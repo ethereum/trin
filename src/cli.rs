@@ -1,8 +1,9 @@
 //use web3::{Web3, transports};
-use threadpool::ThreadPool;
+use reqwest::blocking as reqwest;
 use std::sync::mpsc::channel;
 use std::net;
 use std::io::{self, Read, Write};
+use threadpool::ThreadPool;
 
 // TODO: things to configure:
 //  - infura project id (not just env var?)
@@ -12,7 +13,6 @@ use std::io::{self, Read, Write};
 
 pub fn launch_trin(infura_project_id: String) {
     println!("Launching with infura key: '{}'", infura_project_id);
-    let infura_url = format!("https://mainnet.infura.io/v3/{}", infura_project_id);
 
     let pool = ThreadPool::new(2);
 
@@ -20,11 +20,15 @@ pub fn launch_trin(infura_project_id: String) {
 
     for stream in listener.incoming() {
         let mut stream = stream.unwrap();
-        pool.execute(move || serve_client(&mut stream));
+        let infura_project_id = infura_project_id.clone();
+        pool.execute(move || {
+            let infura_url = format!("https://mainnet.infura.io:443/v3/{}", infura_project_id);
+            serve_client(&mut stream, &infura_url);
+        });
     }
 }
 
-fn serve_client(stream: &mut net::TcpStream) {
+fn serve_client(stream: &mut net::TcpStream, infura_url: &String) {
     println!("Welcoming...");
     stream.write_all(b"Welcome!").unwrap();
     loop {
@@ -32,12 +36,39 @@ fn serve_client(stream: &mut net::TcpStream) {
         match read_line(stream) {
             line if line.len() == 0 => break,
             request => {
-                stream.write_all(b"Echoing: ").unwrap();
-                stream.write_all(&request).unwrap();
+                if let Err(err) = proxy_to_url(request, stream, infura_url) {
+                    stream.write_all(b"Infura fail: ").unwrap();
+                    stream.write_all(err.to_string().as_bytes()).unwrap();
+                }
             }
         }
     }
     println!("Clean exit");
+}
+
+fn proxy_to_url(request: Vec<u8>, out: &mut net::TcpStream, url: &String) -> io::Result<()> {
+    let client = reqwest::Client::new();
+    match client.post(url).body(request).send() {
+        Ok(mut response) => {
+            let status = response.status();
+
+            if status.is_success() {
+                response.copy_to(out).unwrap();
+                Ok(())
+            } else {
+                Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("Responded with status code: {:?}", status),
+                ))
+            }
+        },
+        Err(err) => {
+            Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("Request failure: {:?}", err),
+            ))
+        },
+    }
 }
 
 fn read_line(stream: &mut net::TcpStream) -> Vec<u8> {
@@ -47,13 +78,10 @@ fn read_line(stream: &mut net::TcpStream) -> Vec<u8> {
         match stream.read(&mut buffer) {
             Ok(size) if size == 0 => break,  //EOF
             Ok(size) => {
+                command.extend(&buffer[..size]);
                 if &buffer[size-1] == &b'\n' {
-                    let size = size - 1;
-                    command.extend(&buffer[..size]);
                     break;
-                } else {
-                    command.extend(&buffer[..size]);
-                };
+                }
             }
             Err(err) if err.kind() == io::ErrorKind::Interrupted => continue,
             Err(err) => panic!("Stream read failure: {:?}", err),
