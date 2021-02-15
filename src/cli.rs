@@ -3,6 +3,7 @@ use reqwest::blocking as reqwest;
 use std::sync::mpsc::channel;
 use std::net;
 use std::io::{self, Read, Write};
+use std::os::unix;
 use threadpool::ThreadPool;
 
 // TODO: things to configure:
@@ -16,7 +17,8 @@ pub fn launch_trin(infura_project_id: String) {
 
     let pool = ThreadPool::new(2);
 
-    let listener = net::TcpListener::bind("127.0.0.1:8080").unwrap();
+    //let listener = net::TcpListener::bind("127.0.0.1:8080").unwrap();
+    let listener = unix::net::UnixListener::bind("/tmp/trin-jsonrpc.ipc").unwrap();
 
     for stream in listener.incoming() {
         let mut stream = stream.unwrap();
@@ -28,17 +30,18 @@ pub fn launch_trin(infura_project_id: String) {
     }
 }
 
-fn serve_client(stream: &mut net::TcpStream, infura_url: &String) {
+fn serve_client(stream: &mut (impl Read + Write), infura_url: &String) {
     println!("Welcoming...");
-    stream.write_all(b"Welcome!").unwrap();
     loop {
-        stream.write_all(b"\nInput: ").unwrap();
         match read_line(stream) {
             line if line.len() == 0 => break,
             request => {
                 if let Err(err) = proxy_to_url(request, stream, infura_url) {
-                    stream.write_all(b"Infura fail: ").unwrap();
-                    stream.write_all(err.to_string().as_bytes()).unwrap();
+                    // TODO properly pass through the failure, and match response id with request id
+                    stream.write_all(
+                        b"{\"jsonrpc\":\"2.0\", \"error\": \"Infura failure\"}")
+                        .unwrap();
+                    //stream.write_all(err.to_string().as_bytes()).unwrap();
                 }
             }
         }
@@ -46,7 +49,7 @@ fn serve_client(stream: &mut net::TcpStream, infura_url: &String) {
     println!("Clean exit");
 }
 
-fn proxy_to_url(request: Vec<u8>, out: &mut net::TcpStream, url: &String) -> io::Result<()> {
+fn proxy_to_url(request: Vec<u8>, out: &mut (impl Read + Write), url: &String) -> io::Result<()> {
     let client = reqwest::Client::new();
     match client.post(url).body(request).send() {
         Ok(mut response) => {
@@ -71,7 +74,7 @@ fn proxy_to_url(request: Vec<u8>, out: &mut net::TcpStream, url: &String) -> io:
     }
 }
 
-fn read_line(stream: &mut net::TcpStream) -> Vec<u8> {
+fn read_line(stream: &mut (impl Read + Write)) -> Vec<u8> {
     let mut command = Vec::new();
     let mut buffer = [0; 1024];
     loop {
