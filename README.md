@@ -24,33 +24,36 @@ functionality becomes available.
 
 ## How to use
 
-Create an Infura account, getting a project ID. Check out the git repository, then:
+Create an Infura account, getting a project ID. Check out the trin repository, then:
 
 ```sh
 cd trin
-TRIN_INFURA_PROJECT_ID="<YoUr-Id-HeRe>" cargo run
+TRIN_INFURA_PROJECT_ID="YoUr-Id-HeRe" cargo run
 ```
 
-In another shell:
+In a python shell:
+```py
+>>> from web3 import Web3
+>>> w3 = Web3(Web3.IPCProvider("/tmp/trin-jsonrpc.ipc"))
+>>> w3.clientVersion
+'trin 0.0.1-alpha'
+>>> w3.eth.blockNumber
+11870768
+```
+
+The client version responds immediately, from the trin client. The block number is retrieved more slowly, by proxying to Infura.
+
+To interact with trin at the lowest possible level, try netcat:
 ```sh
-nc localhost 8080
-```
-
-You can interact with trin by using netcat to enter a json-formatted request
-after the "Input:" and then a newline, like:
-```
-Welcome!
-Input: {"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":83}
-{"jsonrpc":"2.0","id":83,"result":"0xb4bc97"}
-Input: {"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":84}
-{"jsonrpc":"2.0","id":84,"result":"0xb4bc98"}
-Input: ^C
+nc -U /tmp/trin-jsonrpc.ipc
+{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":83}
+{"jsonrpc":"2.0","id":83,"result":"0xb52258"}{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":84}
+{"jsonrpc":"2.0","id":84,"result":"0xb52259"}{"jsonrpc":"2.0","id":85,"params":[],"method":"web3_clientVersion"}
+{"jsonrpc":"2.0","id":"85","result":"trin 0.0.1-alpha"}^C
 ```
 
 ## Gotchas
 
-- This doesn't actually accept inbound json-rpc connections yet, it only serves
-  a bare TCP connection, and reads input line by line.
 - There is a limit on concurrent connections given by the threadpool. At last
   doc update, that number was 2, but will surely change. If you leave
   connections open, then new connections will block.
