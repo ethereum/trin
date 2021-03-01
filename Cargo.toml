@@ -10,3 +10,4 @@ edition = "2018"
 reqwest = { version = "0.11.0", features = ["blocking"] }
 serde_json = "1.0.59"
 threadpool = "1.8.1"
+clap = "2.33.3"

@@ -3,18 +3,15 @@ use reqwest::blocking as reqwest;
 use serde_json;
 use std::fs;
 use std::io::{self, Read, Write};
-use std::io::prelude::*;
-use std::os::unix;
-use threadpool::ThreadPool;
 use std::net::TcpListener;
 use std::net::TcpStream;
-
+use std::os::unix;
+use threadpool::ThreadPool;
 
 pub fn launch_trin(infura_project_id: String, protocol: String) {
-    println!("Launching with infura key: '{}' using protocol: '{}'", infura_project_id, protocol);
+    println!("Launching with infura key: '{}'", infura_project_id);
 
     let pool = ThreadPool::new(2);
-
 
     match &protocol[..] {
         "ipc" => launch_ipc_client(pool, infura_project_id),
@@ -40,7 +37,7 @@ fn launch_ipc_client(pool: ThreadPool, infura_project_id: String) {
             panic!("Could not serve from path '{}': {:?}", path, err);
         }
     };
-    
+
     for stream in listener.incoming() {
         let stream = stream.unwrap();
         let infura_project_id = infura_project_id.clone();
@@ -54,7 +51,6 @@ fn launch_ipc_client(pool: ThreadPool, infura_project_id: String) {
 }
 
 fn launch_http_client(pool: ThreadPool, infura_project_id: String) {
-    println!("launching http");
     let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
     for stream in listener.incoming() {
         let stream = stream.unwrap();
@@ -95,8 +91,9 @@ fn serve_http_client(mut stream: TcpStream, infura_url: &String) {
                     "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}",
                     contents.len(),
                     contents,
-                ).into_bytes()
-            },
+                )
+                .into_bytes()
+            }
             _ => {
                 //Re-encode json to proxy to Infura
                 let request = obj.to_string();
@@ -108,15 +105,15 @@ fn serve_http_client(mut stream: TcpStream, infura_url: &String) {
                             "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}",
                             contents.len(),
                             contents,
-                        ).into_bytes()
-                    },
-                    Err(err) => {
-                        format!(
-                            r#"{{"jsonrpc":"2.0","id":"{}","error":"Infura failure: {}"}}"#,
-                            request_id,
-                            err.to_string(),
-                        ).into_bytes()
+                        )
+                        .into_bytes()
                     }
+                    Err(err) => format!(
+                        r#"{{"jsonrpc":"2.0","id":"{}","error":"Infura failure: {}"}}"#,
+                        request_id,
+                        err.to_string(),
+                    )
+                    .into_bytes(),
                 }
             }
         };
