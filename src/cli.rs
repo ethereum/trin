@@ -28,7 +28,7 @@ pub fn launch_trin(infura_project_id: String) {
                 Err(_) => panic!("Could not serve from existing path '{}'", path),
                 Ok(()) => unix::net::UnixListener::bind(path).unwrap(),
             }
-        },
+        }
         Err(err) => {
             panic!("Could not serve from path '{}': {:?}", path, err);
         }
@@ -57,24 +57,22 @@ fn serve_client(rx: &mut impl Read, tx: &mut impl Write, infura_url: &String) {
         let method = obj.get("method").unwrap();
 
         let response = match method.as_str().unwrap() {
-            "web3_clientVersion" => {
-                format!(
-                    r#"{{"jsonrpc":"2.0","id":{},"result":"trin 0.0.1-alpha"}}"#,
-                    request_id,
-                ).into_bytes()
-            },
+            "web3_clientVersion" => format!(
+                r#"{{"jsonrpc":"2.0","id":{},"result":"trin 0.0.1-alpha"}}"#,
+                request_id,
+            )
+            .into_bytes(),
             _ => {
                 //Re-encode json to proxy to Infura
                 let request = obj.to_string();
                 match proxy_to_url(request, infura_url) {
                     Ok(result_body) => result_body,
-                    Err(err) => {
-                        format!(
-                            r#"{{"jsonrpc":"2.0","id":"{}","error":"Infura failure: {}"}}"#,
-                            request_id,
-                            err.to_string(),
-                        ).into_bytes()
-                    }
+                    Err(err) => format!(
+                        r#"{{"jsonrpc":"2.0","id":"{}","error":"Infura failure: {}"}}"#,
+                        request_id,
+                        err.to_string(),
+                    )
+                    .into_bytes(),
                 }
             }
         };
@@ -92,12 +90,10 @@ fn proxy_to_url(request: String, url: &String) -> io::Result<Vec<u8>> {
             if status.is_success() {
                 match response.bytes() {
                     Ok(bytes) => Ok(bytes.to_vec()),
-                    Err(_) => {
-                        Err(io::Error::new(
-                            io::ErrorKind::Other,
-                            "Unexpected error when accessing the response body",
-                        ))
-                    }
+                    Err(_) => Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        "Unexpected error when accessing the response body",
+                    )),
                 }
             } else {
                 Err(io::Error::new(
@@ -105,12 +101,10 @@ fn proxy_to_url(request: String, url: &String) -> io::Result<Vec<u8>> {
                     format!("Responded with status code: {:?}", status),
                 ))
             }
-        },
-        Err(err) => {
-            Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!("Request failure: {:?}", err),
-            ))
-        },
+        }
+        Err(err) => Err(io::Error::new(
+            io::ErrorKind::Other,
+            format!("Request failure: {:?}", err),
+        )),
     }
 }
