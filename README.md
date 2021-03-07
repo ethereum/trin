@@ -31,10 +31,37 @@ cd trin
 TRIN_INFURA_PROJECT_ID="YoUr-Id-HeRe" cargo run
 ```
 
+## CLI Options
+```sh
+USAGE:
+    trin [OPTIONS]
+
+FLAGS:
+    -h, --help       Prints help information
+    -V, --version    Prints version information
+
+OPTIONS:
+    -e, --endpoint <endpoint>      http port [default: 7878]
+    -s, --pool-size <pool_size>    max size of threadpool [default: 2]
+    -p, --protocol <protocol>      select transport protocol [default: http]
+```
+
+### Connect over IPC
 In a python shell:
 ```py
 >>> from web3 import Web3
 >>> w3 = Web3(Web3.IPCProvider("/tmp/trin-jsonrpc.ipc"))
+>>> w3.clientVersion
+'trin 0.0.1-alpha'
+>>> w3.eth.blockNumber
+11870768
+```
+
+### Connect over HTTP
+In a python shell:
+```py
+>>> from web3 import Web3
+>>> w3 = Web3(Web3.HTTPProvider("http://127.0.0.1:7878"))
 >>> w3.clientVersion
 'trin 0.0.1-alpha'
 >>> w3.eth.blockNumber
