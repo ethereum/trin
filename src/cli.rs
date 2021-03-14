@@ -1,5 +1,4 @@
-//use web3::{Web3, transports};
-use clap::{App, Arg};
+use clap::{value_t, App, Arg, Error, ErrorKind};
 use reqwest::blocking as reqwest;
 use serde_json;
 use std::env;
@@ -14,14 +13,13 @@ use threadpool::ThreadPool;
 #[derive(Debug, PartialEq)]
 pub struct TrinConfig {
     pub protocol: String,
-    pub infura_project_id: String,
-    pub endpoint: u32,
+    pub http_port: u32,
     pub pool_size: u32,
 }
 
 impl TrinConfig {
     pub fn new() -> Self {
-        Self::new_from(std::env::args_os().into_iter()).unwrap_or_else(|e| e.exit())
+        Self::new_from(std::env::args_os().into_iter()).expect("Could not parse trin arguments")
     }
 
     fn new_from<I, T>(args: I) -> Result<Self, clap::Error>
@@ -38,16 +36,17 @@ impl TrinConfig {
                     .short("p")
                     .long("protocol")
                     .help("select transport protocol")
+                    .possible_values(&["http", "ipc"])
                     .takes_value(true)
                     .default_value("http"),
             )
             .arg(
-                Arg::with_name("endpoint")
-                    .short("e")
-                    .long("endpoint")
-                    .help("http port")
+                Arg::with_name("http_port")
+                    .short("h")
+                    .long("http-port")
+                    .help("port to accept http connections")
                     .takes_value(true)
-                    .default_value("7878"),
+                    .default_value("8545"),
             )
             .arg(
                 Arg::with_name("pool_size")
@@ -58,58 +57,47 @@ impl TrinConfig {
                     .default_value("2"),
             )
             .get_matches_from_safe(args)
-            .unwrap_or_else(|e| panic!("Unable to parse args: {}", e));
+            .unwrap_or_else(|err| match err.kind {
+                ErrorKind::HelpDisplayed => Error::exit(&err),
+                ErrorKind::VersionDisplayed => Error::exit(&err),
+                _ => panic!("Unable to parse trin arguments: {}", err)
+            });
 
-        println!("Launching Trin...");
-        let protocol = matches.value_of("protocol").unwrap();
-        let endpoint = matches.value_of("endpoint").unwrap();
-        let endpoint = match endpoint.parse::<u32>() {
-            Ok(n) => n,
-            Err(_) => panic!("Provided endpoint arg is not a number"),
-        };
-        let pool_size = matches.value_of("pool_size").unwrap();
-        let pool_size = match pool_size.parse::<u32>() {
-            Ok(n) => n,
-            Err(_) => panic!("Provided pool size arg is not a number"),
-        };
+        println!("Launching trin...");
+        let pool_size = value_t!(matches.value_of("pool_size"), u32)
+            .expect("Invalid type for pool-size argument.");
+        let http_port = value_t!(matches.value_of("http_port"), u32)
+            .expect("Invalid type for http-port argument.");
+        let protocol = value_t!(matches.value_of("protocol"), String)
+            .expect("Invalid type for protocol argument.");
 
-        // parse protocol & endpoint
-        match protocol {
-            "http" => println!("Protocol: {}\nEndpoint: {}", protocol, endpoint),
-            "ipc" => match endpoint {
-                7878 => println!("Protocol: {}", protocol),
-                _ => panic!("No ports for ipc connection"),
+        match protocol.as_str() {
+            "http" => {
+                println!("Protocol: {}\nHTTP port: {}", protocol, http_port)
+            }
+            "ipc" => match http_port {
+                8545 => println!("Protocol: {}", protocol),
+                _ => panic!("Must not supply an http port when using ipc protocol"),
             },
-            val => panic!(
-                "Unsupported protocol: {}, supported protocols include http & ipc.",
-                val
-            ),
+            val => panic!("Unsupported protocol: {}", val),
         }
+
         println!("Pool Size: {}", pool_size);
 
-        let infura_project_id = match env::var("TRIN_INFURA_PROJECT_ID") {
-            Ok(val) => val,
-            Err(_) => panic!(
-                "Must supply Infura key as environment variable, like:\n\
-                TRIN_INFURA_PROJECT_ID=\"your-key-here\" trin"
-            ),
-        };
-
         Ok(TrinConfig {
-            endpoint: endpoint,
-            infura_project_id: infura_project_id,
+            http_port: http_port,
             pool_size: pool_size,
             protocol: protocol.to_string(),
         })
     }
 }
 
-pub fn launch_trin(trin_config: TrinConfig) {
+pub fn launch_trin(trin_config: TrinConfig, infura_project_id: String) {
     let pool = ThreadPool::new(trin_config.pool_size as usize);
 
-    match &trin_config.protocol[..] {
-        "ipc" => launch_ipc_client(pool, trin_config.infura_project_id),
-        "http" => launch_http_client(pool, trin_config),
+    match trin_config.protocol.as_str() {
+        "ipc" => launch_ipc_client(pool, infura_project_id),
+        "http" => launch_http_client(pool, infura_project_id, trin_config),
         val => panic!("Unsupported protocol: {}", val),
     }
 }
@@ -179,13 +167,13 @@ fn serve_ipc_client(rx: &mut impl Read, tx: &mut impl Write, infura_url: &String
     println!("Clean exit");
 }
 
-fn launch_http_client(pool: ThreadPool, trin_config: TrinConfig) {
-    let uri = format!("127.0.0.1:{}", trin_config.endpoint);
+fn launch_http_client(pool: ThreadPool, infura_project_id: String, trin_config: TrinConfig) {
+    let uri = format!("127.0.0.1:{}", trin_config.http_port);
     let listener = TcpListener::bind(uri).unwrap();
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
-                let infura_project_id = trin_config.infura_project_id.clone();
+                let infura_project_id = infura_project_id.clone();
                 pool.execute(move || {
                     let infura_url = get_infura_url(&infura_project_id);
                     serve_http_client(stream, &infura_url);
@@ -312,19 +300,17 @@ mod test {
         assert!(env_is_set());
         let expected_config = TrinConfig {
             protocol: "http".to_string(),
-            infura_project_id: "".to_string(),
-            endpoint: 7878,
+            http_port: 8545,
             pool_size: 2,
         };
         let actual_config = TrinConfig::new_from(["trin"].iter()).unwrap();
         assert_eq!(actual_config.protocol, expected_config.protocol);
-        assert_eq!(actual_config.endpoint, expected_config.endpoint);
+        assert_eq!(actual_config.http_port, expected_config.http_port);
         assert_eq!(actual_config.pool_size, expected_config.pool_size);
-        assert!(!actual_config.infura_project_id.is_empty());
     }
 
     #[test]
-    #[should_panic(expected = "Unsupported protocol: xxx")]
+    #[should_panic(expected = "Unable to parse trin arguments")]
     fn test_invalid_protocol() {
         assert!(env_is_set());
         TrinConfig::new_from(["trin", "--protocol", "xxx"].iter()).unwrap_err();
@@ -335,8 +321,7 @@ mod test {
         assert!(env_is_set());
         let expected_config = TrinConfig {
             protocol: "http".to_string(),
-            infura_project_id: "".to_string(),
-            endpoint: 8080,
+            http_port: 8080,
             pool_size: 3,
         };
         let actual_config = TrinConfig::new_from(
@@ -344,7 +329,7 @@ mod test {
                 "trin",
                 "--protocol",
                 "http",
-                "--endpoint",
+                "--http-port",
                 "8080",
                 "--pool-size",
                 "3",
@@ -353,9 +338,8 @@ mod test {
         )
         .unwrap();
         assert_eq!(actual_config.protocol, expected_config.protocol);
-        assert_eq!(actual_config.endpoint, expected_config.endpoint);
+        assert_eq!(actual_config.http_port, expected_config.http_port);
         assert_eq!(actual_config.pool_size, expected_config.pool_size);
-        assert!(!actual_config.infura_project_id.is_empty());
     }
 
     #[test]
@@ -364,21 +348,19 @@ mod test {
         let actual_config = TrinConfig::new_from(["trin", "--protocol", "ipc"].iter()).unwrap();
         let expected_config = TrinConfig {
             protocol: "ipc".to_string(),
-            infura_project_id: "".to_string(),
-            endpoint: 7878,
+            http_port: 8545,
             pool_size: 2,
         };
         assert_eq!(actual_config.protocol, expected_config.protocol);
-        assert_eq!(actual_config.endpoint, expected_config.endpoint);
+        assert_eq!(actual_config.http_port, expected_config.http_port);
         assert_eq!(actual_config.pool_size, expected_config.pool_size);
-        assert!(!actual_config.infura_project_id.is_empty());
     }
 
     #[test]
-    #[should_panic(expected = "No ports for ipc connection")]
-    fn test_ipc_protocol_rejects_custom_endpoint() {
+    #[should_panic(expected = "Must not supply an http port when using ipc")]
+    fn test_ipc_protocol_rejects_custom_http_port() {
         assert!(env_is_set());
-        TrinConfig::new_from(["trin", "--protocol", "ipc", "--endpoint", "7879"].iter())
+        TrinConfig::new_from(["trin", "--protocol", "ipc", "--http-port", "7879"].iter())
             .unwrap_err();
     }
 }
