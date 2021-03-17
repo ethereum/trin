@@ -1,4 +1,4 @@
-use clap::{value_t, App, Arg, Error, ErrorKind};
+use clap::{value_t, App, Arg};
 use reqwest::blocking as reqwest;
 use serde_json;
 use std::env;
@@ -56,12 +56,7 @@ impl TrinConfig {
                     .takes_value(true)
                     .default_value("2"),
             )
-            .get_matches_from_safe(args)
-            .unwrap_or_else(|err| match err.kind {
-                ErrorKind::HelpDisplayed => Error::exit(&err),
-                ErrorKind::VersionDisplayed => Error::exit(&err),
-                _ => panic!("Unable to parse trin arguments: {}", err)
-            });
+            .get_matches_from(args);
 
         println!("Launching trin...");
         let pool_size = value_t!(matches.value_of("pool_size"), u32)
@@ -307,13 +302,6 @@ mod test {
         assert_eq!(actual_config.protocol, expected_config.protocol);
         assert_eq!(actual_config.http_port, expected_config.http_port);
         assert_eq!(actual_config.pool_size, expected_config.pool_size);
-    }
-
-    #[test]
-    #[should_panic(expected = "Unable to parse trin arguments")]
-    fn test_invalid_protocol() {
-        assert!(env_is_set());
-        TrinConfig::new_from(["trin", "--protocol", "xxx"].iter()).unwrap_err();
     }
 
     #[test]
