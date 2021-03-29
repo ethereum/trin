@@ -1,17 +1,19 @@
 use crate::cli::TrinConfig;
 use reqwest::blocking as reqwest;
-use std::fs;
+use serde_json;
 use std::io::{self, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::os::unix;
 use std::panic;
 use std::process;
 use std::sync::Mutex;
+use std::fs;
 use threadpool::ThreadPool;
 
 lazy_static! {
     static ref IPC_PATH: Mutex<String> = Mutex::new(String::new());
 }
+
 
 pub fn launch_trin(trin_config: TrinConfig, infura_project_id: String) {
     let pool = ThreadPool::new(trin_config.pool_size as usize);
@@ -67,40 +69,6 @@ fn launch_ipc_client(pool: ThreadPool, infura_project_id: String, ipc_path: &Str
     }
 }
 
-fn serve_ipc_client(rx: &mut impl Read, tx: &mut impl Write, infura_url: &str) {
-    println!("Welcoming...");
-    let deser = serde_json::Deserializer::from_reader(rx);
-    for obj in deser.into_iter::<serde_json::Value>() {
-        let obj = obj.unwrap();
-        assert!(obj.is_object());
-        assert_eq!(obj["jsonrpc"], "2.0");
-        let request_id = obj.get("id").unwrap();
-        let method = obj.get("method").unwrap();
-        let response = match method.as_str().unwrap() {
-            "web3_clientVersion" => format!(
-                r#"{{"jsonrpc":"2.0","id":{},"result":"trin 0.0.1-alpha"}}"#,
-                request_id,
-            )
-            .into_bytes(),
-            _ => {
-                //Re-encode json to proxy to Infura
-                let request = obj.to_string();
-                match proxy_to_url(request, infura_url) {
-                    Ok(result_body) => result_body,
-                    Err(err) => format!(
-                        r#"{{"jsonrpc":"2.0","id":"{}","error":"Infura failure: {}"}}"#,
-                        request_id,
-                        err.to_string(),
-                    )
-                    .into_bytes(),
-                }
-            }
-        };
-        tx.write_all(&response).unwrap();
-    }
-    println!("Clean exit");
-}
-
 fn launch_http_client(pool: ThreadPool, infura_project_id: String, trin_config: TrinConfig) {
     let uri = format!("127.0.0.1:{}", trin_config.http_port);
     let listener = TcpListener::bind(uri).unwrap();
@@ -120,64 +88,70 @@ fn launch_http_client(pool: ThreadPool, infura_project_id: String, trin_config: 
     }
 }
 
+fn serve_ipc_client(rx: &mut impl Read, tx: &mut impl Write, infura_url: &String) {
+    println!("Welcoming...");
+    let json_iterator = serde_json::Deserializer::from_reader(rx);
+    for obj in json_iterator.into_iter::<serde_json::Value>() {
+        let result = make_request(obj.unwrap(), &infura_url);
+        let formatted_response = match result {
+            Ok(contents) => contents.into_bytes(),
+            Err(contents) => contents.into_bytes(),
+        };
+        tx.write_all(&formatted_response).unwrap();
+    }
+    println!("Clean exit");
+}
+
 fn serve_http_client(mut stream: TcpStream, infura_url: &str) {
     let mut buffer = Vec::new();
-
     stream.read_to_end(&mut buffer).unwrap();
 
     let json_request = String::from_utf8_lossy(&buffer);
-    let deser = serde_json::Deserializer::from_str(&json_request);
-    for obj in deser.into_iter::<serde_json::Value>() {
-        let obj = obj.unwrap();
-        assert!(obj.is_object());
-        assert_eq!(obj["jsonrpc"], "2.0");
-        let request_id = obj.get("id").unwrap();
-        let method = obj.get("method").unwrap();
-
-        let response = match method.as_str().unwrap() {
-            "web3_clientVersion" => {
-                let contents = format!(
-                    r#"{{"jsonrpc":"2.0","id":{},"result":"trin 0.0.1-alpha"}}"#,
-                    request_id
-                );
-                format!(
-                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}",
-                    contents.len(),
-                    contents,
-                )
-                .into_bytes()
-            }
-            _ => {
-                //Re-encode json to proxy to Infura
-                let request = obj.to_string();
-                match proxy_to_url(request, infura_url) {
-                    Ok(result_body) => {
-                        let contents = String::from_utf8_lossy(&result_body);
-                        format!(
-                            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}",
-                            contents.len(),
-                            contents,
-                        )
-                        .into_bytes()
-                    }
-                    Err(err) => {
-                        let contents = format!(
-                            r#"{{"jsonrpc":"2.0","id":"{}","error":"Infura failure: {}"}}"#,
-                            request_id,
-                            err.to_string(),
-                        );
-                        format!(
-                            "HTTP/1.1 502 BAD GATEWAY\r\nContent-Length: {}\r\n\r\n{}",
-                            contents.len(),
-                            contents,
-                        )
-                        .into_bytes()
-                    }
-                }
-            }
+    let json_iterator = serde_json::Deserializer::from_str(&json_request);
+    for obj in json_iterator.into_iter::<serde_json::Value>() {
+        let result = make_request(obj.unwrap(), &infura_url);
+        let formatted_response = match result {
+            Ok(contents) => format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}",
+                contents.len(),
+                contents,
+            )
+            .into_bytes(),
+            Err(contents) => format!(
+                "HTTP/1.1 502 BAD GATEWAY\r\nContent-Length: {}\r\n\r\n{}",
+                contents.len(),
+                contents,
+            )
+            .into_bytes(),
         };
-        stream.write_all(&response).unwrap();
+        stream.write(&formatted_response).unwrap();
         stream.flush().unwrap();
+    }
+    println!("Clean exit");
+}
+
+fn make_request(obj: serde_json::Value, infura_url: &str) -> Result<String, String> {
+    assert!(obj.is_object());
+    assert_eq!(obj["jsonrpc"], "2.0");
+    let request_id = obj.get("id").unwrap();
+    let method = obj.get("method").unwrap();
+    match method.as_str().unwrap() {
+        "web3_clientVersion" => Ok(format!(
+            r#"{{"jsonrpc":"2.0","id":{},"result":"trin 0.0.1-alpha"}}"#,
+            request_id,
+        )),
+        _ => {
+            //Re-encode json to proxy to Infura
+            let request = obj.to_string();
+            match proxy_to_url(request, infura_url) {
+                Ok(result_body) => Ok(std::str::from_utf8(&result_body).unwrap().to_owned()),
+                Err(err) => Err(format!(
+                    r#"{{"jsonrpc":"2.0","id":"{}","error":"Infura failure: {}"}}"#,
+                    request_id,
+                    err.to_string(),
+                )),
+            }
+        }
     }
 }
 
