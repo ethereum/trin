@@ -31,10 +31,22 @@ cd trin
 TRIN_INFURA_PROJECT_ID="YoUr-Id-HeRe" cargo run
 ```
 
+### Connect over IPC
 In a python shell:
 ```py
 >>> from web3 import Web3
 >>> w3 = Web3(Web3.IPCProvider("/tmp/trin-jsonrpc.ipc"))
+>>> w3.clientVersion
+'trin 0.0.1-alpha'
+>>> w3.eth.blockNumber
+11870768
+```
+
+### Connect over HTTP
+In a python shell:
+```py
+>>> from web3 import Web3
+>>> w3 = Web3(Web3.HTTPProvider("http://127.0.0.1:8545"))
 >>> w3.clientVersion
 'trin 0.0.1-alpha'
 >>> w3.eth.blockNumber
@@ -50,6 +62,25 @@ nc -U /tmp/trin-jsonrpc.ipc
 {"jsonrpc":"2.0","id":83,"result":"0xb52258"}{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":84}
 {"jsonrpc":"2.0","id":84,"result":"0xb52259"}{"jsonrpc":"2.0","id":85,"params":[],"method":"web3_clientVersion"}
 {"jsonrpc":"2.0","id":"85","result":"trin 0.0.1-alpha"}^C
+```
+
+## CLI Options
+```sh
+trin 0.0.1
+carver
+super lightweight eth portal
+
+USAGE:
+    trin [OPTIONS]
+
+FLAGS:
+        --help       Prints help information
+    -V, --version    Prints version information
+
+OPTIONS:
+    -h, --http-port <http_port>    port to accept http connections [default: 8545]
+    -s, --pool-size <pool_size>    max size of threadpool [default: 2]
+    -p, --protocol <protocol>      select transport protocol [default: http]  [possible values: http, ipc]
 ```
 
 ## Gotchas
