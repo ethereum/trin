@@ -2,9 +2,9 @@ version: 2.1
 orbs:
   rust: circleci/rust@1.1.1
 jobs:
-  lint-build:
+  lint-build-test:
         description: |
-            Check linting with Clippy, then build the crate.
+            Check linting with Clippy and rustfmt, build the crate, and run tests.
         executor:
             name: rust/default
             tag: 1.51.0
@@ -31,6 +31,8 @@ jobs:
             - rust/build:
                 release: false
                 with_cache: false
+            - rust/test:
+                with_cache: false
             - save_cache:
                 key: cargo-{{ checksum "Cargo.lock" }}-v1
                 paths:
@@ -39,4 +41,4 @@ jobs:
 workflows:
   merge-test:
     jobs:
-      - lint-build
+      - lint-build-test
