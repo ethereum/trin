@@ -1,8 +1,42 @@
 version: 2.1
 orbs:
-  rust: circleci/rust@1.50.0-beta.8
+  rust: circleci/rust@1.1.1
+jobs:
+  lint-build:
+        description: |
+            Check linting with Clippy, then build the crate.
+        executor:
+            name: rust/default
+            tag: 1.51.0
+        steps:
+            - checkout
+            - restore_cache:
+                keys:
+                    - cargo-{{ checksum "Cargo.lock" }}-v1
+            - run:
+                name: Prepare for apt upgrades
+                command: sudo apt update
+            - run:
+                name: Install libssl-dev for openssl-sys
+                command: sudo apt install -y libssl-dev
+            - run:
+                name: Install rustfmt
+                command: rustup component add rustfmt
+            - run:
+                name: Run rustfmt
+                command: cargo fmt -- --check
+            - rust/clippy:
+                flags: ""
+                with_cache: false
+            - rust/build:
+                release: false
+                with_cache: false
+            - save_cache:
+                key: cargo-{{ checksum "Cargo.lock" }}-v1
+                paths:
+                    - ~/.cargo
+                    - target
 workflows:
-  production:
+  merge-test:
     jobs:
-      - rust/lint-test-build:
-          release: true
+      - lint-build
