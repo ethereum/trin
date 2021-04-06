@@ -1,6 +1,5 @@
 use clap::{value_t, App, Arg};
 use reqwest::blocking as reqwest;
-use serde_json;
 use std::env;
 use std::ffi::OsString;
 use std::fs;
@@ -19,7 +18,7 @@ pub struct TrinConfig {
 
 impl TrinConfig {
     pub fn new() -> Self {
-        Self::new_from(std::env::args_os().into_iter()).expect("Could not parse trin arguments")
+        Self::new_from(env::args_os()).expect("Could not parse trin arguments")
     }
 
     fn new_from<I, T>(args: I) -> Result<Self, clap::Error>
@@ -59,12 +58,9 @@ impl TrinConfig {
             .get_matches_from(args);
 
         println!("Launching trin...");
-        let pool_size = value_t!(matches.value_of("pool_size"), u32)
-            .expect("Invalid type for pool-size argument.");
-        let http_port = value_t!(matches.value_of("http_port"), u32)
-            .expect("Invalid type for http-port argument.");
-        let protocol = value_t!(matches.value_of("protocol"), String)
-            .expect("Invalid type for protocol argument.");
+        let pool_size = value_t!(matches.value_of("pool_size"), u32)?;
+        let http_port = value_t!(matches.value_of("http_port"), u32)?;
+        let protocol = value_t!(matches.value_of("protocol"), String)?;
 
         match protocol.as_str() {
             "http" => {
@@ -80,9 +76,9 @@ impl TrinConfig {
         println!("Pool Size: {}", pool_size);
 
         Ok(TrinConfig {
-            http_port: http_port,
-            pool_size: pool_size,
-            protocol: protocol.to_string(),
+            http_port,
+            pool_size,
+            protocol,
         })
     }
 }
@@ -127,7 +123,7 @@ fn launch_ipc_client(pool: ThreadPool, infura_project_id: String) {
     }
 }
 
-fn serve_ipc_client(rx: &mut impl Read, tx: &mut impl Write, infura_url: &String) {
+fn serve_ipc_client(rx: &mut impl Read, tx: &mut impl Write, infura_url: &str) {
     println!("Welcoming...");
     let deser = serde_json::Deserializer::from_reader(rx);
     for obj in deser.into_iter::<serde_json::Value>() {
@@ -181,17 +177,12 @@ fn launch_http_client(pool: ThreadPool, infura_project_id: String, trin_config: 
     }
 }
 
-fn serve_http_client(mut stream: TcpStream, infura_url: &String) {
-    let mut buffer = [0; 1024];
+fn serve_http_client(mut stream: TcpStream, infura_url: &str) {
+    let mut buffer = Vec::new();
 
-    stream.read(&mut buffer).unwrap();
+    stream.read_to_end(&mut buffer).unwrap();
 
-    let request = String::from_utf8_lossy(&buffer[..]);
-    let json_request = match request.lines().last() {
-        None => panic!("Invalid json request."),
-        Some(last_line) => last_line.split('\u{0}').nth(0).unwrap(),
-    };
-
+    let json_request = String::from_utf8_lossy(&buffer);
     let deser = serde_json::Deserializer::from_str(&json_request);
     for obj in deser.into_iter::<serde_json::Value>() {
         let obj = obj.unwrap();
@@ -242,12 +233,12 @@ fn serve_http_client(mut stream: TcpStream, infura_url: &String) {
                 }
             }
         };
-        stream.write(&response).unwrap();
+        stream.write_all(&response).unwrap();
         stream.flush().unwrap();
     }
 }
 
-fn proxy_to_url(request: String, url: &String) -> io::Result<Vec<u8>> {
+fn proxy_to_url(request: String, url: &str) -> io::Result<Vec<u8>> {
     let client = reqwest::Client::new();
     match client.post(url).body(request).send() {
         Ok(response) => {
@@ -275,7 +266,7 @@ fn proxy_to_url(request: String, url: &String) -> io::Result<Vec<u8>> {
     }
 }
 
-fn get_infura_url(infura_project_id: &String) -> String {
+fn get_infura_url(infura_project_id: &str) -> String {
     return format!("https://mainnet.infura.io:443/v3/{}", infura_project_id);
 }
 
