@@ -79,6 +79,7 @@ FLAGS:
 
 OPTIONS:
     -h, --http-port <http_port>    port to accept http connections [default: 8545]
+    -i, --ipc-path <ipc_path>      path to IPC location [default: /tmp/trin-jsonrpc.ipc]
     -s, --pool-size <pool_size>    max size of threadpool [default: 2]
     -p, --protocol <protocol>      select transport protocol [default: http]  [possible values: http, ipc]
 ```

@@ -1,5 +1,4 @@
 use clap::{value_t, App, Arg};
-use reqwest::blocking as reqwest;
 use std::env;
 use std::ffi::OsString;
 
@@ -67,6 +66,7 @@ impl TrinConfig {
         let pool_size = value_t!(matches.value_of("pool_size"), u32)?;
         let http_port = value_t!(matches.value_of("http_port"), u32)?;
         let protocol = value_t!(matches.value_of("protocol"), String)?;
+        let ipc_path = value_t!(matches.value_of("ipc_path"), String)?;
 
         match protocol.as_str() {
             "http" => match &ipc_path[..] {
@@ -74,7 +74,7 @@ impl TrinConfig {
                 _ => panic!("Must not supply an ipc path when using http protocol"),
             },
             "ipc" => match &http_port.to_string()[..] {
-                DEFAULT_HTTP_PORT => println!("Protocol: {}", protocol),
+                DEFAULT_HTTP_PORT => println!("Protocol: {}\nIPC path: {}", protocol, ipc_path),
                 _ => panic!("Must not supply an http port when using ipc protocol"),
             },
             val => panic!("Unsupported protocol: {}", val),
@@ -84,6 +84,7 @@ impl TrinConfig {
 
         Ok(TrinConfig {
             http_port,
+            ipc_path,
             pool_size,
             protocol,
         })
@@ -93,6 +94,7 @@ impl TrinConfig {
 #[cfg(test)]
 mod test {
     use super::*;
+    use std::env;
 
     fn env_is_set() -> bool {
         match env::var("TRIN_INFURA_PROJECT_ID") {

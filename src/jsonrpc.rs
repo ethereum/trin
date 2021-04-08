@@ -1,11 +1,17 @@
 use crate::cli::TrinConfig;
 use reqwest::blocking as reqwest;
-use serde_json;
 use std::fs;
 use std::io::{self, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::os::unix;
+use std::panic;
+use std::process;
+use std::sync::Mutex;
 use threadpool::ThreadPool;
+
+lazy_static! {
+    static ref IPC_PATH: Mutex<String> = Mutex::new(String::new());
+}
 
 pub fn launch_trin(trin_config: TrinConfig, infura_project_id: String) {
     let pool = ThreadPool::new(trin_config.pool_size as usize);
@@ -17,17 +23,32 @@ pub fn launch_trin(trin_config: TrinConfig, infura_project_id: String) {
     }
 }
 
+fn set_ipc_cleanup_handlers(ipc_path: &String) {
+    let mut ipc_mut = IPC_PATH.lock().unwrap();
+    *ipc_mut = ipc_path.to_string();
+
+    ctrlc::set_handler(move || {
+        let ipc_path: &str = &*IPC_PATH.lock().unwrap().clone();
+        fs::remove_file(&ipc_path).unwrap();
+        std::process::exit(1);
+    })
+    .expect("Error setting Ctrl-C handler.");
+
+    let original_panic = panic::take_hook();
+    panic::set_hook(Box::new(move |panic_info| {
+        let ipc_path: &str = &*IPC_PATH.lock().unwrap().clone();
+        fs::remove_file(&ipc_path).unwrap();
+        original_panic(panic_info);
+        process::exit(1);
+    }));
+}
+
 fn launch_ipc_client(pool: ThreadPool, infura_project_id: String, ipc_path: &String) {
     let listener_result = unix::net::UnixListener::bind(ipc_path);
     let listener = match listener_result {
-        Ok(listener) => listener,
-        Err(err) if err.kind() == io::ErrorKind::AddrInUse => {
-            // TODO something smarter than just dropping the existing file and/or
-            // make sure file gets cleaned up on shutdown.
-            match fs::remove_file(ipc_path) {
-                Err(_) => panic!("Could not serve IPC from existing path '{}'", ipc_path),
-                Ok(()) => unix::net::UnixListener::bind(ipc_path).unwrap(),
-            }
+        Ok(listener) => {
+            set_ipc_cleanup_handlers(ipc_path);
+            listener
         }
         Err(err) => {
             panic!("Could not serve from IPC path '{}': {:?}", ipc_path, err);
@@ -46,7 +67,7 @@ fn launch_ipc_client(pool: ThreadPool, infura_project_id: String, ipc_path: &Str
     }
 }
 
-fn serve_ipc_client(rx: &mut impl Read, tx: &mut impl Write, infura_url: &String) {
+fn serve_ipc_client(rx: &mut impl Read, tx: &mut impl Write, infura_url: &str) {
     println!("Welcoming...");
     let deser = serde_json::Deserializer::from_reader(rx);
     for obj in deser.into_iter::<serde_json::Value>() {
@@ -55,7 +76,6 @@ fn serve_ipc_client(rx: &mut impl Read, tx: &mut impl Write, infura_url: &String
         assert_eq!(obj["jsonrpc"], "2.0");
         let request_id = obj.get("id").unwrap();
         let method = obj.get("method").unwrap();
-
         let response = match method.as_str().unwrap() {
             "web3_clientVersion" => format!(
                 r#"{{"jsonrpc":"2.0","id":{},"result":"trin 0.0.1-alpha"}}"#,
@@ -100,17 +120,12 @@ fn launch_http_client(pool: ThreadPool, infura_project_id: String, trin_config: 
     }
 }
 
-fn serve_http_client(mut stream: TcpStream, infura_url: &String) {
-    let mut buffer = [0; 1024];
+fn serve_http_client(mut stream: TcpStream, infura_url: &str) {
+    let mut buffer = Vec::new();
 
-    stream.read(&mut buffer).unwrap();
+    stream.read_to_end(&mut buffer).unwrap();
 
-    let request = String::from_utf8_lossy(&buffer[..]);
-    let json_request = match request.lines().last() {
-        None => panic!("Invalid json request."),
-        Some(last_line) => last_line.split('\u{0}').nth(0).unwrap(),
-    };
-
+    let json_request = String::from_utf8_lossy(&buffer);
     let deser = serde_json::Deserializer::from_str(&json_request);
     for obj in deser.into_iter::<serde_json::Value>() {
         let obj = obj.unwrap();
@@ -161,12 +176,12 @@ fn serve_http_client(mut stream: TcpStream, infura_url: &String) {
                 }
             }
         };
-        stream.write(&response).unwrap();
+        stream.write_all(&response).unwrap();
         stream.flush().unwrap();
     }
 }
 
-fn proxy_to_url(request: String, url: &String) -> io::Result<Vec<u8>> {
+fn proxy_to_url(request: String, url: &str) -> io::Result<Vec<u8>> {
     let client = reqwest::Client::new();
     match client.post(url).body(request).send() {
         Ok(response) => {
@@ -194,6 +209,6 @@ fn proxy_to_url(request: String, url: &String) -> io::Result<Vec<u8>> {
     }
 }
 
-fn get_infura_url(infura_project_id: &String) -> String {
+fn get_infura_url(infura_project_id: &str) -> String {
     return format!("https://mainnet.infura.io:443/v3/{}", infura_project_id);
 }
