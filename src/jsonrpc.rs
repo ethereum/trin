@@ -122,10 +122,14 @@ fn serve_ipc_client(rx: &mut impl Read, tx: &mut impl Write, infura_url: &str) {
 }
 
 fn serve_http_client(mut stream: TcpStream, infura_url: &str) {
-    let mut buffer = Vec::new();
-    stream.read_to_end(&mut buffer).unwrap();
+    let mut buffer = [0; 1024];
+    stream.read(&mut buffer).unwrap();
 
-    let json_request = String::from_utf8_lossy(&buffer);
+    let request = String::from_utf8_lossy(&buffer[..]);
+    let json_request = match request.lines().last() {
+        None => panic!("Invalid json request."),
+        Some(last_line) => last_line.split('\u{0}').nth(0).unwrap(),
+    };
     let deser = serde_json::Deserializer::from_str(&json_request);
     for obj in deser.into_iter::<JsonRequest>() {
         let obj = obj.unwrap();
