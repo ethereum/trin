@@ -1,6 +1,11 @@
+#[macro_use]
+extern crate lazy_static;
+
 use std::env;
 mod cli;
 use cli::TrinConfig;
+mod jsonrpc;
+use jsonrpc::launch_trin;
 
 fn main() {
     let trin_config = TrinConfig::new();
@@ -13,5 +18,5 @@ fn main() {
         ),
     };
 
-    cli::launch_trin(trin_config, infura_project_id);
+    launch_trin(trin_config, infura_project_id);
 }
