@@ -16,10 +16,10 @@ lazy_static! {
 pub fn launch_trin(trin_config: TrinConfig, infura_project_id: String) {
     let pool = ThreadPool::new(trin_config.pool_size as usize);
 
-    match trin_config.protocol.as_str() {
-        "ipc" => launch_ipc_client(pool, infura_project_id, &trin_config.ipc_path),
+    match trin_config.web3_transport.as_str() {
+        "ipc" => launch_ipc_client(pool, infura_project_id, &trin_config.web3_ipc_path),
         "http" => launch_http_client(pool, infura_project_id, trin_config),
-        val => panic!("Unsupported protocol: {}", val),
+        val => panic!("Unsupported web3 transport: {}", val),
     }
 }
 
@@ -102,7 +102,7 @@ fn serve_ipc_client(rx: &mut impl Read, tx: &mut impl Write, infura_url: &str) {
 }
 
 fn launch_http_client(pool: ThreadPool, infura_project_id: String, trin_config: TrinConfig) {
-    let uri = format!("127.0.0.1:{}", trin_config.http_port);
+    let uri = format!("127.0.0.1:{}", trin_config.web3_http_port);
     let listener = TcpListener::bind(uri).unwrap();
     for stream in listener.incoming() {
         match stream {
