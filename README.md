@@ -43,7 +43,12 @@ In a python shell:
 ```
 
 ### Connect over HTTP
-In a python shell:
+First launch trin using HTTP as the json-rpc transport protocol:
+```sh
+TRIN_INFURA_PROJECT_ID="YoUr-Id-HeRe" cargo run -- --web3-transport http
+```
+
+Then, in a python shell:
 ```py
 >>> from web3 import Web3
 >>> w3 = Web3(Web3.HTTPProvider("http://127.0.0.1:8545"))
@@ -68,20 +73,21 @@ nc -U /tmp/trin-jsonrpc.ipc
 ```sh
 trin 0.0.1
 carver
-super lightweight eth portal
+Run an eth portal client
 
 USAGE:
     trin [OPTIONS]
 
 FLAGS:
-        --help       Prints help information
+    -h, --help       Prints help information
     -V, --version    Prints version information
 
 OPTIONS:
-    -h, --http-port <http_port>    port to accept http connections [default: 8545]
-    -i, --ipc-path <ipc_path>      path to IPC location [default: /tmp/trin-jsonrpc.ipc]
-    -s, --pool-size <pool_size>    max size of threadpool [default: 2]
-    -p, --protocol <protocol>      select transport protocol [default: http]  [possible values: http, ipc]
+        --pool-size <pool_size>              max size of threadpool [default: 2]
+        --web3-http-port <web3_http_port>    port to accept json-rpc http connections [default: 8545]
+        --web3-ipc-path <web3_ipc_path>      path to json-rpc endpoint over IPC [default: /tmp/trin-jsonrpc.ipc]
+        --web3-transport <web3_transport>    select transport protocol to serve json-rpc endpoint [default: ipc]
+                                             [possible values: http, ipc]
 ```
 
 ## Gotchas

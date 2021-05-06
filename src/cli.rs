@@ -4,14 +4,14 @@ use std::ffi::OsString;
 
 #[derive(Debug, PartialEq)]
 pub struct TrinConfig {
-    pub protocol: String,
-    pub ipc_path: String,
-    pub http_port: u32,
+    pub web3_transport: String,
+    pub web3_ipc_path: String,
+    pub web3_http_port: u32,
     pub pool_size: u32,
 }
 
-const DEFAULT_IPC_PATH: &str = "/tmp/trin-jsonrpc.ipc";
-const DEFAULT_HTTP_PORT: &str = "8545";
+const DEFAULT_WEB3_IPC_PATH: &str = "/tmp/trin-jsonrpc.ipc";
+const DEFAULT_WEB3_HTTP_PORT: &str = "8545";
 
 impl TrinConfig {
     pub fn new() -> Self {
@@ -26,35 +26,32 @@ impl TrinConfig {
         let matches = App::new("trin")
             .version("0.0.1")
             .author("carver")
-            .about("super lightweight eth portal")
+            .about("Run an eth portal client")
+            .settings(&[clap::AppSettings::ColoredHelp])
             .arg(
-                Arg::with_name("protocol")
-                    .short("p")
-                    .long("protocol")
-                    .help("select transport protocol")
+                Arg::with_name("web3_transport")
+                    .long("web3-transport")
+                    .help("select transport protocol to serve json-rpc endpoint")
                     .possible_values(&["http", "ipc"])
                     .takes_value(true)
-                    .default_value("http"),
+                    .default_value("ipc"),
             )
             .arg(
-                Arg::with_name("http_port")
-                    .short("h")
-                    .long("http-port")
-                    .help("port to accept http connections")
+                Arg::with_name("web3_http_port")
+                    .long("web3-http-port")
+                    .help("port to accept json-rpc http connections")
                     .takes_value(true)
-                    .default_value(&DEFAULT_HTTP_PORT),
+                    .default_value(&DEFAULT_WEB3_HTTP_PORT),
             )
             .arg(
-                Arg::with_name("ipc_path")
-                    .short("i")
-                    .long("ipc-path")
-                    .help("path to IPC location")
+                Arg::with_name("web3_ipc_path")
+                    .long("web3-ipc-path")
+                    .help("path to json-rpc endpoint over IPC")
                     .takes_value(true)
-                    .default_value(&DEFAULT_IPC_PATH),
+                    .default_value(&DEFAULT_WEB3_IPC_PATH),
             )
             .arg(
                 Arg::with_name("pool_size")
-                    .short("s")
                     .long("pool-size")
                     .help("max size of threadpool")
                     .takes_value(true)
@@ -64,29 +61,36 @@ impl TrinConfig {
 
         println!("Launching trin...");
         let pool_size = value_t!(matches.value_of("pool_size"), u32)?;
-        let http_port = value_t!(matches.value_of("http_port"), u32)?;
-        let protocol = value_t!(matches.value_of("protocol"), String)?;
-        let ipc_path = value_t!(matches.value_of("ipc_path"), String)?;
+        let web3_http_port = value_t!(matches.value_of("web3_http_port"), u32)?;
+        let web3_transport = value_t!(matches.value_of("web3_transport"), String)?;
+        let web3_ipc_path = value_t!(matches.value_of("web3_ipc_path"), String)?;
 
-        match protocol.as_str() {
-            "http" => match &ipc_path[..] {
-                DEFAULT_IPC_PATH => println!("Protocol: {}\nHTTP port: {}", protocol, http_port),
-                _ => panic!("Must not supply an ipc path when using http protocol"),
+        match web3_transport.as_str() {
+            "http" => match &web3_ipc_path[..] {
+                DEFAULT_WEB3_IPC_PATH => {
+                    println!(
+                        "Protocol: {}\nWEB3 HTTP port: {}",
+                        web3_transport, web3_http_port
+                    )
+                }
+                _ => panic!("Must not supply an ipc path when using http protocol for json-rpc"),
             },
-            "ipc" => match &http_port.to_string()[..] {
-                DEFAULT_HTTP_PORT => println!("Protocol: {}\nIPC path: {}", protocol, ipc_path),
-                _ => panic!("Must not supply an http port when using ipc protocol"),
+            "ipc" => match &web3_http_port.to_string()[..] {
+                DEFAULT_WEB3_HTTP_PORT => {
+                    println!("Protocol: {}\nIPC path: {}", web3_transport, web3_ipc_path)
+                }
+                _ => panic!("Must not supply an http port when using ipc protocol for json-rpc"),
             },
-            val => panic!("Unsupported protocol: {}", val),
+            val => panic!("Unsupported json-rpc protocol: {}", val),
         }
 
         println!("Pool Size: {}", pool_size);
 
         Ok(TrinConfig {
-            http_port,
-            ipc_path,
+            web3_http_port,
+            web3_ipc_path,
             pool_size,
-            protocol,
+            web3_transport,
         })
     }
 }
@@ -107,14 +111,14 @@ mod test {
     fn test_default_args() {
         assert!(env_is_set());
         let expected_config = TrinConfig {
-            http_port: DEFAULT_HTTP_PORT.parse::<u32>().unwrap(),
-            ipc_path: DEFAULT_IPC_PATH.to_string(),
+            web3_http_port: DEFAULT_WEB3_HTTP_PORT.parse::<u32>().unwrap(),
+            web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
             pool_size: 2,
-            protocol: "http".to_string(),
+            web3_transport: "ipc".to_string(),
         };
         let actual_config = TrinConfig::new_from(["trin"].iter()).unwrap();
-        assert_eq!(actual_config.protocol, expected_config.protocol);
-        assert_eq!(actual_config.http_port, expected_config.http_port);
+        assert_eq!(actual_config.web3_transport, expected_config.web3_transport);
+        assert_eq!(actual_config.web3_http_port, expected_config.web3_http_port);
         assert_eq!(actual_config.pool_size, expected_config.pool_size);
     }
 
@@ -122,17 +126,17 @@ mod test {
     fn test_custom_http_args() {
         assert!(env_is_set());
         let expected_config = TrinConfig {
-            http_port: 8080,
-            ipc_path: DEFAULT_IPC_PATH.to_string(),
+            web3_http_port: 8080,
+            web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
             pool_size: 3,
-            protocol: "http".to_string(),
+            web3_transport: "http".to_string(),
         };
         let actual_config = TrinConfig::new_from(
             [
                 "trin",
-                "--protocol",
+                "--web3-transport",
                 "http",
-                "--http-port",
+                "--web3-http-port",
                 "8080",
                 "--pool-size",
                 "3",
@@ -140,23 +144,24 @@ mod test {
             .iter(),
         )
         .unwrap();
-        assert_eq!(actual_config.protocol, expected_config.protocol);
-        assert_eq!(actual_config.http_port, expected_config.http_port);
+        assert_eq!(actual_config.web3_transport, expected_config.web3_transport);
+        assert_eq!(actual_config.web3_http_port, expected_config.web3_http_port);
         assert_eq!(actual_config.pool_size, expected_config.pool_size);
     }
 
     #[test]
     fn test_ipc_protocol() {
         assert!(env_is_set());
-        let actual_config = TrinConfig::new_from(["trin", "--protocol", "ipc"].iter()).unwrap();
+        let actual_config =
+            TrinConfig::new_from(["trin", "--web3-transport", "ipc"].iter()).unwrap();
         let expected_config = TrinConfig {
-            http_port: DEFAULT_HTTP_PORT.parse::<u32>().unwrap(),
-            ipc_path: DEFAULT_IPC_PATH.to_string(),
+            web3_http_port: DEFAULT_WEB3_HTTP_PORT.parse::<u32>().unwrap(),
+            web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
             pool_size: 2,
-            protocol: "ipc".to_string(),
+            web3_transport: "ipc".to_string(),
         };
-        assert_eq!(actual_config.protocol, expected_config.protocol);
-        assert_eq!(actual_config.http_port, expected_config.http_port);
+        assert_eq!(actual_config.web3_transport, expected_config.web3_transport);
+        assert_eq!(actual_config.web3_http_port, expected_config.web3_http_port);
         assert_eq!(actual_config.pool_size, expected_config.pool_size);
     }
 
@@ -164,34 +169,59 @@ mod test {
     fn test_ipc_with_custom_path() {
         assert!(env_is_set());
         let actual_config = TrinConfig::new_from(
-            ["trin", "--protocol", "ipc", "--ipc-path", "/path/test.ipc"].iter(),
+            [
+                "trin",
+                "--web3-transport",
+                "ipc",
+                "--web3-ipc-path",
+                "/path/test.ipc",
+            ]
+            .iter(),
         )
         .unwrap();
         let expected_config = TrinConfig {
-            http_port: DEFAULT_HTTP_PORT.parse::<u32>().unwrap(),
-            ipc_path: "/path/test.ipc".to_string(),
+            web3_http_port: DEFAULT_WEB3_HTTP_PORT.parse::<u32>().unwrap(),
+            web3_ipc_path: "/path/test.ipc".to_string(),
             pool_size: 2,
-            protocol: "ipc".to_string(),
+            web3_transport: "ipc".to_string(),
         };
-        assert_eq!(actual_config.protocol, expected_config.protocol);
-        assert_eq!(actual_config.http_port, expected_config.http_port);
+        assert_eq!(actual_config.web3_transport, expected_config.web3_transport);
+        assert_eq!(actual_config.web3_http_port, expected_config.web3_http_port);
         assert_eq!(actual_config.pool_size, expected_config.pool_size);
-        assert_eq!(actual_config.ipc_path, expected_config.ipc_path);
+        assert_eq!(actual_config.web3_ipc_path, expected_config.web3_ipc_path);
     }
 
     #[test]
     #[should_panic(expected = "Must not supply an ipc path when using http")]
-    fn test_http_protocol_rejects_custom_ipc_path() {
+    fn test_http_protocol_rejects_custom_web3_ipc_path() {
         assert!(env_is_set());
-        TrinConfig::new_from(["trin", "--protocol", "http", "--ipc-path", "/path/test.ipc"].iter())
-            .unwrap_err();
+        TrinConfig::new_from(
+            [
+                "trin",
+                "--web3-transport",
+                "http",
+                "--web3-ipc-path",
+                "/path/test.ipc",
+            ]
+            .iter(),
+        )
+        .unwrap_err();
     }
 
     #[test]
     #[should_panic(expected = "Must not supply an http port when using ipc")]
-    fn test_ipc_protocol_rejects_custom_http_port() {
+    fn test_ipc_protocol_rejects_custom_web3_http_port() {
         assert!(env_is_set());
-        TrinConfig::new_from(["trin", "--protocol", "ipc", "--http-port", "7879"].iter())
-            .unwrap_err();
+        TrinConfig::new_from(
+            [
+                "trin",
+                "--web3-transport",
+                "ipc",
+                "--web3-http-port",
+                "7879",
+            ]
+            .iter(),
+        )
+        .unwrap_err();
     }
 }
