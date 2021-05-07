@@ -27,19 +27,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ),
     };
 
+    let listen_port = trin_config.discovery_port;
+    let bootnode_enrs = trin_config
+        .bootnodes
+        .iter()
+        .map(|nodestr| nodestr.parse().unwrap())
+        .collect();
+
+    let portalnet_config = PortalnetConfig {
+        listen_port,
+        bootnode_enrs,
+        ..Default::default()
+    };
+
     let web3_server_task = tokio::task::spawn_blocking(|| {
         launch_trin(trin_config, infura_project_id);
     });
 
-    // TODO populate portal config from cli args
-    let config: PortalnetConfig = Default::default();
-
     info!(
         "About to spawn portal p2p with boot nodes: {:?}",
-        config.bootnode_enrs
+        portalnet_config.bootnode_enrs
     );
     tokio::spawn(async move {
-        let mut p2p = PortalnetProtocol::new(config).await.unwrap();
+        let mut p2p = PortalnetProtocol::new(portalnet_config).await.unwrap();
         // hacky test: make sure we establish a session with the boot node
         p2p.ping_bootnodes().await.unwrap();
 
