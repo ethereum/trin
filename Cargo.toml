@@ -19,7 +19,6 @@ log = "0.4.14"
 tokio = {version = "1.2.0", features = ["full"]}
 futures = "0.3.13"
 env_logger = "0.8.2"
-clap = "2.33.3"
 uint = { version = "0.8.5", default-features = false }
 eth2_ssz = "0.1.2"
 eth2_ssz_derive = "0.1.0"
