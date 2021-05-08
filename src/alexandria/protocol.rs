@@ -10,6 +10,23 @@ use discv5::{Discv5ConfigBuilder, TalkReqHandler, TalkRequest};
 use log::warn;
 use tokio::sync::mpsc;
 
+#[derive(Clone)]
+pub struct PortalConfig {
+    pub listen_port: u16,
+    pub bootnode_enrs: Vec<Enr>,
+    pub data_radius: U256,
+}
+
+impl Default for PortalConfig {
+    fn default() -> Self {
+        Self {
+            listen_port: 4242,
+            bootnode_enrs: vec![],
+            data_radius: U256::from(u64::MAX), //TODO better data_radius default?
+        }
+    }
+}
+
 pub const PROTOCOL: &str = "state-network";
 
 pub struct AlexandriaProtocol {
@@ -32,13 +49,13 @@ impl TalkReqHandler for ProtocolHandler {
 }
 
 impl AlexandriaProtocol {
-    pub async fn new(port: u16, boot_nodes: Vec<Enr>, data_radius: U256) -> Result<Self, String> {
-        let disv5_config = Discv5ConfigBuilder::default().build();
-
-        let mut config = DiscoveryConfig::default();
-        config.discv5_config = disv5_config;
-        config.listen_port = port;
-        config.bootnode_enrs = boot_nodes;
+    pub async fn new(portal_config: PortalConfig) -> Result<Self, String> {
+        let config = DiscoveryConfig {
+            discv5_config: Discv5ConfigBuilder::default().build(),
+            listen_port: portal_config.listen_port,
+            bootnode_enrs: portal_config.bootnode_enrs,
+            ..Default::default()
+        };
 
         let local_socket = SocketAddr::new(config.listen_address, config.listen_port);
 
@@ -52,7 +69,7 @@ impl AlexandriaProtocol {
             .await?;
         Ok(Self {
             discovery,
-            data_radius,
+            data_radius: portal_config.data_radius,
             protocol_receiver: rx,
         })
     }
