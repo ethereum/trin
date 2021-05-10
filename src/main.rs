@@ -12,7 +12,6 @@ use std::time::Duration;
 
 mod alexandria;
 use alexandria::protocol::{AlexandriaProtocol, PortalConfig};
-use alexandria::{Enr, U256};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -40,7 +39,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config.bootnode_enrs
     );
     tokio::spawn(async move {
-        let _p2p = AlexandriaProtocol::new(config).await;
+        let _p2p = AlexandriaProtocol::new(config).await.unwrap();
         // TODO next hacky test: make sure we establish a session with the boot node
 
         // TODO Probably some new API like p2p.maintain_network() that blocks forever

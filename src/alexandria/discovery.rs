@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use super::{protocol::PROTOCOL, Enr};
 use discv5::enr::{CombinedKey, EnrBuilder, NodeId};
 use discv5::{Discv5, Discv5Config, TalkReqHandler};
