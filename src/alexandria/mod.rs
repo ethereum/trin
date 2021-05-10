@@ -1,3 +1,4 @@
+#![allow(clippy::all)]
 pub mod discovery;
 pub mod protocol;
 pub mod types;

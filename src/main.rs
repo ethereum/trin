@@ -12,6 +12,7 @@ use std::time::Duration;
 
 mod alexandria;
 use alexandria::protocol::{AlexandriaProtocol, PortalConfig};
+use alexandria::{Enr, U256};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

@@ -81,8 +81,8 @@ impl AlexandriaProtocol {
         enr: Enr,
     ) -> Result<Vec<u8>, String> {
         let msg = Ping {
-            data_radius,
             enr_seq,
+            data_radius,
         };
         self.discovery
             .send_talkreq(enr, Message::Request(Request::Ping(msg)).to_bytes())

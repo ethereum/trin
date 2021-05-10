@@ -162,7 +162,7 @@ impl ssz::Decode for Nodes {
     }
 
     fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
-        if bytes.len() == 0 {
+        if bytes.is_empty() {
             return Err(DecodeError::BytesInvalid("Should not be empty".to_string()));
         }
         let total = bytes.first().expect("should have one element");
@@ -216,7 +216,7 @@ impl ssz::Decode for FoundContent {
     }
 
     fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
-        if bytes.len() == 0 {
+        if bytes.is_empty() {
             return Err(DecodeError::BytesInvalid("Should not be empty".to_string()));
         }
         let _length = bytes.first().expect("should have one element");
