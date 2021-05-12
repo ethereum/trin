@@ -44,14 +44,16 @@ impl Discovery {
             builder.build(&enr_key).unwrap()
         };
 
-        info!("Starting discv5 service with enr: {:?}", enr);
+        info!(
+            "Starting discv5 with local enr encoded={:?} decoded={}",
+            enr, enr
+        );
 
-        info!("Self enr: {}", enr);
         let mut discv5 = Discv5::new(enr, enr_key, config.discv5_config)
             .map_err(|e| format!("Failed to create discv5 instance: {}", e))?;
 
         for enr in config.bootnode_enrs {
-            info!("Adding bootnode");
+            info!("Adding bootnode {}", enr);
             discv5
                 .add_enr(enr)
                 .map_err(|e| format!("Failed to add enr: {}", e))?;
