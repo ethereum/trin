@@ -87,10 +87,10 @@ impl TrinConfig {
         println!("Pool Size: {}", pool_size);
 
         Ok(TrinConfig {
-            web3_http_port,
-            web3_ipc_path,
-            pool_size,
             web3_transport,
+            web3_ipc_path,
+            web3_http_port,
+            pool_size,
         })
     }
 }
