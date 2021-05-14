@@ -9,7 +9,7 @@ use super::{
 };
 use super::{types::Message, Enr};
 use discv5::{Discv5ConfigBuilder, TalkReqHandler, TalkRequest};
-use log::warn;
+use log::{debug, warn};
 use tokio::sync::mpsc;
 
 #[derive(Clone)]
@@ -76,12 +76,8 @@ impl AlexandriaProtocol {
         })
     }
 
-    pub async fn send_ping(
-        &self,
-        data_radius: U256,
-        enr_seq: u32,
-        enr: Enr,
-    ) -> Result<Vec<u8>, String> {
+    pub async fn send_ping(&self, data_radius: U256, enr: Enr) -> Result<Vec<u8>, String> {
+        let enr_seq = self.discovery.local_enr().seq();
         let msg = Ping {
             enr_seq,
             data_radius,
@@ -113,6 +109,7 @@ impl AlexandriaProtocol {
     pub fn process_request(mut self, handle: tokio::runtime::Handle) {
         let fut = async move {
             while let Some(request) = self.protocol_receiver.recv().await {
+                debug!("Got talkreq message {:?}", request);
                 let reply = match self.process_one_request(&request).await {
                     Ok(r) => Message::Response(r).to_bytes(),
                     Err(e) => e.into_bytes(),
@@ -141,6 +138,7 @@ impl AlexandriaProtocol {
 
         let response = match request {
             Request::Ping(Ping { .. }) => {
+                debug!("Got overlay ping request {:?}", request);
                 let enr_seq = self.discovery.local_enr().seq();
                 Response::Pong(Pong {
                     enr_seq: enr_seq,
@@ -162,5 +160,18 @@ impl AlexandriaProtocol {
         };
 
         Ok(response)
+    }
+
+    /// Convenience call for testing, quick way to ping bootnodes
+    pub async fn ping_bootnodes(&mut self) -> Result<(), String> {
+        // Trigger bonding with bootnodes, at both the base layer and portal overlay.
+        // The overlay ping via talkreq will trigger a session at the base layer, then
+        // a session on the (overlay) portal network.
+        for enr in self.discovery.discv5.table_entries_enr() {
+            debug!("Pinging {} on portal network", enr);
+            let ping_result = self.send_ping(U256::from(u64::MAX), enr).await?;
+            debug!("Portal network Ping result: {:?}", ping_result);
+        }
+        Ok(())
     }
 }

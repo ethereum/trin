@@ -39,8 +39,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config.bootnode_enrs
     );
     tokio::spawn(async move {
-        let _p2p = AlexandriaProtocol::new(config).await.unwrap();
-        // TODO next hacky test: make sure we establish a session with the boot node
+        let mut p2p = AlexandriaProtocol::new(config).await.unwrap();
+        // hacky test: make sure we establish a session with the boot node
+        p2p.ping_bootnodes().await.unwrap();
 
         // TODO Probably some new API like p2p.maintain_network() that blocks forever
         tokio::time::sleep(Duration::from_secs(86400 * 365 * 10)).await;
