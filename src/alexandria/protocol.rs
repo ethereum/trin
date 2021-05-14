@@ -143,7 +143,7 @@ impl AlexandriaProtocol {
             Request::Ping(Ping { .. }) => {
                 let enr_seq = self.discovery.local_enr().seq();
                 Response::Pong(Pong {
-                    enr_seq: enr_seq as u32,
+                    enr_seq: enr_seq,
                     data_radius: self.data_radius,
                 })
             }
