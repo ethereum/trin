@@ -10,8 +10,8 @@ use log::info;
 use std::env;
 use std::time::Duration;
 
-mod alexandria;
-use alexandria::protocol::{AlexandriaProtocol, PortalConfig};
+mod portalnet;
+use portalnet::protocol::{PortalnetConfig, PortalnetProtocol};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -32,14 +32,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // TODO populate portal config from cli args
-    let config: PortalConfig = Default::default();
+    let config: PortalnetConfig = Default::default();
 
     info!(
         "About to spawn portal p2p with boot nodes: {:?}",
         config.bootnode_enrs
     );
     tokio::spawn(async move {
-        let mut p2p = AlexandriaProtocol::new(config).await.unwrap();
+        let mut p2p = PortalnetProtocol::new(config).await.unwrap();
         // hacky test: make sure we establish a session with the boot node
         p2p.ping_bootnodes().await.unwrap();
 

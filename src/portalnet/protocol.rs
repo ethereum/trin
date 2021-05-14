@@ -13,13 +13,13 @@ use log::{debug, warn};
 use tokio::sync::mpsc;
 
 #[derive(Clone)]
-pub struct PortalConfig {
+pub struct PortalnetConfig {
     pub listen_port: u16,
     pub bootnode_enrs: Vec<Enr>,
     pub data_radius: U256,
 }
 
-impl Default for PortalConfig {
+impl Default for PortalnetConfig {
     fn default() -> Self {
         Self {
             listen_port: 4242,
@@ -31,7 +31,7 @@ impl Default for PortalConfig {
 
 pub const PROTOCOL: &str = "portal";
 
-pub struct AlexandriaProtocol {
+pub struct PortalnetProtocol {
     discovery: Discovery,
     data_radius: U256,
     protocol_receiver: mpsc::UnboundedReceiver<TalkRequest>,
@@ -50,8 +50,8 @@ impl TalkReqHandler for ProtocolHandler {
     }
 }
 
-impl AlexandriaProtocol {
-    pub async fn new(portal_config: PortalConfig) -> Result<Self, String> {
+impl PortalnetProtocol {
+    pub async fn new(portal_config: PortalnetConfig) -> Result<Self, String> {
         let config = DiscoveryConfig {
             discv5_config: Discv5ConfigBuilder::default().build(),
             listen_port: portal_config.listen_port,
