@@ -29,7 +29,7 @@ impl Default for PortalConfig {
     }
 }
 
-pub const PROTOCOL: &str = "state-network";
+pub const PROTOCOL: &str = "portal";
 
 pub struct AlexandriaProtocol {
     discovery: Discovery,
