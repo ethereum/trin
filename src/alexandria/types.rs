@@ -116,13 +116,13 @@ impl Response {
 
 #[derive(Debug, PartialEq, Clone, Encode, Decode)]
 pub struct Ping {
-    pub enr_seq: u32,
+    pub enr_seq: u64,
     pub data_radius: U256,
 }
 
 #[derive(Debug, PartialEq, Clone, Encode, Decode)]
 pub struct Pong {
-    pub enr_seq: u32,
+    pub enr_seq: u64,
     pub data_radius: U256,
 }
 
