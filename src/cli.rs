@@ -6,7 +6,7 @@ use std::ffi::OsString;
 pub struct TrinConfig {
     pub web3_transport: String,
     pub web3_ipc_path: String,
-    pub web3_http_port: u32,
+    pub web3_http_port: u16,
     pub pool_size: u32,
 }
 
@@ -61,7 +61,7 @@ impl TrinConfig {
 
         println!("Launching trin...");
         let pool_size = value_t!(matches.value_of("pool_size"), u32)?;
-        let web3_http_port = value_t!(matches.value_of("web3_http_port"), u32)?;
+        let web3_http_port = value_t!(matches.value_of("web3_http_port"), u16)?;
         let web3_transport = value_t!(matches.value_of("web3_transport"), String)?;
         let web3_ipc_path = value_t!(matches.value_of("web3_ipc_path"), String)?;
 
@@ -111,7 +111,7 @@ mod test {
     fn test_default_args() {
         assert!(env_is_set());
         let expected_config = TrinConfig {
-            web3_http_port: DEFAULT_WEB3_HTTP_PORT.parse::<u32>().unwrap(),
+            web3_http_port: DEFAULT_WEB3_HTTP_PORT.parse::<u16>().unwrap(),
             web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
             pool_size: 2,
             web3_transport: "ipc".to_string(),
@@ -155,7 +155,7 @@ mod test {
         let actual_config =
             TrinConfig::new_from(["trin", "--web3-transport", "ipc"].iter()).unwrap();
         let expected_config = TrinConfig {
-            web3_http_port: DEFAULT_WEB3_HTTP_PORT.parse::<u32>().unwrap(),
+            web3_http_port: DEFAULT_WEB3_HTTP_PORT.parse::<u16>().unwrap(),
             web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
             pool_size: 2,
             web3_transport: "ipc".to_string(),
@@ -180,7 +180,7 @@ mod test {
         )
         .unwrap();
         let expected_config = TrinConfig {
-            web3_http_port: DEFAULT_WEB3_HTTP_PORT.parse::<u32>().unwrap(),
+            web3_http_port: DEFAULT_WEB3_HTTP_PORT.parse::<u16>().unwrap(),
             web3_ipc_path: "/path/test.ipc".to_string(),
             pool_size: 2,
             web3_transport: "ipc".to_string(),
