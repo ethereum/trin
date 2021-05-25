@@ -2023,6 +2023,8 @@ dependencies = [
  "serde_json",
  "threadpool",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
  "uint 0.8.5",
  "validator",
 ]

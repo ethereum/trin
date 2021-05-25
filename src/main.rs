@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate lazy_static;
 extern crate log;
+extern crate tracing;
 
 mod cli;
 use cli::TrinConfig;
@@ -15,7 +16,7 @@ use portalnet::protocol::{PortalnetConfig, PortalnetProtocol};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    env_logger::init();
+    tracing_subscriber::fmt::init();
 
     let trin_config = TrinConfig::new();
 
