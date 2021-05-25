@@ -108,6 +108,7 @@ impl TrinConfig {
         println!("Bootnodes: {}", bootnodes);
         let bootnodes: Vec<String> = bootnodes
             .split(',')
+            .filter(|&bootnode| !bootnode.is_empty())
             .map(|bootnode| bootnode.to_string())
             .collect();
 
