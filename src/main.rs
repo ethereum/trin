@@ -9,7 +9,6 @@ mod jsonrpc;
 use jsonrpc::launch_trin;
 use log::info;
 use std::env;
-use std::time::Duration;
 
 mod portalnet;
 use portalnet::protocol::{PortalnetConfig, PortalnetProtocol};
@@ -54,8 +53,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // hacky test: make sure we establish a session with the boot node
         p2p.ping_bootnodes().await.unwrap();
 
-        // TODO Probably some new API like p2p.maintain_network() that blocks forever
-        tokio::time::sleep(Duration::from_secs(86400 * 365 * 10)).await;
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to pause until ctrl-c");
     })
     .await
     .unwrap();
