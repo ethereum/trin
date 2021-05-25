@@ -1,6 +1,7 @@
 #![allow(clippy::all)]
 pub mod discovery;
 pub mod protocol;
+pub mod socket;
 pub mod types;
 use discv5::enr::CombinedKey;
 use ssz::DecodeError;

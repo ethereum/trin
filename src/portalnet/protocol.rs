@@ -13,6 +13,8 @@ use discv5::{Discv5ConfigBuilder, TalkReqHandler, TalkRequest};
 use log::{debug, error, warn};
 use tokio::sync::mpsc;
 
+use super::socket;
+
 #[derive(Clone)]
 pub struct PortalnetConfig {
     pub listen_port: u16,
@@ -115,23 +117,12 @@ impl TalkReqHandler for ProtocolHandler {
     }
 }
 
-/// Ping a STUN server on the public network. This does two things:
-/// - Creates an externally-addressable UDP port, if you are behind a NAT
-/// - Returns the public IP and port that corresponds to your local port
-fn punch_nat(local_socket_addr: &SocketAddr) -> SocketAddr {
-    let socket = std::net::UdpSocket::bind(local_socket_addr).unwrap();
-    let external_addr = stunclient::StunClient::new("143.198.142.185:3478".parse().unwrap()).query_external_address(&socket);
-    debug!(
-        "STUN claims that public network endpoint is: {:?}",
-        external_addr,
-    );
-    external_addr.unwrap_or_else(|_| local_socket_addr.clone())
-}
-
 impl PortalnetProtocol {
     pub async fn new(portal_config: PortalnetConfig) -> Result<(Self, PortalnetEvents), String> {
-        let local_socket_addr = SocketAddr::new("0.0.0.0".parse().unwrap(), portal_config.listen_port);
-        let external_addr = punch_nat(&local_socket_addr);
+        let listen_all_ips = SocketAddr::new("0.0.0.0".parse().unwrap(), portal_config.listen_port);
+
+        let external_addr = socket::stun_for_external(&listen_all_ips)
+            .unwrap_or_else(|| socket::default_local_address(portal_config.listen_port));
 
         let config = DiscoveryConfig {
             discv5_config: Discv5ConfigBuilder::default().build(),
@@ -149,7 +140,7 @@ impl PortalnetProtocol {
         };
 
         discovery
-            .start(local_socket_addr, Some(Box::new(handler)))
+            .start(listen_all_ips, Some(Box::new(handler)))
             .await?;
 
         let discovery = Arc::new(discovery);
