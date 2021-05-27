@@ -17,7 +17,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            listen_address: "127.0.0.1".parse().expect("valid ip address"),
+            listen_address: "0.0.0.0".parse().expect("valid ip address"),
             listen_port: 4242,
             discv5_config: Discv5Config::default(),
             bootnode_enrs: vec![],
