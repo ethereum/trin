@@ -115,16 +115,32 @@ impl TalkReqHandler for ProtocolHandler {
     }
 }
 
+/// Ping a STUN server on the public network. This does two things:
+/// - Creates an externally-addressable UDP port, if you are behind a NAT
+/// - Returns the public IP and port that corresponds to your local port
+fn punch_nat(local_socket_addr: &SocketAddr) -> SocketAddr {
+    let socket = std::net::UdpSocket::bind(local_socket_addr).unwrap();
+    let external_addr = stunclient::StunClient::new("143.198.142.185:3478".parse().unwrap()).query_external_address(&socket);
+    debug!(
+        "STUN claims that public network endpoint is: {:?}",
+        external_addr,
+    );
+    external_addr.unwrap_or_else(|_| local_socket_addr.clone())
+}
+
 impl PortalnetProtocol {
     pub async fn new(portal_config: PortalnetConfig) -> Result<(Self, PortalnetEvents), String> {
+        let local_socket_addr = SocketAddr::new("0.0.0.0".parse().unwrap(), portal_config.listen_port);
+        let external_addr = punch_nat(&local_socket_addr);
+
         let config = DiscoveryConfig {
             discv5_config: Discv5ConfigBuilder::default().build(),
-            listen_port: portal_config.listen_port,
+            // This is for defining the ENR:
+            listen_port: external_addr.port(),
+            listen_address: external_addr.ip(),
             bootnode_enrs: portal_config.bootnode_enrs,
             ..Default::default()
         };
-
-        let local_socket = SocketAddr::new(config.listen_address, config.listen_port);
 
         let mut discovery = Discovery::new(config).unwrap();
         let (tx, rx) = mpsc::unbounded_channel();
@@ -133,7 +149,7 @@ impl PortalnetProtocol {
         };
 
         discovery
-            .start(local_socket, Some(Box::new(handler)))
+            .start(local_socket_addr, Some(Box::new(handler)))
             .await?;
 
         let discovery = Arc::new(discovery);
