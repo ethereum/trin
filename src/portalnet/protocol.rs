@@ -10,7 +10,7 @@ use super::{
 };
 use super::{types::Message, Enr};
 use discv5::{Discv5ConfigBuilder, TalkReqHandler, TalkRequest};
-use log::{debug, warn};
+use log::{debug, error, warn};
 use tokio::sync::mpsc;
 
 #[derive(Clone)]
@@ -50,7 +50,10 @@ impl PortalnetEvents {
             debug!("Got talkreq message {:?}", request);
             let reply = match self.process_one_request(&request).await {
                 Ok(r) => Message::Response(r).to_bytes(),
-                Err(e) => e.into_bytes(),
+                Err(e) => {
+                    error!("failed to process portal event: {}", e);
+                    e.into_bytes()
+                }
             };
 
             request.respond(reply);
