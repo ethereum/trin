@@ -85,7 +85,8 @@ impl PortalnetEvents {
             }
 
             Request::FindNodes(FindNodes { distances }) => {
-                let enrs = self.discovery.find_nodes_response(distances);
+                let distances64: Vec<u64> = distances.iter().map(|x| (*x).into()).collect();
+                let enrs = self.discovery.find_nodes_response(distances64);
                 Response::Nodes(Nodes {
                     total: enrs.len() as u8,
                     enrs,
@@ -162,7 +163,7 @@ impl PortalnetProtocol {
             .await
     }
 
-    pub async fn send_find_nodes(&self, distances: Vec<u64>, enr: Enr) -> Result<Vec<u8>, String> {
+    pub async fn send_find_nodes(&self, distances: Vec<u16>, enr: Enr) -> Result<Vec<u8>, String> {
         let msg = FindNodes { distances };
         self.discovery
             .send_talkreq(enr, Message::Request(Request::FindNodes(msg)).to_bytes())
