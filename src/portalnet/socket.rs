@@ -1,9 +1,7 @@
 use log::debug;
-use std::collections::VecDeque;
-use std::io;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
 
-use get_if_addrs::{get_if_addrs, IfAddr, Interface};
+use interfaces::{self, Interface};
 
 const STUN_SERVER: &str = "143.198.142.185:3478";
 
@@ -22,37 +20,27 @@ pub fn stun_for_external(local_socket_addr: &SocketAddr) -> Option<SocketAddr> {
 }
 
 pub fn default_local_address(port: u16) -> SocketAddr {
-    let ip = first_interface().map_or_else(
-        || IpAddr::V4(Ipv4Addr::LOCALHOST),
-        |interface| interface.addr.ip(),
-    );
+    let ip = find_assigned_ip().unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST));
     SocketAddr::new(ip, port)
 }
 
-fn first_interface() -> Option<Interface> {
-    match get_network_interfaces() {
-        Ok(mut interfaces) => interfaces.pop_front(),
-        Err(err) => {
-            debug!("Could not find any network interfaces: {}", err);
-            None
-        }
-    }
-}
-
-/// Inspired by
-/// https://github.com/pzmarzly/portforwarder-rs/blob/6649b28cdfbece7a79daad2c6eee5304ce519dfe/src/query_interfaces.rs
-fn get_network_interfaces() -> Result<VecDeque<Interface>, io::Error> {
-    // For now, only return v4 addresses
-
-    let interfaces = get_if_addrs()?
+fn find_assigned_ip() -> Option<IpAddr> {
+    let online_nics = Interface::get_all()
+        .unwrap_or(vec![])
         .into_iter()
-        .filter(|interface| {
-            if let IfAddr::V4(ref addr) = interface.addr {
-                !addr.is_loopback()
-            } else {
-                false
-            }
-        })
-        .collect();
-    Ok(interfaces)
+        .filter(|iface| iface.is_up() && iface.is_running() && !iface.is_loopback());
+
+    for nic in online_nics.into_iter() {
+        let ipv4_socket_addr = nic
+            .addresses
+            .iter()
+            .filter(|&addr_group| addr_group.kind == interfaces::Kind::Ipv4)
+            .find_map(|addr_group| addr_group.addr);
+
+        if let Some(valid_socket) = ipv4_socket_addr {
+            return Some(valid_socket.ip());
+        }
+        // else, check the next interface
+    }
+    None
 }
