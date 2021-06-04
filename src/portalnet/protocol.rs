@@ -13,6 +13,8 @@ use discv5::{Discv5ConfigBuilder, TalkReqHandler, TalkRequest};
 use log::{debug, error, warn};
 use tokio::sync::mpsc;
 
+use super::socket;
+
 #[derive(Clone)]
 pub struct PortalnetConfig {
     pub listen_port: u16,
@@ -117,14 +119,19 @@ impl TalkReqHandler for ProtocolHandler {
 
 impl PortalnetProtocol {
     pub async fn new(portal_config: PortalnetConfig) -> Result<(Self, PortalnetEvents), String> {
+        let listen_all_ips = SocketAddr::new("0.0.0.0".parse().unwrap(), portal_config.listen_port);
+
+        let external_addr = socket::stun_for_external(&listen_all_ips)
+            .unwrap_or_else(|| socket::default_local_address(portal_config.listen_port));
+
         let config = DiscoveryConfig {
             discv5_config: Discv5ConfigBuilder::default().build(),
-            listen_port: portal_config.listen_port,
+            // This is for defining the ENR:
+            listen_port: external_addr.port(),
+            listen_address: external_addr.ip(),
             bootnode_enrs: portal_config.bootnode_enrs,
             ..Default::default()
         };
-
-        let local_socket = SocketAddr::new(config.listen_address, config.listen_port);
 
         let mut discovery = Discovery::new(config).unwrap();
         let (tx, rx) = mpsc::unbounded_channel();
@@ -133,7 +140,7 @@ impl PortalnetProtocol {
         };
 
         discovery
-            .start(local_socket, Some(Box::new(handler)))
+            .start(listen_all_ips, Some(Box::new(handler)))
             .await?;
 
         let discovery = Arc::new(discovery);

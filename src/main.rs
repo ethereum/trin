@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate lazy_static;
 extern crate log;
+extern crate stunclient;
 extern crate tracing;
 
 mod cli;
