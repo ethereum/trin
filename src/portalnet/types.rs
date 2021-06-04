@@ -1,9 +1,12 @@
-use ssz::{DecodeError, Encode};
+use rlp::Encodable;
+
+use ssz::{Decode, DecodeError, Encode};
+
+use ssz_derive::{Decode, Encode};
+
+use std::convert::{TryFrom, TryInto};
 
 use super::{Enr, U256};
-use rlp::Encodable;
-use ssz::Decode;
-use ssz_derive::{Decode, Encode};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct ProtocolMessage {
@@ -128,8 +131,8 @@ pub struct Pong {
 
 #[derive(Debug, PartialEq, Clone, Encode, Decode)]
 pub struct FindNodes {
-    // TODO: Make this an ssz list and use u16
-    pub distances: Vec<u64>,
+    // TODO: Make this an ssz list
+    pub distances: Vec<u16>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -137,6 +140,45 @@ pub struct Nodes {
     pub total: u8,
     // TODO: Make this an ssz list
     pub enrs: Vec<Enr>,
+}
+
+#[derive(Debug, Encode, Decode)]
+struct NodesHelper {
+    total: u8,
+    enrs: Vec<Vec<u8>>,
+}
+
+impl From<&Nodes> for NodesHelper {
+    fn from(nodes: &Nodes) -> Self {
+        Self {
+            total: nodes.total,
+            enrs: nodes
+                .enrs
+                .iter()
+                .map(|enr| enr.rlp_bytes().to_vec())
+                .collect(),
+        }
+    }
+}
+
+impl TryFrom<NodesHelper> for Nodes {
+    type Error = DecodeError;
+
+    fn try_from(helper: NodesHelper) -> Result<Self, Self::Error> {
+        let enrs: Vec<Enr> = helper
+            .enrs
+            .into_iter()
+            .map(|bytes| {
+                rlp::decode(&bytes)
+                    .map_err(|e| DecodeError::BytesInvalid(format!("rlp decoding failed: {}", e)))
+            })
+            .collect::<Result<_, _>>()?;
+
+        Ok(Self {
+            total: helper.total,
+            enrs,
+        })
+    }
 }
 
 // TODO: check correctness and if there's a better way
@@ -147,10 +189,7 @@ impl ssz::Encode for Nodes {
     }
 
     fn ssz_append(&self, buf: &mut Vec<u8>) {
-        buf.push(self.total);
-        for enr in self.enrs.iter() {
-            buf.append(enr.rlp_bytes().to_vec().as_mut());
-        }
+        NodesHelper::from(self).ssz_append(buf)
     }
 }
 
@@ -162,22 +201,7 @@ impl ssz::Decode for Nodes {
     }
 
     fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
-        if bytes.is_empty() {
-            return Err(DecodeError::BytesInvalid("Should not be empty".to_string()));
-        }
-        let total = bytes.first().expect("should have one element");
-        let enr_bytes = <Vec<Vec<u8>>>::from_ssz_bytes(&bytes[1..])?;
-        let enrs: Result<Vec<Enr>, _> = enr_bytes
-            .into_iter()
-            .map(|bytes| {
-                rlp::decode(&bytes)
-                    .map_err(|e| DecodeError::BytesInvalid(format!("rlp decoding failed: {}", e)))
-            })
-            .collect();
-        Ok(Self {
-            total: *total,
-            enrs: enrs?,
-        })
+        NodesHelper::from_ssz_bytes(bytes)?.try_into()
     }
 }
 

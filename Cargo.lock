@@ -363,7 +363,7 @@ dependencies = [
 [[package]]
 name = "discv5"
 version = "0.1.0-beta.4"
-source = "git+https://github.com/quilt/discv5.git?branch=trin-quilt#e51f4c780cd9ddd040ffd5539349a169e3272ee9"
+source = "git+https://github.com/quilt/discv5.git?branch=trin-quilt#db00a334f38d6d659f9c1bbb6ce1ed1d9b4ab61f"
 dependencies = [
  "aes-ctr",
  "aes-gcm",

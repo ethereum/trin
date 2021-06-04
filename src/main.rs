@@ -49,7 +49,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         portalnet_config.bootnode_enrs
     );
     tokio::spawn(async move {
-        let mut p2p = PortalnetProtocol::new(portalnet_config).await.unwrap();
+        let (mut p2p, events) = PortalnetProtocol::new(portalnet_config).await.unwrap();
+
+        tokio::spawn(events.process_requests());
+
         // hacky test: make sure we establish a session with the boot node
         p2p.ping_bootnodes().await.unwrap();
 
