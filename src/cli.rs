@@ -1,6 +1,7 @@
 use clap::{value_t, App, Arg};
 use std::env;
 use std::ffi::OsString;
+use std::net::SocketAddr;
 
 #[derive(Debug, PartialEq)]
 pub struct TrinConfig {
@@ -10,6 +11,7 @@ pub struct TrinConfig {
     pub pool_size: u32,
     pub discovery_port: u16,
     pub bootnodes: Vec<String>,
+    pub external_addr: Option<SocketAddr>,
 }
 
 const DEFAULT_WEB3_IPC_PATH: &str = "/tmp/trin-jsonrpc.ipc";
@@ -74,6 +76,12 @@ impl TrinConfig {
                     .default_value("")
                     .takes_value(true),
             )
+            .arg(
+                Arg::with_name("external_addr")
+                .long("external-address")
+                .help("The public IP address and port under which this node is accessible")
+                .takes_value(true),
+            )
             .get_matches_from(args);
 
         println!("Launching trin...");
@@ -83,6 +91,11 @@ impl TrinConfig {
         let web3_ipc_path = value_t!(matches.value_of("web3_ipc_path"), String)?;
         let discovery_port = value_t!(matches.value_of("discovery_port"), u16)?;
         let bootnodes = value_t!(matches.value_of("bootnodes"), String)?;
+        let external_addr = if matches.is_present("external_addr") {
+            Some(value_t!(matches.value_of("external_addr"), SocketAddr)?)
+        } else {
+            None
+        };
 
         match web3_transport.as_str() {
             "http" => match &web3_ipc_path[..] {
@@ -119,6 +132,7 @@ impl TrinConfig {
             pool_size,
             discovery_port,
             bootnodes,
+            external_addr,
         })
     }
 }
@@ -145,17 +159,20 @@ mod test {
             web3_transport: "ipc".to_string(),
             discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
             bootnodes: vec![],
+            external_addr: None,
         };
         let actual_config = TrinConfig::new_from(["trin"].iter()).unwrap();
         assert_eq!(actual_config.web3_transport, expected_config.web3_transport);
         assert_eq!(actual_config.web3_http_port, expected_config.web3_http_port);
         assert_eq!(actual_config.pool_size, expected_config.pool_size);
+        assert_eq!(actual_config.external_addr, expected_config.external_addr);
     }
 
     #[test]
     fn test_custom_http_args() {
         assert!(env_is_set());
         let expected_config = TrinConfig {
+            external_addr: None,
             web3_http_port: 8080,
             web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
             pool_size: 3,
@@ -187,6 +204,7 @@ mod test {
         let actual_config =
             TrinConfig::new_from(["trin", "--web3-transport", "ipc"].iter()).unwrap();
         let expected_config = TrinConfig {
+            external_addr: None,
             web3_http_port: DEFAULT_WEB3_HTTP_PORT.parse::<u16>().unwrap(),
             web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
             pool_size: 2,
@@ -214,6 +232,7 @@ mod test {
         )
         .unwrap();
         let expected_config = TrinConfig {
+            external_addr: None,
             web3_http_port: DEFAULT_WEB3_HTTP_PORT.parse::<u16>().unwrap(),
             web3_ipc_path: "/path/test.ipc".to_string(),
             pool_size: 2,
@@ -265,6 +284,7 @@ mod test {
     fn test_custom_discovery_port() {
         assert!(env_is_set());
         let expected_config = TrinConfig {
+            external_addr: None,
             web3_http_port: DEFAULT_WEB3_HTTP_PORT.parse::<u16>().unwrap(),
             web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
             pool_size: 2,
@@ -281,6 +301,7 @@ mod test {
     fn test_custom_bootnodes() {
         assert!(env_is_set());
         let expected_config = TrinConfig {
+            external_addr: None,
             web3_http_port: DEFAULT_WEB3_HTTP_PORT.parse::<u16>().unwrap(),
             web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
             pool_size: 2,
@@ -291,5 +312,27 @@ mod test {
         let actual_config =
             TrinConfig::new_from(["trin", "--bootnodes", "enr:-aoeu,enr:-htns"].iter()).unwrap();
         assert_eq!(actual_config.bootnodes, expected_config.bootnodes);
+    }
+
+    #[test]
+    fn test_manual_external_addr_v4() {
+        assert!(env_is_set());
+        let actual_config =
+            TrinConfig::new_from(["trin", "--external-address", "127.0.0.1:1234"].iter()).unwrap();
+        assert_eq!(
+            actual_config.external_addr,
+            Some(SocketAddr::from(([127, 0, 0, 1], 1234)))
+        );
+    }
+
+    #[test]
+    fn test_manual_external_addr_v6() {
+        assert!(env_is_set());
+        let actual_config =
+            TrinConfig::new_from(["trin", "--external-address", "[::1]:1234"].iter()).unwrap();
+        assert_eq!(
+            actual_config.external_addr,
+            Some(SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 1], 1234)))
+        );
     }
 }

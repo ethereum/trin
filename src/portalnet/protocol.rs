@@ -17,6 +17,7 @@ use super::socket;
 
 #[derive(Clone)]
 pub struct PortalnetConfig {
+    pub external_addr: Option<SocketAddr>,
     pub listen_port: u16,
     pub bootnode_enrs: Vec<Enr>,
     pub data_radius: U256,
@@ -25,6 +26,7 @@ pub struct PortalnetConfig {
 impl Default for PortalnetConfig {
     fn default() -> Self {
         Self {
+            external_addr: None,
             listen_port: 4242,
             bootnode_enrs: vec![],
             data_radius: U256::from(u64::MAX), //TODO better data_radius default?
@@ -121,7 +123,9 @@ impl PortalnetProtocol {
     pub async fn new(portal_config: PortalnetConfig) -> Result<(Self, PortalnetEvents), String> {
         let listen_all_ips = SocketAddr::new("0.0.0.0".parse().unwrap(), portal_config.listen_port);
 
-        let external_addr = socket::stun_for_external(&listen_all_ips)
+        let external_addr = portal_config
+            .external_addr
+            .or_else(|| socket::stun_for_external(&listen_all_ips))
             .unwrap_or_else(|| socket::default_local_address(portal_config.listen_port));
 
         let config = DiscoveryConfig {

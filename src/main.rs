@@ -28,7 +28,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ),
     };
 
-    let listen_port = trin_config.discovery_port;
     let bootnode_enrs = trin_config
         .bootnodes
         .iter()
@@ -36,7 +35,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .collect();
 
     let portalnet_config = PortalnetConfig {
-        listen_port,
+        external_addr: trin_config.external_addr,
+        listen_port: trin_config.discovery_port,
         bootnode_enrs,
         ..Default::default()
     };
