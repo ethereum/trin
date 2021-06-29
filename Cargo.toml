@@ -9,7 +9,6 @@ edition = "2018"
 [dependencies]
 clap = "2.33.3"
 ctrlc = "3.1.8"
-discv5 = "=0.1.0-beta.4" # Temporarily lock the version until the patch below is resolved.
 env_logger = "0.8.2"
 eth2_ssz = "0.1.2"
 eth2_ssz_derive = "0.1.0"
@@ -29,5 +28,6 @@ tokio = {version = "1.2.0", features = ["full"]}
 uint = { version = "0.8.5", default-features = false }
 validator = { version = "0.13.0", features = ["derive"] }
 
-[patch.crates-io]
-discv5 = { git = "https://github.com/quilt/discv5.git", branch = "trin-quilt" }
+[dependencies.discv5]
+version = "0.1.0-beta.5"
+git = "https://github.com/sigp/discv5"

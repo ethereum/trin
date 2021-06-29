@@ -9,7 +9,7 @@ use super::{
     U256,
 };
 use super::{types::Message, Enr};
-use discv5::{Discv5ConfigBuilder, TalkReqHandler, TalkRequest};
+use discv5::{Discv5ConfigBuilder, Discv5Event, TalkRequest};
 use log::{debug, error, warn};
 use tokio::sync::mpsc;
 
@@ -44,14 +44,20 @@ pub struct PortalnetProtocol {
 pub struct PortalnetEvents {
     data_radius: U256,
     discovery: Arc<Discovery>,
-    protocol_receiver: mpsc::UnboundedReceiver<TalkRequest>,
+    protocol_receiver: mpsc::Receiver<Discv5Event>,
 }
 
 impl PortalnetEvents {
     /// Receives a request from the talkreq handler and sends a response back
     pub async fn process_requests(mut self) {
-        while let Some(request) = self.protocol_receiver.recv().await {
-            debug!("Got talkreq message {:?}", request);
+        while let Some(event) = self.protocol_receiver.recv().await {
+            debug!("Got discv5 event {:?}", event);
+
+            let request = match event {
+                Discv5Event::TalkRequest(r) => r,
+                _ => continue,
+            };
+
             let reply = match self.process_one_request(&request).await {
                 Ok(r) => Message::Response(r).to_bytes(),
                 Err(e) => {
@@ -60,7 +66,9 @@ impl PortalnetEvents {
                 }
             };
 
-            request.respond(reply);
+            if let Err(e) = request.respond(reply) {
+                warn!("failed to send reply: {}", e);
+            }
         }
     }
 
@@ -106,19 +114,6 @@ impl PortalnetEvents {
     }
 }
 
-#[derive(Clone)]
-pub struct ProtocolHandler {
-    protocol_sender: mpsc::UnboundedSender<TalkRequest>,
-}
-
-impl TalkReqHandler for ProtocolHandler {
-    fn talkreq_response(&self, request: TalkRequest) {
-        if self.protocol_sender.send(request).is_err() {
-            warn!("sending on disconnected channel");
-        }
-    }
-}
-
 impl PortalnetProtocol {
     pub async fn new(portal_config: PortalnetConfig) -> Result<(Self, PortalnetEvents), String> {
         let listen_all_ips = SocketAddr::new("0.0.0.0".parse().unwrap(), portal_config.listen_port);
@@ -138,14 +133,13 @@ impl PortalnetProtocol {
         };
 
         let mut discovery = Discovery::new(config).unwrap();
-        let (tx, rx) = mpsc::unbounded_channel();
-        let handler = ProtocolHandler {
-            protocol_sender: tx,
-        };
+        let protocol_receiver = discovery
+            .discv5
+            .event_stream()
+            .await
+            .map_err(|e| e.to_string())?;
 
-        discovery
-            .start(listen_all_ips, Some(Box::new(handler)))
-            .await?;
+        discovery.start(listen_all_ips).await?;
 
         let discovery = Arc::new(discovery);
 
@@ -157,7 +151,7 @@ impl PortalnetProtocol {
         let events = PortalnetEvents {
             data_radius: portal_config.data_radius,
             discovery,
-            protocol_receiver: rx,
+            protocol_receiver,
         };
 
         Ok((proto, events))
