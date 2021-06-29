@@ -2,7 +2,7 @@
 
 use super::{protocol::PROTOCOL, Enr};
 use discv5::enr::{CombinedKey, EnrBuilder, NodeId};
-use discv5::{Discv5, Discv5Config, TalkReqHandler};
+use discv5::{Discv5, Discv5Config};
 use log::info;
 use std::net::{IpAddr, SocketAddr};
 
@@ -65,14 +65,10 @@ impl Discovery {
         })
     }
 
-    pub async fn start(
-        &mut self,
-        listen_socket: SocketAddr,
-        protocol: Option<Box<dyn TalkReqHandler>>,
-    ) -> Result<(), String> {
+    pub async fn start(&mut self, listen_socket: SocketAddr) -> Result<(), String> {
         let _ = self
             .discv5
-            .start(listen_socket, protocol)
+            .start(listen_socket)
             .await
             .map_err(|e| format!("Failed to start discv5 server: {:?}", e))?;
         self.started = true;
