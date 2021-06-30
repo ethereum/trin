@@ -83,11 +83,16 @@ FLAGS:
     -V, --version    Prints version information
 
 OPTIONS:
-        --pool-size <pool_size>              max size of threadpool [default: 2]
-        --web3-http-port <web3_http_port>    port to accept json-rpc http connections [default: 8545]
-        --web3-ipc-path <web3_ipc_path>      path to json-rpc endpoint over IPC [default: /tmp/trin-jsonrpc.ipc]
-        --web3-transport <web3_transport>    select transport protocol to serve json-rpc endpoint [default: ipc]
-                                             [possible values: http, ipc]
+        --bootnodes <bootnodes>               One or more comma-delimited base64-encoded ENR's or multiaddr strings of
+                                              peers to initially add to the local routing table [default: ]
+        --discovery-port <discovery_port>     The UDP port to listen on. [default: 9000]
+        --external-address <external_addr>    The public IP address and port under which this node is accessible
+        --pool-size <pool_size>               max size of threadpool [default: 2]
+        --private-key <private_key>           Hex encoded 32 byte private key
+        --web3-http-port <web3_http_port>     port to accept json-rpc http connections [default: 8545]
+        --web3-ipc-path <web3_ipc_path>       path to json-rpc endpoint over IPC [default: /tmp/trin-jsonrpc.ipc]
+        --web3-transport <web3_transport>     select transport protocol to serve json-rpc endpoint [default: ipc]
+                                              [possible values: http, ipc]
 ```
 
 ## Gotchas

@@ -2605,6 +2605,7 @@ dependencies = [
  "eth2_ssz",
  "eth2_ssz_derive",
  "futures 0.3.14",
+ "hex",
  "interfaces",
  "lazy_static 1.4.0",
  "log 0.4.14",

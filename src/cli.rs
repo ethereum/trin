@@ -12,6 +12,7 @@ pub struct TrinConfig {
     pub discovery_port: u16,
     pub bootnodes: Vec<String>,
     pub external_addr: Option<SocketAddr>,
+    pub private_key: Option<Vec<u8>>,
 }
 
 const DEFAULT_WEB3_IPC_PATH: &str = "/tmp/trin-jsonrpc.ipc";
@@ -78,9 +79,15 @@ impl TrinConfig {
             )
             .arg(
                 Arg::with_name("external_addr")
-                .long("external-address")
-                .help("The public IP address and port under which this node is accessible")
-                .takes_value(true),
+                    .long("external-address")
+                    .help("The public IP address and port under which this node is accessible")
+                    .takes_value(true),
+            )
+            .arg(
+                Arg::with_name("private_key")
+                    .long("unsafe-private-key")
+                    .help("Hex encoded 32 byte private key (unsafe)")
+                    .takes_value(true),
             )
             .get_matches_from(args);
 
@@ -93,6 +100,19 @@ impl TrinConfig {
         let bootnodes = value_t!(matches.value_of("bootnodes"), String)?;
         let external_addr = if matches.is_present("external_addr") {
             Some(value_t!(matches.value_of("external_addr"), SocketAddr)?)
+        } else {
+            None
+        };
+        let private_key = if matches.is_present("private_key") {
+            let hex_private_key = value_t!(matches.value_of("private_key"), String)?;
+            match hex_private_key.len() {
+                64 => (),
+                val => panic!(
+                    "Invalid private key length: {}, expected 32 byte hexstring",
+                    val
+                ),
+            }
+            Some(hex::decode(&hex_private_key).unwrap())
         } else {
             None
         };
@@ -133,6 +153,7 @@ impl TrinConfig {
             discovery_port,
             bootnodes,
             external_addr,
+            private_key,
         })
     }
 }
@@ -160,6 +181,7 @@ mod test {
             discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
             bootnodes: vec![],
             external_addr: None,
+            private_key: None,
         };
         let actual_config = TrinConfig::new_from(["trin"].iter()).unwrap();
         assert_eq!(actual_config.web3_transport, expected_config.web3_transport);
@@ -173,6 +195,7 @@ mod test {
         assert!(env_is_set());
         let expected_config = TrinConfig {
             external_addr: None,
+            private_key: None,
             web3_http_port: 8080,
             web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
             pool_size: 3,
@@ -205,6 +228,7 @@ mod test {
             TrinConfig::new_from(["trin", "--web3-transport", "ipc"].iter()).unwrap();
         let expected_config = TrinConfig {
             external_addr: None,
+            private_key: None,
             web3_http_port: DEFAULT_WEB3_HTTP_PORT.parse::<u16>().unwrap(),
             web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
             pool_size: 2,
@@ -232,6 +256,7 @@ mod test {
         )
         .unwrap();
         let expected_config = TrinConfig {
+            private_key: None,
             external_addr: None,
             web3_http_port: DEFAULT_WEB3_HTTP_PORT.parse::<u16>().unwrap(),
             web3_ipc_path: "/path/test.ipc".to_string(),
@@ -285,6 +310,7 @@ mod test {
         assert!(env_is_set());
         let expected_config = TrinConfig {
             external_addr: None,
+            private_key: None,
             web3_http_port: DEFAULT_WEB3_HTTP_PORT.parse::<u16>().unwrap(),
             web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
             pool_size: 2,
@@ -302,6 +328,7 @@ mod test {
         assert!(env_is_set());
         let expected_config = TrinConfig {
             external_addr: None,
+            private_key: None,
             web3_http_port: DEFAULT_WEB3_HTTP_PORT.parse::<u16>().unwrap(),
             web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
             pool_size: 2,
@@ -334,5 +361,60 @@ mod test {
             actual_config.external_addr,
             Some(SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 1], 1234)))
         );
+    }
+
+    #[test]
+    fn test_custom_private_key() {
+        assert!(env_is_set());
+        let expected_config = TrinConfig {
+            external_addr: None,
+            private_key: Some(vec![1; 32]),
+            web3_http_port: DEFAULT_WEB3_HTTP_PORT.parse::<u16>().unwrap(),
+            web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
+            pool_size: 2,
+            web3_transport: "ipc".to_string(),
+            discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
+            bootnodes: vec![],
+        };
+        let actual_config = TrinConfig::new_from(
+            [
+                "trin",
+                "--unsafe-private-key",
+                "0101010101010101010101010101010101010101010101010101010101010101",
+            ]
+            .iter(),
+        )
+        .unwrap();
+        assert_eq!(actual_config.private_key, expected_config.private_key);
+    }
+
+    #[test]
+    #[should_panic(expected = "Invalid private key length")]
+    fn test_custom_private_key_odd_length() {
+        assert!(env_is_set());
+        TrinConfig::new_from(
+            [
+                "trin",
+                "--unsafe-private-key",
+                "010101010101010101010101010101010101010101010101010101010101010",
+            ]
+            .iter(),
+        )
+        .unwrap_err();
+    }
+
+    #[test]
+    #[should_panic(expected = "Invalid private key length")]
+    fn test_custom_private_key_requires_32_bytes() {
+        assert!(env_is_set());
+        TrinConfig::new_from(
+            [
+                "trin",
+                "--unsafe-private-key",
+                "01010101010101010101010101010101010101010101010101010101010101",
+            ]
+            .iter(),
+        )
+        .unwrap_err();
     }
 }

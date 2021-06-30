@@ -12,6 +12,7 @@ pub struct Config {
     pub listen_port: u16,
     pub discv5_config: Discv5Config,
     pub bootnode_enrs: Vec<Enr>,
+    pub private_key: Option<Vec<u8>>,
 }
 
 impl Default for Config {
@@ -21,6 +22,7 @@ impl Default for Config {
             listen_port: 4242,
             discv5_config: Discv5Config::default(),
             bootnode_enrs: vec![],
+            private_key: None,
         }
     }
 }
@@ -35,7 +37,10 @@ pub struct Discovery {
 
 impl Discovery {
     pub fn new(config: Config) -> Result<Self, String> {
-        let enr_key = CombinedKey::generate_secp256k1();
+        let enr_key = match config.private_key {
+            Some(val) => CombinedKey::secp256k1_from_bytes(val.clone().as_mut_slice()).unwrap(),
+            None => CombinedKey::generate_secp256k1(),
+        };
 
         let enr = {
             let mut builder = EnrBuilder::new("v4");
