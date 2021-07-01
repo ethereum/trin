@@ -13,9 +13,18 @@ use super::{types::Message, Enr};
 use discv5::{Discv5ConfigBuilder, Discv5Event, TalkRequest};
 use log::{debug, error, warn};
 use rocksdb::{Options, DB};
-use tokio::sync::mpsc;
+use serde_json::Value;
+use tokio::sync::{mpsc, oneshot};
 
 use super::socket;
+
+type Responder<T, E> = oneshot::Sender<Result<T, E>>;
+
+#[derive(Debug)]
+pub enum PortalEndpoint {
+    NodeInfo { resp: Responder<Value, String> },
+    RoutingTableInfo { resp: Responder<Value, String> },
+}
 
 #[derive(Clone)]
 pub struct PortalnetConfig {
@@ -39,8 +48,9 @@ impl Default for PortalnetConfig {
 pub const PROTOCOL: &str = "portal";
 pub const TRIN_DB_ENV_VAR: &str = "TRIN_DB_PATH";
 
+#[derive(Clone)]
 pub struct PortalnetProtocol {
-    discovery: Arc<Discovery>,
+    pub discovery: Arc<Discovery>,
     data_radius: U256,
 }
 
@@ -51,9 +61,39 @@ pub struct PortalnetEvents {
     db: DB,
 }
 
+pub struct JsonRPCHandler {
+    discovery: Arc<Discovery>,
+    jsonrpc_rx: mpsc::Receiver<PortalEndpoint>,
+}
+
+impl JsonRPCHandler {
+    pub async fn process_jsonrpc_requests(mut self) {
+        while let Some(cmd) = self.jsonrpc_rx.recv().await {
+            use PortalEndpoint::*;
+
+            match cmd {
+                NodeInfo { resp } => {
+                    let node_id = self.discovery.local_enr().to_base64();
+                    let _ = resp.send(Ok(Value::String(node_id)));
+                }
+                RoutingTableInfo { resp } => {
+                    let routing_table_info = self
+                        .discovery
+                        .discv5
+                        .table_entries_id()
+                        .iter()
+                        .map(|node_id| Value::String(node_id.to_string()))
+                        .collect();
+                    let _ = resp.send(Ok(Value::Array(routing_table_info)));
+                }
+            }
+        }
+    }
+}
+
 impl PortalnetEvents {
     /// Receives a request from the talkreq handler and sends a response back
-    pub async fn process_requests(mut self) {
+    pub async fn process_discv5_requests(mut self) {
         while let Some(event) = self.protocol_receiver.recv().await {
             debug!("Got discv5 event {:?}", event);
 
@@ -135,7 +175,10 @@ impl PortalnetEvents {
 }
 
 impl PortalnetProtocol {
-    pub async fn new(portal_config: PortalnetConfig) -> Result<(Self, PortalnetEvents), String> {
+    pub async fn new(
+        portal_config: PortalnetConfig,
+        jsonrpc_rx: mpsc::Receiver<PortalEndpoint>,
+    ) -> Result<(Self, PortalnetEvents, JsonRPCHandler), String> {
         let listen_all_ips = SocketAddr::new("0.0.0.0".parse().unwrap(), portal_config.listen_port);
 
         let external_addr = portal_config
@@ -183,12 +226,17 @@ impl PortalnetProtocol {
 
         let events = PortalnetEvents {
             data_radius: portal_config.data_radius,
-            discovery,
+            discovery: discovery.clone(),
             protocol_receiver,
             db,
         };
 
-        Ok((proto, events))
+        let rpc_handler = JsonRPCHandler {
+            discovery,
+            jsonrpc_rx,
+        };
+
+        Ok((proto, events, rpc_handler))
     }
 
     pub async fn send_ping(&self, data_radius: U256, enr: Enr) -> Result<Vec<u8>, String> {

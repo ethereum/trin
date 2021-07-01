@@ -4,6 +4,8 @@ extern crate log;
 extern crate stunclient;
 extern crate tracing;
 
+use tokio::sync::mpsc;
+
 mod cli;
 use cli::TrinConfig;
 mod jsonrpc;
@@ -12,7 +14,7 @@ use log::info;
 use std::env;
 
 mod portalnet;
-use portalnet::protocol::{PortalnetConfig, PortalnetProtocol};
+use portalnet::protocol::{PortalEndpoint, PortalnetConfig, PortalnetProtocol};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -41,18 +43,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     };
 
+    // Create a new channel with a capacity of at most 32.
+    let (jsonrpc_tx, jsonrpc_rx) = mpsc::channel::<PortalEndpoint>(32);
+
     let web3_server_task = tokio::task::spawn_blocking(|| {
-        launch_trin(trin_config, infura_project_id);
+        launch_trin(trin_config, infura_project_id, jsonrpc_tx);
     });
 
     info!(
         "About to spawn portal p2p with boot nodes: {:?}",
         portalnet_config.bootnode_enrs
     );
-    tokio::spawn(async move {
-        let (mut p2p, events) = PortalnetProtocol::new(portalnet_config).await.unwrap();
 
-        tokio::spawn(events.process_requests());
+    tokio::spawn(async move {
+        let (mut p2p, events, rpc_handler) = PortalnetProtocol::new(portalnet_config, jsonrpc_rx)
+            .await
+            .unwrap();
+
+        tokio::join!(
+            events.process_discv5_requests(),
+            rpc_handler.process_jsonrpc_requests()
+        );
 
         // hacky test: make sure we establish a session with the boot node
         p2p.ping_bootnodes().await.unwrap();
