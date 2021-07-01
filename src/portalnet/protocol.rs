@@ -133,13 +133,13 @@ impl PortalnetProtocol {
         };
 
         let mut discovery = Discovery::new(config).unwrap();
+        discovery.start(listen_all_ips).await?;
+
         let protocol_receiver = discovery
             .discv5
             .event_stream()
             .await
             .map_err(|e| e.to_string())?;
-
-        discovery.start(listen_all_ips).await?;
 
         let discovery = Arc::new(discovery);
 
