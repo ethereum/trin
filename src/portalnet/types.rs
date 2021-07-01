@@ -1,10 +1,12 @@
-use rlp::Encodable;
-
-use ssz::{Decode, DecodeError, Encode};
-
-use ssz_derive::{Decode, Encode};
-
 use std::convert::{TryFrom, TryInto};
+use std::ops::{Deref, DerefMut};
+use std::str::FromStr;
+
+use base64;
+use rlp::Encodable;
+use ssz;
+use ssz::{Decode, DecodeError, Encode, SszDecoderBuilder, SszEncoder};
+use ssz_derive::{Decode, Encode};
 
 use super::{Enr, U256};
 
@@ -213,45 +215,168 @@ pub struct FindContent {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct FoundContent {
-    pub enrs: Vec<Enr>,
-    // TODO: uncomment this after figuring out how to do ssz tuples
-    // payload: Vec<u8>,
+    pub enrs: Vec<SszEnr>,
+    pub payload: Vec<u8>,
 }
 
-// TODO: This is not according to spec.
-// Fix after figuring out how to do ssz containers encoding.
+#[derive(Debug, PartialEq, Clone)]
+pub struct SszEnr(Enr);
+
+impl SszEnr {
+    pub fn new(enr: Enr) -> SszEnr {
+        SszEnr(enr)
+    }
+}
+
+impl Deref for SszEnr {
+    type Target = Enr;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for SszEnr {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl ssz::Decode for SszEnr {
+    fn is_ssz_fixed_len() -> bool {
+        false
+    }
+
+    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
+        let string = base64::encode_config(&bytes, base64::URL_SAFE);
+        Ok(SszEnr(Enr::from_str(&string).unwrap()))
+    }
+}
+
+impl ssz::Encode for SszEnr {
+    fn is_ssz_fixed_len() -> bool {
+        false
+    }
+
+    fn ssz_append(&self, buf: &mut Vec<u8>) {
+        buf.append(&mut self.rlp_bytes().to_vec());
+    }
+}
+
 impl ssz::Encode for FoundContent {
     fn is_ssz_fixed_len() -> bool {
         false
     }
 
     fn ssz_append(&self, buf: &mut Vec<u8>) {
-        buf.push(self.enrs.len() as u8);
-        for enr in self.enrs.iter() {
-            buf.append(enr.rlp_bytes().to_vec().as_mut());
-        }
+        let offset =
+            <Vec<SszEnr> as Encode>::ssz_fixed_len() + <Vec<u8> as Encode>::ssz_fixed_len();
+        let mut encoder = SszEncoder::container(buf, offset);
+        encoder.append(&self.enrs);
+        encoder.append(&self.payload);
+        encoder.finalize();
     }
 }
 
-// TODO: same as encode
 impl ssz::Decode for FoundContent {
     fn is_ssz_fixed_len() -> bool {
         false
     }
 
     fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
-        if bytes.is_empty() {
-            return Err(DecodeError::BytesInvalid("Should not be empty".to_string()));
-        }
-        let _length = bytes.first().expect("should have one element");
-        let enr_bytes = <Vec<Vec<u8>>>::from_ssz_bytes(&bytes[1..])?;
-        let enrs: Result<Vec<Enr>, _> = enr_bytes
-            .into_iter()
-            .map(|bytes| {
-                rlp::decode(&bytes)
-                    .map_err(|e| DecodeError::BytesInvalid(format!("rlp decoding failed: {}", e)))
-            })
-            .collect();
-        Ok(Self { enrs: enrs? })
+        let mut builder = SszDecoderBuilder::new(&bytes);
+
+        builder.register_type::<Vec<SszEnr>>().unwrap();
+        builder.register_type::<Vec<u8>>().unwrap();
+
+        let mut decoder = builder.build()?;
+        Ok(Self {
+            enrs: decoder.decode_next()?,
+            payload: decoder.decode_next()?,
+        })
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use discv5::enr::{CombinedKey, EnrBuilder};
+    use std::net::Ipv4Addr;
+
+    #[test]
+    fn test_found_content_encodes_empty() {
+        let empty_enrs: Vec<SszEnr> = vec![];
+        let empty_payload: Vec<u8> = vec![];
+        let msg = FoundContent {
+            enrs: empty_enrs.clone(),
+            payload: empty_payload.clone(),
+        };
+        let actual = msg.as_ssz_bytes();
+        let decoded = FoundContent::from_ssz_bytes(&actual).unwrap();
+        assert_eq!(decoded, msg);
+        assert_eq!(decoded.enrs, empty_enrs);
+        assert_eq!(decoded.payload, empty_payload);
+    }
+
+    #[test]
+    fn test_found_content_encodes_payload() {
+        let empty_enrs: Vec<SszEnr> = vec![];
+        let msg = FoundContent {
+            enrs: empty_enrs,
+            payload: vec![1; 32],
+        };
+        let actual = msg.as_ssz_bytes();
+        let decoded = FoundContent::from_ssz_bytes(&actual).unwrap();
+        assert_eq!(decoded, msg);
+        assert_eq!(decoded.payload, vec![1; 32]);
+    }
+
+    #[test]
+    fn test_found_content_encodes_single_enr() {
+        let enr_key = CombinedKey::secp256k1_from_bytes(vec![1; 32].as_mut_slice()).unwrap();
+        let ip = Ipv4Addr::new(192, 168, 0, 1);
+        let enr = EnrBuilder::new("v4")
+            .ip(ip.into())
+            .tcp(8000)
+            .build(&enr_key)
+            .unwrap();
+
+        let empty_payload: Vec<u8> = vec![];
+        let msg = FoundContent {
+            enrs: vec![SszEnr(enr.clone())],
+            payload: empty_payload,
+        };
+        let actual = msg.as_ssz_bytes();
+        let decoded = FoundContent::from_ssz_bytes(&actual).unwrap();
+        assert!(SszEnr(enr).eq(decoded.enrs.first().unwrap()));
+    }
+
+    #[test]
+    fn test_found_content_encodes_double_enrs() {
+        let enr_one_key = CombinedKey::secp256k1_from_bytes(vec![1; 32].as_mut_slice()).unwrap();
+        let enr_one_ip = Ipv4Addr::new(192, 168, 0, 1);
+        let enr_one = EnrBuilder::new("v4")
+            .ip(enr_one_ip.into())
+            .tcp(8000)
+            .build(&enr_one_key)
+            .unwrap();
+
+        let enr_two_key = CombinedKey::secp256k1_from_bytes(vec![2; 32].as_mut_slice()).unwrap();
+        let enr_two_ip = Ipv4Addr::new(191, 168, 0, 1);
+        let enr_two = EnrBuilder::new("v4")
+            .ip(enr_two_ip.into())
+            .tcp(8000)
+            .build(&enr_two_key)
+            .unwrap();
+
+        let empty_payload: Vec<u8> = vec![];
+        let msg = FoundContent {
+            enrs: vec![SszEnr(enr_one.clone()), SszEnr(enr_two.clone())],
+            payload: empty_payload,
+        };
+        let actual = msg.as_ssz_bytes();
+        let decoded = FoundContent::from_ssz_bytes(&actual).unwrap();
+        assert!(SszEnr(enr_one).eq(decoded.enrs.first().unwrap()));
+        assert!(SszEnr(enr_two).eq(&decoded.enrs.into_iter().nth(1).unwrap()));
     }
 }

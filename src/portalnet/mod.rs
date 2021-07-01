@@ -3,6 +3,7 @@ pub mod discovery;
 pub mod protocol;
 pub mod socket;
 pub mod types;
+pub mod utils;
 use discv5::enr::CombinedKey;
 use ssz::DecodeError;
 use uint::construct_uint;

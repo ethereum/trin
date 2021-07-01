@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+use super::types::SszEnr;
+use super::utils::xor_two_values;
 use super::{protocol::PROTOCOL, Enr};
 use discv5::enr::{CombinedKey, EnrBuilder, NodeId};
 use discv5::{Discv5, Discv5Config};
@@ -110,6 +112,22 @@ impl Discovery {
     /// Returns closest nodes according to given distances.
     pub fn find_nodes_response(&self, distances: Vec<u64>) -> Vec<Enr> {
         self.discv5.nodes_by_distance(distances)
+    }
+
+    /// Returns list of nodes (max 32) closer to content than self.
+    pub fn find_nodes_close_to_content(&self, content_key: Vec<u8>) -> Vec<SszEnr> {
+        let self_node_id = self.local_enr().node_id();
+        let self_distance = xor_two_values(&content_key, &self_node_id.raw().to_vec());
+        // TODO: sort these by distance to return the closest 32 nodes
+        self.discv5
+            .table_entries_enr()
+            .into_iter()
+            .filter(|enr| {
+                xor_two_values(&content_key, &enr.node_id().raw().to_vec()) < self_distance
+            })
+            .take(32)
+            .map(|enr| SszEnr::new(enr))
+            .collect()
     }
 
     pub async fn send_talkreq(
