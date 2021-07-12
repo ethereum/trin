@@ -6,7 +6,10 @@ use serde_json::{json, Value};
 use std::fs;
 use std::io::{self, Read, Write};
 use std::net::{TcpListener, TcpStream};
+
+#[cfg(unix)]
 use std::os::unix;
+
 use std::sync::Mutex;
 use std::{panic, process};
 use threadpool::ThreadPool;
@@ -72,13 +75,23 @@ fn set_ipc_cleanup_handlers(ipc_path: &str) {
     }));
 }
 
+#[cfg(unix)]
+fn get_listener_result(ipc_path: &str) -> tokio::io::Result<unix::net::UnixListener> {
+    unix::net::UnixListener::bind(ipc_path)
+}
+
+#[cfg(windows)]
+fn get_listener_result(ipc_path: &str) -> tokio::io::Result<uds_windows::UnixListener> {
+    uds_windows::UnixListener::bind(ipc_path)
+}
+
 fn launch_ipc_client(
     pool: ThreadPool,
     infura_project_id: String,
     ipc_path: &str,
     portal_tx: UnboundedSender<PortalEndpoint>,
 ) {
-    let listener_result = unix::net::UnixListener::bind(ipc_path);
+    let listener_result = get_listener_result(ipc_path);
     let listener = match listener_result {
         Ok(listener) => {
             set_ipc_cleanup_handlers(ipc_path);
