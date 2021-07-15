@@ -35,6 +35,7 @@ pub struct PortalEndpoint {
 #[derive(Clone)]
 pub struct PortalnetConfig {
     pub external_addr: Option<SocketAddr>,
+    pub private_key: Option<Vec<u8>>,
     pub listen_port: u16,
     pub bootnode_enrs: Vec<Enr>,
     pub data_radius: U256,
@@ -44,6 +45,7 @@ impl Default for PortalnetConfig {
     fn default() -> Self {
         Self {
             external_addr: None,
+            private_key: None,
             listen_port: 4242,
             bootnode_enrs: Vec::<Enr>::new(),
             data_radius: U256::from(u64::MAX), //TODO better data_radius default?
@@ -198,6 +200,7 @@ impl PortalnetProtocol {
             listen_port: external_addr.port(),
             listen_address: external_addr.ip(),
             bootnode_enrs: portal_config.bootnode_enrs,
+            private_key: portal_config.private_key,
             ..Default::default()
         };
 
