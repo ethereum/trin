@@ -1,16 +1,18 @@
 #![allow(dead_code)]
 
+use std::env;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
 use super::{
     discovery::{Config as DiscoveryConfig, Discovery},
-    types::{FindContent, FindNodes, FoundContent, Nodes, Ping, Pong, Request, Response},
+    types::{FindContent, FindNodes, FoundContent, Nodes, Ping, Pong, Request, Response, SszEnr},
     U256,
 };
 use super::{types::Message, Enr};
 use discv5::{Discv5ConfigBuilder, Discv5Event, TalkRequest};
 use log::{debug, error, warn};
+use rocksdb::{Options, DB};
 use tokio::sync::mpsc;
 
 use super::socket;
@@ -35,6 +37,7 @@ impl Default for PortalnetConfig {
 }
 
 pub const PROTOCOL: &str = "portal";
+pub const TRIN_DB_ENV_VAR: &str = "TRIN_DB_PATH";
 
 pub struct PortalnetProtocol {
     discovery: Arc<Discovery>,
@@ -45,6 +48,7 @@ pub struct PortalnetEvents {
     data_radius: U256,
     discovery: Arc<Discovery>,
     protocol_receiver: mpsc::Receiver<Discv5Event>,
+    db: DB,
 }
 
 impl PortalnetEvents {
@@ -100,14 +104,30 @@ impl PortalnetEvents {
                 let distances64: Vec<u64> = distances.iter().map(|x| (*x).into()).collect();
                 let enrs = self.discovery.find_nodes_response(distances64);
                 Response::Nodes(Nodes {
-                    total: enrs.len() as u8,
+                    // from spec: total = The total number of Nodes response messages being sent.
+                    // TODO: support returning multiple messages
+                    total: 1 as u8,
                     enrs,
                 })
             }
-            // TODO
-            Request::FindContent(FindContent { .. }) => {
-                Response::FoundContent(FoundContent { enrs: vec![] })
-            }
+            Request::FindContent(FindContent { content_key }) => match self.db.get(&content_key) {
+                Ok(Some(value)) => {
+                    let empty_enrs: Vec<SszEnr> = vec![];
+                    Response::FoundContent(FoundContent {
+                        enrs: empty_enrs,
+                        payload: value,
+                    })
+                }
+                Ok(None) => {
+                    let enrs = self.discovery.find_nodes_close_to_content(content_key);
+                    let empty_payload: Vec<u8> = vec![];
+                    Response::FoundContent(FoundContent {
+                        enrs: enrs,
+                        payload: empty_payload,
+                    })
+                }
+                Err(e) => panic!("Unable to respond to FindContent: {}", e),
+            },
         };
 
         Ok(response)
@@ -148,10 +168,24 @@ impl PortalnetProtocol {
             data_radius: portal_config.data_radius,
         };
 
+        let db_path = match env::var(TRIN_DB_ENV_VAR) {
+            Ok(val) => val,
+            Err(_) => panic!(
+                "Must supply target trin db path as environment variable, like:\n\
+                {}=\"/path\"",
+                TRIN_DB_ENV_VAR,
+            ),
+        };
+
+        let mut db_opts = Options::default();
+        db_opts.create_if_missing(true);
+        let db = DB::open(&db_opts, db_path).unwrap();
+
         let events = PortalnetEvents {
             data_radius: portal_config.data_radius,
             discovery,
             protocol_receiver,
+            db,
         };
 
         Ok((proto, events))

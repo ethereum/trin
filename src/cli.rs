@@ -118,7 +118,11 @@ impl TrinConfig {
 
         println!("Pool Size: {}", pool_size);
 
-        println!("Bootnodes: {}", bootnodes);
+        match bootnodes.is_empty() {
+            true => println!("Bootnodes: None"),
+            _ => println!("Bootnodes: {}", bootnodes),
+        }
+
         let bootnodes: Vec<String> = bootnodes
             .split(',')
             .filter(|&bootnode| !bootnode.is_empty())

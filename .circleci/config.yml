@@ -20,6 +20,9 @@ jobs:
                 name: Install libssl-dev for openssl-sys
                 command: sudo apt install -y libssl-dev
             - run:
+                name: Install libclang for rocksdb
+                command: sudo apt install clang
+            - run:
                 name: Install rustfmt
                 command: rustup component add rustfmt
             - run:
