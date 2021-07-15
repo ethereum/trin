@@ -14,16 +14,22 @@ use discv5::{Discv5ConfigBuilder, Discv5Event, TalkRequest};
 use log::{debug, error, warn};
 use rocksdb::{Options, DB};
 use serde_json::Value;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::mpsc;
 
 use super::socket;
 
-type Responder<T, E> = oneshot::Sender<Result<T, E>>;
+type Responder<T, E> = mpsc::UnboundedSender<Result<T, E>>;
 
 #[derive(Debug)]
-pub enum PortalEndpoint {
-    NodeInfo { resp: Responder<Value, String> },
-    RoutingTableInfo { resp: Responder<Value, String> },
+pub enum PortalEndpointKind {
+    NodeInfo,
+    RoutingTableInfo,
+}
+
+#[derive(Debug)]
+pub struct PortalEndpoint {
+    pub kind: PortalEndpointKind,
+    pub resp: Responder<Value, String>,
 }
 
 #[derive(Clone)]
@@ -39,7 +45,7 @@ impl Default for PortalnetConfig {
         Self {
             external_addr: None,
             listen_port: 4242,
-            bootnode_enrs: vec![],
+            bootnode_enrs: Vec::<Enr>::new(),
             data_radius: U256::from(u64::MAX), //TODO better data_radius default?
         }
     }
@@ -61,22 +67,22 @@ pub struct PortalnetEvents {
     db: DB,
 }
 
-pub struct JsonRPCHandler {
+pub struct JsonRpcHandler {
     discovery: Arc<Discovery>,
-    jsonrpc_rx: mpsc::Receiver<PortalEndpoint>,
+    jsonrpc_rx: mpsc::UnboundedReceiver<PortalEndpoint>,
 }
 
-impl JsonRPCHandler {
+impl JsonRpcHandler {
     pub async fn process_jsonrpc_requests(mut self) {
         while let Some(cmd) = self.jsonrpc_rx.recv().await {
-            use PortalEndpoint::*;
+            use PortalEndpointKind::*;
 
-            match cmd {
-                NodeInfo { resp } => {
+            match cmd.kind {
+                NodeInfo => {
                     let node_id = self.discovery.local_enr().to_base64();
-                    let _ = resp.send(Ok(Value::String(node_id)));
+                    let _ = cmd.resp.send(Ok(Value::String(node_id)));
                 }
-                RoutingTableInfo { resp } => {
+                RoutingTableInfo => {
                     let routing_table_info = self
                         .discovery
                         .discv5
@@ -84,7 +90,7 @@ impl JsonRPCHandler {
                         .iter()
                         .map(|node_id| Value::String(node_id.to_string()))
                         .collect();
-                    let _ = resp.send(Ok(Value::Array(routing_table_info)));
+                    let _ = cmd.resp.send(Ok(Value::Array(routing_table_info)));
                 }
             }
         }
@@ -177,8 +183,8 @@ impl PortalnetEvents {
 impl PortalnetProtocol {
     pub async fn new(
         portal_config: PortalnetConfig,
-        jsonrpc_rx: mpsc::Receiver<PortalEndpoint>,
-    ) -> Result<(Self, PortalnetEvents, JsonRPCHandler), String> {
+        jsonrpc_rx: mpsc::UnboundedReceiver<PortalEndpoint>,
+    ) -> Result<(Self, PortalnetEvents, JsonRpcHandler), String> {
         let listen_all_ips = SocketAddr::new("0.0.0.0".parse().unwrap(), portal_config.listen_port);
 
         let external_addr = portal_config
@@ -231,7 +237,7 @@ impl PortalnetProtocol {
             db,
         };
 
-        let rpc_handler = JsonRPCHandler {
+        let rpc_handler = JsonRpcHandler {
             discovery,
             jsonrpc_rx,
         };

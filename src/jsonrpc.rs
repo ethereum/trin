@@ -1,8 +1,8 @@
 use crate::cli::TrinConfig;
-use crate::portalnet::protocol::PortalEndpoint;
+use crate::portalnet::protocol::{PortalEndpoint, PortalEndpointKind};
 use reqwest::blocking as reqwest;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::fs;
 use std::io::{self, Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -10,8 +10,8 @@ use std::os::unix;
 use std::sync::Mutex;
 use std::{panic, process};
 use threadpool::ThreadPool;
-use tokio::sync::mpsc::Sender;
-use tokio::sync::oneshot;
+use tokio::sync::mpsc;
+use tokio::sync::mpsc::UnboundedSender;
 use validator::{Validate, ValidationError};
 
 #[derive(Debug, Deserialize, Serialize, Validate)]
@@ -36,7 +36,7 @@ lazy_static! {
 pub fn launch_trin(
     trin_config: TrinConfig,
     infura_project_id: String,
-    portal_tx: Sender<PortalEndpoint>,
+    portal_tx: UnboundedSender<PortalEndpoint>,
 ) {
     let pool = ThreadPool::new(trin_config.pool_size as usize);
 
@@ -76,7 +76,7 @@ fn launch_ipc_client(
     pool: ThreadPool,
     infura_project_id: String,
     ipc_path: &str,
-    portal_tx: Sender<PortalEndpoint>,
+    portal_tx: UnboundedSender<PortalEndpoint>,
 ) {
     let listener_result = unix::net::UnixListener::bind(ipc_path);
     let listener = match listener_result {
@@ -107,7 +107,7 @@ fn launch_http_client(
     pool: ThreadPool,
     infura_project_id: String,
     trin_config: TrinConfig,
-    portal_tx: Sender<PortalEndpoint>,
+    portal_tx: UnboundedSender<PortalEndpoint>,
 ) {
     let uri = format!("127.0.0.1:{}", trin_config.web3_http_port);
     let listener = TcpListener::bind(uri).unwrap();
@@ -132,7 +132,7 @@ fn serve_ipc_client(
     rx: &mut impl Read,
     tx: &mut impl Write,
     infura_url: &str,
-    portal_tx: Sender<PortalEndpoint>,
+    portal_tx: UnboundedSender<PortalEndpoint>,
 ) {
     let deser = serde_json::Deserializer::from_reader(rx);
     for obj in deser.into_iter::<JsonRequest>() {
@@ -151,7 +151,11 @@ fn serve_ipc_client(
     }
 }
 
-fn serve_http_client(mut stream: TcpStream, infura_url: &str, portal_tx: Sender<PortalEndpoint>) {
+fn serve_http_client(
+    mut stream: TcpStream,
+    infura_url: &str,
+    portal_tx: UnboundedSender<PortalEndpoint>,
+) {
     let mut buffer = Vec::new();
     stream.read_to_end(&mut buffer).unwrap();
 
@@ -171,7 +175,7 @@ fn serve_http_client(mut stream: TcpStream, infura_url: &str, portal_tx: Sender<
 fn process_http_request(
     obj: JsonRequest,
     infura_url: &str,
-    portal_tx: Sender<PortalEndpoint>,
+    portal_tx: UnboundedSender<PortalEndpoint>,
 ) -> Vec<u8> {
     let result = handle_request(obj, &infura_url, portal_tx);
     match result {
@@ -193,19 +197,17 @@ fn process_http_request(
 fn handle_request(
     obj: JsonRequest,
     infura_url: &str,
-    portal_tx: Sender<PortalEndpoint>,
+    portal_tx: UnboundedSender<PortalEndpoint>,
 ) -> Result<String, String> {
-    let method = obj.method.as_str();
-    if method.starts_with("discv5") {
-        dispatch_portal_request(obj, portal_tx)
-    } else {
-        match method {
-            "web3_clientVersion" => Ok(format!(
-                r#"{{"jsonrpc":"2.0","id":{},"result":"trin 0.0.1-alpha"}}"#,
-                obj.id,
-            )),
-            _ => dispatch_infura_request(obj, infura_url),
-        }
+    match obj.method.as_str() {
+        "web3_clientVersion" => Ok(json!({
+            "jsonrpc": "2.0",
+            "id": obj.id,
+            "result": "trin 0.0.1-alpha",
+        })
+        .to_string()),
+        _ if obj.method.as_str().starts_with("discv5") => dispatch_portal_request(obj, portal_tx),
+        _ => dispatch_infura_request(obj, infura_url),
     }
 }
 
@@ -214,45 +216,58 @@ fn dispatch_infura_request(obj: JsonRequest, infura_url: &str) -> Result<String,
     let request = serde_json::to_string(&obj).unwrap();
     match proxy_to_url(request, infura_url) {
         Ok(result_body) => Ok(std::str::from_utf8(&result_body).unwrap().to_owned()),
-        Err(err) => Err(format!(
-            r#"{{"jsonrpc":"2.0","id":"{}","error":"Infura failure: {}"}}"#,
-            obj.id,
-            err.to_string(),
-        )),
+        Err(err) => Err(json!({
+            "jsonrpc": "2.0",
+            "id": obj.id,
+            "error": format!("Infura failure: {}", err.to_string()),
+        })
+        .to_string()),
     }
 }
 
-#[tokio::main]
-async fn dispatch_portal_request(
+fn dispatch_portal_request(
     obj: JsonRequest,
-    portal_tx: Sender<PortalEndpoint>,
+    portal_tx: UnboundedSender<PortalEndpoint>,
 ) -> Result<String, String> {
-    let (resp_tx, resp_rx) = oneshot::channel::<Result<Value, String>>();
+    let (resp_tx, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
     let method = obj.method.as_str();
     let message = match method {
-        "discv5_nodeInfo" => PortalEndpoint::NodeInfo { resp: resp_tx },
-        "discv5_routingTableInfo" => PortalEndpoint::RoutingTableInfo { resp: resp_tx },
+        "discv5_nodeInfo" => PortalEndpoint {
+            kind: PortalEndpointKind::NodeInfo,
+            resp: resp_tx,
+        },
+        "discv5_routingTableInfo" => PortalEndpoint {
+            kind: PortalEndpointKind::RoutingTableInfo,
+            resp: resp_tx,
+        },
         _ => {
-            return Err(format!(
-                r#"{{"jsonrpc":"2.0","id":"{}","error":"Unsupported discv5 endpoint: {}"}}"#,
-                obj.id, method,
-            ))
+            return Err(json!({
+                "jsonrpc": "2.0",
+                "id": obj.id,
+                "error": format!("Unsupported discv5 endpoint: {}", method),
+            })
+            .to_string())
         }
     };
-    tokio::task::spawn(async move { portal_tx.send(message).await });
-    let res = match resp_rx.await.unwrap() {
+    portal_tx.send(message).unwrap();
+
+    let res = match resp_rx.blocking_recv().unwrap() {
         Ok(val) => val,
         Err(msg) => {
-            return Err(format!(
-                r#"{{"jsonrpc":"2.0","id":"{}","error":"Error while processing {}: {}"}}"#,
-                obj.id, method, msg,
-            ))
+            return Err(json!({
+                "jsonrpc": "2.0",
+                "id": obj.id,
+                "error": format!("Error while processing {}: {}", method, msg),
+            })
+            .to_string())
         }
     };
-    Ok(format!(
-        r#"{{"jsonrpc":"2.0","id":{},"result":{}}}"#,
-        obj.id, res,
-    ))
+    Ok(json!({
+        "jsonrpc": "2.0",
+        "id": obj.id,
+        "result": res,
+    })
+    .to_string())
 }
 
 fn proxy_to_url(request: String, url: &str) -> io::Result<Vec<u8>> {

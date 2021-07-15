@@ -43,8 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     };
 
-    // Create a new channel with a capacity of at most 32.
-    let (jsonrpc_tx, jsonrpc_rx) = mpsc::channel::<PortalEndpoint>(32);
+    let (jsonrpc_tx, jsonrpc_rx) = mpsc::unbounded_channel::<PortalEndpoint>();
 
     let web3_server_task = tokio::task::spawn_blocking(|| {
         launch_trin(trin_config, infura_project_id, jsonrpc_tx);
