@@ -86,7 +86,7 @@ impl TrinConfig {
             .arg(
                 Arg::with_name("private_key")
                     .long("unsafe-private-key")
-                    .help("Hex encoded 32 byte private key (unsafe)")
+                    .help("Hex encoded 32 byte private key (considered unsafe to pass in pk as cli arg, as it's stored in terminal history - keyfile support coming soon)")
                     .takes_value(true),
             )
             .get_matches_from(args);
