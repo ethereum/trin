@@ -2,6 +2,76 @@ use clap::{value_t, App, Arg};
 use std::env;
 use std::ffi::OsString;
 use std::net::SocketAddr;
+use std::path::PathBuf;
+use structopt::StructOpt;
+
+const DEFAULT_WEB3_IPC_PATH: &str = "/tmp/trin-jsonrpc.ipc";
+const DEFAULT_WEB3_HTTP_PORT: &str = "8545";
+const DEFAULT_DISCOVERY_PORT: &str = "9000";
+
+#[derive(StructOpt, Debug, PartialEq)]
+#[structopt(
+    name = "trin",
+    version = "0.0.1",
+    author = "carver",
+    about = "Run an eth portal client"
+)]
+pub struct Opts {
+    #[structopt(
+    default_value = "ipc",
+    possible_values(&["http", "ipc"]),
+    long = "web3-transport",
+    help = "select transport protocol to serve json-rpc endpoint")]
+    pub web3_transport: String,
+
+    #[structopt(
+        default_value = "DEFAULT_WEB3_HTTP_PORT",
+        long = "web3-http-port",
+        help = "port to accept json-rpc http connections"
+    )]
+    pub web3_http_port: u16,
+
+    #[structopt(
+        parse(from_os_str),
+        default_value(&DEFAULT_WEB3_IPC_PATH),
+        long = "web3-ipc-path",
+        help = "path to json-rpc endpoint over IPC"
+    )]
+    pub web3_ipc_path: PathBuf,
+
+    #[structopt(
+        default_value = "2",
+        long = "pool-size",
+        help = "max size of threadpool"
+    )]
+    pub pool_size: u32,
+
+    #[structopt(
+        default_value(&DEFAULT_DISCOVERY_PORT),
+        long = "discovery-port",
+        help = "The UDP port to listen on."
+    )]
+    pub discovery_port: u16,
+
+    #[structopt(
+        default_value = "",
+        long = "bootnodes",
+        help = "One or more comma-delimited base64-encoded ENR's or multiaddr strings of peers to initially add to the local routing table"
+    )]
+    pub bootnodes: Vec<String>,
+
+    #[structopt(
+        long = "external-address",
+        help = "The public IP address and port under which this node is accessible"
+    )]
+    pub external_addr: Option<SocketAddr>,
+
+    #[structopt(
+        long = "unsafe-private-key",
+        help = "Hex encoded 32 byte private key (considered unsafe to pass in pk as cli arg, as it's stored in terminal history - keyfile support coming soon)"
+    )]
+    pub private_key: Option<Vec<u8>>,
+}
 
 #[derive(Debug, PartialEq)]
 pub struct TrinConfig {
@@ -14,10 +84,6 @@ pub struct TrinConfig {
     pub external_addr: Option<SocketAddr>,
     pub private_key: Option<Vec<u8>>,
 }
-
-const DEFAULT_WEB3_IPC_PATH: &str = "/tmp/trin-jsonrpc.ipc";
-const DEFAULT_WEB3_HTTP_PORT: &str = "8545";
-const DEFAULT_DISCOVERY_PORT: &str = "9000";
 
 impl TrinConfig {
     pub fn new() -> Self {
