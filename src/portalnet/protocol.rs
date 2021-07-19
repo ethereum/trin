@@ -17,6 +17,7 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 
 use super::socket;
+use crate::portalnet::types::HexData;
 
 type Responder<T, E> = mpsc::UnboundedSender<Result<T, E>>;
 
@@ -35,7 +36,7 @@ pub struct PortalEndpoint {
 #[derive(Clone)]
 pub struct PortalnetConfig {
     pub external_addr: Option<SocketAddr>,
-    pub private_key: Option<Vec<u8>>,
+    pub private_key: Option<HexData>,
     pub listen_port: u16,
     pub bootnode_enrs: Vec<Enr>,
     pub data_radius: U256,

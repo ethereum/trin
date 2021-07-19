@@ -1,3 +1,5 @@
+use crate::portalnet::types::HexData;
+
 use std::env;
 use std::ffi::OsString;
 use std::net::SocketAddr;
@@ -64,11 +66,11 @@ pub struct TrinConfig {
     pub external_addr: Option<SocketAddr>,
 
     #[structopt(
-        // parse(try_from_str = parse_private_key),
+        validator(check_private_key_length),
         long = "unsafe-private-key",
         help = "Hex encoded 32 byte private key (considered unsafe to pass in pk as cli arg, as it's stored in terminal history - keyfile support coming soon)"
     )]
-    pub private_key: Option<Vec<u8>>,
+    pub private_key: Option<HexData>,
 }
 
 impl TrinConfig {
@@ -116,16 +118,15 @@ impl TrinConfig {
     }
 }
 
-// fn parse_private_key(hex_private_key: &str) -> Vec<u8> {
-//     match hex_private_key.len() {
-//         64 => (),
-//         val => panic!(
-//             "Invalid private key length: {}, expected 32 byte hexstring",
-//             val
-//         ),
-//     }
-//     hex::decode(&hex_private_key).unwrap()
-// }
+fn check_private_key_length(private_key: String) -> Result<(), String> {
+    if private_key.len() == 64 {
+        return Ok(());
+    }
+    panic!(
+        "Invalid private key length: {}, expected 32 byte hexstring",
+        private_key
+    )
+}
 
 #[cfg(test)]
 mod test {
@@ -333,12 +334,11 @@ mod test {
     }
 
     #[test]
-    #[ignore]
     fn test_custom_private_key() {
         assert!(env_is_set());
         let expected_config = TrinConfig {
             external_addr: None,
-            private_key: Some(vec![1; 32]),
+            private_key: Some(HexData(vec![1; 32])),
             web3_http_port: DEFAULT_WEB3_HTTP_PORT.parse::<u16>().unwrap(),
             web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
             pool_size: 2,
@@ -359,7 +359,6 @@ mod test {
     }
 
     #[test]
-    #[ignore]
     #[should_panic(expected = "Invalid private key length")]
     fn test_custom_private_key_odd_length() {
         assert!(env_is_set());
@@ -375,7 +374,6 @@ mod test {
     }
 
     #[test]
-    #[ignore]
     #[should_panic(expected = "Invalid private key length")]
     fn test_custom_private_key_requires_32_bytes() {
         assert!(env_is_set());

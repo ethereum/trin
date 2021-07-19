@@ -3,6 +3,7 @@
 use super::types::SszEnr;
 use super::utils::xor_two_values;
 use super::{protocol::PROTOCOL, Enr};
+use crate::portalnet::types::HexData;
 use discv5::enr::{CombinedKey, EnrBuilder, NodeId};
 use discv5::{Discv5, Discv5Config};
 use log::info;
@@ -14,7 +15,7 @@ pub struct Config {
     pub listen_port: u16,
     pub discv5_config: Discv5Config,
     pub bootnode_enrs: Vec<Enr>,
-    pub private_key: Option<Vec<u8>>,
+    pub private_key: Option<HexData>,
 }
 
 impl Default for Config {
@@ -40,7 +41,7 @@ pub struct Discovery {
 impl Discovery {
     pub fn new(config: Config) -> Result<Self, String> {
         let enr_key = match config.private_key {
-            Some(val) => CombinedKey::secp256k1_from_bytes(val.clone().as_mut_slice()).unwrap(),
+            Some(val) => CombinedKey::secp256k1_from_bytes(val.0.clone().as_mut_slice()).unwrap(),
             None => CombinedKey::generate_secp256k1(),
         };
 
