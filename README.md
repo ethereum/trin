@@ -24,6 +24,12 @@ functionality becomes available.
 
 ## How to use
 
+### Install dependencies (on Ubuntu/Debian)
+
+```sh
+apt install libssl-dev librocksdb-dev libclang-dev 
+```
+
 Create an Infura account, getting a project ID. Check out the trin repository, then:
 
 ```sh
