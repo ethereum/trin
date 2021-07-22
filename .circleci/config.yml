@@ -1,6 +1,7 @@
 version: 2.1
 orbs:
   rust: circleci/rust@1.1.1
+  win: circleci/windows@2.2.0
 jobs:
   lint-build-test:
         description: |
@@ -28,10 +29,14 @@ jobs:
             - run:
                 name: Run rustfmt
                 command: cargo fmt -- --check
-            - rust/clippy:
-                # Force a failure on clippy warnings
-                flags: "-- --deny warnings"
-                with_cache: false
+            # Run the sub-commands of the orb jobs separately, since the combined steps for Clippy can be long enough to trigger a timeout (>10min). Building the source is the main contributor.
+            - run:
+                name: Install Clippy
+                command: rustup component add clippy
+            - run:
+                name: Run Clippy
+                command: cargo clippy -- --deny warnings
+                no_output_timeout: 20m
             - rust/build:
                 release: false
                 with_cache: false
@@ -42,7 +47,53 @@ jobs:
                 paths:
                     - ~/.cargo
                     - target
+  win-build:
+    description: |
+      Build the crate for windows.
+    executor:
+      name: win/default
+      shell: powershell.exe
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - cargo-{{ checksum "Cargo.lock" }}-v1
+      - run:
+          name: Install rustup
+          command: choco install rustup.install
+      - run:
+          name: Install clang
+          command: choco install llvm
+      - run:
+          name: Add target
+          command: rustup target add x86_64-pc-windows-msvc
+      - run:
+          name: Install target toolchain
+          command: rustup toolchain install stable-x86_64-pc-windows-msvc
+      # Run the sub-commands of the orb jobs separately, since the combined steps for Clippy can be long enough to trigger a timeout (>10min). Building the source is the main contributor.
+      - run:
+          name: Install Clippy
+          command: rustup component add clippy
+      - run:
+          name: Run Clippy
+          # Remove the first two lines of gitconfig as work around
+          command: |
+            (gc ..\.gitconfig | select -Skip 2) | sc ..\.gitconfig
+            cargo clippy -- --deny warnings
+          no_output_timeout: 20m
+      - run:
+          name: Cargo Build --target x86_64-pc-windows-msvc
+          command: cargo build --target x86_64-pc-windows-msvc
+      - run:
+          name: Cargo Test --target x86_64-pc-windows-msvc
+          command: cargo test --target x86_64-pc-windows-msvc
+      - save_cache:
+          key: cargo-{{ checksum "Cargo.lock" }}-v1
+          paths:
+            - ~/.cargo
+            - target
 workflows:
   merge-test:
     jobs:
       - lint-build-test
+      - win-build

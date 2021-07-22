@@ -1,7 +1,11 @@
 use log::debug;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
 
+#[cfg(unix)]
 use interfaces::{self, Interface};
+
+#[cfg(windows)]
+use ipconfig;
 
 const STUN_SERVER: &str = "143.198.142.185:3478";
 
@@ -24,6 +28,7 @@ pub fn default_local_address(port: u16) -> SocketAddr {
     SocketAddr::new(ip, port)
 }
 
+#[cfg(unix)]
 fn find_assigned_ip() -> Option<IpAddr> {
     let online_nics = Interface::get_all()
         .unwrap_or(vec![])
@@ -41,6 +46,22 @@ fn find_assigned_ip() -> Option<IpAddr> {
             return Some(valid_socket.ip());
         }
         // else, check the next interface
+    }
+    None
+}
+
+#[cfg(windows)]
+fn find_assigned_ip() -> Option<IpAddr> {
+    let adapters = ipconfig::get_adapters().unwrap_or(vec![]);
+
+    for adapter in adapters.iter() {
+        if adapter.gateways().len() > 0 {
+            for ip in adapter.ip_addresses().iter() {
+                if let IpAddr::V4(_) = ip {
+                    return Some(*ip);
+                }
+            }
+        }
     }
     None
 }
