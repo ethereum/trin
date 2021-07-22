@@ -297,6 +297,17 @@ impl ssz::Decode for FoundContent {
     }
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct HexData(pub Vec<u8>);
+
+impl FromStr for HexData {
+    type Err = hex::FromHexError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        hex::decode(s).map(HexData)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

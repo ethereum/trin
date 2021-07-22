@@ -1,165 +1,131 @@
-use clap::{value_t, App, Arg};
+use crate::portalnet::types::HexData;
+
 use std::env;
 use std::ffi::OsString;
 use std::net::SocketAddr;
-
-#[derive(Debug, PartialEq)]
-pub struct TrinConfig {
-    pub web3_transport: String,
-    pub web3_ipc_path: String,
-    pub web3_http_port: u16,
-    pub pool_size: u32,
-    pub discovery_port: u16,
-    pub bootnodes: Vec<String>,
-    pub external_addr: Option<SocketAddr>,
-    pub private_key: Option<Vec<u8>>,
-}
+use structopt::StructOpt;
 
 const DEFAULT_WEB3_IPC_PATH: &str = "/tmp/trin-jsonrpc.ipc";
 const DEFAULT_WEB3_HTTP_PORT: &str = "8545";
 const DEFAULT_DISCOVERY_PORT: &str = "9000";
 
+#[derive(StructOpt, Debug, PartialEq)]
+#[structopt(
+    name = "trin",
+    version = "0.0.1",
+    author = "carver",
+    about = "Run an eth portal client"
+)]
+pub struct TrinConfig {
+    #[structopt(
+    default_value = "ipc",
+    possible_values(&["http", "ipc"]),
+    long = "web3-transport",
+    help = "select transport protocol to serve json-rpc endpoint")]
+    pub web3_transport: String,
+
+    #[structopt(
+        default_value(DEFAULT_WEB3_HTTP_PORT),
+        long = "web3-http-port",
+        help = "port to accept json-rpc http connections"
+    )]
+    pub web3_http_port: u16,
+
+    #[structopt(
+        default_value(DEFAULT_WEB3_IPC_PATH),
+        long = "web3-ipc-path",
+        help = "path to json-rpc endpoint over IPC"
+    )]
+    pub web3_ipc_path: String, // TODO: Change to PathBuf
+
+    #[structopt(
+        default_value = "2",
+        long = "pool-size",
+        help = "max size of threadpool"
+    )]
+    pub pool_size: u32,
+
+    #[structopt(
+        default_value(DEFAULT_DISCOVERY_PORT),
+        long = "discovery-port",
+        help = "The UDP port to listen on."
+    )]
+    pub discovery_port: u16,
+
+    #[structopt(
+        use_delimiter = true,
+        long = "bootnodes",
+        help = "One or more comma-delimited base64-encoded ENR's or multiaddr strings of peers to initially add to the local routing table"
+    )]
+    pub bootnodes: Vec<String>,
+
+    #[structopt(
+        long = "external-address",
+        help = "The public IP address and port under which this node is accessible"
+    )]
+    pub external_addr: Option<SocketAddr>,
+
+    #[structopt(
+        validator(check_private_key_length),
+        long = "unsafe-private-key",
+        help = "Hex encoded 32 byte private key (considered unsafe to pass in pk as cli arg, as it's stored in terminal history - keyfile support coming soon)"
+    )]
+    pub private_key: Option<HexData>,
+}
+
 impl TrinConfig {
     pub fn new() -> Self {
         Self::new_from(env::args_os()).expect("Could not parse trin arguments")
     }
-
-    fn new_from<I, T>(args: I) -> Result<Self, clap::Error>
+    pub fn new_from<I, T>(args: I) -> Result<Self, clap::Error>
     where
         I: Iterator<Item = T>,
         T: Into<OsString> + Clone,
     {
-        let matches = App::new("trin")
-            .version("0.0.1")
-            .author("carver")
-            .about("Run an eth portal client")
-            .settings(&[clap::AppSettings::ColoredHelp])
-            .arg(
-                Arg::with_name("web3_transport")
-                    .long("web3-transport")
-                    .help("select transport protocol to serve json-rpc endpoint")
-                    .possible_values(&["http", "ipc"])
-                    .takes_value(true)
-                    .default_value("ipc"),
-            )
-            .arg(
-                Arg::with_name("web3_http_port")
-                    .long("web3-http-port")
-                    .help("port to accept json-rpc http connections")
-                    .takes_value(true)
-                    .default_value(&DEFAULT_WEB3_HTTP_PORT),
-            )
-            .arg(
-                Arg::with_name("web3_ipc_path")
-                    .long("web3-ipc-path")
-                    .help("path to json-rpc endpoint over IPC")
-                    .takes_value(true)
-                    .default_value(&DEFAULT_WEB3_IPC_PATH),
-            )
-            .arg(
-                Arg::with_name("pool_size")
-                    .long("pool-size")
-                    .help("max size of threadpool")
-                    .takes_value(true)
-                    .default_value("2"),
-            )
-            .arg(
-                Arg::with_name("discovery_port")
-                    .long("discovery-port")
-                    .help("The UDP port to listen on.")
-                    .default_value(&DEFAULT_DISCOVERY_PORT)
-                    .takes_value(true),
-            )
-            .arg(
-                Arg::with_name("bootnodes")
-                    .long("bootnodes")
-                    .help("One or more comma-delimited base64-encoded ENR's or multiaddr strings of peers to initially add to the local routing table")
-                    .default_value("")
-                    .takes_value(true),
-            )
-            .arg(
-                Arg::with_name("external_addr")
-                    .long("external-address")
-                    .help("The public IP address and port under which this node is accessible")
-                    .takes_value(true),
-            )
-            .arg(
-                Arg::with_name("private_key")
-                    .long("unsafe-private-key")
-                    .help("Hex encoded 32 byte private key (considered unsafe to pass in pk as cli arg, as it's stored in terminal history - keyfile support coming soon)")
-                    .takes_value(true),
-            )
-            .get_matches_from(args);
+        let config = Self::from_iter(args);
 
         println!("Launching trin...");
-        let pool_size = value_t!(matches.value_of("pool_size"), u32)?;
-        let web3_http_port = value_t!(matches.value_of("web3_http_port"), u16)?;
-        let web3_transport = value_t!(matches.value_of("web3_transport"), String)?;
-        let web3_ipc_path = value_t!(matches.value_of("web3_ipc_path"), String)?;
-        let discovery_port = value_t!(matches.value_of("discovery_port"), u16)?;
-        let bootnodes = value_t!(matches.value_of("bootnodes"), String)?;
-        let external_addr = if matches.is_present("external_addr") {
-            Some(value_t!(matches.value_of("external_addr"), SocketAddr)?)
-        } else {
-            None
-        };
-        let private_key = if matches.is_present("private_key") {
-            let hex_private_key = value_t!(matches.value_of("private_key"), String)?;
-            match hex_private_key.len() {
-                64 => (),
-                val => panic!(
-                    "Invalid private key length: {}, expected 32 byte hexstring",
-                    val
-                ),
-            }
-            Some(hex::decode(&hex_private_key).unwrap())
-        } else {
-            None
-        };
 
-        match web3_transport.as_str() {
-            "http" => match &web3_ipc_path[..] {
+        match config.web3_transport.as_str() {
+            "http" => match &config.web3_ipc_path[..] {
                 DEFAULT_WEB3_IPC_PATH => {
                     println!(
                         "Protocol: {}\nWEB3 HTTP port: {}",
-                        web3_transport, web3_http_port
+                        config.web3_transport, config.web3_http_port
                     )
                 }
                 _ => panic!("Must not supply an ipc path when using http protocol for json-rpc"),
             },
-            "ipc" => match &web3_http_port.to_string()[..] {
+            "ipc" => match &config.web3_http_port.to_string()[..] {
                 DEFAULT_WEB3_HTTP_PORT => {
-                    println!("Protocol: {}\nIPC path: {}", web3_transport, web3_ipc_path)
+                    println!(
+                        "Protocol: {}\nIPC path: {}",
+                        config.web3_transport, config.web3_ipc_path
+                    )
                 }
                 _ => panic!("Must not supply an http port when using ipc protocol for json-rpc"),
             },
             val => panic!("Unsupported json-rpc protocol: {}", val),
         }
 
-        println!("Pool Size: {}", pool_size);
+        println!("Pool Size: {}", config.pool_size);
 
-        match bootnodes.is_empty() {
+        match config.bootnodes.is_empty() {
             true => println!("Bootnodes: None"),
-            _ => println!("Bootnodes: {}", bootnodes),
+            _ => println!("Bootnodes: {:?}", config.bootnodes),
         }
-
-        let bootnodes: Vec<String> = bootnodes
-            .split(',')
-            .filter(|&bootnode| !bootnode.is_empty())
-            .map(|bootnode| bootnode.to_string())
-            .collect();
-
-        Ok(TrinConfig {
-            web3_transport,
-            web3_ipc_path,
-            web3_http_port,
-            pool_size,
-            discovery_port,
-            bootnodes,
-            external_addr,
-            private_key,
-        })
+        Ok(config)
     }
+}
+
+fn check_private_key_length(private_key: String) -> Result<(), String> {
+    if private_key.len() == 64 {
+        return Ok(());
+    }
+    panic!(
+        "Invalid private key length: {}, expected 32 byte hexstring",
+        private_key
+    )
 }
 
 #[cfg(test)]
@@ -372,7 +338,7 @@ mod test {
         assert!(env_is_set());
         let expected_config = TrinConfig {
             external_addr: None,
-            private_key: Some(vec![1; 32]),
+            private_key: Some(HexData(vec![1; 32])),
             web3_http_port: DEFAULT_WEB3_HTTP_PORT.parse::<u16>().unwrap(),
             web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
             pool_size: 2,
