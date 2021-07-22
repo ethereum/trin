@@ -2,6 +2,7 @@
 pub mod discovery;
 pub mod protocol;
 pub mod socket;
+pub mod trie;
 pub mod types;
 pub mod utils;
 use discv5::enr::CombinedKey;

@@ -11,12 +11,16 @@ base64 = "0.13.0"
 clap = "2.33.3"
 ctrlc = "3.1.8"
 env_logger = "0.8.2"
+ethereum-types = "0.12.0"
 eth2_ssz = "0.1.2"
 eth2_ssz_derive = "0.1.0"
 futures = "0.3.13"
+hash-db = "0.15.2"
 hex = "0.4.3"
+keccak-hasher = "0.15.3" 
 lazy_static = "1.4.0"
 log = "0.4.14"
+plain_hasher = "0.2.3"
 reqwest = { version = "0.11.0", features = ["blocking"] }
 rlp = "0.5.0"
 rocksdb = "0.16.0"
@@ -25,8 +29,10 @@ serde_json = "1.0.59"
 structopt = "0.3"
 stunclient = "0.1.2"
 threadpool = "1.8.1"
+tiny-keccak = { version = "2.0.2", features = ["keccak"] }
 tracing = "0.1.26"
 tracing-subscriber = "0.2.18"
+trie-db = "0.22.6"
 tokio = {version = "1.8.0", features = ["full"]}
 uint = { version = "0.8.5", default-features = false }
 validator = { version = "0.13.0", features = ["derive"] }

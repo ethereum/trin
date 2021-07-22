@@ -4,20 +4,20 @@ use std::env;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use super::socket;
 use super::{
     discovery::{Config as DiscoveryConfig, Discovery},
+    trie::{Account, PortalTrie},
     types::{FindContent, FindNodes, FoundContent, Nodes, Ping, Pong, Request, Response, SszEnr},
     U256,
 };
 use super::{types::Message, Enr};
+use crate::portalnet::types::HexData;
 use discv5::{Discv5ConfigBuilder, Discv5Event, TalkRequest};
 use log::{debug, error, warn};
 use rocksdb::{Options, DB};
 use serde_json::Value;
 use tokio::sync::mpsc;
-
-use super::socket;
-use crate::portalnet::types::HexData;
 
 type Responder<T, E> = mpsc::UnboundedSender<Result<T, E>>;
 
@@ -25,11 +25,13 @@ type Responder<T, E> = mpsc::UnboundedSender<Result<T, E>>;
 pub enum PortalEndpointKind {
     NodeInfo,
     RoutingTableInfo,
+    EthGetBalance,
 }
 
 #[derive(Debug)]
 pub struct PortalEndpoint {
     pub kind: PortalEndpointKind,
+    pub params: Option<Vec<String>>,
     pub resp: Responder<Value, String>,
 }
 
@@ -76,6 +78,14 @@ pub struct JsonRpcHandler {
 }
 
 impl JsonRpcHandler {
+    fn get_account(&self, params: Vec<String>) -> Account {
+        let trie = PortalTrie {
+            discovery: self.discovery.clone(),
+        };
+        trie.resolve_account(params.first().unwrap().to_string())
+            .unwrap()
+    }
+
     pub async fn process_jsonrpc_requests(mut self) {
         while let Some(cmd) = self.jsonrpc_rx.recv().await {
             use PortalEndpointKind::*;
@@ -94,6 +104,10 @@ impl JsonRpcHandler {
                         .map(|node_id| Value::String(node_id.to_string()))
                         .collect();
                     let _ = cmd.resp.send(Ok(Value::Array(routing_table_info)));
+                }
+                EthGetBalance => {
+                    let account = self.get_account(cmd.params.unwrap());
+                    let _ = cmd.resp.send(Ok(serde_json::json!(account)));
                 }
             }
         }
