@@ -72,7 +72,9 @@ nc -U /tmp/trin-jsonrpc.ipc
 {"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":83}
 {"jsonrpc":"2.0","id":83,"result":"0xb52258"}{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":84}
 {"jsonrpc":"2.0","id":84,"result":"0xb52259"}{"jsonrpc":"2.0","id":85,"params":[],"method":"web3_clientVersion"}
-{"jsonrpc":"2.0","id":"85","result":"trin 0.0.1-alpha"}^C
+{"jsonrpc":"2.0","id":"85","result":"trin 0.0.1-alpha"}
+{"jsonrpc":"2.0","id":86,"params":[],"method":"discv5_nodeInfo"}
+{"id":86,"jsonrpc":"2.0","result":"enr:-IS4QHK_CnCsQKT-mFTilJ5msHacIJtU91aYe8FhAd_K7G-ACO-FO2GPFOyM7kiphjXMwrNh8Y4mSbN3ufSdBQFzjikBgmlkgnY0gmlwhMCoAMKJc2VjcDI1NmsxoQNa58x56RRRcUeOegry5S4yQvLa6LKlDcbBPHL4H5Oy4oN1ZHCCIyg"}
 ```
 
 ## CLI Options
@@ -101,6 +103,11 @@ OPTIONS:
         --web3-transport <web3_transport>     select transport protocol to serve json-rpc endpoint [default: ipc]
                                               [possible values: http, ipc]
 ```
+
+## RPC Methods
+- `discv5_nodeInfo`     Returns the ENR of the client
+- `web3_clientVersion`  Returns the current version of Trin being run
+- `eth_blockNumber `    Returns the current block number from the tip fo the chain (as provided by Infura at present)
 
 ## Gotchas
 
