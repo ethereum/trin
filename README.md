@@ -72,7 +72,9 @@ nc -U /tmp/trin-jsonrpc.ipc
 {"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":83}
 {"jsonrpc":"2.0","id":83,"result":"0xb52258"}{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":84}
 {"jsonrpc":"2.0","id":84,"result":"0xb52259"}{"jsonrpc":"2.0","id":85,"params":[],"method":"web3_clientVersion"}
-{"jsonrpc":"2.0","id":"85","result":"trin 0.0.1-alpha"}^C
+{"jsonrpc":"2.0","id":"85","result":"trin 0.0.1-alpha"}
+{"jsonrpc":"2.0","id":86,"params":[],"method":"discv5_nodeInfo"}
+{"id":86,"jsonrpc":"2.0","result":"enr:-IS4QHK_CnCsQKT-mFTilJ5msHacIJtU91aYe8FhAd_K7G-ACO-FO2GPFOyM7kiphjXMwrNh8Y4mSbN3ufSdBQFzjikBgmlkgnY0gmlwhMCoAMKJc2VjcDI1NmsxoQNa58x56RRRcUeOegry5S4yQvLa6LKlDcbBPHL4H5Oy4oN1ZHCCIyg"}
 ```
 
 ## CLI Options
@@ -101,6 +103,12 @@ OPTIONS:
         --web3-transport <web3_transport>     select transport protocol to serve json-rpc endpoint [default: ipc]
                                               [possible values: http, ipc]
 ```
+
+## Custom RPC Methods
+- `discv5_nodeInfo`     Returns the ENR of the client
+- `discv5_routingTableInfo`     Returns the list of discovery peers that have recently been available
+
+See https://eth.wiki/json-rpc/API#json-rpc-methods for other standard methods that are implemented. Most of the currently proxy to Infura.
 
 ## Gotchas
 
