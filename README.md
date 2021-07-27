@@ -104,10 +104,11 @@ OPTIONS:
                                               [possible values: http, ipc]
 ```
 
-## RPC Methods
+## Custom RPC Methods
 - `discv5_nodeInfo`     Returns the ENR of the client
-- `web3_clientVersion`  Returns the current version of Trin being run
-- `eth_blockNumber `    Returns the current block number from the tip fo the chain (as provided by Infura at present)
+- `discv5_routingTableInfo`     Returns the list of discovery peers that have recently been available
+
+See https://eth.wiki/json-rpc/API#json-rpc-methods for other standard methods that are implemented. Most of the currently proxy to Infura.
 
 ## Gotchas
 
