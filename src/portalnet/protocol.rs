@@ -1,12 +1,12 @@
 #![allow(dead_code)]
 
-use std::env;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
 use super::{
     discovery::{Config as DiscoveryConfig, Discovery},
     types::{FindContent, FindNodes, FoundContent, Nodes, Ping, Pong, Request, Response, SszEnr},
+    utils::get_data_dir,
     U256,
 };
 use super::{types::Message, Enr};
@@ -55,7 +55,7 @@ impl Default for PortalnetConfig {
 }
 
 pub const PROTOCOL: &str = "portal";
-pub const TRIN_DB_ENV_VAR: &str = "TRIN_DB_PATH";
+pub const TRIN_DATA_ENV_VAR: &str = "TRIN_DATA_PATH";
 
 #[derive(Clone)]
 pub struct PortalnetProtocol {
@@ -221,18 +221,11 @@ impl PortalnetProtocol {
             data_radius: portal_config.data_radius,
         };
 
-        let db_path = match env::var(TRIN_DB_ENV_VAR) {
-            Ok(val) => val,
-            Err(_) => panic!(
-                "Must supply target trin db path as environment variable, like:\n\
-                {}=\"/path\"",
-                TRIN_DB_ENV_VAR,
-            ),
-        };
+        let data_path = get_data_dir();
 
         let mut db_opts = Options::default();
         db_opts.create_if_missing(true);
-        let db = DB::open(&db_opts, db_path).unwrap();
+        let db = DB::open(&db_opts, data_path).unwrap();
 
         let events = PortalnetEvents {
             data_radius: portal_config.data_radius,
