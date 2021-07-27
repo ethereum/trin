@@ -37,6 +37,11 @@ cd trin
 TRIN_INFURA_PROJECT_ID="YoUr-Id-HeRe" cargo run
 ```
 
+**Optional:** Custom data directory
+```shell
+TRIN_DATA_PATH="/path"
+```
+
 ### Connect over IPC
 In a python shell:
 ```py
