@@ -12,6 +12,16 @@ This should sound similar to a light client. It is, but with a peer-to-peer
 philosophy rather than the LES client/server model, which has introduced
 challenges in an altruistic environment.
 
+## Repository Structure
+
+Trin is a collection of networks.
+
+The repository is structured as follows:
+
+- `trin/`: The main entry point to run a holistic Ethereum portal client
+- `trin-history/`: The chain history network
+- `trin-state/`: The state network
+
 ## Ready for production?
 
 LOL, not even a little bit. At the last readme update, this was simply a proxy
