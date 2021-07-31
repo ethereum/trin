@@ -14,7 +14,7 @@ challenges in an altruistic environment.
 
 ## Repository Structure
 
-Trin is a collection of networks.
+The portal protocol is a collection of networks. Trin needs to connect to all of them.
 
 The repository is structured as follows:
 
