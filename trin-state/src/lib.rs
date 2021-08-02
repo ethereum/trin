@@ -13,11 +13,10 @@ use jsonrpc::launch_trin;
 use log::info;
 use std::env;
 
-mod portalnet;
+pub mod portalnet;
 use portalnet::protocol::{PortalEndpoint, PortalnetConfig, PortalnetProtocol};
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
     let trin_config = TrinConfig::new();

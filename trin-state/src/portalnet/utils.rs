@@ -1,5 +1,6 @@
 use super::protocol::TRIN_DATA_ENV_VAR;
-use std::env;
+use directories::ProjectDirs;
+use std::{env, fs};
 
 pub fn xor_two_values(first: &Vec<u8>, second: &Vec<u8>) -> Vec<u8> {
     if &first.len() != &second.len() {
@@ -41,26 +42,19 @@ mod test {
 }
 
 pub fn get_data_dir() -> String {
-    match env::var(TRIN_DATA_ENV_VAR) {
-        Ok(data_path) => data_path,
-        Err(_) => get_default_data_dir(),
-    }
+    let path = env::var(TRIN_DATA_ENV_VAR).unwrap_or(get_default_data_dir());
+
+    fs::create_dir_all(&path).expect("Unable to create data directory folder");
+    path
 }
 
 pub fn get_default_data_dir() -> String {
-    // Windows: C:\Users\Username\AppData\Roaming\Trin
+    // Windows: C:\Users\Username\AppData\Roaming\Trin\data
     // macOS: ~/Library/Application Support/Trin
     // Unix-like: ~/.trin
 
-    if cfg!(windows) {
-        let path_ret = env::var("APPDATA").unwrap();
-        format!("{}{}", path_ret, "\\Trin")
-    } else {
-        let path_ret = env::var("Home").unwrap_or(String::from("/"));
-        if cfg!(macos) {
-            format!("{}{}", path_ret, "/Library/Application Support/Trin")
-        } else {
-            format!("{}{}", path_ret, "/.trin")
-        }
+    match ProjectDirs::from("", "", "Trin") {
+        Some(proj_dirs) => proj_dirs.data_local_dir().to_str().unwrap().to_string(),
+        None => panic!("Unable to find data directory"),
     }
 }
