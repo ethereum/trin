@@ -1,3 +1,4 @@
+use crate::cli::TrinConfig;
 use crate::portalnet::protocol::{PortalEndpoint, PortalEndpointKind};
 use reqwest::blocking as reqwest;
 use serde::{Deserialize, Serialize};
@@ -5,7 +6,6 @@ use serde_json::{json, Value};
 use std::fs;
 use std::io::{self, Read, Write};
 use std::net::{TcpListener, TcpStream};
-use crate::cli::TrinConfig;
 
 #[cfg(unix)]
 use std::os::unix;
@@ -152,7 +152,7 @@ fn serve_ipc_client(
         let obj = obj.unwrap();
         let formatted_response = match obj.validate() {
             Ok(_) => {
-                let result = handle_request(obj, &infura_url, portal_tx.clone());
+                let result = handle_request(obj, infura_url, portal_tx.clone());
                 match result {
                     Ok(contents) => contents.into_bytes(),
                     Err(contents) => contents.into_bytes(),
@@ -177,7 +177,7 @@ fn serve_http_client(
     for obj in deser.into_iter::<JsonRequest>() {
         let obj = obj.unwrap();
         let formatted_response = match obj.validate() {
-            Ok(_) => process_http_request(obj, &infura_url, portal_tx.clone()),
+            Ok(_) => process_http_request(obj, infura_url, portal_tx.clone()),
             Err(e) => format!("HTTP/1.1 400 BAD REQUEST\r\n\r\n{}", e).into_bytes(),
         };
         stream.write_all(&formatted_response).unwrap();
@@ -190,7 +190,7 @@ fn process_http_request(
     infura_url: &str,
     portal_tx: UnboundedSender<PortalEndpoint>,
 ) -> Vec<u8> {
-    let result = handle_request(obj, &infura_url, portal_tx);
+    let result = handle_request(obj, infura_url, portal_tx);
     match result {
         Ok(contents) => format!(
             "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}",

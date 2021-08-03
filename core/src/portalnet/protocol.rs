@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use discv5::{Discv5ConfigBuilder, Discv5Event, TalkRequest};
 use log::{debug, error, warn};
-use rocksdb::{DB, Options};
+use rocksdb::{Options, DB};
 use serde_json::Value;
 use tokio::sync::mpsc;
 
@@ -13,10 +13,12 @@ use crate::utils::get_data_dir;
 
 use super::{
     discovery::{Config as DiscoveryConfig, Discovery},
-    types::{FindContent, FindNodes, FoundContent, Nodes, Ping, Pong, Request, Response, SszEnr, HexData},
+    types::{
+        FindContent, FindNodes, FoundContent, HexData, Nodes, Ping, Pong, Request, Response, SszEnr,
+    },
     U256,
 };
-use super::{Enr, types::Message};
+use super::{types::Message, Enr};
 use crate::socket;
 
 type Responder<T, E> = mpsc::UnboundedSender<Result<T, E>>;

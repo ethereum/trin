@@ -3,8 +3,8 @@ use std::{env, fs};
 
 const TRIN_DATA_ENV_VAR: &str = "TRIN_DATA_PATH";
 
-pub fn xor_two_values(first: &Vec<u8>, second: &Vec<u8>) -> Vec<u8> {
-    if &first.len() != &second.len() {
+pub fn xor_two_values(first: &[u8], second: &[u8]) -> Vec<u8> {
+    if first.len() != second.len() {
         panic!("Can only xor vectors of equal length.")
     };
 
@@ -43,7 +43,7 @@ mod test {
 }
 
 pub fn get_data_dir() -> String {
-    let path = env::var(TRIN_DATA_ENV_VAR).unwrap_or(get_default_data_dir());
+    let path = env::var(TRIN_DATA_ENV_VAR).unwrap_or_else(|_| get_default_data_dir());
 
     fs::create_dir_all(&path).expect("Unable to create data directory folder");
     path
