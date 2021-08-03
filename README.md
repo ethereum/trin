@@ -47,6 +47,11 @@ cd trin
 TRIN_INFURA_PROJECT_ID="YoUr-Id-HeRe" cargo run
 ```
 
+To run individual networks:
+```sh
+cargo run -p trin-state|trin-history
+```
+
 **Optional:** Custom data directory
 ```shell
 TRIN_DATA_PATH="/path"

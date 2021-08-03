@@ -4,3 +4,5 @@ members = [
     "trin-state",
     "trin-history",
 ]
+
+default-members = ["trin"]
