@@ -15,6 +15,11 @@ trin-state = { path = "state" }
 members = [
     "state",
     "history",
+    "core"
 ]
 
-default-members = ["trin"]
+default-members = [
+    "state",
+    "history",
+    "core"
+]

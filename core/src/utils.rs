@@ -1,6 +1,7 @@
-use super::protocol::TRIN_DATA_ENV_VAR;
 use directories::ProjectDirs;
 use std::{env, fs};
+
+const TRIN_DATA_ENV_VAR: &str = "TRIN_DATA_PATH";
 
 pub fn xor_two_values(first: &Vec<u8>, second: &Vec<u8>) -> Vec<u8> {
     if &first.len() != &second.len() {

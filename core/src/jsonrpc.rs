@@ -1,4 +1,3 @@
-use crate::cli::TrinConfig;
 use crate::portalnet::protocol::{PortalEndpoint, PortalEndpointKind};
 use reqwest::blocking as reqwest;
 use serde::{Deserialize, Serialize};
@@ -6,6 +5,7 @@ use serde_json::{json, Value};
 use std::fs;
 use std::io::{self, Read, Write};
 use std::net::{TcpListener, TcpStream};
+use crate::cli::TrinConfig;
 
 #[cfg(unix)]
 use std::os::unix;

@@ -8,3 +8,4 @@ edition = "2018"
 
 [dependencies]
 tokio = { version = "1.8.0", features = ["full"] }
+trin-core = { path = "../core" }

@@ -1,20 +1,11 @@
-#[macro_use]
-extern crate lazy_static;
-extern crate log;
-extern crate stunclient;
-extern crate tracing;
-
-use tokio::sync::mpsc;
-
-mod cli;
-use cli::TrinConfig;
-mod jsonrpc;
-use jsonrpc::launch_trin;
-use log::info;
 use std::env;
 
-pub mod portalnet;
-use portalnet::protocol::{PortalEndpoint, PortalnetConfig, PortalnetProtocol};
+use log::info;
+use tokio::sync::mpsc;
+
+use trin_core::cli::TrinConfig;
+use trin_core::jsonrpc::launch_trin;
+use trin_core::portalnet::protocol::{PortalEndpoint, PortalnetConfig, PortalnetProtocol};
 
 pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();

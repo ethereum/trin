@@ -2838,14 +2838,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "trin-history"
-version = "0.1.0"
-dependencies = [
- "tokio",
-]
-
-[[package]]
-name = "trin-state"
+name = "trin-core"
 version = "0.1.0"
 dependencies = [
  "base64",
@@ -2871,11 +2864,28 @@ dependencies = [
  "stunclient",
  "threadpool",
  "tokio",
- "tracing",
- "tracing-subscriber",
  "uds_windows",
  "uint 0.8.5",
  "validator",
+]
+
+[[package]]
+name = "trin-history"
+version = "0.1.0"
+dependencies = [
+ "tokio",
+ "trin-core",
+]
+
+[[package]]
+name = "trin-state"
+version = "0.1.0"
+dependencies = [
+ "log 0.4.14",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "trin-core",
 ]
 
 [[package]]
