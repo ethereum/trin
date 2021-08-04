@@ -1,0 +1,39 @@
+[package]
+name = "trin-core"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+hex = "0.4.3"
+structopt = "0.3"
+clap = "2.33.3"
+directories = "3.0"
+stunclient = "0.1.2"
+log = "0.4.14"
+base64 = "0.13.0"
+ctrlc = "3.1.8"
+env_logger = "0.8.2"
+eth2_ssz = "0.1.2"
+eth2_ssz_derive = "0.1.0"
+futures = "0.3.13"
+lazy_static = "1.4.0"
+reqwest = { version = "0.11.0", features = ["blocking"] }
+rlp = "0.5.0"
+rocksdb = "0.16.0"
+serde = {version = "1.0.125", features = ["derive"] }
+serde_json = "1.0.59"
+threadpool = "1.8.1"
+tokio = {version = "1.8.0", features = ["full"]}
+uint = { version = "0.8.5", default-features = false }
+validator = { version = "0.13.0", features = ["derive"] }
+
+[target.'cfg(windows)'.dependencies]
+ipconfig = "0.2.2"
+uds_windows = "1.0.1"
+
+[target.'cfg(unix)'.dependencies]
+interfaces = "0.0.7"
+
+[dependencies.discv5]
+version = "0.1.0-beta.5"
+git = "https://github.com/sigp/discv5"

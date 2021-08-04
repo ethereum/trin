@@ -1,9 +1,8 @@
 #![allow(dead_code)]
 
-use super::types::SszEnr;
-use super::utils::xor_two_values;
+use super::types::{HexData, SszEnr};
 use super::{protocol::PROTOCOL, Enr};
-use crate::portalnet::types::HexData;
+use crate::utils::xor_two_values;
 use discv5::enr::{CombinedKey, EnrBuilder, NodeId};
 use discv5::{Discv5, Discv5Config};
 use log::info;

@@ -3,21 +3,23 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use super::{
-    discovery::{Config as DiscoveryConfig, Discovery},
-    types::{FindContent, FindNodes, FoundContent, Nodes, Ping, Pong, Request, Response, SszEnr},
-    utils::get_data_dir,
-    U256,
-};
-use super::{types::Message, Enr};
 use discv5::{Discv5ConfigBuilder, Discv5Event, TalkRequest};
 use log::{debug, error, warn};
 use rocksdb::{Options, DB};
 use serde_json::Value;
 use tokio::sync::mpsc;
 
-use super::socket;
-use crate::portalnet::types::HexData;
+use crate::utils::get_data_dir;
+
+use super::{
+    discovery::{Config as DiscoveryConfig, Discovery},
+    types::{
+        FindContent, FindNodes, FoundContent, HexData, Nodes, Ping, Pong, Request, Response, SszEnr,
+    },
+    U256,
+};
+use super::{types::Message, Enr};
+use crate::socket;
 
 type Responder<T, E> = mpsc::UnboundedSender<Result<T, E>>;
 
@@ -55,7 +57,6 @@ impl Default for PortalnetConfig {
 }
 
 pub const PROTOCOL: &str = "portal";
-pub const TRIN_DATA_ENV_VAR: &str = "TRIN_DATA_PATH";
 
 #[derive(Clone)]
 pub struct PortalnetProtocol {
