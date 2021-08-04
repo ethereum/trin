@@ -44,7 +44,7 @@ Create an Infura account, getting a project ID. Check out the trin repository, t
 
 ```sh
 cd trin
-TRIN_INFURA_PROJECT_ID="YoUr-Id-HeRe" cargo run
+TRIN_INFURA_PROJECT_ID="YoUr-Id-HeRe" cargo run -p trin
 ```
 
 To run individual networks:

@@ -8,18 +8,18 @@ edition = "2018"
 
 [dependencies]
 tokio = { version = "1.8.0", features = ["full"] }
-trin-history = { path = "history" }
-trin-state = { path = "state" }
+trin-history = { path = "trin-history" }
+trin-state = { path = "trin-state" }
 
 [workspace]
 members = [
-    "state",
-    "history",
-    "core"
+    "trin-state",
+    "trin-history",
+    "trin-core"
 ]
 
 default-members = [
-    "state",
-    "history",
-    "core"
+    "trin-state",
+    "trin-history",
+    "trin-core"
 ]
