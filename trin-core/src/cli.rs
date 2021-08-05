@@ -73,6 +73,12 @@ pub struct TrinConfig {
     pub private_key: Option<HexData>,
 }
 
+impl Default for TrinConfig {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TrinConfig {
     pub fn new() -> Self {
         Self::new_from(env::args_os()).expect("Could not parse trin arguments")

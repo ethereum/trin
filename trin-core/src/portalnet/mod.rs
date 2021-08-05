@@ -1,12 +1,12 @@
 #![allow(clippy::all)]
-pub mod discovery;
-pub mod protocol;
-pub mod socket;
-pub mod types;
-pub mod utils;
+
 use discv5::enr::CombinedKey;
 use ssz::DecodeError;
 use uint::construct_uint;
+
+pub mod discovery;
+pub mod protocol;
+pub mod types;
 
 pub type Enr = discv5::enr::Enr<CombinedKey>;
 

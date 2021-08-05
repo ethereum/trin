@@ -31,7 +31,7 @@ pub fn default_local_address(port: u16) -> SocketAddr {
 #[cfg(unix)]
 fn find_assigned_ip() -> Option<IpAddr> {
     let online_nics = Interface::get_all()
-        .unwrap_or(vec![])
+        .unwrap_or_default()
         .into_iter()
         .filter(|iface| iface.is_up() && iface.is_running() && !iface.is_loopback());
 
