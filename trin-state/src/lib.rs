@@ -8,9 +8,10 @@ use trin_core::jsonrpc::launch_trin;
 use trin_core::portalnet::protocol::{PortalEndpoint, PortalnetConfig, PortalnetProtocol};
 
 pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt::init();
+    println!("Launching trin-state...");
 
     let trin_config = TrinConfig::new();
+    trin_config.display_config();
 
     let infura_project_id = match env::var("TRIN_INFURA_PROJECT_ID") {
         Ok(val) => val,
