@@ -2874,7 +2874,10 @@ dependencies = [
 name = "trin-history"
 version = "0.1.0"
 dependencies = [
+ "log 0.4.14",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
  "trin-core",
 ]
 

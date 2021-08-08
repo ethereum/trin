@@ -7,5 +7,8 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+log = "0.4.14"
+tracing = "0.1.26"
+tracing-subscriber = "0.2.18"
 tokio = { version = "1.8.0", features = ["full"] }
 trin-core = { path = "../trin-core" }
