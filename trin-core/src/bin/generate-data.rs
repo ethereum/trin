@@ -1,5 +1,5 @@
 use structopt::StructOpt;
-use rocksdb::{Options, DB, perf};
+use rocksdb::{Options, DB};
 use trin_core::utils::{get_data_dir};
 use rand::{distributions::Alphanumeric, Rng};
 use std::process::Command;
@@ -24,8 +24,9 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
   let size_of_keys = 32;
   let size_of_values = generator_config.value_size;
 
-  // For every 1 kb of data we store (key + value), RocksDB grows by approximately this many kb on disk. 
-	// TODO: Use perf::memory_usage_stats to be more accurate.
+  // For every 1 kb of data we store (key + value), RocksDB tends to grow by this many kb on disk...
+	// ...but this is a crude empirical estimation that works mainly with default value data size. 
+	// TODO: Use perf::memory_usage_stats to be more accurate with all data sizes.
 	let data_overhead = 1.1783;
   let number_of_entries = ( (num_kilobytes * 1000) as f64 / (size_of_keys + size_of_values) as f64 ) / data_overhead;
   let number_of_entries = number_of_entries.round() as u32;
@@ -87,7 +88,7 @@ pub struct GeneratorConfig {
     )]
     pub value_size: u32,
 
-		/// If this flag is provided, the DB will be
+		/// If this flag is provided, the DB will be erased and overwritten
     #[structopt(
       short,
       long,
