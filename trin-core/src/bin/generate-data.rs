@@ -31,7 +31,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
   let number_of_entries = ( (num_kilobytes * 1000) as f64 / (size_of_keys + size_of_values) as f64 ) / data_overhead;
   let number_of_entries = number_of_entries.round() as u32;
 
-  for _i in 0..number_of_entries {
+  for _ in 0..number_of_entries {
 	
 		let value = generate_random_value(size_of_values);
     let key = generate_random_value(size_of_keys);
