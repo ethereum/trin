@@ -33,6 +33,7 @@ impl Message {
                     Request::Ping(p) => payload.append(&mut p.as_ssz_bytes()),
                     Request::FindNodes(p) => payload.append(&mut p.as_ssz_bytes()),
                     Request::FindContent(p) => payload.append(&mut p.as_ssz_bytes()),
+                    Request::Advertise(p) => payload.append(&mut p.as_ssz_bytes()),
                 }
                 payload
             }
@@ -42,6 +43,7 @@ impl Message {
                     Response::Pong(p) => payload.append(&mut p.as_ssz_bytes()),
                     Response::Nodes(p) => payload.append(&mut p.as_ssz_bytes()),
                     Response::FoundContent(p) => payload.append(&mut p.as_ssz_bytes()),
+                    Response::RequestProofs(p) => payload.append(&mut p.as_ssz_bytes()),
                 }
                 payload
             }
@@ -65,6 +67,10 @@ impl Message {
                     FindContent::from_ssz_bytes(&bytes[1..])
                         .map_err(|e| format!("Failed to decode ssz: {:?}", e))?,
                 ))),
+                7 => Ok(Message::Request(Request::Advertise(
+                    Advertise::from_ssz_bytes(&bytes[1..])
+                      .map_err(|e| format!("Failed to decode ssz: {:?}", e))?,
+                ))),
                 2 => Ok(Message::Response(Response::Pong(
                     Pong::from_ssz_bytes(&bytes[1..])
                         .map_err(|e| format!("Failed to decode ssz: {:?}", e))?,
@@ -75,6 +81,10 @@ impl Message {
                 ))),
                 6 => Ok(Message::Response(Response::FoundContent(
                     FoundContent::from_ssz_bytes(&bytes[1..])
+                        .map_err(|e| format!("Failed to decode ssz: {:?}", e))?,
+                ))),
+                8 => Ok(Message::Response(Response::RequestProofs(
+                    RequestProofs::from_ssz_bytes(&bytes[1..])
                         .map_err(|e| format!("Failed to decode ssz: {:?}", e))?,
                 ))),
                 _ => Err("Unknown message id".to_string()),
@@ -90,6 +100,7 @@ pub enum Request {
     Ping(Ping),
     FindNodes(FindNodes),
     FindContent(FindContent),
+    Advertise(Advertise),
 }
 
 impl Request {
@@ -98,6 +109,7 @@ impl Request {
             Request::Ping(_) => 1,
             Request::FindNodes(_) => 3,
             Request::FindContent(_) => 5,
+            Request::Advertise(_) => 7,
         }
     }
 }
@@ -107,6 +119,7 @@ pub enum Response {
     Pong(Pong),
     Nodes(Nodes),
     FoundContent(FoundContent),
+    RequestProofs(RequestProofs),
 }
 
 impl Response {
@@ -115,6 +128,7 @@ impl Response {
             Response::Pong(_) => 2,
             Response::Nodes(_) => 4,
             Response::FoundContent(_) => 6,
+            Response::RequestProofs(_) => 8,
         }
     }
 }
@@ -217,6 +231,19 @@ pub struct FindContent {
 pub struct FoundContent {
     pub enrs: Vec<SszEnr>,
     pub payload: Vec<u8>,
+}
+
+#[derive(Debug, PartialEq, Clone, Encode, Decode)]
+pub struct Advertise {
+  pub content_keys: Vec<u8>,
+}
+
+// might need custom encode decode like Nodes?
+#[derive(Debug, PartialEq, Clone, Encode, Decode)]
+pub struct RequestProofs {
+  // needs to be fixed-length of 4 bytes
+  pub connection_id: Vec<u8>,
+  pub content_keys: Vec<u8>,
 }
 
 #[derive(Debug, PartialEq, Clone)]

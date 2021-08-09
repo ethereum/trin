@@ -14,7 +14,7 @@ use crate::utils::get_data_dir;
 use super::{
     discovery::{Config as DiscoveryConfig, Discovery},
     types::{
-        FindContent, FindNodes, FoundContent, HexData, Nodes, Ping, Pong, Request, Response, SszEnr,
+        FindContent, FindNodes, FoundContent, HexData, Nodes, Ping, Pong, Request, Response, SszEnr, Advertise, RequestProofs
     },
     U256,
 };
@@ -178,6 +178,17 @@ impl PortalnetEvents {
                 }
                 Err(e) => panic!("Unable to respond to FindContent: {}", e),
             },
+            Request::Advertise(Advertise { content_keys }) => {
+                // let connection_id just be empty for now
+                let connection_id: Vec<u8> = vec![];
+                // respond with RequestProofs of given content_key
+                Response::RequestProofs(RequestProofs {
+                  connection_id,
+                  content_keys,
+                })
+            },
+            // response to the RequestProofs message? in response to a RequestProofs,
+            // the receiver should initiate a utp stream with given connection_id in order to send proofs to requestor
         };
 
         Ok(response)
@@ -270,6 +281,13 @@ impl PortalnetProtocol {
         self.discovery
             .send_talkreq(enr, Message::Request(Request::FindContent(msg)).to_bytes())
             .await
+    }
+
+    pub async fn send_advertise(&self, content_keys: Vec<u8>, enr: Enr) -> Result<Vec<u8>, String> {
+      let msg = Advertise { content_keys };
+      self.discovery
+        .send_talkreq(enr, Message::Request(Request::Advertise(msg)).to_bytes())
+        .await
     }
 
     /// Convenience call for testing, quick way to ping bootnodes
