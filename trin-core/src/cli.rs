@@ -1,4 +1,5 @@
 use crate::portalnet::types::HexData;
+use log::info;
 
 use std::env;
 use std::ffi::OsString;
@@ -90,37 +91,44 @@ impl TrinConfig {
     {
         let config = Self::from_iter(args);
 
-        println!("Launching trin...");
-
         match config.web3_transport.as_str() {
             "http" => match &config.web3_ipc_path[..] {
-                DEFAULT_WEB3_IPC_PATH => {
-                    println!(
-                        "Protocol: {}\nWEB3 HTTP port: {}",
-                        config.web3_transport, config.web3_http_port
-                    )
-                }
+                DEFAULT_WEB3_IPC_PATH => {}
                 _ => panic!("Must not supply an ipc path when using http protocol for json-rpc"),
             },
             "ipc" => match &config.web3_http_port.to_string()[..] {
-                DEFAULT_WEB3_HTTP_PORT => {
-                    println!(
-                        "Protocol: {}\nIPC path: {}",
-                        config.web3_transport, config.web3_ipc_path
-                    )
-                }
+                DEFAULT_WEB3_HTTP_PORT => {}
                 _ => panic!("Must not supply an http port when using ipc protocol for json-rpc"),
             },
             val => panic!("Unsupported json-rpc protocol: {}", val),
         }
 
-        println!("Pool Size: {}", config.pool_size);
-
-        match config.bootnodes.is_empty() {
-            true => println!("Bootnodes: None"),
-            _ => println!("Bootnodes: {:?}", config.bootnodes),
-        }
         Ok(config)
+    }
+
+    pub fn display_config(&self) {
+        match self.web3_transport.as_str() {
+            "http" => {
+                info!(
+                    "Protocol: {}\nWEB3 HTTP port: {}",
+                    self.web3_transport, self.web3_http_port
+                )
+            }
+            "ipc" => {
+                info!(
+                    "Protocol: {}\nIPC path: {}",
+                    self.web3_transport, self.web3_ipc_path
+                )
+            }
+            val => panic!("Unsupported json-rpc protocol: {}", val),
+        }
+
+        info!("Pool Size: {}", self.pool_size);
+
+        match self.bootnodes.is_empty() {
+            true => info!("Bootnodes: None"),
+            _ => info!("Bootnodes: {:?}", self.bootnodes),
+        }
     }
 }
 
