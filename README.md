@@ -56,7 +56,7 @@ cargo run -p trin-state|trin-history
 ```shell
 TRIN_DATA_PATH="/your_path"
 ```
-*Note*: Default paths are:
+*Note, default paths are:*\
 Linux/Unix - `$HOME/.local/share/trin`
 
 ### Connect over IPC
