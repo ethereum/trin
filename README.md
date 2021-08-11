@@ -54,8 +54,10 @@ cargo run -p trin-state|trin-history
 
 **Optional:** Custom data directory
 ```shell
-TRIN_DATA_PATH="/path"
+TRIN_DATA_PATH="/your_path"
 ```
+*Note*: Default paths are:
+Linux/Unix - `$HOME/.local/share/trin`
 
 ### Connect over IPC
 In a python shell:
