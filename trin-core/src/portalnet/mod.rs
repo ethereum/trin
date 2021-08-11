@@ -7,6 +7,10 @@ use uint::construct_uint;
 pub mod discovery;
 pub mod protocol;
 pub mod types;
+pub mod storage;
+
+use std::convert::From;
+use std::vec;
 
 pub type Enr = discv5::enr::Enr<CombinedKey>;
 
@@ -55,3 +59,44 @@ impl ssz::Decode for U256 {
         }
     }
 }
+
+impl From<vec::Vec<u8>> for U256 {
+
+    fn from(vec: vec::Vec<u8>) -> U256 {
+
+        let mut result = U256::from(0);
+        let mut byte_position = vec.len();
+
+        for byte in vec {
+
+            let base: u8 = 2;
+            let power: u32 = 8 * (byte_position - 1) as u32;
+
+            result = result + (byte * (base.pow(power)));
+            byte_position = byte_position - 1;
+
+        }
+
+        result
+
+    } 
+
+}
+
+impl U256 {
+
+    fn max() -> U256 {
+
+        let base: u128 = 2;
+        let power: u32 = 127;
+
+        let half_max_128: u128 = base.pow(power);
+
+        let max_256: U256 = ((U256::from(half_max_128) << 129) + (U256::from(half_max_128) * 2)) - 1;
+
+        max_256
+
+    }
+
+}
+
