@@ -56,6 +56,8 @@ cargo run -p trin-state|trin-history
 ```shell
 TRIN_DATA_PATH="/path"
 ```
+*Note, default data paths are:*\
+Linux/Unix - `$HOME/.local/share/trin`
 
 ### Connect over IPC
 In a python shell:
