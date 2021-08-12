@@ -25,9 +25,9 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let size_of_values = generator_config.value_size;
 
     // For every 1 kb of data we store (key + value), RocksDB tends to grow by this many kb on disk...
-	// ...but this is a crude empirical estimation that works mainly with default value data size. 
-	// TODO: Use perf::memory_usage_stats to be more accurate with all data sizes.
-	let data_overhead = 1.1783;
+    // ...but this is a crude empirical estimation that works mainly with default value data size. 
+    // TODO: Use perf::memory_usage_stats to be more accurate with all data sizes.
+    let data_overhead = 1.1783;
     let number_of_entries = ( (num_kilobytes * 1000) as f64 / (size_of_keys + size_of_values) as f64 ) / data_overhead;
     let number_of_entries = number_of_entries.round() as u32;
 
