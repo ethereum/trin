@@ -4,25 +4,27 @@ version = "0.1.0"
 edition = "2018"
 
 [dependencies]
-hex = "0.4.3"
-structopt = "0.3"
-clap = "2.33.3"
-directories = "3.0"
-stunclient = "0.1.2"
-log = "0.4.14"
 base64 = "0.13.0"
+clap = "2.33.3"
 ctrlc = "3.1.8"
+directories = "3.0"
 env_logger = "0.8.2"
 eth2_ssz = "0.1.2"
 eth2_ssz_derive = "0.1.0"
+ethereum-types = "0.12.0"
 futures = "0.3.13"
+hex = "0.4.3"
 lazy_static = "1.4.0"
+log = "0.4.14"
+num = "0.4.0"
 parking_lot = "0.11.1"
 reqwest = { version = "0.11.0", features = ["blocking"] }
 rlp = "0.5.0"
 rocksdb = "0.16.0"
 serde = {version = "1.0.125", features = ["derive"] }
 serde_json = "1.0.59"
+structopt = "0.3"
+stunclient = "0.1.2"
 threadpool = "1.8.1"
 tokio = {version = "1.8.0", features = ["full"]}
 uint = { version = "0.8.5", default-features = false }
