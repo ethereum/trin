@@ -9,7 +9,6 @@ pub mod protocol;
 pub mod types;
 pub mod storage;
 
-
 pub type Enr = discv5::enr::Enr<CombinedKey>;
 
 construct_uint! {
