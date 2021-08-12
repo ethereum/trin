@@ -9,7 +9,6 @@ pub mod protocol;
 pub mod types;
 pub mod storage;
 
-use std::convert::From;
 
 pub type Enr = discv5::enr::Enr<CombinedKey>;
 
@@ -58,5 +57,3 @@ impl ssz::Decode for U256 {
         }
     }
 }
-
-
