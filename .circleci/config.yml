@@ -79,7 +79,7 @@ jobs:
           # Remove the first two lines of gitconfig as work around
           command: |
             (gc ..\.gitconfig | select -Skip 2) | sc ..\.gitconfig
-            cargo clippy -- --deny warnings
+            cargo clippy --package trin -- --deny warnings
           no_output_timeout: 20m
       - run:
           name: Cargo Build --target x86_64-pc-windows-msvc
