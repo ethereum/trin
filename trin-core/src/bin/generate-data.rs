@@ -6,57 +6,57 @@ use std::process::Command;
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
-  let generator_config = GeneratorConfig::from_args();
+    let generator_config = GeneratorConfig::from_args();
 
-  if generator_config.overwrite {
-    let _ = Command::new("rm")
-                    .arg("-rf")
-                    .arg(get_data_dir())
-                    .output()
-                    .expect("Failed to overwrite DB.");
-  }
+    if generator_config.overwrite {
+        let _ = Command::new("rm")
+                        .arg("-rf")
+                        .arg(get_data_dir())
+                        .output()
+                        .expect("Failed to overwrite DB.");
+    }
 
-  let mut db_opts = Options::default();
-  db_opts.create_if_missing(true);
-  let db = DB::open(&db_opts, get_data_dir()).expect("Failed to open RocksDB.");
+    let mut db_opts = Options::default();
+    db_opts.create_if_missing(true);
+    let db = DB::open(&db_opts, get_data_dir()).expect("Failed to open RocksDB.");
 
-  let num_kilobytes = generator_config.kb;
-  let size_of_keys = 32;
-  let size_of_values = generator_config.value_size;
+    let num_kilobytes = generator_config.kb;
+    let size_of_keys = 32;
+    let size_of_values = generator_config.value_size;
 
-  // For every 1 kb of data we store (key + value), RocksDB tends to grow by this many kb on disk...
+    // For every 1 kb of data we store (key + value), RocksDB tends to grow by this many kb on disk...
 	// ...but this is a crude empirical estimation that works mainly with default value data size. 
 	// TODO: Use perf::memory_usage_stats to be more accurate with all data sizes.
 	let data_overhead = 1.1783;
-  let number_of_entries = ( (num_kilobytes * 1000) as f64 / (size_of_keys + size_of_values) as f64 ) / data_overhead;
-  let number_of_entries = number_of_entries.round() as u32;
+    let number_of_entries = ( (num_kilobytes * 1000) as f64 / (size_of_keys + size_of_values) as f64 ) / data_overhead;
+    let number_of_entries = number_of_entries.round() as u32;
 
-  for _ in 0..number_of_entries {
-	
-		let value = generate_random_value(size_of_values);
-    let key = generate_random_value(size_of_keys);
+    for _ in 0..number_of_entries {
+        
+        let value = generate_random_value(size_of_values);
+        let key = generate_random_value(size_of_keys);
 
-    db.put(&key, &value).expect("Failed to write DB entry.");
+        db.put(&key, &value).expect("Failed to write DB entry.");
 
-    println!("{} -> {}", &key, &value);
+        println!("{} -> {}", &key, &value);
 
-  } 
+    } 
 
-  db.flush().expect("Failed to flush changes to DB.");
+    db.flush().expect("Failed to flush changes to DB.");
 
-  println!("Successfully saved {} key/value pairs to RocksDB.", number_of_entries);
+    println!("Successfully saved {} key/value pairs to RocksDB.", number_of_entries);
 
-  Ok(())
+    Ok(())
 
 }
 
 fn generate_random_value(number_of_bytes: u32) -> String {
 
-  rand::thread_rng()
-			.sample_iter(&Alphanumeric)
-			.take(number_of_bytes as usize)
-			.map(char::from)
-			.collect()
+    rand::thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(number_of_bytes as usize)
+        .map(char::from)
+        .collect()
 
 }
 
@@ -79,7 +79,7 @@ pub struct GeneratorConfig {
     )]
     pub kb: u32,
 
-		/// Number of bytes per value in each random key/value pair
+	/// Number of bytes per value in each random key/value pair
     #[structopt(
       default_value = "32",
       short,
@@ -88,12 +88,12 @@ pub struct GeneratorConfig {
     )]
     pub value_size: u32,
 
-		/// If this flag is provided, the DB will be erased and overwritten
+    /// If this flag is provided, the DB will be erased and overwritten
     #[structopt(
       short,
       long,
       help = "Overwrite the DB instead of adding to it"
     )]
-    pub overwrite: bool,
+    pub overwrite: bool
 
 }
