@@ -35,7 +35,7 @@ jobs:
                 command: rustup component add clippy
             - run:
                 name: Run Clippy
-                command: cargo clippy -- --deny warnings
+                command: cargo clippy --package trin -- --deny warnings
                 no_output_timeout: 20m
             - rust/build:
                 release: false
