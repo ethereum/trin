@@ -61,5 +61,3 @@ impl ssz::Decode for U256 {
         }
     }
 }
-
-
