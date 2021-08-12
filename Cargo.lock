@@ -2370,7 +2370,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
 name = "rstest"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2381,7 +2380,6 @@ dependencies = [
  "quote 1.0.9",
  "rustc_version 0.4.0",
  "syn 1.0.72",
-=======
 name = "rusqlite"
 version = "0.25.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2394,7 +2392,6 @@ dependencies = [
  "libsqlite3-sys",
  "memchr",
  "smallvec 1.6.1",
->>>>>>> WIP storage class
 ]
 
 [[package]]
@@ -3202,11 +3199,8 @@ dependencies = [
  "reqwest",
  "rlp 0.5.0",
  "rocksdb",
-<<<<<<< HEAD
  "rstest",
-=======
  "rusqlite",
->>>>>>> WIP storage class
  "serde",
  "serde_json",
  "structopt",
