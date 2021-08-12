@@ -51,10 +51,8 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .await
             .unwrap();
 
-        tokio::join!(
-            events.process_discv5_requests(),
-            rpc_handler.process_jsonrpc_requests()
-        );
+        tokio::spawn(events.process_discv5_requests());
+        tokio::spawn(rpc_handler.process_jsonrpc_requests());
 
         // hacky test: make sure we establish a session with the boot node
         p2p.ping_bootnodes().await.unwrap();
