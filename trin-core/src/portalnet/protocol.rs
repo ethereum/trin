@@ -13,6 +13,7 @@ use crate::utils::get_data_dir;
 
 use super::{
     discovery::{Config as DiscoveryConfig, Discovery},
+    overlay::{Config as OverlayConfig, Overlay},
     types::{
         FindContent, FindNodes, FoundContent, HexData, Nodes, Ping, Pong, Request, Response, SszEnr,
     },
@@ -61,12 +62,12 @@ pub const PROTOCOL: &str = "portal";
 #[derive(Clone)]
 pub struct PortalnetProtocol {
     pub discovery: Arc<Discovery>,
-    data_radius: U256,
+    pub overlay: Arc<Overlay>,
 }
 
 pub struct PortalnetEvents {
-    data_radius: U256,
     discovery: Arc<Discovery>,
+    overlay: Arc<Overlay>,
     protocol_receiver: mpsc::Receiver<Discv5Event>,
     db: DB,
 }
@@ -146,13 +147,12 @@ impl PortalnetEvents {
                 let enr_seq = self.discovery.local_enr().seq();
                 Response::Pong(Pong {
                     enr_seq: enr_seq,
-                    data_radius: self.data_radius,
+                    data_radius: self.overlay.data_radius(),
                 })
             }
-
             Request::FindNodes(FindNodes { distances }) => {
                 let distances64: Vec<u64> = distances.iter().map(|x| (*x).into()).collect();
-                let enrs = self.discovery.find_nodes_response(distances64);
+                let enrs = self.overlay.nodes_by_distance(distances64);
                 Response::Nodes(Nodes {
                     // from spec: total = The total number of Nodes response messages being sent.
                     // TODO: support returning multiple messages
@@ -169,7 +169,7 @@ impl PortalnetEvents {
                     })
                 }
                 Ok(None) => {
-                    let enrs = self.discovery.find_nodes_close_to_content(content_key);
+                    let enrs = self.overlay.find_nodes_close_to_content(content_key);
                     let empty_payload: Vec<u8> = vec![];
                     Response::FoundContent(FoundContent {
                         enrs: enrs,
@@ -215,11 +215,17 @@ impl PortalnetProtocol {
             .await
             .map_err(|e| e.to_string())?;
 
+        let overlay = Arc::new(Overlay::new(
+            discovery.local_enr(),
+            portal_config.data_radius,
+            OverlayConfig::default(),
+        ));
+
         let discovery = Arc::new(discovery);
 
         let proto = Self {
             discovery: discovery.clone(),
-            data_radius: portal_config.data_radius,
+            overlay: overlay.clone(),
         };
 
         let data_path = get_data_dir();
@@ -229,8 +235,8 @@ impl PortalnetProtocol {
         let db = DB::open(&db_opts, data_path).unwrap();
 
         let events = PortalnetEvents {
-            data_radius: portal_config.data_radius,
             discovery: discovery.clone(),
+            overlay: overlay.clone(),
             protocol_receiver,
             db,
         };
