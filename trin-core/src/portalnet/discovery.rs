@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use super::types::{HexData, SszEnr};
-use super::{protocol::PROTOCOL, Enr};
+use super::Enr;
 use crate::utils::xor_two_values;
 use discv5::enr::{CombinedKey, EnrBuilder, NodeId};
 use discv5::{Discv5, Discv5Config};
@@ -151,11 +151,12 @@ impl Discovery {
     pub async fn send_talkreq(
         &self,
         enr: Enr,
+        protocol: String,
         request: ProtocolRequest,
     ) -> Result<Vec<u8>, String> {
         let response = self
             .discv5
-            .talk_req(enr, PROTOCOL.as_bytes().to_vec(), request)
+            .talk_req(enr, protocol.into_bytes(), request)
             .await
             .map_err(|e| format!("TalkReq query failed: {:?}", e))?;
         Ok(response)
