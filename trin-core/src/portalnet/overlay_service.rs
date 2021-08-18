@@ -20,6 +20,7 @@ use crate::{
     utils::{bytes, distance::xor, hash_delay_queue::HashDelayQueue},
 };
 
+use crate::portalnet::types::{Accept, Offer};
 use discv5::{
     enr::NodeId,
     kbucket::{
@@ -500,6 +501,7 @@ impl OverlayService {
             Request::FindContent(find_content) => {
                 Ok(Response::Content(self.handle_find_content(find_content)?))
             }
+            Request::Offer(content_keys) => self.handle_offer(content_keys),
         }
     }
 
@@ -570,6 +572,24 @@ impl OverlayService {
                 "Unable to respond to FindContent: {}",
                 msg
             ))),
+        }
+    }
+
+    /// Attempts to build a `Accept` response for a `Offer` request.
+    async fn handle_offer(&self, request: Offer) -> Accept {
+        let mut requested_keys: Vec<bool> = vec![];
+
+        // stub implementation
+        // should_store() performs checks & returns 1 if we should store, 0 otherwise
+        for key in &request.content_keys {
+            requested_keys.push(should_store(key));
+        }
+
+        let connection_id: u16 = super::utp::rand();
+
+        Accept {
+            connection_id,
+            content_keys: requested_keys,
         }
     }
 

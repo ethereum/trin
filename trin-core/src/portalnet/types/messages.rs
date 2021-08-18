@@ -210,6 +210,7 @@ impl Message {
                     Request::Ping(p) => payload.append(&mut p.as_ssz_bytes()),
                     Request::FindNodes(p) => payload.append(&mut p.as_ssz_bytes()),
                     Request::FindContent(p) => payload.append(&mut p.as_ssz_bytes()),
+                    Request::Offer(p) => payload.append(&mut p.as_ssz_bytes()),
                 }
                 payload
             }
@@ -219,6 +220,7 @@ impl Message {
                     Response::Pong(p) => payload.append(&mut p.as_ssz_bytes()),
                     Response::Nodes(p) => payload.append(&mut p.as_ssz_bytes()),
                     Response::Content(p) => payload.append(&mut p.as_ssz_bytes()),
+                    Response::Accept(p) => payload.append(&mut p.as_ssz_bytes()),
                 }
                 payload
             }
@@ -241,7 +243,11 @@ impl Message {
                     FindContent::from_ssz_bytes(&bytes[1..])
                         .map_err(|e| MessageDecodeError::from(e))?,
                 ))),
-                1 => Ok(Message::Response(Response::Pong(
+                6 => Ok(Message::Request(Request::Offer(
+                    Offer::from_ssz_bytes(&bytes[1..]).map_err(|e| MessageDecodeError::from(e))?,
+                ))),
+                // Responses
+                2 => Ok(Message::Response(Response::Pong(
                     Pong::from_ssz_bytes(&bytes[1..]).map_err(|e| MessageDecodeError::from(e))?,
                 ))),
                 3 => Ok(Message::Response(Response::Nodes(
@@ -250,6 +256,9 @@ impl Message {
                 5 => Ok(Message::Response(Response::Content(
                     Content::from_ssz_bytes(&bytes[1..])
                         .map_err(|e| MessageDecodeError::from(e))?,
+                ))),
+                7 => Ok(Message::Response(Response::Accept(
+                    Accept::from_ssz_bytes(&bytes[1..]).map_err(|e| MessageDecodeError::from(e))?,
                 ))),
                 _ => Err(MessageDecodeError::MessageId),
             }
@@ -264,6 +273,7 @@ pub enum Request {
     Ping(Ping),
     FindNodes(FindNodes),
     FindContent(FindContent),
+    Offer(Offer),
 }
 
 impl Request {
@@ -272,6 +282,7 @@ impl Request {
             Request::Ping(_) => 0,
             Request::FindNodes(_) => 2,
             Request::FindContent(_) => 4,
+            Request::Offer(_) => 6,
         }
     }
 }
@@ -281,6 +292,7 @@ pub enum Response {
     Pong(Pong),
     Nodes(Nodes),
     Content(Content),
+    Accept(Accept),
 }
 
 impl Response {
@@ -289,6 +301,7 @@ impl Response {
             Response::Pong(_) => 1,
             Response::Nodes(_) => 3,
             Response::Content(_) => 5,
+            Response::Accept(_) => 7,
         }
     }
 }
@@ -511,6 +524,17 @@ impl TryInto<Value> for Content {
             Err(MessageDecodeError::Type)
         }
     }
+}
+
+#[derive(Debug, PartialEq, Clone, Encode, Decode)]
+pub struct Offer {
+    pub content_keys: Vec<Vec<u8>>,
+}
+
+#[derive(Debug, PartialEq, Clone, Encode, Decode)]
+pub struct Accept {
+    pub connection_id: u16,
+    pub content_keys: Vec<bool>,
 }
 
 #[derive(Debug, PartialEq, Clone)]

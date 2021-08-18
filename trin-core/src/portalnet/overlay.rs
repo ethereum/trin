@@ -9,8 +9,8 @@ use super::{
     Enr,
 };
 use crate::portalnet::types::messages::{
-    Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Ping, Pong, ProtocolId,
-    Request, Response,
+    Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer, Ping, Pong,
+    ProtocolId, Request, Response,
 };
 
 use discv5::{
@@ -258,6 +258,34 @@ impl OverlayProtocol {
             Err(error) => Err(OverlayRequestError::ChannelFailure(error.to_string())),
         }
     }
+
+    // offer is sent in order to store content to k nodes with radii that contain content-id
+    // offer is also sent to nodes after FindContent (POKE)
+    pub async fn send_offer(
+        &self,
+        content_keys: Vec<Vec<u8>>,
+        enr: Enr,
+        protocol: ProtocolKind,
+    ) -> Result<Vec<u8>, String> {
+        // max_length of content_keys = 64
+        let msg = Offer { content_keys };
+        self.discovery
+            .write()
+            .await
+            .send_talkreq(
+                enr,
+                protocol.to_string(),
+                Message::Request(Request::Offer(msg)).to_bytes(),
+            )
+            .await;
+        // the node receives the ACCEPT message here
+        // should initiate utp stream and send data over
+        utp_listener.connect()
+    }
+}
+
+fn should_store(_key: &Vec<u8>) -> bool {
+    return true;
 }
 
 fn validate_find_nodes_distances(distances: &Vec<u16>) -> Result<(), OverlayRequestError> {
