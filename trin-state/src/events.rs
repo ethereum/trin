@@ -13,6 +13,7 @@ pub struct StateEvents {
 
 impl StateEvents {
     pub async fn process_requests(mut self) {
+        // another thing to point out is that this only handles TALKREQ, not TALKRESP
         while let Some(talk_request) = self.event_rx.recv().await {
             let reply = match self
                 .network
@@ -34,6 +35,23 @@ impl StateEvents {
             if let Err(error) = talk_request.respond(reply) {
                 warn!("Failed to send reply: {}", error);
             }
+        }
+    }
+
+    // would we have some other handler method to process responses?
+    pub async fn process_responses(mut self) {
+        while let Some(talk_response) = self.event_rx.recv().await {
+            debug!("Got state response {:?}", talk_response);
+
+            // handles the responses--if they need subnetwork specific handling, otherwise, send to overlay to handle
+            // if PONG
+            //    handle(resp)
+            // elif NODES
+            // elif FOUNDCONTENT
+            // elif ACCEPT
+
+            // OR -- send to OVERLAY protocol
+            // self.network.overlay.process_one_response
         }
     }
 }
