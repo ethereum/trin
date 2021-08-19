@@ -250,14 +250,22 @@ impl PortalnetProtocol {
             data_radius,
         };
         self.discovery
-            .send_talkreq(enr, Message::Request(Request::Ping(msg)).to_bytes())
+            .send_talkreq(
+                enr,
+                PROTOCOL.to_string(),
+                Message::Request(Request::Ping(msg)).to_bytes(),
+            )
             .await
     }
 
     pub async fn send_find_nodes(&self, distances: Vec<u16>, enr: Enr) -> Result<Vec<u8>, String> {
         let msg = FindNodes { distances };
         self.discovery
-            .send_talkreq(enr, Message::Request(Request::FindNodes(msg)).to_bytes())
+            .send_talkreq(
+                enr,
+                PROTOCOL.to_string(),
+                Message::Request(Request::FindNodes(msg)).to_bytes(),
+            )
             .await
     }
 
@@ -268,7 +276,11 @@ impl PortalnetProtocol {
     ) -> Result<Vec<u8>, String> {
         let msg = FindContent { content_key };
         self.discovery
-            .send_talkreq(enr, Message::Request(Request::FindContent(msg)).to_bytes())
+            .send_talkreq(
+                enr,
+                PROTOCOL.to_string(),
+                Message::Request(Request::FindContent(msg)).to_bytes(),
+            )
             .await
     }
 
