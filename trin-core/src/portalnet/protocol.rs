@@ -65,10 +65,10 @@ pub struct PortalnetProtocol {
 }
 
 pub struct PortalnetEvents {
-    data_radius: U256,
-    discovery: Arc<Discovery>,
-    protocol_receiver: mpsc::Receiver<Discv5Event>,
-    db: DB,
+    pub data_radius: U256,
+    pub discovery: Arc<Discovery>,
+    pub protocol_receiver: mpsc::Receiver<Discv5Event>,
+    pub db: DB,
 }
 
 pub struct JsonRpcHandler {

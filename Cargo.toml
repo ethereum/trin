@@ -15,7 +15,8 @@ trin-state = { path = "trin-state" }
 members = [
     "trin-state",
     "trin-history",
-    "trin-core"
+    "trin-core",
+    "devp2p"
 ]
 
 default-members = [

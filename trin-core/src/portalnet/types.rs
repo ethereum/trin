@@ -8,7 +8,7 @@ use ssz;
 use ssz::{Decode, DecodeError, Encode, SszDecoderBuilder, SszEncoder};
 use ssz_derive::{Decode, Encode};
 
-use super::{Enr, U256};
+pub use super::{Enr, U256};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct ProtocolMessage {
