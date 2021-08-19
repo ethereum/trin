@@ -52,7 +52,7 @@ pub fn get_data_dir() -> String {
 pub fn get_default_data_dir() -> String {
     // Windows: C:\Users\Username\AppData\Roaming\Trin\data
     // macOS: ~/Library/Application Support/Trin
-    // Unix-like: ~/.trin
+    // Unix-like: $HOME/.local/share/trin
 
     match ProjectDirs::from("", "", "Trin") {
         Some(proj_dirs) => proj_dirs.data_local_dir().to_str().unwrap().to_string(),
