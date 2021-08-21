@@ -73,8 +73,8 @@ pub struct PortalnetEvents {
 }
 
 pub struct JsonRpcHandler {
-    discovery: Arc<Discovery>,
-    jsonrpc_rx: mpsc::UnboundedReceiver<PortalEndpoint>,
+    pub discovery: Arc<Discovery>,
+    pub jsonrpc_rx: mpsc::UnboundedReceiver<PortalEndpoint>,
 }
 
 impl JsonRpcHandler {
@@ -185,10 +185,7 @@ impl PortalnetEvents {
 }
 
 impl PortalnetProtocol {
-    pub async fn new(
-        portal_config: PortalnetConfig,
-        jsonrpc_rx: mpsc::UnboundedReceiver<PortalEndpoint>,
-    ) -> Result<(Self, PortalnetEvents, JsonRpcHandler), String> {
+    pub async fn new(portal_config: PortalnetConfig) -> Result<(Self, PortalnetEvents), String> {
         let listen_all_ips = SocketAddr::new("0.0.0.0".parse().unwrap(), portal_config.listen_port);
 
         let external_addr = portal_config
@@ -222,12 +219,6 @@ impl PortalnetProtocol {
         );
 
         let discovery = Arc::new(discovery);
-
-        let proto = Self {
-            discovery: discovery.clone(),
-            overlay: overlay.clone(),
-        };
-
         let data_path = get_data_dir();
 
         let mut db_opts = Options::default();
@@ -241,12 +232,12 @@ impl PortalnetProtocol {
             db,
         };
 
-        let rpc_handler = JsonRpcHandler {
-            discovery,
-            jsonrpc_rx,
+        let proto = Self {
+            discovery: discovery.clone(),
+            overlay: overlay.clone(),
         };
 
-        Ok((proto, events, rpc_handler))
+        Ok((proto, events))
     }
 
     pub async fn send_ping(&self, data_radius: U256, enr: Enr) -> Result<Vec<u8>, String> {

@@ -5,7 +5,9 @@ use tokio::sync::mpsc;
 
 use trin_core::cli::TrinConfig;
 use trin_core::jsonrpc::launch_trin;
-use trin_core::portalnet::protocol::{PortalEndpoint, PortalnetConfig, PortalnetProtocol};
+use trin_core::portalnet::protocol::{
+    JsonRpcHandler, PortalEndpoint, PortalnetConfig, PortalnetProtocol,
+};
 
 pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Launching trin-state...");
@@ -47,9 +49,12 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     tokio::spawn(async move {
-        let (mut p2p, events, rpc_handler) = PortalnetProtocol::new(portalnet_config, jsonrpc_rx)
-            .await
-            .unwrap();
+        let (mut p2p, events) = PortalnetProtocol::new(portalnet_config).await.unwrap();
+
+        let rpc_handler = JsonRpcHandler {
+            discovery: p2p.discovery.clone(),
+            jsonrpc_rx,
+        };
 
         tokio::spawn(events.process_discv5_requests());
         tokio::spawn(rpc_handler.process_jsonrpc_requests());
