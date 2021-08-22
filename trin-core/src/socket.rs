@@ -52,12 +52,12 @@ fn find_assigned_ip() -> Option<IpAddr> {
 
 #[cfg(windows)]
 fn find_assigned_ip() -> Option<IpAddr> {
-    let adapters = ipconfig::get_adapters().unwrap_or(vec![]);
+    let adapters = ipconfig::get_adapters().unwrap_or_default();
 
     for adapter in adapters.iter() {
-        if adapter.gateways().len() > 0 {
+        if !adapter.gateways().is_empty() {
             for ip in adapter.ip_addresses().iter() {
-                if let IpAddr::V4(_) = ip {
+                if ip.is_ipv4() {
                     return Some(*ip);
                 }
             }
