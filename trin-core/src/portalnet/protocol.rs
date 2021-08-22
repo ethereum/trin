@@ -62,12 +62,12 @@ pub const PROTOCOL: &str = "portal";
 #[derive(Clone)]
 pub struct PortalnetProtocol {
     pub discovery: Arc<Discovery>,
-    pub overlay: Arc<Overlay>,
+    pub overlay: Overlay,
 }
 
 pub struct PortalnetEvents {
     discovery: Arc<Discovery>,
-    overlay: Arc<Overlay>,
+    overlay: Overlay,
     protocol_receiver: mpsc::Receiver<Discv5Event>,
     db: DB,
 }
@@ -215,11 +215,11 @@ impl PortalnetProtocol {
             .await
             .map_err(|e| e.to_string())?;
 
-        let overlay = Arc::new(Overlay::new(
+        let overlay = Overlay::new(
             discovery.local_enr(),
             portal_config.data_radius,
             OverlayConfig::default(),
-        ));
+        );
 
         let discovery = Arc::new(discovery);
 

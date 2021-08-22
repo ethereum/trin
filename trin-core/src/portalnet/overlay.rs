@@ -10,7 +10,7 @@ use std::time::Duration;
 
 /// Maximum number of ENRs in response to FindNodes.
 const FIND_NODES_MAX_NODES: usize = 32;
-/// Maximum numer of ENRs in response to FindContent.
+/// Maximum number of ENRs in response to FindContent.
 const FIND_CONTENT_MAX_NODES: usize = 32;
 
 #[derive(Clone)]
@@ -58,6 +58,7 @@ impl Default for Config {
 }
 
 /// The node state for a node in an overlay network on top of Discovery v5.
+#[derive(Clone)]
 pub struct Overlay {
     // The ENR of the local node.
     local_enr: Arc<RwLock<Enr>>,
@@ -96,22 +97,22 @@ impl Overlay {
         self.data_radius.read().clone()
     }
 
-    /// Returns a vector of the ENRs of the closest nodes by the given distances.
-    pub fn nodes_by_distance(&self, mut distances: Vec<u64>) -> Vec<Enr> {
+    /// Returns a vector of the ENRs of the closest nodes by the given log2 distances.
+    pub fn nodes_by_distance(&self, mut log2_distances: Vec<u64>) -> Vec<Enr> {
         let mut nodes_to_send = Vec::new();
-        distances.sort_unstable();
-        distances.dedup();
+        log2_distances.sort_unstable();
+        log2_distances.dedup();
 
-        if let Some(0) = distances.first() {
-            // if the distance is 0 send our local ENR
-            nodes_to_send.push(self.local_enr.read().clone());
-            distances.remove(0);
+        if let Some(0) = log2_distances.first() {
+            // If the distance is 0 send our local ENR.
+            nodes_to_send.push(self.local_enr());
+            log2_distances.remove(0);
         }
 
-        if !distances.is_empty() {
+        if !log2_distances.is_empty() {
             let mut kbuckets = self.kbuckets.write();
             for node in kbuckets
-                .nodes_by_distances(distances, FIND_NODES_MAX_NODES)
+                .nodes_by_distances(log2_distances, FIND_NODES_MAX_NODES)
                 .into_iter()
                 .map(|entry| entry.node.value.clone())
             {
@@ -149,7 +150,7 @@ impl Overlay {
         closest_nodes
     }
 
-    /// Returns an iterator over all ENR node IDs of nodes currently contained in the routing table.
+    /// Returns a vector of all ENR node IDs of nodes currently contained in the routing table.
     pub fn table_entries_id(&self) -> Vec<NodeId> {
         self.kbuckets
             .write()
@@ -158,7 +159,7 @@ impl Overlay {
             .collect()
     }
 
-    /// Returns an iterator over all the ENR's of nodes currently contained in the routing table.
+    /// Returns a vector of all the ENRs of nodes currently contained in the routing table.
     pub fn table_entries_enr(&self) -> Vec<Enr> {
         self.kbuckets
             .write()
