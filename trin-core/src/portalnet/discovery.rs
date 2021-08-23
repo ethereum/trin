@@ -1,8 +1,7 @@
 #![allow(dead_code)]
 
-use super::types::{HexData, SszEnr};
+use super::types::HexData;
 use super::Enr;
-use crate::utils::xor_two_values;
 use discv5::enr::{CombinedKey, EnrBuilder, NodeId};
 use discv5::{Discv5, Discv5Config};
 use log::info;
@@ -112,40 +111,6 @@ impl Discovery {
                 .map_err(|e| format!("Failed to add node to dht: {}", e))?;
         }
         Ok(())
-    }
-
-    /// Returns closest nodes according to given distances.
-    pub fn find_nodes_response(&self, distances: Vec<u64>) -> Vec<Enr> {
-        self.discv5.nodes_by_distance(distances)
-    }
-
-    /// Returns list of nodes (max 32) closer to content than self, sorted by distance.
-    pub fn find_nodes_close_to_content(&self, content_key: Vec<u8>) -> Vec<SszEnr> {
-        let self_node_id = self.local_enr().node_id();
-        let self_distance = xor_two_values(&content_key, &self_node_id.raw().to_vec());
-
-        let mut nodes_with_distance: Vec<(Vec<u8>, Enr)> = self
-            .discv5
-            .table_entries_enr()
-            .into_iter()
-            .map(|enr| {
-                (
-                    xor_two_values(&content_key, &enr.node_id().raw().to_vec()),
-                    enr,
-                )
-            })
-            .collect();
-
-        nodes_with_distance.sort_by(|a, b| a.0.cmp(&b.0));
-
-        let closest_nodes = nodes_with_distance
-            .into_iter()
-            .take(32)
-            .filter(|node_record| &node_record.0 < &self_distance)
-            .map(|node_record| SszEnr::new(node_record.1))
-            .collect();
-
-        closest_nodes
     }
 
     pub async fn send_talkreq(
