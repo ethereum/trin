@@ -219,7 +219,7 @@ impl PortalnetProtocol {
         );
 
         let discovery = Arc::new(discovery);
-        let data_path = get_data_dir();
+        let data_path = get_data_dir(discovery.local_enr());
 
         let mut db_opts = Options::default();
         db_opts.create_if_missing(true);

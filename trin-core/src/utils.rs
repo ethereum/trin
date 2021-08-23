@@ -1,3 +1,4 @@
+use crate::portalnet::Enr;
 use directories::ProjectDirs;
 use std::{env, fs};
 
@@ -42,19 +43,25 @@ mod test {
     }
 }
 
-pub fn get_data_dir() -> String {
-    let path = env::var(TRIN_DATA_ENV_VAR).unwrap_or_else(|_| get_default_data_dir());
+pub fn get_data_dir(local_enr: Enr) -> String {
+    let path = env::var(TRIN_DATA_ENV_VAR).unwrap_or_else(|_| get_default_data_dir(local_enr));
 
     fs::create_dir_all(&path).expect("Unable to create data directory folder");
     path
 }
 
-pub fn get_default_data_dir() -> String {
+pub fn get_default_data_dir(local_enr: Enr) -> String {
     // Windows: C:\Users\Username\AppData\Roaming\Trin\data
     // macOS: ~/Library/Application Support/Trin
     // Unix-like: $HOME/.local/share/trin
 
-    match ProjectDirs::from("", "", "Trin") {
+    // Append last 8 enr base64 encoded chars to application dir name
+    let mut application_string = "Trin_".to_owned();
+    let len = &local_enr.to_base64().len();
+    let suffix = &local_enr.to_base64()[len - 8..];
+    application_string.push_str(suffix);
+
+    match ProjectDirs::from("", "", &application_string) {
         Some(proj_dirs) => proj_dirs.data_local_dir().to_str().unwrap().to_string(),
         None => panic!("Unable to find data directory"),
     }
