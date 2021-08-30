@@ -68,10 +68,7 @@ impl PortalStorage {
         let conn = Connection::open(data_path).unwrap();
 
         conn.execute(
-            "create table if not exists content_keys (
-                id integer primary key,
-                content_key integer
-            )",
+            CREATE_QUERY,
             [],
         ).unwrap();
 
@@ -101,11 +98,11 @@ impl PortalStorage {
 
         self.db.put(key, value).expect("Failed to write to DB");
 
-        // Take the first 8 bytes, turn them into a u64, insert them.
-        let key_as_u64: u64 = PortalStorage::byte_vector_to_u64(key.clone().into_bytes());
+        let key_as_u32: u32 = PortalStorage::byte_vector_to_u32(key.clone().into_bytes());
+        println!("Key inserting into SQL: {}", key_as_u32);
         self.meta_db.execute(
-            "INSERT INTO content_keys (content_key) values (?1)",
-            [key_as_u64],
+            INSERT_QUERY,
+            [key_as_u32],
         ).unwrap();
 
         if self.capacity_reached {
@@ -114,8 +111,7 @@ impl PortalStorage {
             self.db.delete(key_to_remove.as_ref().unwrap()).expect("Failed to delete key.");
             let key_to_remove_as_u64 = PortalStorage::byte_vector_to_u64(key_to_remove.clone().unwrap().into_bytes());
             self.meta_db.execute(
-                "DELETE FROM content_keys
-                 WHERE content_key = (?1)",
+                DELETE_QUERY,
                 [key_to_remove_as_u64],
             ).unwrap();
             
@@ -178,22 +174,23 @@ impl PortalStorage {
 
     pub fn find_farthest(&self) -> Result<String, String> {
 
-        let node_id_u64 = PortalStorage::byte_vector_to_u64(self.node_id.raw().to_vec());
+        let node_id_u32 = PortalStorage::byte_vector_to_u32(self.node_id.raw().to_vec());
 
-        //TODO: Write working SQL to query from content_key column, order by XOR with node_id value, take 1.
+        println!("NODE ID: {}", node_id_u32);
+
         let mut query = self.meta_db.prepare(
-            "FROM content_keys (content_key) values (?1)",
+            FIND_FARTHEST_QUERY,
         ).unwrap();
 
-        let results = query.query_map([node_id_u64], |row| {
+        let results = query.query_map([node_id_u32], |row| {
             Ok(ContentKey {
                 key: row.get(0)?
             })
         });
 
-        let content_key = results.unwrap().next().unwrap().unwrap().key;
+        let x = results.unwrap().next().unwrap().unwrap().key;
 
-        Ok(content_key)
+        Ok(x)
 
     }
 
@@ -244,7 +241,38 @@ impl PortalStorage {
 
     }
 
+    fn byte_vector_to_u32(vec: Vec<u8>) -> u32 {
+
+        if vec.len() < 4 {
+            println!("Error: XOR returned less than 4 bytes.");
+            return 0;
+        }
+
+        let mut array: [u8; 4] = [0, 0, 0, 0];
+        for (index, byte) in vec.iter().take(4).enumerate() {
+            array[index] = byte.clone();
+        }
+      
+        u32::from_be_bytes(array)
+
+    }
+
 }
+
+const CREATE_QUERY: &str = "create table if not exists content_keys (
+                                id INTEGER PRIMARY KEY,
+                                content_key INTEGER NOT NULL
+                            )";
+
+const INSERT_QUERY: &str = "INSERT INTO content_keys (content_key) values (?1)";
+
+const DELETE_QUERY: &str = "DELETE FROM content_keys
+                            WHERE content_key = (?1)";
+
+const FIND_FARTHEST_QUERY: &str = "SELECT
+                                    content_key
+                                    FROM content_keys
+                                    ORDER BY ((?1 | content_key) - (?1 & content_key)) DESC";
 
 struct ContentKey {
     key: String
@@ -293,7 +321,6 @@ mod test {
         let value: String = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".to_string();
         storage.store(&key, &value);
 
-
         let result = storage.get(&key);
 
         println!("{}", String::from_utf8(result.unwrap().unwrap()).unwrap());
@@ -332,6 +359,22 @@ mod test {
         let distance = storage.distance_to_key(&key);
 
         println!("Distance to key: {}", distance);
+
+    }
+
+    #[test]
+    fn test_find_farthest() {
+
+        let storage_config = PortalStorageConfig {
+            storage_capacity_kb: 100,
+            node_id: NodeId::random(),
+        };
+
+        let storage = PortalStorage::new(&storage_config).unwrap();
+
+        let result = storage.find_farthest();
+
+        println!("{}", result.unwrap());
 
     }
 
