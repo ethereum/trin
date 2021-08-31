@@ -1,6 +1,5 @@
 use bytes::Bytes;
 use ethereum_types::{Bloom, H160, H256, U256};
-use keccak_hash;
 use rlp::{DecoderError, Encodable, Rlp, RlpStream};
 
 /// An Ethereum address.
