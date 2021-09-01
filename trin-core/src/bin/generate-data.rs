@@ -1,8 +1,11 @@
 use structopt::StructOpt;
 use rocksdb::{Options, DB};
 use trin_core::utils::{get_data_dir};
+use trin_core::portalnet::storage::{PortalStorage, PortalStorageConfig};
 use rand::{distributions::Alphanumeric, Rng};
 use std::process::Command;
+use discv5::enr::NodeId;
+
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
@@ -31,12 +34,22 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let number_of_entries = ( (num_kilobytes * 1000) as f64 / (size_of_keys + size_of_values) as f64 ) / data_overhead;
     let number_of_entries = number_of_entries.round() as u32;
 
+    let storage_config = PortalStorageConfig {
+      storage_capacity_kb: (num_kilobytes / 2) as u64,
+      node_id: NodeId::random(),
+    };
+    let mut storage = PortalStorage::new(&storage_config).unwrap();
+
     for _ in 0..number_of_entries {
         
         let value = generate_random_value(size_of_values);
         let key = generate_random_value(size_of_keys);
 
-        db.put(&key, &value).expect("Failed to write DB entry.");
+        if generator_config.portal_storage {
+          storage.store(&key, &value);
+        } else {
+          db.put(&key, &value).expect("Failed to write DB entry.");
+        }
 
         println!("{} -> {}", &key, &value);
 
@@ -94,6 +107,14 @@ pub struct GeneratorConfig {
       long,
       help = "Overwrite the DB instead of adding to it"
     )]
-    pub overwrite: bool
+    pub overwrite: bool,
+
+    /// If this flag is provided, the PortalStorage struct will be used to store data.
+    #[structopt(
+      short,
+      long,
+      help = "Use PortalStorage functionality for storing data"
+    )]
+    pub portal_storage: bool,
 
 }
