@@ -103,10 +103,11 @@ impl Overlay {
         log2_distances.sort_unstable();
         log2_distances.dedup();
 
+        let mut log2_distances = log2_distances.as_slice();
         if let Some(0) = log2_distances.first() {
             // If the distance is 0 send our local ENR.
             nodes_to_send.push(self.local_enr());
-            log2_distances.remove(0);
+            log2_distances = &log2_distances[1..];
         }
 
         if !log2_distances.is_empty() {
