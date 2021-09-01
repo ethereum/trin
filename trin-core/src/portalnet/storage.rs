@@ -1,7 +1,7 @@
 use rocksdb::{Options, DB, Error, perf};
 use crate::utils::{get_data_dir, xor_two_values};
 use discv5::enr::NodeId;
-use rusqlite::{Connection, Result};
+use rusqlite::{params, Connection, Result};
 use std::fs;
 use log::{error};
 
@@ -98,11 +98,12 @@ impl PortalStorage {
 
         self.db.put(key, value).expect("Failed to write to DB");
 
-        let key_as_u32: u32 = PortalStorage::byte_vector_to_u32(key.clone().into_bytes());
-        println!("Key inserting into SQL: {}", key_as_u32);
+        let key_as_u64: u64 = PortalStorage::byte_vector_to_u64(key.clone().into_bytes());
+        println!("Key inserting into SQL: {}", key_as_u64);
+
         self.meta_db.execute(
             INSERT_QUERY,
-            [key_as_u32],
+            params![key, key_as_u64],
         ).unwrap();
 
         if self.capacity_reached {
@@ -174,21 +175,21 @@ impl PortalStorage {
 
     pub fn find_farthest(&self) -> Result<String, String> {
 
-        let node_id_u32 = PortalStorage::byte_vector_to_u32(self.node_id.raw().to_vec());
+        let node_id_u64 = PortalStorage::byte_vector_to_u64(self.node_id.raw().to_vec());
 
-        println!("NODE ID: {}", node_id_u32);
+        println!("NODE ID: {}", node_id_u64);
 
         let mut query = self.meta_db.prepare(
             FIND_FARTHEST_QUERY,
         ).unwrap();
 
-        let results = query.query_map([node_id_u32], |row| {
+        let results = query.query_map([node_id_u64], |row| {
             Ok(ContentKey {
-                key: row.get(0)?
+                key_long: row.get(0)?,
             })
         });
 
-        let x = results.unwrap().next().unwrap().unwrap().key;
+        let x = results.unwrap().next().unwrap().unwrap().key_long;
 
         Ok(x)
 
@@ -261,21 +262,23 @@ impl PortalStorage {
 
 const CREATE_QUERY: &str = "create table if not exists content_keys (
                                 id INTEGER PRIMARY KEY,
-                                content_key INTEGER NOT NULL
+                                content_key_full TEXT NOT NULL,
+                                content_key_short INTEGER NOT NULL
                             )";
 
-const INSERT_QUERY: &str = "INSERT INTO content_keys (content_key) values (?1)";
+const INSERT_QUERY: &str = "INSERT INTO content_keys (content_key_full, content_key_short)
+                            VALUES (?1, ?2)";
 
 const DELETE_QUERY: &str = "DELETE FROM content_keys
-                            WHERE content_key = (?1)";
+                            WHERE content_key_full = (?1)";
 
 const FIND_FARTHEST_QUERY: &str = "SELECT
-                                    content_key
+                                    content_key_full
                                     FROM content_keys
-                                    ORDER BY ((?1 | content_key) - (?1 & content_key)) DESC";
+                                    ORDER BY ((?1 | content_key_short) - (?1 & content_key_short)) DESC";
 
 struct ContentKey {
-    key: String
+    key_long: String,
 }
 
 #[cfg(test)]
