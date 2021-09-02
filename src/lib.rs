@@ -12,19 +12,6 @@ use trin_core::portalnet::protocol::{
 use trin_history::HistoryRequestHandler;
 use trin_state::StateRequestHandler;
 
-// the purpose of trin-client is to act as a orchestrator for the various networks
-// - trin client is meant to be an ultra-thin wrapper against only the bare minimum
-//      logic necessary for interprocess communication
-//
-// trin-client responsibilities might include...
-// - starting up base layer discv5 protocol and passing handle to selected networks
-//      - sub-networks can use this base layer protocol to build their overlay networks
-// - connecting to database and passing handle to selected networks
-//      - does each network maintain its own db & db connection?
-// - starting up the jsonrpc handler (with infura req handler)
-//      - starting up individual binaries will *not* have jsonrpc
-// - starting up message channels (maybe dbus protocol) for cross-network communication
-
 pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Launching trin");
 
@@ -53,22 +40,18 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     };
 
-    // get rid of mut
-    let mut history_tx = None;
-    let mut history_handler: Option<HistoryRequestHandler> = None;
     let mut state_tx = None;
+    let mut history_tx = None;
     let mut state_handler: Option<StateRequestHandler> = None;
+    let mut history_handler: Option<HistoryRequestHandler> = None;
+
     if trin_config.networks.iter().any(|val| val == "history") {
-        println!("starting history network");
-        // create history msg channel
         let (raw_history_tx, history_rx) = mpsc::unbounded_channel::<HistoryNetworkEndpoint>();
         history_tx = Some(raw_history_tx);
         history_handler = Some(trin_history::initialize(history_rx).unwrap());
     }
 
     if trin_config.networks.iter().any(|val| val == "state") {
-        println!("starting state network");
-        // create state msg channel
         let (raw_state_tx, state_rx) = mpsc::unbounded_channel::<StateNetworkEndpoint>();
         state_tx = Some(raw_state_tx);
         state_handler = Some(trin_state::initialize(state_rx).unwrap());
@@ -96,11 +79,11 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         tokio::spawn(events.process_discv5_requests());
         tokio::spawn(rpc_handler.process_jsonrpc_requests());
-        if state_handler.is_some() {
-            tokio::spawn(state_handler.unwrap().process_network_requests());
+        if let Some(handler) = state_handler {
+            tokio::spawn(handler.process_network_requests());
         }
-        if history_handler.is_some() {
-            tokio::spawn(history_handler.unwrap().process_network_requests());
+        if let Some(handler) = history_handler {
+            tokio::spawn(handler.process_network_requests());
         }
 
         // hacky test: make sure we establish a session with the boot node

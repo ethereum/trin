@@ -8,7 +8,6 @@ use trin_core::portalnet::protocol::{
 };
 
 pub struct HistoryRequestHandler {
-    // pub overlay_discovery,
     pub history_rx: mpsc::UnboundedReceiver<HistoryNetworkEndpoint>,
 }
 
@@ -21,7 +20,7 @@ impl HistoryRequestHandler {
                 GetHistoryNetworkData => {
                     let _ = cmd
                         .resp
-                        .send(Ok(Value::String("fuck yea history".to_string())));
+                        .send(Ok(Value::String("0xmockhistorydata".to_string())));
                 }
             }
         }

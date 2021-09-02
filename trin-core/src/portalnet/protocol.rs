@@ -99,7 +99,6 @@ pub struct PortalnetEvents {
 pub struct JsonRpcHandler {
     pub discovery: Arc<Discovery>,
     pub jsonrpc_rx: mpsc::UnboundedReceiver<PortalEndpoint>,
-    // implications of unbounded vs bounded?
     pub state_tx: Option<mpsc::UnboundedSender<StateNetworkEndpoint>>,
     pub history_tx: Option<mpsc::UnboundedSender<HistoryNetworkEndpoint>>,
 }
@@ -133,7 +132,7 @@ impl JsonRpcHandler {
                     self.history_tx.as_ref().unwrap().send(message).unwrap();
                     let response = match resp_rx.recv().await.unwrap() {
                         Ok(val) => val,
-                        Err(msg) => Value::String("error".to_string()),
+                        Err(msg) => Value::String(msg.to_string()),
                     };
                     let _ = cmd.resp.send(Ok(response));
                 }
@@ -146,7 +145,7 @@ impl JsonRpcHandler {
                     self.state_tx.as_ref().unwrap().send(message).unwrap();
                     let response = match resp_rx.recv().await.unwrap() {
                         Ok(val) => val,
-                        Err(msg) => Value::String("error".to_string()),
+                        Err(msg) => Value::String(msg.to_string()),
                     };
                     let _ = cmd.resp.send(Ok(response));
                 }

@@ -8,7 +8,6 @@ use trin_core::portalnet::protocol::{
 };
 
 pub struct StateRequestHandler {
-    // pub overlay_discovery,
     pub state_rx: mpsc::UnboundedReceiver<StateNetworkEndpoint>,
 }
 
@@ -21,7 +20,7 @@ impl StateRequestHandler {
                 GetStateNetworkData => {
                     let _ = cmd
                         .resp
-                        .send(Ok(Value::String("fuck yea state".to_string())));
+                        .send(Ok(Value::String("0xmockstatedata".to_string())));
                 }
             }
         }
@@ -32,8 +31,6 @@ pub fn initialize(
     state_rx: mpsc::UnboundedReceiver<StateNetworkEndpoint>,
 ) -> Result<StateRequestHandler, Box<dyn std::error::Error>> {
     let handler = StateRequestHandler { state_rx };
-    // build overlay dht
-    // handle db stuff
     Ok(handler)
 }
 

@@ -3047,16 +3047,6 @@ dependencies = [
 name = "trin"
 version = "0.1.0"
 dependencies = [
- "tokio",
- "trin-client",
- "trin-history",
- "trin-state",
-]
-
-[[package]]
-name = "trin-client"
-version = "0.1.0"
-dependencies = [
  "log 0.4.14",
  "tokio",
  "tracing",
