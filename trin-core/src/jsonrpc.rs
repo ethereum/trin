@@ -36,7 +36,7 @@ lazy_static! {
     static ref IPC_PATH: Mutex<String> = Mutex::new(String::new());
 }
 
-pub fn launch_trin(
+pub fn launch_jsonrpc_server(
     trin_config: TrinConfig,
     infura_project_id: String,
     portal_tx: UnboundedSender<PortalEndpoint>,
@@ -219,6 +219,8 @@ fn handle_request(
             "result": "trin 0.0.1-alpha",
         })
         .to_string()),
+        "test_historyNetwork" => dispatch_portal_request(obj, portal_tx),
+        "test_stateNetwork" => dispatch_portal_request(obj, portal_tx),
         _ if obj.method.as_str().starts_with("discv5") => dispatch_portal_request(obj, portal_tx),
         _ => dispatch_infura_request(obj, infura_url),
     }
@@ -251,6 +253,14 @@ fn dispatch_portal_request(
         },
         "discv5_routingTableInfo" => PortalEndpoint {
             kind: PortalEndpointKind::RoutingTableInfo,
+            resp: resp_tx,
+        },
+        "test_historyNetwork" => PortalEndpoint {
+            kind: PortalEndpointKind::DummyHistoryNetworkData,
+            resp: resp_tx,
+        },
+        "test_stateNetwork" => PortalEndpoint {
+            kind: PortalEndpointKind::DummyStateNetworkData,
             resp: resp_tx,
         },
         _ => {

@@ -1,11 +1,11 @@
+// todo:
+// - remove selecting trin-client binary from cargo run
+// - improve dummy state / history network calls
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::select! {
-        history = trin_history::main() => {
-            history
-        },
-        state = trin_state::main() => {
-            state
+        client = trin_client::main() => {
+            client
         },
     }
 }

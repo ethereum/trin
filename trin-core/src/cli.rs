@@ -72,6 +72,14 @@ pub struct TrinConfig {
         help = "Hex encoded 32 byte private key (considered unsafe to pass in pk as cli arg, as it's stored in terminal history - keyfile support coming soon)"
     )]
     pub private_key: Option<HexData>,
+
+    #[structopt(
+        long = "networks",
+        help = "Comma-separated list of which portal networks to activate",
+        default_value = "history,state",
+        use_delimiter = true
+    )]
+    pub networks: Vec<String>,
 }
 
 impl Default for TrinConfig {

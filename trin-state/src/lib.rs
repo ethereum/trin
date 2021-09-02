@@ -1,27 +1,47 @@
-use std::env;
-
 use log::info;
+use serde_json::Value;
 use tokio::sync::mpsc;
 
 use trin_core::cli::TrinConfig;
-use trin_core::jsonrpc::launch_trin;
 use trin_core::portalnet::protocol::{
-    JsonRpcHandler, PortalEndpoint, PortalnetConfig, PortalnetProtocol,
+    PortalnetConfig, PortalnetProtocol, StateEndpointKind, StateNetworkEndpoint,
 };
+
+pub struct StateRequestHandler {
+    // pub overlay_discovery,
+    pub state_rx: mpsc::UnboundedReceiver<StateNetworkEndpoint>,
+}
+
+impl StateRequestHandler {
+    pub async fn process_network_requests(mut self) {
+        while let Some(cmd) = self.state_rx.recv().await {
+            use StateEndpointKind::*;
+
+            match cmd.kind {
+                GetStateNetworkData => {
+                    let _ = cmd
+                        .resp
+                        .send(Ok(Value::String("fuck yea state".to_string())));
+                }
+            }
+        }
+    }
+}
+
+pub fn initialize(
+    state_rx: mpsc::UnboundedReceiver<StateNetworkEndpoint>,
+) -> Result<StateRequestHandler, Box<dyn std::error::Error>> {
+    let handler = StateRequestHandler { state_rx };
+    // build overlay dht
+    // handle db stuff
+    Ok(handler)
+}
 
 pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Launching trin-state...");
 
     let trin_config = TrinConfig::new();
     trin_config.display_config();
-
-    let infura_project_id = match env::var("TRIN_INFURA_PROJECT_ID") {
-        Ok(val) => val,
-        Err(_) => panic!(
-            "Must supply Infura key as environment variable, like:\n\
-            TRIN_INFURA_PROJECT_ID=\"your-key-here\" trin"
-        ),
-    };
 
     let bootnode_enrs = trin_config
         .bootnodes
@@ -37,12 +57,6 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     };
 
-    let (jsonrpc_tx, jsonrpc_rx) = mpsc::unbounded_channel::<PortalEndpoint>();
-
-    let web3_server_task = tokio::task::spawn_blocking(|| {
-        launch_trin(trin_config, infura_project_id, jsonrpc_tx);
-    });
-
     info!(
         "About to spawn portal p2p with boot nodes: {:?}",
         portalnet_config.bootnode_enrs
@@ -51,13 +65,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::spawn(async move {
         let (mut p2p, events) = PortalnetProtocol::new(portalnet_config).await.unwrap();
 
-        let rpc_handler = JsonRpcHandler {
-            discovery: p2p.discovery.clone(),
-            jsonrpc_rx,
-        };
-
         tokio::spawn(events.process_discv5_requests());
-        tokio::spawn(rpc_handler.process_jsonrpc_requests());
 
         // hacky test: make sure we establish a session with the boot node
         p2p.ping_bootnodes().await.unwrap();
@@ -69,6 +77,5 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .await
     .unwrap();
 
-    web3_server_task.await.unwrap();
     Ok(())
 }

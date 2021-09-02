@@ -3048,6 +3048,20 @@ name = "trin"
 version = "0.1.0"
 dependencies = [
  "tokio",
+ "trin-client",
+ "trin-history",
+ "trin-state",
+]
+
+[[package]]
+name = "trin-client"
+version = "0.1.0"
+dependencies = [
+ "log 0.4.14",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "trin-core",
  "trin-history",
  "trin-state",
 ]
@@ -3095,6 +3109,7 @@ dependencies = [
  "keccak-hash",
  "log 0.4.14",
  "rlp 0.5.0",
+ "serde_json",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -3106,6 +3121,7 @@ name = "trin-state"
 version = "0.1.0"
 dependencies = [
  "log 0.4.14",
+ "serde_json",
  "tokio",
  "tracing",
  "tracing-subscriber",

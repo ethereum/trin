@@ -25,7 +25,31 @@ use crate::socket;
 type Responder<T, E> = mpsc::UnboundedSender<Result<T, E>>;
 
 #[derive(Debug)]
+pub enum HistoryEndpointKind {
+    GetHistoryNetworkData,
+}
+
+#[derive(Debug)]
+pub struct HistoryNetworkEndpoint {
+    pub kind: HistoryEndpointKind,
+    pub resp: Responder<Value, String>,
+}
+
+#[derive(Debug)]
+pub enum StateEndpointKind {
+    GetStateNetworkData,
+}
+
+#[derive(Debug)]
+pub struct StateNetworkEndpoint {
+    pub kind: StateEndpointKind,
+    pub resp: Responder<Value, String>,
+}
+
+#[derive(Debug)]
 pub enum PortalEndpointKind {
+    DummyHistoryNetworkData,
+    DummyStateNetworkData,
     NodeInfo,
     RoutingTableInfo,
 }
@@ -75,6 +99,9 @@ pub struct PortalnetEvents {
 pub struct JsonRpcHandler {
     pub discovery: Arc<Discovery>,
     pub jsonrpc_rx: mpsc::UnboundedReceiver<PortalEndpoint>,
+    // implications of unbounded vs bounded?
+    pub state_tx: Option<mpsc::UnboundedSender<StateNetworkEndpoint>>,
+    pub history_tx: Option<mpsc::UnboundedSender<HistoryNetworkEndpoint>>,
 }
 
 impl JsonRpcHandler {
@@ -96,6 +123,32 @@ impl JsonRpcHandler {
                         .map(|node_id| Value::String(node_id.to_string()))
                         .collect();
                     let _ = cmd.resp.send(Ok(Value::Array(routing_table_info)));
+                }
+                DummyHistoryNetworkData => {
+                    let (resp_tx, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
+                    let message = HistoryNetworkEndpoint {
+                        kind: HistoryEndpointKind::GetHistoryNetworkData,
+                        resp: resp_tx,
+                    };
+                    self.history_tx.as_ref().unwrap().send(message).unwrap();
+                    let response = match resp_rx.recv().await.unwrap() {
+                        Ok(val) => val,
+                        Err(msg) => Value::String("error".to_string()),
+                    };
+                    let _ = cmd.resp.send(Ok(response));
+                }
+                DummyStateNetworkData => {
+                    let (resp_tx, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
+                    let message = StateNetworkEndpoint {
+                        kind: StateEndpointKind::GetStateNetworkData,
+                        resp: resp_tx,
+                    };
+                    self.state_tx.as_ref().unwrap().send(message).unwrap();
+                    let response = match resp_rx.recv().await.unwrap() {
+                        Ok(val) => val,
+                        Err(msg) => Value::String("error".to_string()),
+                    };
+                    let _ = cmd.resp.send(Ok(response));
                 }
             }
         }
