@@ -48,13 +48,19 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if trin_config.networks.iter().any(|val| val == "history") {
         let (raw_history_tx, history_rx) = mpsc::unbounded_channel::<HistoryNetworkEndpoint>();
         history_tx = Some(raw_history_tx);
-        history_handler = Some(trin_history::initialize(history_rx).unwrap());
+        history_handler = match trin_history::initialize(history_rx) {
+            Ok(val) => Some(val),
+            Err(msg) => panic!("Error while initializing history network: {:?}", msg),
+        }
     }
 
     if trin_config.networks.iter().any(|val| val == "state") {
         let (raw_state_tx, state_rx) = mpsc::unbounded_channel::<StateNetworkEndpoint>();
         state_tx = Some(raw_state_tx);
-        state_handler = Some(trin_state::initialize(state_rx).unwrap());
+        state_handler = match trin_state::initialize(state_rx) {
+            Ok(val) => Some(val),
+            Err(msg) => panic!("Error while initializing state network: {:?}", msg),
+        }
     }
 
     let (jsonrpc_tx, jsonrpc_rx) = mpsc::unbounded_channel::<PortalEndpoint>();
@@ -80,10 +86,10 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tokio::spawn(events.process_discv5_requests());
         tokio::spawn(rpc_handler.process_jsonrpc_requests());
         if let Some(handler) = state_handler {
-            tokio::spawn(handler.process_network_requests());
+            tokio::spawn(handler.handle_client_queries());
         }
         if let Some(handler) = history_handler {
-            tokio::spawn(handler.process_network_requests());
+            tokio::spawn(handler.handle_client_queries());
         }
 
         // hacky test: make sure we establish a session with the boot node

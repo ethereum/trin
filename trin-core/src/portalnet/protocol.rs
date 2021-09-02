@@ -129,12 +129,23 @@ impl JsonRpcHandler {
                         kind: HistoryEndpointKind::GetHistoryNetworkData,
                         resp: resp_tx,
                     };
-                    self.history_tx.as_ref().unwrap().send(message).unwrap();
-                    let response = match resp_rx.recv().await.unwrap() {
-                        Ok(val) => val,
-                        Err(msg) => Value::String(msg.to_string()),
+                    let response = match self.history_tx.as_ref() {
+                        Some(tx) => {
+                            let _ = tx.send(message);
+                            match resp_rx.recv().await {
+                                Some(val) => match val {
+                                    Ok(result) => Ok(result),
+                                    Err(msg) => Err(format!(
+                                        "Error returned from history subnetwork: {:?}",
+                                        msg.to_string()
+                                    )),
+                                },
+                                None => Err("No response from history subnetwork".to_string()),
+                            }
+                        }
+                        None => Err("Chain history subnetwork unavailable.".to_string()),
                     };
-                    let _ = cmd.resp.send(Ok(response));
+                    let _ = cmd.resp.send(response);
                 }
                 DummyStateNetworkData => {
                     let (resp_tx, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
@@ -142,12 +153,23 @@ impl JsonRpcHandler {
                         kind: StateEndpointKind::GetStateNetworkData,
                         resp: resp_tx,
                     };
-                    self.state_tx.as_ref().unwrap().send(message).unwrap();
-                    let response = match resp_rx.recv().await.unwrap() {
-                        Ok(val) => val,
-                        Err(msg) => Value::String(msg.to_string()),
+                    let response = match self.state_tx.as_ref() {
+                        Some(tx) => {
+                            let _ = tx.send(message);
+                            match resp_rx.recv().await {
+                                Some(val) => match val {
+                                    Ok(result) => Ok(result),
+                                    Err(msg) => Err(format!(
+                                        "Error returned from history subnetwork: {:?}",
+                                        msg.to_string()
+                                    )),
+                                },
+                                None => Err("No response from history subnetwork".to_string()),
+                            }
+                        }
+                        None => Err("Chain history subnetwork unavailable.".to_string()),
                     };
-                    let _ = cmd.resp.send(Ok(response));
+                    let _ = cmd.resp.send(response);
                 }
             }
         }

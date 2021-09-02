@@ -12,7 +12,7 @@ pub struct StateRequestHandler {
 }
 
 impl StateRequestHandler {
-    pub async fn process_network_requests(mut self) {
+    pub async fn handle_client_queries(mut self) {
         while let Some(cmd) = self.state_rx.recv().await {
             use StateEndpointKind::*;
 

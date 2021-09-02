@@ -255,6 +255,8 @@ fn dispatch_portal_request(
             kind: PortalEndpointKind::RoutingTableInfo,
             resp: resp_tx,
         },
+        // todo: remove test_historyNetwork & test_stateNetwork & replace with equivalent tests
+        // these are just test endpoints to validate that we can dispatch requests to subnetworks
         "test_historyNetwork" => PortalEndpoint {
             kind: PortalEndpointKind::DummyHistoryNetworkData,
             resp: resp_tx,
