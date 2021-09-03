@@ -9,9 +9,9 @@ default-run = "trin"
 
 [dependencies]
 log = "0.4.14"
+tokio = { version = "1.8.0", features = ["full"] }
 tracing = "0.1.26"
 tracing-subscriber = "0.2.18"
-tokio = { version = "1.8.0", features = ["full"] }
 trin-core = { path = "trin-core" }
 trin-history = { path = "trin-history" }
 trin-state = { path = "trin-state" }
