@@ -9,7 +9,7 @@ pub struct PortalStorageConfig {
 
     pub storage_capacity_kb: u64,
     pub node_id: NodeId,
-
+    
 }
 
 pub struct PortalStorage {
@@ -188,7 +188,7 @@ impl PortalStorage {
     pub fn find_farthest(&self) -> Result<String, String> {
 
         let node_id_u64 = PortalStorage::byte_vector_to_u64(self.node_id.raw().to_vec());
-        println!("Node ID as u64: {}", node_id_u64);
+        // println!("Node ID as u64: {}", node_id_u64);
 
         let mut query = self.meta_db.prepare(
             FIND_FARTHEST_QUERY,
@@ -371,16 +371,50 @@ mod test {
     #[test]
     fn test_find_farthest() {
 
+        // As u64: 5543900367377300341
+        let example_node_id_bytes: [u8; 32] = [76, 239, 228, 2, 227, 174, 123, 117, 195, 237, 200, 80, 219, 0, 188, 225, 18, 196, 162, 89, 204, 144, 204, 187, 71, 12, 147, 65, 19, 65, 167, 110];
+
         let storage_config = PortalStorageConfig {
             storage_capacity_kb: 100,
-            node_id: NodeId::random(),
+            node_id: NodeId::parse(&example_node_id_bytes).unwrap(),
         };
 
-        let storage = PortalStorage::new(&storage_config).unwrap();
+        let mut storage = PortalStorage::new(&storage_config).unwrap();
 
-        let result = storage.find_farthest();
+        let value = "value".to_string();
 
-        println!("{}", result.unwrap());
+        // As u64: 6443604676644861029
+        // Distance from our Node ID: 1550272167950159632
+        let key_a: String = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".to_string();
+        println!("A: {}", PortalStorage::byte_vector_to_u64(key_a.as_bytes().to_vec()));
+        storage.store(&key_a, &value);
+        println!("A Distance: {}", storage.distance_to_key(&key_a));
+
+        // As u64: 5496766702310214196
+        // Distance from our Node ID: 47169270891360577
+        let key_b: String = "LHp1PeJ4C6c3nRUc7f6BI1FYULNL8aWB".to_string();
+        println!("B: {}", PortalStorage::byte_vector_to_u64(key_b.as_bytes().to_vec()));
+        storage.store(&key_b, &value);
+        println!("B Distance: {}", storage.distance_to_key(&key_b));
+
+        // As u64: 5218398056166675813
+        // Distance from our Node ID: 325558111434255888
+        let key_c: String = "HkybBgUebGtbwdrNDbxDWywtgWlUM8vW".to_string();
+        println!("C: {}", PortalStorage::byte_vector_to_u64(key_c.as_bytes().to_vec()));
+        storage.store(&key_c, &value);
+        println!("C Distance: {}", storage.distance_to_key(&key_c));
+
+        // This one is the farthest.
+        // As u64: 7450166868918420849
+        // Distance from our Node ID: 3137789897711697412
+        let key_d: String = "gdOKkDEq9XFs2Tzay4Ecuw0obIISGw9Y".to_string();
+        println!("D: {}", PortalStorage::byte_vector_to_u64(key_d.as_bytes().to_vec()));
+        storage.store(&key_d, &value);
+        println!("D Distance: {}", storage.distance_to_key(&key_d));
+        
+        let result = storage.find_farthest().unwrap();
+
+        assert_eq!(result, key_d);
 
     }
 
