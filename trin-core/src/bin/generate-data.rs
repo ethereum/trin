@@ -6,7 +6,6 @@ use rand::{distributions::Alphanumeric, Rng};
 use std::process::Command;
 use discv5::enr::NodeId;
 
-
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let generator_config = GeneratorConfig::from_args();
@@ -35,8 +34,8 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let number_of_entries = number_of_entries.round() as u32;
 
     let storage_config = PortalStorageConfig {
-      storage_capacity_kb: (num_kilobytes / 2) as u64,
-      node_id: NodeId::random(),
+        storage_capacity_kb: (num_kilobytes / 2) as u64,
+        node_id: NodeId::random(),
     };
     let mut storage = PortalStorage::new(&storage_config).unwrap();
 
@@ -45,13 +44,15 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         let value = generate_random_value(size_of_values);
         let key = generate_random_value(size_of_keys);
 
+        println!("{} -> {}", &key, &value);
+
         if generator_config.portal_storage {
-          storage.store(&key, &value);
+            storage.store(&key, &value);
         } else {
-          db.put(&key, &value).expect("Failed to write DB entry.");
+            db.put(&key, &value).expect("Failed to write DB entry.");
         }
 
-        println!("{} -> {}", &key, &value);
+        println!("");
 
     } 
 
