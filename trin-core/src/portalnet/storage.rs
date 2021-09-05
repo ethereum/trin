@@ -53,6 +53,8 @@ impl PortalStorage {
         let data_suffix: &str = "/rocksdb";
         let data_path = data_path_root + data_suffix;
 
+        println!("ROCKSDB DATAPATH: {}", data_path);
+
         let mut db_opts = Options::default();
         db_opts.create_if_missing(true);
         DB::open(&db_opts, data_path).unwrap()
@@ -78,6 +80,10 @@ impl PortalStorage {
     
     pub fn should_store(&self, key: &String) -> bool {
 
+        println!("Data radius:     {}", self.data_radius);
+        println!("Max u64:         {}", u64::MAX);
+        println!("Distance to key: {}", self.distance_to_key(key));
+
         if self.data_radius < u64::MAX {
             self.distance_to_key(key) < self.data_radius
         } else {
@@ -93,6 +99,7 @@ impl PortalStorage {
     pub fn store(&mut self, key: &String, value: &String) {
 
         if !self.should_store(key) {
+            println!("Not storing.");
             return;
         }
 
@@ -107,6 +114,8 @@ impl PortalStorage {
         ).unwrap();
 
         if self.capacity_reached {
+
+            println!("Capacity was reached previously.");
 
             let key_to_remove = &self.farthest_key;
             self.db.delete(key_to_remove.as_ref().unwrap()).expect("Failed to delete key.");
@@ -129,8 +138,11 @@ impl PortalStorage {
         } else {
 
             let data_usage = self.get_total_storage_usage_kb();
-            if data_usage > self.storage_capacity_kb {
-              self.capacity_reached = true;
+            println!("Data usage: {}", data_usage);
+            println!("Capacity:   {}", self.storage_capacity_kb * 1000);
+            if data_usage > (self.storage_capacity_kb * 1000) {
+                println!("Capacity has been reached!!!!");
+                self.capacity_reached = true;
             }
 
         }
@@ -176,8 +188,7 @@ impl PortalStorage {
     pub fn find_farthest(&self) -> Result<String, String> {
 
         let node_id_u64 = PortalStorage::byte_vector_to_u64(self.node_id.raw().to_vec());
-
-        println!("NODE ID: {}", node_id_u64);
+        println!("Node ID as u64: {}", node_id_u64);
 
         let mut query = self.meta_db.prepare(
             FIND_FARTHEST_QUERY,
@@ -242,22 +253,6 @@ impl PortalStorage {
 
     }
 
-    fn byte_vector_to_u32(vec: Vec<u8>) -> u32 {
-
-        if vec.len() < 4 {
-            println!("Error: XOR returned less than 4 bytes.");
-            return 0;
-        }
-
-        let mut array: [u8; 4] = [0, 0, 0, 0];
-        for (index, byte) in vec.iter().take(4).enumerate() {
-            array[index] = byte.clone();
-        }
-      
-        u32::from_be_bytes(array)
-
-    }
-
 }
 
 const CREATE_QUERY: &str = "create table if not exists content_keys (
@@ -304,6 +299,8 @@ mod test {
             storage_capacity_kb: 100,
             node_id: NodeId::random(),
         };
+
+
         let mut storage = PortalStorage::new(&storage_config).unwrap();
 
         let key: String = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".to_string();
@@ -352,16 +349,22 @@ mod test {
     #[test]
     fn test_distance_to_key() {
         
+        // As u64: 5543900367377300341
+        let example_node_id_bytes: [u8; 32] = [76, 239, 228, 2, 227, 174, 123, 117, 195, 237, 200, 80, 219, 0, 188, 225, 18, 196, 162, 89, 204, 144, 204, 187, 71, 12, 147, 65, 19, 65, 167, 110];
+
         let storage_config = PortalStorageConfig {
             storage_capacity_kb: 100,
-            node_id: NodeId::random(),
+            node_id: NodeId::parse(&example_node_id_bytes).unwrap(),
         };
+
         let storage = PortalStorage::new(&storage_config).unwrap();
 
+        // As u64: 6443604676644861029
         let key: String = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".to_string();
         let distance = storage.distance_to_key(&key);
 
-        println!("Distance to key: {}", distance);
+        // Answer from https://xor.pw/
+        assert_eq!(distance, 1550272167950159632);
 
     }
 
@@ -382,4 +385,3 @@ mod test {
     }
 
 }
-
