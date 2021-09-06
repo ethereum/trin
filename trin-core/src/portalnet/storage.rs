@@ -84,6 +84,15 @@ impl PortalStorage {
         println!("Max u64:         {}", u64::MAX);
         println!("Distance to key: {}", self.distance_to_key(key));
 
+        // Don't store if we already have the data, otherwise continue.
+        match self.db.get(&key) {
+            Ok(Some(_)) => {
+                return false;
+            },
+            Err(e) => panic!("Unable to respond to FindContent: {}", e),
+            _ => ()
+        }
+
         if self.data_radius < u64::MAX {
             self.distance_to_key(key) < self.data_radius
         } else {
@@ -141,7 +150,7 @@ impl PortalStorage {
             println!("Data usage: {}", data_usage);
             println!("Capacity:   {}", self.storage_capacity_kb * 1000);
             if data_usage > (self.storage_capacity_kb * 1000) {
-                println!("Capacity has been reached!!!!");
+                println!("Capacity has been reached!");
                 self.capacity_reached = true;
             }
 
@@ -345,6 +354,7 @@ mod test {
         println!("{}", kb);
 
     }
+
 
     #[test]
     fn test_distance_to_key() {
