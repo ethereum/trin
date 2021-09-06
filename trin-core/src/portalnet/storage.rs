@@ -101,6 +101,27 @@ impl PortalStorage {
 
     }
 
+    fn meta_db_insert(&self, key: &String) {
+
+        let key_as_u32: u32 = PortalStorage::byte_vector_to_u32(key.clone().into_bytes());
+
+        self.meta_db.execute(
+            INSERT_QUERY,
+            params![key, key_as_u32],
+        ).unwrap();
+
+    }
+
+    fn meta_db_remove(&self, key: &String) {
+
+        let key_to_remove_as_u32 = PortalStorage::byte_vector_to_u32(key.clone().into_bytes());
+        self.meta_db.execute(
+            DELETE_QUERY,
+            [key_to_remove_as_u32],
+        ).unwrap();
+
+    }
+
     // 1.) Don't store data outside the radius.
     // 2.) Store the data, and then if we're at capacity, drop the farthest and find the new farthest.
     // 3.) Initialize or update farthest_key if necessary.
@@ -114,25 +135,15 @@ impl PortalStorage {
 
         self.db.put(key, value).expect("Failed to write to DB");
 
-        let key_as_u32: u32 = PortalStorage::byte_vector_to_u32(key.clone().into_bytes());
-        println!("Key inserting into SQL: {}", key_as_u32);
-
-        self.meta_db.execute(
-            INSERT_QUERY,
-            params![key, key_as_u32],
-        ).unwrap();
+        self.meta_db_insert(key);
 
         if self.capacity_reached {
 
             println!("Capacity was reached previously.");
 
-            let key_to_remove = &self.farthest_key;
-            self.db.delete(key_to_remove.as_ref().unwrap()).expect("Failed to delete key.");
-            let key_to_remove_as_u32 = PortalStorage::byte_vector_to_u32(key_to_remove.clone().unwrap().into_bytes());
-            self.meta_db.execute(
-                DELETE_QUERY,
-                [key_to_remove_as_u32],
-            ).unwrap();
+            let key_to_remove = self.farthest_key.clone();
+            self.db.delete(&key_to_remove.clone().unwrap()).expect("Failed to delete key.");
+            self.meta_db_remove(&key_to_remove.clone().unwrap());
             
             match self.find_farthest() {
                 Err(e) => {
@@ -202,7 +213,6 @@ impl PortalStorage {
             FIND_FARTHEST_QUERY,
         ).unwrap();
 
-        println!("BEFORE THE CRASH THE NODE IS {}", node_id_u32);   
         let results = query.query_map([node_id_u32], |row| {
             Ok(ContentKey {
                 key_long: row.get(0)?,
