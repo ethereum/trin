@@ -80,9 +80,9 @@ impl PortalStorage {
     
     pub fn should_store(&self, key: &String) -> bool {
 
-        println!("Data radius:     {}", self.data_radius);
-        println!("Max u64:         {}", u64::MAX);
-        println!("Distance to key: {}", self.distance_to_key(key));
+        // println!("Data radius:     {}", self.data_radius);
+        // println!("Max u64:         {}", u64::MAX);
+        // println!("Distance to key: {}", self.distance_to_key(key));
 
         // Don't store if we already have the data, otherwise continue.
         match self.db.get(&key) {
@@ -114,12 +114,12 @@ impl PortalStorage {
 
         self.db.put(key, value).expect("Failed to write to DB");
 
-        let key_as_u64: u64 = PortalStorage::byte_vector_to_u64(key.clone().into_bytes());
-        println!("Key inserting into SQL: {}", key_as_u64);
+        let key_as_u32: u32 = PortalStorage::byte_vector_to_u32(key.clone().into_bytes());
+        println!("Key inserting into SQL: {}", key_as_u32);
 
         self.meta_db.execute(
             INSERT_QUERY,
-            params![key, key_as_u64],
+            params![key, key_as_u32],
         ).unwrap();
 
         if self.capacity_reached {
@@ -128,10 +128,10 @@ impl PortalStorage {
 
             let key_to_remove = &self.farthest_key;
             self.db.delete(key_to_remove.as_ref().unwrap()).expect("Failed to delete key.");
-            let key_to_remove_as_u64 = PortalStorage::byte_vector_to_u64(key_to_remove.clone().unwrap().into_bytes());
+            let key_to_remove_as_u32 = PortalStorage::byte_vector_to_u32(key_to_remove.clone().unwrap().into_bytes());
             self.meta_db.execute(
                 DELETE_QUERY,
-                [key_to_remove_as_u64],
+                [key_to_remove_as_u32],
             ).unwrap();
             
             match self.find_farthest() {
@@ -148,8 +148,8 @@ impl PortalStorage {
 
             let data_usage = self.get_total_storage_usage_kb();
             println!("Data usage: {}", data_usage);
-            println!("Capacity:   {}", self.storage_capacity_kb * 1000);
-            if data_usage > (self.storage_capacity_kb * 1000) {
+            println!("Capacity:   {}", self.storage_capacity_kb);
+            if data_usage > self.storage_capacity_kb {
                 println!("Capacity has been reached!");
                 self.capacity_reached = true;
             }
@@ -196,14 +196,14 @@ impl PortalStorage {
 
     pub fn find_farthest(&self) -> Result<String, String> {
 
-        let node_id_u64 = PortalStorage::byte_vector_to_u64(self.node_id.raw().to_vec());
-        // println!("Node ID as u64: {}", node_id_u64);
+        let node_id_u32 = PortalStorage::byte_vector_to_u32(self.node_id.raw().to_vec());
 
         let mut query = self.meta_db.prepare(
             FIND_FARTHEST_QUERY,
         ).unwrap();
 
-        let results = query.query_map([node_id_u64], |row| {
+        println!("BEFORE THE CRASH THE NODE IS {}", node_id_u32);   
+        let results = query.query_map([node_id_u32], |row| {
             Ok(ContentKey {
                 key_long: row.get(0)?,
             })
@@ -259,6 +259,22 @@ impl PortalStorage {
         }
       
         u64::from_be_bytes(array)
+
+    }
+
+    fn byte_vector_to_u32(vec: Vec<u8>) -> u32 {
+
+        if vec.len() < 4 {
+            println!("Error: XOR returned less than 4 bytes.");
+            return 0;
+        }
+
+        let mut array: [u8; 4] = [0, 0, 0, 0];
+        for (index, byte) in vec.iter().take(4).enumerate() {
+            array[index] = byte.clone();
+        }
+      
+        u32::from_be_bytes(array)
 
     }
 
