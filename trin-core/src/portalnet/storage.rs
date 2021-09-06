@@ -357,6 +357,31 @@ mod test {
 
 
     #[test]
+    fn test_should_store() {
+
+        let storage_config = PortalStorageConfig {
+            storage_capacity_kb: 100,
+            node_id: NodeId::random(),
+        };
+
+        let mut storage = PortalStorage::new(&storage_config).unwrap();
+
+        let key_a: String = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".to_string();
+        let key_b: String = "p1K8ymqgNO9vJ1LwATa4yNqCxk6AMgNa".to_string();
+        let value: String = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".to_string();
+
+        storage.store(&key_a, &value);
+
+        let should_store_a = storage.should_store(&key_a);
+        let should_store_b = storage.should_store(&key_b);
+
+        assert_eq!(should_store_a, false);
+        assert_eq!(should_store_b, true);
+
+    }
+
+
+    #[test]
     fn test_distance_to_key() {
         
         // As u64: 5543900367377300341
