@@ -20,7 +20,6 @@ pub struct PortalStorage {
     farthest_key: Option<String>,
     db: rocksdb::DB,
     meta_db: rusqlite::Connection,
-    capacity_reached: bool
 
 }
 
@@ -40,7 +39,6 @@ impl PortalStorage {
             db: db,
             farthest_key: None,
             meta_db: meta_db,
-            capacity_reached: false
         };
 
         Ok(storage)
@@ -79,12 +77,8 @@ impl PortalStorage {
     }
     
     pub fn should_store(&self, key: &String) -> bool {
-
-        // println!("Data radius:     {}", self.data_radius);
-        // println!("Max u64:         {}", u64::MAX);
-        // println!("Distance to key: {}", self.distance_to_key(key));
-
-        // Don't store if we already have the data, otherwise continue.
+        
+        // Don't store if we already have the data.
         match self.db.get(&key) {
             Ok(Some(_)) => {
                 return false;
@@ -93,6 +87,7 @@ impl PortalStorage {
             _ => ()
         }
 
+        // Don't store if it's outside our radius
         if self.data_radius < u64::MAX {
             self.distance_to_key(key) < self.data_radius
         } else {
@@ -122,24 +117,34 @@ impl PortalStorage {
 
     }
 
-    // 1.) Don't store data outside the radius.
-    // 2.) Store the data, and then if we're at capacity, drop the farthest and find the new farthest.
-    // 3.) Initialize or update farthest_key if necessary.
-    // 4.) Check whether we've gone over capacity.
     pub fn store(&mut self, key: &String, value: &String) {
 
+        // Check whether we should store this data
         if !self.should_store(key) {
             println!("Not storing.");
             return;
         }
 
+        // Store the data 
         self.db.put(key, value).expect("Failed to write to DB");
-
         self.meta_db_insert(key);
 
-        if self.capacity_reached {
+        // Update the farthest key if this key is either 1.) the first key ever or 2.) farther than the current farthest
+        match self.farthest_key.as_ref() {
+            None => {
+                self.farthest_key = Some(key.to_string());
+            },
+            Some(farthest) => {
+                if self.distance_to_key(key) > self.distance_to_key(&farthest) {
+                    self.farthest_key = Some(key.clone());
+                }
+            }
+        }
 
-            println!("Capacity was reached previously.");
+        // Delete furthest data until our data usage is less than capacity
+        while self.capacity_reached() {
+
+            println!("Capacity was reached.");
 
             let key_to_remove = self.farthest_key.clone();
             self.db.delete(&key_to_remove.clone().unwrap()).expect("Failed to delete key.");
@@ -155,28 +160,7 @@ impl PortalStorage {
                 }
             }
 
-        } else {
-
-            let data_usage = self.get_total_storage_usage_kb();
-            println!("Data usage: {}", data_usage);
-            println!("Capacity:   {}", self.storage_capacity_kb);
-            if data_usage > self.storage_capacity_kb {
-                println!("Capacity has been reached!");
-                self.capacity_reached = true;
-            }
-
-        }
-
-        match self.farthest_key.as_ref() {
-            None => {
-                self.farthest_key = Some(key.to_string());
-            },
-            Some(farthest) => {
-                if self.distance_to_key(key) > self.distance_to_key(&farthest) {
-                    self.farthest_key = Some(key.clone());
-                }
-            }
-        }
+        } 
 
     }
 
@@ -189,6 +173,12 @@ impl PortalStorage {
     pub fn get_current_radius(&self) -> u64 {
 
         self.data_radius
+
+    }
+
+    pub fn capacity_reached(&self) -> bool {
+
+        self.get_total_storage_usage_kb() > self.storage_capacity_kb
 
     }
 
@@ -253,9 +243,7 @@ impl PortalStorage {
     }
 
     // Takes the most significant 8 bytes of a vector and casts them into a u64.
-    // Useful in this class when the full bytes represent a u256, and for most purposes we only
-    // need to compare the most significant 8 bytes of the u256 to compare 
-    // relative distances. The equivalent of a conversion from nanometers to meters.
+    // The equivalent of a conversion from nanometers to meters.
     fn byte_vector_to_u64(vec: Vec<u8>) -> u64 {
 
         if vec.len() < 8 {
