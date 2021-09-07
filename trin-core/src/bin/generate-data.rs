@@ -52,7 +52,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             db.put(&key, &value).expect("Failed to write DB entry.");
         }
 
-        println!("");
+        println!();
 
     } 
 
