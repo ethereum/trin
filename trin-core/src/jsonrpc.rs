@@ -36,7 +36,7 @@ lazy_static! {
     static ref IPC_PATH: Mutex<String> = Mutex::new(String::new());
 }
 
-pub fn launch_trin(
+pub fn launch_jsonrpc_server(
     trin_config: TrinConfig,
     infura_project_id: String,
     portal_tx: UnboundedSender<PortalEndpoint>,
@@ -212,6 +212,8 @@ fn handle_request(
     infura_url: &str,
     portal_tx: UnboundedSender<PortalEndpoint>,
 ) -> Result<String, String> {
+    // todo: figure out best way to refactor this parsing logic
+    // & catch invalid methods before proxying to infura
     match obj.method.as_str() {
         "web3_clientVersion" => Ok(json!({
             "jsonrpc": "2.0",
@@ -219,6 +221,8 @@ fn handle_request(
             "result": "trin 0.0.1-alpha",
         })
         .to_string()),
+        "test_historyNetwork" => dispatch_portal_request(obj, portal_tx),
+        "test_stateNetwork" => dispatch_portal_request(obj, portal_tx),
         _ if obj.method.as_str().starts_with("discv5") => dispatch_portal_request(obj, portal_tx),
         _ => dispatch_infura_request(obj, infura_url),
     }
@@ -251,6 +255,16 @@ fn dispatch_portal_request(
         },
         "discv5_routingTableInfo" => PortalEndpoint {
             kind: PortalEndpointKind::RoutingTableInfo,
+            resp: resp_tx,
+        },
+        // todo: remove test_historyNetwork & test_stateNetwork & replace with equivalent tests
+        // these are just test endpoints to validate that we can dispatch requests to subnetworks
+        "test_historyNetwork" => PortalEndpoint {
+            kind: PortalEndpointKind::DummyHistoryNetworkData,
+            resp: resp_tx,
+        },
+        "test_stateNetwork" => PortalEndpoint {
+            kind: PortalEndpointKind::DummyStateNetworkData,
             resp: resp_tx,
         },
         _ => {

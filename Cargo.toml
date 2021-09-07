@@ -3,23 +3,21 @@ name = "trin"
 version = "0.1.0"
 authors = ["Jacob Kaufmann <jacobkaufmann18@gmail.com>", "Jason Carver <ut96caarrs@snkmail.com>"]
 edition = "2018"
+default-run = "trin"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+log = "0.4.14"
 tokio = { version = "1.8.0", features = ["full"] }
+tracing = "0.1.26"
+tracing-subscriber = "0.2.18"
+trin-core = { path = "trin-core" }
 trin-history = { path = "trin-history" }
 trin-state = { path = "trin-state" }
 
 [workspace]
 members = [
-    "trin-state",
     "trin-history",
-    "trin-core"
-]
-
-default-members = [
     "trin-state",
-    "trin-history",
-    "trin-core"
 ]

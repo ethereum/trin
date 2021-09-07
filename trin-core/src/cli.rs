@@ -9,6 +9,7 @@ use structopt::StructOpt;
 const DEFAULT_WEB3_IPC_PATH: &str = "/tmp/trin-jsonrpc.ipc";
 const DEFAULT_WEB3_HTTP_PORT: &str = "8545";
 const DEFAULT_DISCOVERY_PORT: &str = "9000";
+const DEFAULT_SUBNETWORKS: &str = "history,state";
 
 #[derive(StructOpt, Debug, PartialEq)]
 #[structopt(
@@ -72,6 +73,14 @@ pub struct TrinConfig {
         help = "Hex encoded 32 byte private key (considered unsafe to pass in pk as cli arg, as it's stored in terminal history - keyfile support coming soon)"
     )]
     pub private_key: Option<HexData>,
+
+    #[structopt(
+        long = "networks",
+        help = "Comma-separated list of which portal subnetworks to activate",
+        default_value = DEFAULT_SUBNETWORKS,
+        use_delimiter = true
+    )]
+    pub networks: Vec<String>,
 }
 
 impl Default for TrinConfig {
