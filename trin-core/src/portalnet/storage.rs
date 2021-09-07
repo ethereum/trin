@@ -32,7 +32,7 @@ impl PortalStorage {
         let meta_db = PortalStorage::setup_sqlite();
 
         // Initialize the instance
-        let storage = Self {
+        let mut storage = Self {
             node_id: config.node_id,
             storage_capacity_kb: config.storage_capacity_kb,
             data_radius: u64::MAX,
@@ -50,8 +50,6 @@ impl PortalStorage {
         let data_path_root: String = get_data_dir().to_owned();
         let data_suffix: &str = "/rocksdb";
         let data_path = data_path_root + data_suffix;
-
-        println!("ROCKSDB DATAPATH: {}", data_path);
 
         let mut db_opts = Options::default();
         db_opts.create_if_missing(true);
@@ -109,21 +107,21 @@ impl PortalStorage {
 
     fn meta_db_remove(&self, key: &String) {
 
-        let key_to_remove_as_u32 = PortalStorage::byte_vector_to_u32(key.clone().into_bytes());
+        // let key_to_remove_as_u32 = PortalStorage::byte_vector_to_u32(key.clone().into_bytes());
         self.meta_db.execute(
             DELETE_QUERY,
-            [key_to_remove_as_u32],
+            [key],
         ).unwrap();
-
+        
     }
 
     pub fn store(&mut self, key: &String, value: &String) {
 
         // Check whether we should store this data
         if !self.should_store(key) {
-            println!("Not storing.");
+            println!("Not storing: {}", key);
             return;
-        }
+        }   
 
         // Store the data 
         self.db.put(key, value).expect("Failed to write to DB");
@@ -144,17 +142,22 @@ impl PortalStorage {
         // Delete furthest data until our data usage is less than capacity
         while self.capacity_reached() {
 
-            println!("Capacity was reached.");
+            println!("Capacity reached.");
 
             let key_to_remove = self.farthest_key.clone();
+            println!("Deleting: {}", &key_to_remove.clone().unwrap());
+
             self.db.delete(&key_to_remove.clone().unwrap()).expect("Failed to delete key.");
             self.meta_db_remove(&key_to_remove.clone().unwrap());
+
+            self.db.flush().expect("Failed to flush db.");
             
             match self.find_farthest() {
                 Err(e) => {
                     error!("Failed to find farthest: {}", e);
                 },
                 Ok(farthest) => {
+                    println!("Found farthest: {}", &farthest);
                     self.farthest_key = Some(farthest.clone());
                     self.data_radius = self.distance_to_key(&farthest);
                 }
@@ -178,11 +181,13 @@ impl PortalStorage {
 
     pub fn capacity_reached(&self) -> bool {
 
-        self.get_total_storage_usage_kb() > self.storage_capacity_kb
+        let storage_usage = self.get_total_storage_usage_in_bytes();
+        println!("Storage Usage: {} bytes", storage_usage);
+        storage_usage > (self.storage_capacity_kb * 1000)
 
     }
 
-    pub fn get_total_storage_usage_kb(&self) -> u64 {
+    pub fn get_total_storage_usage_in_bytes(&self) -> u64 {
 
         let p: perf::MemoryUsageStats = perf::get_memory_usage_stats(Some(&[&self.db]), None)
                                             .expect("Failed to get memory usage statistics.");
@@ -191,7 +196,7 @@ impl PortalStorage {
 
         let total_in_bytes = p.mem_table_total + db_total;
 
-        ( total_in_bytes / 1000 ) as u64
+        total_in_bytes
 
     }
 
@@ -217,7 +222,16 @@ impl PortalStorage {
 
     fn get_total_size_of_directory_in_bytes(&self, path: String) -> std::io::Result<u64> {
 
-        let metadata = fs::metadata(&path).unwrap();
+        let path_leaf = path.split("/").last().unwrap();
+        
+        if path_leaf.starts_with("MANIFEST") || path_leaf.starts_with("LOG") {
+            return Ok(0);
+        }
+
+        let metadata = match fs::metadata(&path) {
+            Ok(metadata) => { metadata }
+            Err(_) => { return Ok(0); }
+        };
         let mut size = metadata.len();
 
         if metadata.is_dir() {
@@ -228,6 +242,8 @@ impl PortalStorage {
             }
         }
 
+        // println!("PATH: {} is using {}", &path, &size);
+        
         Ok(size)
 
     }
@@ -363,9 +379,9 @@ mod test {
         let value: String = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".to_string();
         storage.store(&key, &value);
 
-        let kb = storage.get_total_storage_usage_kb();
+        let bytes = storage.get_total_storage_usage_in_bytes();
 
-        println!("{}", kb);
+        println!("{}", bytes);
 
     }
 
