@@ -32,7 +32,7 @@ impl PortalStorage {
         let meta_db = PortalStorage::setup_sqlite();
 
         // Initialize the instance
-        let mut storage = Self {
+        let storage = Self {
             node_id: config.node_id,
             storage_capacity_kb: config.storage_capacity_kb,
             data_radius: u64::MAX,
