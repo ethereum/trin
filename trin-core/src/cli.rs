@@ -9,7 +9,7 @@ use structopt::StructOpt;
 const DEFAULT_WEB3_IPC_PATH: &str = "/tmp/trin-jsonrpc.ipc";
 const DEFAULT_WEB3_HTTP_PORT: &str = "8545";
 const DEFAULT_DISCOVERY_PORT: &str = "9000";
-const DEFAULT_SUBNETWORKS: &str = "history,gossip";
+const DEFAULT_SUBNETWORKS: &str = "history,state";
 
 #[derive(StructOpt, Debug, PartialEq)]
 #[structopt(

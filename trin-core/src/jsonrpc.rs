@@ -212,6 +212,8 @@ fn handle_request(
     infura_url: &str,
     portal_tx: UnboundedSender<PortalEndpoint>,
 ) -> Result<String, String> {
+    // todo: figure out best way to refactor this parsing logic
+    // & catch invalid methods before proxying to infura
     match obj.method.as_str() {
         "web3_clientVersion" => Ok(json!({
             "jsonrpc": "2.0",
