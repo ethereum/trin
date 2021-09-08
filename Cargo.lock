@@ -3153,14 +3153,12 @@ dependencies = [
  "env_logger",
  "eth2_ssz",
  "eth2_ssz_derive",
- "ethereum-types 0.12.0",
  "futures 0.3.16",
  "hex",
  "interfaces",
  "ipconfig",
  "lazy_static 1.4.0",
  "log 0.4.14",
- "num",
  "parking_lot 0.11.1",
  "reqwest",
  "rlp 0.5.0",
@@ -3199,6 +3197,7 @@ name = "trin-state"
 version = "0.1.0"
 dependencies = [
  "log 0.4.14",
+ "num",
  "serde_json",
  "tokio",
  "tracing",
