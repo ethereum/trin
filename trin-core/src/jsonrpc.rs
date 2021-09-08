@@ -378,6 +378,7 @@ fn get_infura_url(infura_project_id: &str) -> String {
 #[cfg(test)]
 mod test {
     use super::*;
+    use rstest::rstest;
     use validator::ValidationErrors;
 
     #[test]
@@ -403,27 +404,24 @@ mod test {
         assert!(ValidationErrors::has_error(&errors, "jsonrpc"));
     }
 
-    #[test]
-    fn request_params_deserialization() {
-        let s = r#"[null, true, -1, 4, 2.3, "hello", [0], {"key": "value"}, []]"#;
-        let deserialized: Params = serde_json::from_str(s).unwrap();
-
+    fn expected_map() -> Map<String, Value> {
         let mut expected_map = serde_json::Map::new();
         expected_map.insert("key".to_string(), Value::String("value".to_string()));
+        expected_map
+    }
 
-        assert_eq!(
-            Params::Array(vec![
-                Value::Null,
-                Value::Bool(true),
-                Value::from(-1),
-                Value::from(4),
-                Value::from(2.3),
-                Value::String("hello".to_string()),
-                Value::Array(vec![Value::from(0)]),
-                Value::Object(expected_map),
-                Value::Array(vec![]),
-            ]),
-            deserialized
-        );
+    #[rstest]
+    #[case("[null]", Params::Array(vec![Value::Null]))]
+    #[case("[true]", Params::Array(vec![Value::Bool(true)]))]
+    #[case("[-1]", Params::Array(vec![Value::from(-1)]))]
+    #[case("[4]", Params::Array(vec![Value::from(4)]))]
+    #[case("[2.3]", Params::Array(vec![Value::from(2.3)]))]
+    #[case("[\"hello\"]", Params::Array(vec![Value::String("hello".to_string())]))]
+    #[case("[[0]]", Params::Array(vec![Value::Array(vec![Value::from(0)])]))]
+    #[case("[[]]", Params::Array(vec![Value::Array(vec![])]))]
+    #[case("[{\"key\": \"value\"}]", Params::Array(vec![Value::Object(expected_map())]))]
+    fn request_params_deserialization(#[case] input: &str, #[case] expected: Params) {
+        let deserialized: Params = serde_json::from_str(input).unwrap();
+        assert_eq!(deserialized, expected);
     }
 }
