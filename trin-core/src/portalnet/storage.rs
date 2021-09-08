@@ -1,4 +1,4 @@
-use rocksdb::{Options, DB, Error, perf};
+use rocksdb::{Options, DB, Error};
 use crate::utils::{get_data_dir, xor_two_values};
 use discv5::enr::NodeId;
 use rusqlite::{params, Connection, Result};
@@ -32,7 +32,7 @@ impl PortalStorage {
         let meta_db = PortalStorage::setup_sqlite();
 
         // Initialize the instance
-        let storage = Self {
+        let mut storage = Self {
             node_id: config.node_id,
             storage_capacity_kb: config.storage_capacity_kb,
             data_radius: u64::MAX,
@@ -40,6 +40,18 @@ impl PortalStorage {
             farthest_key: None,
             meta_db: meta_db,
         };
+
+        // Check whether we already have data, and use it to set the farthest_key and data_radius fields. 
+        match storage.find_farthest() {
+            Some(key) => {
+                storage.farthest_key = Some(key.clone());
+                if storage.capacity_reached() {
+                    storage.data_radius = storage.distance_to_key(&key);
+                }
+            }
+            // No farthest key found, carry on with blank slate settings.
+            None => ()
+        }
 
         Ok(storage)
 
@@ -109,7 +121,6 @@ impl PortalStorage {
 
     fn meta_db_remove(&self, key: &String) {
 
-        // let key_to_remove_as_u32 = PortalStorage::byte_vector_to_u32(key.clone().into_bytes());
         self.meta_db.execute(
             DELETE_QUERY,
             [key],
@@ -155,10 +166,10 @@ impl PortalStorage {
             self.db.flush().expect("Failed to flush db.");
             
             match self.find_farthest() {
-                Err(e) => {
-                    error!("Failed to find farthest: {}", e);
+                None => {
+                    error!("Failed to find farthest!");
                 },
-                Ok(farthest) => {
+                Some(farthest) => {
                     println!("Found farthest: {}", &farthest);
                     self.farthest_key = Some(farthest.clone());
                     self.data_radius = self.distance_to_key(&farthest);
@@ -213,7 +224,8 @@ impl PortalStorage {
 
     }
 
-    pub fn find_farthest(&self) -> Result<String, String> {
+    // Returns None if there's no data in the DB yet
+    pub fn find_farthest(&self) -> Option<String> {
 
         let node_id_u32 = PortalStorage::byte_vector_to_u32(self.node_id.raw().to_vec());
 
@@ -227,9 +239,17 @@ impl PortalStorage {
             })
         });
 
-        let x = results.unwrap().next().unwrap().unwrap().key_long;
+        let mut result = results.expect("Error reading from SQLite.");
 
-        Ok(x)
+        let result = match result.next() {
+            Some(row) => {
+                row
+            }
+            None => { return None; }
+        };
+        let result = result.expect("Error getting row data from SQLite.").key_long;
+
+        Some(result)
 
     }
 
@@ -254,8 +274,6 @@ impl PortalStorage {
                 size += self.get_total_size_of_directory_in_bytes(path_string.unwrap())?;
             }
         }
-
-        // println!("PATH: {} is using {}", &path, &size);
         
         Ok(size)
 
@@ -398,7 +416,7 @@ mod test {
         let value: String = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".to_string();
         storage.store(&key, &value);
 
-        let bytes = storage.get_total_storage_usage_in_bytes();
+        let bytes = storage.get_total_storage_usage_in_bytes_on_disk();
 
         println!("{}", bytes);
 
