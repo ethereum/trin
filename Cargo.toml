@@ -20,4 +20,5 @@ trin-state = { path = "trin-state" }
 members = [
     "trin-history",
     "trin-state",
+    "trin-core"
 ]
