@@ -175,6 +175,10 @@ mod test {
             bootnodes: vec![],
             external_addr: None,
             private_key: None,
+            networks: DEFAULT_SUBNETWORKS
+                .split(",")
+                .map(|n| n.to_string())
+                .collect(),
         };
         let actual_config = TrinConfig::new_from(["trin"].iter()).unwrap();
         assert_eq!(actual_config.web3_transport, expected_config.web3_transport);
@@ -195,6 +199,10 @@ mod test {
             web3_transport: "http".to_string(),
             discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
             bootnodes: vec![],
+            networks: DEFAULT_SUBNETWORKS
+                .split(",")
+                .map(|n| n.to_string())
+                .collect(),
         };
         let actual_config = TrinConfig::new_from(
             [
@@ -228,6 +236,10 @@ mod test {
             web3_transport: "ipc".to_string(),
             discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
             bootnodes: vec![],
+            networks: DEFAULT_SUBNETWORKS
+                .split(",")
+                .map(|n| n.to_string())
+                .collect(),
         };
         assert_eq!(actual_config.web3_transport, expected_config.web3_transport);
         assert_eq!(actual_config.web3_http_port, expected_config.web3_http_port);
@@ -257,6 +269,10 @@ mod test {
             web3_transport: "ipc".to_string(),
             discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
             bootnodes: vec![],
+            networks: DEFAULT_SUBNETWORKS
+                .split(",")
+                .map(|n| n.to_string())
+                .collect(),
         };
         assert_eq!(actual_config.web3_transport, expected_config.web3_transport);
         assert_eq!(actual_config.web3_http_port, expected_config.web3_http_port);
@@ -310,6 +326,10 @@ mod test {
             web3_transport: "ipc".to_string(),
             discovery_port: 999,
             bootnodes: vec![],
+            networks: DEFAULT_SUBNETWORKS
+                .split(",")
+                .map(|n| n.to_string())
+                .collect(),
         };
         let actual_config =
             TrinConfig::new_from(["trin", "--discovery-port", "999"].iter()).unwrap();
@@ -328,6 +348,10 @@ mod test {
             web3_transport: "ipc".to_string(),
             discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
             bootnodes: vec!["enr:-aoeu".to_string(), "enr:-htns".to_string()],
+            networks: DEFAULT_SUBNETWORKS
+                .split(",")
+                .map(|n| n.to_string())
+                .collect(),
         };
         let actual_config =
             TrinConfig::new_from(["trin", "--bootnodes", "enr:-aoeu,enr:-htns"].iter()).unwrap();
@@ -368,6 +392,10 @@ mod test {
             web3_transport: "ipc".to_string(),
             discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
             bootnodes: vec![],
+            networks: DEFAULT_SUBNETWORKS
+                .split(",")
+                .map(|n| n.to_string())
+                .collect(),
         };
         let actual_config = TrinConfig::new_from(
             [

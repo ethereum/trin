@@ -38,8 +38,9 @@ jobs:
             - rust/build:
                 release: false
                 with_cache: false
-            - rust/test:
-                with_cache: false
+            - run:
+                name: Test Trin workspace
+                command: cargo test --workspace
             - save_cache:
                 key: cargo-{{ checksum "Cargo.lock" }}-v1
                 paths:
