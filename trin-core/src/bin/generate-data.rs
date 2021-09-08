@@ -30,11 +30,11 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ...but this is a crude empirical estimation that works mainly with default value data size. 
     // TODO: Use perf::memory_usage_stats to be more accurate with all data sizes.
     let data_overhead = 1.1783;
-    let number_of_entries = ( (num_kilobytes * 1000) as f64 / (size_of_keys + size_of_values) as f64 ) / data_overhead;
+    let number_of_entries = ( (num_kilobytes * 1000) as f64 / (size_of_values) as f64 ) / data_overhead;
     let number_of_entries = number_of_entries.round() as u32;
 
     let storage_config = PortalStorageConfig {
-        storage_capacity_kb: (num_kilobytes / 2) as u64,
+        storage_capacity_kb: (num_kilobytes / 4) as u64,
         node_id: NodeId::random(),
     };
     let mut storage = PortalStorage::new(&storage_config).unwrap();

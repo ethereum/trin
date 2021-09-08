@@ -76,7 +76,7 @@ impl PortalStorage {
     
     pub fn should_store(&self, key: &String) -> bool {
         
-        // Don't store if we already have the data.
+        // Don't store if we already have the data
         match self.db.get(&key) {
             Ok(Some(_)) => {
                 return false;
@@ -94,13 +94,15 @@ impl PortalStorage {
 
     }
 
-    fn meta_db_insert(&self, key: &String) {
+    fn meta_db_insert(&self, key: &String, value: &String) {
 
         let key_as_u32: u32 = PortalStorage::byte_vector_to_u32(key.clone().into_bytes());
 
+        let value_size = value.len();
+
         self.meta_db.execute(
             INSERT_QUERY,
-            params![key, key_as_u32],
+            params![key, key_as_u32, value_size],
         ).unwrap();
 
     }
@@ -125,7 +127,7 @@ impl PortalStorage {
 
         // Store the data 
         self.db.put(key, value).expect("Failed to write to DB");
-        self.meta_db_insert(key);
+        self.meta_db_insert(key, value);
 
         // Update the farthest key if this key is either 1.) the first key ever or 2.) farther than the current farthest
         match self.farthest_key.as_ref() {
@@ -181,22 +183,33 @@ impl PortalStorage {
 
     pub fn capacity_reached(&self) -> bool {
 
-        let storage_usage = self.get_total_storage_usage_in_bytes();
+        let storage_usage = self.get_total_storage_usage_in_bytes_from_network().unwrap();
         println!("Storage Usage: {} bytes", storage_usage);
         storage_usage > (self.storage_capacity_kb * 1000)
 
     }
 
-    pub fn get_total_storage_usage_in_bytes(&self) -> u64 {
+    pub fn get_total_storage_usage_in_bytes_on_disk(&self) -> u64 {
 
-        let p: perf::MemoryUsageStats = perf::get_memory_usage_stats(Some(&[&self.db]), None)
-                                            .expect("Failed to get memory usage statistics.");
+        self.get_total_size_of_directory_in_bytes(get_data_dir()).unwrap()
 
-        let db_total = self.get_total_size_of_directory_in_bytes(get_data_dir()).unwrap();
+    }
 
-        let total_in_bytes = p.mem_table_total + db_total;
+    pub fn get_total_storage_usage_in_bytes_from_network(&self) -> Result<u64, String> {
 
-        total_in_bytes
+        let mut query = self.meta_db.prepare(
+            TOTAL_DATA_SIZE_QUERY,
+        ).unwrap();
+
+        let result = query.query_map([], |row| {
+            Ok(DataSizeSum {
+                sum: row.get(0)?,
+            })
+        });
+
+        let x = result.unwrap().next().unwrap().unwrap().sum;
+
+        Ok(x)
 
     }
 
@@ -294,25 +307,31 @@ impl PortalStorage {
 
 }
 
-const CREATE_QUERY: &str = "create table if not exists content_keys (
-                                id INTEGER PRIMARY KEY,
-                                content_key_full TEXT NOT NULL,
-                                content_key_short INTEGER NOT NULL
+const CREATE_QUERY: &str = "create table if not exists content_metadata (
+                                content_id_long TEXT PRIMARY KEY,
+                                content_id_short INTEGER NOT NULL,
+                                content_size INTEGER
                             )";
 
-const INSERT_QUERY: &str = "INSERT INTO content_keys (content_key_full, content_key_short)
-                            VALUES (?1, ?2)";
+const INSERT_QUERY: &str = "INSERT INTO content_metadata (content_id_long, content_id_short, content_size)
+                            VALUES (?1, ?2, ?3)";
 
-const DELETE_QUERY: &str = "DELETE FROM content_keys
-                            WHERE content_key_full = (?1)";
+const DELETE_QUERY: &str = "DELETE FROM content_metadata
+                            WHERE content_id_long = (?1)";
 
 const FIND_FARTHEST_QUERY: &str = "SELECT
-                                    content_key_full
-                                    FROM content_keys
-                                    ORDER BY ((?1 | content_key_short) - (?1 & content_key_short)) DESC";
+                                    content_id_long
+                                    FROM content_metadata
+                                    ORDER BY ((?1 | content_id_short) - (?1 & content_id_short)) DESC";
+
+const TOTAL_DATA_SIZE_QUERY: &str = "SELECT SUM(content_size) FROM content_metadata";
 
 struct ContentKey {
     key_long: String,
+}
+
+struct DataSizeSum {
+    sum: u64,
 }
 
 #[cfg(test)]
