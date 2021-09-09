@@ -3,6 +3,7 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 
 use trin_core::cli::TrinConfig;
+use trin_core::portalnet::discovery::Discovery;
 use trin_core::portalnet::protocol::{
     PortalnetConfig, PortalnetProtocol, StateEndpointKind, StateNetworkEndpoint,
 };
@@ -54,13 +55,18 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     };
 
+    let mut discovery = Discovery::new(portalnet_config.clone()).unwrap();
+    discovery.start().await.unwrap();
+
     info!(
         "About to spawn portal p2p with boot nodes: {:?}",
         portalnet_config.bootnode_enrs
     );
 
     tokio::spawn(async move {
-        let (mut p2p, events) = PortalnetProtocol::new(portalnet_config).await.unwrap();
+        let (mut p2p, events) = PortalnetProtocol::new(discovery, portalnet_config)
+            .await
+            .unwrap();
 
         tokio::spawn(events.process_discv5_requests());
 
