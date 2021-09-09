@@ -1,8 +1,9 @@
 use crate::cli::TrinConfig;
 use crate::portalnet::protocol::{PortalEndpoint, PortalEndpointKind};
+use log::debug;
 use reqwest::blocking as reqwest;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 use std::fs;
 use std::io::{self, Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -17,12 +18,40 @@ use tokio::sync::mpsc;
 use tokio::sync::mpsc::UnboundedSender;
 use validator::{Validate, ValidationError};
 
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[serde(untagged)]
+pub enum Params {
+    /// No parameters
+    None,
+    /// Array of values
+    Array(Vec<Value>),
+    /// Map of values
+    Map(Map<String, Value>),
+}
+
+impl From<Params> for Value {
+    fn from(params: Params) -> Value {
+        match params {
+            Params::Array(vec) => Value::Array(vec),
+            Params::Map(map) => Value::Object(map),
+            Params::None => Value::Null,
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize, Validate)]
 struct JsonRequest {
     #[validate(custom = "validate_jsonrpc_version")]
     pub jsonrpc: String,
+    #[serde(default = "default_params")]
+    pub params: Params,
     pub method: String,
     pub id: u32,
+}
+
+fn default_params() -> Params {
+    Params::None
 }
 
 fn validate_jsonrpc_version(jsonrpc: &str) -> Result<(), ValidationError> {
@@ -149,18 +178,30 @@ fn serve_ipc_client(
 ) {
     let deser = serde_json::Deserializer::from_reader(rx);
     for obj in deser.into_iter::<JsonRequest>() {
-        let obj = obj.unwrap();
-        let formatted_response = match obj.validate() {
-            Ok(_) => {
-                let result = handle_request(obj, infura_url, portal_tx.clone());
-                match result {
-                    Ok(contents) => contents.into_bytes(),
-                    Err(contents) => contents.into_bytes(),
-                }
+        match obj {
+            Ok(obj) => {
+                let formatted_response = match obj.validate() {
+                    Ok(_) => {
+                        let result = handle_request(obj, infura_url, portal_tx.clone());
+                        match result {
+                            Ok(contents) => contents.into_bytes(),
+                            Err(contents) => contents.into_bytes(),
+                        }
+                    }
+                    Err(e) => format!("Unsupported trin request: {}", e).into_bytes(),
+                };
+                tx.write_all(&formatted_response).unwrap()
             }
-            Err(e) => format!("Unsupported trin request: {}", e).into_bytes(),
+            Err(e) => {
+                debug!("An error occurred while parsing the JSON text. {}", e);
+                tx.write_all(
+                    &"Parse error! An error occurred while parsing the JSON text."
+                        .to_string()
+                        .into_bytes(),
+                )
+                .unwrap()
+            }
         };
-        tx.write_all(&formatted_response).unwrap();
     }
 }
 
@@ -248,23 +289,28 @@ fn dispatch_portal_request(
 ) -> Result<String, String> {
     let (resp_tx, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
     let method = obj.method.as_str();
+    let params = obj.params;
     let message = match method {
         "discv5_nodeInfo" => PortalEndpoint {
             kind: PortalEndpointKind::NodeInfo,
+            params,
             resp: resp_tx,
         },
         "discv5_routingTableInfo" => PortalEndpoint {
             kind: PortalEndpointKind::RoutingTableInfo,
+            params,
             resp: resp_tx,
         },
         // todo: remove test_historyNetwork & test_stateNetwork & replace with equivalent tests
         // these are just test endpoints to validate that we can dispatch requests to subnetworks
         "test_historyNetwork" => PortalEndpoint {
             kind: PortalEndpointKind::DummyHistoryNetworkData,
+            params,
             resp: resp_tx,
         },
         "test_stateNetwork" => PortalEndpoint {
             kind: PortalEndpointKind::DummyStateNetworkData,
+            params,
             resp: resp_tx,
         },
         _ => {
@@ -332,6 +378,7 @@ fn get_infura_url(infura_project_id: &str) -> String {
 #[cfg(test)]
 mod test {
     use super::*;
+    use rstest::rstest;
     use validator::ValidationErrors;
 
     #[test]
@@ -339,6 +386,7 @@ mod test {
         let request = JsonRequest {
             jsonrpc: "2.0".to_string(),
             id: 1,
+            params: Params::None,
             method: "eth_blockNumber".to_string(),
         };
         assert_eq!(request.validate(), Ok(()));
@@ -349,9 +397,31 @@ mod test {
         let request = JsonRequest {
             jsonrpc: "1.0".to_string(),
             id: 1,
+            params: Params::None,
             method: "eth_blockNumber".to_string(),
         };
         let errors = request.validate();
         assert!(ValidationErrors::has_error(&errors, "jsonrpc"));
+    }
+
+    fn expected_map() -> Map<String, Value> {
+        let mut expected_map = serde_json::Map::new();
+        expected_map.insert("key".to_string(), Value::String("value".to_string()));
+        expected_map
+    }
+
+    #[rstest]
+    #[case("[null]", Params::Array(vec![Value::Null]))]
+    #[case("[true]", Params::Array(vec![Value::Bool(true)]))]
+    #[case("[-1]", Params::Array(vec![Value::from(-1)]))]
+    #[case("[4]", Params::Array(vec![Value::from(4)]))]
+    #[case("[2.3]", Params::Array(vec![Value::from(2.3)]))]
+    #[case("[\"hello\"]", Params::Array(vec![Value::String("hello".to_string())]))]
+    #[case("[[0]]", Params::Array(vec![Value::Array(vec![Value::from(0)])]))]
+    #[case("[[]]", Params::Array(vec![Value::Array(vec![])]))]
+    #[case("[{\"key\": \"value\"}]", Params::Array(vec![Value::Object(expected_map())]))]
+    fn request_params_deserialization(#[case] input: &str, #[case] expected: Params) {
+        let deserialized: Params = serde_json::from_str(input).unwrap();
+        assert_eq!(deserialized, expected);
     }
 }

@@ -20,6 +20,7 @@ use super::{
     U256,
 };
 use super::{types::Message, Enr};
+use crate::jsonrpc::Params;
 use crate::socket;
 
 type Responder<T, E> = mpsc::UnboundedSender<Result<T, E>>;
@@ -57,6 +58,7 @@ pub enum PortalEndpointKind {
 #[derive(Debug)]
 pub struct PortalEndpoint {
     pub kind: PortalEndpointKind,
+    pub params: Params,
     pub resp: Responder<Value, String>,
 }
 
