@@ -41,7 +41,8 @@ impl PortalStorage {
             meta_db: meta_db,
         };
 
-        // Check whether we already have data, and use it to set the farthest_key and data_radius fields. 
+        // Check whether we already have data, and if so 
+        // use it to set the farthest_key and data_radius fields
         match storage.find_farthest() {
             Some(key) => {
                 storage.farthest_key = Some(key.clone());
@@ -49,7 +50,7 @@ impl PortalStorage {
                     storage.data_radius = storage.distance_to_key(&key);
                 }
             }
-            // No farthest key found, carry on with blank slate settings.
+            // No farthest key found, carry on with blank slate settings
             None => ()
         }
 
@@ -195,7 +196,6 @@ impl PortalStorage {
     pub fn capacity_reached(&self) -> bool {
 
         let storage_usage = self.get_total_storage_usage_in_bytes_from_network().unwrap();
-        println!("Storage Usage: {} bytes", storage_usage);
         storage_usage > (self.storage_capacity_kb * 1000)
 
     }
@@ -254,12 +254,6 @@ impl PortalStorage {
     }
 
     fn get_total_size_of_directory_in_bytes(&self, path: String) -> std::io::Result<u64> {
-
-        let path_leaf = path.split("/").last().unwrap();
-        
-        if path_leaf.starts_with("MANIFEST") || path_leaf.starts_with("LOG") {
-            return Ok(0);
-        }
 
         let metadata = match fs::metadata(&path) {
             Ok(metadata) => { metadata }
@@ -416,9 +410,9 @@ mod test {
         let value: String = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".to_string();
         storage.store(&key, &value);
 
-        let bytes = storage.get_total_storage_usage_in_bytes_on_disk();
+        let bytes = storage.get_total_storage_usage_in_bytes_from_network();
 
-        println!("{}", bytes);
+        println!("{}", bytes.unwrap());
 
     }
 
@@ -471,6 +465,8 @@ mod test {
     }
 
     #[test]
+    // This test will only pass if the database isn't already populated,
+    // otherwise we can't guarantee it will get the expected answer
     fn test_find_farthest() {
 
         // As u64: 5543900367377300341
