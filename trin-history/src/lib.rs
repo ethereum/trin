@@ -4,11 +4,10 @@ use tokio::sync::mpsc;
 
 use trin_core::cli::TrinConfig;
 use trin_core::portalnet::discovery::Discovery;
-use trin_core::portalnet::protocol::{HistoryEndpointKind, HistoryNetworkEndpoint, PortalnetConfig, PortalnetEvents};
-use trin_core::portalnet::overlay::OverlayProtocol;
-use trin_core::utils::setup_overlay_db;
-use std::sync::Arc;
-use parking_lot::RwLock;
+use trin_core::portalnet::overlay::HistoryProtocol;
+use trin_core::portalnet::protocol::{
+    HistoryEndpointKind, HistoryNetworkEndpoint, PortalnetConfig,
+};
 
 pub struct HistoryRequestHandler {
     pub history_rx: mpsc::UnboundedReceiver<HistoryNetworkEndpoint>,
@@ -69,29 +68,15 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
         portalnet_config.bootnode_enrs
     );
 
-    let protocol_receiver = discovery
-            .discv5
-            .event_stream()
-            .await
-            .map_err(|e| e.to_string()).unwrap();
-
     tokio::spawn(async move {
-        let discovery = Arc::new(discovery);
-        let overlay = OverlayProtocol::new(discovery.clone(),portalnet_config.clone());
-        let db = setup_overlay_db(discovery.local_enr());
-
-        let events = PortalnetEvents {
-            discovery,
-            overlay,
-            protocol_receiver,
-            db,
-        };
-        // let events = PortalnetEvents::new(discovery, overlay.clone(), db).await;
+        let (mut p2p, events) = HistoryProtocol::new(discovery, portalnet_config.clone())
+            .await
+            .unwrap();
 
         tokio::spawn(events.process_discv5_requests());
 
         // hacky test: make sure we establish a session with the boot node
-        // overlay.ping_bootnodes().await.unwrap();
+        p2p.ping_bootnodes().await.unwrap();
 
         tokio::signal::ctrl_c()
             .await

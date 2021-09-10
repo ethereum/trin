@@ -5,11 +5,11 @@ use std::sync::Arc;
 
 use discv5::{Discv5Event, TalkRequest};
 use log::{debug, error, warn};
-use rocksdb::{Options, DB};
+use rocksdb::{DB};
 use serde_json::Value;
 use tokio::sync::mpsc;
 
-use crate::{jsonrpc::Params, utils::get_data_dir};
+use crate::{jsonrpc::Params};
 
 use super::{
     discovery::Discovery,
@@ -23,7 +23,6 @@ use super::{types::Message, Enr};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use crate::portalnet::overlay::OverlayProtocol;
-use parking_lot::RwLock;
 
 type Responder<T, E> = mpsc::UnboundedSender<Result<T, E>>;
 
@@ -89,7 +88,7 @@ pub const PROTOCOL: &str = "portal";
 
 pub struct PortalnetEvents {
     pub discovery: Arc<Discovery>,
-    pub overlay: OverlayProtocol,
+    pub overlay: Arc<OverlayProtocol>,
     pub protocol_receiver: mpsc::Receiver<Discv5Event>,
     pub db: DB,
     pub utp_listener: UtpListener,
