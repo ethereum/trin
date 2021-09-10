@@ -6,9 +6,9 @@ use tokio::sync::mpsc;
 use trin_core::cli::TrinConfig;
 use trin_core::jsonrpc::launch_jsonrpc_server;
 use trin_core::portalnet::discovery::Discovery;
+use trin_core::portalnet::overlay::StateProtocol;
 use trin_core::portalnet::protocol::{
-    HistoryNetworkEndpoint, JsonRpcHandler, PortalEndpoint, PortalnetConfig, PortalnetProtocol,
-    StateNetworkEndpoint,
+    HistoryNetworkEndpoint, JsonRpcHandler, PortalEndpoint, PortalnetConfig, StateNetworkEndpoint,
 };
 
 #[tokio::main]
@@ -81,12 +81,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             portalnet_config.bootnode_enrs
         );
 
-        let (mut p2p, events) = PortalnetProtocol::new(discovery, portalnet_config)
+        let (mut p2p, events) = StateProtocol::new(discovery, portalnet_config)
             .await
             .unwrap();
 
         let rpc_handler = JsonRpcHandler {
-            discovery: p2p.discovery.clone(),
+            discovery: p2p.overlay.discovery.clone(),
             jsonrpc_rx,
             state_tx,
             history_tx,

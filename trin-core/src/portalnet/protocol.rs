@@ -5,11 +5,11 @@ use std::sync::Arc;
 
 use discv5::{Discv5Event, TalkRequest};
 use log::{debug, error, warn};
-use rocksdb::{DB};
+use rocksdb::DB;
 use serde_json::Value;
 use tokio::sync::mpsc;
 
-use crate::{jsonrpc::Params};
+use crate::jsonrpc::Params;
 
 use super::{
     discovery::Discovery,
@@ -20,9 +20,8 @@ use super::{
     U256,
 };
 use super::{types::Message, Enr};
-use std::collections::HashMap;
-use std::convert::TryInto;
 use crate::portalnet::overlay::OverlayProtocol;
+use std::convert::TryInto;
 
 type Responder<T, E> = mpsc::UnboundedSender<Result<T, E>>;
 
@@ -303,103 +302,3 @@ impl PortalnetEvents {
         }
     }
 }
-
-// impl PortalnetProtocol {
-//     pub async fn new(
-//         mut discovery: Discovery,
-//         portal_config: PortalnetConfig,
-//     ) -> Result<(Self, PortalnetEvents), String> {
-//         let protocol_receiver = discovery
-//             .discv5
-//             .event_stream()
-//             .await
-//             .map_err(|e| e.to_string())?;
-//
-//         let overlay = Overlay::new(
-//             discovery.local_enr(),
-//             portal_config.data_radius,
-//             OverlayConfig::default(),
-//         );
-//
-//         let discovery = Arc::new(discovery);
-//         let data_path = get_data_dir(discovery.local_enr());
-//
-//         let mut db_opts = Options::default();
-//         db_opts.create_if_missing(true);
-//         let db = DB::open(&db_opts, data_path).unwrap();
-//
-//         let utp_listener = UtpListener {
-//             discovery: discovery.clone(),
-//             utp_connections: HashMap::new(),
-//         };
-//
-//         let events = PortalnetEvents {
-//             discovery: discovery.clone(),
-//             overlay: overlay.clone(),
-//             protocol_receiver,
-//             db,
-//             utp_listener,
-//         };
-//
-//         let proto = Self {
-//             discovery: discovery.clone(),
-//             overlay: overlay.clone(),
-//         };
-//
-//         Ok((proto, events))
-//     }
-//
-//     pub async fn send_ping(&self, data_radius: U256, enr: Enr) -> Result<Vec<u8>, String> {
-//         let enr_seq = self.discovery.local_enr().seq();
-//         let msg = Ping {
-//             enr_seq,
-//             data_radius,
-//         };
-//         self.discovery
-//             .send_talkreq(
-//                 enr,
-//                 PROTOCOL.to_string(),
-//                 Message::Request(Request::Ping(msg)).to_bytes(),
-//             )
-//             .await
-//     }
-//
-//     pub async fn send_find_nodes(&self, distances: Vec<u16>, enr: Enr) -> Result<Vec<u8>, String> {
-//         let msg = FindNodes { distances };
-//         self.discovery
-//             .send_talkreq(
-//                 enr,
-//                 PROTOCOL.to_string(),
-//                 Message::Request(Request::FindNodes(msg)).to_bytes(),
-//             )
-//             .await
-//     }
-//
-//     pub async fn send_find_content(
-//         &self,
-//         content_key: Vec<u8>,
-//         enr: Enr,
-//     ) -> Result<Vec<u8>, String> {
-//         let msg = FindContent { content_key };
-//         self.discovery
-//             .send_talkreq(
-//                 enr,
-//                 PROTOCOL.to_string(),
-//                 Message::Request(Request::FindContent(msg)).to_bytes(),
-//             )
-//             .await
-//     }
-//
-//     /// Convenience call for testing, quick way to ping bootnodes
-//     pub async fn ping_bootnodes(&mut self) -> Result<(), String> {
-//         // Trigger bonding with bootnodes, at both the base layer and portal overlay.
-//         // The overlay ping via talkreq will trigger a session at the base layer, then
-//         // a session on the (overlay) portal network.
-//         for enr in self.discovery.discv5.table_entries_enr() {
-//             debug!("Pinging {} on portal network", enr);
-//             let ping_result = self.send_ping(U256::from(u64::MAX), enr).await?;
-//             debug!("Portal network Ping result: {:?}", ping_result);
-//         }
-//         Ok(())
-//     }
-// }

@@ -4,10 +4,8 @@ use tokio::sync::mpsc;
 
 use trin_core::cli::TrinConfig;
 use trin_core::portalnet::discovery::Discovery;
-use trin_core::portalnet::protocol::{PortalnetConfig, StateEndpointKind, StateNetworkEndpoint, PortalnetEvents};
-use trin_core::portalnet::overlay::OverlayProtocol;
-use trin_core::utils::setup_overlay_db;
-use std::sync::Arc;
+use trin_core::portalnet::overlay::StateProtocol;
+use trin_core::portalnet::protocol::{PortalnetConfig, StateEndpointKind, StateNetworkEndpoint};
 
 pub mod utils;
 
@@ -58,7 +56,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     };
 
-    let mut discovery = Arc::new(Discovery::new(portalnet_config.clone()).unwrap());
+    let mut discovery = Discovery::new(portalnet_config.clone()).unwrap();
     discovery.start().await.unwrap();
 
     info!(
@@ -67,14 +65,14 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     tokio::spawn(async move {
-        let mut overlay = OverlayProtocol::new(discovery.clone(),portalnet_config.clone());
-        let db = setup_overlay_db(discovery.local_enr());
-        let events = PortalnetEvents::new(discovery, overlay.clone(), db).await;
+        let (mut p2p, events) = StateProtocol::new(discovery, portalnet_config.clone())
+            .await
+            .unwrap();
 
         tokio::spawn(events.process_discv5_requests());
 
         // hacky test: make sure we establish a session with the boot node
-        overlay.ping_bootnodes().await.unwrap();
+        p2p.ping_bootnodes().await.unwrap();
 
         tokio::signal::ctrl_c()
             .await

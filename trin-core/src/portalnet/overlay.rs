@@ -1,17 +1,19 @@
-use crate::utils::{xor_two_values, setup_overlay_db};
+use crate::utils::{setup_overlay_db, xor_two_values};
 use log::debug;
 
+use super::{
+    discovery::Discovery,
+    protocol::{PortalnetConfig, PortalnetEvents, PROTOCOL},
+    types::{FindContent, FindNodes, Message, Ping, Request, SszEnr},
+    utp::UtpListener,
+    Enr, U256,
+};
 use discv5::enr::NodeId;
 use discv5::kbucket::{Filter, KBucketsTable};
 use parking_lot::RwLock;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use crate::portalnet::{Enr, U256};
-use crate::portalnet::discovery::Discovery;
-use crate::portalnet::protocol::{PortalnetConfig, PROTOCOL, PortalnetEvents};
-use crate::portalnet::types::{
-        FindContent, FindNodes, Message, Ping, Request, SszEnr,
-    };
 
 /// Maximum number of ENRs in response to FindNodes.
 const FIND_NODES_MAX_NODES: usize = 32;
@@ -65,15 +67,15 @@ impl Default for OverlayConfig {
 /// The node state for a node in an overlay network on top of Discovery v5.
 #[derive(Clone)]
 pub struct OverlayProtocol {
-    discovery: Arc<Discovery>,
+    pub discovery: Arc<Discovery>,
     // The data radius of the local node.
-    data_radius: Arc<RwLock<U256>>,
+    pub data_radius: Arc<RwLock<U256>>,
     // The overlay routing table of the local node.
-    kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
+    pub kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
 }
 
 impl OverlayProtocol {
-       /// Returns the local ENR of the node.
+    /// Returns the local ENR of the node.
     pub fn local_enr(&self) -> Enr {
         self.discovery.discv5.local_enr()
     }
@@ -199,11 +201,19 @@ impl OverlayProtocol {
 
 #[derive(Clone)]
 pub struct HistoryProtocol {
-    overlay: Arc<OverlayProtocol>
+    pub overlay: Arc<OverlayProtocol>,
 }
 
-impl HistoryProtocol {
-    pub async fn new(mut discovery: Discovery, portal_config: PortalnetConfig) -> Result<(Self, PortalnetEvents), String>  {
+#[derive(Clone)]
+pub struct StateProtocol {
+    pub overlay: Arc<OverlayProtocol>,
+}
+
+impl StateProtocol {
+    pub async fn new(
+        mut discovery: Discovery,
+        portal_config: PortalnetConfig,
+    ) -> Result<(Self, PortalnetEvents), String> {
         let config = OverlayConfig::default();
         let kbuckets = Arc::new(RwLock::new(KBucketsTable::new(
             discovery.local_enr().node_id().into(),
@@ -218,7 +228,8 @@ impl HistoryProtocol {
             .discv5
             .event_stream()
             .await
-            .map_err(|e| e.to_string()).unwrap();
+            .map_err(|e| e.to_string())
+            .unwrap();
 
         let discovery = Arc::new(discovery);
 
@@ -231,20 +242,92 @@ impl HistoryProtocol {
         let overlay = Arc::new(overlay);
         let db = setup_overlay_db(discovery.local_enr());
 
+        let utp_listener = UtpListener {
+            discovery: discovery.clone(),
+            utp_connections: HashMap::new(),
+        };
+
         let events = PortalnetEvents {
             discovery: discovery.clone(),
             overlay: overlay.clone(),
             protocol_receiver,
             db,
+            utp_listener,
         };
 
         let proto = Self {
-            overlay: overlay.clone()
+            overlay: overlay.clone(),
         };
 
         Ok((proto, events))
     }
 
+    /// Convenience call for testing, quick way to ping bootnodes
+    pub async fn ping_bootnodes(&mut self) -> Result<(), String> {
+        // Trigger bonding with bootnodes, at both the base layer and portal overlay.
+        // The overlay ping via talkreq will trigger a session at the base layer, then
+        // a session on the (overlay) portal network.
+        for enr in self.overlay.discovery.discv5.table_entries_enr() {
+            debug!("Pinging {} on portal network", enr);
+            let ping_result = self.overlay.send_ping(U256::from(u64::MAX), enr).await?;
+            debug!("Portal network Ping result: {:?}", ping_result);
+        }
+        Ok(())
+    }
+}
+
+impl HistoryProtocol {
+    pub async fn new(
+        mut discovery: Discovery,
+        portal_config: PortalnetConfig,
+    ) -> Result<(Self, PortalnetEvents), String> {
+        let config = OverlayConfig::default();
+        let kbuckets = Arc::new(RwLock::new(KBucketsTable::new(
+            discovery.local_enr().node_id().into(),
+            config.bucket_pending_timeout,
+            config.max_incoming_per_bucket,
+            config.table_filter,
+            config.bucket_filter,
+        )));
+        let data_radius = Arc::new(RwLock::new(portal_config.data_radius));
+
+        let protocol_receiver = discovery
+            .discv5
+            .event_stream()
+            .await
+            .map_err(|e| e.to_string())
+            .unwrap();
+
+        let discovery = Arc::new(discovery);
+
+        let overlay = OverlayProtocol {
+            discovery: discovery.clone(),
+            data_radius,
+            kbuckets,
+        };
+
+        let overlay = Arc::new(overlay);
+        let db = setup_overlay_db(discovery.local_enr());
+
+        let utp_listener = UtpListener {
+            discovery: discovery.clone(),
+            utp_connections: HashMap::new(),
+        };
+
+        let events = PortalnetEvents {
+            discovery: discovery.clone(),
+            overlay: overlay.clone(),
+            protocol_receiver,
+            db,
+            utp_listener,
+        };
+
+        let proto = Self {
+            overlay: overlay.clone(),
+        };
+
+        Ok((proto, events))
+    }
 
     /// Convenience call for testing, quick way to ping bootnodes
     pub async fn ping_bootnodes(&mut self) -> Result<(), String> {

@@ -1,7 +1,7 @@
 use crate::portalnet::Enr;
 use directories::ProjectDirs;
+use rocksdb::{Options, DB};
 use std::{env, fs};
-use rocksdb::{DB, Options};
 
 const TRIN_DATA_ENV_VAR: &str = "TRIN_DATA_PATH";
 
