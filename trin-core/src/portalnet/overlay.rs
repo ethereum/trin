@@ -1,12 +1,19 @@
-use crate::portalnet::types::SszEnr;
-use crate::portalnet::{Enr, U256};
-use crate::utils::xor_two_values;
+use crate::utils::{xor_two_values, get_data_dir};
 
 use discv5::enr::NodeId;
 use discv5::kbucket::{Filter, KBucketsTable};
 use parking_lot::RwLock;
 use std::sync::Arc;
 use std::time::Duration;
+use crate::portalnet::{Enr, U256};
+use crate::portalnet::discovery::Discovery;
+use crate::portalnet::protocol::{PortalnetConfig, PROTOCOL, PortalnetEvents};
+use crate::portalnet::types::{
+        FindContent, FindNodes, FoundContent, Message, Nodes, Ping, Pong, Request, Response, SszEnr,
+    };
+use discv5::Discv5Event;
+use rocksdb::{Options, DB};
+use log::{debug, error, warn};
 
 /// Maximum number of ENRs in response to FindNodes.
 const FIND_NODES_MAX_NODES: usize = 32;
@@ -39,14 +46,14 @@ impl PartialEq for Node {
 
 /// Configuration parameters for the overlay network.
 #[derive(Clone)]
-pub struct Config {
+pub struct OverlayConfig {
     bucket_pending_timeout: Duration,
     max_incoming_per_bucket: usize,
     table_filter: Option<Box<dyn Filter<Node>>>,
     bucket_filter: Option<Box<dyn Filter<Node>>>,
 }
 
-impl Default for Config {
+impl Default for OverlayConfig {
     fn default() -> Self {
         Self {
             bucket_pending_timeout: Duration::from_secs(60),
@@ -59,29 +66,28 @@ impl Default for Config {
 
 /// The node state for a node in an overlay network on top of Discovery v5.
 #[derive(Clone)]
-pub struct Overlay {
-    // The ENR of the local node.
-    local_enr: Arc<RwLock<Enr>>,
+pub struct OverlayProtocol {
+    discovery: Arc<Discovery>,
     // The data radius of the local node.
     data_radius: Arc<RwLock<U256>>,
-    // The routing table of the local node.
+    // The overlay routing table of the local node.
     kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
 }
 
-impl Overlay {
-    pub fn new(local_enr: Enr, data_radius: U256, config: Config) -> Self {
+impl OverlayProtocol {
+    pub fn new(mut discovery: Arc<Discovery>, portal_config: PortalnetConfig) -> Self {
+        let config = OverlayConfig::default();
         let kbuckets = Arc::new(RwLock::new(KBucketsTable::new(
-            local_enr.node_id().into(),
+            discovery.local_enr().node_id().into(),
             config.bucket_pending_timeout,
             config.max_incoming_per_bucket,
             config.table_filter,
             config.bucket_filter,
         )));
-        let local_enr = Arc::new(RwLock::new(local_enr));
-        let data_radius = Arc::new(RwLock::new(data_radius));
+        let data_radius = Arc::new(RwLock::new(portal_config.data_radius));
 
         Self {
-            local_enr,
+            discovery,
             data_radius,
             kbuckets,
         }
@@ -89,7 +95,7 @@ impl Overlay {
 
     /// Returns the local ENR of the node.
     pub fn local_enr(&self) -> Enr {
-        self.local_enr.read().clone()
+        self.discovery.discv5.local_enr()
     }
 
     // Returns the data radius of the node.
@@ -167,5 +173,59 @@ impl Overlay {
             .iter()
             .map(|entry| entry.node.value.enr().clone())
             .collect()
+    }
+
+    pub async fn send_ping(&self, data_radius: U256, enr: Enr) -> Result<Vec<u8>, String> {
+        let enr_seq = self.discovery.local_enr().seq();
+        let msg = Ping {
+            enr_seq,
+            data_radius,
+        };
+        self.discovery
+            .send_talkreq(
+                enr,
+                PROTOCOL.to_string(),
+                Message::Request(Request::Ping(msg)).to_bytes(),
+            )
+            .await
+    }
+
+    pub async fn send_find_nodes(&self, distances: Vec<u16>, enr: Enr) -> Result<Vec<u8>, String> {
+        let msg = FindNodes { distances };
+        self.discovery
+            .send_talkreq(
+                enr,
+                PROTOCOL.to_string(),
+                Message::Request(Request::FindNodes(msg)).to_bytes(),
+            )
+            .await
+    }
+
+    pub async fn send_find_content(
+        &self,
+        content_key: Vec<u8>,
+        enr: Enr,
+    ) -> Result<Vec<u8>, String> {
+        let msg = FindContent { content_key };
+        self.discovery
+            .send_talkreq(
+                enr,
+                PROTOCOL.to_string(),
+                Message::Request(Request::FindContent(msg)).to_bytes(),
+            )
+            .await
+    }
+
+    /// Convenience call for testing, quick way to ping bootnodes
+    pub async fn ping_bootnodes(&mut self) -> Result<(), String> {
+        // Trigger bonding with bootnodes, at both the base layer and portal overlay.
+        // The overlay ping via talkreq will trigger a session at the base layer, then
+        // a session on the (overlay) portal network.
+        for enr in self.discovery.discv5.table_entries_enr() {
+            debug!("Pinging {} on portal network", enr);
+            let ping_result = self.send_ping(U256::from(u64::MAX), enr).await?;
+            debug!("Portal network Ping result: {:?}", ping_result);
+        }
+        Ok(())
     }
 }

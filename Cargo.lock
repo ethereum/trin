@@ -3185,6 +3185,7 @@ dependencies = [
  "hex",
  "keccak-hash",
  "log 0.4.14",
+ "parking_lot 0.11.1",
  "rlp 0.5.0",
  "serde_json",
  "tokio",
