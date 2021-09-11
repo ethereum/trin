@@ -20,14 +20,16 @@ const MID: [u8; 77] = [
 // distance function as defined at...
 // https://notes.ethereum.org/h58LZcqqRRuarxx4etOnGQ#Storage-Layout
 // todo: measure performance & optimize if necessary
-pub fn distance(node_id: BigInt, content_id: BigInt) -> BigInt {
+pub fn distance(node_id: [u8; 32], content_id: [u8; 32]) -> BigInt {
+    let node_id_int = BigInt::parse_bytes(&node_id, 10).unwrap();
+    let content_id_int = BigInt::parse_bytes(&content_id, 10).unwrap();
     let modulo = BigInt::parse_bytes(&MODULO, 10).unwrap();
     let mid = BigInt::parse_bytes(&MID, 10).unwrap();
     let negative_mid = mid
         .checked_mul(&BigInt::from_bytes_le(Sign::Minus, &[1u8]))
         .unwrap();
 
-    let first_phrase = node_id - content_id + &mid;
+    let first_phrase = node_id_int - content_id_int + &mid;
     // % returns the remainder, we want to return the modulus
     let modulus_result = ((first_phrase % &modulo) + &modulo) % &modulo;
     let delta = modulus_result - &mid;
@@ -48,8 +50,10 @@ mod test {
     // test cases yanked from: https://notes.ethereum.org/h58LZcqqRRuarxx4etOnGQ
     #[test]
     fn test_distance_with_zeros() {
-        let content_id = BigInt::parse_bytes("10".as_bytes(), 10).unwrap();
-        let node_id = BigInt::parse_bytes("10".as_bytes(), 10).unwrap();
+        let mut content_id: [u8; 32] = Default::default();
+        content_id.copy_from_slice("10".as_bytes());
+        let mut node_id: [u8; 32] = Default::default();
+        node_id.copy_from_slice("10".as_bytes());
         let expected = BigInt::parse_bytes("0".as_bytes(), 10).unwrap();
         let calculated_distance = distance(content_id, node_id);
         assert_eq!(calculated_distance, expected);
