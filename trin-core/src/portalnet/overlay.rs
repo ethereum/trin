@@ -113,7 +113,7 @@ impl Overlay {
         if !log2_distances.is_empty() {
             let mut kbuckets = self.kbuckets.write();
             for node in kbuckets
-                .nodes_by_distances(log2_distances, FIND_NODES_MAX_NODES)
+                .nodes_by_distances(&log2_distances, FIND_NODES_MAX_NODES)
                 .into_iter()
                 .map(|entry| entry.node.value.clone())
             {

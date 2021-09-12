@@ -8,6 +8,7 @@ pub mod discovery;
 pub mod overlay;
 pub mod protocol;
 pub mod types;
+pub mod utp;
 
 pub type Enr = discv5::enr::Enr<CombinedKey>;
 
