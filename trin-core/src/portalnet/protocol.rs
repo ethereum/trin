@@ -17,9 +17,12 @@ use super::{
     types::{
         FindContent, FindNodes, FoundContent, HexData, Nodes, Ping, Pong, Request, Response, SszEnr,
     },
+    utp::{UtpListener, UTP_PROTOCOL},
     U256,
 };
 use super::{types::Message, Enr};
+use std::collections::HashMap;
+use std::convert::TryInto;
 
 type Responder<T, E> = mpsc::UnboundedSender<Result<T, E>>;
 
@@ -94,6 +97,7 @@ pub struct PortalnetEvents {
     overlay: Overlay,
     protocol_receiver: mpsc::Receiver<Discv5Event>,
     db: DB,
+    utp_listener: UtpListener,
 }
 
 pub struct JsonRpcHandler {
@@ -206,28 +210,37 @@ impl PortalnetEvents {
                 _ => continue,
             };
 
-            let reply = match self.process_one_request(&request).await {
-                Ok(r) => Message::Response(r).to_bytes(),
-                Err(e) => {
-                    error!("failed to process portal event: {}", e);
-                    e.into_bytes()
-                }
-            };
+            match std::str::from_utf8(request.protocol()) {
+                Ok(protocol) => match protocol {
+                    PROTOCOL => {
+                        let reply = match self.process_one_request(&request).await {
+                            Ok(r) => Message::Response(r).to_bytes(),
+                            Err(e) => {
+                                error!("failed to process portal event: {}", e);
+                                e.into_bytes()
+                            }
+                        };
 
-            if let Err(e) = request.respond(reply) {
-                warn!("failed to send reply: {}", e);
+                        if let Err(e) = request.respond(reply) {
+                            warn!("failed to send reply: {}", e);
+                        }
+                    }
+                    UTP_PROTOCOL => {
+                        self.utp_listener
+                            .process_utp_request(request.body(), request.node_id())
+                            .await;
+                        self.process_utp_byte_stream().await;
+                    }
+                    _ => {
+                        warn!("Non supported protocol : {}", protocol);
+                    }
+                },
+                Err(_) => warn!("Invalid utf8 protocol decode"),
             }
         }
     }
 
     async fn process_one_request(&self, talk_request: &TalkRequest) -> Result<Response, String> {
-        let protocol = std::str::from_utf8(talk_request.protocol())
-            .map_err(|_| "Invalid protocol".to_owned())?;
-
-        if protocol != PROTOCOL {
-            return Err("Invalid protocol".to_owned());
-        }
-
         let request = match Message::from_bytes(talk_request.body()) {
             Ok(Message::Request(r)) => r,
             Ok(_) => return Err("Invalid message".to_owned()),
@@ -275,6 +288,26 @@ impl PortalnetEvents {
 
         Ok(response)
     }
+
+    // This could be handled in the UtpListener impl, but for consistency with data handling
+    // and clarity it can be put here
+    async fn process_utp_byte_stream(&mut self) {
+        for (_, conn) in self.utp_listener.utp_connections.iter_mut() {
+            let received_stream = conn.recv_data_stream.clone();
+            if received_stream.is_empty() {
+                continue;
+            }
+
+            let message_len = u32::from_be_bytes(received_stream[0..4].try_into().unwrap());
+
+            if message_len + 4 >= received_stream.len() as u32 {
+                // handle data function(&received_stream[4..(message_len + 4)]
+
+                // Removed the handled data from the buffer
+                conn.recv_data_stream = received_stream[((message_len + 4) as usize)..].to_owned();
+            }
+        }
+    }
 }
 
 impl PortalnetProtocol {
@@ -301,11 +334,17 @@ impl PortalnetProtocol {
         db_opts.create_if_missing(true);
         let db = DB::open(&db_opts, data_path).unwrap();
 
+        let utp_listener = UtpListener {
+            discovery: discovery.clone(),
+            utp_connections: HashMap::new(),
+        };
+
         let events = PortalnetEvents {
             discovery: discovery.clone(),
             overlay: overlay.clone(),
             protocol_receiver,
             db,
+            utp_listener,
         };
 
         let proto = Self {
