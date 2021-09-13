@@ -1,15 +1,24 @@
 use std::env;
 
-use log::info;
+use log::{debug, error, info};
 use tokio::sync::mpsc;
+use tokio::sync::RwLock;
 
-use trin_core::cli::TrinConfig;
-use trin_core::jsonrpc::launch_jsonrpc_server;
-use trin_core::portalnet::discovery::Discovery;
-use trin_core::portalnet::overlay::StateProtocol;
-use trin_core::portalnet::protocol::{
-    HistoryNetworkEndpoint, JsonRpcHandler, PortalEndpoint, PortalnetConfig, StateNetworkEndpoint,
+use std::sync::Arc;
+use trin_core::{
+    cli::{TrinConfig, HISTORY_NETWORK, STATE_NETWORK},
+    jsonrpc::launch_jsonrpc_server,
+    portalnet::{
+        discovery::Discovery,
+        protocol::{
+            HistoryNetworkEndpoint, JsonRpcHandler, PortalEndpoint, PortalnetConfig,
+            StateNetworkEndpoint,
+        },
+    },
+    utils::setup_overlay_db,
 };
+use trin_history::network::HistoryNetwork;
+use trin_state::network::StateNetwork;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -42,11 +51,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     };
 
-    let mut discovery = Discovery::new(portalnet_config.clone()).unwrap();
-    discovery.start().await.unwrap();
+    // Initialize base discovery protocol
+    let discovery = Arc::new(RwLock::new(
+        Discovery::new(portalnet_config.clone()).unwrap(),
+    ));
+    discovery.write().await.start().await.unwrap();
 
-    // Initialize state sub-network, if selected
-    let (state_tx, state_handler) = if trin_config.networks.iter().any(|val| val == "state") {
+    // Initialize state sub-network jsonrpc handler, if selected
+    let (state_tx, state_handler) = if trin_config.networks.iter().any(|val| val == STATE_NETWORK) {
         let (state_tx, state_rx) = mpsc::unbounded_channel::<StateNetworkEndpoint>();
         let state_handler = match trin_state::initialize(state_rx) {
             Ok(val) => val,
@@ -57,8 +69,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         (None, None)
     };
 
-    // Initialize chain history sub-network, if selected
-    let (history_tx, history_handler) = if trin_config.networks.iter().any(|val| val == "history") {
+    // Initialize chain history sub-network jsonrpc handler, if selected
+    let (history_tx, history_handler) = if trin_config
+        .networks
+        .iter()
+        .any(|val| val == HISTORY_NETWORK)
+    {
         let (history_tx, history_rx) = mpsc::unbounded_channel::<HistoryNetworkEndpoint>();
         let history_handler = match trin_history::initialize(history_rx) {
             Ok(val) => val,
@@ -71,46 +87,105 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Initialize jsonrpc server
     let (jsonrpc_tx, jsonrpc_rx) = mpsc::unbounded_channel::<PortalEndpoint>();
+    let jsonrpc_trin_config = trin_config.clone();
     let web3_server_task = tokio::task::spawn_blocking(|| {
-        launch_jsonrpc_server(trin_config, infura_project_id, jsonrpc_tx);
+        launch_jsonrpc_server(jsonrpc_trin_config, infura_project_id, jsonrpc_tx);
     });
 
+    // Setup Overlay database
+    let db = Arc::new(setup_overlay_db(discovery.read().await.local_enr()));
+
+    // Spawn main JsonRpc Handler
+    let jsonrpc_discovery = Arc::clone(&discovery);
     tokio::spawn(async move {
-        info!(
-            "About to spawn portal p2p with boot nodes: {:?}",
-            portalnet_config.bootnode_enrs
-        );
-
-        let (mut p2p, events) = StateProtocol::new(discovery, portalnet_config)
-            .await
-            .unwrap();
-
         let rpc_handler = JsonRpcHandler {
-            discovery: p2p.overlay.discovery.clone(),
+            discovery: jsonrpc_discovery,
             jsonrpc_rx,
             state_tx,
             history_tx,
         };
 
-        tokio::spawn(events.process_discv5_requests());
         tokio::spawn(rpc_handler.process_jsonrpc_requests());
+
         if let Some(handler) = state_handler {
             tokio::spawn(handler.handle_client_queries());
         }
         if let Some(handler) = history_handler {
             tokio::spawn(handler.handle_client_queries());
         }
+    });
 
-        // hacky test: make sure we establish a session with the boot node
-        p2p.ping_bootnodes().await.unwrap();
+    debug!("Selected networks to spawn: {:?}", trin_config.networks);
 
-        tokio::signal::ctrl_c()
-            .await
-            .expect("failed to pause until ctrl-c");
-    })
-    .await
-    .unwrap();
+    for network in trin_config.networks.iter() {
+        match network.as_str() {
+            STATE_NETWORK => {
+                let state_network_discovery = Arc::clone(&discovery);
+                let state_network_db = Arc::clone(&db);
+                let portalnet_config_state = portalnet_config.clone();
+
+                // Spawn State network
+                tokio::spawn(async move {
+                    info!(
+                        "About to spawn State Network with boot nodes: {:?}",
+                        portalnet_config_state.bootnode_enrs
+                    );
+
+                    let (mut p2p, events) = StateNetwork::new(
+                        state_network_discovery,
+                        state_network_db,
+                        portalnet_config_state,
+                    )
+                    .await
+                    .unwrap();
+
+                    tokio::spawn(events.process_discv5_requests());
+
+                    // hacky test: make sure we establish a session with the boot node
+                    p2p.ping_bootnodes().await.unwrap();
+                })
+                .await
+                .unwrap();
+            }
+            HISTORY_NETWORK => {
+                let history_network_discovery = Arc::clone(&discovery);
+                let history_network_db = Arc::clone(&db);
+                let portalnet_config_history = portalnet_config.clone();
+
+                // Spawn History network
+                tokio::spawn(async move {
+                    info!(
+                        "About to spawn History Network with boot nodes: {:?}",
+                        portalnet_config_history.bootnode_enrs
+                    );
+
+                    let (mut p2p, _events) = HistoryNetwork::new(
+                        history_network_discovery,
+                        history_network_db,
+                        portalnet_config_history,
+                    )
+                    .await
+                    .unwrap();
+
+                    // tokio::spawn(events.process_discv5_requests());
+
+                    // hacky test: make sure we establish a session with the boot node
+                    p2p.ping_bootnodes().await.unwrap();
+                })
+                .await
+                .unwrap();
+            }
+            other => {
+                error!("{} is unsupported network! Terminating Trin...", other);
+                std::process::exit(1);
+            }
+        }
+    }
 
     web3_server_task.await.unwrap();
+
+    tokio::signal::ctrl_c()
+        .await
+        .expect("failed to pause until ctrl-c");
     Ok(())
 }

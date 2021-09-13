@@ -8,6 +8,7 @@ use log::{debug, error, warn};
 use rocksdb::DB;
 use serde_json::Value;
 use tokio::sync::mpsc;
+use tokio::sync::RwLock;
 
 use crate::jsonrpc::Params;
 
@@ -86,15 +87,15 @@ impl Default for PortalnetConfig {
 pub const PROTOCOL: &str = "portal";
 
 pub struct PortalnetEvents {
-    pub discovery: Arc<Discovery>,
+    pub discovery: Arc<RwLock<Discovery>>,
     pub overlay: Arc<OverlayProtocol>,
     pub protocol_receiver: mpsc::Receiver<Discv5Event>,
-    pub db: DB,
+    pub db: Arc<DB>,
     pub utp_listener: UtpListener,
 }
 
 pub struct JsonRpcHandler {
-    pub discovery: Arc<Discovery>,
+    pub discovery: Arc<RwLock<Discovery>>,
     pub jsonrpc_rx: mpsc::UnboundedReceiver<PortalEndpoint>,
     pub state_tx: Option<mpsc::UnboundedSender<StateNetworkEndpoint>>,
     pub history_tx: Option<mpsc::UnboundedSender<HistoryNetworkEndpoint>>,
@@ -107,12 +108,14 @@ impl JsonRpcHandler {
 
             match cmd.kind {
                 NodeInfo => {
-                    let node_id = self.discovery.local_enr().to_base64();
+                    let node_id = self.discovery.read().await.local_enr().to_base64();
                     let _ = cmd.resp.send(Ok(Value::String(node_id)));
                 }
                 RoutingTableInfo => {
                     let routing_table_info = self
                         .discovery
+                        .read()
+                        .await
                         .discv5
                         .table_entries_id()
                         .iter()
@@ -243,15 +246,15 @@ impl PortalnetEvents {
         let response = match request {
             Request::Ping(Ping { .. }) => {
                 debug!("Got overlay ping request {:?}", request);
-                let enr_seq = self.discovery.local_enr().seq();
+                let enr_seq = self.discovery.read().await.local_enr().seq();
                 Response::Pong(Pong {
                     enr_seq: enr_seq,
-                    data_radius: self.overlay.data_radius(),
+                    data_radius: self.overlay.data_radius().await,
                 })
             }
             Request::FindNodes(FindNodes { distances }) => {
                 let distances64: Vec<u64> = distances.iter().map(|x| (*x).into()).collect();
-                let enrs = self.overlay.nodes_by_distance(distances64);
+                let enrs = self.overlay.nodes_by_distance(distances64).await;
                 Response::Nodes(Nodes {
                     // from spec: total = The total number of Nodes response messages being sent.
                     // TODO: support returning multiple messages
@@ -268,7 +271,7 @@ impl PortalnetEvents {
                     })
                 }
                 Ok(None) => {
-                    let enrs = self.overlay.find_nodes_close_to_content(content_key);
+                    let enrs = self.overlay.find_nodes_close_to_content(content_key).await;
                     let empty_payload: Vec<u8> = vec![];
                     Response::FoundContent(FoundContent {
                         enrs: enrs,

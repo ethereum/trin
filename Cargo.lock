@@ -470,8 +470,8 @@ dependencies = [
 
 [[package]]
 name = "discv5"
-version = "0.1.0-beta.9"
-source = "git+https://github.com/sigp/discv5#04e676f05f573c51dc4904a5cabbd88fa5e76267"
+version = "0.1.0-beta.10"
+source = "git+https://github.com/sigp/discv5#10247bbd299227fef20233f2f5a8de9780de09ac"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -3159,7 +3159,6 @@ dependencies = [
  "ipconfig",
  "lazy_static 1.4.0",
  "log 0.4.14",
- "parking_lot 0.11.1",
  "rand 0.8.4",
  "reqwest",
  "rlp 0.5.0",
@@ -3181,12 +3180,13 @@ name = "trin-history"
 version = "0.1.0"
 dependencies = [
  "bytes 1.1.0",
+ "discv5",
  "ethereum-types 0.12.0",
  "hex",
  "keccak-hash",
  "log 0.4.14",
- "parking_lot 0.11.1",
  "rlp 0.5.0",
+ "rocksdb",
  "serde_json",
  "tokio",
  "tracing",
@@ -3198,8 +3198,10 @@ dependencies = [
 name = "trin-state"
 version = "0.1.0"
 dependencies = [
+ "discv5",
  "log 0.4.14",
  "num",
+ "rocksdb",
  "serde_json",
  "tokio",
  "tracing",

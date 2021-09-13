@@ -1,13 +1,18 @@
+pub mod network;
+
 use log::info;
 use serde_json::Value;
 use tokio::sync::mpsc;
 
+use network::HistoryNetwork;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use trin_core::cli::TrinConfig;
 use trin_core::portalnet::discovery::Discovery;
-use trin_core::portalnet::overlay::HistoryProtocol;
 use trin_core::portalnet::protocol::{
     HistoryEndpointKind, HistoryNetworkEndpoint, PortalnetConfig,
 };
+use trin_core::utils::setup_overlay_db;
 
 pub struct HistoryRequestHandler {
     pub history_rx: mpsc::UnboundedReceiver<HistoryNetworkEndpoint>,
@@ -62,6 +67,10 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut discovery = Discovery::new(portalnet_config.clone()).unwrap();
     discovery.start().await.unwrap();
+    let discovery = Arc::new(RwLock::new(discovery));
+
+    // Setup Overlay database
+    let db = Arc::new(setup_overlay_db(discovery.read().await.local_enr()));
 
     info!(
         "About to spawn portal p2p with boot nodes: {:?}",
@@ -69,7 +78,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     tokio::spawn(async move {
-        let (mut p2p, events) = HistoryProtocol::new(discovery, portalnet_config.clone())
+        let (mut p2p, events) = HistoryNetwork::new(discovery, db, portalnet_config)
             .await
             .unwrap();
 

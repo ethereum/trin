@@ -9,9 +9,11 @@ use structopt::StructOpt;
 const DEFAULT_WEB3_IPC_PATH: &str = "/tmp/trin-jsonrpc.ipc";
 const DEFAULT_WEB3_HTTP_PORT: &str = "8545";
 const DEFAULT_DISCOVERY_PORT: &str = "9000";
+pub const HISTORY_NETWORK: &str = "history";
+pub const STATE_NETWORK: &str = "state";
 const DEFAULT_SUBNETWORKS: &str = "history,state";
 
-#[derive(StructOpt, Debug, PartialEq)]
+#[derive(StructOpt, Debug, PartialEq, Clone)]
 #[structopt(
     name = "trin",
     version = "0.0.1",
