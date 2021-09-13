@@ -3,16 +3,16 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use discv5::{Discv5ConfigBuilder, Discv5Event, TalkRequest};
+use discv5::{Discv5Event, TalkRequest};
 use log::{debug, error, warn};
 use rocksdb::{Options, DB};
 use serde_json::Value;
 use tokio::sync::mpsc;
 
-use crate::utils::get_data_dir;
+use crate::{jsonrpc::Params, utils::get_data_dir};
 
 use super::{
-    discovery::{Config as DiscoveryConfig, Discovery},
+    discovery::Discovery,
     overlay::{Config as OverlayConfig, Overlay},
     types::{
         FindContent, FindNodes, FoundContent, HexData, Nodes, Ping, Pong, Request, Response, SszEnr,
@@ -20,8 +20,6 @@ use super::{
     U256,
 };
 use super::{types::Message, Enr};
-use crate::jsonrpc::Params;
-use crate::socket;
 
 type Responder<T, E> = mpsc::UnboundedSender<Result<T, E>>;
 
@@ -280,27 +278,10 @@ impl PortalnetEvents {
 }
 
 impl PortalnetProtocol {
-    pub async fn new(portal_config: PortalnetConfig) -> Result<(Self, PortalnetEvents), String> {
-        let listen_all_ips = SocketAddr::new("0.0.0.0".parse().unwrap(), portal_config.listen_port);
-
-        let external_addr = portal_config
-            .external_addr
-            .or_else(|| socket::stun_for_external(&listen_all_ips))
-            .unwrap_or_else(|| socket::default_local_address(portal_config.listen_port));
-
-        let config = DiscoveryConfig {
-            discv5_config: Discv5ConfigBuilder::default().build(),
-            // This is for defining the ENR:
-            listen_port: external_addr.port(),
-            listen_address: external_addr.ip(),
-            bootnode_enrs: portal_config.bootnode_enrs,
-            private_key: portal_config.private_key,
-            ..Default::default()
-        };
-
-        let mut discovery = Discovery::new(config).unwrap();
-        discovery.start(listen_all_ips).await?;
-
+    pub async fn new(
+        mut discovery: Discovery,
+        portal_config: PortalnetConfig,
+    ) -> Result<(Self, PortalnetEvents), String> {
         let protocol_receiver = discovery
             .discv5
             .event_stream()

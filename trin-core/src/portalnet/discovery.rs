@@ -2,8 +2,10 @@
 
 use super::types::HexData;
 use super::Enr;
+use crate::portalnet::protocol::PortalnetConfig;
+use crate::socket;
 use discv5::enr::{CombinedKey, EnrBuilder, NodeId};
-use discv5::{Discv5, Discv5Config};
+use discv5::{Discv5, Discv5Config, Discv5ConfigBuilder};
 use log::info;
 use std::net::{IpAddr, SocketAddr};
 
@@ -34,10 +36,28 @@ pub struct Discovery {
     pub discv5: Discv5,
     /// Indicates if the discv5 service has been started
     pub started: bool,
+    pub listen_socket: SocketAddr,
 }
 
 impl Discovery {
-    pub fn new(config: Config) -> Result<Self, String> {
+    pub fn new(portal_config: PortalnetConfig) -> Result<Self, String> {
+        let listen_all_ips = SocketAddr::new("0.0.0.0".parse().unwrap(), portal_config.listen_port);
+
+        let external_addr = portal_config
+            .external_addr
+            .or_else(|| socket::stun_for_external(&listen_all_ips))
+            .unwrap_or_else(|| socket::default_local_address(portal_config.listen_port));
+
+        let config = Config {
+            discv5_config: Discv5ConfigBuilder::default().build(),
+            // This is for defining the ENR:
+            listen_port: external_addr.port(),
+            listen_address: external_addr.ip(),
+            bootnode_enrs: portal_config.bootnode_enrs,
+            private_key: portal_config.private_key,
+            ..Default::default()
+        };
+
         let enr_key = match config.private_key {
             Some(val) => CombinedKey::secp256k1_from_bytes(val.0.clone().as_mut_slice()).unwrap(),
             None => CombinedKey::generate_secp256k1(),
@@ -68,13 +88,14 @@ impl Discovery {
         Ok(Self {
             discv5,
             started: false,
+            listen_socket: listen_all_ips,
         })
     }
 
-    pub async fn start(&mut self, listen_socket: SocketAddr) -> Result<(), String> {
+    pub async fn start(&mut self) -> Result<(), String> {
         let _ = self
             .discv5
-            .start(listen_socket)
+            .start(self.listen_socket)
             .await
             .map_err(|e| format!("Failed to start discv5 server: {:?}", e))?;
         self.started = true;
