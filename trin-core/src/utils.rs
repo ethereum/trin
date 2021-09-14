@@ -16,6 +16,30 @@ pub fn xor_two_values(first: &[u8], second: &[u8]) -> Vec<u8> {
         .collect()
 }
 
+pub fn get_data_dir(local_enr: Enr) -> String {
+    let path = env::var(TRIN_DATA_ENV_VAR).unwrap_or_else(|_| get_default_data_dir(local_enr));
+
+    fs::create_dir_all(&path).expect("Unable to create data directory folder");
+    path
+}
+
+pub fn get_default_data_dir(local_enr: Enr) -> String {
+    // Windows: C:\Users\Username\AppData\Roaming\Trin\data
+    // macOS: ~/Library/Application Support/Trin
+    // Unix-like: $HOME/.local/share/trin
+
+    // Append last 8 enr base64 encoded chars to application dir name
+    let mut application_string = "Trin_".to_owned();
+    let len = &local_enr.to_base64().len();
+    let suffix = &local_enr.to_base64()[len - 8..];
+    application_string.push_str(suffix);
+
+    match ProjectDirs::from("", "", &application_string) {
+        Some(proj_dirs) => proj_dirs.data_local_dir().to_str().unwrap().to_string(),
+        None => panic!("Unable to find data directory"),
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -40,29 +64,5 @@ mod test {
         let one = vec![1, 0];
         let two = vec![0, 0, 1];
         xor_two_values(&one, &two);
-    }
-}
-
-pub fn get_data_dir(local_enr: Enr) -> String {
-    let path = env::var(TRIN_DATA_ENV_VAR).unwrap_or_else(|_| get_default_data_dir(local_enr));
-
-    fs::create_dir_all(&path).expect("Unable to create data directory folder");
-    path
-}
-
-pub fn get_default_data_dir(local_enr: Enr) -> String {
-    // Windows: C:\Users\Username\AppData\Roaming\Trin\data
-    // macOS: ~/Library/Application Support/Trin
-    // Unix-like: $HOME/.local/share/trin
-
-    // Append last 8 enr base64 encoded chars to application dir name
-    let mut application_string = "Trin_".to_owned();
-    let len = &local_enr.to_base64().len();
-    let suffix = &local_enr.to_base64()[len - 8..];
-    application_string.push_str(suffix);
-
-    match ProjectDirs::from("", "", &application_string) {
-        Some(proj_dirs) => proj_dirs.data_local_dir().to_str().unwrap().to_string(),
-        None => panic!("Unable to find data directory"),
     }
 }

@@ -8,6 +8,8 @@ use trin_core::portalnet::protocol::{
     PortalnetConfig, PortalnetProtocol, StateEndpointKind, StateNetworkEndpoint,
 };
 
+pub mod utils;
+
 pub struct StateRequestHandler {
     pub state_rx: mpsc::UnboundedReceiver<StateNetworkEndpoint>,
 }
