@@ -4,6 +4,7 @@ use log::debug;
 use reqwest::blocking as reqwest;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
+use std::fmt;
 use std::fs;
 use std::io::{self, Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -41,7 +42,7 @@ impl From<Params> for Value {
 }
 
 #[derive(Debug, Deserialize, Serialize, Validate)]
-struct JsonRequest {
+pub struct JsonRequest {
     #[validate(custom = "validate_jsonrpc_version")]
     pub jsonrpc: String,
     #[serde(default = "default_params")]
@@ -59,6 +60,67 @@ fn validate_jsonrpc_version(jsonrpc: &str) -> Result<(), ValidationError> {
         return Err(ValidationError::new("Unsupported jsonrpc version"));
     }
     Ok(())
+}
+
+/// A JSON-RPC 2.0 notification.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct JsonNotification {
+    pub jsonrpc: String,
+    pub method: String,
+    pub params: Subscription,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Subscription {
+    pub subscription: String,
+    pub result: serde_json::Value,
+}
+
+/// A JSON-RPC 2.0 response.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct JsonResponse {
+    pub jsonrpc: String,
+    pub method: String,
+    pub id: u32,
+    #[serde(flatten)]
+    pub data: JsonResponseData,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(untagged)]
+pub enum JsonResponseData {
+    Error { error: JsonError },
+    Success { result: Value },
+}
+
+impl JsonResponseData {
+    pub fn into_result(self) -> Result<Value, JsonError> {
+        match self {
+            JsonResponseData::Error { error } => Err(error),
+            JsonResponseData::Success { result } => Ok(result),
+        }
+    }
+}
+
+/// A JSON-RPC 2.0 error.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct JsonError {
+    /// The error code
+    pub code: i64,
+    /// The error message
+    pub message: String,
+    /// Additional data
+    pub data: Option<Value>,
+}
+
+impl fmt::Display for JsonError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "(code: {}, message: {}, data: {:?})",
+            self.code, self.message, self.data
+        )
+    }
 }
 
 lazy_static! {
