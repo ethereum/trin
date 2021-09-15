@@ -1,10 +1,12 @@
 use structopt::StructOpt;
 use rocksdb::{Options, DB};
 use trin_core::utils::{get_data_dir};
-use trin_core::portalnet::storage::{PortalStorage, PortalStorageConfig};
+use trin_core::portalnet::storage::{PortalStorage, PortalStorageConfig, DistanceFunction};
 use rand::{distributions::Alphanumeric, Rng};
 use std::process::Command;
 use discv5::enr::NodeId;
+use sha3::{Digest, Sha3_256};
+use std::convert::TryInto;
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
@@ -36,8 +38,11 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let storage_config = PortalStorageConfig {
         storage_capacity_kb: (num_kilobytes / 4) as u64,
         node_id: NodeId::random(),
+        distance_function: DistanceFunction::Xor,
     };
-    let mut storage = PortalStorage::new(&storage_config).unwrap();
+    let mut storage = PortalStorage::new(&storage_config, |key| {
+        sha256(&key)
+    }).unwrap();
 
     for _ in 0..number_of_entries {
         
@@ -72,6 +77,18 @@ fn generate_random_value(number_of_bytes: u32) -> String {
         .map(char::from)
         .collect()
 
+}
+
+// Placeholder content key -> content id conversion function
+fn sha256(key: &String) -> [u8; 32] {
+
+    let mut hasher = Sha3_256::new();
+    hasher.update(key);
+    let mut x = hasher.finalize();
+    let y: &mut[u8; 32] = x.as_mut_slice().try_into().expect("Wrong length");
+    //let z: &[u8; 32] = &*y;
+    y.clone()
+    
 }
 
 // CLI Parameter Handling

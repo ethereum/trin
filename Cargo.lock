@@ -3203,6 +3203,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "sha3",
  "structopt",
  "stunclient",
  "threadpool",
