@@ -109,6 +109,7 @@ impl PortalStorage {
 
     }
     
+    
     pub fn should_store(&self, key: &String) -> bool {
 
         let content_id = self.content_key_to_content_id(key);
@@ -131,7 +132,7 @@ impl PortalStorage {
 
     }
 
-    fn meta_db_insert(&self, content_id: &[u8; 32], value: &String) {
+    fn meta_db_insert(&self, content_id: &[u8; 32], content_key: &String, value: &String) {
 
         let content_id_as_u32: u32 = PortalStorage::byte_vector_to_u32(content_id.clone().to_vec());
 
@@ -139,7 +140,7 @@ impl PortalStorage {
 
         self.meta_db.execute(
             INSERT_QUERY,
-            params![content_id.to_vec(), content_id_as_u32, value_size],
+            params![content_id.to_vec(), content_id_as_u32, content_key, value_size],
         ).unwrap();
 
     }
@@ -165,7 +166,7 @@ impl PortalStorage {
 
         // Store the data 
         self.db.put(&content_id, value).expect("Failed to write to DB");
-        self.meta_db_insert(&content_id, value);
+        self.meta_db_insert(&content_id, &key, value);
 
         // Update the farthest key if this key is either 1.) the first key ever or 2.) farther than the current farthest
         match self.farthest_content_id.as_ref() {
@@ -192,9 +193,7 @@ impl PortalStorage {
             self.db.flush().expect("Failed to flush db.");
             
             match self.find_farthest_content_id() {
-                None => {
-                    error!("Failed to find farthest!");
-                },
+                None => { error!("Failed to find farthest!") },
                 Some(farthest) => {
                     println!("Found new farthest: {}", hex::encode(&farthest));
                     self.farthest_content_id = Some(farthest.clone());
@@ -317,9 +316,6 @@ impl PortalStorage {
 
     pub fn distance_to_content_id(&self, content_id: &[u8; 32]) -> u64 {
 
-        println!("IN DISTANCE TO CONTENT:");
-        println!("Node ID length: {}", &self.node_id.raw().to_vec().len());
-        println!("Content ID length: {}", content_id.len());
         let byte_vector = xor_two_values(
             content_id, &self.node_id.raw().to_vec()
         );
@@ -330,7 +326,7 @@ impl PortalStorage {
 
     // Takes the most significant 8 bytes of a vector and casts them into a u64.
     // The equivalent of a conversion from nanometers to meters.
-    fn byte_vector_to_u64(vec: Vec<u8>) -> u64 {
+    pub fn byte_vector_to_u64(vec: Vec<u8>) -> u64 {
 
         if vec.len() < 8 {
             println!("Error: XOR returned less than 8 bytes.");
@@ -346,7 +342,7 @@ impl PortalStorage {
 
     }
 
-    fn byte_vector_to_u32(vec: Vec<u8>) -> u32 {
+    pub fn byte_vector_to_u32(vec: Vec<u8>) -> u32 {
 
         if vec.len() < 4 {
             println!("Error: XOR returned less than 4 bytes.");
@@ -367,11 +363,12 @@ impl PortalStorage {
 const CREATE_QUERY: &str = "create table if not exists content_metadata (
                                 content_id_long TEXT PRIMARY KEY,
                                 content_id_short INTEGER NOT NULL,
+                                content_key TEXT NOT NULL,
                                 content_size INTEGER
                             )";
 
-const INSERT_QUERY: &str = "INSERT INTO content_metadata (content_id_long, content_id_short, content_size)
-                            VALUES (?1, ?2, ?3)";
+const INSERT_QUERY: &str = "INSERT INTO content_metadata (content_id_long, content_id_short, content_key, content_size)
+                            VALUES (?1, ?2, ?3, ?4)";
 
 const DELETE_QUERY: &str = "DELETE FROM content_metadata
                             WHERE content_id_long = (?1)";
@@ -399,16 +396,16 @@ mod test {
 
     use super::*;
 
-    fn sha256(key: &String) -> String {
+    // Placeholder content key -> content id conversion function
+    fn sha256(key: &String) -> [u8; 32] {
 
         let mut hasher = Sha3_256::new();
         hasher.update(key);
         let mut x = hasher.finalize();
         let y: &mut[u8; 32] = x.as_mut_slice().try_into().expect("Wrong length");
-        let z = y.clone();
-        String::from_utf8(z.to_vec()).unwrap()
-
-    }
+        y.clone()
+    
+    }      
 
     #[test]
     fn test_new() {
@@ -432,7 +429,6 @@ mod test {
             node_id: NodeId::random(),
             distance_function: DistanceFunction::Xor,
         };
-
 
         let mut storage = PortalStorage::new(&storage_config, |key| {
             sha256(&key)
@@ -532,12 +528,21 @@ mod test {
             sha256(&key)
         }).unwrap();
 
-        // As u64: 6443604676644861029
+        // As u64: 3352017618602726004
         let key: String = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".to_string();
-        let distance = storage.distance_to_content_id(&key);
+        let content_id = storage.content_key_to_content_id(&key);
+
+        let distance = storage.distance_to_content_id(&content_id);
 
         // Answer from https://xor.pw/
-        assert_eq!(distance, 1550272167950159632);
+        assert_eq!(distance, 7091804100148652289);
+
+    }
+
+    fn distance_to_content_key(storage: &PortalStorage, key: &String) -> u64 {
+
+        let content_id = storage.content_key_to_content_id(key);
+        storage.distance_to_content_id(&content_id)
 
     }
 
@@ -561,38 +566,31 @@ mod test {
 
         let value = "value".to_string();
 
-        // As u64: 6443604676644861029
-        // Distance from our Node ID: 1550272167950159632
         let key_a: String = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".to_string();
-        println!("A: {}", PortalStorage::byte_vector_to_u64(key_a.as_bytes().to_vec()));
+        println!("A: {}", PortalStorage::byte_vector_to_u64(storage.content_key_to_content_id(&key_a).to_vec()));
         storage.store(&key_a, &value);
-        println!("A Distance: {}", storage.distance_to_content_id(&key_a));
+        println!("A Distance: {}", distance_to_content_key(&storage, &key_a));
 
-        // As u64: 5496766702310214196
-        // Distance from our Node ID: 47169270891360577
+        // This one is the farthest
         let key_b: String = "LHp1PeJ4C6c3nRUc7f6BI1FYULNL8aWB".to_string();
-        println!("B: {}", PortalStorage::byte_vector_to_u64(key_b.as_bytes().to_vec()));
+        println!("B: {}", PortalStorage::byte_vector_to_u64(storage.content_key_to_content_id(&key_b).to_vec()));
         storage.store(&key_b, &value);
-        println!("B Distance: {}", storage.distance_to_content_id(&key_b));
+        println!("B Distance: {}", distance_to_content_key(&storage, &key_b));
+        let b_content_id = storage.content_key_to_content_id(&key_b);
 
-        // As u64: 5218398056166675813
-        // Distance from our Node ID: 325558111434255888
         let key_c: String = "HkybBgUebGtbwdrNDbxDWywtgWlUM8vW".to_string();
-        println!("C: {}", PortalStorage::byte_vector_to_u64(key_c.as_bytes().to_vec()));
+        println!("C: {}", PortalStorage::byte_vector_to_u64(storage.content_key_to_content_id(&key_c).to_vec()));
         storage.store(&key_c, &value);
-        println!("C Distance: {}", storage.distance_to_content_id(&key_c));
+        println!("C Distance: {}", distance_to_content_key(&storage, &key_c));
 
-        // This one is the farthest.
-        // As u64: 7450166868918420849
-        // Distance from our Node ID: 3137789897711697412
         let key_d: String = "gdOKkDEq9XFs2Tzay4Ecuw0obIISGw9Y".to_string();
-        println!("D: {}", PortalStorage::byte_vector_to_u64(key_d.as_bytes().to_vec()));
+        println!("D: {}", PortalStorage::byte_vector_to_u64(storage.content_key_to_content_id(&key_d).to_vec()));
         storage.store(&key_d, &value);
-        println!("D Distance: {}", storage.distance_to_content_id(&key_d));
+        println!("D Distance: {}", distance_to_content_key(&storage, &key_d));
         
         let result = storage.find_farthest_content_id().unwrap();
 
-        assert_eq!(result, key_d);
+        assert_eq!(result, b_content_id);
 
     }
 
