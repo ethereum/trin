@@ -360,6 +360,7 @@ impl PortalStorage {
 
 }
 
+// SQLite Statements
 const CREATE_QUERY: &str = "create table if not exists content_metadata (
                                 content_id_long TEXT PRIMARY KEY,
                                 content_id_short INTEGER NOT NULL,
@@ -380,6 +381,7 @@ const XOR_FIND_FARTHEST_QUERY: &str = "SELECT
 
 const TOTAL_DATA_SIZE_QUERY: &str = "SELECT SUM(content_size) FROM content_metadata";
 
+// SQLite Result Containers
 struct ContentId {
     id_long: Vec<u8>,
 }
@@ -397,7 +399,7 @@ mod test {
     use super::*;
 
     // Placeholder content key -> content id conversion function
-    fn sha256(key: &String) -> [u8; 32] {
+    fn sha256(key: &str) -> [u8; 32] {
 
         let mut hasher = Sha3_256::new();
         hasher.update(key);

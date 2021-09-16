@@ -80,14 +80,14 @@ fn generate_random_value(number_of_bytes: u32) -> String {
 }
 
 // Placeholder content key -> content id conversion function
-fn sha256(key: &String) -> [u8; 32] {
+fn sha256(key: &str) -> [u8; 32] {
 
     let mut hasher = Sha3_256::new();
     hasher.update(key);
     let mut x = hasher.finalize();
     let y: &mut[u8; 32] = x.as_mut_slice().try_into().expect("Wrong length");
     //let z: &[u8; 32] = &*y;
-    y.clone()
+    *y
     
 }
 
