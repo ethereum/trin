@@ -865,16 +865,9 @@ impl UtpStream {
 
 #[cfg(test)]
 mod tests {
-    use crate::portalnet::discovery::{Config as DiscoveryConfig, Discovery};
-    use crate::portalnet::types::HexData;
-    use crate::portalnet::utp::{ConnectionKey, Packet, PacketHeader, Type, UtpListener, VERSION};
-    use crate::portalnet::Enr;
-    use discv5::{Discv5ConfigBuilder, Discv5Event, TalkRequest};
-    use std::collections::{BTreeMap, HashMap};
+    use crate::portalnet::utp::{Packet, PacketHeader, Type, VERSION};
+    use std::collections::BTreeMap;
     use std::convert::TryFrom;
-    use std::net::SocketAddr;
-    use std::sync::Arc;
-    use tokio::sync::mpsc;
 
     #[test]
     fn test_decode_packet() {
