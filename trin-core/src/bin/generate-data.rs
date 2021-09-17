@@ -2,11 +2,13 @@ use structopt::StructOpt;
 use rocksdb::{Options, DB};
 use trin_core::utils::{get_data_dir};
 use trin_core::portalnet::storage::{PortalStorage, PortalStorageConfig, DistanceFunction};
+use trin_core::portalnet::{U256};
 use rand::{distributions::Alphanumeric, Rng};
 use std::process::Command;
 use discv5::enr::NodeId;
 use sha3::{Digest, Sha3_256};
 use std::convert::TryInto;
+
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
@@ -30,7 +32,6 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // For every 1 kb of data we store (key + value), RocksDB tends to grow by this many kb on disk...
     // ...but this is a crude empirical estimation that works mainly with default value data size. 
-    // TODO: Use perf::memory_usage_stats to be more accurate with all data sizes.
     let data_overhead = 1.1783;
     let number_of_entries = ( (num_kilobytes * 1000) as f64 / (size_of_values) as f64 ) / data_overhead;
     let number_of_entries = number_of_entries.round() as u32;
@@ -80,16 +81,15 @@ fn generate_random_value(number_of_bytes: u32) -> String {
 }
 
 // Placeholder content key -> content id conversion function
-fn sha256(key: &str) -> [u8; 32] {
+fn sha256(key: &str) -> U256 {
 
     let mut hasher = Sha3_256::new();
     hasher.update(key);
     let mut x = hasher.finalize();
-    let y: &mut[u8; 32] = x.as_mut_slice().try_into().expect("Wrong length");
-    //let z: &[u8; 32] = &*y;
-    *y
-    
-}
+    let y: &mut[u8; 32] = x.as_mut_slice().try_into().expect("try_into failed in hash placeholder");
+    U256::from(y.clone())
+
+}      
 
 // CLI Parameter Handling
 #[derive(StructOpt, Debug, PartialEq)]

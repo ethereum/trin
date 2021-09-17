@@ -6,6 +6,7 @@ use std::fs;
 use log::{error};
 use hex;
 use std::convert::TryInto;
+use super::U256;
 
 #[derive(Copy, Clone)]
 pub enum DistanceFunction {
@@ -13,7 +14,7 @@ pub enum DistanceFunction {
     State,
 }
 
-type ContentKeyToIdDerivationFunction = dyn Fn(&String) -> [u8; 32];
+type ContentKeyToIdDerivationFunction = dyn Fn(&String) -> U256;
 
 pub struct PortalStorageConfig  {
 
@@ -38,7 +39,7 @@ pub struct PortalStorage {
 
 impl PortalStorage {
 
-    pub fn new(config: &PortalStorageConfig, convert_function: impl Fn(&String) -> [u8; 32] + 'static) -> Result<Self, String> {
+    pub fn new(config: &PortalStorageConfig, convert_function: impl Fn(&String) -> U256 + 'static) -> Result<Self, String> {
 
         // Create DB interfaces
         let db = PortalStorage::setup_rocksdb();
@@ -105,7 +106,13 @@ impl PortalStorage {
     // Calls the content_key_to_id callback closure that was passed in.
     pub fn content_key_to_content_id(&self, key: &String) -> [u8; 32] {
 
-        (self.content_key_to_id_function)(key)
+        let id_as_u256: U256 = (self.content_key_to_id_function)(key);
+
+        let mut w: [u8; 32] = [0; 32];
+        let y: &mut[u8; 32] = &mut w;
+        id_as_u256.to_big_endian(y);
+
+        y.clone()
 
     }
     
@@ -395,17 +402,16 @@ mod test {
 
     use sha3::{Digest, Sha3_256};
     use std::convert::TryInto;
-
     use super::*;
 
     // Placeholder content key -> content id conversion function
-    fn sha256(key: &str) -> [u8; 32] {
+    fn sha256(key: &str) -> U256 {
 
         let mut hasher = Sha3_256::new();
         hasher.update(key);
         let mut x = hasher.finalize();
-        let y: &mut[u8; 32] = x.as_mut_slice().try_into().expect("Wrong length");
-        y.clone()
+        let y: &mut[u8; 32] = x.as_mut_slice().try_into().expect("try_into failed in hash placeholder");
+        U256::from(y.clone())
     
     }      
 
