@@ -11,6 +11,8 @@ use std::net::{TcpListener, TcpStream};
 #[cfg(unix)]
 use std::os::unix;
 
+use std::error::Error;
+use std::fmt;
 use std::sync::Mutex;
 use std::{panic, process};
 use threadpool::ThreadPool;
@@ -40,18 +42,21 @@ impl From<Params> for Value {
     }
 }
 
+impl Default for Params {
+    fn default() -> Self {
+        Params::None
+    }
+}
+
+/// A JSON-RPC 2.0 request.
 #[derive(Debug, Deserialize, Serialize, Validate)]
 struct JsonRequest {
     #[validate(custom = "validate_jsonrpc_version")]
     pub jsonrpc: String,
-    #[serde(default = "default_params")]
+    #[serde(default = "Params::default")]
     pub params: Params,
     pub method: String,
     pub id: u32,
-}
-
-fn default_params() -> Params {
-    Params::None
 }
 
 fn validate_jsonrpc_version(jsonrpc: &str) -> Result<(), ValidationError> {
@@ -59,6 +64,55 @@ fn validate_jsonrpc_version(jsonrpc: &str) -> Result<(), ValidationError> {
         return Err(ValidationError::new("Unsupported jsonrpc version"));
     }
     Ok(())
+}
+
+/// A JSON-RPC 2.0 notification.
+#[derive(Debug, Deserialize, Serialize)]
+pub struct JsonNotification {
+    pub jsonrpc: String,
+    pub method: String,
+    pub params: Params,
+}
+
+/// A JSON-RPC 2.0 response.
+#[derive(Debug, Deserialize, Serialize)]
+pub struct JsonResponse<T> {
+    pub id: u32,
+    pub jsonrpc: String,
+    #[serde(flatten)]
+    pub data: JsonResponseData<T>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum JsonResponseData<T> {
+    Error { error: JsonError },
+    Success { result: T },
+}
+
+impl<T> From<JsonResponseData<T>> for Result<T, JsonError> {
+    fn from(data: JsonResponseData<T>) -> Self {
+        match data {
+            JsonResponseData::Error { error } => Err(error),
+            JsonResponseData::Success { result } => Ok(result),
+        }
+    }
+}
+
+/// A JSON-RPC 2.0 error.
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct JsonError {
+    pub code: i64,
+    pub message: String,
+    pub data: Option<Value>,
+}
+
+impl Error for JsonError {}
+
+impl fmt::Display for JsonError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "(code: {}, message: {}, data: {:?})", self.code, self.message, self.data)
+    }
 }
 
 lazy_static! {
@@ -378,6 +432,7 @@ fn get_infura_url(infura_project_id: &str) -> String {
 #[cfg(test)]
 mod test {
     use super::*;
+    use std::collections::HashMap;
     use rstest::rstest;
     use validator::ValidationErrors;
 
@@ -420,8 +475,38 @@ mod test {
     #[case("[[0]]", Params::Array(vec![Value::Array(vec![Value::from(0)])]))]
     #[case("[[]]", Params::Array(vec![Value::Array(vec![])]))]
     #[case("[{\"key\": \"value\"}]", Params::Array(vec![Value::Object(expected_map())]))]
-    fn request_params_deserialization(#[case] input: &str, #[case] expected: Params) {
+    fn params_deserialization(#[case] input: &str, #[case] expected: Params) {
         let deserialized: Params = serde_json::from_str(input).unwrap();
         assert_eq!(deserialized, expected);
+    }
+
+    #[test]
+    fn response_deserialization_success() {
+        let input = r#"{"jsonrpc": "2.0", "id": 1, "result": true}"#;
+        let response: JsonResponse<bool> = serde_json::from_str(input).unwrap();
+        let result: Result<bool, JsonError> = response.data.into();
+        assert_eq!(response.id, 1);
+        assert_eq!(result.unwrap(), true);
+    }
+
+    #[test]
+    fn response_deserialization_error() {
+        let input = r#"{"jsonrpc": "2.0", "id": 1, "error": {"code": -32700, "message": "Parse error"}}"#;
+        let response: JsonResponse<bool> = serde_json::from_str(input).unwrap();
+        let result: Result<bool, JsonError> = response.data.into();
+        let error = result.unwrap_err();
+        assert_eq!(response.id, 1);
+        assert_eq!(error.code, -32700);
+        assert_eq!(error.message, "Parse error".to_owned());
+        assert_eq!(error.data, None);
+    }
+
+    #[test]
+    fn notification_deserialization() {
+        let input = r#"{"jsonrpc": "2.0", "method": "eth_subscription", "params": {"subscription": "0x0"}}"#;
+        let notification: JsonNotification = serde_json::from_str(input).unwrap();
+        let params: HashMap<String, String> = serde_json::from_value(notification.params.into()).unwrap();
+        assert_eq!(notification.method, "eth_subscription".to_owned());
+        assert_eq!(params.get("subscription"), Some(&"0x0".to_owned()));
     }
 }
