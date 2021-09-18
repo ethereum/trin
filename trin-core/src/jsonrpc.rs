@@ -111,7 +111,11 @@ impl Error for JsonError {}
 
 impl fmt::Display for JsonError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "(code: {}, message: {}, data: {:?})", self.code, self.message, self.data)
+        write!(
+            f,
+            "(code: {}, message: {}, data: {:?})",
+            self.code, self.message, self.data
+        )
     }
 }
 
@@ -434,6 +438,7 @@ mod test {
     use super::*;
     use std::collections::HashMap;
     use rstest::rstest;
+    use std::collections::HashMap;
     use validator::ValidationErrors;
 
     #[test]
@@ -491,7 +496,8 @@ mod test {
 
     #[test]
     fn response_deserialization_error() {
-        let input = r#"{"jsonrpc": "2.0", "id": 1, "error": {"code": -32700, "message": "Parse error"}}"#;
+        let input =
+            r#"{"jsonrpc": "2.0", "id": 1, "error": {"code": -32700, "message": "Parse error"}}"#;
         let response: JsonResponse<bool> = serde_json::from_str(input).unwrap();
         let result: Result<bool, JsonError> = response.data.into();
         let error = result.unwrap_err();
@@ -505,7 +511,8 @@ mod test {
     fn notification_deserialization() {
         let input = r#"{"jsonrpc": "2.0", "method": "eth_subscription", "params": {"subscription": "0x0"}}"#;
         let notification: JsonNotification = serde_json::from_str(input).unwrap();
-        let params: HashMap<String, String> = serde_json::from_value(notification.params.into()).unwrap();
+        let params: HashMap<String, String> =
+            serde_json::from_value(notification.params.into()).unwrap();
         assert_eq!(notification.method, "eth_subscription".to_owned());
         assert_eq!(params.get("subscription"), Some(&"0x0".to_owned()));
     }
