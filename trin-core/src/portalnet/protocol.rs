@@ -5,15 +5,15 @@ use std::sync::Arc;
 
 use discv5::{Discv5Event, TalkRequest};
 use log::{debug, error, warn};
-use rocksdb::{Options, DB};
+use rocksdb::DB;
 use serde_json::Value;
 use tokio::sync::mpsc;
+use tokio::sync::RwLock;
 
-use crate::{jsonrpc::Params, utils::get_data_dir};
+use crate::jsonrpc::Params;
 
 use super::{
     discovery::Discovery,
-    overlay::{Config as OverlayConfig, Overlay},
     types::{
         FindContent, FindNodes, FoundContent, HexData, Nodes, Ping, Pong, Request, Response, SszEnr,
     },
@@ -21,7 +21,7 @@ use super::{
     U256,
 };
 use super::{types::Message, Enr};
-use std::collections::HashMap;
+use crate::portalnet::overlay::OverlayProtocol;
 use std::convert::TryInto;
 
 type Responder<T, E> = mpsc::UnboundedSender<Result<T, E>>;
@@ -86,22 +86,16 @@ impl Default for PortalnetConfig {
 
 pub const PROTOCOL: &str = "portal";
 
-#[derive(Clone)]
-pub struct PortalnetProtocol {
-    pub discovery: Arc<Discovery>,
-    pub overlay: Overlay,
-}
-
 pub struct PortalnetEvents {
-    discovery: Arc<Discovery>,
-    overlay: Overlay,
-    protocol_receiver: mpsc::Receiver<Discv5Event>,
-    db: DB,
-    utp_listener: UtpListener,
+    pub discovery: Arc<RwLock<Discovery>>,
+    pub overlay: Arc<OverlayProtocol>,
+    pub protocol_receiver: mpsc::Receiver<Discv5Event>,
+    pub db: Arc<DB>,
+    pub utp_listener: UtpListener,
 }
 
 pub struct JsonRpcHandler {
-    pub discovery: Arc<Discovery>,
+    pub discovery: Arc<RwLock<Discovery>>,
     pub jsonrpc_rx: mpsc::UnboundedReceiver<PortalEndpoint>,
     pub state_tx: Option<mpsc::UnboundedSender<StateNetworkEndpoint>>,
     pub history_tx: Option<mpsc::UnboundedSender<HistoryNetworkEndpoint>>,
@@ -114,12 +108,14 @@ impl JsonRpcHandler {
 
             match cmd.kind {
                 NodeInfo => {
-                    let node_id = self.discovery.local_enr().to_base64();
+                    let node_id = self.discovery.read().await.local_enr().to_base64();
                     let _ = cmd.resp.send(Ok(Value::String(node_id)));
                 }
                 RoutingTableInfo => {
                     let routing_table_info = self
                         .discovery
+                        .read()
+                        .await
                         .discv5
                         .table_entries_id()
                         .iter()
@@ -250,15 +246,15 @@ impl PortalnetEvents {
         let response = match request {
             Request::Ping(Ping { .. }) => {
                 debug!("Got overlay ping request {:?}", request);
-                let enr_seq = self.discovery.local_enr().seq();
+                let enr_seq = self.discovery.read().await.local_enr().seq();
                 Response::Pong(Pong {
                     enr_seq: enr_seq,
-                    data_radius: self.overlay.data_radius(),
+                    data_radius: self.overlay.data_radius().await,
                 })
             }
             Request::FindNodes(FindNodes { distances }) => {
                 let distances64: Vec<u64> = distances.iter().map(|x| (*x).into()).collect();
-                let enrs = self.overlay.nodes_by_distance(distances64);
+                let enrs = self.overlay.nodes_by_distance(distances64).await;
                 Response::Nodes(Nodes {
                     // from spec: total = The total number of Nodes response messages being sent.
                     // TODO: support returning multiple messages
@@ -275,7 +271,7 @@ impl PortalnetEvents {
                     })
                 }
                 Ok(None) => {
-                    let enrs = self.overlay.find_nodes_close_to_content(content_key);
+                    let enrs = self.overlay.find_nodes_close_to_content(content_key).await;
                     let empty_payload: Vec<u8> = vec![];
                     Response::FoundContent(FoundContent {
                         enrs: enrs,
@@ -307,105 +303,5 @@ impl PortalnetEvents {
                 conn.recv_data_stream = received_stream[((message_len + 4) as usize)..].to_owned();
             }
         }
-    }
-}
-
-impl PortalnetProtocol {
-    pub async fn new(
-        mut discovery: Discovery,
-        portal_config: PortalnetConfig,
-    ) -> Result<(Self, PortalnetEvents), String> {
-        let protocol_receiver = discovery
-            .discv5
-            .event_stream()
-            .await
-            .map_err(|e| e.to_string())?;
-
-        let overlay = Overlay::new(
-            discovery.local_enr(),
-            portal_config.data_radius,
-            OverlayConfig::default(),
-        );
-
-        let discovery = Arc::new(discovery);
-        let data_path = get_data_dir(discovery.local_enr());
-
-        let mut db_opts = Options::default();
-        db_opts.create_if_missing(true);
-        let db = DB::open(&db_opts, data_path).unwrap();
-
-        let utp_listener = UtpListener {
-            discovery: discovery.clone(),
-            utp_connections: HashMap::new(),
-        };
-
-        let events = PortalnetEvents {
-            discovery: discovery.clone(),
-            overlay: overlay.clone(),
-            protocol_receiver,
-            db,
-            utp_listener,
-        };
-
-        let proto = Self {
-            discovery: discovery.clone(),
-            overlay: overlay.clone(),
-        };
-
-        Ok((proto, events))
-    }
-
-    pub async fn send_ping(&self, data_radius: U256, enr: Enr) -> Result<Vec<u8>, String> {
-        let enr_seq = self.discovery.local_enr().seq();
-        let msg = Ping {
-            enr_seq,
-            data_radius,
-        };
-        self.discovery
-            .send_talkreq(
-                enr,
-                PROTOCOL.to_string(),
-                Message::Request(Request::Ping(msg)).to_bytes(),
-            )
-            .await
-    }
-
-    pub async fn send_find_nodes(&self, distances: Vec<u16>, enr: Enr) -> Result<Vec<u8>, String> {
-        let msg = FindNodes { distances };
-        self.discovery
-            .send_talkreq(
-                enr,
-                PROTOCOL.to_string(),
-                Message::Request(Request::FindNodes(msg)).to_bytes(),
-            )
-            .await
-    }
-
-    pub async fn send_find_content(
-        &self,
-        content_key: Vec<u8>,
-        enr: Enr,
-    ) -> Result<Vec<u8>, String> {
-        let msg = FindContent { content_key };
-        self.discovery
-            .send_talkreq(
-                enr,
-                PROTOCOL.to_string(),
-                Message::Request(Request::FindContent(msg)).to_bytes(),
-            )
-            .await
-    }
-
-    /// Convenience call for testing, quick way to ping bootnodes
-    pub async fn ping_bootnodes(&mut self) -> Result<(), String> {
-        // Trigger bonding with bootnodes, at both the base layer and portal overlay.
-        // The overlay ping via talkreq will trigger a session at the base layer, then
-        // a session on the (overlay) portal network.
-        for enr in self.discovery.discv5.table_entries_enr() {
-            debug!("Pinging {} on portal network", enr);
-            let ping_result = self.send_ping(U256::from(u64::MAX), enr).await?;
-            debug!("Portal network Ping result: {:?}", ping_result);
-        }
-        Ok(())
     }
 }

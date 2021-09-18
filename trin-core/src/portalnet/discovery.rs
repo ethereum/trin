@@ -32,6 +32,7 @@ impl Default for Config {
 
 pub type ProtocolRequest = Vec<u8>;
 
+/// Base Node Discovery Protocol v5 layer
 pub struct Discovery {
     pub discv5: Discv5,
     /// Indicates if the discv5 service has been started

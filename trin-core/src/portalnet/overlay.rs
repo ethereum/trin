@@ -1,12 +1,16 @@
-use crate::portalnet::types::SszEnr;
-use crate::portalnet::{Enr, U256};
 use crate::utils::xor_two_values;
 
+use super::{
+    discovery::Discovery,
+    protocol::PROTOCOL,
+    types::{FindContent, FindNodes, Message, Ping, Request, SszEnr},
+    Enr, U256,
+};
 use discv5::enr::NodeId;
 use discv5::kbucket::{Filter, KBucketsTable};
-use parking_lot::RwLock;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::RwLock;
 
 /// Maximum number of ENRs in response to FindNodes.
 const FIND_NODES_MAX_NODES: usize = 32;
@@ -39,14 +43,14 @@ impl PartialEq for Node {
 
 /// Configuration parameters for the overlay network.
 #[derive(Clone)]
-pub struct Config {
-    bucket_pending_timeout: Duration,
-    max_incoming_per_bucket: usize,
-    table_filter: Option<Box<dyn Filter<Node>>>,
-    bucket_filter: Option<Box<dyn Filter<Node>>>,
+pub struct OverlayConfig {
+    pub bucket_pending_timeout: Duration,
+    pub max_incoming_per_bucket: usize,
+    pub table_filter: Option<Box<dyn Filter<Node>>>,
+    pub bucket_filter: Option<Box<dyn Filter<Node>>>,
 }
 
-impl Default for Config {
+impl Default for OverlayConfig {
     fn default() -> Self {
         Self {
             bucket_pending_timeout: Duration::from_secs(60),
@@ -57,48 +61,32 @@ impl Default for Config {
     }
 }
 
-/// The node state for a node in an overlay network on top of Discovery v5.
+/// Overlay protocol is a layer on top of discv5 that handles all requests from the overlay networks
+/// (state, history etc.) and dispatch them to the discv5 protocol TalkReq. Each network should
+/// implement the overlay protocol and the overlay protocol is where we can encapsulate the logic for
+/// handling common network requests/responses.
 #[derive(Clone)]
-pub struct Overlay {
-    // The ENR of the local node.
-    local_enr: Arc<RwLock<Enr>>,
+pub struct OverlayProtocol {
+    pub discovery: Arc<RwLock<Discovery>>,
     // The data radius of the local node.
-    data_radius: Arc<RwLock<U256>>,
-    // The routing table of the local node.
-    kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
+    pub data_radius: Arc<RwLock<U256>>,
+    // The overlay routing table of the local node.
+    pub kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
 }
 
-impl Overlay {
-    pub fn new(local_enr: Enr, data_radius: U256, config: Config) -> Self {
-        let kbuckets = Arc::new(RwLock::new(KBucketsTable::new(
-            local_enr.node_id().into(),
-            config.bucket_pending_timeout,
-            config.max_incoming_per_bucket,
-            config.table_filter,
-            config.bucket_filter,
-        )));
-        let local_enr = Arc::new(RwLock::new(local_enr));
-        let data_radius = Arc::new(RwLock::new(data_radius));
-
-        Self {
-            local_enr,
-            data_radius,
-            kbuckets,
-        }
-    }
-
+impl OverlayProtocol {
     /// Returns the local ENR of the node.
-    pub fn local_enr(&self) -> Enr {
-        self.local_enr.read().clone()
+    pub async fn local_enr(&self) -> Enr {
+        self.discovery.read().await.discv5.local_enr()
     }
 
     // Returns the data radius of the node.
-    pub fn data_radius(&self) -> U256 {
-        self.data_radius.read().clone()
+    pub async fn data_radius(&self) -> U256 {
+        self.data_radius.read().await.clone()
     }
 
     /// Returns a vector of the ENRs of the closest nodes by the given log2 distances.
-    pub fn nodes_by_distance(&self, mut log2_distances: Vec<u64>) -> Vec<Enr> {
+    pub async fn nodes_by_distance(&self, mut log2_distances: Vec<u64>) -> Vec<Enr> {
         let mut nodes_to_send = Vec::new();
         log2_distances.sort_unstable();
         log2_distances.dedup();
@@ -106,12 +94,12 @@ impl Overlay {
         let mut log2_distances = log2_distances.as_slice();
         if let Some(0) = log2_distances.first() {
             // If the distance is 0 send our local ENR.
-            nodes_to_send.push(self.local_enr());
+            nodes_to_send.push(self.local_enr().await);
             log2_distances = &log2_distances[1..];
         }
 
         if !log2_distances.is_empty() {
-            let mut kbuckets = self.kbuckets.write();
+            let mut kbuckets = self.kbuckets.write().await;
             for node in kbuckets
                 .nodes_by_distances(&log2_distances, FIND_NODES_MAX_NODES)
                 .into_iter()
@@ -124,12 +112,13 @@ impl Overlay {
     }
 
     /// Returns list of nodes closer to content than self, sorted by distance.
-    pub fn find_nodes_close_to_content(&self, content_key: Vec<u8>) -> Vec<SszEnr> {
-        let self_node_id = self.local_enr().node_id();
+    pub async fn find_nodes_close_to_content(&self, content_key: Vec<u8>) -> Vec<SszEnr> {
+        let self_node_id = self.local_enr().await.node_id();
         let self_distance = xor_two_values(&content_key, &self_node_id.raw().to_vec());
 
         let mut nodes_with_distance: Vec<(Vec<u8>, Enr)> = self
             .table_entries_enr()
+            .await
             .into_iter()
             .map(|enr| {
                 (
@@ -152,20 +141,69 @@ impl Overlay {
     }
 
     /// Returns a vector of all ENR node IDs of nodes currently contained in the routing table.
-    pub fn table_entries_id(&self) -> Vec<NodeId> {
+    pub async fn table_entries_id(&self) -> Vec<NodeId> {
         self.kbuckets
             .write()
+            .await
             .iter()
             .map(|entry| *entry.node.key.preimage())
             .collect()
     }
 
     /// Returns a vector of all the ENRs of nodes currently contained in the routing table.
-    pub fn table_entries_enr(&self) -> Vec<Enr> {
+    pub async fn table_entries_enr(&self) -> Vec<Enr> {
         self.kbuckets
             .write()
+            .await
             .iter()
             .map(|entry| entry.node.value.enr().clone())
             .collect()
+    }
+
+    pub async fn send_ping(&self, data_radius: U256, enr: Enr) -> Result<Vec<u8>, String> {
+        let enr_seq = self.discovery.read().await.local_enr().seq();
+        let msg = Ping {
+            enr_seq,
+            data_radius,
+        };
+        self.discovery
+            .write()
+            .await
+            .send_talkreq(
+                enr,
+                PROTOCOL.to_string(),
+                Message::Request(Request::Ping(msg)).to_bytes(),
+            )
+            .await
+    }
+
+    pub async fn send_find_nodes(&self, distances: Vec<u16>, enr: Enr) -> Result<Vec<u8>, String> {
+        let msg = FindNodes { distances };
+        self.discovery
+            .write()
+            .await
+            .send_talkreq(
+                enr,
+                PROTOCOL.to_string(),
+                Message::Request(Request::FindNodes(msg)).to_bytes(),
+            )
+            .await
+    }
+
+    pub async fn send_find_content(
+        &self,
+        content_key: Vec<u8>,
+        enr: Enr,
+    ) -> Result<Vec<u8>, String> {
+        let msg = FindContent { content_key };
+        self.discovery
+            .write()
+            .await
+            .send_talkreq(
+                enr,
+                PROTOCOL.to_string(),
+                Message::Request(Request::FindContent(msg)).to_bytes(),
+            )
+            .await
     }
 }

@@ -1,5 +1,6 @@
 use crate::portalnet::Enr;
 use directories::ProjectDirs;
+use rocksdb::{Options, DB};
 use std::{env, fs};
 
 const TRIN_DATA_ENV_VAR: &str = "TRIN_DATA_PATH";
@@ -38,6 +39,13 @@ pub fn get_default_data_dir(local_enr: Enr) -> String {
         Some(proj_dirs) => proj_dirs.data_local_dir().to_str().unwrap().to_string(),
         None => panic!("Unable to find data directory"),
     }
+}
+
+pub fn setup_overlay_db(local_enr: Enr) -> DB {
+    let data_path = get_data_dir(local_enr);
+    let mut db_opts = Options::default();
+    db_opts.create_if_missing(true);
+    DB::open(&db_opts, data_path).unwrap()
 }
 
 #[cfg(test)]
