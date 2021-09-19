@@ -2,14 +2,18 @@ use log::info;
 use serde_json::Value;
 use tokio::sync::mpsc;
 
+use crate::events::StateEvents;
+use discv5::TalkRequest;
 use network::StateNetwork;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use trin_core::cli::TrinConfig;
 use trin_core::portalnet::discovery::Discovery;
+use trin_core::portalnet::events::PortalnetEvents;
 use trin_core::portalnet::protocol::{PortalnetConfig, StateEndpointKind, StateNetworkEndpoint};
 use trin_core::utils::setup_overlay_db;
 
+pub mod events;
 pub mod network;
 pub mod utils;
 
@@ -68,16 +72,32 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db = Arc::new(setup_overlay_db(discovery.read().await.local_enr()));
 
     info!(
-        "About to spawn portal p2p with boot nodes: {:?}",
+        "About to spawn State network with boot nodes: {:?}",
         portalnet_config.bootnode_enrs
     );
 
+    let (state_sender, state_receiver) = mpsc::unbounded_channel::<TalkRequest>();
+    let portal_events_discovery = Arc::clone(&discovery);
+
+    // Spawn main event handler
     tokio::spawn(async move {
-        let (mut p2p, events) = StateNetwork::new(discovery, db, portalnet_config)
+        let events = PortalnetEvents::new(portal_events_discovery, None, Some(state_sender)).await;
+        events.process_discv5_requests().await;
+    });
+
+    tokio::spawn(async move {
+        let mut p2p = StateNetwork::new(discovery, portalnet_config)
             .await
             .unwrap();
 
-        tokio::spawn(events.process_discv5_requests());
+        let state_events = StateEvents {
+            network: p2p.clone(),
+            db,
+            event_rx: state_receiver,
+        };
+
+        // Spawn state event handler
+        tokio::spawn(state_events.process_requests());
 
         // hacky test: make sure we establish a session with the boot node
         p2p.ping_bootnodes().await.unwrap();

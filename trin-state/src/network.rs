@@ -1,11 +1,9 @@
 use discv5::kbucket::KBucketsTable;
 use log::debug;
-use rocksdb::DB;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use trin_core::portalnet::{
     discovery::Discovery,
-    events::PortalnetEvents,
     overlay::{OverlayConfig, OverlayProtocol},
     protocol::PortalnetConfig,
     U256,
@@ -20,9 +18,8 @@ pub struct StateNetwork {
 impl StateNetwork {
     pub async fn new(
         discovery: Arc<RwLock<Discovery>>,
-        db: Arc<DB>,
         portal_config: PortalnetConfig,
-    ) -> Result<(Self, PortalnetEvents), String> {
+    ) -> Result<Self, String> {
         let config = OverlayConfig::default();
         let kbuckets = Arc::new(RwLock::new(KBucketsTable::new(
             discovery.read().await.local_enr().node_id().into(),
@@ -41,13 +38,11 @@ impl StateNetwork {
 
         let overlay = Arc::new(overlay);
 
-        let events = PortalnetEvents::new(Arc::clone(&overlay), db).await;
-
         let proto = Self {
             overlay: Arc::clone(&overlay),
         };
 
-        Ok((proto, events))
+        Ok(proto)
     }
 
     /// Convenience call for testing, quick way to ping bootnodes

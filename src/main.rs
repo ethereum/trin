@@ -1,10 +1,12 @@
 use std::env;
 
-use log::{debug, error, info};
+use discv5::TalkRequest;
+use log::{debug, info};
 use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 
 use std::sync::Arc;
+use trin_core::portalnet::events::PortalnetEvents;
 use trin_core::{
     cli::{TrinConfig, HISTORY_NETWORK, STATE_NETWORK},
     jsonrpc::launch_jsonrpc_server,
@@ -17,7 +19,9 @@ use trin_core::{
     },
     utils::setup_overlay_db,
 };
+use trin_history::events::HistoryEvents;
 use trin_history::network::HistoryNetwork;
+use trin_state::events::StateEvents;
 use trin_state::network::StateNetwork;
 
 #[tokio::main]
@@ -117,69 +121,116 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     debug!("Selected networks to spawn: {:?}", trin_config.networks);
 
-    for network in trin_config.networks.iter() {
-        match network.as_str() {
-            STATE_NETWORK => {
-                let state_network_discovery = Arc::clone(&discovery);
-                let state_network_db = Arc::clone(&db);
-                let portalnet_config_state = portalnet_config.clone();
+    // Spawn main event handlers
+    //ToDo: Probably we can find a better way to refactor those event handler initializations.
+    // Initializing them together with the json-rpc handlers above may be a good idea.
+    let (state_event_sender, state_event_receiver) =
+        if trin_config.networks.iter().any(|val| val == STATE_NETWORK) {
+            let (state_tx, state_rx) = mpsc::unbounded_channel::<TalkRequest>();
+            (Some(state_tx), Some(state_rx))
+        } else {
+            (None, None)
+        };
 
-                // Spawn State network
-                tokio::spawn(async move {
-                    info!(
-                        "About to spawn State Network with boot nodes: {:?}",
-                        portalnet_config_state.bootnode_enrs
-                    );
+    let (history_event_sender, history_event_receiver) = if trin_config
+        .networks
+        .iter()
+        .any(|val| val == HISTORY_NETWORK)
+    {
+        let (history_tx, history_rx) = mpsc::unbounded_channel::<TalkRequest>();
+        (Some(history_tx), Some(history_rx))
+    } else {
+        (None, None)
+    };
 
-                    let (mut p2p, events) = StateNetwork::new(
-                        state_network_discovery,
-                        state_network_db,
-                        portalnet_config_state,
-                    )
-                    .await
-                    .unwrap();
+    let portal_events_discovery = Arc::clone(&discovery);
 
-                    tokio::spawn(events.process_discv5_requests());
+    tokio::spawn(async move {
+        let events = PortalnetEvents::new(
+            portal_events_discovery,
+            history_event_sender,
+            state_event_sender,
+        )
+        .await;
+        events.process_discv5_requests().await;
+    });
 
-                    // hacky test: make sure we establish a session with the boot node
-                    p2p.ping_bootnodes().await.unwrap();
-                })
+    if trin_config.networks.iter().any(|val| val == STATE_NETWORK) {
+        let state_network_discovery = Arc::clone(&discovery);
+        let state_portalnet_config = portalnet_config.clone();
+        let state_events_db = Arc::clone(&db);
+
+        // Spawn State network
+        tokio::spawn(async move {
+            info!(
+                "About to spawn State Network with boot nodes: {:?}",
+                state_portalnet_config.bootnode_enrs
+            );
+
+            let mut p2p = StateNetwork::new(state_network_discovery, state_portalnet_config)
                 .await
                 .unwrap();
+
+            match state_event_receiver {
+                Some(rx) => {
+                    let state_events = StateEvents {
+                        network: p2p.clone(),
+                        db: state_events_db,
+                        event_rx: rx,
+                    };
+
+                    tokio::spawn(state_events.process_requests());
+                }
+                None => panic!("State network selected, but state event handler not initialized!"),
             }
-            HISTORY_NETWORK => {
-                let history_network_discovery = Arc::clone(&discovery);
-                let history_network_db = Arc::clone(&db);
-                let portalnet_config_history = portalnet_config.clone();
 
-                // Spawn History network
-                tokio::spawn(async move {
-                    info!(
-                        "About to spawn History Network with boot nodes: {:?}",
-                        portalnet_config_history.bootnode_enrs
-                    );
+            // hacky test: make sure we establish a session with the boot node
+            p2p.ping_bootnodes().await.unwrap();
+        })
+        .await
+        .unwrap();
+    }
 
-                    let (mut p2p, _events) = HistoryNetwork::new(
-                        history_network_discovery,
-                        history_network_db,
-                        portalnet_config_history,
-                    )
-                    .await
-                    .unwrap();
+    if trin_config
+        .networks
+        .iter()
+        .any(|val| val == HISTORY_NETWORK)
+    {
+        let history_network_discovery = Arc::clone(&discovery);
+        let history_portalnet_config = portalnet_config.clone();
+        let history_events_db = Arc::clone(&db);
 
-                    // tokio::spawn(events.process_discv5_requests());
+        // Spawn History network
+        tokio::spawn(async move {
+            info!(
+                "About to spawn History Network with boot nodes: {:?}",
+                history_portalnet_config.bootnode_enrs
+            );
 
-                    // hacky test: make sure we establish a session with the boot node
-                    p2p.ping_bootnodes().await.unwrap();
-                })
+            let mut p2p = HistoryNetwork::new(history_network_discovery, history_portalnet_config)
                 .await
                 .unwrap();
+
+            match history_event_receiver {
+                Some(rx) => {
+                    let history_events = HistoryEvents {
+                        network: p2p.clone(),
+                        db: history_events_db,
+                        event_rx: rx,
+                    };
+
+                    tokio::spawn(history_events.process_requests());
+                }
+                None => {
+                    panic!("History network selected, but history event handler not initialized!")
+                }
             }
-            other => {
-                error!("{} is unsupported network! Terminating Trin...", other);
-                std::process::exit(1);
-            }
-        }
+
+            // hacky test: make sure we establish a session with the boot node
+            p2p.ping_bootnodes().await.unwrap();
+        })
+        .await
+        .unwrap();
     }
 
     web3_server_task.await.unwrap();

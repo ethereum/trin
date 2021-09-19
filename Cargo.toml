@@ -16,6 +16,10 @@ trin-core = { path = "trin-core" }
 trin-history = { path = "trin-history" }
 trin-state = { path = "trin-state" }
 
+[dependencies.discv5]
+version = "0.1.0-beta.10"
+git = "https://github.com/sigp/discv5"
+
 [workspace]
 members = [
     "trin-history",

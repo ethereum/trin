@@ -1,18 +1,15 @@
 use std::sync::Arc;
 
 use discv5::{Discv5Event, TalkRequest};
-use log::{debug, error, warn};
-use rocksdb::DB;
+use log::{debug, warn};
 use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 
-use super::types::Message;
 use super::{
     discovery::Discovery,
-    types::{FindContent, FindNodes, FoundContent, Nodes, Ping, Pong, Request, Response, SszEnr},
     utp::{UtpListener, UTP_PROTOCOL},
 };
-use crate::portalnet::overlay::OverlayProtocol;
+use crate::cli::{HISTORY_NETWORK, STATE_NETWORK};
 use std::collections::HashMap;
 use std::convert::TryInto;
 
@@ -20,16 +17,19 @@ pub const PROTOCOL: &str = "portal";
 
 pub struct PortalnetEvents {
     pub discovery: Arc<RwLock<Discovery>>,
-    pub overlay: Arc<OverlayProtocol>,
     pub protocol_receiver: mpsc::Receiver<Discv5Event>,
-    pub db: Arc<DB>,
     pub utp_listener: UtpListener,
+    pub history_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
+    pub state_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
 }
 
 impl PortalnetEvents {
-    pub async fn new(overlay: Arc<OverlayProtocol>, db: Arc<DB>) -> Self {
-        let protocol_receiver = overlay
-            .discovery
+    pub async fn new(
+        discovery: Arc<RwLock<Discovery>>,
+        history_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
+        state_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
+    ) -> Self {
+        let protocol_receiver = discovery
             .write()
             .await
             .discv5
@@ -39,16 +39,16 @@ impl PortalnetEvents {
             .unwrap();
 
         let utp_listener = UtpListener {
-            discovery: Arc::clone(&overlay.discovery),
+            discovery: Arc::clone(&discovery),
             utp_connections: HashMap::new(),
         };
 
         Self {
-            discovery: Arc::clone(&overlay.discovery),
-            overlay,
+            discovery: Arc::clone(&discovery),
             protocol_receiver,
-            db,
             utp_listener,
+            history_sender,
+            state_sender,
         }
     }
 
@@ -64,18 +64,17 @@ impl PortalnetEvents {
 
             match std::str::from_utf8(request.protocol()) {
                 Ok(protocol) => match protocol {
-                    PROTOCOL => {
-                        let reply = match self.process_one_request(&request).await {
-                            Ok(r) => Message::Response(r).to_bytes(),
-                            Err(e) => {
-                                error!("failed to process portal event: {}", e);
-                                e.into_bytes()
-                            }
+                    HISTORY_NETWORK => {
+                        match &self.history_sender {
+                            Some(tx) => tx.send(request).unwrap(),
+                            None => warn!("History event handler not initialized!"),
                         };
-
-                        if let Err(e) = request.respond(reply) {
-                            warn!("failed to send reply: {}", e);
-                        }
+                    }
+                    STATE_NETWORK => {
+                        match &self.state_sender {
+                            Some(tx) => tx.send(request).unwrap(),
+                            None => warn!("State event handler not initialized!"),
+                        };
                     }
                     UTP_PROTOCOL => {
                         self.utp_listener
@@ -90,55 +89,6 @@ impl PortalnetEvents {
                 Err(_) => warn!("Invalid utf8 protocol decode"),
             }
         }
-    }
-
-    async fn process_one_request(&self, talk_request: &TalkRequest) -> Result<Response, String> {
-        let request = match Message::from_bytes(talk_request.body()) {
-            Ok(Message::Request(r)) => r,
-            Ok(_) => return Err("Invalid message".to_owned()),
-            Err(e) => return Err(format!("Invalid request: {}", e)),
-        };
-
-        let response = match request {
-            Request::Ping(Ping { .. }) => {
-                debug!("Got overlay ping request {:?}", request);
-                let enr_seq = self.discovery.read().await.local_enr().seq();
-                Response::Pong(Pong {
-                    enr_seq: enr_seq,
-                    data_radius: self.overlay.data_radius().await,
-                })
-            }
-            Request::FindNodes(FindNodes { distances }) => {
-                let distances64: Vec<u64> = distances.iter().map(|x| (*x).into()).collect();
-                let enrs = self.overlay.nodes_by_distance(distances64).await;
-                Response::Nodes(Nodes {
-                    // from spec: total = The total number of Nodes response messages being sent.
-                    // TODO: support returning multiple messages
-                    total: 1 as u8,
-                    enrs,
-                })
-            }
-            Request::FindContent(FindContent { content_key }) => match self.db.get(&content_key) {
-                Ok(Some(value)) => {
-                    let empty_enrs: Vec<SszEnr> = vec![];
-                    Response::FoundContent(FoundContent {
-                        enrs: empty_enrs,
-                        payload: value,
-                    })
-                }
-                Ok(None) => {
-                    let enrs = self.overlay.find_nodes_close_to_content(content_key).await;
-                    let empty_payload: Vec<u8> = vec![];
-                    Response::FoundContent(FoundContent {
-                        enrs: enrs,
-                        payload: empty_payload,
-                    })
-                }
-                Err(e) => panic!("Unable to respond to FindContent: {}", e),
-            },
-        };
-
-        Ok(response)
     }
 
     // This could be handled in the UtpListener impl, but for consistency with data handling
