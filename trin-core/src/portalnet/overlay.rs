@@ -2,7 +2,7 @@ use crate::utils::xor_two_values;
 
 use super::{
     discovery::Discovery,
-    protocol::PROTOCOL,
+    events::PROTOCOL,
     types::{FindContent, FindNodes, Message, Ping, Request, SszEnr},
     Enr, U256,
 };

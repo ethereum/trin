@@ -1,14 +1,13 @@
 use discv5::kbucket::KBucketsTable;
 use log::debug;
 use rocksdb::DB;
-use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use trin_core::portalnet::{
     discovery::Discovery,
+    events::PortalnetEvents,
     overlay::{OverlayConfig, OverlayProtocol},
-    protocol::{PortalnetConfig, PortalnetEvents},
-    utp::UtpListener,
+    protocol::PortalnetConfig,
     U256,
 };
 
@@ -34,35 +33,15 @@ impl StateNetwork {
         )));
         let data_radius = Arc::new(RwLock::new(portal_config.data_radius));
 
-        let protocol_receiver = discovery
-            .write()
-            .await
-            .discv5
-            .event_stream()
-            .await
-            .map_err(|e| e.to_string())
-            .unwrap();
-
         let overlay = OverlayProtocol {
-            discovery: Arc::clone(&discovery),
+            discovery,
             data_radius,
             kbuckets,
         };
 
         let overlay = Arc::new(overlay);
 
-        let utp_listener = UtpListener {
-            discovery: Arc::clone(&discovery),
-            utp_connections: HashMap::new(),
-        };
-
-        let events = PortalnetEvents {
-            discovery: Arc::clone(&discovery),
-            overlay: Arc::clone(&overlay),
-            protocol_receiver,
-            db,
-            utp_listener,
-        };
+        let events = PortalnetEvents::new(Arc::clone(&overlay), db).await;
 
         let proto = Self {
             overlay: Arc::clone(&overlay),
