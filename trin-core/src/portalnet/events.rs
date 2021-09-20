@@ -13,8 +13,6 @@ use crate::cli::{HISTORY_NETWORK, STATE_NETWORK};
 use std::collections::HashMap;
 use std::convert::TryInto;
 
-pub const PROTOCOL: &str = "portal";
-
 pub struct PortalnetEvents {
     pub discovery: Arc<RwLock<Discovery>>,
     pub protocol_receiver: mpsc::Receiver<Discv5Event>,

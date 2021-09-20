@@ -2,6 +2,7 @@ use discv5::kbucket::KBucketsTable;
 use log::debug;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use trin_core::cli::HISTORY_NETWORK;
 use trin_core::portalnet::{
     discovery::Discovery,
     overlay::{OverlayConfig, OverlayProtocol},
@@ -59,7 +60,10 @@ impl StateNetwork {
             .table_entries_enr()
         {
             debug!("Pinging {} on portal state network", enr);
-            let ping_result = self.overlay.send_ping(U256::from(u64::MAX), enr).await?;
+            let ping_result = self
+                .overlay
+                .send_ping(U256::from(u64::MAX), enr, HISTORY_NETWORK.to_string())
+                .await?;
             debug!("Portal state network Ping result: {:?}", ping_result);
         }
         Ok(())

@@ -17,12 +17,12 @@ pub struct StateEvents {
 impl StateEvents {
     pub async fn process_requests(mut self) {
         while let Some(talk_request) = self.event_rx.recv().await {
-            debug!("Got history request {:?}", talk_request);
+            debug!("Got state request {:?}", talk_request);
 
             let reply = match self.process_one_request(&talk_request).await {
                 Ok(r) => Message::Response(r).to_bytes(),
                 Err(e) => {
-                    error!("failed to process portal history event: {}", e);
+                    error!("failed to process portal state event: {}", e);
                     e.into_bytes()
                 }
             };
@@ -42,7 +42,7 @@ impl StateEvents {
 
         let response = match request {
             Request::Ping(Ping { .. }) => {
-                debug!("Got history overlay ping request {:?}", request);
+                debug!("Got state overlay ping request {:?}", request);
                 let enr_seq = self
                     .network
                     .overlay

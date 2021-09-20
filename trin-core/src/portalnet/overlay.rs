@@ -2,7 +2,6 @@ use crate::utils::xor_two_values;
 
 use super::{
     discovery::Discovery,
-    events::PROTOCOL,
     types::{FindContent, FindNodes, Message, Ping, Request, SszEnr},
     Enr, U256,
 };
@@ -160,7 +159,12 @@ impl OverlayProtocol {
             .collect()
     }
 
-    pub async fn send_ping(&self, data_radius: U256, enr: Enr) -> Result<Vec<u8>, String> {
+    pub async fn send_ping(
+        &self,
+        data_radius: U256,
+        enr: Enr,
+        protocol: String,
+    ) -> Result<Vec<u8>, String> {
         let enr_seq = self.discovery.read().await.local_enr().seq();
         let msg = Ping {
             enr_seq,
@@ -171,20 +175,25 @@ impl OverlayProtocol {
             .await
             .send_talkreq(
                 enr,
-                PROTOCOL.to_string(),
+                protocol,
                 Message::Request(Request::Ping(msg)).to_bytes(),
             )
             .await
     }
 
-    pub async fn send_find_nodes(&self, distances: Vec<u16>, enr: Enr) -> Result<Vec<u8>, String> {
+    pub async fn send_find_nodes(
+        &self,
+        distances: Vec<u16>,
+        enr: Enr,
+        protocol: String,
+    ) -> Result<Vec<u8>, String> {
         let msg = FindNodes { distances };
         self.discovery
             .write()
             .await
             .send_talkreq(
                 enr,
-                PROTOCOL.to_string(),
+                protocol,
                 Message::Request(Request::FindNodes(msg)).to_bytes(),
             )
             .await
@@ -194,6 +203,7 @@ impl OverlayProtocol {
         &self,
         content_key: Vec<u8>,
         enr: Enr,
+        protocol: String,
     ) -> Result<Vec<u8>, String> {
         let msg = FindContent { content_key };
         self.discovery
@@ -201,7 +211,7 @@ impl OverlayProtocol {
             .await
             .send_talkreq(
                 enr,
-                PROTOCOL.to_string(),
+                protocol,
                 Message::Request(Request::FindContent(msg)).to_bytes(),
             )
             .await
