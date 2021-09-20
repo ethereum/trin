@@ -436,7 +436,6 @@ fn get_infura_url(infura_project_id: &str) -> String {
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::collections::HashMap;
     use rstest::rstest;
     use std::collections::HashMap;
     use validator::ValidationErrors;
