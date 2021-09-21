@@ -1,11 +1,12 @@
 use discv5::kbucket::KBucketsTable;
 use log::debug;
+use rocksdb::DB;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use trin_core::portalnet::{
     discovery::Discovery,
-    overlay::{OverlayConfig, OverlayProtocol, PortalnetConfig},
-    types::ProtocolKind,
+    overlay::{OverlayConfig, OverlayProtocol},
+    types::{PortalnetConfig, ProtocolKind},
     U256,
 };
 
@@ -18,6 +19,7 @@ pub struct StateNetwork {
 impl StateNetwork {
     pub async fn new(
         discovery: Arc<RwLock<Discovery>>,
+        db: Arc<DB>,
         portal_config: PortalnetConfig,
     ) -> Result<Self, String> {
         let config = OverlayConfig::default();
@@ -34,6 +36,7 @@ impl StateNetwork {
             discovery,
             data_radius,
             kbuckets,
+            db,
         };
 
         let overlay = Arc::new(overlay);

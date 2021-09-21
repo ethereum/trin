@@ -1,4 +1,5 @@
 use std::convert::{TryFrom, TryInto};
+use std::net::SocketAddr;
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 
@@ -9,6 +10,27 @@ use ssz::{Decode, DecodeError, Encode, SszDecoderBuilder, SszEncoder};
 use ssz_derive::{Decode, Encode};
 
 use super::{Enr, U256};
+
+#[derive(Clone)]
+pub struct PortalnetConfig {
+    pub external_addr: Option<SocketAddr>,
+    pub private_key: Option<HexData>,
+    pub listen_port: u16,
+    pub bootnode_enrs: Vec<Enr>,
+    pub data_radius: U256,
+}
+
+impl Default for PortalnetConfig {
+    fn default() -> Self {
+        Self {
+            external_addr: None,
+            private_key: None,
+            listen_port: 4242,
+            bootnode_enrs: Vec::<Enr>::new(),
+            data_radius: U256::from(u64::MAX), //TODO better data_radius default?
+        }
+    }
+}
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ProtocolKind {

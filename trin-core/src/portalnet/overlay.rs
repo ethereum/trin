@@ -2,13 +2,19 @@ use crate::utils::xor_two_values;
 
 use super::{
     discovery::Discovery,
-    types::{FindContent, FindNodes, Message, Ping, ProtocolKind, Request, SszEnr},
+    types::{
+        FindContent, FindNodes, FoundContent, Message, Nodes, Ping, Pong, ProtocolKind, Request,
+        Response, SszEnr,
+    },
     Enr, U256,
 };
-use crate::portalnet::types::HexData;
-use discv5::enr::NodeId;
-use discv5::kbucket::{Filter, KBucketsTable};
-use std::net::SocketAddr;
+use discv5::{
+    enr::NodeId,
+    kbucket::{Filter, KBucketsTable},
+    TalkRequest,
+};
+use log::debug;
+use rocksdb::DB;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
@@ -42,27 +48,6 @@ impl PartialEq for Node {
     }
 }
 
-#[derive(Clone)]
-pub struct PortalnetConfig {
-    pub external_addr: Option<SocketAddr>,
-    pub private_key: Option<HexData>,
-    pub listen_port: u16,
-    pub bootnode_enrs: Vec<Enr>,
-    pub data_radius: U256,
-}
-
-impl Default for PortalnetConfig {
-    fn default() -> Self {
-        Self {
-            external_addr: None,
-            private_key: None,
-            listen_port: 4242,
-            bootnode_enrs: Vec::<Enr>::new(),
-            data_radius: U256::from(u64::MAX), //TODO better data_radius default?
-        }
-    }
-}
-
 /// Configuration parameters for the overlay network.
 #[derive(Clone)]
 pub struct OverlayConfig {
@@ -89,14 +74,68 @@ impl Default for OverlayConfig {
 /// handling common network requests/responses.
 #[derive(Clone)]
 pub struct OverlayProtocol {
+    /// Reference to the underlying discv5 protocol
     pub discovery: Arc<RwLock<Discovery>>,
     // The data radius of the local node.
     pub data_radius: Arc<RwLock<U256>>,
     // The overlay routing table of the local node.
     pub kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
+    // Reference to the database instance
+    pub db: Arc<DB>,
 }
 
 impl OverlayProtocol {
+    pub async fn process_one_request(
+        &self,
+        talk_request: &TalkRequest,
+    ) -> Result<Response, String> {
+        let request = match Message::from_bytes(talk_request.body()) {
+            Ok(Message::Request(r)) => r,
+            Ok(_) => return Err("Invalid message".to_owned()),
+            Err(e) => return Err(format!("Invalid request: {}", e)),
+        };
+
+        let response = match request {
+            Request::Ping(Ping { .. }) => {
+                debug!("Got overlay ping request {:?}", request);
+                let enr_seq = self.discovery.read().await.local_enr().seq();
+                Response::Pong(Pong {
+                    enr_seq,
+                    data_radius: self.data_radius().await,
+                })
+            }
+            Request::FindNodes(FindNodes { distances }) => {
+                let distances64: Vec<u64> = distances.iter().map(|x| (*x).into()).collect();
+                let enrs = self.nodes_by_distance(distances64).await;
+                Response::Nodes(Nodes {
+                    // from spec: total = The total number of Nodes response messages being sent.
+                    // TODO: support returning multiple messages
+                    total: 1_u8,
+                    enrs,
+                })
+            }
+            Request::FindContent(FindContent { content_key }) => match self.db.get(&content_key) {
+                Ok(Some(value)) => {
+                    let empty_enrs: Vec<SszEnr> = vec![];
+                    Response::FoundContent(FoundContent {
+                        enrs: empty_enrs,
+                        payload: value,
+                    })
+                }
+                Ok(None) => {
+                    let enrs = self.find_nodes_close_to_content(content_key).await;
+                    let empty_payload: Vec<u8> = vec![];
+                    Response::FoundContent(FoundContent {
+                        enrs,
+                        payload: empty_payload,
+                    })
+                }
+                Err(e) => panic!("Unable to respond to FindContent: {}", e),
+            },
+        };
+        Ok(response)
+    }
+
     /// Returns the local ENR of the node.
     pub async fn local_enr(&self) -> Enr {
         self.discovery.read().await.discv5.local_enr()

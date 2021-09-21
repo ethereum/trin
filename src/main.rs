@@ -13,7 +13,7 @@ use trin_core::portalnet::events::PortalnetEvents;
 use trin_core::{
     cli::{TrinConfig, HISTORY_NETWORK, STATE_NETWORK},
     jsonrpc::service::launch_jsonrpc_server,
-    portalnet::{discovery::Discovery, overlay::PortalnetConfig},
+    portalnet::{discovery::Discovery, types::PortalnetConfig},
     utils::setup_overlay_db,
 };
 use trin_history::events::HistoryEvents;
@@ -155,7 +155,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if trin_config.networks.iter().any(|val| val == STATE_NETWORK) {
         let state_network_discovery = Arc::clone(&discovery);
         let state_portalnet_config = portalnet_config.clone();
-        let state_events_db = Arc::clone(&db);
+        let state_overlay_db = Arc::clone(&db);
 
         // Spawn State network
         tokio::spawn(async move {
@@ -164,15 +164,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 state_portalnet_config.bootnode_enrs
             );
 
-            let mut p2p = StateNetwork::new(state_network_discovery, state_portalnet_config)
-                .await
-                .unwrap();
+            let mut p2p = StateNetwork::new(
+                state_network_discovery,
+                state_overlay_db,
+                state_portalnet_config,
+            )
+            .await
+            .unwrap();
 
             match state_event_receiver {
                 Some(rx) => {
                     let state_events = StateEvents {
                         network: p2p.clone(),
-                        db: state_events_db,
                         event_rx: rx,
                     };
 
@@ -195,7 +198,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         let history_network_discovery = Arc::clone(&discovery);
         let history_portalnet_config = portalnet_config.clone();
-        let history_events_db = Arc::clone(&db);
+        let history_overlay_db = Arc::clone(&db);
 
         // Spawn History network
         tokio::spawn(async move {
@@ -204,15 +207,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 history_portalnet_config.bootnode_enrs
             );
 
-            let mut p2p = HistoryNetwork::new(history_network_discovery, history_portalnet_config)
-                .await
-                .unwrap();
+            let mut p2p = HistoryNetwork::new(
+                history_network_discovery,
+                history_overlay_db,
+                history_portalnet_config,
+            )
+            .await
+            .unwrap();
 
             match history_event_receiver {
                 Some(rx) => {
                     let history_events = HistoryEvents {
                         network: p2p.clone(),
-                        db: history_events_db,
                         event_rx: rx,
                     };
 

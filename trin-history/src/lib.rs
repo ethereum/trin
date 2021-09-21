@@ -14,7 +14,7 @@ use trin_core::cli::TrinConfig;
 use trin_core::jsonrpc::handlers::{HistoryEndpointKind, HistoryNetworkEndpoint};
 use trin_core::portalnet::discovery::Discovery;
 use trin_core::portalnet::events::PortalnetEvents;
-use trin_core::portalnet::overlay::PortalnetConfig;
+use trin_core::portalnet::types::PortalnetConfig;
 use trin_core::utils::setup_overlay_db;
 
 pub struct HistoryRequestHandler {
@@ -92,13 +92,12 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Spawn History network
     tokio::spawn(async move {
-        let mut p2p = HistoryNetwork::new(discovery.clone(), portalnet_config)
+        let mut p2p = HistoryNetwork::new(discovery.clone(), db, portalnet_config)
             .await
             .unwrap();
 
         let history_events = HistoryEvents {
             network: p2p.clone(),
-            db,
             event_rx: history_receiver,
         };
 

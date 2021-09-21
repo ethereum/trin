@@ -1,8 +1,7 @@
 #![allow(dead_code)]
 
-use super::types::HexData;
+use super::types::{HexData, PortalnetConfig};
 use super::Enr;
-use crate::portalnet::overlay::PortalnetConfig;
 use crate::socket;
 use discv5::enr::{CombinedKey, EnrBuilder, NodeId};
 use discv5::{Discv5, Discv5Config, Discv5ConfigBuilder};

@@ -11,7 +11,7 @@ use trin_core::cli::TrinConfig;
 use trin_core::jsonrpc::handlers::{StateEndpointKind, StateNetworkEndpoint};
 use trin_core::portalnet::discovery::Discovery;
 use trin_core::portalnet::events::PortalnetEvents;
-use trin_core::portalnet::overlay::PortalnetConfig;
+use trin_core::portalnet::types::PortalnetConfig;
 use trin_core::utils::setup_overlay_db;
 
 pub mod events;
@@ -87,13 +87,12 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     tokio::spawn(async move {
-        let mut p2p = StateNetwork::new(discovery, portalnet_config)
+        let mut p2p = StateNetwork::new(discovery, db, portalnet_config)
             .await
             .unwrap();
 
         let state_events = StateEvents {
             network: p2p.clone(),
-            db,
             event_rx: state_receiver,
         };
 
