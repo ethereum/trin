@@ -8,9 +8,10 @@ use network::StateNetwork;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use trin_core::cli::TrinConfig;
+use trin_core::jsonrpc::handlers::{StateEndpointKind, StateNetworkEndpoint};
 use trin_core::portalnet::discovery::Discovery;
 use trin_core::portalnet::events::PortalnetEvents;
-use trin_core::portalnet::protocol::{PortalnetConfig, StateEndpointKind, StateNetworkEndpoint};
+use trin_core::portalnet::overlay::PortalnetConfig;
 use trin_core::utils::setup_overlay_db;
 
 pub mod events;

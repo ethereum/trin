@@ -5,8 +5,10 @@ use super::{
     types::{FindContent, FindNodes, Message, Ping, Request, SszEnr},
     Enr, U256,
 };
+use crate::portalnet::types::HexData;
 use discv5::enr::NodeId;
 use discv5::kbucket::{Filter, KBucketsTable};
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
@@ -37,6 +39,27 @@ impl std::cmp::Eq for Node {}
 impl PartialEq for Node {
     fn eq(&self, other: &Self) -> bool {
         self.enr == other.enr
+    }
+}
+
+#[derive(Clone)]
+pub struct PortalnetConfig {
+    pub external_addr: Option<SocketAddr>,
+    pub private_key: Option<HexData>,
+    pub listen_port: u16,
+    pub bootnode_enrs: Vec<Enr>,
+    pub data_radius: U256,
+}
+
+impl Default for PortalnetConfig {
+    fn default() -> Self {
+        Self {
+            external_addr: None,
+            private_key: None,
+            listen_port: 4242,
+            bootnode_enrs: Vec::<Enr>::new(),
+            data_radius: U256::from(u64::MAX), //TODO better data_radius default?
+        }
     }
 }
 

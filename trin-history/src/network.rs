@@ -5,8 +5,7 @@ use tokio::sync::RwLock;
 use trin_core::cli::STATE_NETWORK;
 use trin_core::portalnet::{
     discovery::Discovery,
-    overlay::{OverlayConfig, OverlayProtocol},
-    protocol::PortalnetConfig,
+    overlay::{OverlayConfig, OverlayProtocol, PortalnetConfig},
     U256,
 };
 

@@ -11,11 +11,10 @@ use network::HistoryNetwork;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use trin_core::cli::TrinConfig;
+use trin_core::jsonrpc::handlers::{HistoryEndpointKind, HistoryNetworkEndpoint};
 use trin_core::portalnet::discovery::Discovery;
 use trin_core::portalnet::events::PortalnetEvents;
-use trin_core::portalnet::protocol::{
-    HistoryEndpointKind, HistoryNetworkEndpoint, PortalnetConfig,
-};
+use trin_core::portalnet::overlay::PortalnetConfig;
 use trin_core::utils::setup_overlay_db;
 
 pub struct HistoryRequestHandler {

@@ -1,16 +1,14 @@
 #![allow(dead_code)]
 
-use std::net::SocketAddr;
 use std::sync::Arc;
 
 use serde_json::Value;
 use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 
-use crate::jsonrpc::Params;
+use super::types::Params;
 
-use super::Enr;
-use super::{discovery::Discovery, types::HexData, U256};
+use crate::portalnet::discovery::Discovery;
 
 type Responder<T, E> = mpsc::UnboundedSender<Result<T, E>>;
 
@@ -49,27 +47,6 @@ pub struct PortalEndpoint {
     pub kind: PortalEndpointKind,
     pub params: Params,
     pub resp: Responder<Value, String>,
-}
-
-#[derive(Clone)]
-pub struct PortalnetConfig {
-    pub external_addr: Option<SocketAddr>,
-    pub private_key: Option<HexData>,
-    pub listen_port: u16,
-    pub bootnode_enrs: Vec<Enr>,
-    pub data_radius: U256,
-}
-
-impl Default for PortalnetConfig {
-    fn default() -> Self {
-        Self {
-            external_addr: None,
-            private_key: None,
-            listen_port: 4242,
-            bootnode_enrs: Vec::<Enr>::new(),
-            data_radius: U256::from(u64::MAX), //TODO better data_radius default?
-        }
-    }
 }
 
 pub struct JsonRpcHandler {
@@ -144,7 +121,7 @@ async fn proxy_query_to_history_subnet(
             Ok(result) => Ok(result),
             Err(msg) => Err(format!(
                 "Error returned from chain history subnetwork: {:?}",
-                msg.to_string()
+                msg
             )),
         },
         None => Err("No response from chain history subnetwork".to_string()),
@@ -164,10 +141,7 @@ async fn proxy_query_to_state_subnet(
     match resp_rx.recv().await {
         Some(val) => match val {
             Ok(result) => Ok(result),
-            Err(msg) => Err(format!(
-                "Error returned from state subnetwork: {:?}",
-                msg.to_string()
-            )),
+            Err(msg) => Err(format!("Error returned from state subnetwork: {:?}", msg)),
         },
         None => Err("No response from state subnetwork".to_string()),
     }

@@ -1,22 +1,19 @@
 use std::env;
+use std::sync::Arc;
 
 use discv5::TalkRequest;
 use log::{debug, info};
 use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 
-use std::sync::Arc;
+use trin_core::jsonrpc::handlers::{
+    HistoryNetworkEndpoint, JsonRpcHandler, PortalEndpoint, StateNetworkEndpoint,
+};
 use trin_core::portalnet::events::PortalnetEvents;
 use trin_core::{
     cli::{TrinConfig, HISTORY_NETWORK, STATE_NETWORK},
-    jsonrpc::launch_jsonrpc_server,
-    portalnet::{
-        discovery::Discovery,
-        protocol::{
-            HistoryNetworkEndpoint, JsonRpcHandler, PortalEndpoint, PortalnetConfig,
-            StateNetworkEndpoint,
-        },
-    },
+    jsonrpc::service::launch_jsonrpc_server,
+    portalnet::{discovery::Discovery, overlay::PortalnetConfig},
     utils::setup_overlay_db,
 };
 use trin_history::events::HistoryEvents;
@@ -61,7 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ));
     discovery.write().await.start().await.unwrap();
 
-    // Initialize state sub-network jsonrpc handler, if selected
+    // Initialize state sub-network service handler, if selected
     let (state_tx, state_handler) = if trin_config.networks.iter().any(|val| val == STATE_NETWORK) {
         let (state_tx, state_rx) = mpsc::unbounded_channel::<StateNetworkEndpoint>();
         let state_handler = match trin_state::initialize(state_rx) {
@@ -73,7 +70,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         (None, None)
     };
 
-    // Initialize chain history sub-network jsonrpc handler, if selected
+    // Initialize chain history sub-network service handler, if selected
     let (history_tx, history_handler) = if trin_config
         .networks
         .iter()
@@ -89,7 +86,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         (None, None)
     };
 
-    // Initialize jsonrpc server
+    // Initialize service server
     let (jsonrpc_tx, jsonrpc_rx) = mpsc::unbounded_channel::<PortalEndpoint>();
     let jsonrpc_trin_config = trin_config.clone();
     let web3_server_task = tokio::task::spawn_blocking(|| {

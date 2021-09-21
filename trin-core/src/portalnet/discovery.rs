@@ -2,7 +2,7 @@
 
 use super::types::HexData;
 use super::Enr;
-use crate::portalnet::protocol::PortalnetConfig;
+use crate::portalnet::overlay::PortalnetConfig;
 use crate::socket;
 use discv5::enr::{CombinedKey, EnrBuilder, NodeId};
 use discv5::{Discv5, Discv5Config, Discv5ConfigBuilder};
