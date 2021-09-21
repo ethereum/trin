@@ -17,6 +17,7 @@ trin-core = { path = "trin-core" }
 trin-history = { path = "trin-history" }
 trin-state = { path = "trin-state" }
 trin-cli = { path = "trin-cli" }
+url = "2.2.2"
 
 [dependencies.discv5]
 branch = "fewer-mutable-borrows"

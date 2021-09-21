@@ -5,6 +5,7 @@ edition = "2021"
 rust-version = "1.56.1"
 
 [dependencies]
+async-trait = "0.1.51"
 base64 = "0.13.0"
 clap = "2.33.3"
 ctrlc = "3.1.8"
@@ -13,6 +14,7 @@ env_logger = "0.8.2"
 eth2_ssz = "0.4.0"
 eth2_ssz_derive = "0.3.0"
 eth2_ssz_types = "0.2.1"
+ethers-core = "0.6.0"
 futures = "0.3.13"
 hex = "0.4.3"
 httparse = "1.5.1"
@@ -36,13 +38,16 @@ tracing = "0.1.26"
 tracing-futures = "0.2.5"
 uint = { version = "0.8.5", default-features = false }
 ureq = {version = "2.2.0", features = ["json"]}
+url = "2.2.2"
 validator = { version = "0.13.0", features = ["derive"] }
 
 [target.'cfg(windows)'.dependencies]
+ethers-providers = { version = "0.6.0", default-features = false, features = ["ws", "rustls"] }
 ipconfig = "0.2.2"
 uds_windows = "1.0.1"
 
 [target.'cfg(unix)'.dependencies]
+ethers-providers = "0.6.0"
 interfaces = "0.0.7"
 
 [dependencies.discv5]
