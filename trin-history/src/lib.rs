@@ -2,14 +2,15 @@ pub mod events;
 pub mod network;
 
 use log::info;
+use rocksdb::DB;
 use serde_json::Value;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, RwLock};
+use tokio::task::JoinHandle;
 
 use crate::events::HistoryEvents;
 use discv5::TalkRequest;
 use network::HistoryNetwork;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use trin_core::cli::TrinConfig;
 use trin_core::jsonrpc::handlers::{HistoryEndpointKind, HistoryNetworkEndpoint};
 use trin_core::portalnet::discovery::Discovery;
@@ -75,22 +76,33 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Setup Overlay database
     let db = Arc::new(setup_overlay_db(discovery.read().await.local_enr()));
 
-    info!(
-        "About to spawn History network with boot nodes: {:?}",
-        portalnet_config.bootnode_enrs
-    );
-
-    let (history_sender, history_receiver) = mpsc::unbounded_channel::<TalkRequest>();
+    let (history_event_tx, history_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
     let portal_events_discovery = Arc::clone(&discovery);
 
     // Spawn main event handler
     tokio::spawn(async move {
         let events =
-            PortalnetEvents::new(portal_events_discovery, Some(history_sender), None).await;
+            PortalnetEvents::new(portal_events_discovery, Some(history_event_tx), None).await;
         events.process_discv5_requests().await;
     });
 
-    // Spawn History network
+    spawn_history_network(discovery, db, portalnet_config, history_event_rx)
+        .await
+        .unwrap();
+    Ok(())
+}
+
+pub fn spawn_history_network(
+    discovery: Arc<RwLock<Discovery>>,
+    db: Arc<DB>,
+    portalnet_config: PortalnetConfig,
+    history_event_rx: mpsc::UnboundedReceiver<TalkRequest>,
+) -> JoinHandle<()> {
+    info!(
+        "About to spawn History Network with boot nodes: {:?}",
+        portalnet_config.bootnode_enrs
+    );
+
     tokio::spawn(async move {
         let mut p2p = HistoryNetwork::new(discovery.clone(), db, portalnet_config)
             .await
@@ -98,7 +110,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let history_events = HistoryEvents {
             network: p2p.clone(),
-            event_rx: history_receiver,
+            event_rx: history_event_rx,
         };
 
         // Spawn history event handler
@@ -111,8 +123,4 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .await
             .expect("failed to pause until ctrl-c");
     })
-    .await
-    .unwrap();
-
-    Ok(())
 }

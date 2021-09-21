@@ -1,12 +1,13 @@
 use log::info;
+use rocksdb::DB;
 use serde_json::Value;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, RwLock};
+use tokio::task::JoinHandle;
 
 use crate::events::StateEvents;
 use discv5::TalkRequest;
 use network::StateNetwork;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use trin_core::cli::TrinConfig;
 use trin_core::jsonrpc::handlers::{StateEndpointKind, StateNetworkEndpoint};
 use trin_core::portalnet::discovery::Discovery;
@@ -72,28 +73,41 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Setup Overlay database
     let db = Arc::new(setup_overlay_db(discovery.read().await.local_enr()));
 
-    info!(
-        "About to spawn State network with boot nodes: {:?}",
-        portalnet_config.bootnode_enrs
-    );
-
-    let (state_sender, state_receiver) = mpsc::unbounded_channel::<TalkRequest>();
+    let (state_event_tx, state_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
     let portal_events_discovery = Arc::clone(&discovery);
 
     // Spawn main event handler
     tokio::spawn(async move {
-        let events = PortalnetEvents::new(portal_events_discovery, None, Some(state_sender)).await;
+        let events =
+            PortalnetEvents::new(portal_events_discovery, None, Some(state_event_tx)).await;
         events.process_discv5_requests().await;
     });
 
+    spawn_state_network(discovery, db, portalnet_config, state_event_rx)
+        .await
+        .unwrap();
+    Ok(())
+}
+
+pub fn spawn_state_network(
+    discovery: Arc<RwLock<Discovery>>,
+    db: Arc<DB>,
+    portalnet_config: PortalnetConfig,
+    state_event_rx: mpsc::UnboundedReceiver<TalkRequest>,
+) -> JoinHandle<()> {
+    info!(
+        "About to spawn State Network with boot nodes: {:?}",
+        portalnet_config.bootnode_enrs
+    );
+
     tokio::spawn(async move {
-        let mut p2p = StateNetwork::new(discovery, db, portalnet_config)
+        let mut p2p = StateNetwork::new(discovery.clone(), db, portalnet_config)
             .await
             .unwrap();
 
         let state_events = StateEvents {
             network: p2p.clone(),
-            event_rx: state_receiver,
+            event_rx: state_event_rx,
         };
 
         // Spawn state event handler
@@ -106,8 +120,4 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .await
             .expect("failed to pause until ctrl-c");
     })
-    .await
-    .unwrap();
-
-    Ok(())
 }

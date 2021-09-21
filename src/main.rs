@@ -2,7 +2,7 @@ use std::env;
 use std::sync::Arc;
 
 use discv5::TalkRequest;
-use log::{debug, info};
+use log::debug;
 use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 
@@ -16,10 +16,8 @@ use trin_core::{
     portalnet::{discovery::Discovery, types::PortalnetConfig},
     utils::setup_overlay_db,
 };
-use trin_history::events::HistoryEvents;
-use trin_history::network::HistoryNetwork;
-use trin_state::events::StateEvents;
-use trin_state::network::StateNetwork;
+use trin_history::spawn_history_network;
+use trin_state::spawn_state_network;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -58,33 +56,70 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ));
     discovery.write().await.start().await.unwrap();
 
-    // Initialize state sub-network service handler, if selected
-    let (state_tx, state_handler) = if trin_config.networks.iter().any(|val| val == STATE_NETWORK) {
-        let (state_tx, state_rx) = mpsc::unbounded_channel::<StateNetworkEndpoint>();
-        let state_handler = match trin_state::initialize(state_rx) {
-            Ok(val) => val,
-            Err(msg) => panic!("Error while initializing state network: {:?}", msg),
-        };
-        (Some(state_tx), Some(state_handler))
-    } else {
-        (None, None)
-    };
+    // Setup Overlay database
+    let db = Arc::new(setup_overlay_db(discovery.read().await.local_enr()));
 
-    // Initialize chain history sub-network service handler, if selected
-    let (history_tx, history_handler) = if trin_config
-        .networks
-        .iter()
-        .any(|val| val == HISTORY_NETWORK)
-    {
-        let (history_tx, history_rx) = mpsc::unbounded_channel::<HistoryNetworkEndpoint>();
-        let history_handler = match trin_history::initialize(history_rx) {
-            Ok(val) => val,
-            Err(msg) => panic!("Error while initializing chain history network: {:?}", msg),
+    debug!("Selected networks to spawn: {:?}", trin_config.networks);
+
+    // Initialize state sub-network service and event handlers, if selected
+    let (state_jsonrpc_tx, state_handler, state_event_tx, state_network_task) =
+        if trin_config.networks.iter().any(|val| val == STATE_NETWORK) {
+            let (state_jsonrpc_tx, state_jsonrpc_rx) =
+                mpsc::unbounded_channel::<StateNetworkEndpoint>();
+            let (state_event_tx, state_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
+            let state_handler = match trin_state::initialize(state_jsonrpc_rx) {
+                Ok(val) => val,
+                Err(msg) => panic!("Error while initializing state network: {:?}", msg),
+            };
+
+            let state_network_task = spawn_state_network(
+                Arc::clone(&discovery),
+                Arc::clone(&db),
+                portalnet_config.clone(),
+                state_event_rx,
+            );
+
+            (
+                Some(state_jsonrpc_tx),
+                Some(state_handler),
+                Some(state_event_tx),
+                Some(state_network_task),
+            )
+        } else {
+            (None, None, None, None)
         };
-        (Some(history_tx), Some(history_handler))
-    } else {
-        (None, None)
-    };
+
+    // Initialize chain history sub-network service and event handlers, if selected
+    let (history_jsonrpc_tx, history_handler, history_event_tx, history_network_task) =
+        if trin_config
+            .networks
+            .iter()
+            .any(|val| val == HISTORY_NETWORK)
+        {
+            let (history_jsonrpc_tx, history_jsonrpc_rx) =
+                mpsc::unbounded_channel::<HistoryNetworkEndpoint>();
+            let (history_event_tx, history_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
+            let history_handler = match trin_history::initialize(history_jsonrpc_rx) {
+                Ok(val) => val,
+                Err(msg) => panic!("Error while initializing chain history network: {:?}", msg),
+            };
+
+            let history_network_task = spawn_history_network(
+                Arc::clone(&discovery),
+                Arc::clone(&db),
+                portalnet_config.clone(),
+                history_event_rx,
+            );
+
+            (
+                Some(history_jsonrpc_tx),
+                Some(history_handler),
+                Some(history_event_tx),
+                Some(history_network_task),
+            )
+        } else {
+            (None, None, None, None)
+        };
 
     // Initialize service server
     let (jsonrpc_tx, jsonrpc_rx) = mpsc::unbounded_channel::<PortalEndpoint>();
@@ -93,17 +128,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         launch_jsonrpc_server(jsonrpc_trin_config, infura_project_id, jsonrpc_tx);
     });
 
-    // Setup Overlay database
-    let db = Arc::new(setup_overlay_db(discovery.read().await.local_enr()));
-
     // Spawn main JsonRpc Handler
     let jsonrpc_discovery = Arc::clone(&discovery);
     tokio::spawn(async move {
         let rpc_handler = JsonRpcHandler {
             discovery: jsonrpc_discovery,
             jsonrpc_rx,
-            state_tx,
-            history_tx,
+            state_tx: state_jsonrpc_tx,
+            history_tx: history_jsonrpc_tx,
         };
 
         tokio::spawn(rpc_handler.process_jsonrpc_requests());
@@ -116,124 +148,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    debug!("Selected networks to spawn: {:?}", trin_config.networks);
-
-    // Spawn main event handlers
-    //ToDo: Probably we can find a better way to refactor those event handler initializations.
-    // Initializing them together with the json-rpc handlers above may be a good idea.
-    let (state_event_sender, state_event_receiver) =
-        if trin_config.networks.iter().any(|val| val == STATE_NETWORK) {
-            let (state_tx, state_rx) = mpsc::unbounded_channel::<TalkRequest>();
-            (Some(state_tx), Some(state_rx))
-        } else {
-            (None, None)
-        };
-
-    let (history_event_sender, history_event_receiver) = if trin_config
-        .networks
-        .iter()
-        .any(|val| val == HISTORY_NETWORK)
-    {
-        let (history_tx, history_rx) = mpsc::unbounded_channel::<TalkRequest>();
-        (Some(history_tx), Some(history_rx))
-    } else {
-        (None, None)
-    };
-
     let portal_events_discovery = Arc::clone(&discovery);
 
     tokio::spawn(async move {
-        let events = PortalnetEvents::new(
-            portal_events_discovery,
-            history_event_sender,
-            state_event_sender,
-        )
-        .await;
+        let events =
+            PortalnetEvents::new(portal_events_discovery, history_event_tx, state_event_tx).await;
         events.process_discv5_requests().await;
     });
 
-    if trin_config.networks.iter().any(|val| val == STATE_NETWORK) {
-        let state_network_discovery = Arc::clone(&discovery);
-        let state_portalnet_config = portalnet_config.clone();
-        let state_overlay_db = Arc::clone(&db);
-
-        // Spawn State network
-        tokio::spawn(async move {
-            info!(
-                "About to spawn State Network with boot nodes: {:?}",
-                state_portalnet_config.bootnode_enrs
-            );
-
-            let mut p2p = StateNetwork::new(
-                state_network_discovery,
-                state_overlay_db,
-                state_portalnet_config,
-            )
-            .await
-            .unwrap();
-
-            match state_event_receiver {
-                Some(rx) => {
-                    let state_events = StateEvents {
-                        network: p2p.clone(),
-                        event_rx: rx,
-                    };
-
-                    tokio::spawn(state_events.process_requests());
-                }
-                None => panic!("State network selected, but state event handler not initialized!"),
-            }
-
-            // hacky test: make sure we establish a session with the boot node
-            p2p.ping_bootnodes().await.unwrap();
-        })
-        .await
-        .unwrap();
+    if let Some(network) = history_network_task {
+        tokio::spawn(async { network.await });
     }
-
-    if trin_config
-        .networks
-        .iter()
-        .any(|val| val == HISTORY_NETWORK)
-    {
-        let history_network_discovery = Arc::clone(&discovery);
-        let history_portalnet_config = portalnet_config.clone();
-        let history_overlay_db = Arc::clone(&db);
-
-        // Spawn History network
-        tokio::spawn(async move {
-            info!(
-                "About to spawn History Network with boot nodes: {:?}",
-                history_portalnet_config.bootnode_enrs
-            );
-
-            let mut p2p = HistoryNetwork::new(
-                history_network_discovery,
-                history_overlay_db,
-                history_portalnet_config,
-            )
-            .await
-            .unwrap();
-
-            match history_event_receiver {
-                Some(rx) => {
-                    let history_events = HistoryEvents {
-                        network: p2p.clone(),
-                        event_rx: rx,
-                    };
-
-                    tokio::spawn(history_events.process_requests());
-                }
-                None => {
-                    panic!("History network selected, but history event handler not initialized!")
-                }
-            }
-
-            // hacky test: make sure we establish a session with the boot node
-            p2p.ping_bootnodes().await.unwrap();
-        })
-        .await
-        .unwrap();
+    if let Some(network) = state_network_task {
+        tokio::spawn(async { network.await });
     }
 
     web3_server_task.await.unwrap();
