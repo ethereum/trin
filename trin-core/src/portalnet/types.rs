@@ -11,6 +11,21 @@ use ssz_derive::{Decode, Encode};
 use super::{Enr, U256};
 
 #[derive(Debug, PartialEq, Clone)]
+pub enum ProtocolKind {
+    History,
+    State,
+}
+
+impl ToString for ProtocolKind {
+    fn to_string(&self) -> String {
+        match self {
+            ProtocolKind::History => "history".to_string(),
+            ProtocolKind::State => "state".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub struct ProtocolMessage {
     message_id: u8,
     encoded_message: Message,

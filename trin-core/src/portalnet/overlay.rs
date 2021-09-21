@@ -2,7 +2,7 @@ use crate::utils::xor_two_values;
 
 use super::{
     discovery::Discovery,
-    types::{FindContent, FindNodes, Message, Ping, Request, SszEnr},
+    types::{FindContent, FindNodes, Message, Ping, ProtocolKind, Request, SszEnr},
     Enr, U256,
 };
 use crate::portalnet::types::HexData;
@@ -186,7 +186,7 @@ impl OverlayProtocol {
         &self,
         data_radius: U256,
         enr: Enr,
-        protocol: String,
+        protocol: ProtocolKind,
     ) -> Result<Vec<u8>, String> {
         let enr_seq = self.discovery.read().await.local_enr().seq();
         let msg = Ping {
@@ -198,7 +198,7 @@ impl OverlayProtocol {
             .await
             .send_talkreq(
                 enr,
-                protocol,
+                protocol.to_string(),
                 Message::Request(Request::Ping(msg)).to_bytes(),
             )
             .await
@@ -208,7 +208,7 @@ impl OverlayProtocol {
         &self,
         distances: Vec<u16>,
         enr: Enr,
-        protocol: String,
+        protocol: ProtocolKind,
     ) -> Result<Vec<u8>, String> {
         let msg = FindNodes { distances };
         self.discovery
@@ -216,7 +216,7 @@ impl OverlayProtocol {
             .await
             .send_talkreq(
                 enr,
-                protocol,
+                protocol.to_string(),
                 Message::Request(Request::FindNodes(msg)).to_bytes(),
             )
             .await
@@ -226,7 +226,7 @@ impl OverlayProtocol {
         &self,
         content_key: Vec<u8>,
         enr: Enr,
-        protocol: String,
+        protocol: ProtocolKind,
     ) -> Result<Vec<u8>, String> {
         let msg = FindContent { content_key };
         self.discovery
@@ -234,7 +234,7 @@ impl OverlayProtocol {
             .await
             .send_talkreq(
                 enr,
-                protocol,
+                protocol.to_string(),
                 Message::Request(Request::FindContent(msg)).to_bytes(),
             )
             .await
