@@ -5,8 +5,8 @@ use ssz::DecodeError;
 use uint::construct_uint;
 
 pub mod discovery;
+pub mod events;
 pub mod overlay;
-pub mod protocol;
 pub mod types;
 pub mod utp;
 

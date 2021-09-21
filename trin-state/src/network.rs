@@ -1,14 +1,12 @@
 use discv5::kbucket::KBucketsTable;
 use log::debug;
 use rocksdb::DB;
-use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use trin_core::portalnet::{
     discovery::Discovery,
     overlay::{OverlayConfig, OverlayProtocol},
-    protocol::{PortalnetConfig, PortalnetEvents},
-    utp::UtpListener,
+    types::{PortalnetConfig, ProtocolKind},
     U256,
 };
 
@@ -23,7 +21,7 @@ impl StateNetwork {
         discovery: Arc<RwLock<Discovery>>,
         db: Arc<DB>,
         portal_config: PortalnetConfig,
-    ) -> Result<(Self, PortalnetEvents), String> {
+    ) -> Result<Self, String> {
         let config = OverlayConfig::default();
         let kbuckets = Arc::new(RwLock::new(KBucketsTable::new(
             discovery.read().await.local_enr().node_id().into(),
@@ -34,41 +32,20 @@ impl StateNetwork {
         )));
         let data_radius = Arc::new(RwLock::new(portal_config.data_radius));
 
-        let protocol_receiver = discovery
-            .write()
-            .await
-            .discv5
-            .event_stream()
-            .await
-            .map_err(|e| e.to_string())
-            .unwrap();
-
         let overlay = OverlayProtocol {
-            discovery: Arc::clone(&discovery),
+            discovery,
             data_radius,
             kbuckets,
+            db,
         };
 
         let overlay = Arc::new(overlay);
-
-        let utp_listener = UtpListener {
-            discovery: Arc::clone(&discovery),
-            utp_connections: HashMap::new(),
-        };
-
-        let events = PortalnetEvents {
-            discovery: Arc::clone(&discovery),
-            overlay: Arc::clone(&overlay),
-            protocol_receiver,
-            db,
-            utp_listener,
-        };
 
         let proto = Self {
             overlay: Arc::clone(&overlay),
         };
 
-        Ok((proto, events))
+        Ok(proto)
     }
 
     /// Convenience call for testing, quick way to ping bootnodes
@@ -85,7 +62,10 @@ impl StateNetwork {
             .table_entries_enr()
         {
             debug!("Pinging {} on portal state network", enr);
-            let ping_result = self.overlay.send_ping(U256::from(u64::MAX), enr).await?;
+            let ping_result = self
+                .overlay
+                .send_ping(U256::from(u64::MAX), enr, ProtocolKind::State)
+                .await?;
             debug!("Portal state network Ping result: {:?}", ping_result);
         }
         Ok(())

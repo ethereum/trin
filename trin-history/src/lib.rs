@@ -1,17 +1,20 @@
+pub mod events;
 pub mod network;
 
 use log::info;
 use serde_json::Value;
 use tokio::sync::mpsc;
 
+use crate::events::HistoryEvents;
+use discv5::TalkRequest;
 use network::HistoryNetwork;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use trin_core::cli::TrinConfig;
+use trin_core::jsonrpc::handlers::{HistoryEndpointKind, HistoryNetworkEndpoint};
 use trin_core::portalnet::discovery::Discovery;
-use trin_core::portalnet::protocol::{
-    HistoryEndpointKind, HistoryNetworkEndpoint, PortalnetConfig,
-};
+use trin_core::portalnet::events::PortalnetEvents;
+use trin_core::portalnet::types::PortalnetConfig;
 use trin_core::utils::setup_overlay_db;
 
 pub struct HistoryRequestHandler {
@@ -73,16 +76,33 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db = Arc::new(setup_overlay_db(discovery.read().await.local_enr()));
 
     info!(
-        "About to spawn portal p2p with boot nodes: {:?}",
+        "About to spawn History network with boot nodes: {:?}",
         portalnet_config.bootnode_enrs
     );
 
+    let (history_sender, history_receiver) = mpsc::unbounded_channel::<TalkRequest>();
+    let portal_events_discovery = Arc::clone(&discovery);
+
+    // Spawn main event handler
     tokio::spawn(async move {
-        let (mut p2p, events) = HistoryNetwork::new(discovery, db, portalnet_config)
+        let events =
+            PortalnetEvents::new(portal_events_discovery, Some(history_sender), None).await;
+        events.process_discv5_requests().await;
+    });
+
+    // Spawn History network
+    tokio::spawn(async move {
+        let mut p2p = HistoryNetwork::new(discovery.clone(), db, portalnet_config)
             .await
             .unwrap();
 
-        tokio::spawn(events.process_discv5_requests());
+        let history_events = HistoryEvents {
+            network: p2p.clone(),
+            event_rx: history_receiver,
+        };
+
+        // Spawn history event handler
+        tokio::spawn(history_events.process_requests());
 
         // hacky test: make sure we establish a session with the boot node
         p2p.ping_bootnodes().await.unwrap();
