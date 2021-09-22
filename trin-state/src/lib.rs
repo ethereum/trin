@@ -39,13 +39,6 @@ impl StateRequestHandler {
     }
 }
 
-pub fn initialize(
-    state_rx: mpsc::UnboundedReceiver<StateNetworkEndpoint>,
-) -> Result<StateRequestHandler, Box<dyn std::error::Error>> {
-    let handler = StateRequestHandler { state_rx };
-    Ok(handler)
-}
-
 pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Launching trin-state...");
 
@@ -87,6 +80,35 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await
         .unwrap();
     Ok(())
+}
+
+type StateHandler = Option<StateRequestHandler>;
+type StateNetworkTask = Option<JoinHandle<()>>;
+type StateEventTx = Option<mpsc::UnboundedSender<TalkRequest>>;
+type StateJsonRpcTx = Option<mpsc::UnboundedSender<StateNetworkEndpoint>>;
+
+pub fn initialize_state_network(
+    discovery: &Arc<RwLock<Discovery>>,
+    portalnet_config: PortalnetConfig,
+    db: &Arc<DB>,
+) -> (StateHandler, StateNetworkTask, StateEventTx, StateJsonRpcTx) {
+    let (state_jsonrpc_tx, state_jsonrpc_rx) = mpsc::unbounded_channel::<StateNetworkEndpoint>();
+    let (state_event_tx, state_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
+    let state_handler = StateRequestHandler {
+        state_rx: state_jsonrpc_rx,
+    };
+    let state_network_task = spawn_state_network(
+        Arc::clone(discovery),
+        Arc::clone(db),
+        portalnet_config,
+        state_event_rx,
+    );
+    (
+        Some(state_handler),
+        Some(state_network_task),
+        Some(state_event_tx),
+        Some(state_jsonrpc_tx),
+    )
 }
 
 pub fn spawn_state_network(

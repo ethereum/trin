@@ -38,13 +38,6 @@ impl HistoryRequestHandler {
     }
 }
 
-pub fn initialize(
-    history_rx: mpsc::UnboundedReceiver<HistoryNetworkEndpoint>,
-) -> Result<HistoryRequestHandler, Box<dyn std::error::Error>> {
-    let handler = HistoryRequestHandler { history_rx };
-    Ok(handler)
-}
-
 pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Launching trin-history...");
 
@@ -90,6 +83,41 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await
         .unwrap();
     Ok(())
+}
+
+type HistoryHandler = Option<HistoryRequestHandler>;
+type HistoryNetworkTask = Option<JoinHandle<()>>;
+type HistoryEventTx = Option<mpsc::UnboundedSender<TalkRequest>>;
+type HistoryJsonRpcTx = Option<mpsc::UnboundedSender<HistoryNetworkEndpoint>>;
+
+pub fn initialize_history_network(
+    discovery: &Arc<RwLock<Discovery>>,
+    portalnet_config: PortalnetConfig,
+    db: &Arc<DB>,
+) -> (
+    HistoryHandler,
+    HistoryNetworkTask,
+    HistoryEventTx,
+    HistoryJsonRpcTx,
+) {
+    let (history_jsonrpc_tx, history_jsonrpc_rx) =
+        mpsc::unbounded_channel::<HistoryNetworkEndpoint>();
+    let (history_event_tx, history_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
+    let history_handler = HistoryRequestHandler {
+        history_rx: history_jsonrpc_rx,
+    };
+    let history_network_task = spawn_history_network(
+        Arc::clone(discovery),
+        Arc::clone(db),
+        portalnet_config,
+        history_event_rx,
+    );
+    (
+        Some(history_handler),
+        Some(history_network_task),
+        Some(history_event_tx),
+        Some(history_jsonrpc_tx),
+    )
 }
 
 pub fn spawn_history_network(
