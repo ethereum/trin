@@ -1,4 +1,3 @@
-use crate::portalnet::U256;
 use directories::ProjectDirs;
 use discv5::enr::NodeId;
 use rocksdb::{Options, DB};
@@ -32,7 +31,7 @@ pub fn get_default_data_dir(node_id: NodeId) -> String {
 
     // Append first 8 characters of Node ID
     let mut application_string = "Trin_".to_owned();
-    let node_id_string = U256::from(node_id.raw()).to_string();
+    let node_id_string = hex::encode(node_id.raw());
     let suffix = &node_id_string[..8];
     application_string.push_str(suffix);
 
