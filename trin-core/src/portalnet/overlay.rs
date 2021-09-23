@@ -85,6 +85,28 @@ pub struct OverlayProtocol {
 }
 
 impl OverlayProtocol {
+    pub async fn new(
+        config: OverlayConfig,
+        discovery: Arc<RwLock<Discovery>>,
+        db: Arc<DB>,
+        data_radius: U256,
+    ) -> Self {
+        let kbuckets = Arc::new(RwLock::new(KBucketsTable::new(
+            discovery.read().await.local_enr().node_id().into(),
+            config.bucket_pending_timeout,
+            config.max_incoming_per_bucket,
+            config.table_filter,
+            config.bucket_filter,
+        )));
+
+        Self {
+            discovery,
+            data_radius: Arc::new(RwLock::new(data_radius)),
+            kbuckets,
+            db,
+        }
+    }
+
     pub async fn process_one_request(
         &self,
         talk_request: &TalkRequest,

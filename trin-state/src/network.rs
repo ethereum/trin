@@ -1,4 +1,3 @@
-use discv5::kbucket::KBucketsTable;
 use log::debug;
 use rocksdb::DB;
 use std::sync::Arc;
@@ -23,29 +22,11 @@ impl StateNetwork {
         portal_config: PortalnetConfig,
     ) -> Result<Self, String> {
         let config = OverlayConfig::default();
-        let kbuckets = Arc::new(RwLock::new(KBucketsTable::new(
-            discovery.read().await.local_enr().node_id().into(),
-            config.bucket_pending_timeout,
-            config.max_incoming_per_bucket,
-            config.table_filter,
-            config.bucket_filter,
-        )));
-        let data_radius = Arc::new(RwLock::new(portal_config.data_radius));
+        let overlay = OverlayProtocol::new(config, discovery, db, portal_config.data_radius).await;
 
-        let overlay = OverlayProtocol {
-            discovery,
-            data_radius,
-            kbuckets,
-            db,
-        };
-
-        let overlay = Arc::new(overlay);
-
-        let proto = Self {
-            overlay: Arc::clone(&overlay),
-        };
-
-        Ok(proto)
+        Ok(Self {
+            overlay: Arc::new(overlay),
+        })
     }
 
     /// Convenience call for testing, quick way to ping bootnodes
