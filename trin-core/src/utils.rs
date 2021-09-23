@@ -1,5 +1,6 @@
-use crate::portalnet::Enr;
+use crate::portalnet::U256;
 use directories::ProjectDirs;
+use discv5::enr::NodeId;
 use rocksdb::{Options, DB};
 use std::{env, fs};
 
@@ -17,22 +18,22 @@ pub fn xor_two_values(first: &[u8], second: &[u8]) -> Vec<u8> {
         .collect()
 }
 
-pub fn get_data_dir(local_enr: Enr) -> String {
-    let path = env::var(TRIN_DATA_ENV_VAR).unwrap_or_else(|_| get_default_data_dir(local_enr));
+pub fn get_data_dir(node_id: NodeId) -> String {
+    let path = env::var(TRIN_DATA_ENV_VAR).unwrap_or_else(|_| get_default_data_dir(node_id));
 
     fs::create_dir_all(&path).expect("Unable to create data directory folder");
     path
 }
 
-pub fn get_default_data_dir(local_enr: Enr) -> String {
+pub fn get_default_data_dir(node_id: NodeId) -> String {
     // Windows: C:\Users\Username\AppData\Roaming\Trin\data
     // macOS: ~/Library/Application Support/Trin
     // Unix-like: $HOME/.local/share/trin
 
-    // Append last 8 enr base64 encoded chars to application dir name
+    // Append first 8 characters of Node ID
     let mut application_string = "Trin_".to_owned();
-    let len = &local_enr.to_base64().len();
-    let suffix = &local_enr.to_base64()[len - 8..];
+    let node_id_string = U256::from(node_id.raw()).to_string();
+    let suffix = &node_id_string[..8];
     application_string.push_str(suffix);
 
     match ProjectDirs::from("", "", &application_string) {
@@ -41,8 +42,8 @@ pub fn get_default_data_dir(local_enr: Enr) -> String {
     }
 }
 
-pub fn setup_overlay_db(local_enr: Enr) -> DB {
-    let data_path = get_data_dir(local_enr);
+pub fn setup_overlay_db(node_id: NodeId) -> DB {
+    let data_path = get_data_dir(node_id);
     let mut db_opts = Options::default();
     db_opts.create_if_missing(true);
     DB::open(&db_opts, data_path).unwrap()
@@ -72,5 +73,22 @@ mod test {
         let one = vec![1, 0];
         let two = vec![0, 0, 1];
         xor_two_values(&one, &two);
+    }
+
+    #[test]
+    fn test_get_default_data_directory() {
+        // In base 10: 34799626616874909003598320854863980956826645806663081868307102301466166142830
+        let node_id_bytes: [u8; 32] = [
+            76, 239, 228, 2, 227, 174, 123, 117, 195, 237, 200, 80, 219, 0, 188, 225, 18, 196, 162,
+            89, 204, 144, 204, 187, 71, 12, 147, 65, 19, 65, 167, 110,
+        ];
+        let node_id = NodeId::parse(&node_id_bytes).unwrap();
+        let default_data_dir = get_default_data_dir(node_id);
+        let path_leaf = default_data_dir
+            .split("/")
+            .last()
+            .expect("Failed to get leaf of default data path.");
+
+        assert_eq!(path_leaf, "Trin_34799626");
     }
 }
