@@ -75,20 +75,4 @@ mod test {
         xor_two_values(&one, &two);
     }
 
-    #[test]
-    fn test_get_default_data_directory() {
-        // In base 10: 34799626616874909003598320854863980956826645806663081868307102301466166142830
-        let node_id_bytes: [u8; 32] = [
-            76, 239, 228, 2, 227, 174, 123, 117, 195, 237, 200, 80, 219, 0, 188, 225, 18, 196, 162,
-            89, 204, 144, 204, 187, 71, 12, 147, 65, 19, 65, 167, 110,
-        ];
-        let node_id = NodeId::parse(&node_id_bytes).unwrap();
-        let default_data_dir = get_default_data_dir(node_id);
-        let path_leaf = default_data_dir
-            .split("/")
-            .last()
-            .expect("Failed to get leaf of default data path.");
-
-        assert_eq!(path_leaf, "Trin_34799626");
-    }
 }
