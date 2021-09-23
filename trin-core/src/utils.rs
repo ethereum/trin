@@ -74,5 +74,4 @@ mod test {
         let two = vec![0, 0, 1];
         xor_two_values(&one, &two);
     }
-
 }
