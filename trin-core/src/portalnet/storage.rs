@@ -7,6 +7,7 @@ use log::{error};
 use hex;
 use std::convert::TryInto;
 use super::U256;
+use std::sync::Arc;
 
 #[derive(Copy, Clone)]
 pub enum DistanceFunction {
@@ -21,7 +22,9 @@ pub struct PortalStorageConfig  {
     pub storage_capacity_kb: u64,
     pub node_id: NodeId,
     pub distance_function: DistanceFunction,
-    
+    pub db: Arc<DB>,
+    pub meta_db: Arc<rusqlite::Connection>,
+
 }
 
 pub struct PortalStorage {
@@ -30,8 +33,8 @@ pub struct PortalStorage {
     storage_capacity_kb: u64,
     data_radius: u64,
     farthest_content_id: Option<[u8; 32]>,
-    db: rocksdb::DB,
-    meta_db: rusqlite::Connection,
+    db: Arc<rocksdb::DB>,
+    meta_db: Arc<rusqlite::Connection>,
     distance_function: DistanceFunction,
     content_key_to_id_function: Box<ContentKeyToIdDerivationFunction>,
 
@@ -41,18 +44,14 @@ impl PortalStorage {
 
     pub fn new(config: &PortalStorageConfig, convert_function: impl Fn(&String) -> U256 + 'static) -> Self {
 
-        // Create DB interfaces
-        let db = PortalStorage::setup_rocksdb(config.node_id);
-        let meta_db = PortalStorage::setup_sqlite(config.node_id);
-
         // Initialize the instance
         let mut storage = Self {
             node_id: config.node_id,
             storage_capacity_kb: config.storage_capacity_kb,
             data_radius: u64::MAX,
-            db: db,
+            db: config.db.to_owned(),
             farthest_content_id: None,
-            meta_db: meta_db,
+            meta_db: config.meta_db.to_owned(),
             distance_function: config.distance_function,
             content_key_to_id_function: Box::new(convert_function)
         };
@@ -74,7 +73,7 @@ impl PortalStorage {
 
     }
 
-    fn setup_rocksdb(node_id: NodeId) -> DB {
+    pub fn setup_rocksdb(node_id: NodeId) -> DB {
 
         let data_path_root: String = get_data_dir(node_id).to_owned();
         let data_suffix: &str = "/rocksdb";
@@ -86,7 +85,7 @@ impl PortalStorage {
 
     }
 
-    fn setup_sqlite(node_id: NodeId) -> rusqlite::Connection {
+    pub fn setup_sqlite(node_id: NodeId) -> rusqlite::Connection {
 
         let data_path_root: String = get_data_dir(node_id).to_owned();
         let data_suffix: &str = "/trin.sqlite";
@@ -200,7 +199,12 @@ impl PortalStorage {
             self.db.flush().expect("Failed to flush db.");
             
             match self.find_farthest_content_id() {
-                None => { error!("Failed to find farthest!") },
+                None => {
+                    error!("Database is over-capacity, but could not find find entry to delete!");
+                    self.farthest_content_id = None;
+                    // stop attempting to delete, to avoid risk of infinite loop
+                    break;
+                },
                 Some(farthest) => {
                     println!("Found new farthest: {}", hex::encode(&farthest));
                     self.farthest_content_id = Some(farthest.clone());
@@ -418,10 +422,17 @@ mod test {
     #[test]
     fn test_new() {
 
+        let node_id = NodeId::random();
+
+        let db = Arc::new(PortalStorage::setup_rocksdb(node_id));
+        let meta_db = Arc::new(PortalStorage::setup_sqlite(node_id));
+
         let storage_config = PortalStorageConfig {
             storage_capacity_kb: 100,
-            node_id: NodeId::random(),
+            node_id: node_id,
             distance_function: DistanceFunction::Xor,
+            db: db,
+            meta_db: meta_db,
         };
         let _ = PortalStorage::new(&storage_config, |key| {
             sha256(&key)
@@ -432,10 +443,17 @@ mod test {
     #[test]
     fn test_store() {
 
+        let node_id = NodeId::random();
+
+        let db = Arc::new(PortalStorage::setup_rocksdb(node_id));
+        let meta_db = Arc::new(PortalStorage::setup_sqlite(node_id));
+
         let storage_config = PortalStorageConfig {
             storage_capacity_kb: 100,
-            node_id: NodeId::random(),
+            node_id: node_id,
             distance_function: DistanceFunction::Xor,
+            db: db,
+            meta_db: meta_db,
         };
 
         let mut storage = PortalStorage::new(&storage_config, |key| {
@@ -451,10 +469,17 @@ mod test {
     #[test]
     fn test_get_data() {
 
+        let node_id = NodeId::random();
+
+        let db = Arc::new(PortalStorage::setup_rocksdb(node_id));
+        let meta_db = Arc::new(PortalStorage::setup_sqlite(node_id));
+
         let storage_config = PortalStorageConfig {
             storage_capacity_kb: 100,
-            node_id: NodeId::random(),
+            node_id: node_id,
             distance_function: DistanceFunction::Xor,
+            db: db,
+            meta_db: meta_db,
         };
         let mut storage = PortalStorage::new(&storage_config, |key| {
             sha256(&key)
@@ -472,10 +497,17 @@ mod test {
     #[test]
     fn test_get_total_storage() {
 
+        let node_id = NodeId::random();
+
+        let db = Arc::new(PortalStorage::setup_rocksdb(node_id));
+        let meta_db = Arc::new(PortalStorage::setup_sqlite(node_id));
+
         let storage_config = PortalStorageConfig {
             storage_capacity_kb: 100,
-            node_id: NodeId::random(),
+            node_id: node_id,
             distance_function: DistanceFunction::Xor,
+            db: db,
+            meta_db: meta_db,
         };
         let mut storage = PortalStorage::new(&storage_config, |key| {
             sha256(&key)
@@ -495,10 +527,17 @@ mod test {
     #[test]
     fn test_should_store() {
 
+        let node_id = NodeId::random();
+
+        let db = Arc::new(PortalStorage::setup_rocksdb(node_id));
+        let meta_db = Arc::new(PortalStorage::setup_sqlite(node_id));
+
         let storage_config = PortalStorageConfig {
             storage_capacity_kb: 100,
-            node_id: NodeId::random(),
+            node_id: node_id,
             distance_function: DistanceFunction::Xor,
+            db: db,
+            meta_db: meta_db,
         };
 
         let mut storage = PortalStorage::new(&storage_config, |key| {
@@ -525,11 +564,17 @@ mod test {
         
         // As u64: 5615957961415228277
         let example_node_id_bytes: [u8; 32] = [77, 239, 228, 2, 227, 174, 123, 117, 195, 237, 200, 80, 219, 0, 188, 225, 18, 196, 162, 89, 204, 144, 204, 187, 71, 12, 147, 65, 19, 65, 167, 110];
+        let node_id = NodeId::parse(&example_node_id_bytes).unwrap();
+
+        let db = Arc::new(PortalStorage::setup_rocksdb(node_id));
+        let meta_db = Arc::new(PortalStorage::setup_sqlite(node_id));
 
         let storage_config = PortalStorageConfig {
             storage_capacity_kb: 100,
-            node_id: NodeId::parse(&example_node_id_bytes).unwrap(),
+            node_id: node_id,
             distance_function: DistanceFunction::Xor,
+            db: db,
+            meta_db: meta_db,
         };
 
         let storage = PortalStorage::new(&storage_config, |key| {
@@ -559,11 +604,17 @@ mod test {
 
         // As u64: 5543900367377300341
         let example_node_id_bytes: [u8; 32] = [76, 239, 228, 2, 227, 174, 123, 117, 195, 237, 200, 80, 219, 0, 188, 225, 18, 196, 162, 89, 204, 144, 204, 187, 71, 12, 147, 65, 19, 65, 167, 110];
+        let node_id = NodeId::parse(&example_node_id_bytes).unwrap();
+
+        let db = Arc::new(PortalStorage::setup_rocksdb(node_id));
+        let meta_db = Arc::new(PortalStorage::setup_sqlite(node_id));
 
         let storage_config = PortalStorageConfig {
             storage_capacity_kb: 100,
-            node_id: NodeId::parse(&example_node_id_bytes).unwrap(),
+            node_id: node_id,
             distance_function: DistanceFunction::Xor,
+            db: db,
+            meta_db: meta_db,
         };
 
         let mut storage = PortalStorage::new(&storage_config, |key| {

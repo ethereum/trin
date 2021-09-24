@@ -1,5 +1,5 @@
 use structopt::StructOpt;
-use rocksdb::{Options, DB};
+use rocksdb::{Options};
 use trin_core::utils::{get_data_dir};
 use trin_core::portalnet::storage::{PortalStorage, PortalStorageConfig, DistanceFunction};
 use trin_core::portalnet::{U256};
@@ -8,7 +8,7 @@ use std::process::Command;
 use discv5::enr::NodeId;
 use sha3::{Digest, Sha3_256};
 use std::convert::TryInto;
-
+use std::sync::Arc;
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
@@ -26,22 +26,25 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut db_opts = Options::default();
     db_opts.create_if_missing(true);
-    let db = DB::open(&db_opts, get_data_dir(node_id)).expect("Failed to open RocksDB.");
+    let db = PortalStorage::setup_rocksdb(node_id);
+    let meta_db = PortalStorage::setup_sqlite(node_id);
 
     let num_kilobytes = generator_config.kb;
     let size_of_keys = 32;
     let size_of_values = generator_config.value_size;
 
     // For every 1 kb of data we store (key + value), RocksDB tends to grow by this many kb on disk...
-    // ...but this is a crude empirical estimation that works mainly with default value data size. 
+    // ...but this is a crude empirical estimation that works mainly with default value data size of 32 . 
     let data_overhead = 1.1783;
     let number_of_entries = ( (num_kilobytes * 1000) as f64 / (size_of_values) as f64 ) / data_overhead;
     let number_of_entries = number_of_entries.round() as u32;
 
     let storage_config = PortalStorageConfig {
         storage_capacity_kb: (num_kilobytes / 4) as u64,
-        node_id: NodeId::random(),
+        node_id: node_id,
         distance_function: DistanceFunction::Xor,
+        db: Arc::new(db).to_owned(),
+        meta_db: Arc::new(meta_db).to_owned(),
     };
     let mut storage = PortalStorage::new(&storage_config, |key| {
         sha256(&key)
@@ -53,18 +56,10 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         let key = generate_random_value(size_of_keys);
 
         println!("{} -> {}", &key, &value);
-
-        if generator_config.portal_storage {
-            storage.store(&key, &value);
-        } else {
-            db.put(&key, &value).expect("Failed to write DB entry.");
-        }
-
+        storage.store(&key, &value);
         println!();
 
     } 
-
-    db.flush().expect("Failed to flush changes to DB.");
 
     println!("Successfully saved {} key/value pairs to RocksDB.", number_of_entries);
 
