@@ -42,8 +42,8 @@ impl PortalStorage {
     pub fn new(config: &PortalStorageConfig, convert_function: impl Fn(&String) -> U256 + 'static) -> Result<Self, String> {
 
         // Create DB interfaces
-        let db = PortalStorage::setup_rocksdb();
-        let meta_db = PortalStorage::setup_sqlite();
+        let db = PortalStorage::setup_rocksdb(config.node_id);
+        let meta_db = PortalStorage::setup_sqlite(config.node_id);
 
         // Initialize the instance
         let mut storage = Self {
@@ -74,9 +74,9 @@ impl PortalStorage {
 
     }
 
-    fn setup_rocksdb() -> DB {
+    fn setup_rocksdb(node_id: NodeId) -> DB {
 
-        let data_path_root: String = get_data_dir().to_owned();
+        let data_path_root: String = get_data_dir(node_id).to_owned();
         let data_suffix: &str = "/rocksdb";
         let data_path = data_path_root + data_suffix;
 
@@ -86,9 +86,9 @@ impl PortalStorage {
 
     }
 
-    fn setup_sqlite() -> rusqlite::Connection {
+    fn setup_sqlite(node_id: NodeId) -> rusqlite::Connection {
 
-        let data_path_root: String = get_data_dir().to_owned();
+        let data_path_root: String = get_data_dir(node_id).to_owned();
         let data_suffix: &str = "/trin.sqlite";
         let data_path = data_path_root + data_suffix;
 
@@ -234,7 +234,7 @@ impl PortalStorage {
 
     pub fn get_total_storage_usage_in_bytes_on_disk(&self) -> u64 {
 
-        self.get_total_size_of_directory_in_bytes(get_data_dir()).unwrap()
+        self.get_total_size_of_directory_in_bytes(get_data_dir(self.node_id)).unwrap()
 
     }
 

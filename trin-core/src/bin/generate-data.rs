@@ -14,17 +14,19 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let generator_config = GeneratorConfig::from_args();
 
+    let node_id = NodeId::random();
+
     if generator_config.overwrite {
         let _ = Command::new("rm")
                         .arg("-rf")
-                        .arg(get_data_dir())
+                        .arg(get_data_dir(node_id))
                         .output()
                         .expect("Failed to overwrite DB.");
     }
 
     let mut db_opts = Options::default();
     db_opts.create_if_missing(true);
-    let db = DB::open(&db_opts, get_data_dir()).expect("Failed to open RocksDB.");
+    let db = DB::open(&db_opts, get_data_dir(node_id)).expect("Failed to open RocksDB.");
 
     let num_kilobytes = generator_config.kb;
     let size_of_keys = 32;

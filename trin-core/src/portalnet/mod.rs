@@ -12,7 +12,7 @@ pub mod utp;
 pub mod storage;
 
 use std::convert::From;
-use std::vec;
+
 
 pub type Enr = discv5::enr::Enr<CombinedKey>;
 
