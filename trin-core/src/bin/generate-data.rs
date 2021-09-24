@@ -45,7 +45,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let mut storage = PortalStorage::new(&storage_config, |key| {
         sha256(&key)
-    }).unwrap();
+    });
 
     for _ in 0..number_of_entries {
         

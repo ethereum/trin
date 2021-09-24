@@ -39,7 +39,7 @@ pub struct PortalStorage {
 
 impl PortalStorage {
 
-    pub fn new(config: &PortalStorageConfig, convert_function: impl Fn(&String) -> U256 + 'static) -> Result<Self, String> {
+    pub fn new(config: &PortalStorageConfig, convert_function: impl Fn(&String) -> U256 + 'static) -> Self {
 
         // Create DB interfaces
         let db = PortalStorage::setup_rocksdb(config.node_id);
@@ -70,7 +70,7 @@ impl PortalStorage {
             None => ()
         }
 
-        Ok(storage)
+        storage
 
     }
 
@@ -440,7 +440,7 @@ mod test {
 
         let mut storage = PortalStorage::new(&storage_config, |key| {
             sha256(&key)
-        }).unwrap();
+        });
 
         let key: String = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".to_string();
         let value: String = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".to_string();
@@ -458,7 +458,7 @@ mod test {
         };
         let mut storage = PortalStorage::new(&storage_config, |key| {
             sha256(&key)
-        }).unwrap();
+        });
         let key: String = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".to_string();
         let value: String = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".to_string();
         storage.store(&key, &value);
@@ -479,7 +479,7 @@ mod test {
         };
         let mut storage = PortalStorage::new(&storage_config, |key| {
             sha256(&key)
-        }).unwrap();
+        });
 
         let key: String = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".to_string();
         let value: String = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".to_string();
@@ -503,7 +503,7 @@ mod test {
 
         let mut storage = PortalStorage::new(&storage_config, |key| {
             sha256(&key)
-        }).unwrap();
+        });
 
         let key_a: String = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".to_string();
         let key_b: String = "p1K8ymqgNO9vJ1LwATa4yNqCxk6AMgNa".to_string();
@@ -534,7 +534,7 @@ mod test {
 
         let storage = PortalStorage::new(&storage_config, |key| {
             sha256(&key)
-        }).unwrap();
+        });
 
         // As u64: 3352017618602726004
         let key: String = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".to_string();
@@ -570,7 +570,7 @@ mod test {
 
         let mut storage = PortalStorage::new(&storage_config, |key| {
             sha256(&key)
-        }).unwrap();
+        });
 
         let value = "value".to_string();
 
