@@ -89,7 +89,7 @@ fn sha256(key: &str) -> U256 {
     hasher.update(key);
     let mut x = hasher.finalize();
     let y: &mut[u8; 32] = x.as_mut_slice().try_into().expect("try_into failed in hash placeholder");
-    U256::from(y.clone())
+    U256::from(*y)
 
 }      
 

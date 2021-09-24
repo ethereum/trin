@@ -523,8 +523,8 @@ mod test {
     #[test]
     fn test_distance_to_key() {
         
-        // As u64: 5543900367377300341
-        let example_node_id_bytes: [u8; 32] = [76, 239, 228, 2, 227, 174, 123, 117, 195, 237, 200, 80, 219, 0, 188, 225, 18, 196, 162, 89, 204, 144, 204, 187, 71, 12, 147, 65, 19, 65, 167, 110];
+        // As u64: 5615957961415228277
+        let example_node_id_bytes: [u8; 32] = [77, 239, 228, 2, 227, 174, 123, 117, 195, 237, 200, 80, 219, 0, 188, 225, 18, 196, 162, 89, 204, 144, 204, 187, 71, 12, 147, 65, 19, 65, 167, 110];
 
         let storage_config = PortalStorageConfig {
             storage_capacity_kb: 100,
@@ -543,7 +543,7 @@ mod test {
         let distance = storage.distance_to_content_id(&content_id);
 
         // Answer from https://xor.pw/
-        assert_eq!(distance, 7091804100148652289);
+        assert_eq!(distance, 7163861694186580225);
 
     }
 
@@ -555,8 +555,6 @@ mod test {
     }
 
     #[test]
-    // This test will only pass if the database isn't already populated,
-    // otherwise we can't guarantee it will get the expected answer
     fn test_find_farthest() {
 
         // As u64: 5543900367377300341
