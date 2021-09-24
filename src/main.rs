@@ -54,7 +54,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     discovery.write().await.start().await.unwrap();
 
     // Setup Overlay database
-    let db = Arc::new(setup_overlay_db(discovery.read().await.local_enr()));
+    let db = Arc::new(setup_overlay_db(
+        discovery.read().await.local_enr().node_id(),
+    ));
 
     debug!("Selected networks to spawn: {:?}", trin_config.networks);
     // Initialize state sub-network service and event handlers, if selected

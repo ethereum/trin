@@ -67,7 +67,9 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let discovery = Arc::new(RwLock::new(discovery));
 
     // Setup Overlay database
-    let db = Arc::new(setup_overlay_db(discovery.read().await.local_enr()));
+    let db = Arc::new(setup_overlay_db(
+        discovery.read().await.local_enr().node_id(),
+    ));
 
     let (history_event_tx, history_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
     let portal_events_discovery = Arc::clone(&discovery);
