@@ -675,6 +675,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "ethportal-peertest"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "discv5",
+ "log 0.4.14",
+ "rocksdb",
+ "structopt",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "trin-core",
+]
+
+[[package]]
 name = "ff"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
