@@ -46,7 +46,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let mut storage = PortalStorage::new(storage_config, |key| sha256(&key));
 
-    for _ in 0..number_of_entries {
+    for _ in 0..num_of_entries {
         let value = generate_random_value(size_of_values);
         let key = generate_random_value(size_of_keys);
 
@@ -57,7 +57,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!(
         "Successfully saved {} key/value pairs to RocksDB.",
-        number_of_entries
+        num_of_entries
     );
 
     Ok(())
