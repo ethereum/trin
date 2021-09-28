@@ -5,7 +5,8 @@ use log::debug;
 use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 
-use trin_core::jsonrpc::handlers::{JsonRpcHandler, PortalEndpoint};
+use trin_core::jsonrpc::handlers::JsonRpcHandler;
+use trin_core::jsonrpc::types::PortalJsonRpcRequest;
 use trin_core::portalnet::events::PortalnetEvents;
 use trin_core::{
     cli::{TrinConfig, HISTORY_NETWORK, STATE_NETWORK},
@@ -79,11 +80,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             (None, None, None, None)
         };
 
-    // Initialize service server
-    let (jsonrpc_tx, jsonrpc_rx) = mpsc::unbounded_channel::<PortalEndpoint>();
+    // Initialize json-rpc server
+    let (portal_jsonrpc_tx, portal_jsonrpc_rx) = mpsc::unbounded_channel::<PortalJsonRpcRequest>();
     let jsonrpc_trin_config = trin_config.clone();
-    let web3_server_task = tokio::task::spawn_blocking(|| {
-        launch_jsonrpc_server(jsonrpc_trin_config, infura_project_id, jsonrpc_tx);
+    let jsonrpc_server_task = tokio::task::spawn_blocking(|| {
+        launch_jsonrpc_server(jsonrpc_trin_config, infura_project_id, portal_jsonrpc_tx);
     });
 
     // Spawn main JsonRpc Handler
@@ -91,9 +92,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::spawn(async move {
         let rpc_handler = JsonRpcHandler {
             discovery: jsonrpc_discovery,
-            jsonrpc_rx,
-            state_tx: state_jsonrpc_tx,
-            history_tx: history_jsonrpc_tx,
+            portal_jsonrpc_rx,
+            state_jsonrpc_tx,
+            history_jsonrpc_tx,
         };
 
         tokio::spawn(rpc_handler.process_jsonrpc_requests());
@@ -121,7 +122,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tokio::spawn(async { network.await });
     }
 
-    web3_server_task.await.unwrap();
+    jsonrpc_server_task.await.unwrap();
 
     tokio::signal::ctrl_c()
         .await
