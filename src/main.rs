@@ -62,7 +62,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize state sub-network service and event handlers, if selected
     let (state_handler, state_network_task, state_event_tx, state_jsonrpc_tx) =
         if trin_config.networks.iter().any(|val| val == STATE_NETWORK) {
-            initialize_state_network(&discovery, portalnet_config.clone(), &db)
+            initialize_state_network(&discovery, portalnet_config.clone(), Arc::clone(&db)).await
         } else {
             (None, None, None, None)
         };
@@ -74,7 +74,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .iter()
             .any(|val| val == HISTORY_NETWORK)
         {
-            initialize_history_network(&discovery, portalnet_config.clone(), &db)
+            initialize_history_network(&discovery, portalnet_config.clone(), Arc::clone(&db)).await
         } else {
             (None, None, None, None)
         };
