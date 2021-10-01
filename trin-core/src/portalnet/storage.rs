@@ -272,7 +272,6 @@ impl PortalStorage {
                 return Err(PortalStorageError::SumError()); 
             }
         }?.sum;
-        // unwrap().unwrap().sum;
 
         Ok(sum)
     }
