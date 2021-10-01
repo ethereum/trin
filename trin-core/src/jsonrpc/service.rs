@@ -1,4 +1,3 @@
-use super::handlers::{PortalEndpoint, PortalEndpointKind};
 use super::types::JsonRequest;
 use crate::cli::TrinConfig;
 use log::debug;
@@ -11,6 +10,9 @@ use std::net::{TcpListener, TcpStream};
 #[cfg(unix)]
 use std::os::unix;
 
+use crate::jsonrpc::endpoints::PortalEndpointKind;
+use crate::jsonrpc::types::PortalJsonRpcRequest;
+use std::str::FromStr;
 use std::sync::Mutex;
 use std::{panic, process};
 use threadpool::ThreadPool;
@@ -25,7 +27,7 @@ lazy_static! {
 pub fn launch_jsonrpc_server(
     trin_config: TrinConfig,
     infura_project_id: String,
-    portal_tx: UnboundedSender<PortalEndpoint>,
+    portal_tx: UnboundedSender<PortalJsonRpcRequest>,
 ) {
     let pool = ThreadPool::new(trin_config.pool_size as usize);
 
@@ -75,7 +77,7 @@ fn launch_ipc_client(
     pool: ThreadPool,
     infura_project_id: String,
     ipc_path: &str,
-    portal_tx: UnboundedSender<PortalEndpoint>,
+    portal_tx: UnboundedSender<PortalJsonRpcRequest>,
 ) {
     let listener_result = get_listener_result(ipc_path);
     let listener = match listener_result {
@@ -106,7 +108,7 @@ fn launch_http_client(
     pool: ThreadPool,
     infura_project_id: String,
     trin_config: TrinConfig,
-    portal_tx: UnboundedSender<PortalEndpoint>,
+    portal_tx: UnboundedSender<PortalJsonRpcRequest>,
 ) {
     let uri = format!("127.0.0.1:{}", trin_config.web3_http_port);
     let listener = TcpListener::bind(uri).unwrap();
@@ -131,7 +133,7 @@ fn serve_ipc_client(
     rx: &mut impl Read,
     tx: &mut impl Write,
     infura_url: &str,
-    portal_tx: UnboundedSender<PortalEndpoint>,
+    portal_tx: UnboundedSender<PortalJsonRpcRequest>,
 ) {
     let deser = serde_json::Deserializer::from_reader(rx);
     for obj in deser.into_iter::<JsonRequest>() {
@@ -165,7 +167,7 @@ fn serve_ipc_client(
 fn serve_http_client(
     mut stream: TcpStream,
     infura_url: &str,
-    portal_tx: UnboundedSender<PortalEndpoint>,
+    portal_tx: UnboundedSender<PortalJsonRpcRequest>,
 ) {
     let mut buffer = Vec::new();
     stream.read_to_end(&mut buffer).unwrap();
@@ -186,7 +188,7 @@ fn serve_http_client(
 fn process_http_request(
     obj: JsonRequest,
     infura_url: &str,
-    portal_tx: UnboundedSender<PortalEndpoint>,
+    portal_tx: UnboundedSender<PortalJsonRpcRequest>,
 ) -> Vec<u8> {
     let result = handle_request(obj, infura_url, portal_tx);
     match result {
@@ -208,7 +210,7 @@ fn process_http_request(
 fn handle_request(
     obj: JsonRequest,
     infura_url: &str,
-    portal_tx: UnboundedSender<PortalEndpoint>,
+    portal_tx: UnboundedSender<PortalJsonRpcRequest>,
 ) -> Result<String, String> {
     // todo: figure out best way to refactor this parsing logic
     // & catch invalid methods before proxying to infura
@@ -219,10 +221,7 @@ fn handle_request(
             "result": "trin 0.0.1-alpha",
         })
         .to_string()),
-        "test_historyNetwork" => dispatch_portal_request(obj, portal_tx),
-        "test_stateNetwork" => dispatch_portal_request(obj, portal_tx),
-        _ if obj.method.as_str().starts_with("discv5") => dispatch_portal_request(obj, portal_tx),
-        _ => dispatch_infura_request(obj, infura_url),
+        _ => dispatch_portal_request(obj, portal_tx, infura_url),
     }
 }
 
@@ -242,44 +241,35 @@ fn dispatch_infura_request(obj: JsonRequest, infura_url: &str) -> Result<String,
 
 fn dispatch_portal_request(
     obj: JsonRequest,
-    portal_tx: UnboundedSender<PortalEndpoint>,
+    portal_tx: UnboundedSender<PortalJsonRpcRequest>,
+    infura_url: &str,
 ) -> Result<String, String> {
     let (resp_tx, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
     let method = obj.method.as_str();
-    let params = obj.params;
-    let message = match method {
-        "discv5_nodeInfo" => PortalEndpoint {
-            kind: PortalEndpointKind::NodeInfo,
-            params,
-            resp: resp_tx,
+    let endpoint = PortalEndpointKind::from_str(method);
+
+    match endpoint {
+        Ok(endpoint_kind) => match endpoint_kind {
+            PortalEndpointKind::InfuraEndPointKind(_) => {
+                dispatch_infura_request(obj.clone(), infura_url)?;
+            }
+            _ => {
+                let message = PortalJsonRpcRequest {
+                    endpoint: endpoint_kind,
+                    resp: resp_tx,
+                };
+                portal_tx.send(message).unwrap();
+            }
         },
-        "discv5_routingTableInfo" => PortalEndpoint {
-            kind: PortalEndpointKind::RoutingTableInfo,
-            params,
-            resp: resp_tx,
-        },
-        // todo: remove test_historyNetwork & test_stateNetwork & replace with equivalent tests
-        // these are just test endpoints to validate that we can dispatch requests to subnetworks
-        "test_historyNetwork" => PortalEndpoint {
-            kind: PortalEndpointKind::DummyHistoryNetworkData,
-            params,
-            resp: resp_tx,
-        },
-        "test_stateNetwork" => PortalEndpoint {
-            kind: PortalEndpointKind::DummyStateNetworkData,
-            params,
-            resp: resp_tx,
-        },
-        _ => {
+        Err(_) => {
             return Err(json!({
                 "jsonrpc": "2.0",
                 "id": obj.id,
-                "error": format!("Unsupported discv5 endpoint: {}", method),
+                "error": format!("Invalid JSON-RPC portal endpoint: {}", method),
             })
             .to_string())
         }
-    };
-    portal_tx.send(message).unwrap();
+    }
 
     let res = match resp_rx.blocking_recv().unwrap() {
         Ok(val) => val,

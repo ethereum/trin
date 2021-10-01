@@ -35,9 +35,9 @@ jobs:
             - run:
                 name: Run Clippy
                 command: cargo clippy --all -- --deny warnings
-            - rust/build:
-                release: false
-                with_cache: false
+            - run:
+                name: Build Trin workspace
+                command: cargo build --workspace --jobs 2
             - run:
                 name: Test Trin workspace
                 command: cargo test --workspace

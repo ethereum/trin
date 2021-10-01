@@ -20,13 +20,13 @@ impl StateNetwork {
         discovery: Arc<RwLock<Discovery>>,
         db: Arc<DB>,
         portal_config: PortalnetConfig,
-    ) -> Result<Self, String> {
+    ) -> Self {
         let config = OverlayConfig::default();
         let overlay = OverlayProtocol::new(config, discovery, db, portal_config.data_radius).await;
 
-        Ok(Self {
+        Self {
             overlay: Arc::new(overlay),
-        })
+        }
     }
 
     /// Convenience call for testing, quick way to ping bootnodes

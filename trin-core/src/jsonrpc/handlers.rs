@@ -6,113 +6,65 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 
-use super::types::Params;
-
+use crate::jsonrpc::endpoints::{
+    Discv5EndpointKind, HistoryEndpointKind, PortalEndpointKind, StateEndpointKind,
+};
+use crate::jsonrpc::types::{HistoryJsonRpcRequest, PortalJsonRpcRequest, StateJsonRpcRequest};
 use crate::portalnet::discovery::Discovery;
 
 type Responder<T, E> = mpsc::UnboundedSender<Result<T, E>>;
 
-#[derive(Debug)]
-pub enum HistoryEndpointKind {
-    GetHistoryNetworkData,
-}
-
-#[derive(Debug)]
-pub struct HistoryNetworkEndpoint {
-    pub kind: HistoryEndpointKind,
-    pub resp: Responder<Value, String>,
-}
-
-#[derive(Debug)]
-pub enum StateEndpointKind {
-    GetStateNetworkData,
-}
-
-#[derive(Debug)]
-pub struct StateNetworkEndpoint {
-    pub kind: StateEndpointKind,
-    pub resp: Responder<Value, String>,
-}
-
-#[derive(Debug)]
-pub enum PortalEndpointKind {
-    DummyHistoryNetworkData,
-    DummyStateNetworkData,
-    NodeInfo,
-    RoutingTableInfo,
-}
-
-#[derive(Debug)]
-pub struct PortalEndpoint {
-    pub kind: PortalEndpointKind,
-    pub params: Params,
-    pub resp: Responder<Value, String>,
-}
-
+/// Main JSON-RPC handler. It dispatches json-rpc requests to the overlay networks.
 pub struct JsonRpcHandler {
     pub discovery: Arc<RwLock<Discovery>>,
-    pub jsonrpc_rx: mpsc::UnboundedReceiver<PortalEndpoint>,
-    pub state_tx: Option<mpsc::UnboundedSender<StateNetworkEndpoint>>,
-    pub history_tx: Option<mpsc::UnboundedSender<HistoryNetworkEndpoint>>,
+    pub portal_jsonrpc_rx: mpsc::UnboundedReceiver<PortalJsonRpcRequest>,
+    pub state_jsonrpc_tx: Option<mpsc::UnboundedSender<StateJsonRpcRequest>>,
+    pub history_jsonrpc_tx: Option<mpsc::UnboundedSender<HistoryJsonRpcRequest>>,
 }
 
 impl JsonRpcHandler {
     pub async fn process_jsonrpc_requests(mut self) {
-        while let Some(cmd) = self.jsonrpc_rx.recv().await {
-            use PortalEndpointKind::*;
-
-            match cmd.kind {
-                NodeInfo => {
-                    let node_id = self.discovery.read().await.local_enr().to_base64();
-                    let _ = cmd.resp.send(Ok(Value::String(node_id)));
-                }
-                RoutingTableInfo => {
-                    let routing_table_info = self
-                        .discovery
-                        .read()
-                        .await
-                        .discv5
-                        .table_entries_id()
-                        .iter()
-                        .map(|node_id| Value::String(node_id.to_string()))
-                        .collect();
-                    let _ = cmd.resp.send(Ok(Value::Array(routing_table_info)));
-                }
-                DummyHistoryNetworkData => {
-                    let response = match self.history_tx.as_ref() {
-                        Some(tx) => {
-                            proxy_query_to_history_subnet(
-                                tx,
-                                HistoryEndpointKind::GetHistoryNetworkData,
-                            )
-                            .await
-                        }
+        while let Some(request) = self.portal_jsonrpc_rx.recv().await {
+            let response: Value = match request.endpoint {
+                PortalEndpointKind::Discv5EndpointKind(endpoint) => match endpoint {
+                    Discv5EndpointKind::NodeInfo => {
+                        Value::String(self.discovery.read().await.node_info())
+                    }
+                    Discv5EndpointKind::RoutingTableInfo => {
+                        Value::Array(self.discovery.read().await.routing_table_info())
+                    }
+                },
+                PortalEndpointKind::HistoryEndpointKind(endpoint) => {
+                    let response = match self.history_jsonrpc_tx.as_ref() {
+                        Some(tx) => proxy_query_to_history_subnet(tx, endpoint).await,
                         None => Err("Chain history subnetwork unavailable.".to_string()),
                     };
-                    let _ = cmd.resp.send(response);
+                    response.unwrap_or_else(Value::String)
                 }
-                DummyStateNetworkData => {
-                    let response = match self.state_tx.as_ref() {
-                        Some(tx) => {
-                            proxy_query_to_state_subnet(tx, StateEndpointKind::GetStateNetworkData)
-                                .await
-                        }
+                PortalEndpointKind::StateEndpointKind(endpoint) => {
+                    let response = match self.state_jsonrpc_tx.as_ref() {
+                        Some(tx) => proxy_query_to_state_subnet(tx, endpoint).await,
                         None => Err("State subnetwork unavailable.".to_string()),
                     };
-                    let _ = cmd.resp.send(response);
+                    response.unwrap_or_else(Value::String)
                 }
-            }
+                _ => Value::String(format!(
+                    "Can't process portal network endpoint {:?}",
+                    request.endpoint
+                )),
+            };
+            let _ = request.resp.send(Ok(response));
         }
     }
 }
 
 async fn proxy_query_to_history_subnet(
-    subnet_tx: &mpsc::UnboundedSender<HistoryNetworkEndpoint>,
-    msg_kind: HistoryEndpointKind,
+    subnet_tx: &mpsc::UnboundedSender<HistoryJsonRpcRequest>,
+    endpoint: HistoryEndpointKind,
 ) -> Result<Value, String> {
     let (resp_tx, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
-    let message = HistoryNetworkEndpoint {
-        kind: msg_kind,
+    let message = HistoryJsonRpcRequest {
+        endpoint,
         resp: resp_tx,
     };
     let _ = subnet_tx.send(message);
@@ -129,12 +81,12 @@ async fn proxy_query_to_history_subnet(
 }
 
 async fn proxy_query_to_state_subnet(
-    subnet_tx: &mpsc::UnboundedSender<StateNetworkEndpoint>,
-    msg_kind: StateEndpointKind,
+    subnet_tx: &mpsc::UnboundedSender<StateJsonRpcRequest>,
+    endpoint: StateEndpointKind,
 ) -> Result<Value, String> {
     let (resp_tx, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
-    let message = StateNetworkEndpoint {
-        kind: msg_kind,
+    let message = StateJsonRpcRequest {
+        endpoint,
         resp: resp_tx,
     };
     let _ = subnet_tx.send(message);

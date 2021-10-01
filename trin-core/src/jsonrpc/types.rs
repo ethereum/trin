@@ -1,6 +1,10 @@
+use crate::jsonrpc::endpoints::{HistoryEndpointKind, PortalEndpointKind, StateEndpointKind};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+use tokio::sync::mpsc;
 use validator::{Validate, ValidationError};
+
+type Responder<T, E> = mpsc::UnboundedSender<Result<T, E>>;
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -24,7 +28,7 @@ impl From<Params> for Value {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, Validate)]
+#[derive(Debug, Deserialize, Serialize, Validate, Clone)]
 pub struct JsonRequest {
     #[validate(custom = "validate_jsonrpc_version")]
     pub jsonrpc: String,
@@ -32,6 +36,27 @@ pub struct JsonRequest {
     pub params: Params,
     pub method: String,
     pub id: u32,
+}
+
+// Global portal network JSON-RPC request
+#[derive(Debug, Clone)]
+pub struct PortalJsonRpcRequest {
+    pub endpoint: PortalEndpointKind,
+    pub resp: Responder<Value, String>,
+}
+
+/// History network JSON-RPC request
+#[derive(Debug)]
+pub struct HistoryJsonRpcRequest {
+    pub endpoint: HistoryEndpointKind,
+    pub resp: Responder<Value, String>,
+}
+
+/// State network JSON-RPC request
+#[derive(Debug)]
+pub struct StateJsonRpcRequest {
+    pub endpoint: StateEndpointKind,
+    pub resp: Responder<Value, String>,
 }
 
 fn default_params() -> Params {

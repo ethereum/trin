@@ -1,11 +1,12 @@
 use crate::network::StateNetwork;
 use discv5::TalkRequest;
 use log::{debug, error, warn};
-use tokio::sync::mpsc::UnboundedReceiver;
+use std::sync::Arc;
+use tokio::sync::{mpsc::UnboundedReceiver, RwLock};
 use trin_core::portalnet::types::Message;
 
 pub struct StateEvents {
-    pub network: StateNetwork,
+    pub network: Arc<RwLock<StateNetwork>>,
     pub event_rx: UnboundedReceiver<TalkRequest>,
 }
 
@@ -16,6 +17,8 @@ impl StateEvents {
 
             let reply = match self
                 .network
+                .write()
+                .await
                 .overlay
                 .process_one_request(&talk_request)
                 .await
