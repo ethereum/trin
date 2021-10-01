@@ -49,6 +49,9 @@ pub enum PortalStorageError {
     #[error("IO Error")]
     IOError(#[from] std::io::Error),
 
+    #[error("Sum data size error: received None")]
+    SumError(),
+
     #[error("While {doing:?}, expected to receive data of size {expected:?} but found data of size {actual:?}")]
     DataSizeError {
         doing: String,
@@ -263,9 +266,15 @@ impl PortalStorage {
 
         let result = query.query_map([], |row| Ok(DataSizeSum { sum: row.get(0)? }));
 
-        let x = result?.next().unwrap().unwrap().sum;
+        let sum = match result?.next() {
+            Some(x) => x,
+            None => { 
+                return Err(PortalStorageError::SumError()); 
+            }
+        }?.sum;
+        // unwrap().unwrap().sum;
 
-        Ok(x)
+        Ok(sum)
     }
 
     // Returns None if there's no data in the DB yet
