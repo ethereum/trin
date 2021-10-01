@@ -471,7 +471,7 @@ mod test {
         let key: String = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".to_string();
         let value: String = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".to_string();
         storage.store(&key, &value)?;
-        
+
         Ok(())
     }
 
@@ -496,12 +496,17 @@ mod test {
 
         let result = storage.get(&key);
 
-        println!("{}", String::from_utf8(match result? {
-            Some(value) => value,
-            // Fail if there's no value for the key...
-            None => { panic!("Failed to retrieve key that we just put into the DB."); }
-            // ... or if the key can't be converted to utf8 (it should in this particular case). 
-        }).unwrap());
+        println!(
+            "{}",
+            String::from_utf8(match result? {
+                Some(value) => value,
+                // Fail if there's no value for the key...
+                None => {
+                    panic!("Failed to retrieve key that we just put into the DB.");
+                } // ... or if the key can't be converted to utf8 (it should in this particular case).
+            })
+            .unwrap()
+        );
 
         Ok(())
     }
@@ -534,15 +539,11 @@ mod test {
     }
 
     #[test]
-    fn test_should_store() -> Result<(), PortalStorageError>  {
+    fn test_should_store() -> Result<(), PortalStorageError> {
         let node_id = NodeId::random();
 
-        let db = Arc::new(
-            PortalStorage::setup_rocksdb(node_id)?
-        );
-        let meta_db = Arc::new(
-            PortalStorage::setup_sqlite(node_id)?
-         );
+        let db = Arc::new(PortalStorage::setup_rocksdb(node_id)?);
+        let meta_db = Arc::new(PortalStorage::setup_sqlite(node_id)?);
 
         let storage_config = PortalStorageConfig {
             storage_capacity_kb: 100,
@@ -576,9 +577,9 @@ mod test {
             77, 239, 228, 2, 227, 174, 123, 117, 195, 237, 200, 80, 219, 0, 188, 225, 18, 196, 162,
             89, 204, 144, 204, 187, 71, 12, 147, 65, 19, 65, 167, 110,
         ];
-        let node_id = match NodeId::parse(&example_node_id_bytes){
+        let node_id = match NodeId::parse(&example_node_id_bytes) {
             Ok(node_id) => node_id,
-            Err(string) => panic!("Failed to parse Node ID: {}", string)
+            Err(string) => panic!("Failed to parse Node ID: {}", string),
         };
 
         let db = Arc::new(PortalStorage::setup_rocksdb(node_id)?);
@@ -613,9 +614,9 @@ mod test {
             76, 239, 228, 2, 227, 174, 123, 117, 195, 237, 200, 80, 219, 0, 188, 225, 18, 196, 162,
             89, 204, 144, 204, 187, 71, 12, 147, 65, 19, 65, 167, 110,
         ];
-        let node_id = match NodeId::parse(&example_node_id_bytes){
+        let node_id = match NodeId::parse(&example_node_id_bytes) {
             Ok(node_id) => node_id,
-            Err(string) => panic!("Failed to parse Node ID: {}", string)
+            Err(string) => panic!("Failed to parse Node ID: {}", string),
         };
 
         let db = Arc::new(PortalStorage::setup_rocksdb(node_id)?);
@@ -649,7 +650,7 @@ mod test {
 
         let result = match storage.find_farthest_content_id()? {
             Some(key) => key,
-            None => panic!("find_farthest_content_id() returned None despite data in DB.")
+            None => panic!("find_farthest_content_id() returned None despite data in DB."),
         };
 
         assert_eq!(result, b_content_id);
