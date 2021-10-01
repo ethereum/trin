@@ -24,5 +24,6 @@ git = "https://github.com/sigp/discv5"
 members = [
     "trin-history",
     "trin-state",
-    "trin-core"
+    "trin-core",
+    "ethportal-peertest"
 ]
