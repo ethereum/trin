@@ -1,43 +1,24 @@
 use log::info;
 use rocksdb::DB;
-use serde_json::Value;
 use tokio::sync::{mpsc, RwLock};
 use tokio::task::JoinHandle;
 
 use crate::events::StateEvents;
+use crate::jsonrpc::StateRequestHandler;
 use discv5::TalkRequest;
 use network::StateNetwork;
 use std::sync::Arc;
 use trin_core::cli::TrinConfig;
-use trin_core::jsonrpc::handlers::{StateEndpointKind, StateNetworkEndpoint};
+use trin_core::jsonrpc::types::StateJsonRpcRequest;
 use trin_core::portalnet::discovery::Discovery;
 use trin_core::portalnet::events::PortalnetEvents;
 use trin_core::portalnet::types::PortalnetConfig;
 use trin_core::utils::setup_overlay_db;
 
 pub mod events;
+mod jsonrpc;
 pub mod network;
 pub mod utils;
-
-pub struct StateRequestHandler {
-    pub state_rx: mpsc::UnboundedReceiver<StateNetworkEndpoint>,
-}
-
-impl StateRequestHandler {
-    pub async fn handle_client_queries(mut self) {
-        while let Some(cmd) = self.state_rx.recv().await {
-            use StateEndpointKind::*;
-
-            match cmd.kind {
-                GetStateNetworkData => {
-                    let _ = cmd
-                        .resp
-                        .send(Ok(Value::String("0xmockstatedata".to_string())));
-                }
-            }
-        }
-    }
-}
 
 pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Launching trin-state...");
@@ -78,7 +59,10 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
         events.process_discv5_requests().await;
     });
 
-    spawn_state_network(discovery, db, portalnet_config, state_event_rx)
+    let state_network = StateNetwork::new(discovery.clone(), db, portalnet_config.clone()).await;
+    let state_network = Arc::new(RwLock::new(state_network));
+
+    spawn_state_network(state_network, portalnet_config, state_event_rx)
         .await
         .unwrap();
     Ok(())
@@ -87,24 +71,24 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
 type StateHandler = Option<StateRequestHandler>;
 type StateNetworkTask = Option<JoinHandle<()>>;
 type StateEventTx = Option<mpsc::UnboundedSender<TalkRequest>>;
-type StateJsonRpcTx = Option<mpsc::UnboundedSender<StateNetworkEndpoint>>;
+type StateJsonRpcTx = Option<mpsc::UnboundedSender<StateJsonRpcRequest>>;
 
-pub fn initialize_state_network(
+pub async fn initialize_state_network(
     discovery: &Arc<RwLock<Discovery>>,
     portalnet_config: PortalnetConfig,
-    db: &Arc<DB>,
+    db: Arc<DB>,
 ) -> (StateHandler, StateNetworkTask, StateEventTx, StateJsonRpcTx) {
-    let (state_jsonrpc_tx, state_jsonrpc_rx) = mpsc::unbounded_channel::<StateNetworkEndpoint>();
+    let (state_jsonrpc_tx, state_jsonrpc_rx) = mpsc::unbounded_channel::<StateJsonRpcRequest>();
     let (state_event_tx, state_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
+    let state_network =
+        StateNetwork::new(Arc::clone(discovery), db, portalnet_config.clone()).await;
+    let state_network = Arc::new(RwLock::new(state_network));
     let state_handler = StateRequestHandler {
+        network: Arc::clone(&state_network),
         state_rx: state_jsonrpc_rx,
     };
-    let state_network_task = spawn_state_network(
-        Arc::clone(discovery),
-        Arc::clone(db),
-        portalnet_config,
-        state_event_rx,
-    );
+    let state_network_task =
+        spawn_state_network(Arc::clone(&state_network), portalnet_config, state_event_rx);
     (
         Some(state_handler),
         Some(state_network_task),
@@ -114,8 +98,7 @@ pub fn initialize_state_network(
 }
 
 pub fn spawn_state_network(
-    discovery: Arc<RwLock<Discovery>>,
-    db: Arc<DB>,
+    network: Arc<RwLock<StateNetwork>>,
     portalnet_config: PortalnetConfig,
     state_event_rx: mpsc::UnboundedReceiver<TalkRequest>,
 ) -> JoinHandle<()> {
@@ -125,12 +108,8 @@ pub fn spawn_state_network(
     );
 
     tokio::spawn(async move {
-        let mut p2p = StateNetwork::new(discovery.clone(), db, portalnet_config)
-            .await
-            .unwrap();
-
         let state_events = StateEvents {
-            network: p2p.clone(),
+            network: Arc::clone(&network),
             event_rx: state_event_rx,
         };
 
@@ -138,7 +117,7 @@ pub fn spawn_state_network(
         tokio::spawn(state_events.process_requests());
 
         // hacky test: make sure we establish a session with the boot node
-        p2p.ping_bootnodes().await.unwrap();
+        network.write().await.ping_bootnodes().await.unwrap();
 
         tokio::signal::ctrl_c()
             .await

@@ -1,11 +1,12 @@
 use crate::network::HistoryNetwork;
 use discv5::TalkRequest;
 use log::{debug, error, warn};
-use tokio::sync::mpsc::UnboundedReceiver;
+use std::sync::Arc;
+use tokio::sync::{mpsc::UnboundedReceiver, RwLock};
 use trin_core::portalnet::types::Message;
 
 pub struct HistoryEvents {
-    pub network: HistoryNetwork,
+    pub network: Arc<RwLock<HistoryNetwork>>,
     pub event_rx: UnboundedReceiver<TalkRequest>,
 }
 
@@ -16,6 +17,8 @@ impl HistoryEvents {
 
             let reply = match self
                 .network
+                .write()
+                .await
                 .overlay
                 .process_one_request(&talk_request)
                 .await

@@ -1,42 +1,23 @@
 pub mod events;
+mod jsonrpc;
 pub mod network;
 
 use log::info;
 use rocksdb::DB;
-use serde_json::Value;
 use tokio::sync::{mpsc, RwLock};
 use tokio::task::JoinHandle;
 
 use crate::events::HistoryEvents;
+use crate::jsonrpc::HistoryRequestHandler;
 use discv5::TalkRequest;
 use network::HistoryNetwork;
 use std::sync::Arc;
 use trin_core::cli::TrinConfig;
-use trin_core::jsonrpc::handlers::{HistoryEndpointKind, HistoryNetworkEndpoint};
+use trin_core::jsonrpc::types::HistoryJsonRpcRequest;
 use trin_core::portalnet::discovery::Discovery;
 use trin_core::portalnet::events::PortalnetEvents;
 use trin_core::portalnet::types::PortalnetConfig;
 use trin_core::utils::setup_overlay_db;
-
-pub struct HistoryRequestHandler {
-    pub history_rx: mpsc::UnboundedReceiver<HistoryNetworkEndpoint>,
-}
-
-impl HistoryRequestHandler {
-    pub async fn handle_client_queries(mut self) {
-        while let Some(cmd) = self.history_rx.recv().await {
-            use HistoryEndpointKind::*;
-
-            match cmd.kind {
-                GetHistoryNetworkData => {
-                    let _ = cmd
-                        .resp
-                        .send(Ok(Value::String("0xmockhistorydata".to_string())));
-                }
-            }
-        }
-    }
-}
 
 pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Launching trin-history...");
@@ -81,7 +62,11 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
         events.process_discv5_requests().await;
     });
 
-    spawn_history_network(discovery, db, portalnet_config, history_event_rx)
+    let history_network =
+        HistoryNetwork::new(discovery.clone(), db, portalnet_config.clone()).await;
+    let history_network = Arc::new(RwLock::new(history_network));
+
+    spawn_history_network(history_network, portalnet_config, history_event_rx)
         .await
         .unwrap();
     Ok(())
@@ -90,12 +75,12 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
 type HistoryHandler = Option<HistoryRequestHandler>;
 type HistoryNetworkTask = Option<JoinHandle<()>>;
 type HistoryEventTx = Option<mpsc::UnboundedSender<TalkRequest>>;
-type HistoryJsonRpcTx = Option<mpsc::UnboundedSender<HistoryNetworkEndpoint>>;
+type HistoryJsonRpcTx = Option<mpsc::UnboundedSender<HistoryJsonRpcRequest>>;
 
-pub fn initialize_history_network(
+pub async fn initialize_history_network(
     discovery: &Arc<RwLock<Discovery>>,
     portalnet_config: PortalnetConfig,
-    db: &Arc<DB>,
+    db: Arc<DB>,
 ) -> (
     HistoryHandler,
     HistoryNetworkTask,
@@ -103,14 +88,17 @@ pub fn initialize_history_network(
     HistoryJsonRpcTx,
 ) {
     let (history_jsonrpc_tx, history_jsonrpc_rx) =
-        mpsc::unbounded_channel::<HistoryNetworkEndpoint>();
+        mpsc::unbounded_channel::<HistoryJsonRpcRequest>();
     let (history_event_tx, history_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
+    let history_network =
+        HistoryNetwork::new(Arc::clone(discovery), db, portalnet_config.clone()).await;
+    let history_network = Arc::new(RwLock::new(history_network));
     let history_handler = HistoryRequestHandler {
+        network: Arc::clone(&history_network),
         history_rx: history_jsonrpc_rx,
     };
     let history_network_task = spawn_history_network(
-        Arc::clone(discovery),
-        Arc::clone(db),
+        Arc::clone(&history_network),
         portalnet_config,
         history_event_rx,
     );
@@ -123,8 +111,7 @@ pub fn initialize_history_network(
 }
 
 pub fn spawn_history_network(
-    discovery: Arc<RwLock<Discovery>>,
-    db: Arc<DB>,
+    network: Arc<RwLock<HistoryNetwork>>,
     portalnet_config: PortalnetConfig,
     history_event_rx: mpsc::UnboundedReceiver<TalkRequest>,
 ) -> JoinHandle<()> {
@@ -134,12 +121,8 @@ pub fn spawn_history_network(
     );
 
     tokio::spawn(async move {
-        let mut p2p = HistoryNetwork::new(discovery.clone(), db, portalnet_config)
-            .await
-            .unwrap();
-
         let history_events = HistoryEvents {
-            network: p2p.clone(),
+            network: Arc::clone(&network),
             event_rx: history_event_rx,
         };
 
@@ -147,7 +130,7 @@ pub fn spawn_history_network(
         tokio::spawn(history_events.process_requests());
 
         // hacky test: make sure we establish a session with the boot node
-        p2p.ping_bootnodes().await.unwrap();
+        network.write().await.ping_bootnodes().await.unwrap();
 
         tokio::signal::ctrl_c()
             .await
