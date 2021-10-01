@@ -31,6 +31,7 @@ tokio = {version = "1.8.0", features = ["full"]}
 uint = { version = "0.8.5", default-features = false }
 validator = { version = "0.13.0", features = ["derive"] }
 rstest = "0.11.0"
+thiserror = "1.0.29"
 
 [target.'cfg(windows)'.dependencies]
 ipconfig = "0.2.2"

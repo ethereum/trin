@@ -22,8 +22,8 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             .expect("Failed to overwrite DB.");
     }
 
-    let db = PortalStorage::setup_rocksdb(node_id);
-    let meta_db = PortalStorage::setup_sqlite(node_id);
+    let db = PortalStorage::setup_rocksdb(node_id)?;
+    let meta_db = PortalStorage::setup_sqlite(node_id)?;
 
     let num_kilobytes = generator_config.kb;
     let size_of_keys = 32;
@@ -44,14 +44,14 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         db: Arc::new(db),
         meta_db: Arc::new(meta_db),
     };
-    let mut storage = PortalStorage::new(storage_config, |key| sha256(&key));
+    let mut storage = PortalStorage::new(storage_config, |key| sha256(&key))?;
 
     for _ in 0..num_of_entries {
         let value = generate_random_value(size_of_values);
         let key = generate_random_value(size_of_keys);
 
         println!("{} -> {}", &key, &value);
-        storage.store(&key, &value);
+        storage.store(&key, &value)?;
         println!();
     }
 
