@@ -455,7 +455,7 @@ mod test {
             db: db,
             meta_db: meta_db,
         };
-        let _ = PortalStorage::new(storage_config, |key| sha256(&key))?;
+        let _ = PortalStorage::new(storage_config, |key| sha256(key))?;
 
         Ok(())
     }
@@ -475,7 +475,7 @@ mod test {
             meta_db: meta_db,
         };
 
-        let mut storage = PortalStorage::new(storage_config, |key| sha256(&key))?;
+        let mut storage = PortalStorage::new(storage_config, |key| sha256(key))?;
 
         let key: String = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".to_string();
         let value: String = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".to_string();
@@ -498,7 +498,7 @@ mod test {
             db: db,
             meta_db: meta_db,
         };
-        let mut storage = PortalStorage::new(storage_config, |key| sha256(&key))?;
+        let mut storage = PortalStorage::new(storage_config, |key| sha256(key))?;
         let key: String = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".to_string();
         let value: String = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".to_string();
         storage.store(&key, &value)?;
@@ -534,7 +534,7 @@ mod test {
             db: db,
             meta_db: meta_db,
         };
-        let mut storage = PortalStorage::new(storage_config, |key| sha256(&key))?;
+        let mut storage = PortalStorage::new(storage_config, |key| sha256(key))?;
 
         let key: String = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".to_string();
         let value: String = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".to_string();
@@ -562,7 +562,7 @@ mod test {
             meta_db: meta_db,
         };
 
-        let mut storage = PortalStorage::new(storage_config, |key| sha256(&key))?;
+        let mut storage = PortalStorage::new(storage_config, |key| sha256(key))?;
 
         let key_a: String = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".to_string();
         let key_b: String = "p1K8ymqgNO9vJ1LwATa4yNqCxk6AMgNa".to_string();
@@ -602,7 +602,7 @@ mod test {
             meta_db: meta_db,
         };
 
-        let storage = PortalStorage::new(storage_config, |key| sha256(&key))?;
+        let storage = PortalStorage::new(storage_config, |key| sha256(key))?;
 
         // As u64: 3352017618602726004
         let key: String = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".to_string();
@@ -639,7 +639,7 @@ mod test {
             meta_db: meta_db,
         };
 
-        let mut storage = PortalStorage::new(storage_config, |key| sha256(&key))?;
+        let mut storage = PortalStorage::new(storage_config, |key| sha256(key))?;
 
         let value = "value".to_string();
 
