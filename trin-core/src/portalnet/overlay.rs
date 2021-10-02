@@ -255,7 +255,7 @@ impl OverlayProtocol {
             data_radius,
         };
         self.discovery
-            .write()
+            .read()
             .await
             .send_talkreq(
                 enr,
@@ -273,7 +273,7 @@ impl OverlayProtocol {
     ) -> Result<Vec<u8>, String> {
         let msg = FindNodes { distances };
         self.discovery
-            .write()
+            .read()
             .await
             .send_talkreq(
                 enr,
@@ -291,7 +291,7 @@ impl OverlayProtocol {
     ) -> Result<Vec<u8>, String> {
         let msg = FindContent { content_key };
         self.discovery
-            .write()
+            .read()
             .await
             .send_talkreq(
                 enr,
