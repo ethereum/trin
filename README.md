@@ -132,7 +132,7 @@ OPTIONS:
 - `discv5_nodeInfo`     Returns the ENR of the client
 - `discv5_routingTableInfo`     Returns the list of discovery peers that have recently been available
 
-See https://eth.wiki/json-rpc/API#json-rpc-methods for other standard methods that are implemented. Most of the currently proxy to Infura.
+See https://eth.wiki/json-rpc/API#json-rpc-methods for other standard methods that are implemented. Currently, most of them proxy to Infura.
 
 ## Gotchas
 
