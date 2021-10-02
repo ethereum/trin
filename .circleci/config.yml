@@ -65,7 +65,7 @@ jobs:
           command: choco install rustup.install
       - run:
           name: Install sqlite
-	  command: choco install sqlite
+          command: choco install sqlite
       - run:
           name: Install clang
           command: choco install llvm
