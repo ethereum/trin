@@ -268,10 +268,11 @@ impl PortalStorage {
 
         let sum = match result?.next() {
             Some(x) => x,
-            None => { 
-                return Err(PortalStorageError::SumError()); 
+            None => {
+                return Err(PortalStorageError::SumError());
             }
-        }?.sum;
+        }?
+        .sum;
 
         Ok(sum)
     }
