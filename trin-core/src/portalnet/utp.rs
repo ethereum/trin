@@ -587,7 +587,7 @@ impl UtpStream {
         }
         let talk_request_result = self
             .discovery
-            .write()
+            .read()
             .await
             .send_talkreq(self.enr.clone(), UTP_PROTOCOL.to_string(), packet.0.clone())
             .await;
