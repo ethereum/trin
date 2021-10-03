@@ -17,8 +17,10 @@ pub enum DistanceFunction {
     State,
 }
 
+/// Signature of the function that must be passed into the call to new
 type ContentKeyToIdDerivationFunction = dyn Fn(&String) -> U256;
 
+/// Struct for spe
 pub struct PortalStorageConfig {
     pub storage_capacity_kb: u64,
     pub node_id: NodeId,
@@ -27,6 +29,7 @@ pub struct PortalStorageConfig {
     pub meta_db: Arc<rusqlite::Connection>,
 }
 
+/// Struct whose public methods abstract away Kademlia-based storage behavior.
 pub struct PortalStorage {
     node_id: NodeId,
     storage_capacity_kb: u64,
@@ -38,6 +41,7 @@ pub struct PortalStorage {
     content_key_to_id_function: Box<ContentKeyToIdDerivationFunction>,
 }
 
+/// Error type returned in a Result by any failable public PortalStorage methods.
 #[derive(Debug, Error)]
 pub enum PortalStorageError {
     #[error("RocksDB Error")]
@@ -49,7 +53,7 @@ pub enum PortalStorageError {
     #[error("IO Error")]
     IOError(#[from] std::io::Error),
 
-    #[error("Sum data size error: received None")]
+    #[error("Sum data size error: received None from SQLite")]
     SumError(),
 
     #[error("While {doing:?}, expected to receive data of size {expected:?} but found data of size {actual:?}")]
@@ -67,9 +71,11 @@ pub enum PortalStorageError {
 }
 
 impl PortalStorage {
+    /// Public constructor for building a PortalStorage object.
+    /// Checks whether a populated database already exists vs a fresh instance.
     pub fn new(
         config: PortalStorageConfig,
-        convert_function: impl Fn(&String) -> U256 + 'static,
+        content_key_to_id_function: impl Fn(&String) -> U256 + 'static,
     ) -> Result<Self, PortalStorageError> {
         // Initialize the instance
         let mut storage = Self {
@@ -80,7 +86,7 @@ impl PortalStorage {
             farthest_content_id: None,
             meta_db: config.meta_db,
             distance_function: config.distance_function,
-            content_key_to_id_function: Box::new(convert_function),
+            content_key_to_id_function: Box::new(content_key_to_id_function),
         };
 
         // Check whether we already have data, and if so
@@ -99,39 +105,8 @@ impl PortalStorage {
         Ok(storage)
     }
 
-    pub fn setup_rocksdb(node_id: NodeId) -> Result<rocksdb::DB, PortalStorageError> {
-        let data_path_root: String = get_data_dir(node_id).to_owned();
-        let data_suffix: &str = "/rocksdb";
-        let data_path = data_path_root + data_suffix;
-
-        let mut db_opts = Options::default();
-        db_opts.create_if_missing(true);
-        Ok(DB::open(&db_opts, data_path)?)
-    }
-
-    pub fn setup_sqlite(node_id: NodeId) -> Result<rusqlite::Connection, PortalStorageError> {
-        let data_path_root: String = get_data_dir(node_id).to_owned();
-        let data_suffix: &str = "/trin.sqlite";
-        let data_path = data_path_root + data_suffix;
-
-        let conn = Connection::open(data_path)?;
-
-        conn.execute(CREATE_QUERY, [])?;
-
-        Ok(conn)
-    }
-
-    // Calls the content_key_to_id callback closure that was passed in.
-    pub fn content_key_to_content_id(&self, key: &String) -> [u8; 32] {
-        let id_as_u256: U256 = (self.content_key_to_id_function)(key);
-
-        let mut w: [u8; 32] = [0; 32];
-        let y: &mut [u8; 32] = &mut w;
-        id_as_u256.to_big_endian(y);
-
-        y.clone()
-    }
-
+    /// Public method for determining whether a given content key should be stored by the node.
+    /// Takes into account our data radius and whether we are already storing the data.
     pub fn should_store(&self, key: &String) -> Result<bool, PortalStorageError> {
         let content_id = self.content_key_to_content_id(key);
 
@@ -150,40 +125,9 @@ impl PortalStorage {
         }
     }
 
-    fn meta_db_insert(
-        &self,
-        content_id: &[u8; 32],
-        content_key: &String,
-        value: &String,
-    ) -> Result<(), PortalStorageError> {
-        let content_id_as_u32: u32 = PortalStorage::byte_vector_to_u32(content_id.clone().to_vec());
-
-        let value_size = value.len();
-
-        match self.meta_db.execute(
-            INSERT_QUERY,
-            params![
-                content_id.to_vec(),
-                content_id_as_u32,
-                content_key,
-                value_size
-            ],
-        ) {
-            Ok(_) => Ok(()),
-            Err(e) => Err(PortalStorageError::Sqlite(e)),
-        }
-    }
-
-    fn db_insert(&self, content_id: &[u8; 32], value: &String) -> Result<(), PortalStorageError> {
-        self.db.put(&content_id, value)?;
-        Ok(())
-    }
-
-    fn meta_db_remove(&self, content_id: &[u8; 32]) -> Result<(), PortalStorageError> {
-        self.meta_db.execute(DELETE_QUERY, [content_id.to_vec()])?;
-        Ok(())
-    }
-
+    /// Public method for storing a given value for a given content-key.
+    /// This method is idempotent: further calls with the same content-key will not update the DB
+    /// unless the original pair was deleted.
     pub fn store(&mut self, key: &String, value: &String) -> Result<(), PortalStorageError> {
         // Check whether we should store this data
         if !self.should_store(&key)? {
@@ -241,27 +185,91 @@ impl PortalStorage {
         Ok(())
     }
 
+    /// Public method for retrieving the stored value for a given content-key.
+    /// If no value exists for the given content-key, Result<None> is returned.
     pub fn get(&self, key: &String) -> Result<Option<Vec<u8>>, PortalStorageError> {
         let content_id = self.content_key_to_content_id(key);
         let value = self.db.get(content_id)?;
         Ok(value)
     }
 
-    pub fn get_current_radius(&self) -> u64 {
-        self.data_radius
+    /// Public method for retrieving the node's current radius.
+    pub fn get_current_radius(&self) -> U256 {
+        let u64_radius_bytes: [u8; 8] = u64::to_be_bytes(self.data_radius);
+        let empty_bytes: [u8; 24] = [0; 24];
+        let combined_array: [u8; 32] = {
+            let mut whole: [u8; 32] = [0; 32];
+            let (one, two) = whole.split_at_mut(u64_radius_bytes.len());
+            one.copy_from_slice(&u64_radius_bytes);
+            two.copy_from_slice(&empty_bytes);
+            whole
+        };
+        U256::from(combined_array)
     }
 
-    pub fn capacity_reached(&self) -> Result<bool, PortalStorageError> {
-        let storage_usage = self.get_total_storage_usage_in_bytes_from_network()?;
-        Ok(storage_usage > (self.storage_capacity_kb * 1000))
-    }
-
+    /// Public method for determining how much actual disk space is being used to store this node's Portal Network data.
+    /// Intended for analysis purposes. PortalStorage's capacity decision-making is not based off of this method.
     pub fn get_total_storage_usage_in_bytes_on_disk(&self) -> Result<u64, PortalStorageError> {
         let size = self.get_total_size_of_directory_in_bytes(get_data_dir(self.node_id))?;
         Ok(size)
     }
 
-    pub fn get_total_storage_usage_in_bytes_from_network(&self) -> Result<u64, PortalStorageError> {
+    /// Calls the content_key_to_id callback closure that was passed into the constructor.
+    fn content_key_to_content_id(&self, key: &String) -> [u8; 32] {
+        let id_as_u256: U256 = (self.content_key_to_id_function)(key);
+
+        let mut w: [u8; 32] = [0; 32];
+        let y: &mut [u8; 32] = &mut w;
+        id_as_u256.to_big_endian(y);
+
+        y.clone()
+    }
+
+    /// Internal method for inserting data into the db.
+    fn db_insert(&self, content_id: &[u8; 32], value: &String) -> Result<(), PortalStorageError> {
+        self.db.put(&content_id, value)?;
+        Ok(())
+    }
+
+    /// Internal method for inserting data into the meta db.
+    fn meta_db_insert(
+        &self,
+        content_id: &[u8; 32],
+        content_key: &String,
+        value: &String,
+    ) -> Result<(), PortalStorageError> {
+        let content_id_as_u32: u32 = PortalStorage::byte_vector_to_u32(content_id.clone().to_vec());
+
+        let value_size = value.len();
+
+        match self.meta_db.execute(
+            INSERT_QUERY,
+            params![
+                content_id.to_vec(),
+                content_id_as_u32,
+                content_key,
+                value_size
+            ],
+        ) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(PortalStorageError::Sqlite(e)),
+        }
+    }
+
+    /// Internal method for removing a given content-id from the meta db.
+    fn meta_db_remove(&self, content_id: &[u8; 32]) -> Result<(), PortalStorageError> {
+        self.meta_db.execute(DELETE_QUERY, [content_id.to_vec()])?;
+        Ok(())
+    }
+
+    /// Internal method for determining whether the node is over-capacity.
+    fn capacity_reached(&self) -> Result<bool, PortalStorageError> {
+        let storage_usage = self.get_total_storage_usage_in_bytes_from_network()?;
+        Ok(storage_usage > (self.storage_capacity_kb * 1000))
+    }
+
+    /// Internal method for measuring the total amount of requestable data that the node is storing.
+    fn get_total_storage_usage_in_bytes_from_network(&self) -> Result<u64, PortalStorageError> {
         let mut query = self.meta_db.prepare(TOTAL_DATA_SIZE_QUERY)?;
 
         let result = query.query_map([], |row| Ok(DataSizeSum { sum: row.get(0)? }));
@@ -277,8 +285,9 @@ impl PortalStorage {
         Ok(sum)
     }
 
-    // Returns None if there's no data in the DB yet
-    pub fn find_farthest_content_id(&self) -> Result<Option<[u8; 32]>, PortalStorageError> {
+    /// Internal method for finding the piece of stored data that has the farthest content id from our
+    /// node id, according to xor distance. Used to determine which data to drop when at a capacity.
+    fn find_farthest_content_id(&self) -> Result<Option<[u8; 32]>, PortalStorageError> {
         let result = match self.distance_function {
             DistanceFunction::Xor => {
                 let node_id_u32 = PortalStorage::byte_vector_to_u32(self.node_id.raw().to_vec());
@@ -323,6 +332,7 @@ impl PortalStorage {
         Ok(Some(result))
     }
 
+    /// Internal method used to measure on-disk storage usage.
     fn get_total_size_of_directory_in_bytes(
         &self,
         path: String,
@@ -354,7 +364,8 @@ impl PortalStorage {
         Ok(size)
     }
 
-    pub fn distance_to_content_id(&self, content_id: &[u8; 32]) -> u64 {
+    /// Internal method that returns the distance between our node ID and a given content ID
+    fn distance_to_content_id(&self, content_id: &[u8; 32]) -> u64 {
         let byte_vector = xor_two_values(content_id, &self.node_id.raw().to_vec());
 
         PortalStorage::byte_vector_to_u64(byte_vector)
@@ -362,7 +373,7 @@ impl PortalStorage {
 
     // Takes the most significant 8 bytes of a vector and casts them into a u64.
     // The equivalent of a conversion from nanometers to meters.
-    pub fn byte_vector_to_u64(vec: Vec<u8>) -> u64 {
+    fn byte_vector_to_u64(vec: Vec<u8>) -> u64 {
         if vec.len() < 8 {
             println!("Error: XOR returned less than 8 bytes.");
             return 0;
@@ -376,7 +387,8 @@ impl PortalStorage {
         u64::from_be_bytes(array)
     }
 
-    pub fn byte_vector_to_u32(vec: Vec<u8>) -> u32 {
+    // Converts most significant 4 bytes of a vector to a u32.
+    fn byte_vector_to_u32(vec: Vec<u8>) -> u32 {
         if vec.len() < 4 {
             println!("Error: XOR returned less than 4 bytes.");
             return 0;
@@ -388,6 +400,32 @@ impl PortalStorage {
         }
 
         u32::from_be_bytes(array)
+    }
+
+    /// Helper function for opening a SQLite connection.
+    /// Used for testing.
+    pub fn setup_rocksdb(node_id: NodeId) -> Result<rocksdb::DB, PortalStorageError> {
+        let data_path_root: String = get_data_dir(node_id).to_owned();
+        let data_suffix: &str = "/rocksdb";
+        let data_path = data_path_root + data_suffix;
+
+        let mut db_opts = Options::default();
+        db_opts.create_if_missing(true);
+        Ok(DB::open(&db_opts, data_path)?)
+    }
+
+    /// Helper function for opening a SQLite connection.
+    /// Used for testing.
+    pub fn setup_sqlite(node_id: NodeId) -> Result<rusqlite::Connection, PortalStorageError> {
+        let data_path_root: String = get_data_dir(node_id).to_owned();
+        let data_suffix: &str = "/trin.sqlite";
+        let data_path = data_path_root + data_suffix;
+
+        let conn = Connection::open(data_path)?;
+
+        conn.execute(CREATE_QUERY, [])?;
+
+        Ok(conn)
     }
 }
 
