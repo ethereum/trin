@@ -24,9 +24,6 @@ jobs:
                 name: Install libclang for rocksdb
                 command: sudo apt install clang
             - run:
-                name: Install sqlite library
-                command: sudo apt install libsqlite3-dev
-            - run:
                 name: Install rustfmt
                 command: rustup component add rustfmt
             - run:
@@ -63,9 +60,6 @@ jobs:
       - run:
           name: Install rustup
           command: choco install rustup.install
-      - run:
-          name: Install sqlite
-          command: choco install sqlite3
       - run:
           name: Install clang
           command: choco install llvm
