@@ -7,7 +7,7 @@ use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 
 use crate::jsonrpc::endpoints::{
-    Discv5EndpointKind, HistoryEndpointKind, PortalEndpointKind, StateEndpointKind,
+    Discv5EndpointKind, HistoryEndpointKind, StateEndpointKind, TrinEndpointKind,
 };
 use crate::jsonrpc::types::{HistoryJsonRpcRequest, PortalJsonRpcRequest, StateJsonRpcRequest};
 use crate::portalnet::discovery::Discovery;
@@ -26,20 +26,20 @@ impl JsonRpcHandler {
     pub async fn process_jsonrpc_requests(mut self) {
         while let Some(request) = self.portal_jsonrpc_rx.recv().await {
             let response: Value = match request.endpoint {
-                PortalEndpointKind::Discv5EndpointKind(endpoint) => match endpoint {
+                TrinEndpointKind::Discv5EndpointKind(endpoint) => match endpoint {
                     Discv5EndpointKind::NodeInfo => self.discovery.read().await.node_info(),
                     Discv5EndpointKind::RoutingTableInfo => {
                         self.discovery.write().await.routing_table_info()
                     }
                 },
-                PortalEndpointKind::HistoryEndpointKind(endpoint) => {
+                TrinEndpointKind::HistoryEndpointKind(endpoint) => {
                     let response = match self.history_jsonrpc_tx.as_ref() {
                         Some(tx) => proxy_query_to_history_subnet(tx, endpoint).await,
                         None => Err("Chain history subnetwork unavailable.".to_string()),
                     };
                     response.unwrap_or_else(Value::String)
                 }
-                PortalEndpointKind::StateEndpointKind(endpoint) => {
+                TrinEndpointKind::StateEndpointKind(endpoint) => {
                     let response = match self.state_jsonrpc_tx.as_ref() {
                         Some(tx) => proxy_query_to_state_subnet(tx, endpoint).await,
                         None => Err("State subnetwork unavailable.".to_string()),

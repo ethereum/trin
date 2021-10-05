@@ -19,39 +19,49 @@ pub enum HistoryEndpointKind {
     DataRadius,
 }
 
-/// Infura JSON-RPC endpoints
+/// Ethereum JSON-RPC endpoints not currently supported by portal network requests, proxied to Infura
 #[derive(Debug, PartialEq, Clone)]
 pub enum InfuraEndpointKind {
     BlockNumber,
 }
 
-/// Global portal network endpoints, contain Disv5, Infura and all overlay network endpoints
+/// Ethereum JSON-RPC endpoints supported by portal network requests
 #[derive(Debug, PartialEq, Clone)]
 pub enum PortalEndpointKind {
-    Discv5EndpointKind(Discv5EndpointKind),
-    InfuraEndPointKind(InfuraEndpointKind),
-    StateEndpointKind(StateEndpointKind),
-    HistoryEndpointKind(HistoryEndpointKind),
+    ClientVersion, // Doesn't actually rely on portal network data, but it makes sense to live here
 }
 
-impl FromStr for PortalEndpointKind {
+/// Global portal network endpoints supported by trin, including infura proxies, Discv5, Ethereum and all overlay network endpoints supported by portal network requests
+#[derive(Debug, PartialEq, Clone)]
+pub enum TrinEndpointKind {
+    Discv5EndpointKind(Discv5EndpointKind),
+    HistoryEndpointKind(HistoryEndpointKind),
+    StateEndpointKind(StateEndpointKind),
+    InfuraEndpointKind(InfuraEndpointKind),
+    PortalEndpointKind(PortalEndpointKind),
+}
+
+impl FromStr for TrinEndpointKind {
     type Err = ();
 
-    fn from_str(input: &str) -> Result<PortalEndpointKind, Self::Err> {
+    fn from_str(input: &str) -> Result<TrinEndpointKind, Self::Err> {
         match input {
-            "discv5_nodeInfo" => Ok(PortalEndpointKind::Discv5EndpointKind(
+            "web3_clientVersion" => Ok(TrinEndpointKind::PortalEndpointKind(
+                PortalEndpointKind::ClientVersion,
+            )),
+            "discv5_nodeInfo" => Ok(TrinEndpointKind::Discv5EndpointKind(
                 Discv5EndpointKind::NodeInfo,
             )),
-            "discv5_routingTableInfo" => Ok(PortalEndpointKind::Discv5EndpointKind(
+            "discv5_routingTableInfo" => Ok(TrinEndpointKind::Discv5EndpointKind(
                 Discv5EndpointKind::RoutingTableInfo,
             )),
-            "eth_blockNumber" => Ok(PortalEndpointKind::InfuraEndPointKind(
+            "eth_blockNumber" => Ok(TrinEndpointKind::InfuraEndpointKind(
                 InfuraEndpointKind::BlockNumber,
             )),
-            "portalHistory_dataRadius" => Ok(PortalEndpointKind::HistoryEndpointKind(
+            "portalHistory_dataRadius" => Ok(TrinEndpointKind::HistoryEndpointKind(
                 HistoryEndpointKind::DataRadius,
             )),
-            "portalState_dataRadius" => Ok(PortalEndpointKind::StateEndpointKind(
+            "portalState_dataRadius" => Ok(TrinEndpointKind::StateEndpointKind(
                 StateEndpointKind::DataRadius,
             )),
             _ => Err(()),

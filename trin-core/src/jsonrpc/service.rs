@@ -1,23 +1,23 @@
 use super::types::JsonRequest;
 use crate::cli::TrinConfig;
-use log::{debug, info};
-use reqwest::blocking as reqwest;
-use serde_json::{json, Value};
-use std::fs;
-use std::io::{self, Read, Write};
+use std::io::{self, BufRead, Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::str::FromStr;
+use std::sync::Mutex;
+use std::{fs, panic, process};
 
 #[cfg(unix)]
 use std::os::unix;
 
-use crate::jsonrpc::endpoints::PortalEndpointKind;
+use crate::jsonrpc::endpoints::TrinEndpointKind;
 use crate::jsonrpc::types::PortalJsonRpcRequest;
-use std::str::FromStr;
-use std::sync::Mutex;
-use std::{panic, process};
+use httparse;
+use log::{debug, info};
+use serde_json::{json, Value};
 use threadpool::ThreadPool;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::UnboundedSender;
+use ureq;
 use validator::Validate;
 
 lazy_static! {
@@ -103,7 +103,7 @@ fn launch_ipc_client(
             serve_ipc_client(&mut rx, &mut tx, &infura_url, portal_tx);
         });
     }
-    println!("Clean exit");
+    info!("Clean exit");
 }
 
 fn launch_http_client(
@@ -151,7 +151,7 @@ fn serve_ipc_client(
                     }
                     Err(e) => format!("Unsupported trin request: {}", e).into_bytes(),
                 };
-                tx.write_all(&formatted_response).unwrap()
+                tx.write_all(&formatted_response).unwrap();
             }
             Err(e) => {
                 debug!("An error occurred while parsing the JSON text. {}", e);
@@ -171,11 +171,13 @@ fn serve_http_client(
     infura_url: &str,
     portal_tx: UnboundedSender<PortalJsonRpcRequest>,
 ) {
-    let mut buffer = Vec::new();
-    stream.read_to_end(&mut buffer).unwrap();
+    let mut reader = io::BufReader::new(&mut stream);
+    let received: Vec<u8> = reader.fill_buf().unwrap().to_vec();
+    // Mark the bytes read as consumed so the buffer will not return them in a subsequent read
+    reader.consume(received.len());
 
-    let json_request = String::from_utf8_lossy(&buffer);
-    let deser = serde_json::Deserializer::from_str(&json_request);
+    let http_body = parse_http_body(received).unwrap();
+    let deser = serde_json::Deserializer::from_str(&http_body);
     for obj in deser.into_iter::<JsonRequest>() {
         let obj = obj.unwrap();
         let formatted_response = match obj.validate() {
@@ -184,6 +186,23 @@ fn serve_http_client(
         };
         stream.write_all(&formatted_response).unwrap();
         stream.flush().unwrap();
+    }
+}
+
+fn parse_http_body(buf: Vec<u8>) -> Result<String, String> {
+    let mut headers = [httparse::EMPTY_HEADER; 16];
+    let mut req = httparse::Request::new(&mut headers);
+    let body_offset = match req.parse(&buf) {
+        Ok(val) => match val {
+            httparse::Status::Complete(offset) => offset,
+            httparse::Status::Partial => return Err("Error parsing http request.".to_owned()),
+        },
+        Err(msg) => return Err(format!("Error parsing http request: {:?}", msg)),
+    };
+    let body = buf[body_offset..buf.len()].to_vec();
+    match String::from_utf8(body) {
+        Ok(val) => Ok(val),
+        Err(msg) => Err(format!("Error parsing http request: {:?}", msg)),
     }
 }
 
@@ -209,28 +228,53 @@ fn process_http_request(
     }
 }
 
+// Match json-rpc requests by "method" and forwards request onto respective dispatcher
 fn handle_request(
     obj: JsonRequest,
     infura_url: &str,
     portal_tx: UnboundedSender<PortalJsonRpcRequest>,
 ) -> Result<String, String> {
-    // todo: figure out best way to refactor this parsing logic
-    // & catch invalid methods before proxying to infura
-    match obj.method.as_str() {
-        "web3_clientVersion" => Ok(json!({
+    let method = obj.method.as_str();
+    match TrinEndpointKind::from_str(method) {
+        Ok(val) => dispatch_trin_request(obj, val, infura_url, portal_tx),
+        Err(_) => Err(json!({
             "jsonrpc": "2.0",
             "id": obj.id,
-            "result": "trin 0.0.1-alpha",
+            "error": format!("Invalid JSON-RPC portal endpoint: {}", method),
         })
         .to_string()),
-        _ => dispatch_portal_request(obj, portal_tx, infura_url),
     }
 }
 
+fn dispatch_trin_request(
+    obj: JsonRequest,
+    endpoint: TrinEndpointKind,
+    infura_url: &str,
+    portal_tx: UnboundedSender<PortalJsonRpcRequest>,
+) -> Result<String, String> {
+    match endpoint {
+        TrinEndpointKind::PortalEndpointKind(_) => Ok(json!({
+            "jsonrpc": "2.0",
+            "id": obj.id,
+            // todo: this should be updated programatically
+            "result": "trin 0.0.1-alpha",
+        })
+        .to_string()),
+        TrinEndpointKind::InfuraEndpointKind(_) => dispatch_infura_request(obj, infura_url),
+        TrinEndpointKind::Discv5EndpointKind(_) => {
+            dispatch_portal_request(obj, endpoint, portal_tx)
+        }
+        TrinEndpointKind::HistoryEndpointKind(_) => {
+            dispatch_portal_request(obj, endpoint, portal_tx)
+        }
+        TrinEndpointKind::StateEndpointKind(_) => dispatch_portal_request(obj, endpoint, portal_tx),
+    }
+}
+
+// Handle all requests served by infura
 fn dispatch_infura_request(obj: JsonRequest, infura_url: &str) -> Result<String, String> {
     //Re-encode json to proxy to Infura
-    let request = serde_json::to_string(&obj).unwrap();
-    match proxy_to_url(request, infura_url) {
+    match proxy_to_url(&obj, infura_url) {
         Ok(result_body) => Ok(std::str::from_utf8(&result_body).unwrap().to_owned()),
         Err(err) => Err(json!({
             "jsonrpc": "2.0",
@@ -241,78 +285,48 @@ fn dispatch_infura_request(obj: JsonRequest, infura_url: &str) -> Result<String,
     }
 }
 
+// Handle all requests served by fetching data from the portal network. ie. discv5/history/state/portal
 fn dispatch_portal_request(
     obj: JsonRequest,
+    endpoint: TrinEndpointKind,
     portal_tx: UnboundedSender<PortalJsonRpcRequest>,
-    infura_url: &str,
 ) -> Result<String, String> {
     let (resp_tx, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
-    let method = obj.method.as_str();
-    let endpoint = PortalEndpointKind::from_str(method);
-
-    match endpoint {
-        Ok(endpoint_kind) => match endpoint_kind {
-            PortalEndpointKind::InfuraEndPointKind(_) => {
-                dispatch_infura_request(obj.clone(), infura_url)?;
-            }
-            _ => {
-                let message = PortalJsonRpcRequest {
-                    endpoint: endpoint_kind,
-                    resp: resp_tx,
-                };
-                portal_tx.send(message).unwrap();
-            }
-        },
-        Err(_) => {
-            return Err(json!({
-                "jsonrpc": "2.0",
-                "id": obj.id,
-                "error": format!("Invalid JSON-RPC portal endpoint: {}", method),
-            })
-            .to_string())
-        }
-    }
-
-    let res = match resp_rx.blocking_recv().unwrap() {
-        Ok(val) => val,
-        Err(msg) => {
-            return Err(json!({
-                "jsonrpc": "2.0",
-                "id": obj.id,
-                "error": format!("Error while processing {}: {}", method, msg),
-            })
-            .to_string())
-        }
+    let message = PortalJsonRpcRequest {
+        endpoint,
+        resp: resp_tx,
     };
-    Ok(json!({
-        "jsonrpc": "2.0",
-        "id": obj.id,
-        "result": res,
-    })
-    .to_string())
+    portal_tx.send(message).unwrap();
+
+    match resp_rx.blocking_recv().unwrap() {
+        Ok(val) => Ok(json!({
+            "jsonrpc": "2.0",
+            "id": obj.id,
+            "result": val,
+        })
+        .to_string()),
+        Err(msg) => Err(json!({
+            "jsonrpc": "2.0",
+            "id": obj.id,
+            "error": format!("Error while processing {}: {}", obj.method, msg),
+        })
+        .to_string()),
+    }
 }
 
-fn proxy_to_url(request: String, url: &str) -> io::Result<Vec<u8>> {
-    let client = reqwest::Client::new();
-    match client.post(url).body(request).send() {
-        Ok(response) => {
-            let status = response.status();
-
-            if status.is_success() {
-                match response.bytes() {
-                    Ok(bytes) => Ok(bytes.to_vec()),
-                    Err(_) => Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        "Unexpected error when accessing the response body",
-                    )),
-                }
-            } else {
-                Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("Responded with status code: {:?}", status),
-                ))
-            }
-        }
+fn proxy_to_url(request: &JsonRequest, url: &str) -> io::Result<Vec<u8>> {
+    match ureq::post(url).send_json(ureq::json!(request)) {
+        Ok(response) => match response.into_string() {
+            Ok(val) => Ok(val.as_bytes().to_vec()),
+            Err(msg) => Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("Error decoding response: {:?}", msg),
+            )),
+        },
+        Err(ureq::Error::Status(code, _response)) => Err(io::Error::new(
+            io::ErrorKind::Other,
+            format!("Responded with status code: {:?}", code),
+        )),
         Err(err) => Err(io::Error::new(
             io::ErrorKind::Other,
             format!("Request failure: {:?}", err),
