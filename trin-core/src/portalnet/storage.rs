@@ -3,6 +3,7 @@ use crate::utils::{get_data_dir, xor_two_values};
 use discv5::enr::NodeId;
 use hex;
 use log;
+use log::debug;
 use log::error;
 use rocksdb::{Options, DB};
 use rusqlite::{params, Connection};
@@ -17,10 +18,10 @@ pub enum DistanceFunction {
     State,
 }
 
-/// Signature of the function that must be passed into the call to new
+/// Signature of the function that must be passed into the call to new.
 type ContentKeyToIdDerivationFunction = dyn Fn(&String) -> U256;
 
-/// Struct for spe
+/// Struct for configuring a PortalStorage instance.
 pub struct PortalStorageConfig {
     pub storage_capacity_kb: u64,
     pub node_id: NodeId,
@@ -131,7 +132,7 @@ impl PortalStorage {
     pub fn store(&mut self, key: &String, value: &String) -> Result<(), PortalStorageError> {
         // Check whether we should store this data
         if !self.should_store(&key)? {
-            println!("Not storing: {}", key);
+            debug!("Not storing: {}", key);
             return Ok(());
         }
 
@@ -159,7 +160,7 @@ impl PortalStorage {
             // Unwrap because this was set in the block before this loop.
             let id_to_remove = self.farthest_content_id.clone().unwrap();
 
-            println!(
+            debug!(
                 "Capacity reached, deleting farthest: {}",
                 hex::encode(&id_to_remove)
             );
@@ -175,7 +176,7 @@ impl PortalStorage {
                     break;
                 }
                 Some(farthest) => {
-                    println!("Found new farthest: {}", hex::encode(&farthest));
+                    debug!("Found new farthest: {}", hex::encode(&farthest));
                     self.farthest_content_id = Some(farthest.clone());
                     self.data_radius = self.distance_to_content_id(&farthest);
                 }
@@ -189,8 +190,7 @@ impl PortalStorage {
     /// If no value exists for the given content-key, Result<None> is returned.
     pub fn get(&self, key: &String) -> Result<Option<Vec<u8>>, PortalStorageError> {
         let content_id = self.content_key_to_content_id(key);
-        let value = self.db.get(content_id)?;
-        Ok(value)
+        Ok(self.db.get(content_id)?)
     }
 
     /// Public method for retrieving the node's current radius.
@@ -198,7 +198,7 @@ impl PortalStorage {
         let u64_radius_bytes: [u8; 8] = u64::to_be_bytes(self.data_radius);
         let empty_bytes: [u8; 24] = [0; 24];
         let combined_array: [u8; 32] = {
-            let mut whole: [u8; 32] = [0; 32];
+            let mut whole: [u8; 32] = [255; 32];
             let (one, two) = whole.split_at_mut(u64_radius_bytes.len());
             one.copy_from_slice(&u64_radius_bytes);
             two.copy_from_slice(&empty_bytes);
@@ -210,19 +210,17 @@ impl PortalStorage {
     /// Public method for determining how much actual disk space is being used to store this node's Portal Network data.
     /// Intended for analysis purposes. PortalStorage's capacity decision-making is not based off of this method.
     pub fn get_total_storage_usage_in_bytes_on_disk(&self) -> Result<u64, PortalStorageError> {
-        let size = self.get_total_size_of_directory_in_bytes(get_data_dir(self.node_id))?;
-        Ok(size)
+        Ok(self.get_total_size_of_directory_in_bytes(get_data_dir(self.node_id))?)
     }
 
     /// Calls the content_key_to_id callback closure that was passed into the constructor.
     fn content_key_to_content_id(&self, key: &String) -> [u8; 32] {
         let id_as_u256: U256 = (self.content_key_to_id_function)(key);
 
-        let mut w: [u8; 32] = [0; 32];
-        let y: &mut [u8; 32] = &mut w;
-        id_as_u256.to_big_endian(y);
+        let mut content_id: [u8; 32] = [0; 32];
+        id_as_u256.to_big_endian(&mut content_id);
 
-        y.clone()
+        content_id.clone()
     }
 
     /// Internal method for inserting data into the db.
@@ -372,10 +370,10 @@ impl PortalStorage {
     }
 
     // Takes the most significant 8 bytes of a vector and casts them into a u64.
-    // The equivalent of a conversion from nanometers to meters.
+    // With a 32-byte big-endian unsigned integer input, this is equivalent to dividing by 2^(256 - 32)
     fn byte_vector_to_u64(vec: Vec<u8>) -> u64 {
         if vec.len() < 8 {
-            println!("Error: XOR returned less than 8 bytes.");
+            debug!("Error: XOR returned less than 8 bytes.");
             return 0;
         }
 
@@ -390,7 +388,7 @@ impl PortalStorage {
     // Converts most significant 4 bytes of a vector to a u32.
     fn byte_vector_to_u32(vec: Vec<u8>) -> u32 {
         if vec.len() < 4 {
-            println!("Error: XOR returned less than 4 bytes.");
+            debug!("Error: XOR returned less than 4 bytes.");
             return 0;
         }
 
@@ -461,7 +459,7 @@ struct DataSizeSum {
 }
 
 #[cfg(test)]
-mod test {
+pub mod test {
 
     use super::*;
     use sha3::{Digest, Sha3_256};
@@ -486,14 +484,20 @@ mod test {
         let db = Arc::new(PortalStorage::setup_rocksdb(node_id)?);
         let meta_db = Arc::new(PortalStorage::setup_sqlite(node_id)?);
 
+        const CAPACITY: u64 = 100;
+
         let storage_config = PortalStorageConfig {
-            storage_capacity_kb: 100,
+            storage_capacity_kb: CAPACITY,
             node_id,
             distance_function: DistanceFunction::Xor,
             db: db,
             meta_db: meta_db,
         };
-        let _ = PortalStorage::new(storage_config, |key| sha256(key))?;
+        let storage = PortalStorage::new(storage_config, |key| sha256(key))?;
+
+        // Assert that configs match the storage object's fields
+        assert_eq!(storage.node_id, node_id);
+        assert_eq!(storage.storage_capacity_kb, CAPACITY);
 
         Ok(())
     }
@@ -543,17 +547,9 @@ mod test {
 
         let result = storage.get(&key);
 
-        println!(
-            "{}",
-            String::from_utf8(match result? {
-                Some(value) => value,
-                // Fail if there's no value for the key...
-                None => {
-                    panic!("Failed to retrieve key that we just put into the DB.");
-                } // ... or if the key can't be converted to utf8 (it should in this particular case).
-            })
-            .unwrap()
-        );
+        let string = String::from_utf8(result.unwrap().unwrap()).unwrap();
+
+        assert_eq!(string, value);
 
         Ok(())
     }
@@ -580,7 +576,7 @@ mod test {
 
         let bytes = storage.get_total_storage_usage_in_bytes_from_network()?;
 
-        println!("{}", bytes);
+        assert_eq!(32, bytes);
 
         Ok(())
     }
@@ -687,7 +683,7 @@ mod test {
         // This one is the farthest
         let key_b: String = "LHp1PeJ4C6c3nRUc7f6BI1FYULNL8aWB".to_string();
         storage.store(&key_b, &value)?;
-        let b_content_id = storage.content_key_to_content_id(&key_b);
+        let expected_content_id = storage.content_key_to_content_id(&key_b);
 
         let key_c: String = "HkybBgUebGtbwdrNDbxDWywtgWlUM8vW".to_string();
         storage.store(&key_c, &value)?;
@@ -695,12 +691,9 @@ mod test {
         let key_d: String = "gdOKkDEq9XFs2Tzay4Ecuw0obIISGw9Y".to_string();
         storage.store(&key_d, &value)?;
 
-        let result = match storage.find_farthest_content_id()? {
-            Some(key) => key,
-            None => panic!("find_farthest_content_id() returned None despite data in DB."),
-        };
+        let result = storage.find_farthest_content_id().unwrap().unwrap();
 
-        assert_eq!(result, b_content_id);
+        assert_eq!(result, expected_content_id);
 
         Ok(())
     }

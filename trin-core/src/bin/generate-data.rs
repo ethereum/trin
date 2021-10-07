@@ -9,6 +9,11 @@ use trin_core::portalnet::storage::{DistanceFunction, PortalStorage, PortalStora
 use trin_core::portalnet::U256;
 use trin_core::utils::get_data_dir;
 
+// For every 1 kb of data we store (key + value), RocksDB tends to grow by this many kb on disk...
+// ...but this is a crude empirical estimation that works mainly with default value data size of 32
+const DATA_OVERHEAD: f64 = 1.1783;
+const SIZE_OF_KEYS: u32 = 32;
+
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let generator_config = GeneratorConfig::from_args();
 
@@ -26,13 +31,10 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let meta_db = PortalStorage::setup_sqlite(node_id)?;
 
     let num_kilobytes = generator_config.kb;
-    let size_of_keys = 32;
+
     let size_of_values = generator_config.value_size;
 
-    // For every 1 kb of data we store (key + value), RocksDB tends to grow by this many kb on disk...
-    // ...but this is a crude empirical estimation that works mainly with default value data size of 32
-    let data_overhead = 1.1783;
-    let num_entries = ((num_kilobytes * 1000) as f64 / (size_of_values) as f64) / data_overhead;
+    let num_entries = ((num_kilobytes * 1000) as f64 / (size_of_values) as f64) / DATA_OVERHEAD;
     let num_of_entries = num_entries.round() as u32;
 
     let storage_config = PortalStorageConfig {
@@ -48,7 +50,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for _ in 0..num_of_entries {
         let value = generate_random_value(size_of_values);
-        let key = generate_random_value(size_of_keys);
+        let key = generate_random_value(SIZE_OF_KEYS);
 
         println!("{} -> {}", &key, &value);
         storage.store(&key, &value)?;

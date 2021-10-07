@@ -11,8 +11,6 @@ pub mod storage;
 pub mod types;
 pub mod utp;
 
-use std::convert::From;
-
 pub type Enr = discv5::enr::Enr<CombinedKey>;
 
 construct_uint! {
