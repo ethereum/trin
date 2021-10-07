@@ -127,35 +127,36 @@ impl PortalStorage {
     }
 
     /// Public method for storing a given value for a given content-key.
-    /// This method is idempotent: further calls with the same content-key will not update the DB
-    /// unless the original pair was deleted.
     pub fn store(&mut self, key: &String, value: &String) -> Result<(), PortalStorageError> {
-        // Check whether we should store this data
-        if !self.should_store(&key)? {
+        let content_id = self.content_key_to_content_id(key);
+
+        let distance_to_content_id = self.distance_to_content_id(&content_id);
+
+        // Check whether data is outside our radius.
+        if distance_to_content_id > self.data_radius {
             debug!("Not storing: {}", key);
             return Ok(());
         }
 
-        let content_id = self.content_key_to_content_id(key);
-
-        // Store the data
+        // Store the data.
         self.db_insert(&content_id, value)?;
         self.meta_db_insert(&content_id, &key, value)?;
 
-        // Update the farthest key if this key is either 1.) the first key ever or 2.) farther than the current farthest
+        // Update the farthest key if this key is either 1.) the first key ever or 2.) farther than the current farthest.
         match self.farthest_content_id.as_ref() {
             None => {
                 self.farthest_content_id = Some(content_id);
             }
             Some(farthest) => {
-                if self.distance_to_content_id(&content_id) > self.distance_to_content_id(&farthest)
+                // if self.distance_to_content_id(&content_id) > self.distance_to_content_id(&farthest)
+                if distance_to_content_id > self.distance_to_content_id(&farthest)
                 {
                     self.farthest_content_id = Some(content_id.clone());
                 }
             }
         }
 
-        // Delete furthest data until our data usage is less than capacity
+        // Delete furthest data until our data usage is less than capacity.
         while self.capacity_reached()? {
             // Unwrap because this was set in the block before this loop.
             let id_to_remove = self.farthest_content_id.clone().unwrap();
@@ -436,7 +437,7 @@ const CREATE_QUERY: &str = "create table if not exists content_metadata (
                             )";
 
 const INSERT_QUERY: &str =
-    "INSERT INTO content_metadata (content_id_long, content_id_short, content_key, content_size)
+    "INSERT OR IGNORE INTO content_metadata (content_id_long, content_id_short, content_key, content_size)
                             VALUES (?1, ?2, ?3, ?4)";
 
 const DELETE_QUERY: &str = "DELETE FROM content_metadata
