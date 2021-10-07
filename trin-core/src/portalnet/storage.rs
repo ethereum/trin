@@ -33,7 +33,7 @@ pub struct PortalStorageConfig {
 /// Struct whose public methods abstract away Kademlia-based storage behavior.
 pub struct PortalStorage {
     node_id: NodeId,
-    storage_capacity_kb: u64,
+    storage_capacity_in_bytes: u64,
     data_radius: u64,
     farthest_content_id: Option<[u8; 32]>,
     db: Arc<rocksdb::DB>,
@@ -81,7 +81,7 @@ impl PortalStorage {
         // Initialize the instance
         let mut storage = Self {
             node_id: config.node_id,
-            storage_capacity_kb: config.storage_capacity_kb,
+            storage_capacity_in_bytes: config.storage_capacity_kb * 1000,
             data_radius: u64::MAX,
             db: config.db,
             farthest_content_id: None,
@@ -263,7 +263,7 @@ impl PortalStorage {
     /// Internal method for determining whether the node is over-capacity.
     fn capacity_reached(&self) -> Result<bool, PortalStorageError> {
         let storage_usage = self.get_total_storage_usage_in_bytes_from_network()?;
-        Ok(storage_usage > (self.storage_capacity_kb * 1000))
+        Ok(storage_usage > self.storage_capacity_in_bytes)
     }
 
     /// Internal method for measuring the total amount of requestable data that the node is storing.
@@ -497,7 +497,7 @@ pub mod test {
 
         // Assert that configs match the storage object's fields
         assert_eq!(storage.node_id, node_id);
-        assert_eq!(storage.storage_capacity_kb, CAPACITY);
+        assert_eq!(storage.storage_capacity_in_bytes, CAPACITY * 1000);
 
         Ok(())
     }
