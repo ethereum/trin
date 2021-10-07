@@ -149,8 +149,7 @@ impl PortalStorage {
             }
             Some(farthest) => {
                 // if self.distance_to_content_id(&content_id) > self.distance_to_content_id(&farthest)
-                if distance_to_content_id > self.distance_to_content_id(&farthest)
-                {
+                if distance_to_content_id > self.distance_to_content_id(&farthest) {
                     self.farthest_content_id = Some(content_id.clone());
                 }
             }
