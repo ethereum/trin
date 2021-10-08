@@ -1,4 +1,4 @@
-use log::debug;
+use log::{debug, info};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
 
 #[cfg(unix)]
@@ -14,13 +14,20 @@ const STUN_SERVER: &str = "143.198.142.185:3478";
 /// - Returns the public IP and port that corresponds to your local port
 pub fn stun_for_external(local_socket_addr: &SocketAddr) -> Option<SocketAddr> {
     let socket = UdpSocket::bind(local_socket_addr).unwrap();
+    info!("Blocking: connecting to STUN server to find public network endpoint");
     let external_addr =
         stunclient::StunClient::new(STUN_SERVER.parse().unwrap()).query_external_address(&socket);
-    debug!(
-        "STUN claims that public network endpoint is: {:?}",
-        external_addr,
-    );
-    external_addr.ok()
+
+    match external_addr {
+        Ok(addr) => {
+            debug!("STUN gave us a public address: {:?}", addr);
+            Some(addr)
+        }
+        Err(err) => {
+            debug!("Failed to setup STUN traversal: {:?}", err);
+            None
+        }
+    }
 }
 
 pub fn default_local_address(port: u16) -> SocketAddr {
