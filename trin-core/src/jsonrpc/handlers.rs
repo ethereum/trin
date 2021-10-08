@@ -27,11 +27,9 @@ impl JsonRpcHandler {
         while let Some(request) = self.portal_jsonrpc_rx.recv().await {
             let response: Value = match request.endpoint {
                 PortalEndpointKind::Discv5EndpointKind(endpoint) => match endpoint {
-                    Discv5EndpointKind::NodeInfo => {
-                        Value::String(self.discovery.read().await.node_info())
-                    }
+                    Discv5EndpointKind::NodeInfo => self.discovery.read().await.node_info(),
                     Discv5EndpointKind::RoutingTableInfo => {
-                        Value::Array(self.discovery.read().await.routing_table_info())
+                        self.discovery.write().await.routing_table_info()
                     }
                 },
                 PortalEndpointKind::HistoryEndpointKind(endpoint) => {
