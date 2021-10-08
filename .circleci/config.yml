@@ -40,7 +40,7 @@ jobs:
                 command: cargo build --workspace --jobs 2
             - run:
                 name: Test Trin workspace
-                command: cargo test --workspace
+                command: RUSTFLAGS='-D warnings' cargo test --workspace
             - save_cache:
                 key: cargo-{{ checksum "Cargo.lock" }}-v1
                 paths:
