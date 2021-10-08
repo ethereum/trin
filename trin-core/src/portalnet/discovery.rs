@@ -6,7 +6,7 @@ use crate::socket;
 use discv5::enr::{CombinedKey, EnrBuilder, NodeId};
 use discv5::{Discv5, Discv5Config, Discv5ConfigBuilder};
 use log::info;
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::net::{IpAddr, SocketAddr};
 
 #[derive(Clone)]
@@ -108,18 +108,35 @@ impl Discovery {
         self.discv5.connected_peers()
     }
 
-    /// Provides the URL-safe base64 encoded "text" version of the ENR prefixed by "enr:".
-    pub fn node_info(&self) -> String {
-        self.discv5.local_enr().to_base64()
+    /// Returns ENR and nodeId information of the local discv5 node
+    pub fn node_info(&self) -> Value {
+        json!({
+            "enr":  self.discv5.local_enr().to_base64(),
+            "nodeId":  self.discv5.local_enr().node_id().to_string()
+        })
     }
 
     /// Returns vector of all ENR node IDs of nodes currently contained in the routing table mapped to JSON Value.
-    pub fn routing_table_info(&self) -> Vec<Value> {
-        self.discv5
-            .table_entries_id()
+    pub fn routing_table_info(&mut self) -> Value {
+        let buckets: Vec<(String, String, String)> = self
+            .discv5
+            .table_entries()
             .iter()
-            .map(|node_id| Value::String(node_id.to_string()))
-            .collect()
+            .map(|(node_id, enr, node_status)| {
+                (
+                    node_id.to_string(),
+                    enr.to_base64(),
+                    format!("{:?}", node_status.state),
+                )
+            })
+            .collect();
+
+        json!(
+            {
+                "localKey": self.discv5.local_enr().node_id().to_string(),
+                "buckets": buckets
+            }
+        )
     }
 
     pub fn connected_peers(&mut self) -> Vec<NodeId> {
