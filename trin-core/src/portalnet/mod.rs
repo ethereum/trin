@@ -7,6 +7,7 @@ use uint::construct_uint;
 pub mod discovery;
 pub mod events;
 pub mod overlay;
+pub mod storage;
 pub mod types;
 pub mod utp;
 

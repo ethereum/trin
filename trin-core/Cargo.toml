@@ -21,13 +21,15 @@ rlp = "0.5.0"
 rocksdb = "0.16.0"
 serde = {version = "1.0.125", features = ["derive"] }
 serde_json = "1.0.59"
-structopt = "0.3"
 stunclient = "0.1.2"
+structopt = "0.3"
+sha3 = "0.9.1"
 threadpool = "1.8.1"
 tokio = {version = "1.8.0", features = ["full"]}
 uint = { version = "0.8.5", default-features = false }
 validator = { version = "0.13.0", features = ["derive"] }
 rstest = "0.11.0"
+thiserror = "1.0.29"
 
 [target.'cfg(windows)'.dependencies]
 ipconfig = "0.2.2"
@@ -39,3 +41,7 @@ interfaces = "0.0.7"
 [dependencies.discv5]
 version = "0.1.0-beta.10"
 git = "https://github.com/sigp/discv5"
+
+[dependencies.rusqlite]
+version = "0.25.3"
+features = ["bundled"]
