@@ -1,7 +1,7 @@
 use super::handlers::{PortalEndpoint, PortalEndpointKind};
 use super::types::JsonRequest;
 use crate::cli::TrinConfig;
-use log::debug;
+use log::{debug, info};
 use reqwest::blocking as reqwest;
 use serde_json::{json, Value};
 use std::fs;
@@ -87,6 +87,8 @@ fn launch_ipc_client(
             panic!("Could not serve from IPC path '{}': {:?}", ipc_path, err);
         }
     };
+
+    info!("listening for commands: {}", ipc_path);
 
     for stream in listener.incoming() {
         let stream = stream.unwrap();

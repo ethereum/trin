@@ -118,27 +118,22 @@ impl TrinConfig {
     }
 
     pub fn display_config(&self) {
+        info!("Launching with config:");
         match self.web3_transport.as_str() {
             "http" => {
-                info!(
-                    "Protocol: {}\nWEB3 HTTP port: {}",
-                    self.web3_transport, self.web3_http_port
-                )
+                info!("- JSON-RPC HTTP port: {}", self.web3_http_port)
             }
             "ipc" => {
-                info!(
-                    "Protocol: {}\nIPC path: {}",
-                    self.web3_transport, self.web3_ipc_path
-                )
+                info!("- JSON-RPC IPC path: {}", self.web3_ipc_path)
             }
-            val => panic!("Unsupported json-rpc protocol: {}", val),
+            val => panic!("Unsupported json-rpc transport: {}", val),
         }
 
-        info!("Pool Size: {}", self.pool_size);
+        info!("- Pool Size: {}", self.pool_size);
 
         match self.bootnodes.is_empty() {
-            true => info!("Bootnodes: None"),
-            _ => info!("Bootnodes: {:?}", self.bootnodes),
+            true => info!("- Bootnodes: None"),
+            _ => info!("- Bootnodes: {:?}", self.bootnodes),
         }
     }
 }
