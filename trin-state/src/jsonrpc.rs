@@ -20,8 +20,7 @@ impl StateRequestHandler {
                             .read()
                             .await
                             .overlay
-                            .data_radius
-                            .read()
+                            .data_radius()
                             .await
                             .to_string(),
                     )));

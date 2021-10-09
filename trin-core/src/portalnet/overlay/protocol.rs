@@ -1,6 +1,4 @@
-use crate::utils::xor_two_values;
-
-use super::{
+use crate::portalnet::{
     discovery::Discovery,
     types::{
         FindContent, FindNodes, FoundContent, Message, Nodes, Ping, Pong, ProtocolKind, Request,
@@ -8,45 +6,23 @@ use super::{
     },
     Enr, U256,
 };
+use crate::utils::xor_two_values;
+
+use super::service::{
+    Node, OverlayRequest, OverlayService, RequestDirection, FIND_CONTENT_MAX_NODES,
+    FIND_NODES_MAX_NODES,
+};
+
 use discv5::{
     enr::NodeId,
     kbucket::{Filter, KBucketsTable},
     TalkRequest,
 };
-use log::debug;
+use futures::channel::oneshot;
 use rocksdb::DB;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::RwLock;
-
-/// Maximum number of ENRs in response to FindNodes.
-const FIND_NODES_MAX_NODES: usize = 32;
-/// Maximum number of ENRs in response to FindContent.
-const FIND_CONTENT_MAX_NODES: usize = 32;
-
-#[derive(Clone)]
-pub struct Node {
-    enr: Enr,
-    data_radius: U256,
-}
-
-impl Node {
-    pub fn enr(&self) -> Enr {
-        self.enr.clone()
-    }
-
-    pub fn data_radius(&self) -> U256 {
-        self.data_radius.clone()
-    }
-}
-
-impl std::cmp::Eq for Node {}
-
-impl PartialEq for Node {
-    fn eq(&self, other: &Self) -> bool {
-        self.enr == other.enr
-    }
-}
+use tokio::sync::{mpsc::UnboundedSender, RwLock};
 
 /// Configuration parameters for the overlay network.
 #[derive(Clone)]
@@ -72,16 +48,19 @@ impl Default for OverlayConfig {
 /// (state, history etc.) and dispatch them to the discv5 protocol TalkReq. Each network should
 /// implement the overlay protocol and the overlay protocol is where we can encapsulate the logic for
 /// handling common network requests/responses.
-#[derive(Clone)]
 pub struct OverlayProtocol {
-    /// Reference to the underlying discv5 protocol
+    /// Reference to the underlying discv5 protocol.
     pub discovery: Arc<RwLock<Discovery>>,
-    // The data radius of the local node.
-    pub data_radius: Arc<RwLock<U256>>,
-    // The overlay routing table of the local node.
-    pub kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
-    // Reference to the database instance
+    /// Reference to the database instance.
     pub db: Arc<DB>,
+    /// The data radius of the local node.
+    data_radius: Arc<RwLock<U256>>,
+    /// The overlay routing table of the local node.
+    kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
+    /// The subnetwork protocol of the overlay.
+    protocol: ProtocolKind,
+    /// A sender to send requests to the OverlayService.
+    request_tx: UnboundedSender<OverlayRequest>,
 }
 
 impl OverlayProtocol {
@@ -90,23 +69,44 @@ impl OverlayProtocol {
         discovery: Arc<RwLock<Discovery>>,
         db: Arc<DB>,
         data_radius: U256,
+        protocol: ProtocolKind,
     ) -> Self {
+        let local_enr = discovery.read().await.local_enr();
         let kbuckets = Arc::new(RwLock::new(KBucketsTable::new(
-            discovery.read().await.local_enr().node_id().into(),
+            local_enr.node_id().into(),
             config.bucket_pending_timeout,
             config.max_incoming_per_bucket,
             config.table_filter,
             config.bucket_filter,
         )));
 
+        let data_radius = Arc::new(RwLock::new(data_radius));
+        let request_tx = OverlayService::spawn(
+            Arc::clone(&discovery),
+            Arc::clone(&db),
+            Arc::clone(&kbuckets),
+            Arc::clone(&data_radius),
+            protocol.clone(),
+        )
+        .await
+        .unwrap();
+
         Self {
             discovery,
-            data_radius: Arc::new(RwLock::new(data_radius)),
+            data_radius: data_radius,
             kbuckets,
             db,
+            protocol,
+            request_tx,
         }
     }
 
+    /// Returns the subnetwork protocol of the overlay protocol.
+    pub fn protocol(&self) -> &ProtocolKind {
+        &self.protocol
+    }
+
+    /// Processes a single TALK request destined for the overlay protocol.
     pub async fn process_one_request(
         &self,
         talk_request: &TalkRequest,
@@ -117,45 +117,25 @@ impl OverlayProtocol {
             Err(e) => return Err(format!("Invalid request: {}", e)),
         };
 
-        let response = match request {
-            Request::Ping(Ping { .. }) => {
-                debug!("Got overlay ping request {:?}", request);
-                let enr_seq = self.discovery.read().await.local_enr().seq();
-                Response::Pong(Pong {
-                    enr_seq,
-                    data_radius: self.data_radius().await,
-                })
-            }
-            Request::FindNodes(FindNodes { distances }) => {
-                let distances64: Vec<u64> = distances.iter().map(|x| (*x).into()).collect();
-                let enrs = self.nodes_by_distance(distances64).await;
-                Response::Nodes(Nodes {
-                    // from spec: total = The total number of Nodes response messages being sent.
-                    // TODO: support returning multiple messages
-                    total: 1_u8,
-                    enrs,
-                })
-            }
-            Request::FindContent(FindContent { content_key }) => match self.db.get(&content_key) {
-                Ok(Some(value)) => {
-                    let empty_enrs: Vec<SszEnr> = vec![];
-                    Response::FoundContent(FoundContent {
-                        enrs: empty_enrs,
-                        payload: value,
-                    })
-                }
-                Ok(None) => {
-                    let enrs = self.find_nodes_close_to_content(content_key).await;
-                    let empty_payload: Vec<u8> = vec![];
-                    Response::FoundContent(FoundContent {
-                        enrs,
-                        payload: empty_payload,
-                    })
-                }
-                Err(e) => panic!("Unable to respond to FindContent: {}", e),
+        // Send a request through the overlay service.
+        let (tx, rx) = oneshot::channel();
+        let overlay_request = OverlayRequest {
+            request,
+            direction: RequestDirection::Incoming {
+                source: *talk_request.node_id(),
             },
+            responder: Some(tx),
         };
-        Ok(response)
+        if let Err(_) = self.request_tx.send(overlay_request) {
+            return Err("Receiver half of channel dropped, unable to submit request".to_owned());
+        }
+        // Wait on the response.
+        match rx.await {
+            Ok(result) => result,
+            Err(oneshot::Canceled) => {
+                Err("Sender half of the response channel was dropped".to_owned())
+            }
+        }
     }
 
     /// Returns the local ENR of the node.
@@ -163,7 +143,7 @@ impl OverlayProtocol {
         self.discovery.read().await.discv5.local_enr()
     }
 
-    // Returns the data radius of the node.
+    /// Returns the data radius of the node.
     pub async fn data_radius(&self) -> U256 {
         self.data_radius.read().await.clone()
     }
@@ -243,61 +223,87 @@ impl OverlayProtocol {
             .collect()
     }
 
-    pub async fn send_ping(
-        &self,
-        data_radius: U256,
-        enr: Enr,
-        protocol: ProtocolKind,
-    ) -> Result<Vec<u8>, String> {
+    /// Sends a `Ping` request to `enr`.
+    pub async fn send_ping(&self, enr: Enr) -> Result<Pong, String> {
         let enr_seq = self.discovery.read().await.local_enr().seq();
-        let msg = Ping {
+        let request = Ping {
             enr_seq,
-            data_radius,
+            data_radius: self.data_radius().await,
         };
-        self.discovery
-            .read()
-            .await
-            .send_talkreq(
-                enr,
-                protocol.to_string(),
-                Message::Request(Request::Ping(msg)).to_bytes(),
-            )
-            .await
+
+        // Send a request through the overlay service.
+        let (tx, rx) = oneshot::channel();
+        let overlay_request = OverlayRequest {
+            request: Request::Ping(request),
+            direction: RequestDirection::Outgoing { destination: enr },
+            responder: Some(tx),
+        };
+        if let Err(_) = self.request_tx.send(overlay_request) {
+            return Err("Receiver half of channel dropped, unable to submit request".to_owned());
+        }
+
+        // Wait on the response.
+        match rx.await {
+            Ok(Ok(Response::Pong(pong))) => Ok(pong),
+            Ok(Ok(_)) => Err("Unexpected response to Ping request".to_owned()),
+            Ok(Err(error)) => Err(error),
+            Err(oneshot::Canceled) => {
+                Err("Sender half of the response channel was dropped".to_owned())
+            }
+        }
     }
 
-    pub async fn send_find_nodes(
-        &self,
-        distances: Vec<u16>,
-        enr: Enr,
-        protocol: ProtocolKind,
-    ) -> Result<Vec<u8>, String> {
-        let msg = FindNodes { distances };
-        self.discovery
-            .read()
-            .await
-            .send_talkreq(
-                enr,
-                protocol.to_string(),
-                Message::Request(Request::FindNodes(msg)).to_bytes(),
-            )
-            .await
+    pub async fn send_find_nodes(&self, distances: Vec<u16>, enr: Enr) -> Result<Nodes, String> {
+        let request = FindNodes { distances };
+
+        // Send a request through the overlay service.
+        let (tx, rx) = oneshot::channel();
+        let overlay_request = OverlayRequest {
+            request: Request::FindNodes(request),
+            direction: RequestDirection::Outgoing { destination: enr },
+            responder: Some(tx),
+        };
+        if let Err(_) = self.request_tx.send(overlay_request) {
+            return Err("Receiver half of channel dropped, unable to submit request".to_owned());
+        }
+
+        // Wait on the response.
+        match rx.await {
+            Ok(Ok(Response::Nodes(nodes))) => Ok(nodes),
+            Ok(Ok(_)) => Err("Unexpected response to FindNodes request".to_owned()),
+            Ok(Err(error)) => Err(error),
+            Err(oneshot::Canceled) => {
+                Err("Sender half of the response channel was dropped".to_owned())
+            }
+        }
     }
 
     pub async fn send_find_content(
         &self,
         content_key: Vec<u8>,
         enr: Enr,
-        protocol: ProtocolKind,
-    ) -> Result<Vec<u8>, String> {
-        let msg = FindContent { content_key };
-        self.discovery
-            .read()
-            .await
-            .send_talkreq(
-                enr,
-                protocol.to_string(),
-                Message::Request(Request::FindContent(msg)).to_bytes(),
-            )
-            .await
+    ) -> Result<FoundContent, String> {
+        let request = FindContent { content_key };
+
+        // Send a request through the overlay service.
+        let (tx, rx) = oneshot::channel();
+        let overlay_request = OverlayRequest {
+            request: Request::FindContent(request),
+            direction: RequestDirection::Outgoing { destination: enr },
+            responder: Some(tx),
+        };
+        if let Err(_) = self.request_tx.send(overlay_request) {
+            return Err("Receiver half of channel dropped, unable to submit request".to_owned());
+        }
+
+        // Wait on the response.
+        match rx.await {
+            Ok(Ok(Response::FoundContent(found_content))) => Ok(found_content),
+            Ok(Ok(_)) => Err("Unexpected response to FindContent request".to_owned()),
+            Ok(Err(error)) => Err(error),
+            Err(oneshot::Canceled) => {
+                Err("Sender half of the response channel was dropped".to_owned())
+            }
+        }
     }
 }

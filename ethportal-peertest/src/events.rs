@@ -1,4 +1,4 @@
-use discv5::{Discv5Event, TalkRequest};
+use discv5::Discv5Event;
 use log::{debug, error, warn};
 use std::convert::TryInto;
 use std::sync::Arc;
@@ -12,25 +12,22 @@ pub const STATE_NETWORK: &str = "state";
 pub const UTP_PROTOCOL: &str = "utp";
 
 pub struct PortalnetEvents {
-    pub overlay: Arc<OverlayProtocol>,
+    pub history_overlay: Arc<OverlayProtocol>,
+    pub state_overlay: Arc<OverlayProtocol>,
     pub protocol_receiver: mpsc::Receiver<Discv5Event>,
     pub utp_listener: UtpListener,
 }
 
 impl PortalnetEvents {
-    pub async fn new(overlay: Arc<OverlayProtocol>, utp_listener: UtpListener) -> Self {
-        let protocol_receiver = overlay
-            .discovery
-            .write()
-            .await
-            .discv5
-            .event_stream()
-            .await
-            .map_err(|e| e.to_string())
-            .unwrap();
-
+    pub async fn new(
+        history_overlay: Arc<OverlayProtocol>,
+        state_overlay: Arc<OverlayProtocol>,
+        protocol_receiver: mpsc::Receiver<Discv5Event>,
+        utp_listener: UtpListener,
+    ) -> Self {
         Self {
-            overlay: Arc::clone(&overlay),
+            history_overlay,
+            state_overlay,
             protocol_receiver,
             utp_listener,
         }
@@ -49,14 +46,26 @@ impl PortalnetEvents {
             match std::str::from_utf8(request.protocol()) {
                 Ok(protocol) => match protocol {
                     HISTORY_NETWORK => {
-                        let reply = self.get_talk_req_reply(&request).await;
+                        let reply = match self.history_overlay.process_one_request(&request).await {
+                            Ok(r) => Message::Response(r).to_bytes(),
+                            Err(e) => {
+                                error!("failed to process history portal event: {}", e);
+                                e.into_bytes()
+                            }
+                        };
 
                         if let Err(e) = request.respond(reply) {
                             warn!("failed to send history network reply: {}", e);
                         }
                     }
                     STATE_NETWORK => {
-                        let reply = self.get_talk_req_reply(&request).await;
+                        let reply = match self.state_overlay.process_one_request(&request).await {
+                            Ok(r) => Message::Response(r).to_bytes(),
+                            Err(e) => {
+                                error!("failed to process portal event: {}", e);
+                                e.into_bytes()
+                            }
+                        };
 
                         if let Err(e) = request.respond(reply) {
                             warn!("failed to send state network reply: {}", e);
@@ -73,16 +82,6 @@ impl PortalnetEvents {
                     }
                 },
                 Err(_) => warn!("Invalid utf8 protocol decode"),
-            }
-        }
-    }
-
-    async fn get_talk_req_reply(&self, request: &TalkRequest) -> Vec<u8> {
-        match self.overlay.process_one_request(request).await {
-            Ok(r) => Message::Response(r).to_bytes(),
-            Err(e) => {
-                error!("failed to process portal event: {}", e);
-                e.into_bytes()
             }
         }
     }

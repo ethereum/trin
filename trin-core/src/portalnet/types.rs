@@ -263,6 +263,10 @@ impl SszEnr {
     pub fn new(enr: Enr) -> SszEnr {
         SszEnr(enr)
     }
+
+    pub fn enr(&self) -> Enr {
+        self.0.clone()
+    }
 }
 
 impl Deref for SszEnr {

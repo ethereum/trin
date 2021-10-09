@@ -6,7 +6,6 @@ use trin_core::portalnet::{
     discovery::Discovery,
     overlay::{OverlayConfig, OverlayProtocol},
     types::{PortalnetConfig, ProtocolKind},
-    U256,
 };
 
 /// History network layer on top of the overlay protocol. Encapsulates history network specific data and logic.
@@ -22,7 +21,14 @@ impl HistoryNetwork {
         portal_config: PortalnetConfig,
     ) -> Self {
         let config = OverlayConfig::default();
-        let overlay = OverlayProtocol::new(config, discovery, db, portal_config.data_radius).await;
+        let overlay = OverlayProtocol::new(
+            config,
+            discovery,
+            db,
+            portal_config.data_radius,
+            ProtocolKind::History,
+        )
+        .await;
 
         Self {
             overlay: Arc::new(overlay),
@@ -43,10 +49,7 @@ impl HistoryNetwork {
             .table_entries_enr()
         {
             debug!("Pinging {} on portal history network", enr);
-            let ping_result = self
-                .overlay
-                .send_ping(U256::from(u64::MAX), enr, ProtocolKind::History)
-                .await?;
+            let ping_result = self.overlay.send_ping(enr).await?;
             debug!("Portal history network Ping result: {:?}", ping_result);
         }
         Ok(())

@@ -27,16 +27,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let discovery = Arc::new(RwLock::new(Discovery::new(portal_config).unwrap()));
         discovery.write().await.start().await.unwrap();
 
+        let protocol_receiver = discovery
+            .write()
+            .await
+            .discv5
+            .event_stream()
+            .await
+            .map_err(|e| e.to_string())
+            .unwrap();
+
         let db = Arc::new(setup_overlay_db(
             discovery.read().await.local_enr().node_id(),
         ));
 
-        let overlay = Arc::new(
+        let history_overlay = Arc::new(
             OverlayProtocol::new(
                 OverlayConfig::default(),
                 Arc::clone(&discovery),
-                db,
+                Arc::clone(&db),
                 U256::max_value(),
+                ProtocolKind::History,
+            )
+            .await,
+        );
+
+        let state_overlay = Arc::new(
+            OverlayProtocol::new(
+                OverlayConfig::default(),
+                Arc::clone(&discovery),
+                Arc::clone(&db),
+                U256::max_value(),
+                ProtocolKind::State,
             )
             .await,
         );
@@ -46,7 +67,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             utp_connections: HashMap::new(),
         };
 
-        let events = PortalnetEvents::new(Arc::clone(&overlay), utp_listener).await;
+        let events = PortalnetEvents::new(
+            Arc::clone(&history_overlay),
+            Arc::clone(&state_overlay),
+            protocol_receiver,
+            utp_listener,
+        )
+        .await;
 
         tokio::spawn(events.process_discv5_requests());
 
@@ -54,25 +81,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Test history and state network Ping request on target node
         info!("Pinging {} on history network", target_node);
-        let ping_result = overlay
-            .send_ping(
-                U256::from(u64::MAX),
-                target_node.clone(),
-                ProtocolKind::History,
-            )
+        let ping_result = history_overlay
+            .send_ping(target_node.clone())
             .await
             .unwrap();
         info!("History network Ping result: {:?}", ping_result);
 
         info!("Pinging {} on state network", target_node);
-        let ping_result = overlay
-            .send_ping(
-                U256::from(u64::MAX),
-                target_node.clone(),
-                ProtocolKind::State,
-            )
-            .await
-            .unwrap();
+        let ping_result = state_overlay.send_ping(target_node.clone()).await.unwrap();
         info!("State network Ping result: {:?}", ping_result);
 
         tokio::signal::ctrl_c()
