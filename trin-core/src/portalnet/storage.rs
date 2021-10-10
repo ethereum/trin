@@ -7,6 +7,7 @@ use log::debug;
 use log::error;
 use rocksdb::{Options, DB};
 use rusqlite::{params, Connection};
+use sha3::{Digest, Sha3_256};
 use std::convert::TryInto;
 use std::fs;
 use std::sync::Arc;
@@ -19,7 +20,7 @@ pub enum DistanceFunction {
 }
 
 /// Signature of the function that must be passed into the call to new.
-type ContentKeyToIdDerivationFunction = dyn Fn(&String) -> U256;
+type ContentKeyToIdDerivationFunction = dyn Fn(Vec<u8>) -> Result<U256, String>;
 
 /// Struct for configuring a PortalStorage instance.
 pub struct PortalStorageConfig {
@@ -64,10 +65,16 @@ pub enum PortalStorageError {
         actual: usize,
     },
 
-    #[error("String error value returned from {function_name:?}: {error:?}")]
-    StringError {
+    #[error("OsString error value returned from {function_name:?}: {error:?}")]
+    OsStringError {
         function_name: String,
         error: std::ffi::OsString,
+    },
+
+    #[error("String error returned from {function_name:?}: {error:?}")]
+    StringError {
+        function_name: String,
+        error: String,
     },
 }
 
@@ -76,7 +83,7 @@ impl PortalStorage {
     /// Checks whether a populated database already exists vs a fresh instance.
     pub fn new(
         config: PortalStorageConfig,
-        content_key_to_id_function: impl Fn(&String) -> U256 + 'static,
+        content_key_to_id_function: impl Fn(Vec<u8>) -> Result<U256, String> + 'static,
     ) -> Result<Self, PortalStorageError> {
         // Initialize the instance
         let mut storage = Self {
@@ -109,7 +116,7 @@ impl PortalStorage {
     /// Public method for determining whether a given content key should be stored by the node.
     /// Takes into account our data radius and whether we are already storing the data.
     pub fn should_store(&self, key: &String) -> Result<bool, PortalStorageError> {
-        let content_id = self.content_key_to_content_id(key);
+        let content_id = self.content_key_to_content_id(key)?;
 
         // Don't store if we already have the data
         match self.db.get(&content_id) {
@@ -128,7 +135,7 @@ impl PortalStorage {
 
     /// Public method for storing a given value for a given content-key.
     pub fn store(&mut self, key: &String, value: &String) -> Result<(), PortalStorageError> {
-        let content_id = self.content_key_to_content_id(key);
+        let content_id = self.content_key_to_content_id(key)?;
 
         let distance_to_content_id = self.distance_to_content_id(&content_id);
 
@@ -189,7 +196,7 @@ impl PortalStorage {
     /// Public method for retrieving the stored value for a given content-key.
     /// If no value exists for the given content-key, Result<None> is returned.
     pub fn get(&self, key: &String) -> Result<Option<Vec<u8>>, PortalStorageError> {
-        let content_id = self.content_key_to_content_id(key);
+        let content_id = self.content_key_to_content_id(key)?;
         Ok(self.db.get(content_id)?)
     }
 
@@ -214,13 +221,21 @@ impl PortalStorage {
     }
 
     /// Calls the content_key_to_id callback closure that was passed into the constructor.
-    fn content_key_to_content_id(&self, key: &String) -> [u8; 32] {
-        let id_as_u256: U256 = (self.content_key_to_id_function)(key);
+    fn content_key_to_content_id(&self, key: &String) -> Result<[u8; 32], PortalStorageError> {
+        let id_as_u256: U256 = match (self.content_key_to_id_function)(key.as_bytes().to_vec()) {
+            Ok(content_id) => content_id,
+            Err(string_error) => {
+                return Err(PortalStorageError::StringError {
+                    function_name: "content_key_to_id_function".to_owned(),
+                    error: string_error,
+                })
+            }
+        };
 
         let mut content_id: [u8; 32] = [0; 32];
         id_as_u256.to_big_endian(&mut content_id);
 
-        content_id.clone()
+        Ok(content_id.clone())
     }
 
     /// Internal method for inserting data into the db.
@@ -349,7 +364,7 @@ impl PortalStorage {
                 let path_string = match dir.path().into_os_string().into_string() {
                     Ok(string) => string,
                     Err(error_string) => {
-                        return Err(PortalStorageError::StringError {
+                        return Err(PortalStorageError::OsStringError {
                             function_name: "get_total_size_of_directory_in_bytes".to_string(),
                             error: error_string,
                         });
@@ -400,20 +415,18 @@ impl PortalStorage {
         u32::from_be_bytes(array)
     }
 
+    // TODO: Move the following 3 helper functions to a utils file.
     /// Helper function for opening a SQLite connection.
-    /// Used for testing.
     pub fn setup_rocksdb(node_id: NodeId) -> Result<rocksdb::DB, PortalStorageError> {
         let data_path_root: String = get_data_dir(node_id).to_owned();
         let data_suffix: &str = "/rocksdb";
         let data_path = data_path_root + data_suffix;
-
         let mut db_opts = Options::default();
         db_opts.create_if_missing(true);
         Ok(DB::open(&db_opts, data_path)?)
     }
 
     /// Helper function for opening a SQLite connection.
-    /// Used for testing.
     pub fn setup_sqlite(node_id: NodeId) -> Result<rusqlite::Connection, PortalStorageError> {
         let data_path_root: String = get_data_dir(node_id).to_owned();
         let data_suffix: &str = "/trin.sqlite";
@@ -424,6 +437,18 @@ impl PortalStorage {
         conn.execute(CREATE_QUERY, [])?;
 
         Ok(conn)
+    }
+
+    /// Content key -> content id function for testing PortalStorage
+    pub fn sha256(key: Vec<u8>) -> Result<U256, String> {
+        let mut hasher = Sha3_256::new();
+        hasher.update(key);
+        let mut output = hasher.finalize();
+        let byte_output: &mut [u8; 32] = output
+            .as_mut_slice()
+            .try_into()
+            .expect("try_into failed in hash placeholder");
+        Ok(U256::from(*byte_output))
     }
 }
 
@@ -462,20 +487,6 @@ struct DataSizeSum {
 pub mod test {
 
     use super::*;
-    use sha3::{Digest, Sha3_256};
-    use std::convert::TryInto;
-
-    // Placeholder content key -> content id conversion function
-    fn sha256(key: &str) -> U256 {
-        let mut hasher = Sha3_256::new();
-        hasher.update(key);
-        let mut x = hasher.finalize();
-        let y: &mut [u8; 32] = x
-            .as_mut_slice()
-            .try_into()
-            .expect("try_into failed in hash placeholder");
-        U256::from(y.clone())
-    }
 
     #[test]
     fn test_new() -> Result<(), PortalStorageError> {
@@ -493,9 +504,8 @@ pub mod test {
             db: db,
             meta_db: meta_db,
         };
-        let storage = PortalStorage::new(storage_config, |key| sha256(key))?;
+        let storage = PortalStorage::new(storage_config, |key| PortalStorage::sha256(key))?;
 
-        // Assert that configs match the storage object's fields
         assert_eq!(storage.node_id, node_id);
         assert_eq!(storage.storage_capacity_in_bytes, CAPACITY * 1000);
 
@@ -517,7 +527,7 @@ pub mod test {
             meta_db: meta_db,
         };
 
-        let mut storage = PortalStorage::new(storage_config, |key| sha256(key))?;
+        let mut storage = PortalStorage::new(storage_config, |key| PortalStorage::sha256(key))?;
 
         let key: String = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".to_string();
         let value: String = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".to_string();
@@ -540,7 +550,7 @@ pub mod test {
             db: db,
             meta_db: meta_db,
         };
-        let mut storage = PortalStorage::new(storage_config, |key| sha256(key))?;
+        let mut storage = PortalStorage::new(storage_config, |key| PortalStorage::sha256(key))?;
         let key: String = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".to_string();
         let value: String = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".to_string();
         storage.store(&key, &value)?;
@@ -568,7 +578,7 @@ pub mod test {
             db: db,
             meta_db: meta_db,
         };
-        let mut storage = PortalStorage::new(storage_config, |key| sha256(key))?;
+        let mut storage = PortalStorage::new(storage_config, |key| PortalStorage::sha256(key))?;
 
         let key: String = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".to_string();
         let value: String = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".to_string();
@@ -596,7 +606,7 @@ pub mod test {
             meta_db: meta_db,
         };
 
-        let mut storage = PortalStorage::new(storage_config, |key| sha256(key))?;
+        let mut storage = PortalStorage::new(storage_config, |key| PortalStorage::sha256(key))?;
 
         let key_a: String = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".to_string();
         let key_b: String = "p1K8ymqgNO9vJ1LwATa4yNqCxk6AMgNa".to_string();
@@ -636,11 +646,11 @@ pub mod test {
             meta_db: meta_db,
         };
 
-        let storage = PortalStorage::new(storage_config, |key| sha256(key))?;
+        let storage = PortalStorage::new(storage_config, |key| PortalStorage::sha256(key))?;
 
         // As u64: 3352017618602726004
         let key: String = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".to_string();
-        let content_id = storage.content_key_to_content_id(&key);
+        let content_id = storage.content_key_to_content_id(&key)?;
 
         let distance = storage.distance_to_content_id(&content_id);
 
@@ -673,7 +683,7 @@ pub mod test {
             meta_db: meta_db,
         };
 
-        let mut storage = PortalStorage::new(storage_config, |key| sha256(key))?;
+        let mut storage = PortalStorage::new(storage_config, |key| PortalStorage::sha256(key))?;
 
         let value = "value".to_string();
 
@@ -683,7 +693,7 @@ pub mod test {
         // This one is the farthest
         let key_b: String = "LHp1PeJ4C6c3nRUc7f6BI1FYULNL8aWB".to_string();
         storage.store(&key_b, &value)?;
-        let expected_content_id = storage.content_key_to_content_id(&key_b);
+        let expected_content_id = storage.content_key_to_content_id(&key_b)?;
 
         let key_c: String = "HkybBgUebGtbwdrNDbxDWywtgWlUM8vW".to_string();
         storage.store(&key_c, &value)?;
