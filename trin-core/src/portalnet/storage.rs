@@ -328,7 +328,7 @@ impl PortalStorage {
                     // Received data of size other than 32 bytes.
                     x => {
                         return Err(PortalStorageError::DataSizeError {
-                            doing: "finding farthest content id".to_string(),
+                            doing: "finding farthest content id".to_owned(),
                             expected: 32,
                             actual: x,
                         });
@@ -365,7 +365,7 @@ impl PortalStorage {
                     Ok(string) => string,
                     Err(error_string) => {
                         return Err(PortalStorageError::OsStringError {
-                            function_name: "get_total_size_of_directory_in_bytes".to_string(),
+                            function_name: "get_total_size_of_directory_in_bytes".to_owned(),
                             error: error_string,
                         });
                     }
@@ -529,8 +529,8 @@ pub mod test {
 
         let mut storage = PortalStorage::new(storage_config, |key| PortalStorage::sha256(key))?;
 
-        let key: String = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".to_string();
-        let value: String = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".to_string();
+        let key: String = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".to_owned();
+        let value: String = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".to_owned();
         storage.store(&key, &value)?;
 
         Ok(())
@@ -551,8 +551,8 @@ pub mod test {
             meta_db: meta_db,
         };
         let mut storage = PortalStorage::new(storage_config, |key| PortalStorage::sha256(key))?;
-        let key: String = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".to_string();
-        let value: String = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".to_string();
+        let key: String = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".to_owned();
+        let value: String = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".to_owned();
         storage.store(&key, &value)?;
 
         let result = storage.get(&key);
@@ -580,8 +580,8 @@ pub mod test {
         };
         let mut storage = PortalStorage::new(storage_config, |key| PortalStorage::sha256(key))?;
 
-        let key: String = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".to_string();
-        let value: String = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".to_string();
+        let key: String = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".to_owned();
+        let value: String = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".to_owned();
         storage.store(&key, &value)?;
 
         let bytes = storage.get_total_storage_usage_in_bytes_from_network()?;
@@ -608,9 +608,9 @@ pub mod test {
 
         let mut storage = PortalStorage::new(storage_config, |key| PortalStorage::sha256(key))?;
 
-        let key_a: String = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".to_string();
-        let key_b: String = "p1K8ymqgNO9vJ1LwATa4yNqCxk6AMgNa".to_string();
-        let value: String = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".to_string();
+        let key_a: String = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".to_owned();
+        let key_b: String = "p1K8ymqgNO9vJ1LwATa4yNqCxk6AMgNa".to_owned();
+        let value: String = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".to_owned();
 
         storage.store(&key_a, &value)?;
 
@@ -649,7 +649,7 @@ pub mod test {
         let storage = PortalStorage::new(storage_config, |key| PortalStorage::sha256(key))?;
 
         // As u64: 3352017618602726004
-        let key: String = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".to_string();
+        let key: String = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".to_owned();
         let content_id = storage.content_key_to_content_id(&key)?;
 
         let distance = storage.distance_to_content_id(&content_id);
@@ -685,20 +685,20 @@ pub mod test {
 
         let mut storage = PortalStorage::new(storage_config, |key| PortalStorage::sha256(key))?;
 
-        let value = "value".to_string();
+        let value = "value".to_owned();
 
-        let key_a: String = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".to_string();
+        let key_a: String = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".to_owned();
         storage.store(&key_a, &value)?;
 
         // This one is the farthest
-        let key_b: String = "LHp1PeJ4C6c3nRUc7f6BI1FYULNL8aWB".to_string();
+        let key_b: String = "LHp1PeJ4C6c3nRUc7f6BI1FYULNL8aWB".to_owned();
         storage.store(&key_b, &value)?;
         let expected_content_id = storage.content_key_to_content_id(&key_b)?;
 
-        let key_c: String = "HkybBgUebGtbwdrNDbxDWywtgWlUM8vW".to_string();
+        let key_c: String = "HkybBgUebGtbwdrNDbxDWywtgWlUM8vW".to_owned();
         storage.store(&key_c, &value)?;
 
-        let key_d: String = "gdOKkDEq9XFs2Tzay4Ecuw0obIISGw9Y".to_string();
+        let key_d: String = "gdOKkDEq9XFs2Tzay4Ecuw0obIISGw9Y".to_owned();
         storage.store(&key_d, &value)?;
 
         let result = storage.find_farthest_content_id().unwrap().unwrap();
