@@ -45,7 +45,7 @@ impl HistoryNetwork {
             debug!("Pinging {} on portal history network", enr);
             let ping_result = self
                 .overlay
-                .send_ping(U256::from(u64::MAX), enr, ProtocolKind::History)
+                .send_ping(U256::from(u64::MAX), enr, ProtocolKind::History, None)
                 .await?;
             debug!("Portal history network Ping result: {:?}", ping_result);
         }

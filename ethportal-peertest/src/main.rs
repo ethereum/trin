@@ -59,6 +59,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 U256::from(u64::MAX),
                 target_node.clone(),
                 ProtocolKind::History,
+                None,
             )
             .await
             .unwrap();
@@ -70,6 +71,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 U256::from(u64::MAX),
                 target_node.clone(),
                 ProtocolKind::State,
+                None,
             )
             .await
             .unwrap();
