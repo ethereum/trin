@@ -8,6 +8,7 @@ use super::{
     },
     Enr, U256,
 };
+use crate::portalnet::types::CustomPayload;
 use discv5::{
     enr::NodeId,
     kbucket::{Filter, KBucketsTable},
@@ -121,9 +122,10 @@ impl OverlayProtocol {
             Request::Ping(Ping { .. }) => {
                 debug!("Got overlay ping request {:?}", request);
                 let enr_seq = self.discovery.read().await.local_enr().seq();
+                let payload = CustomPayload::new(self.data_radius().await, None);
                 Response::Pong(Pong {
                     enr_seq,
-                    data_radius: self.data_radius().await,
+                    payload: Some(payload),
                 })
             }
             Request::FindNodes(FindNodes { distances }) => {
@@ -248,11 +250,13 @@ impl OverlayProtocol {
         data_radius: U256,
         enr: Enr,
         protocol: ProtocolKind,
+        payload: Option<Vec<u8>>,
     ) -> Result<Vec<u8>, String> {
         let enr_seq = self.discovery.read().await.local_enr().seq();
+        let payload = CustomPayload::new(data_radius, payload);
         let msg = Ping {
             enr_seq,
-            data_radius,
+            payload: Some(payload),
         };
         self.discovery
             .read()

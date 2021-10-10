@@ -45,7 +45,7 @@ impl StateNetwork {
             debug!("Pinging {} on portal state network", enr);
             let ping_result = self
                 .overlay
-                .send_ping(U256::from(u64::MAX), enr, ProtocolKind::State)
+                .send_ping(U256::from(u64::MAX), enr, ProtocolKind::State, None)
                 .await?;
             debug!("Portal state network Ping result: {:?}", ping_result);
         }

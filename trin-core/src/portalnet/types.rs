@@ -8,8 +8,11 @@ use rlp::Encodable;
 use ssz;
 use ssz::{Decode, DecodeError, Encode, SszDecoderBuilder, SszEncoder};
 use ssz_derive::{Decode, Encode};
+use ssz_types::{typenum, VariableList};
 
 use super::{Enr, U256};
+
+type ByteList = VariableList<u8, typenum::U2048>;
 
 #[derive(Clone)]
 pub struct PortalnetConfig {
@@ -156,16 +159,45 @@ impl Response {
     }
 }
 
+/// Custom payload element of Ping and Pong messages
+#[derive(Debug, PartialEq, Clone, Encode, Decode)]
+pub struct CustomPayload {
+    /// Overlay data radius
+    pub data_radius: U256,
+    /// Optional payload element of SSZ type List[uint8, max_length=2048].
+    pub payload: Option<ByteList>,
+}
+
+impl CustomPayload {
+    pub fn new(data_radius: U256, payload: Option<Vec<u8>>) -> Self {
+        match payload {
+            Some(payload) => {
+                let ssz_list = VariableList::from(payload);
+                let message: ByteList = ByteList::from(ssz_list);
+
+                Self {
+                    data_radius,
+                    payload: Some(message),
+                }
+            }
+            None => Self {
+                data_radius,
+                payload: None,
+            },
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Clone, Encode, Decode)]
 pub struct Ping {
     pub enr_seq: u64,
-    pub data_radius: U256,
+    pub payload: Option<CustomPayload>,
 }
 
 #[derive(Debug, PartialEq, Clone, Encode, Decode)]
 pub struct Pong {
     pub enr_seq: u64,
-    pub data_radius: U256,
+    pub payload: Option<CustomPayload>,
 }
 
 #[derive(Debug, PartialEq, Clone, Encode, Decode)]
