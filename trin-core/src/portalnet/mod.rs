@@ -35,6 +35,10 @@ impl ssz::Encode for U256 {
         buf.resize(s + n, 0);
         self.to_little_endian(&mut buf[s..]);
     }
+
+    fn ssz_bytes_len(&self) -> usize {
+        <Self as ssz::Encode>::ssz_fixed_len()
+    }
 }
 
 // Taken from https://github.com/sigp/lighthouse/blob/stable/consensus/ssz/src/decode/impls.rs
@@ -56,5 +60,20 @@ impl ssz::Decode for U256 {
         } else {
             Ok(U256::from_little_endian(bytes))
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use ssz::{Decode, Encode};
+
+    #[test]
+    fn test_u256_ssz_encodes() {
+        let msg = U256::from(60);
+        let actual = msg.as_ssz_bytes();
+        let decoded = U256::from_ssz_bytes(&actual).unwrap();
+        assert_eq!(decoded, msg);
+        assert_eq!(actual.len(), msg.ssz_bytes_len());
     }
 }

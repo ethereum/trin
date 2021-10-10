@@ -230,6 +230,10 @@ impl ssz::Encode for Nodes {
     fn ssz_append(&self, buf: &mut Vec<u8>) {
         NodesHelper::from(self).ssz_append(buf)
     }
+
+    fn ssz_bytes_len(&self) -> usize {
+        self.as_ssz_bytes().len()
+    }
 }
 
 // TODO: check correctness and if there's a better way
@@ -298,6 +302,10 @@ impl ssz::Encode for SszEnr {
     fn ssz_append(&self, buf: &mut Vec<u8>) {
         buf.append(&mut self.rlp_bytes().to_vec());
     }
+
+    fn ssz_bytes_len(&self) -> usize {
+        self.rlp_bytes().to_vec().ssz_bytes_len()
+    }
 }
 
 impl ssz::Encode for FoundContent {
@@ -312,6 +320,13 @@ impl ssz::Encode for FoundContent {
         encoder.append(&self.enrs);
         encoder.append(&self.payload);
         encoder.finalize();
+    }
+
+    fn ssz_bytes_len(&self) -> usize {
+        <Vec<SszEnr> as Encode>::ssz_fixed_len()
+            + <Vec<u8> as Encode>::ssz_fixed_len()
+            + self.enrs.ssz_bytes_len()
+            + self.payload.ssz_bytes_len()
     }
 }
 
@@ -351,6 +366,23 @@ mod test {
     use discv5::enr::{CombinedKey, EnrBuilder};
     use std::net::Ipv4Addr;
 
+    fn enr_one_key() -> CombinedKey {
+        CombinedKey::secp256k1_from_bytes(vec![1; 32].as_mut_slice()).unwrap()
+    }
+
+    fn enr_two_key() -> CombinedKey {
+        CombinedKey::secp256k1_from_bytes(vec![2; 32].as_mut_slice()).unwrap()
+    }
+
+    fn build_enr(enr_key: CombinedKey) -> Enr {
+        let ip = Ipv4Addr::new(192, 168, 0, 1);
+        EnrBuilder::new("v4")
+            .ip(ip.into())
+            .tcp(8000)
+            .build(&enr_key)
+            .unwrap()
+    }
+
     #[test]
     fn test_found_content_encodes_empty() {
         let empty_enrs: Vec<SszEnr> = vec![];
@@ -364,6 +396,7 @@ mod test {
         assert_eq!(decoded, msg);
         assert_eq!(decoded.enrs, empty_enrs);
         assert_eq!(decoded.payload, empty_payload);
+        assert_eq!(actual.len(), msg.ssz_bytes_len());
     }
 
     #[test]
@@ -377,18 +410,12 @@ mod test {
         let decoded = FoundContent::from_ssz_bytes(&actual).unwrap();
         assert_eq!(decoded, msg);
         assert_eq!(decoded.payload, vec![1; 32]);
+        assert_eq!(actual.len(), msg.ssz_bytes_len());
     }
 
     #[test]
     fn test_found_content_encodes_single_enr() {
-        let enr_key = CombinedKey::secp256k1_from_bytes(vec![1; 32].as_mut_slice()).unwrap();
-        let ip = Ipv4Addr::new(192, 168, 0, 1);
-        let enr = EnrBuilder::new("v4")
-            .ip(ip.into())
-            .tcp(8000)
-            .build(&enr_key)
-            .unwrap();
-
+        let enr = build_enr(enr_one_key());
         let empty_payload: Vec<u8> = vec![];
         let msg = FoundContent {
             enrs: vec![SszEnr(enr.clone())],
@@ -397,25 +424,13 @@ mod test {
         let actual = msg.as_ssz_bytes();
         let decoded = FoundContent::from_ssz_bytes(&actual).unwrap();
         assert!(SszEnr(enr).eq(decoded.enrs.first().unwrap()));
+        assert_eq!(actual.len(), msg.ssz_bytes_len());
     }
 
     #[test]
     fn test_found_content_encodes_double_enrs() {
-        let enr_one_key = CombinedKey::secp256k1_from_bytes(vec![1; 32].as_mut_slice()).unwrap();
-        let enr_one_ip = Ipv4Addr::new(192, 168, 0, 1);
-        let enr_one = EnrBuilder::new("v4")
-            .ip(enr_one_ip.into())
-            .tcp(8000)
-            .build(&enr_one_key)
-            .unwrap();
-
-        let enr_two_key = CombinedKey::secp256k1_from_bytes(vec![2; 32].as_mut_slice()).unwrap();
-        let enr_two_ip = Ipv4Addr::new(191, 168, 0, 1);
-        let enr_two = EnrBuilder::new("v4")
-            .ip(enr_two_ip.into())
-            .tcp(8000)
-            .build(&enr_two_key)
-            .unwrap();
+        let enr_one = build_enr(enr_one_key());
+        let enr_two = build_enr(enr_two_key());
 
         let empty_payload: Vec<u8> = vec![];
         let msg = FoundContent {
@@ -426,5 +441,57 @@ mod test {
         let decoded = FoundContent::from_ssz_bytes(&actual).unwrap();
         assert!(SszEnr(enr_one).eq(decoded.enrs.first().unwrap()));
         assert!(SszEnr(enr_two).eq(&decoded.enrs.into_iter().nth(1).unwrap()));
+        assert_eq!(actual.len(), msg.ssz_bytes_len());
+    }
+
+    #[test]
+    fn test_nodes_encodes_empty() {
+        let empty_enrs: Vec<Enr> = vec![];
+        let total: u8 = 0;
+        let msg = Nodes {
+            enrs: empty_enrs.clone(),
+            total,
+        };
+        let actual = msg.as_ssz_bytes();
+        let decoded = Nodes::from_ssz_bytes(&actual).unwrap();
+
+        assert_eq!(decoded, msg);
+        assert_eq!(decoded.enrs, empty_enrs);
+        assert_eq!(decoded.total, 0);
+        assert_eq!(actual.len(), msg.ssz_bytes_len());
+    }
+
+    #[test]
+    fn test_nodes_encodes_single_enr() {
+        let enr = build_enr(enr_one_key());
+        let total: u8 = 1;
+        let msg = Nodes {
+            enrs: vec![enr.clone()],
+            total,
+        };
+        let actual = msg.as_ssz_bytes();
+        let decoded = Nodes::from_ssz_bytes(&actual).unwrap();
+
+        assert_eq!(decoded, msg);
+        assert!(enr.eq(decoded.enrs.first().unwrap()));
+        assert_eq!(actual.len(), msg.ssz_bytes_len());
+    }
+
+    #[test]
+    fn test_nodes_encodes_double_enrs() {
+        let enr_one = build_enr(enr_one_key());
+        let enr_two = build_enr(enr_two_key());
+        let total: u8 = 1;
+        let msg = Nodes {
+            enrs: vec![enr_one.clone(), enr_two.clone()],
+            total,
+        };
+        let actual = msg.as_ssz_bytes();
+        let decoded = Nodes::from_ssz_bytes(&actual).unwrap();
+
+        assert_eq!(decoded, msg);
+        assert!(enr_one.eq(decoded.enrs.first().unwrap()));
+        assert!(enr_two.eq(&decoded.enrs.into_iter().nth(1).unwrap()));
+        assert_eq!(actual.len(), msg.ssz_bytes_len());
     }
 }
