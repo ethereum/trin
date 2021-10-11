@@ -134,12 +134,16 @@ OPTIONS:
 
 See https://eth.wiki/json-rpc/API#json-rpc-methods for other standard methods that are implemented. Currently, most of them proxy to Infura.
 
+## Want to help?
+
+Want to file a bug, contribute some code, or improve documentation? Excellent! Read up on our
+guidelines for [contributing](contributor_guidelines.md),
+then check out issues that are labeled
+[Good First Issue](https://github.com/ethereum/trin/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22).
+
 ## Gotchas
 
 - There is a limit on concurrent connections given by the threadpool. At last
   doc update, that number was 2, but will surely change. If you leave
   connections open, then new connections will block.
 - Error handling is pretty close to non-existent.
-- This project may never be updated. If this repo is looking stale, you might
-  try [asking the Trinity team](https://gitter.im/ethereum/trinity) to find out
-  what spiritual successor exists, if any.
