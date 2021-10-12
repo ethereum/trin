@@ -9,7 +9,7 @@ use std::{fs, panic, process};
 #[cfg(unix)]
 use std::os::unix;
 
-use crate::jsonrpc::endpoints::TrinEndpointKind;
+use crate::jsonrpc::endpoints::TrinEndpoint;
 use crate::jsonrpc::types::PortalJsonRpcRequest;
 use httparse;
 use log::{debug, info};
@@ -235,7 +235,7 @@ fn handle_request(
     portal_tx: UnboundedSender<PortalJsonRpcRequest>,
 ) -> Result<String, String> {
     let method = obj.method.as_str();
-    match TrinEndpointKind::from_str(method) {
+    match TrinEndpoint::from_str(method) {
         Ok(val) => dispatch_trin_request(obj, val, infura_url, portal_tx),
         Err(_) => Err(json!({
             "jsonrpc": "2.0",
@@ -248,26 +248,22 @@ fn handle_request(
 
 fn dispatch_trin_request(
     obj: JsonRequest,
-    endpoint: TrinEndpointKind,
+    endpoint: TrinEndpoint,
     infura_url: &str,
     portal_tx: UnboundedSender<PortalJsonRpcRequest>,
 ) -> Result<String, String> {
     match endpoint {
-        TrinEndpointKind::PortalEndpointKind(_) => Ok(json!({
+        TrinEndpoint::PortalEndpoint(_) => Ok(json!({
             "jsonrpc": "2.0",
             "id": obj.id,
             // todo: this should be updated programatically
             "result": "trin 0.0.1-alpha",
         })
         .to_string()),
-        TrinEndpointKind::InfuraEndpointKind(_) => dispatch_infura_request(obj, infura_url),
-        TrinEndpointKind::Discv5EndpointKind(_) => {
-            dispatch_portal_request(obj, endpoint, portal_tx)
-        }
-        TrinEndpointKind::HistoryEndpointKind(_) => {
-            dispatch_portal_request(obj, endpoint, portal_tx)
-        }
-        TrinEndpointKind::StateEndpointKind(_) => dispatch_portal_request(obj, endpoint, portal_tx),
+        TrinEndpoint::InfuraEndpoint(_) => dispatch_infura_request(obj, infura_url),
+        TrinEndpoint::Discv5Endpoint(_) => dispatch_portal_request(obj, endpoint, portal_tx),
+        TrinEndpoint::HistoryEndpoint(_) => dispatch_portal_request(obj, endpoint, portal_tx),
+        TrinEndpoint::StateEndpoint(_) => dispatch_portal_request(obj, endpoint, portal_tx),
     }
 }
 
@@ -288,7 +284,7 @@ fn dispatch_infura_request(obj: JsonRequest, infura_url: &str) -> Result<String,
 // Handle all requests served by fetching data from the portal network. ie. discv5/history/state/portal
 fn dispatch_portal_request(
     obj: JsonRequest,
-    endpoint: TrinEndpointKind,
+    endpoint: TrinEndpoint,
     portal_tx: UnboundedSender<PortalJsonRpcRequest>,
 ) -> Result<String, String> {
     let (resp_tx, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
