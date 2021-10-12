@@ -1,4 +1,4 @@
-use crate::jsonrpc::endpoints::{HistoryEndpointKind, PortalEndpointKind, StateEndpointKind};
+use crate::jsonrpc::endpoints::{HistoryEndpoint, StateEndpoint, TrinEndpoint};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tokio::sync::mpsc;
@@ -41,21 +41,21 @@ pub struct JsonRequest {
 // Global portal network JSON-RPC request
 #[derive(Debug, Clone)]
 pub struct PortalJsonRpcRequest {
-    pub endpoint: PortalEndpointKind,
+    pub endpoint: TrinEndpoint,
     pub resp: Responder<Value, String>,
 }
 
 /// History network JSON-RPC request
 #[derive(Debug)]
 pub struct HistoryJsonRpcRequest {
-    pub endpoint: HistoryEndpointKind,
+    pub endpoint: HistoryEndpoint,
     pub resp: Responder<Value, String>,
 }
 
 /// State network JSON-RPC request
 #[derive(Debug)]
 pub struct StateJsonRpcRequest {
-    pub endpoint: StateEndpointKind,
+    pub endpoint: StateEndpoint,
     pub resp: Responder<Value, String>,
 }
 
