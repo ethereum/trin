@@ -137,7 +137,7 @@ See https://eth.wiki/json-rpc/API#json-rpc-methods for other standard methods th
 ## Want to help?
 
 Want to file a bug, contribute some code, or improve documentation? Excellent! Read up on our
-guidelines for [contributing](contributor_guidelines.md),
+guidelines for [contributing](CONTRIBUTING.md),
 then check out issues that are labeled
 [Good First Issue](https://github.com/ethereum/trin/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22).
 

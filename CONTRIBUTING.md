@@ -11,6 +11,7 @@ These guidelines are heavily influenced by the [Snake-Charmer Tactical Manual](h
 	- Imports from within the same crate (`trin-core`, `trin-history`, `trin-state` inclusive).
 - Alphabetize imports in `Cargo.toml`
 
+
 ## Pull Requests
 
 We are a distributed team.  The primary way we communicate about our code is
@@ -19,6 +20,10 @@ through github via pull requests.
 * When you start work on something you should have a pull request opened that
   same day.
 * Mark unfinished pull requests with the "Work in Progress" label.
+* Before submitting a pr for review, you should run the following commands
+  locally and make sure they are passing, otherwise CI will raise an error.
+  * `cargo fmt` and `cargo clippy` for linting checks
+  * `cargo test --workspace` to run all tests
 * Pull requests **should** always be reviewed by another member of the team
   prior to being merged.
     * Obvious exceptions include very small pull requests.
@@ -70,7 +75,7 @@ The *correct* phrasing of a commit message.
 - `fixes bug #1234` (wrong)
 - `fixing bug #1234` (wrong)
 
-One way to test if you have it write is to complete the following sentence.
+One way to test whether you have it right is to complete the following sentence.
 
 > If you apply this commit it will ________________.
 
@@ -161,10 +166,19 @@ Notice that fetching PRs this way is *read-only* which means that in case we do
 want to contribute back to the PR (and the author has this enabled), we would
 still need to add their remote explicitly.
 
+
+## Tests
+
+Testing is essential to the production of software with minimal flaws. The default should always be writing tests for the code you produce.
+
+Testing also introduces overhead into our workflow. If a test suite takes a long time to run, it slows down our iteration cycle. This means finding a pragmatic balance between thorough testing, and the speed of our test suite, as well as always iterating on our testing infrastructure.
+
+
 ## Comments
 
-- Any datatype of significance **should** have an accompanying comment briefly describing its role and responsibilities. Comments are an extremely valuable tool in open-source projects with many different contributors, and can greatly improve development speed. Explain your assumptions clearly so others don't need to dig through the code.
+Any datatype of significance **should** have an accompanying comment briefly describing its role and responsibilities. Comments are an extremely valuable tool in open-source projects with many different contributors, and can greatly improve development speed. Explain your assumptions clearly so others don't need to dig through the code.
+- Rust [doc comments](https://doc.rust-lang.org/rust-by-example/meta/doc.html) are the most best way to comment your code.
 
 
 ## Error handling
-- Handle errors, avoid naked `.unwrap()`s.
+- Handle errors, avoid naked `.unwrap()`s, except for in unit tests. Write descriptive error messages that give context of the problem that occured.
