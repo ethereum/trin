@@ -5,6 +5,7 @@ use std::convert::TryInto;
 use std::process::Command;
 use std::sync::Arc;
 use structopt::StructOpt;
+use tokio::sync::RwLock;
 use trin_core::portalnet::storage::{DistanceFunction, PortalStorage, PortalStorageConfig};
 use trin_core::portalnet::U256;
 use trin_core::utils::get_data_dir;
@@ -14,7 +15,8 @@ use trin_core::utils::get_data_dir;
 const DATA_OVERHEAD: f64 = 1.1783;
 const SIZE_OF_KEYS: u32 = 32;
 
-pub fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::main]
+pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let generator_config = GeneratorConfig::from_args();
 
     let node_id = NodeId::random();
@@ -43,17 +45,17 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         storage_capacity_kb: (num_kilobytes / 4) as u64,
         node_id,
         distance_function: DistanceFunction::Xor,
-        db: Arc::new(db),
-        meta_db: Arc::new(meta_db),
+        db: Arc::new(RwLock::new(db)),
+        meta_db: Arc::new(RwLock::new(meta_db)),
     };
-    let mut storage = PortalStorage::new(storage_config, |key| sha256(key))?;
+    let mut storage = PortalStorage::new(storage_config, |key| sha256(key)).await?;
 
     for _ in 0..num_of_entries {
         let value = generate_random_value(size_of_values);
         let key = generate_random_value(SIZE_OF_KEYS);
 
         println!("{} -> {}", &key, &value);
-        storage.store(&key, &value)?;
+        storage.store(&key, &value).await?;
         println!();
     }
 
