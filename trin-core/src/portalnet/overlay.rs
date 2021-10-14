@@ -13,6 +13,8 @@ use crate::portalnet::types::messages::{
     ProtocolId, Request, Response,
 };
 
+use crate::utp::utp::{ConnectionKey, UtpListener};
+use crate::utp::utp_types::{UtpAccept, UtpMessage, UtpMessageId, UtpStreamState};
 use discv5::{
     enr::NodeId,
     kbucket::{Filter, KBucketsTable},
@@ -69,12 +71,14 @@ pub struct OverlayProtocol {
     protocol: ProtocolId,
     /// A sender to send requests to the OverlayService.
     request_tx: UnboundedSender<OverlayRequest>,
+    utp_listener: Arc<RwLock<UtpListener>>,
 }
 
 impl OverlayProtocol {
     pub async fn new(
         config: OverlayConfig,
         discovery: Arc<Discovery>,
+        utp_listener: Arc<RwLock<UtpListener>>,
         db: Arc<DB>,
         data_radius: U256,
         protocol: ProtocolId,
@@ -107,6 +111,7 @@ impl OverlayProtocol {
             db,
             protocol,
             request_tx,
+            utp_listener,
         }
     }
 
@@ -235,6 +240,114 @@ impl OverlayProtocol {
             Err(error) => Err(error),
         }
     }
+    /// offer is sent in order to store content to k nodes with radii that contain content-id
+    /// offer is also sent to nodes after FindContent (POKE)
+    pub async fn send_offer(
+        &self,
+        content_keys: Vec<Vec<u8>>,
+        enr: Enr,
+    ) -> Result<Accept, OverlayRequestError> {
+        // Construct the request.
+        let request = Offer {
+            content_keys: content_keys.clone(),
+        };
+        let direction = RequestDirection::Outgoing {
+            destination: enr.clone(),
+        };
+
+        // Send the request and wait on the response.
+        match self
+            .send_overlay_request(Request::Offer(request), direction)
+            .await
+        {
+            Ok(Response::Accept(accept)) => Ok(self
+                .process_accept_response(accept, enr, content_keys)
+                .await),
+            Ok(_) => Err(OverlayRequestError::InvalidResponse),
+            Err(error) => Err(error),
+        }
+    }
+
+    pub async fn process_accept_response(
+        &self,
+        response: Accept,
+        enr: Enr,
+        content_keys_items: Vec<Vec<u8>>,
+    ) -> Accept {
+        let connection_id = response.connection_id.clone();
+
+        let (tx, mut rx) = mpsc::unbounded_channel::<UtpStreamState>();
+
+        // Add connection_id we will be receiving to the listening list and the
+        // response number. The connection_id is + 1 because that is their id
+        self.utp_listener
+            .write_with_warn()
+            .await
+            .listening
+            .insert(connection_id.clone() + 1, UtpMessageId::OfferAcceptStream);
+
+        self.utp_listener
+            .write_with_warn()
+            .await
+            .connect(connection_id.clone(), enr.node_id(), tx)
+            .await;
+
+        let mut content_items: Vec<(Vec<u8>, Vec<u8>)> = vec![];
+        for (i, key) in response
+            .content_keys
+            .clone()
+            .iter()
+            .zip(content_keys_items.iter())
+        {
+            if i == true {
+                match self.db.get(key.clone()) {
+                    Ok(content) => match content {
+                        Some(content) => content_items.push((key.clone(), content)),
+                        None => {}
+                    },
+                    Err(_) => {}
+                }
+            }
+        }
+
+        let content_message = UtpAccept {
+            message: content_items,
+        };
+
+        let utp_listener = self.utp_listener.clone();
+        tokio::spawn(async move {
+            while let Some(state) = rx.recv().await {
+                if state == UtpStreamState::Connected {
+                    if let Some(conn) = utp_listener
+                        .write_with_warn()
+                        .await
+                        .utp_connections
+                        .get_mut(&ConnectionKey {
+                            node_id: enr.node_id(),
+                            conn_id_recv: connection_id,
+                        })
+                    {
+                        conn.write(&UtpMessage::new(content_message.as_ssz_bytes()).encode()[..])
+                            .await;
+                    }
+                } else if state == UtpStreamState::Finished {
+                    if let Some(conn) = utp_listener
+                        .write_with_warn()
+                        .await
+                        .utp_connections
+                        .get_mut(&ConnectionKey {
+                            node_id: enr.node_id(),
+                            conn_id_recv: connection_id,
+                        })
+                    {
+                        conn.send_finalize().await;
+                        return;
+                    }
+                }
+            }
+        });
+        response
+    }
 
     /// Sends a request through the overlay service.
     async fn send_overlay_request(
@@ -257,30 +370,6 @@ impl OverlayProtocol {
             Ok(result) => result,
             Err(error) => Err(OverlayRequestError::ChannelFailure(error.to_string())),
         }
-    }
-
-    // offer is sent in order to store content to k nodes with radii that contain content-id
-    // offer is also sent to nodes after FindContent (POKE)
-    pub async fn send_offer(
-        &self,
-        content_keys: Vec<Vec<u8>>,
-        enr: Enr,
-        protocol: ProtocolKind,
-    ) -> Result<Vec<u8>, String> {
-        // max_length of content_keys = 64
-        let msg = Offer { content_keys };
-        self.discovery
-            .write()
-            .await
-            .send_talkreq(
-                enr,
-                protocol.to_string(),
-                Message::Request(Request::Offer(msg)).to_bytes(),
-            )
-            .await;
-        // the node receives the ACCEPT message here
-        // should initiate utp stream and send data over
-        utp_listener.connect()
     }
 }
 

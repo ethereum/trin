@@ -35,6 +35,7 @@ use parking_lot::RwLock;
 use rand::seq::SliceRandom;
 use rocksdb::DB;
 use ssz::Encode;
+use ssz_types::BitList;
 use ssz_types::VariableList;
 use thiserror::Error;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
@@ -576,16 +577,14 @@ impl OverlayService {
     }
 
     /// Attempts to build a `Accept` response for a `Offer` request.
-    async fn handle_offer(&self, request: Offer) -> Accept {
-        let mut requested_keys: Vec<bool> = vec![];
+    fn handle_offer(&self, request: Offer) -> Accept {
+        let mut requested_keys = BitList::with_capacity(request.content_keys.len()).unwrap();
 
-        // stub implementation
-        // should_store() performs checks & returns 1 if we should store, 0 otherwise
-        for key in &request.content_keys {
-            requested_keys.push(should_store(key));
+        for (i, key) in request.content_keys.iter().enumerate() {
+            requested_keys.set(i, should_store(key)).unwrap();
         }
 
-        let connection_id: u16 = super::utp::rand();
+        let connection_id: u16 = crate::utp::utp::rand();
 
         Accept {
             connection_id,
@@ -1468,4 +1467,8 @@ mod tests {
         let expected_index = bucket.get_index(&key).unwrap();
         assert_eq!(target_bucket_idx, expected_index as u8);
     }
+}
+
+fn should_store(_key: &Vec<u8>) -> bool {
+    return true;
 }

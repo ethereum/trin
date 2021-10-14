@@ -10,9 +10,11 @@ use std::cmp::{max, min};
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::sync::mpsc;
 
 use crate::portalnet::types::messages::ProtocolId;
 use crate::utp::packets::{Packet, PacketHeader, PacketType, HEADER_SIZE};
+use crate::utp::utp_types::{UtpMessageId, UtpStreamState};
 
 pub const MAX_DISCV5_PACKET_SIZE: usize = 1280;
 pub const MIN_PACKET_SIZE: usize = 150;
@@ -72,6 +74,8 @@ impl ConnectionKey {
 pub struct UtpListener {
     pub discovery: Arc<Discovery>,
     pub utp_connections: HashMap<ConnectionKey, UtpStream>,
+    // We only want to listen/handle packets of connections that were negotiated with
+    pub listening: HashMap<u16, UtpMessageId>,
 }
 
 impl UtpListener {
@@ -80,6 +84,15 @@ impl UtpListener {
             Ok(packet) => {
                 let connection_id = packet.connection_id();
 
+                // Only handle packets if they are on our watchlist and have been negotiated
+                // I believe this is what is meant in the specs when they say after getting this message
+                // Listen for a response
+                // [discv5-utp]: https://github.com/ethereum/portal-network-specs/blob/master/discv5-utp.md?plain=1#L26
+
+                // todo: uncomment this at a future date, as this makes it harder to test with other
+                // clients for the time being
+                //match self.listening.get(&connection_id.clone()) {
+                //    Some(_) =>
                 match packet.type_() {
                     PacketType::Reset => {
                         let key_fn =
@@ -100,10 +113,11 @@ impl UtpListener {
                         }
                     }
                     PacketType::Syn => {
-                        if let Some(enr) = self.discovery.discv5.find_enr(node_id) {
+                        if let Some(enr) = self.discovery.discv5.find_enr(&node_id) {
                             // If neither of those cases happened handle this is a new request
-                            let mut conn = UtpStream::init(Arc::clone(&self.discovery), enr);
-                            conn.handle_packet(packet);
+                            let (tx, _) = mpsc::unbounded_channel::<UtpStreamState>();
+                            let mut conn = UtpStream::init(Arc::clone(&self.discovery), enr, tx);
+                            conn.handle_packet(packet).await;
                             self.utp_connections.insert(
                                 ConnectionKey {
                                     node_id: *node_id,
@@ -124,6 +138,8 @@ impl UtpListener {
                         }
                     }
                 }
+                //    None => debug!("uTP message connection_id isn't in our listening list"),
+                //}
             }
             Err(e) => {
                 debug!("Failed to decode packet: {}", e);
@@ -132,9 +148,14 @@ impl UtpListener {
     }
 
     // I am honestly not sure if I should init this with Enr or NodeId since we could use both
-    fn connect(&mut self, connection_id: u16, node_id: NodeId) {
+    pub fn connect(
+        &mut self,
+        connection_id: u16,
+        node_id: NodeId,
+        tx: mpsc::UnboundedSender<UtpStreamState>,
+    ) {
         if let Some(enr) = self.discovery.discv5.find_enr(&node_id) {
-            let mut conn = UtpStream::init(Arc::clone(&self.discovery), enr);
+            let mut conn = UtpStream::init(Arc::clone(&self.discovery), enr, tx);
             conn.make_connection(connection_id);
             self.utp_connections.insert(
                 ConnectionKey {
@@ -178,10 +199,11 @@ pub struct UtpStream {
     last_rollover: u32,
     current_delay: Vec<u32>,
     pub recv_data_stream: Vec<u8>,
+    tx: mpsc::UnboundedSender<UtpStreamState>,
 }
 
 impl UtpStream {
-    fn init(arc: Arc<Discovery>, enr: Enr) -> Self {
+    fn init(arc: Arc<Discovery>, enr: Enr, tx: mpsc::UnboundedSender<UtpStreamState>) -> Self {
         Self {
             state: ConnectionState::Uninitialized,
             seq_nr: 0,
@@ -205,6 +227,9 @@ impl UtpStream {
             last_rollover: 0,
             current_delay: Vec::with_capacity(8),
             recv_data_stream: vec![],
+
+            // signal when node is connected to write payload
+            tx,
         }
     }
 
@@ -423,6 +448,8 @@ impl UtpStream {
         if self.state == ConnectionState::SynSent {
             self.state = ConnectionState::Connected;
             self.ack_nr = packet.seq_nr() - 1;
+
+            self.tx.send(UtpStreamState::Connected).unwrap();
         } else {
             if self.last_ack == packet.ack_nr() {
                 self.duplicate_acks += 1;
@@ -486,6 +513,12 @@ impl UtpStream {
                 let seq_nr = stored_packet.seq_nr();
                 let len = stored_packet.0.len() as u32;
                 self.send_window.remove(&seq_nr);
+
+                // Since we want to close the stream when they have recv all of the packets
+                // use a channel
+                if self.send_window.is_empty() {
+                    self.tx.send(UtpStreamState::Finished).unwrap();
+                }
                 self.cur_window -= len;
             }
         }
