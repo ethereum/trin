@@ -1,11 +1,13 @@
 use log::debug;
 use rocksdb::DB;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 use trin_core::portalnet::{
     discovery::Discovery,
     overlay::{OverlayConfig, OverlayProtocol, OverlayRequestError},
     types::messages::{PortalnetConfig, ProtocolId},
 };
+use trin_core::utp::utp::UtpListener;
 
 /// History network layer on top of the overlay protocol. Encapsulates history network specific data and logic.
 #[derive(Clone)]
@@ -16,6 +18,7 @@ pub struct HistoryNetwork {
 impl HistoryNetwork {
     pub async fn new(
         discovery: Arc<Discovery>,
+        utp_listener: Arc<RwLock<UtpListener>>,
         db: Arc<DB>,
         portal_config: PortalnetConfig,
     ) -> Self {
@@ -26,6 +29,7 @@ impl HistoryNetwork {
         let overlay = OverlayProtocol::new(
             config,
             discovery,
+            utp_listener,
             db,
             portal_config.data_radius,
             ProtocolId::History,

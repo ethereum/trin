@@ -8,6 +8,7 @@ use trin_core::portalnet::{
     overlay::{OverlayConfig, OverlayProtocol, OverlayRequestError},
     types::messages::{PortalnetConfig, ProtocolId},
 };
+use trin_core::utp::utp::UtpListener;
 
 use crate::trie::TrieDB;
 
@@ -21,6 +22,7 @@ pub struct StateNetwork {
 impl StateNetwork {
     pub async fn new(
         discovery: Arc<Discovery>,
+        utp_listener: Arc<RwLock<UtpListener>>,
         db: Arc<DB>,
         portal_config: PortalnetConfig,
     ) -> Self {
@@ -34,6 +36,7 @@ impl StateNetwork {
         let overlay = OverlayProtocol::new(
             config,
             discovery,
+            utp_listener,
             db,
             portal_config.data_radius,
             ProtocolId::State,
