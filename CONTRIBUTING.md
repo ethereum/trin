@@ -182,3 +182,4 @@ Any datatype of significance **should** have an accompanying comment briefly des
 
 ## Error handling
 - Handle errors, avoid naked `.unwrap()`s, except for in unit tests. Write descriptive error messages that give context of the problem that occured.
+- Meaningful error types should be used in place of `Result< _, String>`. Custom error types should derive from the `std::error::Error` trait. The [`thiserror`](https://docs.rs/thiserror/1.0.30/thiserror/) crate provides a useful macro to simplify creating custom error types.
