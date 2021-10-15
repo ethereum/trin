@@ -4,7 +4,7 @@ use super::types::{HexData, PortalnetConfig};
 use super::Enr;
 use crate::socket;
 use discv5::enr::{CombinedKey, EnrBuilder, NodeId};
-use discv5::{Discv5, Discv5Config, Discv5ConfigBuilder};
+use discv5::{Discv5, Discv5Config, Discv5ConfigBuilder, RequestError};
 use log::info;
 use serde_json::{json, Value};
 use std::net::{IpAddr, SocketAddr};
@@ -171,12 +171,11 @@ impl Discovery {
         enr: Enr,
         protocol: String,
         request: ProtocolRequest,
-    ) -> Result<Vec<u8>, String> {
+    ) -> Result<Vec<u8>, RequestError> {
         let response = self
             .discv5
             .talk_req(enr, protocol.into_bytes(), request)
-            .await
-            .map_err(|e| format!("TalkReq query failed: {:?}", e))?;
+            .await?;
         Ok(response)
     }
 }

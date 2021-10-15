@@ -46,7 +46,8 @@ impl HistoryNetwork {
             let ping_result = self
                 .overlay
                 .send_ping(U256::from(u64::MAX), enr, ProtocolKind::History, None)
-                .await?;
+                .await
+                .map_err(|e| format!("Failed to ping bootnode: {:?}", e))?;
             debug!("Portal history network Ping result: {:?}", ping_result);
         }
         Ok(())

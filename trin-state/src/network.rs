@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use trin_core::portalnet::{
     discovery::Discovery,
-    overlay::{OverlayConfig, OverlayProtocol},
+    overlay::{OverlayConfig, OverlayProtocol, SendPingError},
     types::{PortalnetConfig, ProtocolKind},
     U256,
 };
@@ -42,12 +42,26 @@ impl StateNetwork {
             .discv5
             .table_entries_enr()
         {
-            debug!("Pinging {} on portal state network", enr);
+            debug!("Attempting bond with bootnode {}", enr);
             let ping_result = self
                 .overlay
-                .send_ping(U256::from(u64::MAX), enr, ProtocolKind::State, None)
-                .await?;
-            debug!("Portal state network Ping result: {:?}", ping_result);
+                .send_ping(U256::from(u64::MAX), enr.clone(), ProtocolKind::State, None)
+                .await;
+
+            match ping_result {
+                Ok(_) => {
+                    debug!("Successfully bonded with {}", enr);
+                    continue;
+                }
+                Err(SendPingError::Timeout) => {
+                    debug!("Timed out while bonding with {}", enr);
+                    continue;
+                }
+                Err(SendPingError::Other(err)) => {
+                    debug!("Unexpected error while bonding with {} => {:?}", enr, err);
+                    return Err(err.to_string());
+                }
+            }
         }
         Ok(())
     }

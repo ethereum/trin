@@ -12,12 +12,13 @@ use crate::portalnet::types::CustomPayload;
 use discv5::{
     enr::NodeId,
     kbucket::{Filter, KBucketsTable},
-    TalkRequest,
+    RequestError, TalkRequest,
 };
 use log::debug;
 use rocksdb::DB;
 use std::sync::Arc;
 use std::time::Duration;
+use thiserror::Error;
 use tokio::sync::RwLock;
 
 /// Maximum number of ENRs in response to FindNodes.
@@ -65,6 +66,24 @@ impl Default for OverlayConfig {
             max_incoming_per_bucket: 16,
             table_filter: None,
             bucket_filter: None,
+        }
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum SendPingError {
+    #[error("The request timed out")]
+    Timeout,
+
+    #[error("Internal error: ")]
+    Other(discv5::RequestError),
+}
+
+impl From<discv5::RequestError> for SendPingError {
+    fn from(err: discv5::RequestError) -> Self {
+        match err {
+            discv5::RequestError::Timeout => Self::Timeout,
+            err => Self::Other(err),
         }
     }
 }
@@ -251,14 +270,15 @@ impl OverlayProtocol {
         enr: Enr,
         protocol: ProtocolKind,
         payload: Option<Vec<u8>>,
-    ) -> Result<Vec<u8>, String> {
+    ) -> Result<Vec<u8>, SendPingError> {
         let enr_seq = self.discovery.read().await.local_enr().seq();
         let payload = CustomPayload::new(data_radius, payload);
         let msg = Ping {
             enr_seq,
             payload: Some(payload),
         };
-        self.discovery
+        Ok(self
+            .discovery
             .read()
             .await
             .send_talkreq(
@@ -266,7 +286,7 @@ impl OverlayProtocol {
                 protocol.to_string(),
                 Message::Request(Request::Ping(msg)).to_bytes(),
             )
-            .await
+            .await?)
     }
 
     pub async fn send_find_nodes(
@@ -274,7 +294,7 @@ impl OverlayProtocol {
         distances: Vec<u16>,
         enr: Enr,
         protocol: ProtocolKind,
-    ) -> Result<Vec<u8>, String> {
+    ) -> Result<Vec<u8>, RequestError> {
         let msg = FindNodes { distances };
         self.discovery
             .read()
@@ -292,7 +312,7 @@ impl OverlayProtocol {
         content_key: Vec<u8>,
         enr: Enr,
         protocol: ProtocolKind,
-    ) -> Result<Vec<u8>, String> {
+    ) -> Result<Vec<u8>, RequestError> {
         let msg = FindContent { content_key };
         self.discovery
             .read()
