@@ -3,6 +3,8 @@ use discv5::enr::NodeId;
 use rocksdb::{Options, DB};
 use std::{env, fs};
 
+pub mod hash_delay_queue;
+
 const TRIN_DATA_ENV_VAR: &str = "TRIN_DATA_PATH";
 
 pub fn xor_two_values(first: &[u8], second: &[u8]) -> Vec<u8> {
