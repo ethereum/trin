@@ -89,23 +89,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Spawn main JsonRpc Handler
     let jsonrpc_discovery = Arc::clone(&discovery);
-    tokio::spawn(async move {
-        let rpc_handler = JsonRpcHandler {
-            discovery: jsonrpc_discovery,
-            portal_jsonrpc_rx,
-            state_jsonrpc_tx,
-            history_jsonrpc_tx,
-        };
+    let rpc_handler = JsonRpcHandler {
+        discovery: jsonrpc_discovery,
+        portal_jsonrpc_rx,
+        state_jsonrpc_tx,
+        history_jsonrpc_tx,
+    };
 
-        tokio::spawn(rpc_handler.process_jsonrpc_requests());
+    tokio::spawn(rpc_handler.process_jsonrpc_requests());
 
-        if let Some(handler) = state_handler {
-            tokio::spawn(handler.handle_client_queries());
-        }
-        if let Some(handler) = history_handler {
-            tokio::spawn(handler.handle_client_queries());
-        }
-    });
+    if let Some(handler) = state_handler {
+        tokio::spawn(handler.handle_client_queries());
+    }
+    if let Some(handler) = history_handler {
+        tokio::spawn(handler.handle_client_queries());
+    }
 
     let portal_events_discovery = Arc::clone(&discovery);
 
