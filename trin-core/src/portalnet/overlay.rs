@@ -1,3 +1,4 @@
+use crate::locks::RwLoggingExt;
 use crate::utils::xor_two_values;
 
 use super::{
@@ -112,7 +113,12 @@ impl OverlayProtocol {
         data_radius: U256,
     ) -> Self {
         let kbuckets = Arc::new(RwLock::new(KBucketsTable::new(
-            discovery.read().await.local_enr().node_id().into(),
+            discovery
+                .read_with_warn()
+                .await
+                .local_enr()
+                .node_id()
+                .into(),
             config.bucket_pending_timeout,
             config.max_incoming_per_bucket,
             config.table_filter,
@@ -140,7 +146,7 @@ impl OverlayProtocol {
         let response = match request {
             Request::Ping(Ping { .. }) => {
                 debug!("Got overlay ping request {:?}", request);
-                let enr_seq = self.discovery.read().await.local_enr().seq();
+                let enr_seq = self.discovery.read_with_warn().await.local_enr().seq();
                 let payload = CustomPayload::new(self.data_radius().await, None);
                 Response::Pong(Pong {
                     enr_seq,
@@ -181,12 +187,12 @@ impl OverlayProtocol {
 
     /// Returns the local ENR of the node.
     pub async fn local_enr(&self) -> Enr {
-        self.discovery.read().await.discv5.local_enr()
+        self.discovery.read_with_warn().await.discv5.local_enr()
     }
 
     // Returns the data radius of the node.
     pub async fn data_radius(&self) -> U256 {
-        self.data_radius.read().await.clone()
+        self.data_radius.read_with_warn().await.clone()
     }
 
     /// Returns a vector of the ENRs of the closest nodes by the given log2 distances.
@@ -203,7 +209,7 @@ impl OverlayProtocol {
         }
 
         if !log2_distances.is_empty() {
-            let mut kbuckets = self.kbuckets.write().await;
+            let mut kbuckets = self.kbuckets.write_with_warn().await;
             for node in kbuckets
                 .nodes_by_distances(&log2_distances, FIND_NODES_MAX_NODES)
                 .into_iter()
@@ -247,7 +253,7 @@ impl OverlayProtocol {
     /// Returns a vector of all ENR node IDs of nodes currently contained in the routing table.
     pub async fn table_entries_id(&self) -> Vec<NodeId> {
         self.kbuckets
-            .write()
+            .write_with_warn()
             .await
             .iter()
             .map(|entry| *entry.node.key.preimage())
@@ -257,7 +263,7 @@ impl OverlayProtocol {
     /// Returns a vector of all the ENRs of nodes currently contained in the routing table.
     pub async fn table_entries_enr(&self) -> Vec<Enr> {
         self.kbuckets
-            .write()
+            .write_with_warn()
             .await
             .iter()
             .map(|entry| entry.node.value.enr().clone())
@@ -271,7 +277,8 @@ impl OverlayProtocol {
         protocol: ProtocolKind,
         payload: Option<Vec<u8>>,
     ) -> Result<Vec<u8>, SendPingError> {
-        let enr_seq = self.discovery.read().await.local_enr().seq();
+        let enr_seq = self.discovery.read_with_warn().await.local_enr().seq();
+
         let payload = CustomPayload::new(data_radius, payload);
         let msg = Ping {
             enr_seq,
@@ -279,7 +286,7 @@ impl OverlayProtocol {
         };
         Ok(self
             .discovery
-            .read()
+            .read_with_warn()
             .await
             .send_talkreq(
                 enr,
@@ -297,7 +304,7 @@ impl OverlayProtocol {
     ) -> Result<Vec<u8>, RequestError> {
         let msg = FindNodes { distances };
         self.discovery
-            .read()
+            .read_with_warn()
             .await
             .send_talkreq(
                 enr,
@@ -315,7 +322,7 @@ impl OverlayProtocol {
     ) -> Result<Vec<u8>, RequestError> {
         let msg = FindContent { content_key };
         self.discovery
-            .read()
+            .read_with_warn()
             .await
             .send_talkreq(
                 enr,

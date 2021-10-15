@@ -3,6 +3,7 @@ use discv5::TalkRequest;
 use log::{debug, error, warn};
 use std::sync::Arc;
 use tokio::sync::{mpsc::UnboundedReceiver, RwLock};
+use trin_core::locks::RwLoggingExt;
 use trin_core::portalnet::types::Message;
 
 pub struct StateEvents {
@@ -17,7 +18,7 @@ impl StateEvents {
 
             let reply = match self
                 .network
-                .write()
+                .write_with_warn()
                 .await
                 .overlay
                 .process_one_request(&talk_request)

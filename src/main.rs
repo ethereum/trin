@@ -7,6 +7,7 @@ use tokio::sync::RwLock;
 
 use trin_core::jsonrpc::handlers::JsonRpcHandler;
 use trin_core::jsonrpc::types::PortalJsonRpcRequest;
+use trin_core::locks::RwLoggingExt;
 use trin_core::portalnet::events::PortalnetEvents;
 use trin_core::{
     cli::{TrinConfig, HISTORY_NETWORK, STATE_NETWORK},
@@ -52,11 +53,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let discovery = Arc::new(RwLock::new(
         Discovery::new(portalnet_config.clone()).unwrap(),
     ));
-    discovery.write().await.start().await.unwrap();
+    discovery.write_with_warn().await.start().await.unwrap();
 
     // Setup Overlay database
     let db = Arc::new(setup_overlay_db(
-        discovery.read().await.local_enr().node_id(),
+        discovery.read_with_warn().await.local_enr().node_id(),
     ));
 
     debug!("Selected networks to spawn: {:?}", trin_config.networks);
