@@ -10,6 +10,7 @@ use super::{
     utp::{UtpListener, UTP_PROTOCOL},
 };
 use crate::cli::{HISTORY_NETWORK, STATE_NETWORK};
+use crate::locks::RwLoggingExt;
 use std::collections::HashMap;
 use std::convert::TryInto;
 
@@ -28,7 +29,7 @@ impl PortalnetEvents {
         state_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
     ) -> Self {
         let protocol_receiver = discovery
-            .write()
+            .write_with_warn()
             .await
             .discv5
             .event_stream()

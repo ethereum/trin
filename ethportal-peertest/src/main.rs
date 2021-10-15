@@ -9,6 +9,7 @@ use ethportal_peertest::events::PortalnetEvents;
 use ethportal_peertest::jsonrpc::{
     test_jsonrpc_endpoints_over_http, test_jsonrpc_endpoints_over_ipc,
 };
+use trin_core::locks::RwLoggingExt;
 use trin_core::portalnet::{
     discovery::Discovery,
     overlay::{OverlayConfig, OverlayProtocol},
@@ -30,10 +31,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
 
         let discovery = Arc::new(RwLock::new(Discovery::new(portal_config).unwrap()));
-        discovery.write().await.start().await.unwrap();
+        discovery.write_with_warn().await.start().await.unwrap();
 
         let db = Arc::new(setup_overlay_db(
-            discovery.read().await.local_enr().node_id(),
+            discovery.read_with_warn().await.local_enr().node_id(),
         ));
 
         let overlay = Arc::new(

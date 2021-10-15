@@ -1,5 +1,6 @@
 use log::info;
 use rocksdb::DB;
+use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
 use tokio::task::JoinHandle;
 
@@ -7,9 +8,9 @@ use crate::events::StateEvents;
 use crate::jsonrpc::StateRequestHandler;
 use discv5::TalkRequest;
 use network::StateNetwork;
-use std::sync::Arc;
 use trin_core::cli::TrinConfig;
 use trin_core::jsonrpc::types::StateJsonRpcRequest;
+use trin_core::locks::RwLoggingExt;
 use trin_core::portalnet::discovery::Discovery;
 use trin_core::portalnet::events::PortalnetEvents;
 use trin_core::portalnet::types::PortalnetConfig;
@@ -46,7 +47,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Setup Overlay database
     let db = Arc::new(setup_overlay_db(
-        discovery.read().await.local_enr().node_id(),
+        discovery.read_with_warn().await.local_enr().node_id(),
     ));
 
     let (state_event_tx, state_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
@@ -117,7 +118,12 @@ pub fn spawn_state_network(
         tokio::spawn(state_events.process_requests());
 
         // hacky test: make sure we establish a session with the boot node
-        network.write().await.ping_bootnodes().await.unwrap();
+        network
+            .write_with_warn()
+            .await
+            .ping_bootnodes()
+            .await
+            .unwrap();
 
         tokio::signal::ctrl_c()
             .await

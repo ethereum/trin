@@ -12,6 +12,8 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
 
+use crate::locks::RwLoggingExt;
+
 pub const UTP_PROTOCOL: &str = "utp";
 pub const HEADER_SIZE: usize = 20;
 pub const MAX_DISCV5_PACKET_SIZE: usize = 1280;
@@ -433,7 +435,13 @@ impl UtpListener {
                         }
                     }
                     Type::StSyn => {
-                        if let Some(enr) = self.discovery.read().await.discv5.find_enr(&node_id) {
+                        if let Some(enr) = self
+                            .discovery
+                            .read_with_warn()
+                            .await
+                            .discv5
+                            .find_enr(&node_id)
+                        {
                             // If neither of those cases happened handle this is a new request
                             let mut conn = UtpStream::init(Arc::clone(&self.discovery), enr);
                             conn.handle_packet(packet).await;
@@ -466,7 +474,13 @@ impl UtpListener {
 
     // I am honestly not sure if I should init this with Enr or NodeId since we could use both
     async fn connect(&mut self, connection_id: u16, node_id: NodeId) {
-        if let Some(enr) = self.discovery.read().await.discv5.find_enr(&node_id) {
+        if let Some(enr) = self
+            .discovery
+            .read_with_warn()
+            .await
+            .discv5
+            .find_enr(&node_id)
+        {
             let mut conn = UtpStream::init(Arc::clone(&self.discovery), enr);
             conn.make_connection(connection_id).await;
             self.utp_connections.insert(
@@ -587,7 +601,7 @@ impl UtpStream {
         }
         let talk_request_result = self
             .discovery
-            .read()
+            .read_with_warn()
             .await
             .send_talkreq(self.enr.clone(), UTP_PROTOCOL.to_string(), packet.0.clone())
             .await;

@@ -8,6 +8,7 @@ use tokio::sync::RwLock;
 
 use crate::jsonrpc::endpoints::{Discv5Endpoint, HistoryEndpoint, StateEndpoint, TrinEndpoint};
 use crate::jsonrpc::types::{HistoryJsonRpcRequest, PortalJsonRpcRequest, StateJsonRpcRequest};
+use crate::locks::RwLoggingExt;
 use crate::portalnet::discovery::Discovery;
 
 type Responder<T, E> = mpsc::UnboundedSender<Result<T, E>>;
@@ -25,9 +26,9 @@ impl JsonRpcHandler {
         while let Some(request) = self.portal_jsonrpc_rx.recv().await {
             let response: Value = match request.endpoint {
                 TrinEndpoint::Discv5Endpoint(endpoint) => match endpoint {
-                    Discv5Endpoint::NodeInfo => self.discovery.read().await.node_info(),
+                    Discv5Endpoint::NodeInfo => self.discovery.read_with_warn().await.node_info(),
                     Discv5Endpoint::RoutingTableInfo => {
-                        self.discovery.write().await.routing_table_info()
+                        self.discovery.write_with_warn().await.routing_table_info()
                     }
                 },
                 TrinEndpoint::HistoryEndpoint(endpoint) => {
