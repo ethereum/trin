@@ -6,7 +6,7 @@ use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 
 use super::{
-    discovery::Discovery,
+    discovery::{Discovery, DISCV5_PROTOCOL},
     utp::{UtpListener, UTP_PROTOCOL},
 };
 use crate::cli::{HISTORY_NETWORK, STATE_NETWORK};
@@ -79,6 +79,13 @@ impl PortalnetEvents {
                             .process_utp_request(request.body(), request.node_id())
                             .await;
                         self.process_utp_byte_stream().await;
+                    }
+                    DISCV5_PROTOCOL => {
+                        self.discovery
+                            .read()
+                            .await
+                            .process_rpc_request(request)
+                            .await
                     }
                     _ => {
                         warn!("Non supported protocol : {}", protocol);

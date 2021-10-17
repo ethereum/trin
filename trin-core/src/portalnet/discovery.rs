@@ -1,13 +1,18 @@
 #![allow(dead_code)]
 
-use super::types::{HexData, PortalnetConfig};
+use super::types::{FindNodes, HexData, PortalnetConfig};
 use super::Enr;
+use crate::portalnet::types::{
+    DiscoveryRequestError, Message, MessageDecodeError, Nodes, Request, Response,
+};
 use crate::socket;
 use discv5::enr::{CombinedKey, EnrBuilder, NodeId};
-use discv5::{Discv5, Discv5Config, Discv5ConfigBuilder, RequestError};
-use log::info;
+use discv5::{Discv5, Discv5Config, Discv5ConfigBuilder, RequestError, TalkRequest};
+use log::{info, warn};
 use serde_json::{json, Value};
 use std::net::{IpAddr, SocketAddr};
+
+pub const DISCV5_PROTOCOL: &str = "discv5";
 
 #[derive(Clone)]
 pub struct Config {
@@ -139,6 +144,18 @@ impl Discovery {
         )
     }
 
+    pub async fn find_nodes(&self, enr: Enr, distances: Vec<u16>) -> Result<Vec<u8>, RequestError> {
+        let msg = FindNodes { distances };
+
+        Ok(self
+            .send_talkreq(
+                enr,
+                DISCV5_PROTOCOL.to_owned(),
+                Message::Request(Request::FindNodes(msg)).to_bytes(),
+            )
+            .await?)
+    }
+
     pub fn connected_peers(&mut self) -> Vec<NodeId> {
         self.discv5.table_entries_id()
     }
@@ -177,5 +194,46 @@ impl Discovery {
             .talk_req(enr, protocol.into_bytes(), request)
             .await?;
         Ok(response)
+    }
+
+    /// Process base layer discv5 RPC requests
+    pub async fn process_rpc_request(&self, talk_request: TalkRequest) {
+        let message: Result<Request, MessageDecodeError> =
+            match Message::from_bytes(talk_request.body()) {
+                Ok(Message::Request(r)) => Ok(r),
+                Ok(_) => Err(MessageDecodeError::Type),
+                Err(e) => {
+                    warn!("{:?}", e);
+                    Err(e)
+                }
+            };
+
+        let response: Result<Response, DiscoveryRequestError> = match &message {
+            Ok(Request::FindNodes(FindNodes { distances })) => {
+                let distances64: Vec<u64> = distances.iter().map(|x| (*x).into()).collect();
+                let enrs = self.discv5.nodes_by_distance(distances64);
+                Ok(Response::Nodes(Nodes {
+                    // from spec: total = The total number of Nodes response messages being sent.
+                    // TODO: support returning multiple messages
+                    total: 1_u8,
+                    enrs,
+                }))
+            }
+            _ => Err(DiscoveryRequestError::InvalidMessage),
+        };
+
+        let reply: Result<Vec<u8>, DiscoveryRequestError> = match response {
+            Ok(r) => Ok(Message::Response(r).to_bytes()),
+            Err(e) => Err(e),
+        };
+
+        match reply {
+            Ok(reply) => {
+                if let Err(e) = talk_request.respond(reply) {
+                    warn!("Failed to send discv5 reply: {}", e);
+                }
+            }
+            Err(e) => warn!("{:?}", e),
+        }
     }
 }

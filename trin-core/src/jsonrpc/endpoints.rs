@@ -5,6 +5,7 @@ use std::str::FromStr;
 pub enum Discv5Endpoint {
     NodeInfo,
     RoutingTableInfo,
+    FindNodes,
 }
 
 /// State network JSON-RPC endpoints. Start with "portalState_" prefix
@@ -51,6 +52,7 @@ impl FromStr for TrinEndpoint {
             "discv5_routingTableInfo" => Ok(TrinEndpoint::Discv5Endpoint(
                 Discv5Endpoint::RoutingTableInfo,
             )),
+            "discv5_findNodes" => Ok(TrinEndpoint::Discv5Endpoint(Discv5Endpoint::FindNodes)),
             "eth_blockNumber" => Ok(TrinEndpoint::InfuraEndpoint(InfuraEndpoint::BlockNumber)),
             "portalHistory_dataRadius" => {
                 Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::DataRadius))

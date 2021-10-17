@@ -31,6 +31,10 @@ impl JsonRpcHandler {
                     Discv5Endpoint::RoutingTableInfo => {
                         self.discovery.write().await.routing_table_info()
                     }
+                    Discv5Endpoint::FindNodes => {
+                        // TODO: Add RPC handler for every endpoint and validate parameters
+                        Value::String("Disscv5 FindNodes endpoint not implemented yet!".to_owned())
+                    }
                 },
                 TrinEndpoint::HistoryEndpoint(endpoint) => {
                     let response = match self.history_jsonrpc_tx.as_ref() {
