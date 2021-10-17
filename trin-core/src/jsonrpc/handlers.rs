@@ -7,7 +7,9 @@ use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 
 use crate::jsonrpc::endpoints::{Discv5Endpoint, HistoryEndpoint, StateEndpoint, TrinEndpoint};
-use crate::jsonrpc::types::{HistoryJsonRpcRequest, PortalJsonRpcRequest, StateJsonRpcRequest};
+use crate::jsonrpc::types::{
+    HistoryJsonRpcRequest, JsonRequest, PortalJsonRpcRequest, StateJsonRpcRequest,
+};
 use crate::portalnet::discovery::Discovery;
 
 type Responder<T, E> = mpsc::UnboundedSender<Result<T, E>>;
@@ -22,8 +24,8 @@ pub struct JsonRpcHandler {
 
 impl JsonRpcHandler {
     pub async fn process_jsonrpc_requests(mut self) {
-        while let Some(request) = self.portal_jsonrpc_rx.recv().await {
-            let response: Value = match request.endpoint {
+        while let Some(portal_jsonrpc_req) = self.portal_jsonrpc_rx.recv().await {
+            let response: Value = match portal_jsonrpc_req.endpoint {
                 TrinEndpoint::Discv5Endpoint(endpoint) => match endpoint {
                     Discv5Endpoint::NodeInfo => self.discovery.read().await.node_info(),
                     Discv5Endpoint::RoutingTableInfo => {
@@ -32,34 +34,42 @@ impl JsonRpcHandler {
                 },
                 TrinEndpoint::HistoryEndpoint(endpoint) => {
                     let response = match self.history_jsonrpc_tx.as_ref() {
-                        Some(tx) => proxy_query_to_history_subnet(tx, endpoint).await,
+                        Some(tx) => {
+                            proxy_query_to_history_subnet(portal_jsonrpc_req.request, tx, endpoint)
+                                .await
+                        }
                         None => Err("Chain history subnetwork unavailable.".to_string()),
                     };
                     response.unwrap_or_else(Value::String)
                 }
                 TrinEndpoint::StateEndpoint(endpoint) => {
                     let response = match self.state_jsonrpc_tx.as_ref() {
-                        Some(tx) => proxy_query_to_state_subnet(tx, endpoint).await,
+                        Some(tx) => {
+                            proxy_query_to_state_subnet(portal_jsonrpc_req.request, tx, endpoint)
+                                .await
+                        }
                         None => Err("State subnetwork unavailable.".to_string()),
                     };
                     response.unwrap_or_else(Value::String)
                 }
                 _ => Value::String(format!(
                     "Can't process portal network endpoint {:?}",
-                    request.endpoint
+                    portal_jsonrpc_req.endpoint
                 )),
             };
-            let _ = request.resp.send(Ok(response));
+            let _ = portal_jsonrpc_req.resp.send(Ok(response));
         }
     }
 }
 
 async fn proxy_query_to_history_subnet(
+    request: JsonRequest,
     subnet_tx: &mpsc::UnboundedSender<HistoryJsonRpcRequest>,
     endpoint: HistoryEndpoint,
 ) -> Result<Value, String> {
     let (resp_tx, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
     let message = HistoryJsonRpcRequest {
+        request,
         endpoint,
         resp: resp_tx,
     };
@@ -77,11 +87,13 @@ async fn proxy_query_to_history_subnet(
 }
 
 async fn proxy_query_to_state_subnet(
+    request: JsonRequest,
     subnet_tx: &mpsc::UnboundedSender<StateJsonRpcRequest>,
     endpoint: StateEndpoint,
 ) -> Result<Value, String> {
     let (resp_tx, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
     let message = StateJsonRpcRequest {
+        request,
         endpoint,
         resp: resp_tx,
     };

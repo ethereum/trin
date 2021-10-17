@@ -41,6 +41,7 @@ pub struct JsonRequest {
 // Global portal network JSON-RPC request
 #[derive(Debug, Clone)]
 pub struct PortalJsonRpcRequest {
+    pub request: JsonRequest,
     pub endpoint: TrinEndpoint,
     pub resp: Responder<Value, String>,
 }
@@ -48,6 +49,7 @@ pub struct PortalJsonRpcRequest {
 /// History network JSON-RPC request
 #[derive(Debug)]
 pub struct HistoryJsonRpcRequest {
+    pub request: JsonRequest,
     pub endpoint: HistoryEndpoint,
     pub resp: Responder<Value, String>,
 }
@@ -55,6 +57,7 @@ pub struct HistoryJsonRpcRequest {
 /// State network JSON-RPC request
 #[derive(Debug)]
 pub struct StateJsonRpcRequest {
+    pub request: JsonRequest,
     pub endpoint: StateEndpoint,
     pub resp: Responder<Value, String>,
 }

@@ -289,6 +289,7 @@ fn dispatch_portal_request(
 ) -> Result<String, String> {
     let (resp_tx, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
     let message = PortalJsonRpcRequest {
+        request: obj.clone(),
         endpoint,
         resp: resp_tx,
     };
