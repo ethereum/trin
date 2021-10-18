@@ -1,7 +1,8 @@
+use std::{env, fs};
+
 use directories::ProjectDirs;
 use discv5::enr::NodeId;
 use rocksdb::{Options, DB};
-use std::{env, fs};
 
 pub mod hash_delay_queue;
 
