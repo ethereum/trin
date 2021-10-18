@@ -476,11 +476,228 @@ impl FromStr for HexData {
     }
 }
 
+#[derive(Debug, PartialEq, Encode, Decode)]
+pub struct ContentKey;
+
 #[cfg(test)]
 mod test {
     use super::*;
     use discv5::enr::{CombinedKey, EnrBuilder};
     use std::net::Ipv4Addr;
+
+    // testing StateContentKeys decoding
+    #[test]
+    fn test_account_trie_node_key_decode() {
+        let node_hash = content_key::vec_to_array(hex::decode("b8be7903aee73b8f6a59cd44a1f52c62148e1f376c0dfa1f5f773a98666efc2b").unwrap()).unwrap();
+        let state_root = content_key::vec_to_array(hex::decode("d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d").unwrap()).unwrap();
+
+        let container = AccountTrieNode {
+            path: vec![1,2,0,1],
+            node_hash,
+            state_root,
+        };
+        let test_key = ContentKey::StateContentKey(StateContentKey::AccountTrieNodeKey(container.clone()));
+
+        let ssz_bytes = test_key.to_bytes();
+        println!("{:?}", ssz_bytes);
+        let decoded = StateContentKey::from_bytes(&ssz_bytes).unwrap();
+        println!("{:?}", decoded);
+
+        if let StateContentKey::AccountTrieNodeKey(k) = decoded {
+            assert_eq!(container, k);
+            assert_eq!(container.path, k.path);
+            assert_eq!(container.node_hash, k.node_hash);
+            assert_eq!(state_root, k.state_root);
+        }
+    }
+
+    #[test]
+    fn test_contract_storage_trie_node_key_decode() {
+        let address = hex::decode("829bd824b016326a401d083b33d092293333a830").unwrap();
+        let node_hash = content_key::vec_to_array(hex::decode("3e190b68719aecbcb28ed2271014dd25f2aa633184988eb414189ce0899cade5").unwrap()).unwrap();
+        let state_root = content_key::vec_to_array(hex::decode("d1c390624d3bd4e409a61a858e51235517729a9170d014a6c96530d64dd8621d").unwrap()).unwrap();
+        let container = ContractStorageTrieNode {
+            address,
+            path: vec![1,0,15,14,12,0],
+            node_hash,
+            state_root,
+        };
+
+        let test_key = ContentKey::StateContentKey(StateContentKey::ContractStorageTrieNodeKey(container.clone()));
+        let ssz_bytes = test_key.to_bytes();
+        let decoded = StateContentKey::from_bytes(&ssz_bytes).unwrap();
+
+        if let StateContentKey::ContractStorageTrieNodeKey(k) = decoded {
+            assert_eq!(container, k);
+            assert_eq!(container.address, k.address);
+            assert_eq!(container.path, k.path);
+            assert_eq!(container.node_hash, k.node_hash);
+            assert_eq!(container.state_root, k.state_root);
+        }
+    }
+
+    #[test]
+    fn test_account_trie_proof_key_decode() {
+        let address = hex::decode("829bd824b016326a401d083b33d092293333a830").unwrap();
+        let state_root = content_key::vec_to_array(hex::decode("d1c390624d3bd4e409a61a858e51235517729a9170d014a6c96530d64dd8621d").unwrap()).unwrap();
+        let container = AccountTrieProof {
+            address,
+            state_root,
+        };
+        let test_key = ContentKey::StateContentKey(StateContentKey::AccountTrieProofKey(container.clone()));
+        let ssz_bytes = test_key.to_bytes();
+        let decoded = StateContentKey::from_bytes(&ssz_bytes).unwrap();
+
+        if let StateContentKey::AccountTrieProofKey(k) = decoded {
+            assert_eq!(container, k);
+            assert_eq!(container.address, k.address);
+            assert_eq!(container.state_root, k.state_root);
+        }
+    }
+
+    #[test]
+    fn test_contract_storage_trie_proof_key_decode() {
+        let address = hex::decode("829bd824b016326a401d083b33d092293333a830").unwrap();
+        let state_root = content_key::vec_to_array(hex::decode("d1c390624d3bd4e409a61a858e51235517729a9170d014a6c96530d64dd8621d").unwrap()).unwrap();
+
+        let container = ContractStorageTrieProof {
+            address,
+            slot: U256::from(239304),
+            state_root,
+        };
+
+        let test_key = ContentKey::StateContentKey(StateContentKey::ContractStorageTrieProofKey(container.clone()));
+        let ssz_bytes = test_key.to_bytes();
+        let decoded = StateContentKey::from_bytes(&ssz_bytes).unwrap();
+
+        if let StateContentKey::ContractStorageTrieProofKey(k) = decoded {
+            assert_eq!(container, k);
+            assert_eq!(container.address, k.address);
+            assert_eq!(container.slot, k.slot);
+            assert_eq!(container.state_root, k.state_root);
+        }
+    }
+
+    #[test]
+    fn test_contract_bytecode_key_decode() {
+        let address = hex::decode("829bd824b016326a401d083b33d092293333a830").unwrap();
+        let code_hash = content_key::vec_to_array(hex::decode("d1c390624d3bd4e409a61a858e51235517729a9170d014a6c96530d64dd8621d").unwrap()).unwrap();
+        let container = ContractBytecode {
+            address,
+            code_hash,
+        };
+        let test_key = ContentKey::StateContentKey(StateContentKey::ContractBytecodeKey(container.clone()));
+        let ssz_bytes = test_key.to_bytes();
+        let decoded = StateContentKey::from_bytes(&ssz_bytes).unwrap();
+
+        if let StateContentKey::ContractBytecodeKey(k) = decoded {
+            assert_eq!(container, k);
+            assert_eq!(container.address, k.address);
+            assert_eq!(container.code_hash, k.code_hash);
+        }
+    }
+
+    // test HistoryContentKeys decoding
+    #[test]
+    fn test_header_key_decode() {
+        let chain_id = 15;
+        let block_hash = content_key::vec_to_array(hex::decode("d1c390624d3bd4e409a61a858e51235517729a9170d014a6c96530d64dd8621d").unwrap()).unwrap();
+        let container = HeaderKey {
+            chain_id,
+            block_hash,
+        };
+        let test_key = ContentKey::HistoryContentKey(HistoryContentKey::HeaderKey(container.clone()));
+        let ssz_bytes = test_key.to_bytes();
+        let decoded = HistoryContentKey::from_bytes(&ssz_bytes).unwrap();
+
+        if let HistoryContentKey::HeaderKey(k) = decoded {
+            assert_eq!(container, k);
+            assert_eq!(container.chain_id, k.chain_id);
+            assert_eq!(container.block_hash, k.block_hash);
+        }
+    }
+
+    #[test]
+    fn test_body_key_decode() {
+        let chain_id = 20;
+        let block_hash = content_key::vec_to_array(hex::decode("d1c390624d3bd4e409a61a858e51235517729a9170d014a6c96530d64dd8621d").unwrap()).unwrap();
+        let container = BodyKey {
+            chain_id,
+            block_hash,
+        };
+        let test_key = ContentKey::HistoryContentKey(HistoryContentKey::BodyKey(container.clone()));
+        let ssz_bytes = test_key.to_bytes();
+        let decoded = HistoryContentKey::from_bytes(&ssz_bytes).unwrap();
+
+        if let HistoryContentKey::BodyKey(k) = decoded {
+            assert_eq!(container, k);
+            assert_eq!(container.chain_id, k.chain_id);
+            assert_eq!(container.block_hash, k.block_hash);
+        }
+    }
+
+    #[test]
+    fn test_receipts_key_decode() {
+        let chain_id = 4;
+        let block_hash = content_key::vec_to_array(hex::decode("d1c120624d3bd4e409a61a858e51235517729a9170d014a6c96530d64dd8621d").unwrap()).unwrap();
+        let container = ReceiptsKey {
+            chain_id,
+            block_hash,
+        };
+        let test_key = ContentKey::HistoryContentKey(HistoryContentKey::ReceiptsKey(container.clone()));
+        let ssz_bytes = test_key.to_bytes();
+        let decoded = HistoryContentKey::from_bytes(&ssz_bytes).unwrap();
+
+        if let HistoryContentKey::ReceiptsKey(k) = decoded {
+            assert_eq!(container, k);
+            assert_eq!(container.chain_id, k.chain_id);
+            assert_eq!(container.block_hash, k.block_hash);
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "Cannot decode StateContentKey from empty bytes")]
+    fn test_empty_bytes_failure_state() {
+        let empty_bytes = vec![];
+        StateContentKey::from_bytes(&empty_bytes).unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "No matching content-type")]
+    fn test_incorrect_content_type_state() {
+        // 0x05 is not a correct content-type
+        let bytes = vec![5,3,4,10];
+        StateContentKey::from_bytes(&bytes).unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "Failed to decode AccountTrieNode ssz")]
+    fn test_ssz_decode_failure_state() {
+        let ssz_bytes = vec![0,5,4,3,10]; // this is clearly incorrect type for AccountTrieNode
+        StateContentKey::from_bytes(&ssz_bytes).unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "Cannot decode HistoryContentKey from empty bytes")]
+    fn test_empty_bytes_failure_history() {
+        let empty_bytes = vec![];
+        HistoryContentKey::from_bytes(&empty_bytes).unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "No matching content-type")]
+    fn test_incorrect_content_type_history() {
+        // 0x24 is not a correct content-type
+        let bytes = vec![24,3,4,10];
+        HistoryContentKey::from_bytes(&bytes).unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "Failed to decode HeaderKey ssz")]
+    fn test_ssz_decode_failure_history() {
+        let ssz_bytes = vec![1,5,4,3,10];
+        HistoryContentKey::from_bytes(&ssz_bytes).unwrap();
+    }
 
     fn enr_one_key() -> CombinedKey {
         CombinedKey::secp256k1_from_bytes(vec![1; 32].as_mut_slice()).unwrap()
