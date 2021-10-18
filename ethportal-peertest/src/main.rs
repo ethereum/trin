@@ -17,7 +17,7 @@ use trin_core::portalnet::{
     utp::UtpListener,
     Enr, U256,
 };
-use trin_core::utils::setup_overlay_db;
+use trin_core::utils::db::setup_overlay_db;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
