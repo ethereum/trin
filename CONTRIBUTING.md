@@ -183,3 +183,7 @@ Any datatype of significance **should** have an accompanying comment briefly des
 ## Error handling
 - Handle errors, avoid naked `.unwrap()`s, except for in unit tests. Write descriptive error messages that give context of the problem that occured.
 - Meaningful error types should be used in place of `Result< _, String>`. Custom error types should derive from the `std::error::Error` trait. The [`thiserror`](https://docs.rs/thiserror/1.0.30/thiserror/) crate provides a useful macro to simplify creating custom error types.
+
+
+## Code Style
+- Minimize the amount of `.clone()`s used. Cloning can be a useful mechanism, but should be used with discretion. When leaned upon excessively to [satisfy the borrow checker](https://rust-unofficial.github.io/patterns/anti_patterns/borrow_clone.html) it can lead to unintended consequences.
