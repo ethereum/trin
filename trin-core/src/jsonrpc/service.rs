@@ -1,24 +1,24 @@
-use super::types::JsonRequest;
-use crate::cli::TrinConfig;
 use std::io::{self, BufRead, Read, Write};
 use std::net::{TcpListener, TcpStream};
+#[cfg(unix)]
+use std::os::unix;
 use std::str::FromStr;
 use std::sync::Mutex;
 use std::{fs, panic, process};
 
-#[cfg(unix)]
-use std::os::unix;
-
-use crate::jsonrpc::endpoints::TrinEndpoint;
-use crate::jsonrpc::types::PortalJsonRpcRequest;
 use httparse;
-use log::{debug, info};
+use log::{debug, info, warn};
 use serde_json::{json, Value};
+use thiserror::Error;
 use threadpool::ThreadPool;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::UnboundedSender;
 use ureq;
 use validator::Validate;
+
+use crate::cli::TrinConfig;
+use crate::jsonrpc::endpoints::TrinEndpoint;
+use crate::jsonrpc::types::{JsonRequest, PortalJsonRpcRequest};
 
 lazy_static! {
     static ref IPC_PATH: Mutex<String> = Mutex::new(String::new());
@@ -114,6 +114,11 @@ fn launch_http_client(
     trin_config: TrinConfig,
     portal_tx: UnboundedSender<PortalJsonRpcRequest>,
 ) {
+    ctrlc::set_handler(move || {
+        std::process::exit(1);
+    })
+    .expect("Error setting Ctrl-C handler.");
+
     let uri = format!("0.0.0.0:{}", trin_config.web3_http_port);
     let listener = TcpListener::bind(uri).unwrap();
     for stream in listener.incoming() {
@@ -131,6 +136,7 @@ fn launch_http_client(
             }
         };
     }
+    info!("Clean exit");
 }
 
 fn serve_ipc_client(
@@ -154,6 +160,7 @@ fn serve_ipc_client(
                     Err(e) => format!("Unsupported trin request: {}", e).into_bytes(),
                 };
                 tx.write_all(&formatted_response).unwrap();
+                tx.flush().unwrap();
             }
             Err(e) => {
                 debug!("An error occurred while parsing the JSON text. {}", e);
@@ -178,10 +185,22 @@ fn serve_http_client(
     // Mark the bytes read as consumed so the buffer will not return them in a subsequent read
     reader.consume(received.len());
 
-    let http_body = parse_http_body(received).unwrap();
+    let http_body = match parse_http_body(received) {
+        Ok(val) => val,
+        Err(msg) => {
+            warn!("Error parsing http request: {:?}", msg);
+            return;
+        }
+    };
     let deser = serde_json::Deserializer::from_str(&http_body);
     for obj in deser.into_iter::<JsonRequest>() {
-        let obj = obj.unwrap();
+        let obj = match obj {
+            Ok(val) => val,
+            Err(msg) => {
+                warn!("Error parsing http request: {:?}", msg);
+                break;
+            }
+        };
         let formatted_response = match obj.validate() {
             Ok(_) => process_http_request(obj, infura_url, portal_tx.clone()),
             Err(e) => format!("HTTP/1.1 400 BAD REQUEST\r\n\r\n{}", e).into_bytes(),
@@ -191,20 +210,30 @@ fn serve_http_client(
     }
 }
 
-fn parse_http_body(buf: Vec<u8>) -> Result<String, String> {
+#[derive(Error, Debug)]
+pub enum HttpParseError {
+    #[error("Unable to parse http request: {0}")]
+    InvalidRequest(String),
+}
+
+fn parse_http_body(buf: Vec<u8>) -> Result<String, HttpParseError> {
     let mut headers = [httparse::EMPTY_HEADER; 16];
     let mut req = httparse::Request::new(&mut headers);
     let body_offset = match req.parse(&buf) {
         Ok(val) => match val {
             httparse::Status::Complete(offset) => offset,
-            httparse::Status::Partial => return Err("Error parsing http request.".to_owned()),
+            httparse::Status::Partial => {
+                return Err(HttpParseError::InvalidRequest(
+                    "Http buffer parse incomplete".to_owned(),
+                ))
+            }
         },
-        Err(msg) => return Err(format!("Error parsing http request: {:?}", msg)),
+        Err(msg) => return Err(HttpParseError::InvalidRequest(msg.to_string())),
     };
     let body = buf[body_offset..buf.len()].to_vec();
     match String::from_utf8(body) {
         Ok(val) => Ok(val),
-        Err(msg) => Err(format!("Error parsing http request: {:?}", msg)),
+        Err(msg) => Err(HttpParseError::InvalidRequest(msg.to_string())),
     }
 }
 
@@ -270,7 +299,6 @@ fn dispatch_trin_request(
 
 // Handle all requests served by infura
 fn dispatch_infura_request(obj: JsonRequest, infura_url: &str) -> Result<String, String> {
-    //Re-encode json to proxy to Infura
     match proxy_to_url(&obj, infura_url) {
         Ok(result_body) => Ok(std::str::from_utf8(&result_body).unwrap().to_owned()),
         Err(err) => Err(json!({

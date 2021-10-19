@@ -15,24 +15,32 @@ pub struct PeertestConfig {
     #[structopt(
         default_value(DEFAULT_LISTEN_PORT),
         short = "p",
-        long = "listen_port",
+        long = "listen-port",
         help = "The UDP port to listen on."
     )]
     pub listen_port: u16,
 
     #[structopt(
         default_value(DEFAULT_WEB3_IPC_PATH),
-        long = "web3_ipc_path",
+        long = "web3-ipc-path",
         help = "path to json-rpc socket address over IPC"
     )]
     pub web3_ipc_path: String,
 
     #[structopt(
         short,
-        long = "target_node",
-        help = "Base64-encoded ENR's of the nodes under test"
+        long = "target-node",
+        help = "Base64-encoded ENR of the node under test"
     )]
     pub target_node: String,
+
+    #[structopt(
+        default_value = "ipc",
+        possible_values(&["http", "ipc"]),
+        long = "target-transport",
+        help = "Transport type of the node under test"
+    )]
+    pub target_transport: String,
 }
 
 impl PeertestConfig {
