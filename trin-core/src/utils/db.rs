@@ -4,8 +4,6 @@ use directories::ProjectDirs;
 use discv5::enr::NodeId;
 use rocksdb::{Options, DB};
 
-pub mod hash_delay_queue;
-
 const TRIN_DATA_ENV_VAR: &str = "TRIN_DATA_PATH";
 
 pub fn get_data_dir(node_id: NodeId) -> String {
