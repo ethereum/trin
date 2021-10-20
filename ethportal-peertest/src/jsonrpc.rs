@@ -5,6 +5,7 @@ use std::slice::Iter;
 use hyper::{self, Body, Client, Method, Request};
 use log::info;
 use serde_json::{self, Value};
+use thiserror::Error;
 
 use trin_core::portalnet::U256;
 
@@ -78,8 +79,8 @@ impl JsonRpcEndpoint {
         ALL_ENDPOINTS.iter()
     }
 
-    pub fn to_jsonrpc(self) -> Vec<u8> {
-        let data = format!(
+    pub fn to_jsonrpc(self) -> String {
+        format!(
             r#"
             {{
                 "jsonrpc":"2.0",
@@ -87,9 +88,7 @@ impl JsonRpcEndpoint {
                 "method": "{}"
             }}"#,
             self.id, self.method
-        );
-        let v: Value = serde_json::from_str(&data).unwrap();
-        serde_json::to_vec(&v).unwrap()
+        )
     }
 }
 
@@ -97,14 +96,40 @@ pub async fn test_jsonrpc_endpoints_over_ipc() {
     for endpoint in JsonRpcEndpoint::all_endpoints() {
         info!("Testing over IPC: {:?}", endpoint.method);
         let mut stream = UnixStream::connect("/tmp/trin-jsonrpc.ipc").unwrap();
-        stream.write_all(&endpoint.to_jsonrpc()).unwrap();
+        let v: Value = serde_json::from_str(&endpoint.to_jsonrpc()).unwrap();
+        let data = serde_json::to_vec(&v).unwrap();
+        stream.write_all(&data).unwrap();
         stream.flush().unwrap();
         let deser = serde_json::Deserializer::from_reader(stream);
         for obj in deser.into_iter::<Value>() {
             let response_obj = obj.unwrap();
-            let result = response_obj.get("result").unwrap();
-            validate_endpoint_response(endpoint.method, result);
+            match get_response_result(response_obj) {
+                Ok(result) => validate_endpoint_response(endpoint.method, &result),
+                Err(msg) => panic!(
+                    "Jsonrpc error for {:?} endpoint: {:?}",
+                    endpoint.method, msg
+                ),
+            }
         }
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum JsonRpcResponseError {
+    #[error("JsonRpc response contains an error: {0}")]
+    Error(String),
+
+    #[error("Invalid JsonRpc response")]
+    Invalid(),
+}
+
+fn get_response_result(response: Value) -> Result<Value, JsonRpcResponseError> {
+    match response.get("result") {
+        Some(result) => Ok(result.clone()),
+        None => match response.get("error") {
+            Some(error) => Err(JsonRpcResponseError::Error(error.to_string())),
+            None => Err(JsonRpcResponseError::Invalid()),
+        },
     }
 }
 
@@ -112,10 +137,7 @@ pub async fn test_jsonrpc_endpoints_over_http() {
     let client = Client::new();
     for endpoint in JsonRpcEndpoint::all_endpoints() {
         info!("Testing over HTTP: {:?}", endpoint.method);
-        let json_string = format!(
-            r#"{{"jsonrpc":"2.0","id":0,"method":"{}","params":[]}}"#,
-            endpoint.method
-        );
+        let json_string = endpoint.to_jsonrpc();
         let req = Request::builder()
             .method(Method::POST)
             .uri("http://127.0.0.1:8545")
@@ -124,8 +146,13 @@ pub async fn test_jsonrpc_endpoints_over_http() {
             .unwrap();
         let resp = client.request(req).await.unwrap();
         let body = hyper::body::to_bytes(resp.into_body()).await.unwrap();
-        let body_json: Value = serde_json::from_slice(&body).unwrap();
-        let result = body_json.get("result").unwrap();
-        validate_endpoint_response(endpoint.method, result);
+        let response_obj: Value = serde_json::from_slice(&body).unwrap();
+        match get_response_result(response_obj) {
+            Ok(result) => validate_endpoint_response(endpoint.method, &result),
+            Err(msg) => panic!(
+                "Jsonrpc error for {:?} endpoint: {:?}",
+                endpoint.method, msg
+            ),
+        }
     }
 }
