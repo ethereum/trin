@@ -6,8 +6,8 @@ use std::ffi::OsString;
 use std::net::SocketAddr;
 use structopt::StructOpt;
 
-const DEFAULT_WEB3_IPC_PATH: &str = "/tmp/trin-jsonrpc.ipc";
-const DEFAULT_WEB3_HTTP_PORT: &str = "8545";
+pub const DEFAULT_WEB3_IPC_PATH: &str = "/tmp/trin-jsonrpc.ipc";
+pub const DEFAULT_WEB3_HTTP_PORT: &str = "8545";
 const DEFAULT_DISCOVERY_PORT: &str = "9000";
 pub const HISTORY_NETWORK: &str = "history";
 pub const STATE_NETWORK: &str = "state";

@@ -1,14 +1,19 @@
-use ethportal_peertest::cli::PeertestConfig;
-use ethportal_peertest::events::PortalnetEvents;
-use log::info;
 use std::collections::HashMap;
 use std::sync::Arc;
+
+use log::info;
 use tokio::sync::RwLock;
-use trin_core::portalnet::utp::UtpListener;
+
+use ethportal_peertest::cli::PeertestConfig;
+use ethportal_peertest::events::PortalnetEvents;
+use ethportal_peertest::jsonrpc::{
+    test_jsonrpc_endpoints_over_http, test_jsonrpc_endpoints_over_ipc,
+};
 use trin_core::portalnet::{
     discovery::Discovery,
     overlay::{OverlayConfig, OverlayProtocol},
     types::{PortalnetConfig, ProtocolKind},
+    utp::UtpListener,
     Enr, U256,
 };
 use trin_core::utils::setup_overlay_db;
@@ -77,9 +82,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .unwrap();
         info!("State network Ping result: {:?}", ping_result);
 
-        tokio::signal::ctrl_c()
-            .await
-            .expect("failed to pause until ctrl-c");
+        match peertest_config.target_transport.as_str() {
+            "ipc" => test_jsonrpc_endpoints_over_ipc(peertest_config.target_ipc_path).await,
+            "http" => test_jsonrpc_endpoints_over_http(peertest_config.target_http_port).await,
+            _ => panic!(
+                "Invalid target-transport provided: {:?}",
+                peertest_config.target_transport
+            ),
+        }
+
+        info!("All tests passed successfully!");
+        std::process::exit(1);
     })
     .await
     .unwrap();

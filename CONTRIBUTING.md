@@ -22,8 +22,10 @@ through github via pull requests.
 * Mark unfinished pull requests with the "Work in Progress" label.
 * Before submitting a pr for review, you should run the following commands
   locally and make sure they are passing, otherwise CI will raise an error.
-  * `cargo fmt` and `cargo clippy` for linting checks
-  * `cargo test --workspace` to run all tests
+  * `cargo fmt --all -- --check` and `cargo clippy --all -- --deny warnings` for linting checks
+  * `RUSTFLAGS='-D warnings' cargo test --workspace` to run all tests
+  * Run the `ethportal-peertest` harness against a locally running node. Instructions
+	can be found in [README](ethportal-peertest/README.md).
 * Pull requests **should** always be reviewed by another member of the team
   prior to being merged.
     * Obvious exceptions include very small pull requests.
