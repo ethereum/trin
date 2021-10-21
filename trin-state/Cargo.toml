@@ -8,6 +8,7 @@ rust-version = "1.56"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+eth_trie = "0.1.0"
 log = "0.4.14"
 num = "0.4.0"
 serde_json = "1.0.59"
