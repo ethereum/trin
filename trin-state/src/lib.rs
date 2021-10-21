@@ -22,7 +22,7 @@ pub mod network;
 pub mod utils;
 
 pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("Launching trin-state...");
+    info!("Launching trin-state...");
 
     let trin_config = TrinConfig::new();
     trin_config.display_config();
