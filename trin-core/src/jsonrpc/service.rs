@@ -24,6 +24,8 @@ lazy_static! {
     static ref IPC_PATH: Mutex<String> = Mutex::new(String::new());
 }
 
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 pub fn launch_jsonrpc_server(
     trin_config: TrinConfig,
     infura_project_id: String,
@@ -256,8 +258,7 @@ fn dispatch_trin_request(
         TrinEndpoint::PortalEndpoint(_) => Ok(json!({
             "jsonrpc": "2.0",
             "id": obj.id,
-            // todo: this should be updated programatically
-            "result": "trin 0.0.1-alpha",
+            "result": format!("trin v{}", VERSION),
         })
         .to_string()),
         TrinEndpoint::InfuraEndpoint(_) => dispatch_infura_request(obj, infura_url),

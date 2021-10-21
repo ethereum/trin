@@ -167,6 +167,10 @@ want to contribute back to the PR (and the author has this enabled), we would
 still need to add their remote explicitly.
 
 
+## Releases
+- When cutting a new release, the versions of every crate in this repo should be updated simultaneously to the new version. 
+
+
 ## Tests
 
 Testing is essential to the production of software with minimal flaws. The default should always be writing tests for the code you produce.
