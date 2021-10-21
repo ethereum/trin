@@ -45,7 +45,7 @@ const ALL_ENDPOINTS: [JsonRpcEndpoint; 6] = [
 fn validate_endpoint_response(method: &str, result: &Value) {
     match method {
         "web3_clientVersion" => {
-            assert_eq!(result.as_str().unwrap(), "trin 0.0.1-alpha");
+            assert_eq!(result.as_str().unwrap(), "trin v0.1.0");
         }
         "discv5_nodeInfo" => {
             let enr = result.get("enr").unwrap();
@@ -92,10 +92,11 @@ impl JsonRpcEndpoint {
     }
 }
 
-pub async fn test_jsonrpc_endpoints_over_ipc() {
+#[allow(clippy::never_loop)]
+pub async fn test_jsonrpc_endpoints_over_ipc(target_ipc_path: String) {
     for endpoint in JsonRpcEndpoint::all_endpoints() {
         info!("Testing over IPC: {:?}", endpoint.method);
-        let mut stream = UnixStream::connect("/tmp/trin-jsonrpc.ipc").unwrap();
+        let mut stream = UnixStream::connect(&target_ipc_path).unwrap();
         let v: Value = serde_json::from_str(&endpoint.to_jsonrpc()).unwrap();
         let data = serde_json::to_vec(&v).unwrap();
         stream.write_all(&data).unwrap();
@@ -110,6 +111,8 @@ pub async fn test_jsonrpc_endpoints_over_ipc() {
                     endpoint.method, msg
                 ),
             }
+            // break out of loop here since EOF is not sent, and loop will hang
+            break;
         }
     }
 }
@@ -133,14 +136,14 @@ fn get_response_result(response: Value) -> Result<Value, JsonRpcResponseError> {
     }
 }
 
-pub async fn test_jsonrpc_endpoints_over_http() {
+pub async fn test_jsonrpc_endpoints_over_http(target_http_port: String) {
     let client = Client::new();
     for endpoint in JsonRpcEndpoint::all_endpoints() {
         info!("Testing over HTTP: {:?}", endpoint.method);
         let json_string = endpoint.to_jsonrpc();
         let req = Request::builder()
             .method(Method::POST)
-            .uri("http://127.0.0.1:8545")
+            .uri(format!("http://127.0.0.1:{}", target_http_port))
             .header("content-type", "application/json")
             .body(Body::from(json_string))
             .unwrap();

@@ -188,7 +188,7 @@ fn serve_http_client(
     let http_body = match parse_http_body(received) {
         Ok(val) => val,
         Err(msg) => {
-            warn!("Error parsing http request: {:?}", msg);
+            respond_with_parsing_error(stream, msg.to_string());
             return;
         }
     };
@@ -197,7 +197,7 @@ fn serve_http_client(
         let obj = match obj {
             Ok(val) => val,
             Err(msg) => {
-                warn!("Error parsing http request: {:?}", msg);
+                respond_with_parsing_error(stream, msg.to_string());
                 break;
             }
         };
@@ -208,6 +208,13 @@ fn serve_http_client(
         stream.write_all(&formatted_response).unwrap();
         stream.flush().unwrap();
     }
+}
+
+fn respond_with_parsing_error(mut stream: TcpStream, msg: String) {
+    warn!("Error parsing http request: {:?}", msg);
+    let resp = format!("HTTP/1.1 400 BAD REQUEST\r\n\r\n{}", msg).into_bytes();
+    stream.write_all(&resp).unwrap();
+    stream.flush().unwrap();
 }
 
 #[derive(Error, Debug)]

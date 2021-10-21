@@ -1,6 +1,8 @@
 use std::env;
 use std::ffi::OsString;
 use structopt::StructOpt;
+use trin_core::cli::DEFAULT_WEB3_HTTP_PORT as DEFAULT_TARGET_HTTP_PORT;
+use trin_core::cli::DEFAULT_WEB3_IPC_PATH as DEFAULT_TARGET_IPC_PATH;
 
 const DEFAULT_LISTEN_PORT: &str = "9876";
 const DEFAULT_WEB3_IPC_PATH: &str = "/tmp/json-rpc-peertest.ipc";
@@ -41,6 +43,20 @@ pub struct PeertestConfig {
         help = "Transport type of the node under test"
     )]
     pub target_transport: String,
+
+    #[structopt(
+        default_value = DEFAULT_TARGET_IPC_PATH,
+        long = "target-ipc-path",
+        help = "IPC path of target node under test"
+    )]
+    pub target_ipc_path: String,
+
+    #[structopt(
+        default_value = DEFAULT_TARGET_HTTP_PORT,
+        long = "target-http-port",
+        help = "HTTP port of target node under test"
+    )]
+    pub target_http_port: String,
 }
 
 impl PeertestConfig {

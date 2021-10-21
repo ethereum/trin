@@ -83,8 +83,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         info!("State network Ping result: {:?}", ping_result);
 
         match peertest_config.target_transport.as_str() {
-            "ipc" => test_jsonrpc_endpoints_over_ipc().await,
-            "http" => test_jsonrpc_endpoints_over_http().await,
+            "ipc" => test_jsonrpc_endpoints_over_ipc(peertest_config.target_ipc_path).await,
+            "http" => test_jsonrpc_endpoints_over_http(peertest_config.target_http_port).await,
             _ => panic!(
                 "Invalid target-transport provided: {:?}",
                 peertest_config.target_transport
