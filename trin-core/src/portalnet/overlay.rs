@@ -1,5 +1,5 @@
 use crate::locks::RwLoggingExt;
-use crate::utils::xor_two_values;
+use crate::utils::distance::xor_two_values;
 
 use super::{
     discovery::Discovery,
