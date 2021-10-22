@@ -35,8 +35,12 @@ impl StateNetwork {
         // Trigger bonding with bootnodes, at both the base layer and portal overlay.
         // The overlay ping via talkreq will trigger a session at the base layer, then
         // a session on the (overlay) portal network.
-        let guard = self.overlay.discovery.read_with_warn().await;
-        for enr in guard.discv5.table_entries_enr() {
+        let table_entries = {
+            // use a nested scope so that the guard is quickly dropped
+            let guard = self.overlay.discovery.read_with_warn().await;
+            guard.discv5.table_entries_enr()
+        };
+        for enr in table_entries {
             debug!("Attempting bond with bootnode {}", enr);
             let ping_result = self
                 .overlay
