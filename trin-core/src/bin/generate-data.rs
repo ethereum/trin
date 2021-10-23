@@ -7,7 +7,7 @@ use std::sync::Arc;
 use structopt::StructOpt;
 use trin_core::portalnet::storage::{DistanceFunction, PortalStorage, PortalStorageConfig};
 use trin_core::portalnet::U256;
-use trin_core::utils::get_data_dir;
+use trin_core::utils::db::get_data_dir;
 
 // For every 1 kb of data we store (key + value), RocksDB tends to grow by this many kb on disk...
 // ...but this is a crude empirical estimation that works mainly with default value data size of 32

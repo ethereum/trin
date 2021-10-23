@@ -1,5 +1,5 @@
 use super::U256;
-use crate::utils::{get_data_dir, xor_two_values};
+use crate::utils::{db::get_data_dir, distance::xor_two_values};
 use discv5::enr::NodeId;
 use hex;
 use log;
