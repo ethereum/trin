@@ -603,7 +603,7 @@ impl UtpStream {
             .discovery
             .read_with_warn()
             .await
-            .send_talkreq(self.enr.clone(), ProtocolId::Utp, packet.0.clone())
+            .send_talk_req(self.enr.clone(), ProtocolId::Utp, packet.0.clone())
             .await;
         debug!("uTP TalkRequest result: {:?}", talk_request_result);
     }

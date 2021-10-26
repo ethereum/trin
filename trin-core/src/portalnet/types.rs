@@ -12,7 +12,7 @@ use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, VariableList};
 use thiserror::Error;
 
-use super::overlay::OverlayRequestError;
+use super::overlay_service::OverlayRequestError;
 use super::{Enr, U256};
 use hex::FromHexError;
 
@@ -78,7 +78,7 @@ pub enum ProtocolIdError {
 }
 
 /// Protocol identifiers
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ProtocolId {
     State,
     History,

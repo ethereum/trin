@@ -11,6 +11,8 @@ pub mod storage;
 pub mod types;
 pub mod utp;
 
+mod overlay_service;
+
 pub type Enr = discv5::enr::Enr<CombinedKey>;
 
 construct_uint! {

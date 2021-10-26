@@ -9,7 +9,6 @@ use trin_core::portalnet::{
     discovery::Discovery,
     overlay::{OverlayConfig, OverlayProtocol, OverlayRequestError},
     types::{PortalnetConfig, ProtocolId},
-    U256,
 };
 
 use crate::trie::TrieDB;
@@ -31,7 +30,14 @@ impl StateNetwork {
         let trie = EthTrie::new(Arc::new(triedb));
 
         let config = OverlayConfig::default();
-        let overlay = OverlayProtocol::new(config, discovery, db, portal_config.data_radius).await;
+        let overlay = OverlayProtocol::new(
+            config,
+            discovery,
+            db,
+            portal_config.data_radius,
+            ProtocolId::State,
+        )
+        .await;
 
         Self {
             overlay: Arc::new(overlay),
@@ -51,14 +57,15 @@ impl StateNetwork {
         };
         for enr in table_entries {
             debug!("Attempting bond with bootnode {}", enr);
-            let ping_result = self
-                .overlay
-                .send_ping(U256::from(u64::MAX), enr.clone(), ProtocolId::State, None)
-                .await;
+            let ping_result = self.overlay.send_ping(enr.clone(), None).await;
 
             match ping_result {
                 Ok(_) => {
                     debug!("Successfully bonded with {}", enr);
+                    continue;
+                }
+                Err(OverlayRequestError::ChannelFailure(error)) => {
+                    debug!("Channel failure sending ping: {}", error);
                     continue;
                 }
                 Err(OverlayRequestError::Timeout) => {
@@ -69,6 +76,10 @@ impl StateNetwork {
                     debug!("Empty response to ping from: {}", enr);
                     continue;
                 }
+                Err(OverlayRequestError::InvalidRequest) => {
+                    debug!("Sent invalid ping request to {}", enr);
+                    continue;
+                }
                 Err(OverlayRequestError::InvalidResponse) => {
                     debug!("Invalid ping response from: {}", enr);
                     continue;
@@ -77,9 +88,9 @@ impl StateNetwork {
                     debug!("Error decoding ping response from: {}", enr);
                     continue;
                 }
-                Err(OverlayRequestError::Other(err)) => {
-                    debug!("Unexpected error while bonding with {} => {:?}", enr, err);
-                    return Err(err.to_string());
+                Err(OverlayRequestError::Discv5Error(error)) => {
+                    debug!("Unexpected error while bonding with {} => {:?}", enr, error);
+                    return Err(error.to_string());
                 }
             }
         }
