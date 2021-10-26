@@ -26,6 +26,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::spawn(async move {
         let peertest_config = PeertestConfig::default();
         let portal_config = PortalnetConfig {
+            external_addr: peertest_config.external_addr,
             listen_port: peertest_config.listen_port,
             ..Default::default()
         };

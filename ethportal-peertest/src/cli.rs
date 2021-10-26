@@ -1,5 +1,6 @@
 use std::env;
 use std::ffi::OsString;
+use std::net::SocketAddr;
 use structopt::StructOpt;
 use trin_core::cli::DEFAULT_WEB3_HTTP_PORT as DEFAULT_TARGET_HTTP_PORT;
 use trin_core::cli::DEFAULT_WEB3_IPC_PATH as DEFAULT_TARGET_IPC_PATH;
@@ -57,6 +58,12 @@ pub struct PeertestConfig {
         help = "HTTP port of target node under test"
     )]
     pub target_http_port: String,
+
+    #[structopt(
+        long = "external-address",
+        help = "(Only use this if you are behind a NAT) This is the address which will be advertised to peers (in an ENR). Changing it does not change which port or address trin binds to."
+    )]
+    pub external_addr: Option<SocketAddr>,
 }
 
 impl PeertestConfig {
