@@ -98,7 +98,7 @@ impl PortalnetEvents {
                     }
                     _ => {
                         warn!(
-                            "Received TalkRequest on uknown protocol from={} protocol={} body={}",
+                            "Received TalkRequest on unknown protocol from={} protocol={} body={}",
                             request.node_id(),
                             hex::encode(request.protocol()),
                             hex::encode(request.body()),
