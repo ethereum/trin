@@ -1,4 +1,5 @@
 use std::convert::{TryFrom, TryInto};
+use std::fmt;
 use std::net::SocketAddr;
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
@@ -194,10 +195,66 @@ pub struct Ping {
     pub payload: Option<CustomPayload>,
 }
 
+impl fmt::Display for Ping {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.payload {
+            None => {
+                write!(f, "Ping(enr_seq={})", self.enr_seq)
+            }
+            Some(ref custom_payload) => match custom_payload.payload {
+                None => {
+                    write!(
+                        f,
+                        "Ping(enr_seq={}, radius={})",
+                        self.enr_seq, custom_payload.data_radius,
+                    )
+                }
+                Some(ref bytelist) => {
+                    write!(
+                        f,
+                        "Ping(enr_seq={}, radius={}, payload={})",
+                        self.enr_seq,
+                        custom_payload.data_radius,
+                        hex::encode(bytelist.as_ssz_bytes())
+                    )
+                }
+            },
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Clone, Encode, Decode)]
 pub struct Pong {
     pub enr_seq: u64,
     pub payload: Option<CustomPayload>,
+}
+
+impl fmt::Display for Pong {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.payload {
+            None => {
+                write!(f, "Pong(enr_seq={})", self.enr_seq)
+            }
+            Some(ref custom_payload) => match custom_payload.payload {
+                None => {
+                    write!(
+                        f,
+                        "Pong(enr_seq={}, radius={})",
+                        self.enr_seq, custom_payload.data_radius,
+                    )
+                }
+                Some(ref bytelist) => {
+                    write!(
+                        f,
+                        "Pong(enr_seq={}, radius={}, payload={})",
+                        self.enr_seq,
+                        custom_payload.data_radius,
+                        hex::encode(bytelist.as_ssz_bytes())
+                    )
+                }
+            },
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone, Encode, Decode)]

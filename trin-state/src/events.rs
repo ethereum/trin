@@ -14,8 +14,6 @@ pub struct StateEvents {
 impl StateEvents {
     pub async fn process_requests(mut self) {
         while let Some(talk_request) = self.event_rx.recv().await {
-            debug!("Got state request {:?}", talk_request);
-
             let reply = match self
                 .network
                 .write_with_warn()
@@ -24,7 +22,10 @@ impl StateEvents {
                 .process_one_request(&talk_request)
                 .await
             {
-                Ok(r) => Message::Response(r).to_bytes(),
+                Ok(r) => {
+                    debug!("Sending reply: {:?}", r);
+                    Message::Response(r).to_bytes()
+                }
                 Err(e) => {
                     error!("failed to process portal state event: {}", e);
                     e.into_bytes()

@@ -54,11 +54,26 @@ impl PortalnetEvents {
     /// Receives a request from the talkreq handler and sends a response back
     pub async fn process_discv5_requests(mut self) {
         while let Some(event) = self.protocol_receiver.recv().await {
-            debug!("Got discv5 event {:?}", event);
-
             let request = match event {
                 Discv5Event::TalkRequest(r) => r,
-                _ => continue,
+                Discv5Event::NodeInserted { node_id, replaced } => {
+                    match replaced {
+                        Some(old_node_id) => {
+                            debug!(
+                                "Received NodeInserted(node_id={}, replaced={})",
+                                node_id, old_node_id,
+                            );
+                        }
+                        None => {
+                            debug!("Received NodeInserted(node_id={})", node_id);
+                        }
+                    }
+                    continue;
+                }
+                event => {
+                    debug!("Got discv5 event {:?}", event);
+                    continue;
+                }
             };
 
             match std::str::from_utf8(request.protocol()) {
@@ -82,7 +97,12 @@ impl PortalnetEvents {
                         self.process_utp_byte_stream().await;
                     }
                     _ => {
-                        warn!("Non supported protocol : {}", protocol);
+                        warn!(
+                            "Received TalkRequest on uknown protocol from={} protocol={} body={}",
+                            request.node_id(),
+                            hex::encode(request.protocol()),
+                            hex::encode(request.body()),
+                        );
                     }
                 },
                 Err(_) => warn!("Invalid utf8 protocol decode"),
