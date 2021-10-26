@@ -1,6 +1,6 @@
 version: 2.1
 orbs:
-  rust: circleci/rust@1.5.0
+  rust: circleci/rust@1.6.0
   win: circleci/windows@2.2.0
 jobs:
   lint-build-test:
@@ -8,7 +8,7 @@ jobs:
             Check linting with Clippy and rustfmt, build the crate, and run tests.
         executor:
             name: rust/default
-            tag: 1.55.0
+            tag: 1.56.0
         steps:
             - checkout
             - restore_cache:
