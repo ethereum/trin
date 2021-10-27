@@ -5,7 +5,7 @@ use tokio::sync::RwLock;
 use trin_core::locks::RwLoggingExt;
 use trin_core::portalnet::{
     discovery::Discovery,
-    overlay::{OverlayConfig, OverlayProtocol, SendPingError},
+    overlay::{OverlayConfig, OverlayProtocol, OverlayRequestError},
     types::{PortalnetConfig, ProtocolId},
     U256,
 };
@@ -52,11 +52,23 @@ impl StateNetwork {
                     debug!("Successfully bonded with {}", enr);
                     continue;
                 }
-                Err(SendPingError::Timeout) => {
+                Err(OverlayRequestError::Timeout) => {
                     debug!("Timed out while bonding with {}", enr);
                     continue;
                 }
-                Err(SendPingError::Other(err)) => {
+                Err(OverlayRequestError::EmptyResponse) => {
+                    debug!("Empty response to ping from: {}", enr);
+                    continue;
+                }
+                Err(OverlayRequestError::InvalidResponse) => {
+                    debug!("Invalid ping response from: {}", enr);
+                    continue;
+                }
+                Err(OverlayRequestError::DecodeError) => {
+                    debug!("Error decoding ping response from: {}", enr);
+                    continue;
+                }
+                Err(OverlayRequestError::Other(err)) => {
                     debug!("Unexpected error while bonding with {} => {:?}", enr, err);
                     return Err(err.to_string());
                 }
