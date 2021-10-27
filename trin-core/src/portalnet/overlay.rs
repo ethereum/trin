@@ -15,12 +15,12 @@ use discv5::{
     kbucket::{Filter, KBucketsTable},
     RequestError, TalkRequest,
 };
-use log::debug;
 use rocksdb::DB;
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::RwLock;
+use tracing::debug;
 
 /// Maximum number of ENRs in response to FindNodes.
 const FIND_NODES_MAX_NODES: usize = 32;

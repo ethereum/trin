@@ -1,8 +1,9 @@
 use crate::network::StateNetwork;
 use discv5::TalkRequest;
-use log::{debug, error, warn};
 use std::sync::Arc;
 use tokio::sync::{mpsc::UnboundedReceiver, RwLock};
+use tracing::Instrument;
+use tracing::{debug, error, warn};
 use trin_core::locks::RwLoggingExt;
 use trin_core::portalnet::types::Message;
 
@@ -20,6 +21,7 @@ impl StateEvents {
                 .await
                 .overlay
                 .process_one_request(&talk_request)
+                .instrument(tracing::info_span!("state_network"))
                 .await
             {
                 Ok(r) => {
