@@ -6,7 +6,7 @@ use trin_core::locks::RwLoggingExt;
 use trin_core::portalnet::{
     discovery::Discovery,
     overlay::{OverlayConfig, OverlayProtocol, SendPingError},
-    types::{PortalnetConfig, ProtocolKind},
+    types::{PortalnetConfig, ProtocolId},
     U256,
 };
 
@@ -44,7 +44,7 @@ impl StateNetwork {
             debug!("Attempting bond with bootnode {}", enr);
             let ping_result = self
                 .overlay
-                .send_ping(U256::from(u64::MAX), enr.clone(), ProtocolKind::State, None)
+                .send_ping(U256::from(u64::MAX), enr.clone(), ProtocolId::State, None)
                 .await;
 
             match ping_result {

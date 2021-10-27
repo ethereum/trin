@@ -10,8 +10,10 @@ use ssz;
 use ssz::{Decode, DecodeError, Encode, SszDecoderBuilder, SszEncoder};
 use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, VariableList};
+use thiserror::Error;
 
 use super::{Enr, U256};
+use hex::FromHexError;
 
 type ByteList = VariableList<u8, typenum::U2048>;
 
@@ -38,17 +40,61 @@ impl Default for PortalnetConfig {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
-pub enum ProtocolKind {
-    History,
-    State,
+#[derive(Error, Debug)]
+pub enum ProtocolIdError {
+    #[error("Unable to decode protocol id to bytes: {0}")]
+    Decode(FromHexError),
+
+    #[error("invalid protocol id")]
+    Invalid,
 }
 
-impl ToString for ProtocolKind {
-    fn to_string(&self) -> String {
-        match self {
-            ProtocolKind::History => "history".to_string(),
-            ProtocolKind::State => "state".to_string(),
+/// Protocol identifiers
+#[derive(Debug)]
+pub enum ProtocolId {
+    State,
+    History,
+    TransactionGossip,
+    HeaderGossip,
+    CanonicalIndices,
+    Utp,
+}
+
+/// Encode hex string to protocol id
+impl FromStr for ProtocolId {
+    type Err = ProtocolIdError;
+
+    fn from_str(input: &str) -> Result<ProtocolId, Self::Err> {
+        match input {
+            "500A" => Ok(ProtocolId::State),
+            "500B" => Ok(ProtocolId::History),
+            "500C" => Ok(ProtocolId::TransactionGossip),
+            "500D" => Ok(ProtocolId::HeaderGossip),
+            "500E" => Ok(ProtocolId::CanonicalIndices),
+            // Utp protocol id is placeholder for now
+            "7500" => Ok(ProtocolId::Utp),
+            _ => Err(ProtocolIdError::Invalid),
+        }
+    }
+}
+
+/// Decode ProtocolId to raw bytes
+impl TryFrom<ProtocolId> for Vec<u8> {
+    type Error = ProtocolIdError;
+
+    fn try_from(protocol_id: ProtocolId) -> Result<Self, Self::Error> {
+        let bytes = match protocol_id {
+            ProtocolId::State => hex::decode("500A"),
+            ProtocolId::History => hex::decode("500B"),
+            ProtocolId::TransactionGossip => hex::decode("500C"),
+            ProtocolId::HeaderGossip => hex::decode("500D"),
+            ProtocolId::CanonicalIndices => hex::decode("500E"),
+            ProtocolId::Utp => hex::decode("7500"),
+        };
+
+        match bytes {
+            Ok(bytes) => Ok(bytes),
+            Err(e) => Err(ProtocolIdError::Decode(e)),
         }
     }
 }
@@ -584,5 +630,21 @@ mod test {
         assert!(enr_one.eq(decoded.enrs.first().unwrap()));
         assert!(enr_two.eq(&decoded.enrs.into_iter().nth(1).unwrap()));
         assert_eq!(actual.len(), msg.ssz_bytes_len());
+    }
+
+    #[test]
+    fn protocol_id_encode_decode() {
+        let original_hex = "500A";
+        let protocol_id = ProtocolId::from_str(original_hex).unwrap();
+        let expected_hex = hex::encode_upper(Vec::try_from(protocol_id).unwrap());
+
+        assert_eq!(original_hex, expected_hex);
+    }
+
+    #[test]
+    #[should_panic]
+    fn invalid_protocol_id() {
+        let hex_string = "500F";
+        ProtocolId::from_str(hex_string).unwrap();
     }
 }

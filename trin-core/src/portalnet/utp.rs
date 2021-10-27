@@ -13,8 +13,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
 
 use crate::locks::RwLoggingExt;
+use crate::portalnet::types::ProtocolId;
 
-pub const UTP_PROTOCOL: &str = "utp";
 pub const HEADER_SIZE: usize = 20;
 pub const MAX_DISCV5_PACKET_SIZE: usize = 1280;
 pub const MIN_PACKET_SIZE: usize = 150;
@@ -603,7 +603,7 @@ impl UtpStream {
             .discovery
             .read_with_warn()
             .await
-            .send_talkreq(self.enr.clone(), UTP_PROTOCOL.to_string(), packet.0.clone())
+            .send_talkreq(self.enr.clone(), ProtocolId::Utp, packet.0.clone())
             .await;
         debug!("uTP TalkRequest result: {:?}", talk_request_result);
     }
