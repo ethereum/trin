@@ -27,6 +27,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let peertest_config = PeertestConfig::default();
         let portal_config = PortalnetConfig {
             listen_port: peertest_config.listen_port,
+            internal_ip: true,
             ..Default::default()
         };
 
@@ -67,9 +68,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ProtocolKind::History,
                 None,
             )
-            .await
-            .unwrap();
-        info!("History network Ping result: {:?}", ping_result);
+            .await;
+        match ping_result {
+            Ok(val) => info!("Successful ping to History network: {:?}", val),
+            Err(msg) => panic!("Invalid ping to History network: {:?}", msg),
+        }
 
         info!("Pinging {} on state network", target_node);
         let ping_result = overlay
@@ -79,9 +82,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ProtocolKind::State,
                 None,
             )
-            .await
-            .unwrap();
-        info!("State network Ping result: {:?}", ping_result);
+            .await;
+        match ping_result {
+            Ok(val) => info!("Successful ping to State network: {:?}", val),
+            Err(msg) => panic!("Invalid ping to State network: {:?}", msg),
+        }
 
         match peertest_config.target_transport.as_str() {
             "ipc" => test_jsonrpc_endpoints_over_ipc(peertest_config.target_ipc_path).await,

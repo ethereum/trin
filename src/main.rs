@@ -45,6 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         external_addr: trin_config.external_addr,
         private_key: trin_config.private_key.clone(),
         listen_port: trin_config.discovery_port,
+        internal_ip: trin_config.internal_ip,
         bootnode_enrs,
         ..Default::default()
     };

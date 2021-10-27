@@ -44,16 +44,20 @@ impl Discovery {
     pub fn new(portal_config: PortalnetConfig) -> Result<Self, String> {
         let listen_all_ips = SocketAddr::new("0.0.0.0".parse().unwrap(), portal_config.listen_port);
 
-        let external_addr = portal_config
-            .external_addr
-            .or_else(|| socket::stun_for_external(&listen_all_ips))
-            .unwrap_or_else(|| socket::default_local_address(portal_config.listen_port));
+        let ip_addr = if portal_config.internal_ip {
+            socket::default_local_address(portal_config.listen_port)
+        } else {
+            portal_config
+                .external_addr
+                .or_else(|| socket::stun_for_external(&listen_all_ips))
+                .unwrap_or_else(|| socket::default_local_address(portal_config.listen_port))
+        };
 
         let config = Config {
             discv5_config: Discv5ConfigBuilder::default().build(),
             // This is for defining the ENR:
-            listen_port: external_addr.port(),
-            listen_address: external_addr.ip(),
+            listen_port: ip_addr.port(),
+            listen_address: ip_addr.ip(),
             bootnode_enrs: portal_config.bootnode_enrs,
             private_key: portal_config.private_key,
             ..Default::default()

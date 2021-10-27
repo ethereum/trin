@@ -70,6 +70,12 @@ pub struct TrinConfig {
     pub external_addr: Option<SocketAddr>,
 
     #[structopt(
+        long = "internal-ip",
+        help = "(For testing purposes) Use local ip address rather than external via STUN."
+    )]
+    pub internal_ip: bool,
+
+    #[structopt(
         validator(check_private_key_length),
         long = "unsafe-private-key",
         help = "Hex encoded 32 byte private key (considered unsafe to pass in pk as cli arg, as it's stored in terminal history - keyfile support coming soon)"
@@ -169,6 +175,7 @@ mod test {
             pool_size: 2,
             web3_transport: "ipc".to_string(),
             discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
+            internal_ip: false,
             bootnodes: vec![],
             external_addr: None,
             private_key: None,
@@ -195,6 +202,7 @@ mod test {
             pool_size: 3,
             web3_transport: "http".to_string(),
             discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
+            internal_ip: false,
             bootnodes: vec![],
             networks: DEFAULT_SUBNETWORKS
                 .split(",")
@@ -232,6 +240,7 @@ mod test {
             pool_size: 2,
             web3_transport: "ipc".to_string(),
             discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
+            internal_ip: false,
             bootnodes: vec![],
             networks: DEFAULT_SUBNETWORKS
                 .split(",")
@@ -265,6 +274,7 @@ mod test {
             pool_size: 2,
             web3_transport: "ipc".to_string(),
             discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
+            internal_ip: false,
             bootnodes: vec![],
             networks: DEFAULT_SUBNETWORKS
                 .split(",")
@@ -322,6 +332,7 @@ mod test {
             pool_size: 2,
             web3_transport: "ipc".to_string(),
             discovery_port: 999,
+            internal_ip: false,
             bootnodes: vec![],
             networks: DEFAULT_SUBNETWORKS
                 .split(",")
@@ -344,6 +355,7 @@ mod test {
             pool_size: 2,
             web3_transport: "ipc".to_string(),
             discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
+            internal_ip: false,
             bootnodes: vec!["enr:-aoeu".to_string(), "enr:-htns".to_string()],
             networks: DEFAULT_SUBNETWORKS
                 .split(",")
@@ -388,6 +400,7 @@ mod test {
             pool_size: 2,
             web3_transport: "ipc".to_string(),
             discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
+            internal_ip: false,
             bootnodes: vec![],
             networks: DEFAULT_SUBNETWORKS
                 .split(",")
