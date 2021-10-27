@@ -15,12 +15,12 @@ use discv5::{
     kbucket::{Filter, KBucketsTable},
     RequestError, TalkRequest,
 };
-use log::debug;
 use rocksdb::DB;
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::RwLock;
+use tracing::debug;
 
 /// Maximum number of ENRs in response to FindNodes.
 const FIND_NODES_MAX_NODES: usize = 32;
@@ -144,16 +144,20 @@ impl OverlayProtocol {
         };
 
         let response = match request {
-            Request::Ping(Ping { .. }) => {
-                debug!("Got overlay ping request {:?}", request);
+            Request::Ping(ping) => {
+                debug!("Received {}", ping);
                 let enr_seq = self.discovery.read_with_warn().await.local_enr().seq();
                 let payload = CustomPayload::new(self.data_radius().await, None);
-                Response::Pong(Pong {
+                let pong = Pong {
                     enr_seq,
                     payload: Some(payload),
-                })
+                };
+                debug!("Sending {}", pong);
+
+                Response::Pong(pong)
             }
             Request::FindNodes(FindNodes { distances }) => {
+                debug!("Received FindNodes(distances={:?})", distances);
                 let distances64: Vec<u64> = distances.iter().map(|x| (*x).into()).collect();
                 let enrs = self.nodes_by_distance(distances64).await;
                 Response::Nodes(Nodes {
@@ -284,6 +288,7 @@ impl OverlayProtocol {
             enr_seq,
             payload: Some(payload),
         };
+        debug!("Sending {} dest={}", msg, enr.node_id());
         Ok(self
             .discovery
             .read_with_warn()

@@ -1,8 +1,9 @@
 use crate::network::StateNetwork;
 use discv5::TalkRequest;
-use log::{debug, error, warn};
 use std::sync::Arc;
 use tokio::sync::{mpsc::UnboundedReceiver, RwLock};
+use tracing::Instrument;
+use tracing::{debug, error, warn};
 use trin_core::locks::RwLoggingExt;
 use trin_core::portalnet::types::Message;
 
@@ -14,17 +15,19 @@ pub struct StateEvents {
 impl StateEvents {
     pub async fn process_requests(mut self) {
         while let Some(talk_request) = self.event_rx.recv().await {
-            debug!("Got state request {:?}", talk_request);
-
             let reply = match self
                 .network
                 .write_with_warn()
                 .await
                 .overlay
                 .process_one_request(&talk_request)
+                .instrument(tracing::info_span!("state_network"))
                 .await
             {
-                Ok(r) => Message::Response(r).to_bytes(),
+                Ok(r) => {
+                    debug!("Sending reply: {:?}", r);
+                    Message::Response(r).to_bytes()
+                }
                 Err(e) => {
                     error!("failed to process portal state event: {}", e);
                     e.into_bytes()
