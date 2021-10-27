@@ -24,33 +24,29 @@ pub struct JsonRpcHandler {
 impl JsonRpcHandler {
     pub async fn process_jsonrpc_requests(mut self) {
         while let Some(request) = self.portal_jsonrpc_rx.recv().await {
-            let response: Value = match request.endpoint {
+            let response = match request.endpoint {
                 TrinEndpoint::Discv5Endpoint(endpoint) => match endpoint {
-                    Discv5Endpoint::NodeInfo => self.discovery.read_with_warn().await.node_info(),
+                    Discv5Endpoint::NodeInfo => {
+                        Ok(self.discovery.read_with_warn().await.node_info())
+                    }
                     Discv5Endpoint::RoutingTableInfo => {
-                        self.discovery.write_with_warn().await.routing_table_info()
+                        Ok(self.discovery.write_with_warn().await.routing_table_info())
                     }
                 },
-                TrinEndpoint::HistoryEndpoint(endpoint) => {
-                    let response = match self.history_jsonrpc_tx.as_ref() {
-                        Some(tx) => proxy_query_to_history_subnet(tx, endpoint).await,
-                        None => Err("Chain history subnetwork unavailable.".to_string()),
-                    };
-                    response.unwrap_or_else(Value::String)
-                }
-                TrinEndpoint::StateEndpoint(endpoint) => {
-                    let response = match self.state_jsonrpc_tx.as_ref() {
-                        Some(tx) => proxy_query_to_state_subnet(tx, endpoint).await,
-                        None => Err("State subnetwork unavailable.".to_string()),
-                    };
-                    response.unwrap_or_else(Value::String)
-                }
-                _ => Value::String(format!(
+                TrinEndpoint::HistoryEndpoint(endpoint) => match self.history_jsonrpc_tx.as_ref() {
+                    Some(tx) => proxy_query_to_history_subnet(tx, endpoint).await,
+                    None => Err("Chain history subnetwork unavailable.".to_string()),
+                },
+                TrinEndpoint::StateEndpoint(endpoint) => match self.state_jsonrpc_tx.as_ref() {
+                    Some(tx) => proxy_query_to_state_subnet(tx, endpoint).await,
+                    None => Err("State subnetwork unavailable.".to_string()),
+                },
+                _ => Err(format!(
                     "Can't process portal network endpoint {:?}",
                     request.endpoint
                 )),
             };
-            let _ = request.resp.send(Ok(response));
+            let _ = request.resp.send(response);
         }
     }
 }
