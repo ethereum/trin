@@ -1,6 +1,8 @@
+use std::sync::Arc;
+
+use eth_trie::EthTrie;
 use log::debug;
 use rocksdb::DB;
-use std::sync::Arc;
 use tokio::sync::RwLock;
 use trin_core::locks::RwLoggingExt;
 use trin_core::portalnet::{
@@ -10,10 +12,13 @@ use trin_core::portalnet::{
     U256,
 };
 
+use crate::trie::TrieDB;
+
 /// State network layer on top of the overlay protocol. Encapsulates state network specific data and logic.
 #[derive(Clone)]
 pub struct StateNetwork {
     pub overlay: Arc<OverlayProtocol>,
+    pub trie: Arc<EthTrie<TrieDB>>,
 }
 
 impl StateNetwork {
@@ -22,11 +27,15 @@ impl StateNetwork {
         db: Arc<DB>,
         portal_config: PortalnetConfig,
     ) -> Self {
+        let triedb = TrieDB::new(db.clone());
+        let trie = EthTrie::new(Arc::new(triedb));
+
         let config = OverlayConfig::default();
         let overlay = OverlayProtocol::new(config, discovery, db, portal_config.data_radius).await;
 
         Self {
             overlay: Arc::new(overlay),
+            trie: Arc::new(trie),
         }
     }
 
