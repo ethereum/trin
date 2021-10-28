@@ -55,6 +55,7 @@ fn main() {
             let resp = client.routing_table_info();
             println!("resp: {:?}", resp);
 
+            // TODO: serialize these in a prettier way
             let resp = client.state_data_radius();
             println!("resp: {:?}", resp);
         }
@@ -89,18 +90,22 @@ pub struct RoutingTableInfoResponse {
     pub local_node_id: String,
 }
 
-pub trait ParseResponse<'a>
+pub trait ParseResponse
 {
-    fn parse(value: &'a jsonrpc::Response) -> Result<Self, &'static str> where Self: Sized;
+    fn parse(value: jsonrpc::Response) -> Result<Self, &'static str> where Self: Sized;
 }
 
 // this looks exactly like TryFrom, but we cannot provide a blanket implementation of
 // TryFrom for two reasons:
 // - a conflicting blanket implementation already exists in core (TryInto)
 // - we cannot write blanket implementations for traits which are not defined in our crate
-impl<'a, T> ParseResponse<'a> for T
-where T: serde::Deserialize<'a> {
-    fn parse(value: &'a jsonrpc::Response) -> Result<Self, &'static str> where Self: Sized{
+// We use DeserializeOwned in lieu of Deserialize because this is called in a loop where
+//  some data is read from a socket, then a response is returned, then the original data
+//  is thrown away. In order for the lifetimes to work out our responses must not hold any
+//  references to the original data. More on that here: https://serde.rs/lifetimes.html
+impl<T> ParseResponse for T
+where T: serde::de::DeserializeOwned {
+    fn parse(value: jsonrpc::Response) -> Result<Self, &'static str> where Self: Sized{
         if let Some(ref raw_value) = value.result {
             Ok(serde_json::from_str(raw_value.get()).unwrap())
         } else {
@@ -108,7 +113,6 @@ where T: serde::Deserialize<'a> {
             Err("no value")
         }
     }
-
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -145,6 +149,12 @@ impl TrinClient<UnixStream>
     }
 }
 
+// TryClone is used because JSON-RPC responses are not followed by EOF. We must read bytes
+// from the stream until a complete object is detected, and the simplest way of doing that
+// with available APIs is to give ownership of a Read to a serde_json::Deserializer. If we
+// gave it exclusive ownership that would require us to open a new connection for every
+// command we wanted to send! By making a clone (or, by trying to) we can have our cake
+// and eat it too.
 impl<'a, S> TrinClient<S>
 where S: std::io::Read + std::io::Write + TryClone
 {
@@ -155,7 +165,8 @@ where S: std::io::Read + std::io::Write + TryClone
         result
     }
 
-    fn make_request<T: serde::Deserialize<'a>>(&mut self, req: jsonrpc::Request) -> T {
+    // TODO: a lot of error handling cleanup
+    fn make_request<T: serde::de::DeserializeOwned>(&mut self, req: jsonrpc::Request) -> T {
         let data = serde_json::to_vec(&req).unwrap();
 
         self.stream.write_all(&data).unwrap();
@@ -166,52 +177,21 @@ where S: std::io::Read + std::io::Write + TryClone
         for obj in deser.into_iter::<jsonrpc::Response>() {
             let response_obj = obj.unwrap();
             println!("response: {:?}", response_obj);
-            let resp = T::parse(&response_obj);
+            let resp = T::parse(response_obj);
             return resp.unwrap();
         }
 
+        // TODO: is this actually unreachable? What if they immediately send EOF?
         unreachable!()
     }
 
     fn routing_table_info(&mut self) -> RoutingTableInfoResponse {
         let req = self.build_request("discv5_routingTableInfo");
         self.make_request(req)
-
-        /*
-        let data = serde_json::to_vec(&req).unwrap();
-
-        self.stream.write_all(&data).unwrap();
-        self.stream.flush().unwrap();
-
-        let clone = self.stream.try_clone().unwrap();
-        let deser = serde_json::Deserializer::from_reader(clone);
-        for obj in deser.into_iter::<jsonrpc::Response>() {
-            let response_obj = obj.unwrap();
-            println!("response: {:?}", response_obj);
-            let routing = RoutingTableInfoResponse::parse(&response_obj);
-            return routing.unwrap();
-        }
-
-        unreachable!()
-        */
     }
 
     fn state_data_radius(&mut self) -> DataRadiusResponse {
         let req = self.build_request("portalState_dataRadius");
-        let data = serde_json::to_vec(&req).unwrap();
-
-        self.stream.write_all(&data).unwrap();
-        self.stream.flush().unwrap();
-
-        let clone = self.stream.try_clone().unwrap();
-        let deser = serde_json::Deserializer::from_reader(clone);
-        for obj in deser.into_iter::<jsonrpc::Response>() {
-            let response_obj = obj.unwrap();
-            println!("response: {:?}", response_obj);
-            let routing = DataRadiusResponse::parse(&response_obj);
-            return routing.unwrap();
-        }
-
-        unreachable!()
+        self.make_request(req)
     }
 }
