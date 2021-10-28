@@ -444,6 +444,33 @@ pub struct FoundContent {
     pub payload: Vec<u8>,
 }
 
+impl TryFrom<&Vec<u8>> for FoundContent {
+    type Error = OverlayRequestError;
+
+    fn try_from(value: &Vec<u8>) -> Result<Self, Self::Error> {
+        // A lot of copy/paste in here with TryFrom Pong
+        // TODO DRY it up a bit
+        if value.len() == 0 {
+            return Err(OverlayRequestError::EmptyResponse);
+        }
+        let message = match Message::from_bytes(&value) {
+            Ok(val) => val,
+            // TODO feels like we should embed the decoding error in the ORE::DE
+            Err(_) => return Err(OverlayRequestError::DecodeError),
+        };
+        let response = match message {
+            Message::Response(val) => val,
+            // TODO feels like we should embed the message in the ORE::IR
+            _ => return Err(OverlayRequestError::InvalidResponse),
+        };
+        match response {
+            Response::FoundContent(val) => Ok(val),
+            // The following is unreachable, right?
+            _ => return Err(OverlayRequestError::InvalidResponse),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct SszEnr(Enr);
 

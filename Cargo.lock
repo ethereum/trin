@@ -3212,6 +3212,7 @@ version = "0.1.0"
 dependencies = [
  "discv5",
  "eth_trie",
+ "keccak-hash",
  "log 0.4.14",
  "num",
  "rocksdb",

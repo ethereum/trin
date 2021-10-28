@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use eth_trie::EthTrie;
+use eth_trie::{EthTrie, Trie, TrieError};
+use keccak_hash::keccak;
 use log::debug;
 use rocksdb::DB;
 use tokio::sync::RwLock;
@@ -8,7 +9,7 @@ use trin_core::locks::RwLoggingExt;
 use trin_core::portalnet::{
     discovery::Discovery,
     overlay::{OverlayConfig, OverlayProtocol, OverlayRequestError},
-    types::{PortalnetConfig, ProtocolId},
+    types::{FoundContent, PortalnetConfig, ProtocolId},
     U256,
 };
 
@@ -37,6 +38,46 @@ impl StateNetwork {
             overlay: Arc::new(overlay),
             trie: Arc::new(trie),
         }
+    }
+
+    pub async fn get_encoded_account(&self, address: &[u8]) -> Result<Option<Vec<u8>>, String> {
+        let hashed_addr = keccak(address);
+        self._get_encoded_account(hashed_addr.as_bytes()).await
+    }
+
+    pub async fn _get_encoded_account(&self, hashed_addr: &[u8]) -> Result<Option<Vec<u8>>, String> {
+        match self.trie.get(hashed_addr) {
+            Ok(value) => Ok(value),
+            Err(TrieError::MissingTrieNode { node_hash, .. }) => {
+                let hash_bytes = node_hash.as_bytes();
+                let node_body = match self.find_content(hash_bytes).await {
+                    Ok(received) => received,
+                    _ => { return _; },
+                };
+                self.trie.insert(hash_bytes, node_body);
+                // TODO - might need to trie.commit here, or change eth-trie to check the pending
+                //  writes during a read.
+
+                // Now that the missing trie node is inserted, we can re-attempt the trie read
+                self._get_encoded_account(hashed_addr).await
+            },
+            Err(any) => Err(any.to_string()),
+        }
+    }
+
+    async fn find_content(&self, content_key: &[u8]) -> Result<Vec<u8>, String> {
+        let ENRs = self.overlay.find_nodes_close_to_content(content_key).await;
+        for enr in ENRs {
+            let content = self.overlay.send_find_content(content_key, enr, ProtocolId::State).await;
+
+            match content {
+                // TODO grab ENRs from response, for more peer lookup opportunities
+                Ok(FoundContent { enrs, payload }) => { return Ok(payload); },
+                // TODO log errors as debug
+                _ => { continue; },
+            }
+        }
+        Err(format!("Exhausted peer set looking for content {:?}", content_key))
     }
 
     /// Convenience call for testing, quick way to ping bootnodes

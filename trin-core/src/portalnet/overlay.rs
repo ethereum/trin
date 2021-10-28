@@ -337,13 +337,13 @@ impl OverlayProtocol {
         content_key: V,
         enr: Enr,
         protocol: ProtocolId,
-    ) -> Result<Vec<u8>, RequestError>
+    ) -> Result<FoundContent, OverlayRequestError>
     where
         V: Into<Vec<u8>>,
     {
         let content_key = content_key.into();
         let msg = FindContent { content_key };
-        self.discovery
+        let result_bytes = self.discovery
             .read_with_warn()
             .await
             .send_talkreq(
@@ -351,6 +351,8 @@ impl OverlayProtocol {
                 protocol,
                 Message::Request(Request::FindContent(msg)).to_bytes(),
             )
-            .await
+            .await?;
+
+        FoundContent::try_from(&result_bytes)
     }
 }
