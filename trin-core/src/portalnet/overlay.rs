@@ -234,7 +234,11 @@ impl OverlayProtocol {
     }
 
     /// Returns list of nodes closer to content than self, sorted by distance.
-    pub async fn find_nodes_close_to_content(&self, content_key: Vec<u8>) -> Vec<SszEnr> {
+    pub async fn find_nodes_close_to_content<V>(&self, content_key: V) -> Vec<SszEnr>
+    where
+        V: Into<Vec<u8>>,
+    {
+        let content_key = content_key.into();
         let self_node_id = self.local_enr().await.node_id();
         let self_distance = xor_two_values(&content_key, &self_node_id.raw().to_vec());
 
@@ -328,12 +332,16 @@ impl OverlayProtocol {
             .await
     }
 
-    pub async fn send_find_content(
+    pub async fn send_find_content<V>(
         &self,
-        content_key: Vec<u8>,
+        content_key: V,
         enr: Enr,
         protocol: ProtocolId,
-    ) -> Result<Vec<u8>, RequestError> {
+    ) -> Result<Vec<u8>, RequestError>
+    where
+        V: Into<Vec<u8>>,
+    {
+        let content_key = content_key.into();
         let msg = FindContent { content_key };
         self.discovery
             .read_with_warn()
