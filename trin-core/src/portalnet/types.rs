@@ -306,12 +306,14 @@ impl fmt::Display for Pong {
     }
 }
 
-impl Pong {
-    pub fn from_raw_response(bytes: &[u8]) -> Result<Self, OverlayRequestError> {
-        if bytes.len() == 0 {
+impl TryFrom<&Vec<u8>> for Pong {
+    type Error = OverlayRequestError;
+
+    fn try_from(value: &Vec<u8>) -> Result<Self, Self::Error> {
+        if value.len() == 0 {
             return Err(OverlayRequestError::EmptyResponse);
         }
-        let message = match Message::from_bytes(&bytes) {
+        let message = match Message::from_bytes(&value) {
             Ok(val) => val,
             Err(_) => return Err(OverlayRequestError::DecodeError),
         };

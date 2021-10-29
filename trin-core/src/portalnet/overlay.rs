@@ -307,7 +307,7 @@ impl OverlayProtocol {
                 Message::Request(Request::Ping(msg)).to_bytes(),
             )
             .await?;
-        Pong::from_raw_response(&result)
+        Pong::try_from(&result)
     }
 
     pub async fn send_find_nodes(
