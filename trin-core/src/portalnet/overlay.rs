@@ -4,12 +4,11 @@ use crate::utils::distance::xor_two_values;
 use super::{
     discovery::Discovery,
     types::{
-        FindContent, FindNodes, FoundContent, Message, Nodes, Ping, Pong, ProtocolKind, Request,
-        Response, SszEnr,
+        CustomPayload, FindContent, FindNodes, FoundContent, Message, Nodes, Ping, Pong,
+        ProtocolId, Request, Response, SszEnr,
     },
     Enr, U256,
 };
-use crate::portalnet::types::CustomPayload;
 use discv5::{
     enr::NodeId,
     kbucket::{Filter, KBucketsTable},
@@ -278,7 +277,7 @@ impl OverlayProtocol {
         &self,
         data_radius: U256,
         enr: Enr,
-        protocol: ProtocolKind,
+        protocol: ProtocolId,
         payload: Option<Vec<u8>>,
     ) -> Result<Vec<u8>, SendPingError> {
         let enr_seq = self.discovery.read_with_warn().await.local_enr().seq();
@@ -295,7 +294,7 @@ impl OverlayProtocol {
             .await
             .send_talkreq(
                 enr,
-                protocol.to_string(),
+                protocol,
                 Message::Request(Request::Ping(msg)).to_bytes(),
             )
             .await?)
@@ -305,7 +304,7 @@ impl OverlayProtocol {
         &self,
         distances: Vec<u16>,
         enr: Enr,
-        protocol: ProtocolKind,
+        protocol: ProtocolId,
     ) -> Result<Vec<u8>, RequestError> {
         let msg = FindNodes { distances };
         self.discovery
@@ -313,7 +312,7 @@ impl OverlayProtocol {
             .await
             .send_talkreq(
                 enr,
-                protocol.to_string(),
+                protocol,
                 Message::Request(Request::FindNodes(msg)).to_bytes(),
             )
             .await
@@ -323,7 +322,7 @@ impl OverlayProtocol {
         &self,
         content_key: Vec<u8>,
         enr: Enr,
-        protocol: ProtocolKind,
+        protocol: ProtocolId,
     ) -> Result<Vec<u8>, RequestError> {
         let msg = FindContent { content_key };
         self.discovery
@@ -331,7 +330,7 @@ impl OverlayProtocol {
             .await
             .send_talkreq(
                 enr,
-                protocol.to_string(),
+                protocol,
                 Message::Request(Request::FindContent(msg)).to_bytes(),
             )
             .await

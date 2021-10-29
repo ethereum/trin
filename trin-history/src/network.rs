@@ -5,7 +5,7 @@ use tokio::sync::RwLock;
 use trin_core::portalnet::{
     discovery::Discovery,
     overlay::{OverlayConfig, OverlayProtocol},
-    types::{PortalnetConfig, ProtocolKind},
+    types::{PortalnetConfig, ProtocolId},
     U256,
 };
 
@@ -45,7 +45,7 @@ impl HistoryNetwork {
             debug!("Pinging {} on portal history network", enr);
             let ping_result = self
                 .overlay
-                .send_ping(U256::from(u64::MAX), enr, ProtocolKind::History, None)
+                .send_ping(U256::from(u64::MAX), enr, ProtocolId::History, None)
                 .await
                 .map_err(|e| format!("Failed to ping bootnode: {:?}", e))?;
             debug!("Portal history network Ping result: {:?}", ping_result);

@@ -13,7 +13,7 @@ use trin_core::locks::RwLoggingExt;
 use trin_core::portalnet::{
     discovery::Discovery,
     overlay::{OverlayConfig, OverlayProtocol},
-    types::{PortalnetConfig, ProtocolKind},
+    types::{PortalnetConfig, ProtocolId},
     utp::UtpListener,
     Enr, U256,
 };
@@ -65,7 +65,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .send_ping(
                 U256::from(u64::MAX),
                 target_node.clone(),
-                ProtocolKind::History,
+                ProtocolId::History,
                 None,
             )
             .await;
@@ -79,7 +79,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .send_ping(
                 U256::from(u64::MAX),
                 target_node.clone(),
-                ProtocolKind::State,
+                ProtocolId::State,
                 None,
             )
             .await;

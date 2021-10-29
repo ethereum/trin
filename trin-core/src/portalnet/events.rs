@@ -5,14 +5,13 @@ use log::{debug, warn};
 use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 
-use super::{
-    discovery::Discovery,
-    utp::{UtpListener, UTP_PROTOCOL},
-};
-use crate::cli::{HISTORY_NETWORK, STATE_NETWORK};
+use super::types::ProtocolId;
+use super::{discovery::Discovery, utp::UtpListener};
 use crate::locks::RwLoggingExt;
+use hex;
 use std::collections::HashMap;
 use std::convert::TryInto;
+use std::str::FromStr;
 
 pub struct PortalnetEvents {
     pub discovery: Arc<RwLock<Discovery>>,
@@ -76,21 +75,23 @@ impl PortalnetEvents {
                 }
             };
 
-            match std::str::from_utf8(request.protocol()) {
+            let protocol_id = ProtocolId::from_str(&hex::encode_upper(request.protocol()));
+
+            match protocol_id {
                 Ok(protocol) => match protocol {
-                    HISTORY_NETWORK => {
+                    ProtocolId::History => {
                         match &self.history_sender {
                             Some(tx) => tx.send(request).unwrap(),
                             None => warn!("History event handler not initialized!"),
                         };
                     }
-                    STATE_NETWORK => {
+                    ProtocolId::State => {
                         match &self.state_sender {
                             Some(tx) => tx.send(request).unwrap(),
                             None => warn!("State event handler not initialized!"),
                         };
                     }
-                    UTP_PROTOCOL => {
+                    ProtocolId::Utp => {
                         self.utp_listener
                             .process_utp_request(request.body(), request.node_id())
                             .await;
@@ -100,12 +101,12 @@ impl PortalnetEvents {
                         warn!(
                             "Received TalkRequest on unknown protocol from={} protocol={} body={}",
                             request.node_id(),
-                            hex::encode(request.protocol()),
+                            hex::encode_upper(request.protocol()),
                             hex::encode(request.body()),
                         );
                     }
                 },
-                Err(_) => warn!("Invalid utf8 protocol decode"),
+                Err(_) => warn!("Unable to decode protocol id"),
             }
         }
     }

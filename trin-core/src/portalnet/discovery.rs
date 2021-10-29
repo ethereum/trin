@@ -2,11 +2,13 @@
 
 use super::types::{HexData, PortalnetConfig};
 use super::Enr;
+use crate::portalnet::types::ProtocolId;
 use crate::socket;
 use discv5::enr::{CombinedKey, EnrBuilder, NodeId};
 use discv5::{Discv5, Discv5Config, Discv5ConfigBuilder, RequestError};
 use log::info;
 use serde_json::{json, Value};
+use std::convert::TryFrom;
 use std::net::{IpAddr, SocketAddr};
 
 #[derive(Clone)]
@@ -173,13 +175,13 @@ impl Discovery {
     pub async fn send_talkreq(
         &self,
         enr: Enr,
-        protocol: String,
+        protocol: ProtocolId,
         request: ProtocolRequest,
     ) -> Result<Vec<u8>, RequestError> {
-        let response = self
-            .discv5
-            .talk_req(enr, protocol.into_bytes(), request)
-            .await?;
+        // Send empty protocol id if unable to convert it to bytes
+        let protocol = Vec::try_from(protocol).unwrap_or(vec![]);
+
+        let response = self.discv5.talk_req(enr, protocol, request).await?;
         Ok(response)
     }
 }
