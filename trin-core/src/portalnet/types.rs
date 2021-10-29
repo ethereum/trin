@@ -12,6 +12,7 @@ use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, VariableList};
 use thiserror::Error;
 
+use super::overlay::OverlayRequestError;
 use super::{Enr, U256};
 use hex::FromHexError;
 
@@ -301,6 +302,28 @@ impl fmt::Display for Pong {
                     )
                 }
             },
+        }
+    }
+}
+
+impl TryFrom<&Vec<u8>> for Pong {
+    type Error = OverlayRequestError;
+
+    fn try_from(value: &Vec<u8>) -> Result<Self, Self::Error> {
+        if value.len() == 0 {
+            return Err(OverlayRequestError::EmptyResponse);
+        }
+        let message = match Message::from_bytes(&value) {
+            Ok(val) => val,
+            Err(_) => return Err(OverlayRequestError::DecodeError),
+        };
+        let response = match message {
+            Message::Response(val) => val,
+            _ => return Err(OverlayRequestError::InvalidResponse),
+        };
+        match response {
+            Response::Pong(val) => Ok(val),
+            _ => return Err(OverlayRequestError::InvalidResponse),
         }
     }
 }

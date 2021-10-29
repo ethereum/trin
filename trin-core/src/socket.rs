@@ -42,7 +42,7 @@ fn find_assigned_ip() -> Option<IpAddr> {
         .into_iter()
         .filter(|iface| iface.is_up() && iface.is_running() && !iface.is_loopback());
 
-    for nic in online_nics.into_iter() {
+    for nic in online_nics {
         let ipv4_socket_addr = nic
             .addresses
             .iter()

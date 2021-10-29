@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use trin_core::portalnet::{
     discovery::Discovery,
-    overlay::{OverlayConfig, OverlayProtocol},
+    overlay::{OverlayConfig, OverlayProtocol, OverlayRequestError},
     types::{PortalnetConfig, ProtocolId},
     U256,
 };
@@ -45,10 +45,35 @@ impl HistoryNetwork {
             debug!("Pinging {} on portal history network", enr);
             let ping_result = self
                 .overlay
-                .send_ping(U256::from(u64::MAX), enr, ProtocolId::History, None)
-                .await
-                .map_err(|e| format!("Failed to ping bootnode: {:?}", e))?;
-            debug!("Portal history network Ping result: {:?}", ping_result);
+                .send_ping(U256::from(u64::MAX), enr.clone(), ProtocolId::History, None)
+                .await;
+
+            match ping_result {
+                Ok(_) => {
+                    debug!("Successfully bonded with {}", enr);
+                    continue;
+                }
+                Err(OverlayRequestError::Timeout) => {
+                    debug!("Timed out while bonding with {}", enr);
+                    continue;
+                }
+                Err(OverlayRequestError::EmptyResponse) => {
+                    debug!("Empty response to ping from: {}", enr);
+                    continue;
+                }
+                Err(OverlayRequestError::InvalidResponse) => {
+                    debug!("Invalid ping response from: {}", enr);
+                    continue;
+                }
+                Err(OverlayRequestError::DecodeError) => {
+                    debug!("Error decoding ping response from: {}", enr);
+                    continue;
+                }
+                Err(OverlayRequestError::Other(err)) => {
+                    debug!("Unexpected error while bonding with {} => {:?}", enr, err);
+                    return Err(err.to_string());
+                }
+            }
         }
         Ok(())
     }

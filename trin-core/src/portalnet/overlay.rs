@@ -71,7 +71,16 @@ impl Default for OverlayConfig {
 }
 
 #[derive(Error, Debug)]
-pub enum SendPingError {
+pub enum OverlayRequestError {
+    #[error("The request returned an invalid response type")]
+    InvalidResponse,
+
+    #[error("The response was unable to be decoded")]
+    DecodeError,
+
+    #[error("The request returned an empty response")]
+    EmptyResponse,
+
     #[error("The request timed out")]
     Timeout,
 
@@ -79,7 +88,7 @@ pub enum SendPingError {
     Other(discv5::RequestError),
 }
 
-impl From<discv5::RequestError> for SendPingError {
+impl From<discv5::RequestError> for OverlayRequestError {
     fn from(err: discv5::RequestError) -> Self {
         match err {
             discv5::RequestError::Timeout => Self::Timeout,
@@ -279,7 +288,7 @@ impl OverlayProtocol {
         enr: Enr,
         protocol: ProtocolId,
         payload: Option<Vec<u8>>,
-    ) -> Result<Vec<u8>, SendPingError> {
+    ) -> Result<Pong, OverlayRequestError> {
         let enr_seq = self.discovery.read_with_warn().await.local_enr().seq();
 
         let payload = CustomPayload::new(data_radius, payload);
@@ -288,7 +297,7 @@ impl OverlayProtocol {
             payload: Some(payload),
         };
         debug!("Sending {} dest={}", msg, enr.node_id());
-        Ok(self
+        let result = self
             .discovery
             .read_with_warn()
             .await
@@ -297,7 +306,8 @@ impl OverlayProtocol {
                 protocol,
                 Message::Request(Request::Ping(msg)).to_bytes(),
             )
-            .await?)
+            .await?;
+        Pong::try_from(&result)
     }
 
     pub async fn send_find_nodes(

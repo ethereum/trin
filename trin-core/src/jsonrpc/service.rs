@@ -311,7 +311,7 @@ fn dispatch_infura_request(obj: JsonRequest, infura_url: &str) -> Result<String,
         Err(err) => Err(json!({
             "jsonrpc": "2.0",
             "id": obj.id,
-            "error": format!("Infura failure: {}", err.to_string()),
+            "error": format!("Infura failure: {}", err),
         })
         .to_string()),
     }
