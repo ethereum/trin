@@ -18,6 +18,33 @@ use hex::FromHexError;
 
 type ByteList = VariableList<u8, typenum::U2048>;
 
+#[derive(Error, Debug)]
+pub enum MessageDecodeError {
+    #[error("Failed to decode message from SSZ bytes")]
+    Ssz,
+
+    #[error("Unknown message id")]
+    MessageId,
+
+    #[error("Failed to decode message from empty bytes")]
+    Empty,
+
+    #[error("Invalid message type")]
+    Type,
+}
+
+impl From<DecodeError> for MessageDecodeError {
+    fn from(_err: DecodeError) -> Self {
+        Self::Ssz
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum DiscoveryRequestError {
+    #[error("Invalid discv5 request message")]
+    InvalidMessage,
+}
+
 #[derive(Clone)]
 pub struct PortalnetConfig {
     pub external_addr: Option<SocketAddr>,
@@ -139,38 +166,35 @@ impl Message {
     }
 
     /// Decode a `Message` type from bytes.
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, String> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, MessageDecodeError> {
         if let Some(message_id) = bytes.first() {
             match message_id {
                 // Requests
                 1 => Ok(Message::Request(Request::Ping(
-                    Ping::from_ssz_bytes(&bytes[1..])
-                        .map_err(|e| format!("Failed to decode ssz: {:?}", e))?,
+                    Ping::from_ssz_bytes(&bytes[1..]).map_err(|e| MessageDecodeError::from(e))?,
                 ))),
                 3 => Ok(Message::Request(Request::FindNodes(
                     FindNodes::from_ssz_bytes(&bytes[1..])
-                        .map_err(|e| format!("Failed to decode ssz: {:?}", e))?,
+                        .map_err(|e| MessageDecodeError::from(e))?,
                 ))),
                 5 => Ok(Message::Request(Request::FindContent(
                     FindContent::from_ssz_bytes(&bytes[1..])
-                        .map_err(|e| format!("Failed to decode ssz: {:?}", e))?,
+                        .map_err(|e| MessageDecodeError::from(e))?,
                 ))),
                 2 => Ok(Message::Response(Response::Pong(
-                    Pong::from_ssz_bytes(&bytes[1..])
-                        .map_err(|e| format!("Failed to decode ssz: {:?}", e))?,
+                    Pong::from_ssz_bytes(&bytes[1..]).map_err(|e| MessageDecodeError::from(e))?,
                 ))),
                 4 => Ok(Message::Response(Response::Nodes(
-                    Nodes::from_ssz_bytes(&bytes[1..])
-                        .map_err(|e| format!("Failed to decode ssz: {:?}", e))?,
+                    Nodes::from_ssz_bytes(&bytes[1..]).map_err(|e| MessageDecodeError::from(e))?,
                 ))),
                 6 => Ok(Message::Response(Response::FoundContent(
                     FoundContent::from_ssz_bytes(&bytes[1..])
-                        .map_err(|e| format!("Failed to decode ssz: {:?}", e))?,
+                        .map_err(|e| MessageDecodeError::from(e))?,
                 ))),
-                _ => Err("Unknown message id".to_string()),
+                _ => Err(MessageDecodeError::MessageId),
             }
         } else {
-            Err("Empty bytes".to_string())
+            Err(MessageDecodeError::Empty)
         }
     }
 }
