@@ -160,10 +160,7 @@ mod test {
     use std::env;
 
     fn env_is_set() -> bool {
-        match env::var("TRIN_INFURA_PROJECT_ID") {
-            Ok(_) => true,
-            _ => false,
-        }
+        matches!(env::var("TRIN_INFURA_PROJECT_ID"), Ok(_))
     }
 
     #[test]
@@ -180,7 +177,7 @@ mod test {
             external_addr: None,
             private_key: None,
             networks: DEFAULT_SUBNETWORKS
-                .split(",")
+                .split(',')
                 .map(|n| n.to_string())
                 .collect(),
         };
@@ -205,7 +202,7 @@ mod test {
             internal_ip: false,
             bootnodes: vec![],
             networks: DEFAULT_SUBNETWORKS
-                .split(",")
+                .split(',')
                 .map(|n| n.to_string())
                 .collect(),
         };
@@ -243,7 +240,7 @@ mod test {
             internal_ip: false,
             bootnodes: vec![],
             networks: DEFAULT_SUBNETWORKS
-                .split(",")
+                .split(',')
                 .map(|n| n.to_string())
                 .collect(),
         };
@@ -277,7 +274,7 @@ mod test {
             internal_ip: false,
             bootnodes: vec![],
             networks: DEFAULT_SUBNETWORKS
-                .split(",")
+                .split(',')
                 .map(|n| n.to_string())
                 .collect(),
         };
@@ -335,7 +332,7 @@ mod test {
             internal_ip: false,
             bootnodes: vec![],
             networks: DEFAULT_SUBNETWORKS
-                .split(",")
+                .split(',')
                 .map(|n| n.to_string())
                 .collect(),
         };
@@ -358,7 +355,7 @@ mod test {
             internal_ip: false,
             bootnodes: vec!["enr:-aoeu".to_string(), "enr:-htns".to_string()],
             networks: DEFAULT_SUBNETWORKS
-                .split(",")
+                .split(',')
                 .map(|n| n.to_string())
                 .collect(),
         };
@@ -403,7 +400,7 @@ mod test {
             internal_ip: false,
             bootnodes: vec![],
             networks: DEFAULT_SUBNETWORKS
-                .split(",")
+                .split(',')
                 .map(|n| n.to_string())
                 .collect(),
         };
