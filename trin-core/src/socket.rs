@@ -7,7 +7,9 @@ use interfaces::{self, Interface};
 #[cfg(windows)]
 use ipconfig;
 
-const STUN_SERVER: &str = "143.198.142.185:3478";
+// This stun server is part of the testnet infrastructure.
+// If you are unable to connect, please create an issue.
+const STUN_SERVER: &str = "159.223.0.83:3478";
 
 /// Ping a STUN server on the public network. This does two things:
 /// - Creates an externally-addressable UDP port, if you are behind a NAT
