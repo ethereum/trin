@@ -102,7 +102,7 @@ mod test {
         let content_id = U256::from_dec_str("5").unwrap();
         let node_id = U256::from_dec_str("1").unwrap();
         let expected = U256::from_dec_str("4").unwrap();
-        let calculated_distance = distance(content_id.clone(), node_id.clone()).unwrap();
+        let calculated_distance = distance(content_id, node_id).unwrap();
         assert_eq!(calculated_distance, expected);
         let reversed = distance(node_id, content_id).unwrap();
         assert_eq!(reversed, expected);
@@ -129,8 +129,8 @@ mod test {
     #[test]
     fn test_distance_four() {
         let content_id = U256::from_dec_str("0").unwrap();
-        let node_id = U256::from_dec_str(&MID_DEC_STR).unwrap();
-        let expected = U256::from_dec_str(&MID_DEC_STR).unwrap();
+        let node_id = U256::from_dec_str(MID_DEC_STR).unwrap();
+        let expected = U256::from_dec_str(MID_DEC_STR).unwrap();
         let calculated_distance = distance(content_id, node_id).unwrap();
         assert_eq!(calculated_distance, expected);
     }
