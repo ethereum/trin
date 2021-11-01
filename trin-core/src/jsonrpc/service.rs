@@ -119,8 +119,7 @@ fn launch_http_client(
     })
     .expect("Error setting Ctrl-C handler.");
 
-    let uri = format!("0.0.0.0:{}", trin_config.web3_http_port);
-    let listener = TcpListener::bind(uri).unwrap();
+    let listener = TcpListener::bind(trin_config.web3_http_address).unwrap();
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {

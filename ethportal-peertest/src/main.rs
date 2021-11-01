@@ -90,7 +90,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         match peertest_config.target_transport.as_str() {
             "ipc" => test_jsonrpc_endpoints_over_ipc(peertest_config.target_ipc_path).await,
-            "http" => test_jsonrpc_endpoints_over_http(peertest_config.target_http_port).await,
+            "http" => test_jsonrpc_endpoints_over_http(peertest_config.target_http_address).await,
             _ => panic!(
                 "Invalid target-transport provided: {:?}",
                 peertest_config.target_transport
