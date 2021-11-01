@@ -9,6 +9,8 @@ jobs:
         executor:
             name: rust/default
             tag: 1.56.0
+        environment:
+            RUSTFLAGS: '-D warnings'
         steps:
             - checkout
             - restore_cache:
@@ -40,7 +42,7 @@ jobs:
                 command: cargo build --workspace --jobs 2
             - run:
                 name: Test Trin workspace
-                command: RUSTFLAGS='-D warnings' cargo test --workspace
+                command: cargo test --workspace
             - save_cache:
                 key: cargo-{{ checksum "Cargo.lock" }}-v1
                 paths:

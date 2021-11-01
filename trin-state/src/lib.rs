@@ -19,10 +19,11 @@ use trin_core::utils::db::setup_overlay_db;
 pub mod events;
 mod jsonrpc;
 pub mod network;
+mod trie;
 pub mod utils;
 
 pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("Launching trin-state...");
+    info!("Launching trin-state...");
 
     let trin_config = TrinConfig::new();
     trin_config.display_config();
