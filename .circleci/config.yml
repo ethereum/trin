@@ -34,7 +34,7 @@ jobs:
                 command: rustup component add clippy
             - run:
                 name: Run Clippy
-                command: cargo clippy --all -- --deny warnings
+                command: cargo clippy --all --all-targets --all-features --no-deps -- --deny warnings
             - run:
                 name: Build Trin workspace
                 command: cargo build --workspace --jobs 2
