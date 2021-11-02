@@ -99,8 +99,7 @@ impl FromStr for ProtocolId {
             "500C" => Ok(ProtocolId::TransactionGossip),
             "500D" => Ok(ProtocolId::HeaderGossip),
             "500E" => Ok(ProtocolId::CanonicalIndices),
-            // Utp protocol id is placeholder for now
-            "7500" => Ok(ProtocolId::Utp),
+            "757470" => Ok(ProtocolId::Utp),
             _ => Err(ProtocolIdError::Invalid),
         }
     }
@@ -117,7 +116,7 @@ impl TryFrom<ProtocolId> for Vec<u8> {
             ProtocolId::TransactionGossip => hex::decode("500C"),
             ProtocolId::HeaderGossip => hex::decode("500D"),
             ProtocolId::CanonicalIndices => hex::decode("500E"),
-            ProtocolId::Utp => hex::decode("7500"),
+            ProtocolId::Utp => hex::decode("757470"),
         };
 
         match bytes {
