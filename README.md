@@ -122,7 +122,7 @@ OPTIONS:
         --pool-size <pool_size>               max size of threadpool [default: 2]
         --unsafe-private-key <private_key>    Hex encoded 32 byte private key (considered unsafe to pass in pk as cli
                                               arg, as it's stored in terminal history - keyfile support coming soon)
-        --web3-http-port <web3_http_port>     port to accept json-rpc http connections [default: 8545]
+        --web3-http-address <web3-http-address>    address to accept json-rpc http connections [default: 127.0.0.1:8545]
         --web3-ipc-path <web3_ipc_path>       path to json-rpc endpoint over IPC [default: /tmp/trin-jsonrpc.ipc]
         --web3-transport <web3_transport>     select transport protocol to serve json-rpc endpoint [default: ipc]
                                               [possible values: http, ipc]

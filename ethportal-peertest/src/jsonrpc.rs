@@ -136,14 +136,14 @@ fn get_response_result(response: Value) -> Result<Value, JsonRpcResponseError> {
     }
 }
 
-pub async fn test_jsonrpc_endpoints_over_http(target_http_port: String) {
+pub async fn test_jsonrpc_endpoints_over_http(target_http_address: String) {
     let client = Client::new();
     for endpoint in JsonRpcEndpoint::all_endpoints() {
         info!("Testing over HTTP: {:?}", endpoint.method);
         let json_string = endpoint.to_jsonrpc();
         let req = Request::builder()
             .method(Method::POST)
-            .uri(format!("http://127.0.0.1:{}", target_http_port))
+            .uri(format!("http://{}", target_http_address))
             .header("content-type", "application/json")
             .body(Body::from(json_string))
             .unwrap();
