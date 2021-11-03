@@ -661,7 +661,7 @@ impl UtpStream {
     async fn send_finalize(&self) {
         let mut response = PacketHeader::new();
         response.set_type(Type::StReset);
-        response.set_connection_id(self.conn_id_recv);
+        response.set_connection_id(self.conn_id_send);
         response.set_timestamp(get_time());
         response.set_timestamp_difference(0);
         response.set_seq_nr(self.seq_nr + 1);
@@ -729,7 +729,7 @@ impl UtpStream {
     async fn handle_state_packet(&mut self, packet: Packet) {
         if self.state == ConnectionState::SynSent {
             self.state = ConnectionState::Connected;
-            self.ack_nr = packet.seq_nr();
+            self.ack_nr = packet.seq_nr() - 1;
         } else {
             if self.last_ack == packet.ack_nr() {
                 self.duplicate_acks += 1;
@@ -832,7 +832,7 @@ impl UtpStream {
 
             let mut response = PacketHeader::new();
             response.set_type(Type::StFin);
-            response.set_connection_id(self.conn_id_recv);
+            response.set_connection_id(self.conn_id_send);
             response.set_timestamp(get_time());
             response.set_timestamp_difference(get_time_diff(packet.timestamp()));
             response.set_seq_nr(self.seq_nr);
@@ -851,10 +851,10 @@ impl UtpStream {
 
         let mut response = PacketHeader::new();
         response.set_type(Type::StState);
-        response.set_connection_id(self.conn_id_recv);
+        response.set_connection_id(self.conn_id_send);
         response.set_timestamp(get_time());
         response.set_timestamp_difference(get_time_diff(packet.timestamp()));
-        response.set_seq_nr(self.seq_nr + 1);
+        response.set_seq_nr(self.seq_nr);
         response.set_ack_nr(self.ack_nr);
 
         self.send(&Packet::new(response)).await;
