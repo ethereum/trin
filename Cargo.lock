@@ -753,6 +753,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "discv5",
+ "hex",
  "hyper",
  "log 0.4.14",
  "rocksdb",

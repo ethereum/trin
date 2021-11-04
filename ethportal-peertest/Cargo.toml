@@ -9,6 +9,7 @@ rust-version = "1.56.1"
 [dependencies]
 clap = "2.33.3"
 hyper = { version = "0.14", features = ["full"] }
+hex = "0.4.3"
 log = "0.4.14"
 rocksdb = "0.16.0"
 serde_json = "1.0.59"
