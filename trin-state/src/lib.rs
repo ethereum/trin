@@ -44,12 +44,10 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut discovery = Discovery::new(portalnet_config.clone()).unwrap();
     discovery.start().await.unwrap();
-    let discovery = Arc::new(RwLock::new(discovery));
+    let discovery = Arc::new(discovery);
 
     // Setup Overlay database
-    let db = Arc::new(setup_overlay_db(
-        discovery.read_with_warn().await.local_enr().node_id(),
-    ));
+    let db = Arc::new(setup_overlay_db(discovery.local_enr().node_id()));
 
     let (state_event_tx, state_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
     let portal_events_discovery = Arc::clone(&discovery);
@@ -76,7 +74,7 @@ type StateEventTx = Option<mpsc::UnboundedSender<TalkRequest>>;
 type StateJsonRpcTx = Option<mpsc::UnboundedSender<StateJsonRpcRequest>>;
 
 pub async fn initialize_state_network(
-    discovery: &Arc<RwLock<Discovery>>,
+    discovery: &Arc<Discovery>,
     portalnet_config: PortalnetConfig,
     db: Arc<DB>,
 ) -> (StateHandler, StateNetworkTask, StateEventTx, StateJsonRpcTx) {

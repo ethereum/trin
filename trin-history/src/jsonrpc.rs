@@ -16,13 +16,7 @@ impl HistoryRequestHandler {
             match request.endpoint {
                 HistoryEndpoint::DataRadius => {
                     let _ = request.resp.send(Ok(Value::String(
-                        self.network
-                            .read()
-                            .await
-                            .overlay
-                            .data_radius()
-                            .await
-                            .to_string(),
+                        self.network.read().await.overlay.data_radius.to_string(),
                     )));
                 }
             }

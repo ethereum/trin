@@ -51,11 +51,11 @@ impl Default for OverlayConfig {
 #[derive(Clone)]
 pub struct OverlayProtocol {
     /// Reference to the underlying discv5 protocol
-    pub discovery: Arc<RwLock<Discovery>>,
+    pub discovery: Arc<Discovery>,
     // Reference to the database instance
     pub db: Arc<DB>,
     /// The data radius of the local node.
-    data_radius: Arc<RwLock<U256>>,
+    pub data_radius: Arc<U256>,
     /// The overlay routing table of the local node.
     kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
     /// The subnetwork protocol of the overlay.
@@ -67,21 +67,20 @@ pub struct OverlayProtocol {
 impl OverlayProtocol {
     pub async fn new(
         config: OverlayConfig,
-        discovery: Arc<RwLock<Discovery>>,
+        discovery: Arc<Discovery>,
         db: Arc<DB>,
         data_radius: U256,
         protocol: ProtocolId,
     ) -> Self {
-        let local_enr = discovery.read_with_warn().await.local_enr();
         let kbuckets = Arc::new(RwLock::new(KBucketsTable::new(
-            local_enr.node_id().into(),
+            discovery.local_enr().node_id().into(),
             config.bucket_pending_timeout,
             config.max_incoming_per_bucket,
             config.table_filter,
             config.bucket_filter,
         )));
 
-        let data_radius = Arc::new(RwLock::new(data_radius));
+        let data_radius = Arc::new(data_radius);
         let request_tx = OverlayService::spawn(
             Arc::clone(&discovery),
             Arc::clone(&db),
@@ -109,12 +108,12 @@ impl OverlayProtocol {
 
     /// Returns the ENR of the local node.
     pub async fn local_enr(&self) -> Enr {
-        self.discovery.read_with_warn().await.discv5.local_enr()
+        self.discovery.discv5.local_enr()
     }
 
     /// Returns the data radius of the local node.
     pub async fn data_radius(&self) -> U256 {
-        self.data_radius.read_with_warn().await.clone()
+        *self.data_radius
     }
 
     /// Processes a single Discovery v5 TALKREQ message.
@@ -161,10 +160,9 @@ impl OverlayProtocol {
         enr: Enr,
         payload: Option<Vec<u8>>,
     ) -> Result<Pong, OverlayRequestError> {
-        // Construct the request.
-        let enr_seq = self.discovery.read_with_warn().await.local_enr().seq();
-        let data_radius = self.data_radius().await;
-        let payload = CustomPayload::new(data_radius, payload);
+        let enr_seq = self.discovery.local_enr().seq();
+
+        let payload = CustomPayload::new(*self.data_radius, payload);
         let request = Ping {
             enr_seq,
             payload: Some(payload),

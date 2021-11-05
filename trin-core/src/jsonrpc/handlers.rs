@@ -4,18 +4,16 @@ use std::sync::Arc;
 
 use serde_json::Value;
 use tokio::sync::mpsc;
-use tokio::sync::RwLock;
 
 use crate::jsonrpc::endpoints::{Discv5Endpoint, HistoryEndpoint, StateEndpoint, TrinEndpoint};
 use crate::jsonrpc::types::{HistoryJsonRpcRequest, PortalJsonRpcRequest, StateJsonRpcRequest};
-use crate::locks::RwLoggingExt;
 use crate::portalnet::discovery::Discovery;
 
 type Responder<T, E> = mpsc::UnboundedSender<Result<T, E>>;
 
 /// Main JSON-RPC handler. It dispatches json-rpc requests to the overlay networks.
 pub struct JsonRpcHandler {
-    pub discovery: Arc<RwLock<Discovery>>,
+    pub discovery: Arc<Discovery>,
     pub portal_jsonrpc_rx: mpsc::UnboundedReceiver<PortalJsonRpcRequest>,
     pub state_jsonrpc_tx: Option<mpsc::UnboundedSender<StateJsonRpcRequest>>,
     pub history_jsonrpc_tx: Option<mpsc::UnboundedSender<HistoryJsonRpcRequest>>,
@@ -26,12 +24,8 @@ impl JsonRpcHandler {
         while let Some(request) = self.portal_jsonrpc_rx.recv().await {
             let response = match request.endpoint {
                 TrinEndpoint::Discv5Endpoint(endpoint) => match endpoint {
-                    Discv5Endpoint::NodeInfo => {
-                        Ok(self.discovery.read_with_warn().await.node_info())
-                    }
-                    Discv5Endpoint::RoutingTableInfo => {
-                        Ok(self.discovery.write_with_warn().await.routing_table_info())
-                    }
+                    Discv5Endpoint::NodeInfo => Ok(self.discovery.node_info()),
+                    Discv5Endpoint::RoutingTableInfo => Ok(self.discovery.routing_table_info()),
                 },
                 TrinEndpoint::HistoryEndpoint(endpoint) => match self.history_jsonrpc_tx.as_ref() {
                     Some(tx) => proxy_query_to_history_subnet(tx, endpoint).await,

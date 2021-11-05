@@ -3,11 +3,9 @@ use std::sync::Arc;
 
 use log::debug;
 use tokio::sync::mpsc;
-use tokio::sync::RwLock;
 
 use trin_core::jsonrpc::handlers::JsonRpcHandler;
 use trin_core::jsonrpc::types::PortalJsonRpcRequest;
-use trin_core::locks::RwLoggingExt;
 use trin_core::portalnet::events::PortalnetEvents;
 use trin_core::{
     cli::{TrinConfig, HISTORY_NETWORK, STATE_NETWORK},
@@ -51,15 +49,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // Initialize base discovery protocol
-    let discovery = Arc::new(RwLock::new(
-        Discovery::new(portalnet_config.clone()).unwrap(),
-    ));
-    discovery.write_with_warn().await.start().await.unwrap();
+    let mut discovery = Discovery::new(portalnet_config.clone()).unwrap();
+    discovery.start().await.unwrap();
+    let discovery = Arc::new(discovery);
 
     // Setup Overlay database
-    let db = Arc::new(setup_overlay_db(
-        discovery.read_with_warn().await.local_enr().node_id(),
-    ));
+    let db = Arc::new(setup_overlay_db(discovery.local_enr().node_id()));
 
     debug!("Selected networks to spawn: {:?}", trin_config.networks);
     // Initialize state sub-network service and event handlers, if selected

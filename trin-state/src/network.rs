@@ -3,8 +3,6 @@ use std::sync::Arc;
 use eth_trie::EthTrie;
 use log::debug;
 use rocksdb::DB;
-use tokio::sync::RwLock;
-use trin_core::locks::RwLoggingExt;
 use trin_core::portalnet::{
     discovery::Discovery,
     overlay::{OverlayConfig, OverlayProtocol, OverlayRequestError},
@@ -22,7 +20,7 @@ pub struct StateNetwork {
 
 impl StateNetwork {
     pub async fn new(
-        discovery: Arc<RwLock<Discovery>>,
+        discovery: Arc<Discovery>,
         db: Arc<DB>,
         portal_config: PortalnetConfig,
     ) -> Self {
@@ -50,12 +48,7 @@ impl StateNetwork {
         // Trigger bonding with bootnodes, at both the base layer and portal overlay.
         // The overlay ping via talkreq will trigger a session at the base layer, then
         // a session on the (overlay) portal network.
-        let table_entries = {
-            // use a nested scope so that the guard is quickly dropped
-            let guard = self.overlay.discovery.read_with_warn().await;
-            guard.discv5.table_entries_enr()
-        };
-        for enr in table_entries {
+        for enr in self.overlay.discovery.discv5.table_entries_enr() {
             debug!("Attempting bond with bootnode {}", enr);
             let ping_result = self.overlay.send_ping(enr.clone(), None).await;
 

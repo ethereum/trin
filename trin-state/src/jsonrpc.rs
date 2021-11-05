@@ -17,7 +17,7 @@ impl StateRequestHandler {
             match request.endpoint {
                 StateEndpoint::DataRadius => {
                     let net = self.network.read_with_warn().await;
-                    let radius = net.overlay.data_radius().await;
+                    let radius = &net.overlay.data_radius;
                     let _ = request.resp.send(Ok(Value::String(radius.to_string())));
                 }
             }

@@ -2,14 +2,12 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use log::info;
-use tokio::sync::RwLock;
 
 use ethportal_peertest::cli::PeertestConfig;
 use ethportal_peertest::events::PortalnetEvents;
 use ethportal_peertest::jsonrpc::{
     test_jsonrpc_endpoints_over_http, test_jsonrpc_endpoints_over_ipc,
 };
-use trin_core::locks::RwLoggingExt;
 use trin_core::portalnet::{
     discovery::Discovery,
     overlay::{OverlayConfig, OverlayProtocol},
@@ -31,21 +29,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             ..Default::default()
         };
 
-        let discovery = Arc::new(RwLock::new(Discovery::new(portal_config).unwrap()));
-        discovery.write_with_warn().await.start().await.unwrap();
+        let mut discovery = Discovery::new(portal_config).unwrap();
+        discovery.start().await.unwrap();
+        let discovery = Arc::new(discovery);
 
         let protocol_rx = discovery
-            .write_with_warn()
-            .await
             .discv5
             .event_stream()
             .await
             .map_err(|e| e.to_string())
             .unwrap();
 
-        let db = Arc::new(setup_overlay_db(
-            discovery.read_with_warn().await.local_enr().node_id(),
-        ));
+        let db = Arc::new(setup_overlay_db(discovery.local_enr().node_id()));
 
         let history_overlay = Arc::new(
             OverlayProtocol::new(

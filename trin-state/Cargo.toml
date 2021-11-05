@@ -20,5 +20,5 @@ trin-core = { path = "../trin-core" }
 rocksdb = "0.16.0"
 
 [dependencies.discv5]
-version = "0.1.0-beta.10"
-git = "https://github.com/sigp/discv5"
+branch = "fewer-mutable-borrows"
+git = "https://github.com/carver/discv5"

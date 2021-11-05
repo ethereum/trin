@@ -3,18 +3,16 @@ use std::sync::Arc;
 use discv5::{Discv5Event, TalkRequest};
 use log::{debug, warn};
 use tokio::sync::mpsc;
-use tokio::sync::RwLock;
 
 use super::types::ProtocolId;
 use super::{discovery::Discovery, utp::UtpListener};
-use crate::locks::RwLoggingExt;
 use hex;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::str::FromStr;
 
 pub struct PortalnetEvents {
-    pub discovery: Arc<RwLock<Discovery>>,
+    pub discovery: Arc<Discovery>,
     pub protocol_receiver: mpsc::Receiver<Discv5Event>,
     pub utp_listener: UtpListener,
     pub history_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
@@ -23,13 +21,11 @@ pub struct PortalnetEvents {
 
 impl PortalnetEvents {
     pub async fn new(
-        discovery: Arc<RwLock<Discovery>>,
+        discovery: Arc<Discovery>,
         history_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
         state_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
     ) -> Self {
         let protocol_receiver = discovery
-            .write_with_warn()
-            .await
             .discv5
             .event_stream()
             .await
