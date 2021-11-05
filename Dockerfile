@@ -1,12 +1,11 @@
 # select build image
-FROM rust as builder
+FROM rust:1.56.1 AS builder
 
 # create a new empty shell project
 RUN USER=root cargo new --bin trin
 WORKDIR /trin
 
 RUN apt-get update && apt-get install clang -y
-RUN rustup component add rustfmt
 
 # copy over manifests and source to build image
 COPY ./Cargo.lock ./Cargo.lock
@@ -21,7 +20,7 @@ COPY ./ethportal-peertest ./ethportal-peertest
 RUN cargo build --release
 
 # final base
-FROM rust
+FROM rust:1.56.1
 
 # copy build artifact from build stage
 COPY --from=builder /trin/target/release/trin .
