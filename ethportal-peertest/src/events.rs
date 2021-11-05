@@ -1,15 +1,13 @@
 use discv5::{Discv5Event, TalkRequest};
+use hex;
 use log::{debug, error, warn};
 use std::convert::TryInto;
+use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use trin_core::portalnet::overlay::OverlayProtocol;
-use trin_core::portalnet::types::Message;
+use trin_core::portalnet::types::{Message, ProtocolId};
 use trin_core::portalnet::utp::UtpListener;
-
-pub const HISTORY_NETWORK: &str = "history";
-pub const STATE_NETWORK: &str = "state";
-pub const UTP_PROTOCOL: &str = "utp";
 
 pub struct PortalnetEvents {
     pub overlay: Arc<OverlayProtocol>,
@@ -46,33 +44,40 @@ impl PortalnetEvents {
                 _ => continue,
             };
 
-            match std::str::from_utf8(request.protocol()) {
+            let protocol_id = ProtocolId::from_str(&hex::encode_upper(request.protocol()));
+
+            match protocol_id {
                 Ok(protocol) => match protocol {
-                    HISTORY_NETWORK => {
+                    ProtocolId::History => {
                         let reply = self.get_talk_req_reply(&request).await;
 
                         if let Err(e) = request.respond(reply) {
                             warn!("failed to send history network reply: {}", e);
                         }
                     }
-                    STATE_NETWORK => {
+                    ProtocolId::State => {
                         let reply = self.get_talk_req_reply(&request).await;
 
                         if let Err(e) = request.respond(reply) {
                             warn!("failed to send state network reply: {}", e);
                         }
                     }
-                    UTP_PROTOCOL => {
+                    ProtocolId::Utp => {
                         self.utp_listener
                             .process_utp_request(request.body(), request.node_id())
                             .await;
                         self.process_utp_byte_stream().await
                     }
                     _ => {
-                        warn!("Non supported protocol : {}", protocol);
+                        warn!(
+                            "Received TalkRequest on unknown protocol from={} protocol={} body={}",
+                            request.node_id(),
+                            hex::encode_upper(request.protocol()),
+                            hex::encode(request.body()),
+                        );
                     }
                 },
-                Err(_) => warn!("Invalid utf8 protocol decode"),
+                Err(_) => warn!("Unable to decode protocol id"),
             }
         }
     }
