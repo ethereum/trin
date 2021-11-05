@@ -7,15 +7,9 @@ pub enum Discv5Endpoint {
     RoutingTableInfo,
 }
 
-/// State network JSON-RPC endpoints. Start with "portalState_" prefix
+/// Overlay JSON-RPC endpoints. Start with "overlay_" prefix
 #[derive(Debug, PartialEq, Clone)]
-pub enum StateEndpoint {
-    DataRadius,
-}
-
-/// History network JSON-RPC endpoints. Start with "portalHistory_" prefix
-#[derive(Debug, PartialEq, Clone)]
-pub enum HistoryEndpoint {
+pub enum OverlayEndpoint {
     DataRadius,
 }
 
@@ -35,8 +29,7 @@ pub enum PortalEndpoint {
 #[derive(Debug, PartialEq, Clone)]
 pub enum TrinEndpoint {
     Discv5Endpoint(Discv5Endpoint),
-    HistoryEndpoint(HistoryEndpoint),
-    StateEndpoint(StateEndpoint),
+    OverlayEndpoint(OverlayEndpoint),
     InfuraEndpoint(InfuraEndpoint),
     PortalEndpoint(PortalEndpoint),
 }
@@ -52,10 +45,7 @@ impl FromStr for TrinEndpoint {
                 Discv5Endpoint::RoutingTableInfo,
             )),
             "eth_blockNumber" => Ok(TrinEndpoint::InfuraEndpoint(InfuraEndpoint::BlockNumber)),
-            "portalHistory_dataRadius" => {
-                Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::DataRadius))
-            }
-            "portalState_dataRadius" => Ok(TrinEndpoint::StateEndpoint(StateEndpoint::DataRadius)),
+            "overlay_dataRadius" => Ok(TrinEndpoint::OverlayEndpoint(OverlayEndpoint::DataRadius)),
             _ => Err(()),
         }
     }

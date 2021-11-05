@@ -1,4 +1,4 @@
-use crate::jsonrpc::endpoints::{HistoryEndpoint, StateEndpoint, TrinEndpoint};
+use crate::jsonrpc::endpoints::{OverlayEndpoint, TrinEndpoint};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tokio::sync::mpsc;
@@ -43,20 +43,26 @@ pub struct JsonRequest {
 pub struct PortalJsonRpcRequest {
     pub endpoint: TrinEndpoint,
     pub resp: Responder<Value, String>,
+    //#[serde(default = "default_params")]
+    pub params: Params,
 }
 
 /// History network JSON-RPC request
 #[derive(Debug)]
 pub struct HistoryJsonRpcRequest {
-    pub endpoint: HistoryEndpoint,
+    pub endpoint: OverlayEndpoint,
     pub resp: Responder<Value, String>,
+    //#[serde(default = "default_params")]
+    pub params: Params,
 }
 
 /// State network JSON-RPC request
 #[derive(Debug)]
 pub struct StateJsonRpcRequest {
-    pub endpoint: StateEndpoint,
+    pub endpoint: OverlayEndpoint,
     pub resp: Responder<Value, String>,
+    //#[serde(default = "default_params")]
+    pub params: Params,
 }
 
 fn default_params() -> Params {

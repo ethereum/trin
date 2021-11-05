@@ -298,8 +298,7 @@ fn dispatch_trin_request(
         .to_string()),
         TrinEndpoint::InfuraEndpoint(_) => dispatch_infura_request(obj, infura_url),
         TrinEndpoint::Discv5Endpoint(_) => dispatch_portal_request(obj, endpoint, portal_tx),
-        TrinEndpoint::HistoryEndpoint(_) => dispatch_portal_request(obj, endpoint, portal_tx),
-        TrinEndpoint::StateEndpoint(_) => dispatch_portal_request(obj, endpoint, portal_tx),
+        TrinEndpoint::OverlayEndpoint(_) => dispatch_portal_request(obj, endpoint, portal_tx),
     }
 }
 
@@ -325,6 +324,7 @@ fn dispatch_portal_request(
     let (resp_tx, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
     let message = PortalJsonRpcRequest {
         endpoint,
+        params: obj.params,
         resp: resp_tx,
     };
     portal_tx.send(message).unwrap();

@@ -1,85 +1,90 @@
 use std::io::prelude::*;
 use std::os::unix::net::UnixStream;
-use std::slice::Iter;
 
 use hyper::{self, Body, Client, Method, Request};
 use log::info;
 use serde_json::{self, Value};
 use thiserror::Error;
 
+use trin_core::jsonrpc::types::Params;
 use trin_core::portalnet::U256;
 
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct JsonRpcEndpoint {
     pub method: &'static str,
     pub id: &'static u8,
+    pub params: Params
 }
 
-const ALL_ENDPOINTS: [JsonRpcEndpoint; 6] = [
-    JsonRpcEndpoint {
-        method: "web3_clientVersion",
-        id: &0,
-    },
-    JsonRpcEndpoint {
-        method: "discv5_nodeInfo",
-        id: &1,
-    },
-    JsonRpcEndpoint {
-        method: "discv5_routingTableInfo",
-        id: &2,
-    },
-    JsonRpcEndpoint {
-        method: "eth_blockNumber",
-        id: &3,
-    },
-    JsonRpcEndpoint {
-        method: "portalHistory_dataRadius",
-        id: &4,
-    },
-    JsonRpcEndpoint {
-        method: "portalState_dataRadius",
-        id: &5,
-    },
-];
-
-fn validate_endpoint_response(method: &str, result: &Value) {
-    match method {
-        "web3_clientVersion" => {
+fn validate_endpoint_response(id: &u8, result: &Value) {
+    match id {
+        0 => {
             assert_eq!(result.as_str().unwrap(), "trin v0.1.0");
         }
-        "discv5_nodeInfo" => {
+        1 => {
             let enr = result.get("enr").unwrap();
             assert!(enr.is_string());
             assert!(enr.as_str().unwrap().contains("enr:"));
             assert!(result.get("nodeId").unwrap().is_string());
         }
-        "discv5_routingTableInfo" => {
+        2 => {
             let local_key = result.get("localKey").unwrap();
             assert!(local_key.is_string());
             assert!(local_key.as_str().unwrap().contains("0x"));
             assert!(result.get("buckets").unwrap().is_array());
         }
-        "eth_blockNumber" => {
+        3 => {
             assert!(result.is_string());
             assert!(result.as_str().unwrap().contains("0x"));
         }
-        "portalHistory_dataRadius" => {
+        4 => {
             assert_eq!(result.as_str().unwrap(), U256::from(u64::MAX).to_string());
         }
-        "portalState_dataRadius" => {
+        5 => {
             assert_eq!(result.as_str().unwrap(), U256::from(u64::MAX).to_string());
         }
         _ => panic!("Unsupported endpoint"),
     };
-    info!("{:?} returned a valid response.", method);
+    info!("RPC endpoint: id #{:?} returned a valid response.", id);
 }
 
 impl JsonRpcEndpoint {
-    pub fn all_endpoints() -> Iter<'static, Self> {
-        ALL_ENDPOINTS.iter()
+    pub fn all_endpoints() -> Vec<JsonRpcEndpoint> {
+        vec![
+            JsonRpcEndpoint {
+                method: "web3_clientVersion",
+                id: &0,
+                params: Params::None,
+            },
+            JsonRpcEndpoint {
+                method: "discv5_nodeInfo",
+                id: &1,
+                params: Params::None,
+            },
+            JsonRpcEndpoint {
+                method: "discv5_routingTableInfo",
+                id: &2,
+                params: Params::None,
+            },
+            JsonRpcEndpoint {
+                method: "eth_blockNumber",
+                id: &3,
+                params: Params::None,
+            },
+            JsonRpcEndpoint {
+                method: "overlay_dataRadius",
+                id: &4,
+                params: Params::Array(vec![Value::String("history".to_string())]),
+            },
+            JsonRpcEndpoint {
+                method: "overlay_dataRadius",
+                id: &5,
+                params: Params::Array(vec![Value::String("state".to_string())]),
+            },
+        ]
     }
 
-    pub fn to_jsonrpc(self) -> String {
+    pub fn to_jsonrpc(&self) -> String {
         format!(
             r#"
             {{
@@ -105,10 +110,10 @@ pub async fn test_jsonrpc_endpoints_over_ipc(target_ipc_path: String) {
         for obj in deser.into_iter::<Value>() {
             let response_obj = obj.unwrap();
             match get_response_result(response_obj) {
-                Ok(result) => validate_endpoint_response(endpoint.method, &result),
+                Ok(result) => validate_endpoint_response(&endpoint.id, &result),
                 Err(msg) => panic!(
-                    "Jsonrpc error for {:?} endpoint: {:?}",
-                    endpoint.method, msg
+                    "Jsonrpc error for endpoint id #{:?}: {:?}",
+                    endpoint.id, msg
                 ),
             }
             // break out of loop here since EOF is not sent, and loop will hang
@@ -151,10 +156,10 @@ pub async fn test_jsonrpc_endpoints_over_http(target_http_address: String) {
         let body = hyper::body::to_bytes(resp.into_body()).await.unwrap();
         let response_obj: Value = serde_json::from_slice(&body).unwrap();
         match get_response_result(response_obj) {
-            Ok(result) => validate_endpoint_response(endpoint.method, &result),
+            Ok(result) => validate_endpoint_response(&endpoint.id, &result),
             Err(msg) => panic!(
-                "Jsonrpc error for {:?} endpoint: {:?}",
-                endpoint.method, msg
+                "Jsonrpc error for endpoint id #{:?}: {:?}",
+                endpoint.id, msg
             ),
         }
     }
