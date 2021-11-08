@@ -9,7 +9,6 @@ use std::{fs, panic, process};
 use httparse;
 use log::{debug, info, warn};
 use serde_json::{json, Value};
-use thiserror::Error;
 use threadpool::ThreadPool;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::UnboundedSender;
@@ -18,6 +17,7 @@ use validator::Validate;
 
 use crate::cli::TrinConfig;
 use crate::jsonrpc::endpoints::TrinEndpoint;
+use crate::jsonrpc::errors::HttpParseError;
 use crate::jsonrpc::types::{JsonRequest, PortalJsonRpcRequest};
 
 lazy_static! {
@@ -214,12 +214,6 @@ fn respond_with_parsing_error(mut stream: TcpStream, msg: String) {
     let resp = format!("HTTP/1.1 400 BAD REQUEST\r\n\r\n{}", msg).into_bytes();
     stream.write_all(&resp).unwrap();
     stream.flush().unwrap();
-}
-
-#[derive(Error, Debug)]
-pub enum HttpParseError {
-    #[error("Unable to parse http request: {0}")]
-    InvalidRequest(String),
 }
 
 fn parse_http_body(buf: Vec<u8>) -> Result<String, HttpParseError> {

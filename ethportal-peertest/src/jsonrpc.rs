@@ -13,7 +13,7 @@ use trin_core::portalnet::U256;
 pub struct JsonRpcEndpoint {
     pub method: &'static str,
     pub id: &'static u8,
-    pub params: Params
+    pub params: Params,
 }
 
 fn validate_endpoint_response(id: &u8, result: &Value) {
@@ -85,15 +85,29 @@ impl JsonRpcEndpoint {
     }
 
     pub fn to_jsonrpc(&self) -> String {
-        format!(
-            r#"
-            {{
-                "jsonrpc":"2.0",
-                "id": {},
-                "method": "{}"
-            }}"#,
-            self.id, self.method
-        )
+        match self.params {
+            Params::None => format!(
+                r#"
+                    {{
+                        "jsonrpc":"2.0",
+                        "id": {},
+                        "method": "{}"
+                    }}"#,
+                self.id, self.method
+            ),
+            _ => format!(
+                r#"
+                    {{
+                        "jsonrpc":"2.0",
+                        "id": {},
+                        "method": "{}",
+                        "params": {}
+                    }}"#,
+                self.id,
+                self.method,
+                serde_json::to_string(&self.params).unwrap()
+            ),
+        }
     }
 }
 
@@ -110,7 +124,7 @@ pub async fn test_jsonrpc_endpoints_over_ipc(target_ipc_path: String) {
         for obj in deser.into_iter::<Value>() {
             let response_obj = obj.unwrap();
             match get_response_result(response_obj) {
-                Ok(result) => validate_endpoint_response(&endpoint.id, &result),
+                Ok(result) => validate_endpoint_response(endpoint.id, &result),
                 Err(msg) => panic!(
                     "Jsonrpc error for endpoint id #{:?}: {:?}",
                     endpoint.id, msg
@@ -156,7 +170,7 @@ pub async fn test_jsonrpc_endpoints_over_http(target_http_address: String) {
         let body = hyper::body::to_bytes(resp.into_body()).await.unwrap();
         let response_obj: Value = serde_json::from_slice(&body).unwrap();
         match get_response_result(response_obj) {
-            Ok(result) => validate_endpoint_response(&endpoint.id, &result),
+            Ok(result) => validate_endpoint_response(endpoint.id, &result),
             Err(msg) => panic!(
                 "Jsonrpc error for endpoint id #{:?}: {:?}",
                 endpoint.id, msg

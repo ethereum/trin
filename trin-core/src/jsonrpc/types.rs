@@ -43,7 +43,6 @@ pub struct JsonRequest {
 pub struct PortalJsonRpcRequest {
     pub endpoint: TrinEndpoint,
     pub resp: Responder<Value, String>,
-    //#[serde(default = "default_params")]
     pub params: Params,
 }
 
@@ -52,7 +51,6 @@ pub struct PortalJsonRpcRequest {
 pub struct HistoryJsonRpcRequest {
     pub endpoint: OverlayEndpoint,
     pub resp: Responder<Value, String>,
-    //#[serde(default = "default_params")]
     pub params: Params,
 }
 
@@ -61,7 +59,6 @@ pub struct HistoryJsonRpcRequest {
 pub struct StateJsonRpcRequest {
     pub endpoint: OverlayEndpoint,
     pub resp: Responder<Value, String>,
-    //#[serde(default = "default_params")]
     pub params: Params,
 }
 

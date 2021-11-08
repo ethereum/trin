@@ -7,7 +7,10 @@ use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 
 use crate::jsonrpc::endpoints::{Discv5Endpoint, OverlayEndpoint, TrinEndpoint};
-use crate::jsonrpc::types::{HistoryJsonRpcRequest, PortalJsonRpcRequest, StateJsonRpcRequest, Params};
+use crate::jsonrpc::errors::JsonRpcError;
+use crate::jsonrpc::types::{
+    HistoryJsonRpcRequest, Params, PortalJsonRpcRequest, StateJsonRpcRequest,
+};
 use crate::locks::RwLoggingExt;
 use crate::portalnet::discovery::Discovery;
 
@@ -33,35 +36,45 @@ impl JsonRpcHandler {
                         Ok(self.discovery.write_with_warn().await.routing_table_info())
                     }
                 },
-                TrinEndpoint::OverlayEndpoint(endpoint) => self.process_overlay_request(endpoint, request.params.clone()).await,
-                _ => Err(format!(
+                TrinEndpoint::OverlayEndpoint(endpoint) => {
+                    self.process_overlay_request(endpoint, request.params.clone())
+                        .await
+                }
+                _ => Err(JsonRpcError::InvalidRequest(format!(
                     "Can't process portal network endpoint {:?}",
                     request.endpoint
-                )),
+                ))),
             };
-            let _ = request.resp.send(response);
+            let _ = match response {
+                Ok(val) => request.resp.send(Ok(val)),
+                Err(msg) => request.resp.send(Err(msg.to_string())),
+            };
         }
     }
 
-    // change to errror type
     async fn process_overlay_request(
         &self,
         endpoint: OverlayEndpoint,
-        params: Params
-    ) -> Result<Value, String> {
+        params: Params,
+    ) -> Result<Value, JsonRpcError> {
         match params.clone() {
             Params::Array(val) => match &val[0].as_str() {
-                 Some("history") => match self.history_jsonrpc_tx.as_ref() {
+                Some("history") => match self.history_jsonrpc_tx.as_ref() {
                     Some(tx) => proxy_query_to_history_subnet(tx, endpoint, params.clone()).await,
-                    None => Err("Chain history subnetwork unavailable.".to_string()),
+                    None => Err(JsonRpcError::UnavailableNetwork("history".to_string())),
                 },
                 Some("state") => match self.state_jsonrpc_tx.as_ref() {
                     Some(tx) => proxy_query_to_state_subnet(tx, endpoint, params).await,
-                    None => Err("State subnetwork unavailable.".to_string()),
+                    None => Err(JsonRpcError::UnavailableNetwork("state".to_string())),
                 },
-                _ => Err("fuck".to_string()),
+                _ => Err(JsonRpcError::InvalidRequest(
+                    "Overlay request params must contain a first arg of `state` or `history`"
+                        .to_string(),
+                )),
             },
-            _ => Err("fuck".to_string()),
+            _ => Err(JsonRpcError::InvalidRequest(
+                "Overlay requests require an array of params".to_string(),
+            )),
         }
     }
 }
@@ -70,7 +83,7 @@ async fn proxy_query_to_history_subnet(
     subnet_tx: &mpsc::UnboundedSender<HistoryJsonRpcRequest>,
     endpoint: OverlayEndpoint,
     params: Params,
-) -> Result<Value, String> {
+) -> Result<Value, JsonRpcError> {
     let (resp_tx, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
     let message = HistoryJsonRpcRequest {
         endpoint,
@@ -81,12 +94,14 @@ async fn proxy_query_to_history_subnet(
     match resp_rx.recv().await {
         Some(val) => match val {
             Ok(result) => Ok(result),
-            Err(msg) => Err(format!(
+            Err(msg) => Err(JsonRpcError::InvalidRequest(format!(
                 "Error returned from chain history subnetwork: {:?}",
                 msg
-            )),
+            ))),
         },
-        None => Err("No response from chain history subnetwork".to_string()),
+        None => Err(JsonRpcError::UnavailableNetwork(
+            "No response from state subnetwork".to_string(),
+        )),
     }
 }
 
@@ -94,7 +109,7 @@ async fn proxy_query_to_state_subnet(
     subnet_tx: &mpsc::UnboundedSender<StateJsonRpcRequest>,
     endpoint: OverlayEndpoint,
     params: Params,
-) -> Result<Value, String> {
+) -> Result<Value, JsonRpcError> {
     let (resp_tx, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
     let message = StateJsonRpcRequest {
         endpoint,
@@ -105,8 +120,13 @@ async fn proxy_query_to_state_subnet(
     match resp_rx.recv().await {
         Some(val) => match val {
             Ok(result) => Ok(result),
-            Err(msg) => Err(format!("Error returned from state subnetwork: {:?}", msg)),
+            Err(msg) => Err(JsonRpcError::InvalidRequest(format!(
+                "Error returned from state subnetwork: {:?}",
+                msg
+            ))),
         },
-        None => Err("No response from state subnetwork".to_string()),
+        None => Err(JsonRpcError::UnavailableNetwork(
+            "No response from state subnetwork".to_string(),
+        )),
     }
 }
