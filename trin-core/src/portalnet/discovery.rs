@@ -172,7 +172,7 @@ impl Discovery {
         Ok(())
     }
 
-    pub async fn send_talkreq(
+    pub async fn send_talk_req(
         &self,
         enr: Enr,
         protocol: ProtocolId,

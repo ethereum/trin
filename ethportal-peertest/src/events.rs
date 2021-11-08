@@ -1,4 +1,4 @@
-use discv5::{Discv5Event, TalkRequest};
+use discv5::Discv5Event;
 use hex;
 use log::{debug, error, warn};
 use std::convert::TryInto;
@@ -10,33 +10,30 @@ use trin_core::portalnet::types::{Message, ProtocolId};
 use trin_core::portalnet::utp::UtpListener;
 
 pub struct PortalnetEvents {
-    pub overlay: Arc<OverlayProtocol>,
-    pub protocol_receiver: mpsc::Receiver<Discv5Event>,
+    pub history_overlay: Arc<OverlayProtocol>,
+    pub state_overlay: Arc<OverlayProtocol>,
+    pub protocol_rx: mpsc::Receiver<Discv5Event>,
     pub utp_listener: UtpListener,
 }
 
 impl PortalnetEvents {
-    pub async fn new(overlay: Arc<OverlayProtocol>, utp_listener: UtpListener) -> Self {
-        let protocol_receiver = overlay
-            .discovery
-            .write()
-            .await
-            .discv5
-            .event_stream()
-            .await
-            .map_err(|e| e.to_string())
-            .unwrap();
-
+    pub async fn new(
+        history_overlay: Arc<OverlayProtocol>,
+        state_overlay: Arc<OverlayProtocol>,
+        protocol_rx: mpsc::Receiver<Discv5Event>,
+        utp_listener: UtpListener,
+    ) -> Self {
         Self {
-            overlay: Arc::clone(&overlay),
-            protocol_receiver,
+            history_overlay,
+            state_overlay,
+            protocol_rx,
             utp_listener,
         }
     }
 
     /// Receives a request from the talkreq handler and sends a response back
     pub async fn process_discv5_requests(mut self) {
-        while let Some(event) = self.protocol_receiver.recv().await {
+        while let Some(event) = self.protocol_rx.recv().await {
             debug!("Got discv5 event {:?}", event);
 
             let request = match event {
@@ -49,17 +46,29 @@ impl PortalnetEvents {
             match protocol_id {
                 Ok(protocol) => match protocol {
                     ProtocolId::History => {
-                        let reply = self.get_talk_req_reply(&request).await;
+                        let reply = match self.history_overlay.process_one_request(&request).await {
+                            Ok(response) => Message::Response(response).to_bytes(),
+                            Err(error) => {
+                                error!("Failed to process history portal event: {}", error);
+                                error.to_string().into_bytes()
+                            }
+                        };
 
-                        if let Err(e) = request.respond(reply) {
-                            warn!("failed to send history network reply: {}", e);
+                        if let Err(error) = request.respond(reply) {
+                            warn!("Failed to send history network reply: {}", error);
                         }
                     }
                     ProtocolId::State => {
-                        let reply = self.get_talk_req_reply(&request).await;
+                        let reply = match self.state_overlay.process_one_request(&request).await {
+                            Ok(response) => Message::Response(response).to_bytes(),
+                            Err(error) => {
+                                error!("Failed to process portal event: {}", error);
+                                error.to_string().into_bytes()
+                            }
+                        };
 
-                        if let Err(e) = request.respond(reply) {
-                            warn!("failed to send state network reply: {}", e);
+                        if let Err(error) = request.respond(reply) {
+                            warn!("Failed to send state network reply: {}", error);
                         }
                     }
                     ProtocolId::Utp => {
@@ -78,16 +87,6 @@ impl PortalnetEvents {
                     }
                 },
                 Err(_) => warn!("Unable to decode protocol id"),
-            }
-        }
-    }
-
-    async fn get_talk_req_reply(&self, request: &TalkRequest) -> Vec<u8> {
-        match self.overlay.process_one_request(request).await {
-            Ok(r) => Message::Response(r).to_bytes(),
-            Err(e) => {
-                error!("failed to process portal event: {}", e);
-                e.into_bytes()
             }
         }
     }

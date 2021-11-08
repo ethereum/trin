@@ -24,18 +24,18 @@ impl StateEvents {
                 .instrument(tracing::info_span!("state_network"))
                 .await
             {
-                Ok(r) => {
-                    debug!("Sending reply: {:?}", r);
-                    Message::Response(r).to_bytes()
+                Ok(response) => {
+                    debug!("Sending reply: {:?}", response);
+                    Message::Response(response).to_bytes()
                 }
-                Err(e) => {
-                    error!("failed to process portal state event: {}", e);
-                    e.into_bytes()
+                Err(error) => {
+                    error!("Failed to process portal state event: {}", error);
+                    error.to_string().into_bytes()
                 }
             };
 
-            if let Err(e) = talk_request.respond(reply) {
-                warn!("failed to send reply: {}", e);
+            if let Err(error) = talk_request.respond(reply) {
+                warn!("Failed to send reply: {}", error);
             }
         }
     }

@@ -1,54 +1,28 @@
-use crate::locks::RwLoggingExt;
-use crate::utils::distance::xor_two_values;
+use std::sync::Arc;
+use std::time::Duration;
 
 use super::{
     discovery::Discovery,
+    overlay_service::{Node, OverlayRequest, OverlayService, RequestDirection},
     types::{
         CustomPayload, FindContent, FindNodes, FoundContent, Message, Nodes, Ping, Pong,
-        ProtocolId, Request, Response, SszEnr,
+        ProtocolId, Request, Response,
     },
     Enr, U256,
 };
+use crate::locks::RwLoggingExt;
+
 use discv5::{
     enr::NodeId,
     kbucket::{Filter, KBucketsTable},
-    RequestError, TalkRequest,
+    TalkRequest,
 };
+use futures::channel::oneshot;
 use rocksdb::DB;
-use std::sync::Arc;
-use std::time::Duration;
-use thiserror::Error;
-use tokio::sync::RwLock;
-use tracing::debug;
+use tokio::sync::{mpsc::UnboundedSender, RwLock};
+use tracing::{debug, warn};
 
-/// Maximum number of ENRs in response to FindNodes.
-const FIND_NODES_MAX_NODES: usize = 32;
-/// Maximum number of ENRs in response to FindContent.
-const FIND_CONTENT_MAX_NODES: usize = 32;
-
-#[derive(Clone)]
-pub struct Node {
-    enr: Enr,
-    data_radius: U256,
-}
-
-impl Node {
-    pub fn enr(&self) -> Enr {
-        self.enr.clone()
-    }
-
-    pub fn data_radius(&self) -> U256 {
-        self.data_radius.clone()
-    }
-}
-
-impl std::cmp::Eq for Node {}
-
-impl PartialEq for Node {
-    fn eq(&self, other: &Self) -> bool {
-        self.enr == other.enr
-    }
-}
+pub use super::overlay_service::OverlayRequestError;
 
 /// Configuration parameters for the overlay network.
 #[derive(Clone)]
@@ -70,33 +44,6 @@ impl Default for OverlayConfig {
     }
 }
 
-#[derive(Error, Debug)]
-pub enum OverlayRequestError {
-    #[error("The request returned an invalid response type")]
-    InvalidResponse,
-
-    #[error("The response was unable to be decoded")]
-    DecodeError,
-
-    #[error("The request returned an empty response")]
-    EmptyResponse,
-
-    #[error("The request timed out")]
-    Timeout,
-
-    #[error("Internal error: ")]
-    Other(discv5::RequestError),
-}
-
-impl From<discv5::RequestError> for OverlayRequestError {
-    fn from(err: discv5::RequestError) -> Self {
-        match err {
-            discv5::RequestError::Timeout => Self::Timeout,
-            err => Self::Other(err),
-        }
-    }
-}
-
 /// Overlay protocol is a layer on top of discv5 that handles all requests from the overlay networks
 /// (state, history etc.) and dispatch them to the discv5 protocol TalkReq. Each network should
 /// implement the overlay protocol and the overlay protocol is where we can encapsulate the logic for
@@ -105,12 +52,16 @@ impl From<discv5::RequestError> for OverlayRequestError {
 pub struct OverlayProtocol {
     /// Reference to the underlying discv5 protocol
     pub discovery: Arc<RwLock<Discovery>>,
-    // The data radius of the local node.
-    pub data_radius: Arc<RwLock<U256>>,
-    // The overlay routing table of the local node.
-    pub kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
     // Reference to the database instance
     pub db: Arc<DB>,
+    /// The data radius of the local node.
+    data_radius: Arc<RwLock<U256>>,
+    /// The overlay routing table of the local node.
+    kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
+    /// The subnetwork protocol of the overlay.
+    protocol: ProtocolId,
+    /// A sender to send requests to the OverlayService.
+    request_tx: UnboundedSender<OverlayRequest>,
 }
 
 impl OverlayProtocol {
@@ -119,151 +70,69 @@ impl OverlayProtocol {
         discovery: Arc<RwLock<Discovery>>,
         db: Arc<DB>,
         data_radius: U256,
+        protocol: ProtocolId,
     ) -> Self {
+        let local_enr = discovery.read_with_warn().await.local_enr();
         let kbuckets = Arc::new(RwLock::new(KBucketsTable::new(
-            discovery
-                .read_with_warn()
-                .await
-                .local_enr()
-                .node_id()
-                .into(),
+            local_enr.node_id().into(),
             config.bucket_pending_timeout,
             config.max_incoming_per_bucket,
             config.table_filter,
             config.bucket_filter,
         )));
 
+        let data_radius = Arc::new(RwLock::new(data_radius));
+        let request_tx = OverlayService::spawn(
+            Arc::clone(&discovery),
+            Arc::clone(&db),
+            Arc::clone(&kbuckets),
+            Arc::clone(&data_radius),
+            protocol.clone(),
+        )
+        .await
+        .unwrap();
+
         Self {
             discovery,
-            data_radius: Arc::new(RwLock::new(data_radius)),
+            data_radius,
             kbuckets,
             db,
+            protocol,
+            request_tx,
         }
     }
 
-    pub async fn process_one_request(
-        &self,
-        talk_request: &TalkRequest,
-    ) -> Result<Response, String> {
-        let request = match Message::from_bytes(talk_request.body()) {
-            Ok(Message::Request(r)) => r,
-            Ok(_) => return Err("Invalid message".to_owned()),
-            Err(e) => return Err(format!("Invalid request: {}", e)),
-        };
-
-        let response = match request {
-            Request::Ping(ping) => {
-                debug!("Received {}", ping);
-                let enr_seq = self.discovery.read_with_warn().await.local_enr().seq();
-                let payload = CustomPayload::new(self.data_radius().await, None);
-                let pong = Pong {
-                    enr_seq,
-                    payload: Some(payload),
-                };
-                debug!("Sending {}", pong);
-
-                Response::Pong(pong)
-            }
-            Request::FindNodes(FindNodes { distances }) => {
-                debug!("Received FindNodes(distances={:?})", distances);
-                let distances64: Vec<u64> = distances.iter().map(|x| (*x).into()).collect();
-                let enrs = self.nodes_by_distance(distances64).await;
-                Response::Nodes(Nodes {
-                    // from spec: total = The total number of Nodes response messages being sent.
-                    // TODO: support returning multiple messages
-                    total: 1_u8,
-                    enrs,
-                })
-            }
-            Request::FindContent(FindContent { content_key }) => match self.db.get(&content_key) {
-                Ok(Some(value)) => {
-                    let empty_enrs: Vec<SszEnr> = vec![];
-                    Response::FoundContent(FoundContent {
-                        enrs: empty_enrs,
-                        payload: value,
-                    })
-                }
-                Ok(None) => {
-                    let enrs = self.find_nodes_close_to_content(content_key).await;
-                    let empty_payload: Vec<u8> = vec![];
-                    Response::FoundContent(FoundContent {
-                        enrs,
-                        payload: empty_payload,
-                    })
-                }
-                Err(e) => panic!("Unable to respond to FindContent: {}", e),
-            },
-        };
-        Ok(response)
+    /// Returns the subnetwork protocol of the overlay protocol.
+    pub fn protocol(&self) -> &ProtocolId {
+        &self.protocol
     }
 
-    /// Returns the local ENR of the node.
+    /// Returns the ENR of the local node.
     pub async fn local_enr(&self) -> Enr {
         self.discovery.read_with_warn().await.discv5.local_enr()
     }
 
-    // Returns the data radius of the node.
+    /// Returns the data radius of the local node.
     pub async fn data_radius(&self) -> U256 {
         self.data_radius.read_with_warn().await.clone()
     }
 
-    /// Returns a vector of the ENRs of the closest nodes by the given log2 distances.
-    pub async fn nodes_by_distance(&self, mut log2_distances: Vec<u64>) -> Vec<Enr> {
-        let mut nodes_to_send = Vec::new();
-        log2_distances.sort_unstable();
-        log2_distances.dedup();
+    /// Processes a single Discovery v5 TALKREQ message.
+    pub async fn process_one_request(
+        &self,
+        talk_request: &TalkRequest,
+    ) -> Result<Response, OverlayRequestError> {
+        let request = match Message::from_bytes(talk_request.body()) {
+            Ok(Message::Request(request)) => request,
+            Ok(_) => return Err(OverlayRequestError::InvalidRequest),
+            Err(_) => return Err(OverlayRequestError::DecodeError),
+        };
+        let direction = RequestDirection::Incoming {
+            source: *talk_request.node_id(),
+        };
 
-        let mut log2_distances = log2_distances.as_slice();
-        if let Some(0) = log2_distances.first() {
-            // If the distance is 0 send our local ENR.
-            nodes_to_send.push(self.local_enr().await);
-            log2_distances = &log2_distances[1..];
-        }
-
-        if !log2_distances.is_empty() {
-            let mut kbuckets = self.kbuckets.write_with_warn().await;
-            for node in kbuckets
-                .nodes_by_distances(&log2_distances, FIND_NODES_MAX_NODES)
-                .into_iter()
-                .map(|entry| entry.node.value.clone())
-            {
-                nodes_to_send.push(node.enr());
-            }
-        }
-        nodes_to_send
-    }
-
-    /// Returns list of nodes closer to content than self, sorted by distance.
-    pub async fn find_nodes_close_to_content<V>(&self, content_key: V) -> Vec<SszEnr>
-    where
-        V: Into<Vec<u8>>,
-    {
-        let content_key = content_key.into();
-        let self_node_id = self.local_enr().await.node_id();
-        let self_distance = xor_two_values(&content_key, &self_node_id.raw().to_vec());
-
-        let mut nodes_with_distance: Vec<(Vec<u8>, Enr)> = self
-            .table_entries_enr()
-            .await
-            .into_iter()
-            .map(|enr| {
-                (
-                    xor_two_values(&content_key, &enr.node_id().raw().to_vec()),
-                    enr,
-                )
-            })
-            .collect();
-
-        nodes_with_distance.sort_by(|a, b| a.0.cmp(&b.0));
-
-        let closest_nodes = nodes_with_distance
-            .into_iter()
-            .take(FIND_CONTENT_MAX_NODES)
-            .filter(|node_record| &node_record.0 < &self_distance)
-            .map(|node_record| SszEnr::new(node_record.1))
-            .collect();
-
-        closest_nodes
+        // Send the request and wait on the response.
+        self.send_overlay_request(request, direction).await
     }
 
     /// Returns a vector of all ENR node IDs of nodes currently contained in the routing table.
@@ -286,71 +155,102 @@ impl OverlayProtocol {
             .collect()
     }
 
+    /// Sends a `Ping` request to `enr`.
     pub async fn send_ping(
         &self,
-        data_radius: U256,
         enr: Enr,
-        protocol: ProtocolId,
         payload: Option<Vec<u8>>,
     ) -> Result<Pong, OverlayRequestError> {
+        // Construct the request.
         let enr_seq = self.discovery.read_with_warn().await.local_enr().seq();
-
+        let data_radius = self.data_radius().await;
         let payload = CustomPayload::new(data_radius, payload);
-        let msg = Ping {
+        let request = Ping {
             enr_seq,
             payload: Some(payload),
         };
-        debug!("Sending {} dest={}", msg, enr.node_id());
-        let result = self
-            .discovery
-            .read_with_warn()
+
+        let node_id = enr.node_id();
+        let direction = RequestDirection::Outgoing { destination: enr };
+
+        // Send the request and wait on the response.
+        debug!("Sending {} dest={}", request, node_id);
+        match self
+            .send_overlay_request(Request::Ping(request), direction)
             .await
-            .send_talkreq(
-                enr,
-                protocol,
-                Message::Request(Request::Ping(msg)).to_bytes(),
-            )
-            .await?;
-        Pong::try_from(&result)
+        {
+            Ok(Response::Pong(pong)) => Ok(pong),
+            Ok(_) => Err(OverlayRequestError::InvalidResponse),
+            Err(error) => Err(error),
+        }
     }
 
+    /// Sends a `FindNodes` request to `enr`.
     pub async fn send_find_nodes(
         &self,
-        distances: Vec<u16>,
         enr: Enr,
-        protocol: ProtocolId,
-    ) -> Result<Vec<u8>, RequestError> {
-        let msg = FindNodes { distances };
-        self.discovery
-            .read_with_warn()
+        distances: Vec<u16>,
+    ) -> Result<Nodes, OverlayRequestError> {
+        // Construct the request.
+        let request = FindNodes { distances };
+        let direction = RequestDirection::Outgoing { destination: enr };
+
+        // Send the request and wait on the response.
+        match self
+            .send_overlay_request(Request::FindNodes(request), direction)
             .await
-            .send_talkreq(
-                enr,
-                protocol,
-                Message::Request(Request::FindNodes(msg)).to_bytes(),
-            )
-            .await
+        {
+            Ok(Response::Nodes(nodes)) => Ok(nodes),
+            Ok(_) => Err(OverlayRequestError::InvalidResponse),
+            Err(error) => Err(error),
+        }
     }
 
-    pub async fn send_find_content<V>(
+    /// Sends a `FindContent` request for `content_key` to `enr`.
+    pub async fn send_find_content(
         &self,
-        content_key: V,
         enr: Enr,
-        protocol: ProtocolId,
-    ) -> Result<Vec<u8>, RequestError>
-    where
-        V: Into<Vec<u8>>,
-    {
-        let content_key = content_key.into();
-        let msg = FindContent { content_key };
-        self.discovery
-            .read_with_warn()
+        content_key: Vec<u8>,
+    ) -> Result<FoundContent, OverlayRequestError> {
+        // Construct the request.
+        let request = FindContent { content_key };
+        let direction = RequestDirection::Outgoing { destination: enr };
+
+        // Send the request and wait on the response.
+        match self
+            .send_overlay_request(Request::FindContent(request), direction)
             .await
-            .send_talkreq(
-                enr,
-                protocol,
-                Message::Request(Request::FindContent(msg)).to_bytes(),
-            )
-            .await
+        {
+            Ok(Response::FoundContent(found_content)) => Ok(found_content),
+            Ok(_) => Err(OverlayRequestError::InvalidResponse),
+            Err(error) => Err(error),
+        }
+    }
+
+    /// Sends a request through the overlay service.
+    async fn send_overlay_request(
+        &self,
+        request: Request,
+        direction: RequestDirection,
+    ) -> Result<Response, OverlayRequestError> {
+        let (tx, rx) = oneshot::channel();
+        let overlay_request = OverlayRequest {
+            request,
+            direction,
+            responder: Some(tx),
+        };
+        if let Err(error) = self.request_tx.send(overlay_request) {
+            warn!(
+                "Failure sending request over {:?} service channel",
+                self.protocol
+            );
+            return Err(OverlayRequestError::ChannelFailure(error.to_string()));
+        }
+
+        // Wait on the response.
+        match rx.await {
+            Ok(result) => result,
+            Err(error) => Err(OverlayRequestError::ChannelFailure(error.to_string())),
+        }
     }
 }
