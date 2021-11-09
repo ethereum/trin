@@ -41,7 +41,7 @@ impl HistoryNetwork {
         // a session on the (overlay) portal network.
         for enr in self.overlay.discovery.discv5.table_entries_enr() {
             debug!("Pinging {} on portal history network", enr);
-            let ping_result = self.overlay.send_ping(enr.clone(), None).await;
+            let ping_result = self.overlay.send_ping(enr.clone()).await;
 
             match ping_result {
                 Ok(_) => {

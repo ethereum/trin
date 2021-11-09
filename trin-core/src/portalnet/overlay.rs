@@ -155,17 +155,15 @@ impl OverlayProtocol {
     }
 
     /// Sends a `Ping` request to `enr`.
-    pub async fn send_ping(
-        &self,
-        enr: Enr,
-        payload: Option<Vec<u8>>,
-    ) -> Result<Pong, OverlayRequestError> {
-        let enr_seq = self.discovery.local_enr().seq();
-
-        let payload = CustomPayload::new(*self.data_radius, payload);
+    pub async fn send_ping(&self, enr: Enr) -> Result<Pong, OverlayRequestError> {
+        // Construct the request.
+        let enr_seq = self.discovery.read_with_warn().await.local_enr().seq();
+        let data_radius = self.data_radius().await;
+        // todo - change type?
+        let custom_payload = CustomPayload::new(u64::to_be_bytes(data_radius.as_u64()).to_vec());
         let request = Ping {
             enr_seq,
-            payload: Some(payload),
+            custom_payload,
         };
 
         let node_id = enr.node_id();

@@ -148,7 +148,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tokio::spawn(async { history_network_task.unwrap().await });
         tokio::spawn(async { state_network_task.unwrap().await });
         tokio::spawn(async { jsonrpc_server_task.await.unwrap() });
-
         match peertest_config.target_transport.as_str() {
             "ipc" => test_jsonrpc_endpoints_over_ipc(peertest_config).await,
             "http" => test_jsonrpc_endpoints_over_http(peertest_config).await,

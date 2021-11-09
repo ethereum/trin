@@ -6,8 +6,8 @@ use crate::{
     portalnet::{
         discovery::Discovery,
         types::{
-            CustomPayload, FindContent, FindNodes, FoundContent, Message, Nodes, Ping, Pong,
-            ProtocolId, Request, Response, SszEnr,
+            ByteList, CustomPayload, FindContent, FindNodes, FoundContent, Message, Nodes, Ping,
+            Pong, ProtocolId, Request, Response, SszEnr,
         },
         Enr, U256,
     },
@@ -18,6 +18,8 @@ use discv5::{enr::NodeId, kbucket::KBucketsTable};
 use futures::channel::oneshot;
 use log::{debug, info};
 use rocksdb::DB;
+use ssz::Encode;
+use ssz_types::VariableList;
 use thiserror::Error;
 use tokio::sync::{
     mpsc::{self, UnboundedReceiver, UnboundedSender},
@@ -257,8 +259,11 @@ impl OverlayService {
         );
         let enr_seq = self.local_enr().await.seq();
         let data_radius = self.data_radius().await;
-        let payload = Some(CustomPayload::new(data_radius, None));
-        Pong { enr_seq, payload }
+        let custom_payload = CustomPayload::new(data_radius.as_ssz_bytes());
+        Pong {
+            enr_seq,
+            custom_payload,
+        }
     }
 
     /// Builds a `Nodes` response for a `FindNodes` request.
@@ -276,16 +281,13 @@ impl OverlayService {
         request: FindContent,
     ) -> Result<FoundContent, OverlayRequestError> {
         match self.db.get(&request.content_key) {
-            Ok(Some(value)) => Ok(FoundContent {
-                enrs: vec![],
-                payload: value,
-            }),
+            Ok(Some(value)) => {
+                let content = Some(ByteList::from(VariableList::from(value)));
+                Ok(FoundContent::new(None, None, content))
+            }
             Ok(None) => {
-                let enrs = self.find_nodes_close_to_content(request.content_key).await;
-                Ok(FoundContent {
-                    enrs,
-                    payload: vec![],
-                })
+                let enrs = Some(self.find_nodes_close_to_content(request.content_key).await);
+                Ok(FoundContent::new(None, enrs, None))
             }
             Err(error) => panic!("Unable to respond to FindContent: {}", error),
         }
@@ -326,7 +328,7 @@ impl OverlayService {
     }
 
     /// Returns a vector of the ENRs of the closest nodes by the given log2 distances.
-    async fn nodes_by_distance(&self, mut log2_distances: Vec<u64>) -> Vec<Enr> {
+    async fn nodes_by_distance(&self, mut log2_distances: Vec<u64>) -> Vec<SszEnr> {
         let mut nodes_to_send = Vec::new();
         log2_distances.sort_unstable();
         log2_distances.dedup();
@@ -334,7 +336,7 @@ impl OverlayService {
         let mut log2_distances = log2_distances.as_slice();
         if let Some(0) = log2_distances.first() {
             // If the distance is 0 send our local ENR.
-            nodes_to_send.push(self.local_enr().await);
+            nodes_to_send.push(SszEnr::new(self.local_enr().await));
             log2_distances = &log2_distances[1..];
         }
 
@@ -345,7 +347,7 @@ impl OverlayService {
                 .into_iter()
                 .map(|entry| entry.node.value.clone())
             {
-                nodes_to_send.push(node.enr());
+                nodes_to_send.push(SszEnr::new(node.enr()));
             }
         }
         nodes_to_send
