@@ -1,5 +1,5 @@
 use std::os::unix::net::UnixStream;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use structopt::StructOpt;
 use thiserror::Error;
 
@@ -24,7 +24,7 @@ struct Config {
     endpoint: String,
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let Config { ipc, endpoint } = Config::from_args();
 
     eprintln!(
@@ -32,31 +32,18 @@ fn main() {
         endpoint,
         ipc.to_string_lossy()
     );
-    let mut client = match TrinClient::from_ipc(&ipc) {
-        Ok(client) => client,
-        Err(err) => {
-            eprintln!("Could not connect. err={:?}", err);
-            return;
-        }
-    };
+    let mut client = TrinClient::from_ipc(&ipc)?;
 
     let req = client.build_request(endpoint.as_str());
-    let resp = client.make_request(req);
+    let resp = client.make_request(req)?;
 
-    match resp {
-        Err(error) => {
-            eprintln!("error: {}", error);
-        }
-        Ok(value) => {
-            // unwrap: this value is safe to serialize, it was just deserialized!
-            println!("{}", serde_json::to_string_pretty(&value).unwrap());
-        }
-    }
+    println!("{}", serde_json::to_string_pretty(&resp).unwrap());
+    Ok(())
 }
 
-fn build_request<'a>(method: &'a str, request_id: u64) -> jsonrpc::Request<'a> {
+fn build_request(method: &str, request_id: u64) -> jsonrpc::Request {
     jsonrpc::Request {
-        method: method,
+        method,
         params: &[],
         id: serde_json::json!(request_id),
         jsonrpc: Some("2.0"),
@@ -84,7 +71,7 @@ where
 }
 
 impl TrinClient<UnixStream> {
-    fn from_ipc(path: &PathBuf) -> std::io::Result<Self> {
+    fn from_ipc(path: &Path) -> std::io::Result<Self> {
         // TODO: a nice error if this file does not exist
         Ok(Self {
             stream: UnixStream::connect(path)?,
@@ -127,8 +114,9 @@ where
 
         let clone = self.stream.try_clone().unwrap();
         let deser = serde_json::Deserializer::from_reader(clone);
-        for obj in deser.into_iter::<serde_json::Value>() {
-            return obj.map_err(|err| JsonRpcError::Malformed(err));
+
+        if let Some(obj) = deser.into_iter::<serde_json::Value>().next() {
+            return obj.map_err(JsonRpcError::Malformed);
         }
 
         // this should only happen when they immediately send EOF
