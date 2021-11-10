@@ -44,7 +44,7 @@ impl StateNetwork {
     }
 
     /// Convenience call for testing, quick way to ping bootnodes
-    pub async fn ping_bootnodes(&mut self) -> Result<(), String> {
+    pub async fn ping_bootnodes(&self) -> Result<(), String> {
         // Trigger bonding with bootnodes, at both the base layer and portal overlay.
         // The overlay ping via talkreq will trigger a session at the base layer, then
         // a session on the (overlay) portal network.
