@@ -95,6 +95,12 @@ pub enum JsonRpcError {
 // gave it exclusive ownership that would require us to open a new connection for every
 // command we wanted to send! By making a clone (or, by trying to) we can have our cake
 // and eat it too.
+//
+// TryClone is not necessary if TrinClient stays in this file forever; this script only
+// needs to make a single request before it exits. However, in a future where TrinClient
+// becomes the mechanism other parts of the codebase (such as peertester) use to act as
+// JSON-RPC clients then this becomes necessary. So, this is slightly over-engineered but
+// with an eye to future growth.
 impl<'a, S> TrinClient<S>
 where
     S: std::io::Read + std::io::Write + TryClone,
