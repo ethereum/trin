@@ -10,9 +10,7 @@ use std::cmp::{max, min};
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tokio::sync::RwLock;
 
-use crate::locks::RwLoggingExt;
 use crate::portalnet::types::ProtocolId;
 
 pub const HEADER_SIZE: usize = 20;
@@ -404,7 +402,7 @@ impl ConnectionKey {
 
 // Basically the same idea as in the official Bit Torrent library we will store all of the active connections data here
 pub struct UtpListener {
-    pub discovery: Arc<RwLock<Discovery>>,
+    pub discovery: Arc<Discovery>,
     pub utp_connections: HashMap<ConnectionKey, UtpStream>,
 }
 
@@ -435,13 +433,7 @@ impl UtpListener {
                         }
                     }
                     Type::StSyn => {
-                        if let Some(enr) = self
-                            .discovery
-                            .read_with_warn()
-                            .await
-                            .discv5
-                            .find_enr(&node_id)
-                        {
+                        if let Some(enr) = self.discovery.discv5.find_enr(&node_id) {
                             // If neither of those cases happened handle this is a new request
                             let mut conn = UtpStream::init(Arc::clone(&self.discovery), enr);
                             conn.handle_packet(packet).await;
@@ -474,13 +466,7 @@ impl UtpListener {
 
     // I am honestly not sure if I should init this with Enr or NodeId since we could use both
     async fn connect(&mut self, connection_id: u16, node_id: NodeId) {
-        if let Some(enr) = self
-            .discovery
-            .read_with_warn()
-            .await
-            .discv5
-            .find_enr(&node_id)
-        {
+        if let Some(enr) = self.discovery.discv5.find_enr(&node_id) {
             let mut conn = UtpStream::init(Arc::clone(&self.discovery), enr);
             conn.make_connection(connection_id).await;
             self.utp_connections.insert(
@@ -509,7 +495,7 @@ pub struct UtpStream {
     incoming_buffer: BTreeMap<u16, Packet>,
     unsent_queue: VecDeque<Packet>,
     enr: Enr,
-    discovery: Arc<RwLock<Discovery>>,
+    discovery: Arc<Discovery>,
     cur_window: u32,
     remote_wnd_size: u32,
     send_window: HashMap<u16, Packet>,
@@ -529,7 +515,7 @@ pub struct UtpStream {
 }
 
 impl UtpStream {
-    fn init(arc: Arc<RwLock<Discovery>>, enr: Enr) -> Self {
+    fn init(arc: Arc<Discovery>, enr: Enr) -> Self {
         Self {
             state: ConnectionState::Uninitialized,
             seq_nr: 0,
@@ -601,8 +587,6 @@ impl UtpStream {
         }
         let talk_request_result = self
             .discovery
-            .read_with_warn()
-            .await
             .send_talk_req(self.enr.clone(), ProtocolId::Utp, packet.0.clone())
             .await;
         debug!("uTP TalkRequest result: {:?}", talk_request_result);

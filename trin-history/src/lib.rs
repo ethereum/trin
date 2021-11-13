@@ -45,12 +45,10 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut discovery = Discovery::new(portalnet_config.clone()).unwrap();
     discovery.start().await.unwrap();
-    let discovery = Arc::new(RwLock::new(discovery));
+    let discovery = Arc::new(discovery);
 
     // Setup Overlay database
-    let db = Arc::new(setup_overlay_db(
-        discovery.read().await.local_enr().node_id(),
-    ));
+    let db = Arc::new(setup_overlay_db(discovery.local_enr().node_id()));
 
     let (history_event_tx, history_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
     let portal_events_discovery = Arc::clone(&discovery);
@@ -78,7 +76,7 @@ type HistoryEventTx = Option<mpsc::UnboundedSender<TalkRequest>>;
 type HistoryJsonRpcTx = Option<mpsc::UnboundedSender<HistoryJsonRpcRequest>>;
 
 pub async fn initialize_history_network(
-    discovery: &Arc<RwLock<Discovery>>,
+    discovery: &Arc<Discovery>,
     portalnet_config: PortalnetConfig,
     db: Arc<DB>,
 ) -> (

@@ -82,7 +82,7 @@ impl Discovery {
             enr, enr
         );
 
-        let mut discv5 = Discv5::new(enr, enr_key, config.discv5_config)
+        let discv5 = Discv5::new(enr, enr_key, config.discv5_config)
             .map_err(|e| format!("Failed to create discv5 instance: {}", e))?;
 
         for enr in config.bootnode_enrs {
@@ -123,7 +123,7 @@ impl Discovery {
     }
 
     /// Returns vector of all ENR node IDs of nodes currently contained in the routing table mapped to JSON Value.
-    pub fn routing_table_info(&mut self) -> Value {
+    pub fn routing_table_info(&self) -> Value {
         let buckets: Vec<(String, String, String)> = self
             .discv5
             .table_entries()

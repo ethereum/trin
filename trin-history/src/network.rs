@@ -1,7 +1,6 @@
 use log::debug;
 use rocksdb::DB;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use trin_core::portalnet::{
     discovery::Discovery,
     overlay::{OverlayConfig, OverlayProtocol, OverlayRequestError},
@@ -16,7 +15,7 @@ pub struct HistoryNetwork {
 
 impl HistoryNetwork {
     pub async fn new(
-        discovery: Arc<RwLock<Discovery>>,
+        discovery: Arc<Discovery>,
         db: Arc<DB>,
         portal_config: PortalnetConfig,
     ) -> Self {
@@ -40,14 +39,7 @@ impl HistoryNetwork {
         // Trigger bonding with bootnodes, at both the base layer and portal overlay.
         // The overlay ping via talkreq will trigger a session at the base layer, then
         // a session on the (overlay) portal network.
-        for enr in self
-            .overlay
-            .discovery
-            .read()
-            .await
-            .discv5
-            .table_entries_enr()
-        {
+        for enr in self.overlay.discovery.discv5.table_entries_enr() {
             debug!("Pinging {} on portal history network", enr);
             let ping_result = self.overlay.send_ping(enr.clone(), None).await;
 

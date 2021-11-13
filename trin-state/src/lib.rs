@@ -1,7 +1,7 @@
 use log::info;
 use rocksdb::DB;
 use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
 use crate::events::StateEvents;
@@ -10,7 +10,6 @@ use discv5::TalkRequest;
 use network::StateNetwork;
 use trin_core::cli::TrinConfig;
 use trin_core::jsonrpc::types::StateJsonRpcRequest;
-use trin_core::locks::RwLoggingExt;
 use trin_core::portalnet::discovery::Discovery;
 use trin_core::portalnet::events::PortalnetEvents;
 use trin_core::portalnet::types::PortalnetConfig;
@@ -44,12 +43,10 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut discovery = Discovery::new(portalnet_config.clone()).unwrap();
     discovery.start().await.unwrap();
-    let discovery = Arc::new(RwLock::new(discovery));
+    let discovery = Arc::new(discovery);
 
     // Setup Overlay database
-    let db = Arc::new(setup_overlay_db(
-        discovery.read_with_warn().await.local_enr().node_id(),
-    ));
+    let db = Arc::new(setup_overlay_db(discovery.local_enr().node_id()));
 
     let (state_event_tx, state_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
     let portal_events_discovery = Arc::clone(&discovery);
@@ -62,7 +59,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     let state_network = StateNetwork::new(discovery.clone(), db, portalnet_config.clone()).await;
-    let state_network = Arc::new(RwLock::new(state_network));
+    let state_network = Arc::new(state_network);
 
     spawn_state_network(state_network, portalnet_config, state_event_rx)
         .await
@@ -76,7 +73,7 @@ type StateEventTx = Option<mpsc::UnboundedSender<TalkRequest>>;
 type StateJsonRpcTx = Option<mpsc::UnboundedSender<StateJsonRpcRequest>>;
 
 pub async fn initialize_state_network(
-    discovery: &Arc<RwLock<Discovery>>,
+    discovery: &Arc<Discovery>,
     portalnet_config: PortalnetConfig,
     db: Arc<DB>,
 ) -> (StateHandler, StateNetworkTask, StateEventTx, StateJsonRpcTx) {
@@ -84,7 +81,7 @@ pub async fn initialize_state_network(
     let (state_event_tx, state_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
     let state_network =
         StateNetwork::new(Arc::clone(discovery), db, portalnet_config.clone()).await;
-    let state_network = Arc::new(RwLock::new(state_network));
+    let state_network = Arc::new(state_network);
     let state_handler = StateRequestHandler {
         network: Arc::clone(&state_network),
         state_rx: state_jsonrpc_rx,
@@ -100,7 +97,7 @@ pub async fn initialize_state_network(
 }
 
 pub fn spawn_state_network(
-    network: Arc<RwLock<StateNetwork>>,
+    network: Arc<StateNetwork>,
     portalnet_config: PortalnetConfig,
     state_event_rx: mpsc::UnboundedReceiver<TalkRequest>,
 ) -> JoinHandle<()> {
@@ -119,12 +116,7 @@ pub fn spawn_state_network(
         tokio::spawn(state_events.process_requests());
 
         // hacky test: make sure we establish a session with the boot node
-        network
-            .write_with_warn()
-            .await
-            .ping_bootnodes()
-            .await
-            .unwrap();
+        network.ping_bootnodes().await.unwrap();
 
         tokio::signal::ctrl_c()
             .await

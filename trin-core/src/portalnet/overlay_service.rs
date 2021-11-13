@@ -143,13 +143,13 @@ impl PartialEq for Node {
 /// The overlay service.
 pub struct OverlayService {
     /// The underlying Discovery v5 protocol.
-    discovery: Arc<RwLock<Discovery>>,
+    discovery: Arc<Discovery>,
     /// The content database of the local node.
     db: Arc<DB>,
     /// The routing table of the local node.
     kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
     /// The data radius of the local node.
-    data_radius: Arc<RwLock<U256>>,
+    data_radius: Arc<U256>,
     /// The protocol identifier.
     protocol: ProtocolId,
     // TODO: This should probably be a bounded channel.
@@ -164,10 +164,10 @@ impl OverlayService {
     /// is updated according to incoming requests and responses as well as autonomous maintenance
     /// processes.
     pub async fn spawn(
-        discovery: Arc<RwLock<Discovery>>,
+        discovery: Arc<Discovery>,
         db: Arc<DB>,
         kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
-        data_radius: Arc<RwLock<U256>>,
+        data_radius: Arc<U256>,
         protocol: ProtocolId,
     ) -> Result<UnboundedSender<OverlayRequest>, String> {
         let (request_tx, request_rx) = mpsc::unbounded_channel();
@@ -198,12 +198,12 @@ impl OverlayService {
 
     /// Returns the local ENR of the node.
     async fn local_enr(&self) -> Enr {
-        self.discovery.read_with_warn().await.discv5.local_enr()
+        self.discovery.discv5.local_enr()
     }
 
     /// Returns the data radius of the node.
     async fn data_radius(&self) -> U256 {
-        self.data_radius.read_with_warn().await.clone()
+        *self.data_radius
     }
 
     /// Processes an overlay request.
@@ -299,8 +299,6 @@ impl OverlayService {
     ) -> Result<Response, OverlayRequestError> {
         match self
             .discovery
-            .read_with_warn()
-            .await
             .send_talk_req(
                 destination,
                 self.protocol.clone(),
