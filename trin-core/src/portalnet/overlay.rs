@@ -19,6 +19,7 @@ use discv5::{
 };
 use futures::channel::oneshot;
 use rocksdb::DB;
+use ssz::Encode;
 use tokio::sync::{mpsc::UnboundedSender, RwLock};
 use tracing::{debug, warn};
 
@@ -159,8 +160,7 @@ impl OverlayProtocol {
         // Construct the request.
         let enr_seq = self.discovery.read_with_warn().await.local_enr().seq();
         let data_radius = self.data_radius().await;
-        // todo - change type?
-        let custom_payload = CustomPayload::new(u64::to_be_bytes(data_radius.as_u64()).to_vec());
+        let custom_payload = CustomPayload::new(data_radius.as_ssz_bytes());
         let request = Ping {
             enr_seq,
             custom_payload,
