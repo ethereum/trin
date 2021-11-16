@@ -1,6 +1,7 @@
 use std::io::prelude::*;
 use std::os::unix::net::UnixStream;
 use std::slice::Iter;
+use std::time::Duration;
 
 use hyper::{self, Body, Client, Method, Request};
 use log::info;
@@ -97,13 +98,23 @@ pub async fn test_jsonrpc_endpoints_over_ipc(target_ipc_path: String) {
     for endpoint in JsonRpcEndpoint::all_endpoints() {
         info!("Testing over IPC: {:?}", endpoint.method);
         let mut stream = UnixStream::connect(&target_ipc_path).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_millis(500)))
+            .expect("Couldn't set read timeout");
+
         let v: Value = serde_json::from_str(&endpoint.to_jsonrpc()).unwrap();
         let data = serde_json::to_vec(&v).unwrap();
         stream.write_all(&data).unwrap();
         stream.flush().unwrap();
         let deser = serde_json::Deserializer::from_reader(stream);
         for obj in deser.into_iter::<Value>() {
-            let response_obj = obj.unwrap();
+            let response_obj = match obj {
+                Ok(val) => val,
+                Err(err) => panic!(
+                    "json deserialization error. (Timeouts typically give an 'os error 11'): {}",
+                    err
+                ),
+            };
             match get_response_result(response_obj) {
                 Ok(result) => validate_endpoint_response(endpoint.method, &result),
                 Err(msg) => panic!(
