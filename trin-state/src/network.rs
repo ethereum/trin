@@ -27,7 +27,10 @@ impl StateNetwork {
         let triedb = TrieDB::new(db.clone());
         let trie = EthTrie::new(Arc::new(triedb));
 
-        let config = OverlayConfig::default();
+        let config = OverlayConfig {
+            bootnode_enrs: portal_config.bootnode_enrs.clone(),
+            ..Default::default()
+        };
         let overlay = OverlayProtocol::new(
             config,
             discovery,

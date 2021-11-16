@@ -45,8 +45,8 @@ uds_windows = "1.0.1"
 interfaces = "0.0.7"
 
 [dependencies.discv5]
-branch = "fewer-mutable-borrows"
-git = "https://github.com/carver/discv5"
+branch = "master"
+git = "https://github.com/sigp/discv5"
 
 [dependencies.rusqlite]
 version = "0.25.3"

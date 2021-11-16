@@ -30,19 +30,23 @@ pub use super::overlay_service::OverlayRequestError;
 /// Configuration parameters for the overlay network.
 #[derive(Clone)]
 pub struct OverlayConfig {
+    pub bootnode_enrs: Vec<Enr>,
     pub bucket_pending_timeout: Duration,
     pub max_incoming_per_bucket: usize,
     pub table_filter: Option<Box<dyn Filter<Node>>>,
     pub bucket_filter: Option<Box<dyn Filter<Node>>>,
+    pub ping_queue_interval: Option<Duration>,
 }
 
 impl Default for OverlayConfig {
     fn default() -> Self {
         Self {
+            bootnode_enrs: vec![],
             bucket_pending_timeout: Duration::from_secs(60),
             max_incoming_per_bucket: 16,
             table_filter: None,
             bucket_filter: None,
+            ping_queue_interval: None,
         }
     }
 }
@@ -88,6 +92,8 @@ impl OverlayProtocol {
             Arc::clone(&discovery),
             Arc::clone(&db),
             Arc::clone(&kbuckets),
+            config.bootnode_enrs,
+            config.ping_queue_interval,
             Arc::clone(&data_radius),
             protocol.clone(),
         )
@@ -135,6 +141,7 @@ impl OverlayProtocol {
             Err(_) => return Err(OverlayRequestError::DecodeError),
         };
         let direction = RequestDirection::Incoming {
+            id: talk_request.id().clone(),
             source: *talk_request.node_id(),
         };
 
@@ -238,11 +245,7 @@ impl OverlayProtocol {
         direction: RequestDirection,
     ) -> Result<Response, OverlayRequestError> {
         let (tx, rx) = oneshot::channel();
-        let overlay_request = OverlayRequest {
-            request,
-            direction,
-            responder: Some(tx),
-        };
+        let overlay_request = OverlayRequest::new(request, direction, Some(tx));
         if let Err(error) = self.request_tx.send(overlay_request) {
             warn!(
                 "Failure sending request over {:?} service channel",

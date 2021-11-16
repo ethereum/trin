@@ -19,7 +19,10 @@ impl HistoryNetwork {
         db: Arc<DB>,
         portal_config: PortalnetConfig,
     ) -> Self {
-        let config = OverlayConfig::default();
+        let config = OverlayConfig {
+            bootnode_enrs: portal_config.bootnode_enrs.clone(),
+            ..Default::default()
+        };
         let overlay = OverlayProtocol::new(
             config,
             discovery,

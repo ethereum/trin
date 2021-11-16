@@ -531,8 +531,8 @@ dependencies = [
 
 [[package]]
 name = "discv5"
-version = "0.1.0-beta.10"
-source = "git+https://github.com/carver/discv5?branch=fewer-mutable-borrows#7cd3f424f1b9e2e30e84c019ba8f3a2469df3ead"
+version = "0.1.0-beta.11"
+source = "git+https://github.com/sigp/discv5?branch=master#06e8af6e80bb4cacb909ff8a4637187d7bf9f7df"
 dependencies = [
  "aes",
  "aes-gcm",
