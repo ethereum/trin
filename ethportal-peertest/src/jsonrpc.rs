@@ -16,7 +16,7 @@ pub struct JsonRpcEndpoint {
     pub id: &'static u8,
 }
 
-const ALL_ENDPOINTS: [JsonRpcEndpoint; 6] = [
+const ALL_ENDPOINTS: [JsonRpcEndpoint; 5] = [
     JsonRpcEndpoint {
         method: "web3_clientVersion",
         id: &0,
@@ -28,10 +28,6 @@ const ALL_ENDPOINTS: [JsonRpcEndpoint; 6] = [
     JsonRpcEndpoint {
         method: "discv5_routingTableInfo",
         id: &2,
-    },
-    JsonRpcEndpoint {
-        method: "eth_blockNumber",
-        id: &3,
     },
     JsonRpcEndpoint {
         method: "portalHistory_dataRadius",
