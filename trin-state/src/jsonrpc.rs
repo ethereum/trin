@@ -1,8 +1,13 @@
-use crate::network::StateNetwork;
-use serde_json::Value;
 use std::sync::Arc;
+
+use serde_json::Value;
 use tokio::sync::mpsc;
-use trin_core::jsonrpc::{endpoints::StateEndpoint, types::StateJsonRpcRequest};
+
+use crate::network::StateNetwork;
+use trin_core::jsonrpc::{
+    endpoints::StateEndpoint,
+    types::{PingParams, StateJsonRpcRequest},
+};
 
 /// Handles State network JSON-RPC requests
 pub struct StateRequestHandler {
@@ -17,6 +22,16 @@ impl StateRequestHandler {
                 StateEndpoint::DataRadius => {
                     let radius = &self.network.overlay.data_radius;
                     let _ = request.resp.send(Ok(Value::String(radius.to_string())));
+                }
+                StateEndpoint::Ping => {
+                    let response = match PingParams::try_from(request.params) {
+                        Ok(val) => match self.network.overlay.send_ping(val.enr, None).await {
+                            Ok(pong) => Ok(Value::String(format!("{:?}", pong.payload.unwrap()))),
+                            Err(msg) => Err(format!("Ping request timeout: {:?}", msg).to_owned()),
+                        },
+                        Err(msg) => Err(format!("Invalid Ping params: {:?}", msg)),
+                    };
+                    let _ = request.resp.send(response);
                 }
             }
         }

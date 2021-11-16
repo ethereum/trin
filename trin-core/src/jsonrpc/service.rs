@@ -326,6 +326,7 @@ fn dispatch_portal_request(
     let message = PortalJsonRpcRequest {
         endpoint,
         resp: resp_tx,
+        params: obj.params,
     };
     portal_tx.send(message).unwrap();
 

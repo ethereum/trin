@@ -773,6 +773,8 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "trin-core",
+ "trin-history",
+ "trin-state",
 ]
 
 [[package]]

@@ -7,7 +7,7 @@ use trin_core::cli::DEFAULT_WEB3_IPC_PATH as DEFAULT_TARGET_IPC_PATH;
 const DEFAULT_LISTEN_PORT: &str = "9876";
 const DEFAULT_WEB3_IPC_PATH: &str = "/tmp/json-rpc-peertest.ipc";
 
-#[derive(StructOpt, Debug, PartialEq)]
+#[derive(StructOpt, Debug, PartialEq, Clone)]
 #[structopt(
     name = "ethportal-peertest",
     version = "0.0.1",

@@ -11,12 +11,14 @@ pub enum Discv5Endpoint {
 #[derive(Debug, PartialEq, Clone)]
 pub enum StateEndpoint {
     DataRadius,
+    Ping,
 }
 
 /// History network JSON-RPC endpoints. Start with "portalHistory_" prefix
 #[derive(Debug, PartialEq, Clone)]
 pub enum HistoryEndpoint {
     DataRadius,
+    Ping,
 }
 
 /// Ethereum JSON-RPC endpoints not currently supported by portal network requests, proxied to Infura
@@ -52,10 +54,12 @@ impl FromStr for TrinEndpoint {
                 Discv5Endpoint::RoutingTableInfo,
             )),
             "eth_blockNumber" => Ok(TrinEndpoint::InfuraEndpoint(InfuraEndpoint::BlockNumber)),
-            "portalHistory_dataRadius" => {
+            "portal_historyPing" => Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::Ping)),
+            "portal_historyRadius" => {
                 Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::DataRadius))
             }
-            "portalState_dataRadius" => Ok(TrinEndpoint::StateEndpoint(StateEndpoint::DataRadius)),
+            "portal_statePing" => Ok(TrinEndpoint::StateEndpoint(StateEndpoint::Ping)),
+            "portal_stateRadius" => Ok(TrinEndpoint::StateEndpoint(StateEndpoint::DataRadius)),
             _ => Err(()),
         }
     }
