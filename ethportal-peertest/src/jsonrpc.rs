@@ -91,8 +91,9 @@ impl JsonRpcEndpoint {
 
 #[allow(clippy::never_loop)]
 pub async fn test_jsonrpc_endpoints_over_ipc(target_ipc_path: String) {
+    info!("Testing IPC path: {}", target_ipc_path);
     for endpoint in JsonRpcEndpoint::all_endpoints() {
-        info!("Testing over IPC: {:?}", endpoint.method);
+        info!("Testing IPC method: {:?}", endpoint.method);
         let mut stream = UnixStream::connect(&target_ipc_path).unwrap();
         stream
             .set_read_timeout(Some(Duration::from_millis(500)))
