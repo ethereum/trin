@@ -1,12 +1,12 @@
 use crate::network::HistoryNetwork;
 use serde_json::Value;
 use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::mpsc;
 use trin_core::jsonrpc::{endpoints::HistoryEndpoint, types::HistoryJsonRpcRequest};
 
 /// Handles History network JSON-RPC requests
 pub struct HistoryRequestHandler {
-    pub network: Arc<RwLock<HistoryNetwork>>,
+    pub network: Arc<HistoryNetwork>,
     pub history_rx: mpsc::UnboundedReceiver<HistoryJsonRpcRequest>,
 }
 
@@ -15,9 +15,8 @@ impl HistoryRequestHandler {
         while let Some(request) = self.history_rx.recv().await {
             match request.endpoint {
                 HistoryEndpoint::DataRadius => {
-                    let _ = request.resp.send(Ok(Value::String(
-                        self.network.read().await.overlay.data_radius.to_string(),
-                    )));
+                    let radius = &self.network.overlay.data_radius;
+                    let _ = request.resp.send(Ok(Value::String(radius.to_string())));
                 }
             }
         }
