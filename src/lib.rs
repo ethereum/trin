@@ -8,7 +8,7 @@ use trin_core::jsonrpc::types::PortalJsonRpcRequest;
 use trin_core::portalnet::events::PortalnetEvents;
 use trin_core::{
     cli::{TrinConfig, HISTORY_NETWORK, STATE_NETWORK},
-    jsonrpc::service::launch_jsonrpc_server,
+    jsonrpc::service::{launch_jsonrpc_server, JsonRpcExiter},
     portalnet::{discovery::Discovery, types::messages::PortalnetConfig},
     utils::db::setup_overlay_db,
 };
@@ -18,7 +18,7 @@ use trin_state::initialize_state_network;
 pub async fn run_trin(
     trin_config: TrinConfig,
     infura_project_id: String,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<Arc<JsonRpcExiter>, Box<dyn std::error::Error>> {
     trin_config.display_config();
 
     let bootnode_enrs = trin_config
@@ -69,14 +69,19 @@ pub async fn run_trin(
     let (portal_jsonrpc_tx, portal_jsonrpc_rx) = mpsc::unbounded_channel::<PortalJsonRpcRequest>();
     let jsonrpc_trin_config = trin_config.clone();
     let (live_server_tx, mut live_server_rx) = tokio::sync::mpsc::channel::<bool>(1);
-    tokio::task::spawn_blocking(|| {
-        launch_jsonrpc_server(
-            jsonrpc_trin_config,
-            infura_project_id,
-            portal_jsonrpc_tx,
-            live_server_tx,
-        );
-    });
+    let json_exiter = Arc::new(JsonRpcExiter::new());
+    {
+        let json_exiter_clone = Arc::clone(&json_exiter);
+        tokio::task::spawn_blocking(|| {
+            launch_jsonrpc_server(
+                jsonrpc_trin_config,
+                infura_project_id,
+                portal_jsonrpc_tx,
+                live_server_tx,
+                json_exiter_clone,
+            );
+        });
+    }
 
     // Spawn main JsonRpc Handler
     let jsonrpc_discovery = Arc::clone(&discovery);
@@ -114,5 +119,5 @@ pub async fn run_trin(
     let _ = live_server_rx.recv().await;
     live_server_rx.close();
 
-    Ok(())
+    Ok(json_exiter)
 }

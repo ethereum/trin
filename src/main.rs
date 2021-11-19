@@ -19,10 +19,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ),
     };
 
-    run_trin(trin_config, infura_project_id).await?;
+    let exiter = run_trin(trin_config, infura_project_id).await?;
 
     tokio::signal::ctrl_c()
         .await
         .expect("failed to pause until ctrl-c");
+
+    exiter.exit();
+
     Ok(())
 }
