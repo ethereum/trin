@@ -30,6 +30,7 @@ pub fn launch_jsonrpc_server(
     trin_config: TrinConfig,
     infura_project_id: String,
     portal_tx: UnboundedSender<PortalJsonRpcRequest>,
+    live_server_tx: tokio::sync::mpsc::Sender<bool>,
 ) {
     let pool = ThreadPool::new(trin_config.pool_size as usize);
 
@@ -39,8 +40,15 @@ pub fn launch_jsonrpc_server(
             infura_project_id,
             &trin_config.web3_ipc_path,
             portal_tx,
+            live_server_tx,
         ),
-        "http" => launch_http_client(pool, infura_project_id, trin_config, portal_tx),
+        "http" => launch_http_client(
+            pool,
+            infura_project_id,
+            trin_config,
+            portal_tx,
+            live_server_tx,
+        ),
         val => panic!("Unsupported web3 transport: {}", val),
     }
 }
@@ -80,6 +88,7 @@ fn launch_ipc_client(
     infura_project_id: String,
     ipc_path: &str,
     portal_tx: UnboundedSender<PortalJsonRpcRequest>,
+    live_server_tx: tokio::sync::mpsc::Sender<bool>,
 ) {
     let listener_result = get_listener_result(ipc_path);
     let listener = match listener_result {
@@ -92,7 +101,10 @@ fn launch_ipc_client(
         }
     };
 
-    info!("listening for commands: {}", ipc_path);
+    info!("Listening for commands: {}", ipc_path);
+    std::thread::spawn(move || {
+        live_server_tx.blocking_send(true).unwrap();
+    });
 
     for stream in listener.incoming() {
         let stream = stream.unwrap();
@@ -113,13 +125,20 @@ fn launch_http_client(
     infura_project_id: String,
     trin_config: TrinConfig,
     portal_tx: UnboundedSender<PortalJsonRpcRequest>,
+    live_server_tx: tokio::sync::mpsc::Sender<bool>,
 ) {
     ctrlc::set_handler(move || {
         std::process::exit(1);
     })
     .expect("Error setting Ctrl-C handler.");
 
-    let listener = TcpListener::bind(trin_config.web3_http_address).unwrap();
+    let listener = TcpListener::bind(&trin_config.web3_http_address).unwrap();
+
+    info!("Listening for commands: {}", trin_config.web3_http_address);
+    std::thread::spawn(move || {
+        live_server_tx.blocking_send(true).unwrap();
+    });
+
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {

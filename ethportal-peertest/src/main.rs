@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 use std::env;
 use std::sync::Arc;
-use std::{thread, time};
 
-use log::info;
+use log::{debug, info};
 use structopt::StructOpt;
 use tokio::sync::mpsc;
 
@@ -108,9 +107,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             peertest_config.listen_port.to_string(),
         ]);
 
+        let (live_server_tx, mut live_server_rx) = tokio::sync::mpsc::channel::<bool>(1);
+
         let jsonrpc_server_task = tokio::task::spawn_blocking(|| {
-            launch_jsonrpc_server(jsonrpc_trin_config, infura_project_id, portal_jsonrpc_tx);
+            launch_jsonrpc_server(
+                jsonrpc_trin_config,
+                infura_project_id,
+                portal_jsonrpc_tx,
+                live_server_tx,
+            );
         });
+
+        while let Some(res) = live_server_rx.recv().await {
+            debug!("JsonRPC server is available: {:?}", res);
+            live_server_rx.close();
+        }
 
         // Spawn main JsonRpc Handler
         let jsonrpc_discovery = Arc::clone(&discovery);
@@ -137,8 +148,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tokio::spawn(async { history_network_task.unwrap().await });
         tokio::spawn(async { state_network_task.unwrap().await });
         tokio::spawn(async { jsonrpc_server_task.await.unwrap() });
-        // short sleep so server task gets running
-        thread::sleep(time::Duration::from_millis(1000));
+
         match peertest_config.target_transport.as_str() {
             "ipc" => test_jsonrpc_endpoints_over_ipc(peertest_config).await,
             "http" => test_jsonrpc_endpoints_over_http(peertest_config).await,

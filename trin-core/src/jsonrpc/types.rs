@@ -87,13 +87,24 @@ impl TryFrom<Params> for PingParams {
     fn try_from(params: Params) -> Result<Self, Self::Error> {
         match params {
             Params::Array(val) => match val.len() {
-                1 => match Enr::from_str(val[0].as_str().unwrap()) {
-                    Ok(val) => Ok(Self { enr: val }),
-                    Err(_) => Err(ValidationError::new("Invalid enr param")),
-                },
+                1 => PingParams::try_from(&val[0]),
                 _ => Err(ValidationError::new("Expected only a single param")),
             },
             _ => Err(ValidationError::new("Expected array of params")),
+        }
+    }
+}
+
+impl TryFrom<&Value> for PingParams {
+    type Error = ValidationError;
+
+    fn try_from(param: &Value) -> Result<Self, Self::Error> {
+        match param.as_str() {
+            Some(val) => match Enr::from_str(val) {
+                Ok(val) => Ok(PingParams { enr: val }),
+                Err(_) => Err(ValidationError::new("Invalid enr param")),
+            },
+            None => Err(ValidationError::new("Missing or empty enr param")),
         }
     }
 }

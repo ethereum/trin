@@ -157,7 +157,7 @@ pub async fn test_jsonrpc_endpoints_over_ipc(peertest_config: PeertestConfig) {
                 ),
             };
             match get_response_result(response_obj) {
-                Ok(result) => validate_endpoint_response(endpoint.method.as_str(), &result),
+                Ok(result) => validate_endpoint_response(&endpoint.method, &result),
                 Err(msg) => panic!(
                     "Jsonrpc error for {:?} endpoint: {:?}",
                     endpoint.method, msg
@@ -193,18 +193,17 @@ pub async fn test_jsonrpc_endpoints_over_http(peertest_config: PeertestConfig) {
     let client = Client::new();
     for endpoint in JsonRpcEndpoint::all_endpoints(peertest_config.target_node) {
         info!("Testing over HTTP: {:?}", endpoint.method);
-        let json_string = &endpoint.to_jsonrpc();
         let req = Request::builder()
             .method(Method::POST)
             .uri(format!("http://{}", peertest_config.target_http_address))
             .header("content-type", "application/json")
-            .body(Body::from(json_string.clone()))
+            .body(Body::from(endpoint.to_jsonrpc()))
             .unwrap();
         let resp = client.request(req).await.unwrap();
         let body = hyper::body::to_bytes(resp.into_body()).await.unwrap();
         let response_obj: Value = serde_json::from_slice(&body).unwrap();
         match get_response_result(response_obj) {
-            Ok(result) => validate_endpoint_response(endpoint.method.as_str(), &result),
+            Ok(result) => validate_endpoint_response(&endpoint.method, &result),
             Err(msg) => panic!(
                 "Jsonrpc error for {:?} endpoint: {:?}",
                 endpoint.method, msg

@@ -26,8 +26,8 @@ impl StateRequestHandler {
                 StateEndpoint::Ping => {
                     let response = match PingParams::try_from(request.params) {
                         Ok(val) => match self.network.overlay.send_ping(val.enr, None).await {
-                            Ok(pong) => Ok(Value::String(format!("{:?}", pong.payload.unwrap()))),
-                            Err(msg) => Err(format!("Ping request timeout: {:?}", msg).to_owned()),
+                            Ok(pong) => pong.try_into(),
+                            Err(msg) => Err(format!("Ping request timeout: {:?}", msg)),
                         },
                         Err(msg) => Err(format!("Invalid Ping params: {:?}", msg)),
                     };

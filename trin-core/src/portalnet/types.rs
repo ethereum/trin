@@ -5,7 +5,9 @@ use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 
 use base64;
+use hex::FromHexError;
 use rlp::Encodable;
+use serde_json::Value;
 use ssz;
 use ssz::{Decode, DecodeError, Encode, SszDecoderBuilder, SszEncoder};
 use ssz_derive::{Decode, Encode};
@@ -14,7 +16,6 @@ use thiserror::Error;
 
 use super::overlay_service::OverlayRequestError;
 use super::{Enr, U256};
-use hex::FromHexError;
 
 type ByteList = VariableList<u8, typenum::U2048>;
 
@@ -347,6 +348,17 @@ impl TryFrom<&Vec<u8>> for Pong {
         match response {
             Response::Pong(val) => Ok(val),
             _ => return Err(OverlayRequestError::InvalidResponse),
+        }
+    }
+}
+
+impl TryInto<Value> for Pong {
+    type Error = String;
+
+    fn try_into(self) -> Result<Value, Self::Error> {
+        match self.payload {
+            Some(val) => Ok(Value::String(format!("{:?}", val))),
+            None => Err("Invalid pong payload: None".to_owned()),
         }
     }
 }

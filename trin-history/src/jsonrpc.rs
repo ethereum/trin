@@ -25,17 +25,10 @@ impl HistoryRequestHandler {
                 }
                 HistoryEndpoint::Ping => {
                     let response = match PingParams::try_from(request.params) {
-                        Ok(val) => {
-                            let pong = self
-                                .network
-                                .read()
-                                .await
-                                .overlay
-                                .send_ping(val.enr, None)
-                                .await
-                                .unwrap();
-                            Ok(Value::String(format!("{:?}", pong.payload.unwrap())))
-                        }
+                        Ok(val) => match self.network.overlay.send_ping(val.enr, None).await {
+                            Ok(pong) => pong.try_into(),
+                            Err(msg) => Err(format!("Ping request timeout: {:?}", msg)),
+                        },
                         Err(msg) => Err(format!("Invalid Ping params: {:?}", msg)),
                     };
                     let _ = request.resp.send(response);
