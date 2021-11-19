@@ -80,9 +80,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize json-rpc server
     let (portal_jsonrpc_tx, portal_jsonrpc_rx) = mpsc::unbounded_channel::<PortalJsonRpcRequest>();
     let jsonrpc_trin_config = trin_config.clone();
+
+    let (live_server_tx, mut live_server_rx) = tokio::sync::mpsc::channel::<bool>(1);
     let jsonrpc_server_task = tokio::task::spawn_blocking(|| {
-        launch_jsonrpc_server(jsonrpc_trin_config, infura_project_id, portal_jsonrpc_tx);
+        launch_jsonrpc_server(
+            jsonrpc_trin_config,
+            infura_project_id,
+            portal_jsonrpc_tx,
+            live_server_tx,
+        );
     });
+
+    let _ = live_server_rx.recv().await;
+    live_server_rx.close();
 
     // Spawn main JsonRpc Handler
     let jsonrpc_discovery = Arc::clone(&discovery);
@@ -118,7 +128,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     jsonrpc_server_task.await.unwrap();
-
     tokio::signal::ctrl_c()
         .await
         .expect("failed to pause until ctrl-c");

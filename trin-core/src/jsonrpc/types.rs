@@ -1,8 +1,12 @@
-use crate::jsonrpc::endpoints::{HistoryEndpoint, StateEndpoint, TrinEndpoint};
+use std::str::FromStr;
+
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tokio::sync::mpsc;
 use validator::{Validate, ValidationError};
+
+use crate::jsonrpc::endpoints::{HistoryEndpoint, StateEndpoint, TrinEndpoint};
+use crate::portalnet::Enr;
 
 type Responder<T, E> = mpsc::UnboundedSender<Result<T, E>>;
 
@@ -43,6 +47,7 @@ pub struct JsonRequest {
 pub struct PortalJsonRpcRequest {
     pub endpoint: TrinEndpoint,
     pub resp: Responder<Value, String>,
+    pub params: Params,
 }
 
 /// History network JSON-RPC request
@@ -50,6 +55,7 @@ pub struct PortalJsonRpcRequest {
 pub struct HistoryJsonRpcRequest {
     pub endpoint: HistoryEndpoint,
     pub resp: Responder<Value, String>,
+    pub params: Params,
 }
 
 /// State network JSON-RPC request
@@ -57,6 +63,7 @@ pub struct HistoryJsonRpcRequest {
 pub struct StateJsonRpcRequest {
     pub endpoint: StateEndpoint,
     pub resp: Responder<Value, String>,
+    pub params: Params,
 }
 
 fn default_params() -> Params {
@@ -68,6 +75,38 @@ fn validate_jsonrpc_version(jsonrpc: &str) -> Result<(), ValidationError> {
         return Err(ValidationError::new("Unsupported jsonrpc version"));
     }
     Ok(())
+}
+
+pub struct PingParams {
+    pub enr: Enr,
+}
+
+impl TryFrom<Params> for PingParams {
+    type Error = ValidationError;
+
+    fn try_from(params: Params) -> Result<Self, Self::Error> {
+        match params {
+            Params::Array(val) => match val.len() {
+                1 => PingParams::try_from(&val[0]),
+                _ => Err(ValidationError::new("Expected only a single param")),
+            },
+            _ => Err(ValidationError::new("Expected array of params")),
+        }
+    }
+}
+
+impl TryFrom<&Value> for PingParams {
+    type Error = ValidationError;
+
+    fn try_from(param: &Value) -> Result<Self, Self::Error> {
+        match param.as_str() {
+            Some(val) => match Enr::from_str(val) {
+                Ok(val) => Ok(PingParams { enr: val }),
+                Err(_) => Err(ValidationError::new("Invalid enr param")),
+            },
+            None => Err(ValidationError::new("Missing or empty enr param")),
+        }
+    }
 }
 
 #[cfg(test)]

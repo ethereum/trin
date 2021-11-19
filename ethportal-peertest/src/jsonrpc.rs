@@ -1,43 +1,23 @@
 use std::io::prelude::*;
 use std::os::unix::net::UnixStream;
-use std::slice::Iter;
 use std::time::Duration;
+use std::{fs, panic, process};
 
 use hyper::{self, Body, Client, Method, Request};
 use log::info;
 use serde_json::{self, Value};
 use thiserror::Error;
 
+use crate::cli::PeertestConfig;
+use trin_core::jsonrpc::types::Params;
 use trin_core::portalnet::U256;
 
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct JsonRpcEndpoint {
-    pub method: &'static str,
-    pub id: &'static u8,
+    pub method: String,
+    pub id: u8,
+    pub params: Params,
 }
-
-const ALL_ENDPOINTS: [JsonRpcEndpoint; 5] = [
-    JsonRpcEndpoint {
-        method: "web3_clientVersion",
-        id: &0,
-    },
-    JsonRpcEndpoint {
-        method: "discv5_nodeInfo",
-        id: &1,
-    },
-    JsonRpcEndpoint {
-        method: "discv5_routingTableInfo",
-        id: &2,
-    },
-    JsonRpcEndpoint {
-        method: "portalHistory_dataRadius",
-        id: &4,
-    },
-    JsonRpcEndpoint {
-        method: "portalState_dataRadius",
-        id: &5,
-    },
-];
 
 fn validate_endpoint_response(method: &str, result: &Value) {
     match method {
@@ -56,15 +36,21 @@ fn validate_endpoint_response(method: &str, result: &Value) {
             assert!(local_key.as_str().unwrap().contains("0x"));
             assert!(result.get("buckets").unwrap().is_array());
         }
-        "eth_blockNumber" => {
+        "portal_historyRadius" => {
+            assert_eq!(result.as_str().unwrap(), U256::from(u64::MAX).to_string());
+        }
+        "portal_stateRadius" => {
+            assert_eq!(result.as_str().unwrap(), U256::from(u64::MAX).to_string());
+        }
+        "portal_historyPing" => {
             assert!(result.is_string());
-            assert!(result.as_str().unwrap().contains("0x"));
+            assert!(result.as_str().unwrap().contains("data_radius"));
+            assert!(result.as_str().unwrap().contains("payload"));
         }
-        "portalHistory_dataRadius" => {
-            assert_eq!(result.as_str().unwrap(), U256::from(u64::MAX).to_string());
-        }
-        "portalState_dataRadius" => {
-            assert_eq!(result.as_str().unwrap(), U256::from(u64::MAX).to_string());
+        "portal_statePing" => {
+            assert!(result.is_string());
+            assert!(result.as_str().unwrap().contains("data_radius"));
+            assert!(result.as_str().unwrap().contains("payload"));
         }
         _ => panic!("Unsupported endpoint"),
     };
@@ -72,33 +58,91 @@ fn validate_endpoint_response(method: &str, result: &Value) {
 }
 
 impl JsonRpcEndpoint {
-    pub fn all_endpoints() -> Iter<'static, Self> {
-        ALL_ENDPOINTS.iter()
+    pub fn all_endpoints(target_node: String) -> Vec<JsonRpcEndpoint> {
+        vec![
+            JsonRpcEndpoint {
+                method: "web3_clientVersion".to_string(),
+                id: 0,
+                params: Params::None,
+            },
+            JsonRpcEndpoint {
+                method: "discv5_nodeInfo".to_string(),
+                id: 1,
+                params: Params::None,
+            },
+            JsonRpcEndpoint {
+                method: "discv5_routingTableInfo".to_string(),
+                id: 2,
+                params: Params::None,
+            },
+            JsonRpcEndpoint {
+                method: "portal_historyRadius".to_string(),
+                id: 4,
+                params: Params::None,
+            },
+            JsonRpcEndpoint {
+                method: "portal_stateRadius".to_string(),
+                id: 5,
+                params: Params::None,
+            },
+            JsonRpcEndpoint {
+                method: "portal_statePing".to_string(),
+                id: 6,
+                params: Params::Array(vec![Value::String(target_node.clone())]),
+            },
+            JsonRpcEndpoint {
+                method: "portal_historyPing".to_string(),
+                id: 7,
+                params: Params::Array(vec![Value::String(target_node)]),
+            },
+        ]
     }
 
-    pub fn to_jsonrpc(self) -> String {
-        format!(
-            r#"
-            {{
-                "jsonrpc":"2.0",
-                "id": {},
-                "method": "{}"
-            }}"#,
-            self.id, self.method
-        )
+    pub fn to_jsonrpc(&self) -> String {
+        match self.params {
+            Params::None => format!(
+                r#"
+                {{
+                    "jsonrpc":"2.0",
+                    "id": {},
+                    "method": "{}"
+                }}"#,
+                self.id, self.method
+            ),
+            _ => format!(
+                r#"
+                {{
+                    "jsonrpc":"2.0",
+                    "id": {},
+                    "method": "{}",
+                    "params":{}
+                }}"#,
+                self.id,
+                self.method,
+                serde_json::to_string(&self.params).unwrap()
+            ),
+        }
     }
 }
 
 #[allow(clippy::never_loop)]
-pub async fn test_jsonrpc_endpoints_over_ipc(target_ipc_path: String) {
-    info!("Testing IPC path: {}", target_ipc_path);
-    for endpoint in JsonRpcEndpoint::all_endpoints() {
+pub async fn test_jsonrpc_endpoints_over_ipc(peertest_config: PeertestConfig) {
+    // setup cleanup handler if tests panic
+    let original_panic = panic::take_hook();
+    let ipc_path = peertest_config.web3_ipc_path.clone();
+    panic::set_hook(Box::new(move |panic_info| {
+        fs::remove_file(&ipc_path).unwrap();
+        original_panic(panic_info);
+        process::exit(1);
+    }));
+
+    info!("Testing IPC path: {}", peertest_config.web3_ipc_path);
+    for endpoint in JsonRpcEndpoint::all_endpoints(peertest_config.target_node) {
         info!("Testing IPC method: {:?}", endpoint.method);
-        let mut stream = UnixStream::connect(&target_ipc_path).unwrap();
+        let mut stream = UnixStream::connect(&peertest_config.web3_ipc_path).unwrap();
         stream
             .set_read_timeout(Some(Duration::from_millis(500)))
             .expect("Couldn't set read timeout");
-
         let v: Value = serde_json::from_str(&endpoint.to_jsonrpc()).unwrap();
         let data = serde_json::to_vec(&v).unwrap();
         stream.write_all(&data).unwrap();
@@ -113,7 +157,7 @@ pub async fn test_jsonrpc_endpoints_over_ipc(target_ipc_path: String) {
                 ),
             };
             match get_response_result(response_obj) {
-                Ok(result) => validate_endpoint_response(endpoint.method, &result),
+                Ok(result) => validate_endpoint_response(&endpoint.method, &result),
                 Err(msg) => panic!(
                     "Jsonrpc error for {:?} endpoint: {:?}",
                     endpoint.method, msg
@@ -123,6 +167,7 @@ pub async fn test_jsonrpc_endpoints_over_ipc(target_ipc_path: String) {
             break;
         }
     }
+    fs::remove_file(&peertest_config.web3_ipc_path).unwrap();
 }
 
 #[derive(Error, Debug)]
@@ -144,22 +189,21 @@ fn get_response_result(response: Value) -> Result<Value, JsonRpcResponseError> {
     }
 }
 
-pub async fn test_jsonrpc_endpoints_over_http(target_http_address: String) {
+pub async fn test_jsonrpc_endpoints_over_http(peertest_config: PeertestConfig) {
     let client = Client::new();
-    for endpoint in JsonRpcEndpoint::all_endpoints() {
+    for endpoint in JsonRpcEndpoint::all_endpoints(peertest_config.target_node) {
         info!("Testing over HTTP: {:?}", endpoint.method);
-        let json_string = endpoint.to_jsonrpc();
         let req = Request::builder()
             .method(Method::POST)
-            .uri(format!("http://{}", target_http_address))
+            .uri(format!("http://{}", peertest_config.target_http_address))
             .header("content-type", "application/json")
-            .body(Body::from(json_string))
+            .body(Body::from(endpoint.to_jsonrpc()))
             .unwrap();
         let resp = client.request(req).await.unwrap();
         let body = hyper::body::to_bytes(resp.into_body()).await.unwrap();
         let response_obj: Value = serde_json::from_slice(&body).unwrap();
         match get_response_result(response_obj) {
-            Ok(result) => validate_endpoint_response(endpoint.method, &result),
+            Ok(result) => validate_endpoint_response(&endpoint.method, &result),
             Err(msg) => panic!(
                 "Jsonrpc error for {:?} endpoint: {:?}",
                 endpoint.method, msg

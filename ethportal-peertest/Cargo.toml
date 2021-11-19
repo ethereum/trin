@@ -15,10 +15,12 @@ rocksdb = "0.16.0"
 serde_json = "1.0.59"
 structopt = "0.3"
 thiserror = "1.0.29"
-tokio = {version = "1.8.0", features = ["full"]}
+tokio = {version = "1.14.0", features = ["full"]}
 tracing = "0.1.26"
 tracing-subscriber = "0.2.18"
 trin-core = { path = "../trin-core" }
+trin-history = { path = "../trin-history" }
+trin-state = { path = "../trin-state" }
 
 [dependencies.discv5]
 branch = "fewer-mutable-borrows"
