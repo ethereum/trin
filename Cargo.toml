@@ -22,6 +22,9 @@ trin-cli = { path = "trin-cli" }
 branch = "fewer-mutable-borrows"
 git = "https://github.com/carver/discv5"
 
+[dev-dependencies]
+ethportal-peertest = { path = "ethportal-peertest" }
+
 [workspace]
 members = [
     "trin-history",
