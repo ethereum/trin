@@ -4,7 +4,7 @@ pub mod network;
 
 use log::info;
 use rocksdb::DB;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
 use crate::events::HistoryEvents;
@@ -62,7 +62,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let history_network =
         HistoryNetwork::new(discovery.clone(), db, portalnet_config.clone()).await;
-    let history_network = Arc::new(RwLock::new(history_network));
+    let history_network = Arc::new(history_network);
 
     spawn_history_network(history_network, portalnet_config, history_event_rx)
         .await
@@ -90,7 +90,7 @@ pub async fn initialize_history_network(
     let (history_event_tx, history_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
     let history_network =
         HistoryNetwork::new(Arc::clone(discovery), db, portalnet_config.clone()).await;
-    let history_network = Arc::new(RwLock::new(history_network));
+    let history_network = Arc::new(history_network);
     let history_handler = HistoryRequestHandler {
         network: Arc::clone(&history_network),
         history_rx: history_jsonrpc_rx,
@@ -109,7 +109,7 @@ pub async fn initialize_history_network(
 }
 
 pub fn spawn_history_network(
-    network: Arc<RwLock<HistoryNetwork>>,
+    network: Arc<HistoryNetwork>,
     portalnet_config: PortalnetConfig,
     history_event_rx: mpsc::UnboundedReceiver<TalkRequest>,
 ) -> JoinHandle<()> {
@@ -128,7 +128,7 @@ pub fn spawn_history_network(
         tokio::spawn(history_events.process_requests());
 
         // hacky test: make sure we establish a session with the boot node
-        network.write().await.ping_bootnodes().await.unwrap();
+        network.ping_bootnodes().await.unwrap();
 
         tokio::signal::ctrl_c()
             .await
