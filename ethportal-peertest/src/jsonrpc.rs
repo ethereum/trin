@@ -4,7 +4,7 @@ use std::time::Duration;
 use std::{fs, panic, process};
 
 use hyper::{self, Body, Client, Method, Request};
-use log::info;
+use log::{info, warn};
 use serde_json::{self, Value};
 use thiserror::Error;
 
@@ -131,7 +131,9 @@ pub async fn test_jsonrpc_endpoints_over_ipc(peertest_config: PeertestConfig) {
     let original_panic = panic::take_hook();
     let ipc_path = peertest_config.web3_ipc_path.clone();
     panic::set_hook(Box::new(move |panic_info| {
-        fs::remove_file(&ipc_path).unwrap();
+        if let Err(err) = fs::remove_file(&ipc_path) {
+            warn!("Couldn't remove {} because: {}", ipc_path, err);
+        };
         original_panic(panic_info);
         process::exit(1);
     }));

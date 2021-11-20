@@ -3,7 +3,7 @@ use std::net::{TcpListener, TcpStream};
 #[cfg(unix)]
 use std::os::unix;
 use std::str::FromStr;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
 use std::{fs, panic, process};
@@ -21,10 +21,6 @@ use validator::Validate;
 use crate::cli::TrinConfig;
 use crate::jsonrpc::endpoints::TrinEndpoint;
 use crate::jsonrpc::types::{JsonRequest, PortalJsonRpcRequest};
-
-lazy_static! {
-    static ref IPC_PATH: Mutex<String> = Mutex::new(String::new());
-}
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -86,23 +82,28 @@ pub fn launch_jsonrpc_server(
 }
 
 fn set_ipc_cleanup_handlers(ipc_path: &str) {
-    let mut ipc_mut = IPC_PATH.lock().unwrap();
-    *ipc_mut = ipc_path.to_string();
+    {
+        let ipc_path = ipc_path.to_string();
+        ctrlc::set_handler(move || {
+            if let Err(err) = fs::remove_file(&ipc_path) {
+                warn!("Couldn't remove {} because: {}", ipc_path, err);
+            };
+            std::process::exit(1);
+        })
+        .expect("Error setting Ctrl-C handler.");
+    }
 
-    ctrlc::set_handler(move || {
-        let ipc_path: &str = &*IPC_PATH.lock().unwrap().clone();
-        fs::remove_file(&ipc_path).unwrap();
-        std::process::exit(1);
-    })
-    .expect("Error setting Ctrl-C handler.");
-
-    let original_panic = panic::take_hook();
-    panic::set_hook(Box::new(move |panic_info| {
-        let ipc_path: &str = &*IPC_PATH.lock().unwrap().clone();
-        fs::remove_file(&ipc_path).unwrap();
-        original_panic(panic_info);
-        process::exit(1);
-    }));
+    {
+        let ipc_path = ipc_path.to_string();
+        let original_panic = panic::take_hook();
+        panic::set_hook(Box::new(move |panic_info| {
+            if let Err(err) = fs::remove_file(&ipc_path) {
+                warn!("Couldn't remove {} because: {}", ipc_path, err);
+            };
+            original_panic(panic_info);
+            process::exit(1);
+        }));
+    }
 }
 
 #[cfg(unix)]
