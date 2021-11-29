@@ -6,8 +6,8 @@ use crate::{
     portalnet::{
         discovery::Discovery,
         types::{
-            ByteList, CustomPayload, FindContent, FindNodes, FoundContent, Message, Nodes, Ping,
-            Pong, ProtocolId, Request, Response, SszEnr,
+            ByteList, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Ping, Pong,
+            ProtocolId, Request, Response, SszEnr,
         },
         Enr, U256,
     },
@@ -245,7 +245,7 @@ impl OverlayService {
             Request::FindNodes(find_nodes) => {
                 Ok(Response::Nodes(self.handle_find_nodes(find_nodes).await))
             }
-            Request::FindContent(find_content) => Ok(Response::FoundContent(
+            Request::FindContent(find_content) => Ok(Response::Content(
                 self.handle_find_content(find_content).await?,
             )),
         }
@@ -275,19 +275,19 @@ impl OverlayService {
         Nodes { total: 1, enrs }
     }
 
-    /// Attempts to build a `FoundContent` response for a `FindContent` request.
+    /// Attempts to build a `Content` response for a `FindContent` request.
     async fn handle_find_content(
         &self,
         request: FindContent,
-    ) -> Result<FoundContent, OverlayRequestError> {
+    ) -> Result<Content, OverlayRequestError> {
         match self.db.get(&request.content_key) {
             Ok(Some(value)) => {
-                let content = Some(ByteList::from(VariableList::from(value)));
-                Ok(FoundContent::new(None, None, content))
+                let content = ByteList::from(VariableList::from(value));
+                Ok(Content::Content(content))
             }
             Ok(None) => {
-                let enrs = Some(self.find_nodes_close_to_content(request.content_key).await);
-                Ok(FoundContent::new(None, enrs, None))
+                let enrs = self.find_nodes_close_to_content(request.content_key).await;
+                Ok(Content::Enrs(enrs))
             }
             Err(error) => panic!("Unable to respond to FindContent: {}", error),
         }

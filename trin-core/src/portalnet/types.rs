@@ -8,8 +8,7 @@ use base64;
 use hex::FromHexError;
 use rlp::Encodable;
 use serde_json::Value;
-use ssz;
-use ssz::{Decode, DecodeError, Encode, SszDecoderBuilder, SszEncoder};
+use ssz::{Decode, DecodeError, Encode};
 use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, VariableList};
 use thiserror::Error;
@@ -158,7 +157,7 @@ impl Message {
                 match resp {
                     Response::Pong(p) => payload.append(&mut p.as_ssz_bytes()),
                     Response::Nodes(p) => payload.append(&mut p.as_ssz_bytes()),
-                    Response::FoundContent(p) => payload.append(&mut p.as_ssz_bytes()),
+                    Response::Content(p) => payload.append(&mut p.as_ssz_bytes()),
                 }
                 payload
             }
@@ -187,8 +186,8 @@ impl Message {
                 4 => Ok(Message::Response(Response::Nodes(
                     Nodes::from_ssz_bytes(&bytes[1..]).map_err(|e| MessageDecodeError::from(e))?,
                 ))),
-                6 => Ok(Message::Response(Response::FoundContent(
-                    FoundContent::from_ssz_bytes(&bytes[1..])
+                6 => Ok(Message::Response(Response::Content(
+                    Content::from_ssz_bytes(&bytes[1..])
                         .map_err(|e| MessageDecodeError::from(e))?,
                 ))),
                 _ => Err(MessageDecodeError::MessageId),
@@ -220,7 +219,7 @@ impl Request {
 pub enum Response {
     Pong(Pong),
     Nodes(Nodes),
-    FoundContent(FoundContent),
+    Content(Content),
 }
 
 impl Response {
@@ -228,7 +227,7 @@ impl Response {
         match self {
             Response::Pong(_) => 2,
             Response::Nodes(_) => 4,
-            Response::FoundContent(_) => 6,
+            Response::Content(_) => 6,
         }
     }
 }
@@ -300,14 +299,9 @@ impl TryFrom<&Vec<u8>> for Pong {
     }
 }
 
-impl TryInto<Value> for Pong {
-    type Error = String;
-
-    fn try_into(self) -> Result<Value, Self::Error> {
-        match self.payload {
-            Some(val) => Ok(Value::String(format!("{:?}", val))),
-            None => Err("Invalid pong payload: None".to_owned()),
-        }
+impl Into<Value> for Pong {
+    fn into(self) -> Value {
+        Value::String(format!("{:?}", self.custom_payload))
     }
 }
 
@@ -400,40 +394,36 @@ pub struct FindContent {
     pub content_key: Vec<u8>,
 }
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct FoundContent {
-    pub connection_id: Option<u16>,
-    pub enrs: Option<Vec<SszEnr>>,
-    pub content: Option<ByteList>,
-    // private field used to enforce struct initialization via new()
-    union_flag: bool,
+#[derive(Debug, PartialEq, Clone, Encode, Decode)]
+#[ssz(enum_behaviour = "union")]
+pub enum Content {
+    ConnectionId(u16),
+    Content(ByteList),
+    Enrs(Vec<SszEnr>),
 }
 
-impl FoundContent {
-    // Enforce union-like behavior for FoundContent
-    pub fn new(
-        connection_id: Option<u16>,
-        enrs: Option<Vec<SszEnr>>,
-        content: Option<ByteList>,
-    ) -> Self {
-        let mut count = 0;
-        if connection_id.is_some() {
-            count += 1;
+impl Content {
+    pub fn connection_id(self) -> Result<u16, MessageDecodeError> {
+        if let Content::ConnectionId(val) = self {
+            Ok(val)
+        } else {
+            Err(MessageDecodeError::Type)
         }
-        if enrs.is_some() {
-            count += 1;
+    }
+
+    pub fn content(self) -> Result<ByteList, MessageDecodeError> {
+        if let Content::Content(val) = self {
+            Ok(val)
+        } else {
+            Err(MessageDecodeError::Type)
         }
-        if content.is_some() {
-            count += 1;
-        }
-        match count {
-            1 => Self {
-                connection_id,
-                enrs,
-                content,
-                union_flag: true,
-            },
-            _ => panic!("Invalid fields for FoundContent union."),
+    }
+
+    pub fn enrs(self) -> Result<Vec<SszEnr>, MessageDecodeError> {
+        if let Content::Enrs(val) = self {
+            Ok(val)
+        } else {
+            Err(MessageDecodeError::Type)
         }
     }
 }
@@ -486,159 +476,6 @@ impl ssz::Encode for SszEnr {
     }
 }
 
-// custom type required for special union ssz encoding/decoding
-// not supported in ssz library
-pub struct UnionVecEnr {
-    enrs: Vec<SszEnr>,
-}
-
-impl UnionVecEnr {
-    pub fn new(enrs: Vec<SszEnr>) -> Self {
-        Self { enrs }
-    }
-}
-
-impl ssz::Encode for UnionVecEnr {
-    fn ssz_bytes_len(&self) -> usize {
-        self.enrs.ssz_bytes_len()
-    }
-
-    fn ssz_append(&self, buf: &mut Vec<u8>) {
-        self.enrs.ssz_append(buf)
-    }
-
-    // this is true so var offset is not encoded, which is not used in unions
-    fn is_ssz_fixed_len() -> bool {
-        true
-    }
-}
-
-impl ssz::Decode for UnionVecEnr {
-    fn is_ssz_fixed_len() -> bool {
-        false
-    }
-
-    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
-        // this is a hack to transform union -> container by adding var length offset
-        let mut thing: Vec<u8> = vec![4u8, 0u8, 0u8, 0u8];
-        thing.extend_from_slice(bytes);
-        let mut builder = SszDecoderBuilder::new(&thing);
-        builder.register_type::<Vec<SszEnr>>().unwrap();
-        let mut decoder = builder.build()?;
-        Ok(Self {
-            enrs: decoder.decode_next()?,
-        })
-    }
-}
-
-// custom type required for special union ssz encoding/decoding
-// not supported in ssz library
-pub struct UnionByteList {
-    content: ByteList,
-}
-
-impl UnionByteList {
-    pub fn new(content: ByteList) -> Self {
-        Self { content }
-    }
-}
-
-impl ssz::Encode for UnionByteList {
-    fn ssz_bytes_len(&self) -> usize {
-        self.content.ssz_bytes_len()
-    }
-
-    fn ssz_append(&self, buf: &mut Vec<u8>) {
-        self.content.ssz_append(buf)
-    }
-
-    // this is true so var offset is not encoded, which is not used in unions
-    fn is_ssz_fixed_len() -> bool {
-        true
-    }
-}
-
-impl ssz::Encode for FoundContent {
-    fn is_ssz_fixed_len() -> bool {
-        false
-    }
-
-    fn ssz_append(&self, buf: &mut Vec<u8>) {
-        if self.enrs.is_some() {
-            let offset = <u8 as Encode>::ssz_fixed_len() + <Vec<SszEnr> as Encode>::ssz_fixed_len();
-            let mut encoder = SszEncoder::container(buf, offset);
-            let enrs = UnionVecEnr::new(self.enrs.clone().unwrap());
-            // append union selector flag and then content
-            encoder.append(&2u8);
-            encoder.append(&enrs);
-            encoder.finalize();
-        } else if self.content.is_some() {
-            let offset = <u8 as Encode>::ssz_fixed_len() + <ByteList as Encode>::ssz_fixed_len();
-            let mut encoder = SszEncoder::container(buf, offset);
-            let union_content: UnionByteList = UnionByteList::new(self.content.clone().unwrap());
-            // append union selector flag and then content
-            encoder.append(&1u8);
-            encoder.append(&union_content);
-            encoder.finalize();
-        } else if self.connection_id.is_some() {
-            let offset = <u16 as Encode>::ssz_fixed_len();
-            let mut encoder = SszEncoder::container(buf, offset);
-            // append union selector flag and then content
-            encoder.append(&0u8);
-            encoder.append(self.connection_id.as_ref().unwrap());
-            encoder.finalize();
-        } else {
-            panic!("Invalid FoundContent union: cannot convert to bytes.")
-        }
-    }
-
-    fn ssz_bytes_len(&self) -> usize {
-        if self.enrs.is_some() {
-            self.enrs.as_ref().unwrap().ssz_bytes_len()
-        } else {
-            self.content.as_ref().unwrap().ssz_bytes_len()
-        }
-    }
-}
-
-impl ssz::Decode for FoundContent {
-    fn is_ssz_fixed_len() -> bool {
-        false
-    }
-
-    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
-        let (flag, bytes) = bytes.split_at(1);
-
-        match flag {
-            [0u8] => {
-                // write tests for these
-                let result = match bytes.len() {
-                    2 => u16::from_le_bytes([bytes[0], bytes[1]]),
-                    _ => {
-                        return Err(DecodeError::BytesInvalid(format!(
-                            "Invalid connection id: {:?}",
-                            bytes
-                        )))
-                    }
-                };
-                Ok(Self::new(Some(result), None, None))
-            }
-            [1u8] => {
-                let result = ByteList::from(VariableList::from(bytes.to_vec()));
-                Ok(Self::new(None, None, Some(result)))
-            }
-            [2u8] => {
-                let result = <UnionVecEnr as ssz::Decode>::from_ssz_bytes(bytes).unwrap();
-                Ok(Self::new(None, Some(result.enrs), None))
-            }
-            _ => Err(DecodeError::BytesInvalid(format!(
-                "Invalid FoundContent union type flag: {:?}",
-                flag
-            ))),
-        }
-    }
-}
-
 #[derive(Debug, PartialEq, Clone)]
 pub struct HexData(pub Vec<u8>);
 
@@ -654,7 +491,6 @@ impl FromStr for HexData {
 mod test {
     use super::*;
     use discv5::enr::{CombinedKey, EnrBuilder};
-    use rstest::rstest;
     use std::net::Ipv4Addr;
 
     fn enr_one_key() -> CombinedKey {
@@ -674,39 +510,24 @@ mod test {
             .unwrap()
     }
 
-    #[rstest]
-    #[case(None, None, None)]
-    #[case(Some(0u16), None, Some(ByteList::from(VariableList::from(vec![0u8]))))]
-    #[should_panic(expected = "Invalid fields for FoundContent union.")]
-    fn test_found_content_enforces_union_behavior(
-        #[case] connection_id: Option<u16>,
-        #[case] enrs: Option<Vec<SszEnr>>,
-        #[case] content: Option<ByteList>,
-    ) {
-        FoundContent::new(connection_id, enrs, content);
-    }
-
     #[test]
     fn test_found_content_encodes_content() {
-        let some_content = Some(ByteList::from(VariableList::from(vec![1; 33])));
-        let msg = FoundContent::new(None, None, some_content.clone());
+        let some_content = ByteList::from(VariableList::from(vec![1; 33]));
+        let msg = Content::Content(some_content.clone());
         let actual = msg.as_ssz_bytes();
-        let decoded = FoundContent::from_ssz_bytes(&actual).unwrap();
-        assert_eq!(decoded, msg);
-        assert_eq!(decoded.content, some_content);
-        // add one to account for union flag byte
-        assert_eq!(actual.len(), msg.ssz_bytes_len() + 1);
+        let decoded = Content::from_ssz_bytes(&actual).unwrap();
+        assert_eq!(decoded.content().unwrap(), some_content);
+        assert_eq!(actual.len(), msg.ssz_bytes_len());
     }
 
     #[test]
     fn test_found_content_encodes_single_enr() {
         let enr = build_enr(enr_one_key());
-        let msg = FoundContent::new(None, Some(vec![SszEnr(enr.clone())]), None);
+        let msg = Content::Enrs(vec![SszEnr(enr.clone())]);
         let actual = msg.as_ssz_bytes();
-        let decoded = FoundContent::from_ssz_bytes(&actual).unwrap();
-        assert!(SszEnr(enr).eq(decoded.enrs.unwrap().first().unwrap()));
-        // add one to account for union flag byte
-        assert_eq!(actual.len(), msg.ssz_bytes_len() + 1);
+        let decoded = Content::from_ssz_bytes(&actual).unwrap();
+        assert!(SszEnr(enr).eq(decoded.enrs().unwrap().first().unwrap()));
+        assert_eq!(actual.len(), msg.ssz_bytes_len());
     }
 
     #[test]
@@ -714,17 +535,12 @@ mod test {
         let enr_one = build_enr(enr_one_key());
         let enr_two = build_enr(enr_two_key());
 
-        let msg = FoundContent::new(
-            None,
-            Some(vec![SszEnr(enr_one.clone()), SszEnr(enr_two.clone())]),
-            None,
-        );
+        let msg = Content::Enrs(vec![SszEnr(enr_one.clone()), SszEnr(enr_two.clone())]);
         let actual = msg.as_ssz_bytes();
-        let decoded = FoundContent::from_ssz_bytes(&actual).unwrap();
-        assert!(SszEnr(enr_one).eq(decoded.enrs.as_ref().unwrap().first().unwrap()));
-        assert!(SszEnr(enr_two).eq(&decoded.enrs.unwrap().into_iter().nth(1).unwrap()));
-        // add one to account for union flag byte
-        assert_eq!(actual.len(), msg.ssz_bytes_len() + 1);
+        let decoded_enrs = Content::from_ssz_bytes(&actual).unwrap().enrs().unwrap();
+        assert!(SszEnr(enr_one).eq(decoded_enrs.first().unwrap()));
+        assert!(SszEnr(enr_two).eq(&decoded_enrs.into_iter().nth(1).unwrap()));
+        assert_eq!(actual.len(), msg.ssz_bytes_len());
     }
 
     #[test]
@@ -873,13 +689,9 @@ mod test {
     #[test]
     fn test_vector_found_content_connection_id() {
         let raw = [01u8, 02u8];
-        let connection_id = Some(u16::from_le_bytes(raw));
+        let connection_id = u16::from_le_bytes(raw);
         let expected = "06000102";
-        let message = Message::Response(Response::FoundContent(FoundContent::new(
-            connection_id,
-            None,
-            None,
-        )));
+        let message = Message::Response(Response::Content(Content::ConnectionId(connection_id)));
         assert_eq!(hex::encode(message.to_bytes()), expected);
         let decoded = Message::from_bytes(message.to_bytes().as_slice()).unwrap();
         assert_eq!(decoded, message);
@@ -887,13 +699,11 @@ mod test {
 
     #[test]
     fn test_vector_found_content_content() {
-        let content = Some(ByteList::from(VariableList::from(
+        let content = ByteList::from(VariableList::from(
             hex::decode("7468652063616b652069732061206c6965").unwrap(),
-        )));
+        ));
         let expected = "06017468652063616b652069732061206c6965";
-        let message = Message::Response(Response::FoundContent(FoundContent::new(
-            None, None, content,
-        )));
+        let message = Message::Response(Response::Content(Content::Content(content)));
         assert_eq!(hex::encode(message.to_bytes()), expected);
         let decoded = Message::from_bytes(message.to_bytes().as_slice()).unwrap();
         assert_eq!(decoded, message);
@@ -903,10 +713,9 @@ mod test {
     fn test_vector_found_content_enrs() {
         let enr_one = SszEnr(Enr::from_str("enr:-HW4QBzimRxkmT18hMKaAL3IcZF1UcfTMPyi3Q1pxwZZbcZVRI8DC5infUAB_UauARLOJtYTxaagKoGmIjzQxO2qUygBgmlkgnY0iXNlY3AyNTZrMaEDymNMrg1JrLQB2KTGtv6MVbcNEVv0AHacwUAPMljNMTg").unwrap());
         let enr_two = SszEnr(Enr::from_str("enr:-HW4QNfxw543Ypf4HXKXdYxkyzfcxcO-6p9X986WldfVpnVTQX1xlTnWrktEWUbeTZnmgOuAY_KUhbVV1Ft98WoYUBMBgmlkgnY0iXNlY3AyNTZrMaEDDiy3QkHAxPyOgWbxp5oF1bDdlYE6dLCUUp8xfVw50jU").unwrap());
-        let enrs = Some(vec![enr_one, enr_two]);
+        let enrs = vec![enr_one, enr_two];
         let expected = "0602080000007f000000f875b8401ce2991c64993d7c84c29a00bdc871917551c7d330fca2dd0d69c706596dc655448f030b98a77d4001fd46ae0112ce26d613c5a6a02a81a6223cd0c4edaa53280182696482763489736563703235366b31a103ca634cae0d49acb401d8a4c6b6fe8c55b70d115bf400769cc1400f3258cd3138f875b840d7f1c39e376297f81d7297758c64cb37dcc5c3beea9f57f7ce9695d7d5a67553417d719539d6ae4b445946de4d99e680eb8063f29485b555d45b7df16a1850130182696482763489736563703235366b31a1030e2cb74241c0c4fc8e8166f1a79a05d5b0dd95813a74b094529f317d5c39d235";
-        let message =
-            Message::Response(Response::FoundContent(FoundContent::new(None, enrs, None)));
+        let message = Message::Response(Response::Content(Content::Enrs(enrs)));
         assert_eq!(hex::encode(message.to_bytes()), expected);
         let decoded = Message::from_bytes(message.to_bytes().as_slice()).unwrap();
         assert_eq!(decoded, message);
