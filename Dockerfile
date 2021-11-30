@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install clang -y
 COPY ./Cargo.lock ./Cargo.lock
 COPY ./Cargo.toml ./Cargo.toml
 COPY ./src ./src 
-COPY ./trin-cli ./trin-cli 
+COPY ./trin-cli ./trin-cli
 COPY ./trin-core ./trin-core 
 COPY ./trin-history ./trin-history 
 COPY ./trin-state ./trin-state 

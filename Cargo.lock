@@ -342,7 +342,7 @@ dependencies = [
  "ansi_term 0.11.0",
  "atty",
  "bitflags",
- "strsim",
+ "strsim 0.8.0",
  "textwrap",
  "unicode-width",
  "vec_map",
@@ -453,6 +453,41 @@ dependencies = [
  "rand_core 0.5.1",
  "subtle",
  "zeroize",
+]
+
+[[package]]
+name = "darling"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "757c0ded2af11d8e739c4daea1ac623dd1624b06c844cf3f5a39f1bdbd99bb12"
+dependencies = [
+ "darling_core",
+ "darling_macro",
+]
+
+[[package]]
+name = "darling_core"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2c34d8efb62d0c2d7f60ece80f75e5c63c1588ba68032740494b0b9a996466e3"
+dependencies = [
+ "fnv",
+ "ident_case",
+ "proc-macro2",
+ "quote",
+ "strsim 0.10.0",
+ "syn",
+]
+
+[[package]]
+name = "darling_macro"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ade7bff147130fe5e6d39f089c6bd49ec0250f35d70b2eebf72afdfc919f15cc"
+dependencies = [
+ "darling_core",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -634,29 +669,31 @@ dependencies = [
 
 [[package]]
 name = "eth2_ssz"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76a5dc942eddedd41e4591bab17bece2b00eb9eb153b8ea683c5bba682dbd41d"
+checksum = "948e343aa022785c07193f41ed37adfd9dd0350368060803b8302c7f798e8306"
 dependencies = [
- "ethereum-types 0.11.0",
+ "ethereum-types 0.12.1",
  "smallvec 1.6.1",
 ]
 
 [[package]]
 name = "eth2_ssz_derive"
-version = "0.2.1"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12812b9ebe7b7246ab2ddf526cca7c6b1652b8f6a189450291eae702cf34808d"
+checksum = "635b86d2c941bb71e7419a571e1763d65c93e51a1bafc400352e3bef6ff59fc9"
 dependencies = [
+ "darling",
+ "proc-macro2",
  "quote",
  "syn",
 ]
 
 [[package]]
 name = "eth2_ssz_types"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bdc06d98dfc53d15835d75e4506643b7f9c64132878a11a3269ab8549ae06e68"
+checksum = "a9423ac7fb37037f828a32b724cdfa65ea62290055811731402a90fb8a5bcbb1"
 dependencies = [
  "eth2_serde_utils",
  "eth2_ssz",
@@ -721,29 +758,15 @@ dependencies = [
 
 [[package]]
 name = "ethereum-types"
-version = "0.11.0"
+version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f64b5df66a228d85e4b17e5d6c6aa43b0310898ffe8a85988c4c032357aaabfd"
+checksum = "05136f7057fe789f06e6d41d07b34e6f70d8c86e5693b60f97aaa6553553bdaf"
 dependencies = [
  "ethbloom 0.11.0",
  "fixed-hash 0.7.0",
  "impl-rlp",
  "impl-serde",
- "primitive-types 0.9.1",
- "uint 0.9.1",
-]
-
-[[package]]
-name = "ethereum-types"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0dd6bde671199089e601e8d47e153368b893ef885f11f365a3261ec58153c211"
-dependencies = [
- "ethbloom 0.11.0",
- "fixed-hash 0.7.0",
- "impl-rlp",
- "impl-serde",
- "primitive-types 0.10.1",
+ "primitive-types",
  "uint 0.9.1",
 ]
 
@@ -1220,6 +1243,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "ident_case"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
+
+[[package]]
 name = "idna"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1390,7 +1419,7 @@ version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce2bd4c29270e724d3eaadf7bdc8700af4221fc0ed771b855eadcd1b98d52851"
 dependencies = [
- "primitive-types 0.10.1",
+ "primitive-types",
  "tiny-keccak 2.0.2",
 ]
 
@@ -1940,19 +1969,6 @@ name = "ppv-lite86"
 version = "0.2.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac74c624d6b2d21f425f752262f42188365d7b8ff1aff74c82e45136510a4857"
-
-[[package]]
-name = "primitive-types"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06345ee39fbccfb06ab45f3a1a5798d9dafa04cb8921a76d227040003a234b0e"
-dependencies = [
- "fixed-hash 0.7.0",
- "impl-codec",
- "impl-rlp",
- "impl-serde",
- "uint 0.9.1",
-]
 
 [[package]]
 name = "primitive-types"
@@ -2661,6 +2677,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ea5119cdb4c55b55d432abb513a0429384878c15dde60cc77b1c99de1a95a6a"
 
 [[package]]
+name = "strsim"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
+
+[[package]]
 name = "structopt"
 version = "0.3.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3145,12 +3167,12 @@ dependencies = [
 
 [[package]]
 name = "tree_hash"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0092991b5664c725f0fbf30ed7eba2163e36cb22a789e1e371e9575eaff580e0"
+checksum = "3f9c8a86fad3169a65aad2265d3c6a8bc119d0b771046af3c1b2fb0e9b12182b"
 dependencies = [
  "eth2_hashing",
- "ethereum-types 0.11.0",
+ "ethereum-types 0.12.1",
  "smallvec 1.6.1",
 ]
 
@@ -3230,7 +3252,7 @@ version = "0.1.0"
 dependencies = [
  "bytes 1.1.0",
  "discv5",
- "ethereum-types 0.12.0",
+ "ethereum-types 0.12.1",
  "hex",
  "keccak-hash",
  "log 0.4.14",

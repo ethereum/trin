@@ -5,8 +5,8 @@ use super::{
     discovery::Discovery,
     overlay_service::{Node, OverlayRequest, OverlayService, RequestDirection},
     types::{
-        CustomPayload, FindContent, FindNodes, FoundContent, Message, Nodes, Ping, Pong,
-        ProtocolId, Request, Response,
+        ByteList, Content, FindContent, FindNodes, Message, Nodes, Ping, Pong, ProtocolId, Request,
+        Response,
     },
     Enr, U256,
 };
@@ -19,6 +19,7 @@ use discv5::{
 };
 use futures::channel::oneshot;
 use rocksdb::DB;
+use ssz::Encode;
 use tokio::sync::{mpsc::UnboundedSender, RwLock};
 use tracing::{debug, warn};
 
@@ -155,17 +156,14 @@ impl OverlayProtocol {
     }
 
     /// Sends a `Ping` request to `enr`.
-    pub async fn send_ping(
-        &self,
-        enr: Enr,
-        payload: Option<Vec<u8>>,
-    ) -> Result<Pong, OverlayRequestError> {
+    pub async fn send_ping(&self, enr: Enr) -> Result<Pong, OverlayRequestError> {
+        // Construct the request.
         let enr_seq = self.discovery.local_enr().seq();
-
-        let payload = CustomPayload::new(*self.data_radius, payload);
+        let data_radius = self.data_radius().await;
+        let custom_payload = ByteList::from(data_radius.as_ssz_bytes());
         let request = Ping {
             enr_seq,
-            payload: Some(payload),
+            custom_payload,
         };
 
         let node_id = enr.node_id();
@@ -209,7 +207,7 @@ impl OverlayProtocol {
         &self,
         enr: Enr,
         content_key: Vec<u8>,
-    ) -> Result<FoundContent, OverlayRequestError> {
+    ) -> Result<Content, OverlayRequestError> {
         // Construct the request.
         let request = FindContent { content_key };
         let direction = RequestDirection::Outgoing { destination: enr };
@@ -219,7 +217,7 @@ impl OverlayProtocol {
             .send_overlay_request(Request::FindContent(request), direction)
             .await
         {
-            Ok(Response::FoundContent(found_content)) => Ok(found_content),
+            Ok(Response::Content(found_content)) => Ok(found_content),
             Ok(_) => Err(OverlayRequestError::InvalidResponse),
             Err(error) => Err(error),
         }
