@@ -5,8 +5,8 @@ use super::{
     discovery::Discovery,
     overlay_service::{Node, OverlayRequest, OverlayService, RequestDirection},
     types::{
-        Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Ping, Pong, ProtocolId,
-        Request, Response,
+        ByteList, Content, FindContent, FindNodes, Message, Nodes, Ping, Pong, ProtocolId, Request,
+        Response,
     },
     Enr, U256,
 };
@@ -160,7 +160,7 @@ impl OverlayProtocol {
         // Construct the request.
         let enr_seq = self.discovery.local_enr().seq();
         let data_radius = self.data_radius().await;
-        let custom_payload = CustomPayload::new(data_radius.as_ssz_bytes());
+        let custom_payload = ByteList::from(data_radius.as_ssz_bytes());
         let request = Ping {
             enr_seq,
             custom_payload,

@@ -169,24 +169,24 @@ impl Message {
         if let Some(message_id) = bytes.first() {
             match message_id {
                 // Requests
-                1 => Ok(Message::Request(Request::Ping(
+                0 => Ok(Message::Request(Request::Ping(
                     Ping::from_ssz_bytes(&bytes[1..]).map_err(|e| MessageDecodeError::from(e))?,
                 ))),
-                3 => Ok(Message::Request(Request::FindNodes(
+                2 => Ok(Message::Request(Request::FindNodes(
                     FindNodes::from_ssz_bytes(&bytes[1..])
                         .map_err(|e| MessageDecodeError::from(e))?,
                 ))),
-                5 => Ok(Message::Request(Request::FindContent(
+                4 => Ok(Message::Request(Request::FindContent(
                     FindContent::from_ssz_bytes(&bytes[1..])
                         .map_err(|e| MessageDecodeError::from(e))?,
                 ))),
-                2 => Ok(Message::Response(Response::Pong(
+                1 => Ok(Message::Response(Response::Pong(
                     Pong::from_ssz_bytes(&bytes[1..]).map_err(|e| MessageDecodeError::from(e))?,
                 ))),
-                4 => Ok(Message::Response(Response::Nodes(
+                3 => Ok(Message::Response(Response::Nodes(
                     Nodes::from_ssz_bytes(&bytes[1..]).map_err(|e| MessageDecodeError::from(e))?,
                 ))),
-                6 => Ok(Message::Response(Response::Content(
+                5 => Ok(Message::Response(Response::Content(
                     Content::from_ssz_bytes(&bytes[1..])
                         .map_err(|e| MessageDecodeError::from(e))?,
                 ))),
@@ -208,9 +208,9 @@ pub enum Request {
 impl Request {
     fn message_id(&self) -> u8 {
         match self {
-            Request::Ping(_) => 1,
-            Request::FindNodes(_) => 3,
-            Request::FindContent(_) => 5,
+            Request::Ping(_) => 0,
+            Request::FindNodes(_) => 2,
+            Request::FindContent(_) => 4,
         }
     }
 }
@@ -225,21 +225,10 @@ pub enum Response {
 impl Response {
     fn message_id(&self) -> u8 {
         match self {
-            Response::Pong(_) => 2,
-            Response::Nodes(_) => 4,
-            Response::Content(_) => 6,
+            Response::Pong(_) => 1,
+            Response::Nodes(_) => 3,
+            Response::Content(_) => 5,
         }
-    }
-}
-
-/// Custom payload element of Ping and Pong messages
-#[derive(Debug, PartialEq, Clone, Encode, Decode)]
-pub struct CustomPayload;
-
-impl CustomPayload {
-    pub fn new(payload: Vec<u8>) -> ByteList {
-        let ssz_list = VariableList::from(payload);
-        ByteList::from(ssz_list)
     }
 }
 
@@ -511,7 +500,7 @@ mod test {
     }
 
     #[test]
-    fn test_found_content_encodes_content() {
+    fn test_content_encodes_content() {
         let some_content = ByteList::from(VariableList::from(vec![1; 33]));
         let msg = Content::Content(some_content.clone());
         let actual = msg.as_ssz_bytes();
@@ -521,7 +510,7 @@ mod test {
     }
 
     #[test]
-    fn test_found_content_encodes_single_enr() {
+    fn test_content_encodes_single_enr() {
         let enr = build_enr(enr_one_key());
         let msg = Content::Enrs(vec![SszEnr(enr.clone())]);
         let actual = msg.as_ssz_bytes();
@@ -531,7 +520,7 @@ mod test {
     }
 
     #[test]
-    fn test_found_content_encodes_double_enrs() {
+    fn test_content_encodes_double_enrs() {
         let enr_one = build_enr(enr_one_key());
         let enr_two = build_enr(enr_two_key());
 
@@ -616,8 +605,8 @@ mod test {
     fn test_vector_ping() {
         let enr_seq = 1u64;
         let data_radius = U256::MAX - U256::from(1);
-        let custom_payload = CustomPayload::new(data_radius.as_ssz_bytes());
-        let expected = "0101000000000000000c000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+        let custom_payload = ByteList::from(data_radius.as_ssz_bytes());
+        let expected = "0001000000000000000c000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
         let message = Message::Request(Request::Ping(Ping {
             enr_seq,
             custom_payload,
@@ -631,8 +620,8 @@ mod test {
     fn test_vector_pong() {
         let enr_seq = 1;
         let data_radius: U256 = U256::max_value() / 2;
-        let custom_payload = CustomPayload::new(data_radius.as_ssz_bytes());
-        let expected = "0201000000000000000c000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f";
+        let custom_payload = ByteList::from(data_radius.as_ssz_bytes());
+        let expected = "0101000000000000000c000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f";
         let message = Message::Response(Response::Pong(Pong {
             enr_seq,
             custom_payload,
@@ -645,7 +634,7 @@ mod test {
     #[test]
     fn test_vector_find_nodes() {
         let distances = vec![256, 255];
-        let expected = "03040000000001ff00";
+        let expected = "02040000000001ff00";
         let message = Message::Request(Request::FindNodes(FindNodes { distances }));
         assert_eq!(hex::encode(message.to_bytes()), expected);
         let decoded = Message::from_bytes(message.to_bytes().as_slice()).unwrap();
@@ -656,7 +645,7 @@ mod test {
     fn test_vector_nodes_empty() {
         let enrs = vec![];
         let total = 1;
-        let expected = "040105000000";
+        let expected = "030105000000";
         let message = Message::Response(Response::Nodes(Nodes { total, enrs }));
         assert_eq!(hex::encode(message.to_bytes()), expected);
         let decoded = Message::from_bytes(message.to_bytes().as_slice()).unwrap();
@@ -669,7 +658,7 @@ mod test {
         let enr_two = SszEnr(Enr::from_str("enr:-HW4QNfxw543Ypf4HXKXdYxkyzfcxcO-6p9X986WldfVpnVTQX1xlTnWrktEWUbeTZnmgOuAY_KUhbVV1Ft98WoYUBMBgmlkgnY0iXNlY3AyNTZrMaEDDiy3QkHAxPyOgWbxp5oF1bDdlYE6dLCUUp8xfVw50jU").unwrap());
         let enrs = vec![enr_one, enr_two];
         let total = 1;
-        let expected = "040105000000080000007f000000f875b8401ce2991c64993d7c84c29a00bdc871917551c7d330fca2dd0d69c706596dc655448f030b98a77d4001fd46ae0112ce26d613c5a6a02a81a6223cd0c4edaa53280182696482763489736563703235366b31a103ca634cae0d49acb401d8a4c6b6fe8c55b70d115bf400769cc1400f3258cd3138f875b840d7f1c39e376297f81d7297758c64cb37dcc5c3beea9f57f7ce9695d7d5a67553417d719539d6ae4b445946de4d99e680eb8063f29485b555d45b7df16a1850130182696482763489736563703235366b31a1030e2cb74241c0c4fc8e8166f1a79a05d5b0dd95813a74b094529f317d5c39d235";
+        let expected = "030105000000080000007f000000f875b8401ce2991c64993d7c84c29a00bdc871917551c7d330fca2dd0d69c706596dc655448f030b98a77d4001fd46ae0112ce26d613c5a6a02a81a6223cd0c4edaa53280182696482763489736563703235366b31a103ca634cae0d49acb401d8a4c6b6fe8c55b70d115bf400769cc1400f3258cd3138f875b840d7f1c39e376297f81d7297758c64cb37dcc5c3beea9f57f7ce9695d7d5a67553417d719539d6ae4b445946de4d99e680eb8063f29485b555d45b7df16a1850130182696482763489736563703235366b31a1030e2cb74241c0c4fc8e8166f1a79a05d5b0dd95813a74b094529f317d5c39d235";
         let message = Message::Response(Response::Nodes(Nodes { total, enrs }));
         assert_eq!(hex::encode(message.to_bytes()), expected);
         let decoded = Message::from_bytes(message.to_bytes().as_slice()).unwrap();
@@ -679,7 +668,7 @@ mod test {
     #[test]
     fn test_vector_find_content() {
         let content_key = hex::decode("706f7274616c").unwrap();
-        let expected = "0504000000706f7274616c";
+        let expected = "0404000000706f7274616c";
         let message = Message::Request(Request::FindContent(FindContent { content_key }));
         assert_eq!(hex::encode(message.to_bytes()), expected);
         let decoded = Message::from_bytes(message.to_bytes().as_slice()).unwrap();
@@ -687,10 +676,10 @@ mod test {
     }
 
     #[test]
-    fn test_vector_found_content_connection_id() {
+    fn test_vector_content_with_connection_id() {
         let raw = [01u8, 02u8];
         let connection_id = u16::from_le_bytes(raw);
-        let expected = "06000102";
+        let expected = "05000102";
         let message = Message::Response(Response::Content(Content::ConnectionId(connection_id)));
         assert_eq!(hex::encode(message.to_bytes()), expected);
         let decoded = Message::from_bytes(message.to_bytes().as_slice()).unwrap();
@@ -698,11 +687,11 @@ mod test {
     }
 
     #[test]
-    fn test_vector_found_content_content() {
+    fn test_vector_content_with_content() {
         let content = ByteList::from(VariableList::from(
             hex::decode("7468652063616b652069732061206c6965").unwrap(),
         ));
-        let expected = "06017468652063616b652069732061206c6965";
+        let expected = "05017468652063616b652069732061206c6965";
         let message = Message::Response(Response::Content(Content::Content(content)));
         assert_eq!(hex::encode(message.to_bytes()), expected);
         let decoded = Message::from_bytes(message.to_bytes().as_slice()).unwrap();
@@ -710,11 +699,11 @@ mod test {
     }
 
     #[test]
-    fn test_vector_found_content_enrs() {
+    fn test_vector_content_with_enrs() {
         let enr_one = SszEnr(Enr::from_str("enr:-HW4QBzimRxkmT18hMKaAL3IcZF1UcfTMPyi3Q1pxwZZbcZVRI8DC5infUAB_UauARLOJtYTxaagKoGmIjzQxO2qUygBgmlkgnY0iXNlY3AyNTZrMaEDymNMrg1JrLQB2KTGtv6MVbcNEVv0AHacwUAPMljNMTg").unwrap());
         let enr_two = SszEnr(Enr::from_str("enr:-HW4QNfxw543Ypf4HXKXdYxkyzfcxcO-6p9X986WldfVpnVTQX1xlTnWrktEWUbeTZnmgOuAY_KUhbVV1Ft98WoYUBMBgmlkgnY0iXNlY3AyNTZrMaEDDiy3QkHAxPyOgWbxp5oF1bDdlYE6dLCUUp8xfVw50jU").unwrap());
         let enrs = vec![enr_one, enr_two];
-        let expected = "0602080000007f000000f875b8401ce2991c64993d7c84c29a00bdc871917551c7d330fca2dd0d69c706596dc655448f030b98a77d4001fd46ae0112ce26d613c5a6a02a81a6223cd0c4edaa53280182696482763489736563703235366b31a103ca634cae0d49acb401d8a4c6b6fe8c55b70d115bf400769cc1400f3258cd3138f875b840d7f1c39e376297f81d7297758c64cb37dcc5c3beea9f57f7ce9695d7d5a67553417d719539d6ae4b445946de4d99e680eb8063f29485b555d45b7df16a1850130182696482763489736563703235366b31a1030e2cb74241c0c4fc8e8166f1a79a05d5b0dd95813a74b094529f317d5c39d235";
+        let expected = "0502080000007f000000f875b8401ce2991c64993d7c84c29a00bdc871917551c7d330fca2dd0d69c706596dc655448f030b98a77d4001fd46ae0112ce26d613c5a6a02a81a6223cd0c4edaa53280182696482763489736563703235366b31a103ca634cae0d49acb401d8a4c6b6fe8c55b70d115bf400769cc1400f3258cd3138f875b840d7f1c39e376297f81d7297758c64cb37dcc5c3beea9f57f7ce9695d7d5a67553417d719539d6ae4b445946de4d99e680eb8063f29485b555d45b7df16a1850130182696482763489736563703235366b31a1030e2cb74241c0c4fc8e8166f1a79a05d5b0dd95813a74b094529f317d5c39d235";
         let message = Message::Response(Response::Content(Content::Enrs(enrs)));
         assert_eq!(hex::encode(message.to_bytes()), expected);
         let decoded = Message::from_bytes(message.to_bytes().as_slice()).unwrap();

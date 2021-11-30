@@ -6,8 +6,8 @@ use crate::{
     portalnet::{
         discovery::Discovery,
         types::{
-            ByteList, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Ping, Pong,
-            ProtocolId, Request, Response, SszEnr,
+            ByteList, Content, FindContent, FindNodes, Message, Nodes, Ping, Pong, ProtocolId,
+            Request, Response, SszEnr,
         },
         Enr, U256,
     },
@@ -259,7 +259,7 @@ impl OverlayService {
         );
         let enr_seq = self.local_enr().await.seq();
         let data_radius = self.data_radius().await;
-        let custom_payload = CustomPayload::new(data_radius.as_ssz_bytes());
+        let custom_payload = ByteList::from(data_radius.as_ssz_bytes());
         Pong {
             enr_seq,
             custom_payload,
