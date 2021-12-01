@@ -18,13 +18,14 @@ COPY ./trin-state ./trin-state
 COPY ./ethportal-peertest ./ethportal-peertest 
 
 # build for release
-RUN cargo build --release
+RUN cargo build --all --release
 
 # final base
 FROM rust:1.56.1
 
 # copy build artifact from build stage
 COPY --from=builder /trin/target/release/trin .
+COPY --from=builder /trin/target/release/trin-cli .
 
 ENV RUST_LOG=debug
 
