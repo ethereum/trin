@@ -22,7 +22,7 @@ construct_uint! {
     pub struct U512(8);
 }
 
-// taken from primitive-types crate https://docs.rs/primitive-types/0.10.1/src/primitive_types/lib.rs.html#147-155
+// taken from primitive-messages crate https://docs.rs/primitive-types/0.10.1/src/primitive_types/lib.rs.html#147-155
 impl From<U256> for U512 {
     fn from(value: U256) -> U512 {
         let U256(ref arr) = value;
@@ -35,7 +35,7 @@ impl From<U256> for U512 {
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq)]
 pub enum U512toU256Error {
     #[error("Failed to convert U512 to U256 due to overflow")]
     Overflow,
@@ -112,6 +112,7 @@ impl ssz::Decode for U256 {
 
 #[cfg(test)]
 mod test {
+    use super::U512toU256Error::Overflow;
     use super::*;
     use rstest::rstest;
     use ssz::{Decode, Encode};
@@ -125,33 +126,34 @@ mod test {
     #[case(U256_MAX, U512_MAX)]
     #[case(U256([u64::MAX,u64::MAX,u64::MAX-1,u64::MAX]), U512([u64::MAX,u64::MAX,u64::MAX-1,u64::MAX,0,0,0,0]))]
     #[case(U256([0,0,0,0]), U512([0,0,0,0,0,0,0,0]))]
-    fn u256_to_u512_test(#[case] input: U256, #[case] expected: U512) {
+    fn test_u256_to_u512(#[case] input: U256, #[case] expected: U512) {
         let result = U512::from(input);
         assert_eq!(expected, result);
     }
 
     #[rstest]
     #[case(U512([1,2,3,4,0,0,0,0]), U256([1,2,3,4]))]
-    #[case(U512([420,69,420,69,0,0,0,0]), U256([420,69,420,69]))]
+    #[case(U512([419,70,409,96,0,0,0,0]), U256([419,70,409,96]))]
     #[case(U512([u64::MAX,u64::MAX,u64::MAX,u64::MAX,0,0,0,0]), U256_MAX)]
     #[case(U512([u64::MAX-1,u64::MAX,u64::MAX,u64::MAX,0,0,0,0]), U256([u64::MAX-1,u64::MAX,u64::MAX,u64::MAX]))]
     #[case(U512([1,0,0,0,0,0,0,0]), U256([1,0,0,0]))]
-    fn u512_to_u256_test(#[case] input: U512, #[case] expected: U256) {
+    fn test_u512_to_u256(#[case] input: U512, #[case] expected: U256) {
         let result = input.try_into().unwrap();
         assert_eq!(expected, result);
     }
 
     #[rstest]
-    #[case(U512([1,2,3,4,1,0,0,0]), U256([1,2,3,4]))]
-    #[case(U512([1,2,3,4,0,34,0,0]), U256([1,2,3,4]))]
-    #[case(U512([1,2,3,4,0,0,234,0]), U256([1,2,3,4]))]
-    #[case(U512([1,2,3,4,0,0,0,349]), U256([1,2,3,4]))]
-    #[case(U512([u64::MAX,u64::MAX,u64::MAX,u64::MAX,1,0,0,0]), U256([1,2,3,4]))]
-    #[case(U512([0,0,0,0,1,0,0,0]), U256([1,2,3,4]))]
-    #[should_panic]
-    fn test_u512_to_u256_failure(#[case] input: U512, #[case] expected: U256) {
-        let result = input.try_into().unwrap();
-        assert_eq!(expected, result);
+    #[case(U512([1,2,3,4,1,0,0,0]), Overflow)]
+    #[case(U512([1,2,3,4,0,34,0,0]), Overflow)]
+    #[case(U512([1,2,3,4,0,0,234,0]), Overflow)]
+    #[case(U512([1,2,3,4,0,0,0,349]), Overflow)]
+    #[case(U512([u64::MAX,u64::MAX,u64::MAX,u64::MAX,1,0,0,0]), Overflow)]
+    #[case(U512([0,0,0,0,1,0,0,0]), Overflow)]
+    fn test_u512_to_u256_failure(#[case] input: U512, #[case] expected: U512toU256Error) {
+        let result: Result<U256, U512toU256Error> = input.try_into();
+        if let Err(e) = result {
+            assert_eq!(e, expected);
+        }
     }
 
     #[test]

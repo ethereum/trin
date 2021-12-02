@@ -1,4 +1,4 @@
-use crate::portalnet::types::HexData;
+use crate::portalnet::types::messages::HexData;
 use log::info;
 
 use std::env;

@@ -5,7 +5,7 @@ use crate::{
     locks::RwLoggingExt,
     portalnet::{
         discovery::Discovery,
-        types::{
+        types::messages::{
             ByteList, Content, FindContent, FindNodes, Message, Nodes, Ping, Pong, ProtocolId,
             Request, Response, SszEnr,
         },

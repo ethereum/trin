@@ -12,7 +12,7 @@ use trin_core::cli::TrinConfig;
 use trin_core::jsonrpc::types::StateJsonRpcRequest;
 use trin_core::portalnet::discovery::Discovery;
 use trin_core::portalnet::events::PortalnetEvents;
-use trin_core::portalnet::types::PortalnetConfig;
+use trin_core::portalnet::types::messages::PortalnetConfig;
 use trin_core::utils::db::setup_overlay_db;
 
 pub mod events;
