@@ -22,10 +22,11 @@ const DEFAULT_SUBNETWORKS: &str = "history,state";
 )]
 pub struct TrinConfig {
     #[structopt(
-    default_value = "ipc",
-    possible_values(&["http", "ipc"]),
-    long = "web3-transport",
-    help = "select transport protocol to serve json-rpc endpoint")]
+        default_value = "ipc",
+        possible_values(&["http", "ipc"]),
+        long = "web3-transport",
+        help = "select transport protocol to serve json-rpc endpoint"
+    )]
     pub web3_transport: String,
 
     #[structopt(

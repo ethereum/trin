@@ -26,7 +26,7 @@ struct Config {
     endpoint: String,
 
     #[structopt(long, help = "first parameter")]
-    params: String,
+    params: Option<String>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -37,14 +37,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     } = Config::from_args();
 
     eprintln!(
-        "Attempting RPC. endpoint={} params={} file={}",
+        "Attempting RPC. endpoint={} params={:?} file={}",
         endpoint,
         params,
         ipc.to_string_lossy()
     );
     let mut client = TrinClient::from_ipc(&ipc)?;
 
-    let params = [jsonrpc::arg(params)];
+    let params = params.map(|val| [jsonrpc::arg(val)]);
     let req = client.build_request(endpoint.as_str(), &params);
     let resp = client.make_request(req)?;
 
@@ -54,14 +54,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn build_request<'a>(
     method: &'a str,
-    raw_params: &'a [Box<RawValue>],
+    raw_params: &'a Option<[Box<RawValue>; 1]>,
     request_id: u64,
 ) -> jsonrpc::Request<'a> {
-    jsonrpc::Request {
-        method,
-        params: raw_params,
-        id: serde_json::json!(request_id),
-        jsonrpc: Some("2.0"),
+    match raw_params {
+        Some(val) => jsonrpc::Request {
+            method,
+            params: val,
+            id: serde_json::json!(request_id),
+            jsonrpc: Some("2.0"),
+        },
+        None => jsonrpc::Request {
+            method,
+            params: &[],
+            id: serde_json::json!(request_id),
+            jsonrpc: Some("2.0"),
+        },
     }
 }
 
@@ -123,7 +131,7 @@ where
     fn build_request(
         &mut self,
         method: &'a str,
-        params: &'a [Box<RawValue>],
+        params: &'a Option<[Box<RawValue>; 1]>,
     ) -> jsonrpc::Request<'a> {
         let result = build_request(method, params, self.request_id);
         self.request_id += 1;
