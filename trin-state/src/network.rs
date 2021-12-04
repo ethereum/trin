@@ -3,6 +3,7 @@ use std::sync::Arc;
 use eth_trie::EthTrie;
 use log::debug;
 use rocksdb::DB;
+use tokio::sync::RwLock;
 use trin_core::portalnet::{
     discovery::Discovery,
     overlay::{OverlayConfig, OverlayProtocol, OverlayRequestError},
@@ -90,6 +91,9 @@ impl StateNetwork {
                 Err(OverlayRequestError::DecodeError) => {
                     debug!("Error decoding ping response from: {}", enr);
                     continue;
+                }
+                Err(OverlayRequestError::AcceptError(error)) => {
+                    debug!("Error building Accept message: {:?}", error);
                 }
                 Err(OverlayRequestError::Discv5Error(error)) => {
                     debug!("Unexpected error while bonding with {} => {:?}", enr, error);

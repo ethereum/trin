@@ -83,6 +83,9 @@ impl HistoryNetwork {
                     debug!("Error decoding ping response from: {}", enr);
                     continue;
                 }
+                Err(OverlayRequestError::AcceptError(error)) => {
+                    debug!("Error building Accept message: {:?}", error);
+                }
                 Err(OverlayRequestError::Discv5Error(error)) => {
                     debug!("Unexpected error while bonding with {} => {:?}", enr, error);
                     return Err(error.to_string());
