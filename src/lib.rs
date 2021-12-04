@@ -1,11 +1,13 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use log::debug;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, RwLock};
 
 use trin_core::jsonrpc::handlers::JsonRpcHandler;
 use trin_core::jsonrpc::types::PortalJsonRpcRequest;
 use trin_core::portalnet::events::PortalnetEvents;
+use trin_core::utp::utp::UtpListener;
 use trin_core::{
     cli::{TrinConfig, HISTORY_NETWORK, STATE_NETWORK},
     jsonrpc::service::{launch_jsonrpc_server, JsonRpcExiter},
@@ -44,11 +46,23 @@ pub async fn run_trin(
     // Setup Overlay database
     let db = Arc::new(setup_overlay_db(discovery.local_enr().node_id()));
 
+    let utp_listener = Arc::new(RwLock::new(UtpListener {
+        discovery: Arc::clone(&discovery),
+        utp_connections: HashMap::new(),
+        listening: HashMap::new(),
+    }));
+
     debug!("Selected networks to spawn: {:?}", trin_config.networks);
     // Initialize state sub-network service and event handlers, if selected
     let (state_handler, state_network_task, state_event_tx, state_jsonrpc_tx) =
         if trin_config.networks.iter().any(|val| val == STATE_NETWORK) {
-            initialize_state_network(&discovery, portalnet_config.clone(), Arc::clone(&db)).await
+            initialize_state_network(
+                &discovery,
+                &utp_listener,
+                portalnet_config.clone(),
+                Arc::clone(&db),
+            )
+            .await
         } else {
             (None, None, None, None)
         };
@@ -60,7 +74,13 @@ pub async fn run_trin(
             .iter()
             .any(|val| val == HISTORY_NETWORK)
         {
-            initialize_history_network(&discovery, portalnet_config.clone(), Arc::clone(&db)).await
+            initialize_history_network(
+                &discovery,
+                &utp_listener,
+                portalnet_config.clone(),
+                Arc::clone(&db),
+            )
+            .await
         } else {
             (None, None, None, None)
         };
@@ -104,8 +124,13 @@ pub async fn run_trin(
     let portal_events_discovery = Arc::clone(&discovery);
 
     tokio::spawn(async move {
-        let events =
-            PortalnetEvents::new(portal_events_discovery, history_event_tx, state_event_tx).await;
+        let events = PortalnetEvents::new(
+            portal_events_discovery,
+            utp_listener,
+            history_event_tx,
+            state_event_tx,
+        )
+        .await;
         events.process_discv5_requests().await;
     });
 

@@ -20,7 +20,7 @@ use crate::{
     utils::{bytes, distance::xor, hash_delay_queue::HashDelayQueue},
 };
 
-use crate::portalnet::types::{Accept, Offer};
+use crate::portalnet::types::messages::{Accept, Offer};
 use discv5::{
     enr::NodeId,
     kbucket::{
@@ -81,6 +81,10 @@ pub enum OverlayRequestError {
     /// The request  Discovery v5 request error.
     #[error("Internal Discovery v5 error: {0}")]
     Discv5Error(discv5::RequestError),
+
+    /// Error types resulting from building ACCEPT message
+    #[error("Error while building accept message")]
+    AcceptError(ssz_types::Error),
 }
 
 impl From<discv5::RequestError> for OverlayRequestError {
@@ -502,7 +506,7 @@ impl OverlayService {
             Request::FindContent(find_content) => {
                 Ok(Response::Content(self.handle_find_content(find_content)?))
             }
-            Request::Offer(content_keys) => self.handle_offer(content_keys),
+            Request::Offer(offer) => Ok(Response::Accept(self.handle_offer(offer)?)),
         }
     }
 
@@ -577,19 +581,32 @@ impl OverlayService {
     }
 
     /// Attempts to build a `Accept` response for a `Offer` request.
-    fn handle_offer(&self, request: Offer) -> Accept {
-        let mut requested_keys = BitList::with_capacity(request.content_keys.len()).unwrap();
-
-        for (i, key) in request.content_keys.iter().enumerate() {
-            requested_keys.set(i, should_store(key)).unwrap();
-        }
-
+    fn handle_offer(&self, request: Offer) -> Result<Accept, OverlayRequestError> {
+        let mut requested_keys = BitList::with_capacity(request.content_keys.len())
+            .map_err(|e| OverlayRequestError::AcceptError(e))?;
         let connection_id: u16 = crate::utp::utp::rand();
 
-        Accept {
+        for (i, key) in request.content_keys.iter().enumerate() {
+            // should_store is currently a dummy function
+            // the actual function will take ContentKey type, so we'll  have to decode keys here
+            requested_keys
+                .set(i, should_store(key))
+                .map_err(|e| OverlayRequestError::AcceptError(e))?;
+        }
+        // need to add connection_id to utp since we need to listen for requests on it??
+        // add to UtpListener.listening
+        // self.utp_listener
+        //     .write_with_warn()
+        //     .await
+        //     .listening
+        //     .insert(connection_id.clone() + 1, UtpMessageId::OfferAcceptStream);
+
+        let accept = Accept {
             connection_id,
             content_keys: requested_keys,
-        }
+        };
+
+        Ok(accept)
     }
 
     /// Sends a TALK request via Discovery v5 to some destination node.
@@ -760,6 +777,7 @@ impl OverlayService {
             Response::Pong(pong) => self.process_pong(pong, source),
             Response::Nodes(nodes) => self.process_nodes(nodes, source),
             Response::Content(content) => self.process_content(content, source),
+            _ => {}
         }
     }
 

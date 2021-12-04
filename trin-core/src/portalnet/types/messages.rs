@@ -247,7 +247,7 @@ impl Message {
                     Offer::from_ssz_bytes(&bytes[1..]).map_err(|e| MessageDecodeError::from(e))?,
                 ))),
                 // Responses
-                2 => Ok(Message::Response(Response::Pong(
+                1 => Ok(Message::Response(Response::Pong(
                     Pong::from_ssz_bytes(&bytes[1..]).map_err(|e| MessageDecodeError::from(e))?,
                 ))),
                 3 => Ok(Message::Response(Response::Nodes(

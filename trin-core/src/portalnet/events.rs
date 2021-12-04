@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use discv5::{Discv5Event, TalkRequest};
 use log::{debug, warn};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, RwLock};
 
 use super::discovery::Discovery;
 use super::types::messages::ProtocolId;
@@ -85,11 +85,13 @@ impl PortalnetEvents {
                         };
                     }
                     ProtocolId::Utp => {
+                        // process utp message and send response (deals with sending/handling utp protocol msgs)
                         self.utp_listener
                             .write_with_warn()
                             .await
                             .process_utp_request(request.body(), request.node_id())
                             .await;
+                        // handles actual data sent over utp. eg, stores data in db
                         self.process_utp_byte_stream().await;
                     }
                     _ => {

@@ -1,7 +1,7 @@
 use log::info;
 use rocksdb::DB;
 use std::sync::Arc;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, RwLock};
 use tokio::task::JoinHandle;
 
 use crate::events::StateEvents;

@@ -24,7 +24,9 @@ use futures::channel::oneshot;
 use parking_lot::RwLock;
 use rocksdb::DB;
 use ssz::Encode;
+use tokio::sync::mpsc;
 use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::RwLock as RwLockT;
 use tracing::{debug, warn};
 
 pub use super::overlay_service::OverlayRequestError;
@@ -71,14 +73,14 @@ pub struct OverlayProtocol {
     protocol: ProtocolId,
     /// A sender to send requests to the OverlayService.
     request_tx: UnboundedSender<OverlayRequest>,
-    utp_listener: Arc<RwLock<UtpListener>>,
+    utp_listener: Arc<RwLockT<UtpListener>>,
 }
 
 impl OverlayProtocol {
     pub async fn new(
         config: OverlayConfig,
         discovery: Arc<Discovery>,
-        utp_listener: Arc<RwLock<UtpListener>>,
+        utp_listener: Arc<RwLockT<UtpListener>>,
         db: Arc<DB>,
         data_radius: U256,
         protocol: ProtocolId,
@@ -272,32 +274,33 @@ impl OverlayProtocol {
         &self,
         response: Accept,
         enr: Enr,
-        content_keys_items: Vec<Vec<u8>>,
+        content_keys_offered: Vec<Vec<u8>>,
     ) -> Accept {
         let connection_id = response.connection_id.clone();
 
         let (tx, mut rx) = mpsc::unbounded_channel::<UtpStreamState>();
 
-        // Add connection_id we will be receiving to the listening list and the
-        // response number. The connection_id is + 1 because that is their id
         self.utp_listener
-            .write_with_warn()
+            .write()
             .await
             .listening
-            .insert(connection_id.clone() + 1, UtpMessageId::OfferAcceptStream);
+            .insert(connection_id.clone(), UtpMessageId::OfferAcceptStream);
 
+        // initiate the connection to the acceptor
         self.utp_listener
-            .write_with_warn()
+            .write()
             .await
             .connect(connection_id.clone(), enr.node_id(), tx)
             .await;
 
+        // Return to acceptor: the content key and corresponding data
         let mut content_items: Vec<(Vec<u8>, Vec<u8>)> = vec![];
+
         for (i, key) in response
             .content_keys
             .clone()
             .iter()
-            .zip(content_keys_items.iter())
+            .zip(content_keys_offered.iter())
         {
             if i == true {
                 match self.db.get(key.clone()) {
@@ -305,6 +308,7 @@ impl OverlayProtocol {
                         Some(content) => content_items.push((key.clone(), content)),
                         None => {}
                     },
+                    // should return some error if content not found
                     Err(_) => {}
                 }
             }
@@ -318,27 +322,30 @@ impl OverlayProtocol {
         tokio::spawn(async move {
             while let Some(state) = rx.recv().await {
                 if state == UtpStreamState::Connected {
-                    if let Some(conn) = utp_listener
-                        .write_with_warn()
-                        .await
-                        .utp_connections
-                        .get_mut(&ConnectionKey {
-                            node_id: enr.node_id(),
-                            conn_id_recv: connection_id,
-                        })
+                    if let Some(conn) =
+                        utp_listener
+                            .write()
+                            .await
+                            .utp_connections
+                            .get_mut(&ConnectionKey {
+                                node_id: enr.node_id(),
+                                conn_id_recv: connection_id,
+                            })
                     {
+                        // send the content to the acceptor over a uTP stream
                         conn.write(&UtpMessage::new(content_message.as_ssz_bytes()).encode()[..])
                             .await;
                     }
                 } else if state == UtpStreamState::Finished {
-                    if let Some(conn) = utp_listener
-                        .write_with_warn()
-                        .await
-                        .utp_connections
-                        .get_mut(&ConnectionKey {
-                            node_id: enr.node_id(),
-                            conn_id_recv: connection_id,
-                        })
+                    if let Some(conn) =
+                        utp_listener
+                            .write()
+                            .await
+                            .utp_connections
+                            .get_mut(&ConnectionKey {
+                                node_id: enr.node_id(),
+                                conn_id_recv: connection_id,
+                            })
                     {
                         conn.send_finalize().await;
                         return;

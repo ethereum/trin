@@ -113,7 +113,7 @@ impl UtpListener {
                         }
                     }
                     PacketType::Syn => {
-                        if let Some(enr) = self.discovery.discv5.find_enr(&node_id) {
+                        if let Some(enr) = self.discovery.discv5.find_enr(node_id) {
                             // If neither of those cases happened handle this is a new request
                             let (tx, _) = mpsc::unbounded_channel::<UtpStreamState>();
                             let mut conn = UtpStream::init(Arc::clone(&self.discovery), enr, tx);
