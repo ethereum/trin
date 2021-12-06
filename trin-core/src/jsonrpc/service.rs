@@ -86,7 +86,7 @@ fn set_ipc_cleanup_handlers(ipc_path: &str) {
         let ipc_path = ipc_path.to_string();
         ctrlc::set_handler(move || {
             if let Err(err) = fs::remove_file(&ipc_path) {
-                warn!("Couldn't remove {} because: {}", ipc_path, err);
+                debug!("Ctrl-C: Skipped removing {} because: {}", ipc_path, err);
             };
             std::process::exit(1);
         })
@@ -98,7 +98,7 @@ fn set_ipc_cleanup_handlers(ipc_path: &str) {
         let original_panic = panic::take_hook();
         panic::set_hook(Box::new(move |panic_info| {
             if let Err(err) = fs::remove_file(&ipc_path) {
-                warn!("Couldn't remove {} because: {}", ipc_path, err);
+                debug!("Panic hook: Skipped removing {} because: {}", ipc_path, err);
             };
             original_panic(panic_info);
             process::exit(1);
@@ -165,6 +165,7 @@ fn launch_ipc_client(
             }
             Err(_) => break, // Socket exited
         };
+        debug!("New IPC client: {:?}", stream.peer_addr().unwrap());
         let infura_project_id = infura_project_id.clone();
         let portal_tx = portal_tx.clone();
         pool.execute(move || {
@@ -177,7 +178,7 @@ fn launch_ipc_client(
     info!("JSON-RPC server over IPC exited cleanly");
 
     if let Err(err) = fs::remove_file(ipc_path) {
-        warn!("Could not clear IPC path {} because: {}", ipc_path, err);
+        debug!("Clean Exit: Skipped removing {} because: {}", ipc_path, err);
     }
 }
 
@@ -226,6 +227,7 @@ fn serve_ipc_client(
 ) {
     let deser = serde_json::Deserializer::from_reader(rx);
     for obj in deser.into_iter::<JsonRequest>() {
+        debug!("Got new IPC request: {:?}", obj);
         match obj {
             Ok(obj) => {
                 let formatted_response = match obj.validate() {
