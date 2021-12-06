@@ -561,6 +561,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "discv5"
+version = "0.1.0-beta.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8a4968631f2eb03ef8dff74fe355440bcf4bd1c514c4326325fc739640c4ec53"
+dependencies = [
+ "aes",
+ "aes-gcm",
+ "arrayvec",
+ "digest",
+ "enr",
+ "fnv",
+ "futures 0.3.17",
+ "hashlink",
+ "hex",
+ "hkdf",
+ "lazy_static 1.4.0",
+ "lru",
+ "parking_lot 0.11.1",
+ "rand 0.8.4",
+ "rlp 0.5.0",
+ "sha2",
+ "smallvec 1.6.1",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+ "uint 0.9.1",
+ "zeroize",
+]
+
+[[package]]
 name = "ecdsa"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -784,7 +816,7 @@ name = "ethportal-peertest"
 version = "0.1.0"
 dependencies = [
  "clap",
- "discv5",
+ "discv5 0.1.0-beta.10",
  "hex",
  "hyper",
  "log 0.4.14",
@@ -3180,7 +3212,7 @@ dependencies = [
 name = "trin"
 version = "0.1.0"
 dependencies = [
- "discv5",
+ "discv5 0.1.0-beta.11",
  "log 0.4.14",
  "tokio",
  "tracing",
@@ -3211,7 +3243,7 @@ dependencies = [
  "clap",
  "ctrlc",
  "directories",
- "discv5",
+ "discv5 0.1.0-beta.10",
  "env_logger",
  "eth2_ssz",
  "eth2_ssz_derive",
@@ -3251,7 +3283,7 @@ name = "trin-history"
 version = "0.1.0"
 dependencies = [
  "bytes 1.1.0",
- "discv5",
+ "discv5 0.1.0-beta.10",
  "ethereum-types 0.12.1",
  "hex",
  "keccak-hash",
@@ -3269,7 +3301,7 @@ dependencies = [
 name = "trin-state"
 version = "0.1.0"
 dependencies = [
- "discv5",
+ "discv5 0.1.0-beta.10",
  "eth_trie",
  "log 0.4.14",
  "num",
