@@ -2,6 +2,7 @@ use std::convert::{TryFrom, TryInto};
 use std::fmt;
 use std::net::SocketAddr;
 use std::ops::{Deref, DerefMut};
+use std::string::String;
 use std::str::FromStr;
 
 use base64;
@@ -383,6 +384,8 @@ pub struct FindContent {
     pub content_key: Vec<u8>,
 }
 
+// add findcontent test to peertest
+
 #[derive(Debug, PartialEq, Clone, Encode, Decode)]
 #[ssz(enum_behaviour = "union")]
 pub enum Content {
@@ -411,6 +414,22 @@ impl Content {
     pub fn enrs(self) -> Result<Vec<SszEnr>, MessageDecodeError> {
         if let Content::Enrs(val) = self {
             Ok(val)
+        } else {
+            Err(MessageDecodeError::Type)
+        }
+    }
+}
+
+impl TryInto<Value> for Content {
+    type Error = MessageDecodeError;
+
+    fn try_into(self) -> Result<Value, Self::Error> {
+        if let Content::ConnectionId(val) = self {
+            Ok(Value::String(val.to_string()))
+        } else if let Content::Content(val) = self {
+            Ok(Value::String(String::from_utf8(val.to_vec()).unwrap()))
+        } else if let Content::Enrs(val) = self {
+            Ok(Value::String(val[0].to_string()))
         } else {
             Err(MessageDecodeError::Type)
         }

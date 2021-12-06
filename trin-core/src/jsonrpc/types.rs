@@ -1,12 +1,15 @@
 use std::str::FromStr;
 
+use hex::decode;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+use ssz_types::VariableList;
 use tokio::sync::mpsc;
 use validator::{Validate, ValidationError};
 
 use crate::jsonrpc::endpoints::{HistoryEndpoint, StateEndpoint, TrinEndpoint};
 use crate::portalnet::Enr;
+use crate::portalnet::types::messages::ByteList;
 
 type Responder<T, E> = mpsc::UnboundedSender<Result<T, E>>;
 
@@ -101,13 +104,54 @@ impl TryFrom<&Value> for PingParams {
     fn try_from(param: &Value) -> Result<Self, Self::Error> {
         match param.as_str() {
             Some(val) => match Enr::from_str(val) {
-                Ok(val) => Ok(PingParams { enr: val }),
+                Ok(enr) => Ok(Self { enr }),
                 Err(_) => Err(ValidationError::new("Invalid enr param")),
             },
             None => Err(ValidationError::new("Missing or empty enr param")),
         }
     }
 }
+    
+pub struct FindContentParams {
+    pub enr: Enr,
+    pub content_key: ByteList,
+}
+
+impl TryFrom<Params> for FindContentParams {
+    type Error = ValidationError;
+
+    fn try_from(params: Params) -> Result<Self, Self::Error> {
+        println!("params innit: {:?}", params);
+        match params {
+           Params::Array(val) => match val.len() {
+                2 => FindContentParams::try_from(&val),
+                _ => Err(ValidationError::new("Expected 2 params")),
+            },
+            _ => Err(ValidationError::new("Expected array of params")),
+        }
+    }
+}
+
+impl TryFrom<&Vec<Value>> for FindContentParams {
+    type Error = ValidationError;
+
+    fn try_from(params: &Vec<Value>) -> Result<Self, Self::Error> {
+        // handle unwrap()(s)
+        let raw = params[0].as_str().unwrap();
+        let enr = match Enr::from_str(raw) {
+            Ok(enr) => enr,
+            Err(_msg) => {
+                return Err(ValidationError::new("Invalid enr param"))
+            }
+        };
+        let content_key = match decode(params[1].as_str().unwrap()) {
+            Ok(val) => ByteList::from(VariableList::from(val)),
+            Err(_msg) => return Err(ValidationError::new("Unable to decode content_key")),
+        };
+        Ok(Self {enr, content_key} )
+    }
+}
+
 
 #[cfg(test)]
 mod test {

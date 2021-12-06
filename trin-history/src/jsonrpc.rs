@@ -23,6 +23,9 @@ impl HistoryRequestHandler {
                     let radius = &self.network.overlay.data_radius;
                     let _ = request.resp.send(Ok(Value::String(radius.to_string())));
                 }
+                HistoryEndpoint::FindContent => {
+                    let _ = request.resp.send(Ok(Value::String("content".to_owned())));
+                }
                 HistoryEndpoint::Ping => {
                     let response = match PingParams::try_from(request.params) {
                         Ok(val) => match self.network.overlay.send_ping(val.enr).await {

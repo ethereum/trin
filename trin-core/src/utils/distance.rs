@@ -1,4 +1,6 @@
 pub fn xor_two_values(first: &[u8], second: &[u8]) -> Vec<u8> {
+    println!("first: {:?} - {:?}", first.len(), first);
+    println!("second: {:?} - {:?}", second.len(), second);
     if first.len() != second.len() {
         panic!("Can only xor vectors of equal length.")
     };
