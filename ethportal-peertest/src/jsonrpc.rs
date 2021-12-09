@@ -1,5 +1,6 @@
 use std::io::prelude::*;
-use std::os::unix::net::UnixStream;
+#[cfg(unix)]
+use std::os::unix;
 use std::time::Duration;
 use std::{fs, panic, process};
 
@@ -127,6 +128,16 @@ impl JsonRpcEndpoint {
     }
 }
 
+#[cfg(unix)]
+fn get_ipc_stream(ipc_path: &str) -> unix::net::UnixStream {
+    unix::net::UnixStream::connect(ipc_path).unwrap()
+}
+
+#[cfg(windows)]
+fn get_ipc_stream(ipc_path: &str) -> uds_windows::UnixStream {
+    uds_windows::UnixStream::connect(ipc_path).unwrap()
+}
+
 #[allow(clippy::never_loop)]
 pub async fn test_jsonrpc_endpoints_over_ipc(peertest_config: PeertestConfig) {
     // setup cleanup handler if tests panic
@@ -146,7 +157,7 @@ pub async fn test_jsonrpc_endpoints_over_ipc(peertest_config: PeertestConfig) {
     info!("Testing IPC path: {}", peertest_config.web3_ipc_path);
     for endpoint in JsonRpcEndpoint::all_endpoints(peertest_config.target_node) {
         info!("Testing IPC method: {:?}", endpoint.method);
-        let mut stream = UnixStream::connect(&peertest_config.web3_ipc_path).unwrap();
+        let mut stream = get_ipc_stream(&peertest_config.web3_ipc_path);
         stream
             .set_read_timeout(Some(Duration::from_millis(500)))
             .expect("Couldn't set read timeout");
