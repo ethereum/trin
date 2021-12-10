@@ -153,6 +153,27 @@ pub fn make_ipc_request(
     get_response_result(response_obj)
 }
 
+pub fn get_enode(ipc_path: &str) -> Result<String, String> {
+    let info_endpoint = JsonRpcEndpoint {
+        method: "discv5_nodeInfo".to_string(),
+        id: 1,
+        params: Params::None,
+    };
+    let result = make_ipc_request(ipc_path, info_endpoint).map_err(|jsonerr| {
+        format!(
+            "Error while trying to get enode for client at ipc_path {:?} endpoint: {:?}",
+            ipc_path, jsonerr
+        )
+    })?;
+    match result.get("enr") {
+        Some(val) => match val.as_str() {
+            Some(enr) => Ok(enr.to_owned()),
+            None => Err("Reported ENR value was not a string".to_owned()),
+        },
+        None => Err("'enr' field not found in nodeInfo response".to_owned()),
+    }
+}
+
 #[allow(clippy::never_loop)]
 pub async fn test_jsonrpc_endpoints_over_ipc(peertest_config: PeertestConfig) {
     // setup cleanup handler if tests panic
