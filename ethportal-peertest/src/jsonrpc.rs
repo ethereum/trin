@@ -45,13 +45,11 @@ fn validate_endpoint_response(method: &str, result: &Value) {
         }
         "portal_historyPing" => {
             assert!(result.is_string());
-            assert!(result.as_str().unwrap().contains("data_radius"));
-            assert!(result.as_str().unwrap().contains("payload"));
+            // TODO test for enrSeq, recipient{IP,Port}
         }
         "portal_statePing" => {
             assert!(result.is_string());
-            assert!(result.as_str().unwrap().contains("data_radius"));
-            assert!(result.as_str().unwrap().contains("payload"));
+            // TODO test for enrSeq, recipient{IP,Port}
         }
         _ => panic!("Unsupported endpoint"),
     };
