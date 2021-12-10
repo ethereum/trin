@@ -4,6 +4,7 @@ use ethportal_peertest::cli::PeertestConfig;
 use ethportal_peertest::jsonrpc::{
     test_jsonrpc_endpoints_over_http, test_jsonrpc_endpoints_over_ipc,
 };
+use ethportal_peertest::launch_buddy_node;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

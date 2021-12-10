@@ -4,6 +4,10 @@ use std::sync::Arc;
 use std::task::Poll;
 use std::time::Duration;
 
+use crate::locks::RwLoggingExt;
+use crate::portalnet::types::messages::{Accept, Offer};
+use crate::utp::utp::UtpListener;
+use crate::utp::utp_types::UtpMessageId;
 use crate::{
     portalnet::{
         discovery::Discovery,
@@ -19,8 +23,6 @@ use crate::{
     },
     utils::{bytes, distance::xor, hash_delay_queue::HashDelayQueue},
 };
-
-use crate::portalnet::types::messages::{Accept, Offer};
 use discv5::{
     enr::NodeId,
     kbucket::{
@@ -39,6 +41,7 @@ use ssz_types::BitList;
 use ssz_types::VariableList;
 use thiserror::Error;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::sync::RwLock as RwLockT;
 
 /// Maximum number of ENRs in response to FindNodes.
 pub const FIND_NODES_MAX_NODES: usize = 32;
@@ -237,6 +240,7 @@ pub struct OverlayService {
     // TODO: This should probably be a bounded channel.
     /// The receiver half of the service request channel.
     request_rx: UnboundedReceiver<OverlayRequest>,
+
     /// The sender half of a channel for service requests.
     /// This is used internally to submit requests (e.g. maintenance ping requests).
     request_tx: UnboundedSender<OverlayRequest>,
@@ -246,6 +250,8 @@ pub struct OverlayService {
     response_rx: UnboundedReceiver<OverlayResponse>,
     /// The sender half of a channel for responses to outgoing requests.
     response_tx: UnboundedSender<OverlayResponse>,
+
+    utp_listener: Arc<RwLockT<UtpListener>>,
 }
 
 impl OverlayService {
@@ -262,6 +268,7 @@ impl OverlayService {
         ping_queue_interval: Option<Duration>,
         data_radius: Arc<U256>,
         protocol: ProtocolId,
+        utp_listener: Arc<RwLockT<UtpListener>>,
     ) -> Result<UnboundedSender<OverlayRequest>, String> {
         let (request_tx, request_rx) = mpsc::unbounded_channel();
         let internal_request_tx = request_tx.clone();
@@ -289,6 +296,7 @@ impl OverlayService {
                 active_outgoing_requests: Arc::new(RwLock::new(HashMap::new())),
                 response_rx,
                 response_tx,
+                utp_listener,
             };
 
             // Attempt to insert bootnodes into the routing table in a disconnected state.
@@ -593,13 +601,23 @@ impl OverlayService {
                 .set(i, should_store(key))
                 .map_err(|e| OverlayRequestError::AcceptError(e))?;
         }
-        // need to add connection_id to utp since we need to listen for requests on it??
-        // add to UtpListener.listening
-        // self.utp_listener
-        //     .write_with_warn()
-        //     .await
-        //     .listening
-        //     .insert(connection_id.clone() + 1, UtpMessageId::OfferAcceptStream);
+
+        let utp_listener = self.utp_listener.clone();
+        tokio::spawn(async move {
+            // listen for incoming connection request on conn_id, as part of utp handshake
+            utp_listener
+                .write_with_warn()
+                .await
+                .listening
+                .insert(connection_id.clone(), UtpMessageId::OfferAcceptStream);
+
+            // also listen on conn_id + 1 because this is the actual receive path for acceptor
+            utp_listener
+                .write_with_warn()
+                .await
+                .listening
+                .insert(connection_id.clone() + 1, UtpMessageId::OfferAcceptStream);
+        });
 
         let accept = Accept {
             connection_id,
@@ -1068,6 +1086,12 @@ mod tests {
         };
         let discovery = Arc::new(Discovery::new(portal_config).unwrap());
 
+        let utp_listener = Arc::new(RwLockT::new(UtpListener {
+            discovery: Arc::clone(&discovery),
+            utp_connections: HashMap::new(),
+            listening: HashMap::new(),
+        }));
+
         let db = Arc::new(db::setup_overlay_db(discovery.local_enr().node_id()));
 
         let overlay_config = OverlayConfig::default();
@@ -1098,6 +1122,7 @@ mod tests {
             active_outgoing_requests,
             response_tx,
             response_rx,
+            utp_listener,
         }
     }
 
