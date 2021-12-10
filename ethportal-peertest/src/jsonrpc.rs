@@ -134,6 +134,25 @@ fn get_ipc_stream(ipc_path: &str) -> uds_windows::UnixStream {
     uds_windows::UnixStream::connect(ipc_path).unwrap()
 }
 
+pub fn make_ipc_request(
+    ipc_path: &str,
+    endpoint: JsonRpcEndpoint,
+) -> Result<serde_json::Value, JsonRpcResponseError> {
+    let mut stream = get_ipc_stream(ipc_path);
+    stream
+        .set_read_timeout(Some(Duration::from_millis(500)))
+        .expect("Couldn't set read timeout");
+
+    let v: Value = serde_json::from_str(&endpoint.to_jsonrpc()).unwrap();
+    let data = serde_json::to_vec(&v).unwrap();
+    stream.write_all(&data).unwrap();
+    stream.flush().unwrap();
+    let deser = serde_json::Deserializer::from_reader(stream);
+    let next_obj = deser.into_iter::<Value>().next();
+    let response_obj = next_obj.ok_or(JsonRpcResponseError::Empty())?;
+    get_response_result(response_obj)
+}
+
 #[allow(clippy::never_loop)]
 pub async fn test_jsonrpc_endpoints_over_ipc(peertest_config: PeertestConfig) {
     // setup cleanup handler if tests panic
@@ -163,17 +182,10 @@ pub async fn test_jsonrpc_endpoints_over_ipc(peertest_config: PeertestConfig) {
         stream.flush().unwrap();
         let deser = serde_json::Deserializer::from_reader(stream);
         for obj in deser.into_iter::<Value>() {
-            let response_obj = match obj {
-                Ok(val) => val,
-                Err(err) => panic!(
-                    "json deserialization error. (Timeouts typically give an 'os error 11'): {}",
-                    err
-                ),
-            };
-            match get_response_result(response_obj) {
+            match get_response_result(obj) {
                 Ok(result) => validate_endpoint_response(&endpoint.method, &result),
                 Err(msg) => panic!(
-                    "Jsonrpc error for {:?} endpoint: {:?}",
+                    "Jsonrpc error for {:?} endpoint ('os error 11' means timeout): {:?}",
                     endpoint.method, msg
                 ),
             }
@@ -186,14 +198,23 @@ pub async fn test_jsonrpc_endpoints_over_ipc(peertest_config: PeertestConfig) {
 
 #[derive(Error, Debug)]
 pub enum JsonRpcResponseError {
+    #[error("Empty JsonRpc response")]
+    Empty(),
+
     #[error("JsonRpc response contains an error: {0}")]
     Error(String),
 
-    #[error("Invalid JsonRpc response")]
+    #[error("Invalid object in JsonRpc response")]
     Invalid(),
+
+    #[error("Deserialize failed on JsonRpc response")]
+    Unparseable(String),
 }
 
-fn get_response_result(response: Value) -> Result<Value, JsonRpcResponseError> {
+fn get_response_result(
+    response: Result<Value, serde_json::Error>,
+) -> Result<Value, JsonRpcResponseError> {
+    let response = response.map_err(|err| JsonRpcResponseError::Unparseable(err.to_string()))?;
     match response.get("result") {
         Some(result) => Ok(result.clone()),
         None => match response.get("error") {
@@ -215,7 +236,7 @@ pub async fn test_jsonrpc_endpoints_over_http(peertest_config: PeertestConfig) {
             .unwrap();
         let resp = client.request(req).await.unwrap();
         let body = hyper::body::to_bytes(resp.into_body()).await.unwrap();
-        let response_obj: Value = serde_json::from_slice(&body).unwrap();
+        let response_obj = serde_json::from_slice(&body);
         match get_response_result(response_obj) {
             Ok(result) => validate_endpoint_response(&endpoint.method, &result),
             Err(msg) => panic!(
