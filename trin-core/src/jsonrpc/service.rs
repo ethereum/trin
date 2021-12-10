@@ -84,13 +84,17 @@ pub fn launch_jsonrpc_server(
 fn set_ipc_cleanup_handlers(ipc_path: &str) {
     {
         let ipc_path = ipc_path.to_string();
-        ctrlc::set_handler(move || {
+        if let Err(err) = ctrlc::set_handler(move || {
             if let Err(err) = fs::remove_file(&ipc_path) {
                 debug!("Ctrl-C: Skipped removing {} because: {}", ipc_path, err);
             };
             std::process::exit(1);
-        })
-        .expect("Error setting Ctrl-C handler.");
+        }) {
+            warn!(
+                "Could not set the Ctrl-C handler for removing the IPC socket: {}",
+                err
+            );
+        }
     }
 
     {
