@@ -13,7 +13,7 @@ use ethportal_peertest::jsonrpc::{
 };
 use trin_core::cli::TrinConfig;
 use trin_core::jsonrpc::handlers::JsonRpcHandler;
-use trin_core::jsonrpc::service::launch_jsonrpc_server;
+use trin_core::jsonrpc::service::{launch_jsonrpc_server, JsonRpcExiter};
 use trin_core::jsonrpc::types::PortalJsonRpcRequest;
 use trin_core::portalnet::{
     discovery::Discovery,
@@ -109,14 +109,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let (live_server_tx, mut live_server_rx) = tokio::sync::mpsc::channel::<bool>(1);
 
-        let jsonrpc_server_task = tokio::task::spawn_blocking(|| {
-            launch_jsonrpc_server(
-                jsonrpc_trin_config,
-                infura_project_id,
-                portal_jsonrpc_tx,
-                live_server_tx,
-            );
-        });
+        let json_exiter = Arc::new(JsonRpcExiter::new());
+        let jsonrpc_server_task = {
+            let json_exiter_clone = Arc::clone(&json_exiter);
+            tokio::task::spawn_blocking(|| {
+                launch_jsonrpc_server(
+                    jsonrpc_trin_config,
+                    infura_project_id,
+                    portal_jsonrpc_tx,
+                    live_server_tx,
+                    json_exiter_clone,
+                );
+            })
+        };
 
         while let Some(res) = live_server_rx.recv().await {
             debug!("JsonRPC server is available: {:?}", res);
@@ -158,6 +163,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         info!("All tests passed successfully!");
+
+        json_exiter.exit();
+        // TODO do we need some kind of event loop cycle here, before running the hard exit?
         std::process::exit(1);
     })
     .await

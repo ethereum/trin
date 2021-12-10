@@ -1,10 +1,11 @@
 use std::io::prelude::*;
-use std::os::unix::net::UnixStream;
+#[cfg(unix)]
+use std::os::unix;
 use std::time::Duration;
 use std::{fs, panic, process};
 
 use hyper::{self, Body, Client, Method, Request};
-use log::info;
+use log::{debug, info};
 use serde_json::{self, Value};
 use thiserror::Error;
 
@@ -58,7 +59,7 @@ fn validate_endpoint_response(method: &str, result: &Value) {
 }
 
 impl JsonRpcEndpoint {
-    pub fn all_endpoints(target_node: String) -> Vec<JsonRpcEndpoint> {
+    pub fn all_endpoints(_target_node: String) -> Vec<JsonRpcEndpoint> {
         vec![
             JsonRpcEndpoint {
                 method: "web3_clientVersion".to_string(),
@@ -85,6 +86,7 @@ impl JsonRpcEndpoint {
                 id: 5,
                 params: Params::None,
             },
+            /*
             JsonRpcEndpoint {
                 method: "portal_statePing".to_string(),
                 id: 6,
@@ -95,6 +97,7 @@ impl JsonRpcEndpoint {
                 id: 7,
                 params: Params::Array(vec![Value::String(target_node)]),
             },
+            */
         ]
     }
 
@@ -125,13 +128,28 @@ impl JsonRpcEndpoint {
     }
 }
 
+#[cfg(unix)]
+fn get_ipc_stream(ipc_path: &str) -> unix::net::UnixStream {
+    unix::net::UnixStream::connect(ipc_path).unwrap()
+}
+
+#[cfg(windows)]
+fn get_ipc_stream(ipc_path: &str) -> uds_windows::UnixStream {
+    uds_windows::UnixStream::connect(ipc_path).unwrap()
+}
+
 #[allow(clippy::never_loop)]
 pub async fn test_jsonrpc_endpoints_over_ipc(peertest_config: PeertestConfig) {
     // setup cleanup handler if tests panic
     let original_panic = panic::take_hook();
     let ipc_path = peertest_config.web3_ipc_path.clone();
     panic::set_hook(Box::new(move |panic_info| {
-        fs::remove_file(&ipc_path).unwrap();
+        if let Err(err) = fs::remove_file(&ipc_path) {
+            debug!(
+                "Peertest panic hook: Skipped removing {} because: {}",
+                ipc_path, err
+            );
+        };
         original_panic(panic_info);
         process::exit(1);
     }));
@@ -139,7 +157,7 @@ pub async fn test_jsonrpc_endpoints_over_ipc(peertest_config: PeertestConfig) {
     info!("Testing IPC path: {}", peertest_config.web3_ipc_path);
     for endpoint in JsonRpcEndpoint::all_endpoints(peertest_config.target_node) {
         info!("Testing IPC method: {:?}", endpoint.method);
-        let mut stream = UnixStream::connect(&peertest_config.web3_ipc_path).unwrap();
+        let mut stream = get_ipc_stream(&peertest_config.web3_ipc_path);
         stream
             .set_read_timeout(Some(Duration::from_millis(500)))
             .expect("Couldn't set read timeout");

@@ -3,7 +3,9 @@ use std::net::{TcpListener, TcpStream};
 #[cfg(unix)]
 use std::os::unix;
 use std::str::FromStr;
-use std::sync::Mutex;
+use std::sync::{Arc, RwLock};
+use std::thread;
+use std::time::Duration;
 use std::{fs, panic, process};
 
 use httparse;
@@ -20,17 +22,42 @@ use crate::cli::TrinConfig;
 use crate::jsonrpc::endpoints::TrinEndpoint;
 use crate::jsonrpc::types::{JsonRequest, PortalJsonRpcRequest};
 
-lazy_static! {
-    static ref IPC_PATH: Mutex<String> = Mutex::new(String::new());
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+pub struct JsonRpcExiter {
+    should_exit: Arc<RwLock<bool>>,
 }
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
+impl JsonRpcExiter {
+    pub fn new() -> Self {
+        JsonRpcExiter {
+            should_exit: Arc::new(RwLock::new(false)),
+        }
+    }
+
+    pub fn exit(&self) {
+        let mut flag = self.should_exit.write().unwrap();
+        *flag = true;
+    }
+
+    pub fn is_exiting(&self) -> bool {
+        let flag = self.should_exit.read().unwrap();
+        *flag
+    }
+}
+
+impl Default for JsonRpcExiter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 pub fn launch_jsonrpc_server(
     trin_config: TrinConfig,
     infura_project_id: String,
     portal_tx: UnboundedSender<PortalJsonRpcRequest>,
     live_server_tx: tokio::sync::mpsc::Sender<bool>,
+    json_rpc_exiter: Arc<JsonRpcExiter>,
 ) {
     let pool = ThreadPool::new(trin_config.pool_size as usize);
 
@@ -41,6 +68,7 @@ pub fn launch_jsonrpc_server(
             &trin_config.web3_ipc_path,
             portal_tx,
             live_server_tx,
+            json_rpc_exiter,
         ),
         "http" => launch_http_client(
             pool,
@@ -54,23 +82,28 @@ pub fn launch_jsonrpc_server(
 }
 
 fn set_ipc_cleanup_handlers(ipc_path: &str) {
-    let mut ipc_mut = IPC_PATH.lock().unwrap();
-    *ipc_mut = ipc_path.to_string();
+    {
+        let ipc_path = ipc_path.to_string();
+        ctrlc::set_handler(move || {
+            if let Err(err) = fs::remove_file(&ipc_path) {
+                debug!("Ctrl-C: Skipped removing {} because: {}", ipc_path, err);
+            };
+            std::process::exit(1);
+        })
+        .expect("Error setting Ctrl-C handler.");
+    }
 
-    ctrlc::set_handler(move || {
-        let ipc_path: &str = &*IPC_PATH.lock().unwrap().clone();
-        fs::remove_file(&ipc_path).unwrap();
-        std::process::exit(1);
-    })
-    .expect("Error setting Ctrl-C handler.");
-
-    let original_panic = panic::take_hook();
-    panic::set_hook(Box::new(move |panic_info| {
-        let ipc_path: &str = &*IPC_PATH.lock().unwrap().clone();
-        fs::remove_file(&ipc_path).unwrap();
-        original_panic(panic_info);
-        process::exit(1);
-    }));
+    {
+        let ipc_path = ipc_path.to_string();
+        let original_panic = panic::take_hook();
+        panic::set_hook(Box::new(move |panic_info| {
+            if let Err(err) = fs::remove_file(&ipc_path) {
+                debug!("Panic hook: Skipped removing {} because: {}", ipc_path, err);
+            };
+            original_panic(panic_info);
+            process::exit(1);
+        }));
+    }
 }
 
 #[cfg(unix)]
@@ -89,11 +122,15 @@ fn launch_ipc_client(
     ipc_path: &str,
     portal_tx: UnboundedSender<PortalJsonRpcRequest>,
     live_server_tx: tokio::sync::mpsc::Sender<bool>,
+    json_rpc_exiter: Arc<JsonRpcExiter>,
 ) {
     let listener_result = get_listener_result(ipc_path);
     let listener = match listener_result {
         Ok(listener) => {
             set_ipc_cleanup_handlers(ipc_path);
+            listener
+                .set_nonblocking(true)
+                .expect("Cannot set non-blocking");
             listener
         }
         Err(err) => {
@@ -107,7 +144,28 @@ fn launch_ipc_client(
     });
 
     for stream in listener.incoming() {
-        let stream = stream.unwrap();
+        let stream = match stream {
+            Ok(s) => {
+                // Each stream will be checked in its own thread, so can remain blocking
+                s.set_nonblocking(false)
+                    .expect("Couldn't set stream to block");
+                s
+            }
+            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                // No one was waiting yet for the socket
+                // Check if we should exit
+                if json_rpc_exiter.is_exiting() {
+                    break;
+                } else {
+                    // Wait, then check for new clients.
+                    // Check 5 times per second:
+                    thread::sleep(Duration::from_millis(200));
+                    continue;
+                }
+            }
+            Err(_) => break, // Socket exited
+        };
+        debug!("New IPC client: {:?}", stream.peer_addr().unwrap());
         let infura_project_id = infura_project_id.clone();
         let portal_tx = portal_tx.clone();
         pool.execute(move || {
@@ -117,7 +175,11 @@ fn launch_ipc_client(
             serve_ipc_client(&mut rx, &mut tx, &infura_url, portal_tx);
         });
     }
-    info!("Clean exit");
+    info!("JSON-RPC server over IPC exited cleanly");
+
+    if let Err(err) = fs::remove_file(ipc_path) {
+        debug!("Clean Exit: Skipped removing {} because: {}", ipc_path, err);
+    }
 }
 
 fn launch_http_client(
@@ -165,6 +227,7 @@ fn serve_ipc_client(
 ) {
     let deser = serde_json::Deserializer::from_reader(rx);
     for obj in deser.into_iter::<JsonRequest>() {
+        debug!("Got new IPC request: {:?}", obj);
         match obj {
             Ok(obj) => {
                 let formatted_response = match obj.validate() {

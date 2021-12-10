@@ -798,6 +798,7 @@ dependencies = [
  "trin-core",
  "trin-history",
  "trin-state",
+ "uds_windows",
 ]
 
 [[package]]
@@ -3181,6 +3182,7 @@ name = "trin"
 version = "0.1.0"
 dependencies = [
  "discv5",
+ "ethportal-peertest",
  "log 0.4.14",
  "tokio",
  "tracing",
@@ -3221,7 +3223,6 @@ dependencies = [
  "httparse",
  "interfaces",
  "ipconfig",
- "lazy_static 1.4.0",
  "log 0.4.14",
  "rand 0.8.4",
  "rlp 0.5.0",

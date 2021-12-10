@@ -25,7 +25,7 @@ pub struct JsonRpcHandler {
 impl JsonRpcHandler {
     pub async fn process_jsonrpc_requests(mut self) {
         while let Some(request) = self.portal_jsonrpc_rx.recv().await {
-            debug!("Received JSON-RPC request: {:?}", request.endpoint);
+            debug!("Processing Portal JSON-RPC request: {:?}", request.endpoint);
             let response = match request.endpoint {
                 TrinEndpoint::Discv5Endpoint(endpoint) => match endpoint {
                     Discv5Endpoint::NodeInfo => Ok(self.discovery.node_info()),
