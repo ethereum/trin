@@ -59,7 +59,7 @@ fn validate_endpoint_response(method: &str, result: &Value) {
 }
 
 impl JsonRpcEndpoint {
-    pub fn all_endpoints(_target_node: String) -> Vec<JsonRpcEndpoint> {
+    pub fn all_endpoints(target_node: String) -> Vec<JsonRpcEndpoint> {
         vec![
             JsonRpcEndpoint {
                 method: "web3_clientVersion".to_string(),
@@ -86,7 +86,6 @@ impl JsonRpcEndpoint {
                 id: 5,
                 params: Params::None,
             },
-            /*
             JsonRpcEndpoint {
                 method: "portal_statePing".to_string(),
                 id: 6,
@@ -97,7 +96,6 @@ impl JsonRpcEndpoint {
                 id: 7,
                 params: Params::Array(vec![Value::String(target_node)]),
             },
-            */
         ]
     }
 
