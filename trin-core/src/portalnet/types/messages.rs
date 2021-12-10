@@ -13,8 +13,8 @@ use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, VariableList};
 use thiserror::Error;
 
-use super::overlay_service::OverlayRequestError;
-use super::{Enr, U256};
+use crate::portalnet::overlay_service::OverlayRequestError;
+use crate::portalnet::{Enr, U256};
 
 pub type ByteList = VariableList<u8, typenum::U2048>;
 

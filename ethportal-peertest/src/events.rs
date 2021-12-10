@@ -6,7 +6,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use trin_core::portalnet::overlay::OverlayProtocol;
-use trin_core::portalnet::types::{Message, ProtocolId};
+use trin_core::portalnet::types::messages::{Message, ProtocolId};
 use trin_core::portalnet::utp::UtpListener;
 
 pub struct PortalnetEvents {

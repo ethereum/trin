@@ -10,7 +10,7 @@ use trin_core::portalnet::events::PortalnetEvents;
 use trin_core::{
     cli::{TrinConfig, HISTORY_NETWORK, STATE_NETWORK},
     jsonrpc::service::launch_jsonrpc_server,
-    portalnet::{discovery::Discovery, types::PortalnetConfig},
+    portalnet::{discovery::Discovery, types::messages::PortalnetConfig},
     utils::db::setup_overlay_db,
 };
 use trin_history::initialize_history_network;

@@ -11,7 +11,7 @@ use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use crate::portalnet::types::ProtocolId;
+use crate::portalnet::types::messages::ProtocolId;
 
 pub const HEADER_SIZE: usize = 20;
 pub const MAX_DISCV5_PACKET_SIZE: usize = 1280;

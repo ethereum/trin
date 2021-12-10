@@ -4,7 +4,7 @@ use std::sync::Arc;
 use trin_core::portalnet::{
     discovery::Discovery,
     overlay::{OverlayConfig, OverlayProtocol, OverlayRequestError},
-    types::{PortalnetConfig, ProtocolId},
+    types::messages::{PortalnetConfig, ProtocolId},
 };
 
 /// History network layer on top of the overlay protocol. Encapsulates history network specific data and logic.

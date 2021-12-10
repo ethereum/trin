@@ -4,13 +4,13 @@ use std::time::Duration;
 use super::{
     discovery::Discovery,
     overlay_service::{Node, OverlayRequest, OverlayService, RequestDirection},
-    types::{
-        ByteList, Content, FindContent, FindNodes, Message, Nodes, Ping, Pong, ProtocolId, Request,
-        Response,
-    },
     Enr, U256,
 };
 use crate::locks::RwLoggingExt;
+use crate::portalnet::types::messages::{
+    ByteList, Content, FindContent, FindNodes, Message, Nodes, Ping, Pong, ProtocolId, Request,
+    Response,
+};
 
 use discv5::{
     enr::NodeId,

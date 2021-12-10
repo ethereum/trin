@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tracing::Instrument;
 use tracing::{debug, error, warn};
-use trin_core::portalnet::types::Message;
+use trin_core::portalnet::types::messages::Message;
 
 pub struct HistoryEvents {
     pub network: Arc<HistoryNetwork>,

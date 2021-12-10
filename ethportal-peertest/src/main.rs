@@ -18,7 +18,7 @@ use trin_core::jsonrpc::types::PortalJsonRpcRequest;
 use trin_core::portalnet::{
     discovery::Discovery,
     overlay::{OverlayConfig, OverlayProtocol},
-    types::{PortalnetConfig, ProtocolId},
+    types::messages::{PortalnetConfig, ProtocolId},
     utp::UtpListener,
     U256,
 };

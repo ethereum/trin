@@ -4,7 +4,7 @@ use discv5::{Discv5Event, TalkRequest};
 use log::{debug, warn};
 use tokio::sync::mpsc;
 
-use super::types::ProtocolId;
+use super::types::messages::ProtocolId;
 use super::{discovery::Discovery, utp::UtpListener};
 use hex;
 use std::collections::HashMap;

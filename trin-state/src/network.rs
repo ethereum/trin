@@ -6,7 +6,7 @@ use rocksdb::DB;
 use trin_core::portalnet::{
     discovery::Discovery,
     overlay::{OverlayConfig, OverlayProtocol, OverlayRequestError},
-    types::{PortalnetConfig, ProtocolId},
+    types::messages::{PortalnetConfig, ProtocolId},
 };
 
 use crate::trie::TrieDB;
