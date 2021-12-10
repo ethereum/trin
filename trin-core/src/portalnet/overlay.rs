@@ -102,6 +102,7 @@ impl OverlayProtocol {
             config.ping_queue_interval,
             Arc::clone(&data_radius),
             protocol.clone(),
+            utp_listener.clone(),
         )
         .await
         .unwrap();
@@ -378,10 +379,6 @@ impl OverlayProtocol {
             Err(error) => Err(OverlayRequestError::ChannelFailure(error.to_string())),
         }
     }
-}
-
-fn should_store(_key: &Vec<u8>) -> bool {
-    return true;
 }
 
 fn validate_find_nodes_distances(distances: &Vec<u16>) -> Result<(), OverlayRequestError> {
