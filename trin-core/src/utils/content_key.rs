@@ -1,4 +1,4 @@
-use crate::portalnet::U256;
+use crate::portalnet::types::uint::U256;
 use sha3::{Digest, Keccak256};
 use std::convert::TryInto;
 use thiserror::Error;

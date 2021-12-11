@@ -1,6 +1,6 @@
 use num::bigint::{BigInt, Sign};
 use num::Signed;
-use trin_core::portalnet::U256;
+use trin_core::portalnet::types::uint::U256;
 
 // 2 ** 256
 const MODULO: [u8; 78] = [

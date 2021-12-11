@@ -14,7 +14,7 @@ use ssz_types::{typenum, VariableList};
 use thiserror::Error;
 
 use crate::portalnet::overlay_service::OverlayRequestError;
-use crate::portalnet::{Enr, U256};
+use crate::portalnet::{types::uint::U256, Enr};
 
 pub type ByteList = VariableList<u8, typenum::U2048>;
 

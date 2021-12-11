@@ -4,7 +4,7 @@ use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, FixedVector, VariableList};
 use thiserror::Error;
 
-use crate::portalnet::{U512toU256Error, U256, U512};
+use crate::portalnet::types::uint::{U512toU256Error, U256, U512};
 use crate::utils::content_key::*;
 
 type Nibbles = VariableList<u8, typenum::U64>;
