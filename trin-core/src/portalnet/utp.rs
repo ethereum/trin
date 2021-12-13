@@ -471,7 +471,7 @@ impl UtpListener {
             conn.make_connection(connection_id).await;
             self.utp_connections.insert(
                 ConnectionKey {
-                    node_id: node_id,
+                    node_id,
                     conn_id_recv: connection_id,
                 },
                 conn,

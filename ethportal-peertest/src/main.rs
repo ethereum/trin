@@ -19,8 +19,8 @@ use trin_core::portalnet::{
     discovery::Discovery,
     overlay::{OverlayConfig, OverlayProtocol},
     types::messages::{PortalnetConfig, ProtocolId},
+    types::uint::U256,
     utp::UtpListener,
-    U256,
 };
 use trin_core::utils::db::setup_overlay_db;
 use trin_history::initialize_history_network;

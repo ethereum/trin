@@ -11,7 +11,7 @@ use thiserror::Error;
 
 use crate::cli::PeertestConfig;
 use trin_core::jsonrpc::types::Params;
-use trin_core::portalnet::U256;
+use trin_core::portalnet::types::uint::U256;
 
 #[derive(Clone)]
 pub struct JsonRpcEndpoint {

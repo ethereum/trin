@@ -5,11 +5,14 @@ use crate::{
     locks::RwLoggingExt,
     portalnet::{
         discovery::Discovery,
-        types::messages::{
-            ByteList, Content, FindContent, FindNodes, Message, Nodes, Ping, Pong, ProtocolId,
-            Request, Response, SszEnr,
+        types::{
+            messages::{
+                ByteList, Content, FindContent, FindNodes, Message, Nodes, Ping, Pong, ProtocolId,
+                Request, Response, SszEnr,
+            },
+            uint::U256,
         },
-        Enr, U256,
+        Enr,
     },
     utils::distance::xor_two_values,
 };

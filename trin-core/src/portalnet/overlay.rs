@@ -4,7 +4,8 @@ use std::time::Duration;
 use super::{
     discovery::Discovery,
     overlay_service::{Node, OverlayRequest, OverlayService, RequestDirection},
-    Enr, U256,
+    types::uint::U256,
+    Enr,
 };
 use crate::locks::RwLoggingExt;
 use crate::portalnet::types::messages::{
