@@ -2,11 +2,10 @@ use std::convert::{TryFrom, TryInto};
 use std::fmt;
 use std::net::SocketAddr;
 use std::ops::{Deref, DerefMut};
-use std::string::String;
 use std::str::FromStr;
 
 use base64;
-use hex::FromHexError;
+use hex::{encode, FromHexError};
 use rlp::Encodable;
 use serde_json::Value;
 use ssz::{Decode, DecodeError, Encode};
@@ -245,7 +244,7 @@ impl fmt::Display for Ping {
             f,
             "Ping(enr_seq={}, radius={})",
             self.enr_seq,
-            hex::encode(self.custom_payload.as_ssz_bytes())
+            encode(self.custom_payload.as_ssz_bytes())
         )
     }
 }
@@ -262,7 +261,7 @@ impl fmt::Display for Pong {
             f,
             "Pong(enr_seq={}, radius={})",
             self.enr_seq,
-            hex::encode(self.custom_payload.as_ssz_bytes())
+            encode(self.custom_payload.as_ssz_bytes())
         )
     }
 }
@@ -384,8 +383,6 @@ pub struct FindContent {
     pub content_key: Vec<u8>,
 }
 
-// add findcontent test to peertest
-
 #[derive(Debug, PartialEq, Clone, Encode, Decode)]
 #[ssz(enum_behaviour = "union")]
 pub enum Content {
@@ -427,7 +424,7 @@ impl TryInto<Value> for Content {
         if let Content::ConnectionId(val) = self {
             Ok(Value::String(val.to_string()))
         } else if let Content::Content(val) = self {
-            Ok(Value::String(String::from_utf8(val.to_vec()).unwrap()))
+            Ok(Value::String(encode(val.to_vec())))
         } else if let Content::Enrs(val) = self {
             Ok(Value::String(val[0].to_string()))
         } else {

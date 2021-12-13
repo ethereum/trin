@@ -63,8 +63,8 @@ pub enum OverlayRequestError {
     ChannelFailure(String),
 
     /// An invalid request was received.
-    #[error("Invalid request")]
-    InvalidRequest,
+    #[error("Invalid request: {0}")]
+    InvalidRequest(String),
 
     /// An invalid response was received.
     #[error("Invalid response")]
@@ -80,6 +80,10 @@ pub enum OverlayRequestError {
     /// The request timed out.
     #[error("The request timed out")]
     Timeout,
+
+    /// The request was unable to be served.
+    #[error("Failure to serve request: {0}")]
+    Failure(String),
 
     /// The request  Discovery v5 request error.
     #[error("Internal Discovery v5 error: {0}")]
@@ -290,9 +294,14 @@ impl OverlayService {
             }
             Ok(None) => {
                 let enrs = self.find_nodes_close_to_content(request.content_key).await;
-                Ok(Content::Enrs(enrs))
+                match enrs {
+                    Ok(val) => Ok(Content::Enrs(val)),
+                    Err(msg) => Err(OverlayRequestError::InvalidRequest(msg.to_string())),
+                }
             }
-            Err(error) => panic!("Unable to respond to FindContent: {}", error),
+            Err(_) => Err(OverlayRequestError::Failure(
+                "Unable to respond to FindContent".to_string(),
+            )),
         }
     }
 
@@ -357,9 +366,15 @@ impl OverlayService {
     }
 
     /// Returns list of nodes closer to content than self, sorted by distance.
-    async fn find_nodes_close_to_content(&self, content_key: Vec<u8>) -> Vec<SszEnr> {
+    async fn find_nodes_close_to_content(
+        &self,
+        content_key: Vec<u8>,
+    ) -> Result<Vec<SszEnr>, OverlayRequestError> {
         let self_node_id = self.local_enr().await.node_id();
-        let self_distance = xor_two_values(&content_key, &self_node_id.raw().to_vec());
+        let self_distance = match xor_two_values(&content_key, &self_node_id.raw().to_vec()) {
+            Ok(val) => val,
+            Err(msg) => return Err(OverlayRequestError::InvalidRequest(msg.to_string())),
+        };
 
         let mut nodes_with_distance: Vec<(Vec<u8>, Enr)> = self
             .table_entries_enr()
@@ -367,7 +382,8 @@ impl OverlayService {
             .into_iter()
             .map(|enr| {
                 (
-                    xor_two_values(&content_key, &enr.node_id().raw().to_vec()),
+                    // naked unwrap since content key len has already been validated
+                    xor_two_values(&content_key, &enr.node_id().raw().to_vec()).unwrap(),
                     enr,
                 )
             })
@@ -382,6 +398,6 @@ impl OverlayService {
             .map(|node_record| SszEnr::new(node_record.1))
             .collect();
 
-        closest_nodes
+        Ok(closest_nodes)
     }
 }

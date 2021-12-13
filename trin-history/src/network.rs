@@ -60,12 +60,16 @@ impl HistoryNetwork {
                     debug!("Empty response to ping from: {}", enr);
                     continue;
                 }
-                Err(OverlayRequestError::InvalidRequest) => {
+                Err(OverlayRequestError::InvalidRequest(_)) => {
                     debug!("Sent invalid ping response to {}", enr);
                     continue;
                 }
                 Err(OverlayRequestError::InvalidResponse) => {
                     debug!("Invalid ping response from: {}", enr);
+                    continue;
+                }
+                Err(OverlayRequestError::Failure(_)) => {
+                    debug!("Failure to serve ping response from: {}", enr);
                     continue;
                 }
                 Err(OverlayRequestError::DecodeError) => {

@@ -25,10 +25,18 @@ impl StateRequestHandler {
                 }
                 StateEndpoint::FindContent => {
                     let response = match FindContentParams::try_from(request.params) {
-                        Ok(val) => match self.network.overlay.send_find_content(val.enr, val.content_key.into()).await {
-                            Ok(content) => Ok(Value::String(hex::encode(content.content().unwrap().to_vec()))),
+                        Ok(val) => match self
+                            .network
+                            .overlay
+                            .send_find_content(val.enr, val.content_key.into())
+                            .await
+                        {
+                            Ok(content) => match content.try_into() {
+                                Ok(val) => Ok(val),
+                                Err(_) => Err("Content response decoding error".to_string()),
+                            },
                             Err(msg) => Err(format!("FindContent request timeout: {:?}", msg)),
-                        }
+                        },
                         Err(msg) => Err(format!("Invalid FindContent params: {:?}", msg)),
                     };
                     let _ = request.resp.send(response);

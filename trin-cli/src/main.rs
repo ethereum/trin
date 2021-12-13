@@ -36,10 +36,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         params,
     } = Config::from_args();
 
-    let params: Option<Vec<Box<RawValue>>> = match params {
-        Some(val) => Some(val.into_iter().map(|val| jsonrpc::arg(val)).collect()),
-        None => None,
-    };
+    let params: Option<Vec<Box<RawValue>>> =
+        params.map(|param| param.into_iter().map(jsonrpc::arg).collect());
+
     eprintln!(
         "Attempting RPC. endpoint={} params={:?} file={}",
         endpoint,
@@ -61,14 +60,12 @@ fn build_request<'a>(
     request_id: u64,
 ) -> jsonrpc::Request<'a> {
     match raw_params {
-        Some(val) => {
-            jsonrpc::Request {
-                method,
-                params: val,
-                id: serde_json::json!(request_id),
-                jsonrpc: Some("2.0"),
-            }
-        }
+        Some(val) => jsonrpc::Request {
+            method,
+            params: val,
+            id: serde_json::json!(request_id),
+            jsonrpc: Some("2.0"),
+        },
         None => jsonrpc::Request {
             method,
             params: &[],
