@@ -5,7 +5,6 @@ use trin_core::cli::DEFAULT_WEB3_HTTP_ADDRESS as DEFAULT_TARGET_HTTP_ADDRESS;
 use trin_core::cli::DEFAULT_WEB3_IPC_PATH as DEFAULT_TARGET_IPC_PATH;
 
 const DEFAULT_LISTEN_PORT: &str = "9876";
-const DEFAULT_WEB3_IPC_PATH: &str = "/tmp/json-rpc-peertest.ipc";
 
 #[derive(StructOpt, Debug, PartialEq, Clone)]
 #[structopt(
@@ -21,20 +20,6 @@ pub struct PeertestConfig {
         help = "The UDP port to listen on."
     )]
     pub listen_port: u16,
-
-    #[structopt(
-        default_value(DEFAULT_WEB3_IPC_PATH),
-        long = "web3-ipc-path",
-        help = "path to json-rpc socket address over IPC"
-    )]
-    pub web3_ipc_path: String,
-
-    #[structopt(
-        short,
-        long = "target-node",
-        help = "Base64-encoded ENR of the node under test"
-    )]
-    pub target_node: String,
 
     #[structopt(
         default_value = "ipc",
