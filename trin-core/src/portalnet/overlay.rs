@@ -127,7 +127,7 @@ impl OverlayProtocol {
             Ok(Message::Request(request)) => request,
             Ok(_) => {
                 return Err(OverlayRequestError::InvalidRequest(
-                    "Message not a recognized request type".to_string(),
+                    format!("Message not recognized request type: {:?}", talk_request.body())
                 ))
             }
             Err(_) => return Err(OverlayRequestError::DecodeError),

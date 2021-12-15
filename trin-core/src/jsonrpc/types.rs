@@ -1,6 +1,5 @@
 use std::str::FromStr;
 
-use hex::decode;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use ssz_types::VariableList;
@@ -146,7 +145,7 @@ impl TryFrom<[&Value; 2]> for FindContentParams {
             Ok(enr) => enr,
             Err(_msg) => return Err(ValidationError::new("Invalid enr param")),
         };
-        let content_key = match decode(content_key) {
+        let content_key = match hex::decode(content_key) {
             Ok(val) => VariableList::from(val),
             Err(_msg) => return Err(ValidationError::new("Unable to decode content_key")),
         };
