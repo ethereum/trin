@@ -1214,6 +1214,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "hmac-sha256"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4bf358bbbbf03cbe18c2bc53c34b9f1dc212d2ce5cc56bf95ce34cec4359613b"
+
+[[package]]
 name = "http"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3298,6 +3304,7 @@ dependencies = [
  "eth2_ssz_types",
  "futures 0.3.19",
  "hex",
+ "hmac-sha256",
  "httparse",
  "interfaces",
  "ipconfig",
