@@ -10,7 +10,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Launching trin");
 
-    let trin_config = TrinConfig::new();
+    let trin_config = TrinConfig::from_cli();
     let infura_project_id = match env::var("TRIN_INFURA_PROJECT_ID") {
         Ok(val) => val,
         Err(_) => panic!(

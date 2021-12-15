@@ -22,7 +22,7 @@ use trin_core::utils::db::setup_overlay_db;
 pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Launching trin-history...");
 
-    let mut trin_config = TrinConfig::new();
+    let mut trin_config = TrinConfig::from_cli();
 
     // Set chain history default params
     trin_config.discovery_port = 9001;

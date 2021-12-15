@@ -60,8 +60,8 @@ pub struct PeertestConfig {
 }
 
 impl PeertestConfig {
-    pub fn new() -> Self {
-        Self::new_from(env::args_os()).expect("Could not parse trin arguments")
+    pub fn from_cli() -> Self {
+        Self::new_from(env::args_os()).expect("Could not parse ethportal-peertest arguments")
     }
 
     pub fn new_from<I, T>(args: I) -> Result<Self, String>
@@ -77,6 +77,6 @@ impl PeertestConfig {
 
 impl Default for PeertestConfig {
     fn default() -> Self {
-        Self::new()
+        Self::new_from(["."].iter()).unwrap()
     }
 }
