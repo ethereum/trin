@@ -422,11 +422,11 @@ impl TryInto<Value> for Content {
 
     fn try_into(self) -> Result<Value, Self::Error> {
         if let Content::ConnectionId(val) = self {
-            Ok(Value::String(val.to_string()))
+            Ok(serde_json::json!({ "connection_id": val }))
         } else if let Content::Content(val) = self {
-            Ok(Value::String(hex::encode(val.to_vec())))
+            Ok(serde_json::json!({"content": hex::encode(val.to_vec())}))
         } else if let Content::Enrs(val) = self {
-            Ok(Value::String(format!("{:?}", val)))
+            Ok(serde_json::json!({ "enrs": format!("{:?}", val) }))
         } else {
             Err(MessageDecodeError::Type)
         }

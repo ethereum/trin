@@ -299,9 +299,10 @@ impl OverlayService {
                     Err(msg) => Err(OverlayRequestError::InvalidRequest(msg.to_string())),
                 }
             }
-            Err(msg) => Err(OverlayRequestError::Failure(
-                format!("Unable to respond to FindContent: {}", msg)
-            )),
+            Err(msg) => Err(OverlayRequestError::Failure(format!(
+                "Unable to respond to FindContent: {}",
+                msg
+            ))),
         }
     }
 
@@ -373,9 +374,12 @@ impl OverlayService {
         let self_node_id = self.local_enr().await.node_id();
         let self_distance = match xor_two_values(&content_key, &self_node_id.raw().to_vec()) {
             Ok(val) => val,
-            Err(msg) => return Err(OverlayRequestError::InvalidRequest(
-                format!("Could not find distance from node, because content key is malformed: {}", msg)
-            )),
+            Err(msg) => {
+                return Err(OverlayRequestError::InvalidRequest(format!(
+                    "Could not find distance from node, because content key is malformed: {}",
+                    msg
+                )))
+            }
         };
 
         let mut nodes_with_distance: Vec<(Vec<u8>, Enr)> = self

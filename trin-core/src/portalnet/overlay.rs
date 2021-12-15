@@ -126,9 +126,10 @@ impl OverlayProtocol {
         let request = match Message::from_bytes(talk_request.body()) {
             Ok(Message::Request(request)) => request,
             Ok(_) => {
-                return Err(OverlayRequestError::InvalidRequest(
-                    format!("Message not recognized request type: {:?}", talk_request.body())
-                ))
+                return Err(OverlayRequestError::InvalidRequest(format!(
+                    "Message not recognized request type: {:?}",
+                    talk_request.body()
+                )))
             }
             Err(_) => return Err(OverlayRequestError::DecodeError),
         };
