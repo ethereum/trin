@@ -25,8 +25,8 @@ struct Config {
     #[structopt(help = "e.g. discv5_routingTableInfo", required = true)]
     endpoint: String,
 
-    #[structopt(long, help = "first parameter")]
-    params: Option<String>,
+    #[structopt(long, help = "parameters", use_delimiter = true)]
+    params: Option<Vec<String>>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -36,6 +36,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         params,
     } = Config::from_args();
 
+    let params: Option<Vec<Box<RawValue>>> =
+        params.map(|param| param.into_iter().map(jsonrpc::arg).collect());
+
     eprintln!(
         "Attempting RPC. endpoint={} params={:?} file={}",
         endpoint,
@@ -44,7 +47,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     let mut client = TrinClient::from_ipc(&ipc)?;
 
-    let params = params.map(|val| [jsonrpc::arg(val)]);
     let req = client.build_request(endpoint.as_str(), &params);
     let resp = client.make_request(req)?;
 
@@ -54,7 +56,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn build_request<'a>(
     method: &'a str,
-    raw_params: &'a Option<[Box<RawValue>; 1]>,
+    raw_params: &'a Option<Vec<Box<RawValue>>>,
     request_id: u64,
 ) -> jsonrpc::Request<'a> {
     match raw_params {
@@ -131,7 +133,7 @@ where
     fn build_request(
         &mut self,
         method: &'a str,
-        params: &'a Option<[Box<RawValue>; 1]>,
+        params: &'a Option<Vec<Box<RawValue>>>,
     ) -> jsonrpc::Request<'a> {
         let result = build_request(method, params, self.request_id);
         self.request_id += 1;

@@ -364,7 +364,8 @@ impl PortalStorage {
 
     /// Internal method that returns the distance between our node ID and a given content ID
     fn distance_to_content_id(&self, content_id: &[u8; 32]) -> u64 {
-        let byte_vector = xor_two_values(content_id, &self.node_id.raw().to_vec());
+        // naked unwrap since content_id and node_id are equally sized
+        let byte_vector = xor_two_values(content_id, &self.node_id.raw().to_vec()).unwrap();
 
         PortalStorage::byte_vector_to_u64(byte_vector)
     }

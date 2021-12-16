@@ -15,9 +15,9 @@ Attempting RPC. endpoint=discv5_routingTableInfo file=/tmp/trin-jsonrpc.ipc
 }
 ```
 
-### To send a parameter, use the `--params` flag. Currently, the cli tool only supports a single param.
+### To send a parameter, use the `--params` flag. To use multiple parameters, enter them as a comma-separated string.
 ```sh
-$ cargo run -p trin-cli -- portal_statePing --params "enr:...."
+$ cargo run -p trin-cli -- portal_statePing --params enr:....
 ```
 
 ### If you have multiple nodes running you can manually select which one you communicate with:
