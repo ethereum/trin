@@ -28,7 +28,7 @@ impl HistoryRequestHandler {
                         Ok(val) => match self
                             .network
                             .overlay
-                            .send_find_content(val.enr, val.content_key.into())
+                            .send_find_content(val.enr.into(), val.content_key.into())
                             .await
                         {
                             Ok(content) => match content.try_into() {
@@ -46,7 +46,7 @@ impl HistoryRequestHandler {
                         Ok(val) => match self
                             .network
                             .overlay
-                            .send_find_nodes(val.enr, val.distances)
+                            .send_find_nodes(val.enr.into(), val.distances)
                             .await
                         {
                             Ok(nodes) => Ok(nodes.into()),
@@ -58,7 +58,7 @@ impl HistoryRequestHandler {
                 }
                 HistoryEndpoint::Ping => {
                     let response = match PingParams::try_from(request.params) {
-                        Ok(val) => match self.network.overlay.send_ping(val.enr).await {
+                        Ok(val) => match self.network.overlay.send_ping(val.enr.into()).await {
                             Ok(pong) => Ok(pong.into()),
                             Err(msg) => Err(format!("Ping request timeout: {:?}", msg)),
                         },

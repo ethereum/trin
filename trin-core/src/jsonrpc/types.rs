@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use ssz_types::VariableList;
@@ -7,8 +5,7 @@ use tokio::sync::mpsc;
 use validator::{Validate, ValidationError};
 
 use crate::jsonrpc::endpoints::{HistoryEndpoint, StateEndpoint, TrinEndpoint};
-use crate::portalnet::types::messages::ByteList;
-use crate::portalnet::Enr;
+use crate::portalnet::types::messages::{ByteList, SszEnr};
 
 type Responder<T, E> = mpsc::UnboundedSender<Result<T, E>>;
 
@@ -80,7 +77,7 @@ fn validate_jsonrpc_version(jsonrpc: &str) -> Result<(), ValidationError> {
 }
 
 pub struct PingParams {
-    pub enr: Enr,
+    pub enr: SszEnr,
 }
 
 impl TryFrom<Params> for PingParams {
@@ -101,18 +98,16 @@ impl TryFrom<&Value> for PingParams {
     type Error = ValidationError;
 
     fn try_from(param: &Value) -> Result<Self, Self::Error> {
-        match param.as_str() {
-            Some(val) => match Enr::from_str(val) {
-                Ok(enr) => Ok(Self { enr }),
-                Err(_) => Err(ValidationError::new("Invalid enr param")),
-            },
-            None => Err(ValidationError::new("Missing or empty enr param")),
-        }
+        let enr: SszEnr = match param.try_into() {
+            Ok(val) => val,
+            Err(msg) => return Err(msg),
+        };
+        Ok(Self { enr })
     }
 }
 
 pub struct FindNodesParams {
-    pub enr: Enr,
+    pub enr: SszEnr,
     pub distances: Vec<u16>,
 }
 
@@ -130,40 +125,28 @@ impl TryFrom<Params> for FindNodesParams {
     }
 }
 
-// each distance must be in range(0,256) inclusive
-// each distance must be unique
 impl TryFrom<[&Value; 2]> for FindNodesParams {
     type Error = ValidationError;
 
     fn try_from(params: [&Value; 2]) -> Result<Self, Self::Error> {
-        let enr = params[0]
-            .as_str()
-            .ok_or_else(|| ValidationError::new("Empty enr param"))?;
+        let enr: SszEnr = match params[0].try_into() {
+            Ok(val) => val,
+            Err(msg) => return Err(msg),
+        };
+
         let distances = params[1]
             .as_str()
             .ok_or_else(|| ValidationError::new("Empty distances param"))?;
-
-        let enr = match Enr::from_str(enr) {
-            Ok(enr) => enr,
-            Err(_) => return Err(ValidationError::new("Invalid enr param")),
-        };
         let distances: Vec<u16> = match serde_json::from_str(distances) {
             Ok(val) => val,
             Err(_) => return Err(ValidationError::new("Unable to decode distances")),
         };
-        if distances.len() == 0 {
-            return Err(ValidationError::new("Invalid distances param: Empty list."));
-        } else if distances.len() > 256 {
-            return Err(ValidationError::new(
-                "Invalid distances param: More than 256 max allowed # of elements.",
-            ));
-        }
         Ok(Self { enr, distances })
     }
 }
 
 pub struct FindContentParams {
-    pub enr: Enr,
+    pub enr: SszEnr,
     pub content_key: ByteList,
 }
 
@@ -185,17 +168,14 @@ impl TryFrom<[&Value; 2]> for FindContentParams {
     type Error = ValidationError;
 
     fn try_from(params: [&Value; 2]) -> Result<Self, Self::Error> {
-        let enr = params[0]
-            .as_str()
-            .ok_or_else(|| ValidationError::new("Empty enr param"))?;
+        let enr: SszEnr = match params[0].try_into() {
+            Ok(val) => val,
+            Err(msg) => return Err(msg),
+        };
+
         let content_key = params[1]
             .as_str()
             .ok_or_else(|| ValidationError::new("Empty content key param"))?;
-
-        let enr = match Enr::from_str(enr) {
-            Ok(enr) => enr,
-            Err(_) => return Err(ValidationError::new("Invalid enr param")),
-        };
         let content_key = match hex::decode(content_key) {
             Ok(val) => VariableList::from(val),
             Err(_) => return Err(ValidationError::new("Unable to decode content_key")),

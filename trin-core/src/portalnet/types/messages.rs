@@ -12,6 +12,7 @@ use ssz::{Decode, DecodeError, Encode};
 use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, VariableList};
 use thiserror::Error;
+use validator::ValidationError;
 
 use crate::portalnet::overlay_service::OverlayRequestError;
 use crate::portalnet::{types::uint::U256, Enr};
@@ -445,6 +446,26 @@ pub struct SszEnr(Enr);
 impl SszEnr {
     pub fn new(enr: Enr) -> SszEnr {
         SszEnr(enr)
+    }
+}
+
+impl Into<Enr> for SszEnr {
+    fn into(self) -> Enr {
+        Enr::from(self.0.clone())
+    }
+}
+
+impl TryFrom<&Value> for SszEnr {
+    type Error = ValidationError;
+
+    fn try_from(value: &Value) -> Result<Self, Self::Error> {
+        let enr = value
+            .as_str()
+            .ok_or_else(|| ValidationError::new("Empty enr value"))?;
+        match Enr::from_str(enr) {
+            Ok(enr) => Ok(Self(enr)),
+            Err(_) => Err(ValidationError::new("Invalid enr value")),
+        }
     }
 }
 
