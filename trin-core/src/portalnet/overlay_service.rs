@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
+use std::task::Poll;
 use std::time::Duration;
 
 use crate::{
-    locks::RwLoggingExt,
     portalnet::{
         discovery::Discovery,
         types::{
@@ -27,16 +27,14 @@ use discv5::{
     },
     rpc::RequestId,
 };
-use futures::{channel::oneshot, stream::StreamExt};
+use futures::{channel::oneshot, prelude::*};
 use log::{debug, info, warn};
+use parking_lot::RwLock;
 use rocksdb::DB;
 use ssz::Encode;
 use ssz_types::VariableList;
 use thiserror::Error;
-use tokio::sync::{
-    mpsc::{self, UnboundedReceiver, UnboundedSender},
-    RwLock,
-};
+use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
 /// Maximum number of ENRs in response to FindNodes.
 pub const FIND_NODES_MAX_NODES: usize = 32;
@@ -135,7 +133,7 @@ impl OverlayRequest {
 }
 
 /// An active outgoing overlay request.
-struct ActiveOverlayRequest {
+struct ActiveOutgoingRequest {
     /// The ENR of the destination (target) node.
     pub destination: Enr,
     /// An optional responder to send the result of the associated request.
@@ -226,7 +224,7 @@ pub struct OverlayService {
     /// This is used internally to submit requests (e.g. maintenance ping requests).
     request_tx: UnboundedSender<OverlayRequest>,
     /// A map of active outgoing requests.
-    active_requests: Arc<RwLock<HashMap<OverlayRequestId, ActiveOverlayRequest>>>,
+    active_outgoing_requests: Arc<RwLock<HashMap<OverlayRequestId, ActiveOutgoingRequest>>>,
     /// The receiver half of a channel for responses to outgoing requests.
     response_rx: UnboundedReceiver<OverlayResponse>,
     /// The sender half of a channel for responses to outgoing requests.
@@ -271,7 +269,7 @@ impl OverlayService {
                 peers_to_ping,
                 request_rx,
                 request_tx: internal_request_tx,
-                active_requests: Arc::new(RwLock::new(HashMap::new())),
+                active_outgoing_requests: Arc::new(RwLock::new(HashMap::new())),
                 response_rx,
                 response_tx,
             };
@@ -293,7 +291,7 @@ impl OverlayService {
                 };
 
                 // Attempt to insert the node into the routing table.
-                match service.kbuckets.write_with_warn().await.insert_or_update(
+                match service.kbuckets.write().insert_or_update(
                     &kbucket::Key::from(node_id.clone()),
                     node,
                     status,
@@ -342,7 +340,7 @@ impl OverlayService {
                 Some(request) = self.request_rx.recv() => self.process_request(request).await,
                 Some(response) = self.response_rx.recv() => {
                     // Look up active request that corresponds to the response.
-                    let optional_active_request = self.active_requests.write_with_warn().await.remove(&response.request_id);
+                    let optional_active_request = self.active_outgoing_requests.write().remove(&response.request_id);
                     if let Some(active_request) = optional_active_request {
                         // Send response to responder if present.
                         if let Some(responder) = active_request.responder {
@@ -361,16 +359,9 @@ impl OverlayService {
                 Some(Ok(node_id)) = self.peers_to_ping.next() => {
                     // If the node is in the routing table, then ping and re-queue the node.
                     let key = kbucket::Key::from(node_id);
-                    let optional_enr = {
-                        if let kbucket::Entry::Present(ref mut entry, _) = self.kbuckets.write_with_warn().await.entry(&key) {
-                            // Re-queue the node.
-                            self.peers_to_ping.insert(node_id);
-                            Some(entry.value().enr())
-                        } else { None }
-                    };
-
-                    if let Some(enr) = optional_enr {
-                        self.ping_node(&enr).await;
+                    if let kbucket::Entry::Present(ref mut entry, _) = self.kbuckets.write().entry(&key) {
+                        self.ping_node(&entry.value().enr());
+                        self.peers_to_ping.insert(node_id);
                     }
                 }
                 _ = OverlayService::bucket_maintenance_poll(self.protocol.clone(), &self.kbuckets) => {}
@@ -379,12 +370,12 @@ impl OverlayService {
     }
 
     /// Returns the local ENR of the node.
-    async fn local_enr(&self) -> Enr {
+    fn local_enr(&self) -> Enr {
         self.discovery.discv5.local_enr()
     }
 
     /// Returns the data radius of the node.
-    async fn data_radius(&self) -> U256 {
+    fn data_radius(&self) -> U256 {
         *self.data_radius
     }
 
@@ -397,15 +388,20 @@ impl OverlayService {
         protocol: ProtocolId,
         kbuckets: &Arc<RwLock<KBucketsTable<NodeId, Node>>>,
     ) {
-        // Drain applied pending entries from the routing table.
-        if let Some(entry) = kbuckets.write_with_warn().await.take_applied_pending() {
-            debug!(
-                "[{:?}] Node {:?} inserted and node {:?} evicted",
-                protocol,
-                entry.inserted.into_preimage(),
-                entry.evicted.map(|n| n.key.into_preimage())
-            );
-        }
+        future::poll_fn(move |_cx| {
+            // Drain applied pending entries from the routing table.
+            if let Some(entry) = kbuckets.write().take_applied_pending() {
+                debug!(
+                    "[{:?}] Node {:?} inserted and node {:?} evicted",
+                    protocol,
+                    entry.inserted.into_preimage(),
+                    entry.evicted.map(|n| n.key.into_preimage())
+                );
+                return Poll::Ready(());
+            }
+            Poll::Pending
+        })
+        .await
     }
 
     /// Processes an overlay request.
@@ -418,9 +414,8 @@ impl OverlayService {
         // channel if the request was initiated internally (e.g. for maintenance).
         match request.direction {
             RequestDirection::Incoming { id, source } => {
-                let response = self
-                    .handle_request(request.request.clone(), id.clone(), source.clone())
-                    .await;
+                let response =
+                    self.handle_request(request.request.clone(), id.clone(), source.clone());
                 // Send response to responder if present.
                 if let Some(responder) = request.responder {
                     let _ = responder.send(response);
@@ -430,9 +425,9 @@ impl OverlayService {
                     .await;
             }
             RequestDirection::Outgoing { destination } => {
-                self.active_requests.write_with_warn().await.insert(
+                self.active_outgoing_requests.write().insert(
                     request.id,
-                    ActiveOverlayRequest {
+                    ActiveOutgoingRequest {
                         destination: destination.clone(),
                         responder: request.responder,
                     },
@@ -443,7 +438,7 @@ impl OverlayService {
     }
 
     /// Attempts to build a response for a request.
-    async fn handle_request(
+    fn handle_request(
         &mut self,
         request: Request,
         id: RequestId,
@@ -451,24 +446,24 @@ impl OverlayService {
     ) -> Result<Response, OverlayRequestError> {
         debug!("[{:?}] Handling request {}", self.protocol, id);
         match request {
-            Request::Ping(ping) => Ok(Response::Pong(self.handle_ping(ping, source).await)),
+            Request::Ping(ping) => Ok(Response::Pong(self.handle_ping(ping, source))),
             Request::FindNodes(find_nodes) => {
-                Ok(Response::Nodes(self.handle_find_nodes(find_nodes).await))
+                Ok(Response::Nodes(self.handle_find_nodes(find_nodes)))
             }
-            Request::FindContent(find_content) => Ok(Response::Content(
-                self.handle_find_content(find_content).await?,
-            )),
+            Request::FindContent(find_content) => {
+                Ok(Response::Content(self.handle_find_content(find_content)?))
+            }
         }
     }
 
     /// Builds a `Pong` response for a `Ping` request.
-    async fn handle_ping(&self, request: Ping, source: NodeId) -> Pong {
+    fn handle_ping(&self, request: Ping, source: NodeId) -> Pong {
         debug!(
             "[{:?}] Handling ping request from node={}. Ping={:?}",
             self.protocol, source, request
         );
-        let enr_seq = self.local_enr().await.seq();
-        let data_radius = self.data_radius().await;
+        let enr_seq = self.local_enr().seq();
+        let data_radius = self.data_radius();
         let custom_payload = ByteList::from(data_radius.as_ssz_bytes());
         Pong {
             enr_seq,
@@ -477,26 +472,23 @@ impl OverlayService {
     }
 
     /// Builds a `Nodes` response for a `FindNodes` request.
-    async fn handle_find_nodes(&self, request: FindNodes) -> Nodes {
+    fn handle_find_nodes(&self, request: FindNodes) -> Nodes {
         let distances64: Vec<u64> = request.distances.iter().map(|x| (*x).into()).collect();
-        let enrs = self.nodes_by_distance(distances64).await;
+        let enrs = self.nodes_by_distance(distances64);
         // `total` represents the total number of `Nodes` response messages being sent.
         // TODO: support returning multiple messages.
         Nodes { total: 1, enrs }
     }
 
     /// Attempts to build a `Content` response for a `FindContent` request.
-    async fn handle_find_content(
-        &self,
-        request: FindContent,
-    ) -> Result<Content, OverlayRequestError> {
+    fn handle_find_content(&self, request: FindContent) -> Result<Content, OverlayRequestError> {
         match self.db.get(&request.content_key) {
             Ok(Some(value)) => {
                 let content = ByteList::from(VariableList::from(value));
                 Ok(Content::Content(content))
             }
             Ok(None) => {
-                let enrs = self.find_nodes_close_to_content(request.content_key).await;
+                let enrs = self.find_nodes_close_to_content(request.content_key);
                 match enrs {
                     Ok(val) => Ok(Content::Enrs(val)),
                     Err(msg) => Err(OverlayRequestError::InvalidRequest(msg.to_string())),
@@ -515,7 +507,7 @@ impl OverlayService {
         let protocol = self.protocol.clone();
         let response_tx = self.response_tx.clone();
 
-        // Spawn a new thread to send end the TALK request. Otherwise we would delay processing of
+        // Spawn a new thread to send the TALK request. Otherwise we would delay processing of
         // other tasks until we receive the response. Send the response over the response channel,
         // which will be received in the main loop.
         tokio::spawn(async move {
@@ -542,7 +534,7 @@ impl OverlayService {
     async fn process_incoming_request(&mut self, request: Request, _id: RequestId, source: NodeId) {
         // Look up the node in the routing table.
         let key = kbucket::Key::from(source);
-        let is_node_in_table = match self.kbuckets.write_with_warn().await.entry(&key) {
+        let is_node_in_table = match self.kbuckets.write().entry(&key) {
             kbucket::Entry::Present(_, _) => true,
             kbucket::Entry::Pending(_, _) => true,
             _ => false,
@@ -552,10 +544,7 @@ impl OverlayService {
         // update the node's position in the kbucket. If the node is not in the routing table, then
         // we cannot construct a new entry for sure, because we only have the node ID, not the ENR.
         if is_node_in_table {
-            match self
-                .update_node_connection_state(source, ConnectionState::Connected)
-                .await
-            {
+            match self.update_node_connection_state(source, ConnectionState::Connected) {
                 Ok(_) => {}
                 Err(_) => {
                     // If the update fails, then remove the node from the ping queue.
@@ -577,7 +566,7 @@ impl OverlayService {
                     enr,
                     data_radius: U256::from(u64::MAX),
                 };
-                self.connect_node(node, ConnectionDirection::Incoming).await;
+                self.connect_node(node, ConnectionDirection::Incoming);
             }
         }
 
@@ -591,7 +580,7 @@ impl OverlayService {
     async fn process_ping(&mut self, ping: Ping, source: NodeId) {
         // Look up the node in the routing table.
         let key = kbucket::Key::from(source);
-        let optional_node = match self.kbuckets.write_with_warn().await.entry(&key) {
+        let optional_node = match self.kbuckets.write().entry(&key) {
             kbucket::Entry::Present(ref mut entry, _) => Some(entry.value().clone()),
             kbucket::Entry::Pending(ref mut entry, _) => Some(entry.value().clone()),
             _ => None,
@@ -606,7 +595,7 @@ impl OverlayService {
             // If the ENR sequence number in pong is less than the ENR sequence number for the routing
             // table entry, then request the node.
             if node.enr().seq() < ping.enr_seq {
-                self.request_node(&node.enr()).await;
+                self.request_node(&node.enr());
             }
         }
     }
@@ -625,10 +614,7 @@ impl OverlayService {
 
         // Attempt to mark the node as disconnected.
         let node_id = destination.node_id();
-        let _ = self
-            .update_node_connection_state(node_id, ConnectionState::Disconnected)
-            .await;
-
+        let _ = self.update_node_connection_state(node_id, ConnectionState::Disconnected);
         // Remove the node from the ping queue.
         self.peers_to_ping.remove(&node_id);
     }
@@ -640,7 +626,7 @@ impl OverlayService {
         // the source ENR and establish a connection in the outgoing direction, because this
         // node is responding to our request.
         let key = kbucket::Key::from(source.node_id());
-        let (node, status) = match self.kbuckets.write_with_warn().await.entry(&key) {
+        let (node, status) = match self.kbuckets.write().entry(&key) {
             kbucket::Entry::Present(ref mut entry, status) => (entry.value().clone(), status),
             kbucket::Entry::Pending(ref mut entry, status) => (entry.value().clone(), status),
             _ => {
@@ -665,11 +651,10 @@ impl OverlayService {
         // node? Handling this case might not be necessary, or it should be handled in a different
         // way.
         match status.state {
-            ConnectionState::Disconnected => self.connect_node(node, status.direction).await,
+            ConnectionState::Disconnected => self.connect_node(node, status.direction),
             ConnectionState::Connected => {
                 match self
                     .update_node_connection_state(source.node_id(), ConnectionState::Connected)
-                    .await
                 {
                     Ok(_) => {}
                     Err(_) => {
@@ -681,16 +666,16 @@ impl OverlayService {
         }
 
         match response {
-            Response::Pong(pong) => self.process_pong(pong, source).await,
-            Response::Nodes(nodes) => self.process_nodes(nodes, source).await,
-            Response::Content(content) => self.process_content(content, source).await,
+            Response::Pong(pong) => self.process_pong(pong, source),
+            Response::Nodes(nodes) => self.process_nodes(nodes, source),
+            Response::Content(content) => self.process_content(content, source),
         }
     }
 
     /// Processes a Pong response.
     ///
     /// Refreshes the node if necessary. Attempts to mark the node as connected.
-    async fn process_pong(&mut self, pong: Pong, source: Enr) {
+    fn process_pong(&mut self, pong: Pong, source: Enr) {
         let node_id = source.node_id();
         debug!(
             "[{:?}] Processing Pong response from node. Node: {}",
@@ -702,20 +687,20 @@ impl OverlayService {
         //
         // TODO: Perform update on non-ENR node entry state. See note in `process_ping`.
         let key = kbucket::Key::from(node_id);
-        let optional_node = match self.kbuckets.write_with_warn().await.entry(&key) {
+        let optional_node = match self.kbuckets.write().entry(&key) {
             kbucket::Entry::Present(ref mut entry, _) => Some(entry.value().clone()),
             kbucket::Entry::Pending(ref mut entry, _) => Some(entry.value().clone()),
             _ => None,
         };
         if let Some(node) = optional_node {
             if node.enr().seq() < pong.enr_seq {
-                self.request_node(&node.enr()).await;
+                self.request_node(&node.enr());
             }
         }
     }
 
     /// Processes a Nodes response.
-    async fn process_nodes(&mut self, _nodes: Nodes, source: Enr) {
+    fn process_nodes(&mut self, _nodes: Nodes, source: Enr) {
         debug!(
             "[{:?}] Processing Nodes response from node. Node: {}",
             self.protocol,
@@ -725,7 +710,7 @@ impl OverlayService {
     }
 
     /// Processes a Content response.
-    async fn process_content(&mut self, _content: Content, source: Enr) {
+    fn process_content(&mut self, _content: Content, source: Enr) {
         debug!(
             "[{:?}] Processing Content response from node. Node: {}",
             self.protocol,
@@ -735,15 +720,15 @@ impl OverlayService {
     }
 
     /// Submits a request to ping a destination (target) node.
-    async fn ping_node(&self, destination: &Enr) {
+    fn ping_node(&self, destination: &Enr) {
         debug!(
             "[{:?}] Sending Ping request to node. Node: {}",
             self.protocol,
             destination.node_id()
         );
 
-        let enr_seq = self.local_enr().await.seq();
-        let data_radius = self.data_radius().await;
+        let enr_seq = self.local_enr().seq();
+        let data_radius = self.data_radius();
         let custom_payload = ByteList::from(data_radius.as_ssz_bytes());
         let ping = Request::Ping(Ping {
             enr_seq,
@@ -760,7 +745,7 @@ impl OverlayService {
     }
 
     /// Submits a request for the node info of a destination (target) node.
-    async fn request_node(&self, destination: &Enr) {
+    fn request_node(&self, destination: &Enr) {
         let find_nodes = Request::FindNodes(FindNodes { distances: vec![0] });
         let request = OverlayRequest::new(
             find_nodes,
@@ -773,7 +758,7 @@ impl OverlayService {
     }
 
     /// Attempts to insert a newly connected node or update an existing node to connected.
-    async fn connect_node(&mut self, node: Node, connection_direction: ConnectionDirection) {
+    fn connect_node(&mut self, node: Node, connection_direction: ConnectionDirection) {
         let node_id = node.enr().node_id();
         let key = kbucket::Key::from(node_id);
         let status = NodeStatus {
@@ -782,12 +767,7 @@ impl OverlayService {
         };
 
         let mut node_to_ping = None;
-        match self
-            .kbuckets
-            .write_with_warn()
-            .await
-            .insert_or_update(&key, node, status)
-        {
+        match self.kbuckets.write().insert_or_update(&key, node, status) {
             InsertResult::Inserted => {
                 // The node was inserted into the routing table. Add the node to the ping queue.
                 debug!(
@@ -829,31 +809,20 @@ impl OverlayService {
 
         // Ping node to check for connectivity. See comment above for reasoning.
         if let Some(key) = node_to_ping {
-            match self.kbuckets.write_with_warn().await.entry(&key) {
-                kbucket::Entry::Present(ref mut entry, _) => {
-                    self.ping_node(&entry.value().enr()).await;
-                }
-                kbucket::Entry::Pending(ref mut entry, _) => {
-                    self.ping_node(&entry.value().enr()).await;
-                }
-                _ => {}
+            if let kbucket::Entry::Present(ref mut entry, _) = self.kbuckets.write().entry(&key) {
+                self.ping_node(&entry.value().enr());
             }
         }
     }
 
     /// Attempts to update the connection state of a node.
-    async fn update_node_connection_state(
+    fn update_node_connection_state(
         &mut self,
         node_id: NodeId,
         state: ConnectionState,
     ) -> Result<(), FailureReason> {
         let key = kbucket::Key::from(node_id);
-        match self
-            .kbuckets
-            .write_with_warn()
-            .await
-            .update_node_status(&key, state, None)
-        {
+        match self.kbuckets.write().update_node_status(&key, state, None) {
             UpdateResult::Failed(reason) => match reason {
                 FailureReason::KeyNonExistant => Err(FailureReason::KeyNonExistant),
                 other => {
@@ -876,17 +845,16 @@ impl OverlayService {
     }
 
     /// Returns a vector of all the ENRs of nodes currently contained in the routing table.
-    async fn table_entries_enr(&self) -> Vec<Enr> {
+    fn table_entries_enr(&self) -> Vec<Enr> {
         self.kbuckets
-            .write_with_warn()
-            .await
+            .write()
             .iter()
             .map(|entry| entry.node.value.enr().clone())
             .collect()
     }
 
     /// Returns a vector of the ENRs of the closest nodes by the given log2 distances.
-    async fn nodes_by_distance(&self, mut log2_distances: Vec<u64>) -> Vec<SszEnr> {
+    fn nodes_by_distance(&self, mut log2_distances: Vec<u64>) -> Vec<SszEnr> {
         let mut nodes_to_send = Vec::new();
         log2_distances.sort_unstable();
         log2_distances.dedup();
@@ -894,12 +862,12 @@ impl OverlayService {
         let mut log2_distances = log2_distances.as_slice();
         if let Some(0) = log2_distances.first() {
             // If the distance is 0 send our local ENR.
-            nodes_to_send.push(SszEnr::new(self.local_enr().await));
+            nodes_to_send.push(SszEnr::new(self.local_enr()));
             log2_distances = &log2_distances[1..];
         }
 
         if !log2_distances.is_empty() {
-            let mut kbuckets = self.kbuckets.write_with_warn().await;
+            let mut kbuckets = self.kbuckets.write();
             for node in kbuckets
                 .nodes_by_distances(&log2_distances, FIND_NODES_MAX_NODES)
                 .into_iter()
@@ -912,11 +880,11 @@ impl OverlayService {
     }
 
     /// Returns list of nodes closer to content than self, sorted by distance.
-    async fn find_nodes_close_to_content(
+    fn find_nodes_close_to_content(
         &self,
         content_key: Vec<u8>,
     ) -> Result<Vec<SszEnr>, OverlayRequestError> {
-        let self_node_id = self.local_enr().await.node_id();
+        let self_node_id = self.local_enr().node_id();
         let self_distance = match xor_two_values(&content_key, &self_node_id.raw().to_vec()) {
             Ok(val) => val,
             Err(msg) => {
@@ -929,7 +897,6 @@ impl OverlayService {
 
         let mut nodes_with_distance: Vec<(Vec<u8>, Enr)> = self
             .table_entries_enr()
-            .await
             .into_iter()
             .map(|enr| {
                 (
