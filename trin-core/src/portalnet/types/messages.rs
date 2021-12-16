@@ -377,6 +377,13 @@ impl ssz::Decode for Nodes {
     }
 }
 
+impl Into<Value> for Nodes {
+    fn into(self) -> Value {
+        serde_json::json!({ "enrs": format!("{:?}", self.enrs) , "total": self.total})
+    }
+}
+
+
 #[derive(Debug, PartialEq, Clone, Encode, Decode)]
 pub struct FindContent {
     // TODO: Use some version of H256

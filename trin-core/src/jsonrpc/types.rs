@@ -111,6 +111,57 @@ impl TryFrom<&Value> for PingParams {
     }
 }
 
+pub struct FindNodesParams {
+    pub enr: Enr,
+    pub distances: Vec<u16>,
+}
+
+impl TryFrom<Params> for FindNodesParams {
+    type Error = ValidationError;
+
+    fn try_from(params: Params) -> Result<Self, Self::Error> {
+        match params {
+            Params::Array(val) => match val.len() {
+                2 => FindNodesParams::try_from([&val[0], &val[1]]),
+                _ => Err(ValidationError::new("Expected 2 params")),
+            },
+            _ => Err(ValidationError::new("Expected array of params")),
+        }
+    }
+}
+
+// each distance must be in range(0,256) inclusive
+// each distance must be unique
+impl TryFrom<[&Value; 2]> for FindNodesParams {
+    type Error = ValidationError;
+
+    fn try_from(params: [&Value; 2]) -> Result<Self, Self::Error> {
+        let enr = params[0]
+            .as_str()
+            .ok_or_else(|| ValidationError::new("Empty enr param"))?;
+        let distances = params[1]
+            .as_str()
+            .ok_or_else(|| ValidationError::new("Empty distances param"))?;
+
+        let enr = match Enr::from_str(enr) {
+            Ok(enr) => enr,
+            Err(_) => return Err(ValidationError::new("Invalid enr param")),
+        };
+        let distances: Vec<u16> = match serde_json::from_str(distances) {
+            Ok(val) => val,
+            Err(_) => return Err(ValidationError::new("Unable to decode distances")),
+        };
+        if distances.len() == 0 {
+            return Err(ValidationError::new("Invalid distances param: Empty list."))
+        } else if distances.len() > 256 {
+            return Err(ValidationError::new(
+                "Invalid distances param: More than 256 max allowed # of elements."
+            ))
+        }
+        Ok(Self { enr, distances })
+    }
+}
+
 pub struct FindContentParams {
     pub enr: Enr,
     pub content_key: ByteList,
@@ -143,11 +194,11 @@ impl TryFrom<[&Value; 2]> for FindContentParams {
 
         let enr = match Enr::from_str(enr) {
             Ok(enr) => enr,
-            Err(_msg) => return Err(ValidationError::new("Invalid enr param")),
+            Err(_) => return Err(ValidationError::new("Invalid enr param")),
         };
         let content_key = match hex::decode(content_key) {
             Ok(val) => VariableList::from(val),
-            Err(_msg) => return Err(ValidationError::new("Unable to decode content_key")),
+            Err(_) => return Err(ValidationError::new("Unable to decode content_key")),
         };
         Ok(Self { enr, content_key })
     }

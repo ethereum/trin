@@ -41,6 +41,9 @@ impl HistoryRequestHandler {
                     };
                     let _ = request.resp.send(response);
                 }
+                HistoryEndpoint::FindNodes => {
+                    let _ = request.resp.send(Ok(Value::String("".to_string())));
+                }
                 HistoryEndpoint::Ping => {
                     let response = match PingParams::try_from(request.params) {
                         Ok(val) => match self.network.overlay.send_ping(val.enr).await {

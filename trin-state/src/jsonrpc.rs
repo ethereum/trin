@@ -6,7 +6,7 @@ use tokio::sync::mpsc;
 use crate::network::StateNetwork;
 use trin_core::jsonrpc::{
     endpoints::StateEndpoint,
-    types::{FindContentParams, PingParams, StateJsonRpcRequest},
+    types::{FindContentParams, FindNodesParams, PingParams, StateJsonRpcRequest},
 };
 
 /// Handles State network JSON-RPC requests
@@ -38,6 +38,17 @@ impl StateRequestHandler {
                             Err(msg) => Err(format!("FindContent request timeout: {:?}", msg)),
                         },
                         Err(msg) => Err(format!("Invalid FindContent params: {:?}", msg)),
+                    };
+                    let _ = request.resp.send(response);
+                }
+                StateEndpoint::FindNodes => {
+                    let response = match FindNodesParams::try_from(request.params) {
+                        Ok(val) => match self.network.overlay.send_find_nodes(val.enr, val.distances).await
+                        {
+                            Ok(nodes) => Ok(nodes.into()),
+                            Err(msg) => Err(format!("FindNodes request timeout: {:?}", msg)),
+                        }
+                        Err(msg) => Err(format!("Invalid FindNodes params: {:?}", msg)),
                     };
                     let _ = request.resp.send(response);
                 }
