@@ -61,7 +61,9 @@ impl FromStr for TrinEndpoint {
             "portal_historyFindContent" => {
                 Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::FindContent))
             }
-            "portal_historyFindNodes" => Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::FindNodes)),
+            "portal_historyFindNodes" => {
+                Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::FindNodes))
+            }
             "portal_historyPing" => Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::Ping)),
             "portal_historyRadius" => {
                 Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::DataRadius))

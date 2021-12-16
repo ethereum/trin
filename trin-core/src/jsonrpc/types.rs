@@ -152,11 +152,11 @@ impl TryFrom<[&Value; 2]> for FindNodesParams {
             Err(_) => return Err(ValidationError::new("Unable to decode distances")),
         };
         if distances.len() == 0 {
-            return Err(ValidationError::new("Invalid distances param: Empty list."))
+            return Err(ValidationError::new("Invalid distances param: Empty list."));
         } else if distances.len() > 256 {
             return Err(ValidationError::new(
-                "Invalid distances param: More than 256 max allowed # of elements."
-            ))
+                "Invalid distances param: More than 256 max allowed # of elements.",
+            ));
         }
         Ok(Self { enr, distances })
     }

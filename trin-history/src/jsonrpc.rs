@@ -6,7 +6,7 @@ use tokio::sync::mpsc;
 use crate::network::HistoryNetwork;
 use trin_core::jsonrpc::{
     endpoints::HistoryEndpoint,
-    types::{FindContentParams, HistoryJsonRpcRequest, PingParams},
+    types::{FindContentParams, FindNodesParams, HistoryJsonRpcRequest, PingParams},
 };
 
 /// Handles History network JSON-RPC requests
@@ -42,7 +42,19 @@ impl HistoryRequestHandler {
                     let _ = request.resp.send(response);
                 }
                 HistoryEndpoint::FindNodes => {
-                    let _ = request.resp.send(Ok(Value::String("".to_string())));
+                    let response = match FindNodesParams::try_from(request.params) {
+                        Ok(val) => match self
+                            .network
+                            .overlay
+                            .send_find_nodes(val.enr, val.distances)
+                            .await
+                        {
+                            Ok(nodes) => Ok(nodes.into()),
+                            Err(msg) => Err(format!("FindNodes request timeout: {:?}", msg)),
+                        },
+                        Err(msg) => Err(format!("Invalid FindNodes params: {:?}", msg)),
+                    };
+                    let _ = request.resp.send(response);
                 }
                 HistoryEndpoint::Ping => {
                     let response = match PingParams::try_from(request.params) {

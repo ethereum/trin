@@ -383,7 +383,6 @@ impl Into<Value> for Nodes {
     }
 }
 
-
 #[derive(Debug, PartialEq, Clone, Encode, Decode)]
 pub struct FindContent {
     // TODO: Use some version of H256
