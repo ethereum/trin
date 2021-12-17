@@ -451,7 +451,7 @@ impl SszEnr {
 
 impl Into<Enr> for SszEnr {
     fn into(self) -> Enr {
-        Enr::from(self.0.clone())
+        Enr::from(self.0)
     }
 }
 

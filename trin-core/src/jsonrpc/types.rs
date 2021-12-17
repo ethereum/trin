@@ -98,10 +98,7 @@ impl TryFrom<&Value> for PingParams {
     type Error = ValidationError;
 
     fn try_from(param: &Value) -> Result<Self, Self::Error> {
-        let enr: SszEnr = match param.try_into() {
-            Ok(val) => val,
-            Err(msg) => return Err(msg),
-        };
+        let enr: SszEnr = param.try_into()?;
         Ok(Self { enr })
     }
 }
@@ -129,10 +126,7 @@ impl TryFrom<[&Value; 2]> for FindNodesParams {
     type Error = ValidationError;
 
     fn try_from(params: [&Value; 2]) -> Result<Self, Self::Error> {
-        let enr: SszEnr = match params[0].try_into() {
-            Ok(val) => val,
-            Err(msg) => return Err(msg),
-        };
+        let enr: SszEnr = params[0].try_into()?;
 
         let distances = params[1]
             .as_str()
@@ -168,11 +162,7 @@ impl TryFrom<[&Value; 2]> for FindContentParams {
     type Error = ValidationError;
 
     fn try_from(params: [&Value; 2]) -> Result<Self, Self::Error> {
-        let enr: SszEnr = match params[0].try_into() {
-            Ok(val) => val,
-            Err(msg) => return Err(msg),
-        };
-
+        let enr: SszEnr = params[0].try_into()?;
         let content_key = params[1]
             .as_str()
             .ok_or_else(|| ValidationError::new("Empty content key param"))?;

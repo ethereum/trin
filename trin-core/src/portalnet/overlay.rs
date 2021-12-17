@@ -195,10 +195,7 @@ impl OverlayProtocol {
         distances: Vec<u16>,
     ) -> Result<Nodes, OverlayRequestError> {
         // Construct the request.
-        match validate_find_nodes_distances(&distances) {
-            Ok(_) => (),
-            Err(msg) => return Err(msg),
-        }
+        validate_find_nodes_distances(&distances)?;
         let request = FindNodes { distances };
         let direction = RequestDirection::Outgoing { destination: enr };
 
@@ -308,7 +305,7 @@ mod test {
 
     #[rstest]
     #[case(vec![], "Empty list")]
-    #[case(vec![0u16; 257], "More than 256")]
+    #[case((0u16..257u16).collect(), "More than 256")]
     #[case(vec![257u16], "Distances greater than")]
     #[case(vec![0u16, 0u16, 1u16], "Duplicate elements detected")]
     fn test_nodes_validator_rejects_invalid_input(#[case] input: Vec<u16>, #[case] msg: String) {
