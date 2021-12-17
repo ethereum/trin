@@ -11,16 +11,18 @@ pub enum Discv5Endpoint {
 #[derive(Debug, PartialEq, Clone)]
 pub enum StateEndpoint {
     DataRadius,
-    Ping,
     FindContent,
+    FindNodes,
+    Ping,
 }
 
 /// History network JSON-RPC endpoints. Start with "portalHistory_" prefix
 #[derive(Debug, PartialEq, Clone)]
 pub enum HistoryEndpoint {
     DataRadius,
-    Ping,
     FindContent,
+    FindNodes,
+    Ping,
 }
 
 /// Ethereum JSON-RPC endpoints not currently supported by portal network requests, proxied to Infura
@@ -59,6 +61,9 @@ impl FromStr for TrinEndpoint {
             "portal_historyFindContent" => {
                 Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::FindContent))
             }
+            "portal_historyFindNodes" => {
+                Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::FindNodes))
+            }
             "portal_historyPing" => Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::Ping)),
             "portal_historyRadius" => {
                 Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::DataRadius))
@@ -66,6 +71,7 @@ impl FromStr for TrinEndpoint {
             "portal_stateFindContent" => {
                 Ok(TrinEndpoint::StateEndpoint(StateEndpoint::FindContent))
             }
+            "portal_stateFindNodes" => Ok(TrinEndpoint::StateEndpoint(StateEndpoint::FindNodes)),
             "portal_statePing" => Ok(TrinEndpoint::StateEndpoint(StateEndpoint::Ping)),
             "portal_stateRadius" => Ok(TrinEndpoint::StateEndpoint(StateEndpoint::DataRadius)),
             _ => Err(()),

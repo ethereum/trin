@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -194,6 +195,7 @@ impl OverlayProtocol {
         distances: Vec<u16>,
     ) -> Result<Nodes, OverlayRequestError> {
         // Construct the request.
+        validate_find_nodes_distances(&distances)?;
         let request = FindNodes { distances };
         let direction = RequestDirection::Outgoing { destination: enr };
 
@@ -253,6 +255,64 @@ impl OverlayProtocol {
         match rx.await {
             Ok(result) => result,
             Err(error) => Err(OverlayRequestError::ChannelFailure(error.to_string())),
+        }
+    }
+}
+
+fn validate_find_nodes_distances(distances: &Vec<u16>) -> Result<(), OverlayRequestError> {
+    if distances.len() == 0 {
+        return Err(OverlayRequestError::InvalidRequest(
+            "Invalid distances: Empty list".to_string(),
+        ));
+    }
+    if distances.len() > 256 {
+        return Err(OverlayRequestError::InvalidRequest(
+            "Invalid distances: More than 256 elements".to_string(),
+        ));
+    }
+    let invalid_distances: Vec<&u16> = distances.iter().filter(|val| val > &&256u16).collect();
+    if invalid_distances.len() > 0 {
+        return Err(OverlayRequestError::InvalidRequest(format!(
+            "Invalid distances: Distances greater than 256 are not allowed. Found: {:?}",
+            invalid_distances
+        )));
+    }
+    let unique: HashSet<u16> = HashSet::from_iter(distances.iter().cloned());
+    if unique.len() != distances.len() {
+        return Err(OverlayRequestError::InvalidRequest(
+            "Invalid distances: Duplicate elements detected".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use rstest::rstest;
+
+    #[rstest]
+    #[case(vec![0u16])]
+    #[case(vec![256u16])]
+    #[case((0u16..256u16).collect())]
+    fn test_nodes_validator_accepts_valid_input(#[case] input: Vec<u16>) {
+        let result = validate_find_nodes_distances(&input);
+        match result {
+            Ok(val) => assert_eq!(val, ()),
+            Err(_) => panic!("Valid test case fails"),
+        }
+    }
+
+    #[rstest]
+    #[case(vec![], "Empty list")]
+    #[case((0u16..257u16).collect(), "More than 256")]
+    #[case(vec![257u16], "Distances greater than")]
+    #[case(vec![0u16, 0u16, 1u16], "Duplicate elements detected")]
+    fn test_nodes_validator_rejects_invalid_input(#[case] input: Vec<u16>, #[case] msg: String) {
+        let result = validate_find_nodes_distances(&input);
+        match result {
+            Ok(_) => panic!("Invalid test case passed"),
+            Err(err) => assert!(err.to_string().contains(&msg)),
         }
     }
 }

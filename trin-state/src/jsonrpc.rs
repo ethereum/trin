@@ -6,7 +6,7 @@ use tokio::sync::mpsc;
 use crate::network::StateNetwork;
 use trin_core::jsonrpc::{
     endpoints::StateEndpoint,
-    types::{FindContentParams, PingParams, StateJsonRpcRequest},
+    types::{FindContentParams, FindNodesParams, PingParams, StateJsonRpcRequest},
 };
 
 /// Handles State network JSON-RPC requests
@@ -28,7 +28,7 @@ impl StateRequestHandler {
                         Ok(val) => match self
                             .network
                             .overlay
-                            .send_find_content(val.enr, val.content_key.into())
+                            .send_find_content(val.enr.into(), val.content_key.into())
                             .await
                         {
                             Ok(content) => match content.try_into() {
@@ -41,9 +41,24 @@ impl StateRequestHandler {
                     };
                     let _ = request.resp.send(response);
                 }
+                StateEndpoint::FindNodes => {
+                    let response = match FindNodesParams::try_from(request.params) {
+                        Ok(val) => match self
+                            .network
+                            .overlay
+                            .send_find_nodes(val.enr.into(), val.distances)
+                            .await
+                        {
+                            Ok(nodes) => Ok(nodes.into()),
+                            Err(msg) => Err(format!("FindNodes request timeout: {:?}", msg)),
+                        },
+                        Err(msg) => Err(format!("Invalid FindNodes params: {:?}", msg)),
+                    };
+                    let _ = request.resp.send(response);
+                }
                 StateEndpoint::Ping => {
                     let response = match PingParams::try_from(request.params) {
-                        Ok(val) => match self.network.overlay.send_ping(val.enr).await {
+                        Ok(val) => match self.network.overlay.send_ping(val.enr.into()).await {
                             Ok(pong) => Ok(pong.into()),
                             Err(msg) => Err(format!("Ping request timeout: {:?}", msg)),
                         },
