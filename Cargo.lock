@@ -795,6 +795,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "trin",
  "trin-core",
  "trin-history",
  "trin-state",

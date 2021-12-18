@@ -92,14 +92,8 @@ pub struct TrinConfig {
     pub networks: Vec<String>,
 }
 
-impl Default for TrinConfig {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl TrinConfig {
-    pub fn new() -> Self {
+    pub fn from_cli() -> Self {
         Self::new_from(env::args_os()).expect("Could not parse trin arguments")
     }
     pub fn new_from<I, T>(args: I) -> Result<Self, clap::Error>

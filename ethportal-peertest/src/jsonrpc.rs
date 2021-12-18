@@ -1,11 +1,11 @@
 use std::io::prelude::*;
 #[cfg(unix)]
 use std::os::unix;
+use std::panic;
 use std::time::Duration;
-use std::{fs, panic, process};
 
 use hyper::{self, Body, Client, Method, Request};
-use log::{debug, info};
+use log::info;
 use serde_json::{self, Value};
 use thiserror::Error;
 
@@ -57,7 +57,7 @@ fn validate_endpoint_response(method: &str, result: &Value) {
 }
 
 impl JsonRpcEndpoint {
-    pub fn all_endpoints(target_node: String) -> Vec<JsonRpcEndpoint> {
+    pub fn all_endpoints(buddy_node: String) -> Vec<JsonRpcEndpoint> {
         vec![
             JsonRpcEndpoint {
                 method: "web3_clientVersion".to_string(),
@@ -87,12 +87,12 @@ impl JsonRpcEndpoint {
             JsonRpcEndpoint {
                 method: "portal_statePing".to_string(),
                 id: 6,
-                params: Params::Array(vec![Value::String(target_node.clone())]),
+                params: Params::Array(vec![Value::String(buddy_node.clone())]),
             },
             JsonRpcEndpoint {
                 method: "portal_historyPing".to_string(),
                 id: 7,
-                params: Params::Array(vec![Value::String(target_node)]),
+                params: Params::Array(vec![Value::String(buddy_node)]),
             },
         ]
     }
@@ -175,25 +175,11 @@ pub fn get_enode(ipc_path: &str) -> Result<String, String> {
 }
 
 #[allow(clippy::never_loop)]
-pub async fn test_jsonrpc_endpoints_over_ipc(peertest_config: PeertestConfig) {
-    // setup cleanup handler if tests panic
-    let original_panic = panic::take_hook();
-    let ipc_path = peertest_config.web3_ipc_path.clone();
-    panic::set_hook(Box::new(move |panic_info| {
-        if let Err(err) = fs::remove_file(&ipc_path) {
-            debug!(
-                "Peertest panic hook: Skipped removing {} because: {}",
-                ipc_path, err
-            );
-        };
-        original_panic(panic_info);
-        process::exit(1);
-    }));
-
-    info!("Testing IPC path: {}", peertest_config.web3_ipc_path);
-    for endpoint in JsonRpcEndpoint::all_endpoints(peertest_config.target_node) {
+pub async fn test_jsonrpc_endpoints_over_ipc(peertest_config: PeertestConfig, buddy_enr: String) {
+    info!("Testing IPC path: {}", peertest_config.target_ipc_path);
+    for endpoint in JsonRpcEndpoint::all_endpoints(buddy_enr) {
         info!("Testing IPC method: {:?}", endpoint.method);
-        let mut stream = get_ipc_stream(&peertest_config.web3_ipc_path);
+        let mut stream = get_ipc_stream(&peertest_config.target_ipc_path);
         stream
             .set_read_timeout(Some(Duration::from_millis(500)))
             .expect("Couldn't set read timeout");
@@ -214,7 +200,6 @@ pub async fn test_jsonrpc_endpoints_over_ipc(peertest_config: PeertestConfig) {
             break;
         }
     }
-    fs::remove_file(&peertest_config.web3_ipc_path).unwrap();
 }
 
 #[derive(Error, Debug)]
@@ -245,9 +230,9 @@ fn get_response_result(
     }
 }
 
-pub async fn test_jsonrpc_endpoints_over_http(peertest_config: PeertestConfig) {
+pub async fn test_jsonrpc_endpoints_over_http(peertest_config: PeertestConfig, buddy_enr: String) {
     let client = Client::new();
-    for endpoint in JsonRpcEndpoint::all_endpoints(peertest_config.target_node) {
+    for endpoint in JsonRpcEndpoint::all_endpoints(buddy_enr) {
         info!("Testing over HTTP: {:?}", endpoint.method);
         let req = Request::builder()
             .method(Method::POST)
