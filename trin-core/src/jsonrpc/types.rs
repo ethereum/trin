@@ -113,7 +113,6 @@ impl TryFrom<[&Value; 2]> for PingParams {
 
     fn try_from(param: [&Value; 2]) -> Result<Self, Self::Error> {
         let enr: SszEnr = param[0].try_into()?;
-        // let custom_payload: ByteList = param[1].try_into()?;
         let custom_payload: CustomPayload = param[1].try_into()?;
         Ok(Self {
             enr,

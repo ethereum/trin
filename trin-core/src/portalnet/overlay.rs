@@ -9,8 +9,8 @@ use super::{
     Enr,
 };
 use crate::portalnet::types::messages::{
-    ByteList, Content, FindContent, FindNodes, Message, Nodes, Ping, Pong, ProtocolId, Request,
-    Response,
+    Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Ping, Pong, ProtocolId,
+    Request, Response,
 };
 
 use discv5::{
@@ -172,7 +172,7 @@ impl OverlayProtocol {
         // Construct the request.
         let enr_seq = self.discovery.local_enr().seq();
         let data_radius = self.data_radius();
-        let custom_payload = ByteList::from(data_radius.as_ssz_bytes());
+        let custom_payload = CustomPayload::from(data_radius.as_ssz_bytes());
         let request = Ping {
             enr_seq,
             custom_payload,

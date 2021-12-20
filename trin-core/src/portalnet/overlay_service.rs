@@ -9,8 +9,8 @@ use crate::{
         discovery::Discovery,
         types::{
             messages::{
-                ByteList, Content, FindContent, FindNodes, Message, Nodes, Ping, Pong, ProtocolId,
-                Request, Response, SszEnr,
+                ByteList, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Ping,
+                Pong, ProtocolId, Request, Response, SszEnr,
             },
             uint::U256,
         },
@@ -463,7 +463,7 @@ impl OverlayService {
         );
         let enr_seq = self.local_enr().seq();
         let data_radius = self.data_radius();
-        let custom_payload = ByteList::from(data_radius.as_ssz_bytes());
+        let custom_payload = CustomPayload::from(data_radius.as_ssz_bytes());
         Pong {
             enr_seq,
             custom_payload,
@@ -728,7 +728,7 @@ impl OverlayService {
 
         let enr_seq = self.local_enr().seq();
         let data_radius = self.data_radius();
-        let custom_payload = ByteList::from(data_radius.as_ssz_bytes());
+        let custom_payload = CustomPayload::from(data_radius.as_ssz_bytes());
         let ping = Request::Ping(Ping {
             enr_seq,
             custom_payload,
@@ -1016,7 +1016,7 @@ mod tests {
 
         let ping = Ping {
             enr_seq: source.seq() + 1,
-            custom_payload: ByteList::from(data_radius.as_ssz_bytes()),
+            custom_payload: CustomPayload::from(data_radius.as_ssz_bytes()),
         };
 
         service.process_ping(ping, node_id);
@@ -1054,7 +1054,7 @@ mod tests {
 
         let ping = Ping {
             enr_seq: source.seq(),
-            custom_payload: ByteList::from(data_radius.as_ssz_bytes()),
+            custom_payload: CustomPayload::from(data_radius.as_ssz_bytes()),
         };
 
         service.process_ping(ping, node_id);
@@ -1137,7 +1137,7 @@ mod tests {
 
         let pong = Pong {
             enr_seq: source.seq() + 1,
-            custom_payload: ByteList::from(data_radius.as_ssz_bytes()),
+            custom_payload: CustomPayload::from(data_radius.as_ssz_bytes()),
         };
 
         service.process_pong(pong, source.clone());
@@ -1174,7 +1174,7 @@ mod tests {
 
         let pong = Pong {
             enr_seq: source.seq(),
-            custom_payload: ByteList::from(data_radius.as_ssz_bytes()),
+            custom_payload: CustomPayload::from(data_radius.as_ssz_bytes()),
         };
 
         service.process_pong(pong, source);

@@ -19,7 +19,11 @@ use crate::portalnet::{types::uint::U256, Enr};
 
 pub type ByteList = VariableList<u8, typenum::U2048>;
 
-pub struct CustomPayload(ByteList);
+/// Custom payload element of Ping and Pong overlay messages
+#[derive(Debug, PartialEq, Clone)]
+pub struct CustomPayload {
+    payload: ByteList,
+}
 
 impl TryFrom<&Value> for CustomPayload {
     type Error = ValidationError;
@@ -27,17 +31,51 @@ impl TryFrom<&Value> for CustomPayload {
     fn try_from(value: &Value) -> Result<Self, Self::Error> {
         let value = value
             .as_str()
-            .ok_or_else(|| ValidationError::new("Empty custom payload value"))?;
-        let custom_payload = match hex::decode(value) {
-            Ok(custom_payload) => custom_payload,
+            .ok_or_else(|| ValidationError::new("Custom payload value is not a string!"))?;
+        let payload = match hex::decode(value) {
+            Ok(payload) => payload,
             Err(_) => Err(ValidationError::new(
                 "Unable to decode hex payload into bytes",
             ))?,
         };
-        match ByteList::try_from(custom_payload) {
-            Ok(custom_payload) => Ok(Self(custom_payload)),
+        match ByteList::try_from(payload) {
+            Ok(payload) => Ok(Self { payload }),
             Err(_) => Err(ValidationError::new("Invalid custom payload value")),
         }
+    }
+}
+
+impl From<Vec<u8>> for CustomPayload {
+    fn from(ssz_bytes: Vec<u8>) -> Self {
+        Self {
+            payload: ByteList::from(ssz_bytes),
+        }
+    }
+}
+
+impl ssz::Decode for CustomPayload {
+    fn is_ssz_fixed_len() -> bool {
+        false
+    }
+
+    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
+        Ok(CustomPayload {
+            payload: ByteList::from(bytes.to_vec()),
+        })
+    }
+}
+
+impl ssz::Encode for CustomPayload {
+    fn is_ssz_fixed_len() -> bool {
+        false
+    }
+
+    fn ssz_append(&self, buf: &mut Vec<u8>) {
+        buf.append(&mut self.payload.as_ssz_bytes());
+    }
+
+    fn ssz_bytes_len(&self) -> usize {
+        self.payload.as_ssz_bytes().len()
     }
 }
 
@@ -258,7 +296,7 @@ impl Response {
 #[derive(Debug, PartialEq, Clone, Encode, Decode)]
 pub struct Ping {
     pub enr_seq: u64,
-    pub custom_payload: ByteList,
+    pub custom_payload: CustomPayload,
 }
 
 impl fmt::Display for Ping {
@@ -275,7 +313,7 @@ impl fmt::Display for Ping {
 #[derive(Debug, PartialEq, Clone, Encode, Decode)]
 pub struct Pong {
     pub enr_seq: u64,
-    pub custom_payload: ByteList,
+    pub custom_payload: CustomPayload,
 }
 
 impl fmt::Display for Pong {
@@ -483,7 +521,7 @@ impl TryFrom<&Value> for SszEnr {
     fn try_from(value: &Value) -> Result<Self, Self::Error> {
         let enr = value
             .as_str()
-            .ok_or_else(|| ValidationError::new("Empty enr value"))?;
+            .ok_or_else(|| ValidationError::new("Enr value is not a string!"))?;
         match Enr::from_str(enr) {
             Ok(enr) => Ok(Self(enr)),
             Err(_) => Err(ValidationError::new("Invalid enr value")),
@@ -670,7 +708,7 @@ mod test {
     fn test_vector_ping() {
         let enr_seq = 1u64;
         let data_radius = U256::MAX - U256::from(1);
-        let custom_payload = ByteList::from(data_radius.as_ssz_bytes());
+        let custom_payload = CustomPayload::from(data_radius.as_ssz_bytes());
         let expected = "0001000000000000000c000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
         let message = Message::Request(Request::Ping(Ping {
             enr_seq,
@@ -685,7 +723,7 @@ mod test {
     fn test_vector_pong() {
         let enr_seq = 1;
         let data_radius: U256 = U256::max_value() / 2;
-        let custom_payload = ByteList::from(data_radius.as_ssz_bytes());
+        let custom_payload = CustomPayload::from(data_radius.as_ssz_bytes());
         let expected = "0101000000000000000c000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f";
         let message = Message::Response(Response::Pong(Pong {
             enr_seq,
