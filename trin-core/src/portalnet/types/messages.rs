@@ -19,6 +19,28 @@ use crate::portalnet::{types::uint::U256, Enr};
 
 pub type ByteList = VariableList<u8, typenum::U2048>;
 
+pub struct CustomPayload(ByteList);
+
+impl TryFrom<&Value> for CustomPayload {
+    type Error = ValidationError;
+
+    fn try_from(value: &Value) -> Result<Self, Self::Error> {
+        let value = value
+            .as_str()
+            .ok_or_else(|| ValidationError::new("Empty custom payload value"))?;
+        let custom_payload = match hex::decode(value) {
+            Ok(custom_payload) => custom_payload,
+            Err(_) => Err(ValidationError::new(
+                "Unable to decode hex payload into bytes",
+            ))?,
+        };
+        match ByteList::try_from(custom_payload) {
+            Ok(custom_payload) => Ok(Self(custom_payload)),
+            Err(_) => Err(ValidationError::new("Invalid custom payload value")),
+        }
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum MessageDecodeError {
     #[error("Failed to decode message from SSZ bytes")]
