@@ -86,7 +86,7 @@ impl From<discv5::RequestError> for OverlayRequestError {
 }
 
 /// An incoming or outgoing request.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum RequestDirection {
     /// An incoming request from `source`.
     Incoming { id: RequestId, source: NodeId },
@@ -337,7 +337,7 @@ impl OverlayService {
     async fn start(&mut self) {
         loop {
             tokio::select! {
-                Some(request) = self.request_rx.recv() => self.process_request(request).await,
+                Some(request) = self.request_rx.recv() => self.process_request(request),
                 Some(response) = self.response_rx.recv() => {
                     // Look up active request that corresponds to the response.
                     let optional_active_request = self.active_outgoing_requests.write().remove(&response.request_id);
@@ -349,8 +349,8 @@ impl OverlayService {
 
                         // Perform background processing.
                         match response.response {
-                            Ok(response) => self.process_response(response, active_request.destination).await,
-                            Err(error) => self.process_request_failure(response.request_id, active_request.destination, error).await,
+                            Ok(response) => self.process_response(response, active_request.destination),
+                            Err(error) => self.process_request_failure(response.request_id, active_request.destination, error),
                         }
                     } else {
                         warn!("No active request with id {} for response", response.request_id);
@@ -405,7 +405,7 @@ impl OverlayService {
     }
 
     /// Processes an overlay request.
-    async fn process_request(&mut self, request: OverlayRequest) {
+    fn process_request(&mut self, request: OverlayRequest) {
         // For incoming requests, handle the request, possibly send the response over the channel,
         // and then process the request.
         //
@@ -421,8 +421,7 @@ impl OverlayService {
                     let _ = responder.send(response);
                 }
                 // Perform background processing.
-                self.process_incoming_request(request.request, id, source)
-                    .await;
+                self.process_incoming_request(request.request, id, source);
             }
             RequestDirection::Outgoing { destination } => {
                 self.active_outgoing_requests.write().insert(
@@ -531,7 +530,7 @@ impl OverlayService {
     }
 
     /// Processes an incoming request from some source node.
-    async fn process_incoming_request(&mut self, request: Request, _id: RequestId, source: NodeId) {
+    fn process_incoming_request(&mut self, request: Request, _id: RequestId, source: NodeId) {
         // Look up the node in the routing table.
         let key = kbucket::Key::from(source);
         let is_node_in_table = match self.kbuckets.write().entry(&key) {
@@ -571,13 +570,13 @@ impl OverlayService {
         }
 
         match request {
-            Request::Ping(ping) => self.process_ping(ping, source).await,
+            Request::Ping(ping) => self.process_ping(ping, source),
             _ => {}
         }
     }
 
     /// Processes a ping request from some source node.
-    async fn process_ping(&mut self, ping: Ping, source: NodeId) {
+    fn process_ping(&mut self, ping: Ping, source: NodeId) {
         // Look up the node in the routing table.
         let key = kbucket::Key::from(source);
         let optional_node = match self.kbuckets.write().entry(&key) {
@@ -601,7 +600,7 @@ impl OverlayService {
     }
 
     /// Processes a failed request intended for some destination node.
-    async fn process_request_failure(
+    fn process_request_failure(
         &mut self,
         request_id: OverlayRequestId,
         destination: Enr,
@@ -620,7 +619,7 @@ impl OverlayService {
     }
 
     /// Processes a response to an outgoing request from some source node.
-    async fn process_response(&mut self, response: Response, source: Enr) {
+    fn process_response(&mut self, response: Response, source: Enr) {
         // If the node is present in the routing table, but the node is not connected, then
         // use the existing entry's value and direction. Otherwise, build a new entry from
         // the source ENR and establish a connection in the outgoing direction, because this
@@ -917,5 +916,440 @@ impl OverlayService {
             .collect();
 
         Ok(closest_nodes)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::net::Ipv4Addr;
+
+    use crate::{
+        portalnet::{
+            discovery::Discovery, overlay::OverlayConfig, types::messages::PortalnetConfig,
+        },
+        utils::db,
+    };
+
+    use discv5::enr::{CombinedKey, EnrBuilder};
+    use tokio_test::{assert_pending, assert_ready, task};
+
+    macro_rules! poll_request_rx {
+        ($service:ident) => {
+            $service.enter(|cx, mut service| service.request_rx.poll_recv(cx))
+        };
+    }
+
+    fn build_service() -> OverlayService {
+        let portal_config = PortalnetConfig {
+            internal_ip: true,
+            ..Default::default()
+        };
+        let discovery = Arc::new(Discovery::new(portal_config).unwrap());
+
+        let db = Arc::new(db::setup_overlay_db(discovery.local_enr().node_id()));
+
+        let overlay_config = OverlayConfig::default();
+        let kbuckets = Arc::new(RwLock::new(KBucketsTable::new(
+            discovery.local_enr().node_id().into(),
+            overlay_config.bucket_pending_timeout,
+            overlay_config.max_incoming_per_bucket,
+            overlay_config.table_filter,
+            overlay_config.bucket_filter,
+        )));
+
+        let data_radius = Arc::new(U256::from(u64::MAX));
+        let protocol = ProtocolId::History;
+        let active_outgoing_requests = Arc::new(RwLock::new(HashMap::new()));
+        let peers_to_ping = HashDelayQueue::default();
+        let (request_tx, request_rx) = mpsc::unbounded_channel();
+        let (response_tx, response_rx) = mpsc::unbounded_channel();
+
+        OverlayService {
+            discovery,
+            db,
+            kbuckets,
+            data_radius,
+            protocol,
+            peers_to_ping,
+            request_tx,
+            request_rx,
+            active_outgoing_requests,
+            response_tx,
+            response_rx,
+        }
+    }
+
+    fn generate_enr() -> Enr {
+        let key = CombinedKey::generate_secp256k1();
+        let ip = Ipv4Addr::new(192, 168, 0, 1);
+        EnrBuilder::new("v4")
+            .ip(ip.into())
+            .tcp(8000)
+            .build(&key)
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn process_ping_source_in_table_higher_enr_seq() {
+        let mut service = task::spawn(build_service());
+
+        let source = generate_enr();
+        let node_id = source.node_id();
+        let key = kbucket::Key::from(node_id);
+        let status = NodeStatus {
+            state: ConnectionState::Connected,
+            direction: ConnectionDirection::Outgoing,
+        };
+
+        let data_radius = U256::from(u64::MAX);
+        let node = Node {
+            enr: source.clone(),
+            data_radius,
+        };
+
+        let _ = service
+            .kbuckets
+            .write()
+            .insert_or_update(&key, node, status);
+
+        let ping = Ping {
+            enr_seq: source.seq() + 1,
+            custom_payload: ByteList::from(data_radius.as_ssz_bytes()),
+        };
+
+        service.process_ping(ping, node_id);
+
+        let request = assert_ready!(poll_request_rx!(service));
+        assert!(request.is_some());
+
+        let request = request.unwrap();
+        assert!(request.responder.is_none());
+
+        assert_eq!(
+            RequestDirection::Outgoing {
+                destination: source
+            },
+            request.direction
+        );
+
+        assert!(std::matches!(request.request, Request::FindNodes { .. }));
+
+        match request.request {
+            Request::FindNodes(find_nodes) => {
+                assert_eq!(vec![0], find_nodes.distances)
+            }
+            _ => panic!(),
+        };
+    }
+
+    #[tokio::test]
+    async fn process_ping_source_not_in_table() {
+        let mut service = task::spawn(build_service());
+
+        let source = generate_enr();
+        let node_id = source.node_id();
+        let data_radius = U256::from(u64::MAX);
+
+        let ping = Ping {
+            enr_seq: source.seq(),
+            custom_payload: ByteList::from(data_radius.as_ssz_bytes()),
+        };
+
+        service.process_ping(ping, node_id);
+
+        assert_pending!(poll_request_rx!(service));
+    }
+
+    #[tokio::test]
+    async fn process_request_failure() {
+        let mut service = task::spawn(build_service());
+
+        let destination = generate_enr();
+        let node_id = destination.node_id();
+        let key = kbucket::Key::from(node_id);
+        let status = NodeStatus {
+            state: ConnectionState::Connected,
+            direction: ConnectionDirection::Outgoing,
+        };
+
+        let node = Node {
+            enr: destination.clone(),
+            data_radius: U256::from(u64::MAX),
+        };
+
+        let _ = service
+            .kbuckets
+            .write()
+            .insert_or_update(&key, node, status);
+        service.peers_to_ping.insert(node_id);
+
+        assert!(service.peers_to_ping.contains_key(&node_id));
+
+        assert!(std::matches!(
+            service.kbuckets.write().entry(&key),
+            kbucket::Entry::Present { .. }
+        ));
+
+        let request_id = rand::random();
+        let error = OverlayRequestError::Timeout;
+        service.process_request_failure(request_id, destination.clone(), error);
+
+        assert!(!service.peers_to_ping.contains_key(&node_id));
+
+        match service.kbuckets.write().entry(&key) {
+            kbucket::Entry::Present(_entry, status) => {
+                assert_eq!(ConnectionState::Disconnected, status.state)
+            }
+            _ => panic!(),
+        };
+    }
+
+    #[tokio::test]
+    async fn process_response_source_in_table_disconnected() {}
+
+    #[tokio::test]
+    async fn process_response_source_not_in_table() {}
+
+    #[tokio::test]
+    async fn process_pong_source_in_table_higher_enr_seq() {
+        let mut service = task::spawn(build_service());
+
+        let source = generate_enr();
+        let node_id = source.node_id();
+        let key = kbucket::Key::from(node_id);
+        let status = NodeStatus {
+            state: ConnectionState::Connected,
+            direction: ConnectionDirection::Outgoing,
+        };
+
+        let data_radius = U256::from(u64::MAX);
+        let node = Node {
+            enr: source.clone(),
+            data_radius,
+        };
+
+        let _ = service
+            .kbuckets
+            .write()
+            .insert_or_update(&key, node, status);
+
+        let pong = Pong {
+            enr_seq: source.seq() + 1,
+            custom_payload: ByteList::from(data_radius.as_ssz_bytes()),
+        };
+
+        service.process_pong(pong, source.clone());
+
+        let request = assert_ready!(poll_request_rx!(service));
+        assert!(request.is_some());
+
+        let request = request.unwrap();
+        assert!(request.responder.is_none());
+
+        assert_eq!(
+            RequestDirection::Outgoing {
+                destination: source
+            },
+            request.direction
+        );
+
+        assert!(std::matches!(request.request, Request::FindNodes { .. }));
+
+        match request.request {
+            Request::FindNodes(find_nodes) => {
+                assert_eq!(vec![0], find_nodes.distances)
+            }
+            _ => panic!(),
+        };
+    }
+
+    #[tokio::test]
+    async fn process_pong_source_not_in_table() {
+        let mut service = task::spawn(build_service());
+
+        let source = generate_enr();
+        let data_radius = U256::from(u64::MAX);
+
+        let pong = Pong {
+            enr_seq: source.seq(),
+            custom_payload: ByteList::from(data_radius.as_ssz_bytes()),
+        };
+
+        service.process_pong(pong, source);
+
+        assert_pending!(poll_request_rx!(service));
+    }
+
+    #[tokio::test]
+    async fn request_node() {
+        let mut service = task::spawn(build_service());
+
+        let destination = generate_enr();
+        service.request_node(&destination);
+
+        let request = assert_ready!(poll_request_rx!(service));
+        assert!(request.is_some());
+
+        let request = request.unwrap();
+        assert!(request.responder.is_none());
+
+        assert_eq!(
+            RequestDirection::Outgoing { destination },
+            request.direction
+        );
+
+        assert!(std::matches!(request.request, Request::FindNodes { .. }));
+
+        match request.request {
+            Request::FindNodes(find_nodes) => {
+                assert_eq!(vec![0], find_nodes.distances)
+            }
+            _ => panic!(),
+        };
+    }
+
+    #[tokio::test]
+    async fn ping_node() {
+        let mut service = task::spawn(build_service());
+
+        let destination = generate_enr();
+        service.ping_node(&destination);
+
+        let request = assert_ready!(poll_request_rx!(service));
+        assert!(request.is_some());
+
+        let request = request.unwrap();
+        assert!(request.responder.is_none());
+
+        assert_eq!(
+            RequestDirection::Outgoing { destination },
+            request.direction
+        );
+
+        assert!(std::matches!(request.request, Request::Ping { .. }));
+    }
+
+    #[tokio::test]
+    async fn connect_node() {
+        let mut service = task::spawn(build_service());
+
+        let enr = generate_enr();
+        let node_id = enr.node_id();
+        let key = kbucket::Key::from(node_id);
+
+        let data_radius = U256::from(u64::MAX);
+        let node = Node {
+            enr: enr.clone(),
+            data_radius,
+        };
+        let connection_direction = ConnectionDirection::Outgoing;
+
+        assert!(!service.peers_to_ping.contains_key(&node_id));
+        assert!(std::matches!(
+            service.kbuckets.write().entry(&key),
+            kbucket::Entry::Absent { .. }
+        ));
+
+        service.connect_node(node, connection_direction);
+
+        assert!(service.peers_to_ping.contains_key(&node_id));
+
+        match service.kbuckets.write().entry(&key) {
+            kbucket::Entry::Present(_entry, status) => {
+                assert_eq!(ConnectionState::Connected, status.state);
+                assert_eq!(connection_direction, status.direction);
+            }
+            _ => panic!(),
+        };
+    }
+
+    #[tokio::test]
+    async fn update_node_connection_state_disconnected_to_connected() {
+        let mut service = task::spawn(build_service());
+
+        let enr = generate_enr();
+        let node_id = enr.node_id();
+        let key = kbucket::Key::from(node_id);
+
+        let data_radius = U256::from(u64::MAX);
+        let node = Node {
+            enr: enr.clone(),
+            data_radius,
+        };
+
+        let connection_direction = ConnectionDirection::Outgoing;
+        let status = NodeStatus {
+            state: ConnectionState::Disconnected,
+            direction: connection_direction,
+        };
+
+        let _ = service
+            .kbuckets
+            .write()
+            .insert_or_update(&key, node, status);
+
+        match service.kbuckets.write().entry(&key) {
+            kbucket::Entry::Present(_entry, status) => {
+                assert_eq!(ConnectionState::Disconnected, status.state);
+                assert_eq!(connection_direction, status.direction);
+            }
+            _ => panic!(),
+        };
+
+        let _ = service.update_node_connection_state(node_id, ConnectionState::Connected);
+
+        match service.kbuckets.write().entry(&key) {
+            kbucket::Entry::Present(_entry, status) => {
+                assert_eq!(ConnectionState::Connected, status.state);
+                assert_eq!(connection_direction, status.direction);
+            }
+            _ => panic!(),
+        };
+    }
+
+    #[tokio::test]
+    async fn update_node_connection_state_connected_to_disconnected() {
+        let mut service = task::spawn(build_service());
+
+        let enr = generate_enr();
+        let node_id = enr.node_id();
+        let key = kbucket::Key::from(node_id);
+
+        let data_radius = U256::from(u64::MAX);
+        let node = Node {
+            enr: enr.clone(),
+            data_radius,
+        };
+
+        let connection_direction = ConnectionDirection::Outgoing;
+        let status = NodeStatus {
+            state: ConnectionState::Connected,
+            direction: connection_direction,
+        };
+
+        let _ = service
+            .kbuckets
+            .write()
+            .insert_or_update(&key, node, status);
+
+        match service.kbuckets.write().entry(&key) {
+            kbucket::Entry::Present(_entry, status) => {
+                assert_eq!(ConnectionState::Connected, status.state);
+                assert_eq!(connection_direction, status.direction);
+            }
+            _ => panic!(),
+        };
+
+        let _ = service.update_node_connection_state(node_id, ConnectionState::Disconnected);
+
+        match service.kbuckets.write().entry(&key) {
+            kbucket::Entry::Present(_entry, status) => {
+                assert_eq!(ConnectionState::Disconnected, status.state);
+                assert_eq!(connection_direction, status.direction);
+            }
+            _ => panic!(),
+        };
     }
 }
