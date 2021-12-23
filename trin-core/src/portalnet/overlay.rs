@@ -8,7 +8,6 @@ use super::{
     types::uint::U256,
     Enr,
 };
-use crate::locks::RwLoggingExt;
 use crate::portalnet::types::messages::{
     ByteList, Content, FindContent, FindNodes, Message, Nodes, Ping, Pong, ProtocolId, Request,
     Response,
@@ -20,9 +19,10 @@ use discv5::{
     TalkRequest,
 };
 use futures::channel::oneshot;
+use parking_lot::RwLock;
 use rocksdb::DB;
 use ssz::Encode;
-use tokio::sync::{mpsc::UnboundedSender, RwLock};
+use tokio::sync::mpsc::UnboundedSender;
 use tracing::{debug, warn};
 
 pub use super::overlay_service::OverlayRequestError;
@@ -30,19 +30,23 @@ pub use super::overlay_service::OverlayRequestError;
 /// Configuration parameters for the overlay network.
 #[derive(Clone)]
 pub struct OverlayConfig {
+    pub bootnode_enrs: Vec<Enr>,
     pub bucket_pending_timeout: Duration,
     pub max_incoming_per_bucket: usize,
     pub table_filter: Option<Box<dyn Filter<Node>>>,
     pub bucket_filter: Option<Box<dyn Filter<Node>>>,
+    pub ping_queue_interval: Option<Duration>,
 }
 
 impl Default for OverlayConfig {
     fn default() -> Self {
         Self {
+            bootnode_enrs: vec![],
             bucket_pending_timeout: Duration::from_secs(60),
             max_incoming_per_bucket: 16,
             table_filter: None,
             bucket_filter: None,
+            ping_queue_interval: None,
         }
     }
 }
@@ -88,6 +92,8 @@ impl OverlayProtocol {
             Arc::clone(&discovery),
             Arc::clone(&db),
             Arc::clone(&kbuckets),
+            config.bootnode_enrs,
+            config.ping_queue_interval,
             Arc::clone(&data_radius),
             protocol.clone(),
         )
@@ -110,12 +116,12 @@ impl OverlayProtocol {
     }
 
     /// Returns the ENR of the local node.
-    pub async fn local_enr(&self) -> Enr {
+    pub fn local_enr(&self) -> Enr {
         self.discovery.discv5.local_enr()
     }
 
     /// Returns the data radius of the local node.
-    pub async fn data_radius(&self) -> U256 {
+    pub fn data_radius(&self) -> U256 {
         *self.data_radius
     }
 
@@ -135,6 +141,7 @@ impl OverlayProtocol {
             Err(_) => return Err(OverlayRequestError::DecodeError),
         };
         let direction = RequestDirection::Incoming {
+            id: talk_request.id().clone(),
             source: *talk_request.node_id(),
         };
 
@@ -143,20 +150,18 @@ impl OverlayProtocol {
     }
 
     /// Returns a vector of all ENR node IDs of nodes currently contained in the routing table.
-    pub async fn table_entries_id(&self) -> Vec<NodeId> {
+    pub fn table_entries_id(&self) -> Vec<NodeId> {
         self.kbuckets
-            .write_with_warn()
-            .await
+            .write()
             .iter()
             .map(|entry| *entry.node.key.preimage())
             .collect()
     }
 
     /// Returns a vector of all the ENRs of nodes currently contained in the routing table.
-    pub async fn table_entries_enr(&self) -> Vec<Enr> {
+    pub fn table_entries_enr(&self) -> Vec<Enr> {
         self.kbuckets
-            .write_with_warn()
-            .await
+            .write()
             .iter()
             .map(|entry| entry.node.value.enr().clone())
             .collect()
@@ -166,7 +171,7 @@ impl OverlayProtocol {
     pub async fn send_ping(&self, enr: Enr) -> Result<Pong, OverlayRequestError> {
         // Construct the request.
         let enr_seq = self.discovery.local_enr().seq();
-        let data_radius = self.data_radius().await;
+        let data_radius = self.data_radius();
         let custom_payload = ByteList::from(data_radius.as_ssz_bytes());
         let request = Ping {
             enr_seq,
@@ -238,11 +243,7 @@ impl OverlayProtocol {
         direction: RequestDirection,
     ) -> Result<Response, OverlayRequestError> {
         let (tx, rx) = oneshot::channel();
-        let overlay_request = OverlayRequest {
-            request,
-            direction,
-            responder: Some(tx),
-        };
+        let overlay_request = OverlayRequest::new(request, direction, Some(tx));
         if let Err(error) = self.request_tx.send(overlay_request) {
             warn!(
                 "Failure sending request over {:?} service channel",
