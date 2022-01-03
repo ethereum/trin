@@ -10,7 +10,7 @@ jobs:
             name: rust/default
             tag: 1.56.1
         environment:
-            RUSTFLAGS: '-D warnings'
+            RUSTFLAGS: '-Dwarnings'
         steps:
             - checkout
             - restore_cache:
