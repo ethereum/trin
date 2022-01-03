@@ -9,6 +9,7 @@ base64 = "0.13.0"
 clap = "2.33.3"
 ctrlc = "3.1.8"
 directories = "3.0"
+discv5 = "0.1.0-beta.13"
 env_logger = "0.8.2"
 eth2_ssz = "0.4.0"
 eth2_ssz_derive = "0.3.0"
@@ -44,10 +45,6 @@ uds_windows = "1.0.1"
 
 [target.'cfg(unix)'.dependencies]
 interfaces = "0.0.7"
-
-[dependencies.discv5]
-branch = "master"
-git = "https://github.com/sigp/discv5"
 
 [dependencies.rusqlite]
 version = "0.25.3"
