@@ -8,6 +8,7 @@ rust-version = "1.56.1"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+discv5 = "0.1.0-beta.13"
 eth_trie = "0.1.0"
 log = "0.4.14"
 num = "0.4.0"
@@ -19,7 +20,3 @@ sha3 = "0.9.1"
 tokio = {version = "1.8.0", features = ["full"]}
 trin-core = { path = "../trin-core" }
 rocksdb = "0.16.0"
-
-[dependencies.discv5]
-branch = "master"
-git = "https://github.com/sigp/discv5"

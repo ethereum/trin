@@ -18,10 +18,6 @@ trin-history = { path = "trin-history" }
 trin-state = { path = "trin-state" }
 trin-cli = { path = "trin-cli" }
 
-[dependencies.discv5]
-branch = "master"
-git = "https://github.com/sigp/discv5"
-
 [dev-dependencies]
 ethportal-peertest = { path = "ethportal-peertest" }
 
