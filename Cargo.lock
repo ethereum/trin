@@ -3211,7 +3211,6 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber 0.2.19",
- "trin-cli",
  "trin-core",
  "trin-history",
  "trin-state",

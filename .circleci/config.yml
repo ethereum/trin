@@ -42,7 +42,7 @@ jobs:
                 command: cargo build --workspace --jobs 2
             - run:
                 name: Test Trin workspace
-                command: cargo test --workspace
+                command: cargo test --workspace --jobs 2
             - save_cache:
                 key: cargo-{{ checksum "Cargo.lock" }}-v1
                 paths:

@@ -5,7 +5,7 @@ use tokio::sync::mpsc;
 use validator::{Validate, ValidationError};
 
 use crate::jsonrpc::endpoints::{HistoryEndpoint, StateEndpoint, TrinEndpoint};
-use crate::portalnet::types::messages::{ByteList, SszEnr};
+use crate::portalnet::types::messages::{ByteList, CustomPayload, SszEnr};
 
 type Responder<T, E> = mpsc::UnboundedSender<Result<T, E>>;
 
@@ -78,6 +78,7 @@ fn validate_jsonrpc_version(jsonrpc: &str) -> Result<(), ValidationError> {
 
 pub struct PingParams {
     pub enr: SszEnr,
+    pub custom_payload: Option<CustomPayload>,
 }
 
 impl TryFrom<Params> for PingParams {
@@ -87,7 +88,8 @@ impl TryFrom<Params> for PingParams {
         match params {
             Params::Array(val) => match val.len() {
                 1 => PingParams::try_from(&val[0]),
-                _ => Err(ValidationError::new("Expected only a single param")),
+                2 => PingParams::try_from([&val[0], &val[1]]),
+                _ => Err(ValidationError::new("Expected 1 or 2 params")),
             },
             _ => Err(ValidationError::new("Expected array of params")),
         }
@@ -99,7 +101,23 @@ impl TryFrom<&Value> for PingParams {
 
     fn try_from(param: &Value) -> Result<Self, Self::Error> {
         let enr: SszEnr = param.try_into()?;
-        Ok(Self { enr })
+        Ok(Self {
+            enr,
+            custom_payload: None,
+        })
+    }
+}
+
+impl TryFrom<[&Value; 2]> for PingParams {
+    type Error = ValidationError;
+
+    fn try_from(param: [&Value; 2]) -> Result<Self, Self::Error> {
+        let enr: SszEnr = param[0].try_into()?;
+        let custom_payload: CustomPayload = param[1].try_into()?;
+        Ok(Self {
+            enr,
+            custom_payload: Some(custom_payload),
+        })
     }
 }
 

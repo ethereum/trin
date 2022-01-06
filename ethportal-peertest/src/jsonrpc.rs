@@ -87,12 +87,18 @@ impl JsonRpcEndpoint {
             JsonRpcEndpoint {
                 method: "portal_statePing".to_string(),
                 id: 6,
-                params: Params::Array(vec![Value::String(buddy_node.clone())]),
+                params: Params::Array(vec![
+                    Value::String(buddy_node.clone()),
+                    Value::String("010100".to_string()),
+                ]),
             },
             JsonRpcEndpoint {
                 method: "portal_historyPing".to_string(),
                 id: 7,
-                params: Params::Array(vec![Value::String(buddy_node)]),
+                params: Params::Array(vec![
+                    Value::String(buddy_node),
+                    Value::String("010100".to_string()),
+                ]),
             },
         ]
     }
