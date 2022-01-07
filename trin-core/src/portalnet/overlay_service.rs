@@ -17,7 +17,11 @@ use crate::{
         },
         Enr,
     },
-    utils::{distance::xor_two_values, hash_delay_queue::HashDelayQueue},
+    utils::{
+        binary_string,
+        distance::{xor_two_values, DistanceError},
+        hash_delay_queue::HashDelayQueue,
+    },
 };
 
 use discv5::{
@@ -29,8 +33,9 @@ use discv5::{
     rpc::RequestId,
 };
 use futures::{channel::oneshot, prelude::*};
-use log::{debug, info, warn};
+use log::{debug, error, info, warn};
 use parking_lot::RwLock;
+use rand::{seq::SliceRandom, thread_rng};
 use rocksdb::DB;
 use ssz::Encode;
 use ssz_types::VariableList;
@@ -75,6 +80,22 @@ pub enum OverlayRequestError {
     /// The request  Discovery v5 request error.
     #[error("Internal Discovery v5 error: {0}")]
     Discv5Error(discv5::RequestError),
+}
+
+/// A NodeId error.
+#[derive(Clone, Error, Debug)]
+pub enum RandomNodeIdError<'a> {
+    /// A failure to generate random NodeId
+    #[error("Unable to generate random  NodeId")]
+    BinaryStringError(#[from] binary_string::BinaryStringError),
+
+    /// Distance error
+    #[error("Distance error: {0}")]
+    DistanceError(#[from] DistanceError),
+
+    /// NodeId parse error
+    #[error("Parse error: {0}")]
+    ParseError(&'a str),
 }
 
 impl From<discv5::RequestError> for OverlayRequestError {
@@ -156,7 +177,7 @@ struct OverlayResponse {
 }
 
 /// A node in the overlay network routing table.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Node {
     /// The node's ENR.
     enr: Enr,
@@ -949,12 +970,31 @@ impl OverlayService {
 
         Ok(closest_nodes)
     }
+
+    fn send_recursive_findnode(&self, _target: &NodeId) {
+        // TODO: Implement Recursive(iterative) FINDNODE. This is a stub.
+    }
+
+    /// Generate random NodeId based on bucket index target.
+    /// First we generate a random distance metric with leading zeroes based on the target bucket.
+    /// Then we XOR the result distance with the local NodeId to get the random target NodeId
+    fn generate_random_node_id(&self, target_bucket_idx: u8) -> Result<NodeId, RandomNodeIdError> {
+        let distance_leading_zeroes = 255 - target_bucket_idx;
+        let random_distance = binary_string::generate_random(distance_leading_zeroes);
+        let random_distance = binary_string::to_byte_array(&random_distance)?;
+        let raw_node_id = xor_two_values(&self.local_enr().node_id().raw(), &random_distance)?;
+        match NodeId::parse(raw_node_id.as_slice()) {
+            Ok(node_id) => Ok(node_id),
+            Err(msg) => Err(RandomNodeIdError::ParseError(msg)),
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    use rstest::rstest;
     use std::net::Ipv4Addr;
 
     use crate::{
@@ -1383,5 +1423,18 @@ mod tests {
             }
             _ => panic!(),
         };
+    }
+
+    #[rstest]
+    #[case(6)]
+    #[case(0)]
+    #[case(255)]
+    fn generate_random_node_id(#[case] target_bucket_idx: u8) {
+        let service = task::spawn(build_service());
+        let random_node_id = service.generate_random_node_id(target_bucket_idx).unwrap();
+        let key = kbucket::Key::from(random_node_id);
+        let bucket = service.kbuckets.read();
+        let expected_index = bucket.get_index(&key).unwrap();
+        assert_eq!(target_bucket_idx, expected_index as u8);
     }
 }
