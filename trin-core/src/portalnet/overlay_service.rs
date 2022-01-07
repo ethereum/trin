@@ -363,6 +363,9 @@ impl OverlayService {
     ///
     /// Bucket maintenance: Maintain the routing table (more info documented above function).
     async fn start(&mut self) {
+        // Construct bucket refresh interval
+        let mut bucket_refresh_interval = tokio::time::interval(Duration::from_secs(60));
+
         loop {
             tokio::select! {
                 Some(request) = self.request_rx.recv() => self.process_request(request),
@@ -393,7 +396,47 @@ impl OverlayService {
                     }
                 }
                 _ = OverlayService::bucket_maintenance_poll(self.protocol.clone(), &self.kbuckets) => {}
+                _ = bucket_refresh_interval.tick() => {
+                    debug!("Bucket refresh lookup");
+                    self.bucket_refresh_lookup();
+                }
             }
+        }
+    }
+
+    /// Main bucket refresh lookup logic
+    fn bucket_refresh_lookup(&self) {
+        // Look at local routing table and select the first 8 buckets which are not full.
+        let buckets = self.kbuckets.read();
+        let buckets = buckets
+            .buckets_iter()
+            .enumerate()
+            .map(|x| (x.0, x.1.iter().collect::<Vec<_>>().len()))
+            .filter(|&x| x.1 < 16)
+            .take(8)
+            .collect::<Vec<_>>();
+        // Randomly pick one of these buckets. Weighting the random selection to prefer
+        // "larger" buckets so we can prioritize finding the easier to find nodes first.
+        // Weights are the number of nodes in a bucket + 1. We add 1 to the length because
+        // we don't want zero weights for empty buckets in distribution.
+        let mut rng = thread_rng();
+        let target_bucket = buckets.choose_weighted(&mut rng, |x| x.1 + 1);
+        match target_bucket {
+            Ok(bucket) => {
+                let target_bucket_idx = u8::try_from(bucket.0);
+                if let Ok(idx) = target_bucket_idx {
+                    // Randomly generate a NodeID that falls within the target bucket.
+                    let target_node_id = self.generate_random_node_id(idx);
+                    // Do the random lookup on this node-id.
+                    match target_node_id {
+                        Ok(node_id) => self.send_recursive_findnode(&node_id),
+                        Err(msg) => warn!("{:?}", msg),
+                    }
+                } else {
+                    error!("Unable to downcast bucket index.")
+                }
+            }
+            Err(msg) => error!("Unable to choose random bucket index: {}", msg),
         }
     }
 
