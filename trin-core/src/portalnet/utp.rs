@@ -1013,4 +1013,123 @@ mod tests {
         assert_eq!(reply.get_extensions()[0].bitmask[2], 0b0101_1010);
         assert_eq!(reply.get_extensions()[0].bitmask[3], 0b0000_0001);
     }
+
+    // https://github.com/ethereum/portal-network-specs/pull/127
+    // konrad uTP test vectors
+
+    #[test]
+    fn test_syn_packet() {
+        let mut response = PacketHeader::new();
+        response.set_type(Type::StSyn);
+        response.set_connection_id(10049);
+        response.set_timestamp(3384187322);
+        response.set_timestamp_difference(0);
+        response.set_wnd_size(1048576);
+        response.set_seq_nr(11884);
+        response.set_ack_nr(0);
+
+        let packet = Packet::new(response);
+        assert_eq!(
+            hex::encode(packet.0.clone()),
+            "41002741c9b699ba00000000001000002e6c0000"
+        );
+    }
+
+    #[test]
+    fn test_act_packet_no_extension() {
+        let mut response = PacketHeader::new();
+        response.set_type(Type::StState);
+        response.set_connection_id(10049);
+        response.set_timestamp(6195294);
+        response.set_timestamp_difference(916973699);
+        response.set_wnd_size(1048576);
+        response.set_seq_nr(16807);
+        response.set_ack_nr(11885);
+
+        let packet = Packet::new(response);
+        assert_eq!(
+            hex::encode(packet.0.clone()),
+            "21002741005e885e36a7e8830010000041a72e6d"
+        );
+    }
+
+    #[test]
+    fn test_act_packet_with_selective_ack_extension() {
+        let mut response = PacketHeader::new();
+        response.set_type(Type::StState);
+        response.set_connection_id(10049);
+        response.set_timestamp(6195294);
+        response.set_timestamp_difference(916973699);
+        response.set_wnd_size(1048576);
+        response.set_seq_nr(16807);
+        response.set_ack_nr(11885);
+
+        let mut incoming_buffer: BTreeMap<u16, Packet> = Default::default();
+        incoming_buffer.insert(12050, Packet::new(PacketHeader::new()));
+        incoming_buffer.insert(12081, Packet::new(PacketHeader::new()));
+
+        let mut reply = Packet::new(response);
+
+        if reply.seq_nr().wrapping_sub(12048) > 1 {
+            reply.set_selective_ack(&incoming_buffer, 12048);
+        }
+        assert_eq!(
+            hex::encode(reply.0.clone()),
+            "21012741005e885e36a7e8830010000041a72e6d000401000080"
+        );
+    }
+
+    #[test]
+    fn test_data_packet() {
+        let mut response = PacketHeader::new();
+        response.set_type(Type::StData);
+        response.set_connection_id(26237);
+        response.set_timestamp(252492495);
+        response.set_timestamp_difference(242289855);
+        response.set_wnd_size(1048576);
+        response.set_seq_nr(8334);
+        response.set_ack_nr(16806);
+
+        let packet = Packet::with_payload(response, &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        assert_eq!(
+            hex::encode(packet.0.clone()),
+            "0100667d0f0cbacf0e710cbf00100000208e41a600010203040506070809"
+        );
+    }
+
+    #[test]
+    fn test_fin_packet() {
+        let mut response = PacketHeader::new();
+        response.set_type(Type::StFin);
+        response.set_connection_id(19003);
+        response.set_timestamp(515227279);
+        response.set_timestamp_difference(511481041);
+        response.set_wnd_size(1048576);
+        response.set_seq_nr(41050);
+        response.set_ack_nr(16806);
+
+        let packet = Packet::new(response);
+        assert_eq!(
+            hex::encode(packet.0.clone()),
+            "11004a3b1eb5be8f1e7c94d100100000a05a41a6"
+        );
+    }
+
+    #[test]
+    fn test_reset_packet() {
+        let mut response = PacketHeader::new();
+        response.set_type(Type::StReset);
+        response.set_connection_id(62285);
+        response.set_timestamp(751226811);
+        response.set_timestamp_difference(0);
+        response.set_wnd_size(0);
+        response.set_seq_nr(55413);
+        response.set_ack_nr(16807);
+
+        let packet = Packet::new(response);
+        assert_eq!(
+            hex::encode(packet.0.clone()),
+            "3100f34d2cc6cfbb0000000000000000d87541a7"
+        );
+    }
 }
