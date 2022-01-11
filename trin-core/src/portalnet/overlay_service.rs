@@ -8,6 +8,7 @@ use crate::{
     portalnet::{
         discovery::Discovery,
         types::{
+            content_keys::{ContentKeyError, HistoryContentKey, StateContentKey},
             messages::{
                 ByteList, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Ping,
                 Pong, ProtocolId, Request, Response, SszEnr,
@@ -82,6 +83,12 @@ impl From<discv5::RequestError> for OverlayRequestError {
             discv5::RequestError::Timeout => Self::Timeout,
             err => Self::Discv5Error(err),
         }
+    }
+}
+
+impl From<ContentKeyError> for OverlayRequestError {
+    fn from(err: ContentKeyError) -> Self {
+        Self::InvalidRequest(format!("Invalid content key: {}", err))
     }
 }
 
@@ -883,8 +890,33 @@ impl OverlayService {
         &self,
         content_key: Vec<u8>,
     ) -> Result<Vec<SszEnr>, OverlayRequestError> {
+        // Attempt to derive the content ID for the content key.
+        let content_id = match self.protocol {
+            ProtocolId::State => {
+                let state_content_key = StateContentKey::from_bytes(content_key.as_slice())?;
+                state_content_key.derive_content_id()?
+            }
+            ProtocolId::History => {
+                let history_content_key = HistoryContentKey::from_bytes(content_key.as_slice())?;
+                history_content_key.derive_content_id()?
+            }
+            _ => {
+                warn!(
+                    "Attempt to find undefined content for {:?} protocol",
+                    self.protocol
+                );
+                return Err(OverlayRequestError::InvalidRequest(format!(
+                    "Content undefined for {:?} protocol",
+                    self.protocol,
+                )));
+            }
+        };
+
         let self_node_id = self.local_enr().node_id();
-        let self_distance = match xor_two_values(&content_key, &self_node_id.raw().to_vec()) {
+        let self_distance = match xor_two_values(
+            &Into::<[u8; 32]>::into(content_id).to_vec(),
+            &self_node_id.raw().to_vec(),
+        ) {
             Ok(val) => val,
             Err(msg) => {
                 return Err(OverlayRequestError::InvalidRequest(format!(
