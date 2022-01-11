@@ -7,7 +7,7 @@ use std::str::FromStr;
 use base64;
 use hex::FromHexError;
 use rlp::Encodable;
-use serde_json::Value;
+use serde_json::{Map, Value};
 use ssz::{Decode, DecodeError, Encode};
 use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, VariableList};
@@ -349,9 +349,22 @@ impl TryFrom<&Vec<u8>> for Pong {
     }
 }
 
+/// Convert to JSON Value from Pong ssz bytes
 impl Into<Value> for Pong {
     fn into(self) -> Value {
-        Value::String(format!("{:?}", self.custom_payload))
+        match U256::from_ssz_bytes(&self.custom_payload.payload.as_ssz_bytes()) {
+            Ok(data_radius) => {
+                let mut result = Map::new();
+                result.insert("enrSeq".to_owned(), Value::String(self.enr_seq.to_string()));
+                result.insert(
+                    "dataRadius".to_owned(),
+                    Value::String(data_radius.to_string()),
+                );
+
+                Value::Object(result)
+            }
+            Err(msg) => Value::String(format!("Unable to ssz decode data radius!: {:?}", msg)),
+        }
     }
 }
 

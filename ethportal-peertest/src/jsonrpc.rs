@@ -11,7 +11,6 @@ use thiserror::Error;
 
 use crate::cli::PeertestConfig;
 use trin_core::jsonrpc::types::Params;
-use trin_core::portalnet::types::uint::U256;
 
 #[derive(Clone)]
 pub struct JsonRpcEndpoint {
@@ -19,6 +18,11 @@ pub struct JsonRpcEndpoint {
     pub id: u8,
     pub params: Params,
 }
+
+/// Default data radius value: U256::from(u64::MAX)
+const DATA_RADIUS: &str = "18446744073709551615";
+/// Default enr seq value
+const ENR_SEQ: &str = "1";
 
 fn validate_endpoint_response(method: &str, result: &Value) {
     match method {
@@ -38,18 +42,30 @@ fn validate_endpoint_response(method: &str, result: &Value) {
             assert!(result.get("buckets").unwrap().is_array());
         }
         "portal_historyRadius" => {
-            assert_eq!(result.as_str().unwrap(), U256::from(u64::MAX).to_string());
+            assert_eq!(result.as_str().unwrap(), DATA_RADIUS);
         }
         "portal_stateRadius" => {
-            assert_eq!(result.as_str().unwrap(), U256::from(u64::MAX).to_string());
+            assert_eq!(result.as_str().unwrap(), DATA_RADIUS);
         }
         "portal_historyPing" => {
-            assert!(result.is_string());
-            // TODO test for enrSeq, recipient{IP,Port}
+            assert_eq!(
+                result.get("dataRadius").unwrap().as_str().unwrap(),
+                DATA_RADIUS
+            );
+            assert_eq!(
+                result.get("enrSeq").unwrap().as_str().unwrap(),
+                ENR_SEQ.to_string()
+            );
         }
         "portal_statePing" => {
-            assert!(result.is_string());
-            // TODO test for enrSeq, recipient{IP,Port}
+            assert_eq!(
+                result.get("dataRadius").unwrap().as_str().unwrap(),
+                DATA_RADIUS
+            );
+            assert_eq!(
+                result.get("enrSeq").unwrap().as_str().unwrap(),
+                ENR_SEQ.to_string()
+            );
         }
         _ => panic!("Unsupported endpoint"),
     };
@@ -89,7 +105,7 @@ impl JsonRpcEndpoint {
                 id: 6,
                 params: Params::Array(vec![
                     Value::String(buddy_node.clone()),
-                    Value::String("010100".to_string()),
+                    Value::String(DATA_RADIUS.to_owned()),
                 ]),
             },
             JsonRpcEndpoint {
@@ -97,7 +113,7 @@ impl JsonRpcEndpoint {
                 id: 7,
                 params: Params::Array(vec![
                     Value::String(buddy_node),
-                    Value::String("010100".to_string()),
+                    Value::String(DATA_RADIUS.to_owned()),
                 ]),
             },
         ]
