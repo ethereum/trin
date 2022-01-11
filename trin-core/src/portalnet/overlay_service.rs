@@ -35,7 +35,7 @@ use discv5::{
 use futures::{channel::oneshot, prelude::*};
 use log::{debug, error, info, warn};
 use parking_lot::RwLock;
-use rand::{seq::SliceRandom, thread_rng};
+use rand::seq::SliceRandom;
 use rocksdb::DB;
 use ssz::Encode;
 use ssz_types::VariableList;
@@ -46,6 +46,9 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 pub const FIND_NODES_MAX_NODES: usize = 32;
 /// Maximum number of ENRs in response to FindContent.
 pub const FIND_CONTENT_MAX_NODES: usize = 32;
+/// With even distribution assumptions, 2**17 is enough to put each node (estimating 100k nodes,
+/// which is more than 10x the ethereum mainnet node count) into a unique bucket by the 17th bucket index.
+pub const EXPECTED_NON_EMPTY_BUCKETS: usize = 17;
 
 /// An overlay request error.
 #[derive(Clone, Error, Debug)]
@@ -397,7 +400,7 @@ impl OverlayService {
                 }
                 _ = OverlayService::bucket_maintenance_poll(self.protocol.clone(), &self.kbuckets) => {}
                 _ = bucket_refresh_interval.tick() => {
-                    debug!("Bucket refresh lookup");
+                    debug!("Overlay bucket refresh lookup");
                     self.bucket_refresh_lookup();
                 }
             }
@@ -406,23 +409,17 @@ impl OverlayService {
 
     /// Main bucket refresh lookup logic
     fn bucket_refresh_lookup(&self) {
-        // Look at local routing table and select the first 8 buckets which are not full.
+        // Look at local routing table and select the largest 17 buckets.
+        // We only need the 17 bits furthest from our own node ID, because the closest 239 bits of
+        // buckets are going to be empty-ish.
         let buckets = self.kbuckets.read();
-        let buckets = buckets
-            .buckets_iter()
-            .enumerate()
-            .map(|x| (x.0, x.1.iter().collect::<Vec<_>>().len()))
-            .filter(|&x| x.1 < 16)
-            .take(8)
-            .collect::<Vec<_>>();
-        // Randomly pick one of these buckets. Weighting the random selection to prefer
-        // "larger" buckets so we can prioritize finding the easier to find nodes first.
-        // Weights are the number of nodes in a bucket + 1. We add 1 to the length because
-        // we don't want zero weights for empty buckets in distribution.
-        let mut rng = thread_rng();
-        let target_bucket = buckets.choose_weighted(&mut rng, |x| x.1 + 1);
+        let buckets = buckets.buckets_iter().enumerate().collect::<Vec<_>>();
+        let buckets = &buckets[256 - EXPECTED_NON_EMPTY_BUCKETS..];
+
+        // Randomly pick one of these buckets.
+        let target_bucket = buckets.choose(&mut rand::thread_rng());
         match target_bucket {
-            Ok(bucket) => {
+            Some(bucket) => {
                 let target_bucket_idx = u8::try_from(bucket.0);
                 if let Ok(idx) = target_bucket_idx {
                     // Randomly generate a NodeID that falls within the target bucket.
@@ -436,7 +433,7 @@ impl OverlayService {
                     error!("Unable to downcast bucket index.")
                 }
             }
-            Err(msg) => error!("Unable to choose random bucket index: {}", msg),
+            None => error!("Failed to choose random bucket index"),
         }
     }
 
