@@ -17,11 +17,7 @@ use crate::{
         },
         Enr,
     },
-    utils::{
-        bytes,
-        distance::{xor_two_values, DistanceError},
-        hash_delay_queue::HashDelayQueue,
-    },
+    utils::{bytes, distance::xor_two_values, hash_delay_queue::HashDelayQueue},
 };
 
 use discv5::{
@@ -83,18 +79,6 @@ pub enum OverlayRequestError {
     /// The request  Discovery v5 request error.
     #[error("Internal Discovery v5 error: {0}")]
     Discv5Error(discv5::RequestError),
-}
-
-/// A NodeId error.
-#[derive(Clone, Error, Debug)]
-pub enum RandomNodeIdError<'a> {
-    /// Distance error
-    #[error("Distance error: {0}")]
-    DistanceError(#[from] DistanceError),
-
-    /// NodeId parse error
-    #[error("Parse error: {0}")]
-    ParseError(&'a str),
 }
 
 impl From<discv5::RequestError> for OverlayRequestError {
@@ -1014,13 +998,13 @@ impl OverlayService {
     /// Generate random NodeId based on bucket index target.
     /// First we generate a random distance metric with leading zeroes based on the target bucket.
     /// Then we XOR the result distance with the local NodeId to get the random target NodeId
-    fn generate_random_node_id(&self, target_bucket_idx: u8) -> Result<NodeId, RandomNodeIdError> {
+    fn generate_random_node_id(&self, target_bucket_idx: u8) -> anyhow::Result<NodeId> {
         let distance_leading_zeroes = 255 - target_bucket_idx;
         let random_distance = bytes::random_32byte_array(distance_leading_zeroes);
         let raw_node_id = xor_two_values(&self.local_enr().node_id().raw(), &random_distance)?;
         match NodeId::parse(raw_node_id.as_slice()) {
             Ok(node_id) => Ok(node_id),
-            Err(msg) => Err(RandomNodeIdError::ParseError(msg)),
+            Err(msg) => Err(anyhow::Error::msg(msg)),
         }
     }
 }
