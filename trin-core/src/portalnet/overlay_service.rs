@@ -827,23 +827,116 @@ impl OverlayService {
     }
 
     /// Processes a Nodes response.
-    fn process_nodes(&mut self, _nodes: Nodes, source: Enr) {
+    fn process_nodes(&mut self, nodes: Nodes, source: Enr) {
         debug!(
             "[{:?}] Processing Nodes response from node. Node: {}",
             self.protocol,
             source.node_id()
         );
-        // TODO: Implement processing logic.
+        self.process_discovered_enrs(
+            nodes
+                .enrs
+                .into_iter()
+                .map(|ssz_enr| ssz_enr.into())
+                .collect(),
+        );
     }
 
     /// Processes a Content response.
-    fn process_content(&mut self, _content: Content, source: Enr) {
+    fn process_content(&mut self, content: Content, source: Enr) {
         debug!(
             "[{:?}] Processing Content response from node. Node: {}",
             self.protocol,
             source.node_id()
         );
-        // TODO: Implement processing logic.
+        if let Content::Enrs(enrs) = content {
+            self.process_discovered_enrs(enrs.into_iter().map(|ssz_enr| ssz_enr.into()).collect());
+        }
+    }
+
+    /// Processes a collection of discovered nodes.
+    fn process_discovered_enrs(&mut self, enrs: Vec<Enr>) {
+        let local_node_id = self.local_enr().node_id();
+
+        // Acquire write lock here so that we can perform node lookup and insert/update atomically.
+        // Once we acquire the write lock for the routing table, there are no other locks that we
+        // need to acquire, so we should not create a deadlock.
+        let mut kbuckets = self.kbuckets.write();
+
+        for enr in enrs {
+            let node_id = enr.node_id();
+
+            // Ignore ourself.
+            if node_id == local_node_id {
+                continue;
+            }
+
+            let key = kbucket::Key::from(node_id);
+            let node = match kbuckets.entry(&key) {
+                kbucket::Entry::Present(entry, _) => Some(entry.value().clone()),
+                kbucket::Entry::Pending(ref mut entry, _) => Some(entry.value().clone()),
+                _ => None,
+            };
+
+            // If the node is in the routing table, then check to see if we should update its entry.
+            // If the node is not in the routing table, then add the node in a disconnected state.
+            // A subsequent ping will establish connectivity with the node. If the insertion succeeds,
+            // then add the node to the ping queue. Ignore insertion failures.
+            if let Some(present_node) = node {
+                if present_node.enr().seq() < enr.seq() {
+                    let updated_node = Node {
+                        enr,
+                        data_radius: present_node.data_radius(),
+                    };
+
+                    // The update removed the node because it would violate the incoming peers condition
+                    // or a bucket/table filter. Remove the node from the ping queue.
+                    if let UpdateResult::Failed(reason) =
+                        kbuckets.update_node(&key, updated_node, None)
+                    {
+                        self.peers_to_ping.remove(&node_id);
+                        debug!(
+                            "Failed to update discovered node. Node: {}, Reason: {:?}",
+                            node_id, reason
+                        );
+                    }
+                }
+            } else {
+                let node = Node {
+                    enr,
+                    data_radius: U256::from(u64::MAX),
+                };
+                let status = NodeStatus {
+                    state: ConnectionState::Disconnected,
+                    direction: ConnectionDirection::Outgoing,
+                };
+                match kbuckets.insert_or_update(&key, node, status) {
+                    InsertResult::Inserted => {
+                        debug!("Discovered node added to routing table. Node: {}", node_id);
+                        self.peers_to_ping.insert(node_id);
+                    }
+                    InsertResult::Pending { disconnected } => {
+                        // The disconnected node is the least-recently connected entry that is
+                        // currently considered disconnected. This node should be pinged to check
+                        // for connectivity.
+                        //
+                        // The discovered node was inserted as a pending entry that will be inserted
+                        // after some timeout if the disconnected node is not updated.
+                        if let kbucket::Entry::Present(node_to_ping, _) =
+                            kbuckets.entry(&disconnected)
+                        {
+                            self.ping_node(&node_to_ping.value().enr());
+                        }
+                    }
+                    _ => {
+                        debug!(
+                            "Discovered node not added to routing table. Node: {}",
+                            node_id
+                        );
+                    }
+                }
+            }
+        }
     }
 
     /// Submits a request to ping a destination (target) node.
@@ -1062,6 +1155,7 @@ mod tests {
     };
 
     use discv5::enr::{CombinedKey, EnrBuilder};
+    use rand::Rng;
     use tokio_test::{assert_pending, assert_ready, task};
 
     macro_rules! poll_request_rx {
@@ -1117,21 +1211,26 @@ mod tests {
         }
     }
 
-    fn generate_enr() -> Enr {
+    fn generate_random_remote_enr() -> (CombinedKey, Enr) {
         let key = CombinedKey::generate_secp256k1();
-        let ip = Ipv4Addr::new(192, 168, 0, 1);
-        EnrBuilder::new("v4")
+
+        let mut rng = rand::thread_rng();
+        let ip = Ipv4Addr::from(rng.gen::<u32>());
+
+        let enr = EnrBuilder::new("v4")
             .ip(ip.into())
-            .tcp(8000)
+            .udp(8000)
             .build(&key)
-            .unwrap()
+            .unwrap();
+
+        (key, enr)
     }
 
     #[tokio::test]
     async fn process_ping_source_in_table_higher_enr_seq() {
         let mut service = task::spawn(build_service());
 
-        let source = generate_enr();
+        let (_, source) = generate_random_remote_enr();
         let node_id = source.node_id();
         let key = kbucket::Key::from(node_id);
         let status = NodeStatus {
@@ -1184,7 +1283,7 @@ mod tests {
     async fn process_ping_source_not_in_table() {
         let mut service = task::spawn(build_service());
 
-        let source = generate_enr();
+        let (_, source) = generate_random_remote_enr();
         let node_id = source.node_id();
         let data_radius = U256::from(u64::MAX);
 
@@ -1202,7 +1301,7 @@ mod tests {
     async fn process_request_failure() {
         let mut service = task::spawn(build_service());
 
-        let destination = generate_enr();
+        let (_, destination) = generate_random_remote_enr();
         let node_id = destination.node_id();
         let key = kbucket::Key::from(node_id);
         let status = NodeStatus {
@@ -1243,16 +1342,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn process_response_source_in_table_disconnected() {}
-
-    #[tokio::test]
-    async fn process_response_source_not_in_table() {}
-
-    #[tokio::test]
     async fn process_pong_source_in_table_higher_enr_seq() {
         let mut service = task::spawn(build_service());
 
-        let source = generate_enr();
+        let (_, source) = generate_random_remote_enr();
         let node_id = source.node_id();
         let key = kbucket::Key::from(node_id);
         let status = NodeStatus {
@@ -1305,7 +1398,7 @@ mod tests {
     async fn process_pong_source_not_in_table() {
         let mut service = task::spawn(build_service());
 
-        let source = generate_enr();
+        let (_, source) = generate_random_remote_enr();
         let data_radius = U256::from(u64::MAX);
 
         let pong = Pong {
@@ -1319,10 +1412,128 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn process_discovered_enrs_unknown_enrs() {
+        let mut service = task::spawn(build_service());
+
+        // Generate random ENRs to simulate.
+        let (_, enr1) = generate_random_remote_enr();
+        let (_, enr2) = generate_random_remote_enr();
+
+        let mut enrs: Vec<Enr> = vec![];
+        enrs.push(enr1.clone());
+        enrs.push(enr2.clone());
+        service.process_discovered_enrs(enrs);
+
+        let key1 = kbucket::Key::from(enr1.node_id());
+        let key2 = kbucket::Key::from(enr2.node_id());
+
+        // Check routing table for first ENR.
+        // Node should be present in a disconnected state in the outgoing direction.
+        match service.kbuckets.write().entry(&key1) {
+            kbucket::Entry::Present(_entry, status) => {
+                assert_eq!(ConnectionState::Disconnected, status.state);
+                assert_eq!(ConnectionDirection::Outgoing, status.direction);
+            }
+            _ => panic!(),
+        };
+
+        // Check routing table for second ENR.
+        // Node should be present in a disconnected state in the outgoing direction.
+        match service.kbuckets.write().entry(&key2) {
+            kbucket::Entry::Present(_entry, status) => {
+                assert_eq!(ConnectionState::Disconnected, status.state);
+                assert_eq!(ConnectionDirection::Outgoing, status.direction);
+            }
+            _ => panic!(),
+        };
+
+        // Check ping queue for first ENR.
+        // Key for node should be present.
+        assert!(service.peers_to_ping.contains_key(&enr1.node_id()));
+
+        // Check ping queue for second ENR.
+        // Key for node should be present.
+        assert!(service.peers_to_ping.contains_key(&enr2.node_id()));
+    }
+
+    #[tokio::test]
+    async fn process_discovered_enrs_known_enrs() {
+        let mut service = task::spawn(build_service());
+
+        // Generate random ENRs to simulate.
+        let (sk1, mut enr1) = generate_random_remote_enr();
+        let (_, enr2) = generate_random_remote_enr();
+
+        let key1 = kbucket::Key::from(enr1.node_id());
+        let key2 = kbucket::Key::from(enr2.node_id());
+
+        let status = NodeStatus {
+            state: ConnectionState::Connected,
+            direction: ConnectionDirection::Outgoing,
+        };
+        let data_radius = U256::from(u64::MAX);
+
+        let node1 = Node {
+            enr: enr1.clone(),
+            data_radius: data_radius.clone(),
+        };
+        let node2 = Node {
+            enr: enr2.clone(),
+            data_radius: data_radius.clone(),
+        };
+
+        // Insert nodes into routing table.
+        let _ = service
+            .kbuckets
+            .write()
+            .insert_or_update(&key1, node1, status);
+        assert!(std::matches!(
+            service.kbuckets.write().entry(&key1),
+            kbucket::Entry::Present { .. }
+        ));
+        let _ = service
+            .kbuckets
+            .write()
+            .insert_or_update(&key2, node2, status);
+        assert!(std::matches!(
+            service.kbuckets.write().entry(&key2),
+            kbucket::Entry::Present { .. }
+        ));
+
+        // Modify first ENR to increment sequence number.
+        let updated_udp: u16 = 9000;
+        let _ = enr1.set_udp(updated_udp, &sk1);
+        assert_ne!(1, enr1.seq());
+
+        let mut enrs: Vec<Enr> = vec![];
+        enrs.push(enr1.clone());
+        enrs.push(enr2.clone());
+        service.process_discovered_enrs(enrs);
+
+        // Check routing table for first ENR.
+        // Node should be present with ENR sequence number equal to 2.
+        match service.kbuckets.write().entry(&key1) {
+            kbucket::Entry::Present(entry, _status) => {
+                assert_eq!(2, entry.value().enr.seq());
+            }
+            _ => panic!(),
+        };
+
+        // Check routing table for second ENR.
+        // Node should be present with ENR sequence number equal to 1.
+        match service.kbuckets.write().entry(&key2) {
+            kbucket::Entry::Present(entry, _status) => {
+                assert_eq!(1, entry.value().enr.seq());
+            }
+            _ => panic!(),
+        };
+    }
+
+    #[tokio::test]
     async fn request_node() {
         let mut service = task::spawn(build_service());
 
-        let destination = generate_enr();
+        let (_, destination) = generate_random_remote_enr();
         service.request_node(&destination);
 
         let request = assert_ready!(poll_request_rx!(service));
@@ -1350,7 +1561,7 @@ mod tests {
     async fn ping_node() {
         let mut service = task::spawn(build_service());
 
-        let destination = generate_enr();
+        let (_, destination) = generate_random_remote_enr();
         service.ping_node(&destination);
 
         let request = assert_ready!(poll_request_rx!(service));
@@ -1371,7 +1582,7 @@ mod tests {
     async fn connect_node() {
         let mut service = task::spawn(build_service());
 
-        let enr = generate_enr();
+        let (_, enr) = generate_random_remote_enr();
         let node_id = enr.node_id();
         let key = kbucket::Key::from(node_id);
 
@@ -1405,7 +1616,7 @@ mod tests {
     async fn update_node_connection_state_disconnected_to_connected() {
         let mut service = task::spawn(build_service());
 
-        let enr = generate_enr();
+        let (_, enr) = generate_random_remote_enr();
         let node_id = enr.node_id();
         let key = kbucket::Key::from(node_id);
 
@@ -1449,7 +1660,7 @@ mod tests {
     async fn update_node_connection_state_connected_to_disconnected() {
         let mut service = task::spawn(build_service());
 
-        let enr = generate_enr();
+        let (_, enr) = generate_random_remote_enr();
         let node_id = enr.node_id();
         let key = kbucket::Key::from(node_id);
 
