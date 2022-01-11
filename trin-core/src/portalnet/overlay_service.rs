@@ -18,7 +18,7 @@ use crate::{
         Enr,
     },
     utils::{
-        binary_string,
+        bytes,
         distance::{xor_two_values, DistanceError},
         hash_delay_queue::HashDelayQueue,
     },
@@ -88,10 +88,6 @@ pub enum OverlayRequestError {
 /// A NodeId error.
 #[derive(Clone, Error, Debug)]
 pub enum RandomNodeIdError<'a> {
-    /// A failure to generate random NodeId
-    #[error("Unable to generate random  NodeId")]
-    BinaryStringError(#[from] binary_string::BinaryStringError),
-
     /// Distance error
     #[error("Distance error: {0}")]
     DistanceError(#[from] DistanceError),
@@ -1020,8 +1016,7 @@ impl OverlayService {
     /// Then we XOR the result distance with the local NodeId to get the random target NodeId
     fn generate_random_node_id(&self, target_bucket_idx: u8) -> Result<NodeId, RandomNodeIdError> {
         let distance_leading_zeroes = 255 - target_bucket_idx;
-        let random_distance = binary_string::generate_random(distance_leading_zeroes);
-        let random_distance = binary_string::to_byte_array(&random_distance)?;
+        let random_distance = bytes::random_32byte_array(distance_leading_zeroes);
         let raw_node_id = xor_two_values(&self.local_enr().node_id().raw(), &random_distance)?;
         match NodeId::parse(raw_node_id.as_slice()) {
             Ok(node_id) => Ok(node_id),
