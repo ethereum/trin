@@ -308,24 +308,7 @@ impl Packet {
         &self.0[payload_begins..]
     }
 
-    fn set_selective_ack(&mut self, incoming_buffer: &BTreeMap<u16, Packet>, ack_nr: u16) {
-        // must be at least 4 bytes, and in multiples of 4
-        let incoming = incoming_buffer.range((ack_nr + 2)..);
-        let len = incoming.clone().count();
-        let k = if len % 32 != 0 {
-            (len / 32) + 1
-        } else {
-            len / 32
-        };
-
-        let mut sack_bitfield: Vec<u8> = vec![0u8; k * 4];
-
-        for (seq, _) in incoming {
-            let v = (seq - ack_nr - 2) as usize;
-            let (index, offset) = (v / 8, v % 8);
-            sack_bitfield[index] |= 1 << offset;
-        }
-
+    fn set_selective_ack(&mut self, sack_bitfield: Vec<u8>) {
         let mut extension = self.extension();
         let mut extension_begins = HEADER_SIZE;
 
@@ -658,6 +641,26 @@ impl UtpStream {
         self.send(&Packet::new(response)).await;
     }
 
+    fn build_selective_ack(&self) -> Vec<u8> {
+        // must be at least 4 bytes, and in multiples of 4
+        let incoming = self.incoming_buffer.range((self.ack_nr + 2)..);
+        let len = incoming.clone().count();
+        let k = if len % 32 != 0 {
+            (len / 32) + 1
+        } else {
+            len / 32
+        };
+
+        let mut sack_bitfield: Vec<u8> = vec![0u8; k * 4];
+
+        for (seq, _) in incoming {
+            let v = (seq - self.ack_nr - 2) as usize;
+            let (index, offset) = (v / 8, v % 8);
+            sack_bitfield[index] |= 1 << offset;
+        }
+        sack_bitfield
+    }
+
     async fn send_finalize(&self) {
         let mut response = PacketHeader::new();
         response.set_type(Type::StReset);
@@ -703,7 +706,8 @@ impl UtpStream {
 
         let mut reply = Packet::new(response);
         if packet.seq_nr().wrapping_sub(self.ack_nr) > 1 {
-            reply.set_selective_ack(&self.incoming_buffer, self.ack_nr);
+            let sack_bitfield = self.build_selective_ack();
+            reply.set_selective_ack(sack_bitfield);
         }
 
         self.send(&reply).await;
@@ -864,7 +868,6 @@ impl UtpStream {
 #[cfg(test)]
 mod tests {
     use crate::portalnet::utp::{Packet, PacketHeader, Type, VERSION};
-    use std::collections::BTreeMap;
     use std::convert::TryFrom;
 
     #[test]
@@ -988,25 +991,8 @@ mod tests {
         response.set_seq_nr(12044);
         response.set_ack_nr(12024);
 
-        let mut incoming_buffer: BTreeMap<u16, Packet> = Default::default();
-        incoming_buffer.insert(12045, Packet::new(PacketHeader::new()));
-        incoming_buffer.insert(12049, Packet::new(PacketHeader::new()));
-        incoming_buffer.insert(12050, Packet::new(PacketHeader::new()));
-        incoming_buffer.insert(12052, Packet::new(PacketHeader::new()));
-        incoming_buffer.insert(12049, Packet::new(PacketHeader::new()));
-        incoming_buffer.insert(12053, Packet::new(PacketHeader::new()));
-        incoming_buffer.insert(12054, Packet::new(PacketHeader::new()));
-        incoming_buffer.insert(12057, Packet::new(PacketHeader::new()));
-        incoming_buffer.insert(12067, Packet::new(PacketHeader::new()));
-        incoming_buffer.insert(12069, Packet::new(PacketHeader::new()));
-        incoming_buffer.insert(12070, Packet::new(PacketHeader::new()));
-        incoming_buffer.insert(12072, Packet::new(PacketHeader::new()));
-        incoming_buffer.insert(12074, Packet::new(PacketHeader::new()));
-
         let mut reply = Packet::new(response);
-        if reply.seq_nr().wrapping_sub(12048) > 1 {
-            reply.set_selective_ack(&incoming_buffer, 12048);
-        }
+        reply.set_selective_ack(vec![0b1001_1101, 0b0000_0000, 0b0101_1010, 0b0000_0001]);
 
         assert_eq!(reply.get_extensions()[0].bitmask[0], 0b1001_1101);
         assert_eq!(reply.get_extensions()[0].bitmask[1], 0b0000_0000);
@@ -1030,7 +1016,7 @@ mod tests {
 
         let packet = Packet::new(response);
         assert_eq!(
-            hex::encode(packet.0.clone()),
+            hex::encode(packet.0),
             "41002741c9b699ba00000000001000002e6c0000"
         );
     }
@@ -1048,7 +1034,7 @@ mod tests {
 
         let packet = Packet::new(response);
         assert_eq!(
-            hex::encode(packet.0.clone()),
+            hex::encode(packet.0),
             "21002741005e885e36a7e8830010000041a72e6d"
         );
     }
@@ -1064,17 +1050,11 @@ mod tests {
         response.set_seq_nr(16807);
         response.set_ack_nr(11885);
 
-        let mut incoming_buffer: BTreeMap<u16, Packet> = Default::default();
-        incoming_buffer.insert(12050, Packet::new(PacketHeader::new()));
-        incoming_buffer.insert(12081, Packet::new(PacketHeader::new()));
-
         let mut reply = Packet::new(response);
+        reply.set_selective_ack(vec![1, 0, 0, 128]);
 
-        if reply.seq_nr().wrapping_sub(12048) > 1 {
-            reply.set_selective_ack(&incoming_buffer, 12048);
-        }
         assert_eq!(
-            hex::encode(reply.0.clone()),
+            hex::encode(reply.0),
             "21012741005e885e36a7e8830010000041a72e6d000401000080"
         );
     }
@@ -1092,7 +1072,7 @@ mod tests {
 
         let packet = Packet::with_payload(response, &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
         assert_eq!(
-            hex::encode(packet.0.clone()),
+            hex::encode(packet.0),
             "0100667d0f0cbacf0e710cbf00100000208e41a600010203040506070809"
         );
     }
@@ -1110,7 +1090,7 @@ mod tests {
 
         let packet = Packet::new(response);
         assert_eq!(
-            hex::encode(packet.0.clone()),
+            hex::encode(packet.0),
             "11004a3b1eb5be8f1e7c94d100100000a05a41a6"
         );
     }
@@ -1128,7 +1108,7 @@ mod tests {
 
         let packet = Packet::new(response);
         assert_eq!(
-            hex::encode(packet.0.clone()),
+            hex::encode(packet.0),
             "3100f34d2cc6cfbb0000000000000000d87541a7"
         );
     }
