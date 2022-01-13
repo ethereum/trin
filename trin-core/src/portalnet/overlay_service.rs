@@ -488,13 +488,38 @@ impl OverlayService {
 
     /// Attempts to build a `Content` response for a `FindContent` request.
     fn handle_find_content(&self, request: FindContent) -> Result<Content, OverlayRequestError> {
-        match self.db.get(&request.content_key) {
+        // Attempt to derive the content ID for the content key.
+        let content_id = match self.protocol {
+            ProtocolId::State => {
+                let state_content_key =
+                    StateContentKey::from_bytes(request.content_key.as_slice())?;
+                state_content_key.derive_content_id()?
+            }
+            ProtocolId::History => {
+                let history_content_key =
+                    HistoryContentKey::from_bytes(request.content_key.as_slice())?;
+                history_content_key.derive_content_id()?
+            }
+            _ => {
+                warn!(
+                    "Attempt to find undefined content for {:?} protocol",
+                    self.protocol
+                );
+                return Err(OverlayRequestError::InvalidRequest(format!(
+                    "Content undefined for {:?} protocol",
+                    self.protocol,
+                )));
+            }
+        };
+
+        let content_id = Into::<[u8; 32]>::into(content_id).to_vec();
+        match self.db.get(&content_id) {
             Ok(Some(value)) => {
                 let content = ByteList::from(VariableList::from(value));
                 Ok(Content::Content(content))
             }
             Ok(None) => {
-                let enrs = self.find_nodes_close_to_content(request.content_key);
+                let enrs = self.find_nodes_close_to_content(content_id);
                 match enrs {
                     Ok(val) => Ok(Content::Enrs(val)),
                     Err(msg) => Err(OverlayRequestError::InvalidRequest(msg.to_string())),
@@ -888,35 +913,10 @@ impl OverlayService {
     /// Returns list of nodes closer to content than self, sorted by distance.
     fn find_nodes_close_to_content(
         &self,
-        content_key: Vec<u8>,
+        content_id: Vec<u8>,
     ) -> Result<Vec<SszEnr>, OverlayRequestError> {
-        // Attempt to derive the content ID for the content key.
-        let content_id = match self.protocol {
-            ProtocolId::State => {
-                let state_content_key = StateContentKey::from_bytes(content_key.as_slice())?;
-                state_content_key.derive_content_id()?
-            }
-            ProtocolId::History => {
-                let history_content_key = HistoryContentKey::from_bytes(content_key.as_slice())?;
-                history_content_key.derive_content_id()?
-            }
-            _ => {
-                warn!(
-                    "Attempt to find undefined content for {:?} protocol",
-                    self.protocol
-                );
-                return Err(OverlayRequestError::InvalidRequest(format!(
-                    "Content undefined for {:?} protocol",
-                    self.protocol,
-                )));
-            }
-        };
-
         let self_node_id = self.local_enr().node_id();
-        let self_distance = match xor_two_values(
-            &Into::<[u8; 32]>::into(content_id).to_vec(),
-            &self_node_id.raw().to_vec(),
-        ) {
+        let self_distance = match xor_two_values(&content_id, &self_node_id.raw().to_vec()) {
             Ok(val) => val,
             Err(msg) => {
                 return Err(OverlayRequestError::InvalidRequest(format!(
@@ -932,7 +932,7 @@ impl OverlayService {
             .map(|enr| {
                 (
                     // naked unwrap since content key len has already been validated
-                    xor_two_values(&content_key, &enr.node_id().raw().to_vec()).unwrap(),
+                    xor_two_values(&content_id, &enr.node_id().raw().to_vec()).unwrap(),
                     enr,
                 )
             })
