@@ -8,7 +8,7 @@ jobs:
             Check linting with Clippy and rustfmt, build the crate, and run tests.
         executor:
             name: rust/default
-            tag: 1.56.1
+            tag: 1.58.0
         environment:
             RUSTFLAGS: '-D warnings'
         steps:
