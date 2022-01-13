@@ -52,6 +52,15 @@ construct_uint! {
     pub struct U256(4);
 }
 
+/// Convert u256 to 32 byte array
+impl U256 {
+    pub fn to_32_byte_array(self) -> [u8; 32] {
+        let mut byte_array = [0; 32];
+        self.to_big_endian(byte_array.as_mut_slice());
+        byte_array
+    }
+}
+
 // Taken from https://github.com/sigp/lighthouse/blob/stable/consensus/ssz/src/encode/impls.rs
 impl ssz::Encode for U256 {
     fn is_ssz_fixed_len() -> bool {

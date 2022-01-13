@@ -47,6 +47,9 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     discovery.start().await.unwrap();
     let discovery = Arc::new(discovery);
 
+    // Search for discv5 peers (bucket refresh lookup)
+    tokio::spawn(Arc::clone(&discovery).bucket_refresh_lookup());
+
     // Setup Overlay database
     let db = Arc::new(setup_overlay_db(discovery.local_enr().node_id()));
 
