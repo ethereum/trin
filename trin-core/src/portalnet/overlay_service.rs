@@ -6,8 +6,8 @@ use std::time::Duration;
 
 use crate::locks::RwLoggingExt;
 use crate::portalnet::types::messages::{Accept, Offer};
-use crate::utp::utp::UtpListener;
-use crate::utp::utp_types::UtpMessageId;
+use crate::utp::stream::UtpListener;
+use crate::utp::trin_helpers::UtpMessageId;
 use crate::{
     portalnet::{
         discovery::Discovery,
@@ -592,7 +592,7 @@ impl OverlayService {
     fn handle_offer(&self, request: Offer) -> Result<Accept, OverlayRequestError> {
         let mut requested_keys = BitList::with_capacity(request.content_keys.len())
             .map_err(|e| OverlayRequestError::AcceptError(e))?;
-        let connection_id: u16 = crate::utp::utp::rand();
+        let connection_id: u16 = crate::utp::stream::rand();
 
         for (i, key) in request.content_keys.iter().enumerate() {
             // should_store is currently a dummy function

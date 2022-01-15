@@ -15,7 +15,7 @@ use trin_core::portalnet::discovery::Discovery;
 use trin_core::portalnet::events::PortalnetEvents;
 use trin_core::portalnet::types::messages::PortalnetConfig;
 use trin_core::utils::db::setup_overlay_db;
-use trin_core::utp::utp::UtpListener;
+use trin_core::utp::stream::UtpListener;
 
 pub mod events;
 mod jsonrpc;

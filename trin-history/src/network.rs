@@ -7,7 +7,7 @@ use trin_core::portalnet::{
     overlay::{OverlayConfig, OverlayProtocol, OverlayRequestError},
     types::messages::{PortalnetConfig, ProtocolId},
 };
-use trin_core::utp::utp::UtpListener;
+use trin_core::utp::stream::UtpListener;
 
 /// History network layer on top of the overlay protocol. Encapsulates history network specific data and logic.
 #[derive(Clone)]

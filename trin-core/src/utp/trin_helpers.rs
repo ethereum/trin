@@ -1,10 +1,8 @@
-// The code here isn't affiliated with utp.rs and isn't part of the uTP implementation
-// this code is used in handling the uTP responses handled in events.rs.
-// just a clarification. It is just for handling the uTP stream higher up what utp.rs releases.
+// These are just some Trin helper functions
 
 use ssz_derive::{Decode, Encode};
 
-// These Utp impl are related to sending messages over uTP not the implementation itself or utp.rs
+// These Utp impl are related to sending messages over uTP not the implementation itself or stream
 pub struct UtpMessage {
     pub length: u32,
     pub payload: Vec<u8>,
@@ -27,7 +25,7 @@ impl UtpMessage {
 
     pub fn decode(bytes: &[u8]) -> Result<UtpMessage, String> {
         if bytes.len() >= 4 {
-            let len = u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+            let len = u32::from_be_bytes(bytes[0..4].try_into().unwrap());
             if len + 4 <= bytes.len() as u32 {
                 let mut payload_vec: Vec<u8> = vec![];
                 payload_vec.extend_from_slice(&bytes[4..(len as usize + 4)]);
@@ -68,7 +66,7 @@ pub enum UtpMessageId {
 
 #[cfg(test)]
 mod tests {
-    use crate::utp::utp_types::UtpMessage;
+    use crate::utp::trin_helpers::UtpMessage;
 
     #[test]
     fn test_too_short_message() {

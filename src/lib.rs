@@ -7,7 +7,7 @@ use tokio::sync::{mpsc, RwLock};
 use trin_core::jsonrpc::handlers::JsonRpcHandler;
 use trin_core::jsonrpc::types::PortalJsonRpcRequest;
 use trin_core::portalnet::events::PortalnetEvents;
-use trin_core::utp::utp::UtpListener;
+use trin_core::utp::stream::UtpListener;
 use trin_core::{
     cli::{TrinConfig, HISTORY_NETWORK, STATE_NETWORK},
     jsonrpc::service::{launch_jsonrpc_server, JsonRpcExiter},

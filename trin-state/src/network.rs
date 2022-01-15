@@ -9,7 +9,7 @@ use trin_core::portalnet::{
     overlay::{OverlayConfig, OverlayProtocol, OverlayRequestError},
     types::messages::{PortalnetConfig, ProtocolId},
 };
-use trin_core::utp::utp::UtpListener;
+use trin_core::utp::stream::UtpListener;
 
 use crate::trie::TrieDB;
 

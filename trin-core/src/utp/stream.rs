@@ -14,7 +14,7 @@ use tokio::sync::mpsc;
 
 use crate::portalnet::types::messages::ProtocolId;
 use crate::utp::packets::{Packet, PacketHeader, PacketType, HEADER_SIZE};
-use crate::utp::utp_types::{UtpMessageId, UtpStreamState};
+use crate::utp::trin_helpers::{UtpMessageId, UtpStreamState};
 
 pub const MAX_DISCV5_PACKET_SIZE: usize = 1280;
 pub const MIN_PACKET_SIZE: usize = 150;
@@ -84,15 +84,6 @@ impl UtpListener {
             Ok(packet) => {
                 let connection_id = packet.connection_id();
 
-                // Only handle packets if they are on our watchlist and have been negotiated
-                // I believe this is what is meant in the specs when they say after getting this message
-                // Listen for a response
-                // [discv5-utp]: https://github.com/ethereum/portal-network-specs/blob/master/discv5-utp.md?plain=1#L26
-
-                // todo: uncomment this at a future date, as this makes it harder to test with other
-                // clients for the time being
-                //match self.listening.get(&connection_id.clone()) {
-                //    Some(_) =>
                 match packet.type_() {
                     PacketType::Reset => {
                         let key_fn =
@@ -117,7 +108,7 @@ impl UtpListener {
                             // If neither of those cases happened handle this is a new request
                             let (tx, _) = mpsc::unbounded_channel::<UtpStreamState>();
                             let mut conn = UtpStream::init(Arc::clone(&self.discovery), enr, tx);
-                            conn.handle_packet(packet).await;
+                            conn.handle_packet(packet);
                             self.utp_connections.insert(
                                 ConnectionKey {
                                     node_id: *node_id,
@@ -138,8 +129,6 @@ impl UtpListener {
                         }
                     }
                 }
-                //    None => debug!("uTP message connection_id isn't in our listening list"),
-                //}
             }
             Err(e) => {
                 debug!("Failed to decode packet: {}", e);

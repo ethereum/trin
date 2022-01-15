@@ -6,8 +6,9 @@ use tokio::sync::{mpsc, RwLock};
 
 use super::discovery::Discovery;
 use super::types::messages::ProtocolId;
+use crate::locks::RwLoggingExt;
 use crate::utp::stream::UtpListener;
-use crate::utp::utp_types::{UtpAccept, UtpMessage, UtpMessageId};
+use crate::utp::trin_helpers::{UtpAccept, UtpMessage, UtpMessageId};
 use hex;
 use ssz::Decode;
 use std::str::FromStr;
@@ -89,8 +90,7 @@ impl PortalnetEvents {
                         self.utp_listener
                             .write_with_warn()
                             .await
-                            .process_utp_request(request.body(), request.node_id())
-                            .await;
+                            .process_utp_request(request.body(), request.node_id());
                         // handles actual data sent over utp. eg, stores data in db
                         self.process_utp_byte_stream().await;
                     }
