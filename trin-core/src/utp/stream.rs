@@ -524,7 +524,7 @@ impl UtpStream {
             self.state = ConnectionState::Disconnected;
 
             let mut response = PacketHeader::new();
-            response.set_type(PacketType::Fin);
+            response.set_type(PacketType::State);
             response.set_connection_id(self.conn_id_send);
             response.set_timestamp(get_time());
             response.set_timestamp_difference(get_time_diff(packet.timestamp()));
