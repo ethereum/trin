@@ -4,8 +4,9 @@ use discv5::{Discv5Event, TalkRequest};
 use log::{debug, warn};
 use tokio::sync::mpsc;
 
+use super::discovery::Discovery;
 use super::types::messages::ProtocolId;
-use super::{discovery::Discovery, utp::UtpListener};
+use crate::utp::stream::UtpListener;
 use hex;
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -89,8 +90,7 @@ impl PortalnetEvents {
                     }
                     ProtocolId::Utp => {
                         self.utp_listener
-                            .process_utp_request(request.body(), request.node_id())
-                            .await;
+                            .process_utp_request(request.body(), request.node_id());
                         self.process_utp_byte_stream().await;
                     }
                     _ => {

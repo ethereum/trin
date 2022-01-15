@@ -8,6 +8,5 @@ pub mod overlay;
 mod overlay_service;
 pub mod storage;
 pub mod types;
-pub mod utp;
 
 pub type Enr = discv5::enr::Enr<CombinedKey>;

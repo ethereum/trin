@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use super::discovery::Discovery;
+use crate::portalnet::discovery::Discovery;
 use core::convert::TryFrom;
 use discv5::enr::NodeId;
 use discv5::Enr;
@@ -9,11 +9,11 @@ use rand::Rng;
 use std::cmp::{max, min};
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::portalnet::types::messages::ProtocolId;
+use crate::utp::packets::{Packet, PacketHeader, PacketType, HEADER_SIZE};
 
-pub const HEADER_SIZE: usize = 20;
 pub const MAX_DISCV5_PACKET_SIZE: usize = 1280;
 pub const MIN_PACKET_SIZE: usize = 150;
 const MIN_DISCV5_PACKET_SIZE: usize = 63;
@@ -21,321 +21,6 @@ const MIN_DISCV5_PACKET_SIZE: usize = 63;
 const CCONTROL_TARGET: usize = 100 * 1000;
 const MAX_CWND_INCREASE_BYTES_PER_RTT: usize = 3000;
 const MIN_WINDOW_SIZE: usize = 10;
-const VERSION: u8 = 1;
-
-#[derive(PartialEq, Debug)]
-enum Type {
-    StData,
-    StFin,
-    StState,
-    StReset,
-    StSyn,
-}
-
-impl TryFrom<u8> for Type {
-    type Error = &'static str;
-
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        match value {
-            0 => Ok(Type::StData),
-            1 => Ok(Type::StFin),
-            2 => Ok(Type::StState),
-            3 => Ok(Type::StReset),
-            4 => Ok(Type::StSyn),
-            _ => Err("invalid packet type"),
-        }
-    }
-}
-
-impl From<Type> for u8 {
-    fn from(value: Type) -> u8 {
-        match value {
-            Type::StData => 0,
-            Type::StFin => 1,
-            Type::StState => 2,
-            Type::StReset => 3,
-            Type::StSyn => 4,
-        }
-    }
-}
-
-impl<'a> TryFrom<&'a [u8]> for PacketHeader {
-    type Error = &'static str;
-
-    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        if value.len() < HEADER_SIZE {
-            return Err("invalid header size");
-        }
-
-        if value[0] & 0xf != VERSION {
-            return Err("invalid packet version");
-        }
-
-        if let Err(e) = Type::try_from(value[0] >> 4) {
-            return Err(e);
-        }
-
-        Ok(PacketHeader::decode(value))
-    }
-}
-
-fn check_extensions(data: &[u8]) -> Result<(), &'static str> {
-    if data.len() < HEADER_SIZE {
-        return Err("invalid header size");
-    }
-
-    let mut extension = data[1];
-    let mut index = HEADER_SIZE;
-
-    // must be at least 4 bytes, and in multiples of 4
-    while extension != 0 {
-        if data.len() < index + 2 {
-            return Err("Invalid packet length");
-        }
-        extension = data[index];
-        let len = data[index + 1] as usize;
-
-        if len == 0 || len % 4 != 0 || len + index + 2 > data.len() {
-            return Err("Invalid Extension Length");
-        }
-
-        index += len + 2;
-    }
-    Ok(())
-}
-
-impl<'a> TryFrom<&'a [u8]> for Packet {
-    type Error = &'static str;
-
-    // todo: Added support to check validity of extensions,
-    // we don't need to worry about checking payloads
-    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        match PacketHeader::try_from(value).and(check_extensions(value)) {
-            Ok(_) => Ok(Packet(value.to_owned())),
-            Err(e) => Err(e),
-        }
-    }
-}
-
-#[derive(Debug)]
-struct PacketHeader {
-    type_ver: u8,
-    extension: u8,
-    connection_id: u16,
-    // This time is in microseconds
-    timestamp: u32,
-    timestamp_difference: u32,
-    wnd_size: u32,
-    seq_nr: u16,
-    ack_nr: u16,
-}
-
-impl PacketHeader {
-    fn new() -> Self {
-        PacketHeader {
-            type_ver: u8::from(Type::StData) << 4 | VERSION,
-            extension: 0,
-            connection_id: 0,
-            timestamp: 0,
-            timestamp_difference: 0,
-            wnd_size: 0xf000,
-            seq_nr: 0,
-            ack_nr: 0,
-        }
-    }
-
-    fn encode(&mut self) -> Vec<u8> {
-        let mut buf = vec![];
-        buf.extend_from_slice(&[self.type_ver]);
-        buf.extend_from_slice(&[self.extension]);
-        buf.extend_from_slice(&self.connection_id.to_be_bytes());
-        buf.extend_from_slice(&self.timestamp.to_be_bytes());
-        buf.extend_from_slice(&self.timestamp_difference.to_be_bytes());
-        buf.extend_from_slice(&self.wnd_size.to_be_bytes());
-        buf.extend_from_slice(&self.seq_nr.to_be_bytes());
-        buf.extend_from_slice(&self.ack_nr.to_be_bytes());
-        buf
-    }
-
-    fn decode(bytes: &[u8]) -> PacketHeader {
-        PacketHeader {
-            type_ver: bytes[0],
-            extension: bytes[1],
-            connection_id: u16::from_be_bytes([bytes[2], bytes[3]]),
-            timestamp: u32::from_be_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]),
-            timestamp_difference: u32::from_be_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]),
-            wnd_size: u32::from_be_bytes([bytes[12], bytes[13], bytes[14], bytes[15]]),
-            seq_nr: u16::from_be_bytes([bytes[16], bytes[17]]),
-            ack_nr: u16::from_be_bytes([bytes[18], bytes[19]]),
-        }
-    }
-
-    fn version(&self) -> u8 {
-        self.type_ver & 0xf
-    }
-    fn set_version(&mut self, int: u8) {
-        self.type_ver = (self.type_ver & 0xf0) | (int & 0xf)
-    }
-    fn type_(&self) -> Type {
-        Type::try_from(self.type_ver >> 4).unwrap()
-    }
-    fn set_type(&mut self, t: Type) {
-        self.type_ver = (self.type_ver & 0xf) | (u8::from(t) << 4)
-    }
-
-    fn set_connection_id(&mut self, connection_id: u16) {
-        self.connection_id = connection_id;
-    }
-
-    fn set_timestamp(&mut self, timestamp: u32) {
-        self.timestamp = timestamp;
-    }
-
-    fn set_timestamp_difference(&mut self, timestamp_difference: u32) {
-        self.timestamp_difference = timestamp_difference;
-    }
-
-    fn set_wnd_size(&mut self, wnd_size: u32) {
-        self.wnd_size = wnd_size;
-    }
-
-    fn set_seq_nr(&mut self, seq_nr: u16) {
-        self.seq_nr = seq_nr;
-    }
-
-    fn set_ack_nr(&mut self, ack_nr: u16) {
-        self.ack_nr = ack_nr;
-    }
-}
-
-#[derive(Debug)]
-struct Extension {
-    extension_type: u8,
-    len: u8,
-    bitmask: Vec<u8>,
-}
-
-#[derive(Clone, Debug)]
-struct Packet(Vec<u8>);
-
-impl Packet {
-    fn new(mut packet_header: PacketHeader) -> Packet {
-        let mut vec = Vec::with_capacity(HEADER_SIZE);
-        vec.append(&mut packet_header.encode());
-        Packet(vec)
-    }
-
-    fn with_payload(mut packet_header: PacketHeader, payload: &[u8]) -> Packet {
-        let mut vec = Vec::with_capacity(HEADER_SIZE + payload.len());
-        vec.append(&mut packet_header.encode());
-        vec.extend_from_slice(payload);
-        Packet(vec)
-    }
-
-    fn from_slice(bytes: &[u8]) -> Self {
-        Self(bytes.to_vec())
-    }
-
-    fn get_header(&self) -> PacketHeader {
-        PacketHeader::decode(&self.0[0..20])
-    }
-
-    fn type_(&self) -> Type {
-        self.get_header().type_()
-    }
-
-    fn version(&self) -> u8 {
-        self.get_header().version()
-    }
-
-    fn extension(&self) -> u8 {
-        self.get_header().extension
-    }
-
-    fn connection_id(&self) -> u16 {
-        self.get_header().connection_id
-    }
-
-    fn timestamp(&self) -> u32 {
-        self.get_header().timestamp
-    }
-
-    fn timestamp_difference(&self) -> u32 {
-        self.get_header().timestamp_difference
-    }
-
-    fn wnd_size(&self) -> u32 {
-        self.get_header().wnd_size
-    }
-
-    fn seq_nr(&self) -> u16 {
-        self.get_header().seq_nr
-    }
-
-    fn ack_nr(&self) -> u16 {
-        self.get_header().ack_nr
-    }
-
-    fn get_extensions(&self) -> Vec<Extension> {
-        let mut extensions: Vec<Extension> = Vec::default();
-        let mut extension = self.extension();
-        let mut extension_begins = HEADER_SIZE;
-        while extension != 0 {
-            let len = self.0[extension_begins + 1];
-            let ext = Extension {
-                extension_type: extension,
-                len,
-                bitmask: Vec::from(
-                    &self.0[(extension_begins + 2)..(extension_begins + len as usize + 2)],
-                ),
-            };
-            extensions.push(ext);
-
-            extension = self.0[extension_begins];
-            extension_begins += (len + 2) as usize;
-        }
-        extensions
-    }
-
-    fn get_payload(&self) -> &[u8] {
-        let mut extension = self.extension();
-        let mut payload_begins = HEADER_SIZE;
-        while extension != 0 {
-            extension = self.0[payload_begins];
-            let len = self.0[payload_begins + 1];
-            payload_begins += (len + 2) as usize;
-        }
-        &self.0[payload_begins..]
-    }
-
-    fn set_selective_ack(&mut self, sack_bitfield: Vec<u8>) {
-        let mut extension = self.extension();
-        let mut extension_begins = HEADER_SIZE;
-
-        if !sack_bitfield.is_empty() {
-            if self.0[1] == 0 {
-                self.0[1] = 1;
-            } else {
-                while extension != 0 {
-                    extension = self.0[extension_begins];
-                    let len = self.0[extension_begins + 1];
-                    extension_begins += (len + 2) as usize;
-
-                    if extension == 0 {
-                        self.0[extension_begins] = 1;
-                    }
-                }
-            }
-
-            self.0.insert(extension_begins, 0);
-            self.0
-                .insert(extension_begins + 1, sack_bitfield.len() as u8);
-            for (i, byte) in sack_bitfield.iter().enumerate() {
-                self.0.insert(extension_begins + 2 + i, *byte);
-            }
-        }
-    }
-}
 
 fn get_time() -> u32 {
     (SystemTime::now()
@@ -355,12 +40,12 @@ fn get_time_diff(response_time: u32) -> u32 {
     }
 }
 
-fn rand() -> u16 {
+pub fn rand() -> u16 {
     rand::thread_rng().gen()
 }
 
 #[derive(PartialEq, Clone)]
-enum ConnectionState {
+pub enum ConnectionState {
     Uninitialized,
     SynSent,
     SynRecv,
@@ -370,8 +55,8 @@ enum ConnectionState {
 
 #[derive(Hash, Eq, PartialEq, Copy, Clone, Debug)]
 pub struct ConnectionKey {
-    node_id: NodeId,
-    conn_id_recv: u16,
+    pub node_id: NodeId,
+    pub conn_id_recv: u16,
 }
 
 impl ConnectionKey {
@@ -390,16 +75,15 @@ pub struct UtpListener {
 }
 
 impl UtpListener {
-    pub async fn process_utp_request(&mut self, payload: &[u8], node_id: &NodeId) {
+    pub fn process_utp_request(&mut self, payload: &[u8], node_id: &NodeId) {
         match Packet::try_from(payload) {
             Ok(packet) => {
                 let connection_id = packet.connection_id();
 
                 match packet.type_() {
-                    Type::StReset => {
-                        let key_fn = |offset| {
-                            ConnectionKey::new(node_id.clone(), connection_id - 1 + offset)
-                        };
+                    PacketType::Reset => {
+                        let key_fn =
+                            |offset| ConnectionKey::new(*node_id, connection_id - 1 + offset);
                         let f =
                             |conn: &&mut UtpStream| -> bool { conn.conn_id_send == connection_id };
 
@@ -415,14 +99,14 @@ impl UtpListener {
                             conn.state = ConnectionState::Disconnected;
                         }
                     }
-                    Type::StSyn => {
-                        if let Some(enr) = self.discovery.discv5.find_enr(&node_id) {
+                    PacketType::Syn => {
+                        if let Some(enr) = self.discovery.discv5.find_enr(node_id) {
                             // If neither of those cases happened handle this is a new request
                             let mut conn = UtpStream::init(Arc::clone(&self.discovery), enr);
-                            conn.handle_packet(packet).await;
+                            conn.handle_packet(packet);
                             self.utp_connections.insert(
                                 ConnectionKey {
-                                    node_id: node_id.clone(),
+                                    node_id: *node_id,
                                     conn_id_recv: conn.conn_id_recv,
                                 },
                                 conn,
@@ -433,10 +117,10 @@ impl UtpListener {
                     }
                     _ => {
                         if let Some(conn) = self.utp_connections.get_mut(&ConnectionKey {
-                            node_id: node_id.clone(),
+                            node_id: *node_id,
                             conn_id_recv: connection_id,
                         }) {
-                            conn.handle_packet(packet).await;
+                            conn.handle_packet(packet);
                         }
                     }
                 }
@@ -448,10 +132,10 @@ impl UtpListener {
     }
 
     // I am honestly not sure if I should init this with Enr or NodeId since we could use both
-    async fn connect(&mut self, connection_id: u16, node_id: NodeId) {
+    fn connect(&mut self, connection_id: u16, node_id: NodeId) {
         if let Some(enr) = self.discovery.discv5.find_enr(&node_id) {
             let mut conn = UtpStream::init(Arc::clone(&self.discovery), enr);
-            conn.make_connection(connection_id).await;
+            conn.make_connection(connection_id);
             self.utp_connections.insert(
                 ConnectionKey {
                     node_id,
@@ -469,11 +153,10 @@ pub struct UtpStream {
     state: ConnectionState,
     seq_nr: u16,
     ack_nr: u16,
-    conn_id_recv: u16,
+    pub conn_id_recv: u16,
     conn_id_send: u16,
     // maximum window size, in bytes
     max_window: u32,
-    // A buffer of packets will be sorted and concatenated on socket close.
     // <seq_nr, packet>
     incoming_buffer: BTreeMap<u16, Packet>,
     unsent_queue: VecDeque<Packet>,
@@ -525,54 +208,62 @@ impl UtpStream {
         }
     }
 
-    // If you want to send a payload call this it is basically just write
-    async fn write(&mut self, message: &[u8]) {
+    /// Writes a message to the uTP stream
+    pub fn write(&mut self, message: &[u8]) {
         for chunk in message.chunks(MAX_DISCV5_PACKET_SIZE - MIN_DISCV5_PACKET_SIZE - HEADER_SIZE) {
             let mut response = PacketHeader::new();
-            response.set_type(Type::StData);
+            response.set_type(PacketType::Data);
             response.set_connection_id(self.conn_id_send);
             response.set_timestamp(get_time());
             response.set_timestamp_difference(0);
             response.set_seq_nr(self.seq_nr);
             response.set_ack_nr(self.ack_nr);
 
-            self.seq_nr = self.seq_nr + 1;
+            self.seq_nr += 1;
             let packet = Packet::with_payload(response, chunk);
             self.unsent_queue.push_back(packet)
         }
 
-        self.send_packets_in_queue().await;
+        self.send_packets_in_queue();
     }
 
-    async fn send_packets_in_queue(&mut self) {
+    fn send_packets_in_queue(&mut self) {
         while let Some(packet) = self.unsent_queue.pop_front() {
-            self.send(&packet).await;
+            self.send(packet.clone());
             self.cur_window += packet.0.len() as u32;
             self.send_window.insert(packet.get_header().seq_nr, packet);
         }
     }
 
-    async fn resend_packet(&self, seq_nr: u16) {
+    fn resend_packet(&self, seq_nr: u16) {
         if let Some(packet) = self.send_window.get(&seq_nr) {
-            self.send(&packet).await;
+            self.send(packet.clone());
         }
     }
 
-    async fn send(&self, packet: &Packet) {
+    fn send(&self, packet: Packet) {
         let max_send = max(
             MAX_DISCV5_PACKET_SIZE,
             min(self.max_window as usize, self.remote_wnd_size as usize),
         );
-        while self.cur_window + packet.0.len() as u32 > max_send as u32 {
-            // I might change the amount of milliseconds later, but this sleep is just so
-            // It doesn't waste cpu cycles well waiting.
-            tokio::time::sleep(Duration::from_millis(100)).await;
+        let now = get_time();
+
+        // Wait for rate control, but don't wait forever
+        while self.cur_window + packet.0.len() as u32 > max_send as u32 && get_time() - now < 500000
+        {
+            debug!("max_send {}", max_send);
         }
-        let talk_request_result = self
-            .discovery
-            .send_talk_req(self.enr.clone(), ProtocolId::Utp, packet.0.clone())
-            .await;
-        debug!("uTP TalkRequest result: {:?}", talk_request_result);
+
+        let enr = self.enr.clone();
+        let discovery = self.discovery.clone();
+
+        // Handle talkreq/talkresp in the background
+        tokio::spawn(async move {
+            let talk_request_result = discovery
+                .send_talk_req(enr, ProtocolId::Utp, packet.0.clone())
+                .await;
+            debug!("uTP TalkRequest result: {:?}", talk_request_result);
+        });
     }
 
     fn update_base_delay(&mut self, delay: u32, now: u32) {
@@ -589,15 +280,13 @@ impl UtpStream {
     }
 
     fn update_current_delay(&mut self, delay: u32) {
-        if self.current_delay.len() < 8 {
-            self.current_delay.push(delay);
-        } else {
+        if !self.current_delay.len() < 8 {
             self.current_delay = self.current_delay[1..].to_owned();
-            self.current_delay.push(delay);
         }
+        self.current_delay.push(delay);
     }
 
-    fn filter(current_delay: &Vec<u32>) -> u32 {
+    fn filter(current_delay: &[u32]) -> u32 {
         let filt = (current_delay.len() as f64 / 3_f64).ceil() as usize;
         *current_delay[current_delay.len() - filt..]
             .iter()
@@ -605,7 +294,7 @@ impl UtpStream {
             .unwrap()
     }
 
-    async fn make_connection(&mut self, connection_id: u16) {
+    fn make_connection(&mut self, connection_id: u16) {
         if self.state == ConnectionState::Uninitialized {
             self.state = ConnectionState::SynSent;
             self.seq_nr = 1;
@@ -613,32 +302,32 @@ impl UtpStream {
             self.conn_id_send = self.conn_id_recv + 1;
 
             let mut response = PacketHeader::new();
-            response.set_type(Type::StSyn);
+            response.set_type(PacketType::Syn);
             response.set_connection_id(self.conn_id_recv);
             response.set_timestamp(get_time());
             response.set_timestamp_difference(0);
             response.set_seq_nr(self.seq_nr + 1);
             response.set_ack_nr(0);
 
-            self.send(&Packet::new(response)).await;
+            self.send(Packet::new(response));
         }
     }
 
-    async fn make_connection_rand_id(&mut self) {
+    fn make_connection_rand_id(&mut self) {
         self.state = ConnectionState::SynSent;
         self.seq_nr = 1;
         self.conn_id_recv = rand();
         self.conn_id_send = self.conn_id_recv + 1;
 
         let mut response = PacketHeader::new();
-        response.set_type(Type::StSyn);
+        response.set_type(PacketType::Syn);
         response.set_connection_id(self.conn_id_recv);
         response.set_timestamp(get_time());
         response.set_timestamp_difference(0);
         response.set_seq_nr(self.seq_nr + 1);
         response.set_ack_nr(0);
 
-        self.send(&Packet::new(response)).await;
+        self.send(Packet::new(response));
     }
 
     fn build_selective_ack(&self) -> Vec<u8> {
@@ -661,19 +350,19 @@ impl UtpStream {
         sack_bitfield
     }
 
-    async fn send_finalize(&self) {
+    pub fn send_finalize(&self) {
         let mut response = PacketHeader::new();
-        response.set_type(Type::StReset);
+        response.set_type(PacketType::Fin);
         response.set_connection_id(self.conn_id_send);
         response.set_timestamp(get_time());
         response.set_timestamp_difference(0);
         response.set_seq_nr(self.seq_nr + 1);
         response.set_ack_nr(0);
 
-        self.send(&Packet::new(response)).await;
+        self.send(Packet::new(response));
     }
 
-    async fn handle_packet(&mut self, packet: Packet) {
+    fn handle_packet(&mut self, packet: Packet) {
         self.remote_wnd_size = packet.wnd_size();
 
         // Only acknowledge this if this follows the last one, else do it when we advance the send
@@ -683,21 +372,21 @@ impl UtpStream {
         }
 
         match packet.type_() {
-            Type::StData => self.handle_data_packet(packet).await,
-            Type::StFin => self.handle_finalize_packet(packet).await,
-            Type::StState => self.handle_state_packet(packet).await,
-            Type::StReset => assert!(false, "StReset should never make it here"),
-            Type::StSyn => self.handle_syn_packet(packet).await,
+            PacketType::Data => self.handle_data_packet(packet),
+            PacketType::Fin => self.handle_finalize_packet(packet),
+            PacketType::State => self.handle_state_packet(packet),
+            PacketType::Reset => unreachable!("Reset should never make it here"),
+            PacketType::Syn => self.handle_syn_packet(packet),
         }
     }
 
-    async fn handle_data_packet(&mut self, packet: Packet) {
+    fn handle_data_packet(&mut self, packet: Packet) {
         if self.state == ConnectionState::SynRecv {
-            self.state = ConnectionState::Connected
+            self.state = ConnectionState::Connected;
         }
 
         let mut response = PacketHeader::new();
-        response.set_type(Type::StState);
+        response.set_type(PacketType::State);
         response.set_connection_id(self.conn_id_send);
         response.set_timestamp(get_time());
         response.set_timestamp_difference(get_time_diff(packet.timestamp()));
@@ -710,7 +399,7 @@ impl UtpStream {
             reply.set_selective_ack(sack_bitfield);
         }
 
-        self.send(&reply).await;
+        self.send(reply);
 
         // Add packet to BTreeMap
         self.incoming_buffer.insert(packet.seq_nr(), packet);
@@ -730,7 +419,7 @@ impl UtpStream {
         }
     }
 
-    async fn handle_state_packet(&mut self, packet: Packet) {
+    fn handle_state_packet(&mut self, packet: Packet) {
         if self.state == ConnectionState::SynSent {
             self.state = ConnectionState::Connected;
             self.ack_nr = packet.seq_nr() - 1;
@@ -761,7 +450,7 @@ impl UtpStream {
                 // The only extension we support is 1 selective acks, some clients support
                 // others tho.
                 if extension.extension_type == 1 {
-                    self.resend_packet(packet.ack_nr() + 1).await;
+                    self.resend_packet(packet.ack_nr() + 1);
                     already_resent_ack_1 = true;
                     packet_loss_detected = true;
                 }
@@ -774,7 +463,7 @@ impl UtpStream {
                         for i in 0..8 {
                             let (bit, seq_nr) = ((byte >> i) & 1, packet.ack_nr() + 2 + k);
                             if bit == 0 && seq_nr < *last_seq_nr {
-                                self.resend_packet(seq_nr).await;
+                                self.resend_packet(seq_nr);
                                 packet_loss_detected = true;
                             }
                             k += 1;
@@ -784,12 +473,12 @@ impl UtpStream {
             }
 
             if self.duplicate_acks == 3 && !already_resent_ack_1 {
-                self.resend_packet(packet.ack_nr() + 1).await;
+                self.resend_packet(packet.ack_nr() + 1);
                 packet_loss_detected = true;
             }
 
             if packet_loss_detected {
-                self.max_window = self.max_window / 2;
+                self.max_window /= 2;
             }
 
             // acknowledge received packet
@@ -830,23 +519,23 @@ impl UtpStream {
         self.timeout = max((self.rtt + self.rtt_var * 4) as u64, 500);
     }
 
-    async fn handle_finalize_packet(&mut self, packet: Packet) {
+    fn handle_finalize_packet(&mut self, packet: Packet) {
         if self.state == ConnectionState::Connected {
             self.state = ConnectionState::Disconnected;
 
             let mut response = PacketHeader::new();
-            response.set_type(Type::StFin);
+            response.set_type(PacketType::Fin);
             response.set_connection_id(self.conn_id_send);
             response.set_timestamp(get_time());
             response.set_timestamp_difference(get_time_diff(packet.timestamp()));
             response.set_seq_nr(self.seq_nr);
             response.set_ack_nr(self.ack_nr);
 
-            self.send(&Packet::new(response)).await;
+            self.send(Packet::new(response));
         }
     }
 
-    async fn handle_syn_packet(&mut self, packet: Packet) {
+    fn handle_syn_packet(&mut self, packet: Packet) {
         self.conn_id_recv = packet.connection_id() + 1;
         self.conn_id_send = packet.connection_id();
         self.seq_nr = rand();
@@ -854,20 +543,21 @@ impl UtpStream {
         self.state = ConnectionState::SynRecv;
 
         let mut response = PacketHeader::new();
-        response.set_type(Type::StState);
+        response.set_type(PacketType::State);
         response.set_connection_id(self.conn_id_send);
         response.set_timestamp(get_time());
         response.set_timestamp_difference(get_time_diff(packet.timestamp()));
         response.set_seq_nr(self.seq_nr);
         response.set_ack_nr(self.ack_nr);
 
-        self.send(&Packet::new(response)).await;
+        self.send(Packet::new(response));
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::portalnet::utp::{Packet, PacketHeader, Type, VERSION};
+    use crate::utp::packets::VERSION;
+    use crate::utp::stream::{Packet, PacketHeader, PacketType};
     use std::convert::TryFrom;
 
     #[test]
@@ -880,7 +570,7 @@ mod tests {
         let packet = Packet::try_from(&buf[..]);
         assert!(packet.is_ok());
         let packet = packet.unwrap();
-        assert_eq!(packet.type_(), Type::StState);
+        assert_eq!(packet.type_(), PacketType::State);
         assert_eq!(packet.version(), VERSION);
         assert_eq!(packet.extension(), 0);
         assert_eq!(packet.connection_id(), 42054);
@@ -902,7 +592,7 @@ mod tests {
         let packet = Packet::try_from(&buf[..]);
         assert!(packet.is_ok());
         let packet = packet.unwrap();
-        assert_eq!(packet.type_(), Type::StState);
+        assert_eq!(packet.type_(), PacketType::State);
         assert_eq!(packet.version(), VERSION);
         assert_eq!(packet.extension(), 1);
         assert_eq!(packet.connection_id(), 42054);
@@ -928,7 +618,7 @@ mod tests {
     #[test]
     fn test_encode_packet() {
         let mut response = PacketHeader::new();
-        response.set_type(Type::StData);
+        response.set_type(PacketType::Data);
         response.set_connection_id(49300);
         response.set_timestamp(2805920832);
         response.set_timestamp_difference(1805367832);
@@ -937,7 +627,7 @@ mod tests {
         response.set_ack_nr(12024);
 
         let packet = Packet::new(response);
-        assert_eq!(packet.type_(), Type::StData);
+        assert_eq!(packet.type_(), PacketType::Data);
         assert_eq!(packet.version(), VERSION);
         assert_eq!(packet.extension(), 0);
         assert_eq!(packet.connection_id(), 49300);
@@ -952,7 +642,7 @@ mod tests {
     #[test]
     fn test_encode_packet_with_payload() {
         let mut response = PacketHeader::new();
-        response.set_type(Type::StData);
+        response.set_type(PacketType::Data);
         response.set_connection_id(49300);
         response.set_timestamp(2805920832);
         response.set_timestamp_difference(1805367832);
@@ -962,7 +652,7 @@ mod tests {
         let payload = b"Hello world".to_vec();
 
         let packet = Packet::with_payload(response, &payload[..]);
-        assert_eq!(packet.type_(), Type::StData);
+        assert_eq!(packet.type_(), PacketType::Data);
         assert_eq!(packet.version(), VERSION);
         assert_eq!(packet.extension(), 0);
         assert_eq!(packet.connection_id(), 49300);
@@ -983,7 +673,7 @@ mod tests {
     #[test]
     fn test_selective_ack() {
         let mut response = PacketHeader::new();
-        response.set_type(Type::StState);
+        response.set_type(PacketType::State);
         response.set_connection_id(49300);
         response.set_timestamp(2805920832);
         response.set_timestamp_difference(1805367832);
@@ -1006,7 +696,7 @@ mod tests {
     #[test]
     fn test_syn_packet() {
         let mut response = PacketHeader::new();
-        response.set_type(Type::StSyn);
+        response.set_type(PacketType::Syn);
         response.set_connection_id(10049);
         response.set_timestamp(3384187322);
         response.set_timestamp_difference(0);
@@ -1024,7 +714,7 @@ mod tests {
     #[test]
     fn test_act_packet_no_extension() {
         let mut response = PacketHeader::new();
-        response.set_type(Type::StState);
+        response.set_type(PacketType::State);
         response.set_connection_id(10049);
         response.set_timestamp(6195294);
         response.set_timestamp_difference(916973699);
@@ -1042,7 +732,7 @@ mod tests {
     #[test]
     fn test_act_packet_with_selective_ack_extension() {
         let mut response = PacketHeader::new();
-        response.set_type(Type::StState);
+        response.set_type(PacketType::State);
         response.set_connection_id(10049);
         response.set_timestamp(6195294);
         response.set_timestamp_difference(916973699);
@@ -1062,7 +752,7 @@ mod tests {
     #[test]
     fn test_data_packet() {
         let mut response = PacketHeader::new();
-        response.set_type(Type::StData);
+        response.set_type(PacketType::Data);
         response.set_connection_id(26237);
         response.set_timestamp(252492495);
         response.set_timestamp_difference(242289855);
@@ -1080,7 +770,7 @@ mod tests {
     #[test]
     fn test_fin_packet() {
         let mut response = PacketHeader::new();
-        response.set_type(Type::StFin);
+        response.set_type(PacketType::Fin);
         response.set_connection_id(19003);
         response.set_timestamp(515227279);
         response.set_timestamp_difference(511481041);
@@ -1098,7 +788,7 @@ mod tests {
     #[test]
     fn test_reset_packet() {
         let mut response = PacketHeader::new();
-        response.set_type(Type::StReset);
+        response.set_type(PacketType::Reset);
         response.set_connection_id(62285);
         response.set_timestamp(751226811);
         response.set_timestamp_difference(0);
