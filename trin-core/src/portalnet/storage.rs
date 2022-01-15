@@ -1,5 +1,5 @@
 use super::types::uint::U256;
-use crate::utils::{db::get_data_dir, distance::xor_two_values};
+use crate::utils::{db::get_data_dir, distance::xor};
 use discv5::enr::NodeId;
 use hex;
 use log;
@@ -362,28 +362,11 @@ impl PortalStorage {
         Ok(size)
     }
 
-    /// Internal method that returns the distance between our node ID and a given content ID
+    /// Internal method that returns the distance between our node ID and a given content ID.
+    /// Returns the most significant 8 bytes of the distance as a u64.
     fn distance_to_content_id(&self, content_id: &[u8; 32]) -> u64 {
-        // naked unwrap since content_id and node_id are equally sized
-        let byte_vector = xor_two_values(content_id, &self.node_id.raw().to_vec()).unwrap();
-
-        PortalStorage::byte_vector_to_u64(byte_vector)
-    }
-
-    // Takes the most significant 8 bytes of a vector and casts them into a u64.
-    // With a 32-byte big-endian unsigned integer input, this is equivalent to dividing by 2^(256 - 32)
-    fn byte_vector_to_u64(vec: Vec<u8>) -> u64 {
-        if vec.len() < 8 {
-            debug!("Error: XOR returned less than 8 bytes.");
-            return 0;
-        }
-
-        let mut array: [u8; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
-        for (index, byte) in vec.iter().take(8).enumerate() {
-            array[index] = byte.clone();
-        }
-
-        u64::from_be_bytes(array)
+        let distance = xor(content_id, &self.node_id.raw());
+        distance.0[3]
     }
 
     // Converts most significant 4 bytes of a vector to a u32.
