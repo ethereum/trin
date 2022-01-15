@@ -13,8 +13,8 @@ use crate::portalnet::types::messages::{
     ProtocolId, Request, Response,
 };
 
-use crate::utp::utp::{ConnectionKey, UtpListener};
-use crate::utp::utp_types::{UtpAccept, UtpMessage, UtpMessageId, UtpStreamState};
+use crate::utp::stream::{ConnectionKey, UtpListener};
+use crate::utp::trin_helpers::{UtpAccept, UtpMessage, UtpMessageId, UtpStreamState};
 use discv5::{
     enr::NodeId,
     kbucket::{Filter, KBucketsTable},
@@ -291,8 +291,7 @@ impl OverlayProtocol {
         self.utp_listener
             .write()
             .await
-            .connect(connection_id.clone(), enr.node_id(), tx)
-            .await;
+            .connect(connection_id.clone(), enr.node_id(), tx);
 
         // Return to acceptor: the content key and corresponding data
         let mut content_items: Vec<(Vec<u8>, Vec<u8>)> = vec![];
@@ -334,8 +333,7 @@ impl OverlayProtocol {
                             })
                     {
                         // send the content to the acceptor over a uTP stream
-                        conn.write(&UtpMessage::new(content_message.as_ssz_bytes()).encode()[..])
-                            .await;
+                        conn.write(&UtpMessage::new(content_message.as_ssz_bytes()).encode()[..]);
                     }
                 } else if state == UtpStreamState::Finished {
                     if let Some(conn) =
@@ -348,7 +346,7 @@ impl OverlayProtocol {
                                 conn_id_recv: connection_id,
                             })
                     {
-                        conn.send_finalize().await;
+                        conn.send_finalize();
                         return;
                     }
                 }
