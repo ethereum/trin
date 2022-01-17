@@ -28,3 +28,7 @@ members = [
     "trin-cli",
     "ethportal-peertest"
 ]
+
+[patch.crates-io]
+# Use temporaly discv5 version
+discv5 = { git = "https://github.com/ogenev/discv5.git", branch = "public_kbucket_stable" }

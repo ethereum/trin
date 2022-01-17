@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-#[derive(Error, Debug, PartialEq)]
+#[derive(Error, Debug, PartialEq, Clone)]
 pub enum DistanceError {
     #[error("Vectors are different lengths, can only xor vectors of equal length.")]
     InvalidLengths,
