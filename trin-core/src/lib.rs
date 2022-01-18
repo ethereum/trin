@@ -3,6 +3,7 @@ pub mod jsonrpc;
 pub mod locks;
 pub mod portalnet;
 pub mod socket;
+pub mod types;
 pub mod utils;
 pub mod utp;
 

@@ -144,6 +144,7 @@ impl PortalStorage {
         let distance_to_content_id = self.distance_to_content_id(&content_id);
 
         // Check whether data is outside our radius.
+        // Why is this returning ok?
         if distance_to_content_id > self.data_radius {
             debug!("Not storing: {:02X?}", key.clone().into());
             return Err(PortalStorageError::OutsideDistanceError);
@@ -249,6 +250,7 @@ impl PortalStorage {
 
     /// Internal method for inserting data into the db.
     fn db_insert(&self, content_id: &[u8; 32], value: &Vec<u8>) -> Result<(), PortalStorageError> {
+        // what if data already exists?
         self.db.put(&content_id, value)?;
         Ok(())
     }
@@ -430,9 +432,7 @@ impl PortalStorage {
     /// Helper function for opening a SQLite connection.
     /// Used for testing.
     pub fn setup_rocksdb(node_id: NodeId) -> Result<rocksdb::DB, PortalStorageError> {
-        let data_path_root: String = get_data_dir(node_id).to_owned();
-        let data_suffix: &str = "/rocksdb";
-        let data_path = data_path_root + data_suffix;
+        let data_path: String = get_data_dir(node_id).to_owned();
         debug!("Setting up RocksDB at path: {:?}", data_path);
 
         let mut db_opts = Options::default();

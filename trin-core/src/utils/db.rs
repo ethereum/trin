@@ -23,6 +23,7 @@ pub fn get_default_data_dir(node_id: NodeId) -> String {
     let node_id_string = hex::encode(node_id.raw());
     let suffix = &node_id_string[..8];
     application_string.push_str(suffix);
+    application_string.push_str("/rocksdb");
 
     match ProjectDirs::from("", "", &application_string) {
         Some(proj_dirs) => proj_dirs.data_local_dir().to_str().unwrap().to_string(),
