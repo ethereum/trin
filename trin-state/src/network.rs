@@ -12,12 +12,12 @@ use trin_core::portalnet::{
 };
 use trin_core::utp::stream::UtpListener;
 
-use crate::trie::TrieDB;
+use crate::{content_key::StateContentKey, trie::TrieDB};
 
 /// State network layer on top of the overlay protocol. Encapsulates state network specific data and logic.
 #[derive(Clone)]
 pub struct StateNetwork {
-    pub overlay: Arc<OverlayProtocol>,
+    pub overlay: Arc<OverlayProtocol<StateContentKey>>,
     pub trie: Arc<EthTrie<TrieDB>>,
 }
 

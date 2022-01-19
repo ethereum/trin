@@ -17,6 +17,7 @@ use trin_core::portalnet::types::messages::PortalnetConfig;
 use trin_core::utils::db::setup_overlay_db;
 use trin_core::utp::stream::UtpListener;
 
+pub mod content_key;
 pub mod events;
 mod jsonrpc;
 pub mod network;

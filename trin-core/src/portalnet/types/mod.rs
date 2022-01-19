@@ -1,3 +1,3 @@
-pub mod content_keys;
+pub mod content_key;
 pub mod messages;
 pub mod uint;

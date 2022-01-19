@@ -584,7 +584,7 @@ dependencies = [
  "parking_lot 0.11.2",
  "rand 0.8.4",
  "rlp 0.5.1",
- "sha2",
+ "sha2 0.9.9",
  "smallvec 1.7.0",
  "tokio",
  "tokio-stream",
@@ -626,7 +626,7 @@ dependencies = [
  "ed25519",
  "rand 0.7.3",
  "serde",
- "sha2",
+ "sha2 0.9.9",
  "zeroize",
 ]
 
@@ -662,7 +662,7 @@ dependencies = [
  "rand 0.8.4",
  "rlp 0.5.1",
  "serde",
- "sha3",
+ "sha3 0.9.1",
  "zeroize",
 ]
 
@@ -688,7 +688,7 @@ dependencies = [
  "cpufeatures 0.1.5",
  "lazy_static 1.4.0",
  "ring",
- "sha2",
+ "sha2 0.9.9",
 ]
 
 [[package]]
@@ -1451,7 +1451,7 @@ dependencies = [
  "cfg-if 1.0.0",
  "ecdsa",
  "elliptic-curve",
- "sha2",
+ "sha2 0.9.9",
 ]
 
 [[package]]
@@ -2642,6 +2642,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "sha2"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "99c3bd8169c58782adad9290a9af5939994036b76187f7b4f0e6de91dbbfc0ec"
+dependencies = [
+ "cfg-if 1.0.0",
+ "cpufeatures 0.2.1",
+ "digest 0.10.1",
+]
+
+[[package]]
 name = "sha3"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2651,6 +2662,16 @@ dependencies = [
  "digest 0.9.0",
  "keccak",
  "opaque-debug",
+]
+
+[[package]]
+name = "sha3"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "31f935e31cf406e8c0e96c2815a5516181b7004ae8c5f296293221e9b1e356bd"
+dependencies = [
+ "digest 0.10.1",
+ "keccak",
 ]
 
 [[package]]
@@ -3330,7 +3351,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
- "sha3",
+ "sha3 0.9.1",
  "structopt",
  "stunclient",
  "thiserror",
@@ -3353,6 +3374,9 @@ dependencies = [
  "anyhow",
  "bytes 1.1.0",
  "discv5",
+ "eth2_ssz",
+ "eth2_ssz_derive",
+ "eth2_ssz_types",
  "ethereum-types 0.12.1",
  "hex",
  "keccak-hash",
@@ -3360,7 +3384,8 @@ dependencies = [
  "rlp 0.5.1",
  "rocksdb",
  "serde_json",
- "sha3",
+ "sha2 0.10.1",
+ "sha3 0.9.1",
  "tokio",
  "tracing",
  "tracing-subscriber 0.2.25",
@@ -3373,12 +3398,18 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "discv5",
+ "eth2_ssz",
+ "eth2_ssz_derive",
+ "eth2_ssz_types",
  "eth_trie",
+ "ethereum-types 0.12.1",
+ "hex",
  "log 0.4.14",
  "num",
  "rocksdb",
  "serde_json",
- "sha3",
+ "sha2 0.10.1",
+ "sha3 0.10.0",
  "tokio",
  "tracing",
  "tracing-futures",

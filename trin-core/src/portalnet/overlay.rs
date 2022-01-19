@@ -1,11 +1,12 @@
 use std::collections::HashSet;
+use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::Duration;
 
 use super::{
     discovery::Discovery,
     overlay_service::{Node, OverlayRequest, OverlayService, RequestDirection},
-    types::uint::U256,
+    types::{content_key::OverlayContentKey, uint::U256},
     Enr,
 };
 use crate::portalnet::types::messages::{
@@ -60,7 +61,7 @@ impl Default for OverlayConfig {
 /// implement the overlay protocol and the overlay protocol is where we can encapsulate the logic for
 /// handling common network requests/responses.
 #[derive(Clone)]
-pub struct OverlayProtocol {
+pub struct OverlayProtocol<K> {
     /// Reference to the underlying discv5 protocol
     pub discovery: Arc<Discovery>,
     // Reference to the database instance
@@ -74,9 +75,11 @@ pub struct OverlayProtocol {
     /// A sender to send requests to the OverlayService.
     request_tx: UnboundedSender<OverlayRequest>,
     utp_listener: Arc<RwLockT<UtpListener>>,
+    /// Phantom content key.
+    phantom_content_key: PhantomData<K>,
 }
 
-impl OverlayProtocol {
+impl<K: OverlayContentKey + Send + Sync> OverlayProtocol<K> {
     pub async fn new(
         config: OverlayConfig,
         discovery: Arc<Discovery>,
@@ -94,7 +97,7 @@ impl OverlayProtocol {
         )));
 
         let data_radius = Arc::new(data_radius);
-        let request_tx = OverlayService::spawn(
+        let request_tx = OverlayService::<K>::spawn(
             Arc::clone(&discovery),
             Arc::clone(&db),
             Arc::clone(&kbuckets),
@@ -115,6 +118,7 @@ impl OverlayProtocol {
             protocol,
             request_tx,
             utp_listener,
+            phantom_content_key: PhantomData,
         }
     }
 

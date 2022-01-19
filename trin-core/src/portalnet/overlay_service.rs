@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fmt;
+use std::marker::PhantomData;
 use std::sync::Arc;
 use std::task::Poll;
 use std::time::Duration;
@@ -12,7 +13,7 @@ use crate::{
     portalnet::{
         discovery::Discovery,
         types::{
-            content_keys::{ContentKeyError, HistoryContentKey, StateContentKey},
+            content_key::OverlayContentKey,
             messages::{
                 ByteList, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Ping,
                 Pong, ProtocolId, Request, Response, SszEnr,
@@ -97,12 +98,6 @@ impl From<discv5::RequestError> for OverlayRequestError {
             discv5::RequestError::Timeout => Self::Timeout,
             err => Self::Discv5Error(err),
         }
-    }
-}
-
-impl From<ContentKeyError> for OverlayRequestError {
-    fn from(err: ContentKeyError) -> Self {
-        Self::InvalidRequest(format!("Invalid content key: {}", err))
     }
 }
 
@@ -225,7 +220,7 @@ impl PartialEq for Node {
 }
 
 /// The overlay service.
-pub struct OverlayService {
+pub struct OverlayService<K> {
     /// The underlying Discovery v5 protocol.
     discovery: Arc<Discovery>,
     /// The content database of the local node.
@@ -251,11 +246,12 @@ pub struct OverlayService {
     response_rx: UnboundedReceiver<OverlayResponse>,
     /// The sender half of a channel for responses to outgoing requests.
     response_tx: UnboundedSender<OverlayResponse>,
-
     utp_listener: Arc<RwLockT<UtpListener>>,
+    /// Phantom content key.
+    phantom_content_key: PhantomData<K>,
 }
 
-impl OverlayService {
+impl<K: OverlayContentKey + Send + Sync> OverlayService<K> {
     /// Spawns the overlay network service.
     ///
     /// The state of the overlay network largely consists of its routing table. The routing table
@@ -298,6 +294,7 @@ impl OverlayService {
                 response_rx,
                 response_tx,
                 utp_listener,
+                phantom_content_key: PhantomData,
             };
 
             // Attempt to insert bootnodes into the routing table in a disconnected state.
@@ -393,7 +390,7 @@ impl OverlayService {
                         self.peers_to_ping.insert(node_id);
                     }
                 }
-                _ = OverlayService::bucket_maintenance_poll(self.protocol.clone(), &self.kbuckets) => {}
+                _ = OverlayService::<K>::bucket_maintenance_poll(self.protocol.clone(), &self.kbuckets) => {}
                 _ = bucket_refresh_interval.tick() => {
                     debug!("[{:?}] Overlay bucket refresh lookup", self.protocol);
                     self.bucket_refresh_lookup();
@@ -546,36 +543,15 @@ impl OverlayService {
     /// Attempts to build a `Content` response for a `FindContent` request.
     fn handle_find_content(&self, request: FindContent) -> Result<Content, OverlayRequestError> {
         // Attempt to derive the content ID for the content key.
-        let content_id = match self.protocol {
-            ProtocolId::State => {
-                let state_content_key =
-                    StateContentKey::from_bytes(request.content_key.as_slice())?;
-                match state_content_key.derive_content_id() {
-                    Ok(val) => val,
-                    Err(_) => return Err(OverlayRequestError::DecodeError),
-                }
-            }
-            ProtocolId::History => {
-                let history_content_key =
-                    HistoryContentKey::from_bytes(request.content_key.as_slice())?;
-                match history_content_key.derive_content_id() {
-                    Ok(val) => val,
-                    Err(_) => return Err(OverlayRequestError::DecodeError),
-                }
-            }
-            _ => {
-                warn!(
-                    "Attempt to find undefined content for {:?} protocol",
-                    self.protocol
-                );
-                return Err(OverlayRequestError::InvalidRequest(format!(
-                    "Content undefined for {:?} protocol",
-                    self.protocol,
-                )));
+        let content_id = match (K::try_from)(request.content_key) {
+            Ok(key) => key.content_id(),
+            Err(_err) => {
+                return Err(OverlayRequestError::InvalidRequest(
+                    "Invalid content key".to_string(),
+                ))
             }
         };
 
-        let content_id = Into::<[u8; 32]>::into(content_id);
         match self.db.get(&content_id) {
             Ok(Some(value)) => {
                 let content = ByteList::from(VariableList::from(value));
@@ -1178,13 +1154,37 @@ mod tests {
     use rand::Rng;
     use tokio_test::{assert_pending, assert_ready, task};
 
+    struct MockContentKey {
+        value: Vec<u8>,
+    }
+
+    impl TryFrom<Vec<u8>> for MockContentKey {
+        type Error = String;
+
+        fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+            Ok(MockContentKey { value })
+        }
+    }
+
+    impl Into<Vec<u8>> for MockContentKey {
+        fn into(self) -> Vec<u8> {
+            self.value
+        }
+    }
+
+    impl OverlayContentKey for MockContentKey {
+        fn content_id(&self) -> [u8; 32] {
+            [0; 32]
+        }
+    }
+
     macro_rules! poll_request_rx {
         ($service:ident) => {
             $service.enter(|cx, mut service| service.request_rx.poll_recv(cx))
         };
     }
 
-    fn build_service() -> OverlayService {
+    fn build_service() -> OverlayService<MockContentKey> {
         let portal_config = PortalnetConfig {
             internal_ip: true,
             ..Default::default()
@@ -1228,6 +1228,7 @@ mod tests {
             response_tx,
             response_rx,
             utp_listener,
+            phantom_content_key: PhantomData,
         }
     }
 

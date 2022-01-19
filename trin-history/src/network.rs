@@ -10,10 +10,12 @@ use trin_core::portalnet::{
 };
 use trin_core::utp::stream::UtpListener;
 
+use super::content_key::HistoryContentKey;
+
 /// History network layer on top of the overlay protocol. Encapsulates history network specific data and logic.
 #[derive(Clone)]
 pub struct HistoryNetwork {
-    pub overlay: Arc<OverlayProtocol>,
+    pub overlay: Arc<OverlayProtocol<HistoryContentKey>>,
 }
 
 impl HistoryNetwork {
