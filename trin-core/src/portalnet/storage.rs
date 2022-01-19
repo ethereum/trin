@@ -144,7 +144,6 @@ impl PortalStorage {
         let distance_to_content_id = self.distance_to_content_id(&content_id);
 
         // Check whether data is outside our radius.
-        // Why is this returning ok?
         if distance_to_content_id > self.data_radius {
             debug!("Not storing: {:02X?}", key.clone().into());
             return Err(PortalStorageError::OutsideDistanceError);

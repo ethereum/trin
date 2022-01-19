@@ -14,33 +14,10 @@ use sha3::{Digest, Sha3_256};
 use structopt::StructOpt;
 
 use trin_core::portalnet::storage::{DistanceFunction, PortalStorage, PortalStorageConfig};
+use trin_core::portalnet::types::content_keys::{ContentKey, HeaderKey, HistoryContentKey};
 use trin_core::portalnet::types::uint::U256;
-use trin_core::portalnet::types::content_keys::{ContentKey, HistoryContentKey, HeaderKey};
-use trin_core::utils::db::get_data_dir;
 use trin_core::types::header::Header;
-
-#[derive(Debug)]
-struct Block {
-    _hash: String,
-    rlp: String,
-    _number: u64,
-}
-
-impl From<Value> for Block {
-    fn from(value: Value) -> Self {
-        match value {
-            Value::Object(val) => {
-                let values = val.values().into_iter().nth(0).unwrap();
-                Self{
-                    _hash: val.keys().into_iter().nth(0).unwrap().to_string(),
-                    rlp: values.clone().get("rlp").unwrap().as_str().unwrap().to_string(),
-                    _number: values.clone().get("number").unwrap().as_u64().unwrap(),
-                }
-            }
-            _ => panic!("xxx")
-        }
-    }
-}
+use trin_core::utils::db::get_data_dir;
 
 // For every 1 kb of data we store (key + value), RocksDB tends to grow by this many kb on disk...
 // ...but this is a crude empirical estimation that works mainly with default value data size of 32
@@ -57,11 +34,14 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         builder.build(&enr_key).unwrap()
     };
     let node_id = enr.node_id();
+    let data_dir_path = get_data_dir(node_id);
+    println!("Storing data for NodeID: {:02X?}", node_id);
+    println!("DB Path: {:?}", data_dir_path);
 
     if generator_config.overwrite {
         let _ = Command::new("rm")
             .arg("-rf")
-            .arg(get_data_dir(node_id))
+            .arg(data_dir_path)
             .output()
             .expect("Failed to overwrite DB.");
     }
@@ -82,9 +62,9 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match generator_config.data_folder {
         Some(data_folder) => load_mainnet_data(storage, data_folder),
-        None => load_random_data(storage, generator_config)
+        None => load_random_data(storage, generator_config),
     }
-    
+
     Ok(())
 }
 
@@ -95,11 +75,11 @@ pub struct BlockRlp {
 
 impl Decodable for BlockRlp {
     fn decode(rlp: &rlp::Rlp) -> Result<Self, DecoderError> {
-        let header = match Header::decode_rlp(rlp, 100000000u64) {
+        let header = match Header::decode_rlp(rlp) {
             Ok(val) => Some(val),
             Err(_) => None,
         };
-        return Ok(Self { header })
+        Ok(Self { header })
     }
 }
 
@@ -109,6 +89,58 @@ fn load_mainnet_data(mut storage: PortalStorage, data_folder: String) {
     for path in paths {
         load_file_data(&path.unwrap().path(), &mut storage);
     }
+}
+
+fn load_file_data(path: &Path, storage: &mut PortalStorage) {
+    println!("Loading data from file: {:?}", path);
+    let file = File::open(path).unwrap();
+    let reader = BufReader::new(file);
+    let json_blocks: Value = serde_json::from_reader(reader).unwrap();
+    let mut stored_count = 0;
+    let mut total_count = 0;
+    match json_blocks {
+        Value::Object(val) => {
+            for (_block_hash, block_data) in val.into_iter() {
+                match block_data {
+                    Value::Object(val) => {
+                        let block_rlp = val.get("rlp").unwrap().as_str().unwrap().to_string();
+                        let prefix_removed_rlp = &block_rlp[2..block_rlp.len()];
+                        let bytes_rlp = hex::decode(prefix_removed_rlp).unwrap();
+                        let blocks: Vec<BlockRlp> = rlp::decode_list(&bytes_rlp);
+                        let block = blocks.get(0).unwrap();
+                        if block.header.is_some() {
+                            let header_key = HeaderKey {
+                                chain_id: 1u16,
+                                block_hash: block.clone().header.unwrap().hash().into(),
+                            };
+                            let content_key = ContentKey::HistoryContentKey(
+                                HistoryContentKey::HeaderKey(header_key),
+                            );
+                            let content_key_hex = hex::encode(&content_key.to_bytes());
+                            total_count += 1;
+                            match storage.should_store(&content_key_hex).unwrap() {
+                                true => {
+                                    storage
+                                        .store(&content_key_hex, &prefix_removed_rlp.to_owned())
+                                        .unwrap();
+                                    println!("Stored content key: {:?}", content_key_hex);
+                                    println!("- Block RLP: {:?}", prefix_removed_rlp.get(0..31));
+                                    stored_count += 1;
+                                }
+                                false => {}
+                            }
+                        }
+                    }
+                    _ => panic!("Invalid deserialized type, expected an object."),
+                }
+            }
+        }
+        _ => panic!("Invalid deserialized type, expected an object."),
+    }
+    println!(
+        "Stored {:?}/{:?} block headers from {:?}",
+        stored_count, total_count, path
+    );
 }
 
 fn load_random_data(mut storage: PortalStorage, generator_config: GeneratorConfig) {
@@ -123,60 +155,11 @@ fn load_random_data(mut storage: PortalStorage, generator_config: GeneratorConfi
 
         storage.store(&key, &value).unwrap();
     }
-    
+
     println!(
         "Successfully saved {} randomly generated key/value pairs to RocksDB.",
         num_of_entries
     );
-}
-
-fn load_file_data(path: &Path, storage: &mut PortalStorage) {
-    let file = File::open(path).unwrap();
-    let reader = BufReader::new(file);
-    let deserialized: Value = serde_json::from_reader(reader).unwrap();
-    let mut stored_count = 0;
-    let mut total_count = 0;
-    match deserialized {
-        Value::Object(val) => {
-            for (key, value) in val.into_iter() {
-                match value {
-                    Value::Object(val) => {
-                        let block: Block = Block {
-                            _hash: key,
-                            rlp: val.get("rlp").unwrap().as_str().unwrap().to_string(),
-                            _number: val.get("number").unwrap().as_u64().unwrap(),
-                        };
-                        let prefix_removed = &block.rlp[2..block.rlp.len()];
-                        let block_rlp = hex::decode(prefix_removed).unwrap();
-                        let block: Vec<BlockRlp> = rlp::decode_list(&block_rlp);
-                        let header = block[0].clone();
-                        if !header.header.is_none() {
-                            let header_key = HeaderKey {
-                                chain_id: 1u16,
-                                block_hash: header.clone().header.unwrap().hash().into(),
-                            };
-                            let content_key = ContentKey::HistoryContentKey(HistoryContentKey::HeaderKey(header_key));
-                            let content_key_hex = hex::encode(&content_key.to_bytes());
-                            match storage.should_store(&content_key_hex).unwrap() {
-                                true => {
-                                    let block_rlp_hex = hex::encode(block_rlp);
-                                    storage.store(&content_key_hex, &block_rlp_hex).unwrap();
-                                    stored_count += 1;
-                                    total_count += 1;
-                                },
-                                false => {
-                                    total_count += 1;
-                                }
-                            }
-                        }
-                    }
-                    _ => panic!("Invalid deserialized type, expected an object.")
-                }
-            }
-        }
-        _ => panic!("Invalid deserialized type, expected an object.")
-    }
-    println!("Stored {:?}/{:?} block headers from {:?}", stored_count, total_count, path);
 }
 
 fn generate_random_value(number_of_bytes: u32) -> String {
@@ -208,7 +191,6 @@ fn sha256(key: &str) -> U256 {
     about = "Populate data in Trin DB for Testing & Development"
 )]
 pub struct GeneratorConfig {
-    //// ummmmmmmmmmmmmmm
     /// Number of Kilobytes to Generate
     #[structopt(
         default_value = "300",
@@ -234,16 +216,16 @@ pub struct GeneratorConfig {
     /// If this flag is provided, the PortalStorage struct will be used to store data.
     #[structopt(short, long, help = "Use PortalStorage functionality for storing data")]
     pub portal_storage: bool,
-    
+
     #[structopt(
         long,
-        help="(unsafe) Hex private key to generate node id for database namespace"
+        help = "(unsafe) Hex private key to generate node id for database namespace"
     )]
     pub private_key: String,
 
     #[structopt(
         long,
-        help="Path to mainnetMM directory, if not included command will seed random data"
+        help = "Path to mainnetMM directory, if not included command will seed random data"
     )]
-    pub data_folder: Option<String>
+    pub data_folder: Option<String>,
 }

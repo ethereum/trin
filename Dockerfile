@@ -32,8 +32,8 @@ COPY --from=builder /trin/target/release/seed-database .
 # This data is too large to be kept inside trin-source code
 # It must be downloaded separately and moved to the correct location
 # https://www.dropbox.com/s/y5n36ztppltgs7x/mainnetMM.zip?dl=0
-# RUN mkdir /mainnetMM
-# COPY --from=builder /trin/trin-core/src/bin/mainnetMM ./mainnetMM
+RUN mkdir /mainnetMM
+COPY --from=builder /trin/trin-core/src/bin/mainnetMM ./mainnetMM
 
 ENV RUST_LOG=debug
 
