@@ -52,7 +52,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         let value = generate_random_value(size_of_values);
         let key = generate_random_value(SIZE_OF_KEYS);
 
-        println!("{} -> {}", &key, &value);
+        println!("{:?} -> {:?}", &key, &value);
         storage.store(&key, &value)?;
         println!();
     }
@@ -65,16 +65,15 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn generate_random_value(number_of_bytes: u32) -> String {
+fn generate_random_value(number_of_bytes: u32) -> Vec<u8> {
     rand::thread_rng()
         .sample_iter(&Alphanumeric)
         .take(number_of_bytes as usize)
-        .map(char::from)
         .collect()
 }
 
 // Placeholder content key -> content id conversion function
-fn sha256(key: &str) -> U256 {
+fn sha256(key: &Vec<u8>) -> U256 {
     let mut hasher = Sha3_256::new();
     hasher.update(key);
     let mut x = hasher.finalize();

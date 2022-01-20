@@ -90,6 +90,14 @@ pub struct TrinConfig {
         use_delimiter = true
     )]
     pub networks: Vec<String>,
+
+    /// Number of Kilobytes to store in the DB
+    #[structopt(
+        default_value = "100000", // 100mb
+        long,
+        help = "Maximum number of kilobytes of total data to store in the DB"
+    )]
+    pub kb: u32,
 }
 
 impl TrinConfig {
@@ -165,6 +173,7 @@ mod test {
             web3_http_address: DEFAULT_WEB3_HTTP_ADDRESS.to_string(),
             web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
             pool_size: 2,
+            kb: 100000,
             web3_transport: "ipc".to_string(),
             discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
             internal_ip: false,
@@ -192,6 +201,7 @@ mod test {
         let expected_config = TrinConfig {
             external_addr: None,
             private_key: None,
+            kb: 100000,
             web3_http_address: "0.0.0.0:8080".to_string(),
             web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
             pool_size: 3,
@@ -233,6 +243,7 @@ mod test {
         let expected_config = TrinConfig {
             external_addr: None,
             private_key: None,
+            kb: 100000,
             web3_http_address: DEFAULT_WEB3_HTTP_ADDRESS.to_string(),
             web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
             pool_size: 2,
@@ -272,6 +283,7 @@ mod test {
             external_addr: None,
             web3_http_address: DEFAULT_WEB3_HTTP_ADDRESS.to_string(),
             web3_ipc_path: "/path/test.ipc".to_string(),
+            kb: 100000,
             pool_size: 2,
             web3_transport: "ipc".to_string(),
             discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
@@ -334,6 +346,7 @@ mod test {
             web3_http_address: DEFAULT_WEB3_HTTP_ADDRESS.to_string(),
             web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
             pool_size: 2,
+            kb: 100000,
             web3_transport: "ipc".to_string(),
             discovery_port: 999,
             internal_ip: false,
@@ -357,6 +370,7 @@ mod test {
             web3_http_address: DEFAULT_WEB3_HTTP_ADDRESS.to_string(),
             web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
             pool_size: 2,
+            kb: 100000,
             web3_transport: "ipc".to_string(),
             discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
             internal_ip: false,
@@ -402,6 +416,7 @@ mod test {
             web3_http_address: DEFAULT_WEB3_HTTP_ADDRESS.to_string(),
             web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
             pool_size: 2,
+            kb: 100000,
             web3_transport: "ipc".to_string(),
             discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
             internal_ip: false,

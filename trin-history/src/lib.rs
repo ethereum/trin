@@ -4,7 +4,6 @@ mod jsonrpc;
 pub mod network;
 
 use log::info;
-use rocksdb::DB;
 use tokio::sync::{mpsc, RwLock};
 use tokio::task::JoinHandle;
 
@@ -18,9 +17,10 @@ use trin_core::cli::TrinConfig;
 use trin_core::jsonrpc::types::HistoryJsonRpcRequest;
 use trin_core::portalnet::discovery::Discovery;
 use trin_core::portalnet::events::PortalnetEvents;
+use trin_core::portalnet::storage::PortalStorage;
 use trin_core::portalnet::types::messages::PortalnetConfig;
-use trin_core::utils::db::setup_overlay_db;
 use trin_core::utp::stream::UtpListener;
+use trin_core::utils::db::setup_portal_storage;
 
 pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Launching trin-history...");
@@ -54,7 +54,9 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::spawn(Arc::clone(&discovery).bucket_refresh_lookup());
 
     // Setup Overlay database
-    let db = Arc::new(setup_overlay_db(discovery.local_enr().node_id()));
+    //let db = Arc::new(setup_overlay_db(discovery.local_enr().node_id()));
+    let node_id = discovery.local_enr().node_id();
+    let storage = Arc::new(setup_portal_storage(node_id, trin_config.kb));
 
     let utp_listener = Arc::new(RwLock::new(UtpListener {
         discovery: Arc::clone(&discovery),
@@ -81,7 +83,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let history_network = HistoryNetwork::new(
         discovery.clone(),
         utp_listener.clone(),
-        db,
+        storage,
         portalnet_config.clone(),
     )
     .await;
@@ -102,7 +104,7 @@ pub async fn initialize_history_network(
     discovery: &Arc<Discovery>,
     utp_listener: &Arc<RwLock<UtpListener>>,
     portalnet_config: PortalnetConfig,
-    db: Arc<DB>,
+    storage: Arc<PortalStorage>,
 ) -> (
     HistoryHandler,
     HistoryNetworkTask,
@@ -115,7 +117,7 @@ pub async fn initialize_history_network(
     let history_network = HistoryNetwork::new(
         Arc::clone(discovery),
         Arc::clone(utp_listener),
-        db,
+        storage,
         portalnet_config.clone(),
     )
     .await;

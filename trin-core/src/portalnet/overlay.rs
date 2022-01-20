@@ -9,6 +9,7 @@ use super::{
     types::{content_key::OverlayContentKey, uint::U256},
     Enr,
 };
+use crate::portalnet::storage::PortalStorage;
 use crate::portalnet::types::messages::{
     Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer, Ping, Pong,
     ProtocolId, Request, Response,
@@ -23,7 +24,6 @@ use discv5::{
 };
 use futures::channel::oneshot;
 use parking_lot::RwLock;
-use rocksdb::DB;
 use ssz::Encode;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::UnboundedSender;
@@ -65,7 +65,7 @@ pub struct OverlayProtocol<TContentKey> {
     /// Reference to the underlying discv5 protocol
     pub discovery: Arc<Discovery>,
     // Reference to the database instance
-    pub db: Arc<DB>,
+    pub storage: Arc<PortalStorage>,
     /// The data radius of the local node.
     pub data_radius: Arc<U256>,
     /// The overlay routing table of the local node.
@@ -86,7 +86,7 @@ impl<TContentKey: OverlayContentKey + Send> OverlayProtocol<TContentKey> {
         config: OverlayConfig,
         discovery: Arc<Discovery>,
         utp_listener: Arc<RwLockT<UtpListener>>,
-        db: Arc<DB>,
+        storage: Arc<PortalStorage>,
         data_radius: U256,
         protocol: ProtocolId,
     ) -> Self {
@@ -101,7 +101,7 @@ impl<TContentKey: OverlayContentKey + Send> OverlayProtocol<TContentKey> {
         let data_radius = Arc::new(data_radius);
         let request_tx = OverlayService::<TContentKey>::spawn(
             Arc::clone(&discovery),
-            Arc::clone(&db),
+            Arc::clone(&storage),
             Arc::clone(&kbuckets),
             config.bootnode_enrs,
             config.ping_queue_interval,
@@ -116,7 +116,7 @@ impl<TContentKey: OverlayContentKey + Send> OverlayProtocol<TContentKey> {
             discovery,
             data_radius,
             kbuckets,
-            db,
+            storage,
             protocol,
             request_tx,
             utp_listener,

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::anyhow;
+use discv5::enr::NodeId;
 use eth_trie::EthTrie;
 use log::debug;
 use rocksdb::DB;
@@ -8,9 +9,11 @@ use tokio::sync::RwLock;
 use trin_core::portalnet::{
     discovery::Discovery,
     overlay::{OverlayConfig, OverlayProtocol, OverlayRequestError},
+    storage::PortalStorage,
     types::messages::{PortalnetConfig, ProtocolId},
 };
 use trin_core::utp::stream::UtpListener;
+use trin_core::utils::db::setup_overlay_db;
 
 use crate::{content_key::StateContentKey, trie::TrieDB};
 
@@ -25,10 +28,12 @@ impl StateNetwork {
     pub async fn new(
         discovery: Arc<Discovery>,
         utp_listener: Arc<RwLock<UtpListener>>,
-        db: Arc<DB>,
+        storage: Arc<PortalStorage>,
         portal_config: PortalnetConfig,
     ) -> Self {
-        let triedb = TrieDB::new(db.clone());
+        // no bueno
+        let db = setup_overlay_db(NodeId::random());
+        let triedb = TrieDB::new(Arc::new(db));
         let trie = EthTrie::new(Arc::new(triedb));
 
         let config = OverlayConfig {
@@ -39,7 +44,7 @@ impl StateNetwork {
             config,
             discovery,
             utp_listener,
-            db,
+            storage,
             portal_config.data_radius,
             ProtocolId::State,
         )

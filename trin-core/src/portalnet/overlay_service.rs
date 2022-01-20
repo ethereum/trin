@@ -12,6 +12,7 @@ use crate::utp::trin_helpers::UtpMessageId;
 use crate::{
     portalnet::{
         discovery::Discovery,
+        storage::PortalStorage,
         types::{
             content_key::OverlayContentKey,
             messages::{
@@ -37,7 +38,6 @@ use futures::{channel::oneshot, prelude::*};
 use log::{debug, error, info, warn};
 use parking_lot::RwLock;
 use rand::seq::SliceRandom;
-use rocksdb::DB;
 use ssz::Encode;
 use ssz_types::BitList;
 use ssz_types::VariableList;
@@ -224,7 +224,7 @@ pub struct OverlayService<TContentKey> {
     /// The underlying Discovery v5 protocol.
     discovery: Arc<Discovery>,
     /// The content database of the local node.
-    db: Arc<DB>,
+    storage: Arc<PortalStorage>,
     /// The routing table of the local node.
     kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
     /// The data radius of the local node.
@@ -259,7 +259,7 @@ impl<TContentKey: OverlayContentKey + Send> OverlayService<TContentKey> {
     /// processes.
     pub async fn spawn(
         discovery: Arc<Discovery>,
-        db: Arc<DB>,
+        storage: Arc<PortalStorage>,
         kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
         bootnode_enrs: Vec<Enr>,
         ping_queue_interval: Option<Duration>,
@@ -283,7 +283,7 @@ impl<TContentKey: OverlayContentKey + Send> OverlayService<TContentKey> {
         tokio::spawn(async move {
             let mut service = Self {
                 discovery,
-                db,
+                storage,
                 kbuckets,
                 data_radius,
                 protocol,
@@ -542,23 +542,13 @@ impl<TContentKey: OverlayContentKey + Send> OverlayService<TContentKey> {
 
     /// Attempts to build a `Content` response for a `FindContent` request.
     fn handle_find_content(&self, request: FindContent) -> Result<Content, OverlayRequestError> {
-        // Attempt to derive the content ID for the content key.
-        let content_id = match (TContentKey::try_from)(request.content_key) {
-            Ok(key) => key.content_id(),
-            Err(_err) => {
-                return Err(OverlayRequestError::InvalidRequest(
-                    "Invalid content key".to_string(),
-                ))
-            }
-        };
-
-        match self.db.get(&content_id) {
+        match self.storage.get(&request.content_key) {
             Ok(Some(value)) => {
                 let content = ByteList::from(VariableList::from(value));
                 Ok(Content::Content(content))
             }
             Ok(None) => {
-                let enrs = self.find_nodes_close_to_content(content_id);
+                let enrs = self.find_nodes_close_to_content(request.content_key);
                 match enrs {
                     Ok(val) => Ok(Content::Enrs(val)),
                     Err(msg) => Err(OverlayRequestError::InvalidRequest(msg.to_string())),
@@ -1095,8 +1085,33 @@ impl<TContentKey: OverlayContentKey + Send> OverlayService<TContentKey> {
     /// Returns list of nodes closer to content than self, sorted by distance.
     fn find_nodes_close_to_content(
         &self,
-        content_id: [u8; 32],
+        content_key: Vec<u8>,
     ) -> Result<Vec<SszEnr>, OverlayRequestError> {
+        // Attempt to derive the content ID for the content key.
+        let content_id = match self.protocol {
+            ProtocolId::State => {
+                let state_content_key =
+                    StateContentKey::from_bytes(&content_key)?;
+                state_content_key.derive_content_id()?
+            }
+            ProtocolId::History => {
+                let history_content_key =
+                    HistoryContentKey::from_bytes(&content_key)?;
+                history_content_key.derive_content_id()?
+            }
+            _ => {
+                warn!(
+                    "Attempt to find undefined content for {:?} protocol",
+                    self.protocol
+                );
+                return Err(OverlayRequestError::InvalidRequest(format!(
+                    "Content undefined for {:?} protocol",
+                    self.protocol,
+                )));
+            }
+        };
+
+        let content_id = Into::<[u8; 32]>::into(content_id).to_vec();
         let self_node_id = self.local_enr().node_id();
         let self_distance = xor(&content_id, &self_node_id.raw());
 
@@ -1175,7 +1190,7 @@ mod tests {
             listening: HashMap::new(),
         }));
 
-        let db = Arc::new(db::setup_overlay_db(discovery.local_enr().node_id()));
+        let storage = Arc::new(db::setup_portal_storage(discovery.local_enr().node_id(), 100000));
 
         let overlay_config = OverlayConfig::default();
         let kbuckets = Arc::new(RwLock::new(KBucketsTable::new(
@@ -1195,7 +1210,7 @@ mod tests {
 
         OverlayService {
             discovery,
-            db,
+            storage,
             kbuckets,
             data_radius,
             protocol,
