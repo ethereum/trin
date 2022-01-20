@@ -17,7 +17,7 @@ use crate::{
         },
         Enr,
     },
-    utils::{bytes, distance::xor_two_values, hash_delay_queue::HashDelayQueue},
+    utils::{bytes, distance::xor, hash_delay_queue::HashDelayQueue},
 };
 
 use discv5::{
@@ -553,7 +553,7 @@ impl OverlayService {
             }
         };
 
-        let content_id = Into::<[u8; 32]>::into(content_id).to_vec();
+        let content_id = Into::<[u8; 32]>::into(content_id);
         match self.db.get(&content_id) {
             Ok(Some(value)) => {
                 let content = ByteList::from(VariableList::from(value));
@@ -954,26 +954,18 @@ impl OverlayService {
     /// Returns list of nodes closer to content than self, sorted by distance.
     fn find_nodes_close_to_content(
         &self,
-        content_id: Vec<u8>,
+        content_id: [u8; 32],
     ) -> Result<Vec<SszEnr>, OverlayRequestError> {
         let self_node_id = self.local_enr().node_id();
-        let self_distance = match xor_two_values(&content_id, &self_node_id.raw().to_vec()) {
-            Ok(val) => val,
-            Err(msg) => {
-                return Err(OverlayRequestError::InvalidRequest(format!(
-                    "Could not find distance from node, because content key is malformed: {}",
-                    msg
-                )))
-            }
-        };
+        let self_distance = xor(&content_id, &self_node_id.raw());
 
-        let mut nodes_with_distance: Vec<(Vec<u8>, Enr)> = self
+        let mut nodes_with_distance: Vec<(U256, Enr)> = self
             .table_entries_enr()
             .into_iter()
             .map(|enr| {
                 (
                     // naked unwrap since content key len has already been validated
-                    xor_two_values(&content_id, &enr.node_id().raw().to_vec()).unwrap(),
+                    xor(&content_id, &enr.node_id().raw()),
                     enr,
                 )
             })
@@ -1001,8 +993,8 @@ impl OverlayService {
     fn generate_random_node_id(&self, target_bucket_idx: u8) -> anyhow::Result<NodeId> {
         let distance_leading_zeroes = 255 - target_bucket_idx;
         let random_distance = bytes::random_32byte_array(distance_leading_zeroes);
-        let raw_node_id = xor_two_values(&self.local_enr().node_id().raw(), &random_distance)?;
-        match NodeId::parse(raw_node_id.as_slice()) {
+        let raw_node_id = xor(&self.local_enr().node_id().raw(), &random_distance);
+        match NodeId::parse(Into::<[u8; 32]>::into(raw_node_id).as_slice()) {
             Ok(node_id) => Ok(node_id),
             Err(msg) => Err(anyhow::Error::msg(msg)),
         }
