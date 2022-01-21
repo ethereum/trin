@@ -544,9 +544,18 @@ impl<TContentKey: OverlayContentKey + Send> OverlayService<TContentKey> {
     /// Attempts to build a `Content` response for a `FindContent` request.
     fn handle_find_content(&self, request: FindContent) -> Result<Content, OverlayRequestError> {
         let content_key = match self.protocol {
-            ProtocolId::State => ContentKey::StateContentKey(StateContentKey::from_bytes(&request.content_key).unwrap()),
-            ProtocolId::History => ContentKey::HistoryContentKey(HistoryContentKey::from_bytes(&request.content_key).unwrap()),
-            _ => return Err(OverlayRequestError::Failure(format!("Trin does not currently support requested protocol: {:?}", self.protocol)))
+            ProtocolId::State => ContentKey::StateContentKey(
+                StateContentKey::from_bytes(&request.content_key).unwrap(),
+            ),
+            ProtocolId::History => ContentKey::HistoryContentKey(
+                HistoryContentKey::from_bytes(&request.content_key).unwrap(),
+            ),
+            _ => {
+                return Err(OverlayRequestError::Failure(format!(
+                    "Trin does not currently support requested protocol: {:?}",
+                    self.protocol
+                )))
+            }
         };
         match self.storage.get(&content_key) {
             Ok(Some(value)) => {
@@ -1095,15 +1104,11 @@ impl<TContentKey: OverlayContentKey + Send> OverlayService<TContentKey> {
     ) -> Result<Vec<SszEnr>, OverlayRequestError> {
         // Attempt to derive the content ID for the content key.
         let content_id = match content_key {
-            ContentKey::StateContentKey(val) => {
-                val.derive_content_id().unwrap()
-            }
-            ContentKey::HistoryContentKey(val) => {
-                val.derive_content_id().unwrap()
-            }
+            ContentKey::StateContentKey(val) => val.derive_content_id().unwrap(),
+            ContentKey::HistoryContentKey(val) => val.derive_content_id().unwrap(),
         };
 
-        let content_id = Into::<[u8; 32]>::into(content_id).to_vec();
+        let content_id = Into::<[u8; 32]>::into(content_id);
         let self_node_id = self.local_enr().node_id();
         let self_distance = xor(&content_id, &self_node_id.raw());
 
@@ -1148,6 +1153,7 @@ mod tests {
     use std::net::Ipv4Addr;
 
     use crate::{
+        cli::DEFAULT_STORAGE_CAPACITY,
         portalnet::{
             discovery::Discovery,
             overlay::OverlayConfig,
@@ -1182,7 +1188,11 @@ mod tests {
             listening: HashMap::new(),
         }));
 
-        let storage = Arc::new(db::setup_portal_storage(discovery.local_enr().node_id(), 100000));
+        let storage_capacity: u32 = DEFAULT_STORAGE_CAPACITY.parse().unwrap();
+        let storage = Arc::new(db::setup_portal_storage(
+            discovery.local_enr().node_id(),
+            storage_capacity,
+        ));
 
         let overlay_config = OverlayConfig::default();
         let kbuckets = Arc::new(RwLock::new(KBucketsTable::new(

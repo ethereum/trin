@@ -12,7 +12,6 @@ use trin_core::{
     cli::{TrinConfig, HISTORY_NETWORK, STATE_NETWORK},
     jsonrpc::service::{launch_jsonrpc_server, JsonRpcExiter},
     portalnet::{discovery::Discovery, types::messages::PortalnetConfig},
-    utils::db::setup_portal_storage,
 };
 use trin_history::initialize_history_network;
 use trin_state::initialize_state_network;
@@ -45,10 +44,6 @@ pub async fn run_trin(
     // Search for discv5 peers (bucket refresh lookup)
     tokio::spawn(Arc::clone(&discovery).bucket_refresh_lookup());
 
-    // Setup Overlay database
-    let node_id = discovery.local_enr().node_id();
-    let storage = Arc::new(setup_portal_storage(node_id, trin_config.kb));
-
     let utp_listener = Arc::new(RwLock::new(UtpListener {
         discovery: Arc::clone(&discovery),
         utp_connections: HashMap::new(),
@@ -63,7 +58,7 @@ pub async fn run_trin(
                 &discovery,
                 &utp_listener,
                 portalnet_config.clone(),
-                Arc::clone(&storage),
+                trin_config.kb,
             )
             .await
         } else {
@@ -81,7 +76,7 @@ pub async fn run_trin(
                 &discovery,
                 &utp_listener,
                 portalnet_config.clone(),
-                Arc::clone(&storage),
+                trin_config.kb,
             )
             .await
         } else {

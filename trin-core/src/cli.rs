@@ -1,10 +1,11 @@
-use crate::portalnet::types::messages::HexData;
-use log::info;
-
 use std::env;
 use std::ffi::OsString;
 use std::net::SocketAddr;
+
+use log::info;
 use structopt::StructOpt;
+
+use crate::portalnet::types::messages::HexData;
 
 pub const DEFAULT_WEB3_IPC_PATH: &str = "/tmp/trin-jsonrpc.ipc";
 pub const DEFAULT_WEB3_HTTP_ADDRESS: &str = "127.0.0.1:8545";
@@ -12,6 +13,7 @@ const DEFAULT_DISCOVERY_PORT: &str = "9000";
 pub const HISTORY_NETWORK: &str = "history";
 pub const STATE_NETWORK: &str = "state";
 const DEFAULT_SUBNETWORKS: &str = "history,state";
+pub const DEFAULT_STORAGE_CAPACITY: &str = "100000";
 
 #[derive(StructOpt, Debug, PartialEq, Clone)]
 #[structopt(
@@ -93,7 +95,7 @@ pub struct TrinConfig {
 
     /// Number of Kilobytes to store in the DB
     #[structopt(
-        default_value = "100000", // 100mb
+        default_value(DEFAULT_STORAGE_CAPACITY),
         long,
         help = "Maximum number of kilobytes of total data to store in the DB"
     )]
@@ -173,7 +175,7 @@ mod test {
             web3_http_address: DEFAULT_WEB3_HTTP_ADDRESS.to_string(),
             web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
             pool_size: 2,
-            kb: 100000,
+            kb: DEFAULT_STORAGE_CAPACITY.parse().unwrap(),
             web3_transport: "ipc".to_string(),
             discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
             internal_ip: false,
@@ -201,7 +203,7 @@ mod test {
         let expected_config = TrinConfig {
             external_addr: None,
             private_key: None,
-            kb: 100000,
+            kb: DEFAULT_STORAGE_CAPACITY.parse().unwrap(),
             web3_http_address: "0.0.0.0:8080".to_string(),
             web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
             pool_size: 3,
@@ -243,7 +245,7 @@ mod test {
         let expected_config = TrinConfig {
             external_addr: None,
             private_key: None,
-            kb: 100000,
+            kb: DEFAULT_STORAGE_CAPACITY.parse().unwrap(),
             web3_http_address: DEFAULT_WEB3_HTTP_ADDRESS.to_string(),
             web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
             pool_size: 2,
@@ -283,7 +285,7 @@ mod test {
             external_addr: None,
             web3_http_address: DEFAULT_WEB3_HTTP_ADDRESS.to_string(),
             web3_ipc_path: "/path/test.ipc".to_string(),
-            kb: 100000,
+            kb: DEFAULT_STORAGE_CAPACITY.parse().unwrap(),
             pool_size: 2,
             web3_transport: "ipc".to_string(),
             discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
@@ -346,7 +348,7 @@ mod test {
             web3_http_address: DEFAULT_WEB3_HTTP_ADDRESS.to_string(),
             web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
             pool_size: 2,
-            kb: 100000,
+            kb: DEFAULT_STORAGE_CAPACITY.parse().unwrap(),
             web3_transport: "ipc".to_string(),
             discovery_port: 999,
             internal_ip: false,
@@ -370,7 +372,7 @@ mod test {
             web3_http_address: DEFAULT_WEB3_HTTP_ADDRESS.to_string(),
             web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
             pool_size: 2,
-            kb: 100000,
+            kb: DEFAULT_STORAGE_CAPACITY.parse().unwrap(),
             web3_transport: "ipc".to_string(),
             discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
             internal_ip: false,
@@ -416,7 +418,7 @@ mod test {
             web3_http_address: DEFAULT_WEB3_HTTP_ADDRESS.to_string(),
             web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
             pool_size: 2,
-            kb: 100000,
+            kb: DEFAULT_STORAGE_CAPACITY.parse().unwrap(),
             web3_transport: "ipc".to_string(),
             discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
             internal_ip: false,

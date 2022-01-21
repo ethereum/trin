@@ -1,12 +1,10 @@
 use discv5::enr::NodeId;
 use rand::{distributions::Alphanumeric, Rng};
-use sha3::{Digest, Sha3_256};
-use std::convert::TryInto;
 use std::process::Command;
 use std::sync::Arc;
 use structopt::StructOpt;
 use trin_core::portalnet::storage::{DistanceFunction, PortalStorage, PortalStorageConfig};
-use trin_core::portalnet::types::uint::U256;
+use trin_core::portalnet::types::content_keys::{ContentKey, StateContentKey};
 use trin_core::utils::db::get_data_dir;
 
 // For every 1 kb of data we store (key + value), RocksDB tends to grow by this many kb on disk...
@@ -46,14 +44,15 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         db: Arc::new(db),
         meta_db: Arc::new(meta_db),
     };
-    let mut storage = PortalStorage::new(storage_config, |key| sha256(key))?;
+    let mut storage = PortalStorage::new(storage_config)?;
 
     for _ in 0..num_of_entries {
         let value = generate_random_value(size_of_values);
         let key = generate_random_value(SIZE_OF_KEYS);
 
-        println!("{:?} -> {:?}", &key, &value);
-        storage.store(&key, &value)?;
+        let content_key = ContentKey::StateContentKey(StateContentKey::from_bytes(&key).unwrap());
+        println!("{:?} -> {:?}", &content_key, &value);
+        storage.store(&content_key, &value)?;
         println!();
     }
 
@@ -70,18 +69,6 @@ fn generate_random_value(number_of_bytes: u32) -> Vec<u8> {
         .sample_iter(&Alphanumeric)
         .take(number_of_bytes as usize)
         .collect()
-}
-
-// Placeholder content key -> content id conversion function
-fn sha256(key: &Vec<u8>) -> U256 {
-    let mut hasher = Sha3_256::new();
-    hasher.update(key);
-    let mut x = hasher.finalize();
-    let y: &mut [u8; 32] = x
-        .as_mut_slice()
-        .try_into()
-        .expect("try_into failed in hash placeholder");
-    U256::from(*y)
 }
 
 // CLI Parameter Handling

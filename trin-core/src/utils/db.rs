@@ -51,6 +51,5 @@ pub fn setup_portal_storage(node_id: NodeId, kb: u32) -> PortalStorage {
         db: Arc::new(rocks_db),
         meta_db: Arc::new(meta_db),
     };
-    let storage = PortalStorage::new(storage_config).unwrap();
-    storage
+    PortalStorage::new(storage_config).unwrap()
 }

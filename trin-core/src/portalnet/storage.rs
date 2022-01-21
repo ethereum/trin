@@ -9,9 +9,9 @@ use rocksdb::{Options, DB};
 use rusqlite::{params, Connection};
 use thiserror::Error;
 
-use crate::utils::{db::get_data_dir, distance::xor};
-use super::types::uint::U256;
 use super::types::content_keys::ContentKey;
+use super::types::uint::U256;
+use crate::utils::{db::get_data_dir, distance::xor};
 
 #[derive(Copy, Clone)]
 pub enum DistanceFunction {
@@ -110,12 +110,8 @@ impl PortalStorage {
     /// Takes into account our data radius and whether we are already storing the data.
     pub fn should_store(&self, key: &ContentKey) -> Result<bool, PortalStorageError> {
         let content_id = match key {
-            ContentKey::StateContentKey(val) => {
-                val.derive_content_id().unwrap()
-            }
-            ContentKey::HistoryContentKey(val) => {
-                val.derive_content_id().unwrap()
-            }
+            ContentKey::StateContentKey(val) => val.derive_content_id().unwrap(),
+            ContentKey::HistoryContentKey(val) => val.derive_content_id().unwrap(),
         };
         let content_id = Into::<[u8; 32]>::into(content_id);
         // Don't store if we already have the data
@@ -136,12 +132,8 @@ impl PortalStorage {
     /// Public method for storing a given value for a given content-key.
     pub fn store(&mut self, key: &ContentKey, value: &Vec<u8>) -> Result<(), PortalStorageError> {
         let content_id = match key {
-            ContentKey::StateContentKey(val) => {
-                val.derive_content_id().unwrap()
-            }
-            ContentKey::HistoryContentKey(val) => {
-                val.derive_content_id().unwrap()
-            }
+            ContentKey::StateContentKey(val) => val.derive_content_id().unwrap(),
+            ContentKey::HistoryContentKey(val) => val.derive_content_id().unwrap(),
         };
         let content_id = Into::<[u8; 32]>::into(content_id);
         let distance_to_content_id = self.distance_to_content_id(&content_id);
@@ -204,12 +196,8 @@ impl PortalStorage {
     /// If no value exists for the given content-key, Result<None> is returned.
     pub fn get(&self, key: &ContentKey) -> Result<Option<Vec<u8>>, PortalStorageError> {
         let content_id = match key {
-            ContentKey::StateContentKey(val) => {
-                val.derive_content_id().unwrap()
-            }
-            ContentKey::HistoryContentKey(val) => {
-                val.derive_content_id().unwrap()
-            }
+            ContentKey::StateContentKey(val) => val.derive_content_id().unwrap(),
+            ContentKey::HistoryContentKey(val) => val.derive_content_id().unwrap(),
         };
         let content_id = Into::<[u8; 32]>::into(content_id);
         println!("looking up content_id: {:02X?}", content_id);
@@ -462,21 +450,7 @@ struct DataSizeSum {
 pub mod test {
 
     use super::*;
-    use sha3::{Digest, Sha3_256};
-    use std::convert::TryInto;
-    use crate::portalnet::types::content_keys::StateContentKey;
-
-    // Placeholder content key -> content id conversion function
-    fn sha256(key: &Vec<u8>) -> U256 {
-        let mut hasher = Sha3_256::new();
-        hasher.update(key);
-        let mut x = hasher.finalize();
-        let y: &mut [u8; 32] = x
-            .as_mut_slice()
-            .try_into()
-            .expect("try_into failed in hash placeholder");
-        U256::from(y.clone())
-    }
+    use crate::portalnet::types::content_keys::{ContentKey, StateContentKey};
 
     #[test]
     fn test_new() -> Result<(), PortalStorageError> {
@@ -494,7 +468,7 @@ pub mod test {
             db,
             meta_db,
         };
-        let storage = PortalStorage::new(storage_config, |key| sha256(key))?;
+        let storage = PortalStorage::new(storage_config)?;
 
         // Assert that configs match the storage object's fields
         assert_eq!(storage.node_id, node_id);
@@ -518,7 +492,7 @@ pub mod test {
             meta_db,
         };
 
-        let mut storage = PortalStorage::new(storage_config, |key| sha256(key))?;
+        let mut storage = PortalStorage::new(storage_config)?;
 
         let key: Vec<u8> = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".into();
         let content_key = ContentKey::StateContentKey(StateContentKey::from_bytes(&key).unwrap());
@@ -542,7 +516,7 @@ pub mod test {
             db,
             meta_db,
         };
-        let mut storage = PortalStorage::new(storage_config, |key| sha256(key))?;
+        let mut storage = PortalStorage::new(storage_config)?;
         let key: Vec<u8> = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".into();
         let content_key = ContentKey::StateContentKey(StateContentKey::from_bytes(&key).unwrap());
         let value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
@@ -569,7 +543,7 @@ pub mod test {
             db,
             meta_db,
         };
-        let mut storage = PortalStorage::new(storage_config, |key| sha256(key))?;
+        let mut storage = PortalStorage::new(storage_config)?;
 
         let key: Vec<u8> = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".into();
         let content_key = ContentKey::StateContentKey(StateContentKey::from_bytes(&key).unwrap());
@@ -598,12 +572,14 @@ pub mod test {
             meta_db,
         };
 
-        let mut storage = PortalStorage::new(storage_config, |key| sha256(key))?;
+        let mut storage = PortalStorage::new(storage_config)?;
 
         let key_a: Vec<u8> = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".into();
-        let content_key_a = ContentKey::StateContentKey(StateContentKey::from_bytes(&key_a).unwrap());
+        let content_key_a =
+            ContentKey::StateContentKey(StateContentKey::from_bytes(&key_a).unwrap());
         let key_b: Vec<u8> = "p1K8ymqgNO9vJ1LwATa4yNqCxk6AMgNa".into();
-        let content_key_b = ContentKey::StateContentKey(StateContentKey::from_bytes(&key_b).unwrap());
+        let content_key_b =
+            ContentKey::StateContentKey(StateContentKey::from_bytes(&key_b).unwrap());
         let value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
 
         storage.store(&content_key_a, &value)?;
@@ -640,12 +616,13 @@ pub mod test {
             meta_db,
         };
 
-        let storage = PortalStorage::new(storage_config, |key| sha256(key))?;
+        let storage = PortalStorage::new(storage_config)?;
 
         // As u64: 3352017618602726004
         let key: Vec<u8> = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".into();
-        let content_id = storage.content_key_to_content_id(&key);
-
+        let content_key = ContentKey::StateContentKey(StateContentKey::from_bytes(&key).unwrap());
+        let content_id = content_key.to_content_id().unwrap();
+        let content_id = Into::<[u8; 32]>::into(content_id);
         let distance = storage.distance_to_content_id(&content_id);
 
         // Answer from https://xor.pw/
@@ -677,26 +654,31 @@ pub mod test {
             meta_db,
         };
 
-        let mut storage = PortalStorage::new(storage_config, |key| sha256(key))?;
+        let mut storage = PortalStorage::new(storage_config)?;
 
         let value: Vec<u8> = "value".into();
 
         let key_a: Vec<u8> = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".into();
-        let content_key_a = ContentKey::StateContentKey(StateContentKey::from_bytes(&key_a).unwrap());
+        let content_key_a =
+            ContentKey::StateContentKey(StateContentKey::from_bytes(&key_a).unwrap());
         storage.store(&content_key_a, &value)?;
 
         // This one is the farthest
         let key_b: Vec<u8> = "LHp1PeJ4C6c3nRUc7f6BI1FYULNL8aWB".into();
-        let content_key_b = ContentKey::StateContentKey(StateContentKey::from_bytes(&key_b).unwrap());
+        let content_key_b =
+            ContentKey::StateContentKey(StateContentKey::from_bytes(&key_b).unwrap());
         storage.store(&content_key_b, &value)?;
-        let expected_content_id = storage.content_key_to_content_id(&key_b);
+        let expected_content_id = content_key_b.to_content_id().unwrap();
+        let expected_content_id = Into::<[u8; 32]>::into(expected_content_id);
 
         let key_c: Vec<u8> = "HkybBgUebGtbwdrNDbxDWywtgWlUM8vW".into();
-        let content_key_c = ContentKey::StateContentKey(StateContentKey::from_bytes(&key_c).unwrap());
+        let content_key_c =
+            ContentKey::StateContentKey(StateContentKey::from_bytes(&key_c).unwrap());
         storage.store(&content_key_c, &value)?;
 
         let key_d: Vec<u8> = "gdOKkDEq9XFs2Tzay4Ecuw0obIISGw9Y".into();
-        let content_key_d = ContentKey::StateContentKey(StateContentKey::from_bytes(&key_d).unwrap());
+        let content_key_d =
+            ContentKey::StateContentKey(StateContentKey::from_bytes(&key_d).unwrap());
         storage.store(&content_key_d, &value)?;
 
         let result = storage.find_farthest_content_id().unwrap().unwrap();

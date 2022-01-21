@@ -5,9 +5,9 @@ use tokio::sync::RwLock;
 use trin_core::portalnet::{
     discovery::Discovery,
     overlay::{OverlayConfig, OverlayProtocol, OverlayRequestError},
-    storage::PortalStorage,
     types::messages::{PortalnetConfig, ProtocolId},
 };
+use trin_core::utils::db::setup_portal_storage;
 use trin_core::utp::stream::UtpListener;
 
 use super::content_key::HistoryContentKey;
@@ -22,13 +22,15 @@ impl HistoryNetwork {
     pub async fn new(
         discovery: Arc<Discovery>,
         utp_listener: Arc<RwLock<UtpListener>>,
-        storage: Arc<PortalStorage>,
+        storage_kb: u32,
         portal_config: PortalnetConfig,
     ) -> Self {
         let config = OverlayConfig {
             bootnode_enrs: portal_config.bootnode_enrs.clone(),
             ..Default::default()
         };
+        let node_id = discovery.local_enr().node_id();
+        let storage = Arc::new(setup_portal_storage(node_id, storage_kb));
         let overlay = OverlayProtocol::new(
             config,
             discovery,
