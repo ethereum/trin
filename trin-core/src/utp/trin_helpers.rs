@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 // These are just some Trin helper functions
 
 use ssz_derive::{Decode, Encode};

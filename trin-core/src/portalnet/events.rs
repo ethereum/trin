@@ -7,8 +7,8 @@ use tokio::sync::{mpsc, RwLock};
 use super::discovery::Discovery;
 use super::types::messages::ProtocolId;
 use crate::locks::RwLoggingExt;
-use crate::utp::stream::UtpListener;
-use crate::utp::trin_helpers::{UtpAccept, UtpMessage, UtpMessageId};
+use crate::utp::stream::{ConnectionState, UtpListener};
+use crate::utp::trin_helpers::{UtpAccept, UtpMessageId};
 use hex;
 use ssz::Decode;
 use std::str::FromStr;
@@ -108,46 +108,47 @@ impl PortalnetEvents {
         }
     }
 
-    // This could be handled in the UtpListener impl, but for consistency with data handling
-    // and clarity it can be put here
+    // https://github.com/ethereum/portal-network-specs/pull/98\
+    // Currently the way to handle data over uTP isn't finalized yet, so we are going to use the
+    // handle data on connection closed method, as that seems to be the accepted method for now.
     async fn process_utp_byte_stream(&mut self) {
-        for (_, conn) in self
+        for (conn_key, conn) in self
             .utp_listener
             .write_with_warn()
             .await
             .utp_connections
             .iter_mut()
         {
-            let received_stream = conn.recv_data_stream.clone();
+            if conn.state == ConnectionState::Disconnected {
+                let received_stream = conn.recv_data_stream.clone();
 
-            match UtpMessage::decode(&received_stream[..]) {
-                Ok(message) => {
-                    match self
-                        .utp_listener
-                        .read_with_warn()
-                        .await
-                        .listening
-                        .get(&conn.conn_id_recv)
-                    {
-                        Some(message_type) => match message_type {
-                            UtpMessageId::OfferAcceptStream => {
-                                let payload = UtpAccept::from_ssz_bytes(&message.payload[..])
-                                    .unwrap()
-                                    .message;
-
-                                for (key, content) in payload {
-                                    store(key, content).unwrap();
+                match self
+                    .utp_listener
+                    .read_with_warn()
+                    .await
+                    .listening
+                    .get(&conn.conn_id_recv)
+                {
+                    Some(message_type) => match message_type {
+                        UtpMessageId::OfferAcceptStream => {
+                            match UtpAccept::from_ssz_bytes(&received_stream[..]) {
+                                Ok(payload) => {
+                                    for (key, content) in payload.message {
+                                        store(key, content).unwrap();
+                                    }
                                 }
+                                Err(_) => debug!("Recv malformed data on handing UtpAccept"),
                             }
-                        },
-                        _ => warn!("uTP listening HashMap doesn't have uTP stream message type"),
-                    }
-
-                    // message was successfully handled, remove it from the buffer
-                    conn.recv_data_stream = received_stream[(message.len() as usize)..].to_owned();
+                        }
+                    },
+                    _ => warn!("uTP listening HashMap doesn't have uTP stream message type"),
                 }
-                // Ignore messages which are too short
-                _ => {}
+
+                self.utp_listener
+                    .write_with_warn()
+                    .await
+                    .utp_connections
+                    .remove(conn_key);
             }
         }
     }
