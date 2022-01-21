@@ -4,10 +4,8 @@ use std::{env, fs};
 use directories::ProjectDirs;
 use discv5::enr::NodeId;
 use rocksdb::{Options, DB};
-use sha3::{Digest, Sha3_256};
 
 use crate::portalnet::storage::{DistanceFunction, PortalStorage, PortalStorageConfig};
-use crate::portalnet::types::uint::U256;
 
 const TRIN_DATA_ENV_VAR: &str = "TRIN_DATA_PATH";
 
@@ -53,18 +51,6 @@ pub fn setup_portal_storage(node_id: NodeId, kb: u32) -> PortalStorage {
         db: Arc::new(rocks_db),
         meta_db: Arc::new(meta_db),
     };
-    let storage = PortalStorage::new(storage_config, |key| sha256(key)).unwrap();
+    let storage = PortalStorage::new(storage_config).unwrap();
     storage
-}
-
-// Placeholder content key -> content id conversion function
-fn sha256(key: &Vec<u8>) -> U256 {
-    let mut hasher = Sha3_256::new();
-    hasher.update(key);
-    let mut x = hasher.finalize();
-    let y: &mut [u8; 32] = x
-        .as_mut_slice()
-        .try_into()
-        .expect("try_into failed in hash placeholder");
-    U256::from(*y)
 }

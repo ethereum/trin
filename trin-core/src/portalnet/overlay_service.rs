@@ -15,6 +15,7 @@ use crate::{
         storage::PortalStorage,
         types::{
             content_key::OverlayContentKey,
+            content_keys::{ContentKey, HistoryContentKey, StateContentKey},
             messages::{
                 ByteList, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Ping,
                 Pong, ProtocolId, Request, Response, SszEnr,
@@ -542,13 +543,18 @@ impl<TContentKey: OverlayContentKey + Send> OverlayService<TContentKey> {
 
     /// Attempts to build a `Content` response for a `FindContent` request.
     fn handle_find_content(&self, request: FindContent) -> Result<Content, OverlayRequestError> {
-        match self.storage.get(&request.content_key) {
+        let content_key = match self.protocol {
+            ProtocolId::State => ContentKey::StateContentKey(StateContentKey::from_bytes(&request.content_key).unwrap()),
+            ProtocolId::History => ContentKey::HistoryContentKey(HistoryContentKey::from_bytes(&request.content_key).unwrap()),
+            _ => return Err(OverlayRequestError::Failure(format!("Trin does not currently support requested protocol: {:?}", self.protocol)))
+        };
+        match self.storage.get(&content_key) {
             Ok(Some(value)) => {
                 let content = ByteList::from(VariableList::from(value));
                 Ok(Content::Content(content))
             }
             Ok(None) => {
-                let enrs = self.find_nodes_close_to_content(request.content_key);
+                let enrs = self.find_nodes_close_to_content(content_key);
                 match enrs {
                     Ok(val) => Ok(Content::Enrs(val)),
                     Err(msg) => Err(OverlayRequestError::InvalidRequest(msg.to_string())),
@@ -1085,29 +1091,15 @@ impl<TContentKey: OverlayContentKey + Send> OverlayService<TContentKey> {
     /// Returns list of nodes closer to content than self, sorted by distance.
     fn find_nodes_close_to_content(
         &self,
-        content_key: Vec<u8>,
+        content_key: ContentKey,
     ) -> Result<Vec<SszEnr>, OverlayRequestError> {
         // Attempt to derive the content ID for the content key.
-        let content_id = match self.protocol {
-            ProtocolId::State => {
-                let state_content_key =
-                    StateContentKey::from_bytes(&content_key)?;
-                state_content_key.derive_content_id()?
+        let content_id = match content_key {
+            ContentKey::StateContentKey(val) => {
+                val.derive_content_id().unwrap()
             }
-            ProtocolId::History => {
-                let history_content_key =
-                    HistoryContentKey::from_bytes(&content_key)?;
-                history_content_key.derive_content_id()?
-            }
-            _ => {
-                warn!(
-                    "Attempt to find undefined content for {:?} protocol",
-                    self.protocol
-                );
-                return Err(OverlayRequestError::InvalidRequest(format!(
-                    "Content undefined for {:?} protocol",
-                    self.protocol,
-                )));
+            ContentKey::HistoryContentKey(val) => {
+                val.derive_content_id().unwrap()
             }
         };
 
