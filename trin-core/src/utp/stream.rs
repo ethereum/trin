@@ -160,7 +160,7 @@ impl UtpListener {
 // Used to be MicroTransportProtocol impl but it is basically just called UtpStream compared to the
 // Rust Tcp Lib so I changed it
 pub struct UtpStream {
-    state: ConnectionState,
+    pub state: ConnectionState,
     seq_nr: u16,
     ack_nr: u16,
     pub conn_id_recv: u16,
