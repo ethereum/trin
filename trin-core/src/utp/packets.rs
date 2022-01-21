@@ -103,12 +103,13 @@ impl Default for PacketHeader {
 
 #[derive(Debug)]
 pub struct PacketHeader {
+    /// It would be wasteful over the wire to have 2 separate bytes for type and ver, so we split the u8 in half 0000_0000
+    /// so the first half will store the type and the second half will store the version of the packet
     type_ver: u8,
     extension: u8,
     connection_id: u16,
-    // This time is in microseconds
-    timestamp: u32,
-    timestamp_difference: u32,
+    timestamp_microseconds: u32,
+    timestamp_difference_microseconds: u32,
     wnd_size: u32,
     pub seq_nr: u16,
     ack_nr: u16,
@@ -120,8 +121,8 @@ impl PacketHeader {
             type_ver: u8::from(PacketType::Data) << 4 | VERSION,
             extension: 0,
             connection_id: 0,
-            timestamp: 0,
-            timestamp_difference: 0,
+            timestamp_microseconds: 0,
+            timestamp_difference_microseconds: 0,
             wnd_size: 0xf000,
             seq_nr: 0,
             ack_nr: 0,
@@ -133,8 +134,8 @@ impl PacketHeader {
         buf.extend_from_slice(&[self.type_ver]);
         buf.extend_from_slice(&[self.extension]);
         buf.extend_from_slice(&self.connection_id.to_be_bytes());
-        buf.extend_from_slice(&self.timestamp.to_be_bytes());
-        buf.extend_from_slice(&self.timestamp_difference.to_be_bytes());
+        buf.extend_from_slice(&self.timestamp_microseconds.to_be_bytes());
+        buf.extend_from_slice(&self.timestamp_difference_microseconds.to_be_bytes());
         buf.extend_from_slice(&self.wnd_size.to_be_bytes());
         buf.extend_from_slice(&self.seq_nr.to_be_bytes());
         buf.extend_from_slice(&self.ack_nr.to_be_bytes());
@@ -146,8 +147,10 @@ impl PacketHeader {
             type_ver: bytes[0],
             extension: bytes[1],
             connection_id: u16::from_be_bytes([bytes[2], bytes[3]]),
-            timestamp: u32::from_be_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]),
-            timestamp_difference: u32::from_be_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]),
+            timestamp_microseconds: u32::from_be_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]),
+            timestamp_difference_microseconds: u32::from_be_bytes([
+                bytes[8], bytes[9], bytes[10], bytes[11],
+            ]),
             wnd_size: u32::from_be_bytes([bytes[12], bytes[13], bytes[14], bytes[15]]),
             seq_nr: u16::from_be_bytes([bytes[16], bytes[17]]),
             ack_nr: u16::from_be_bytes([bytes[18], bytes[19]]),
@@ -157,12 +160,15 @@ impl PacketHeader {
     pub fn version(&self) -> u8 {
         self.type_ver & 0xf
     }
+
     pub fn set_version(&mut self, int: u8) {
         self.type_ver = (self.type_ver & 0xf0) | (int & 0xf)
     }
+
     pub fn type_(&self) -> PacketType {
         PacketType::try_from(self.type_ver >> 4).unwrap()
     }
+
     pub fn set_type(&mut self, t: PacketType) {
         self.type_ver = (self.type_ver & 0xf) | (u8::from(t) << 4)
     }
@@ -171,12 +177,12 @@ impl PacketHeader {
         self.connection_id = connection_id;
     }
 
-    pub fn set_timestamp(&mut self, timestamp: u32) {
-        self.timestamp = timestamp;
+    pub fn set_timestamp(&mut self, timestamp_microseconds: u32) {
+        self.timestamp_microseconds = timestamp_microseconds;
     }
 
-    pub fn set_timestamp_difference(&mut self, timestamp_difference: u32) {
-        self.timestamp_difference = timestamp_difference;
+    pub fn set_timestamp_difference(&mut self, timestamp_difference_microseconds: u32) {
+        self.timestamp_difference_microseconds = timestamp_difference_microseconds;
     }
 
     pub fn set_wnd_size(&mut self, wnd_size: u32) {
@@ -241,11 +247,11 @@ impl Packet {
     }
 
     pub fn timestamp(&self) -> u32 {
-        self.get_header().timestamp
+        self.get_header().timestamp_microseconds
     }
 
     pub fn timestamp_difference(&self) -> u32 {
-        self.get_header().timestamp_difference
+        self.get_header().timestamp_difference_microseconds
     }
 
     pub fn wnd_size(&self) -> u32 {
