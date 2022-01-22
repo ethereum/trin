@@ -1,4 +1,5 @@
 use crate::portalnet::types::uint::U256;
+use hmac_sha256::Hash;
 use sha3::{Digest, Keccak256};
 use std::convert::TryInto;
 use thiserror::Error;
@@ -21,12 +22,16 @@ impl VecToArrayError {
     }
 }
 
-pub fn keccak(key: &str) -> Result<U256, VecToArrayError> {
+pub fn keccak256(key: &[u8]) -> U256 {
     let mut hasher = Keccak256::new();
     hasher.update(key);
-    let result = hasher.finalize().to_vec();
-    // if the underlying hash library is secure, then a 32 len vector will always be returned, so no error should ever occur
-    Ok(U256::from(vec_to_array::<u8, 32>(result)?))
+    let result = &hasher.finalize()[..];
+    U256::from(result)
+}
+
+pub fn sha256(key: &[u8]) -> U256 {
+    let output = Hash::hash(key);
+    U256::from(output)
 }
 
 pub fn vec_to_array<T, const N: usize>(v: Vec<T>) -> Result<[T; N], VecToArrayError> {
@@ -39,21 +44,31 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_keccak() {
-        let test_input = "302938402a9f";
-        let result = keccak(test_input).unwrap();
-        let inter = hex::decode("3fea4dacec93ff6fd6a7462d1a2cc656f7a13361bb36abf0dde7c27a3ca7606d")
+    fn test_keccak256() {
+        let test_input = hex::decode("302938402a9f").unwrap();
+        let actual = keccak256(&test_input);
+        let bytes = hex::decode("924fd25eb4fdce477517e48f6e4d25d2fe53139c7ebcd7a1ac102577a465e4ca")
             .unwrap();
-        let actual = U256::from(vec_to_array(inter).unwrap());
-        assert_eq!(actual, result);
+        let expected = U256::from(vec_to_array(bytes).unwrap());
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_sha256() {
+        let test_input = hex::decode("302938402a9f").unwrap();
+        let actual = sha256(&test_input);
+        let inter = hex::decode("20b2e507035deae9513e0622890508a27c8f79648aa5d7dcce0fe34fea6893df")
+            .unwrap();
+        let expected = U256::from(vec_to_array(inter).unwrap());
+        assert_eq!(actual, expected);
     }
 
     #[test]
     fn test_vec_to_array() {
         let input = vec![4, 2, 5, 6];
-        let result = vec_to_array(input).unwrap();
-        let actual = [4, 2, 5, 6];
-        assert_eq!(result, actual);
+        let actual = vec_to_array(input).unwrap();
+        let expected = [4, 2, 5, 6];
+        assert_eq!(actual, expected);
     }
 
     #[test]
