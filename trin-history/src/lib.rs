@@ -17,6 +17,7 @@ use trin_core::cli::TrinConfig;
 use trin_core::jsonrpc::types::HistoryJsonRpcRequest;
 use trin_core::portalnet::discovery::Discovery;
 use trin_core::portalnet::events::PortalnetEvents;
+use trin_core::portalnet::storage::{DistanceFunction, PortalStorage, PortalStorageConfig};
 use trin_core::portalnet::types::messages::PortalnetConfig;
 use trin_core::utp::stream::UtpListener;
 
@@ -61,6 +62,18 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let portal_events_discovery = Arc::clone(&discovery);
     let portal_events_utp_listener = Arc::clone(&utp_listener);
 
+    // Initialize DB config
+    let node_id = discovery.local_enr().node_id();
+    let rocks_db = PortalStorage::setup_rocksdb(node_id).unwrap();
+    let meta_db = PortalStorage::setup_sqlite(node_id).unwrap();
+    let storage_config = PortalStorageConfig {
+        storage_capacity_kb: (trin_config.kb / 4) as u64,
+        node_id,
+        distance_function: DistanceFunction::Xor,
+        db: Arc::new(rocks_db),
+        meta_db: Arc::new(meta_db),
+    };
+
     // Spawn main event handler
     tokio::spawn(async move {
         let events = PortalnetEvents::new(
@@ -76,7 +89,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let history_network = HistoryNetwork::new(
         discovery.clone(),
         utp_listener.clone(),
-        trin_config.kb,
+        storage_config,
         portalnet_config.clone(),
     )
     .await;
@@ -97,7 +110,7 @@ pub async fn initialize_history_network(
     discovery: &Arc<Discovery>,
     utp_listener: &Arc<RwLock<UtpListener>>,
     portalnet_config: PortalnetConfig,
-    storage_kb: u32,
+    storage_config: PortalStorageConfig,
 ) -> (
     HistoryHandler,
     HistoryNetworkTask,
@@ -110,7 +123,7 @@ pub async fn initialize_history_network(
     let history_network = HistoryNetwork::new(
         Arc::clone(discovery),
         Arc::clone(utp_listener),
-        storage_kb,
+        storage_config,
         portalnet_config.clone(),
     )
     .await;

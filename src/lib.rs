@@ -11,7 +11,11 @@ use trin_core::utp::stream::UtpListener;
 use trin_core::{
     cli::{TrinConfig, HISTORY_NETWORK, STATE_NETWORK},
     jsonrpc::service::{launch_jsonrpc_server, JsonRpcExiter},
-    portalnet::{discovery::Discovery, types::messages::PortalnetConfig},
+    portalnet::{
+        discovery::Discovery,
+        storage::{DistanceFunction, PortalStorage, PortalStorageConfig},
+        types::messages::PortalnetConfig,
+    },
 };
 use trin_history::initialize_history_network;
 use trin_state::initialize_state_network;
@@ -44,11 +48,24 @@ pub async fn run_trin(
     // Search for discv5 peers (bucket refresh lookup)
     tokio::spawn(Arc::clone(&discovery).bucket_refresh_lookup());
 
+    // Initialize UTP listener
     let utp_listener = Arc::new(RwLock::new(UtpListener {
         discovery: Arc::clone(&discovery),
         utp_connections: HashMap::new(),
         listening: HashMap::new(),
     }));
+
+    // Initialize DB config
+    let node_id = discovery.local_enr().node_id();
+    let rocks_db = PortalStorage::setup_rocksdb(node_id).unwrap();
+    let meta_db = PortalStorage::setup_sqlite(node_id).unwrap();
+    let storage_config = PortalStorageConfig {
+        storage_capacity_kb: (trin_config.kb / 4) as u64,
+        node_id,
+        distance_function: DistanceFunction::Xor,
+        db: Arc::new(rocks_db),
+        meta_db: Arc::new(meta_db),
+    };
 
     debug!("Selected networks to spawn: {:?}", trin_config.networks);
     // Initialize state sub-network service and event handlers, if selected
@@ -58,7 +75,7 @@ pub async fn run_trin(
                 &discovery,
                 &utp_listener,
                 portalnet_config.clone(),
-                trin_config.kb,
+                storage_config.clone(),
             )
             .await
         } else {
@@ -76,7 +93,7 @@ pub async fn run_trin(
                 &discovery,
                 &utp_listener,
                 portalnet_config.clone(),
-                trin_config.kb,
+                storage_config,
             )
             .await
         } else {

@@ -17,10 +17,10 @@ use crate::utils::{db::get_data_dir, distance::xor};
 pub enum DistanceFunction {
     Xor,
     State,
-    History,
 }
 
 /// Struct for configuring a PortalStorage instance.
+#[derive(Clone)]
 pub struct PortalStorageConfig {
     pub storage_capacity_kb: u64,
     pub node_id: NodeId,
@@ -72,6 +72,7 @@ pub enum PortalStorageError {
     OutsideDistanceError,
 }
 
+// todo: re-evaluate these, can we remove them?
 unsafe impl Send for PortalStorage {}
 unsafe impl Sync for PortalStorage {}
 
@@ -200,7 +201,6 @@ impl PortalStorage {
             ContentKey::HistoryContentKey(val) => val.derive_content_id().unwrap(),
         };
         let content_id = Into::<[u8; 32]>::into(content_id);
-        println!("looking up content_id: {:02X?}", content_id);
         Ok(self.db.get(content_id)?)
     }
 
@@ -325,9 +325,6 @@ impl PortalStorage {
             DistanceFunction::State => {
                 panic!("State distance function is not implemented yet.")
             }
-            DistanceFunction::History => {
-                panic!("History distance function is not implemented yet.")
-            }
         };
 
         Ok(Some(result))
@@ -393,7 +390,6 @@ impl PortalStorage {
         let data_path_root: String = get_data_dir(node_id).to_owned();
         let data_suffix: &str = "/rocksdb";
         let data_path = data_path_root + data_suffix;
-        println!("data path: {:?}", data_path);
 
         let mut db_opts = Options::default();
         db_opts.create_if_missing(true);

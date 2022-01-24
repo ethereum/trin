@@ -1158,8 +1158,9 @@ mod tests {
             discovery::Discovery,
             overlay::OverlayConfig,
             types::{content_key::MockContentKey, messages::PortalnetConfig},
+            storage::{DistanceFunction, PortalStorage, PortalStorageConfig},
+            types::messages::PortalnetConfig,
         },
-        utils::db,
     };
 
     use discv5::{
@@ -1188,11 +1189,19 @@ mod tests {
             listening: HashMap::new(),
         }));
 
+        // Initialize DB config
         let storage_capacity: u32 = DEFAULT_STORAGE_CAPACITY.parse().unwrap();
-        let storage = Arc::new(db::setup_portal_storage(
-            discovery.local_enr().node_id(),
-            storage_capacity,
-        ));
+        let node_id = discovery.local_enr().node_id();
+        let rocks_db = PortalStorage::setup_rocksdb(node_id).unwrap();
+        let meta_db = PortalStorage::setup_sqlite(node_id).unwrap();
+        let storage_config = PortalStorageConfig {
+            storage_capacity_kb: (storage_capacity / 4) as u64,
+            node_id,
+            distance_function: DistanceFunction::Xor,
+            db: Arc::new(rocks_db),
+            meta_db: Arc::new(meta_db),
+        };
+        let storage = Arc::new(PortalStorage::new(storage_config).unwrap());
 
         let overlay_config = OverlayConfig::default();
         let kbuckets = Arc::new(RwLock::new(KBucketsTable::new(

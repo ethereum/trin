@@ -12,6 +12,7 @@ use trin_core::cli::TrinConfig;
 use trin_core::jsonrpc::types::StateJsonRpcRequest;
 use trin_core::portalnet::discovery::Discovery;
 use trin_core::portalnet::events::PortalnetEvents;
+use trin_core::portalnet::storage::{DistanceFunction, PortalStorage, PortalStorageConfig};
 use trin_core::portalnet::types::messages::PortalnetConfig;
 use trin_core::utp::stream::UtpListener;
 
@@ -59,6 +60,18 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let portal_events_discovery = Arc::clone(&discovery);
     let portal_events_utp_listener = Arc::clone(&utp_listener);
 
+    // Initialize DB config
+    let node_id = discovery.local_enr().node_id();
+    let rocks_db = PortalStorage::setup_rocksdb(node_id).unwrap();
+    let meta_db = PortalStorage::setup_sqlite(node_id).unwrap();
+    let storage_config = PortalStorageConfig {
+        storage_capacity_kb: (trin_config.kb / 4) as u64,
+        node_id,
+        distance_function: DistanceFunction::Xor,
+        db: Arc::new(rocks_db),
+        meta_db: Arc::new(meta_db),
+    };
+
     // Spawn main event handler
     tokio::spawn(async move {
         let events = PortalnetEvents::new(
@@ -74,7 +87,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state_network = StateNetwork::new(
         discovery.clone(),
         utp_listener.clone(),
-        trin_config.kb,
+        storage_config,
         portalnet_config.clone(),
     )
     .await;
@@ -95,14 +108,14 @@ pub async fn initialize_state_network(
     discovery: &Arc<Discovery>,
     utp_listener: &Arc<RwLock<UtpListener>>,
     portalnet_config: PortalnetConfig,
-    storage_kb: u32,
+    storage_config: PortalStorageConfig,
 ) -> (StateHandler, StateNetworkTask, StateEventTx, StateJsonRpcTx) {
     let (state_jsonrpc_tx, state_jsonrpc_rx) = mpsc::unbounded_channel::<StateJsonRpcRequest>();
     let (state_event_tx, state_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
     let state_network = StateNetwork::new(
         Arc::clone(discovery),
         Arc::clone(utp_listener),
-        storage_kb,
+        storage_config,
         portalnet_config.clone(),
     )
     .await;

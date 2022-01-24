@@ -13,7 +13,7 @@ const DEFAULT_DISCOVERY_PORT: &str = "9000";
 pub const HISTORY_NETWORK: &str = "history";
 pub const STATE_NETWORK: &str = "state";
 const DEFAULT_SUBNETWORKS: &str = "history,state";
-pub const DEFAULT_STORAGE_CAPACITY: &str = "100000";
+pub const DEFAULT_STORAGE_CAPACITY: &str = "100000"; // 100mb
 
 #[derive(StructOpt, Debug, PartialEq, Clone)]
 #[structopt(
