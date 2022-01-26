@@ -6,6 +6,7 @@ pub mod discovery;
 pub mod events;
 pub mod overlay;
 mod overlay_service;
+pub mod sql;
 pub mod storage;
 pub mod types;
 

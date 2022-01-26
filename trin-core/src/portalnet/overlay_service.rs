@@ -1168,6 +1168,8 @@ mod tests {
         kbucket::Entry,
     };
     use rand::Rng;
+    use discv5::enr::{CombinedKey, EnrBuilder};
+    use serial_test::serial;
     use tokio_test::{assert_pending, assert_ready, task};
 
     macro_rules! poll_request_rx {
@@ -1193,15 +1195,17 @@ mod tests {
         let storage_capacity: u32 = DEFAULT_STORAGE_CAPACITY.parse().unwrap();
         let node_id = discovery.local_enr().node_id();
         let rocks_db = PortalStorage::setup_rocksdb(node_id).unwrap();
-        let meta_db = PortalStorage::setup_sqlite(node_id).unwrap();
+        let (sql_handler_tx, sql_handler_rx) = mpsc::channel(32);
+        let sql_handler = PortalStorage::setup_sql(node_id, sql_handler_rx).unwrap();
         let storage_config = PortalStorageConfig {
             storage_capacity_kb: (storage_capacity / 4) as u64,
             node_id,
             distance_function: DistanceFunction::Xor,
             db: Arc::new(rocks_db),
-            meta_db: Arc::new(meta_db),
+            sql_handler_tx,
         };
-        let storage = Arc::new(PortalStorage::new(storage_config).unwrap());
+        tokio::spawn(sql_handler.process_sql_requests());
+        let storage = Arc::new(PortalStorage::new(storage_config).await.unwrap());
 
         let overlay_config = OverlayConfig::default();
         let kbuckets = Arc::new(RwLock::new(KBucketsTable::new(
@@ -1252,8 +1256,9 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn process_ping_source_in_table_higher_enr_seq() {
-        let mut service = task::spawn(build_service());
+        let mut service = task::spawn(build_service().await);
 
         let (_, source) = generate_random_remote_enr();
         let node_id = source.node_id();
@@ -1305,8 +1310,9 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn process_ping_source_not_in_table() {
-        let mut service = task::spawn(build_service());
+        let mut service = task::spawn(build_service().await);
 
         let (_, source) = generate_random_remote_enr();
         let node_id = source.node_id();
@@ -1323,8 +1329,9 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn process_request_failure() {
-        let mut service = task::spawn(build_service());
+        let mut service = task::spawn(build_service().await);
 
         let (_, destination) = generate_random_remote_enr();
         let node_id = destination.node_id();
@@ -1367,8 +1374,17 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
+    async fn process_response_source_in_table_disconnected() {}
+
+    #[tokio::test]
+    #[serial]
+    async fn process_response_source_not_in_table() {}
+
+    #[tokio::test]
+    #[serial]
     async fn process_pong_source_in_table_higher_enr_seq() {
-        let mut service = task::spawn(build_service());
+        let mut service = task::spawn(build_service().await);
 
         let (_, source) = generate_random_remote_enr();
         let node_id = source.node_id();
@@ -1420,8 +1436,9 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn process_pong_source_not_in_table() {
-        let mut service = task::spawn(build_service());
+        let mut service = task::spawn(build_service().await);
 
         let (_, source) = generate_random_remote_enr();
         let data_radius = U256::from(u64::MAX);
@@ -1437,6 +1454,7 @@ mod tests {
     }
 
     #[tokio::test]
+<<<<<<< HEAD
     async fn process_discovered_enrs_local_enr() {
         let mut service = task::spawn(build_service());
         let local_enr = service.discovery.local_enr();
@@ -1574,8 +1592,9 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn request_node() {
-        let mut service = task::spawn(build_service());
+        let mut service = task::spawn(build_service().await);
 
         let (_, destination) = generate_random_remote_enr();
         service.request_node(&destination);
@@ -1602,8 +1621,9 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn ping_node() {
-        let mut service = task::spawn(build_service());
+        let mut service = task::spawn(build_service().await);
 
         let (_, destination) = generate_random_remote_enr();
         service.ping_node(&destination);
@@ -1623,8 +1643,9 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn connect_node() {
-        let mut service = task::spawn(build_service());
+        let mut service = task::spawn(build_service().await);
 
         let (_, enr) = generate_random_remote_enr();
         let node_id = enr.node_id();
@@ -1657,8 +1678,9 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn update_node_connection_state_disconnected_to_connected() {
-        let mut service = task::spawn(build_service());
+        let mut service = task::spawn(build_service().await);
 
         let (_, enr) = generate_random_remote_enr();
         let node_id = enr.node_id();
@@ -1701,8 +1723,9 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn update_node_connection_state_connected_to_disconnected() {
-        let mut service = task::spawn(build_service());
+        let mut service = task::spawn(build_service().await);
 
         let (_, enr) = generate_random_remote_enr();
         let node_id = enr.node_id();
@@ -1748,8 +1771,10 @@ mod tests {
     #[case(6)]
     #[case(0)]
     #[case(255)]
-    fn generate_random_node_id(#[case] target_bucket_idx: u8) {
-        let service = task::spawn(build_service());
+    #[tokio::test]
+    #[serial]
+    async fn test_generate_random_node_id(#[case] target_bucket_idx: u8) {
+        let service = task::spawn(build_service().await);
         let random_node_id = service.generate_random_node_id(target_bucket_idx).unwrap();
         let key = kbucket::Key::from(random_node_id);
         let bucket = service.kbuckets.read();

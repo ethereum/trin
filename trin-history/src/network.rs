@@ -29,7 +29,7 @@ impl HistoryNetwork {
             bootnode_enrs: portal_config.bootnode_enrs.clone(),
             ..Default::default()
         };
-        let storage = Arc::new(PortalStorage::new(storage_config).unwrap());
+        let storage = Arc::new(PortalStorage::new(storage_config).await.unwrap());
         let overlay = OverlayProtocol::new(
             config,
             discovery,

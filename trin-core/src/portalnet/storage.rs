@@ -1,16 +1,24 @@
 use std::convert::TryInto;
 use std::fs;
 use std::sync::Arc;
+use std::time::Duration;
 
 use discv5::enr::NodeId;
 use hex;
 use log::{debug, error};
 use rocksdb::{Options, DB};
-use rusqlite::{params, Connection};
+use rusqlite::Connection;
+use serde_json::Value;
 use thiserror::Error;
+use tokio::sync::{mpsc, oneshot};
+use tokio::time::timeout;
 
 use super::types::content_keys::ContentKey;
 use super::types::uint::U256;
+use crate::portalnet::sql::{
+    FindFarthestParams, InsertParams, RemoveParams, SqlHandler, SqlHandlerError, SqlParams,
+    SqlQuery, SqlTransaction,
+};
 use crate::utils::{db::get_data_dir, distance::xor};
 
 #[derive(Copy, Clone)]
@@ -26,7 +34,7 @@ pub struct PortalStorageConfig {
     pub node_id: NodeId,
     pub distance_function: DistanceFunction,
     pub db: Arc<rocksdb::DB>,
-    pub meta_db: Arc<rusqlite::Connection>,
+    pub sql_handler_tx: mpsc::Sender<SqlTransaction>,
 }
 
 /// Struct whose public methods abstract away Kademlia-based storage behavior.
@@ -36,24 +44,32 @@ pub struct PortalStorage {
     data_radius: u64,
     farthest_content_id: Option<[u8; 32]>,
     db: Arc<rocksdb::DB>,
-    meta_db: Arc<rusqlite::Connection>,
+    sql_handler_tx: mpsc::Sender<SqlTransaction>,
     distance_function: DistanceFunction,
 }
 
 /// Error type returned in a Result by any failable public PortalStorage methods.
 #[derive(Debug, Error)]
 pub enum PortalStorageError {
+    #[error("SqlHandler Error")]
+    SqlHandler(#[from] SqlHandlerError),
+
     #[error("RocksDB Error")]
     RocksDB(#[from] rocksdb::Error),
 
-    #[error("Sqlite Error")]
-    Sqlite(#[from] rusqlite::Error),
+    #[error("Sql Error")]
+    Sql(#[from] rusqlite::Error),
 
     #[error("IO Error")]
     IOError(#[from] std::io::Error),
 
     #[error("Sum data size error: received None from SQLite")]
     SumError(),
+
+    #[error(
+        "Timeout during {request_type:} request to SqlHandler. Verify the SqlHandler is running."
+    )]
+    SqlTimeout { request_type: String },
 
     #[error("While {doing:?}, expected to receive data of size {expected:?} but found data of size {actual:?}")]
     DataSizeError {
@@ -68,18 +84,26 @@ pub enum PortalStorageError {
         error: std::ffi::OsString,
     },
 
+    #[error("Unable to insert content id into meta db: {content_id:?}")]
+    InsertError { content_id: Vec<u8> },
+
+    #[error("Unable to remove content id from meta db: {content_id:?}")]
+    RemoveError { content_id: Vec<u8> },
+
+    #[error("Unable to find farthest content id from meta db.")]
+    FindFarthestError,
+
+    #[error("Unable to find total storage size of db.")]
+    TotalStorageError,
+
     #[error("Content can not be stored since it falls outside our radius")]
     OutsideDistanceError,
 }
 
-// todo: re-evaluate these, can we remove them?
-unsafe impl Send for PortalStorage {}
-unsafe impl Sync for PortalStorage {}
-
 impl PortalStorage {
     /// Public constructor for building a PortalStorage object.
     /// Checks whether a populated database already exists vs a fresh instance.
-    pub fn new(config: PortalStorageConfig) -> Result<Self, PortalStorageError> {
+    pub async fn new(config: PortalStorageConfig) -> Result<Self, PortalStorageError> {
         // Initialize the instance
         let mut storage = Self {
             node_id: config.node_id,
@@ -87,16 +111,16 @@ impl PortalStorage {
             data_radius: u64::MAX,
             db: config.db,
             farthest_content_id: None,
-            meta_db: config.meta_db,
+            sql_handler_tx: config.sql_handler_tx,
             distance_function: config.distance_function,
         };
 
         // Check whether we already have data, and if so
         // use it to set the farthest_key and data_radius fields
-        match storage.find_farthest_content_id()? {
+        match storage.find_farthest_content_id().await? {
             Some(content_id) => {
                 storage.farthest_content_id = Some(content_id.clone());
-                if storage.capacity_reached()? {
+                if storage.capacity_reached().await? {
                     storage.data_radius = storage.distance_to_content_id(&content_id);
                 }
             }
@@ -131,7 +155,11 @@ impl PortalStorage {
     }
 
     /// Public method for storing a given value for a given content-key.
-    pub fn store(&mut self, key: &ContentKey, value: &Vec<u8>) -> Result<(), PortalStorageError> {
+    pub async fn store(
+        &mut self,
+        key: &ContentKey,
+        value: &Vec<u8>,
+    ) -> Result<(), PortalStorageError> {
         let content_id = match key {
             ContentKey::StateContentKey(val) => val.derive_content_id().unwrap(),
             ContentKey::HistoryContentKey(val) => val.derive_content_id().unwrap(),
@@ -147,7 +175,8 @@ impl PortalStorage {
 
         // Store the data.
         self.db_insert(&content_id, value)?;
-        self.meta_db_insert(&content_id, &key.to_bytes(), value)?;
+        self.meta_db_insert(&content_id, &key.to_bytes(), value)
+            .await?;
 
         // Update the farthest key if this key is either 1.) the first key ever or 2.) farther than the current farthest.
         match self.farthest_content_id.as_ref() {
@@ -163,7 +192,7 @@ impl PortalStorage {
         }
 
         // Delete furthest data until our data usage is less than capacity.
-        while self.capacity_reached()? {
+        while self.capacity_reached().await? {
             // Unwrap because this was set in the block before this loop.
             let id_to_remove = self.farthest_content_id.clone().unwrap();
 
@@ -173,9 +202,9 @@ impl PortalStorage {
             );
 
             self.db.delete(&id_to_remove)?;
-            self.meta_db_remove(&id_to_remove)?;
+            self.meta_db_remove(&id_to_remove).await?;
 
-            match self.find_farthest_content_id()? {
+            match self.find_farthest_content_id().await? {
                 None => {
                     error!("Database is over-capacity, but could not find find entry to delete!");
                     self.farthest_content_id = None;
@@ -224,6 +253,23 @@ impl PortalStorage {
         Ok(self.get_total_size_of_directory_in_bytes(get_data_dir(self.node_id))?)
     }
 
+    async fn send_sql_handler_request(
+        &self,
+        tx: SqlTransaction,
+        resp_rx: oneshot::Receiver<Result<Value, SqlHandlerError>>,
+        request_type: String,
+    ) -> Result<Value, SqlHandlerError> {
+        self.sql_handler_tx.send(tx).await?;
+        let result = timeout(Duration::from_millis(100), resp_rx).await;
+        match result {
+            Ok(val) => match val {
+                Ok(val) => val,
+                Err(_) => Err(SqlHandlerError::FailedExecution { request_type }),
+            },
+            Err(_) => Err(SqlHandlerError::Timeout),
+        }
+    }
+
     /// Internal method for inserting data into the db.
     fn db_insert(&self, content_id: &[u8; 32], value: &Vec<u8>) -> Result<(), PortalStorageError> {
         self.db.put(&content_id, value)?;
@@ -231,92 +277,100 @@ impl PortalStorage {
     }
 
     /// Internal method for inserting data into the meta db.
-    fn meta_db_insert(
+    async fn meta_db_insert(
         &self,
         content_id: &[u8; 32],
         content_key: &Vec<u8>,
         value: &Vec<u8>,
     ) -> Result<(), PortalStorageError> {
-        let content_id_as_u32: u32 = PortalStorage::byte_vector_to_u32(content_id.clone().to_vec());
-
-        let value_size = value.len();
-
-        match self.meta_db.execute(
-            INSERT_QUERY,
-            params![
-                content_id.to_vec(),
-                content_id_as_u32,
-                content_key,
-                value_size
-            ],
-        ) {
-            Ok(_) => Ok(()),
-            Err(e) => Err(PortalStorageError::Sqlite(e)),
-        }
+        let params = SqlParams::InsertParams(InsertParams {
+            content_id: content_id.to_vec(),
+            content_id_as_u32: PortalStorage::byte_vector_to_u32(content_id.to_vec()),
+            content_key: hex::encode(content_key.to_vec()),
+            value_size: value.len() as u32,
+        });
+        let (resp_tx, resp_rx) = oneshot::channel::<Result<Value, SqlHandlerError>>();
+        let tx = SqlTransaction {
+            query_type: SqlQuery::Insert,
+            params,
+            resp: resp_tx,
+        };
+        self.send_sql_handler_request(tx, resp_rx, "Insert".to_string())
+            .await?;
+        Ok(())
     }
 
     /// Internal method for removing a given content-id from the meta db.
-    fn meta_db_remove(&self, content_id: &[u8; 32]) -> Result<(), PortalStorageError> {
-        self.meta_db.execute(DELETE_QUERY, [content_id.to_vec()])?;
+    async fn meta_db_remove(&self, content_id: &[u8; 32]) -> Result<(), PortalStorageError> {
+        let (resp_tx, resp_rx) = oneshot::channel::<Result<Value, SqlHandlerError>>();
+        let params = SqlParams::RemoveParams(RemoveParams {
+            content_id: content_id.to_vec(),
+        });
+        let tx = SqlTransaction {
+            query_type: SqlQuery::Remove,
+            params,
+            resp: resp_tx,
+        };
+        self.send_sql_handler_request(tx, resp_rx, "Remove".to_string())
+            .await?;
         Ok(())
     }
 
     /// Internal method for determining whether the node is over-capacity.
-    fn capacity_reached(&self) -> Result<bool, PortalStorageError> {
-        let storage_usage = self.get_total_storage_usage_in_bytes_from_network()?;
+    async fn capacity_reached(&self) -> Result<bool, PortalStorageError> {
+        let storage_usage = self.get_total_storage_usage_in_bytes_from_network().await?;
         Ok(storage_usage > self.storage_capacity_in_bytes)
     }
 
     /// Internal method for measuring the total amount of requestable data that the node is storing.
-    fn get_total_storage_usage_in_bytes_from_network(&self) -> Result<u64, PortalStorageError> {
-        let mut query = self.meta_db.prepare(TOTAL_DATA_SIZE_QUERY)?;
-
-        let result = query.query_map([], |row| Ok(DataSizeSum { sum: row.get(0)? }));
-
-        let sum = match result?.next() {
-            Some(x) => x,
-            None => {
-                return Err(PortalStorageError::SumError());
-            }
-        }?
-        .sum;
-
-        Ok(sum)
+    async fn get_total_storage_usage_in_bytes_from_network(
+        &self,
+    ) -> Result<u64, PortalStorageError> {
+        let (resp_tx, resp_rx) = oneshot::channel::<Result<Value, SqlHandlerError>>();
+        let tx = SqlTransaction {
+            query_type: SqlQuery::TotalStorage,
+            params: SqlParams::None,
+            resp: resp_tx,
+        };
+        let total_storage = self
+            .send_sql_handler_request(tx, resp_rx, "TotalStorage".to_string())
+            .await?;
+        Ok(total_storage.as_u64().unwrap())
     }
 
     /// Internal method for finding the piece of stored data that has the farthest content id from our
     /// node id, according to xor distance. Used to determine which data to drop when at a capacity.
-    fn find_farthest_content_id(&self) -> Result<Option<[u8; 32]>, PortalStorageError> {
+    async fn find_farthest_content_id(&self) -> Result<Option<[u8; 32]>, PortalStorageError> {
         let result = match self.distance_function {
             DistanceFunction::Xor => {
-                let node_id_u32 = PortalStorage::byte_vector_to_u32(self.node_id.raw().to_vec());
-
-                let mut query = self.meta_db.prepare(XOR_FIND_FARTHEST_QUERY)?;
-
-                let mut result = query.query_map([node_id_u32], |row| {
-                    Ok(ContentId {
-                        id_long: row.get(0)?,
-                    })
-                })?;
-
-                let result = match result.next() {
-                    Some(row) => row,
-                    None => {
-                        return Ok(None);
-                    }
+                let (resp_tx, resp_rx) = oneshot::channel::<Result<Value, SqlHandlerError>>();
+                let tx = SqlTransaction {
+                    query_type: SqlQuery::FindFarthest,
+                    params: SqlParams::FindFarthestParams(FindFarthestParams {
+                        node_id: self.node_id.raw().to_vec(),
+                    }),
+                    resp: resp_tx,
                 };
-                let result = result?.id_long;
+                let json_value = self
+                    .send_sql_handler_request(tx, resp_rx, "FindFarthest".to_string())
+                    .await?;
+                let result = match json_value {
+                    Value::String(content_id) => hex::decode(content_id).unwrap(),
+                    Value::Null => return Ok(None),
+                    _ => return Err(PortalStorageError::FindFarthestError),
+                };
+
                 let result_vec: [u8; 32] = match result.len() {
                     // If exact data size, safe to expect conversion.
                     32 => result.try_into().expect(
                         "Unexpectedly failed to convert 32 element vec to 32 element array.",
                     ),
                     // Received data of size other than 32 bytes.
-                    x => {
+                    length => {
                         return Err(PortalStorageError::DataSizeError {
                             doing: "finding farthest content id".to_string(),
                             expected: 32,
-                            actual: x,
+                            actual: length,
                         });
                     }
                 };
@@ -369,8 +423,8 @@ impl PortalStorage {
         distance.0[3]
     }
 
-    // Converts most significant 4 bytes of a vector to a u32.
-    fn byte_vector_to_u32(vec: Vec<u8>) -> u32 {
+    /// Converts most significant 4 bytes of a vector to a u32.
+    pub fn byte_vector_to_u32(vec: Vec<u8>) -> u32 {
         if vec.len() < 4 {
             debug!("Error: XOR returned less than 4 bytes.");
             return 0;
@@ -398,62 +452,58 @@ impl PortalStorage {
 
     /// Helper function for opening a SQLite connection.
     /// Used for testing.
-    pub fn setup_sqlite(node_id: NodeId) -> Result<rusqlite::Connection, PortalStorageError> {
+    pub fn setup_sql(
+        node_id: NodeId,
+        sql_handler_rx: mpsc::Receiver<SqlTransaction>,
+    ) -> Result<SqlHandler, PortalStorageError> {
         let data_path_root: String = get_data_dir(node_id).to_owned();
         let data_suffix: &str = "/trin.sqlite";
         let data_path = data_path_root + data_suffix;
 
         let conn = Connection::open(data_path)?;
-
-        conn.execute(CREATE_QUERY, [])?;
-
-        Ok(conn)
+        let handler = SqlHandler::new(conn, sql_handler_rx)?;
+        Ok(handler)
     }
-}
-
-// SQLite Statements
-const CREATE_QUERY: &str = "create table if not exists content_metadata (
-                                content_id_long TEXT PRIMARY KEY,
-                                content_id_short INTEGER NOT NULL,
-                                content_key TEXT NOT NULL,
-                                content_size INTEGER
-                            )";
-
-const INSERT_QUERY: &str =
-    "INSERT OR IGNORE INTO content_metadata (content_id_long, content_id_short, content_key, content_size)
-                            VALUES (?1, ?2, ?3, ?4)";
-
-const DELETE_QUERY: &str = "DELETE FROM content_metadata
-                            WHERE content_id_long = (?1)";
-
-const XOR_FIND_FARTHEST_QUERY: &str = "SELECT
-                                    content_id_long
-                                    FROM content_metadata
-                                    ORDER BY ((?1 | content_id_short) - (?1 & content_id_short)) DESC";
-
-const TOTAL_DATA_SIZE_QUERY: &str = "SELECT SUM(content_size) FROM content_metadata";
-
-// SQLite Result Containers
-struct ContentId {
-    id_long: Vec<u8>,
-}
-
-struct DataSizeSum {
-    sum: u64,
 }
 
 #[cfg(test)]
 pub mod test {
 
     use super::*;
-    use crate::portalnet::types::content_keys::{ContentKey, StateContentKey};
+    use crate::portalnet::types::content_keys::{ContentKey, HeaderKey, HistoryContentKey};
+    use serial_test::serial;
+    use std::env;
+    use tempdir::TempDir;
 
-    #[test]
-    fn test_new() -> Result<(), PortalStorageError> {
+    fn generate_content_key() -> ContentKey {
+        // block 14115690
+        let block_hash =
+            hex::decode("05c7941834c39a98cbcec5a4890cc6dfcde245ba9fd885980b1544dca2373ff7")
+                .unwrap();
+        let mut key = [0u8; 32];
+        key.copy_from_slice(block_hash.as_slice());
+        ContentKey::HistoryContentKey(HistoryContentKey::HeaderKey(HeaderKey {
+            chain_id: 1u16,
+            block_hash: key,
+        }))
+    }
+
+    fn setup_temp_dir() -> TempDir {
+        let temp_dir = TempDir::new("trin").unwrap();
+        env::set_var("TRIN_DATA_PATH", temp_dir.path());
+        temp_dir
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_new() -> Result<(), PortalStorageError> {
+        let temp_dir = setup_temp_dir();
+
         let node_id = NodeId::random();
 
         let db = Arc::new(PortalStorage::setup_rocksdb(node_id)?);
-        let meta_db = Arc::new(PortalStorage::setup_sqlite(node_id)?);
+        let (sql_handler_tx, sql_handler_rx) = mpsc::channel(1);
+        let sql_handler = PortalStorage::setup_sql(node_id, sql_handler_rx)?;
 
         const CAPACITY: u64 = 100;
 
@@ -462,136 +512,152 @@ pub mod test {
             node_id,
             distance_function: DistanceFunction::Xor,
             db,
-            meta_db,
+            sql_handler_tx,
         };
-        let storage = PortalStorage::new(storage_config)?;
+        tokio::spawn(sql_handler.process_sql_requests());
+        let storage = PortalStorage::new(storage_config).await?;
 
         // Assert that configs match the storage object's fields
         assert_eq!(storage.node_id, node_id);
         assert_eq!(storage.storage_capacity_in_bytes, CAPACITY * 1000);
 
+        temp_dir.close()?;
         Ok(())
     }
 
-    #[test]
-    fn test_store() -> Result<(), PortalStorageError> {
+    #[tokio::test]
+    #[serial]
+    async fn test_storage_requires_sqlhandler_running() -> Result<(), PortalStorageError> {
+        let temp_dir = setup_temp_dir();
         let node_id = NodeId::random();
 
         let db = Arc::new(PortalStorage::setup_rocksdb(node_id)?);
-        let meta_db = Arc::new(PortalStorage::setup_sqlite(node_id)?);
+        let (sql_handler_tx, sql_handler_rx) = mpsc::channel(1);
+        PortalStorage::setup_sql(node_id, sql_handler_rx)?;
+
+        const CAPACITY: u64 = 100;
+
+        let storage_config = PortalStorageConfig {
+            storage_capacity_kb: CAPACITY,
+            node_id,
+            distance_function: DistanceFunction::Xor,
+            db,
+            sql_handler_tx,
+        };
+
+        let storage = PortalStorage::new(storage_config).await;
+        let _expected = SqlHandlerError::Timeout;
+        let matches = matches!(storage, _expected);
+
+        assert!(matches);
+
+        temp_dir.close()?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_store() -> Result<(), PortalStorageError> {
+        let temp_dir = setup_temp_dir();
+
+        let node_id = NodeId::random();
+
+        let db = Arc::new(PortalStorage::setup_rocksdb(node_id)?);
+        let (sql_handler_tx, sql_handler_rx) = mpsc::channel(1);
+        let sql_handler = PortalStorage::setup_sql(node_id, sql_handler_rx)?;
 
         let storage_config = PortalStorageConfig {
             storage_capacity_kb: 100,
             node_id,
             distance_function: DistanceFunction::Xor,
             db,
-            meta_db,
+            sql_handler_tx,
         };
 
-        let mut storage = PortalStorage::new(storage_config)?;
+        tokio::spawn(sql_handler.process_sql_requests());
 
-        let key: Vec<u8> = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".into();
-        let content_key = ContentKey::StateContentKey(StateContentKey::from_bytes(&key).unwrap());
+        let mut storage = PortalStorage::new(storage_config).await?;
+        let content_key = generate_content_key();
         let value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
-        storage.store(&content_key, &value)?;
+        storage.store(&content_key, &value).await?;
 
+        temp_dir.close()?;
         Ok(())
     }
 
-    #[test]
-    fn test_get_data() -> Result<(), PortalStorageError> {
+    #[tokio::test]
+    #[serial]
+    async fn test_get_data() -> Result<(), PortalStorageError> {
+        let temp_dir = setup_temp_dir();
+
         let node_id = NodeId::random();
 
         let db = Arc::new(PortalStorage::setup_rocksdb(node_id)?);
-        let meta_db = Arc::new(PortalStorage::setup_sqlite(node_id)?);
+        let (sql_handler_tx, sql_handler_rx) = mpsc::channel(1);
+        let sql_handler = PortalStorage::setup_sql(node_id, sql_handler_rx)?;
+        tokio::spawn(sql_handler.process_sql_requests());
 
         let storage_config = PortalStorageConfig {
             storage_capacity_kb: 100,
             node_id,
             distance_function: DistanceFunction::Xor,
             db,
-            meta_db,
+            sql_handler_tx,
         };
-        let mut storage = PortalStorage::new(storage_config)?;
-        let key: Vec<u8> = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".into();
-        let content_key = ContentKey::StateContentKey(StateContentKey::from_bytes(&key).unwrap());
+        let mut storage = PortalStorage::new(storage_config).await?;
+        let content_key = generate_content_key();
         let value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
-        storage.store(&content_key, &value)?;
+        storage.store(&content_key, &value).await?;
 
         let result = storage.get(&content_key).unwrap().unwrap();
 
         assert_eq!(result, value);
 
+        temp_dir.close()?;
         Ok(())
     }
 
-    #[test]
-    fn test_get_total_storage() -> Result<(), PortalStorageError> {
+    #[tokio::test]
+    #[serial]
+    async fn test_get_total_storage() -> Result<(), PortalStorageError> {
+        let temp_dir = setup_temp_dir();
+
         let node_id = NodeId::random();
 
         let db = Arc::new(PortalStorage::setup_rocksdb(node_id)?);
-        let meta_db = Arc::new(PortalStorage::setup_sqlite(node_id)?);
+        let (sql_handler_tx, sql_handler_rx) = mpsc::channel(1);
+        let sql_handler = PortalStorage::setup_sql(node_id, sql_handler_rx)?;
+        tokio::spawn(sql_handler.process_sql_requests());
 
         let storage_config = PortalStorageConfig {
             storage_capacity_kb: 100,
             node_id,
             distance_function: DistanceFunction::Xor,
             db,
-            meta_db,
+            sql_handler_tx,
         };
-        let mut storage = PortalStorage::new(storage_config)?;
+        let mut storage = PortalStorage::new(storage_config).await?;
 
-        let key: Vec<u8> = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".into();
-        let content_key = ContentKey::StateContentKey(StateContentKey::from_bytes(&key).unwrap());
+        let content_key = generate_content_key();
         let value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
-        storage.store(&content_key, &value)?;
+        storage.store(&content_key, &value).await?;
 
-        let bytes = storage.get_total_storage_usage_in_bytes_from_network()?;
+        let bytes = storage
+            .get_total_storage_usage_in_bytes_from_network()
+            .await?;
 
         assert_eq!(32, bytes);
 
+        temp_dir.close()?;
         Ok(())
     }
 
-    #[test]
-    fn test_should_store() -> Result<(), PortalStorageError> {
-        let node_id = NodeId::random();
+    #[tokio::test]
+    #[serial]
+    async fn test_should_store() -> Result<(), PortalStorageError> {
+        let temp_dir = setup_temp_dir();
 
-        let db = Arc::new(PortalStorage::setup_rocksdb(node_id)?);
-        let meta_db = Arc::new(PortalStorage::setup_sqlite(node_id)?);
-
-        let storage_config = PortalStorageConfig {
-            storage_capacity_kb: 100,
-            node_id,
-            distance_function: DistanceFunction::Xor,
-            db,
-            meta_db,
-        };
-
-        let mut storage = PortalStorage::new(storage_config)?;
-
-        let key_a: Vec<u8> = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".into();
-        let content_key_a =
-            ContentKey::StateContentKey(StateContentKey::from_bytes(&key_a).unwrap());
-        let key_b: Vec<u8> = "p1K8ymqgNO9vJ1LwATa4yNqCxk6AMgNa".into();
-        let content_key_b =
-            ContentKey::StateContentKey(StateContentKey::from_bytes(&key_b).unwrap());
-        let value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
-
-        storage.store(&content_key_a, &value)?;
-
-        let should_store_a = storage.should_store(&content_key_a)?;
-        let should_store_b = storage.should_store(&content_key_b)?;
-
-        assert_eq!(should_store_a, false);
-        assert_eq!(should_store_b, true);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_distance_to_key() -> Result<(), PortalStorageError> {
-        // As u64: 5615957961415228277
+        // As u256: 35251939465458175391971645015054168096878481684263240321586233488997076805486
         let example_node_id_bytes: [u8; 32] = [
             77, 239, 228, 2, 227, 174, 123, 117, 195, 237, 200, 80, 219, 0, 188, 225, 18, 196, 162,
             89, 204, 144, 204, 187, 71, 12, 147, 65, 19, 65, 167, 110,
@@ -602,34 +668,121 @@ pub mod test {
         };
 
         let db = Arc::new(PortalStorage::setup_rocksdb(node_id)?);
-        let meta_db = Arc::new(PortalStorage::setup_sqlite(node_id)?);
+        let (sql_handler_tx, sql_handler_rx) = mpsc::channel(1);
+
+        let sql_handler = PortalStorage::setup_sql(node_id, sql_handler_rx)?;
+        tokio::spawn(sql_handler.process_sql_requests());
 
         let storage_config = PortalStorageConfig {
             storage_capacity_kb: 100,
             node_id,
             distance_function: DistanceFunction::Xor,
             db,
-            meta_db,
+            sql_handler_tx,
         };
 
-        let storage = PortalStorage::new(storage_config)?;
+        let mut storage = PortalStorage::new(storage_config).await?;
+        let value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
 
-        // As u64: 3352017618602726004
-        let key: Vec<u8> = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".into();
-        let content_key = ContentKey::StateContentKey(StateContentKey::from_bytes(&key).unwrap());
+        // block 14115690
+        // content id as u256:              5701445789546971387853890390228320669946681132619292758904237535384791812776
+        // distance from node id as u256:   29607079854947394638644290140513652007972538914554032181524285051455066058182
+        let block_hash =
+            hex::decode("05c7941834c39a98cbcec5a4890cc6dfcde245ba9fd885980b1544dca2373ff7")
+                .unwrap();
+        let mut key = [0u8; 32];
+        key.copy_from_slice(block_hash.as_slice());
+        let content_key_a =
+            ContentKey::HistoryContentKey(HistoryContentKey::HeaderKey(HeaderKey {
+                chain_id: 1u16,
+                block_hash: key,
+            }));
+        storage.store(&content_key_a, &value).await?;
+
+        // block 14116437
+        // content id as u256:              23871079715462885586646939789258755405425791346736285845114521966636355669268
+        // distance from node id as u256:   54803022893030492915184992817984449688707796647786152400599495572486067350138
+        let block_hash_b =
+            hex::decode("537ab981abc9c1f59e370a4a0eda42818fed8d6a80678efefc3154c1146437e6")
+                .unwrap();
+        let mut hash_b = [0u8; 32];
+        hash_b.copy_from_slice(block_hash_b.as_slice());
+        let content_key_b =
+            ContentKey::HistoryContentKey(HistoryContentKey::HeaderKey(HeaderKey {
+                chain_id: 1u16,
+                block_hash: hash_b,
+            }));
+
+        storage.store(&content_key_a, &value).await?;
+
+        let should_store_a = storage.should_store(&content_key_a)?;
+        let should_store_b = storage.should_store(&content_key_b)?;
+
+        assert_eq!(should_store_a, false);
+        assert_eq!(should_store_b, true);
+
+        temp_dir.close()?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_distance_to_key() -> Result<(), PortalStorageError> {
+        let temp_dir = setup_temp_dir();
+
+        // As u256: 35251939465458175391971645015054168096878481684263240321586233488997076805486
+        let example_node_id_bytes: [u8; 32] = [
+            77, 239, 228, 2, 227, 174, 123, 117, 195, 237, 200, 80, 219, 0, 188, 225, 18, 196, 162,
+            89, 204, 144, 204, 187, 71, 12, 147, 65, 19, 65, 167, 110,
+        ];
+        let node_id = match NodeId::parse(&example_node_id_bytes) {
+            Ok(node_id) => node_id,
+            Err(string) => panic!("Failed to parse Node ID: {}", string),
+        };
+
+        let db = Arc::new(PortalStorage::setup_rocksdb(node_id)?);
+        let (sql_handler_tx, sql_handler_rx) = mpsc::channel(1);
+        let sql_handler = PortalStorage::setup_sql(node_id, sql_handler_rx)?;
+        tokio::spawn(sql_handler.process_sql_requests());
+
+        let storage_config = PortalStorageConfig {
+            storage_capacity_kb: 100,
+            node_id,
+            distance_function: DistanceFunction::Xor,
+            db,
+            sql_handler_tx,
+        };
+
+        let storage = PortalStorage::new(storage_config).await?;
+
+        // As u256: 5701445789546971387853890390228320669946681132619292758904237535384791812776
+        let content_key = generate_content_key();
         let content_id = content_key.to_content_id().unwrap();
         let content_id = Into::<[u8; 32]>::into(content_id);
         let distance = storage.distance_to_content_id(&content_id);
 
         // Answer from https://xor.pw/
-        assert_eq!(distance, 7163861694186580225);
+        // as u256: 29607079854947394638644290140513652007972538914554032181524285051455066058182
+        // as hex: 4175036b04c5ef373b3444ae47832cbeae4623c14104029275f90a8979bbadc6
+        let expected =
+            hex::decode("4175036b04c5ef373b3444ae47832cbeae4623c14104029275f90a8979bbadc6")
+                .unwrap();
+        let mut expected_distance = [0u8; 32];
+        expected_distance.copy_from_slice(expected.as_slice());
 
+        let expected = U256::from(expected_distance);
+        assert_eq!(distance, expected.0[3]);
+
+        temp_dir.close()?;
         Ok(())
     }
 
-    #[test]
-    fn test_find_farthest() -> Result<(), PortalStorageError> {
-        // As u64: 5543900367377300341
+    #[tokio::test]
+    #[serial]
+    async fn test_find_farthest() -> Result<(), PortalStorageError> {
+        let temp_dir = setup_temp_dir();
+
+        // As u256: 35251939465458175391971645015054168096878481684263240321586233488997076805486
         let example_node_id_bytes: [u8; 32] = [
             76, 239, 228, 2, 227, 174, 123, 117, 195, 237, 200, 80, 219, 0, 188, 225, 18, 196, 162,
             89, 204, 144, 204, 187, 71, 12, 147, 65, 19, 65, 167, 110,
@@ -640,47 +793,89 @@ pub mod test {
         };
 
         let db = Arc::new(PortalStorage::setup_rocksdb(node_id)?);
-        let meta_db = Arc::new(PortalStorage::setup_sqlite(node_id)?);
+        let (sql_handler_tx, sql_handler_rx) = mpsc::channel(1);
+        let sql_handler = PortalStorage::setup_sql(node_id, sql_handler_rx)?;
+        tokio::spawn(sql_handler.process_sql_requests());
 
         let storage_config = PortalStorageConfig {
             storage_capacity_kb: 100,
             node_id,
             distance_function: DistanceFunction::Xor,
             db,
-            meta_db,
+            sql_handler_tx,
         };
 
-        let mut storage = PortalStorage::new(storage_config)?;
+        let mut storage = PortalStorage::new(storage_config).await?;
 
         let value: Vec<u8> = "value".into();
 
-        let key_a: Vec<u8> = "YlHPPvteGytjbPHbrMOVlK3Z90IcO4UR".into();
+        // block 14115690
+        // content id as u256:              5701445789546971387853890390228320669946681132619292758904237535384791812776
+        // distance from node id as u256:   29607079854947394638644290140513652007972538914554032181524285051455066058182
+        let block_hash =
+            hex::decode("05c7941834c39a98cbcec5a4890cc6dfcde245ba9fd885980b1544dca2373ff7")
+                .unwrap();
+        let mut key = [0u8; 32];
+        key.copy_from_slice(block_hash.as_slice());
         let content_key_a =
-            ContentKey::StateContentKey(StateContentKey::from_bytes(&key_a).unwrap());
-        storage.store(&content_key_a, &value)?;
+            ContentKey::HistoryContentKey(HistoryContentKey::HeaderKey(HeaderKey {
+                chain_id: 1u16,
+                block_hash: key,
+            }));
+        storage.store(&content_key_a, &value).await?;
 
-        // This one is the farthest
-        let key_b: Vec<u8> = "LHp1PeJ4C6c3nRUc7f6BI1FYULNL8aWB".into();
+        // block 14116437
+        // content id as u256:              23871079715462885586646939789258755405425791346736285845114521966636355669268
+        // distance from node id as u256:   54803022893030492915184992817984449688707796647786152400599495572486067350138 (expected furthest)
+        let block_hash_b =
+            hex::decode("537ab981abc9c1f59e370a4a0eda42818fed8d6a80678efefc3154c1146437e6")
+                .unwrap();
+        let mut hash_b = [0u8; 32];
+        hash_b.copy_from_slice(block_hash_b.as_slice());
         let content_key_b =
-            ContentKey::StateContentKey(StateContentKey::from_bytes(&key_b).unwrap());
-        storage.store(&content_key_b, &value)?;
+            ContentKey::HistoryContentKey(HistoryContentKey::HeaderKey(HeaderKey {
+                chain_id: 1u16,
+                block_hash: hash_b,
+            }));
+        storage.store(&content_key_b, &value).await?;
         let expected_content_id = content_key_b.to_content_id().unwrap();
         let expected_content_id = Into::<[u8; 32]>::into(expected_content_id);
 
-        let key_c: Vec<u8> = "HkybBgUebGtbwdrNDbxDWywtgWlUM8vW".into();
+        // block 14116473
+        // content id as u256::             30750375007938708425329103013511547426004951745661667748299259528812980354093
+        // distance from node id as u256:   6367692335593601105074560955799151728577943337223065532273915844111147572035
+        let block_hash_c =
+            hex::decode("da1dbda10d7b1a03bbcf36097d5990e1380a1e843e89c38f7c179f1f405f3656")
+                .unwrap();
+        let mut hash_c = [0u8; 32];
+        hash_c.copy_from_slice(block_hash_c.as_slice());
         let content_key_c =
-            ContentKey::StateContentKey(StateContentKey::from_bytes(&key_c).unwrap());
-        storage.store(&content_key_c, &value)?;
+            ContentKey::HistoryContentKey(HistoryContentKey::HeaderKey(HeaderKey {
+                chain_id: 1u16,
+                block_hash: hash_c,
+            }));
+        storage.store(&content_key_c, &value).await?;
 
-        let key_d: Vec<u8> = "gdOKkDEq9XFs2Tzay4Ecuw0obIISGw9Y".into();
+        // block 14116478
+        // content id as u256:              6634133047319258901051603752555532101300487165376060860530003199889217118408
+        // distance from node id as u256:   30427185766077037900598516726868566347824875172301521156656914882040898439078
+        let block_hash_d =
+            hex::decode("36225e47ebea87b010d2383871baf83546eb96705b9f2a34842e17f574cd00f4")
+                .unwrap();
+        let mut hash_d = [0u8; 32];
+        hash_d.copy_from_slice(block_hash_d.as_slice());
         let content_key_d =
-            ContentKey::StateContentKey(StateContentKey::from_bytes(&key_d).unwrap());
-        storage.store(&content_key_d, &value)?;
+            ContentKey::HistoryContentKey(HistoryContentKey::HeaderKey(HeaderKey {
+                chain_id: 1u16,
+                block_hash: hash_d,
+            }));
+        storage.store(&content_key_d, &value).await?;
 
-        let result = storage.find_farthest_content_id().unwrap().unwrap();
+        let result = storage.find_farthest_content_id().await.unwrap().unwrap();
 
         assert_eq!(result, expected_content_id);
 
+        temp_dir.close()?;
         Ok(())
     }
 }
