@@ -21,7 +21,7 @@ use crate::{
         },
         Enr,
     },
-    utils::{bytes, distance::xor, hash_delay_queue::HashDelayQueue},
+    utils::{distance::xor, hash_delay_queue::HashDelayQueue, node_id},
 };
 use discv5::{
     enr::NodeId,
@@ -49,7 +49,7 @@ pub const FIND_NODES_MAX_NODES: usize = 32;
 pub const FIND_CONTENT_MAX_NODES: usize = 32;
 /// With even distribution assumptions, 2**17 is enough to put each node (estimating 100k nodes,
 /// which is more than 10x the ethereum mainnet node count) into a unique bucket by the 17th bucket index.
-pub const EXPECTED_NON_EMPTY_BUCKETS: usize = 17;
+const EXPECTED_NON_EMPTY_BUCKETS: usize = 17;
 
 /// An overlay request error.
 #[derive(Clone, Error, Debug)]
@@ -394,7 +394,7 @@ impl OverlayService {
                 }
                 _ = OverlayService::bucket_maintenance_poll(self.protocol.clone(), &self.kbuckets) => {}
                 _ = bucket_refresh_interval.tick() => {
-                    debug!("Overlay bucket refresh lookup");
+                    debug!("[{:?}] Overlay bucket refresh lookup", self.protocol);
                     self.bucket_refresh_lookup();
                 }
             }
@@ -1042,17 +1042,8 @@ impl OverlayService {
         // TODO: Implement Recursive(iterative) FINDNODE. This is a stub.
     }
 
-    /// Generate random NodeId based on bucket index target.
-    /// First we generate a random distance metric with leading zeroes based on the target bucket.
-    /// Then we XOR the result distance with the local NodeId to get the random target NodeId
     fn generate_random_node_id(&self, target_bucket_idx: u8) -> anyhow::Result<NodeId> {
-        let distance_leading_zeroes = 255 - target_bucket_idx;
-        let random_distance = bytes::random_32byte_array(distance_leading_zeroes);
-        let raw_node_id = xor(&self.local_enr().node_id().raw(), &random_distance);
-        match NodeId::parse(Into::<[u8; 32]>::into(raw_node_id).as_slice()) {
-            Ok(node_id) => Ok(node_id),
-            Err(msg) => Err(anyhow::Error::msg(msg)),
-        }
+        node_id::generate_random_node_id(target_bucket_idx, self.local_enr().node_id())
     }
 }
 

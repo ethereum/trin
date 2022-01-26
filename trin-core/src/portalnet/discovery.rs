@@ -3,12 +3,20 @@
 use super::types::messages::{HexData, PortalnetConfig, ProtocolId};
 use super::Enr;
 use crate::socket;
+use crate::utils::node_id::generate_random_node_id;
 use discv5::enr::{CombinedKey, EnrBuilder, NodeId};
 use discv5::{Discv5, Discv5Config, Discv5ConfigBuilder, RequestError};
-use log::info;
+use log::{debug, error, info, warn};
+use rand::seq::SliceRandom;
 use serde_json::{json, Value};
 use std::convert::TryFrom;
 use std::net::{IpAddr, SocketAddr};
+use std::sync::Arc;
+use std::time::Duration;
+
+/// With even distribution assumptions, 2**17 is enough to put each node (estimating 100k nodes,
+/// which is more than 10x the ethereum mainnet node count) into a unique bucket by the 17th bucket index.
+const EXPECTED_NON_EMPTY_BUCKETS: usize = 17;
 
 #[derive(Clone)]
 pub struct Config {
@@ -182,5 +190,66 @@ impl Discovery {
 
         let response = self.discv5.talk_req(enr, protocol, request).await?;
         Ok(response)
+    }
+
+    pub async fn bucket_refresh_lookup(self: Arc<Self>) {
+        // construct a 30 second interval to search for new peers.
+        let mut query_interval = tokio::time::interval(Duration::from_secs(60));
+
+        loop {
+            tokio::select! {
+                _ = query_interval.tick() => {
+                    // Look at local routing table and select the largest 17 buckets.
+                    // We only need the 17 bits furthest from our own node ID, because the closest 239 bits of
+                    // buckets are going to be empty-ish.
+                    let buckets = self.discv5.kbuckets();
+                    let buckets = buckets.buckets_iter().enumerate().collect::<Vec<_>>();
+                    let buckets = &buckets[256 - EXPECTED_NON_EMPTY_BUCKETS..];
+                    // Randomly pick one of these buckets.
+                    let target_bucket = buckets.choose(&mut rand::thread_rng());
+
+                     match target_bucket {
+                         Some(bucket) => {
+                             let target_bucket_idx = u8::try_from(bucket.0);
+                             if let Ok(idx) = target_bucket_idx {
+                                 // Randomly generate a NodeID that falls within the target bucket.
+                                 let target_node_id = generate_random_node_id(idx, self.local_enr().node_id());
+                                 // Do the random lookup on this node-id.
+                                 match target_node_id {
+                                     Ok(node_id) => {
+                                        // get metrics
+                                        let metrics = self.discv5.metrics();
+                                        let connected_peers = self.discv5.connected_peers();
+                                        debug!("Connected peers: {}, Active sessions: {}, Unsolicited requests/s: {:.2}", connected_peers, metrics.active_sessions, metrics.unsolicited_requests_per_second);
+                                        debug!("Searching for discv5 peers...");
+                                        // execute a FINDNODE query
+                                        self.recursive_find_node(node_id).await;
+                            },
+                                     Err(msg) => warn!("{:?}", msg),
+                                 }
+                             } else {
+                                 error!("Unable to downcast bucket index.")
+                             }
+                         }
+                         None => error!("Failed to choose random bucket index"),
+                     }
+                }
+            }
+        }
+    }
+
+    /// Searching for discv5 peers with recursive FINDNODE
+    async fn recursive_find_node(&self, node_id: NodeId) {
+        match self.discv5.find_node(node_id).await {
+            Err(e) => warn!("Find Node result failed: {:?}", e),
+            Ok(v) => {
+                // found a list of ENR's print their NodeIds
+                let node_ids = v.iter().map(|enr| enr.node_id()).collect::<Vec<_>>();
+                debug!("Nodes found: {}", node_ids.len());
+                for node_id in node_ids {
+                    debug!("Node: {}", node_id);
+                }
+            }
+        }
     }
 }
