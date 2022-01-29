@@ -8,47 +8,76 @@ use trin_core::portalnet::types::{
     uint::{U256, U512},
 };
 
+/// A content key in the state overlay network.
 #[derive(Clone, Debug, Decode, Encode)]
 #[ssz(enum_behaviour = "union")]
 pub enum StateContentKey {
+    /// A trie node from the state trie.
     AccountTrieNode(AccountTrieNode),
+    /// A trie node from some account's contract storage.
     ContractStorageTrieNode(ContractStorageTrieNode),
+    /// A leaf node from the state trie and the associated Merkle proof against a particular state
+    /// root.
     AccountTrieProof(AccountTrieProof),
+    /// A leaf node from some account's contract storage and the associated Merkle proof against a
+    /// particular state root.
     ContractStorageTrieProof(ContractStorageTrieProof),
+    /// An account's contract bytecode.
     ContractBytecode(ContractBytecode),
 }
 
+/// A key for a trie node from the state trie.
 #[derive(Clone, Debug, Decode, Encode)]
 pub struct AccountTrieNode {
+    /// Trie path of the node.
     path: VariableList<u8, typenum::U64>,
+    /// Hash of the node.
     node_hash: [u8; 32],
+    /// Hash of the root of the state trie in which the node exists.
     state_root: [u8; 32],
 }
 
+/// A key for a trie node from some account's contract storage.
 #[derive(Clone, Debug, Decode, Encode)]
 pub struct ContractStorageTrieNode {
+    /// Address of the account.
     address: FixedVector<u8, typenum::U20>,
+    /// Trie path of the node.
     path: VariableList<u8, typenum::U64>,
+    /// Hash of the node.
     node_hash: [u8; 32],
+    /// Hash of the root of the state trie in which the node exists.
     state_root: [u8; 32],
 }
 
+/// A key for a leaf node from the state trie and the associated Merkle proof against a particular
+/// state root.
 #[derive(Clone, Debug, Decode, Encode)]
 pub struct AccountTrieProof {
+    /// Address of the account.
     address: FixedVector<u8, typenum::U20>,
+    /// Hash of the root of the state trie in which the node exists.
     state_root: [u8; 32],
 }
 
+/// A key for a leaf node from some account's contract storage and the associated Merkle proof
+/// against a particular state root.
 #[derive(Clone, Debug, Decode, Encode)]
 pub struct ContractStorageTrieProof {
+    /// Address of the account.
     address: FixedVector<u8, typenum::U20>,
+    /// Storage slot.
     slot: U256,
+    /// Hash of the root of the state trie in which the node exists.
     state_root: [u8; 32],
 }
 
+/// A key for an account's contract bytecode.
 #[derive(Clone, Debug, Decode, Encode)]
 pub struct ContractBytecode {
+    /// Address of the account.
     address: FixedVector<u8, typenum::U20>,
+    /// Hash of the bytecode.
     code_hash: [u8; 32],
 }
 
@@ -115,11 +144,9 @@ impl OverlayContentKey for StateContentKey {
                 let slot = U512::from(U256::from_big_endian(&slot));
 
                 let content_id = address + slot;
-                let mask = U512::from(U256::MAX);
-                let content_id = content_id & mask;
 
                 let mut content_id_be: [u8; 64] = [0; 64];
-                (content_id << 256u16).to_big_endian(&mut content_id_be);
+                (content_id << 256).to_big_endian(&mut content_id_be);
 
                 let mut content_id: [u8; 32] = [0; 32];
                 content_id[..32].clone_from_slice(&content_id_be[..32]);

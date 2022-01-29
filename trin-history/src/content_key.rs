@@ -3,29 +3,42 @@ use ssz::{self, Decode, Encode};
 use ssz_derive::{Decode, Encode};
 use trin_core::portalnet::types::content_key::OverlayContentKey;
 
+/// A content key in the history overlay network.
 #[derive(Clone, Debug, Decode, Encode)]
 #[ssz(enum_behaviour = "union")]
 pub enum HistoryContentKey {
+    /// A block header.
     BlockHeader(BlockHeader),
+    /// A block body.
     BlockBody(BlockBody),
+    /// The transaction receipts for a block.
     BlockReceipts(BlockReceipts),
 }
 
+/// A key for a block header.
 #[derive(Clone, Debug, Decode, Encode)]
 pub struct BlockHeader {
+    /// Chain identifier.
     chain_id: u16,
+    /// Hash of the block.
     block_hash: [u8; 32],
 }
 
+/// A key for a block body.
 #[derive(Clone, Debug, Decode, Encode)]
 pub struct BlockBody {
+    /// Chain identifier.
     chain_id: u16,
+    /// Hash of the block.
     block_hash: [u8; 32],
 }
 
+/// A key for the transaction receipts for a block.
 #[derive(Clone, Debug, Decode, Encode)]
 pub struct BlockReceipts {
+    /// Chain identifier.
     chain_id: u16,
+    /// Hash of the block.
     block_hash: [u8; 32],
 }
 

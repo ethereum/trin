@@ -251,7 +251,7 @@ pub struct OverlayService<K> {
     phantom_content_key: PhantomData<K>,
 }
 
-impl<K: OverlayContentKey + Send + Sync> OverlayService<K> {
+impl<K: OverlayContentKey + Send> OverlayService<K> {
     /// Spawns the overlay network service.
     ///
     /// The state of the overlay network largely consists of its routing table. The routing table

@@ -79,7 +79,7 @@ pub struct OverlayProtocol<K> {
     phantom_content_key: PhantomData<K>,
 }
 
-impl<K: OverlayContentKey + Send + Sync> OverlayProtocol<K> {
+impl<K: OverlayContentKey + Send> OverlayProtocol<K> {
     pub async fn new(
         config: OverlayConfig,
         discovery: Arc<Discovery>,
