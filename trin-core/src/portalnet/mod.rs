@@ -9,5 +9,4 @@ mod overlay_service;
 pub mod storage;
 pub mod types;
 
-pub use overlay_service::OverlayRequestError;
 pub type Enr = discv5::enr::Enr<CombinedKey>;
