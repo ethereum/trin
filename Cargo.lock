@@ -3522,6 +3522,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4ae116fef2b7fea257ed6440d3cfcff7f190865f170cdad00bb6465bf18ecba"
 
 [[package]]
+name = "utp-testing"
+version = "0.1.0"
+dependencies = [
+ "discv5",
+ "ethportal-peertest",
+ "hex",
+ "log 0.4.14",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.2.25",
+ "trin",
+ "trin-core",
+]
+
+[[package]]
 name = "validator"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
