@@ -333,7 +333,7 @@ impl OverlayProtocol {
                             })
                     {
                         // send the content to the acceptor over a uTP stream
-                        conn.write(&UtpMessage::new(content_message.as_ssz_bytes()).encode()[..]);
+                        conn.send_to(&UtpMessage::new(content_message.as_ssz_bytes()).encode()[..]);
                     }
                 } else if state == UtpStreamState::Finished {
                     if let Some(conn) =

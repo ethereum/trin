@@ -1,3 +1,5 @@
+use std::fmt;
+
 pub const HEADER_SIZE: usize = 20;
 pub const VERSION: u8 = 1;
 
@@ -105,7 +107,7 @@ impl Default for PacketHeader {
 pub struct PacketHeader {
     /// It would be wasteful over the wire to have 2 separate bytes for type and ver, so we split the u8 in half 0000_0000
     /// so the first half will store the type and the second half will store the version of the packet
-    type_ver: u8,
+    type_ver: u8, // type: u4, ver: u4
     extension: u8,
     connection_id: u16,
     timestamp_microseconds: u32,
@@ -157,7 +159,7 @@ impl PacketHeader {
         }
     }
 
-    pub fn version(&self) -> u8 {
+    pub fn get_version(&self) -> u8 {
         self.type_ver & 0xf
     }
 
@@ -165,7 +167,7 @@ impl PacketHeader {
         self.type_ver = (self.type_ver & 0xf0) | (int & 0xf)
     }
 
-    pub fn type_(&self) -> PacketType {
+    pub fn get_type(&self) -> PacketType {
         PacketType::try_from(self.type_ver >> 4).unwrap()
     }
 
@@ -205,8 +207,13 @@ pub struct Extension {
     pub bitmask: Vec<u8>,
 }
 
-#[derive(Clone, Debug)]
-pub struct Packet(pub Vec<u8>);
+pub struct Packet(Vec<u8>);
+
+impl AsRef<[u8]> for Packet {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
 
 impl Packet {
     pub fn new(mut packet_header: PacketHeader) -> Packet {
@@ -230,12 +237,12 @@ impl Packet {
         PacketHeader::decode(&self.0[0..20])
     }
 
-    pub fn type_(&self) -> PacketType {
-        self.get_header().type_()
+    pub fn get_type(&self) -> PacketType {
+        self.get_header().get_type()
     }
 
-    pub fn version(&self) -> u8 {
-        self.get_header().version()
+    pub fn get_version(&self) -> u8 {
+        self.get_header().get_version()
     }
 
     pub fn extension(&self) -> u8 {
@@ -324,5 +331,27 @@ impl Packet {
                 self.0.insert(extension_begins + 2 + i, *byte);
             }
         }
+    }
+}
+
+impl Clone for Packet {
+    fn clone(&self) -> Packet {
+        Packet(self.0.clone())
+    }
+}
+
+impl fmt::Debug for Packet {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Packet")
+            .field("type", &self.get_type())
+            .field("version", &self.get_version())
+            .field("extension", &self.extension())
+            .field("connection_id", &self.connection_id())
+            .field("timestamp", &self.timestamp())
+            .field("timestamp_difference", &self.timestamp_difference())
+            .field("wnd_size", &self.wnd_size())
+            .field("seq_nr", &self.seq_nr())
+            .field("ack_nr", &self.ack_nr())
+            .finish()
     }
 }
