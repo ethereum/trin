@@ -19,6 +19,7 @@ futures = "0.3.13"
 hex = "0.4.3"
 httparse = "1.5.1"
 log = "0.4.14"
+num = "0.4.0"
 parking_lot = "0.11.2"
 rand = "0.8.4"
 rlp = "0.5.0"
@@ -40,6 +41,9 @@ tracing-futures = "0.2.5"
 uint = { version = "0.8.5", default-features = false }
 ureq = {version = "2.2.0", features = ["json"]}
 validator = { version = "0.13.0", features = ["derive"] }
+
+[dev-dependencies]
+quickcheck = "1.0.3"
 
 [target.'cfg(windows)'.dependencies]
 ipconfig = "0.2.2"
