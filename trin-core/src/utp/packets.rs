@@ -3,13 +3,37 @@ use std::fmt;
 pub const HEADER_SIZE: usize = 20;
 pub const VERSION: u8 = 1;
 
+macro_rules! u8_to_unsigned_be {
+    ($src:ident, $start:expr, $end:expr, $t:ty) => ({
+        (0 .. $end - $start + 1).rev().fold(0, |acc, i| acc | $src[$start+i] as $t << (i * 8))
+    })
+}
+
+macro_rules! make_getter {
+    ($name:ident, $t:ty, $m:ident) => {
+        pub fn $name(&self) -> $t {
+            let header = unsafe { &*(self.0.as_ptr() as *const PacketHeader) };
+            $m::from_be(header.$name)
+        }
+    };
+}
+
+macro_rules! make_setter {
+    ($fn_name:ident, $field:ident, $t: ty) => {
+        pub fn $fn_name(&mut self, new: $t) {
+            let mut header = unsafe { &mut *(self.0.as_mut_ptr() as *mut PacketHeader) };
+            header.$field = new.to_be();
+        }
+    };
+}
+
 #[derive(PartialEq, Debug)]
 pub enum PacketType {
-    Data,
-    Fin,
-    State,
-    Reset,
-    Syn,
+    Data,  // packet carries a data payload
+    Fin,   // signals the end of a connection
+    State, // signals acknowledgment of a packet
+    Reset, // forcibly terminates a connection
+    Syn,   // initiates a new connection with a peer
 }
 
 impl TryFrom<u8> for PacketType {
@@ -39,26 +63,7 @@ impl From<PacketType> for u8 {
     }
 }
 
-impl<'a> TryFrom<&'a [u8]> for PacketHeader {
-    type Error = &'static str;
-
-    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        if value.len() < HEADER_SIZE {
-            return Err("invalid header size");
-        }
-
-        if value[0] & 0xf != VERSION {
-            return Err("invalid packet version");
-        }
-
-        if let Err(e) = PacketType::try_from(value[0] >> 4) {
-            return Err(e);
-        }
-
-        Ok(PacketHeader::decode(value))
-    }
-}
-
+/// Validate correctness of packet extensions, if any, in byte slice
 fn check_extensions(data: &[u8]) -> Result<(), &'static str> {
     if data.len() < HEADER_SIZE {
         return Err("invalid header size");
@@ -84,26 +89,7 @@ fn check_extensions(data: &[u8]) -> Result<(), &'static str> {
     Ok(())
 }
 
-impl<'a> TryFrom<&'a [u8]> for Packet {
-    type Error = &'static str;
-
-    // todo: Added support to check validity of extensions,
-    // we don't need to worry about checking payloads
-    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        match PacketHeader::try_from(value).and(check_extensions(value)) {
-            Ok(_) => Ok(Packet(value.to_owned())),
-            Err(e) => Err(e),
-        }
-    }
-}
-
-impl Default for PacketHeader {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[derive(Debug)]
+#[repr(C)]
 pub struct PacketHeader {
     /// It would be wasteful over the wire to have 2 separate bytes for type and ver, so we split the u8 in half 0000_0000
     /// so the first half will store the type and the second half will store the version of the packet
@@ -113,90 +99,82 @@ pub struct PacketHeader {
     timestamp_microseconds: u32,
     timestamp_difference_microseconds: u32,
     wnd_size: u32,
-    pub seq_nr: u16,
+    seq_nr: u16,
     ack_nr: u16,
 }
 
 impl PacketHeader {
-    pub fn new() -> Self {
+    /// Returns the packet's version.
+    pub fn get_version(&self) -> u8 {
+        self.type_ver & 0x0F
+    }
+
+    /// Sets the type of packet to the specified type.
+    pub fn set_type(&mut self, t: PacketType) {
+        let version = 0x0F & self.type_ver;
+        self.type_ver = u8::from(t) << 4 | version;
+    }
+
+    /// Returns the packet's type.
+    pub fn get_type(&self) -> PacketType {
+        PacketType::try_from(self.type_ver >> 4).unwrap()
+    }
+}
+
+impl<'a> TryFrom<&'a [u8]> for PacketHeader {
+    // TODO: Refactor this to use anyhow crate
+    type Error = &'static str;
+    /// Reads a byte buffer and returns the corresponding packet header.
+    /// It assumes the fields are in network (big-endian) byte order,
+    /// preserving it.
+    fn try_from(buf: &[u8]) -> Result<Self, Self::Error> {
+        // Check length
+        if buf.len() < HEADER_SIZE {
+            return Err("The packet is too small");
+        }
+
+        // Check version
+        if buf[0] & 0x0F != VERSION {
+            return Err("Unsupported packet version");
+        }
+
+        // Check packet type
+        if let Err(e) = PacketType::try_from(buf[0] >> 4) {
+            return Err(e);
+        }
+
+        Ok(PacketHeader {
+            type_ver: buf[0],
+            extension: buf[1],
+            connection_id: u8_to_unsigned_be!(buf, 2, 3, u16),
+            timestamp_microseconds: u8_to_unsigned_be!(buf, 4, 7, u32),
+            timestamp_difference_microseconds: u8_to_unsigned_be!(buf, 8, 11, u32),
+            wnd_size: u8_to_unsigned_be!(buf, 12, 15, u32),
+            seq_nr: u8_to_unsigned_be!(buf, 16, 17, u16),
+            ack_nr: u8_to_unsigned_be!(buf, 18, 19, u16),
+        })
+    }
+}
+
+impl AsRef<[u8]> for PacketHeader {
+    /// Returns the packet header as a slice of bytes.
+    fn as_ref(&self) -> &[u8] {
+        unsafe { &*(self as *const PacketHeader as *const [u8; HEADER_SIZE]) }
+    }
+}
+
+impl Default for PacketHeader {
+    fn default() -> PacketHeader {
         PacketHeader {
             type_ver: u8::from(PacketType::Data) << 4 | VERSION,
             extension: 0,
             connection_id: 0,
             timestamp_microseconds: 0,
             timestamp_difference_microseconds: 0,
-            wnd_size: 0xf000,
+            wnd_size: 0,
             seq_nr: 0,
             ack_nr: 0,
         }
-    }
-
-    pub fn encode(&mut self) -> Vec<u8> {
-        let mut buf = vec![];
-        buf.extend_from_slice(&[self.type_ver]);
-        buf.extend_from_slice(&[self.extension]);
-        buf.extend_from_slice(&self.connection_id.to_be_bytes());
-        buf.extend_from_slice(&self.timestamp_microseconds.to_be_bytes());
-        buf.extend_from_slice(&self.timestamp_difference_microseconds.to_be_bytes());
-        buf.extend_from_slice(&self.wnd_size.to_be_bytes());
-        buf.extend_from_slice(&self.seq_nr.to_be_bytes());
-        buf.extend_from_slice(&self.ack_nr.to_be_bytes());
-        buf
-    }
-
-    pub fn decode(bytes: &[u8]) -> PacketHeader {
-        PacketHeader {
-            type_ver: bytes[0],
-            extension: bytes[1],
-            connection_id: u16::from_be_bytes([bytes[2], bytes[3]]),
-            timestamp_microseconds: u32::from_be_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]),
-            timestamp_difference_microseconds: u32::from_be_bytes([
-                bytes[8], bytes[9], bytes[10], bytes[11],
-            ]),
-            wnd_size: u32::from_be_bytes([bytes[12], bytes[13], bytes[14], bytes[15]]),
-            seq_nr: u16::from_be_bytes([bytes[16], bytes[17]]),
-            ack_nr: u16::from_be_bytes([bytes[18], bytes[19]]),
-        }
-    }
-
-    pub fn get_version(&self) -> u8 {
-        self.type_ver & 0xf
-    }
-
-    pub fn set_version(&mut self, int: u8) {
-        self.type_ver = (self.type_ver & 0xf0) | (int & 0xf)
-    }
-
-    pub fn get_type(&self) -> PacketType {
-        PacketType::try_from(self.type_ver >> 4).unwrap()
-    }
-
-    pub fn set_type(&mut self, t: PacketType) {
-        self.type_ver = (self.type_ver & 0xf) | (u8::from(t) << 4)
-    }
-
-    pub fn set_connection_id(&mut self, connection_id: u16) {
-        self.connection_id = connection_id;
-    }
-
-    pub fn set_timestamp(&mut self, timestamp_microseconds: u32) {
-        self.timestamp_microseconds = timestamp_microseconds;
-    }
-
-    pub fn set_timestamp_difference(&mut self, timestamp_difference_microseconds: u32) {
-        self.timestamp_difference_microseconds = timestamp_difference_microseconds;
-    }
-
-    pub fn set_wnd_size(&mut self, wnd_size: u32) {
-        self.wnd_size = wnd_size;
-    }
-
-    pub fn set_seq_nr(&mut self, seq_nr: u16) {
-        self.seq_nr = seq_nr;
-    }
-
-    pub fn set_ack_nr(&mut self, ack_nr: u16) {
-        self.ack_nr = ack_nr;
     }
 }
 
@@ -215,67 +193,87 @@ impl AsRef<[u8]> for Packet {
     }
 }
 
+impl Default for Packet {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Packet {
-    pub fn new(mut packet_header: PacketHeader) -> Packet {
-        let mut vec = Vec::with_capacity(HEADER_SIZE);
-        vec.append(&mut packet_header.encode());
-        Packet(vec)
+    pub fn new() -> Packet {
+        Packet(PacketHeader::default().as_ref().to_owned())
     }
 
-    pub fn with_payload(mut packet_header: PacketHeader, payload: &[u8]) -> Packet {
-        let mut vec = Vec::with_capacity(HEADER_SIZE + payload.len());
-        vec.append(&mut packet_header.encode());
-        vec.extend_from_slice(payload);
-        Packet(vec)
+    pub fn with_payload(payload: &[u8]) -> Packet {
+        let mut inner = Vec::with_capacity(HEADER_SIZE + payload.len());
+        let mut header = PacketHeader::default();
+        header.set_type(PacketType::Data);
+
+        inner.extend_from_slice(header.as_ref());
+        inner.extend_from_slice(payload);
+
+        Packet(inner)
     }
 
     pub fn from_slice(bytes: &[u8]) -> Self {
         Self(bytes.to_vec())
     }
 
-    pub fn get_header(&self) -> PacketHeader {
-        PacketHeader::decode(&self.0[0..20])
+    pub fn set_type(&mut self, t: PacketType) {
+        let header = unsafe { &mut *(self.0.as_mut_ptr() as *mut PacketHeader) };
+        header.set_type(t);
     }
 
     pub fn get_type(&self) -> PacketType {
-        self.get_header().get_type()
+        let header = unsafe { &*(self.0.as_ptr() as *const PacketHeader) };
+        header.get_type()
     }
 
     pub fn get_version(&self) -> u8 {
-        self.get_header().get_version()
+        let header = unsafe { &*(self.0.as_ptr() as *const PacketHeader) };
+        header.get_version()
     }
 
-    pub fn extension(&self) -> u8 {
-        self.get_header().extension
+    // TODO: Add ExtensionType struct instead of raw u8
+    pub fn get_extension_type(&self) -> u8 {
+        let header = unsafe { &*(self.0.as_ptr() as *const PacketHeader) };
+        header.extension
     }
 
-    pub fn connection_id(&self) -> u16 {
-        self.get_header().connection_id
-    }
-
+    // TODO: Return use Timestamp and Delay data structures instead of u32 in the following methods
     pub fn timestamp(&self) -> u32 {
-        self.get_header().timestamp_microseconds
+        let header = unsafe { &*(self.0.as_ptr() as *const PacketHeader) };
+        header.timestamp_microseconds.to_be()
+    }
+
+    pub fn set_timestamp(&mut self, timestamp: u32) {
+        let header = unsafe { &mut *(self.0.as_mut_ptr() as *mut PacketHeader) };
+        header.timestamp_microseconds = timestamp.to_be()
     }
 
     pub fn timestamp_difference(&self) -> u32 {
-        self.get_header().timestamp_difference_microseconds
+        let header = unsafe { &*(self.0.as_ptr() as *const PacketHeader) };
+        header.timestamp_difference_microseconds.to_be()
     }
 
-    pub fn wnd_size(&self) -> u32 {
-        self.get_header().wnd_size
+    pub fn set_timestamp_difference(&mut self, delay: u32) {
+        let header = unsafe { &mut *(self.0.as_mut_ptr() as *mut PacketHeader) };
+        header.timestamp_difference_microseconds = delay.to_be()
     }
 
-    pub fn seq_nr(&self) -> u16 {
-        self.get_header().seq_nr
-    }
+    make_getter!(seq_nr, u16, u16);
+    make_getter!(ack_nr, u16, u16);
+    make_getter!(connection_id, u16, u16);
+    make_getter!(wnd_size, u32, u32);
 
-    pub fn ack_nr(&self) -> u16 {
-        self.get_header().ack_nr
-    }
+    make_setter!(set_seq_nr, seq_nr, u16);
+    make_setter!(set_ack_nr, ack_nr, u16);
+    make_setter!(set_connection_id, connection_id, u16);
+    make_setter!(set_wnd_size, wnd_size, u32);
 
     pub fn get_extensions(&self) -> Vec<Extension> {
         let mut extensions: Vec<Extension> = Vec::default();
-        let mut extension = self.extension();
+        let mut extension = self.get_extension_type();
         let mut extension_begins = HEADER_SIZE;
         while extension != 0 {
             let len = self.0[extension_begins + 1];
@@ -295,7 +293,7 @@ impl Packet {
     }
 
     pub fn get_payload(&self) -> &[u8] {
-        let mut extension = self.extension();
+        let mut extension = self.get_extension_type();
         let mut payload_begins = HEADER_SIZE;
         while extension != 0 {
             extension = self.0[payload_begins];
@@ -306,7 +304,7 @@ impl Packet {
     }
 
     pub fn set_selective_ack(&mut self, sack_bitfield: Vec<u8>) {
-        let mut extension = self.extension();
+        let mut extension = self.get_extension_type();
         let mut extension_begins = HEADER_SIZE;
 
         if !sack_bitfield.is_empty() {
@@ -334,6 +332,22 @@ impl Packet {
     }
 }
 
+impl<'a> TryFrom<&'a [u8]> for Packet {
+    // TODO: Refactor error to use anyhow crate
+    type Error = &'static str;
+
+    /// Decodes a byte slice and construct the equivalent Packet.
+    ///
+    /// Note that this method makes no attempt to guess the payload size, saving
+    /// all except the initial 20 bytes corresponding to the header as payload.
+    /// It's the caller's responsibility to use an appropriately sized buffer
+    fn try_from(buf: &[u8]) -> Result<Self, Self::Error> {
+        PacketHeader::try_from(buf)
+            .and(check_extensions(buf))
+            .and(Ok(Packet(buf.to_owned())))
+    }
+}
+
 impl Clone for Packet {
     fn clone(&self) -> Packet {
         Packet(self.0.clone())
@@ -345,7 +359,7 @@ impl fmt::Debug for Packet {
         f.debug_struct("Packet")
             .field("type", &self.get_type())
             .field("version", &self.get_version())
-            .field("extension", &self.extension())
+            .field("extension", &self.get_extension_type())
             .field("connection_id", &self.connection_id())
             .field("timestamp", &self.timestamp())
             .field("timestamp_difference", &self.timestamp_difference())

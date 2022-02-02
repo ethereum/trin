@@ -13,7 +13,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc;
 
 use crate::portalnet::types::messages::ProtocolId;
-use crate::utp::packets::{Packet, PacketHeader, PacketType, HEADER_SIZE};
+use crate::utp::packets::{Packet, PacketType, HEADER_SIZE};
 use crate::utp::trin_helpers::{UtpMessageId, UtpStreamState};
 
 // Maximum time (in microseconds) to wait for incoming packets when the send window is full
@@ -289,14 +289,11 @@ impl UtpSocket {
         let total_length = buf.len();
 
         for chunk in buf.chunks(MAX_DISCV5_PACKET_SIZE - MIN_DISCV5_PACKET_SIZE - HEADER_SIZE) {
-            let mut header = PacketHeader::new();
-            header.set_type(PacketType::Data);
-            header.set_connection_id(self.sender_connection_id);
-            header.set_timestamp(now_microseconds());
-            header.set_seq_nr(self.seq_nr);
-            header.set_ack_nr(self.ack_nr);
+            let mut packet = Packet::with_payload(chunk);
+            packet.set_seq_nr(self.seq_nr);
+            packet.set_ack_nr(self.ack_nr);
+            packet.set_connection_id(self.sender_connection_id);
 
-            let packet = Packet::with_payload(header, chunk);
             self.unsent_queue.push_back(packet);
 
             // Intentionally wrap around sequence number
@@ -310,21 +307,21 @@ impl UtpSocket {
     }
 
     fn send_packets_in_queue(&mut self) {
-        while let Some(packet) = self.unsent_queue.pop_front() {
-            self.send_packet(packet.clone());
+        while let Some(mut packet) = self.unsent_queue.pop_front() {
+            self.send_packet(&mut packet);
             self.cur_window += packet.as_ref().len() as u32;
-            self.send_window.insert(packet.get_header().seq_nr, packet);
+            self.send_window.insert(packet.seq_nr(), packet);
         }
     }
 
-    fn resend_packet(&self, seq_nr: u16) {
-        if let Some(packet) = self.send_window.get(&seq_nr) {
-            self.send_packet(packet.clone());
+    fn resend_packet(&mut self, seq_nr: u16) {
+        if let Some(mut packet) = self.send_window.get(&seq_nr).map(Packet::clone) {
+            self.send_packet(&mut packet);
         }
     }
 
     /// Send one packet.
-    fn send_packet(&self, packet: Packet) {
+    fn send_packet(&mut self, packet: &mut Packet) {
         debug!("current window: {}", self.send_window.len());
         let max_inflight = max(
             MAX_DISCV5_PACKET_SIZE,
@@ -353,14 +350,20 @@ impl UtpSocket {
 
         let enr = self.connected_to.clone();
         let discovery = self.socket.clone();
+
+        packet.set_timestamp(now_microseconds());
+        // TODO: Add their_delay field instead of calculating here get_time_diff
+        packet.set_timestamp_difference(get_time_diff(packet.timestamp()));
+
         let packet_to_send = packet.clone();
 
         // Handle talkreq/talkresp in the background
         tokio::spawn(async move {
-            if let Err(response) = discovery
-                .send_talk_req(enr, ProtocolId::Utp, Vec::from(packet_to_send.as_ref()))
-                .await
-            {
+            if let Err(response) = {
+                discovery
+                    .send_talk_req(enr, ProtocolId::Utp, Vec::from(packet_to_send.as_ref()))
+                    .await
+            } {
                 debug!("Unable to send utp talk req: {response}")
             }
         });
@@ -402,15 +405,13 @@ impl UtpSocket {
             self.receiver_connection_id = connection_id;
             self.sender_connection_id = self.receiver_connection_id + 1;
 
-            let mut header = PacketHeader::new();
-            header.set_type(PacketType::Syn);
-            header.set_connection_id(self.receiver_connection_id);
-            header.set_timestamp(now_microseconds());
-            header.set_timestamp_difference(0);
-            header.set_seq_nr(self.seq_nr + 1);
-            header.set_ack_nr(0);
+            let mut packet = Packet::new();
+            packet.set_type(PacketType::Syn);
+            packet.set_connection_id(self.receiver_connection_id);
+            packet.set_seq_nr(self.seq_nr + 1);
+            packet.set_ack_nr(0);
 
-            self.send_packet(Packet::new(header));
+            self.send_packet(&mut packet);
         }
     }
 
@@ -434,16 +435,14 @@ impl UtpSocket {
         sack_bitfield
     }
 
-    pub fn send_finalize(&self) {
-        let mut header = PacketHeader::new();
-        header.set_type(PacketType::Fin);
-        header.set_connection_id(self.sender_connection_id);
-        header.set_timestamp(now_microseconds());
-        header.set_timestamp_difference(0);
-        header.set_seq_nr(self.seq_nr + 1);
-        header.set_ack_nr(0);
+    pub fn send_finalize(&mut self) {
+        let mut packet = Packet::new();
+        packet.set_type(PacketType::Fin);
+        packet.set_connection_id(self.sender_connection_id);
+        packet.set_seq_nr(self.seq_nr + 1);
+        packet.set_ack_nr(0);
 
-        self.send_packet(Packet::new(header));
+        self.send_packet(&mut packet);
     }
 
     fn handle_packet(&mut self, packet: Packet) {
@@ -462,7 +461,7 @@ impl UtpSocket {
 
         match packet.get_type() {
             PacketType::Data => self.handle_data_packet(packet),
-            PacketType::Fin => self.handle_finalize_packet(packet),
+            PacketType::Fin => self.handle_finalize_packet(),
             PacketType::State => self.handle_state_packet(packet),
             PacketType::Reset => unreachable!("Reset should never make it here"),
             PacketType::Syn => self.handle_syn_packet(packet),
@@ -474,21 +473,18 @@ impl UtpSocket {
             self.state = SocketState::Connected;
         }
 
-        let mut header = PacketHeader::new();
-        header.set_type(PacketType::State);
-        header.set_connection_id(self.sender_connection_id);
-        header.set_timestamp(now_microseconds());
-        header.set_timestamp_difference(get_time_diff(packet.timestamp()));
-        header.set_seq_nr(self.seq_nr);
-        header.set_ack_nr(self.ack_nr);
+        let mut packet_reply = Packet::new();
+        packet_reply.set_type(PacketType::State);
+        packet_reply.set_connection_id(self.sender_connection_id);
+        packet_reply.set_seq_nr(self.seq_nr);
+        packet_reply.set_ack_nr(self.ack_nr);
 
-        let mut reply = Packet::new(header);
         if packet.seq_nr().wrapping_sub(self.ack_nr) > 1 {
             let sack_bitfield = self.build_selective_ack();
-            reply.set_selective_ack(sack_bitfield);
+            packet_reply.set_selective_ack(sack_bitfield);
         }
 
-        self.send_packet(reply);
+        self.send_packet(&mut packet_reply);
 
         // Add packet to BTreeMap
         self.incoming_buffer.insert(packet.seq_nr(), packet);
@@ -551,14 +547,14 @@ impl UtpSocket {
                     packet_loss_detected = true;
                 }
 
-                if let Some((last_seq_nr, _)) = self.send_window.iter().last() {
+                if let Some(last_seq_nr) = self.send_window.iter().last().map(|x| *x.0) {
                     // I need to iterate over this starting with least sig byte per byte
                     // then move right after
                     let mut k = 0;
                     for byte in &extension.bitmask {
                         for i in 0..8 {
                             let (bit, seq_nr) = ((byte >> i) & 1, packet.ack_nr() + 2 + k);
-                            if bit == 0 && seq_nr < *last_seq_nr {
+                            if bit == 0 && seq_nr < last_seq_nr {
                                 self.resend_packet(seq_nr);
                                 packet_loss_detected = true;
                             }
@@ -622,19 +618,18 @@ impl UtpSocket {
         self.congestion_timeout = max((self.rtt + self.rtt_variance * 4) as u64, 500);
     }
 
-    fn handle_finalize_packet(&mut self, packet: Packet) {
+    fn handle_finalize_packet(&mut self) {
         if self.state == SocketState::Connected {
             self.state = SocketState::Disconnected;
 
-            let mut header = PacketHeader::new();
-            header.set_type(PacketType::State);
-            header.set_connection_id(self.sender_connection_id);
-            header.set_timestamp(now_microseconds());
-            header.set_timestamp_difference(get_time_diff(packet.timestamp()));
-            header.set_seq_nr(self.seq_nr);
-            header.set_ack_nr(self.ack_nr);
+            let mut packet_reply = Packet::new();
+            packet_reply.set_type(PacketType::State);
+            packet_reply.set_connection_id(self.sender_connection_id);
+            // TODO: add timestamp difference when we set the delay to self.delay field
+            packet_reply.set_seq_nr(self.seq_nr);
+            packet_reply.set_ack_nr(self.ack_nr);
 
-            self.send_packet(Packet::new(header));
+            self.send_packet(&mut packet_reply);
         }
     }
 
@@ -645,22 +640,20 @@ impl UtpSocket {
         self.ack_nr = packet.seq_nr();
         self.state = SocketState::SynRecv;
 
-        let mut header = PacketHeader::new();
-        header.set_type(PacketType::State);
-        header.set_connection_id(self.sender_connection_id);
-        header.set_timestamp(now_microseconds());
-        header.set_timestamp_difference(get_time_diff(packet.timestamp()));
-        header.set_seq_nr(self.seq_nr);
-        header.set_ack_nr(self.ack_nr);
+        let mut packet_reply = Packet::new();
+        packet_reply.set_type(PacketType::State);
+        packet_reply.set_connection_id(self.sender_connection_id);
+        packet_reply.set_seq_nr(self.seq_nr);
+        packet_reply.set_ack_nr(self.ack_nr);
 
-        self.send_packet(Packet::new(header));
+        self.send_packet(&mut packet_reply);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::utp::packets::VERSION;
-    use crate::utp::stream::{Packet, PacketHeader, PacketType};
+    use crate::utp::stream::{Packet, PacketType};
     use std::convert::TryFrom;
 
     #[test]
@@ -675,7 +668,7 @@ mod tests {
         let packet = packet.unwrap();
         assert_eq!(packet.get_type(), PacketType::State);
         assert_eq!(packet.get_version(), VERSION);
-        assert_eq!(packet.extension(), 0);
+        assert_eq!(packet.get_extension_type(), 0);
         assert_eq!(packet.connection_id(), 42054);
         assert_eq!(packet.timestamp(), 2805920832);
         assert_eq!(packet.timestamp_difference(), 10000);
@@ -694,10 +687,11 @@ mod tests {
 
         let packet = Packet::try_from(&buf[..]);
         assert!(packet.is_ok());
+
         let packet = packet.unwrap();
         assert_eq!(packet.get_type(), PacketType::State);
         assert_eq!(packet.get_version(), VERSION);
-        assert_eq!(packet.extension(), 1);
+        assert_eq!(packet.get_extension_type(), 1);
         assert_eq!(packet.connection_id(), 42054);
         assert_eq!(packet.timestamp(), 2805920832);
         assert_eq!(packet.timestamp_difference(), 10000);
@@ -720,19 +714,18 @@ mod tests {
 
     #[test]
     fn test_encode_packet() {
-        let mut header = PacketHeader::new();
-        header.set_type(PacketType::Data);
-        header.set_connection_id(49300);
-        header.set_timestamp(2805920832);
-        header.set_timestamp_difference(1805367832);
-        header.set_wnd_size(61440);
-        header.set_seq_nr(12044);
-        header.set_ack_nr(12024);
+        let mut packet = Packet::new();
+        packet.set_type(PacketType::Data);
+        packet.set_connection_id(49300);
+        packet.set_timestamp(2805920832);
+        packet.set_timestamp_difference(1805367832);
+        packet.set_wnd_size(61440);
+        packet.set_seq_nr(12044);
+        packet.set_ack_nr(12024);
 
-        let packet = Packet::new(header);
         assert_eq!(packet.get_type(), PacketType::Data);
         assert_eq!(packet.get_version(), VERSION);
-        assert_eq!(packet.extension(), 0);
+        assert_eq!(packet.get_extension_type(), 0);
         assert_eq!(packet.connection_id(), 49300);
         assert_eq!(packet.timestamp(), 2805920832);
         assert_eq!(packet.timestamp_difference(), 1805367832);
@@ -744,20 +737,20 @@ mod tests {
 
     #[test]
     fn test_encode_packet_with_payload() {
-        let mut header = PacketHeader::new();
-        header.set_type(PacketType::Data);
-        header.set_connection_id(49300);
-        header.set_timestamp(2805920832);
-        header.set_timestamp_difference(1805367832);
-        header.set_wnd_size(61440);
-        header.set_seq_nr(12044);
-        header.set_ack_nr(12024);
         let payload = b"Hello world".to_vec();
 
-        let packet = Packet::with_payload(header, &payload[..]);
+        let mut packet = Packet::with_payload(&payload[..]);
+        packet.set_type(PacketType::Data);
+        packet.set_connection_id(49300);
+        packet.set_timestamp(2805920832);
+        packet.set_timestamp_difference(1805367832);
+        packet.set_wnd_size(61440);
+        packet.set_seq_nr(12044);
+        packet.set_ack_nr(12024);
+
         assert_eq!(packet.get_type(), PacketType::Data);
         assert_eq!(packet.get_version(), VERSION);
-        assert_eq!(packet.extension(), 0);
+        assert_eq!(packet.get_extension_type(), 0);
         assert_eq!(packet.connection_id(), 49300);
         assert_eq!(packet.timestamp(), 2805920832);
         assert_eq!(packet.timestamp_difference(), 1805367832);
@@ -775,22 +768,21 @@ mod tests {
 
     #[test]
     fn test_selective_ack() {
-        let mut header = PacketHeader::new();
-        header.set_type(PacketType::State);
-        header.set_connection_id(49300);
-        header.set_timestamp(2805920832);
-        header.set_timestamp_difference(1805367832);
-        header.set_wnd_size(61440);
-        header.set_seq_nr(12044);
-        header.set_ack_nr(12024);
+        let mut packet = Packet::new();
+        packet.set_type(PacketType::State);
+        packet.set_connection_id(49300);
+        packet.set_timestamp(2805920832);
+        packet.set_timestamp_difference(1805367832);
+        packet.set_wnd_size(61440);
+        packet.set_seq_nr(12044);
+        packet.set_ack_nr(12024);
 
-        let mut reply = Packet::new(header);
-        reply.set_selective_ack(vec![0b1001_1101, 0b0000_0000, 0b0101_1010, 0b0000_0001]);
+        packet.set_selective_ack(vec![0b1001_1101, 0b0000_0000, 0b0101_1010, 0b0000_0001]);
 
-        assert_eq!(reply.get_extensions()[0].bitmask[0], 0b1001_1101);
-        assert_eq!(reply.get_extensions()[0].bitmask[1], 0b0000_0000);
-        assert_eq!(reply.get_extensions()[0].bitmask[2], 0b0101_1010);
-        assert_eq!(reply.get_extensions()[0].bitmask[3], 0b0000_0001);
+        assert_eq!(packet.get_extensions()[0].bitmask[0], 0b1001_1101);
+        assert_eq!(packet.get_extensions()[0].bitmask[1], 0b0000_0000);
+        assert_eq!(packet.get_extensions()[0].bitmask[2], 0b0101_1010);
+        assert_eq!(packet.get_extensions()[0].bitmask[3], 0b0000_0001);
     }
 
     // https://github.com/ethereum/portal-network-specs/pull/127
@@ -798,16 +790,18 @@ mod tests {
 
     #[test]
     fn test_syn_packet() {
-        let mut header = PacketHeader::new();
-        header.set_type(PacketType::Syn);
-        header.set_connection_id(10049);
-        header.set_timestamp(3384187322);
-        header.set_timestamp_difference(0);
-        header.set_wnd_size(1048576);
-        header.set_seq_nr(11884);
-        header.set_ack_nr(0);
+        let mut packet = Packet::new();
+        packet.set_type(PacketType::Syn);
+        packet.set_connection_id(10049);
+        packet.set_timestamp(3384187322);
+        packet.set_timestamp_difference(0);
+        packet.set_wnd_size(1048576);
+        packet.set_seq_nr(11884);
+        packet.set_ack_nr(0);
 
-        let packet = Packet::new(header);
+        println!("packet: {:?}", packet);
+        println!("packet raw: {:?}", packet.as_ref());
+
         assert_eq!(
             hex::encode(packet.as_ref()),
             "41002741c9b699ba00000000001000002e6c0000"
@@ -816,16 +810,15 @@ mod tests {
 
     #[test]
     fn test_act_packet_no_extension() {
-        let mut header = PacketHeader::new();
-        header.set_type(PacketType::State);
-        header.set_connection_id(10049);
-        header.set_timestamp(6195294);
-        header.set_timestamp_difference(916973699);
-        header.set_wnd_size(1048576);
-        header.set_seq_nr(16807);
-        header.set_ack_nr(11885);
+        let mut packet = Packet::new();
+        packet.set_type(PacketType::State);
+        packet.set_connection_id(10049);
+        packet.set_timestamp(6195294);
+        packet.set_timestamp_difference(916973699);
+        packet.set_wnd_size(1048576);
+        packet.set_seq_nr(16807);
+        packet.set_ack_nr(11885);
 
-        let packet = Packet::new(header);
         assert_eq!(
             hex::encode(packet.as_ref()),
             "21002741005e885e36a7e8830010000041a72e6d"
@@ -834,36 +827,34 @@ mod tests {
 
     #[test]
     fn test_act_packet_with_selective_ack_extension() {
-        let mut header = PacketHeader::new();
-        header.set_type(PacketType::State);
-        header.set_connection_id(10049);
-        header.set_timestamp(6195294);
-        header.set_timestamp_difference(916973699);
-        header.set_wnd_size(1048576);
-        header.set_seq_nr(16807);
-        header.set_ack_nr(11885);
+        let mut packet = Packet::new();
+        packet.set_type(PacketType::State);
+        packet.set_connection_id(10049);
+        packet.set_timestamp(6195294);
+        packet.set_timestamp_difference(916973699);
+        packet.set_wnd_size(1048576);
+        packet.set_seq_nr(16807);
+        packet.set_ack_nr(11885);
 
-        let mut reply = Packet::new(header);
-        reply.set_selective_ack(vec![1, 0, 0, 128]);
+        packet.set_selective_ack(vec![1, 0, 0, 128]);
 
         assert_eq!(
-            hex::encode(reply.as_ref()),
+            hex::encode(packet.as_ref()),
             "21012741005e885e36a7e8830010000041a72e6d000401000080"
         );
     }
 
     #[test]
     fn test_data_packet() {
-        let mut header = PacketHeader::new();
-        header.set_type(PacketType::Data);
-        header.set_connection_id(26237);
-        header.set_timestamp(252492495);
-        header.set_timestamp_difference(242289855);
-        header.set_wnd_size(1048576);
-        header.set_seq_nr(8334);
-        header.set_ack_nr(16806);
+        let mut packet = Packet::with_payload(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        packet.set_type(PacketType::Data);
+        packet.set_connection_id(26237);
+        packet.set_timestamp(252492495);
+        packet.set_timestamp_difference(242289855);
+        packet.set_wnd_size(1048576);
+        packet.set_seq_nr(8334);
+        packet.set_ack_nr(16806);
 
-        let packet = Packet::with_payload(header, &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
         assert_eq!(
             hex::encode(packet.as_ref()),
             "0100667d0f0cbacf0e710cbf00100000208e41a600010203040506070809"
@@ -872,16 +863,15 @@ mod tests {
 
     #[test]
     fn test_fin_packet() {
-        let mut header = PacketHeader::new();
-        header.set_type(PacketType::Fin);
-        header.set_connection_id(19003);
-        header.set_timestamp(515227279);
-        header.set_timestamp_difference(511481041);
-        header.set_wnd_size(1048576);
-        header.set_seq_nr(41050);
-        header.set_ack_nr(16806);
+        let mut packet = Packet::new();
+        packet.set_type(PacketType::Fin);
+        packet.set_connection_id(19003);
+        packet.set_timestamp(515227279);
+        packet.set_timestamp_difference(511481041);
+        packet.set_wnd_size(1048576);
+        packet.set_seq_nr(41050);
+        packet.set_ack_nr(16806);
 
-        let packet = Packet::new(header);
         assert_eq!(
             hex::encode(packet.as_ref()),
             "11004a3b1eb5be8f1e7c94d100100000a05a41a6"
@@ -890,16 +880,15 @@ mod tests {
 
     #[test]
     fn test_reset_packet() {
-        let mut header = PacketHeader::new();
-        header.set_type(PacketType::Reset);
-        header.set_connection_id(62285);
-        header.set_timestamp(751226811);
-        header.set_timestamp_difference(0);
-        header.set_wnd_size(0);
-        header.set_seq_nr(55413);
-        header.set_ack_nr(16807);
+        let mut packet = Packet::new();
+        packet.set_type(PacketType::Reset);
+        packet.set_connection_id(62285);
+        packet.set_timestamp(751226811);
+        packet.set_timestamp_difference(0);
+        packet.set_wnd_size(0);
+        packet.set_seq_nr(55413);
+        packet.set_ack_nr(16807);
 
-        let packet = Packet::new(header);
         assert_eq!(
             hex::encode(packet.as_ref()),
             "3100f34d2cc6cfbb0000000000000000d87541a7"
