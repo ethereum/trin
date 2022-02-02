@@ -7,7 +7,7 @@ use tokio::sync::{mpsc, RwLock};
 use super::discovery::Discovery;
 use super::types::messages::ProtocolId;
 use crate::locks::RwLoggingExt;
-use crate::utp::stream::{ConnectionState, UtpListener};
+use crate::utp::stream::{SocketState, UtpListener};
 use crate::utp::trin_helpers::{UtpAccept, UtpMessageId};
 use hex;
 use ssz::Decode;
@@ -119,7 +119,7 @@ impl PortalnetEvents {
             .utp_connections
             .iter_mut()
         {
-            if conn.state == ConnectionState::Disconnected {
+            if conn.state == SocketState::Disconnected {
                 let received_stream = conn.recv_data_stream.clone();
 
                 match self
@@ -127,7 +127,7 @@ impl PortalnetEvents {
                     .read_with_warn()
                     .await
                     .listening
-                    .get(&conn.conn_id_recv)
+                    .get(&conn.receiver_connection_id)
                 {
                     Some(message_type) => match message_type {
                         UtpMessageId::OfferAcceptStream => {
