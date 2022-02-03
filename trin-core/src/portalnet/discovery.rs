@@ -192,6 +192,11 @@ impl Discovery {
         Ok(response)
     }
 
+    pub fn send_to(&self, _buf: &[u8], _enr: Enr) -> anyhow::Result<()> {
+        // TODO: Interface with discv5 socket
+        Ok(())
+    }
+
     pub async fn bucket_refresh_lookup(self: Arc<Self>) {
         // construct a 30 second interval to search for new peers.
         let mut query_interval = tokio::time::interval(Duration::from_secs(60));
