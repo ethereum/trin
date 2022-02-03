@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+#![allow(unreachable_code)]
 
 use crate::portalnet::discovery::Discovery;
 use core::convert::TryFrom;
@@ -17,6 +18,7 @@ use crate::utp::time::{now_microseconds, Delay, Timestamp};
 use crate::utp::trin_helpers::{UtpMessageId, UtpStreamState};
 use crate::utp::utils::{abs_diff, ewma};
 use anyhow::anyhow;
+use std::time::{Duration, Instant};
 
 // Maximum time (in microseconds) to wait for incoming packets when the send window is full
 const PRE_SEND_TIMEOUT: u32 = 500_000;
@@ -31,6 +33,9 @@ const INITIAL_CONGESTION_TIMEOUT: u64 = 1000; // one second
 const MIN_CWND: u32 = 2;
 const INIT_CWND: u32 = 2;
 
+// For simplicity's sake, let us assume no packet will ever exceed the
+// Ethernet maximum transfer unit of 1500 bytes.
+const BUF_SIZE: usize = 1500;
 const GAIN: f64 = 1.0;
 const ALLOWED_INCREASE: u32 = 1;
 const TARGET: f64 = 100_000.0; // 100 milliseconds
@@ -43,6 +48,8 @@ const MIN_DISCV5_PACKET_SIZE: usize = 63;
 const CCONTROL_TARGET: usize = 100 * 1000;
 const MAX_CWND_INCREASE_BYTES_PER_RTT: usize = 3000;
 const MIN_WINDOW_SIZE: usize = 10;
+const WINDOW_SIZE: u32 = 1024 * 1024; // local receive window size
+const MAX_RETRANSMISSION_RETRIES: u32 = 5; // maximum retransmission retries
 
 pub fn rand() -> u16 {
     rand::thread_rng().gen()
@@ -231,6 +238,9 @@ pub struct UtpSocket {
     /// Variance of the round-trip time to the remote peer
     rtt_variance: i32,
 
+    /// Data from the latest packet not yet returned in `recv_from`
+    pending_data: Vec<u8>,
+
     /// Rolling window of packet delay to remote peer
     base_delays: VecDeque<Delay>,
 
@@ -248,6 +258,9 @@ pub struct UtpSocket {
 
     /// Start of the current minute for sampling purposes
     last_rollover: Timestamp,
+
+    /// Maximum retransmission retries
+    pub max_retransmission_retries: u32,
 
     pub recv_data_stream: Vec<u8>,
     tx: mpsc::UnboundedSender<UtpStreamState>,
@@ -279,13 +292,15 @@ impl UtpSocket {
             last_dropped: 0,
             rtt: 0,
             rtt_variance: 0,
+            pending_data: Vec::new(),
             base_delays: VecDeque::with_capacity(BASE_HISTORY),
             their_delay: Delay::default(),
             congestion_timeout: INITIAL_CONGESTION_TIMEOUT,
             cwnd: INIT_CWND * MSS,
             last_rollover: Timestamp::default(),
             current_delays: Vec::with_capacity(8),
-            recv_data_stream: vec![],
+            recv_data_stream: Vec::new(),
+            max_retransmission_retries: MAX_RETRANSMISSION_RETRIES,
 
             // signal when node is connected to write payload
             tx,
@@ -326,6 +341,336 @@ impl UtpSocket {
         self.send_packets_in_queue();
 
         Ok(total_length)
+    }
+
+    /// Gracefully closes connection to peer.
+    ///
+    /// This method allows both peers to receive all packets still in
+    /// flight.
+    pub fn close(&mut self) -> anyhow::Result<()> {
+        // Nothing to do if the socket's already closed or not connected
+        if self.state == SocketState::Closed
+            || self.state == SocketState::New
+            || self.state == SocketState::SynSent
+        {
+            return Ok(());
+        }
+
+        // Flush unsent and unacknowledged packets
+        self.flush()?;
+
+        let mut packet = Packet::new();
+        packet.set_connection_id(self.sender_connection_id);
+        packet.set_seq_nr(self.seq_nr);
+        packet.set_ack_nr(self.ack_nr);
+        packet.set_timestamp(now_microseconds());
+        packet.set_type(PacketType::Fin);
+
+        // Send FIN
+        self.socket
+            .send_to(packet.as_ref(), self.connected_to.clone())?;
+        debug!("sent {:?}", packet);
+        self.state = SocketState::FinSent;
+
+        // Receive JAKE
+        let mut buf = [0; BUF_SIZE];
+        while self.state != SocketState::Closed {
+            self.recv(&mut buf)?;
+        }
+
+        Ok(())
+    }
+
+    /// Receives data from socket.
+    ///
+    /// On success, returns the number of bytes read and the sender's address.
+    /// Returns 0 bytes read after receiving a FIN packet when the remaining
+    /// in-flight packets are consumed.
+    pub fn recv_from(&mut self, buf: &mut [u8]) -> anyhow::Result<(usize, Enr)> {
+        let read = self.flush_incoming_buffer(buf);
+
+        if read > 0 {
+            return Ok((read, self.connected_to.clone()));
+        }
+
+        // If the socket received a reset packet and all data has been flushed, then it can't
+        // receive anything else
+        if self.state == SocketState::ResetReceived {
+            return Err(anyhow!("Connection reset by remote peer"));
+        }
+
+        loop {
+            // A closed socket with no pending data can only "read" 0 new bytes.
+            if self.state == SocketState::Closed {
+                return Ok((0, self.connected_to.clone()));
+            }
+
+            match self.recv(buf) {
+                Ok((0, _src)) => continue,
+                Ok(x) => return Ok(x),
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
+    fn recv(&mut self, buf: &mut [u8]) -> anyhow::Result<(usize, Enr)> {
+        let mut b = [0; BUF_SIZE + HEADER_SIZE];
+        let start = Instant::now();
+        let (read, src);
+        let mut retries = 0;
+
+        // Try to receive a packet and handle timeouts
+        loop {
+            // Abort loop if the current try exceeds the maximum number of retransmission retries.
+            if retries >= self.max_retransmission_retries {
+                self.state = SocketState::Closed;
+                return Err(anyhow!("Connection timed out"));
+            }
+
+            let timeout = if self.state != SocketState::New {
+                debug!("setting read timeout of {} ms", self.congestion_timeout);
+                Some(Duration::from_millis(self.congestion_timeout))
+            } else {
+                None
+            };
+
+            // self.socket
+            //     .set_read_timeout(timeout)
+            //     .expect("Error setting read timeout");
+            //
+            // TODO: Refactor this to use discv5 layer
+            // match self.socket.recv_from(&mut b) {
+            //     Ok((r, s)) => {
+            //         read = r;
+            //         src = s;
+            //         break;
+            //     }
+            //     Err(ref e)
+            //         if (e.kind() == ErrorKind::WouldBlock || e.kind() == ErrorKind::TimedOut) =>
+            //     {
+            //         debug!("recv_from timed out");
+            //         self.handle_receive_timeout()?;
+            //     }
+            //     Err(e) => return Err(e),
+            // };
+
+            let elapsed = start.elapsed();
+            let elapsed_ms = elapsed.as_secs() * 1000 + elapsed.subsec_millis() as u64;
+            debug!("{} ms elapsed", elapsed_ms);
+            retries += 1;
+        }
+
+        // Decode received data into a packet
+        let packet = match Packet::try_from(&b[..read]) {
+            Ok(packet) => packet,
+            Err(e) => {
+                debug!("{}", e);
+                debug!("Ignoring invalid packet");
+                return Ok((0, self.connected_to));
+            }
+        };
+        debug!("received {:?}", packet);
+
+        // Process packet, including sending a reply if necessary
+        if let Some(mut pkt) = self.handle_packet(&packet, src)? {
+            pkt.set_wnd_size(WINDOW_SIZE);
+            self.socket.send_to(pkt.as_ref(), src)?;
+            debug!("sent {:?}", pkt);
+        }
+
+        // Insert data packet into the incoming buffer if it isn't a duplicate of a previously
+        // discarded packet
+        if packet.get_type() == PacketType::Data
+            && packet.seq_nr().wrapping_sub(self.last_dropped) > 0
+        {
+            self.insert_into_buffer(packet);
+        }
+
+        // Flush incoming buffer if possible
+        let read = self.flush_incoming_buffer(buf);
+
+        Ok((read, src))
+    }
+
+    fn handle_receive_timeout(&mut self) -> anyhow::Result<()> {
+        self.congestion_timeout *= 2;
+        self.cwnd = MSS;
+
+        // There are three possible cases here:
+        //
+        // - If the socket is sending and waiting for acknowledgements (the send window is
+        //   not empty), resend the first unacknowledged packet;
+        //
+        // - If the socket is not sending and it hasn't sent a FIN yet, then it's waiting
+        //   for incoming packets: send a fast resend request;
+        //
+        // - If the socket sent a FIN previously, resend it.
+        debug!(
+            "self.send_window: {:?}",
+            self.send_window
+                .iter()
+                .map(Packet::seq_nr)
+                .collect::<Vec<u16>>()
+        );
+
+        if self.send_window.is_empty() {
+            // The socket is trying to close, all sent packets were acknowledged, and it has
+            // already sent a FIN: resend it.
+            if self.state == SocketState::FinSent {
+                let mut packet = Packet::new();
+                packet.set_connection_id(self.sender_connection_id);
+                packet.set_seq_nr(self.seq_nr);
+                packet.set_ack_nr(self.ack_nr);
+                packet.set_timestamp(now_microseconds());
+                packet.set_type(PacketType::Fin);
+
+                // Send FIN
+                self.socket
+                    .send_to(packet.as_ref(), self.connected_to.clone())?;
+                debug!("resent FIN: {:?}", packet);
+            } else if self.state != SocketState::New {
+                // The socket is waiting for incoming packets but the remote peer is silent:
+                // send a fast resend request.
+                debug!("sending fast resend request");
+                self.send_fast_resend_request();
+            }
+        } else {
+            // The socket is sending data packets but there is no reply from the remote
+            // peer: resend the first unacknowledged packet with the current timestamp.
+            let packet = &mut self.send_window[0];
+            packet.set_timestamp(now_microseconds());
+            self.socket
+                .send_to(packet.as_ref(), self.connected_to.clone())?;
+            debug!("resent {:?}", packet);
+        }
+
+        Ok(())
+    }
+
+    /// Removes a packet in the incoming buffer and updates the current acknowledgement number.
+    fn advance_incoming_buffer(&mut self) -> Option<Packet> {
+        if !self.incoming_buffer.is_empty() {
+            let packet = self.incoming_buffer.remove(0);
+            debug!("Removed packet from incoming buffer: {:?}", packet);
+            self.ack_nr = packet.seq_nr();
+            self.last_dropped = self.ack_nr;
+            Some(packet)
+        } else {
+            None
+        }
+    }
+
+    /// Discards sequential, ordered packets in incoming buffer, starting from
+    /// the most recently acknowledged to the most recent, as long as there are
+    /// no missing packets. The discarded packets' payload is written to the
+    /// slice `buf`, starting in position `start`.
+    /// Returns the last written index.
+    fn flush_incoming_buffer(&mut self, buf: &mut [u8]) -> usize {
+        fn unsafe_copy(src: &[u8], dst: &mut [u8]) -> usize {
+            let max_len = min(src.len(), dst.len());
+            unsafe {
+                use std::ptr::copy;
+                copy(src.as_ptr(), dst.as_mut_ptr(), max_len);
+            }
+            max_len
+        }
+
+        // Return pending data from a partially read packet
+        if !self.pending_data.is_empty() {
+            let flushed = unsafe_copy(&self.pending_data[..], buf);
+
+            if flushed == self.pending_data.len() {
+                self.pending_data.clear();
+                self.advance_incoming_buffer();
+            } else {
+                self.pending_data = self.pending_data[flushed..].to_vec();
+            }
+
+            return flushed;
+        }
+
+        if !self.incoming_buffer.is_empty()
+            && (self.ack_nr == self.incoming_buffer[0].seq_nr()
+                || self.ack_nr + 1 == self.incoming_buffer[0].seq_nr())
+        {
+            let flushed = unsafe_copy(&self.incoming_buffer[0].payload(), buf);
+
+            if flushed == self.incoming_buffer[0].payload().len() {
+                self.advance_incoming_buffer();
+            } else {
+                self.pending_data = self.incoming_buffer[0].payload()[flushed..].to_vec();
+            }
+
+            return flushed;
+        }
+
+        0
+    }
+
+    /// Sends a fast resend request to the remote peer.
+    ///
+    /// A fast resend request consists of sending three State packets (acknowledging the last
+    /// received packet) in quick succession.
+    fn send_fast_resend_request(&self) {
+        for _ in 0..3 {
+            let mut packet = Packet::new();
+            packet.set_type(PacketType::State);
+            let self_t_micro = now_microseconds();
+            packet.set_timestamp(self_t_micro);
+            packet.set_timestamp_difference(self.their_delay);
+            packet.set_connection_id(self.sender_connection_id);
+            packet.set_seq_nr(self.seq_nr);
+            packet.set_ack_nr(self.ack_nr);
+            let _ = self
+                .socket
+                .send_to(packet.as_ref(), self.connected_to.clone());
+        }
+    }
+
+    /// Inserts a packet into the socket's buffer.
+    ///
+    /// The packet is inserted in such a way that the packets in the buffer are sorted according to
+    /// their sequence number in ascending order. This allows storing packets that were received out
+    /// of order.
+    ///
+    /// Trying to insert a duplicate of a packet will silently fail.
+    /// it's more recent (larger timestamp).
+    fn insert_into_buffer(&mut self, packet: Packet) {
+        // Immediately push to the end if the packet's sequence number comes after the last
+        // packet's.
+        if self
+            .incoming_buffer
+            .last()
+            .map_or(false, |p| packet.seq_nr() > p.seq_nr())
+        {
+            self.incoming_buffer.push(packet);
+        } else {
+            // Find index following the most recent packet before the one we wish to insert
+            let i = self
+                .incoming_buffer
+                .iter()
+                .filter(|p| p.seq_nr() < packet.seq_nr())
+                .count();
+
+            if self
+                .incoming_buffer
+                .get(i)
+                .map_or(true, |p| p.seq_nr() != packet.seq_nr())
+            {
+                self.incoming_buffer.insert(i, packet);
+            }
+        }
+    }
+
+    /// Consumes acknowledgements for every pending packet.
+    pub fn flush(&mut self) -> anyhow::Result<()> {
+        let mut buf = [0u8; BUF_SIZE];
+        while !self.send_window.is_empty() {
+            debug!("packets in send window: {}", self.send_window.len());
+            self.recv(&mut buf)?;
+        }
+
+        Ok(())
     }
 
     fn send_packets_in_queue(&mut self) {
