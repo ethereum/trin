@@ -267,25 +267,30 @@ impl<TContentKey: OverlayContentKey + Send> OverlayProtocol<TContentKey> {
         };
 
         // todo: remove after updating `Offer` to use `ContentKey` type
-        let mut content_keys_offered: Vec<ContentKey> = vec![];
-        match self.protocol {
-            ProtocolId::State => content_keys.into_iter().for_each(|key| {
-                content_keys_offered.push(ContentKey::StateContentKey(
-                    StateContentKey::from_bytes(key.as_slice()).unwrap(),
-                ))
-            }),
-            ProtocolId::History => content_keys.into_iter().for_each(|key| {
-                content_keys_offered.push(ContentKey::HistoryContentKey(
-                    HistoryContentKey::from_bytes(key.as_slice()).unwrap(),
-                ))
-            }),
+        let content_keys_offered: Vec<ContentKey> = match self.protocol {
+            ProtocolId::State => content_keys
+                .into_iter()
+                .map(|key| {
+                    ContentKey::StateContentKey(
+                        StateContentKey::from_bytes(key.as_slice()).unwrap(),
+                    )
+                })
+                .collect(),
+            ProtocolId::History => content_keys
+                .into_iter()
+                .map(|key| {
+                    ContentKey::HistoryContentKey(
+                        HistoryContentKey::from_bytes(key.as_slice()).unwrap(),
+                    )
+                })
+                .collect(),
             _ => {
                 return Err(OverlayRequestError::InvalidRequest(format!(
                     "Send offer not supported on {:?} protocol",
                     self.protocol
                 )))
             }
-        }
+        };
 
         // Send the request and wait on the response.
         match self

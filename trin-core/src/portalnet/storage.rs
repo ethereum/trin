@@ -16,7 +16,7 @@ use tokio::time::timeout;
 use super::types::content_keys::ContentKey;
 use super::types::uint::U256;
 use crate::portalnet::sql::{
-    FindFarthestParams, InsertParams, RemoveParams, SqlHandler, SqlHandlerError, SqlParams,
+    EmptyParams, FindFarthestParams, InsertParams, RemoveParams, SqlHandler, SqlHandlerError,
     SqlQuery, SqlTransaction,
 };
 use crate::utils::{db::get_data_dir, distance::xor};
@@ -175,8 +175,20 @@ impl PortalStorage {
 
         // Store the data.
         self.db_insert(&content_id, value)?;
-        self.meta_db_insert(&content_id, &key.to_bytes(), value)
-            .await?;
+        // Revert rocks db action if there's an error with writing to metadata db
+        if let Err(msg) = self
+            .meta_db_insert(&content_id, &key.to_bytes(), value)
+            .await
+        {
+            debug!(
+                "Error writing content ID {:?} to meta db. Reverting: {:?}",
+                content_id, msg
+            );
+            self.db.delete(&content_id)?;
+            return Err(PortalStorageError::InsertError {
+                content_id: content_id.to_vec(),
+            });
+        }
 
         // Update the farthest key if this key is either 1.) the first key ever or 2.) farther than the current farthest.
         match self.farthest_content_id.as_ref() {
@@ -201,8 +213,21 @@ impl PortalStorage {
                 hex::encode(&id_to_remove)
             );
 
+            let deleted_value = self.db.get(&id_to_remove)?;
             self.db.delete(&id_to_remove)?;
-            self.meta_db_remove(&id_to_remove).await?;
+            // Revert rocksdb action if there's an error with writing to metadata db
+            if let Err(msg) = self.meta_db_remove(&id_to_remove).await {
+                debug!(
+                    "Error writing content ID {:?} to meta db. Reverting: {:?}",
+                    content_id, msg
+                );
+                if let Some(value) = deleted_value {
+                    self.db_insert(&content_id, &value)?;
+                }
+                return Err(PortalStorageError::InsertError {
+                    content_id: content_id.to_vec(),
+                });
+            };
 
             match self.find_farthest_content_id().await? {
                 None => {
@@ -283,16 +308,14 @@ impl PortalStorage {
         content_key: &Vec<u8>,
         value: &Vec<u8>,
     ) -> Result<(), PortalStorageError> {
-        let params = SqlParams::InsertParams(InsertParams {
-            content_id: content_id.to_vec(),
-            content_id_as_u32: PortalStorage::byte_vector_to_u32(content_id.to_vec()),
-            content_key: hex::encode(content_key.to_vec()),
-            value_size: value.len() as u32,
-        });
         let (resp_tx, resp_rx) = oneshot::channel::<Result<Value, SqlHandlerError>>();
         let tx = SqlTransaction {
-            query_type: SqlQuery::Insert,
-            params,
+            query_type: SqlQuery::Insert(InsertParams {
+                content_id: content_id.to_vec(),
+                content_id_as_u32: PortalStorage::byte_vector_to_u32(content_id.to_vec()),
+                content_key: hex::encode(content_key.to_vec()),
+                value_size: value.len() as u32,
+            }),
             resp: resp_tx,
         };
         self.send_sql_handler_request(tx, resp_rx, "Insert".to_string())
@@ -303,12 +326,10 @@ impl PortalStorage {
     /// Internal method for removing a given content-id from the meta db.
     async fn meta_db_remove(&self, content_id: &[u8; 32]) -> Result<(), PortalStorageError> {
         let (resp_tx, resp_rx) = oneshot::channel::<Result<Value, SqlHandlerError>>();
-        let params = SqlParams::RemoveParams(RemoveParams {
-            content_id: content_id.to_vec(),
-        });
         let tx = SqlTransaction {
-            query_type: SqlQuery::Remove,
-            params,
+            query_type: SqlQuery::Remove(RemoveParams {
+                content_id: content_id.to_vec(),
+            }),
             resp: resp_tx,
         };
         self.send_sql_handler_request(tx, resp_rx, "Remove".to_string())
@@ -328,8 +349,7 @@ impl PortalStorage {
     ) -> Result<u64, PortalStorageError> {
         let (resp_tx, resp_rx) = oneshot::channel::<Result<Value, SqlHandlerError>>();
         let tx = SqlTransaction {
-            query_type: SqlQuery::TotalStorage,
-            params: SqlParams::None,
+            query_type: SqlQuery::TotalStorage(EmptyParams {}),
             resp: resp_tx,
         };
         let total_storage = self
@@ -345,8 +365,7 @@ impl PortalStorage {
             DistanceFunction::Xor => {
                 let (resp_tx, resp_rx) = oneshot::channel::<Result<Value, SqlHandlerError>>();
                 let tx = SqlTransaction {
-                    query_type: SqlQuery::FindFarthest,
-                    params: SqlParams::FindFarthestParams(FindFarthestParams {
+                    query_type: SqlQuery::FindFarthest(FindFarthestParams {
                         node_id: self.node_id.raw().to_vec(),
                     }),
                     resp: resp_tx,

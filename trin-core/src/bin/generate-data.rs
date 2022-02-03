@@ -54,7 +54,14 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let value = generate_random_value(size_of_values);
         let key = generate_random_value(SIZE_OF_KEYS);
 
-        let content_key = ContentKey::StateContentKey(StateContentKey::from_bytes(&key).unwrap());
+        let content_key = match StateContentKey::from_bytes(&key) {
+            Ok(val) => val,
+            Err(_) => {
+                println!("Skipping invalid key: {:?}", key);
+                continue;
+            }
+        };
+        let content_key = ContentKey::StateContentKey(content_key);
         println!("{:?} -> {:?}", &content_key, &value);
         storage.store(&content_key, &value).await?;
         println!();

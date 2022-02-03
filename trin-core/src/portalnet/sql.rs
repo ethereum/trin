@@ -5,34 +5,14 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::portalnet::storage::PortalStorage;
 
-/// Enum for various parameters for each supported operation on metadata (sqlite) db
+/// Params for SqlHandler operations without any params
 #[derive(Debug)]
-pub enum SqlParams {
-    None,
-    FindFarthestParams(FindFarthestParams),
-    InsertParams(InsertParams),
-    RemoveParams(RemoveParams),
-}
+pub struct EmptyParams {}
 
 /// Params for FindFarthest operation
 #[derive(Debug)]
 pub struct FindFarthestParams {
     pub node_id: Vec<u8>,
-}
-
-impl TryFrom<SqlParams> for FindFarthestParams {
-    type Error = SqlHandlerError;
-
-    fn try_from(params: SqlParams) -> Result<Self, Self::Error> {
-        match params {
-            SqlParams::FindFarthestParams(val) => Ok(val),
-            _ => {
-                return Err(Self::Error::InvalidParams {
-                    request_type: "Find Farthest".to_string(),
-                })
-            }
-        }
-    }
 }
 
 /// Params for Insert operation
@@ -44,57 +24,26 @@ pub struct InsertParams {
     pub value_size: u32,
 }
 
-impl TryFrom<SqlParams> for InsertParams {
-    type Error = SqlHandlerError;
-
-    fn try_from(params: SqlParams) -> Result<Self, Self::Error> {
-        match params {
-            SqlParams::InsertParams(val) => Ok(val),
-            _ => {
-                return Err(Self::Error::InvalidParams {
-                    request_type: "Insert".to_string(),
-                })
-            }
-        }
-    }
-}
-
 /// Params for Remove operation
 #[derive(Debug)]
 pub struct RemoveParams {
     pub content_id: Vec<u8>,
 }
 
-impl TryFrom<SqlParams> for RemoveParams {
-    type Error = SqlHandlerError;
-
-    fn try_from(params: SqlParams) -> Result<Self, Self::Error> {
-        match params {
-            SqlParams::RemoveParams(val) => Ok(val),
-            _ => {
-                return Err(Self::Error::InvalidParams {
-                    request_type: "Remove".to_string(),
-                })
-            }
-        }
-    }
-}
-
 /// Various types of permitted operations on metadata (sqlite) database
 #[derive(Debug)]
 pub enum SqlQuery {
-    Create,
-    Insert,
-    Remove,
-    TotalStorage,
-    FindFarthest,
+    Create(EmptyParams),
+    Insert(InsertParams),
+    Remove(RemoveParams),
+    TotalStorage(EmptyParams),
+    FindFarthest(FindFarthestParams),
 }
 
 /// Struct to encapsulate R/W requests to metadata (sqlite) database
 #[derive(Debug)]
 pub struct SqlTransaction {
     pub query_type: SqlQuery,
-    pub params: SqlParams,
     pub resp: oneshot::Sender<Result<Value, SqlHandlerError>>,
 }
 
@@ -140,11 +89,11 @@ impl SqlHandler {
     pub async fn process_sql_requests(mut self) {
         while let Some(request) = self.sql_rx.recv().await {
             let response = match request.query_type {
-                SqlQuery::Create => self.create(),
-                SqlQuery::Insert => self.insert(request.params),
-                SqlQuery::Remove => self.remove(request.params),
-                SqlQuery::TotalStorage => self.total_storage(),
-                SqlQuery::FindFarthest => self.find_farthest(request.params),
+                SqlQuery::Create(_params) => self.create(),
+                SqlQuery::Insert(params) => self.insert(params),
+                SqlQuery::Remove(params) => self.remove(params),
+                SqlQuery::TotalStorage(_params) => self.total_storage(),
+                SqlQuery::FindFarthest(params) => self.find_farthest(params),
             };
             let _ = request.resp.send(response);
         }
@@ -161,8 +110,7 @@ impl SqlHandler {
     }
 
     /// Remove a ContentID from the metadata (sqlite) database
-    fn remove(&self, params: SqlParams) -> Result<Value, SqlHandlerError> {
-        let params: RemoveParams = params.try_into()?;
+    fn remove(&self, params: RemoveParams) -> Result<Value, SqlHandlerError> {
         match self.conn.execute(DELETE_QUERY, [params.content_id]) {
             Ok(_) => Ok(Value::Null),
             Err(_) => Err(SqlHandlerError::FailedExecution {
@@ -172,8 +120,7 @@ impl SqlHandler {
     }
 
     /// Insert a ContentID & its metadata into the metadata (sqlite) database
-    fn insert(&self, params: SqlParams) -> Result<Value, SqlHandlerError> {
-        let params: InsertParams = params.try_into()?;
+    fn insert(&self, params: InsertParams) -> Result<Value, SqlHandlerError> {
         let insert_params = params![
             params.content_id,
             params.content_id_as_u32,
@@ -212,8 +159,7 @@ impl SqlHandler {
     }
 
     /// Find the farthest ContentID from the provided NodeID
-    fn find_farthest(&self, params: SqlParams) -> Result<Value, SqlHandlerError> {
-        let params: FindFarthestParams = params.try_into()?;
+    fn find_farthest(&self, params: FindFarthestParams) -> Result<Value, SqlHandlerError> {
         let node_id_u32 = PortalStorage::byte_vector_to_u32(params.node_id);
         let mut query = self.conn.prepare(XOR_FIND_FARTHEST_QUERY).unwrap();
         let mut result = query.query_map([node_id_u32], |row| {
