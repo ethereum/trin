@@ -3,7 +3,6 @@ use rand::{distributions::Alphanumeric, Rng};
 use std::process::Command;
 use std::sync::Arc;
 use structopt::StructOpt;
-use tokio::sync::mpsc;
 use trin_core::portalnet::storage::{DistanceFunction, PortalStorage, PortalStorageConfig};
 use trin_core::portalnet::types::content_keys::{ContentKey, StateContentKey};
 use trin_core::utils::db::get_data_dir;
@@ -28,9 +27,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let db = PortalStorage::setup_rocksdb(node_id)?;
-    let (sql_handler_tx, sql_handler_rx) = mpsc::channel(32);
-    let sql_handler = PortalStorage::setup_sql(node_id, sql_handler_rx)?;
-    tokio::spawn(sql_handler.process_sql_requests());
+    let sql_connection_pool = PortalStorage::setup_sql(node_id)?;
 
     let num_kilobytes = generator_config.kb;
 
@@ -46,9 +43,9 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
         node_id,
         distance_function: DistanceFunction::Xor,
         db: Arc::new(db),
-        sql_handler_tx,
+        sql_connection_pool,
     };
-    let mut storage = PortalStorage::new(storage_config).await?;
+    let mut storage = PortalStorage::new(storage_config)?;
 
     for _ in 0..num_of_entries {
         let value = generate_random_value(size_of_values);
@@ -63,7 +60,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
         let content_key = ContentKey::StateContentKey(content_key);
         println!("{:?} -> {:?}", &content_key, &value);
-        storage.store(&content_key, &value).await?;
+        storage.store(&content_key, &value)?;
         println!();
     }
 

@@ -58,17 +58,14 @@ pub async fn run_trin(
     // Initialize DB config
     let node_id = discovery.local_enr().node_id();
     let rocks_db = PortalStorage::setup_rocksdb(node_id)?;
-    let (sql_handler_tx, sql_handler_rx) = mpsc::channel(32);
-    let sql_handler = PortalStorage::setup_sql(node_id, sql_handler_rx)?;
+    let sql_connection_pool = PortalStorage::setup_sql(node_id)?;
     let storage_config = PortalStorageConfig {
         storage_capacity_kb: (trin_config.kb / 4) as u64,
         node_id,
         distance_function: DistanceFunction::Xor,
         db: Arc::new(rocks_db),
-        sql_handler_tx,
+        sql_connection_pool,
     };
-
-    tokio::spawn(sql_handler.process_sql_requests());
 
     debug!("Selected networks to spawn: {:?}", trin_config.networks);
     // Initialize state sub-network service and event handlers, if selected

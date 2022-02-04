@@ -35,7 +35,7 @@ impl StateNetwork {
         let triedb = TrieDB::new(Arc::new(db));
         let trie = EthTrie::new(Arc::new(triedb));
 
-        let storage = Arc::new(PortalStorage::new(storage_config).await.unwrap());
+        let storage = Arc::new(PortalStorage::new(storage_config).unwrap());
         let config = OverlayConfig {
             bootnode_enrs: portal_config.bootnode_enrs.clone(),
             ..Default::default()

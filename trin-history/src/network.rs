@@ -1,7 +1,10 @@
 use anyhow::anyhow;
 use log::debug;
 use std::sync::Arc;
+
+use log::debug;
 use tokio::sync::RwLock;
+
 use trin_core::portalnet::{
     discovery::Discovery,
     overlay::{OverlayConfig, OverlayProtocol, OverlayRequestError},
@@ -29,7 +32,7 @@ impl HistoryNetwork {
             bootnode_enrs: portal_config.bootnode_enrs.clone(),
             ..Default::default()
         };
-        let storage = Arc::new(PortalStorage::new(storage_config).await.unwrap());
+        let storage = Arc::new(PortalStorage::new(storage_config).unwrap());
         let overlay = OverlayProtocol::new(
             config,
             discovery,
