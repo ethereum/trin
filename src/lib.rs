@@ -11,11 +11,7 @@ use trin_core::utp::stream::UtpListener;
 use trin_core::{
     cli::{TrinConfig, HISTORY_NETWORK, STATE_NETWORK},
     jsonrpc::service::{launch_jsonrpc_server, JsonRpcExiter},
-    portalnet::{
-        discovery::Discovery,
-        storage::{DistanceFunction, PortalStorage, PortalStorageConfig},
-        types::messages::PortalnetConfig,
-    },
+    portalnet::{discovery::Discovery, storage::PortalStorage, types::messages::PortalnetConfig},
 };
 use trin_history::initialize_history_network;
 use trin_state::initialize_state_network;
@@ -55,17 +51,9 @@ pub async fn run_trin(
         listening: HashMap::new(),
     }));
 
-    // Initialize DB config
-    let node_id = discovery.local_enr().node_id();
-    let rocks_db = PortalStorage::setup_rocksdb(node_id)?;
-    let sql_connection_pool = PortalStorage::setup_sql(node_id)?;
-    let storage_config = PortalStorageConfig {
-        storage_capacity_kb: (trin_config.kb / 4) as u64,
-        node_id,
-        distance_function: DistanceFunction::Xor,
-        db: Arc::new(rocks_db),
-        sql_connection_pool,
-    };
+    // Initialize Storage config
+    let storage_config =
+        PortalStorage::setup_config(discovery.local_enr().node_id(), trin_config.kb)?;
 
     debug!("Selected networks to spawn: {:?}", trin_config.networks);
     // Initialize state sub-network service and event handlers, if selected

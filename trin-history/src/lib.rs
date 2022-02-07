@@ -17,7 +17,7 @@ use trin_core::cli::TrinConfig;
 use trin_core::jsonrpc::types::HistoryJsonRpcRequest;
 use trin_core::portalnet::discovery::Discovery;
 use trin_core::portalnet::events::PortalnetEvents;
-use trin_core::portalnet::storage::{DistanceFunction, PortalStorage, PortalStorageConfig};
+use trin_core::portalnet::storage::{PortalStorage, PortalStorageConfig};
 use trin_core::portalnet::types::messages::PortalnetConfig;
 use trin_core::utp::stream::UtpListener;
 
@@ -63,16 +63,8 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let portal_events_utp_listener = Arc::clone(&utp_listener);
 
     // Initialize DB config
-    let node_id = discovery.local_enr().node_id();
-    let rocks_db = PortalStorage::setup_rocksdb(node_id).unwrap();
-    let sql_connection_pool = PortalStorage::setup_sql(node_id)?;
-    let storage_config = PortalStorageConfig {
-        storage_capacity_kb: (trin_config.kb / 4) as u64,
-        node_id,
-        distance_function: DistanceFunction::Xor,
-        db: Arc::new(rocks_db),
-        sql_connection_pool,
-    };
+    let storage_config =
+        PortalStorage::setup_config(discovery.local_enr().node_id(), trin_config.kb)?;
 
     // Spawn main event handler
     tokio::spawn(async move {

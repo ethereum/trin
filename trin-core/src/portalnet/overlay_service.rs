@@ -15,7 +15,6 @@ use crate::{
         storage::PortalStorage,
         types::{
             content_key::OverlayContentKey,
-            content_keys::{ContentKey, HistoryContentKey, StateContentKey},
             messages::{
                 ByteList, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Ping,
                 Pong, ProtocolId, Request, Response, SszEnr,
@@ -543,20 +542,15 @@ impl<TContentKey: OverlayContentKey + Send> OverlayService<TContentKey> {
 
     /// Attempts to build a `Content` response for a `FindContent` request.
     fn handle_find_content(&self, request: FindContent) -> Result<Content, OverlayRequestError> {
-        let content_key = match self.protocol {
-            ProtocolId::State => ContentKey::StateContentKey(
-                StateContentKey::from_bytes(&request.content_key).unwrap(),
-            ),
-            ProtocolId::History => ContentKey::HistoryContentKey(
-                HistoryContentKey::from_bytes(&request.content_key).unwrap(),
-            ),
-            _ => {
-                return Err(OverlayRequestError::Failure(format!(
-                    "Trin does not currently support requested protocol: {:?}",
-                    self.protocol
-                )))
+        let content_key = match (TContentKey::try_from)(request.content_key) {
+            Ok(key) => key,
+            Err(_) => {
+                return Err(OverlayRequestError::InvalidRequest(
+                    "Invalid content key".to_string(),
+                ))
             }
         };
+
         match self.storage.get(&content_key) {
             Ok(Some(value)) => {
                 let content = ByteList::from(VariableList::from(value));
@@ -1100,28 +1094,16 @@ impl<TContentKey: OverlayContentKey + Send> OverlayService<TContentKey> {
     /// Returns list of nodes closer to content than self, sorted by distance.
     fn find_nodes_close_to_content(
         &self,
-        content_key: ContentKey,
+        content_key: impl OverlayContentKey,
     ) -> Result<Vec<SszEnr>, OverlayRequestError> {
-        // Attempt to derive the content ID for the content key.
-        let content_id = match content_key {
-            ContentKey::StateContentKey(val) => val.derive_content_id().unwrap(),
-            ContentKey::HistoryContentKey(val) => val.derive_content_id().unwrap(),
-        };
-
-        let content_id = Into::<[u8; 32]>::into(content_id);
+        let content_id = content_key.content_id();
         let self_node_id = self.local_enr().node_id();
         let self_distance = xor(&content_id, &self_node_id.raw());
 
         let mut nodes_with_distance: Vec<(U256, Enr)> = self
             .table_entries_enr()
             .into_iter()
-            .map(|enr| {
-                (
-                    // naked unwrap since content key len has already been validated
-                    xor(&content_id, &enr.node_id().raw()),
-                    enr,
-                )
-            })
+            .map(|enr| (xor(&content_id, &enr.node_id().raw()), enr))
             .collect();
 
         nodes_with_distance.sort_by(|a, b| a.0.cmp(&b.0));
@@ -1155,11 +1137,8 @@ mod tests {
     use crate::{
         cli::DEFAULT_STORAGE_CAPACITY,
         portalnet::{
-            discovery::Discovery,
-            overlay::OverlayConfig,
-            types::{content_key::MockContentKey, messages::PortalnetConfig},
-            storage::{DistanceFunction, PortalStorage, PortalStorageConfig},
-            types::messages::PortalnetConfig,
+            discovery::Discovery, overlay::OverlayConfig, storage::PortalStorage,
+            types::content_key::MockContentKey, types::messages::PortalnetConfig,
         },
     };
 
@@ -1168,7 +1147,6 @@ mod tests {
         kbucket::Entry,
     };
     use rand::Rng;
-    use discv5::enr::{CombinedKey, EnrBuilder};
     use serial_test::serial;
     use tokio_test::{assert_pending, assert_ready, task};
 
@@ -1194,15 +1172,7 @@ mod tests {
         // Initialize DB config
         let storage_capacity: u32 = DEFAULT_STORAGE_CAPACITY.parse().unwrap();
         let node_id = discovery.local_enr().node_id();
-        let rocks_db = PortalStorage::setup_rocksdb(node_id).unwrap();
-        let sql_connection_pool = PortalStorage::setup_sql(node_id).unwrap();
-        let storage_config = PortalStorageConfig {
-            storage_capacity_kb: (storage_capacity / 4) as u64,
-            node_id,
-            distance_function: DistanceFunction::Xor,
-            db: Arc::new(rocks_db),
-            sql_connection_pool,
-        };
+        let storage_config = PortalStorage::setup_config(node_id, storage_capacity).unwrap();
         let storage = Arc::new(PortalStorage::new(storage_config).unwrap());
 
         let overlay_config = OverlayConfig::default();
@@ -1452,7 +1422,7 @@ mod tests {
     }
 
     #[tokio::test]
-<<<<<<< HEAD
+    #[serial]
     async fn process_discovered_enrs_local_enr() {
         let mut service = task::spawn(build_service());
         let local_enr = service.discovery.local_enr();
@@ -1472,6 +1442,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn process_discovered_enrs_unknown_enrs() {
         let mut service = task::spawn(build_service());
 
@@ -1517,6 +1488,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn process_discovered_enrs_known_enrs() {
         let mut service = task::spawn(build_service());
 
@@ -1769,9 +1741,8 @@ mod tests {
     #[case(6)]
     #[case(0)]
     #[case(255)]
-    #[tokio::test]
     #[serial]
-    async fn test_generate_random_node_id(#[case] target_bucket_idx: u8) {
+    fn test_generate_random_node_id(#[case] target_bucket_idx: u8) {
         let service = task::spawn(build_service());
         let random_node_id = service.generate_random_node_id(target_bucket_idx).unwrap();
         let key = kbucket::Key::from(random_node_id);

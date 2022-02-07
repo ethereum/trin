@@ -10,7 +10,6 @@ use super::{
     Enr,
 };
 use crate::portalnet::storage::PortalStorage;
-use crate::portalnet::types::content_keys::{ContentKey, HistoryContentKey, StateContentKey};
 use crate::portalnet::types::messages::{
     Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer, Ping, Pong,
     ProtocolId, Request, Response,
@@ -267,29 +266,13 @@ impl<TContentKey: OverlayContentKey + Send> OverlayProtocol<TContentKey> {
         };
 
         // todo: remove after updating `Offer` to use `ContentKey` type
-        let content_keys_offered: Vec<ContentKey> = match self.protocol {
-            ProtocolId::State => content_keys
-                .into_iter()
-                .map(|key| {
-                    ContentKey::StateContentKey(
-                        StateContentKey::from_bytes(key.as_slice()).unwrap(),
-                    )
-                })
-                .collect(),
-            ProtocolId::History => content_keys
-                .into_iter()
-                .map(|key| {
-                    ContentKey::HistoryContentKey(
-                        HistoryContentKey::from_bytes(key.as_slice()).unwrap(),
-                    )
-                })
-                .collect(),
-            _ => {
-                return Err(OverlayRequestError::InvalidRequest(format!(
-                    "Send offer not supported on {:?} protocol",
-                    self.protocol
-                )))
-            }
+        let content_keys_offered: Result<Vec<TContentKey>, TContentKey::Error> = content_keys
+            .into_iter()
+            .map(|key| (TContentKey::try_from)(key))
+            .collect();
+        let content_keys_offered: Vec<TContentKey> = match content_keys_offered {
+            Ok(val) => val,
+            Err(_msg) => return Err(OverlayRequestError::DecodeError),
         };
 
         // Send the request and wait on the response.
@@ -309,7 +292,7 @@ impl<TContentKey: OverlayContentKey + Send> OverlayProtocol<TContentKey> {
         &self,
         response: Accept,
         enr: Enr,
-        content_keys_offered: Vec<ContentKey>,
+        content_keys_offered: Vec<TContentKey>,
     ) -> Accept {
         let connection_id = response.connection_id.clone();
 
@@ -337,9 +320,9 @@ impl<TContentKey: OverlayContentKey + Send> OverlayProtocol<TContentKey> {
             .zip(content_keys_offered.iter())
         {
             if i == true {
-                match self.storage.get(key.clone()) {
+                match self.storage.get(&key.clone()) {
                     Ok(content) => match content {
-                        Some(content) => content_items.push((key.to_bytes(), content)),
+                        Some(content) => content_items.push((key.clone().into(), content)),
                         None => {}
                     },
                     // should return some error if content not found

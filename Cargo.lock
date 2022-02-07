@@ -3442,6 +3442,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.1",
  "sha3 0.9.1",
+ "tempdir",
  "tokio",
  "tracing",
  "tracing-subscriber 0.2.25",

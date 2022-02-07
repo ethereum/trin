@@ -1,10 +1,9 @@
 use discv5::enr::NodeId;
 use rand::{distributions::Alphanumeric, Rng};
 use std::process::Command;
-use std::sync::Arc;
 use structopt::StructOpt;
-use trin_core::portalnet::storage::{DistanceFunction, PortalStorage, PortalStorageConfig};
-use trin_core::portalnet::types::content_keys::{ContentKey, StateContentKey};
+use trin_core::portalnet::storage::PortalStorage;
+use trin_core::portalnet::types::content_key::MockContentKey;
 use trin_core::utils::db::get_data_dir;
 
 // For every 1 kb of data we store (key + value), RocksDB tends to grow by this many kb on disk...
@@ -26,9 +25,6 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .expect("Failed to overwrite DB.");
     }
 
-    let db = PortalStorage::setup_rocksdb(node_id)?;
-    let sql_connection_pool = PortalStorage::setup_sql(node_id)?;
-
     let num_kilobytes = generator_config.kb;
 
     let size_of_values = generator_config.value_size;
@@ -36,30 +32,16 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let num_entries = ((num_kilobytes * 1000) as f64 / (size_of_values) as f64) / DATA_OVERHEAD;
     let num_of_entries = num_entries.round() as u32;
 
-    let storage_config = PortalStorageConfig {
-        // Arbitrarily set capacity at a quarter of what we're storing.
-        // todo: make this ratio configurable
-        storage_capacity_kb: (num_kilobytes / 4) as u64,
-        node_id,
-        distance_function: DistanceFunction::Xor,
-        db: Arc::new(db),
-        sql_connection_pool,
-    };
+    let storage_config = PortalStorage::setup_config(node_id, num_kilobytes)?;
     let mut storage = PortalStorage::new(storage_config)?;
 
     for _ in 0..num_of_entries {
         let value = generate_random_value(size_of_values);
         let key = generate_random_value(SIZE_OF_KEYS);
 
-        let content_key = match StateContentKey::from_bytes(&key) {
-            Ok(val) => val,
-            Err(_) => {
-                println!("Skipping invalid key: {:?}", key);
-                continue;
-            }
-        };
-        let content_key = ContentKey::StateContentKey(content_key);
-        println!("{:?} -> {:?}", &content_key, &value);
+        let content_key = MockContentKey::try_from(key).unwrap();
+        let display: Vec<u8> = content_key.clone().into();
+        println!("{:?} -> {:?}", display, &value);
         storage.store(&content_key, &value)?;
         println!();
     }

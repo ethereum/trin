@@ -2,7 +2,6 @@ use anyhow::anyhow;
 use log::debug;
 use std::sync::Arc;
 
-use log::debug;
 use tokio::sync::RwLock;
 
 use trin_core::portalnet::{
