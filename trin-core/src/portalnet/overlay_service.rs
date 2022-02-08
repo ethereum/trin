@@ -808,7 +808,6 @@ impl OverlayService {
             "[{:?}] Processing Pong response from node. Node: {}",
             self.protocol, node_id
         );
-
         // If the ENR sequence number in pong is less than the ENR sequence number for the routing
         // table entry, then request the node.
         //
@@ -849,8 +848,19 @@ impl OverlayService {
             self.protocol,
             source.node_id()
         );
-        if let Content::Enrs(enrs) = content {
-            self.process_discovered_enrs(enrs.into_iter().map(|ssz_enr| ssz_enr.into()).collect());
+        match content {
+            Content::ConnectionId(id) => debug!(
+                "[{:?}] Skipping processing for content connection ID {}",
+                self.protocol, id
+            ),
+            Content::Content(_) => {
+                debug!(
+                    "[{:?}] Skipping processing for content bytes",
+                    self.protocol
+                )
+            }
+            Content::Enrs(enrs) => self
+                .process_discovered_enrs(enrs.into_iter().map(|ssz_enr| ssz_enr.into()).collect()),
         }
     }
 
@@ -872,7 +882,7 @@ impl OverlayService {
             }
 
             let key = kbucket::Key::from(node_id);
-            let node = match kbuckets.entry(&key) {
+            let optional_node = match kbuckets.entry(&key) {
                 kbucket::Entry::Present(entry, _) => Some(entry.value().clone()),
                 kbucket::Entry::Pending(ref mut entry, _) => Some(entry.value().clone()),
                 _ => None,
@@ -882,11 +892,11 @@ impl OverlayService {
             // If the node is not in the routing table, then add the node in a disconnected state.
             // A subsequent ping will establish connectivity with the node. If the insertion succeeds,
             // then add the node to the ping queue. Ignore insertion failures.
-            if let Some(present_node) = node {
-                if present_node.enr().seq() < enr.seq() {
+            if let Some(node) = optional_node {
+                if node.enr().seq() < enr.seq() {
                     let updated_node = Node {
                         enr,
-                        data_radius: present_node.data_radius(),
+                        data_radius: node.data_radius(),
                     };
 
                     // The update removed the node because it would violate the incoming peers condition
@@ -1154,7 +1164,10 @@ mod tests {
         utils::db,
     };
 
-    use discv5::enr::{CombinedKey, EnrBuilder};
+    use discv5::{
+        enr::{CombinedKey, EnrBuilder},
+        kbucket::Entry,
+    };
     use rand::Rng;
     use tokio_test::{assert_pending, assert_ready, task};
 
@@ -1269,7 +1282,7 @@ mod tests {
             request.direction
         );
 
-        assert!(std::matches!(request.request, Request::FindNodes { .. }));
+        assert!(matches!(request.request, Request::FindNodes { .. }));
 
         match request.request {
             Request::FindNodes(find_nodes) => {
@@ -1322,7 +1335,7 @@ mod tests {
 
         assert!(service.peers_to_ping.contains_key(&node_id));
 
-        assert!(std::matches!(
+        assert!(matches!(
             service.kbuckets.write().entry(&key),
             kbucket::Entry::Present { .. }
         ));
@@ -1384,7 +1397,7 @@ mod tests {
             request.direction
         );
 
-        assert!(std::matches!(request.request, Request::FindNodes { .. }));
+        assert!(matches!(request.request, Request::FindNodes { .. }));
 
         match request.request {
             Request::FindNodes(find_nodes) => {
@@ -1409,6 +1422,25 @@ mod tests {
         service.process_pong(pong, source);
 
         assert_pending!(poll_request_rx!(service));
+    }
+
+    #[tokio::test]
+    async fn process_discovered_enrs_local_enr() {
+        let mut service = task::spawn(build_service());
+        let local_enr = service.discovery.local_enr();
+        service.process_discovered_enrs(vec![local_enr.clone()]);
+
+        // Check routing table for local ENR.
+        // Local node should not be present in the routing table.
+        let local_key = kbucket::Key::from(local_enr.node_id());
+        assert!(matches!(
+            service.kbuckets.write().entry(&local_key),
+            Entry::SelfEntry
+        ));
+
+        // Check ping queue for local ENR.
+        // Ping queue should be empty.
+        assert!(service.peers_to_ping.is_empty());
     }
 
     #[tokio::test]
@@ -1487,7 +1519,7 @@ mod tests {
             .kbuckets
             .write()
             .insert_or_update(&key1, node1, status);
-        assert!(std::matches!(
+        assert!(matches!(
             service.kbuckets.write().entry(&key1),
             kbucket::Entry::Present { .. }
         ));
@@ -1495,7 +1527,7 @@ mod tests {
             .kbuckets
             .write()
             .insert_or_update(&key2, node2, status);
-        assert!(std::matches!(
+        assert!(matches!(
             service.kbuckets.write().entry(&key2),
             kbucket::Entry::Present { .. }
         ));
@@ -1547,7 +1579,7 @@ mod tests {
             request.direction
         );
 
-        assert!(std::matches!(request.request, Request::FindNodes { .. }));
+        assert!(matches!(request.request, Request::FindNodes { .. }));
 
         match request.request {
             Request::FindNodes(find_nodes) => {
@@ -1575,7 +1607,7 @@ mod tests {
             request.direction
         );
 
-        assert!(std::matches!(request.request, Request::Ping { .. }));
+        assert!(matches!(request.request, Request::Ping { .. }));
     }
 
     #[tokio::test]
@@ -1594,7 +1626,7 @@ mod tests {
         let connection_direction = ConnectionDirection::Outgoing;
 
         assert!(!service.peers_to_ping.contains_key(&node_id));
-        assert!(std::matches!(
+        assert!(matches!(
             service.kbuckets.write().entry(&key),
             kbucket::Entry::Absent { .. }
         ));

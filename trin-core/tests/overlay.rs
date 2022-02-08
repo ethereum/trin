@@ -92,6 +92,7 @@ async fn spawn_overlay(discovery: Arc<Discovery>, overlay: Arc<OverlayProtocol>)
 #[tokio::test]
 async fn overlay() {
     let protocol = ProtocolId::History;
+    let sleep_duration = Duration::from_millis(5);
 
     // Node one.
     let portal_config_one = PortalnetConfig {
@@ -104,7 +105,7 @@ async fn overlay() {
     let discovery_one = Arc::new(discovery_one);
     let overlay_one = Arc::new(init_overlay(Arc::clone(&discovery_one), protocol.clone()).await);
     spawn_overlay(Arc::clone(&discovery_one), Arc::clone(&overlay_one)).await;
-    time::sleep(Duration::from_millis(5)).await;
+    time::sleep(sleep_duration).await;
 
     // Node two.
     let portal_config_two = PortalnetConfig {
@@ -117,7 +118,7 @@ async fn overlay() {
     let discovery_two = Arc::new(discovery_two);
     let overlay_two = Arc::new(init_overlay(Arc::clone(&discovery_two), protocol.clone()).await);
     spawn_overlay(Arc::clone(&discovery_two), Arc::clone(&overlay_two)).await;
-    time::sleep(Duration::from_millis(5)).await;
+    time::sleep(sleep_duration).await;
 
     // Node three.
     let portal_config_three = PortalnetConfig {
@@ -131,7 +132,7 @@ async fn overlay() {
     let overlay_three =
         Arc::new(init_overlay(Arc::clone(&discovery_three), protocol.clone()).await);
     spawn_overlay(Arc::clone(&discovery_three), Arc::clone(&overlay_three)).await;
-    time::sleep(Duration::from_millis(5)).await;
+    time::sleep(sleep_duration).await;
 
     // All routing tables are empty.
     assert!(overlay_one.table_entries_enr().is_empty());
@@ -146,7 +147,7 @@ async fn overlay() {
         }
         Err(err) => panic!("Unable to respond to ping: {}", err),
     }
-    time::sleep(Duration::from_millis(5)).await;
+    time::sleep(sleep_duration).await;
     let overlay_one_peers = overlay_one.table_entries_enr();
     assert_eq!(1, overlay_one_peers.len());
     assert!(overlay_one_peers.contains(&overlay_two.local_enr()));
@@ -164,7 +165,7 @@ async fn overlay() {
         }
         Err(err) => panic!("Unable to respond to find nodes: {}", err),
     }
-    time::sleep(Duration::from_millis(5)).await;
+    time::sleep(sleep_duration).await;
     let overlay_one_peers = overlay_one.table_entries_enr();
     assert_eq!(2, overlay_one_peers.len());
     assert!(overlay_one_peers.contains(&overlay_three.local_enr()));
@@ -186,7 +187,7 @@ async fn overlay() {
         }
         Err(err) => panic!("Unable to respond to find nodes: {}", err),
     }
-    time::sleep(Duration::from_millis(5)).await;
+    time::sleep(sleep_duration).await;
     let overlay_three_peers = overlay_three.table_entries_enr();
     assert_eq!(2, overlay_three_peers.len());
     assert!(overlay_three_peers.contains(&overlay_one.local_enr()));
@@ -211,7 +212,7 @@ async fn overlay() {
         },
         Err(err) => panic!("Unable to respond to find content: {}", err),
     };
-    time::sleep(Duration::from_millis(5)).await;
+    time::sleep(sleep_duration).await;
     let overlay_two_peers = overlay_two.table_entries_enr();
     assert!(overlay_two_peers.contains(&overlay_one.local_enr()));
     for enr in content_enrs {
