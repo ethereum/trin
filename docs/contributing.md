@@ -182,6 +182,49 @@ still need to add their remote explicitly.
 ## Releases
 - When cutting a new release, the versions of every crate in this repo should be updated simultaneously to the new version. 
 
+### Versioning
+
+Make sure that version follows [semver](https://semver.org/) rules e.g (`0.2.0-alpha`).
+
+**For the time being, ALWAYS specify the `-alpha` suffix.**
+
+### Generate Release Notes
+
+**Prerequisite**: Release notes are generated with [towncrier](https://pypi.org/project/towncrier/). Ensure to have `towncrier` installed and the command is available.
+
+Run `make notes version=<version>` where `<version>` is the version we are generating the release notes for e.g. `0.2.0-alpha`.
+
+Example:
+
+```
+make notes version=0.2.0-alpha
+```
+
+Examine the generated release notes and if needed perform and commit any manual changes.
+
+### Generate the release
+
+**Prerequisite**: Make sure the central repository is configured as `origin`.
+
+Run `make release version=<version>`.
+
+Example:
+
+```
+make release version=0.2.0-alpha
+```
+
+### Update testnet nodes
+Run `make create-docker-image` and `make push-docker-image` commands with the appropriate version.
+
+Example:
+
+```
+make create-docker-image version=0.2.0-alpha
+make push-docker-image version=0.2.0-alpha
+```
+
+Run the Ansible playbook to fetch the newly available docker image and update the testnet nodes.
 
 ## Tests
 

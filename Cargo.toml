@@ -5,10 +5,12 @@ authors = ["Jacob Kaufmann <jacobkaufmann18@gmail.com>", "Jason Carver <ut96caar
 edition = "2021"
 rust-version = "1.58.0"
 default-run = "trin"
+repository = "https://github.com/ethereum/trin"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+cargo-release = "0.20.1"
 log = "0.4.14"
 tokio = { version = "1.8.0", features = ["full"] }
 tracing = "0.1.26"
@@ -30,5 +32,5 @@ members = [
 ]
 
 [patch.crates-io]
-# Use temporaly discv5 version
+# Use temporary discv5 version
 discv5 = { git = "https://github.com/ogenev/discv5.git", branch = "public_kbucket_stable" }

@@ -32,74 +32,9 @@ Trin will proxy at least *some* requests to Infura for quite a while, but the
 plan is to incrementally reduce the reliance on Infura, as more trin
 functionality becomes available.
 
-## How to use
+## How to use Trin
 
-### Install dependencies (on Ubuntu/Debian)
-
-```sh
-apt install libssl-dev librocksdb-dev libclang-dev 
-```
-
-Create an Infura account, getting a project ID. Check out the trin repository, then:
-
-```sh
-cd trin
-TRIN_INFURA_PROJECT_ID="YoUr-Id-HeRe" cargo run -p trin
-```
-
-To run individual networks:
-```sh
-cargo run -p trin-state|trin-history
-```
-
-**Optional:** Custom data directory
-```shell
-TRIN_DATA_PATH="/your_path"
-```
-*Note, default data paths are:*\
-Linux/Unix - `$HOME/.local/share/trin`\
-MacOS - `~/Library/Application Support/Trin`\
-Windows - `C:\Users\Username\AppData\Roaming\Trin\data`
-
-### Connect over IPC
-In a python shell:
-```py
->>> from web3 import Web3
->>> w3 = Web3(Web3.IPCProvider("/tmp/trin-jsonrpc.ipc"))
->>> w3.clientVersion
-'trin 0.0.1-alpha'
->>> w3.eth.blockNumber
-11870768
-```
-
-### Connect over HTTP
-First launch trin using HTTP as the json-rpc transport protocol:
-```sh
-TRIN_INFURA_PROJECT_ID="YoUr-Id-HeRe" cargo run -- --web3-transport http
-```
-
-Then, in a python shell:
-```py
->>> from web3 import Web3
->>> w3 = Web3(Web3.HTTPProvider("http://127.0.0.1:8545"))
->>> w3.clientVersion
-'trin 0.0.1-alpha'
->>> w3.eth.blockNumber
-11870768
-```
-
-The client version responds immediately, from the trin client. The block number is retrieved more slowly, by proxying to Infura.
-
-To interact with trin at the lowest possible level, try netcat:
-```sh
-nc -U /tmp/trin-jsonrpc.ipc
-{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":83}
-{"jsonrpc":"2.0","id":83,"result":"0xb52258"}{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":84}
-{"jsonrpc":"2.0","id":84,"result":"0xb52259"}{"jsonrpc":"2.0","id":85,"params":[],"method":"web3_clientVersion"}
-{"jsonrpc":"2.0","id":"85","result":"trin 0.0.1-alpha"}
-{"jsonrpc":"2.0","id":86,"params":[],"method":"discv5_nodeInfo"}
-{"id":86,"jsonrpc":"2.0","result":"enr:-IS4QHK_CnCsQKT-mFTilJ5msHacIJtU91aYe8FhAd_K7G-ACO-FO2GPFOyM7kiphjXMwrNh8Y4mSbN3ufSdBQFzjikBgmlkgnY0gmlwhMCoAMKJc2VjcDI1NmsxoQNa58x56RRRcUeOegry5S4yQvLa6LKlDcbBPHL4H5Oy4oN1ZHCCIyg"}
-```
+Checkout out the [Getting Started](/docs/getting_started.md) guide to quickly get up and running with Trin.
 
 ## CLI Options
 ```sh
@@ -133,15 +68,15 @@ OPTIONS:
 ```
 
 ## Custom RPC Methods
-- `discv5_nodeInfo`     Returns the ENR of the client
+- `discv5_nodeInfo`             Returns the ENR of the client
 - `discv5_routingTableInfo`     Returns the list of discovery peers that have recently been available
 
-See https://eth.wiki/json-rpc/API#json-rpc-methods for other standard methods that are implemented. Currently, most of them proxy to Infura.
+See the [wiki](https://eth.wiki/json-rpc/API#json-rpc-methods) for other standard methods that are implemented. Currently, most of them proxy to Infura.
 
 ## Want to help?
 
 Want to file a bug, contribute some code, or improve documentation? Excellent! Read up on our
-guidelines for [contributing](CONTRIBUTING.md),
+guidelines for [contributing](/docs/contributing.md),
 then check out issues that are labeled
 [Good First Issue](https://github.com/ethereum/trin/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22).
 
@@ -150,4 +85,3 @@ then check out issues that are labeled
 - There is a limit on concurrent connections given by the threadpool. At last
   doc update, that number was 2, but will surely change. If you leave
   connections open, then new connections will block.
-- Error handling is pretty close to non-existent.
