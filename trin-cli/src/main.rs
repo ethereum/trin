@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::value::RawValue;
 use structopt::StructOpt;
+// todo
 use thiserror::Error;
 
 use trin_core::cli::DEFAULT_WEB3_IPC_PATH;

@@ -4,6 +4,7 @@ use std::net::SocketAddr;
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 
+use anyhow::anyhow;
 use base64;
 use hex::FromHexError;
 use rlp::Encodable;
@@ -14,7 +15,6 @@ use ssz_types::{typenum, BitList, VariableList};
 use thiserror::Error;
 use validator::ValidationError;
 
-use crate::portalnet::overlay_service::OverlayRequestError;
 use crate::portalnet::{types::uint::U256, Enr};
 
 pub type ByteList = VariableList<u8, typenum::U2048>;
@@ -341,23 +341,23 @@ impl fmt::Display for Pong {
 }
 
 impl TryFrom<&Vec<u8>> for Pong {
-    type Error = OverlayRequestError;
+    type Error = anyhow::Error;
 
-    fn try_from(value: &Vec<u8>) -> Result<Self, Self::Error> {
+    fn try_from(value: &Vec<u8>) -> anyhow::Result<Self> {
         if value.len() == 0 {
-            return Err(OverlayRequestError::EmptyResponse);
+            return Err(anyhow!("Pong Response is empty"));
         }
         let message = match Message::from_bytes(&value) {
             Ok(val) => val,
-            Err(_) => return Err(OverlayRequestError::DecodeError),
+            Err(_) => return Err(anyhow!("Unable to decode Pong Response")),
         };
         let response = match message {
             Message::Response(val) => val,
-            _ => return Err(OverlayRequestError::InvalidResponse),
+            _ => return Err(anyhow!("Invalid Pong Response")),
         };
         match response {
             Response::Pong(val) => Ok(val),
-            _ => return Err(OverlayRequestError::InvalidResponse),
+            _ => return Err(anyhow!("Invalid Pong Response")),
         }
     }
 }

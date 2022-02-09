@@ -12,7 +12,7 @@ use crate::{
     portalnet::{
         discovery::Discovery,
         types::{
-            content_keys::{ContentKeyError, HistoryContentKey, StateContentKey},
+            content_keys::{HistoryContentKey, StateContentKey},
             messages::{
                 ByteList, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Ping,
                 Pong, ProtocolId, Request, Response, SszEnr,
@@ -23,6 +23,8 @@ use crate::{
     },
     utils::{distance::xor, hash_delay_queue::HashDelayQueue, node_id},
 };
+
+use anyhow::anyhow;
 use discv5::{
     enr::NodeId,
     kbucket::{
@@ -39,7 +41,6 @@ use rocksdb::DB;
 use ssz::Encode;
 use ssz_types::BitList;
 use ssz_types::VariableList;
-use thiserror::Error;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::sync::RwLock as RwLockT;
 
@@ -50,60 +51,6 @@ pub const FIND_CONTENT_MAX_NODES: usize = 32;
 /// With even distribution assumptions, 2**17 is enough to put each node (estimating 100k nodes,
 /// which is more than 10x the ethereum mainnet node count) into a unique bucket by the 17th bucket index.
 const EXPECTED_NON_EMPTY_BUCKETS: usize = 17;
-
-/// An overlay request error.
-#[derive(Clone, Error, Debug)]
-pub enum OverlayRequestError {
-    /// A failure to transmit or receive a message on a channel.
-    #[error("Channel failure: {0}")]
-    ChannelFailure(String),
-
-    /// An invalid request was received.
-    #[error("Invalid request: {0}")]
-    InvalidRequest(String),
-
-    /// An invalid response was received.
-    #[error("Invalid response")]
-    InvalidResponse,
-
-    #[error("The request returned an empty response")]
-    EmptyResponse,
-
-    /// A failure to decode a message.
-    #[error("The message was unable to be decoded")]
-    DecodeError,
-
-    /// The request timed out.
-    #[error("The request timed out")]
-    Timeout,
-
-    /// The request was unable to be served.
-    #[error("Failure to serve request: {0}")]
-    Failure(String),
-
-    /// The request  Discovery v5 request error.
-    #[error("Internal Discovery v5 error: {0}")]
-    Discv5Error(discv5::RequestError),
-
-    /// Error types resulting from building ACCEPT message
-    #[error("Error while building accept message")]
-    AcceptError(ssz_types::Error),
-}
-
-impl From<discv5::RequestError> for OverlayRequestError {
-    fn from(err: discv5::RequestError) -> Self {
-        match err {
-            discv5::RequestError::Timeout => Self::Timeout,
-            err => Self::Discv5Error(err),
-        }
-    }
-}
-
-impl From<ContentKeyError> for OverlayRequestError {
-    fn from(err: ContentKeyError) -> Self {
-        Self::InvalidRequest(format!("Invalid content key: {}", err))
-    }
-}
 
 /// An incoming or outgoing request.
 #[derive(Debug, PartialEq)]
@@ -120,7 +67,7 @@ pub enum RequestDirection {
 type OverlayRequestId = u128;
 
 /// An overlay request response channel.
-type OverlayResponder = oneshot::Sender<Result<Response, OverlayRequestError>>;
+type OverlayResponder = oneshot::Sender<Result<Response, String>>;
 
 /// A request to pass through the overlay.
 #[derive(Debug)]
@@ -165,7 +112,7 @@ struct OverlayResponse {
     /// The identifier of the associated request.
     pub request_id: OverlayRequestId,
     /// The result of the associated request.
-    pub response: Result<Response, OverlayRequestError>,
+    pub response: anyhow::Result<Response>,
 }
 
 /// A node in the overlay network routing table.
@@ -368,15 +315,20 @@ impl OverlayService {
                 Some(request) = self.request_rx.recv() => self.process_request(request),
                 Some(response) = self.response_rx.recv() => {
                     // Look up active request that corresponds to the response.
+                    // temp solution since anyhow::Error doesn't implement Clone
+                    let current_response = match response.response {
+                        Ok(val) => Ok(val),
+                        Err(msg) => Err(msg.to_string()),
+                    };
                     let optional_active_request = self.active_outgoing_requests.write().remove(&response.request_id);
                     if let Some(active_request) = optional_active_request {
                         // Send response to responder if present.
                         if let Some(responder) = active_request.responder {
-                            let _ = responder.send(response.response.clone());
+                            let _ = responder.send(current_response.clone());
                         }
 
                         // Perform background processing.
-                        match response.response {
+                        match current_response {
                             Ok(response) => self.process_response(response, active_request.destination),
                             Err(error) => self.process_request_failure(response.request_id, active_request.destination, error),
                         }
@@ -478,9 +430,13 @@ impl OverlayService {
             RequestDirection::Incoming { id, source } => {
                 let response =
                     self.handle_request(request.request.clone(), id.clone(), source.clone());
+                let current_response = match response {
+                    Ok(val) => Ok(val),
+                    Err(msg) => Err(msg.to_string()),
+                };
                 // Send response to responder if present.
                 if let Some(responder) = request.responder {
-                    let _ = responder.send(response);
+                    let _ = responder.send(current_response);
                 }
                 // Perform background processing.
                 self.process_incoming_request(request.request, id, source);
@@ -504,7 +460,7 @@ impl OverlayService {
         request: Request,
         id: RequestId,
         source: NodeId,
-    ) -> Result<Response, OverlayRequestError> {
+    ) -> anyhow::Result<Response> {
         debug!("[{:?}] Handling request {}", self.protocol, id);
         match request {
             Request::Ping(ping) => Ok(Response::Pong(self.handle_ping(ping, source))),
@@ -543,7 +499,7 @@ impl OverlayService {
     }
 
     /// Attempts to build a `Content` response for a `FindContent` request.
-    fn handle_find_content(&self, request: FindContent) -> Result<Content, OverlayRequestError> {
+    fn handle_find_content(&self, request: FindContent) -> anyhow::Result<Content> {
         // Attempt to derive the content ID for the content key.
         let content_id = match self.protocol {
             ProtocolId::State => {
@@ -561,10 +517,10 @@ impl OverlayService {
                     "Attempt to find undefined content for {:?} protocol",
                     self.protocol
                 );
-                return Err(OverlayRequestError::InvalidRequest(format!(
-                    "Content undefined for {:?} protocol",
-                    self.protocol,
-                )));
+                return Err(anyhow!(
+                    "Invalid Request: Content undefined for {:?} protocol",
+                    self.protocol
+                ));
             }
         };
 
@@ -578,28 +534,28 @@ impl OverlayService {
                 let enrs = self.find_nodes_close_to_content(content_id);
                 match enrs {
                     Ok(val) => Ok(Content::Enrs(val)),
-                    Err(msg) => Err(OverlayRequestError::InvalidRequest(msg.to_string())),
+                    Err(msg) => Err(msg.context(format!(
+                        "Error looking up nodes close to content on {:?} network",
+                        self.protocol
+                    ))),
                 }
             }
-            Err(msg) => Err(OverlayRequestError::Failure(format!(
-                "Unable to respond to FindContent: {}",
-                msg
-            ))),
+            Err(msg) => Err(anyhow!("Unable to respond to FindContent: {}", msg)),
         }
     }
 
     /// Attempts to build a `Accept` response for a `Offer` request.
-    fn handle_offer(&self, request: Offer) -> Result<Accept, OverlayRequestError> {
+    fn handle_offer(&self, request: Offer) -> anyhow::Result<Accept> {
         let mut requested_keys = BitList::with_capacity(request.content_keys.len())
-            .map_err(|e| OverlayRequestError::AcceptError(e))?;
+            .map_err(|msg| anyhow!("Error while building accept message: {:?}", msg))?;
         let connection_id: u16 = crate::utp::stream::rand();
 
         for (i, key) in request.content_keys.iter().enumerate() {
             // should_store is currently a dummy function
             // the actual function will take ContentKey type, so we'll  have to decode keys here
             requested_keys
-                .set(i, should_store(key))
-                .map_err(|e| OverlayRequestError::AcceptError(e))?;
+                .set(i, should_store(key.into()))
+                .map_err(|msg| anyhow!("Error while building accept message: {:?}", msg))?;
         }
 
         let utp_listener = self.utp_listener.clone();
@@ -643,10 +599,10 @@ impl OverlayService {
             {
                 Ok(talk_resp) => match Message::from_bytes(&talk_resp) {
                     Ok(Message::Response(response)) => Ok(response),
-                    Ok(_) => Err(OverlayRequestError::InvalidResponse),
-                    Err(_) => Err(OverlayRequestError::DecodeError),
+                    Ok(_) => Err(anyhow!("Invalid response received")),
+                    Err(msg) => Err(anyhow!("Unable to decode message: {:?}", msg)),
                 },
-                Err(error) => Err(error.into()),
+                Err(msg) => Err(anyhow!("Error receiving response: {:?}", msg)),
             };
 
             let _ = response_tx.send(OverlayResponse {
@@ -731,7 +687,7 @@ impl OverlayService {
         &mut self,
         request_id: OverlayRequestId,
         destination: Enr,
-        error: OverlayRequestError,
+        error: String,
     ) {
         debug!(
             "[{:?}] Request {} failed. Error: {}",
@@ -1007,10 +963,7 @@ impl OverlayService {
     }
 
     /// Returns list of nodes closer to content than self, sorted by distance.
-    fn find_nodes_close_to_content(
-        &self,
-        content_id: [u8; 32],
-    ) -> Result<Vec<SszEnr>, OverlayRequestError> {
+    fn find_nodes_close_to_content(&self, content_id: [u8; 32]) -> anyhow::Result<Vec<SszEnr>> {
         let self_node_id = self.local_enr().node_id();
         let self_distance = xor(&content_id, &self_node_id.raw());
 
@@ -1229,8 +1182,8 @@ mod tests {
         ));
 
         let request_id = rand::random();
-        let error = OverlayRequestError::Timeout;
-        service.process_request_failure(request_id, destination.clone(), error);
+        let error = anyhow!("Timeout");
+        service.process_request_failure(request_id, destination.clone(), error.to_string());
 
         assert!(!service.peers_to_ping.contains_key(&node_id));
 
