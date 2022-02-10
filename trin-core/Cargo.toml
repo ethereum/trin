@@ -52,3 +52,6 @@ interfaces = "0.0.7"
 [dependencies.rusqlite]
 version = "0.25.3"
 features = ["bundled"]
+
+[dev-dependencies]
+quickcheck = "1.0.3"

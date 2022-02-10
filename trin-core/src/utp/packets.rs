@@ -1,4 +1,7 @@
+use crate::utp::bit_iterator::BitIterator;
 use crate::utp::time::{Delay, Timestamp};
+use anyhow::anyhow;
+use std::convert::TryFrom;
 use std::fmt;
 
 pub const HEADER_SIZE: usize = 20;
@@ -38,7 +41,7 @@ pub enum PacketType {
 }
 
 impl TryFrom<u8> for PacketType {
-    type Error = &'static str;
+    type Error = anyhow::Error;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
@@ -47,7 +50,7 @@ impl TryFrom<u8> for PacketType {
             2 => Ok(PacketType::State),
             3 => Ok(PacketType::Reset),
             4 => Ok(PacketType::Syn),
-            _ => Err("invalid packet type"),
+            _ => Err(anyhow!("Invalid packet type")),
         }
     }
 }
@@ -65,28 +68,46 @@ impl From<PacketType> for u8 {
 }
 
 /// Validate correctness of packet extensions, if any, in byte slice
-fn check_extensions(data: &[u8]) -> Result<(), &'static str> {
+pub(crate) fn check_extensions(data: &[u8]) -> anyhow::Result<()> {
     if data.len() < HEADER_SIZE {
-        return Err("invalid header size");
+        return Err(anyhow!("The packet is too small"));
     }
 
-    let mut extension = data[1];
+    let mut extension_type = ExtensionType::from(data[1]);
     let mut index = HEADER_SIZE;
 
-    // must be at least 4 bytes, and in multiples of 4
-    while extension != 0 {
+    if data.len() == HEADER_SIZE && extension_type != ExtensionType::None {
+        return Err(anyhow!(
+            "Invalid extension length (must be a non-zero multiple of 4)"
+        ));
+    }
+
+    // Consume known extensions and skip over unknown ones
+    while index < data.len() && extension_type != ExtensionType::None {
         if data.len() < index + 2 {
-            return Err("Invalid packet length");
+            return Err(anyhow!("Invalid packet length"));
         }
-        extension = data[index];
         let len = data[index + 1] as usize;
+        let extension_start = index + 2;
+        let extension_end = extension_start + len;
 
-        if len == 0 || len % 4 != 0 || len + index + 2 > data.len() {
-            return Err("Invalid Extension Length");
+        // Check validity of extension length:
+        // - non-zero,
+        // - multiple of 4,
+        // - does not exceed packet length
+        if len == 0 || len % 4 != 0 || extension_end > data.len() {
+            return Err(anyhow!("Invalid Extension Length"));
         }
 
+        extension_type = ExtensionType::from(data[index]);
         index += len + 2;
     }
+
+    // Check for pending extensions (early exit of previous loop)
+    if extension_type != ExtensionType::None {
+        return Err(anyhow!("Invalid packet length"));
+    }
+
     Ok(())
 }
 
@@ -122,27 +143,29 @@ impl PacketHeader {
     pub fn get_type(&self) -> PacketType {
         PacketType::try_from(self.type_ver >> 4).unwrap()
     }
+
+    /// Returns the type of the first extension
+    pub fn get_extension_type(&self) -> ExtensionType {
+        self.extension.into()
+    }
 }
 
 impl<'a> TryFrom<&'a [u8]> for PacketHeader {
-    // TODO: Refactor this to use anyhow crate
-    type Error = &'static str;
+    type Error = anyhow::Error;
     /// Reads a byte buffer and returns the corresponding packet header.
     /// It assumes the fields are in network (big-endian) byte order,
     /// preserving it.
     fn try_from(buf: &[u8]) -> Result<Self, Self::Error> {
         if buf.len() < HEADER_SIZE {
-            return Err("The packet is too small");
+            return Err(anyhow!("The packet is too small"));
         }
 
         if buf[0] & 0x0F != VERSION {
-            return Err("Unsupported packet version");
+            return Err(anyhow!("Unsupported packet version"));
         }
 
         // Check packet type
-        if let Err(e) = PacketType::try_from(buf[0] >> 4) {
-            return Err(e);
-        }
+        PacketType::try_from(buf[0] >> 4)?;
 
         Ok(PacketHeader {
             type_ver: buf[0],
@@ -179,11 +202,98 @@ impl Default for PacketHeader {
     }
 }
 
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+pub enum ExtensionType {
+    None,
+    SelectiveAck,
+    Unknown(u8),
+}
+
+impl From<u8> for ExtensionType {
+    fn from(original: u8) -> Self {
+        match original {
+            0 => ExtensionType::None,
+            1 => ExtensionType::SelectiveAck,
+            n => ExtensionType::Unknown(n),
+        }
+    }
+}
+
+impl From<ExtensionType> for u8 {
+    fn from(original: ExtensionType) -> u8 {
+        match original {
+            ExtensionType::None => 0,
+            ExtensionType::SelectiveAck => 1,
+            ExtensionType::Unknown(n) => n,
+        }
+    }
+}
+
 #[derive(Debug)]
-pub struct Extension {
-    pub extension_type: u8,
-    pub len: u8,
-    pub bitmask: Vec<u8>,
+pub struct Extension<'a> {
+    pub ty: ExtensionType,
+    pub data: &'a [u8],
+}
+
+impl<'a> Extension<'a> {
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn get_type(&self) -> ExtensionType {
+        self.ty
+    }
+
+    pub fn iter(&self) -> BitIterator<'_> {
+        BitIterator::from_bytes(self.data)
+    }
+}
+
+pub struct ExtensionIterator<'a> {
+    raw_bytes: &'a [u8],
+    next_extension: ExtensionType,
+    index: usize,
+}
+
+impl<'a> ExtensionIterator<'a> {
+    fn new(packet: &'a Packet) -> Self {
+        ExtensionIterator {
+            raw_bytes: packet.as_ref(),
+            next_extension: ExtensionType::from(packet.as_ref()[1]),
+            index: HEADER_SIZE,
+        }
+    }
+}
+
+impl<'a> Iterator for ExtensionIterator<'a> {
+    type Item = Extension<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.next_extension == ExtensionType::None {
+            None
+        } else if self.index < self.raw_bytes.len() {
+            let len = self.raw_bytes[self.index + 1] as usize;
+            let extension_start = self.index + 2;
+            let extension_end = extension_start + len;
+
+            // Assume extension is valid because the bytes come from a (valid) Packet
+            let extension = Extension {
+                ty: self.next_extension,
+                data: &self.raw_bytes[extension_start..extension_end],
+            };
+
+            self.next_extension = self.raw_bytes[self.index].into();
+            self.index += len + 2;
+
+            Some(extension)
+        } else {
+            None
+        }
+    }
 }
 
 pub struct Packet(Vec<u8>);
@@ -235,13 +345,15 @@ impl Packet {
         header.get_version()
     }
 
-    // TODO: Add ExtensionType struct instead of raw u8
-    pub fn get_extension_type(&self) -> u8 {
+    pub fn get_extension_type(&self) -> ExtensionType {
         let header = unsafe { &*(self.0.as_ptr() as *const PacketHeader) };
-        header.extension
+        header.get_extension_type()
     }
 
-    // TODO: Return use Timestamp and Delay data structures instead of u32 in the following methods
+    pub fn extensions(&self) -> ExtensionIterator<'_> {
+        ExtensionIterator::new(self)
+    }
+
     pub fn timestamp(&self) -> Timestamp {
         let header = unsafe { &*(self.0.as_ptr() as *const PacketHeader) };
         u32::from_be(header.timestamp_microseconds).into()
@@ -272,63 +384,72 @@ impl Packet {
     make_setter!(set_connection_id, connection_id, u16);
     make_setter!(set_wnd_size, wnd_size, u32);
 
-    pub fn get_extensions(&self) -> Vec<Extension> {
-        let mut extensions: Vec<Extension> = Vec::default();
-        let mut extension = self.get_extension_type();
-        let mut extension_begins = HEADER_SIZE;
-        while extension != 0 {
-            let len = self.0[extension_begins + 1];
-            let ext = Extension {
-                extension_type: extension,
-                len,
-                bitmask: Vec::from(
-                    &self.0[(extension_begins + 2)..(extension_begins + len as usize + 2)],
-                ),
-            };
-            extensions.push(ext);
+    pub fn payload(&self) -> &[u8] {
+        let mut extension_type = ExtensionType::from(self.0[1]);
+        let mut index = HEADER_SIZE;
 
-            extension = self.0[extension_begins];
-            extension_begins += (len + 2) as usize;
+        // Consume known extensions and skip over unknown ones
+        while index < self.0.len() && extension_type != ExtensionType::None {
+            let len = self.0[index + 1] as usize;
+
+            // Assume extension is valid because the bytes come from a (valid) Packet
+
+            extension_type = ExtensionType::from(self.0[index]);
+            index += len + 2;
         }
-        extensions
+        &self.0[index..]
     }
 
-    pub fn get_payload(&self) -> &[u8] {
-        let mut extension = self.get_extension_type();
-        let mut payload_begins = HEADER_SIZE;
-        while extension != 0 {
-            extension = self.0[payload_begins];
-            let len = self.0[payload_begins + 1];
-            payload_begins += (len + 2) as usize;
-        }
-        &self.0[payload_begins..]
-    }
-
+    /// Sets Selective ACK field in packet header and adds appropriate data.
+    ///
+    /// The length of the SACK extension is expressed in bytes, which
+    /// must be a multiple of 4 and at least 4.
     pub fn set_selective_ack(&mut self, sack_bitfield: Vec<u8>) {
-        let mut extension = self.get_extension_type();
-        let mut extension_begins = HEADER_SIZE;
+        // The length of the SACK extension is expressed in bytes, which
+        // must be a multiple of 4 and at least 4.
+        assert!(sack_bitfield.len() >= 4);
+        assert_eq!(sack_bitfield.len() % 4, 0);
 
-        if !sack_bitfield.is_empty() {
-            if self.0[1] == 0 {
-                self.0[1] = 1;
-            } else {
-                while extension != 0 {
-                    extension = self.0[extension_begins];
-                    let len = self.0[extension_begins + 1];
-                    extension_begins += (len + 2) as usize;
+        let mut extension_type = ExtensionType::from(self.0[1]);
+        let mut index = HEADER_SIZE;
 
-                    if extension == 0 {
-                        self.0[extension_begins] = 1;
-                    }
+        // Set extension type in header if none is used, otherwise find and update the
+        // "next extension type" marker in the last extension before payload
+        if extension_type == ExtensionType::None {
+            self.0[1] = ExtensionType::SelectiveAck.into();
+        } else {
+            // Skip over all extensions until last, then modify its "next extension type" field and
+            // add the new extension after it.
+
+            // Consume known extensions and skip over unknown ones
+            while index < self.0.len() && extension_type != ExtensionType::None {
+                let len = self.0[index + 1] as usize;
+                // No validity checks needed
+                // ...
+
+                extension_type = ExtensionType::from(self.0[index]);
+
+                // Arrived at last extension
+                if extension_type == ExtensionType::None {
+                    // Mark existence of an additional extension
+                    self.0[index] = ExtensionType::SelectiveAck.into();
                 }
+                index += len + 2;
             }
+        }
 
-            self.0.insert(extension_begins, 0);
-            self.0
-                .insert(extension_begins + 1, sack_bitfield.len() as u8);
-            for (i, byte) in sack_bitfield.iter().enumerate() {
-                self.0.insert(extension_begins + 2 + i, *byte);
-            }
+        // Insert the new extension into the packet's data.
+        // The way this is currently done is potentially slower than the alternative of resizing the
+        // underlying Vec, moving the payload forward and then writing the extension in the "new"
+        // place before the payload.
+
+        // Set the type of the following (non-existent) extension
+        self.0.insert(index, ExtensionType::None.into());
+        // Set this extension's length
+        self.0.insert(index + 1, sack_bitfield.len() as u8);
+        // Write this extension's data
+        for (i, &byte) in sack_bitfield.iter().enumerate() {
+            self.0.insert(index + 2 + i, byte);
         }
     }
 
@@ -342,8 +463,7 @@ impl Packet {
 }
 
 impl<'a> TryFrom<&'a [u8]> for Packet {
-    // TODO: Refactor error to use anyhow crate
-    type Error = &'static str;
+    type Error = anyhow::Error;
 
     /// Decodes a byte slice and construct the equivalent Packet.
     ///

@@ -1,3 +1,4 @@
+mod bit_iterator;
 pub mod packets;
 pub mod stream;
 mod time;
