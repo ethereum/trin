@@ -1,3 +1,4 @@
+use crate::utp::time::{Delay, Timestamp};
 use std::fmt;
 
 pub const HEADER_SIZE: usize = 20;
@@ -241,24 +242,24 @@ impl Packet {
     }
 
     // TODO: Return use Timestamp and Delay data structures instead of u32 in the following methods
-    pub fn timestamp(&self) -> u32 {
+    pub fn timestamp(&self) -> Timestamp {
         let header = unsafe { &*(self.0.as_ptr() as *const PacketHeader) };
-        header.timestamp_microseconds.to_be()
+        u32::from_be(header.timestamp_microseconds).into()
     }
 
-    pub fn set_timestamp(&mut self, timestamp: u32) {
+    pub fn set_timestamp(&mut self, timestamp: Timestamp) {
         let header = unsafe { &mut *(self.0.as_mut_ptr() as *mut PacketHeader) };
-        header.timestamp_microseconds = timestamp.to_be()
+        header.timestamp_microseconds = u32::from(timestamp).to_be();
     }
 
-    pub fn timestamp_difference(&self) -> u32 {
+    pub fn timestamp_difference(&self) -> Delay {
         let header = unsafe { &*(self.0.as_ptr() as *const PacketHeader) };
-        header.timestamp_difference_microseconds.to_be()
+        u32::from_be(header.timestamp_difference_microseconds).into()
     }
 
-    pub fn set_timestamp_difference(&mut self, delay: u32) {
+    pub fn set_timestamp_difference(&mut self, delay: Delay) {
         let header = unsafe { &mut *(self.0.as_mut_ptr() as *mut PacketHeader) };
-        header.timestamp_difference_microseconds = delay.to_be()
+        header.timestamp_difference_microseconds = u32::from(delay).to_be();
     }
 
     make_getter!(seq_nr, u16, u16);
@@ -329,6 +330,14 @@ impl Packet {
                 self.0.insert(extension_begins + 2 + i, *byte);
             }
         }
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 

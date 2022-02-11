@@ -9,42 +9,31 @@ use rand::Rng;
 use std::cmp::{max, min};
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc;
 
 use crate::portalnet::types::messages::ProtocolId;
 use crate::utp::packets::{Packet, PacketType, HEADER_SIZE};
+use crate::utp::time::{now_microseconds, Delay, Timestamp};
 use crate::utp::trin_helpers::{UtpMessageId, UtpStreamState};
+use crate::utp::util::{abs_diff, ewma};
+
+const GAIN: f64 = 1.0;
+const ALLOWED_INCREASE: u32 = 1;
+const MIN_CWND: u32 = 2; // minimum congestion window size
+const INIT_CWND: u32 = 2; // init congestion window size
+const MIN_CONGESTION_TIMEOUT: u64 = 500; // 500 ms
+const MAX_CONGESTION_TIMEOUT: u64 = 60_000; // one minute
 
 // Maximum time (in microseconds) to wait for incoming packets when the send window is full
 const PRE_SEND_TIMEOUT: u32 = 500_000;
 
-pub const MAX_DISCV5_PACKET_SIZE: usize = 1280;
-pub const MIN_PACKET_SIZE: usize = 150;
-const MIN_DISCV5_PACKET_SIZE: usize = 63;
-// 100 miliseconds
-const CCONTROL_TARGET: usize = 100 * 1000;
-const MAX_CWND_INCREASE_BYTES_PER_RTT: usize = 3000;
-const MIN_WINDOW_SIZE: usize = 10;
+const MAX_DISCV5_PACKET_SIZE: u32 = 1280;
+// Buffering delay that the uTP accepts on the up-link. Currently the delay target is set to 100 ms.
+const CCONTROL_TARGET: f64 = 100_000.0;
 
-/// Return current time in microseconds since the UNIX epoch.
-fn now_microseconds() -> u32 {
-    (SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_micros()
-        & 0xffffffff) as u32
-}
-
-fn get_time_diff(response_time: u32) -> u32 {
-    let current_time = now_microseconds();
-
-    if current_time > response_time {
-        current_time - response_time
-    } else {
-        response_time - current_time
-    }
-}
+const BASE_HISTORY: usize = 10; // base delays history size
+                                // Maximum age of base delay sample (60 seconds)
+const MAX_BASE_DELAY_AGE: Delay = Delay(60_000_000);
 
 pub fn rand() -> u16 {
     rand::thread_rng().gen()
@@ -57,6 +46,11 @@ pub enum SocketState {
     SynRecv,
     Connected,
     Disconnected,
+}
+
+struct DelayDifferenceSample {
+    received_at: Timestamp,
+    difference: Delay,
 }
 
 #[derive(Hash, Eq, PartialEq, Copy, Clone, Debug)]
@@ -186,8 +180,8 @@ pub struct UtpSocket {
     /// Receiver connection identifier
     pub receiver_connection_id: u16,
 
-    // maximum window size, in bytes
-    max_window: u32,
+    /// Congestion window in bytes
+    cwnd: u32,
 
     /// Received but not acknowledged packets
     incoming_buffer: BTreeMap<u16, Packet>,
@@ -217,17 +211,19 @@ pub struct UtpSocket {
     rtt_variance: i32,
 
     /// Rolling window of packet delay to remote peer
-    base_delays: Vec<u32>,
+    base_delays: VecDeque<Delay>,
 
     /// Rolling window of the difference between sending a packet and receiving its acknowledgement
-    current_delays: Vec<u32>,
+    current_delays: Vec<DelayDifferenceSample>,
+
+    /// Difference between timestamp of the latest packet received and time of reception
+    their_delay: Delay,
 
     /// Current congestion timeout in milliseconds
     congestion_timeout: u64,
 
     /// Start of the current minute for sampling purposes
-    // TODO: Add Timestamp struct here
-    last_rollover: u32,
+    last_rollover: Timestamp,
 
     pub recv_data_stream: Vec<u8>,
     tx: mpsc::UnboundedSender<UtpStreamState>,
@@ -245,7 +241,7 @@ impl UtpSocket {
             ack_nr: 0,
             receiver_connection_id: 0,
             sender_connection_id: 0,
-            max_window: 0,
+            cwnd: INIT_CWND * MAX_DISCV5_PACKET_SIZE,
             incoming_buffer: Default::default(),
             unsent_queue: Default::default(),
             connected_to,
@@ -257,9 +253,10 @@ impl UtpSocket {
             last_acked: 0,
             rtt: 0,
             rtt_variance: 0,
-            base_delays: vec![],
+            base_delays: VecDeque::with_capacity(BASE_HISTORY),
+            their_delay: Delay::default(),
             congestion_timeout: 1000,
-            last_rollover: 0,
+            last_rollover: Timestamp::default(),
             current_delays: Vec::with_capacity(8),
             recv_data_stream: vec![],
 
@@ -288,7 +285,7 @@ impl UtpSocket {
 
         let total_length = buf.len();
 
-        for chunk in buf.chunks(MAX_DISCV5_PACKET_SIZE - MIN_DISCV5_PACKET_SIZE - HEADER_SIZE) {
+        for chunk in buf.chunks(MAX_DISCV5_PACKET_SIZE as usize - HEADER_SIZE) {
             let mut packet = Packet::with_payload(chunk);
             packet.set_seq_nr(self.seq_nr);
             packet.set_ack_nr(self.ack_nr);
@@ -323,22 +320,20 @@ impl UtpSocket {
     /// Send one packet.
     fn send_packet(&mut self, packet: &mut Packet) {
         debug!("current window: {}", self.send_window.len());
-        let max_inflight = max(
-            MAX_DISCV5_PACKET_SIZE,
-            min(self.max_window as usize, self.remote_wnd_size as usize),
-        );
+        let max_inflight = min(self.cwnd, self.remote_wnd_size);
+        let max_inflight = max(MIN_CWND * MAX_DISCV5_PACKET_SIZE, max_inflight);
         let now = now_microseconds();
 
         // Wait until enough in-flight packets are acknowledged for rate control purposes, but don't
         // wait more than 500 ms (PRE_SEND_TIMEOUT) before sending the packet
         while self.cur_window + packet.as_ref().len() as u32 > max_inflight as u32
-            && now_microseconds() - now < PRE_SEND_TIMEOUT
+            && now_microseconds() - now < PRE_SEND_TIMEOUT.into()
         {
             debug!("self.curr_window: {}", self.cur_window);
             debug!("max_inflight: {}", max_inflight);
             debug!("self.duplicate_ack_count: {}", self.duplicate_ack_count);
             debug!("now_microseconds() - now = {}", now_microseconds() - now)
-            // TODO: Why here we dont do for example:
+            // TODO: Add those when implement `recv` method
             // let mut buf = [0; BUF_SIZE];
             // self.recv(&mut buf)?;
         }
@@ -348,12 +343,22 @@ impl UtpSocket {
             now_microseconds() - now
         );
 
+        // Check if it still makes sense to send packet, as we might be trying to resend a lost
+        // packet acknowledged in the receive loop above.
+        // If there were no wrapping around of sequence numbers, we'd simply check if the packet's
+        // sequence number is greater than `last_acked`.
+        let distance_a = packet.seq_nr().wrapping_sub(self.last_acked);
+        let distance_b = self.last_acked.wrapping_sub(packet.seq_nr());
+        if distance_a > distance_b {
+            debug!("Packet already acknowledged, skipping...");
+            return;
+        }
+
         let enr = self.connected_to.clone();
         let discovery = self.socket.clone();
 
         packet.set_timestamp(now_microseconds());
-        // TODO: Add their_delay field instead of calculating here get_time_diff
-        packet.set_timestamp_difference(get_time_diff(packet.timestamp()));
+        packet.set_timestamp_difference(self.their_delay);
 
         let packet_to_send = packet.clone();
 
@@ -370,24 +375,45 @@ impl UtpSocket {
         debug!("sent {:?}", packet);
     }
 
-    fn update_base_delay(&mut self, delay: u32, now: u32) {
-        if now - self.last_rollover > 60 * 1000 {
+    // Insert a new sample in the base delay list.
+    //
+    // The base delay list contains at most `BASE_HISTORY` samples, each sample is the minimum
+    // measured over a period of a minute (MAX_BASE_DELAY_AGE).
+    fn update_base_delay(&mut self, base_delay: Delay, now: Timestamp) {
+        if self.base_delays.is_empty() || now - self.last_rollover > MAX_BASE_DELAY_AGE {
+            // Update last rollover
             self.last_rollover = now;
-            if self.base_delays.len() == 10 {
-                self.base_delays.remove(0);
+
+            // Drop the oldest sample, if need be
+            if self.base_delays.len() == BASE_HISTORY {
+                self.base_delays.pop_front();
             }
-            self.base_delays.push(delay);
+
+            // Insert new sample
+            self.base_delays.push_back(base_delay);
         } else {
-            let index = self.base_delays.len() - 1;
-            self.base_delays[index] = min(self.base_delays[index], delay);
+            // Replace sample for the current minute if the delay is lower
+            let last_idx = self.base_delays.len() - 1;
+            if base_delay < self.base_delays[last_idx] {
+                self.base_delays[last_idx] = base_delay;
+            }
         }
     }
 
-    fn update_current_delay(&mut self, delay: u32) {
-        if !self.current_delays.len() < 8 {
-            self.current_delays = self.current_delays[1..].to_owned();
+    /// Inserts a new sample in the current delay list after removing samples older than one RTT, as
+    /// specified in RFC6817.
+    fn update_current_delay(&mut self, our_delay: Delay, now: Timestamp) {
+        // Remove samples more than one RTT old
+        let rtt = (self.rtt as i64 * 100).into();
+        while !self.current_delays.is_empty() && now - self.current_delays[0].received_at > rtt {
+            self.current_delays.remove(0);
         }
-        self.current_delays.push(delay);
+
+        // Insert new measurement
+        self.current_delays.push(DelayDifferenceSample {
+            received_at: now,
+            difference: our_delay,
+        });
     }
 
     fn filter(current_delay: &[u32]) -> u32 {
@@ -451,13 +477,21 @@ impl UtpSocket {
             packet.get_type(),
             self.state
         );
+
+        // Update remote window size
         self.remote_wnd_size = packet.wnd_size();
+        debug!("Remote window size: {}", self.remote_wnd_size);
 
         // Only acknowledge this if this follows the last one, else do it when we advance the send
         // window
         if packet.seq_nr().wrapping_sub(self.ack_nr) == 1 {
             self.ack_nr = packet.seq_nr();
         }
+
+        // Update remote peer's delay between them sending the packet and us receiving it
+        let now = now_microseconds();
+        self.their_delay = abs_diff(now, packet.timestamp());
+        debug!("self.their_delay: {}", self.their_delay);
 
         match packet.get_type() {
             PacketType::Data => self.handle_data_packet(packet),
@@ -523,17 +557,47 @@ impl UtpSocket {
                 packet.ack_nr()
             );
 
-            // handle timeouts and congestion window
-            if let Some(stored_packet) = self.send_window.get(&packet.ack_nr()) {
-                let now = now_microseconds();
-                let our_delay = now - stored_packet.timestamp();
-                self.update_base_delay(our_delay, now);
-                self.update_current_delay(our_delay);
-                let queuing_delay = UtpSocket::filter(&self.current_delays)
-                    - self.base_delays.iter().min().unwrap();
+            // TODO: Update self.send_window to Vec, instead of a HashMap
+            // Update congestion window size
+            if let Some(index) = self
+                .send_window
+                .clone()
+                .into_values()
+                .position(|p| packet.ack_nr() == p.seq_nr())
+            {
+                // Calculate the sum of the size of every packet implicitly and explicitly acknowledged
+                // by the inbound packet (i.e., every packet whose sequence number precedes the inbound
+                // packet's acknowledgement number, plus the packet whose sequence number matches)
+                let bytes_newly_acked = self
+                    .send_window
+                    .clone()
+                    .into_values()
+                    .take(index + 1)
+                    .fold(0, |acc, p| acc + p.len());
 
-                self.update_congestion_window(&packet, queuing_delay);
-                self.update_timeout(our_delay, queuing_delay);
+                // Update base and current delay
+                let now = now_microseconds();
+                let our_delay = now
+                    - self
+                        .send_window
+                        .clone()
+                        .into_values()
+                        .nth(index)
+                        .unwrap()
+                        .timestamp();
+                debug!("our_delay: {}", our_delay);
+                self.update_base_delay(our_delay, now);
+                self.update_current_delay(our_delay, now);
+
+                let off_target: f64 =
+                    (CCONTROL_TARGET - u32::from(self.queuing_delay()) as f64) / CCONTROL_TARGET;
+                debug!("off_target: {}", off_target);
+
+                self.update_congestion_window(off_target, bytes_newly_acked as u32);
+
+                // Update congestion timeout
+                let rtt = u32::from(our_delay - self.queuing_delay()) / 1000; // in milliseconds
+                self.update_congestion_timeout(rtt as i32);
             }
 
             let mut packet_loss_detected = false;
@@ -570,7 +634,7 @@ impl UtpSocket {
             }
 
             if packet_loss_detected {
-                self.max_window /= 2;
+                self.cwnd /= 2;
             }
 
             // acknowledge received packet
@@ -590,32 +654,84 @@ impl UtpSocket {
         }
     }
 
-    fn update_congestion_window(&mut self, packet: &Packet, queuing_delay: u32) {
-        // LEDBAT congestion control
-        // todo: I will need to add support for bytes_acked to also consider selective
-        // acks when they are implemented
-        let mut bytes_acked = 0;
-        for (i, stored_packet) in self.send_window.iter() {
-            if &packet.ack_nr() <= i {
-                bytes_acked += stored_packet.as_ref().len();
-            }
-        }
+    fn queuing_delay(&self) -> Delay {
+        let filtered_current_delay = self.filtered_current_delay();
+        let min_base_delay = self.min_base_delay();
+        let queuing_delay = filtered_current_delay - min_base_delay;
 
-        let off_target = (CCONTROL_TARGET as f64 - queuing_delay as f64) / CCONTROL_TARGET as f64;
-        let window_factor = (min(bytes_acked, self.max_window as usize)
-            / max(self.max_window as usize, bytes_acked)) as f64;
-        let scaled_gain =
-            (MAX_CWND_INCREASE_BYTES_PER_RTT as f64 * off_target * window_factor) as u32;
+        debug!("filtered_current_delay: {}", filtered_current_delay);
+        debug!("min_base_delay: {}", min_base_delay);
+        debug!("queuing_delay: {}", queuing_delay);
 
-        self.max_window += scaled_gain;
+        queuing_delay
     }
 
-    fn update_timeout(&mut self, our_delay: u32, queuing_delay: u32) {
-        let packet_rtt = (our_delay - queuing_delay) as i32;
-        let delta = self.rtt - packet_rtt;
-        self.rtt_variance += (delta - self.rtt_variance) / 4;
-        self.rtt += (packet_rtt - self.rtt) / 8;
-        self.congestion_timeout = max((self.rtt + self.rtt_variance * 4) as u64, 500);
+    /// Calculates the filtered current delay in the current window.
+    ///
+    /// The current delay is calculated through application of the exponential
+    /// weighted moving average filter with smoothing factor 0.333 over the
+    /// current delays in the current window.
+    fn filtered_current_delay(&self) -> Delay {
+        let input = self.current_delays.iter().map(|delay| &delay.difference);
+        (ewma(input, 0.333) as i64).into()
+    }
+
+    /// Calculates the lowest base delay in the current window.
+    fn min_base_delay(&self) -> Delay {
+        self.base_delays.iter().min().cloned().unwrap_or_default()
+    }
+
+    /// Calculates the new congestion window size, increasing it or decreasing it.
+    ///
+    /// This is the core of uTP, the [LEDBAT][ledbat_rfc] congestion algorithm. It depends on
+    /// estimating the queuing delay between the two peers, and adjusting the congestion window
+    /// accordingly.
+    ///
+    /// `off_target` is a normalized value representing the difference between the current queuing
+    /// delay and a fixed target delay (`CCONTROL_TARGET`). `off_target` ranges between -1.0 and 1.0. A
+    /// positive value makes the congestion window increase, while a negative value makes the
+    /// congestion window decrease.
+    ///
+    /// `bytes_newly_acked` is the number of bytes acknowledged by an inbound `State` packet. It may
+    /// be the size of the packet explicitly acknowledged by the inbound packet (i.e., with sequence
+    /// number equal to the inbound packet's acknowledgement number), or every packet implicitly
+    /// acknowledged (every packet with sequence number between the previous inbound `State`
+    /// packet's acknowledgement number and the current inbound `State` packet's acknowledgement
+    /// number).
+    ///
+    ///[ledbat_rfc]: https://tools.ietf.org/html/rfc6817
+    fn update_congestion_window(&mut self, off_target: f64, bytes_newly_acked: u32) {
+        let flightsize = self.cur_window;
+
+        let cwnd_increase =
+            GAIN * off_target * bytes_newly_acked as f64 * MAX_DISCV5_PACKET_SIZE as f64;
+        let cwnd_increase = cwnd_increase / self.cwnd as f64;
+        debug!("cwnd_increase: {}", cwnd_increase);
+
+        self.cwnd = (self.cwnd as f64 + cwnd_increase) as u32;
+        let max_allowed_cwnd = flightsize + ALLOWED_INCREASE * MAX_DISCV5_PACKET_SIZE;
+        self.cwnd = min(self.cwnd, max_allowed_cwnd);
+        self.cwnd = max(self.cwnd, MIN_CWND * MAX_DISCV5_PACKET_SIZE);
+
+        debug!("cwnd: {}", self.cwnd);
+        debug!("max_allowed_cwnd: {}", max_allowed_cwnd);
+    }
+
+    fn update_congestion_timeout(&mut self, current_delay: i32) {
+        let delta = self.rtt - current_delay;
+        self.rtt_variance += (delta.abs() - self.rtt_variance) / 4;
+        self.rtt += (current_delay - self.rtt) / 8;
+        self.congestion_timeout = max(
+            (self.rtt + self.rtt_variance * 4) as u64,
+            MIN_CONGESTION_TIMEOUT,
+        );
+        self.congestion_timeout = min(self.congestion_timeout, MAX_CONGESTION_TIMEOUT);
+
+        debug!("current_delay: {}", current_delay);
+        debug!("delta: {}", delta);
+        debug!("self.rtt_variance: {}", self.rtt_variance);
+        debug!("self.rtt: {}", self.rtt);
+        debug!("self.congestion_timeout: {}", self.congestion_timeout);
     }
 
     fn handle_finalize_packet(&mut self) {
@@ -670,8 +786,8 @@ mod tests {
         assert_eq!(packet.get_version(), VERSION);
         assert_eq!(packet.get_extension_type(), 0);
         assert_eq!(packet.connection_id(), 42054);
-        assert_eq!(packet.timestamp(), 2805920832);
-        assert_eq!(packet.timestamp_difference(), 10000);
+        assert_eq!(packet.timestamp(), 2805920832.into());
+        assert_eq!(packet.timestamp_difference(), 10000.into());
         assert_eq!(packet.wnd_size(), 61440);
         assert_eq!(packet.seq_nr(), 15404);
         assert_eq!(packet.ack_nr(), 32437);
@@ -693,8 +809,8 @@ mod tests {
         assert_eq!(packet.get_version(), VERSION);
         assert_eq!(packet.get_extension_type(), 1);
         assert_eq!(packet.connection_id(), 42054);
-        assert_eq!(packet.timestamp(), 2805920832);
-        assert_eq!(packet.timestamp_difference(), 10000);
+        assert_eq!(packet.timestamp(), 2805920832.into());
+        assert_eq!(packet.timestamp_difference(), 10000.into());
         assert_eq!(packet.wnd_size(), 61440);
         assert_eq!(packet.seq_nr(), 15404);
         assert_eq!(packet.ack_nr(), 32437);
@@ -717,8 +833,8 @@ mod tests {
         let mut packet = Packet::new();
         packet.set_type(PacketType::Data);
         packet.set_connection_id(49300);
-        packet.set_timestamp(2805920832);
-        packet.set_timestamp_difference(1805367832);
+        packet.set_timestamp(2805920832.into());
+        packet.set_timestamp_difference(1805367832.into());
         packet.set_wnd_size(61440);
         packet.set_seq_nr(12044);
         packet.set_ack_nr(12024);
@@ -727,8 +843,8 @@ mod tests {
         assert_eq!(packet.get_version(), VERSION);
         assert_eq!(packet.get_extension_type(), 0);
         assert_eq!(packet.connection_id(), 49300);
-        assert_eq!(packet.timestamp(), 2805920832);
-        assert_eq!(packet.timestamp_difference(), 1805367832);
+        assert_eq!(packet.timestamp(), 2805920832.into());
+        assert_eq!(packet.timestamp_difference(), 1805367832.into());
         assert_eq!(packet.wnd_size(), 61440);
         assert_eq!(packet.seq_nr(), 12044);
         assert_eq!(packet.ack_nr(), 12024);
@@ -742,8 +858,8 @@ mod tests {
         let mut packet = Packet::with_payload(&payload[..]);
         packet.set_type(PacketType::Data);
         packet.set_connection_id(49300);
-        packet.set_timestamp(2805920832);
-        packet.set_timestamp_difference(1805367832);
+        packet.set_timestamp(2805920832.into());
+        packet.set_timestamp_difference(1805367832.into());
         packet.set_wnd_size(61440);
         packet.set_seq_nr(12044);
         packet.set_ack_nr(12024);
@@ -752,8 +868,8 @@ mod tests {
         assert_eq!(packet.get_version(), VERSION);
         assert_eq!(packet.get_extension_type(), 0);
         assert_eq!(packet.connection_id(), 49300);
-        assert_eq!(packet.timestamp(), 2805920832);
-        assert_eq!(packet.timestamp_difference(), 1805367832);
+        assert_eq!(packet.timestamp(), 2805920832.into());
+        assert_eq!(packet.timestamp_difference(), 1805367832.into());
         assert_eq!(packet.wnd_size(), 61440);
         assert_eq!(packet.seq_nr(), 12044);
         assert_eq!(packet.ack_nr(), 12024);
@@ -771,8 +887,8 @@ mod tests {
         let mut packet = Packet::new();
         packet.set_type(PacketType::State);
         packet.set_connection_id(49300);
-        packet.set_timestamp(2805920832);
-        packet.set_timestamp_difference(1805367832);
+        packet.set_timestamp(2805920832.into());
+        packet.set_timestamp_difference(1805367832.into());
         packet.set_wnd_size(61440);
         packet.set_seq_nr(12044);
         packet.set_ack_nr(12024);
@@ -793,8 +909,8 @@ mod tests {
         let mut packet = Packet::new();
         packet.set_type(PacketType::Syn);
         packet.set_connection_id(10049);
-        packet.set_timestamp(3384187322);
-        packet.set_timestamp_difference(0);
+        packet.set_timestamp(3384187322.into());
+        packet.set_timestamp_difference(0.into());
         packet.set_wnd_size(1048576);
         packet.set_seq_nr(11884);
         packet.set_ack_nr(0);
@@ -813,8 +929,8 @@ mod tests {
         let mut packet = Packet::new();
         packet.set_type(PacketType::State);
         packet.set_connection_id(10049);
-        packet.set_timestamp(6195294);
-        packet.set_timestamp_difference(916973699);
+        packet.set_timestamp(6195294.into());
+        packet.set_timestamp_difference(916973699.into());
         packet.set_wnd_size(1048576);
         packet.set_seq_nr(16807);
         packet.set_ack_nr(11885);
@@ -830,8 +946,8 @@ mod tests {
         let mut packet = Packet::new();
         packet.set_type(PacketType::State);
         packet.set_connection_id(10049);
-        packet.set_timestamp(6195294);
-        packet.set_timestamp_difference(916973699);
+        packet.set_timestamp(6195294.into());
+        packet.set_timestamp_difference(916973699.into());
         packet.set_wnd_size(1048576);
         packet.set_seq_nr(16807);
         packet.set_ack_nr(11885);
@@ -849,8 +965,8 @@ mod tests {
         let mut packet = Packet::with_payload(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
         packet.set_type(PacketType::Data);
         packet.set_connection_id(26237);
-        packet.set_timestamp(252492495);
-        packet.set_timestamp_difference(242289855);
+        packet.set_timestamp(252492495.into());
+        packet.set_timestamp_difference(242289855.into());
         packet.set_wnd_size(1048576);
         packet.set_seq_nr(8334);
         packet.set_ack_nr(16806);
@@ -866,8 +982,8 @@ mod tests {
         let mut packet = Packet::new();
         packet.set_type(PacketType::Fin);
         packet.set_connection_id(19003);
-        packet.set_timestamp(515227279);
-        packet.set_timestamp_difference(511481041);
+        packet.set_timestamp(515227279.into());
+        packet.set_timestamp_difference(511481041.into());
         packet.set_wnd_size(1048576);
         packet.set_seq_nr(41050);
         packet.set_ack_nr(16806);
@@ -883,8 +999,8 @@ mod tests {
         let mut packet = Packet::new();
         packet.set_type(PacketType::Reset);
         packet.set_connection_id(62285);
-        packet.set_timestamp(751226811);
-        packet.set_timestamp_difference(0);
+        packet.set_timestamp(751226811.into());
+        packet.set_timestamp_difference(0.into());
         packet.set_wnd_size(0);
         packet.set_seq_nr(55413);
         packet.set_ack_nr(16807);
