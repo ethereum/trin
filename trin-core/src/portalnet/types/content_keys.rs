@@ -10,7 +10,6 @@ use crate::utils::content_key::*;
 type Nibbles = VariableList<u8, typenum::U64>;
 type Bytes20 = FixedVector<u8, typenum::U20>;
 
-// todo remove this error entirely
 #[derive(Error, Debug)]
 pub enum ContentKeyError {
     #[error("Failed to decode {key_type:?} from SSZ bytes: {error:?}")]

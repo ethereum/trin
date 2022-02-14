@@ -15,7 +15,6 @@ use crate::portalnet::types::messages::{
 
 use crate::utp::stream::{ConnectionKey, UtpListener};
 use crate::utp::trin_helpers::{UtpAccept, UtpMessage, UtpMessageId, UtpStreamState};
-use anyhow::anyhow;
 use discv5::{
     enr::NodeId,
     kbucket::{Filter, KBucketsTable},
@@ -29,6 +28,8 @@ use tokio::sync::mpsc;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::RwLock as RwLockT;
 use tracing::{debug, warn};
+
+pub use super::overlay_service::OverlayRequestError;
 
 /// Configuration parameters for the overlay network.
 #[derive(Clone)]
@@ -136,22 +137,16 @@ impl OverlayProtocol {
     pub async fn process_one_request(
         &self,
         talk_request: &TalkRequest,
-    ) -> anyhow::Result<Response> {
+    ) -> Result<Response, OverlayRequestError> {
         let request = match Message::from_bytes(talk_request.body()) {
             Ok(Message::Request(request)) => request,
             Ok(_) => {
-                return Err(anyhow!(
+                return Err(OverlayRequestError::InvalidRequest(format!(
                     "Message not recognized request type: {:?}",
                     talk_request.body()
-                ))
+                )))
             }
-            Err(msg) => {
-                return Err(anyhow!(
-                    "Error decoding request on {:?} overlay network: {:?}",
-                    self.protocol,
-                    msg
-                ))
-            }
+            Err(_) => return Err(OverlayRequestError::DecodeError),
         };
         let direction = RequestDirection::Incoming {
             id: talk_request.id().clone(),
@@ -181,7 +176,7 @@ impl OverlayProtocol {
     }
 
     /// Sends a `Ping` request to `enr`.
-    pub async fn send_ping(&self, enr: Enr) -> anyhow::Result<Pong> {
+    pub async fn send_ping(&self, enr: Enr) -> Result<Pong, OverlayRequestError> {
         // Construct the request.
         let enr_seq = self.discovery.local_enr().seq();
         let data_radius = self.data_radius();
@@ -201,19 +196,17 @@ impl OverlayProtocol {
             .await
         {
             Ok(Response::Pong(pong)) => Ok(pong),
-            Ok(_) => Err(anyhow!(
-                "Invalid Response for Ping on {:?} network",
-                self.protocol
-            )),
-            Err(error) => Err(error.context(format!(
-                "Error waiting for Pong on {:?} network.",
-                self.protocol
-            ))),
+            Ok(_) => Err(OverlayRequestError::InvalidResponse),
+            Err(error) => Err(error),
         }
     }
 
     /// Sends a `FindNodes` request to `enr`.
-    pub async fn send_find_nodes(&self, enr: Enr, distances: Vec<u16>) -> anyhow::Result<Nodes> {
+    pub async fn send_find_nodes(
+        &self,
+        enr: Enr,
+        distances: Vec<u16>,
+    ) -> Result<Nodes, OverlayRequestError> {
         // Construct the request.
         validate_find_nodes_distances(&distances)?;
         let request = FindNodes { distances };
@@ -225,14 +218,8 @@ impl OverlayProtocol {
             .await
         {
             Ok(Response::Nodes(nodes)) => Ok(nodes),
-            Ok(_) => Err(anyhow!(
-                "Invalid Response for FindNodes on {:?} network",
-                self.protocol
-            )),
-            Err(error) => Err(error.context(format!(
-                "Error waiting for Nodes on {:?} network.",
-                self.protocol
-            ))),
+            Ok(_) => Err(OverlayRequestError::InvalidResponse),
+            Err(error) => Err(error),
         }
     }
 
@@ -241,7 +228,7 @@ impl OverlayProtocol {
         &self,
         enr: Enr,
         content_key: Vec<u8>,
-    ) -> anyhow::Result<Content> {
+    ) -> Result<Content, OverlayRequestError> {
         // Construct the request.
         let request = FindContent { content_key };
         let direction = RequestDirection::Outgoing { destination: enr };
@@ -252,19 +239,17 @@ impl OverlayProtocol {
             .await
         {
             Ok(Response::Content(found_content)) => Ok(found_content),
-            Ok(_) => Err(anyhow!(
-                "Invalid Response for FindContent on {:?} network",
-                self.protocol
-            )),
-            Err(error) => Err(error.context(format!(
-                "Error waiting for Content on {:?} network.",
-                self.protocol
-            ))),
+            Ok(_) => Err(OverlayRequestError::InvalidResponse),
+            Err(error) => Err(error),
         }
     }
     /// offer is sent in order to store content to k nodes with radii that contain content-id
     /// offer is also sent to nodes after FindContent (POKE)
-    pub async fn send_offer(&self, content_keys: Vec<Vec<u8>>, enr: Enr) -> anyhow::Result<Accept> {
+    pub async fn send_offer(
+        &self,
+        content_keys: Vec<Vec<u8>>,
+        enr: Enr,
+    ) -> Result<Accept, OverlayRequestError> {
         // Construct the request.
         let request = Offer {
             content_keys: content_keys.clone(),
@@ -281,14 +266,8 @@ impl OverlayProtocol {
             Ok(Response::Accept(accept)) => Ok(self
                 .process_accept_response(accept, enr, content_keys)
                 .await),
-            Ok(_) => Err(anyhow!(
-                "Invalid Response for Offer on {:?} network",
-                self.protocol
-            )),
-            Err(error) => Err(error.context(format!(
-                "Error waiting for Accept on {:?} network.",
-                self.protocol
-            ))),
+            Ok(_) => Err(OverlayRequestError::InvalidResponse),
+            Err(error) => Err(error),
         }
     }
 
@@ -381,7 +360,7 @@ impl OverlayProtocol {
         &self,
         request: Request,
         direction: RequestDirection,
-    ) -> anyhow::Result<Response> {
+    ) -> Result<Response, OverlayRequestError> {
         let (tx, rx) = oneshot::channel();
         let overlay_request = OverlayRequest::new(request, direction, Some(tx));
         if let Err(error) = self.request_tx.send(overlay_request) {
@@ -389,38 +368,40 @@ impl OverlayProtocol {
                 "Failure sending request over {:?} service channel",
                 self.protocol
             );
-            return Err(anyhow!(
-                "Error sending request over {:?} service channel: {:?}",
-                self.protocol,
-                error
-            ));
+            return Err(OverlayRequestError::ChannelFailure(error.to_string()));
         }
 
         // Wait on the response.
-        match rx.await? {
-            Ok(result) => Ok(result),
-            Err(msg) => Err(anyhow!(msg)),
+        match rx.await {
+            Ok(result) => result,
+            Err(error) => Err(OverlayRequestError::ChannelFailure(error.to_string())),
         }
     }
 }
 
-fn validate_find_nodes_distances(distances: &Vec<u16>) -> anyhow::Result<()> {
+fn validate_find_nodes_distances(distances: &Vec<u16>) -> Result<(), OverlayRequestError> {
     if distances.len() == 0 {
-        return Err(anyhow!("Invalid distances: Empty list"));
+        return Err(OverlayRequestError::InvalidRequest(
+            "Invalid distances: Empty list".to_string(),
+        ));
     }
     if distances.len() > 256 {
-        return Err(anyhow!("Invalid distances: More than 256 elements"));
+        return Err(OverlayRequestError::InvalidRequest(
+            "Invalid distances: More than 256 elements".to_string(),
+        ));
     }
     let invalid_distances: Vec<&u16> = distances.iter().filter(|val| val > &&256u16).collect();
     if invalid_distances.len() > 0 {
-        return Err(anyhow!(
+        return Err(OverlayRequestError::InvalidRequest(format!(
             "Invalid distances: Distances greater than 256 are not allowed. Found: {:?}",
             invalid_distances
-        ));
+        )));
     }
     let unique: HashSet<u16> = HashSet::from_iter(distances.iter().cloned());
     if unique.len() != distances.len() {
-        return Err(anyhow!("Invalid distances: Duplicate elements detected"));
+        return Err(OverlayRequestError::InvalidRequest(
+            "Invalid distances: Duplicate elements detected".to_string(),
+        ));
     }
     Ok(())
 }

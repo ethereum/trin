@@ -1,12 +1,13 @@
 use std::sync::Arc;
 
+use anyhow::anyhow;
 use eth_trie::EthTrie;
 use log::debug;
 use rocksdb::DB;
 use tokio::sync::RwLock;
 use trin_core::portalnet::{
     discovery::Discovery,
-    overlay::{OverlayConfig, OverlayProtocol},
+    overlay::{OverlayConfig, OverlayProtocol, OverlayRequestError},
     types::messages::{PortalnetConfig, ProtocolId},
 };
 use trin_core::utp::stream::UtpListener;
@@ -64,12 +65,40 @@ impl StateNetwork {
                     debug!("Successfully bonded with {}", enr);
                     continue;
                 }
-                // Tbh I'm a bit stumped on how to handle this area, so this is just a temporary
-                // solution to get the compiler passing. Will revisit if we decide to continue with
-                // anyhow
-                Err(msg) => {
-                    debug!("{}", msg);
+                Err(OverlayRequestError::ChannelFailure(error)) => {
+                    debug!("Channel failure sending ping: {}", error);
                     continue;
+                }
+                Err(OverlayRequestError::Timeout) => {
+                    debug!("Timed out while bonding with {}", enr);
+                    continue;
+                }
+                Err(OverlayRequestError::EmptyResponse) => {
+                    debug!("Empty response to ping from: {}", enr);
+                    continue;
+                }
+                Err(OverlayRequestError::InvalidRequest(_)) => {
+                    debug!("Sent invalid ping request to {}", enr);
+                    continue;
+                }
+                Err(OverlayRequestError::InvalidResponse) => {
+                    debug!("Invalid ping response from: {}", enr);
+                    continue;
+                }
+                Err(OverlayRequestError::Failure(_)) => {
+                    debug!("Failure to serve ping response from: {}", enr);
+                    continue;
+                }
+                Err(OverlayRequestError::DecodeError) => {
+                    debug!("Error decoding ping response from: {}", enr);
+                    continue;
+                }
+                Err(OverlayRequestError::AcceptError(error)) => {
+                    debug!("Error building Accept message: {:?}", error);
+                }
+                Err(OverlayRequestError::Discv5Error(error)) => {
+                    debug!("Unexpected error while bonding with {} => {:?}", enr, error);
+                    return Err(anyhow!(error.to_string()));
                 }
             }
         }
