@@ -1,26 +1,8 @@
 use crate::portalnet::types::uint::U256;
+use anyhow::anyhow;
 use hmac_sha256::Hash;
 use sha3::{Digest, Keccak256};
 use std::convert::TryInto;
-use thiserror::Error;
-
-#[derive(Error, Debug)]
-pub enum VecToArrayError {
-    #[error("Failed to convert vector to array. Expected length of {expected_len:?} but got length of {actual_len:?}")]
-    Length {
-        expected_len: usize,
-        actual_len: usize,
-    },
-}
-
-impl VecToArrayError {
-    fn length<T>(v: Vec<T>, n: usize) -> Self {
-        Self::Length {
-            expected_len: n,
-            actual_len: v.len(),
-        }
-    }
-}
 
 pub fn keccak256(key: &[u8]) -> U256 {
     let mut hasher = Keccak256::new();
@@ -34,9 +16,14 @@ pub fn sha256(key: &[u8]) -> U256 {
     U256::from(output)
 }
 
-pub fn vec_to_array<T, const N: usize>(v: Vec<T>) -> Result<[T; N], VecToArrayError> {
-    v.try_into()
-        .map_err(|v: Vec<T>| VecToArrayError::length(v, N))
+pub fn vec_to_array<T, const N: usize>(v: Vec<T>) -> anyhow::Result<[T; N]> {
+    v.try_into().map_err(|v: Vec<T>| {
+        anyhow!(
+            "Failed to convert vector to array. Expected length of {:?} but got length of {:?}",
+            N,
+            v.len()
+        )
+    })
 }
 
 #[cfg(test)]
@@ -72,9 +59,11 @@ mod test {
     }
 
     #[test]
-    #[should_panic]
     fn test_vec_to_array_failure() {
         let input = vec![4, 2, 5, 6];
-        let _result = vec_to_array::<i32, 5>(input).unwrap();
+        let error = vec_to_array::<i32, 5>(input).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("Failed to convert vector to array."))
     }
 }

@@ -23,6 +23,7 @@ use crate::{
     },
     utils::{distance::xor, hash_delay_queue::HashDelayQueue, node_id},
 };
+
 use discv5::{
     enr::NodeId,
     kbucket::{
@@ -549,12 +550,18 @@ impl OverlayService {
             ProtocolId::State => {
                 let state_content_key =
                     StateContentKey::from_bytes(request.content_key.as_slice())?;
-                state_content_key.derive_content_id()?
+                match state_content_key.derive_content_id() {
+                    Ok(val) => val,
+                    Err(_) => return Err(OverlayRequestError::DecodeError),
+                }
             }
             ProtocolId::History => {
                 let history_content_key =
                     HistoryContentKey::from_bytes(request.content_key.as_slice())?;
-                history_content_key.derive_content_id()?
+                match history_content_key.derive_content_id() {
+                    Ok(val) => val,
+                    Err(_) => return Err(OverlayRequestError::DecodeError),
+                }
             }
             _ => {
                 warn!(

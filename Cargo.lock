@@ -3338,6 +3338,7 @@ dependencies = [
 name = "trin-history"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "bytes 1.1.0",
  "discv5",
  "ethereum-types 0.12.1",
@@ -3358,6 +3359,7 @@ dependencies = [
 name = "trin-state"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "discv5",
  "eth_trie",
  "log 0.4.14",

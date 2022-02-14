@@ -1,7 +1,7 @@
 use std::convert::TryInto;
 
+use anyhow::anyhow;
 use ssz::DecodeError;
-use thiserror::Error;
 use uint::construct_uint;
 
 construct_uint! {
@@ -22,20 +22,14 @@ impl From<U256> for U512 {
     }
 }
 
-#[derive(Error, Debug, PartialEq)]
-pub enum U512toU256Error {
-    #[error("Failed to convert U512 to U256 due to overflow")]
-    Overflow,
-}
-
 impl TryInto<U256> for U512 {
-    type Error = U512toU256Error;
+    type Error = anyhow::Error;
 
-    fn try_into(self) -> Result<U256, Self::Error> {
+    fn try_into(self) -> anyhow::Result<U256> {
         let U512(ref arr) = self;
 
         if arr[4] | arr[5] | arr[6] | arr[7] != 0 {
-            return Err(U512toU256Error::Overflow);
+            return Err(anyhow!("Failed to convert U512 to U256 due to overflow"));
         }
 
         let mut ret = [0; 4];
@@ -108,7 +102,6 @@ impl ssz::Decode for U256 {
 
 #[cfg(test)]
 mod test {
-    use super::U512toU256Error::Overflow;
     use super::*;
     use rstest::rstest;
     use ssz::{Decode, Encode};
@@ -139,17 +132,18 @@ mod test {
     }
 
     #[rstest]
-    #[case(U512([1,2,3,4,1,0,0,0]), Overflow)]
-    #[case(U512([1,2,3,4,0,34,0,0]), Overflow)]
-    #[case(U512([1,2,3,4,0,0,234,0]), Overflow)]
-    #[case(U512([1,2,3,4,0,0,0,349]), Overflow)]
-    #[case(U512([u64::MAX,u64::MAX,u64::MAX,u64::MAX,1,0,0,0]), Overflow)]
-    #[case(U512([0,0,0,0,1,0,0,0]), Overflow)]
-    fn test_u512_to_u256_failure(#[case] input: U512, #[case] expected: U512toU256Error) {
-        let result: Result<U256, U512toU256Error> = input.try_into();
-        if let Err(e) = result {
-            assert_eq!(e, expected);
-        }
+    #[case(U512([1,2,3,4,1,0,0,0]))]
+    #[case(U512([1,2,3,4,0,34,0,0]))]
+    #[case(U512([1,2,3,4,0,0,234,0]))]
+    #[case(U512([1,2,3,4,0,0,0,349]))]
+    #[case(U512([u64::MAX,u64::MAX,u64::MAX,u64::MAX,1,0,0,0]))]
+    #[case(U512([0,0,0,0,1,0,0,0]))]
+    fn test_u512_to_u256_failure(#[case] input: U512) {
+        let result: anyhow::Result<U256> = input.try_into();
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Failed to convert U512 to U256 due to overflow"
+        );
     }
 
     #[test]

@@ -4,7 +4,7 @@ use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, FixedVector, VariableList};
 use thiserror::Error;
 
-use crate::portalnet::types::uint::{U512toU256Error, U256, U512};
+use crate::portalnet::types::uint::{U256, U512};
 use crate::utils::content_key::*;
 
 type Nibbles = VariableList<u8, typenum::U64>;
@@ -17,26 +17,12 @@ pub enum ContentKeyError {
         error: DecodeError,
         key_type: String,
     },
+
     #[error("Invalid content-type {content_type:?}")]
     Type { content_type: u8 },
+
     #[error("Empty bytes")]
     Empty,
-    #[error("Failed to convert key to id while hashing due to array length mismatch")]
-    VecToArray,
-    #[error("Failed to convert key to id due to overflow while converting U512 to U256")]
-    Overflow,
-}
-
-impl From<VecToArrayError> for ContentKeyError {
-    fn from(_: VecToArrayError) -> Self {
-        Self::VecToArray
-    }
-}
-
-impl From<U512toU256Error> for ContentKeyError {
-    fn from(_: U512toU256Error) -> Self {
-        Self::Overflow
-    }
 }
 
 impl ContentKeyError {
@@ -87,7 +73,7 @@ impl ContentKey {
     }
 
     /// Returns the appropriate content-id for the given content-key
-    pub fn to_content_id(&self) -> Result<U256, ContentKeyError> {
+    pub fn to_content_id(&self) -> anyhow::Result<U256> {
         match self {
             ContentKey::StateContentKey(state_key) => state_key.derive_content_id(),
             ContentKey::HistoryContentKey(history_key) => history_key.derive_content_id(),
@@ -156,7 +142,7 @@ impl StateContentKey {
     }
 
     /// Derives the proper content-id for a given StateContentKey
-    pub fn derive_content_id(&self) -> Result<U256, ContentKeyError> {
+    pub fn derive_content_id(&self) -> anyhow::Result<U256> {
         match self {
             StateContentKey::AccountTrieNodeKey(AccountTrieNode {
                 path, node_hash, ..
@@ -250,7 +236,7 @@ impl HistoryContentKey {
     }
 
     /// Derives the proper content-id for a given HistoryContentKey
-    pub fn derive_content_id(&self) -> Result<U256, ContentKeyError> {
+    pub fn derive_content_id(&self) -> anyhow::Result<U256> {
         let (content_type, chain_id, block_hash) = match self {
             HistoryContentKey::HeaderKey(HeaderKey {
                 chain_id,
