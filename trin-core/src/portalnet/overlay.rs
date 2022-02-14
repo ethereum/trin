@@ -41,6 +41,7 @@ pub struct OverlayConfig {
     pub table_filter: Option<Box<dyn Filter<Node>>>,
     pub bucket_filter: Option<Box<dyn Filter<Node>>>,
     pub ping_queue_interval: Option<Duration>,
+    pub enable_metrics: bool,
 }
 
 impl Default for OverlayConfig {
@@ -52,6 +53,7 @@ impl Default for OverlayConfig {
             table_filter: None,
             bucket_filter: None,
             ping_queue_interval: None,
+            enable_metrics: false,
         }
     }
 }
@@ -108,6 +110,7 @@ impl<TContentKey: OverlayContentKey + Send> OverlayProtocol<TContentKey> {
             Arc::clone(&data_radius),
             protocol.clone(),
             utp_listener.clone(),
+            config.enable_metrics,
         )
         .await
         .unwrap();
