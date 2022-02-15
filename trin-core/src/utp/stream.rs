@@ -528,6 +528,7 @@ impl UtpSocket {
         debug!("self.their_delay: {}", self.their_delay);
 
         match (self.state, packet.get_type()) {
+            // New connection, when we receive SYN packet, respond with STATE packet
             (SocketState::Uninitialized, PacketType::Syn) => {
                 self.connected_to = src;
                 self.ack_nr = packet.seq_nr();
@@ -539,7 +540,10 @@ impl UtpSocket {
 
                 Ok(Some(self.prepare_reply(packet, PacketType::State)))
             }
+            // When connection is already initialised and we receive SYN packet,
+            // we want to forcibly terminate the connection
             (_, PacketType::Syn) => Ok(Some(self.prepare_reply(packet, PacketType::Reset))),
+            // When SYN is send and we receive STATE, do not reply
             (SocketState::SynSent, PacketType::State) => {
                 self.connected_to = src;
                 self.ack_nr = packet.seq_nr();
@@ -549,18 +553,23 @@ impl UtpSocket {
                 self.last_acked_timestamp = now_microseconds();
                 Ok(None)
             }
+            // Only STATE packet is expected when SYN is sent
             (SocketState::SynSent, _) => Err(anyhow!("The remote peer sent an invalid reply")),
+            // Handle data packet if socket state is `Connected` or `FinSent` and packet type is DATA
             (SocketState::Connected, PacketType::Data)
             | (SocketState::FinSent, PacketType::Data) => Ok(self.handle_data_packet(packet)),
+            // Handle state packet if socket state is `Connected` and packet type is STATE
             (SocketState::Connected, PacketType::State) => {
                 self.handle_state_packet(packet);
                 Ok(None)
             }
+            // Handle FIN packet. Check if all send packets are acknowledged.
             (SocketState::Connected, PacketType::Fin) | (SocketState::FinSent, PacketType::Fin) => {
                 if packet.ack_nr() < self.seq_nr {
                     debug!("FIN received but there are missing acknowledgements for sent packets");
                 }
                 let mut reply = self.prepare_reply(packet, PacketType::State);
+
                 if packet.seq_nr().wrapping_sub(self.ack_nr) > 1 {
                     debug!(
                         "current ack_nr ({}) is behind received packet seq_nr ({})",
@@ -580,6 +589,7 @@ impl UtpSocket {
                 self.state = SocketState::Closed;
                 Ok(Some(reply))
             }
+            // Confirm with STATE packet when socket state is `Closed` and we receive FIN packet
             (SocketState::Closed, PacketType::Fin) => {
                 Ok(Some(self.prepare_reply(packet, PacketType::State)))
             }
@@ -591,6 +601,7 @@ impl UtpSocket {
                 }
                 Ok(None)
             }
+            // Reset connection when receiving RESET packet
             (_, PacketType::Reset) => {
                 self.state = SocketState::ResetReceived;
                 Err(anyhow!("Connection reset by remote peer"))
@@ -620,11 +631,11 @@ impl UtpSocket {
 
     fn handle_data_packet(&mut self, packet: &Packet) -> Option<Packet> {
         // If a FIN was previously sent, reply with a FIN packet acknowledging the received packet.
-        let packet_type = if self.state == SocketState::FinSent {
-            PacketType::Fin
-        } else {
-            PacketType::State
+        let packet_type = match self.state {
+            SocketState::FinSent => PacketType::Fin,
+            _ => PacketType::State,
         };
+
         let mut reply = self.prepare_reply(packet, packet_type);
 
         if packet.seq_nr().wrapping_sub(self.ack_nr) > 1 {
@@ -850,44 +861,41 @@ impl UtpSocket {
 mod tests {
     use crate::portalnet::discovery::Discovery;
     use crate::portalnet::types::messages::PortalnetConfig;
-    use crate::portalnet::Enr;
+    use crate::utils::node_id::generate_random_remote_enr;
     use crate::utp::packets::{Packet, PacketType};
-    use crate::utp::stream::{UtpSocket, BUF_SIZE};
-    use discv5::enr::{CombinedKey, EnrBuilder};
-    use rand::Rng;
-    use std::net::Ipv4Addr;
+    use crate::utp::stream::{SocketState, UtpSocket, BUF_SIZE};
     use std::sync::Arc;
 
-    fn generate_random_enr() -> Enr {
-        let key = CombinedKey::generate_secp256k1();
+    fn next_test_port() -> u16 {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static NEXT_OFFSET: AtomicUsize = AtomicUsize::new(0);
+        const BASE_PORT: u16 = 9600;
+        BASE_PORT + NEXT_OFFSET.fetch_add(1, Ordering::Relaxed) as u16
+    }
 
-        let mut rng = rand::thread_rng();
-        let ip = Ipv4Addr::from(rng.gen::<u32>());
+    fn create_portal_config() -> PortalnetConfig {
+        PortalnetConfig {
+            listen_port: next_test_port(),
+            internal_ip: true,
+            ..Default::default()
+        }
+    }
 
-        EnrBuilder::new("v4")
-            .ip(ip.into())
-            .udp(8000)
-            .build(&key)
-            .unwrap()
+    async fn server_setup() -> UtpSocket {
+        let (_, server_enr) = generate_random_remote_enr();
+        let server_config = create_portal_config();
+        let mut server_discv5 = Discovery::new(server_config).unwrap();
+        server_discv5.start().await.unwrap();
+        UtpSocket::new(Arc::new(server_discv5), server_enr.clone())
     }
 
     #[tokio::test]
     async fn test_handle_packet() {
+        // Boilerplate test setup
         let initial_connection_id: u16 = rand::random();
         let sender_connection_id = initial_connection_id + 1;
-        let client_enr = generate_random_enr();
-        let server_enr = generate_random_enr();
-
-        let server_config = PortalnetConfig {
-            listen_port: 7272,
-            internal_ip: true,
-            ..Default::default()
-        };
-
-        let mut server_discv5 = Discovery::new(server_config).unwrap();
-        server_discv5.start().await.unwrap();
-
-        let mut socket = UtpSocket::new(Arc::new(server_discv5), server_enr.clone());
+        let (_, client_enr) = generate_random_remote_enr();
+        let mut socket = server_setup().await;
 
         // ---------------------------------
         // Test connection setup - SYN packet
@@ -913,7 +921,7 @@ mod tests {
         // Response acknowledges SYN
         assert_eq!(response.ack_nr(), packet.seq_nr());
 
-        // No payload?
+        // Expect no payloadd
         assert!(response.payload().is_empty());
 
         // ---------------------------------
@@ -978,5 +986,178 @@ mod tests {
 
         // FIN should be acknowledged
         assert_eq!(response.ack_nr(), packet.seq_nr());
+    }
+
+    #[tokio::test]
+    async fn test_response_to_keepalive_ack() {
+        // Boilerplate test setup
+        let initial_connection_id: u16 = rand::random();
+        let (_, client_enr) = generate_random_remote_enr();
+        let mut socket = server_setup().await;
+
+        // Establish connection
+        let mut packet = Packet::new();
+        packet.set_wnd_size(BUF_SIZE as u32);
+        packet.set_type(PacketType::Syn);
+        packet.set_connection_id(initial_connection_id);
+
+        let response = socket.handle_packet(&packet, client_enr.clone());
+        assert!(response.is_ok());
+        let response = response.unwrap();
+        assert!(response.is_some());
+        let response = response.unwrap();
+        assert_eq!(response.get_type(), PacketType::State);
+
+        let old_packet = packet;
+        let old_response = response;
+
+        // Now, send a keepalive packet
+        let mut packet = Packet::new();
+        packet.set_wnd_size(BUF_SIZE as u32);
+        packet.set_type(PacketType::State);
+        packet.set_connection_id(initial_connection_id);
+        packet.set_seq_nr(old_packet.seq_nr() + 1);
+        packet.set_ack_nr(old_response.seq_nr());
+
+        let response = socket.handle_packet(&packet, client_enr.clone());
+        assert!(response.is_ok());
+        let response = response.unwrap();
+        assert!(response.is_none());
+
+        // Send a second keepalive packet, identical to the previous one
+        let response = socket.handle_packet(&packet, client_enr.clone());
+        assert!(response.is_ok());
+        let response = response.unwrap();
+        assert!(response.is_none());
+
+        // Mark socket as closed
+        socket.state = SocketState::Closed;
+    }
+
+    #[tokio::test]
+    async fn test_response_to_wrong_connection_id() {
+        // Boilerplate test setup
+        let initial_connection_id: u16 = rand::random();
+        let (_, client_enr) = generate_random_remote_enr();
+        let mut socket = server_setup().await;
+
+        // Establish connection
+        let mut packet = Packet::new();
+        packet.set_wnd_size(BUF_SIZE as u32);
+        packet.set_type(PacketType::Syn);
+        packet.set_connection_id(initial_connection_id);
+
+        let response = socket.handle_packet(&packet, client_enr.clone());
+        assert!(response.is_ok());
+        let response = response.unwrap();
+        assert!(response.is_some());
+        assert_eq!(response.unwrap().get_type(), PacketType::State);
+
+        // Now, disrupt connection with a packet with an incorrect connection id
+        let new_connection_id = initial_connection_id.wrapping_mul(2);
+
+        let mut packet = Packet::new();
+        packet.set_wnd_size(BUF_SIZE as u32);
+        packet.set_type(PacketType::State);
+        packet.set_connection_id(new_connection_id);
+
+        let response = socket.handle_packet(&packet, client_enr);
+        assert!(response.is_ok());
+        let response = response.unwrap();
+        assert!(response.is_some());
+
+        let response = response.unwrap();
+        assert_eq!(response.get_type(), PacketType::Reset);
+        assert_eq!(response.ack_nr(), packet.seq_nr());
+
+        // Mark socket as closed
+        socket.state = SocketState::Closed;
+    }
+
+    #[tokio::test]
+    async fn test_unordered_packets() {
+        // Boilerplate test setup
+        let initial_connection_id: u16 = rand::random();
+        let (_, client_enr) = generate_random_remote_enr();
+        let mut socket = server_setup().await;
+
+        // Establish connection
+        let mut packet = Packet::new();
+        packet.set_wnd_size(BUF_SIZE as u32);
+        packet.set_type(PacketType::Syn);
+        packet.set_connection_id(initial_connection_id);
+
+        let response = socket.handle_packet(&packet, client_enr.clone());
+        assert!(response.is_ok());
+        let response = response.unwrap();
+        assert!(response.is_some());
+        let response = response.unwrap();
+        assert_eq!(response.get_type(), PacketType::State);
+
+        let old_packet = packet;
+        let old_response = response;
+
+        let mut window: Vec<Packet> = Vec::new();
+
+        // Now, send a keepalive packet
+        let mut packet = Packet::with_payload(&[1, 2, 3]);
+        packet.set_wnd_size(BUF_SIZE as u32);
+        packet.set_connection_id(initial_connection_id);
+        packet.set_seq_nr(old_packet.seq_nr() + 1);
+        packet.set_ack_nr(old_response.seq_nr());
+        window.push(packet);
+
+        let mut packet = Packet::with_payload(&[4, 5, 6]);
+        packet.set_wnd_size(BUF_SIZE as u32);
+        packet.set_connection_id(initial_connection_id);
+        packet.set_seq_nr(old_packet.seq_nr() + 2);
+        packet.set_ack_nr(old_response.seq_nr());
+        window.push(packet);
+
+        // Send packets in reverse order
+        let response = socket.handle_packet(&window[1], client_enr.clone());
+        assert!(response.is_ok());
+        let response = response.unwrap();
+        assert!(response.is_some());
+        let response = response.unwrap();
+        assert!(response.ack_nr() != window[1].seq_nr());
+
+        let response = socket.handle_packet(&window[0], client_enr);
+        assert!(response.is_ok());
+        let response = response.unwrap();
+        assert!(response.is_some());
+
+        // Mark socket as closed
+        socket.state = SocketState::Closed;
+    }
+
+    #[tokio::test]
+    async fn test_base_delay_calculation() {
+        let minute_in_microseconds = 60 * 10i64.pow(6);
+        let samples = vec![
+            (0, 10),
+            (1, 8),
+            (2, 12),
+            (3, 7),
+            (minute_in_microseconds + 1, 11),
+            (minute_in_microseconds + 2, 19),
+            (minute_in_microseconds + 3, 9),
+        ];
+        let mut socket = server_setup().await;
+
+        for (timestamp, delay) in samples {
+            socket.update_base_delay(delay.into(), ((timestamp + delay) as u32).into());
+        }
+
+        let expected = vec![7i64, 9i64]
+            .into_iter()
+            .map(Into::into)
+            .collect::<Vec<_>>();
+        let actual = socket.base_delays.iter().cloned().collect::<Vec<_>>();
+        assert_eq!(expected, actual);
+        assert_eq!(
+            socket.min_base_delay(),
+            expected.iter().min().cloned().unwrap_or_default()
+        );
     }
 }
