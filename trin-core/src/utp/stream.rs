@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use crate::portalnet::discovery::Discovery;
+use anyhow::anyhow;
 use discv5::enr::NodeId;
 use discv5::Enr;
 use log::debug;
@@ -17,6 +18,9 @@ use crate::utp::time::{now_microseconds, Delay, Timestamp};
 use crate::utp::trin_helpers::{UtpMessageId, UtpStreamState};
 use crate::utp::util::{abs_diff, ewma};
 
+// For simplicity's sake, let us assume no packet will ever exceed the
+// Ethernet maximum transfer unit of 1500 bytes.
+const BUF_SIZE: usize = 1500;
 const GAIN: f64 = 1.0;
 const ALLOWED_INCREASE: u32 = 1;
 const MIN_CWND: u32 = 2; // minimum congestion window size
@@ -39,13 +43,15 @@ pub fn rand() -> u16 {
     rand::thread_rng().gen()
 }
 
-#[derive(PartialEq, Clone, Debug)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum SocketState {
     Uninitialized,
     SynSent,
     SynRecv,
+    FinSent,
     Connected,
-    Disconnected,
+    Closed,
+    ResetReceived,
 }
 
 struct DelayDifferenceSample {
@@ -91,23 +97,22 @@ impl UtpListener {
                         };
 
                         if let Some(conn) = self.utp_connections.get_mut(&key_fn(1)) {
-                            conn.state = SocketState::Disconnected;
+                            conn.state = SocketState::Closed;
                         } else if let Some(conn) =
                             self.utp_connections.get_mut(&key_fn(2)).filter(f)
                         {
-                            conn.state = SocketState::Disconnected;
+                            conn.state = SocketState::Closed;
                         } else if let Some(conn) =
                             self.utp_connections.get_mut(&key_fn(0)).filter(f)
                         {
-                            conn.state = SocketState::Disconnected;
+                            conn.state = SocketState::Closed;
                         }
                     }
                     PacketType::Syn => {
                         if let Some(enr) = self.discovery.discv5.find_enr(node_id) {
                             // If neither of those cases happened handle this is a new request
-                            let (tx, _) = mpsc::unbounded_channel::<UtpStreamState>();
-                            let mut conn = UtpSocket::new(Arc::clone(&self.discovery), enr, tx);
-                            conn.handle_packet(packet);
+                            let mut conn = UtpSocket::new(Arc::clone(&self.discovery), enr.clone());
+                            let _ = conn.handle_packet(&packet, enr);
                             self.utp_connections.insert(
                                 ConnectionKey {
                                     node_id: *node_id,
@@ -124,7 +129,10 @@ impl UtpListener {
                             node_id: *node_id,
                             conn_id_recv: connection_id,
                         }) {
-                            conn.handle_packet(packet);
+                            // FIXME: Temporaly hack. We need to know source Enr to handle utp packet.
+                            if let Some(enr) = self.discovery.discv5.find_enr(node_id) {
+                                let _ = conn.handle_packet(&packet, enr);
+                            }
                         }
                     }
                 }
@@ -140,10 +148,10 @@ impl UtpListener {
         &mut self,
         connection_id: u16,
         node_id: NodeId,
-        tx: mpsc::UnboundedSender<UtpStreamState>,
+        _tx: mpsc::UnboundedSender<UtpStreamState>,
     ) {
         if let Some(enr) = self.discovery.discv5.find_enr(&node_id) {
-            let mut conn = UtpSocket::new(Arc::clone(&self.discovery), enr, tx);
+            let mut conn = UtpSocket::new(Arc::clone(&self.discovery), enr);
             conn.make_connection(connection_id);
             self.utp_connections.insert(
                 ConnectionKey {
@@ -204,6 +212,12 @@ pub struct UtpSocket {
     /// Sequence number of the latest packet the remote peer acknowledged
     last_acked: u16,
 
+    /// Timestamp of the latest packet the remote peer acknowledged
+    last_acked_timestamp: Timestamp,
+
+    /// Sequence number of the last packet removed from the incoming buffer
+    last_dropped: u16,
+
     /// Round-trip time to remote peer
     rtt: i32,
 
@@ -226,15 +240,10 @@ pub struct UtpSocket {
     last_rollover: Timestamp,
 
     pub recv_data_stream: Vec<u8>,
-    tx: mpsc::UnboundedSender<UtpStreamState>,
 }
 
 impl UtpSocket {
-    fn new(
-        socket: Arc<Discovery>,
-        connected_to: Enr,
-        tx: mpsc::UnboundedSender<UtpStreamState>,
-    ) -> Self {
+    fn new(socket: Arc<Discovery>, connected_to: Enr) -> Self {
         Self {
             state: SocketState::Uninitialized,
             seq_nr: 0,
@@ -251,6 +260,8 @@ impl UtpSocket {
             send_window: Vec::new(),
             duplicate_ack_count: 0,
             last_acked: 0,
+            last_acked_timestamp: Timestamp::default(),
+            last_dropped: 0,
             rtt: 0,
             rtt_variance: 0,
             base_delays: VecDeque::with_capacity(BASE_HISTORY),
@@ -259,9 +270,6 @@ impl UtpSocket {
             last_rollover: Timestamp::default(),
             current_delays: Vec::with_capacity(8),
             recv_data_stream: vec![],
-
-            // signal when node is connected to write payload
-            tx,
         }
     }
 
@@ -488,16 +496,12 @@ impl UtpSocket {
         self.send_packet(&mut packet);
     }
 
-    fn handle_packet(&mut self, packet: Packet) {
+    fn handle_packet(&mut self, packet: &Packet, src: Enr) -> anyhow::Result<Option<Packet>> {
         debug!(
             "Handle packet: {:?}. Conn state: {:?}",
             packet.get_type(),
             self.state
         );
-
-        // Update remote window size
-        self.remote_wnd_size = packet.wnd_size();
-        debug!("Remote window size: {}", self.remote_wnd_size);
 
         // Only acknowledge this if this follows the last one, else do it when we advance the send
         // window
@@ -505,162 +509,236 @@ impl UtpSocket {
             self.ack_nr = packet.seq_nr();
         }
 
+        // Reset connection if connection id doesn't match and this isn't a SYN
+        if packet.get_type() != PacketType::Syn
+            && self.state != SocketState::SynSent
+            && !(packet.connection_id() == self.sender_connection_id
+                || packet.connection_id() == self.receiver_connection_id)
+        {
+            return Ok(Some(self.prepare_reply(packet, PacketType::Reset)));
+        }
+
+        // Update remote window size
+        self.remote_wnd_size = packet.wnd_size();
+        debug!("Remote window size: {}", self.remote_wnd_size);
+
         // Update remote peer's delay between them sending the packet and us receiving it
         let now = now_microseconds();
         self.their_delay = abs_diff(now, packet.timestamp());
         debug!("self.their_delay: {}", self.their_delay);
 
-        match packet.get_type() {
-            PacketType::Data => self.handle_data_packet(packet),
-            PacketType::Fin => self.handle_finalize_packet(),
-            PacketType::State => self.handle_state_packet(packet),
-            PacketType::Reset => unreachable!("Reset should never make it here"),
-            PacketType::Syn => self.handle_syn_packet(packet),
+        match (self.state, packet.get_type()) {
+            (SocketState::Uninitialized, PacketType::Syn) => {
+                self.connected_to = src;
+                self.ack_nr = packet.seq_nr();
+                self.seq_nr = rand::random();
+                self.receiver_connection_id = packet.connection_id() + 1;
+                self.sender_connection_id = packet.connection_id();
+                self.state = SocketState::Connected;
+                self.last_dropped = self.ack_nr;
+
+                Ok(Some(self.prepare_reply(packet, PacketType::State)))
+            }
+            (_, PacketType::Syn) => Ok(Some(self.prepare_reply(packet, PacketType::Reset))),
+            (SocketState::SynSent, PacketType::State) => {
+                self.connected_to = src;
+                self.ack_nr = packet.seq_nr();
+                self.seq_nr += 1;
+                self.state = SocketState::Connected;
+                self.last_acked = packet.ack_nr();
+                self.last_acked_timestamp = now_microseconds();
+                Ok(None)
+            }
+            (SocketState::SynSent, _) => Err(anyhow!("The remote peer sent an invalid reply")),
+            (SocketState::Connected, PacketType::Data)
+            | (SocketState::FinSent, PacketType::Data) => Ok(self.handle_data_packet(packet)),
+            (SocketState::Connected, PacketType::State) => {
+                self.handle_state_packet(packet);
+                Ok(None)
+            }
+            (SocketState::Connected, PacketType::Fin) | (SocketState::FinSent, PacketType::Fin) => {
+                if packet.ack_nr() < self.seq_nr {
+                    debug!("FIN received but there are missing acknowledgements for sent packets");
+                }
+                let mut reply = self.prepare_reply(packet, PacketType::State);
+                if packet.seq_nr().wrapping_sub(self.ack_nr) > 1 {
+                    debug!(
+                        "current ack_nr ({}) is behind received packet seq_nr ({})",
+                        self.ack_nr,
+                        packet.seq_nr()
+                    );
+
+                    // Set SACK extension payload if the packet is not in order
+                    let sack = self.build_selective_ack();
+
+                    if !sack.is_empty() {
+                        reply.set_selective_ack(sack);
+                    }
+                }
+
+                // Give up, the remote peer might not care about our missing packets
+                self.state = SocketState::Closed;
+                Ok(Some(reply))
+            }
+            (SocketState::Closed, PacketType::Fin) => {
+                Ok(Some(self.prepare_reply(packet, PacketType::State)))
+            }
+            (SocketState::FinSent, PacketType::State) => {
+                if packet.ack_nr() == self.seq_nr {
+                    self.state = SocketState::Closed;
+                } else {
+                    self.handle_state_packet(packet);
+                }
+                Ok(None)
+            }
+            (_, PacketType::Reset) => {
+                self.state = SocketState::ResetReceived;
+                Err(anyhow!("Connection reset by remote peer"))
+            }
+            (state, ty) => {
+                let message = format!("Unimplemented handling for ({state:?},{ty:?})");
+                debug!("{}", message);
+                Err(anyhow!(message))
+            }
         }
     }
 
-    fn handle_data_packet(&mut self, packet: Packet) {
-        if self.state == SocketState::SynRecv {
-            self.state = SocketState::Connected;
-        }
+    fn prepare_reply(&self, original: &Packet, t: PacketType) -> Packet {
+        let mut resp = Packet::new();
+        resp.set_type(t);
+        let self_t_micro = now_microseconds();
+        let other_t_micro = original.timestamp();
+        let time_difference: Delay = abs_diff(self_t_micro, other_t_micro);
+        resp.set_timestamp(self_t_micro);
+        resp.set_timestamp_difference(time_difference);
+        resp.set_connection_id(self.sender_connection_id);
+        resp.set_seq_nr(self.seq_nr);
+        resp.set_ack_nr(self.ack_nr);
 
-        let mut packet_reply = Packet::new();
-        packet_reply.set_type(PacketType::State);
-        packet_reply.set_connection_id(self.sender_connection_id);
-        packet_reply.set_seq_nr(self.seq_nr);
-        packet_reply.set_ack_nr(self.ack_nr);
+        resp
+    }
+
+    fn handle_data_packet(&mut self, packet: &Packet) -> Option<Packet> {
+        // If a FIN was previously sent, reply with a FIN packet acknowledging the received packet.
+        let packet_type = if self.state == SocketState::FinSent {
+            PacketType::Fin
+        } else {
+            PacketType::State
+        };
+        let mut reply = self.prepare_reply(packet, packet_type);
 
         if packet.seq_nr().wrapping_sub(self.ack_nr) > 1 {
-            let sack_bitfield = self.build_selective_ack();
-            packet_reply.set_selective_ack(sack_bitfield);
-        }
-
-        self.send_packet(&mut packet_reply);
-
-        // Add packet to BTreeMap
-        self.incoming_buffer.insert(packet.seq_nr(), packet);
-
-        // TODO: use pop_front when it is in a stable release
-        if let Some(packet_from_buffer) = self.incoming_buffer.clone().values().next() {
-            let packet_seq = packet_from_buffer.seq_nr();
-            if !self.incoming_buffer.is_empty()
-                && (self.ack_nr == packet_seq || self.ack_nr + 1 == packet_seq)
-            {
-                self.incoming_buffer.remove(&packet_seq);
-                self.ack_nr = packet_seq;
-
-                self.recv_data_stream
-                    .append(&mut Vec::from(packet_from_buffer.payload()));
-            }
-        }
-    }
-
-    fn handle_state_packet(&mut self, packet: Packet) {
-        if self.state == SocketState::SynSent {
-            self.state = SocketState::Connected;
-            self.ack_nr = packet.seq_nr() - 1;
-
-            self.tx.send(UtpStreamState::Connected).unwrap();
-        } else {
-            if self.last_acked == packet.ack_nr() {
-                self.duplicate_ack_count += 1;
-            } else {
-                self.last_acked = packet.ack_nr();
-                self.duplicate_ack_count = 1;
-            }
             debug!(
-                "Send window first {:?}, Packet ack_nr: {}",
-                self.send_window,
-                packet.ack_nr()
+                "current ack_nr ({}) is behind received packet seq_nr ({})",
+                self.ack_nr,
+                packet.seq_nr()
             );
 
-            // Update congestion window size
-            if let Some(index) = self
+            // Set SACK extension payload if the packet is not in order
+            let sack_bitfield = self.build_selective_ack();
+
+            if !sack_bitfield.is_empty() {
+                reply.set_selective_ack(sack_bitfield);
+            }
+        }
+        Some(reply)
+    }
+
+    fn handle_state_packet(&mut self, packet: &Packet) {
+        if self.last_acked == packet.ack_nr() {
+            self.duplicate_ack_count += 1;
+        } else {
+            self.last_acked = packet.ack_nr();
+            self.last_acked_timestamp = now_microseconds();
+            self.duplicate_ack_count = 1;
+        }
+
+        // Update congestion window size
+        if let Some(index) = self
+            .send_window
+            .iter()
+            .position(|p| packet.ack_nr() == p.seq_nr())
+        {
+            // Calculate the sum of the size of every packet implicitly and explicitly acknowledged
+            // by the inbound packet (i.e., every packet whose sequence number precedes the inbound
+            // packet's acknowledgement number, plus the packet whose sequence number matches)
+            let bytes_newly_acked = self
                 .send_window
                 .iter()
-                .position(|p| packet.ack_nr() == p.seq_nr())
-            {
-                // Calculate the sum of the size of every packet implicitly and explicitly acknowledged
-                // by the inbound packet (i.e., every packet whose sequence number precedes the inbound
-                // packet's acknowledgement number, plus the packet whose sequence number matches)
-                let bytes_newly_acked = self
-                    .send_window
-                    .iter()
-                    .take(index + 1)
-                    .fold(0, |acc, p| acc + p.len());
+                .take(index + 1)
+                .fold(0, |acc, p| acc + p.len());
 
-                // Update base and current delay
-                let now = now_microseconds();
-                let our_delay = now - self.send_window[index].timestamp();
-                debug!("our_delay: {}", our_delay);
-                self.update_base_delay(our_delay, now);
-                self.update_current_delay(our_delay, now);
+            // Update base and current delay
+            let now = now_microseconds();
+            let our_delay = now - self.send_window[index].timestamp();
+            debug!("our_delay: {}", our_delay);
+            self.update_base_delay(our_delay, now);
+            self.update_current_delay(our_delay, now);
 
-                let off_target: f64 =
-                    (CCONTROL_TARGET - u32::from(self.queuing_delay()) as f64) / CCONTROL_TARGET;
-                debug!("off_target: {}", off_target);
+            let off_target: f64 =
+                (CCONTROL_TARGET - u32::from(self.queuing_delay()) as f64) / CCONTROL_TARGET;
+            debug!("off_target: {}", off_target);
 
-                self.update_congestion_window(off_target, bytes_newly_acked as u32);
+            self.update_congestion_window(off_target, bytes_newly_acked as u32);
 
-                // Update congestion timeout
-                let rtt = u32::from(our_delay - self.queuing_delay()) / 1000; // in milliseconds
-                self.update_congestion_timeout(rtt as i32);
-            }
+            // Update congestion timeout
+            let rtt = u32::from(our_delay - self.queuing_delay()) / 1000; // in milliseconds
+            self.update_congestion_timeout(rtt as i32);
+        }
 
-            let mut packet_loss_detected: bool =
-                !self.send_window.is_empty() && self.duplicate_ack_count == 3;
+        let mut packet_loss_detected: bool =
+            !self.send_window.is_empty() && self.duplicate_ack_count == 3;
 
-            // Process extensions, if any
-            for extension in packet.extensions() {
-                if extension.get_type() == ExtensionType::SelectiveAck {
-                    // If three or more packets are acknowledged past the implicit missing one,
-                    // assume it was lost.
-                    if extension.iter().count_ones() >= 3 {
-                        self.resend_lost_packet(packet.ack_nr() + 1);
+        // Process extensions, if any
+        for extension in packet.extensions() {
+            if extension.get_type() == ExtensionType::SelectiveAck {
+                // If three or more packets are acknowledged past the implicit missing one,
+                // assume it was lost.
+                if extension.iter().count_ones() >= 3 {
+                    self.resend_lost_packet(packet.ack_nr() + 1);
+                    packet_loss_detected = true;
+                }
+
+                if let Some(last_seq_nr) = self.send_window.last().map(Packet::seq_nr) {
+                    let lost_packets = extension
+                        .iter()
+                        .enumerate()
+                        .filter(|&(_, received)| !received)
+                        .map(|(idx, _)| packet.ack_nr() + 2 + idx as u16)
+                        .take_while(|&seq_nr| seq_nr < last_seq_nr);
+
+                    for seq_nr in lost_packets {
+                        debug!("SACK: packet {} lost", seq_nr);
+                        self.resend_lost_packet(seq_nr);
                         packet_loss_detected = true;
                     }
-
-                    if let Some(last_seq_nr) = self.send_window.last().map(Packet::seq_nr) {
-                        let lost_packets = extension
-                            .iter()
-                            .enumerate()
-                            .filter(|&(_, received)| !received)
-                            .map(|(idx, _)| packet.ack_nr() + 2 + idx as u16)
-                            .take_while(|&seq_nr| seq_nr < last_seq_nr);
-
-                        for seq_nr in lost_packets {
-                            debug!("SACK: packet {} lost", seq_nr);
-                            self.resend_lost_packet(seq_nr);
-                            packet_loss_detected = true;
-                        }
-                    }
-                } else {
-                    debug!("Unknown extension {:?}, ignoring", extension.get_type());
                 }
+            } else {
+                debug!("Unknown extension {:?}, ignoring", extension.get_type());
             }
-
-            // Three duplicate ACKs mean a fast resend request. Resend the first unacknowledged packet
-            // if the incoming packet doesn't have a SACK extension. If it does, the lost packets were
-            // already resent.
-            if !self.send_window.is_empty()
-                && self.duplicate_ack_count == 3
-                && !packet
-                    .extensions()
-                    .any(|ext| ext.get_type() == ExtensionType::SelectiveAck)
-            {
-                self.resend_lost_packet(packet.ack_nr() + 1);
-            }
-
-            // Packet lost, halve the congestion window
-            if packet_loss_detected {
-                debug!("packet loss detected, halving congestion window");
-                self.cwnd = max(self.cwnd / 2, MIN_CWND * MAX_DISCV5_PACKET_SIZE);
-                debug!("congestion window: {}", self.cwnd);
-            }
-
-            // Success, advance send window
-            self.advance_send_window();
         }
+
+        // Three duplicate ACKs mean a fast resend request. Resend the first unacknowledged packet
+        // if the incoming packet doesn't have a SACK extension. If it does, the lost packets were
+        // already resent.
+        if !self.send_window.is_empty()
+            && self.duplicate_ack_count == 3
+            && !packet
+                .extensions()
+                .any(|ext| ext.get_type() == ExtensionType::SelectiveAck)
+        {
+            self.resend_lost_packet(packet.ack_nr() + 1);
+        }
+
+        // Packet lost, halve the congestion window
+        if packet_loss_detected {
+            debug!("packet loss detected, halving congestion window");
+            self.cwnd = max(self.cwnd / 2, MIN_CWND * MAX_DISCV5_PACKET_SIZE);
+            debug!("congestion window: {}", self.cwnd);
+        }
+
+        // Success, advance send window
+        self.advance_send_window();
     }
 
     /// Forgets sent packets that were acknowledged by the remote peer.
@@ -766,35 +844,139 @@ impl UtpSocket {
         debug!("self.rtt: {}", self.rtt);
         debug!("self.congestion_timeout: {}", self.congestion_timeout);
     }
+}
 
-    fn handle_finalize_packet(&mut self) {
-        if self.state == SocketState::Connected {
-            self.state = SocketState::Disconnected;
+#[cfg(test)]
+mod tests {
+    use crate::portalnet::discovery::Discovery;
+    use crate::portalnet::types::messages::PortalnetConfig;
+    use crate::portalnet::Enr;
+    use crate::utp::packets::{Packet, PacketType};
+    use crate::utp::stream::{UtpSocket, BUF_SIZE};
+    use discv5::enr::{CombinedKey, EnrBuilder};
+    use rand::Rng;
+    use std::net::Ipv4Addr;
+    use std::sync::Arc;
 
-            let mut packet_reply = Packet::new();
-            packet_reply.set_type(PacketType::State);
-            packet_reply.set_connection_id(self.sender_connection_id);
-            // TODO: add timestamp difference when we set the delay to self.delay field
-            packet_reply.set_seq_nr(self.seq_nr);
-            packet_reply.set_ack_nr(self.ack_nr);
+    fn generate_random_enr() -> Enr {
+        let key = CombinedKey::generate_secp256k1();
 
-            self.send_packet(&mut packet_reply);
-        }
+        let mut rng = rand::thread_rng();
+        let ip = Ipv4Addr::from(rng.gen::<u32>());
+
+        EnrBuilder::new("v4")
+            .ip(ip.into())
+            .udp(8000)
+            .build(&key)
+            .unwrap()
     }
 
-    fn handle_syn_packet(&mut self, packet: Packet) {
-        self.receiver_connection_id = packet.connection_id() + 1;
-        self.sender_connection_id = packet.connection_id();
-        self.seq_nr = rand();
-        self.ack_nr = packet.seq_nr();
-        self.state = SocketState::SynRecv;
+    #[tokio::test]
+    async fn test_handle_packet() {
+        let initial_connection_id: u16 = rand::random();
+        let sender_connection_id = initial_connection_id + 1;
+        let client_enr = generate_random_enr();
+        let server_enr = generate_random_enr();
 
-        let mut packet_reply = Packet::new();
-        packet_reply.set_type(PacketType::State);
-        packet_reply.set_connection_id(self.sender_connection_id);
-        packet_reply.set_seq_nr(self.seq_nr);
-        packet_reply.set_ack_nr(self.ack_nr);
+        let server_config = PortalnetConfig {
+            listen_port: 7272,
+            internal_ip: true,
+            ..Default::default()
+        };
 
-        self.send_packet(&mut packet_reply);
+        let mut server_discv5 = Discovery::new(server_config).unwrap();
+        server_discv5.start().await.unwrap();
+
+        let mut socket = UtpSocket::new(Arc::new(server_discv5), server_enr.clone());
+
+        // ---------------------------------
+        // Test connection setup - SYN packet
+
+        let mut packet = Packet::new();
+        packet.set_wnd_size(BUF_SIZE as u32);
+        packet.set_type(PacketType::Syn);
+        packet.set_connection_id(initial_connection_id);
+
+        // Do we have a response?
+        let response = socket.handle_packet(&packet, client_enr.clone());
+        assert!(response.is_ok());
+        let response = response.unwrap();
+        assert!(response.is_some());
+
+        // Is it of the correct type?
+        let response = response.unwrap();
+        assert_eq!(response.get_type(), PacketType::State);
+
+        // Same connection id on both ends during connection establishment
+        assert_eq!(response.connection_id(), packet.connection_id());
+
+        // Response acknowledges SYN
+        assert_eq!(response.ack_nr(), packet.seq_nr());
+
+        // No payload?
+        assert!(response.payload().is_empty());
+
+        // ---------------------------------
+        // Test connection usage - transmitting DATA packet
+
+        let old_packet = packet;
+        let old_response = response;
+
+        let mut packet = Packet::new();
+        packet.set_type(PacketType::Data);
+        packet.set_connection_id(sender_connection_id);
+        packet.set_seq_nr(old_packet.seq_nr() + 1);
+        packet.set_ack_nr(old_response.seq_nr());
+
+        let response = socket.handle_packet(&packet, client_enr.clone());
+        assert!(response.is_ok());
+        let response = response.unwrap();
+        assert!(response.is_some());
+
+        let response = response.unwrap();
+        assert_eq!(response.get_type(), PacketType::State);
+
+        // Sender (i.e., who the initiated connection and sent a SYN) has connection id equal to
+        // initial connection id + 1
+        // Receiver (i.e., who accepted connection) has connection id equal to initial connection id
+        assert_eq!(response.connection_id(), initial_connection_id);
+        assert_eq!(response.connection_id(), packet.connection_id() - 1);
+
+        // Previous packets should be ack'ed
+        assert_eq!(response.ack_nr(), packet.seq_nr());
+
+        // Responses with no payload should not increase the sequence number
+        assert!(response.payload().is_empty());
+        assert_eq!(response.seq_nr(), old_response.seq_nr());
+
+        // ---------------------------------
+        // Test connection teardown - FIN packet
+
+        let old_packet = packet;
+        let old_response = response;
+
+        let mut packet = Packet::new();
+        packet.set_type(PacketType::Fin);
+        packet.set_connection_id(sender_connection_id);
+        packet.set_seq_nr(old_packet.seq_nr() + 1);
+        packet.set_ack_nr(old_response.seq_nr());
+
+        let response = socket.handle_packet(&packet, client_enr);
+        assert!(response.is_ok());
+        let response = response.unwrap();
+        assert!(response.is_some());
+
+        let response = response.unwrap();
+
+        assert_eq!(response.get_type(), PacketType::State);
+
+        // FIN packets have no payload but the sequence number shouldn't increase
+        assert_eq!(packet.seq_nr(), old_packet.seq_nr() + 1);
+
+        // Nor should the ACK packet's sequence number
+        assert_eq!(response.seq_nr(), old_response.seq_nr());
+
+        // FIN should be acknowledged
+        assert_eq!(response.ack_nr(), packet.seq_nr());
     }
 }
