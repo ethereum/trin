@@ -220,7 +220,7 @@ impl PartialEq for Node {
 }
 
 /// The overlay service.
-pub struct OverlayService<K> {
+pub struct OverlayService<TContentKey> {
     /// The underlying Discovery v5 protocol.
     discovery: Arc<Discovery>,
     /// The content database of the local node.
@@ -248,10 +248,10 @@ pub struct OverlayService<K> {
     response_tx: UnboundedSender<OverlayResponse>,
     utp_listener: Arc<RwLockT<UtpListener>>,
     /// Phantom content key.
-    phantom_content_key: PhantomData<K>,
+    phantom_content_key: PhantomData<TContentKey>,
 }
 
-impl<K: OverlayContentKey + Send> OverlayService<K> {
+impl<TContentKey: OverlayContentKey + Send> OverlayService<TContentKey> {
     /// Spawns the overlay network service.
     ///
     /// The state of the overlay network largely consists of its routing table. The routing table
@@ -390,7 +390,7 @@ impl<K: OverlayContentKey + Send> OverlayService<K> {
                         self.peers_to_ping.insert(node_id);
                     }
                 }
-                _ = OverlayService::<K>::bucket_maintenance_poll(self.protocol.clone(), &self.kbuckets) => {}
+                _ = OverlayService::<TContentKey>::bucket_maintenance_poll(self.protocol.clone(), &self.kbuckets) => {}
                 _ = bucket_refresh_interval.tick() => {
                     debug!("[{:?}] Overlay bucket refresh lookup", self.protocol);
                     self.bucket_refresh_lookup();
@@ -543,7 +543,7 @@ impl<K: OverlayContentKey + Send> OverlayService<K> {
     /// Attempts to build a `Content` response for a `FindContent` request.
     fn handle_find_content(&self, request: FindContent) -> Result<Content, OverlayRequestError> {
         // Attempt to derive the content ID for the content key.
-        let content_id = match (K::try_from)(request.content_key) {
+        let content_id = match (TContentKey::try_from)(request.content_key) {
             Ok(key) => key.content_id(),
             Err(_err) => {
                 return Err(OverlayRequestError::InvalidRequest(
@@ -1142,7 +1142,9 @@ mod tests {
 
     use crate::{
         portalnet::{
-            discovery::Discovery, overlay::OverlayConfig, types::messages::PortalnetConfig,
+            discovery::Discovery,
+            overlay::OverlayConfig,
+            types::{content_key::MockContentKey, messages::PortalnetConfig},
         },
         utils::db,
     };
@@ -1153,30 +1155,6 @@ mod tests {
     };
     use rand::Rng;
     use tokio_test::{assert_pending, assert_ready, task};
-
-    struct MockContentKey {
-        value: Vec<u8>,
-    }
-
-    impl TryFrom<Vec<u8>> for MockContentKey {
-        type Error = String;
-
-        fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-            Ok(MockContentKey { value })
-        }
-    }
-
-    impl Into<Vec<u8>> for MockContentKey {
-        fn into(self) -> Vec<u8> {
-            self.value
-        }
-    }
-
-    impl OverlayContentKey for MockContentKey {
-        fn content_id(&self) -> [u8; 32] {
-            [0; 32]
-        }
-    }
 
     macro_rules! poll_request_rx {
         ($service:ident) => {

@@ -61,7 +61,7 @@ impl Default for OverlayConfig {
 /// implement the overlay protocol and the overlay protocol is where we can encapsulate the logic for
 /// handling common network requests/responses.
 #[derive(Clone)]
-pub struct OverlayProtocol<K> {
+pub struct OverlayProtocol<TContentKey> {
     /// Reference to the underlying discv5 protocol
     pub discovery: Arc<Discovery>,
     // Reference to the database instance
@@ -75,11 +75,13 @@ pub struct OverlayProtocol<K> {
     /// A sender to send requests to the OverlayService.
     request_tx: UnboundedSender<OverlayRequest>,
     utp_listener: Arc<RwLockT<UtpListener>>,
-    /// Phantom content key.
-    phantom_content_key: PhantomData<K>,
+    /// Declare the allowed content key types for a given overlay network.
+    /// Use a phantom, because we don't store any keys in this struct.
+    /// For example, this type is used when decoding a content key received over the network.
+    phantom_content_key: PhantomData<TContentKey>,
 }
 
-impl<K: OverlayContentKey + Send> OverlayProtocol<K> {
+impl<TContentKey: OverlayContentKey + Send> OverlayProtocol<TContentKey> {
     pub async fn new(
         config: OverlayConfig,
         discovery: Arc<Discovery>,
@@ -97,7 +99,7 @@ impl<K: OverlayContentKey + Send> OverlayProtocol<K> {
         )));
 
         let data_radius = Arc::new(data_radius);
-        let request_tx = OverlayService::<K>::spawn(
+        let request_tx = OverlayService::<TContentKey>::spawn(
             Arc::clone(&discovery),
             Arc::clone(&db),
             Arc::clone(&kbuckets),
