@@ -1,18 +1,18 @@
 #![allow(dead_code)]
 
 use crate::portalnet::discovery::Discovery;
-use core::convert::TryFrom;
 use discv5::enr::NodeId;
 use discv5::Enr;
 use log::debug;
 use rand::Rng;
 use std::cmp::{max, min};
 use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::convert::TryFrom;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
 use crate::portalnet::types::messages::ProtocolId;
-use crate::utp::packets::{Packet, PacketType, HEADER_SIZE};
+use crate::utp::packets::{ExtensionType, Packet, PacketType, HEADER_SIZE};
 use crate::utp::time::{now_microseconds, Delay, Timestamp};
 use crate::utp::trin_helpers::{UtpMessageId, UtpStreamState};
 use crate::utp::util::{abs_diff, ewma};
@@ -196,7 +196,7 @@ pub struct UtpSocket {
     remote_wnd_size: u32,
 
     /// Sent but not yet acknowledged packets
-    send_window: HashMap<u16, Packet>,
+    send_window: Vec<Packet>,
 
     /// How many ACKs did the socket receive for packet with sequence number equal to `ack_nr`
     duplicate_ack_count: u8,
@@ -243,12 +243,12 @@ impl UtpSocket {
             sender_connection_id: 0,
             cwnd: INIT_CWND * MAX_DISCV5_PACKET_SIZE,
             incoming_buffer: Default::default(),
-            unsent_queue: Default::default(),
+            unsent_queue: VecDeque::new(),
             connected_to,
             socket,
             cur_window: 0,
             remote_wnd_size: 0,
-            send_window: Default::default(),
+            send_window: Vec::new(),
             duplicate_ack_count: 0,
             last_acked: 0,
             rtt: 0,
@@ -306,15 +306,30 @@ impl UtpSocket {
     fn send_packets_in_queue(&mut self) {
         while let Some(mut packet) = self.unsent_queue.pop_front() {
             self.send_packet(&mut packet);
-            self.cur_window += packet.as_ref().len() as u32;
-            self.send_window.insert(packet.seq_nr(), packet);
+            self.cur_window += packet.len() as u32;
+            self.send_window.push(packet);
         }
     }
 
-    fn resend_packet(&mut self, seq_nr: u16) {
-        if let Some(mut packet) = self.send_window.get(&seq_nr).map(Packet::clone) {
-            self.send_packet(&mut packet);
+    fn resend_lost_packet(&mut self, lost_packet_nr: u16) {
+        debug!("---> resend_lost_packet({}) <---", lost_packet_nr);
+        match self
+            .send_window
+            .iter()
+            .position(|pkt| pkt.seq_nr() == lost_packet_nr)
+        {
+            None => debug!("Packet {} not found", lost_packet_nr),
+            Some(position) => {
+                debug!("Send window len: {}", self.send_window.len());
+                debug!("position: {}", position);
+                let mut packet = self.send_window[position].clone();
+                self.send_packet(&mut packet);
+
+                // We intentionally don't increase `curr_window` because otherwise a packet's length
+                // would be counted more than once
+            }
         }
+        debug!("---> END resend_lost_packet <---");
     }
 
     /// Send one packet.
@@ -343,16 +358,18 @@ impl UtpSocket {
             now_microseconds() - now
         );
 
+        // TODO: Uncomment the lines above when we implement self.recv
+
         // Check if it still makes sense to send packet, as we might be trying to resend a lost
         // packet acknowledged in the receive loop above.
         // If there were no wrapping around of sequence numbers, we'd simply check if the packet's
         // sequence number is greater than `last_acked`.
-        let distance_a = packet.seq_nr().wrapping_sub(self.last_acked);
-        let distance_b = self.last_acked.wrapping_sub(packet.seq_nr());
-        if distance_a > distance_b {
-            debug!("Packet already acknowledged, skipping...");
-            return;
-        }
+        // let distance_a = packet.seq_nr().wrapping_sub(self.last_acked);
+        // let distance_b = self.last_acked.wrapping_sub(packet.seq_nr());
+        // if distance_a > distance_b {
+        //     debug!("Packet already acknowledged, skipping...");
+        //     return;
+        // }
 
         let enr = self.connected_to.clone();
         let discovery = self.socket.clone();
@@ -533,7 +550,7 @@ impl UtpSocket {
                 self.ack_nr = packet_seq;
 
                 self.recv_data_stream
-                    .append(&mut Vec::from(packet_from_buffer.get_payload()));
+                    .append(&mut Vec::from(packet_from_buffer.payload()));
             }
         }
     }
@@ -557,12 +574,10 @@ impl UtpSocket {
                 packet.ack_nr()
             );
 
-            // TODO: Update self.send_window to Vec, instead of a HashMap
             // Update congestion window size
             if let Some(index) = self
                 .send_window
-                .clone()
-                .into_values()
+                .iter()
                 .position(|p| packet.ack_nr() == p.seq_nr())
             {
                 // Calculate the sum of the size of every packet implicitly and explicitly acknowledged
@@ -570,21 +585,13 @@ impl UtpSocket {
                 // packet's acknowledgement number, plus the packet whose sequence number matches)
                 let bytes_newly_acked = self
                     .send_window
-                    .clone()
-                    .into_values()
+                    .iter()
                     .take(index + 1)
                     .fold(0, |acc, p| acc + p.len());
 
                 // Update base and current delay
                 let now = now_microseconds();
-                let our_delay = now
-                    - self
-                        .send_window
-                        .clone()
-                        .into_values()
-                        .nth(index)
-                        .unwrap()
-                        .timestamp();
+                let our_delay = now - self.send_window[index].timestamp();
                 debug!("our_delay: {}", our_delay);
                 self.update_base_delay(our_delay, now);
                 self.update_current_delay(our_delay, now);
@@ -600,58 +607,84 @@ impl UtpSocket {
                 self.update_congestion_timeout(rtt as i32);
             }
 
-            let mut packet_loss_detected = false;
-            let mut already_resent_ack_1 = false;
-            for extension in &packet.get_extensions() {
-                // The only extension we support is 1 selective acks, some clients support
-                // others tho.
-                if extension.extension_type == 1 {
-                    self.resend_packet(packet.ack_nr() + 1);
-                    already_resent_ack_1 = true;
-                    packet_loss_detected = true;
-                }
+            let mut packet_loss_detected: bool =
+                !self.send_window.is_empty() && self.duplicate_ack_count == 3;
 
-                if let Some(last_seq_nr) = self.send_window.iter().last().map(|x| *x.0) {
-                    // I need to iterate over this starting with least sig byte per byte
-                    // then move right after
-                    let mut k = 0;
-                    for byte in &extension.bitmask {
-                        for i in 0..8 {
-                            let (bit, seq_nr) = ((byte >> i) & 1, packet.ack_nr() + 2 + k);
-                            if bit == 0 && seq_nr < last_seq_nr {
-                                self.resend_packet(seq_nr);
-                                packet_loss_detected = true;
-                            }
-                            k += 1;
+            // Process extensions, if any
+            for extension in packet.extensions() {
+                if extension.get_type() == ExtensionType::SelectiveAck {
+                    // If three or more packets are acknowledged past the implicit missing one,
+                    // assume it was lost.
+                    if extension.iter().count_ones() >= 3 {
+                        self.resend_lost_packet(packet.ack_nr() + 1);
+                        packet_loss_detected = true;
+                    }
+
+                    if let Some(last_seq_nr) = self.send_window.last().map(Packet::seq_nr) {
+                        let lost_packets = extension
+                            .iter()
+                            .enumerate()
+                            .filter(|&(_, received)| !received)
+                            .map(|(idx, _)| packet.ack_nr() + 2 + idx as u16)
+                            .take_while(|&seq_nr| seq_nr < last_seq_nr);
+
+                        for seq_nr in lost_packets {
+                            debug!("SACK: packet {} lost", seq_nr);
+                            self.resend_lost_packet(seq_nr);
+                            packet_loss_detected = true;
                         }
                     }
+                } else {
+                    debug!("Unknown extension {:?}, ignoring", extension.get_type());
                 }
             }
 
-            if self.duplicate_ack_count == 3 && !already_resent_ack_1 {
-                self.resend_packet(packet.ack_nr() + 1);
-                packet_loss_detected = true;
+            // Three duplicate ACKs mean a fast resend request. Resend the first unacknowledged packet
+            // if the incoming packet doesn't have a SACK extension. If it does, the lost packets were
+            // already resent.
+            if !self.send_window.is_empty()
+                && self.duplicate_ack_count == 3
+                && !packet
+                    .extensions()
+                    .any(|ext| ext.get_type() == ExtensionType::SelectiveAck)
+            {
+                self.resend_lost_packet(packet.ack_nr() + 1);
             }
 
+            // Packet lost, halve the congestion window
             if packet_loss_detected {
-                self.cwnd /= 2;
+                debug!("packet loss detected, halving congestion window");
+                self.cwnd = max(self.cwnd / 2, MIN_CWND * MAX_DISCV5_PACKET_SIZE);
+                debug!("congestion window: {}", self.cwnd);
             }
 
-            // acknowledge received packet
-            if let Some(stored_packet) = self.send_window.get(&packet.ack_nr()) {
-                let seq_nr = stored_packet.seq_nr();
-                let len = stored_packet.as_ref().len() as u32;
-                self.send_window.remove(&seq_nr);
+            // Success, advance send window
+            self.advance_send_window();
+        }
+    }
 
-                // Since we want to close the stream when they have recv all of the packets
-                // use a channel
-                debug!("Send_window: {:?}", self.send_window);
-                if self.send_window.is_empty() {
-                    self.tx.send(UtpStreamState::Finished).unwrap();
-                }
-                self.cur_window -= len;
+    /// Forgets sent packets that were acknowledged by the remote peer.
+    fn advance_send_window(&mut self) {
+        // The reason we are not removing the first element in a loop while its sequence number is
+        // smaller than `last_acked` is because of wrapping sequence numbers, which would create the
+        // sequence [..., 65534, 65535, 0, 1, ...]. If `last_acked` is smaller than the first
+        // packet's sequence number because of wraparound (for instance, 1), no packets would be
+        // removed, as the condition `seq_nr < last_acked` would fail immediately.
+        //
+        // On the other hand, we can't keep removing the first packet in a loop until its sequence
+        // number matches `last_acked` because it might never match, and in that case no packets
+        // should be removed.
+        if let Some(position) = self
+            .send_window
+            .iter()
+            .position(|packet| packet.seq_nr() == self.last_acked)
+        {
+            for _ in 0..position + 1 {
+                let packet = self.send_window.remove(0);
+                self.cur_window -= packet.len() as u32;
             }
         }
+        debug!("Bytes in flight: {}", self.cur_window);
     }
 
     fn queuing_delay(&self) -> Delay {
@@ -768,8 +801,10 @@ impl UtpSocket {
 
 #[cfg(test)]
 mod tests {
-    use crate::utp::packets::VERSION;
-    use crate::utp::stream::{Packet, PacketType};
+    use crate::utp::packets::PacketType::{Data, State};
+    use crate::utp::packets::*;
+    use crate::utp::time::{Delay, Timestamp};
+    use quickcheck::{QuickCheck, TestResult};
     use std::convert::TryFrom;
 
     #[test]
@@ -784,21 +819,22 @@ mod tests {
         let packet = packet.unwrap();
         assert_eq!(packet.get_type(), PacketType::State);
         assert_eq!(packet.get_version(), VERSION);
-        assert_eq!(packet.get_extension_type(), 0);
+        assert_eq!(packet.get_extension_type(), ExtensionType::None);
         assert_eq!(packet.connection_id(), 42054);
         assert_eq!(packet.timestamp(), 2805920832.into());
         assert_eq!(packet.timestamp_difference(), 10000.into());
         assert_eq!(packet.wnd_size(), 61440);
         assert_eq!(packet.seq_nr(), 15404);
         assert_eq!(packet.ack_nr(), 32437);
-        assert!(packet.get_payload().is_empty());
+        assert_eq!(packet.len(), buf.len());
+        assert!(packet.payload().is_empty());
     }
 
     #[test]
     fn test_decode_packet_with_extension() {
         let buf = [
             0x21, 0x1, 0xA4, 0x46, 0xA7, 0x3E, 0xF4, 0x40, 0x0, 0x0, 0x27, 0x10, 0x0, 0x0, 0xF0,
-            0x0, 0x3C, 0x2C, 0x7E, 0xB5, 0x0, 0x4, 0xAA, 0x3C, 0x5F, 0x0,
+            0x0, 0x3C, 0x2C, 0x7E, 0xB5, 0x0, 0x4, 0x00, 0x00, 0x00, 0x00,
         ];
 
         let packet = Packet::try_from(&buf[..]);
@@ -807,98 +843,275 @@ mod tests {
         let packet = packet.unwrap();
         assert_eq!(packet.get_type(), PacketType::State);
         assert_eq!(packet.get_version(), VERSION);
-        assert_eq!(packet.get_extension_type(), 1);
+        assert_eq!(packet.get_extension_type(), ExtensionType::SelectiveAck);
         assert_eq!(packet.connection_id(), 42054);
         assert_eq!(packet.timestamp(), 2805920832.into());
         assert_eq!(packet.timestamp_difference(), 10000.into());
         assert_eq!(packet.wnd_size(), 61440);
         assert_eq!(packet.seq_nr(), 15404);
         assert_eq!(packet.ack_nr(), 32437);
-        assert!(packet.get_payload().is_empty());
+        assert_eq!(packet.len(), buf.len());
+        assert!(packet.payload().is_empty());
+        let extensions: Vec<Extension<'_>> = packet.extensions().collect();
+        assert_eq!(extensions.len(), 1);
+        assert_eq!(extensions[0].ty, ExtensionType::SelectiveAck);
+        assert_eq!(extensions[0].data, &[0, 0, 0, 0]);
+        assert_eq!(extensions[0].len(), extensions[0].data.len());
+        assert_eq!(extensions[0].len(), 4);
+        // Reversible
+        assert_eq!(packet.as_ref(), &buf);
     }
 
     #[test]
-    fn test_decode_packet_with_invalid_extension() {
+    fn test_packet_decode_with_missing_extension() {
         let buf = [
-            0x21, 0x1, 0xA4, 0x46, 0xA7, 0x3E, 0xF4, 0x40, 0x0, 0x0, 0x27, 0x10, 0x0, 0x0, 0xF0,
-            0x0, 0x3C, 0x2C, 0x7E, 0xB5, 0x0, 0x4, 0xAA, 0x3C, 0x0,
+            0x21, 0x01, 0x41, 0xa8, 0x99, 0x2f, 0xd0, 0x2a, 0x9f, 0x4a, 0x26, 0x21, 0x00, 0x10,
+            0x00, 0x00, 0x3a, 0xf2, 0x6c, 0x79,
         ];
-
         let packet = Packet::try_from(&buf[..]);
         assert!(packet.is_err());
     }
 
     #[test]
-    fn test_encode_packet() {
-        let mut packet = Packet::new();
-        packet.set_type(PacketType::Data);
-        packet.set_connection_id(49300);
-        packet.set_timestamp(2805920832.into());
-        packet.set_timestamp_difference(1805367832.into());
-        packet.set_wnd_size(61440);
-        packet.set_seq_nr(12044);
-        packet.set_ack_nr(12024);
+    fn test_packet_decode_with_malformed_extension() {
+        let buf = [
+            0x21, 0x01, 0x41, 0xa8, 0x99, 0x2f, 0xd0, 0x2a, 0x9f, 0x4a, 0x26, 0x21, 0x00, 0x10,
+            0x00, 0x00, 0x3a, 0xf2, 0x6c, 0x79, 0x00, 0x04, 0x00,
+        ];
+        let packet = Packet::try_from(&buf[..]);
+        assert!(packet.is_err());
+    }
 
-        assert_eq!(packet.get_type(), PacketType::Data);
-        assert_eq!(packet.get_version(), VERSION);
-        assert_eq!(packet.get_extension_type(), 0);
-        assert_eq!(packet.connection_id(), 49300);
-        assert_eq!(packet.timestamp(), 2805920832.into());
-        assert_eq!(packet.timestamp_difference(), 1805367832.into());
-        assert_eq!(packet.wnd_size(), 61440);
-        assert_eq!(packet.seq_nr(), 12044);
-        assert_eq!(packet.ack_nr(), 12024);
-        assert!(packet.get_payload().is_empty());
+    #[test]
+    fn test_decode_packet_with_unknown_extensions() {
+        let buf = [
+            0x21, 0x01, 0x41, 0xa7, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x05, 0xdc, 0xab, 0x53, 0x3a, 0xf5, 0xff, 0x04, 0x00, 0x00, 0x00,
+            0x00, // Imaginary extension
+            0x00, 0x04, 0x00, 0x00, 0x00, 0x00,
+        ];
+        match Packet::try_from(&buf[..]) {
+            Ok(packet) => {
+                assert_eq!(packet.get_version(), 1);
+                assert_eq!(packet.get_extension_type(), ExtensionType::SelectiveAck);
+                assert_eq!(packet.get_type(), State);
+                assert_eq!(packet.connection_id(), 16807);
+                assert_eq!(packet.timestamp(), Timestamp(0));
+                assert_eq!(packet.timestamp_difference(), Delay(0));
+                assert_eq!(packet.wnd_size(), 1500);
+                assert_eq!(packet.seq_nr(), 43859);
+                assert_eq!(packet.ack_nr(), 15093);
+                assert!(packet.payload().is_empty());
+                // The invalid extension is discarded
+                let extensions: Vec<Extension<'_>> = packet.extensions().collect();
+                assert_eq!(extensions.len(), 2);
+                assert_eq!(extensions[0].ty, ExtensionType::SelectiveAck);
+                assert_eq!(extensions[0].data, &[0, 0, 0, 0]);
+                assert_eq!(extensions[0].len(), extensions[0].data.len());
+                assert_eq!(extensions[0].len(), 4);
+            }
+            Err(ref e) => panic!("{}", e),
+        }
+    }
+
+    #[test]
+    fn test_encode_packet() {
+        let payload = b"Hello\n".to_vec();
+        let timestamp = Timestamp(15270793);
+        let timestamp_diff = Delay(1707040186);
+        let (connection_id, seq_nr, ack_nr): (u16, u16, u16) = (16808, 15090, 17096);
+        let window_size: u32 = 1048576;
+        let mut packet = Packet::with_payload(&payload[..]);
+        packet.set_type(Data);
+        packet.set_timestamp(timestamp);
+        packet.set_timestamp_difference(timestamp_diff);
+        packet.set_connection_id(connection_id);
+        packet.set_seq_nr(seq_nr);
+        packet.set_ack_nr(ack_nr);
+        packet.set_wnd_size(window_size);
+        let buf = [
+            0x01, 0x00, 0x41, 0xa8, 0x00, 0xe9, 0x03, 0x89, 0x65, 0xbf, 0x5d, 0xba, 0x00, 0x10,
+            0x00, 0x00, 0x3a, 0xf2, 0x42, 0xc8, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x0a,
+        ];
+
+        assert_eq!(packet.len(), buf.len());
+        assert_eq!(packet.len(), HEADER_SIZE + payload.len());
+        assert_eq!(&packet.payload(), &payload.as_slice());
+        assert_eq!(packet.get_version(), 1);
+        assert_eq!(packet.get_extension_type(), ExtensionType::None);
+        assert_eq!(packet.get_type(), Data);
+        assert_eq!(packet.connection_id(), connection_id);
+        assert_eq!(packet.seq_nr(), seq_nr);
+        assert_eq!(packet.ack_nr(), ack_nr);
+        assert_eq!(packet.wnd_size(), window_size);
+        assert_eq!(packet.timestamp(), timestamp);
+        assert_eq!(packet.timestamp_difference(), timestamp_diff);
+        assert_eq!(packet.as_ref(), buf);
     }
 
     #[test]
     fn test_encode_packet_with_payload() {
-        let payload = b"Hello world".to_vec();
-
+        let payload = b"Hello\n".to_vec();
+        let timestamp = Timestamp(15270793);
+        let timestamp_diff = Delay(1707040186);
+        let (connection_id, seq_nr, ack_nr): (u16, u16, u16) = (16808, 15090, 17096);
+        let window_size: u32 = 1048576;
         let mut packet = Packet::with_payload(&payload[..]);
-        packet.set_type(PacketType::Data);
-        packet.set_connection_id(49300);
-        packet.set_timestamp(2805920832.into());
-        packet.set_timestamp_difference(1805367832.into());
-        packet.set_wnd_size(61440);
-        packet.set_seq_nr(12044);
-        packet.set_ack_nr(12024);
+        packet.set_timestamp(timestamp);
+        packet.set_timestamp_difference(timestamp_diff);
+        packet.set_connection_id(connection_id);
+        packet.set_seq_nr(seq_nr);
+        packet.set_ack_nr(ack_nr);
+        packet.set_wnd_size(window_size);
+        let buf = [
+            0x01, 0x00, 0x41, 0xa8, 0x00, 0xe9, 0x03, 0x89, 0x65, 0xbf, 0x5d, 0xba, 0x00, 0x10,
+            0x00, 0x00, 0x3a, 0xf2, 0x42, 0xc8, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x0a,
+        ];
 
-        assert_eq!(packet.get_type(), PacketType::Data);
-        assert_eq!(packet.get_version(), VERSION);
-        assert_eq!(packet.get_extension_type(), 0);
-        assert_eq!(packet.connection_id(), 49300);
-        assert_eq!(packet.timestamp(), 2805920832.into());
-        assert_eq!(packet.timestamp_difference(), 1805367832.into());
-        assert_eq!(packet.wnd_size(), 61440);
-        assert_eq!(packet.seq_nr(), 12044);
-        assert_eq!(packet.ack_nr(), 12024);
-        assert_eq!(packet.get_payload(), &payload[..]);
+        assert_eq!(packet.len(), buf.len());
+        assert_eq!(packet.len(), HEADER_SIZE + payload.len());
+        assert_eq!(&packet.payload(), &payload.as_slice());
+        assert_eq!(packet.get_version(), 1);
+        assert_eq!(packet.get_type(), Data);
+        assert_eq!(packet.get_extension_type(), ExtensionType::None);
+        assert_eq!(packet.connection_id(), connection_id);
+        assert_eq!(packet.seq_nr(), seq_nr);
+        assert_eq!(packet.ack_nr(), ack_nr);
+        assert_eq!(packet.wnd_size(), window_size);
+        assert_eq!(packet.timestamp(), timestamp);
+        assert_eq!(packet.timestamp_difference(), timestamp_diff);
+        assert_eq!(packet.as_ref(), buf);
     }
 
     #[test]
-    fn test_empty_packet() {
+    fn test_reversible() {
+        let buf = [
+            0x01, 0x00, 0x41, 0xa8, 0x00, 0xe9, 0x03, 0x89, 0x65, 0xbf, 0x5d, 0xba, 0x00, 0x10,
+            0x00, 0x00, 0x3a, 0xf2, 0x42, 0xc8, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x0a,
+        ];
+        assert_eq!(&Packet::try_from(&buf[..]).unwrap().as_ref(), &buf);
+    }
+
+    #[test]
+    fn test_decode_evil_sequence() {
+        let buf = [
+            0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ];
+        let packet = Packet::try_from(&buf[..]);
+        assert!(packet.is_err());
+    }
+
+    #[test]
+    fn test_decode_empty_packet() {
         let packet = Packet::try_from(&[][..]);
         assert!(packet.is_err());
     }
 
     #[test]
-    fn test_selective_ack() {
+    fn test_packet_set_type() {
         let mut packet = Packet::new();
+        packet.set_type(PacketType::Syn);
+        assert_eq!(packet.get_type(), PacketType::Syn);
         packet.set_type(PacketType::State);
-        packet.set_connection_id(49300);
-        packet.set_timestamp(2805920832.into());
-        packet.set_timestamp_difference(1805367832.into());
-        packet.set_wnd_size(61440);
-        packet.set_seq_nr(12044);
-        packet.set_ack_nr(12024);
+        assert_eq!(packet.get_type(), PacketType::State);
+        packet.set_type(PacketType::Fin);
+        assert_eq!(packet.get_type(), PacketType::Fin);
+        packet.set_type(PacketType::Reset);
+        assert_eq!(packet.get_type(), PacketType::Reset);
+        packet.set_type(PacketType::Data);
+        assert_eq!(packet.get_type(), PacketType::Data);
+    }
 
-        packet.set_selective_ack(vec![0b1001_1101, 0b0000_0000, 0b0101_1010, 0b0000_0001]);
+    #[test]
+    fn test_packet_set_selective_acknowledgment() {
+        let mut packet = Packet::new();
+        packet.set_selective_ack(vec![1, 2, 3, 4]);
 
-        assert_eq!(packet.get_extensions()[0].bitmask[0], 0b1001_1101);
-        assert_eq!(packet.get_extensions()[0].bitmask[1], 0b0000_0000);
-        assert_eq!(packet.get_extensions()[0].bitmask[2], 0b0101_1010);
-        assert_eq!(packet.get_extensions()[0].bitmask[3], 0b0000_0001);
+        {
+            let extensions: Vec<Extension<'_>> = packet.extensions().collect();
+            assert_eq!(extensions.len(), 1);
+            assert_eq!(extensions[0].ty, ExtensionType::SelectiveAck);
+            assert_eq!(extensions[0].data, &[1, 2, 3, 4]);
+            assert_eq!(extensions[0].len(), extensions[0].data.len());
+            assert_eq!(extensions[0].len(), 4);
+        }
+
+        // Add a second sack
+        packet.set_selective_ack(vec![5, 6, 7, 8, 9, 10, 11, 12]);
+
+        let extensions: Vec<Extension<'_>> = packet.extensions().collect();
+        assert_eq!(extensions.len(), 2);
+        assert_eq!(extensions[0].ty, ExtensionType::SelectiveAck);
+        assert_eq!(extensions[0].data, &[1, 2, 3, 4]);
+        assert_eq!(extensions[0].len(), extensions[0].data.len());
+        assert_eq!(extensions[0].len(), 4);
+        assert_eq!(extensions[1].ty, ExtensionType::SelectiveAck);
+        assert_eq!(extensions[1].data, &[5, 6, 7, 8, 9, 10, 11, 12]);
+        assert_eq!(extensions[1].len(), extensions[1].data.len());
+        assert_eq!(extensions[1].len(), 8);
+    }
+
+    // Use quickcheck to simulate a malicious attacker sending malformed packets
+    #[test]
+    fn quicktest() {
+        fn run(x: Vec<u8>) -> TestResult {
+            let packet = Packet::try_from(x.as_slice());
+
+            if PacketHeader::try_from(x.as_slice())
+                .and(check_extensions(x.as_slice()))
+                .is_err()
+            {
+                TestResult::from_bool(packet.is_err())
+            } else if let Ok(packet) = packet {
+                TestResult::from_bool(packet.as_ref() == x.as_slice())
+            } else {
+                TestResult::from_bool(false)
+            }
+        }
+        QuickCheck::new()
+            .tests(10000)
+            .quickcheck(run as fn(Vec<u8>) -> TestResult)
+    }
+
+    #[test]
+    fn extension_iterator() {
+        let buf = [
+            0x21, 0x00, 0x41, 0xa8, 0x99, 0x2f, 0xd0, 0x2a, 0x9f, 0x4a, 0x26, 0x21, 0x00, 0x10,
+            0x00, 0x00, 0x3a, 0xf2, 0x6c, 0x79,
+        ];
+        let packet = Packet::try_from(&buf[..]).unwrap();
+        assert_eq!(packet.extensions().count(), 0);
+
+        let buf = [
+            0x21, 0x01, 0x41, 0xa7, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x05, 0xdc, 0xab, 0x53, 0x3a, 0xf5, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00,
+        ];
+        let packet = Packet::try_from(&buf[..]).unwrap();
+        let extensions: Vec<Extension<'_>> = packet.extensions().collect();
+        assert_eq!(extensions.len(), 1);
+        assert_eq!(extensions[0].ty, ExtensionType::SelectiveAck);
+        assert_eq!(extensions[0].data, &[0, 0, 0, 0]);
+        assert_eq!(extensions[0].len(), extensions[0].data.len());
+        assert_eq!(extensions[0].len(), 4);
+
+        let buf = [
+            0x21, 0x01, 0x41, 0xa7, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x05, 0xdc, 0xab, 0x53, 0x3a, 0xf5, 0xff, 0x04, 0x01, 0x02, 0x03,
+            0x04, // Imaginary extension
+            0x00, 0x04, 0x05, 0x06, 0x07, 0x08,
+        ];
+
+        let packet = Packet::try_from(&buf[..]).unwrap();
+        let extensions: Vec<Extension<'_>> = packet.extensions().collect();
+        assert_eq!(extensions.len(), 2);
+        assert_eq!(extensions[0].ty, ExtensionType::SelectiveAck);
+        assert_eq!(extensions[0].data, &[1, 2, 3, 4]);
+        assert_eq!(extensions[0].len(), extensions[0].data.len());
+        assert_eq!(extensions[0].len(), 4);
+        assert_eq!(extensions[1].ty, ExtensionType::Unknown(0xff));
+        assert_eq!(extensions[1].data, &[5, 6, 7, 8]);
+        assert_eq!(extensions[1].len(), extensions[1].data.len());
+        assert_eq!(extensions[1].len(), 4);
     }
 
     // https://github.com/ethereum/portal-network-specs/pull/127
