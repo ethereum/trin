@@ -7,7 +7,7 @@ use trin_core::{
         discovery::Discovery,
         overlay::{OverlayConfig, OverlayProtocol},
         types::{
-            content_keys::{ContentKey, HeaderKey, HistoryContentKey},
+            content_key::MockContentKey,
             messages::{Content, Message, PortalnetConfig, ProtocolId, SszEnr},
             uint::U256,
         },
@@ -21,7 +21,10 @@ use discv5::Discv5Event;
 use tokio::sync::{mpsc, RwLock};
 use tokio::time::{self, Duration};
 
-async fn init_overlay(discovery: Arc<Discovery>, protocol: ProtocolId) -> OverlayProtocol {
+async fn init_overlay(
+    discovery: Arc<Discovery>,
+    protocol: ProtocolId,
+) -> OverlayProtocol<MockContentKey> {
     let db = Arc::new(setup_overlay_db(discovery.local_enr().node_id()));
     let overlay_config = OverlayConfig::default();
     let utp_listener = Arc::new(RwLock::new(UtpListener {
@@ -41,7 +44,7 @@ async fn init_overlay(discovery: Arc<Discovery>, protocol: ProtocolId) -> Overla
     .await
 }
 
-async fn spawn_overlay(discovery: Arc<Discovery>, overlay: Arc<OverlayProtocol>) {
+async fn spawn_overlay(discovery: Arc<Discovery>, overlay: Arc<OverlayProtocol<MockContentKey>>) {
     let (overlay_tx, mut overlay_rx) = mpsc::unbounded_channel();
     let mut discovery_rx = discovery
         .discv5
@@ -197,13 +200,9 @@ async fn overlay() {
     // Node one should be added to the routing table because it is the destination of the request.
     // All ENRs in the content response should be added to the routing table, except for node two,
     // because node two is the local node.
-    let content_key = HeaderKey {
-        chain_id: 1,
-        block_hash: U256::MAX.into(),
-    };
-    let content_key = ContentKey::HistoryContentKey(HistoryContentKey::HeaderKey(content_key));
+    let content_key = MockContentKey::try_from(vec![0u8; 32]).unwrap();
     let content_enrs = match overlay_two
-        .send_find_content(overlay_one.local_enr(), content_key.to_bytes())
+        .send_find_content(overlay_one.local_enr(), content_key.into())
         .await
     {
         Ok(content) => match content {
