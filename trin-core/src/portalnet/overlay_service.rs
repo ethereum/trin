@@ -1183,11 +1183,7 @@ mod tests {
         };
         let discovery = Arc::new(Discovery::new(portal_config).unwrap());
 
-        let utp_listener = Arc::new(RwLockT::new(UtpListener {
-            discovery: Arc::clone(&discovery),
-            utp_connections: HashMap::new(),
-            listening: HashMap::new(),
-        }));
+        let utp_listener = Arc::new(RwLockT::new(UtpListener::new(Arc::clone(&discovery))));
 
         // Initialize DB config
         let storage_capacity: u32 = DEFAULT_STORAGE_CAPACITY.parse().unwrap();

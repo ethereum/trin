@@ -308,7 +308,8 @@ impl<TContentKey: OverlayContentKey + Send> OverlayProtocol<TContentKey> {
         self.utp_listener
             .write()
             .await
-            .connect(connection_id.clone(), enr.node_id(), tx);
+            .connect(connection_id.clone(), enr.node_id(), tx)
+            .await;
 
         // Return to acceptor: the content key and corresponding data
         let mut content_items: Vec<(Vec<u8>, Vec<u8>)> = vec![];
@@ -350,7 +351,12 @@ impl<TContentKey: OverlayContentKey + Send> OverlayProtocol<TContentKey> {
                             })
                     {
                         // send the content to the acceptor over a uTP stream
-                        conn.send_to(&UtpMessage::new(content_message.as_ssz_bytes()).encode()[..]);
+                        if let Err(msg) = conn
+                            .send_to(&UtpMessage::new(content_message.as_ssz_bytes()).encode()[..])
+                            .await
+                        {
+                            debug!("Error sending content {msg}");
+                        };
                     }
                 } else if state == UtpStreamState::Finished {
                     if let Some(conn) =
@@ -363,7 +369,7 @@ impl<TContentKey: OverlayContentKey + Send> OverlayProtocol<TContentKey> {
                                 conn_id_recv: connection_id,
                             })
                     {
-                        conn.send_finalize();
+                        conn.send_finalize().await;
                         return;
                     }
                 }

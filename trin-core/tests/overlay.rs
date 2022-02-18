@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -33,11 +32,7 @@ async fn init_overlay(
     .unwrap();
     let db = Arc::new(PortalStorage::new(storage_config).unwrap());
     let overlay_config = OverlayConfig::default();
-    let utp_listener = Arc::new(RwLock::new(UtpListener {
-        discovery: Arc::clone(&discovery),
-        utp_connections: HashMap::new(),
-        listening: HashMap::new(),
-    }));
+    let utp_listener = Arc::new(RwLock::new(UtpListener::new(Arc::clone(&discovery))));
 
     OverlayProtocol::new(
         overlay_config,

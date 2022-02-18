@@ -11,7 +11,6 @@ use crate::events::HistoryEvents;
 use crate::jsonrpc::HistoryRequestHandler;
 use discv5::TalkRequest;
 use network::HistoryNetwork;
-use std::collections::HashMap;
 use std::sync::Arc;
 use trin_core::cli::TrinConfig;
 use trin_core::jsonrpc::types::HistoryJsonRpcRequest;
@@ -49,11 +48,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Search for discv5 peers (bucket refresh lookup)
     tokio::spawn(Arc::clone(&discovery).bucket_refresh_lookup());
 
-    let utp_listener = Arc::new(RwLock::new(UtpListener {
-        discovery: Arc::clone(&discovery),
-        utp_connections: HashMap::new(),
-        listening: HashMap::new(),
-    }));
+    let utp_listener = Arc::new(RwLock::new(UtpListener::new(Arc::clone(&discovery))));
 
     let (history_event_tx, history_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
     let portal_events_discovery = Arc::clone(&discovery);

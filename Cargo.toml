@@ -38,7 +38,7 @@ members = [
     "trin-state",
     "trin-core",
     "trin-cli",
-    "ethportal-peertest"
+    "ethportal-peertest",
 ]
 
 [patch.crates-io]
