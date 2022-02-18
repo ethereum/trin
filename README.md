@@ -119,6 +119,10 @@ OPTIONS:
                                               peers to initially add to the local routing table [default: ]
         --discovery-port <discovery_port>     The UDP port to listen on. [default: 9000]
         --external-address <external_addr>    The public IP address and port under which this node is accessible
+        --kb <kb>                             Maximum number of kilobytes of total data to store in the DB
+                                              [default: 100000]
+        --networks <networks>...              Comma-separated list of which portal subnetworks to activate
+                                              [default: history,state]
         --pool-size <pool_size>               max size of threadpool [default: 2]
         --unsafe-private-key <private_key>    Hex encoded 32 byte private key (considered unsafe to pass in pk as cli
                                               arg, as it's stored in terminal history - keyfile support coming soon)

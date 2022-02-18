@@ -4,7 +4,6 @@ mod jsonrpc;
 pub mod network;
 
 use log::info;
-use rocksdb::DB;
 use tokio::sync::{mpsc, RwLock};
 use tokio::task::JoinHandle;
 
@@ -18,8 +17,8 @@ use trin_core::cli::TrinConfig;
 use trin_core::jsonrpc::types::HistoryJsonRpcRequest;
 use trin_core::portalnet::discovery::Discovery;
 use trin_core::portalnet::events::PortalnetEvents;
+use trin_core::portalnet::storage::{PortalStorage, PortalStorageConfig};
 use trin_core::portalnet::types::messages::PortalnetConfig;
-use trin_core::utils::db::setup_overlay_db;
 use trin_core::utp::stream::UtpListener;
 
 pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -53,9 +52,6 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Search for discv5 peers (bucket refresh lookup)
     tokio::spawn(Arc::clone(&discovery).bucket_refresh_lookup());
 
-    // Setup Overlay database
-    let db = Arc::new(setup_overlay_db(discovery.local_enr().node_id()));
-
     let utp_listener = Arc::new(RwLock::new(UtpListener {
         discovery: Arc::clone(&discovery),
         utp_connections: HashMap::new(),
@@ -65,6 +61,10 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (history_event_tx, history_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
     let portal_events_discovery = Arc::clone(&discovery);
     let portal_events_utp_listener = Arc::clone(&utp_listener);
+
+    // Initialize DB config
+    let storage_config =
+        PortalStorage::setup_config(discovery.local_enr().node_id(), trin_config.kb)?;
 
     // Spawn main event handler
     tokio::spawn(async move {
@@ -81,7 +81,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let history_network = HistoryNetwork::new(
         discovery.clone(),
         utp_listener.clone(),
-        db,
+        storage_config,
         portalnet_config.clone(),
     )
     .await;
@@ -102,7 +102,7 @@ pub async fn initialize_history_network(
     discovery: &Arc<Discovery>,
     utp_listener: &Arc<RwLock<UtpListener>>,
     portalnet_config: PortalnetConfig,
-    db: Arc<DB>,
+    storage_config: PortalStorageConfig,
 ) -> (
     HistoryHandler,
     HistoryNetworkTask,
@@ -115,7 +115,7 @@ pub async fn initialize_history_network(
     let history_network = HistoryNetwork::new(
         Arc::clone(discovery),
         Arc::clone(utp_listener),
-        db,
+        storage_config,
         portalnet_config.clone(),
     )
     .await;

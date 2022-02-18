@@ -9,6 +9,7 @@ use super::{
     types::{content_key::OverlayContentKey, uint::U256},
     Enr,
 };
+use crate::portalnet::storage::PortalStorage;
 use crate::portalnet::types::messages::{
     Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer, Ping, Pong,
     ProtocolId, Request, Response,
@@ -23,7 +24,6 @@ use discv5::{
 };
 use futures::channel::oneshot;
 use parking_lot::RwLock;
-use rocksdb::DB;
 use ssz::Encode;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::UnboundedSender;
@@ -65,7 +65,7 @@ pub struct OverlayProtocol<TContentKey> {
     /// Reference to the underlying discv5 protocol
     pub discovery: Arc<Discovery>,
     // Reference to the database instance
-    pub db: Arc<DB>,
+    pub storage: Arc<PortalStorage>,
     /// The data radius of the local node.
     pub data_radius: Arc<U256>,
     /// The overlay routing table of the local node.
@@ -86,7 +86,7 @@ impl<TContentKey: OverlayContentKey + Send> OverlayProtocol<TContentKey> {
         config: OverlayConfig,
         discovery: Arc<Discovery>,
         utp_listener: Arc<RwLockT<UtpListener>>,
-        db: Arc<DB>,
+        storage: Arc<PortalStorage>,
         data_radius: U256,
         protocol: ProtocolId,
     ) -> Self {
@@ -101,7 +101,7 @@ impl<TContentKey: OverlayContentKey + Send> OverlayProtocol<TContentKey> {
         let data_radius = Arc::new(data_radius);
         let request_tx = OverlayService::<TContentKey>::spawn(
             Arc::clone(&discovery),
-            Arc::clone(&db),
+            Arc::clone(&storage),
             Arc::clone(&kbuckets),
             config.bootnode_enrs,
             config.ping_queue_interval,
@@ -116,7 +116,7 @@ impl<TContentKey: OverlayContentKey + Send> OverlayProtocol<TContentKey> {
             discovery,
             data_radius,
             kbuckets,
-            db,
+            storage,
             protocol,
             request_tx,
             utp_listener,
@@ -249,8 +249,9 @@ impl<TContentKey: OverlayContentKey + Send> OverlayProtocol<TContentKey> {
             Err(error) => Err(error),
         }
     }
-    /// offer is sent in order to store content to k nodes with radii that contain content-id
-    /// offer is also sent to nodes after FindContent (POKE)
+
+    /// Offer is sent in order to store content to k nodes with radii that contain content-id
+    /// Offer is also sent to nodes after FindContent (POKE)
     pub async fn send_offer(
         &self,
         content_keys: Vec<Vec<u8>>,
@@ -264,13 +265,23 @@ impl<TContentKey: OverlayContentKey + Send> OverlayProtocol<TContentKey> {
             destination: enr.clone(),
         };
 
+        // todo: remove after updating `Offer` to use `ContentKey` type
+        let content_keys_offered: Result<Vec<TContentKey>, TContentKey::Error> = content_keys
+            .into_iter()
+            .map(|key| (TContentKey::try_from)(key))
+            .collect();
+        let content_keys_offered: Vec<TContentKey> = match content_keys_offered {
+            Ok(val) => val,
+            Err(_msg) => return Err(OverlayRequestError::DecodeError),
+        };
+
         // Send the request and wait on the response.
         match self
             .send_overlay_request(Request::Offer(request), direction)
             .await
         {
             Ok(Response::Accept(accept)) => Ok(self
-                .process_accept_response(accept, enr, content_keys)
+                .process_accept_response(accept, enr, content_keys_offered)
                 .await),
             Ok(_) => Err(OverlayRequestError::InvalidResponse),
             Err(error) => Err(error),
@@ -281,7 +292,7 @@ impl<TContentKey: OverlayContentKey + Send> OverlayProtocol<TContentKey> {
         &self,
         response: Accept,
         enr: Enr,
-        content_keys_offered: Vec<Vec<u8>>,
+        content_keys_offered: Vec<TContentKey>,
     ) -> Accept {
         let connection_id = response.connection_id.clone();
 
@@ -309,9 +320,9 @@ impl<TContentKey: OverlayContentKey + Send> OverlayProtocol<TContentKey> {
             .zip(content_keys_offered.iter())
         {
             if i == true {
-                match self.db.get(key.clone()) {
+                match self.storage.get(&key.clone()) {
                     Ok(content) => match content {
-                        Some(content) => content_items.push((key.clone(), content)),
+                        Some(content) => content_items.push((key.clone().into(), content)),
                         None => {}
                     },
                     // should return some error if content not found

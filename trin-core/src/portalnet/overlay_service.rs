@@ -12,6 +12,7 @@ use crate::utp::trin_helpers::UtpMessageId;
 use crate::{
     portalnet::{
         discovery::Discovery,
+        storage::PortalStorage,
         types::{
             content_key::OverlayContentKey,
             messages::{
@@ -37,7 +38,6 @@ use futures::{channel::oneshot, prelude::*};
 use log::{debug, error, info, warn};
 use parking_lot::RwLock;
 use rand::seq::SliceRandom;
-use rocksdb::DB;
 use ssz::Encode;
 use ssz_types::BitList;
 use ssz_types::VariableList;
@@ -224,7 +224,7 @@ pub struct OverlayService<TContentKey> {
     /// The underlying Discovery v5 protocol.
     discovery: Arc<Discovery>,
     /// The content database of the local node.
-    db: Arc<DB>,
+    storage: Arc<PortalStorage>,
     /// The routing table of the local node.
     kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
     /// The data radius of the local node.
@@ -259,7 +259,7 @@ impl<TContentKey: OverlayContentKey + Send> OverlayService<TContentKey> {
     /// processes.
     pub async fn spawn(
         discovery: Arc<Discovery>,
-        db: Arc<DB>,
+        storage: Arc<PortalStorage>,
         kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
         bootnode_enrs: Vec<Enr>,
         ping_queue_interval: Option<Duration>,
@@ -283,7 +283,7 @@ impl<TContentKey: OverlayContentKey + Send> OverlayService<TContentKey> {
         tokio::spawn(async move {
             let mut service = Self {
                 discovery,
-                db,
+                storage,
                 kbuckets,
                 data_radius,
                 protocol,
@@ -542,23 +542,22 @@ impl<TContentKey: OverlayContentKey + Send> OverlayService<TContentKey> {
 
     /// Attempts to build a `Content` response for a `FindContent` request.
     fn handle_find_content(&self, request: FindContent) -> Result<Content, OverlayRequestError> {
-        // Attempt to derive the content ID for the content key.
-        let content_id = match (TContentKey::try_from)(request.content_key) {
-            Ok(key) => key.content_id(),
-            Err(_err) => {
+        let content_key = match (TContentKey::try_from)(request.content_key) {
+            Ok(key) => key,
+            Err(_) => {
                 return Err(OverlayRequestError::InvalidRequest(
                     "Invalid content key".to_string(),
                 ))
             }
         };
 
-        match self.db.get(&content_id) {
+        match self.storage.get(&content_key) {
             Ok(Some(value)) => {
                 let content = ByteList::from(VariableList::from(value));
                 Ok(Content::Content(content))
             }
             Ok(None) => {
-                let enrs = self.find_nodes_close_to_content(content_id);
+                let enrs = self.find_nodes_close_to_content(content_key);
                 match enrs {
                     Ok(val) => Ok(Content::Enrs(val)),
                     Err(msg) => Err(OverlayRequestError::InvalidRequest(msg.to_string())),
@@ -1095,21 +1094,16 @@ impl<TContentKey: OverlayContentKey + Send> OverlayService<TContentKey> {
     /// Returns list of nodes closer to content than self, sorted by distance.
     fn find_nodes_close_to_content(
         &self,
-        content_id: [u8; 32],
+        content_key: impl OverlayContentKey,
     ) -> Result<Vec<SszEnr>, OverlayRequestError> {
+        let content_id = content_key.content_id();
         let self_node_id = self.local_enr().node_id();
         let self_distance = xor(&content_id, &self_node_id.raw());
 
         let mut nodes_with_distance: Vec<(U256, Enr)> = self
             .table_entries_enr()
             .into_iter()
-            .map(|enr| {
-                (
-                    // naked unwrap since content key len has already been validated
-                    xor(&content_id, &enr.node_id().raw()),
-                    enr,
-                )
-            })
+            .map(|enr| (xor(&content_id, &enr.node_id().raw()), enr))
             .collect();
 
         nodes_with_distance.sort_by(|a, b| a.0.cmp(&b.0));
@@ -1141,12 +1135,11 @@ mod tests {
     use std::net::Ipv4Addr;
 
     use crate::{
+        cli::DEFAULT_STORAGE_CAPACITY,
         portalnet::{
-            discovery::Discovery,
-            overlay::OverlayConfig,
-            types::{content_key::MockContentKey, messages::PortalnetConfig},
+            discovery::Discovery, overlay::OverlayConfig, storage::PortalStorage,
+            types::content_key::MockContentKey, types::messages::PortalnetConfig,
         },
-        utils::db,
     };
 
     use discv5::{
@@ -1154,6 +1147,7 @@ mod tests {
         kbucket::Entry,
     };
     use rand::Rng;
+    use serial_test::serial;
     use tokio_test::{assert_pending, assert_ready, task};
 
     macro_rules! poll_request_rx {
@@ -1175,7 +1169,11 @@ mod tests {
             listening: HashMap::new(),
         }));
 
-        let db = Arc::new(db::setup_overlay_db(discovery.local_enr().node_id()));
+        // Initialize DB config
+        let storage_capacity: u32 = DEFAULT_STORAGE_CAPACITY.parse().unwrap();
+        let node_id = discovery.local_enr().node_id();
+        let storage_config = PortalStorage::setup_config(node_id, storage_capacity).unwrap();
+        let storage = Arc::new(PortalStorage::new(storage_config).unwrap());
 
         let overlay_config = OverlayConfig::default();
         let kbuckets = Arc::new(RwLock::new(KBucketsTable::new(
@@ -1195,7 +1193,7 @@ mod tests {
 
         OverlayService {
             discovery,
-            db,
+            storage,
             kbuckets,
             data_radius,
             protocol,
@@ -1226,6 +1224,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn process_ping_source_in_table_higher_enr_seq() {
         let mut service = task::spawn(build_service());
 
@@ -1279,6 +1278,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn process_ping_source_not_in_table() {
         let mut service = task::spawn(build_service());
 
@@ -1297,6 +1297,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn process_request_failure() {
         let mut service = task::spawn(build_service());
 
@@ -1341,6 +1342,15 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
+    async fn process_response_source_in_table_disconnected() {}
+
+    #[tokio::test]
+    #[serial]
+    async fn process_response_source_not_in_table() {}
+
+    #[tokio::test]
+    #[serial]
     async fn process_pong_source_in_table_higher_enr_seq() {
         let mut service = task::spawn(build_service());
 
@@ -1394,6 +1404,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn process_pong_source_not_in_table() {
         let mut service = task::spawn(build_service());
 
@@ -1411,6 +1422,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn process_discovered_enrs_local_enr() {
         let mut service = task::spawn(build_service());
         let local_enr = service.discovery.local_enr();
@@ -1430,6 +1442,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn process_discovered_enrs_unknown_enrs() {
         let mut service = task::spawn(build_service());
 
@@ -1475,6 +1488,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn process_discovered_enrs_known_enrs() {
         let mut service = task::spawn(build_service());
 
@@ -1548,6 +1562,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn request_node() {
         let mut service = task::spawn(build_service());
 
@@ -1576,6 +1591,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn ping_node() {
         let mut service = task::spawn(build_service());
 
@@ -1597,6 +1613,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn connect_node() {
         let mut service = task::spawn(build_service());
 
@@ -1631,6 +1648,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn update_node_connection_state_disconnected_to_connected() {
         let mut service = task::spawn(build_service());
 
@@ -1675,6 +1693,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn update_node_connection_state_connected_to_disconnected() {
         let mut service = task::spawn(build_service());
 
@@ -1722,7 +1741,8 @@ mod tests {
     #[case(6)]
     #[case(0)]
     #[case(255)]
-    fn generate_random_node_id(#[case] target_bucket_idx: u8) {
+    #[serial]
+    fn test_generate_random_node_id(#[case] target_bucket_idx: u8) {
         let service = task::spawn(build_service());
         let random_node_id = service.generate_random_node_id(target_bucket_idx).unwrap();
         let key = kbucket::Key::from(random_node_id);

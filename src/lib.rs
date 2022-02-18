@@ -11,8 +11,7 @@ use trin_core::utp::stream::UtpListener;
 use trin_core::{
     cli::{TrinConfig, HISTORY_NETWORK, STATE_NETWORK},
     jsonrpc::service::{launch_jsonrpc_server, JsonRpcExiter},
-    portalnet::{discovery::Discovery, types::messages::PortalnetConfig},
-    utils::db::setup_overlay_db,
+    portalnet::{discovery::Discovery, storage::PortalStorage, types::messages::PortalnetConfig},
 };
 use trin_history::initialize_history_network;
 use trin_state::initialize_state_network;
@@ -45,14 +44,16 @@ pub async fn run_trin(
     // Search for discv5 peers (bucket refresh lookup)
     tokio::spawn(Arc::clone(&discovery).bucket_refresh_lookup());
 
-    // Setup Overlay database
-    let db = Arc::new(setup_overlay_db(discovery.local_enr().node_id()));
-
+    // Initialize UTP listener
     let utp_listener = Arc::new(RwLock::new(UtpListener {
         discovery: Arc::clone(&discovery),
         utp_connections: HashMap::new(),
         listening: HashMap::new(),
     }));
+
+    // Initialize Storage config
+    let storage_config =
+        PortalStorage::setup_config(discovery.local_enr().node_id(), trin_config.kb)?;
 
     debug!("Selected networks to spawn: {:?}", trin_config.networks);
     // Initialize state sub-network service and event handlers, if selected
@@ -62,7 +63,7 @@ pub async fn run_trin(
                 &discovery,
                 &utp_listener,
                 portalnet_config.clone(),
-                Arc::clone(&db),
+                storage_config.clone(),
             )
             .await
         } else {
@@ -80,7 +81,7 @@ pub async fn run_trin(
                 &discovery,
                 &utp_listener,
                 portalnet_config.clone(),
-                Arc::clone(&db),
+                storage_config.clone(),
             )
             .await
         } else {

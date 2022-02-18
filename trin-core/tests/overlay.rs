@@ -3,9 +3,11 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use trin_core::{
+    cli::DEFAULT_STORAGE_CAPACITY,
     portalnet::{
         discovery::Discovery,
         overlay::{OverlayConfig, OverlayProtocol},
+        storage::PortalStorage,
         types::{
             content_key::MockContentKey,
             messages::{Content, Message, PortalnetConfig, ProtocolId, SszEnr},
@@ -13,7 +15,6 @@ use trin_core::{
         },
         Enr,
     },
-    utils::db::setup_overlay_db,
     utp::stream::UtpListener,
 };
 
@@ -25,7 +26,12 @@ async fn init_overlay(
     discovery: Arc<Discovery>,
     protocol: ProtocolId,
 ) -> OverlayProtocol<MockContentKey> {
-    let db = Arc::new(setup_overlay_db(discovery.local_enr().node_id()));
+    let storage_config = PortalStorage::setup_config(
+        discovery.local_enr().node_id(),
+        DEFAULT_STORAGE_CAPACITY.parse().unwrap(),
+    )
+    .unwrap();
+    let db = Arc::new(PortalStorage::new(storage_config).unwrap());
     let overlay_config = OverlayConfig::default();
     let utp_listener = Arc::new(RwLock::new(UtpListener {
         discovery: Arc::clone(&discovery),

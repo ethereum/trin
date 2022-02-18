@@ -1,5 +1,4 @@
 use log::info;
-use rocksdb::DB;
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
 use tokio::task::JoinHandle;
@@ -13,8 +12,8 @@ use trin_core::cli::TrinConfig;
 use trin_core::jsonrpc::types::StateJsonRpcRequest;
 use trin_core::portalnet::discovery::Discovery;
 use trin_core::portalnet::events::PortalnetEvents;
+use trin_core::portalnet::storage::{PortalStorage, PortalStorageConfig};
 use trin_core::portalnet::types::messages::PortalnetConfig;
-use trin_core::utils::db::setup_overlay_db;
 use trin_core::utp::stream::UtpListener;
 
 pub mod content_key;
@@ -51,9 +50,6 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Search for discv5 peers (bucket refresh lookup)
     tokio::spawn(Arc::clone(&discovery).bucket_refresh_lookup());
 
-    // Setup Overlay database
-    let db = Arc::new(setup_overlay_db(discovery.local_enr().node_id()));
-
     let utp_listener = Arc::new(RwLock::new(UtpListener {
         discovery: Arc::clone(&discovery),
         utp_connections: HashMap::new(),
@@ -63,6 +59,10 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (state_event_tx, state_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
     let portal_events_discovery = Arc::clone(&discovery);
     let portal_events_utp_listener = Arc::clone(&utp_listener);
+
+    // Initialize DB config
+    let storage_config =
+        PortalStorage::setup_config(discovery.local_enr().node_id(), trin_config.kb)?;
 
     // Spawn main event handler
     tokio::spawn(async move {
@@ -79,7 +79,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state_network = StateNetwork::new(
         discovery.clone(),
         utp_listener.clone(),
-        db,
+        storage_config,
         portalnet_config.clone(),
     )
     .await;
@@ -100,14 +100,14 @@ pub async fn initialize_state_network(
     discovery: &Arc<Discovery>,
     utp_listener: &Arc<RwLock<UtpListener>>,
     portalnet_config: PortalnetConfig,
-    db: Arc<DB>,
+    storage_config: PortalStorageConfig,
 ) -> (StateHandler, StateNetworkTask, StateEventTx, StateJsonRpcTx) {
     let (state_jsonrpc_tx, state_jsonrpc_rx) = mpsc::unbounded_channel::<StateJsonRpcRequest>();
     let (state_event_tx, state_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
     let state_network = StateNetwork::new(
         Arc::clone(discovery),
         Arc::clone(utp_listener),
-        db,
+        storage_config,
         portalnet_config.clone(),
     )
     .await;

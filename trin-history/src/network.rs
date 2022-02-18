@@ -1,11 +1,13 @@
 use anyhow::anyhow;
 use log::debug;
-use rocksdb::DB;
 use std::sync::Arc;
+
 use tokio::sync::RwLock;
+
 use trin_core::portalnet::{
     discovery::Discovery,
     overlay::{OverlayConfig, OverlayProtocol, OverlayRequestError},
+    storage::{PortalStorage, PortalStorageConfig},
     types::messages::{PortalnetConfig, ProtocolId},
 };
 use trin_core::utp::stream::UtpListener;
@@ -22,18 +24,19 @@ impl HistoryNetwork {
     pub async fn new(
         discovery: Arc<Discovery>,
         utp_listener: Arc<RwLock<UtpListener>>,
-        db: Arc<DB>,
+        storage_config: PortalStorageConfig,
         portal_config: PortalnetConfig,
     ) -> Self {
         let config = OverlayConfig {
             bootnode_enrs: portal_config.bootnode_enrs.clone(),
             ..Default::default()
         };
+        let storage = Arc::new(PortalStorage::new(storage_config).unwrap());
         let overlay = OverlayProtocol::new(
             config,
             discovery,
             utp_listener,
-            db,
+            storage,
             portal_config.data_radius,
             ProtocolId::History,
         )
