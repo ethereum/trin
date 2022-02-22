@@ -8,13 +8,14 @@ import pathlib
 import sys
 
 ALLOWED_EXTENSIONS = {
-    '.bugfix.md',
-    '.doc.md',
-    '.feature.md',
+    '.added.md',
+    '.changed.md',
+    '.deprecated.md',
+    '.removed.md',
+    '.fixed.md',
+    '.security.md',
     '.internal.md',
-    '.misc.md',
-    '.performance.md',
-    '.removal.md',
+    '.doc.md',
 }
 
 ALLOWED_FILES = {

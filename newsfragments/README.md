@@ -8,15 +8,16 @@ relevant to people working on the code itself.)
 Each file should be named like `<ISSUE>.<TYPE>.md`, where
 `<ISSUE>` is an issue numbers, and `<TYPE>` is one of:
 
-* `feature`
-* `bugfix`
-* `performance`
-* `doc`
-* `internal`
-* `removal`
-* `misc`
+* `added` - For new features.
+* `changed` - For changes in existing functionality.
+* `deprecated` - For soon-to-be removed features.
+* `removed` - For now removed features.
+* `fixed` - For any bug fixes.
+* `security` - In case of vulnerabilities.
+* `internal` - Internal changes - for Trin contributors.
+* `doc` - Improved documentation.
 
-So for example: `123.feature.md`, `456.bugfix.md`
+So for example: `123.added.md`, `456.fixed.md`
 
 If the PR fixes an issue, use that number here. If there is no issue,
 then open up the PR first and use the PR number for the newsfragment.

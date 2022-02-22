@@ -9,28 +9,33 @@ start_string = "[//]: # (towncrier release notes start)"
 title_format = "## {version} ({project_date})"
 
 [[tool.towncrier.type]]
-directory = "feature"
+directory = "added"
 name = "### Features"
 showcontent = true
 
 [[tool.towncrier.type]]
-directory = "bugfix"
+directory = "changed"
+name = "### Changed Functionality"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "deprecated"
+name = "### Soon-to-be Removed Features"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "removed"
+name = "### Removed Features"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "fixed"
 name = "### Bugfixes"
 showcontent = true
 
 [[tool.towncrier.type]]
-directory = "performance"
-name = "### Performance improvements"
-showcontent = true
-
-[[tool.towncrier.type]]
-directory = "doc"
-name = "### Improved Documentation"
-showcontent = true
-
-[[tool.towncrier.type]]
-directory = "removal"
-name = "### Deprecations and Removals"
+directory = "security"
+name = "### Security Improvements"
 showcontent = true
 
 [[tool.towncrier.type]]
@@ -39,6 +44,6 @@ name = "### Internal Changes - for Trin Contributors"
 showcontent = true
 
 [[tool.towncrier.type]]
-directory = "misc"
-name = "### Miscellaneous changes"
-showcontent = false
+directory = "doc"
+name = "### Improved Documentation"
+showcontent = true
