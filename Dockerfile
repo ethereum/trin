@@ -16,6 +16,7 @@ COPY ./trin-core ./trin-core
 COPY ./trin-history ./trin-history 
 COPY ./trin-state ./trin-state 
 COPY ./ethportal-peertest ./ethportal-peertest 
+COPY ./mainnetMM ./mainnetMM 
 
 # build for release
 RUN cargo build --all --release
@@ -33,7 +34,7 @@ COPY --from=builder /trin/target/release/seed-database .
 # It must be downloaded separately and moved to the correct location
 # https://www.dropbox.com/s/y5n36ztppltgs7x/mainnetMM.zip?dl=0
 RUN mkdir /mainnetMM
-COPY --from=builder /trin/trin-core/src/bin/mainnetMM ./mainnetMM
+COPY --from=builder /trin/mainnetMM ./mainnetMM
 
 ENV RUST_LOG=debug
 

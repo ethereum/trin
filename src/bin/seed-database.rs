@@ -1,23 +1,24 @@
-use std::convert::TryInto;
 use std::fs;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 use std::process::Command;
-use std::sync::Arc;
 
 use discv5::enr::{CombinedKey, EnrBuilder};
 use rand::{distributions::Alphanumeric, Rng};
 use rlp::{Decodable, DecoderError};
 use serde_json::Value;
-use sha3::{Digest, Sha3_256};
 use structopt::StructOpt;
 
-use trin_core::portalnet::storage::{DistanceFunction, PortalStorage, PortalStorageConfig};
-use trin_core::portalnet::types::content_keys::{ContentKey, HeaderKey, HistoryContentKey};
-use trin_core::portalnet::types::uint::U256;
+use trin_core::portalnet::storage::PortalStorage;
+use trin_core::portalnet::types::content_key::MockContentKey;
 use trin_core::types::header::Header;
 use trin_core::utils::db::get_data_dir;
+use trin_history::content_key::{BlockHeader, HistoryContentKey};
+
+// This script is used to seed testnet nodes with data from mainnetMM data dump
+// https://www.dropbox.com/s/y5n36ztppltgs7x/mainnetMM.zip?dl=0
+// cargo run --bin seed-database -- --private-key 0000000000000000000000000000000000000000000000000000000000000001 --data-folder ./mainnetMM
 
 // For every 1 kb of data we store (key + value), RocksDB tends to grow by this many kb on disk...
 // ...but this is a crude empirical estimation that works mainly with default value data size of 32
@@ -36,6 +37,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let node_id = enr.node_id();
     let data_dir_path = get_data_dir(node_id);
     println!("Storing data for NodeID: {:02X?}", node_id);
+    println!("ENR: {:?}", enr);
     println!("DB Path: {:?}", data_dir_path);
 
     if generator_config.overwrite {
@@ -46,19 +48,10 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             .expect("Failed to overwrite DB.");
     }
 
-    let db = PortalStorage::setup_rocksdb(node_id)?;
-    let meta_db = PortalStorage::setup_sqlite(node_id)?;
+    let num_kilobytes = generator_config.kb;
 
-    let storage_config = PortalStorageConfig {
-        // Arbitrarily set capacity at a quarter of what we're storing.
-        // todo: make this ratio configurable
-        storage_capacity_kb: (generator_config.kb / 4) as u64,
-        node_id,
-        distance_function: DistanceFunction::Xor,
-        db: Arc::new(db),
-        meta_db: Arc::new(meta_db),
-    };
-    let storage = PortalStorage::new(storage_config, |key| sha256(key))?;
+    let storage_config = PortalStorage::setup_config(node_id, num_kilobytes)?;
+    let storage = PortalStorage::new(storage_config)?;
 
     match generator_config.data_folder {
         Some(data_folder) => load_mainnet_data(storage, data_folder),
@@ -68,6 +61,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// Type for data format stored in mainnetMM data dump
 #[derive(Debug, Clone)]
 pub struct BlockRlp {
     pub header: Option<Header>,
@@ -108,21 +102,19 @@ fn load_file_data(path: &Path, storage: &mut PortalStorage) {
                         let bytes_rlp = hex::decode(prefix_removed_rlp).unwrap();
                         let blocks: Vec<BlockRlp> = rlp::decode_list(&bytes_rlp);
                         let block = blocks.get(0).unwrap();
+
                         if block.header.is_some() {
-                            let header_key = HeaderKey {
+                            let content_key = HistoryContentKey::BlockHeader(BlockHeader {
                                 chain_id: 1u16,
                                 block_hash: block.clone().header.unwrap().hash().into(),
-                            };
-                            let content_key = ContentKey::HistoryContentKey(
-                                HistoryContentKey::HeaderKey(header_key),
-                            );
-                            let content_key_hex = hex::encode(&content_key.to_bytes());
+                            });
+
+                            let content_key_bytes: Vec<u8> = content_key.clone().into();
+                            let content_key_hex = hex::encode(&content_key_bytes);
                             total_count += 1;
-                            match storage.should_store(&content_key_hex).unwrap() {
+                            match storage.should_store(&content_key).unwrap() {
                                 true => {
-                                    storage
-                                        .store(&content_key_hex, &prefix_removed_rlp.to_owned())
-                                        .unwrap();
+                                    storage.store(&content_key, &bytes_rlp).unwrap();
                                     println!("Stored content key: {:?}", content_key_hex);
                                     println!("- Block RLP: {:?}", prefix_removed_rlp.get(0..31));
                                     stored_count += 1;
@@ -152,6 +144,7 @@ fn load_random_data(mut storage: PortalStorage, generator_config: GeneratorConfi
     for _ in 0..num_of_entries {
         let value = generate_random_value(size_of_values);
         let key = generate_random_value(SIZE_OF_KEYS);
+        let key = MockContentKey::try_from(key).unwrap();
 
         storage.store(&key, &value).unwrap();
     }
@@ -162,24 +155,11 @@ fn load_random_data(mut storage: PortalStorage, generator_config: GeneratorConfi
     );
 }
 
-fn generate_random_value(number_of_bytes: u32) -> String {
+fn generate_random_value(number_of_bytes: u32) -> Vec<u8> {
     rand::thread_rng()
         .sample_iter(&Alphanumeric)
         .take(number_of_bytes as usize)
-        .map(char::from)
         .collect()
-}
-
-// Placeholder content key -> content id conversion function
-fn sha256(key: &str) -> U256 {
-    let mut hasher = Sha3_256::new();
-    hasher.update(key);
-    let mut x = hasher.finalize();
-    let y: &mut [u8; 32] = x
-        .as_mut_slice()
-        .try_into()
-        .expect("try_into failed in hash placeholder");
-    U256::from(*y)
 }
 
 // CLI Parameter Handling
@@ -212,10 +192,6 @@ pub struct GeneratorConfig {
     /// If this flag is provided, the DB will be erased and overwritten
     #[structopt(short, long, help = "Overwrite the DB instead of adding to it")]
     pub overwrite: bool,
-
-    /// If this flag is provided, the PortalStorage struct will be used to store data.
-    #[structopt(short, long, help = "Use PortalStorage functionality for storing data")]
-    pub portal_storage: bool,
 
     #[structopt(
         long,

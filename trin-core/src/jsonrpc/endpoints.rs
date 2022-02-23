@@ -13,6 +13,7 @@ pub enum StateEndpoint {
     DataRadius,
     FindContent,
     FindNodes,
+    LocalContent,
     Ping,
 }
 
@@ -22,6 +23,7 @@ pub enum HistoryEndpoint {
     DataRadius,
     FindContent,
     FindNodes,
+    LocalContent,
     Ping,
 }
 
@@ -64,6 +66,9 @@ impl FromStr for TrinEndpoint {
             "portal_historyFindNodes" => {
                 Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::FindNodes))
             }
+            "portal_historyLocalContent" => {
+                Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::LocalContent))
+            }
             "portal_historyPing" => Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::Ping)),
             "portal_historyRadius" => {
                 Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::DataRadius))
@@ -72,6 +77,9 @@ impl FromStr for TrinEndpoint {
                 Ok(TrinEndpoint::StateEndpoint(StateEndpoint::FindContent))
             }
             "portal_stateFindNodes" => Ok(TrinEndpoint::StateEndpoint(StateEndpoint::FindNodes)),
+            "portal_stateLocalContent" => {
+                Ok(TrinEndpoint::StateEndpoint(StateEndpoint::LocalContent))
+            }
             "portal_statePing" => Ok(TrinEndpoint::StateEndpoint(StateEndpoint::Ping)),
             "portal_stateRadius" => Ok(TrinEndpoint::StateEndpoint(StateEndpoint::DataRadius)),
             _ => Err(()),

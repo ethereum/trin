@@ -19,9 +19,9 @@ pub enum HistoryContentKey {
 #[derive(Clone, Debug, Decode, Encode)]
 pub struct BlockHeader {
     /// Chain identifier.
-    chain_id: u16,
+    pub chain_id: u16,
     /// Hash of the block.
-    block_hash: [u8; 32],
+    pub block_hash: [u8; 32],
 }
 
 /// A key for a block body.

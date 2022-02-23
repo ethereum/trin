@@ -1,6 +1,4 @@
-# trin
-(a working name)
-
+# Trin
 Trin is an Ethereum "portal": a json-rpc server with nearly instant sync, and
 low CPU & storage usage.
 

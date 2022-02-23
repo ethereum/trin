@@ -3914,6 +3914,7 @@ name = "trin"
 version = "0.1.0"
 dependencies = [
  "cargo-release",
+ "discv5",
  "ethereum-types 0.12.1",
  "ethportal-peertest",
  "hex",

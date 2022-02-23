@@ -249,7 +249,6 @@ impl PortalStorage {
 
     /// Internal method for inserting data into the db.
     fn db_insert(&self, content_id: &[u8; 32], value: &Vec<u8>) -> Result<(), PortalStorageError> {
-        // what if data already exists?
         self.db.put(&content_id, value)?;
         Ok(())
     }

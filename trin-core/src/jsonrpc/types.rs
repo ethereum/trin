@@ -5,6 +5,7 @@ use tokio::sync::mpsc;
 use validator::{Validate, ValidationError};
 
 use crate::jsonrpc::endpoints::{HistoryEndpoint, StateEndpoint, TrinEndpoint};
+use crate::portalnet::types::content_key::OverlayContentKey;
 use crate::portalnet::types::messages::{ByteList, CustomPayload, SszEnr};
 
 type Responder<T, E> = mpsc::UnboundedSender<Result<T, E>>;
@@ -189,6 +190,42 @@ impl TryFrom<[&Value; 2]> for FindContentParams {
             Err(_) => return Err(ValidationError::new("Unable to decode content_key")),
         };
         Ok(Self { enr, content_key })
+    }
+}
+
+pub struct LocalContentParams<TContentKey> {
+    pub content_key: TContentKey,
+}
+
+impl<TContentKey: OverlayContentKey> TryFrom<Params> for LocalContentParams<TContentKey> {
+    type Error = ValidationError;
+
+    fn try_from(params: Params) -> Result<Self, Self::Error> {
+        match params {
+            Params::Array(val) => match val.len() {
+                1 => LocalContentParams::<TContentKey>::try_from(&val[0]),
+                _ => Err(ValidationError::new("Expected 1 param")),
+            },
+            _ => Err(ValidationError::new("Expected array of params")),
+        }
+    }
+}
+
+impl<TContentKey: OverlayContentKey> TryFrom<&Value> for LocalContentParams<TContentKey> {
+    type Error = ValidationError;
+
+    fn try_from(params: &Value) -> Result<Self, Self::Error> {
+        let content_key = params[0]
+            .as_str()
+            .ok_or_else(|| ValidationError::new("Empty content key param"))?;
+        let content_key = match hex::decode(content_key) {
+            Ok(val) => match TContentKey::try_from(val) {
+                Ok(val) => val,
+                Err(_) => return Err(ValidationError::new("Unable to decode content_key")),
+            },
+            Err(_) => return Err(ValidationError::new("Unable to decode content_key")),
+        };
+        Ok(Self { content_key })
     }
 }
 
