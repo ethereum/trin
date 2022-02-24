@@ -77,6 +77,7 @@ mod test {
     use std::sync::Arc;
 
     use discv5::enr::NodeId;
+    use serial_test::serial;
     use tempdir::TempDir;
 
     use trin_core::portalnet::storage::{
@@ -181,6 +182,7 @@ mod test {
     // full-featured content key types, since MockContentKey is insufficient to test
     // some PortalStorage functionality
     #[tokio::test]
+    #[serial]
     async fn test_should_store() -> Result<(), PortalStorageError> {
         let temp_dir = setup_temp_dir();
 
@@ -237,6 +239,7 @@ mod test {
     // full-featured content key types, since MockContentKey is insufficient to test
     // some PortalStorage functionality
     #[tokio::test]
+    #[serial]
     async fn test_distance_to_key() -> Result<(), PortalStorageError> {
         let temp_dir = setup_temp_dir();
 
