@@ -1,6 +1,5 @@
 [tool.towncrier]
 # Read https://github.com/ethereum/trin/newsfragments/README.md for instructions
-package = "trin"
 filename = "docs/release_notes.md"
 directory = "newsfragments"
 underlines = ["", ""]

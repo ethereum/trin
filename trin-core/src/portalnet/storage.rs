@@ -433,6 +433,7 @@ impl PortalStorage {
         let data_path_root: String = get_data_dir(node_id).to_owned();
         let data_suffix: &str = "/rocksdb";
         let data_path = data_path_root + data_suffix;
+        debug!("Setting up RocksDB at path: {:?}", data_path);
 
         let mut db_opts = Options::default();
         db_opts.create_if_missing(true);
@@ -445,6 +446,7 @@ impl PortalStorage {
         let data_path_root: String = get_data_dir(node_id).to_owned();
         let data_suffix: &str = "/trin.sqlite";
         let data_path = data_path_root + data_suffix;
+        debug!("Setting up SqliteDB at path: {:?}", data_path);
 
         let manager = SqliteConnectionManager::file(data_path);
         let pool = Pool::new(manager)?;

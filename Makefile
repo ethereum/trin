@@ -14,8 +14,9 @@ notes:
 		git commit -m "Compile release notes"
 
 release:
+		# First run `make notes version=<version>` before this
 		./newsfragments/validate_files.py is-empty
-		cargo release $(version) --all
+		cargo release $(version) --all --execute
 
 create-docker-image:
 		docker build -t ethpm/trin:latest -t ethpm/trin:$(version) -f ./Dockerfile .
