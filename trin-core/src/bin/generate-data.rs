@@ -3,7 +3,7 @@ use rand::{distributions::Alphanumeric, Rng};
 use std::process::Command;
 use structopt::StructOpt;
 use trin_core::portalnet::storage::PortalStorage;
-use trin_core::portalnet::types::content_key::MockContentKey;
+use trin_core::portalnet::types::content_key::IdentityContentKey;
 use trin_core::utils::db::get_data_dir;
 
 // For every 1 kb of data we store (key + value), RocksDB tends to grow by this many kb on disk...
@@ -39,7 +39,9 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let value = generate_random_value(size_of_values);
         let key = generate_random_value(SIZE_OF_KEYS);
 
-        let content_key = MockContentKey::try_from(key).unwrap();
+        // Conversion should not fail because Vec is length 32.
+        let content_key = IdentityContentKey::try_from(key).unwrap();
+
         let display: Vec<u8> = content_key.clone().into();
         println!("{:?} -> {:?}", display, &value);
         storage.store(&content_key, &value)?;

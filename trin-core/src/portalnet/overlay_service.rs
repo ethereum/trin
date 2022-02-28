@@ -1161,7 +1161,7 @@ mod tests {
         cli::DEFAULT_STORAGE_CAPACITY,
         portalnet::{
             discovery::Discovery, overlay::OverlayConfig, storage::PortalStorage,
-            types::content_key::MockContentKey, types::messages::PortalnetConfig,
+            types::content_key::IdentityContentKey, types::messages::PortalnetConfig,
         },
         utils::node_id::generate_random_remote_enr,
     };
@@ -1176,7 +1176,7 @@ mod tests {
         };
     }
 
-    fn build_service() -> OverlayService<MockContentKey> {
+    fn build_service() -> OverlayService<IdentityContentKey> {
         let portal_config = PortalnetConfig {
             internal_ip: true,
             ..Default::default()

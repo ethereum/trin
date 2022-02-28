@@ -488,16 +488,17 @@ struct DataSizeSum {
 pub mod test {
 
     use super::*;
-    use crate::portalnet::types::content_key::MockContentKey;
+    use crate::portalnet::types::content_key::IdentityContentKey;
+
+    use rand::RngCore;
     use serial_test::serial;
     use std::env;
     use tempdir::TempDir;
 
-    fn generate_content_key(block_hash: &str) -> MockContentKey {
-        let block_hash = hex::decode(block_hash).unwrap();
+    fn generate_random_content_key() -> IdentityContentKey {
         let mut key = [0u8; 32];
-        key.copy_from_slice(block_hash.as_slice());
-        MockContentKey::try_from(key.to_vec()).unwrap()
+        rand::thread_rng().fill_bytes(&mut key);
+        IdentityContentKey::new(key)
     }
 
     fn setup_temp_dir() -> TempDir {
@@ -554,9 +555,7 @@ pub mod test {
         };
 
         let mut storage = PortalStorage::new(storage_config)?;
-        // block 14115690
-        let block_hash = "05c7941834c39a98cbcec5a4890cc6dfcde245ba9fd885980b1544dca2373ff7";
-        let content_key = generate_content_key(block_hash);
+        let content_key = generate_random_content_key();
         let value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
         storage.store(&content_key, &value)?;
 
@@ -582,9 +581,7 @@ pub mod test {
             sql_connection_pool,
         };
         let mut storage = PortalStorage::new(storage_config)?;
-        // block 14115690
-        let block_hash = "05c7941834c39a98cbcec5a4890cc6dfcde245ba9fd885980b1544dca2373ff7";
-        let content_key = generate_content_key(block_hash);
+        let content_key = generate_random_content_key();
         let value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
         storage.store(&content_key, &value)?;
 
@@ -615,9 +612,7 @@ pub mod test {
         };
         let mut storage = PortalStorage::new(storage_config)?;
 
-        // block 14115690
-        let block_hash = "05c7941834c39a98cbcec5a4890cc6dfcde245ba9fd885980b1544dca2373ff7";
-        let content_key = generate_content_key(block_hash);
+        let content_key = generate_random_content_key();
         let value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
         storage.store(&content_key, &value)?;
 
@@ -634,15 +629,7 @@ pub mod test {
     async fn test_find_farthest() -> Result<(), PortalStorageError> {
         let temp_dir = setup_temp_dir();
 
-        // As u256: 35251939465458175391971645015054168096878481684263240321586233488997076805486
-        let example_node_id_bytes: [u8; 32] = [
-            76, 239, 228, 2, 227, 174, 123, 117, 195, 237, 200, 80, 219, 0, 188, 225, 18, 196, 162,
-            89, 204, 144, 204, 187, 71, 12, 147, 65, 19, 65, 167, 110,
-        ];
-        let node_id = match NodeId::parse(&example_node_id_bytes) {
-            Ok(node_id) => node_id,
-            Err(string) => panic!("Failed to parse Node ID: {}", string),
-        };
+        let node_id = NodeId::new(&[0; 32]);
 
         let db = Arc::new(PortalStorage::setup_rocksdb(node_id)?);
         let sql_connection_pool = PortalStorage::setup_sql(node_id)?;
@@ -659,39 +646,17 @@ pub mod test {
 
         let value: Vec<u8> = "value".into();
 
-        // block 14115690
-        // content id as u256:              5701445789546971387853890390228320669946681132619292758904237535384791812776
-        // distance from node id as u256:   29607079854947394638644290140513652007972538914554032181524285051455066058182
-        let block_hash = "05c7941834c39a98cbcec5a4890cc6dfcde245ba9fd885980b1544dca2373ff7";
-        let content_key_a = generate_content_key(block_hash);
+        let content_key_a = IdentityContentKey::new([0; 32]);
         storage.store(&content_key_a, &value)?;
 
-        // block 14116437 (expected furthest)
-        // content id as u256:              23871079715462885586646939789258755405425791346736285845114521966636355669268
-        // distance from node id as u256:   54803022893030492915184992817984449688707796647786152400599495572486067350138
-        let block_hash = "537ab981abc9c1f59e370a4a0eda42818fed8d6a80678efefc3154c1146437e6";
-        let content_key_b = generate_content_key(block_hash);
+        let content_key_b = IdentityContentKey::new([1; 32]);
         storage.store(&content_key_b, &value)?;
+
         let expected_content_id = content_key_b.content_id();
-        let expected_content_id = Some(Into::<[u8; 32]>::into(expected_content_id));
-
-        // block 14116473
-        // content id as u256::             30750375007938708425329103013511547426004951745661667748299259528812980354093
-        // distance from node id as u256:   6367692335593601105074560955799151728577943337223065532273915844111147572035
-        let block_hash = "da1dbda10d7b1a03bbcf36097d5990e1380a1e843e89c38f7c179f1f405f3656";
-        let content_key_c = generate_content_key(block_hash);
-        storage.store(&content_key_c, &value)?;
-
-        // block 14116478
-        // content id as u256:              6634133047319258901051603752555532101300487165376060860530003199889217118408
-        // distance from node id as u256:   30427185766077037900598516726868566347824875172301521156656914882040898439078
-        let block_hash = "36225e47ebea87b010d2383871baf83546eb96705b9f2a34842e17f574cd00f4";
-        let content_key_d = generate_content_key(block_hash);
-        storage.store(&content_key_d, &value)?;
 
         let result = storage.find_farthest_content_id()?;
 
-        assert_eq!(result, expected_content_id);
+        assert_eq!(result.unwrap(), expected_content_id);
 
         temp_dir.close()?;
         Ok(())
