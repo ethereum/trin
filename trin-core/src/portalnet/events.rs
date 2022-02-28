@@ -119,7 +119,7 @@ impl PortalnetEvents {
             .utp_connections
             .iter_mut()
         {
-            if conn.state == SocketState::Disconnected {
+            if conn.state == SocketState::Closed {
                 let received_stream = conn.recv_data_stream.clone();
 
                 match self

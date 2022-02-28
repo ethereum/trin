@@ -2,6 +2,15 @@ use crate::utils::bytes;
 use crate::utils::distance::xor;
 use discv5::enr::NodeId;
 
+#[cfg(test)]
+use crate::portalnet::Enr;
+#[cfg(test)]
+use discv5::enr::{CombinedKey, EnrBuilder};
+#[cfg(test)]
+use rand::Rng;
+#[cfg(test)]
+use std::net::Ipv4Addr;
+
 /// Generate random NodeId based on bucket index target and a local node id.
 /// First we generate a random distance metric with leading zeroes based on the target bucket.
 /// Then we XOR the result distance with the local NodeId to get the random target NodeId
@@ -16,6 +25,22 @@ pub fn generate_random_node_id(
         Ok(node_id) => Ok(node_id),
         Err(msg) => Err(anyhow::Error::msg(msg)),
     }
+}
+
+#[cfg(test)]
+pub fn generate_random_remote_enr() -> (CombinedKey, Enr) {
+    let key = CombinedKey::generate_secp256k1();
+
+    let mut rng = rand::thread_rng();
+    let ip = Ipv4Addr::from(rng.gen::<u32>());
+
+    let enr = EnrBuilder::new("v4")
+        .ip(ip.into())
+        .udp(8000)
+        .build(&key)
+        .unwrap();
+
+    (key, enr)
 }
 
 #[cfg(test)]

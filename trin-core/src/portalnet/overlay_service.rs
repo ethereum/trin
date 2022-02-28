@@ -1132,7 +1132,6 @@ mod tests {
     use super::*;
 
     use rstest::rstest;
-    use std::net::Ipv4Addr;
 
     use crate::{
         cli::DEFAULT_STORAGE_CAPACITY,
@@ -1140,13 +1139,10 @@ mod tests {
             discovery::Discovery, overlay::OverlayConfig, storage::PortalStorage,
             types::content_key::MockContentKey, types::messages::PortalnetConfig,
         },
+        utils::node_id::generate_random_remote_enr,
     };
 
-    use discv5::{
-        enr::{CombinedKey, EnrBuilder},
-        kbucket::Entry,
-    };
-    use rand::Rng;
+    use discv5::kbucket::Entry;
     use serial_test::serial;
     use tokio_test::{assert_pending, assert_ready, task};
 
@@ -1206,21 +1202,6 @@ mod tests {
             utp_listener,
             phantom_content_key: PhantomData,
         }
-    }
-
-    fn generate_random_remote_enr() -> (CombinedKey, Enr) {
-        let key = CombinedKey::generate_secp256k1();
-
-        let mut rng = rand::thread_rng();
-        let ip = Ipv4Addr::from(rng.gen::<u32>());
-
-        let enr = EnrBuilder::new("v4")
-            .ip(ip.into())
-            .udp(8000)
-            .build(&key)
-            .unwrap();
-
-        (key, enr)
     }
 
     #[tokio::test]
