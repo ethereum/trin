@@ -1324,14 +1324,6 @@ mod tests {
 
     #[tokio::test]
     #[serial]
-    async fn process_response_source_in_table_disconnected() {}
-
-    #[tokio::test]
-    #[serial]
-    async fn process_response_source_not_in_table() {}
-
-    #[tokio::test]
-    #[serial]
     async fn process_pong_source_in_table_higher_enr_seq() {
         let mut service = task::spawn(build_service());
 
