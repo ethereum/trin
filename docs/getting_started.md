@@ -53,7 +53,7 @@ In a python shell:
 11870768
 ```
 
-See the [wiki](https://eth.wiki/json-rpc/API#json-rpc-methods) for other standard methods that are implemented. You can use the [web3.py](https://web3py.readthedocs.io/en/stable/web3.eth.html#module-web3.eth) API to access these although currently, most of them proxy to Infura rather than requesting the data from the Portal Network.
+See the [wiki](https://eth.wiki/json-rpc/API#json-rpc-methods) for other standard methods that are implemented. You can use the [web3.py](https://web3py.readthedocs.io/en/stable/web3.eth.html#module-web3.eth) API to access these. Note that currently most of them proxy to Infura rather than requesting the data from the Portal Network.
 
 ### Connect over HTTP
 First launch trin using HTTP as the json-rpc transport protocol:
