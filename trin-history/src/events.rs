@@ -23,7 +23,7 @@ impl HistoryEvents {
             {
                 Ok(response) => {
                     debug!("Sending reply: {:?}", response);
-                    Message::Response(response).to_bytes()
+                    Message::from(response).into()
                 }
                 Err(error) => {
                     error!("Failed to process portal history event: {}", error);

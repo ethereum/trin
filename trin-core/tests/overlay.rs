@@ -84,7 +84,7 @@ async fn spawn_overlay(discovery: Arc<Discovery>, overlay: Arc<OverlayProtocol<M
     tokio::spawn(async move {
         while let Some(talk_req) = overlay_rx.recv().await {
             let talk_resp = match overlay.process_one_request(&talk_req).await {
-                Ok(response) => Message::Response(response).to_bytes(),
+                Ok(response) => Message::from(response).into(),
                 Err(err) => panic!("Error processing request: {}", err),
             };
             if let Err(err) = talk_req.respond(talk_resp) {

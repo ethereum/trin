@@ -81,7 +81,7 @@ pub struct ContractBytecode {
     code_hash: [u8; 32],
 }
 
-// Silence clippy to avoid implementing newtype pattern on imported type
+// Silence clippy to avoid implementing newtype pattern on imported type.
 #[allow(clippy::from_over_into)]
 impl Into<Vec<u8>> for StateContentKey {
     fn into(self) -> Vec<u8> {
