@@ -5,8 +5,9 @@ use anyhow::anyhow;
 use async_recursion::async_recursion;
 use discv5::enr::NodeId;
 use discv5::{Enr, TalkRequest};
-use log::debug;
+use log::{debug, warn};
 use rand::Rng;
+use ssz::Decode;
 use std::cmp::{max, min};
 use std::collections::{HashMap, VecDeque};
 use std::convert::TryFrom;
@@ -18,7 +19,7 @@ use tokio::time::timeout;
 use crate::portalnet::types::messages::ProtocolId;
 use crate::utp::packets::{ExtensionType, Packet, PacketType, HEADER_SIZE};
 use crate::utp::time::{now_microseconds, Delay, Timestamp};
-use crate::utp::trin_helpers::{UtpMessageId, UtpStreamState};
+use crate::utp::trin_helpers::{UtpAccept, UtpMessageId};
 use crate::utp::util::{abs_diff, ewma, generate_sequential_identifiers};
 use std::time::Duration;
 
@@ -38,6 +39,9 @@ const WINDOW_SIZE: u32 = 1024 * 1024; // local receive window size
 const PRE_SEND_TIMEOUT: u32 = 500_000;
 
 const MAX_DISCV5_PACKET_SIZE: u32 = 1280;
+const MAX_DISCV5_HEADER_SIZE: usize = 80;
+// Size of the payload length in uTP message
+const PAYLOAD_LENGTH_SIZE: usize = 32;
 // Buffering delay that the uTP accepts on the up-link. Currently the delay target is set to 100 ms.
 const CCONTROL_TARGET: f64 = 100_000.0;
 
@@ -137,17 +141,19 @@ impl UtpListener {
                     PacketType::Syn => {
                         if let Some(enr) = self.discovery.discv5.find_enr(node_id) {
                             // If neither of those cases happened handle this is a new request
-                            let (tx, _) = mpsc::unbounded_channel::<UtpStreamState>();
                             let mut conn = UtpSocket::new(
                                 Arc::clone(&self.discovery),
                                 enr.clone(),
-                                tx,
-                                self.rx.clone(),
+                                Arc::clone(&self.rx),
                             );
 
-                            conn.raw_receive().await.unwrap();
+                            let mut buf = [0; BUF_SIZE];
 
-                            let response = conn.handle_packet(&packet, enr).await.unwrap();
+                            if let Err(msg) = conn.recv(&mut buf).await {
+                                debug!("Unable to receive SYN packet {msg}");
+                                return;
+                            }
+
                             self.utp_connections.insert(
                                 ConnectionKey {
                                     node_id: *node_id,
@@ -155,30 +161,39 @@ impl UtpListener {
                                 },
                                 conn.clone(),
                             );
-                            match response {
-                                Some(mut packet) => conn.send_packet(&mut packet).await,
-                                None => debug!("abababa"),
-                            }
                         } else {
                             debug!("Query requested an unknown ENR");
                         }
                     }
-                    _ => {
+                    // Receive DATA and FIN packets
+                    PacketType::Data => {
                         if let Some(conn) = self.utp_connections.get_mut(&ConnectionKey {
                             node_id: *node_id,
                             conn_id_recv: connection_id,
                         }) {
-                            // TODO: Temporaly hack. We need to know source Enr to handle utp packet.
-                            if let Some(enr) = self.discovery.discv5.find_enr(node_id) {
-                                conn.raw_receive().await.unwrap();
-                                let response = conn.handle_packet(&packet, enr).await.unwrap();
-                                match response {
-                                    Some(mut packet) => conn.send_packet(&mut packet).await,
-                                    None => debug!("xaxaxa"),
-                                }
+                            let mut buf = [0; BUF_SIZE];
+                            if let Err(msg) = conn.recv(&mut buf).await {
+                                warn!("Unable to receive uTP DATA packet: {msg}")
+                            } else {
+                                conn.recv_data_stream
+                                    .append(&mut Vec::from(packet.payload()));
                             }
                         }
                     }
+                    PacketType::Fin => {
+                        if let Some(conn) = self.utp_connections.get_mut(&ConnectionKey {
+                            node_id: *node_id,
+                            conn_id_recv: connection_id,
+                        }) {
+                            let mut buf = [0; BUF_SIZE];
+                            if let Err(msg) = conn.recv(&mut buf).await {
+                                warn!("Unable to receive uTP FIN packet: {msg}")
+                            }
+                        }
+                    }
+                    // We don't handle STATE packets here, because the uTP client is handling them
+                    // implicitly in the background when sending FIN packet with conn.close()
+                    PacketType::State => {}
                 }
             }
             Err(e) => {
@@ -192,18 +207,54 @@ impl UtpListener {
         &mut self,
         connection_id: u16,
         node_id: NodeId,
-        tx: mpsc::UnboundedSender<UtpStreamState>,
-    ) {
+    ) -> anyhow::Result<UtpSocket> {
         if let Some(enr) = self.discovery.discv5.find_enr(&node_id) {
-            let mut conn = UtpSocket::new(Arc::clone(&self.discovery), enr, tx, self.rx.clone());
+            let mut conn = UtpSocket::new(Arc::clone(&self.discovery), enr, Arc::clone(&self.rx));
             conn.make_connection(connection_id).await;
             self.utp_connections.insert(
                 ConnectionKey {
                     node_id,
                     conn_id_recv: connection_id,
                 },
-                conn,
+                conn.clone(),
             );
+            Ok(conn)
+        } else {
+            Err(anyhow!("Trying to connect to unknow Enr"))
+        }
+    }
+
+    // https://github.com/ethereum/portal-network-specs/pull/98\
+    // Currently the way to handle data over uTP isn't finalized yet, so we are going to use the
+    // handle data on connection closed method, as that seems to be the accepted method for now.
+    pub async fn process_utp_byte_stream(&mut self) {
+        let mut utp_connections = self.utp_connections.clone();
+        for (conn_key, conn) in self.utp_connections.iter_mut() {
+            if conn.state == SocketState::Closed {
+                let received_stream = conn.recv_data_stream.clone();
+                debug!(
+                    "Received data: {received_stream:?}, len: {}",
+                    received_stream.len()
+                );
+
+                match self.listening.get(&conn.receiver_connection_id) {
+                    Some(message_type) => match message_type {
+                        UtpMessageId::OfferAcceptStream => {
+                            match UtpAccept::from_ssz_bytes(&received_stream[..]) {
+                                Ok(payload) => {
+                                    for (key, content) in payload.message {
+                                        // TODO: Implement this with overlay store
+                                        debug!("Store {key:?}, {content:?}");
+                                    }
+                                }
+                                Err(_) => debug!("Recv malformed data on handing UtpAccept"),
+                            }
+                        }
+                    },
+                    _ => warn!("uTP listening HashMap doesn't have uTP stream message type"),
+                }
+                utp_connections.remove(conn_key);
+            }
         }
     }
 }
@@ -290,10 +341,8 @@ pub struct UtpSocket {
     /// Maximum retransmission retries
     pub max_retransmission_retries: u32,
 
-    tx: mpsc::UnboundedSender<UtpStreamState>,
-
     /// Receive channel for discv5 socket
-    rx_rcv: Arc<RwLock<mpsc::UnboundedReceiver<Packet>>>,
+    rx: Arc<RwLock<mpsc::UnboundedReceiver<Packet>>>,
 
     pub recv_data_stream: Vec<u8>,
 }
@@ -302,7 +351,6 @@ impl UtpSocket {
     fn new(
         socket: Arc<Discovery>,
         connected_to: Enr,
-        tx: mpsc::UnboundedSender<UtpStreamState>,
         rx_rcv: Arc<RwLock<mpsc::UnboundedReceiver<Packet>>>,
     ) -> Self {
         let (receiver_id, sender_id) = generate_sequential_identifiers();
@@ -333,10 +381,9 @@ impl UtpSocket {
             congestion_timeout: 1000,
             last_rollover: Timestamp::default(),
             current_delays: Vec::with_capacity(8),
-            recv_data_stream: vec![],
+            recv_data_stream: Vec::new(),
             max_retransmission_retries: MAX_RETRANSMISSION_RETRIES,
-            tx,
-            rx_rcv,
+            rx: rx_rcv,
         }
     }
 
@@ -358,7 +405,12 @@ impl UtpSocket {
 
         let total_length = buf.len();
 
-        for chunk in buf.chunks(MAX_DISCV5_PACKET_SIZE as usize - HEADER_SIZE) {
+        for chunk in buf.chunks(
+            MAX_DISCV5_PACKET_SIZE as usize
+                - MAX_DISCV5_HEADER_SIZE
+                - PAYLOAD_LENGTH_SIZE
+                - HEADER_SIZE,
+        ) {
             let mut packet = Packet::with_payload(chunk);
             packet.set_seq_nr(self.seq_nr);
             packet.set_ack_nr(self.ack_nr);
@@ -378,7 +430,7 @@ impl UtpSocket {
 
     pub async fn raw_receive(&mut self) -> anyhow::Result<Option<Packet>> {
         // Listen on a channel for discovery utp packet
-        match timeout(Duration::from_millis(15), self.rx_rcv.write().await.recv()).await {
+        match timeout(Duration::from_millis(15), self.rx.write().await.recv()).await {
             Ok(val) => Ok(val),
             Err(msg) => Err(anyhow!("Discv5 socket timeout: {msg}")),
         }
@@ -432,8 +484,9 @@ impl UtpSocket {
             debug!("duplicate_ack_count: {}", self.duplicate_ack_count);
             debug!("now_microseconds() - now = {}", now_microseconds() - now);
             let mut buf = [0; BUF_SIZE];
-            // FIXME: handle this unwrap
-            self.recv(&mut buf).await.unwrap();
+            if let Err(msg) = self.recv(&mut buf).await {
+                debug!("Unable to receive from uTP socket: {msg}");
+            }
         }
 
         debug!(
@@ -470,7 +523,6 @@ impl UtpSocket {
             }
         });
         debug!("sent {:?}", packet);
-        println!("sent {packet:?}");
     }
 
     // Insert a new sample in the base delay list.
@@ -627,7 +679,6 @@ impl UtpSocket {
                 self.state = SocketState::Connected;
                 self.last_acked = packet.ack_nr();
                 self.last_acked_timestamp = now_microseconds();
-                // self.tx.send(UtpStreamState::Connected).unwrap();
                 Ok(None)
             }
             // Only STATE packet is expected when SYN is sent
@@ -638,9 +689,6 @@ impl UtpSocket {
             // Handle state packet if socket state is `Connected` and packet type is STATE
             (SocketState::Connected, PacketType::State) => {
                 self.handle_state_packet(packet).await;
-                // if self.send_window.is_empty() {
-                //     self.tx.send(UtpStreamState::Finished).unwrap();
-                // }
                 Ok(None)
             }
             // Handle FIN packet. Check if all send packets are acknowledged.
@@ -938,24 +986,28 @@ impl UtpSocket {
     }
 
     #[async_recursion]
-    async fn recv(&mut self, buf: &mut [u8]) -> anyhow::Result<usize> {
+    pub async fn recv(&mut self, buf: &mut [u8]) -> anyhow::Result<usize> {
         let packet;
 
-        // TODO: Abort loop if the current try exceeds the maximum number of retransmission retries.
+        // TODO: Refactor this and abort loop if the current try exceeds the maximum number of retransmission retries.
         // Try to receive a packet
         loop {
             let result = self.raw_receive().await;
             match result {
                 Ok(pkt) => {
-                    // FIXME: Handle this unwrap
-                    packet = pkt.unwrap();
+                    match pkt {
+                        Some(pkt) => packet = pkt,
+                        None => {
+                            debug!("Received packet is NONE");
+                            continue;
+                        }
+                    }
                     break;
                 }
                 Err(msg) => debug!("{msg}"),
             }
         }
 
-        println!("received {:?}", packet);
         debug!("received {:?}", packet);
 
         // Process packet, including sending a reply if necessary
@@ -964,7 +1016,6 @@ impl UtpSocket {
             .await?
         {
             pkt.set_wnd_size(WINDOW_SIZE);
-            //FIXME: change this to discv5 send
             self.socket
                 .send_talk_req(
                     self.connected_to.clone(),
@@ -997,6 +1048,7 @@ impl UtpSocket {
     fn flush_incoming_buffer(&mut self, buf: &mut [u8]) -> usize {
         fn unsafe_copy(src: &[u8], dst: &mut [u8]) -> usize {
             let max_len = min(src.len(), dst.len());
+            // Unsafe is needed because `copy` is unsafe function
             unsafe {
                 use std::ptr::copy;
                 copy(src.as_ptr(), dst.as_mut_ptr(), max_len);
@@ -1108,16 +1160,19 @@ impl UtpSocket {
         packet.set_type(PacketType::Fin);
 
         // Send FIN
-
-        //FIXME: change this to discv5 send
-        self.socket
+        if let Err(msg) = self
+            .socket
             .send_talk_req(
                 self.connected_to.clone(),
                 ProtocolId::Utp,
                 Vec::from(packet.as_ref()),
             )
             .await
-            .unwrap();
+        {
+            let msg = format!("Unavle to send FIN packet: {msg}");
+            debug!("{msg}");
+            return Err(anyhow!(msg));
+        }
 
         debug!("CLosing connection, sent {:?}", packet);
         self.state = SocketState::FinSent;
@@ -1151,22 +1206,13 @@ mod tests {
     use crate::utils::node_id::generate_random_remote_enr;
     use crate::utp::packets::{Packet, PacketType};
     use crate::utp::stream::{SocketState, UtpSocket, BUF_SIZE};
-    use crate::utp::trin_helpers::UtpStreamState;
     use discv5::Discv5Event;
     use std::convert::TryFrom;
     use std::str::FromStr;
     use std::sync::Arc;
     use tokio::sync::mpsc;
+    use tokio::sync::mpsc::UnboundedSender;
     use tokio::sync::RwLock;
-
-    macro_rules! iotry {
-        ($e:expr) => {
-            match $e {
-                Ok(e) => e,
-                Err(e) => panic!("{:?}", e),
-            }
-        };
-    }
 
     fn next_test_port() -> u16 {
         use std::sync::atomic::{AtomicUsize, Ordering};
@@ -1188,42 +1234,15 @@ mod tests {
         let mut discv5 = Discovery::new(config).unwrap();
         let enr = discv5.discv5.local_enr();
         discv5.start().await.unwrap();
-        let (tx_s, _) = mpsc::unbounded_channel::<UtpStreamState>();
         let (tx, rx) = mpsc::unbounded_channel::<Packet>();
 
         let discv5_arc = Arc::new(discv5);
         let discv5_arc_clone = Arc::clone(&discv5_arc);
 
-        tokio::spawn(async move {
-            let mut receiver = discv5_arc_clone.discv5.event_stream().await.unwrap();
-            while let Some(event) = receiver.recv().await {
-                match event {
-                    Discv5Event::TalkRequest(request) => {
-                        let protocol_id =
-                            ProtocolId::from_str(&hex::encode_upper(request.protocol())).unwrap();
+        // TODO: Create `Discv5Socket` struct to encapsulate all socket logic
+        spawn_socket_recv(tx, discv5_arc_clone);
 
-                        match protocol_id {
-                            ProtocolId::Utp => {
-                                let payload = request.body();
-                                let packet = Packet::try_from(payload).unwrap();
-                                tx.send(packet).unwrap();
-                            }
-                            _ => {
-                                panic!(
-                            "Received TalkRequest on unknown protocol from={} protocol={} body={}",
-                            request.node_id(),
-                            hex::encode_upper(request.protocol()),
-                            hex::encode(request.body()),
-                        );
-                            }
-                        }
-                    }
-                    _ => continue,
-                }
-            }
-        });
-
-        UtpSocket::new(discv5_arc, enr, tx_s, Arc::new(RwLock::new(rx)))
+        UtpSocket::new(discv5_arc, enr, Arc::new(RwLock::new(rx)))
     }
 
     async fn client_setup(connected_to: Enr) -> (Enr, UtpSocket) {
@@ -1231,14 +1250,20 @@ mod tests {
         let mut discv5 = Discovery::new(config).unwrap();
         discv5.start().await.unwrap();
 
-        //FIXME:: remove this  unusefull channel
-        let (tx_s, _) = mpsc::unbounded_channel::<UtpStreamState>();
         let (tx, rx) = mpsc::unbounded_channel::<Packet>();
 
         let discv5_arc = Arc::new(discv5);
         let discv5_arc_clone = Arc::clone(&discv5_arc);
 
-        // TODO: Create `Discv5Socket` struct to encapsulate all socket logic
+        spawn_socket_recv(tx, discv5_arc_clone);
+
+        (
+            discv5_arc.local_enr(),
+            UtpSocket::new(discv5_arc, connected_to, Arc::new(RwLock::new(rx))),
+        )
+    }
+
+    fn spawn_socket_recv(tx: UnboundedSender<Packet>, discv5_arc_clone: Arc<Discovery>) {
         tokio::spawn(async move {
             let mut receiver = discv5_arc_clone.discv5.event_stream().await.unwrap();
             while let Some(event) = receiver.recv().await {
@@ -1255,11 +1280,11 @@ mod tests {
                             }
                             _ => {
                                 panic!(
-                            "Received TalkRequest on unknown protocol from={} protocol={} body={}",
-                            request.node_id(),
-                            hex::encode_upper(request.protocol()),
-                            hex::encode(request.body()),
-                        );
+                                    "Received TalkRequest on unknown protocol from={} protocol={} body={}",
+                                    request.node_id(),
+                                    hex::encode_upper(request.protocol()),
+                                    hex::encode(request.body()),
+                                );
                             }
                         }
                     }
@@ -1267,11 +1292,6 @@ mod tests {
                 }
             }
         });
-
-        (
-            discv5_arc.local_enr(),
-            UtpSocket::new(discv5_arc, connected_to, tx_s, Arc::new(RwLock::new(rx))),
-        )
     }
 
     #[tokio::test]
@@ -1554,7 +1574,7 @@ mod tests {
         // Fits in a packet
         const LEN: usize = 50;
         let data = (0..LEN).map(|idx| idx as u8).collect::<Vec<u8>>();
-        let d = data.clone();
+        let data_clone = data.clone();
         assert_eq!(LEN, data.len());
 
         let (enr, mut client) = client_setup(server.connected_to.clone()).await;
@@ -1563,13 +1583,13 @@ mod tests {
 
         // Expect SYN packet
         server.connected_to = enr;
-        iotry!(server.recv(&mut buf).await);
+        server.recv(&mut buf).await.unwrap();
 
         // Expect STATE packet
-        iotry!(client.recv(&mut buf).await);
+        client.recv(&mut buf).await.unwrap();
 
         // Send DATA packet
-        iotry!(client.send_to(&d[..]).await);
+        client.send_to(&data_clone[..]).await.unwrap();
 
         // Receive data
         let data_packet = server.raw_receive().await.unwrap().unwrap();
@@ -1587,23 +1607,22 @@ mod tests {
         packet.set_connection_id(server.sender_connection_id);
 
         for _ in 0..3 {
-            iotry!(
-                server
-                    .socket
-                    .discv5
-                    .talk_req(
-                        server.connected_to.clone(),
-                        Vec::try_from(ProtocolId::Utp).unwrap(),
-                        packet.as_ref().to_vec()
-                    )
-                    .await
-            );
+            server
+                .socket
+                .discv5
+                .talk_req(
+                    server.connected_to.clone(),
+                    Vec::try_from(ProtocolId::Utp).unwrap(),
+                    packet.as_ref().to_vec(),
+                )
+                .await
+                .unwrap();
         }
 
-        // FIXME: implement `recv_from` to handle all packets
+        // TODO: implement `recv_from` to handle all packets
         for _ in 0..3 {
             let mut buf = [0; BUF_SIZE];
-            iotry!(client.recv(&mut buf).await);
+            client.recv(&mut buf).await.unwrap();
         }
 
         // Receive data again and check that it's the same we reported as missing
@@ -1619,28 +1638,27 @@ mod tests {
                 let response = response.unwrap();
                 assert!(response.is_some());
                 let response = response.unwrap();
-                iotry!(
-                    server
-                        .socket
-                        .discv5
-                        .talk_req(
-                            client_addr,
-                            Vec::try_from(ProtocolId::Utp).unwrap(),
-                            response.as_ref().to_vec()
-                        )
-                        .await
-                );
+                server
+                    .socket
+                    .discv5
+                    .talk_req(
+                        client_addr,
+                        Vec::try_from(ProtocolId::Utp).unwrap(),
+                        response.as_ref().to_vec(),
+                    )
+                    .await
+                    .unwrap();
             }
             Err(e) => panic!("{}", e),
         }
 
-        iotry!(client.recv(&mut buf).await);
+        client.recv(&mut buf).await.unwrap();
 
         // Gracefully closes connection
         let handle = tokio::spawn(async move { client.close().await });
 
         // Received FIN Packet
-        iotry!(server.recv(&mut buf).await);
-        iotry!(handle.await.unwrap());
+        server.recv(&mut buf).await.unwrap();
+        handle.await.unwrap().unwrap();
     }
 }

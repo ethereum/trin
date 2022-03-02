@@ -91,6 +91,10 @@ pub enum OverlayRequestError {
     /// Error types resulting from building ACCEPT message
     #[error("Error while building accept message")]
     AcceptError(ssz_types::Error),
+
+    /// Error types resulting from building ACCEPT message
+    #[error("Error while sending offer message")]
+    OfferError(String),
 }
 
 impl From<discv5::RequestError> for OverlayRequestError {

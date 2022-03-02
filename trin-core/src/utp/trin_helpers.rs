@@ -50,15 +50,6 @@ pub struct UtpAccept {
     pub message: Vec<(Vec<u8>, Vec<u8>)>,
 }
 
-// This is used in Channels. It is just used here so we know when to send the data, but also when that
-// data is fully sent. We need this because uTP streams aren't long lived, also how uTP is implemented
-// on top of Discv5
-#[derive(PartialEq, Debug)]
-pub enum UtpStreamState {
-    Connected,
-    Finished,
-}
-
 // This is not in a spec, this is just for internally tracking for what portal message
 // negotiated the uTP stream
 pub enum UtpMessageId {

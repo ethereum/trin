@@ -16,7 +16,7 @@ use crate::portalnet::types::messages::{
 };
 
 use crate::utp::stream::{ConnectionKey, UtpListener};
-use crate::utp::trin_helpers::{UtpAccept, UtpMessage, UtpMessageId, UtpStreamState};
+use crate::utp::trin_helpers::{UtpAccept, UtpMessage, UtpMessageId};
 use discv5::{
     enr::NodeId,
     kbucket::{Filter, KBucketsTable},
@@ -25,7 +25,6 @@ use discv5::{
 use futures::channel::oneshot;
 use parking_lot::RwLock;
 use ssz::Encode;
-use tokio::sync::mpsc;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::RwLock as RwLockT;
 use tracing::{debug, warn};
@@ -280,9 +279,15 @@ impl<TContentKey: OverlayContentKey + Send> OverlayProtocol<TContentKey> {
             .send_overlay_request(Request::Offer(request), direction)
             .await
         {
-            Ok(Response::Accept(accept)) => Ok(self
-                .process_accept_response(accept, enr, content_keys_offered)
-                .await),
+            Ok(Response::Accept(accept)) => {
+                match self
+                    .process_accept_response(accept, enr, content_keys_offered)
+                    .await
+                {
+                    Ok(accept) => Ok(accept),
+                    Err(msg) => Err(OverlayRequestError::OfferError(msg.to_string())),
+                }
+            }
             Ok(_) => Err(OverlayRequestError::InvalidResponse),
             Err(error) => Err(error),
         }
@@ -293,10 +298,8 @@ impl<TContentKey: OverlayContentKey + Send> OverlayProtocol<TContentKey> {
         response: Accept,
         enr: Enr,
         content_keys_offered: Vec<TContentKey>,
-    ) -> Accept {
+    ) -> anyhow::Result<Accept> {
         let connection_id = response.connection_id.clone();
-
-        let (tx, mut rx) = mpsc::unbounded_channel::<UtpStreamState>();
 
         self.utp_listener
             .write()
@@ -305,11 +308,17 @@ impl<TContentKey: OverlayContentKey + Send> OverlayProtocol<TContentKey> {
             .insert(connection_id.clone(), UtpMessageId::OfferAcceptStream);
 
         // initiate the connection to the acceptor
-        self.utp_listener
+        let mut conn = self
+            .utp_listener
             .write()
             .await
-            .connect(connection_id.clone(), enr.node_id(), tx)
-            .await;
+            .connect(connection_id.clone(), enr.node_id())
+            .await?;
+
+        // TODO: Replace this with recv_from
+        // Handle STATE packet for SYN
+        let mut buf = [0; 1500];
+        conn.recv(&mut buf).await?;
 
         // Return to acceptor: the content key and corresponding data
         let mut content_items: Vec<(Vec<u8>, Vec<u8>)> = vec![];
@@ -338,44 +347,30 @@ impl<TContentKey: OverlayContentKey + Send> OverlayProtocol<TContentKey> {
 
         let utp_listener = self.utp_listener.clone();
         tokio::spawn(async move {
-            while let Some(state) = rx.recv().await {
-                if state == UtpStreamState::Connected {
-                    if let Some(conn) =
-                        utp_listener
-                            .write()
-                            .await
-                            .utp_connections
-                            .get_mut(&ConnectionKey {
-                                node_id: enr.node_id(),
-                                conn_id_recv: connection_id,
-                            })
-                    {
-                        // send the content to the acceptor over a uTP stream
-                        if let Err(msg) = conn
-                            .send_to(&UtpMessage::new(content_message.as_ssz_bytes()).encode()[..])
-                            .await
-                        {
-                            debug!("Error sending content {msg}");
-                        };
+            if let Some(conn) = utp_listener
+                .write()
+                .await
+                .utp_connections
+                .get_mut(&ConnectionKey {
+                    node_id: enr.node_id(),
+                    conn_id_recv: connection_id,
+                })
+            {
+                // send the content to the acceptor over a uTP stream
+                if let Err(msg) = conn
+                    .send_to(&UtpMessage::new(content_message.as_ssz_bytes()).encode()[..])
+                    .await
+                {
+                    debug!("Error sending content {msg}");
+                } else {
+                    // Close uTP connection
+                    if let Err(msg) = conn.close().await {
+                        debug!("Unable to close uTP connection!: {msg}")
                     }
-                } else if state == UtpStreamState::Finished {
-                    if let Some(conn) =
-                        utp_listener
-                            .write()
-                            .await
-                            .utp_connections
-                            .get_mut(&ConnectionKey {
-                                node_id: enr.node_id(),
-                                conn_id_recv: connection_id,
-                            })
-                    {
-                        conn.send_finalize().await;
-                        return;
-                    }
-                }
+                };
             }
         });
-        response
+        Ok(response)
     }
 
     /// Sends a request through the overlay service.

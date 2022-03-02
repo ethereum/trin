@@ -106,6 +106,11 @@ impl StateNetwork {
                     debug!("Unexpected error while bonding with {} => {:?}", enr, error);
                     return Err(anyhow!(error.to_string()));
                 }
+                _ => {
+                    let msg = format!("Unexpected error while bonding with {enr}");
+                    debug!("{msg}");
+                    return Err(anyhow!(msg));
+                }
             }
         }
         Ok(())
