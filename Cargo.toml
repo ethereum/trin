@@ -39,6 +39,7 @@ members = [
     "trin-core",
     "trin-cli",
     "ethportal-peertest",
+    "utp-testing",
 ]
 
 [patch.crates-io]
