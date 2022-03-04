@@ -7,6 +7,7 @@ use tokio::sync::{mpsc, RwLock};
 use trin_core::jsonrpc::handlers::JsonRpcHandler;
 use trin_core::jsonrpc::types::PortalJsonRpcRequest;
 use trin_core::portalnet::events::PortalnetEvents;
+use trin_core::utils::bootnodes::parse_bootnodes;
 use trin_core::utp::stream::UtpListener;
 use trin_core::{
     cli::{TrinConfig, HISTORY_NETWORK, STATE_NETWORK},
@@ -22,11 +23,7 @@ pub async fn run_trin(
 ) -> Result<Arc<JsonRpcExiter>, Box<dyn std::error::Error>> {
     trin_config.display_config();
 
-    let bootnode_enrs = trin_config
-        .bootnodes
-        .iter()
-        .map(|nodestr| nodestr.parse().unwrap())
-        .collect();
+    let bootnode_enrs = parse_bootnodes(&trin_config.bootnodes)?;
 
     let portalnet_config = PortalnetConfig {
         external_addr: trin_config.external_addr,

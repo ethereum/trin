@@ -14,6 +14,7 @@ use trin_core::portalnet::discovery::Discovery;
 use trin_core::portalnet::events::PortalnetEvents;
 use trin_core::portalnet::storage::{PortalStorage, PortalStorageConfig};
 use trin_core::portalnet::types::messages::PortalnetConfig;
+use trin_core::utils::bootnodes::parse_bootnodes;
 use trin_core::utp::stream::UtpListener;
 
 pub mod content_key;
@@ -29,11 +30,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let trin_config = TrinConfig::from_cli();
     trin_config.display_config();
 
-    let bootnode_enrs = trin_config
-        .bootnodes
-        .iter()
-        .map(|nodestr| nodestr.parse().unwrap())
-        .collect();
+    let bootnode_enrs = parse_bootnodes(&trin_config.bootnodes)?;
 
     let portalnet_config = PortalnetConfig {
         external_addr: trin_config.external_addr,
