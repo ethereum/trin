@@ -22,8 +22,6 @@ use crate::cli::TrinConfig;
 use crate::jsonrpc::endpoints::TrinEndpoint;
 use crate::jsonrpc::types::{JsonRequest, PortalJsonRpcRequest};
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
-
 pub struct JsonRpcExiter {
     should_exit: Arc<RwLock<bool>>,
 }
@@ -376,16 +374,8 @@ fn dispatch_trin_request(
     portal_tx: UnboundedSender<PortalJsonRpcRequest>,
 ) -> Result<String, String> {
     match endpoint {
-        TrinEndpoint::PortalEndpoint(_) => Ok(json!({
-            "jsonrpc": "2.0",
-            "id": obj.id,
-            "result": format!("trin v{}", VERSION),
-        })
-        .to_string()),
         TrinEndpoint::InfuraEndpoint(_) => dispatch_infura_request(obj, infura_url),
-        TrinEndpoint::Discv5Endpoint(_) => dispatch_portal_request(obj, endpoint, portal_tx),
-        TrinEndpoint::HistoryEndpoint(_) => dispatch_portal_request(obj, endpoint, portal_tx),
-        TrinEndpoint::StateEndpoint(_) => dispatch_portal_request(obj, endpoint, portal_tx),
+        _ => dispatch_portal_request(obj, endpoint, portal_tx),
     }
 }
 
@@ -408,7 +398,7 @@ fn dispatch_portal_request(
     endpoint: TrinEndpoint,
     portal_tx: UnboundedSender<PortalJsonRpcRequest>,
 ) -> Result<String, String> {
-    let (resp_tx, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
+    let (resp_tx, mut resp_rx) = mpsc::unbounded_channel::<anyhow::Result<Value>>();
     let message = PortalJsonRpcRequest {
         endpoint,
         resp: resp_tx,

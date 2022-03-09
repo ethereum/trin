@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use super::{
     discovery::Discovery,
-    overlay_service::{Node, OverlayRequest, OverlayService, RequestDirection},
     types::{content_key::OverlayContentKey, metric::Metric},
+    overlay_service::{Node, OverlayRequest, OverlayService},
     Enr,
 };
 use crate::portalnet::storage::PortalStorage;
@@ -31,6 +31,7 @@ use tokio::sync::RwLock as RwLockT;
 use tracing::{debug, warn};
 
 pub use super::overlay_service::OverlayRequestError;
+pub use super::overlay_service::RequestDirection;
 
 /// Configuration parameters for the overlay network.
 #[derive(Clone)]
@@ -426,7 +427,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
     }
 
     /// Sends a request through the overlay service.
-    async fn send_overlay_request(
+    pub async fn send_overlay_request(
         &self,
         request: Request,
         direction: RequestDirection,

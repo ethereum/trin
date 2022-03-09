@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use serde_json::Value;
+use rlp::Rlp;
+use serde_json::{json, Value};
 use tokio::sync::mpsc;
 
 use crate::network::HistoryNetwork;
@@ -8,9 +9,14 @@ use trin_core::jsonrpc::{
     endpoints::HistoryEndpoint,
     types::{
         FindContentParams, FindNodesParams, HistoryJsonRpcRequest, LocalContentParams, PingParams,
+        RecursiveFindContentParams,
     },
 };
+use trin_core::portalnet::overlay::RequestDirection;
 use trin_core::portalnet::types::content_key::HistoryContentKey;
+use trin_core::portalnet::types::messages::{Content, FindContent, Request, Response, SszEnr};
+use trin_core::portalnet::Enr;
+use trin_core::types::header::Header;
 
 /// Handles History network JSON-RPC requests
 pub struct HistoryRequestHandler {
@@ -42,6 +48,75 @@ impl HistoryRequestHandler {
                             }
                             Err(msg) => Err(format!("Invalid LocalContent params: {msg:?}")),
                         };
+                    let _ = request.resp.send(response);
+                }
+                HistoryEndpoint::RecursiveFindContent => {
+                    let direction = RequestDirection::Initialize;
+
+                    let find_content_params =
+                        match RecursiveFindContentParams::try_from(request.params) {
+                            Ok(params) => params,
+                            Err(msg) => {
+                                let _ = request.resp.send(Err(format!(
+                                    "Invalid RecursiveFindContent params: {:?}",
+                                    msg.code
+                                )));
+                                return;
+                            }
+                        };
+
+                    let content_key = find_content_params.content_key.to_vec();
+                    let decoded_content_key = Request::FindContent(FindContent { content_key });
+                    let first_response = match self
+                        .network
+                        .overlay
+                        .send_overlay_request(decoded_content_key, direction)
+                        .await
+                    {
+                        Ok(content) => content,
+                        Err(msg) => {
+                            let _ = request.resp.send(Err(format!(
+                                "Unable to initialize RecursiveFindContent request: {:?}",
+                                msg
+                            )));
+                            return;
+                        }
+                    };
+                    // Pretty much all this logic is temporary hack that will be replaced by
+                    // iterative find content support
+                    let response = match first_response {
+                        Response::Content(val) => match val {
+                            Content::Enrs(enrs) => {
+                                let target_enr: SszEnr = enrs.first().unwrap().clone();
+                                let target_enr: Enr = target_enr.into();
+                                match self
+                                    .network
+                                    .overlay
+                                    .send_find_content(
+                                        target_enr,
+                                        find_content_params.content_key.into(),
+                                    )
+                                    .await
+                                {
+                                    Ok(content) => match content {
+                                        Content::Content(val) => {
+                                            let rlp = Rlp::new(&val);
+                                            let header = Header::decode_rlp(&rlp).unwrap();
+                                            Ok(json!(header))
+                                        }
+                                        _ => Err("Invalid Content value.".to_string()),
+                                    },
+                                    Err(msg) => Err(format!(
+                                        "RecursiveFindContent request timeout: {:?}",
+                                        msg
+                                    )),
+                                }
+                            }
+                            Content::Content(_) => Ok(val.try_into().unwrap()),
+                            _ => Err("Unsupported content".to_string()),
+                        },
+                        _ => Err("Invalid RecursiveFindContent params".to_string()),
+                    };
                     let _ = request.resp.send(response);
                 }
                 HistoryEndpoint::DataRadius => {

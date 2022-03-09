@@ -1,6 +1,7 @@
 use bytes::Bytes;
 use ethereum_types::{Bloom, H160, H256, U256};
 use rlp::{DecoderError, Encodable, Rlp, RlpStream};
+use serde::Serialize;
 
 /// An Ethereum address.
 type Address = H160;
@@ -8,7 +9,7 @@ type Address = H160;
 const LONDON_BLOCK_NUMBER: u64 = 12965000;
 
 /// A block header.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Header {
     /// Block parent hash.
     pub parent_hash: H256,
@@ -35,7 +36,7 @@ pub struct Header {
     /// Block timestamp.
     pub timestamp: u64,
     /// Block extra data.
-    pub extra_data: Bytes,
+    pub extra_data: Vec<u8>,
     /// Block PoW mix hash.
     pub mix_hash: Option<H256>,
     /// Block PoW nonce.
@@ -52,7 +53,7 @@ impl Header {
     }
 
     /// Returns the RLP representation of the header.
-    fn rlp(&self, with_seal: bool) -> Bytes {
+    pub fn rlp(&self, with_seal: bool) -> Bytes {
         let mut s = RlpStream::new();
         self.stream_rlp(&mut s, with_seal);
         s.out().freeze()
