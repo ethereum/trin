@@ -586,6 +586,9 @@ mod test {
         assert_eq!(hex, expected_hex);
     }
 
+    // Wire message test vectors available in Ethereum Portal Network specs repo:
+    // github.com/ethereum/portal-network-specs
+
     #[test]
     fn message_encoding_ping() {
         let data_radius: U256 = U256::MAX - U256::from(1u8);
@@ -601,7 +604,7 @@ mod test {
         let expected_encoded = "0001000000000000000c000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
         assert_eq!(encoded, expected_encoded);
 
-        let decoded = Message::try_from(hex::decode(expected_encoded).unwrap()).unwrap();
+        let decoded = Message::try_from(hex::decode(encoded).unwrap()).unwrap();
         assert_eq!(decoded, ping);
     }
 
@@ -620,7 +623,7 @@ mod test {
         let expected_encoded = "0101000000000000000c000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f";
         assert_eq!(encoded, expected_encoded);
 
-        let decoded = Message::try_from(hex::decode(expected_encoded).unwrap()).unwrap();
+        let decoded = Message::try_from(hex::decode(encoded).unwrap()).unwrap();
         assert_eq!(decoded, pong);
     }
 
@@ -635,7 +638,7 @@ mod test {
         let expected_encoded = "02040000000001ff00";
         assert_eq!(encoded, expected_encoded);
 
-        let decoded = Message::try_from(hex::decode(expected_encoded).unwrap()).unwrap();
+        let decoded = Message::try_from(hex::decode(encoded).unwrap()).unwrap();
         assert_eq!(decoded, find_nodes);
     }
 
@@ -652,7 +655,7 @@ mod test {
         let expected_encoded = "030105000000";
         assert_eq!(encoded, expected_encoded);
 
-        let decoded = Message::try_from(hex::decode(expected_encoded).unwrap()).unwrap();
+        let decoded = Message::try_from(hex::decode(encoded).unwrap()).unwrap();
         assert_eq!(decoded, nodes);
     }
 
@@ -671,7 +674,7 @@ mod test {
         let expected_encoded = "030105000000080000007f000000f875b8401ce2991c64993d7c84c29a00bdc871917551c7d330fca2dd0d69c706596dc655448f030b98a77d4001fd46ae0112ce26d613c5a6a02a81a6223cd0c4edaa53280182696482763489736563703235366b31a103ca634cae0d49acb401d8a4c6b6fe8c55b70d115bf400769cc1400f3258cd3138f875b840d7f1c39e376297f81d7297758c64cb37dcc5c3beea9f57f7ce9695d7d5a67553417d719539d6ae4b445946de4d99e680eb8063f29485b555d45b7df16a1850130182696482763489736563703235366b31a1030e2cb74241c0c4fc8e8166f1a79a05d5b0dd95813a74b094529f317d5c39d235";
         assert_eq!(encoded, expected_encoded);
 
-        let decoded = Message::try_from(hex::decode(expected_encoded).unwrap()).unwrap();
+        let decoded = Message::try_from(hex::decode(encoded).unwrap()).unwrap();
         assert_eq!(decoded, nodes);
     }
 
@@ -686,7 +689,7 @@ mod test {
         let expected_encoded = "0404000000706f7274616c";
         assert_eq!(encoded, expected_encoded);
 
-        let decoded = Message::try_from(hex::decode(expected_encoded).unwrap()).unwrap();
+        let decoded = Message::try_from(hex::decode(encoded).unwrap()).unwrap();
         assert_eq!(decoded, find_content);
     }
 
@@ -701,7 +704,7 @@ mod test {
         let expected_encoded = "05000102";
         assert_eq!(encoded, expected_encoded);
 
-        let decoded = Message::try_from(hex::decode(expected_encoded).unwrap()).unwrap();
+        let decoded = Message::try_from(hex::decode(encoded).unwrap()).unwrap();
         assert_eq!(decoded, content);
     }
 
@@ -717,7 +720,7 @@ mod test {
         let expected_encoded = "05017468652063616b652069732061206c6965";
         assert_eq!(encoded, expected_encoded);
 
-        let decoded = Message::try_from(hex::decode(expected_encoded).unwrap()).unwrap();
+        let decoded = Message::try_from(hex::decode(encoded).unwrap()).unwrap();
         assert_eq!(decoded, content);
     }
 
@@ -733,7 +736,7 @@ mod test {
         let expected_encoded = "0502080000007f000000f875b8401ce2991c64993d7c84c29a00bdc871917551c7d330fca2dd0d69c706596dc655448f030b98a77d4001fd46ae0112ce26d613c5a6a02a81a6223cd0c4edaa53280182696482763489736563703235366b31a103ca634cae0d49acb401d8a4c6b6fe8c55b70d115bf400769cc1400f3258cd3138f875b840d7f1c39e376297f81d7297758c64cb37dcc5c3beea9f57f7ce9695d7d5a67553417d719539d6ae4b445946de4d99e680eb8063f29485b555d45b7df16a1850130182696482763489736563703235366b31a1030e2cb74241c0c4fc8e8166f1a79a05d5b0dd95813a74b094529f317d5c39d235";
         assert_eq!(encoded, expected_encoded);
 
-        let decoded = Message::try_from(hex::decode(expected_encoded).unwrap()).unwrap();
+        let decoded = Message::try_from(hex::decode(encoded).unwrap()).unwrap();
         assert_eq!(decoded, content);
     }
 
@@ -748,7 +751,7 @@ mod test {
         let expected_encoded = "060400000004000000010203";
         assert_eq!(encoded, expected_encoded);
 
-        let decoded = Message::try_from(hex::decode(expected_encoded).unwrap()).unwrap();
+        let decoded = Message::try_from(hex::decode(encoded).unwrap()).unwrap();
         assert_eq!(decoded, offer);
     }
 
@@ -768,7 +771,7 @@ mod test {
         let expected_encoded = "070102060000000101";
         assert_eq!(encoded, expected_encoded);
 
-        let decoded = Message::try_from(hex::decode(expected_encoded).unwrap()).unwrap();
+        let decoded = Message::try_from(hex::decode(encoded).unwrap()).unwrap();
         assert_eq!(decoded, accept);
     }
 }
