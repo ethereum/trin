@@ -144,14 +144,11 @@ impl<TContentKey: OverlayContentKey + Send> OverlayProtocol<TContentKey> {
         &self,
         talk_request: &TalkRequest,
     ) -> Result<Response, OverlayRequestError> {
-        let request = match Message::from_bytes(talk_request.body()) {
-            Ok(Message::Request(request)) => request,
-            Ok(_) => {
-                return Err(OverlayRequestError::InvalidRequest(format!(
-                    "Message not recognized request type: {:?}",
-                    talk_request.body()
-                )))
-            }
+        let request = match Message::try_from(Vec::<u8>::from(talk_request.body())) {
+            Ok(message) => match Request::try_from(message) {
+                Ok(request) => request,
+                Err(err) => return Err(OverlayRequestError::InvalidRequest(err.to_string())),
+            },
             Err(_) => return Err(OverlayRequestError::DecodeError),
         };
         let direction = RequestDirection::Incoming {

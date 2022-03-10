@@ -14,7 +14,6 @@ use ssz_types::{typenum, BitList, VariableList};
 use thiserror::Error;
 use validator::ValidationError;
 
-use crate::portalnet::overlay_service::OverlayRequestError;
 use crate::portalnet::{types::uint::U256, Enr};
 
 pub type ByteList = VariableList<u8, typenum::U2048>;
@@ -187,88 +186,71 @@ impl TryFrom<ProtocolId> for Vec<u8> {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct ProtocolMessage {
-    message_id: u8,
-    encoded_message: Message,
-}
-
-#[derive(Debug, PartialEq, Clone)]
+/// A Portal protocol message.
+#[derive(Debug, PartialEq, Clone, Encode, Decode)]
+#[ssz(enum_behaviour = "union")]
 pub enum Message {
-    Request(Request),
-    Response(Response),
+    Ping(Ping),
+    Pong(Pong),
+    FindNodes(FindNodes),
+    Nodes(Nodes),
+    FindContent(FindContent),
+    Content(Content),
+    Offer(Offer),
+    Accept(Accept),
 }
 
-impl Message {
-    /// Return the byte representation of the Message by prefixing the `message_id`
-    /// with the message payload.
-    pub fn to_bytes(&self) -> Vec<u8> {
-        match self {
-            Message::Request(req) => {
-                let mut payload = vec![req.message_id()];
-                match req {
-                    Request::Ping(p) => payload.append(&mut p.as_ssz_bytes()),
-                    Request::FindNodes(p) => payload.append(&mut p.as_ssz_bytes()),
-                    Request::FindContent(p) => payload.append(&mut p.as_ssz_bytes()),
-                    Request::Offer(p) => payload.append(&mut p.as_ssz_bytes()),
-                }
-                payload
-            }
-            Message::Response(resp) => {
-                let mut payload = vec![resp.message_id()];
-                match resp {
-                    Response::Pong(p) => payload.append(&mut p.as_ssz_bytes()),
-                    Response::Nodes(p) => payload.append(&mut p.as_ssz_bytes()),
-                    Response::Content(p) => payload.append(&mut p.as_ssz_bytes()),
-                    Response::Accept(p) => payload.append(&mut p.as_ssz_bytes()),
-                }
-                payload
-            }
-        }
+// Silence clippy to avoid implementing newtype pattern on imported type.
+#[allow(clippy::from_over_into)]
+impl Into<Vec<u8>> for Message {
+    fn into(self) -> Vec<u8> {
+        self.as_ssz_bytes()
     }
+}
 
-    /// Decode a `Message` type from bytes.
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, MessageDecodeError> {
-        if let Some(message_id) = bytes.first() {
-            match message_id {
-                // Requests
-                0 => Ok(Message::Request(Request::Ping(
-                    Ping::from_ssz_bytes(&bytes[1..]).map_err(|e| MessageDecodeError::from(e))?,
-                ))),
-                2 => Ok(Message::Request(Request::FindNodes(
-                    FindNodes::from_ssz_bytes(&bytes[1..])
-                        .map_err(|e| MessageDecodeError::from(e))?,
-                ))),
-                4 => Ok(Message::Request(Request::FindContent(
-                    FindContent::from_ssz_bytes(&bytes[1..])
-                        .map_err(|e| MessageDecodeError::from(e))?,
-                ))),
-                6 => Ok(Message::Request(Request::Offer(
-                    Offer::from_ssz_bytes(&bytes[1..]).map_err(|e| MessageDecodeError::from(e))?,
-                ))),
-                // Responses
-                1 => Ok(Message::Response(Response::Pong(
-                    Pong::from_ssz_bytes(&bytes[1..]).map_err(|e| MessageDecodeError::from(e))?,
-                ))),
-                3 => Ok(Message::Response(Response::Nodes(
-                    Nodes::from_ssz_bytes(&bytes[1..]).map_err(|e| MessageDecodeError::from(e))?,
-                ))),
-                5 => Ok(Message::Response(Response::Content(
-                    Content::from_ssz_bytes(&bytes[1..])
-                        .map_err(|e| MessageDecodeError::from(e))?,
-                ))),
-                7 => Ok(Message::Response(Response::Accept(
-                    Accept::from_ssz_bytes(&bytes[1..]).map_err(|e| MessageDecodeError::from(e))?,
-                ))),
-                _ => Err(MessageDecodeError::MessageId),
-            }
-        } else {
-            Err(MessageDecodeError::Empty)
+impl TryFrom<Vec<u8>> for Message {
+    type Error = MessageDecodeError;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        match Message::from_ssz_bytes(&value) {
+            Ok(key) => Ok(key),
+            Err(err) => Err(MessageDecodeError::from(err)),
         }
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+impl From<Request> for Message {
+    fn from(request: Request) -> Self {
+        match request {
+            Request::Ping(ping) => Message::Ping(ping),
+            Request::FindNodes(find_nodes) => Message::FindNodes(find_nodes),
+            Request::FindContent(find_content) => Message::FindContent(find_content),
+            Request::Offer(offer) => Message::Offer(offer),
+        }
+    }
+}
+
+impl From<Response> for Message {
+    fn from(response: Response) -> Self {
+        match response {
+            Response::Pong(pong) => Message::Pong(pong),
+            Response::Nodes(nodes) => Message::Nodes(nodes),
+            Response::Content(content) => Message::Content(content),
+            Response::Accept(accept) => Message::Accept(accept),
+        }
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum TryFromMessageError {
+    #[error("non-request message")]
+    NonRequestMessage,
+    #[error("non-response message")]
+    NonResponseMessage,
+}
+
+/// A Portal protocol request.
+#[derive(Debug, Clone)]
 pub enum Request {
     Ping(Ping),
     FindNodes(FindNodes),
@@ -276,18 +258,27 @@ pub enum Request {
     Offer(Offer),
 }
 
-impl Request {
-    fn message_id(&self) -> u8 {
-        match self {
-            Request::Ping(_) => 0,
-            Request::FindNodes(_) => 2,
-            Request::FindContent(_) => 4,
-            Request::Offer(_) => 6,
+impl TryFrom<Message> for Request {
+    type Error = TryFromMessageError;
+
+    fn try_from(message: Message) -> Result<Self, Self::Error> {
+        // Match all variants explicitly so that a new variant cannot be added without additional
+        // match arm.
+        match message {
+            Message::Ping(ping) => Ok(Request::Ping(ping)),
+            Message::Pong(_) => Err(TryFromMessageError::NonRequestMessage),
+            Message::FindNodes(find_nodes) => Ok(Request::FindNodes(find_nodes)),
+            Message::Nodes(_) => Err(TryFromMessageError::NonRequestMessage),
+            Message::FindContent(find_content) => Ok(Request::FindContent(find_content)),
+            Message::Content(_) => Err(TryFromMessageError::NonRequestMessage),
+            Message::Offer(offer) => Ok(Request::Offer(offer)),
+            Message::Accept(_) => Err(TryFromMessageError::NonRequestMessage),
         }
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+/// A Portal protocol response.
+#[derive(Debug, Clone)]
 pub enum Response {
     Pong(Pong),
     Nodes(Nodes),
@@ -295,13 +286,21 @@ pub enum Response {
     Accept(Accept),
 }
 
-impl Response {
-    fn message_id(&self) -> u8 {
-        match self {
-            Response::Pong(_) => 1,
-            Response::Nodes(_) => 3,
-            Response::Content(_) => 5,
-            Response::Accept(_) => 7,
+impl TryFrom<Message> for Response {
+    type Error = TryFromMessageError;
+
+    fn try_from(message: Message) -> Result<Self, Self::Error> {
+        // Match all variants explicitly so that a new variant cannot be added without additional
+        // match arm.
+        match message {
+            Message::Ping(_) => Err(TryFromMessageError::NonResponseMessage),
+            Message::Pong(pong) => Ok(Response::Pong(pong)),
+            Message::FindNodes(_) => Err(TryFromMessageError::NonResponseMessage),
+            Message::Nodes(nodes) => Ok(Response::Nodes(nodes)),
+            Message::FindContent(_) => Err(TryFromMessageError::NonResponseMessage),
+            Message::Content(content) => Ok(Response::Content(content)),
+            Message::Offer(_) => Err(TryFromMessageError::NonResponseMessage),
+            Message::Accept(accept) => Ok(Response::Accept(accept)),
         }
     }
 }
@@ -337,28 +336,6 @@ impl fmt::Display for Pong {
             self.enr_seq,
             hex::encode(self.custom_payload.as_ssz_bytes())
         )
-    }
-}
-
-impl TryFrom<&Vec<u8>> for Pong {
-    type Error = OverlayRequestError;
-
-    fn try_from(value: &Vec<u8>) -> Result<Self, Self::Error> {
-        if value.len() == 0 {
-            return Err(OverlayRequestError::EmptyResponse);
-        }
-        let message = match Message::from_bytes(&value) {
-            Ok(val) => val,
-            Err(_) => return Err(OverlayRequestError::DecodeError),
-        };
-        let response = match message {
-            Message::Response(val) => val,
-            _ => return Err(OverlayRequestError::InvalidResponse),
-        };
-        match response {
-            Response::Pong(val) => Ok(val),
-            _ => return Err(OverlayRequestError::InvalidResponse),
-        }
     }
 }
 
@@ -484,32 +461,6 @@ pub enum Content {
     Enrs(Vec<SszEnr>),
 }
 
-impl Content {
-    pub fn connection_id(self) -> Result<u16, MessageDecodeError> {
-        if let Content::ConnectionId(val) = self {
-            Ok(val)
-        } else {
-            Err(MessageDecodeError::Type)
-        }
-    }
-
-    pub fn content(self) -> Result<ByteList, MessageDecodeError> {
-        if let Content::Content(val) = self {
-            Ok(val)
-        } else {
-            Err(MessageDecodeError::Type)
-        }
-    }
-
-    pub fn enrs(self) -> Result<Vec<SszEnr>, MessageDecodeError> {
-        if let Content::Enrs(val) = self {
-            Ok(val)
-        } else {
-            Err(MessageDecodeError::Type)
-        }
-    }
-}
-
 impl TryInto<Value> for Content {
     type Error = MessageDecodeError;
 
@@ -619,272 +570,208 @@ impl FromStr for HexData {
 #[cfg(test)]
 mod test {
     use super::*;
-    use discv5::enr::{CombinedKey, EnrBuilder};
-    use std::net::Ipv4Addr;
-
-    fn enr_one_key() -> CombinedKey {
-        CombinedKey::secp256k1_from_bytes(vec![1; 32].as_mut_slice()).unwrap()
-    }
-
-    fn enr_two_key() -> CombinedKey {
-        CombinedKey::secp256k1_from_bytes(vec![2; 32].as_mut_slice()).unwrap()
-    }
-
-    fn build_enr(enr_key: CombinedKey) -> Enr {
-        let ip = Ipv4Addr::new(192, 168, 0, 1);
-        EnrBuilder::new("v4")
-            .ip(ip.into())
-            .tcp(8000)
-            .build(&enr_key)
-            .unwrap()
-    }
-
-    #[test]
-    fn test_content_encodes_content() {
-        let some_content = ByteList::from(VariableList::from(vec![1; 33]));
-        let msg = Content::Content(some_content.clone());
-        let actual = msg.as_ssz_bytes();
-        let decoded = Content::from_ssz_bytes(&actual).unwrap();
-        assert_eq!(decoded.content().unwrap(), some_content);
-        assert_eq!(actual.len(), msg.ssz_bytes_len());
-    }
-
-    #[test]
-    fn test_content_encodes_single_enr() {
-        let enr = build_enr(enr_one_key());
-        let msg = Content::Enrs(vec![SszEnr(enr.clone())]);
-        let actual = msg.as_ssz_bytes();
-        let decoded = Content::from_ssz_bytes(&actual).unwrap();
-        assert!(SszEnr(enr).eq(decoded.enrs().unwrap().first().unwrap()));
-        assert_eq!(actual.len(), msg.ssz_bytes_len());
-    }
-
-    #[test]
-    fn test_content_encodes_double_enrs() {
-        let enr_one = build_enr(enr_one_key());
-        let enr_two = build_enr(enr_two_key());
-
-        let msg = Content::Enrs(vec![SszEnr(enr_one.clone()), SszEnr(enr_two.clone())]);
-        let actual = msg.as_ssz_bytes();
-        let decoded_enrs = Content::from_ssz_bytes(&actual).unwrap().enrs().unwrap();
-        assert!(SszEnr(enr_one).eq(decoded_enrs.first().unwrap()));
-        assert!(SszEnr(enr_two).eq(&decoded_enrs.into_iter().nth(1).unwrap()));
-        assert_eq!(actual.len(), msg.ssz_bytes_len());
-    }
-
-    #[test]
-    fn test_nodes_encodes_empty() {
-        let empty_enrs: Vec<SszEnr> = vec![];
-        let total: u8 = 0;
-        let msg = Nodes {
-            enrs: empty_enrs.clone(),
-            total,
-        };
-        let actual = msg.as_ssz_bytes();
-        let decoded = Nodes::from_ssz_bytes(&actual).unwrap();
-
-        assert_eq!(decoded, msg);
-        assert_eq!(decoded.enrs, empty_enrs);
-        assert_eq!(decoded.total, 0);
-        assert_eq!(actual.len(), msg.ssz_bytes_len());
-    }
-
-    #[test]
-    fn test_nodes_encodes_single_enr() {
-        let enr = build_enr(enr_one_key());
-        let total: u8 = 1;
-        let msg = Nodes {
-            enrs: vec![SszEnr(enr.clone())],
-            total,
-        };
-        let actual = msg.as_ssz_bytes();
-        let decoded = Nodes::from_ssz_bytes(&actual).unwrap();
-
-        assert_eq!(decoded, msg);
-        assert!(enr.eq(decoded.enrs.first().unwrap()));
-        assert_eq!(actual.len(), msg.ssz_bytes_len());
-    }
-
-    #[test]
-    fn test_nodes_encodes_double_enrs() {
-        let enr_one = build_enr(enr_one_key());
-        let enr_two = build_enr(enr_two_key());
-        let total: u8 = 1;
-        let msg = Nodes {
-            enrs: vec![SszEnr(enr_one.clone()), SszEnr(enr_two.clone())],
-            total,
-        };
-        let actual = msg.as_ssz_bytes();
-        let decoded = Nodes::from_ssz_bytes(&actual).unwrap();
-
-        assert_eq!(decoded, msg);
-        assert!(enr_one.eq(decoded.enrs.first().unwrap()));
-        assert!(enr_two.eq(&decoded.enrs.into_iter().nth(1).unwrap()));
-        assert_eq!(actual.len(), msg.ssz_bytes_len());
-    }
-
-    #[test]
-    fn protocol_id_encode_decode() {
-        let original_hex = "500A";
-        let protocol_id = ProtocolId::from_str(original_hex).unwrap();
-        let expected_hex = hex::encode_upper(Vec::try_from(protocol_id).unwrap());
-
-        assert_eq!(original_hex, expected_hex);
-    }
 
     #[test]
     #[should_panic]
-    fn invalid_protocol_id() {
-        let hex_string = "500F";
-        ProtocolId::from_str(hex_string).unwrap();
+    fn protocol_id_invalid() {
+        let hex = "500F";
+        ProtocolId::from_str(hex).unwrap();
     }
 
-    // test vectors sourced from
-    // https://github.com/ethereum/portal-network-specs/blob/master/portal-wire-test-vectors.md
     #[test]
-    fn test_vector_ping() {
-        let enr_seq = 1u64;
-        let data_radius = U256::MAX - U256::from(1);
+    fn protocol_id_encoding() {
+        let hex = "500A";
+        let protocol_id = ProtocolId::from_str(hex).unwrap();
+        let expected_hex = hex::encode_upper(Vec::try_from(protocol_id).unwrap());
+        assert_eq!(hex, expected_hex);
+    }
+
+    // Wire message test vectors available in Ethereum Portal Network specs repo:
+    // github.com/ethereum/portal-network-specs
+
+    #[test]
+    fn message_encoding_ping() {
+        let data_radius: U256 = U256::MAX - U256::from(1u8);
         let custom_payload = CustomPayload::from(data_radius.as_ssz_bytes());
-        let expected = "0001000000000000000c000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
-        let message = Message::Request(Request::Ping(Ping {
-            enr_seq,
+        let ping = Ping {
+            enr_seq: 1,
             custom_payload,
-        }));
-        assert_eq!(hex::encode(message.to_bytes()), expected);
-        let decoded = Message::from_bytes(message.to_bytes().as_slice()).unwrap();
-        assert_eq!(decoded, message);
-    }
-
-    #[test]
-    fn test_vector_pong() {
-        let enr_seq = 1;
-        let data_radius: U256 = U256::max_value() / 2;
-        let custom_payload = CustomPayload::from(data_radius.as_ssz_bytes());
-        let expected = "0101000000000000000c000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f";
-        let message = Message::Response(Response::Pong(Pong {
-            enr_seq,
-            custom_payload,
-        }));
-        assert_eq!(hex::encode(message.to_bytes()), expected);
-        let decoded = Message::from_bytes(message.to_bytes().as_slice()).unwrap();
-        assert_eq!(decoded, message);
-    }
-
-    #[test]
-    fn test_vector_find_nodes() {
-        let distances = vec![256, 255];
-        let expected = "02040000000001ff00";
-        let message = Message::Request(Request::FindNodes(FindNodes { distances }));
-        assert_eq!(hex::encode(message.to_bytes()), expected);
-        let decoded = Message::from_bytes(message.to_bytes().as_slice()).unwrap();
-        assert_eq!(decoded, message);
-    }
-
-    #[test]
-    fn test_vector_nodes_empty() {
-        let enrs = vec![];
-        let total = 1;
-        let expected = "030105000000";
-        let message = Message::Response(Response::Nodes(Nodes { total, enrs }));
-        assert_eq!(hex::encode(message.to_bytes()), expected);
-        let decoded = Message::from_bytes(message.to_bytes().as_slice()).unwrap();
-        assert_eq!(decoded, message);
-    }
-
-    #[test]
-    fn test_vector_nodes_multiple_enrs() {
-        let enr_one = SszEnr(Enr::from_str("enr:-HW4QBzimRxkmT18hMKaAL3IcZF1UcfTMPyi3Q1pxwZZbcZVRI8DC5infUAB_UauARLOJtYTxaagKoGmIjzQxO2qUygBgmlkgnY0iXNlY3AyNTZrMaEDymNMrg1JrLQB2KTGtv6MVbcNEVv0AHacwUAPMljNMTg").unwrap());
-        let enr_two = SszEnr(Enr::from_str("enr:-HW4QNfxw543Ypf4HXKXdYxkyzfcxcO-6p9X986WldfVpnVTQX1xlTnWrktEWUbeTZnmgOuAY_KUhbVV1Ft98WoYUBMBgmlkgnY0iXNlY3AyNTZrMaEDDiy3QkHAxPyOgWbxp5oF1bDdlYE6dLCUUp8xfVw50jU").unwrap());
-        let enrs = vec![enr_one, enr_two];
-        let total = 1;
-        let expected = "030105000000080000007f000000f875b8401ce2991c64993d7c84c29a00bdc871917551c7d330fca2dd0d69c706596dc655448f030b98a77d4001fd46ae0112ce26d613c5a6a02a81a6223cd0c4edaa53280182696482763489736563703235366b31a103ca634cae0d49acb401d8a4c6b6fe8c55b70d115bf400769cc1400f3258cd3138f875b840d7f1c39e376297f81d7297758c64cb37dcc5c3beea9f57f7ce9695d7d5a67553417d719539d6ae4b445946de4d99e680eb8063f29485b555d45b7df16a1850130182696482763489736563703235366b31a1030e2cb74241c0c4fc8e8166f1a79a05d5b0dd95813a74b094529f317d5c39d235";
-        let message = Message::Response(Response::Nodes(Nodes { total, enrs }));
-        assert_eq!(hex::encode(message.to_bytes()), expected);
-        let decoded = Message::from_bytes(message.to_bytes().as_slice()).unwrap();
-        assert_eq!(decoded, message);
-    }
-
-    #[test]
-    fn test_vector_find_content() {
-        let content_key = hex::decode("706f7274616c").unwrap();
-        let expected = "0404000000706f7274616c";
-        let message = Message::Request(Request::FindContent(FindContent { content_key }));
-        assert_eq!(hex::encode(message.to_bytes()), expected);
-        let decoded = Message::from_bytes(message.to_bytes().as_slice()).unwrap();
-        assert_eq!(decoded, message);
-    }
-
-    #[test]
-    fn test_vector_content_with_connection_id() {
-        let raw = [01u8, 02u8];
-        let connection_id = u16::from_le_bytes(raw);
-        let expected = "05000102";
-        let message = Message::Response(Response::Content(Content::ConnectionId(connection_id)));
-        assert_eq!(hex::encode(message.to_bytes()), expected);
-        let decoded = Message::from_bytes(message.to_bytes().as_slice()).unwrap();
-        assert_eq!(decoded, message);
-    }
-
-    #[test]
-    fn test_vector_content_with_content() {
-        let content = ByteList::from(VariableList::from(
-            hex::decode("7468652063616b652069732061206c6965").unwrap(),
-        ));
-        let expected = "05017468652063616b652069732061206c6965";
-        let message = Message::Response(Response::Content(Content::Content(content)));
-        assert_eq!(hex::encode(message.to_bytes()), expected);
-        let decoded = Message::from_bytes(message.to_bytes().as_slice()).unwrap();
-        assert_eq!(decoded, message);
-    }
-
-    #[test]
-    fn test_vector_content_with_enrs() {
-        let enr_one = SszEnr(Enr::from_str("enr:-HW4QBzimRxkmT18hMKaAL3IcZF1UcfTMPyi3Q1pxwZZbcZVRI8DC5infUAB_UauARLOJtYTxaagKoGmIjzQxO2qUygBgmlkgnY0iXNlY3AyNTZrMaEDymNMrg1JrLQB2KTGtv6MVbcNEVv0AHacwUAPMljNMTg").unwrap());
-        let enr_two = SszEnr(Enr::from_str("enr:-HW4QNfxw543Ypf4HXKXdYxkyzfcxcO-6p9X986WldfVpnVTQX1xlTnWrktEWUbeTZnmgOuAY_KUhbVV1Ft98WoYUBMBgmlkgnY0iXNlY3AyNTZrMaEDDiy3QkHAxPyOgWbxp5oF1bDdlYE6dLCUUp8xfVw50jU").unwrap());
-        let enrs = vec![enr_one, enr_two];
-        let expected = "0502080000007f000000f875b8401ce2991c64993d7c84c29a00bdc871917551c7d330fca2dd0d69c706596dc655448f030b98a77d4001fd46ae0112ce26d613c5a6a02a81a6223cd0c4edaa53280182696482763489736563703235366b31a103ca634cae0d49acb401d8a4c6b6fe8c55b70d115bf400769cc1400f3258cd3138f875b840d7f1c39e376297f81d7297758c64cb37dcc5c3beea9f57f7ce9695d7d5a67553417d719539d6ae4b445946de4d99e680eb8063f29485b555d45b7df16a1850130182696482763489736563703235366b31a1030e2cb74241c0c4fc8e8166f1a79a05d5b0dd95813a74b094529f317d5c39d235";
-        let message = Message::Response(Response::Content(Content::Enrs(enrs)));
-        assert_eq!(hex::encode(message.to_bytes()), expected);
-        let decoded = Message::from_bytes(message.to_bytes().as_slice()).unwrap();
-        assert_eq!(decoded, message);
-    }
-
-    #[test]
-    fn test_offer_request() {
-        let mut content_keys: Vec<Vec<u8>> = Default::default();
-        content_keys.push(vec![1, 2, 3]);
-
-        let request = Offer {
-            content_keys: content_keys.clone(),
         };
+        let ping = Message::Ping(ping);
 
-        let encoded = request.as_ssz_bytes();
-        assert_eq!(hex::encode(encoded.clone()), "0400000004000000010203");
+        let encoded: Vec<u8> = ping.clone().into();
+        let encoded = hex::encode(encoded);
+        let expected_encoded = "0001000000000000000c000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+        assert_eq!(encoded, expected_encoded);
 
-        let decoded = Offer::from_ssz_bytes(&encoded[..]);
-        assert!(decoded.is_ok());
-        let decoded = decoded.unwrap();
-        assert_eq!(decoded.content_keys, content_keys);
+        let decoded = Message::try_from(hex::decode(encoded).unwrap()).unwrap();
+        assert_eq!(decoded, ping);
     }
 
     #[test]
-    fn test_accept_response() {
+    fn message_encoding_pong() {
+        let data_radius: U256 = U256::MAX / U256::from(2u8);
+        let custom_payload = CustomPayload::from(data_radius.as_ssz_bytes());
+        let pong = Pong {
+            enr_seq: 1,
+            custom_payload,
+        };
+        let pong = Message::Pong(pong);
+
+        let encoded: Vec<u8> = pong.clone().into();
+        let encoded = hex::encode(encoded);
+        let expected_encoded = "0101000000000000000c000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f";
+        assert_eq!(encoded, expected_encoded);
+
+        let decoded = Message::try_from(hex::decode(encoded).unwrap()).unwrap();
+        assert_eq!(decoded, pong);
+    }
+
+    #[test]
+    fn message_encoding_find_nodes() {
+        let distances = vec![256, 255];
+        let find_nodes = FindNodes { distances };
+        let find_nodes = Message::FindNodes(find_nodes);
+
+        let encoded: Vec<u8> = find_nodes.clone().into();
+        let encoded = hex::encode(encoded);
+        let expected_encoded = "02040000000001ff00";
+        assert_eq!(encoded, expected_encoded);
+
+        let decoded = Message::try_from(hex::decode(encoded).unwrap()).unwrap();
+        assert_eq!(decoded, find_nodes);
+    }
+
+    #[test]
+    fn message_encoding_nodes_zero_enrs() {
+        let nodes = Nodes {
+            total: 1,
+            enrs: vec![],
+        };
+        let nodes = Message::Nodes(nodes);
+
+        let encoded: Vec<u8> = nodes.clone().into();
+        let encoded = hex::encode(encoded);
+        let expected_encoded = "030105000000";
+        assert_eq!(encoded, expected_encoded);
+
+        let decoded = Message::try_from(hex::decode(encoded).unwrap()).unwrap();
+        assert_eq!(decoded, nodes);
+    }
+
+    #[test]
+    fn message_encoding_nodes_multiple_enrs() {
+        let enr_one = SszEnr(Enr::from_str("enr:-HW4QBzimRxkmT18hMKaAL3IcZF1UcfTMPyi3Q1pxwZZbcZVRI8DC5infUAB_UauARLOJtYTxaagKoGmIjzQxO2qUygBgmlkgnY0iXNlY3AyNTZrMaEDymNMrg1JrLQB2KTGtv6MVbcNEVv0AHacwUAPMljNMTg").unwrap());
+        let enr_two = SszEnr(Enr::from_str("enr:-HW4QNfxw543Ypf4HXKXdYxkyzfcxcO-6p9X986WldfVpnVTQX1xlTnWrktEWUbeTZnmgOuAY_KUhbVV1Ft98WoYUBMBgmlkgnY0iXNlY3AyNTZrMaEDDiy3QkHAxPyOgWbxp5oF1bDdlYE6dLCUUp8xfVw50jU").unwrap());
+        let nodes = Nodes {
+            total: 1,
+            enrs: vec![enr_one, enr_two],
+        };
+        let nodes = Message::Nodes(nodes);
+
+        let encoded: Vec<u8> = nodes.clone().into();
+        let encoded = hex::encode(encoded);
+        let expected_encoded = "030105000000080000007f000000f875b8401ce2991c64993d7c84c29a00bdc871917551c7d330fca2dd0d69c706596dc655448f030b98a77d4001fd46ae0112ce26d613c5a6a02a81a6223cd0c4edaa53280182696482763489736563703235366b31a103ca634cae0d49acb401d8a4c6b6fe8c55b70d115bf400769cc1400f3258cd3138f875b840d7f1c39e376297f81d7297758c64cb37dcc5c3beea9f57f7ce9695d7d5a67553417d719539d6ae4b445946de4d99e680eb8063f29485b555d45b7df16a1850130182696482763489736563703235366b31a1030e2cb74241c0c4fc8e8166f1a79a05d5b0dd95813a74b094529f317d5c39d235";
+        assert_eq!(encoded, expected_encoded);
+
+        let decoded = Message::try_from(hex::decode(encoded).unwrap()).unwrap();
+        assert_eq!(decoded, nodes);
+    }
+
+    #[test]
+    fn message_encoding_find_content() {
+        let content_key = hex::decode("706f7274616c").unwrap();
+        let find_content = FindContent { content_key };
+        let find_content = Message::FindContent(find_content);
+
+        let encoded: Vec<u8> = find_content.clone().into();
+        let encoded = hex::encode(encoded);
+        let expected_encoded = "0404000000706f7274616c";
+        assert_eq!(encoded, expected_encoded);
+
+        let decoded = Message::try_from(hex::decode(encoded).unwrap()).unwrap();
+        assert_eq!(decoded, find_content);
+    }
+
+    #[test]
+    fn message_encoding_content_connection_id() {
+        let connection_id = u16::from_le_bytes([0x01, 0x02]);
+        let content = Content::ConnectionId(connection_id);
+        let content = Message::Content(content);
+
+        let encoded: Vec<u8> = content.clone().into();
+        let encoded = hex::encode(encoded);
+        let expected_encoded = "05000102";
+        assert_eq!(encoded, expected_encoded);
+
+        let decoded = Message::try_from(hex::decode(encoded).unwrap()).unwrap();
+        assert_eq!(decoded, content);
+    }
+
+    #[test]
+    fn message_encoding_content_content() {
+        let content_val = hex::decode("7468652063616b652069732061206c6965").unwrap();
+        let content_val = ByteList::from(VariableList::from(content_val));
+        let content = Content::Content(content_val);
+        let content = Message::Content(content);
+
+        let encoded: Vec<u8> = content.clone().into();
+        let encoded = hex::encode(encoded);
+        let expected_encoded = "05017468652063616b652069732061206c6965";
+        assert_eq!(encoded, expected_encoded);
+
+        let decoded = Message::try_from(hex::decode(encoded).unwrap()).unwrap();
+        assert_eq!(decoded, content);
+    }
+
+    #[test]
+    fn message_encoding_content_enrs() {
+        let enr_one = SszEnr(Enr::from_str("enr:-HW4QBzimRxkmT18hMKaAL3IcZF1UcfTMPyi3Q1pxwZZbcZVRI8DC5infUAB_UauARLOJtYTxaagKoGmIjzQxO2qUygBgmlkgnY0iXNlY3AyNTZrMaEDymNMrg1JrLQB2KTGtv6MVbcNEVv0AHacwUAPMljNMTg").unwrap());
+        let enr_two = SszEnr(Enr::from_str("enr:-HW4QNfxw543Ypf4HXKXdYxkyzfcxcO-6p9X986WldfVpnVTQX1xlTnWrktEWUbeTZnmgOuAY_KUhbVV1Ft98WoYUBMBgmlkgnY0iXNlY3AyNTZrMaEDDiy3QkHAxPyOgWbxp5oF1bDdlYE6dLCUUp8xfVw50jU").unwrap());
+        let content = Content::Enrs(vec![enr_one, enr_two]);
+        let content = Message::Content(content);
+
+        let encoded: Vec<u8> = content.clone().into();
+        let encoded = hex::encode(encoded);
+        let expected_encoded = "0502080000007f000000f875b8401ce2991c64993d7c84c29a00bdc871917551c7d330fca2dd0d69c706596dc655448f030b98a77d4001fd46ae0112ce26d613c5a6a02a81a6223cd0c4edaa53280182696482763489736563703235366b31a103ca634cae0d49acb401d8a4c6b6fe8c55b70d115bf400769cc1400f3258cd3138f875b840d7f1c39e376297f81d7297758c64cb37dcc5c3beea9f57f7ce9695d7d5a67553417d719539d6ae4b445946de4d99e680eb8063f29485b555d45b7df16a1850130182696482763489736563703235366b31a1030e2cb74241c0c4fc8e8166f1a79a05d5b0dd95813a74b094529f317d5c39d235";
+        assert_eq!(encoded, expected_encoded);
+
+        let decoded = Message::try_from(hex::decode(encoded).unwrap()).unwrap();
+        assert_eq!(decoded, content);
+    }
+
+    #[test]
+    fn message_encoding_offer() {
+        let content_keys = vec![hex::decode("010203").unwrap()];
+        let offer = Offer { content_keys };
+        let offer = Message::Offer(offer);
+
+        let encoded: Vec<u8> = offer.clone().into();
+        let encoded = hex::encode(encoded);
+        let expected_encoded = "060400000004000000010203";
+        assert_eq!(encoded, expected_encoded);
+
+        let decoded = Message::try_from(hex::decode(encoded).unwrap()).unwrap();
+        assert_eq!(decoded, offer);
+    }
+
+    #[test]
+    fn message_encoding_accept() {
+        let connection_id = u16::from_le_bytes([0x01, 0x02]);
         let mut content_keys = BitList::with_capacity(8).unwrap();
         content_keys.set(0, true).unwrap();
-
-        let response = Accept {
-            connection_id: 513,
-            content_keys: content_keys.clone(),
+        let accept = Accept {
+            connection_id,
+            content_keys,
         };
+        let accept = Message::Accept(accept);
 
-        let encoded = response.as_ssz_bytes();
-        assert_eq!(hex::encode(encoded.clone()), "0102060000000101");
-        let decoded = Accept::from_ssz_bytes(&encoded[..]);
-        assert!(decoded.is_ok());
-        let decoded = decoded.unwrap();
+        let encoded: Vec<u8> = accept.clone().into();
+        let encoded = hex::encode(encoded);
+        let expected_encoded = "070102060000000101";
+        assert_eq!(encoded, expected_encoded);
 
-        assert_eq!(decoded.connection_id, 513);
-        assert_eq!(decoded.content_keys, content_keys);
+        let decoded = Message::try_from(hex::decode(encoded).unwrap()).unwrap();
+        assert_eq!(decoded, accept);
     }
 }

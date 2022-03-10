@@ -620,12 +620,14 @@ impl<TContentKey: OverlayContentKey + Send> OverlayService<TContentKey> {
         // which will be received in the main loop.
         tokio::spawn(async move {
             let response = match discovery
-                .send_talk_req(destination, protocol, Message::Request(request).to_bytes())
+                .send_talk_req(destination, protocol, Message::from(request).into())
                 .await
             {
-                Ok(talk_resp) => match Message::from_bytes(&talk_resp) {
-                    Ok(Message::Response(response)) => Ok(response),
-                    Ok(_) => Err(OverlayRequestError::InvalidResponse),
+                Ok(talk_resp) => match Message::try_from(talk_resp) {
+                    Ok(message) => match Response::try_from(message) {
+                        Ok(response) => Ok(response),
+                        Err(_) => Err(OverlayRequestError::InvalidResponse),
+                    },
                     Err(_) => Err(OverlayRequestError::DecodeError),
                 },
                 Err(error) => Err(error.into()),
