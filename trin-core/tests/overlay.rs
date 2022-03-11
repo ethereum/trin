@@ -10,6 +10,7 @@ use trin_core::{
         types::{
             content_key::IdentityContentKey,
             messages::{Content, Message, PortalnetConfig, ProtocolId, SszEnr},
+            metric::XorMetric,
             uint::U256,
         },
         Enr,
@@ -24,7 +25,7 @@ use tokio::time::{self, Duration};
 async fn init_overlay(
     discovery: Arc<Discovery>,
     protocol: ProtocolId,
-) -> OverlayProtocol<IdentityContentKey> {
+) -> OverlayProtocol<IdentityContentKey, XorMetric> {
     let storage_config = PortalStorage::setup_config(
         discovery.local_enr().node_id(),
         DEFAULT_STORAGE_CAPACITY.parse().unwrap(),
@@ -47,7 +48,7 @@ async fn init_overlay(
 
 async fn spawn_overlay(
     discovery: Arc<Discovery>,
-    overlay: Arc<OverlayProtocol<IdentityContentKey>>,
+    overlay: Arc<OverlayProtocol<IdentityContentKey, XorMetric>>,
 ) {
     let (overlay_tx, mut overlay_rx) = mpsc::unbounded_channel();
     let mut discovery_rx = discovery

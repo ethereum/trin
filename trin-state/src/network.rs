@@ -9,7 +9,10 @@ use trin_core::portalnet::{
     discovery::Discovery,
     overlay::{OverlayConfig, OverlayProtocol, OverlayRequestError},
     storage::{PortalStorage, PortalStorageConfig},
-    types::messages::{PortalnetConfig, ProtocolId},
+    types::{
+        messages::{PortalnetConfig, ProtocolId},
+        metric::XorMetric,
+    },
 };
 use trin_core::utils::db::setup_overlay_db;
 use trin_core::utp::stream::UtpListener;
@@ -19,7 +22,7 @@ use crate::{content_key::StateContentKey, trie::TrieDB};
 /// State network layer on top of the overlay protocol. Encapsulates state network specific data and logic.
 #[derive(Clone)]
 pub struct StateNetwork {
-    pub overlay: Arc<OverlayProtocol<StateContentKey>>,
+    pub overlay: Arc<OverlayProtocol<StateContentKey, XorMetric>>,
     pub trie: Arc<EthTrie<TrieDB>>,
 }
 

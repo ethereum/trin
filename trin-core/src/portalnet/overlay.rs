@@ -6,7 +6,7 @@ use std::time::Duration;
 use super::{
     discovery::Discovery,
     overlay_service::{Node, OverlayRequest, OverlayService, RequestDirection},
-    types::{content_key::OverlayContentKey, uint::U256},
+    types::{content_key::OverlayContentKey, metric::Metric, uint::U256},
     Enr,
 };
 use crate::portalnet::storage::PortalStorage;
@@ -62,7 +62,7 @@ impl Default for OverlayConfig {
 /// implement the overlay protocol and the overlay protocol is where we can encapsulate the logic for
 /// handling common network requests/responses.
 #[derive(Clone)]
-pub struct OverlayProtocol<TContentKey> {
+pub struct OverlayProtocol<TContentKey, TMetric> {
     /// Reference to the underlying discv5 protocol
     pub discovery: Arc<Discovery>,
     // Reference to the database instance
@@ -80,9 +80,13 @@ pub struct OverlayProtocol<TContentKey> {
     /// Use a phantom, because we don't store any keys in this struct.
     /// For example, this type is used when decoding a content key received over the network.
     phantom_content_key: PhantomData<TContentKey>,
+    /// Phantom metric. The metric type is only stored within the underlying overlay service.
+    phanton_metric: PhantomData<TMetric>,
 }
 
-impl<TContentKey: OverlayContentKey + Send> OverlayProtocol<TContentKey> {
+impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + 'static + Send>
+    OverlayProtocol<TContentKey, TMetric>
+{
     pub async fn new(
         config: OverlayConfig,
         discovery: Arc<Discovery>,
@@ -100,7 +104,7 @@ impl<TContentKey: OverlayContentKey + Send> OverlayProtocol<TContentKey> {
         )));
 
         let data_radius = Arc::new(data_radius);
-        let request_tx = OverlayService::<TContentKey>::spawn(
+        let request_tx = OverlayService::<TContentKey, TMetric>::spawn(
             Arc::clone(&discovery),
             Arc::clone(&storage),
             Arc::clone(&kbuckets),
@@ -123,6 +127,7 @@ impl<TContentKey: OverlayContentKey + Send> OverlayProtocol<TContentKey> {
             request_tx,
             utp_listener,
             phantom_content_key: PhantomData,
+            phanton_metric: PhantomData,
         }
     }
 

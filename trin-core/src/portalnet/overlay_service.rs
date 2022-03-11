@@ -19,11 +19,12 @@ use crate::{
                 Accept, ByteList, Content, CustomPayload, FindContent, FindNodes, Message, Nodes,
                 Offer, Ping, Pong, ProtocolId, Request, Response, SszEnr,
             },
+            metric::Metric,
             uint::U256,
         },
         Enr,
     },
-    utils::{distance::xor, node_id},
+    utils::node_id,
 };
 
 use delay_map::HashSetDelay;
@@ -225,7 +226,7 @@ impl PartialEq for Node {
 }
 
 /// The overlay service.
-pub struct OverlayService<TContentKey> {
+pub struct OverlayService<TContentKey, TMetric> {
     /// The underlying Discovery v5 protocol.
     discovery: Arc<Discovery>,
     /// The content database of the local node.
@@ -256,11 +257,15 @@ pub struct OverlayService<TContentKey> {
     utp_listener: Arc<RwLockT<UtpListener>>,
     /// Phantom content key.
     phantom_content_key: PhantomData<TContentKey>,
+    /// Phantom metric (distance function).
+    phantom_metric: PhantomData<TMetric>,
     /// Metrics reporting component
     metrics: Option<OverlayMetrics>,
 }
 
-impl<TContentKey: OverlayContentKey + Send> OverlayService<TContentKey> {
+impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
+    OverlayService<TContentKey, TMetric>
+{
     /// Spawns the overlay network service.
     ///
     /// The state of the overlay network largely consists of its routing table. The routing table
@@ -308,6 +313,7 @@ impl<TContentKey: OverlayContentKey + Send> OverlayService<TContentKey> {
                 response_tx,
                 utp_listener,
                 phantom_content_key: PhantomData,
+                phantom_metric: PhantomData,
                 metrics,
             };
 
@@ -404,7 +410,7 @@ impl<TContentKey: OverlayContentKey + Send> OverlayService<TContentKey> {
                         self.peers_to_ping.insert(node_id);
                     }
                 }
-                _ = OverlayService::<TContentKey>::bucket_maintenance_poll(self.protocol.clone(), &self.kbuckets) => {}
+                _ = OverlayService::<TContentKey, TMetric>::bucket_maintenance_poll(self.protocol.clone(), &self.kbuckets) => {}
                 _ = bucket_refresh_interval.tick() => {
                     debug!("[{:?}] Overlay bucket refresh lookup", self.protocol);
                     self.bucket_refresh_lookup();
@@ -1126,12 +1132,12 @@ impl<TContentKey: OverlayContentKey + Send> OverlayService<TContentKey> {
     ) -> Result<Vec<SszEnr>, OverlayRequestError> {
         let content_id = content_key.content_id();
         let self_node_id = self.local_enr().node_id();
-        let self_distance = xor(&content_id, &self_node_id.raw());
+        let self_distance = (TMetric::distance)(&content_id, &self_node_id.raw());
 
         let mut nodes_with_distance: Vec<(U256, Enr)> = self
             .table_entries_enr()
             .into_iter()
-            .map(|enr| (xor(&content_id, &enr.node_id().raw()), enr))
+            .map(|enr| ((TMetric::distance)(&content_id, &enr.node_id().raw()), enr))
             .collect();
 
         nodes_with_distance.sort_by(|a, b| a.0.cmp(&b.0));
@@ -1164,8 +1170,12 @@ mod tests {
     use crate::{
         cli::DEFAULT_STORAGE_CAPACITY,
         portalnet::{
-            discovery::Discovery, overlay::OverlayConfig, storage::PortalStorage,
-            types::content_key::IdentityContentKey, types::messages::PortalnetConfig,
+            discovery::Discovery,
+            overlay::OverlayConfig,
+            storage::PortalStorage,
+            types::{
+                content_key::IdentityContentKey, messages::PortalnetConfig, metric::XorMetric,
+            },
         },
         utils::node_id::generate_random_remote_enr,
     };
@@ -1180,7 +1190,7 @@ mod tests {
         };
     }
 
-    fn build_service() -> OverlayService<IdentityContentKey> {
+    fn build_service() -> OverlayService<IdentityContentKey, XorMetric> {
         let portal_config = PortalnetConfig {
             internal_ip: true,
             ..Default::default()
@@ -1226,6 +1236,7 @@ mod tests {
             response_rx,
             utp_listener,
             phantom_content_key: PhantomData,
+            phantom_metric: PhantomData,
             metrics,
         }
     }
