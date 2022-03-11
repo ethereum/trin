@@ -6,7 +6,7 @@ use std::task::Poll;
 use std::time::Duration;
 
 use crate::locks::RwLoggingExt;
-use crate::metrics::{Metrics, MetricsReporter, NoopMetrics};
+use crate::portalnet::metrics::Metrics;
 use crate::utp::stream::UtpListener;
 use crate::utp::trin_helpers::UtpMessageId;
 use crate::{
@@ -249,7 +249,7 @@ pub struct OverlayService<TContentKey> {
     /// Phantom content key.
     phantom_content_key: PhantomData<TContentKey>,
     /// Metrics reporting component
-    metrics: Box<dyn MetricsReporter + Send>,
+    metrics: Option<Metrics>,
 }
 
 impl<TContentKey: OverlayContentKey + Send> OverlayService<TContentKey> {
@@ -282,9 +282,9 @@ impl<TContentKey: OverlayContentKey + Send> OverlayService<TContentKey> {
 
         let (response_tx, response_rx) = mpsc::unbounded_channel();
 
-        let metrics: Box<dyn MetricsReporter + Send> = match enable_metrics {
-            true => Box::new(Metrics::init(&protocol)),
-            false => Box::new(NoopMetrics::init(&protocol)),
+        let metrics: Option<Metrics> = match enable_metrics {
+            true => Some(Metrics::init(&protocol)),
+            false => None,
         };
 
         tokio::spawn(async move {
@@ -530,7 +530,9 @@ impl<TContentKey: OverlayContentKey + Send> OverlayService<TContentKey> {
             "[{:?}] Handling ping request from node={}. Ping={:?}",
             self.protocol, source, request
         );
-        self.metrics.report_inbound_ping();
+        self.metrics
+            .as_ref()
+            .and_then(|m| Some(m.report_inbound_ping()));
         let enr_seq = self.local_enr().seq();
         let data_radius = self.data_radius();
         let custom_payload = CustomPayload::from(data_radius.as_ssz_bytes());
@@ -542,7 +544,9 @@ impl<TContentKey: OverlayContentKey + Send> OverlayService<TContentKey> {
 
     /// Builds a `Nodes` response for a `FindNodes` request.
     fn handle_find_nodes(&self, request: FindNodes) -> Nodes {
-        self.metrics.report_inbound_find_nodes();
+        self.metrics
+            .as_ref()
+            .and_then(|m| Some(m.report_inbound_find_nodes()));
         let distances64: Vec<u64> = request.distances.iter().map(|x| (*x).into()).collect();
         let enrs = self.nodes_by_distance(distances64);
         // `total` represents the total number of `Nodes` response messages being sent.
@@ -552,7 +556,9 @@ impl<TContentKey: OverlayContentKey + Send> OverlayService<TContentKey> {
 
     /// Attempts to build a `Content` response for a `FindContent` request.
     fn handle_find_content(&self, request: FindContent) -> Result<Content, OverlayRequestError> {
-        self.metrics.report_inbound_find_content();
+        self.metrics
+            .as_ref()
+            .and_then(|m| Some(m.report_inbound_find_content()));
         let content_key = match (TContentKey::try_from)(request.content_key) {
             Ok(key) => key,
             Err(_) => {
@@ -583,7 +589,9 @@ impl<TContentKey: OverlayContentKey + Send> OverlayService<TContentKey> {
 
     /// Attempts to build a `Accept` response for a `Offer` request.
     fn handle_offer(&self, request: Offer) -> Result<Accept, OverlayRequestError> {
-        self.metrics.report_inbound_offer();
+        self.metrics
+            .as_ref()
+            .and_then(|m| Some(m.report_inbound_offer()));
         let mut requested_keys = BitList::with_capacity(request.content_keys.len())
             .map_err(|e| OverlayRequestError::AcceptError(e))?;
         let connection_id: u16 = crate::utp::stream::rand();
@@ -1202,7 +1210,7 @@ mod tests {
         let peers_to_ping = HashDelayQueue::default();
         let (request_tx, request_rx) = mpsc::unbounded_channel();
         let (response_tx, response_rx) = mpsc::unbounded_channel();
-        let metrics = Box::new(NoopMetrics::init(&ProtocolId::History));
+        let metrics = None;
 
         OverlayService {
             discovery,

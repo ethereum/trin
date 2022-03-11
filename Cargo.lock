@@ -2550,7 +2550,6 @@ dependencies = [
  "lazy_static 1.4.0",
  "memchr",
  "parking_lot 0.11.2",
- "protobuf",
  "thiserror",
 ]
 
@@ -2567,12 +2566,6 @@ dependencies = [
  "thiserror",
  "tiny_http",
 ]
-
-[[package]]
-name = "protobuf"
-version = "2.27.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf7e6d18738ecd0902d30d1ad232c9125985a3422929b16c65517b38adc14f96"
 
 [[package]]
 name = "quick-error"
@@ -3913,7 +3906,6 @@ dependencies = [
  "cargo-release",
  "ethportal-peertest",
  "log 0.4.14",
- "prometheus",
  "prometheus_exporter",
  "tokio",
  "tracing",
@@ -3958,7 +3950,6 @@ dependencies = [
  "log 0.4.14",
  "num",
  "parking_lot 0.11.2",
- "prometheus",
  "prometheus_exporter",
  "quickcheck",
  "r2d2",

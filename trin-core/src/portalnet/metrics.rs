@@ -5,12 +5,11 @@ use prometheus_exporter::{
 
 use crate::portalnet::types::messages::ProtocolId;
 
-pub trait MetricsReporter {
-    fn report_inbound_ping(&self);
-    fn report_inbound_find_nodes(&self);
-    fn report_inbound_find_content(&self);
-    fn report_inbound_offer(&self);
-}
+/// General Metrics Strategy (wip)
+/// - Each module should maintain its own metrics reporter
+/// - When possible, use the lazy_static! approach
+/// - - https://romankudryashov.com/blog/2021/11/monitoring-rust-web-application/
+/// - - https://github.com/sigp/lighthouse/blob/c3a793fd73a3b11b130b82032904d39c952869e4/beacon_node/lighthouse_network/src/metrics.rs
 
 /// Overlay Service Metrics Reporter
 pub struct Metrics {
@@ -39,39 +38,20 @@ impl Metrics {
     }
 }
 
-impl MetricsReporter for Metrics {
-    fn report_inbound_ping(&self) {
+impl Metrics {
+    pub fn report_inbound_ping(&self) {
         self.inbound_ping.inc();
     }
 
-    fn report_inbound_find_nodes(&self) {
+    pub fn report_inbound_find_nodes(&self) {
         self.inbound_find_nodes.inc();
     }
 
-    fn report_inbound_find_content(&self) {
+    pub fn report_inbound_find_content(&self) {
         self.inbound_find_content.inc();
     }
 
-    fn report_inbound_offer(&self) {
+    pub fn report_inbound_offer(&self) {
         self.inbound_offer.inc();
     }
-}
-
-/// No-Operation Metrics Reporter - Used in place of Metrics whenever metrics are not enabled
-pub struct NoopMetrics {}
-
-impl NoopMetrics {
-    pub fn init(_protocol: &ProtocolId) -> Self {
-        Self {}
-    }
-}
-
-impl MetricsReporter for NoopMetrics {
-    fn report_inbound_ping(&self) {}
-
-    fn report_inbound_find_nodes(&self) {}
-
-    fn report_inbound_find_content(&self) {}
-
-    fn report_inbound_offer(&self) {}
 }
