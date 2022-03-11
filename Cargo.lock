@@ -706,6 +706,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "delay_map"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6fb5c9454c9e068876c8dc8acb6b70482c9b043fac1b595fe4488e88fb7c1910"
+dependencies = [
+ "futures 0.3.21",
+ "tokio-util",
+]
+
+[[package]]
 name = "der"
 version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3887,6 +3897,7 @@ dependencies = [
  "base64",
  "clap 2.34.0",
  "ctrlc",
+ "delay_map",
  "directories",
  "discv5",
  "env_logger 0.8.4",
