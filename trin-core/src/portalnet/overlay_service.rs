@@ -6,7 +6,7 @@ use std::task::Poll;
 use std::time::Duration;
 
 use crate::locks::RwLoggingExt;
-use crate::portalnet::metrics::Metrics;
+use crate::portalnet::metrics::OverlayMetrics;
 use crate::utp::stream::UtpListener;
 use crate::utp::trin_helpers::UtpMessageId;
 use crate::{
@@ -249,7 +249,7 @@ pub struct OverlayService<TContentKey> {
     /// Phantom content key.
     phantom_content_key: PhantomData<TContentKey>,
     /// Metrics reporting component
-    metrics: Option<Metrics>,
+    metrics: Option<OverlayMetrics>,
 }
 
 impl<TContentKey: OverlayContentKey + Send> OverlayService<TContentKey> {
@@ -282,10 +282,8 @@ impl<TContentKey: OverlayContentKey + Send> OverlayService<TContentKey> {
 
         let (response_tx, response_rx) = mpsc::unbounded_channel();
 
-        let metrics: Option<Metrics> = match enable_metrics {
-            true => Some(Metrics::init(&protocol)),
-            false => None,
-        };
+        let metrics: Option<OverlayMetrics> =
+            enable_metrics.then(|| OverlayMetrics::new(&protocol));
 
         tokio::spawn(async move {
             let mut service = Self {

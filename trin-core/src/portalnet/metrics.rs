@@ -12,15 +12,15 @@ use crate::portalnet::types::messages::ProtocolId;
 /// - - https://github.com/sigp/lighthouse/blob/c3a793fd73a3b11b130b82032904d39c952869e4/beacon_node/lighthouse_network/src/metrics.rs
 
 /// Overlay Service Metrics Reporter
-pub struct Metrics {
+pub struct OverlayMetrics {
     pub inbound_ping: Counter,
     pub inbound_find_nodes: Counter,
     pub inbound_find_content: Counter,
     pub inbound_offer: Counter,
 }
 
-impl Metrics {
-    pub fn init(protocol: &ProtocolId) -> Self {
+impl OverlayMetrics {
+    pub fn new(protocol: &ProtocolId) -> Self {
         let inbound_ping =
             register_counter!(format!("trin_inbound_ping_{:?}", protocol), "help").unwrap();
         let inbound_find_nodes =
@@ -38,7 +38,7 @@ impl Metrics {
     }
 }
 
-impl Metrics {
+impl OverlayMetrics {
     pub fn report_inbound_ping(&self) {
         self.inbound_ping.inc();
     }
