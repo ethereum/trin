@@ -233,11 +233,13 @@ pub struct OverlayService<TContentKey> {
     /// The protocol identifier.
     protocol: ProtocolId,
     /// A queue of peers that require regular ping to check connectivity.
+    /// Inserted entries expire after a fixed time. Nodes to be pinged are inserted with a timeout
+    /// duration equal to some ping interval, and we continuously poll the queue to check for
+    /// expired entries.
     peers_to_ping: HashSetDelay<NodeId>,
     // TODO: This should probably be a bounded channel.
     /// The receiver half of the service request channel.
     request_rx: UnboundedReceiver<OverlayRequest>,
-
     /// The sender half of a channel for service requests.
     /// This is used internally to submit requests (e.g. maintenance ping requests).
     request_tx: UnboundedSender<OverlayRequest>,
