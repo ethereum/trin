@@ -23,9 +23,10 @@ use crate::{
         },
         Enr,
     },
-    utils::{distance::xor, hash_delay_queue::HashDelayQueue, node_id},
+    utils::{distance::xor, node_id},
 };
 
+use delay_map::HashSetDelay;
 use discv5::{
     enr::NodeId,
     kbucket::{
@@ -232,11 +233,13 @@ pub struct OverlayService<TContentKey> {
     /// The protocol identifier.
     protocol: ProtocolId,
     /// A queue of peers that require regular ping to check connectivity.
-    peers_to_ping: HashDelayQueue<NodeId>,
+    /// Inserted entries expire after a fixed time. Nodes to be pinged are inserted with a timeout
+    /// duration equal to some ping interval, and we continuously poll the queue to check for
+    /// expired entries.
+    peers_to_ping: HashSetDelay<NodeId>,
     // TODO: This should probably be a bounded channel.
     /// The receiver half of the service request channel.
     request_rx: UnboundedReceiver<OverlayRequest>,
-
     /// The sender half of a channel for service requests.
     /// This is used internally to submit requests (e.g. maintenance ping requests).
     request_tx: UnboundedSender<OverlayRequest>,
@@ -273,9 +276,9 @@ impl<TContentKey: OverlayContentKey + Send> OverlayService<TContentKey> {
         let overlay_protocol = protocol.clone();
 
         let peers_to_ping = if let Some(interval) = ping_queue_interval {
-            HashDelayQueue::new(interval)
+            HashSetDelay::new(interval)
         } else {
-            HashDelayQueue::default()
+            HashSetDelay::default()
         };
 
         let (response_tx, response_rx) = mpsc::unbounded_channel();
@@ -1185,7 +1188,7 @@ mod tests {
         let data_radius = Arc::new(U256::from(u64::MAX));
         let protocol = ProtocolId::History;
         let active_outgoing_requests = Arc::new(RwLock::new(HashMap::new()));
-        let peers_to_ping = HashDelayQueue::default();
+        let peers_to_ping = HashSetDelay::default();
         let (request_tx, request_rx) = mpsc::unbounded_channel();
         let (response_tx, response_rx) = mpsc::unbounded_channel();
 
