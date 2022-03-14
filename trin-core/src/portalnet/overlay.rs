@@ -80,11 +80,11 @@ pub struct OverlayProtocol<TContentKey, TMetric> {
     /// Use a phantom, because we don't store any keys in this struct.
     /// For example, this type is used when decoding a content key received over the network.
     phantom_content_key: PhantomData<TContentKey>,
-    /// Phantom metric. The metric type is only stored within the underlying overlay service.
+    /// Associate a metric with the overlay network.
     phanton_metric: PhantomData<TMetric>,
 }
 
-impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + 'static + Send>
+impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
     OverlayProtocol<TContentKey, TMetric>
 {
     pub async fn new(

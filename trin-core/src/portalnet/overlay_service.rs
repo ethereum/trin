@@ -1132,12 +1132,12 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
     ) -> Result<Vec<SszEnr>, OverlayRequestError> {
         let content_id = content_key.content_id();
         let self_node_id = self.local_enr().node_id();
-        let self_distance = (TMetric::distance)(&content_id, &self_node_id.raw());
+        let self_distance = TMetric::distance(&content_id, &self_node_id.raw());
 
         let mut nodes_with_distance: Vec<(U256, Enr)> = self
             .table_entries_enr()
             .into_iter()
-            .map(|enr| ((TMetric::distance)(&content_id, &enr.node_id().raw()), enr))
+            .map(|enr| (TMetric::distance(&content_id, &enr.node_id().raw()), enr))
             .collect();
 
         nodes_with_distance.sort_by(|a, b| a.0.cmp(&b.0));
