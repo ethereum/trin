@@ -34,13 +34,13 @@ impl StateRequestHandler {
                                             params.content_key
                                         )),
                                     },
-                                    Err(_msg) => Err(format!(
+                                    Err(_) => Err(format!(
                                         "Unable to find content key in local storage: {:?}",
                                         params.content_key
                                     )),
                                 }
                             }
-                            Err(msg) => Err(format!("Invalid LocalContent params: {:?}", msg)),
+                            Err(msg) => Err(format!("Invalid LocalContent params: {msg:?}")),
                         };
                     let _ = request.resp.send(response);
                 }

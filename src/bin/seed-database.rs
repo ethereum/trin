@@ -5,6 +5,7 @@ use std::path::Path;
 use std::process::Command;
 
 use discv5::enr::{CombinedKey, EnrBuilder};
+use log::debug;
 use rand::{distributions::Alphanumeric, Rng};
 use rlp::{Decodable, DecoderError};
 use serde_json::Value;
@@ -69,10 +70,7 @@ pub struct BlockRlp {
 
 impl Decodable for BlockRlp {
     fn decode(rlp: &rlp::Rlp) -> Result<Self, DecoderError> {
-        let header = match Header::decode_rlp(rlp) {
-            Ok(val) => Some(val),
-            Err(_) => None,
-        };
+        let header = Header::decode_rlp(rlp).ok();
         Ok(Self { header })
     }
 }
@@ -123,11 +121,11 @@ fn load_file_data(path: &Path, storage: &mut PortalStorage) {
                             }
                         }
                     }
-                    _ => panic!("Invalid deserialized type, expected an object."),
+                    _ => debug!("Invalid deserialized type, expected an object."),
                 }
             }
         }
-        _ => panic!("Invalid deserialized type, expected an object."),
+        _ => debug!("Invalid deserialized type, expected an object."),
     }
     println!(
         "Stored {:?}/{:?} block headers from {:?}",
