@@ -3,10 +3,13 @@ use std::sync::Arc;
 use serde_json::Value;
 use tokio::sync::mpsc;
 
+use crate::content_key::HistoryContentKey;
 use crate::network::HistoryNetwork;
 use trin_core::jsonrpc::{
     endpoints::HistoryEndpoint,
-    types::{FindContentParams, FindNodesParams, HistoryJsonRpcRequest, PingParams},
+    types::{
+        FindContentParams, FindNodesParams, HistoryJsonRpcRequest, LocalContentParams, PingParams,
+    },
 };
 
 /// Handles History network JSON-RPC requests
@@ -19,6 +22,28 @@ impl HistoryRequestHandler {
     pub async fn handle_client_queries(mut self) {
         while let Some(request) = self.history_rx.recv().await {
             match request.endpoint {
+                HistoryEndpoint::LocalContent => {
+                    let response =
+                        match LocalContentParams::<HistoryContentKey>::try_from(request.params) {
+                            Ok(params) => {
+                                match &self.network.overlay.storage.get(&params.content_key) {
+                                    Ok(val) => match val {
+                                        Some(val) => Ok(Value::String(hex::encode(val.clone()))),
+                                        None => Err(format!(
+                                            "Unable to find content key in local storage: {:?}",
+                                            params.content_key
+                                        )),
+                                    },
+                                    Err(_) => Err(format!(
+                                        "Unable to find content key in local storage: {:?}",
+                                        params.content_key
+                                    )),
+                                }
+                            }
+                            Err(msg) => Err(format!("Invalid LocalContent params: {msg:?}")),
+                        };
+                    let _ = request.resp.send(response);
+                }
                 HistoryEndpoint::DataRadius => {
                     let radius = &self.network.overlay.data_radius;
                     let _ = request.resp.send(Ok(Value::String(radius.to_string())));
