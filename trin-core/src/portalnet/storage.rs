@@ -646,16 +646,21 @@ pub mod test {
 
         let value: Vec<u8> = "value".into();
 
-        let content_key_a = IdentityContentKey::new([0; 32]);
+        let content_key_a = IdentityContentKey::new([1; 32]);
         storage.store(&content_key_a, &value)?;
 
-        let content_key_b = IdentityContentKey::new([1; 32]);
+        let content_key_b = IdentityContentKey::new([5; 32]);
         storage.store(&content_key_b, &value)?;
 
         let expected_content_id = content_key_b.content_id();
-
         let result = storage.find_farthest_content_id()?;
+        assert_eq!(result.unwrap(), expected_content_id);
 
+        let content_key_c = IdentityContentKey::new([10; 32]);
+        storage.store(&content_key_c, &value)?;
+
+        let expected_content_id = content_key_c.content_id();
+        let result = storage.find_farthest_content_id()?;
         assert_eq!(result.unwrap(), expected_content_id);
 
         temp_dir.close()?;
