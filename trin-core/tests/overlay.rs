@@ -9,7 +9,7 @@ use trin_core::{
         overlay::{OverlayConfig, OverlayProtocol},
         storage::PortalStorage,
         types::{
-            content_key::MockContentKey,
+            content_key::IdentityContentKey,
             messages::{Content, Message, PortalnetConfig, ProtocolId, SszEnr},
             uint::U256,
         },
@@ -25,7 +25,7 @@ use tokio::time::{self, Duration};
 async fn init_overlay(
     discovery: Arc<Discovery>,
     protocol: ProtocolId,
-) -> OverlayProtocol<MockContentKey> {
+) -> OverlayProtocol<IdentityContentKey> {
     let storage_config = PortalStorage::setup_config(
         discovery.local_enr().node_id(),
         DEFAULT_STORAGE_CAPACITY.parse().unwrap(),
@@ -50,7 +50,10 @@ async fn init_overlay(
     .await
 }
 
-async fn spawn_overlay(discovery: Arc<Discovery>, overlay: Arc<OverlayProtocol<MockContentKey>>) {
+async fn spawn_overlay(
+    discovery: Arc<Discovery>,
+    overlay: Arc<OverlayProtocol<IdentityContentKey>>,
+) {
     let (overlay_tx, mut overlay_rx) = mpsc::unbounded_channel();
     let mut discovery_rx = discovery
         .discv5
@@ -206,7 +209,7 @@ async fn overlay() {
     // Node one should be added to the routing table because it is the destination of the request.
     // All ENRs in the content response should be added to the routing table, except for node two,
     // because node two is the local node.
-    let content_key = MockContentKey::try_from(vec![0u8; 32]).unwrap();
+    let content_key = IdentityContentKey::new([0u8; 32]);
     let content_enrs = match overlay_two
         .send_find_content(overlay_one.local_enr(), content_key.into())
         .await

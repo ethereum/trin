@@ -6,13 +6,13 @@ use std::process::Command;
 
 use discv5::enr::{CombinedKey, EnrBuilder};
 use log::debug;
-use rand::{distributions::Alphanumeric, Rng};
+use rand::{distributions::Alphanumeric, Rng, RngCore};
 use rlp::{Decodable, DecoderError};
 use serde_json::Value;
 use structopt::StructOpt;
 
 use trin_core::portalnet::storage::PortalStorage;
-use trin_core::portalnet::types::content_key::MockContentKey;
+use trin_core::portalnet::types::content_key::IdentityContentKey;
 use trin_core::types::header::Header;
 use trin_core::utils::db::get_data_dir;
 use trin_history::content_key::{BlockHeader, HistoryContentKey};
@@ -24,7 +24,6 @@ use trin_history::content_key::{BlockHeader, HistoryContentKey};
 // For every 1 kb of data we store (key + value), RocksDB tends to grow by this many kb on disk...
 // ...but this is a crude empirical estimation that works mainly with default value data size of 32
 const DATA_OVERHEAD: f64 = 1.1783;
-const SIZE_OF_KEYS: u32 = 32;
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let generator_config = GeneratorConfig::from_args();
@@ -141,8 +140,7 @@ fn load_random_data(mut storage: PortalStorage, generator_config: GeneratorConfi
 
     for _ in 0..num_of_entries {
         let value = generate_random_value(size_of_values);
-        let key = generate_random_value(SIZE_OF_KEYS);
-        let key = MockContentKey::try_from(key).unwrap();
+        let key = generate_random_content_key();
 
         storage.store(&key, &value).unwrap();
     }
@@ -151,6 +149,12 @@ fn load_random_data(mut storage: PortalStorage, generator_config: GeneratorConfi
         "Successfully saved {} randomly generated key/value pairs to RocksDB.",
         num_of_entries
     );
+}
+
+fn generate_random_content_key() -> IdentityContentKey {
+    let mut key = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut key);
+    IdentityContentKey::new(key)
 }
 
 fn generate_random_value(number_of_bytes: u32) -> Vec<u8> {
