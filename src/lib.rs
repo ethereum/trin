@@ -30,6 +30,7 @@ pub async fn run_trin(
         private_key: trin_config.private_key.clone(),
         listen_port: trin_config.discovery_port,
         internal_ip: trin_config.internal_ip,
+        enable_metrics: trin_config.enable_metrics,
         bootnode_enrs,
         ..Default::default()
     };
@@ -40,6 +41,12 @@ pub async fn run_trin(
     let discovery = Arc::new(discovery);
     // Search for discv5 peers (bucket refresh lookup)
     tokio::spawn(Arc::clone(&discovery).bucket_refresh_lookup());
+
+    // Initialize metrics
+    if trin_config.enable_metrics {
+        let binding = trin_config.metrics_url.as_ref().unwrap().parse().unwrap();
+        prometheus_exporter::start(binding).unwrap();
+    };
 
     // Initialize UTP listener
     let utp_listener = Arc::new(RwLock::new(UtpListener {

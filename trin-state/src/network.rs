@@ -38,6 +38,7 @@ impl StateNetwork {
         let storage = Arc::new(PortalStorage::new(storage_config).unwrap());
         let config = OverlayConfig {
             bootnode_enrs: portal_config.bootnode_enrs.clone(),
+            enable_metrics: portal_config.enable_metrics,
             ..Default::default()
         };
         let overlay = OverlayProtocol::new(
