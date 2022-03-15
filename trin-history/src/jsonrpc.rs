@@ -222,6 +222,11 @@ impl HistoryRequestHandler {
                     };
                     let _ = request.resp.send(response);
                 }
+                HistoryEndpoint::RoutingTableInfo => {
+                    let _ = request
+                        .resp
+                        .send(Ok(self.network.overlay.routing_table_info()));
+                }
             }
         }
     }

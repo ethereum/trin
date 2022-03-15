@@ -20,12 +20,18 @@
 
 // This basis of this file has been taken from the rust-libp2p codebase:
 // https://github.com/libp2p/rust-libp2p
+<<<<<<< HEAD
 
 use super::super::query_pool::QueryState;
 use super::query::{Query, QueryConfig, QueryPeer, QueryPeerState, QueryProgress};
 
 use discv5::kbucket::{Distance, Key};
 
+=======
+//
+use super::super::query_pool::QueryState;
+use discv5::kbucket::{Distance, Key};
+>>>>>>> Initial integration of FindNodesQuery into OverlayService
 use std::{
     collections::btree_map::{BTreeMap, Entry},
     time::Instant,
@@ -110,6 +116,7 @@ where
             Entry::Vacant(..) => return,
             Entry::Occupied(mut entry) => match entry.get().state() {
                 QueryPeerState::Waiting(..) => {
+<<<<<<< HEAD
                     assert!(
                         self.num_waiting > 0,
                         "Query has invalid number of waiting queries"
@@ -123,6 +130,23 @@ where
                     let peer = entry.get_mut();
                     peer.increment_peers_returned(peer_response.len());
                     peer.set_state(QueryPeerState::Succeeded);
+=======
+                    if self.num_waiting > 0 {
+                        self.num_waiting -= 1;
+                    } else {
+                        log::error!(
+                            "on_success called on a query that wasn't waiting on anything."
+                        );
+                    }
+                    let peer = entry.get_mut();
+                    peer.peers_returned += closer_peers.len();
+                    peer.state = QueryPeerState::Succeeded;
+                }
+                QueryPeerState::Unresponsive => {
+                    let peer = entry.get_mut();
+                    peer.peers_returned += closer_peers.len();
+                    peer.state = QueryPeerState::Succeeded;
+>>>>>>> Initial integration of FindNodesQuery into OverlayService
                 }
                 QueryPeerState::NotContacted
                 | QueryPeerState::Failed
@@ -315,12 +339,108 @@ where
     }
 }
 
+<<<<<<< HEAD
+=======
+/// Stage of the query.
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+enum QueryProgress {
+    /// The query is making progress by iterating towards `num_results` closest
+    /// peers to the target with a maximum of `parallelism` peers for which the
+    /// query is waiting for results at a time.
+    ///
+    /// > **Note**: When the query switches back to `Iterating` after being
+    /// > `Stalled`, it may temporarily be waiting for more than `parallelism`
+    /// > results from peers, with new peers only being considered once
+    /// > the number pending results drops below `parallelism`.
+    Iterating {
+        /// The number of consecutive results that did not yield a peer closer
+        /// to the target. When this number reaches `parallelism` and no new
+        /// peer was discovered or at least `num_results` peers are known to
+        /// the query, it is considered `Stalled`.
+        no_progress: usize,
+    },
+
+    /// A query is stalled when it did not make progress after `parallelism`
+    /// consecutive successful results (see `on_success`).
+    ///
+    /// While the query is stalled, the maximum allowed parallelism for pending
+    /// results is increased to `num_results` in an attempt to finish the query.
+    /// If the query can make progress again upon receiving the remaining
+    /// results, it switches back to `Iterating`. Otherwise it will be finished.
+    Stalled,
+
+    /// The query is finished.
+    ///
+    /// A query finishes either when it has collected `num_results` results
+    /// from the closest peers (not counting those that failed or are unresponsive)
+    /// or because the query ran out of peers that have not yet delivered
+    /// results (or failed).
+    Finished,
+}
+
+/// Representation of a peer in the context of a query.
+#[derive(Debug, Clone)]
+struct QueryPeer<TNodeId> {
+    /// The `KBucket` key used to identify the peer.
+    key: Key<TNodeId>,
+
+    /// The number of peers that have been returned by this peer.
+    peers_returned: usize,
+
+    /// The current query state of this peer.
+    state: QueryPeerState,
+}
+
+impl<TNodeId> QueryPeer<TNodeId> {
+    pub fn new(key: Key<TNodeId>, state: QueryPeerState) -> Self {
+        QueryPeer {
+            key,
+            peers_returned: 0,
+            state,
+        }
+    }
+}
+
+/// The state of `QueryPeer` in the context of a query.
+#[derive(Debug, Copy, Clone)]
+enum QueryPeerState {
+    /// The peer has not yet been contacted.
+    ///
+    /// This is the starting state for every peer known to, or discovered by, a query.
+    NotContacted,
+
+    /// The query is waiting for a result from the peer.
+    Waiting(Instant),
+
+    /// A result was not delivered for the peer within the configured timeout.
+    ///
+    /// The peer is not taken into account for the termination conditions
+    /// of the iterator until and unless it responds.
+    Unresponsive,
+
+    /// Obtaining a result from the peer has failed.
+    ///
+    /// This is a final state, reached as a result of a call to `on_failure`.
+    Failed,
+
+    /// A successful result from the peer has been delivered.
+    ///
+    /// This is a final state, reached as a result of a call to `on_success`.
+    Succeeded,
+}
+
+>>>>>>> Initial integration of FindNodesQuery into OverlayService
 #[cfg(test)]
 mod tests {
     use super::*;
     use discv5::enr::NodeId;
+<<<<<<< HEAD
     use quickcheck::*;
     use rand::{thread_rng, Rng};
+=======
+    use quickcheck_09::*;
+    use rand_07::{thread_rng, Rng};
+>>>>>>> Initial integration of FindNodesQuery into OverlayService
     use std::time::Duration;
 
     type TestQuery = FindNodeQuery<NodeId>;
