@@ -3,6 +3,7 @@ use std::fs;
 use std::sync::Arc;
 
 use discv5::enr::NodeId;
+use ethereum_types::U256;
 use hex;
 use log::{debug, error};
 use r2d2::Pool;
@@ -14,7 +15,6 @@ use thiserror::Error;
 use super::types::{
     content_key::OverlayContentKey,
     metric::{Metric, XorMetric},
-    uint::U256,
 };
 use crate::utils::db::get_data_dir;
 

@@ -6,7 +6,7 @@ use std::time::Duration;
 use super::{
     discovery::Discovery,
     overlay_service::{Node, OverlayRequest, OverlayService, RequestDirection},
-    types::{content_key::OverlayContentKey, metric::Metric, uint::U256},
+    types::{content_key::OverlayContentKey, metric::Metric},
     Enr,
 };
 use crate::portalnet::storage::PortalStorage;
@@ -22,6 +22,7 @@ use discv5::{
     kbucket::{Filter, KBucketsTable},
     TalkRequest,
 };
+use ethereum_types::U256;
 use futures::channel::oneshot;
 use parking_lot::RwLock;
 use ssz::Encode;
