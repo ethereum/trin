@@ -7,7 +7,7 @@ use discv5::enr::NodeId;
 use discv5::{Enr, TalkRequest};
 use log::{debug, warn};
 use rand::Rng;
-use ssz::Decode;
+use ssz::{Decode, Encode};
 use std::cmp::{max, min};
 use std::collections::{HashMap, VecDeque};
 use std::convert::TryFrom;
@@ -16,23 +16,24 @@ use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 use tokio::time::timeout;
 
+use crate::portalnet::types::messages::Content::Content;
 use crate::portalnet::types::messages::ProtocolId;
 use crate::utp::packets::{ExtensionType, Packet, PacketType, HEADER_SIZE};
 use crate::utp::time::{now_microseconds, Delay, Timestamp};
-use crate::utp::trin_helpers::{UtpAccept, UtpMessageId};
+use crate::utp::trin_helpers::{UtpAccept, UtpMessage, UtpMessageId};
 use crate::utp::util::{abs_diff, ewma, generate_sequential_identifiers};
 use std::time::Duration;
 
 // For simplicity's sake, let us assume no packet will ever exceed the
 // Ethernet maximum transfer unit of 1500 bytes.
-const BUF_SIZE: usize = 1500;
+pub const BUF_SIZE: usize = 1500;
 const GAIN: f64 = 1.0;
 const ALLOWED_INCREASE: u32 = 1;
 const MIN_CWND: u32 = 2; // minimum congestion window size
 const INIT_CWND: u32 = 2; // init congestion window size
 const MIN_CONGESTION_TIMEOUT: u64 = 500; // 500 ms
 const MAX_CONGESTION_TIMEOUT: u64 = 60_000; // one minute
-const MAX_RETRANSMISSION_RETRIES: u32 = 5; // maximum retransmission retries
+const MAX_RETRANSMISSION_RETRIES: u32 = 5; // discv5 socket maximum retransmission retries
 const WINDOW_SIZE: u32 = 1024 * 1024; // local receive window size
 
 // Maximum time (in microseconds) to wait for incoming packets when the send window is full
@@ -48,6 +49,8 @@ const CCONTROL_TARGET: f64 = 100_000.0;
 const BASE_HISTORY: usize = 10; // base delays history size
                                 // Maximum age of base delay sample (60 seconds)
 const MAX_BASE_DELAY_AGE: Delay = Delay(60_000_000);
+// Discv5 socket timeout in milliseconds
+const DISCV5_SOCKET_TIMEOUT: u64 = 25;
 
 pub fn rand() -> u16 {
     rand::thread_rng().gen()
@@ -161,6 +164,41 @@ impl UtpListener {
                                 },
                                 conn.clone(),
                             );
+
+                            // Get ownership of FindContentData and re-add the receiver connection
+                            let utp_message_id = self.listening.remove(&conn.sender_connection_id);
+
+                            // TODO: Probably there is a better way with lifetimes to pass the HashMap value to a
+                            // different thread without removing the key and re-adding it.
+                            self.listening
+                                .insert(conn.sender_connection_id, UtpMessageId::FindContentStream);
+
+                            if let Some(UtpMessageId::FindContentData(Content(content_data))) =
+                                utp_message_id
+                            {
+                                // We want to send uTP data only if the content is Content(ByteList)
+                                tokio::spawn(async move {
+                                    debug!(
+                                        "Sending content data via uTP with len: {}",
+                                        content_data.len()
+                                    );
+                                    // send the content to the requestor over a uTP stream
+                                    if let Err(msg) = conn
+                                        .send_to(
+                                            &UtpMessage::new(content_data.as_ssz_bytes()).encode()
+                                                [..],
+                                        )
+                                        .await
+                                    {
+                                        debug!("Error sending content {msg}");
+                                    } else {
+                                        // Close uTP connection
+                                        if let Err(msg) = conn.close().await {
+                                            debug!("Unable to close uTP connection!: {msg}")
+                                        }
+                                    };
+                                });
+                            }
                         } else {
                             debug!("Query requested an unknown ENR");
                         }
@@ -232,10 +270,7 @@ impl UtpListener {
         for (conn_key, conn) in self.utp_connections.iter_mut() {
             if conn.state == SocketState::Closed {
                 let received_stream = conn.recv_data_stream.clone();
-                debug!(
-                    "Received data: {received_stream:?}, len: {}",
-                    received_stream.len()
-                );
+                debug!("Received data: with len: {}", received_stream.len());
 
                 match self.listening.get(&conn.receiver_connection_id) {
                     Some(message_type) => match message_type {
@@ -250,6 +285,9 @@ impl UtpListener {
                                 Err(_) => debug!("Recv malformed data on handing UtpAccept"),
                             }
                         }
+                        // TODO: Process Content data received via uTP stream
+                        UtpMessageId::FindContentData(_) => {}
+                        UtpMessageId::FindContentStream => {}
                     },
                     _ => warn!("uTP listening HashMap doesn't have uTP stream message type"),
                 }
@@ -348,7 +386,7 @@ pub struct UtpSocket {
 }
 
 impl UtpSocket {
-    fn new(
+    pub fn new(
         socket: Arc<Discovery>,
         connected_to: Enr,
         rx_rcv: Arc<RwLock<mpsc::UnboundedReceiver<Packet>>>,
@@ -430,7 +468,12 @@ impl UtpSocket {
 
     pub async fn raw_receive(&mut self) -> anyhow::Result<Option<Packet>> {
         // Listen on a channel for discovery utp packet
-        match timeout(Duration::from_millis(15), self.rx.write().await.recv()).await {
+        match timeout(
+            Duration::from_millis(DISCV5_SOCKET_TIMEOUT),
+            self.rx.write().await.recv(),
+        )
+        .await
+        {
             Ok(val) => Ok(val),
             Err(msg) => Err(anyhow!("Discv5 socket timeout: {msg}")),
         }
@@ -469,7 +512,6 @@ impl UtpSocket {
     /// Send one packet.
     #[async_recursion]
     async fn send_packet(&mut self, packet: &mut Packet) {
-        debug!("current window: {}", self.send_window.len());
         let max_inflight = min(self.cwnd, self.remote_wnd_size);
         let max_inflight = max(MIN_CWND * MAX_DISCV5_PACKET_SIZE, max_inflight);
         let now = now_microseconds();
@@ -479,20 +521,11 @@ impl UtpSocket {
         while self.cur_window + packet.as_ref().len() as u32 > max_inflight as u32
             && now_microseconds() - now < PRE_SEND_TIMEOUT.into()
         {
-            debug!("curr_window: {}", self.cur_window);
-            debug!("max_inflight: {}", max_inflight);
-            debug!("duplicate_ack_count: {}", self.duplicate_ack_count);
-            debug!("now_microseconds() - now = {}", now_microseconds() - now);
             let mut buf = [0; BUF_SIZE];
             if let Err(msg) = self.recv(&mut buf).await {
                 debug!("Unable to receive from uTP socket: {msg}");
             }
         }
-
-        debug!(
-            "out: now_microseconds() - now = {}",
-            now_microseconds() - now
-        );
 
         // Check if it still makes sense to send packet, as we might be trying to resend a lost
         // packet acknowledged in the receive loop above.
@@ -631,10 +664,17 @@ impl UtpSocket {
             self.state
         );
 
-        // Only acknowledge this if this follows the last one, else do it when we advance the send
-        // window
-        if packet.seq_nr().wrapping_sub(self.ack_nr) == 1 {
+        // To make uTP connection bidirectional, we want to always acknowledge the received packet
+        if self.state == SocketState::SynSent {
             self.ack_nr = packet.seq_nr();
+        } else {
+            // Only acknowledge this if this follows the last one, else do it when we advance the send
+            // window
+            if packet.seq_nr().wrapping_sub(self.ack_nr) == 1
+                && packet.get_type() != PacketType::State
+            {
+                self.ack_nr = packet.seq_nr();
+            }
         }
 
         // Reset connection if connection id doesn't match and this isn't a SYN
@@ -648,12 +688,10 @@ impl UtpSocket {
 
         // Update remote window size
         self.remote_wnd_size = packet.wnd_size();
-        debug!("Remote window size: {}", self.remote_wnd_size);
 
         // Update remote peer's delay between them sending the packet and us receiving it
         let now = now_microseconds();
         self.their_delay = abs_diff(now, packet.timestamp());
-        debug!("self.their_delay: {}", self.their_delay);
 
         match (self.state, packet.get_type()) {
             // New connection, when we receive SYN packet, respond with STATE packet
@@ -666,7 +704,12 @@ impl UtpSocket {
                 self.state = SocketState::Connected;
                 self.last_dropped = self.ack_nr;
 
-                Ok(Some(self.prepare_reply(packet, PacketType::State)))
+                let reply = self.prepare_reply(packet, PacketType::State);
+                // We always assume that SYN-ACK packet is acknowledged, this allows us to send DATA packet right after
+                // SYN-ACK (bi-directional utp flow)
+                self.last_acked = reply.seq_nr();
+
+                Ok(Some(reply))
             }
             // When connection is already initialised and we receive SYN packet,
             // we want to forcibly terminate the connection
@@ -681,8 +724,8 @@ impl UtpSocket {
                 self.last_acked_timestamp = now_microseconds();
                 Ok(None)
             }
-            // Only STATE packet is expected when SYN is sent
-            (SocketState::SynSent, _) => Err(anyhow!("The remote peer sent an invalid reply")),
+            // To make uTP connection bidirectional, we also can expect DATA packet if state is SynSent
+            (SocketState::SynSent, PacketType::Data) => Ok(self.handle_data_packet(packet)),
             // Handle data packet if socket state is `Connected` or `FinSent` and packet type is DATA
             (SocketState::Connected, PacketType::Data)
             | (SocketState::FinSent, PacketType::Data) => Ok(self.handle_data_packet(packet)),
@@ -692,7 +735,9 @@ impl UtpSocket {
                 Ok(None)
             }
             // Handle FIN packet. Check if all send packets are acknowledged.
-            (SocketState::Connected, PacketType::Fin) | (SocketState::FinSent, PacketType::Fin) => {
+            (SocketState::Connected, PacketType::Fin)
+            | (SocketState::FinSent, PacketType::Fin)
+            | (SocketState::SynSent, PacketType::Fin) => {
                 if packet.ack_nr() < self.seq_nr {
                     debug!("FIN received but there are missing acknowledgements for sent packets");
                 }
@@ -758,6 +803,12 @@ impl UtpSocket {
     }
 
     fn handle_data_packet(&mut self, packet: &Packet) -> Option<Packet> {
+        // We increase packet seq_nr if we are going to send DATA packet right after SYN-ACK.
+        if self.state == SocketState::SynSent {
+            self.seq_nr += 1;
+            self.state = SocketState::Connected
+        }
+
         // If a FIN was previously sent, reply with a FIN packet acknowledging the received packet.
         let packet_type = match self.state {
             SocketState::FinSent => PacketType::Fin,
@@ -811,13 +862,11 @@ impl UtpSocket {
             // Update base and current delay
             let now = now_microseconds();
             let our_delay = now - self.send_window[index].timestamp();
-            debug!("our_delay: {}", our_delay);
             self.update_base_delay(our_delay, now);
             self.update_current_delay(our_delay, now);
 
             let off_target: f64 =
                 (CCONTROL_TARGET - u32::from(self.queuing_delay()) as f64) / CCONTROL_TARGET;
-            debug!("off_target: {}", off_target);
 
             self.update_congestion_window(off_target, bytes_newly_acked as u32);
 
@@ -902,19 +951,12 @@ impl UtpSocket {
                 self.cur_window -= packet.len() as u32;
             }
         }
-        debug!("Bytes in flight: {}", self.cur_window);
     }
 
     fn queuing_delay(&self) -> Delay {
         let filtered_current_delay = self.filtered_current_delay();
         let min_base_delay = self.min_base_delay();
-        let queuing_delay = filtered_current_delay - min_base_delay;
-
-        debug!("filtered_current_delay: {}", filtered_current_delay);
-        debug!("min_base_delay: {}", min_base_delay);
-        debug!("queuing_delay: {}", queuing_delay);
-
-        queuing_delay
+        filtered_current_delay - min_base_delay
     }
 
     /// Calculates the filtered current delay in the current window.
@@ -957,15 +999,11 @@ impl UtpSocket {
         let cwnd_increase =
             GAIN * off_target * bytes_newly_acked as f64 * MAX_DISCV5_PACKET_SIZE as f64;
         let cwnd_increase = cwnd_increase / self.cwnd as f64;
-        debug!("cwnd_increase: {}", cwnd_increase);
 
         self.cwnd = (self.cwnd as f64 + cwnd_increase) as u32;
         let max_allowed_cwnd = flightsize + ALLOWED_INCREASE * MAX_DISCV5_PACKET_SIZE;
         self.cwnd = min(self.cwnd, max_allowed_cwnd);
         self.cwnd = max(self.cwnd, MIN_CWND * MAX_DISCV5_PACKET_SIZE);
-
-        debug!("cwnd: {}", self.cwnd);
-        debug!("max_allowed_cwnd: {}", max_allowed_cwnd);
     }
 
     fn update_congestion_timeout(&mut self, current_delay: i32) {
@@ -977,20 +1015,14 @@ impl UtpSocket {
             MIN_CONGESTION_TIMEOUT,
         );
         self.congestion_timeout = min(self.congestion_timeout, MAX_CONGESTION_TIMEOUT);
-
-        debug!("current_delay: {}", current_delay);
-        debug!("delta: {}", delta);
-        debug!("self.rtt_variance: {}", self.rtt_variance);
-        debug!("self.rtt: {}", self.rtt);
-        debug!("self.congestion_timeout: {}", self.congestion_timeout);
     }
 
     #[async_recursion]
     pub async fn recv(&mut self, buf: &mut [u8]) -> anyhow::Result<usize> {
         let packet;
 
-        // TODO: Refactor this and abort loop if the current try exceeds the maximum number of retransmission retries.
-        // Try to receive a packet
+        let mut recv_retries = 0;
+        // Try to receive a packet. Abort loop if the current try exceeds the maximum number of retransmission retries.
         loop {
             let result = self.raw_receive().await;
             match result {
@@ -1004,7 +1036,13 @@ impl UtpSocket {
                     }
                     break;
                 }
-                Err(msg) => debug!("{msg}"),
+                Err(_) => {
+                    recv_retries += 1;
+
+                    if recv_retries > self.max_retransmission_retries {
+                        return Err(anyhow!("Discv5 socket timeout"));
+                    }
+                }
             }
         }
 
@@ -1190,7 +1228,6 @@ impl UtpSocket {
     pub async fn flush(&mut self) -> anyhow::Result<()> {
         let mut buf = [0u8; BUF_SIZE];
         while !self.send_window.is_empty() {
-            debug!("packets in send window: {}", self.send_window.len());
             self.recv(&mut buf).await?;
         }
 

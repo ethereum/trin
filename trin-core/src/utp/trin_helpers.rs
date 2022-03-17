@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 // These are just some Trin helper functions
 
+use crate::portalnet::types::messages::Content;
 use ssz_derive::{Decode, Encode};
 
 // These Utp impl are related to sending messages over uTP not the implementation itself or stream
@@ -52,7 +53,10 @@ pub struct UtpAccept {
 
 // This is not in a spec, this is just for internally tracking for what portal message
 // negotiated the uTP stream
+#[derive(Debug, Clone)]
 pub enum UtpMessageId {
+    FindContentStream,
+    FindContentData(Content),
     OfferAcceptStream,
 }
 
