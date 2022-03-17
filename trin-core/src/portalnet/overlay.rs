@@ -81,7 +81,7 @@ pub struct OverlayProtocol<TContentKey, TMetric> {
     /// For example, this type is used when decoding a content key received over the network.
     phantom_content_key: PhantomData<TContentKey>,
     /// Associate a metric with the overlay network.
-    phanton_metric: PhantomData<TMetric>,
+    phantom_metric: PhantomData<TMetric>,
 }
 
 impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
@@ -127,7 +127,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
             request_tx,
             utp_listener,
             phantom_content_key: PhantomData,
-            phanton_metric: PhantomData,
+            phantom_metric: PhantomData,
         }
     }
 
