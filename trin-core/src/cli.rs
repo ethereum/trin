@@ -68,7 +68,7 @@ pub struct TrinConfig {
 
     #[structopt(
         long = "external-address",
-        help = "(Only use this if you are behind a NAT) This is the address which will be advertised to peers (in an ENR). Changing it does not change which port or address trin binds to."
+        help = "(Only use this if you are behind a NAT) The address which will be advertised to peers (in an ENR). Changing it does not change which port or address trin binds to. Port number is required, ex: 127.0.0.1:9001"
     )]
     pub external_addr: Option<SocketAddr>,
 
