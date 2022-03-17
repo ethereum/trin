@@ -7,10 +7,8 @@ use tokio::sync::{mpsc, RwLock};
 use super::discovery::Discovery;
 use super::types::messages::ProtocolId;
 use crate::locks::RwLoggingExt;
-use crate::utp::stream::{SocketState, UtpListener};
-use crate::utp::trin_helpers::{UtpAccept, UtpMessageId};
+use crate::utp::stream::UtpListener;
 use hex;
-use ssz::Decode;
 use std::str::FromStr;
 
 pub struct PortalnetEvents {
@@ -90,9 +88,14 @@ impl PortalnetEvents {
                         self.utp_listener
                             .write_with_warn()
                             .await
-                            .process_utp_request(request.body(), request.node_id());
+                            .process_utp_request(request)
+                            .await;
                         // handles actual data sent over utp. eg, stores data in db
-                        self.process_utp_byte_stream().await;
+                        self.utp_listener
+                            .write_with_warn()
+                            .await
+                            .process_utp_byte_stream()
+                            .await;
                     }
                     _ => {
                         warn!(
@@ -107,54 +110,4 @@ impl PortalnetEvents {
             }
         }
     }
-
-    // https://github.com/ethereum/portal-network-specs/pull/98\
-    // Currently the way to handle data over uTP isn't finalized yet, so we are going to use the
-    // handle data on connection closed method, as that seems to be the accepted method for now.
-    async fn process_utp_byte_stream(&mut self) {
-        for (conn_key, conn) in self
-            .utp_listener
-            .write_with_warn()
-            .await
-            .utp_connections
-            .iter_mut()
-        {
-            if conn.state == SocketState::Closed {
-                let received_stream = conn.recv_data_stream.clone();
-
-                match self
-                    .utp_listener
-                    .read_with_warn()
-                    .await
-                    .listening
-                    .get(&conn.receiver_connection_id)
-                {
-                    Some(message_type) => match message_type {
-                        UtpMessageId::OfferAcceptStream => {
-                            match UtpAccept::from_ssz_bytes(&received_stream[..]) {
-                                Ok(payload) => {
-                                    for (key, content) in payload.message {
-                                        store(key, content).unwrap();
-                                    }
-                                }
-                                Err(_) => debug!("Recv malformed data on handing UtpAccept"),
-                            }
-                        }
-                    },
-                    _ => warn!("uTP listening HashMap doesn't have uTP stream message type"),
-                }
-
-                self.utp_listener
-                    .write_with_warn()
-                    .await
-                    .utp_connections
-                    .remove(conn_key);
-            }
-        }
-    }
-}
-
-// stub function for overlay store
-fn store(_key: Vec<u8>, _content: Vec<u8>) -> Result<(), String> {
-    Ok(())
 }

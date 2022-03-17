@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use log::debug;
@@ -49,11 +48,7 @@ pub async fn run_trin(
     };
 
     // Initialize UTP listener
-    let utp_listener = Arc::new(RwLock::new(UtpListener {
-        discovery: Arc::clone(&discovery),
-        utp_connections: HashMap::new(),
-        listening: HashMap::new(),
-    }));
+    let utp_listener = Arc::new(RwLock::new(UtpListener::new(Arc::clone(&discovery))));
 
     // Initialize Storage config
     let storage_config =
