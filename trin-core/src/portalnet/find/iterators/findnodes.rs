@@ -62,8 +62,8 @@ pub struct FindNodeQueryConfig {
     /// Number of results to produce.
     ///
     /// The number of closest peers that a query must obtain successful results
-    /// for before it terminates. Defaults to the maximum number of entries in a
-    /// single k-bucket, i.e. the `k` parameter in the Kademlia paper.
+    /// for before it terminates. Kademlia paper specifices that this should be equal
+    /// to k, the max number of entries in a k-bucket. Currently defaults to `20`. 
     pub num_results: usize,
 
     /// The timeout for a single peer.
@@ -73,6 +73,16 @@ pub struct FindNodeQueryConfig {
     /// the peer when evaluating the termination conditions, until and unless a
     /// result is delivered. Defaults to `10` seconds.
     pub peer_timeout: Duration,
+}
+
+impl FindNodeQueryConfig {
+    pub fn default() -> Self {
+        Self {
+            parallelism: 3,
+            num_results: 20,
+            peer_timeout: Duration::from_secs(10),
+        }
+    }
 }
 
 impl<TNodeId> FindNodeQuery<TNodeId>
