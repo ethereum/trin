@@ -38,7 +38,7 @@ pub trait TargetKey<TNodeId> {
 /// that determines the peer selection strategy, i.e. the order in which the
 /// peers involved in the query should be contacted.
 pub struct QueryPool<TTarget, TNodeId, TResult> {
-    next_id: usize,
+    next_id: QueryId,
     query_timeout: Duration,
     queries: FnvHashMap<QueryId, Query<TTarget, TNodeId, TResult>>,
     result_type: PhantomData<TResult>

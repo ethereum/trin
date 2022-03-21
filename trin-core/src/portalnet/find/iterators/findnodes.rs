@@ -30,7 +30,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-
 #[derive(Debug, Clone)]
 pub struct FindNodeQuery<TNodeId> {
     /// The target key we are looking for
@@ -383,9 +382,6 @@ enum QueryProgress {
 struct QueryPeer<TNodeId> {
     /// The `KBucket` key used to identify the peer.
     key: Key<TNodeId>,
-
-    /// The current rpc request iteration that has been made on this peer.
-    iteration: usize,
 
     /// The number of peers that have been returned by this peer.
     peers_returned: usize,
