@@ -29,6 +29,7 @@ use std::{
     collections::btree_map::{BTreeMap, Entry},
     time::{Duration, Instant},
 };
+use log::error;
 
 #[derive(Debug, Clone)]
 pub struct FindNodeQuery<TNodeId> {
@@ -138,9 +139,12 @@ where
         // If the node returned peers, mark it as succeeded.
         match self.closest_peers.entry(distance) {
             Entry::Vacant(..) => return,
-            Entry::Occupied(mut e) => match e.get().state {
+            Entry::Occupied(mut entry) => match entry.get().state {
                 QueryPeerState::Waiting(..) => {
-                    debug_assert!(self.num_waiting > 0);
+                    if self.num_waiting < 0 {
+                       error!("In findenodes.rs on_success num_waiting is negative. Aborting.")
+                       return
+                    }
                     self.num_waiting -= 1;
                     let peer = e.get_mut();
                     peer.peers_returned += closer_peers.len();
@@ -280,11 +284,11 @@ where
                 }
 
                 QueryPeerState::Succeeded => {
-                    if let Some(ref mut cnt) = result_counter {
-                        *cnt += 1;
+                    if let Some(ref mut count) = result_counter {
+                        *count += 1;
                         // If `num_results` successful results have been delivered for the
                         // closest peers, the query is done.
-                        if *cnt >= self.config.num_results {
+                        if *count >= self.config.num_results {
                             self.progress = QueryProgress::Finished;
                             return QueryState::Finished;
                         }
@@ -548,7 +552,6 @@ mod tests {
                     if rng.gen_bool(0.75) {
                         let num_closer = rng.gen_range(0, query.config.num_results + 1);
                         let closer_peers = random_nodes(num_closer).collect::<Vec<_>>();
-                        // let _: () = remaining;
                         remaining.extend(closer_peers.iter().map(|x| Key::from(*x)));
                         query.on_success(k.preimage(), closer_peers);
                     } else {
@@ -583,7 +586,6 @@ mod tests {
             let result = query.into_result();
             let closest = result.into_iter().map(Key::from).collect::<Vec<_>>();
 
-            // assert_eq!(result.target, target);
             assert!(sorted(&target_key, &closest));
 
             if closest.len() < num_results {

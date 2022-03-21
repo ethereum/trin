@@ -41,8 +41,8 @@ impl QueryInfo {
     }
 }
 
-impl TargetKey<NodeId> for QueryInfo {
-    fn key(&self) -> Key<NodeId> {
+impl TargetKey<TNodeId> for QueryInfo {
+    fn key(&self) -> Key<TNodeId> {
         match self.query_type {
             QueryType::FindNode(ref node_id) => {
                 Key::new_raw(*node_id, *GenericArray::from_slice(&node_id.raw()))
