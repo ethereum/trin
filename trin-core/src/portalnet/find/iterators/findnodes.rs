@@ -40,6 +40,7 @@ pub struct FindNodeQuery<TNodeId> {
     progress: QueryProgress,
 
     /// The closest peers to the target, ordered by increasing distance.
+    /// Assumes that no two peers are equidistant.
     closest_peers: BTreeMap<Distance, QueryPeer<TNodeId>>,
 
     /// The number of peers for which the query is currently waiting for results.
@@ -152,19 +153,17 @@ where
             Entry::Occupied(mut entry) => match entry.get().state {
                 QueryPeerState::Waiting(..) => {
                     if self.num_waiting < 0 {
-                       error!("In findenodes.rs on_success num_waiting is negative. Aborting.")
+                       error!("In findenodes.rs on_success num_waiting is negative.")
                        return
                     }
                     self.num_waiting -= 1;
                     let peer = e.get_mut();
                     peer.peers_returned += closer_peers.len();
-                    // mark the peer as succeeded
                     peer.state = QueryPeerState::Succeeded;
                 }
                 QueryPeerState::Unresponsive => {
                     let peer = e.get_mut();
                     peer.peers_returned += closer_peers.len();
-                    // mark the peer as succeeded
                     peer.state = QueryPeerState::Succeeded;
                 }
                 QueryPeerState::NotContacted
