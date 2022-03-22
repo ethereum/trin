@@ -6,10 +6,11 @@ use std::time::Duration;
 
 use hyper::{self, Body, Client, Method, Request};
 use log::info;
-use serde_json::{self, Value};
+use serde_json::{self, json, Value};
 use thiserror::Error;
 
 use crate::cli::PeertestConfig;
+use crate::AllPeertestNodes;
 use trin_core::jsonrpc::types::Params;
 
 #[derive(Clone)]
@@ -24,7 +25,7 @@ const DATA_RADIUS: &str = "18446744073709551615";
 /// Default enr seq value
 const ENR_SEQ: &str = "1";
 
-fn validate_endpoint_response(method: &str, result: &Value) {
+fn validate_endpoint_response(method: &str, result: &Value, peertest_nodes: &AllPeertestNodes) {
     match method {
         "web3_clientVersion" => {
             assert_eq!(result.as_str().unwrap(), "trin v0.1.0");
@@ -57,6 +58,18 @@ fn validate_endpoint_response(method: &str, result: &Value) {
                 ENR_SEQ.to_string()
             );
         }
+        "portal_historyFindNodes" => {
+            assert_eq!(
+                result.get("total").unwrap().as_u64().unwrap(),
+                peertest_nodes.nodes.len() as u64
+            );
+            assert!(result
+                .get("enrs")
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .contains("enr:"));
+        }
         "portal_statePing" => {
             assert_eq!(
                 result.get("dataRadius").unwrap().as_str().unwrap(),
@@ -67,13 +80,25 @@ fn validate_endpoint_response(method: &str, result: &Value) {
                 ENR_SEQ.to_string()
             );
         }
+        "portal_stateFindNodes" => {
+            assert_eq!(
+                result.get("total").unwrap().as_u64().unwrap(),
+                peertest_nodes.nodes.len() as u64
+            );
+            assert!(result
+                .get("enrs")
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .contains("enr:"));
+        }
         _ => panic!("Unsupported endpoint"),
     };
     info!("{:?} returned a valid response.", method);
 }
 
 impl JsonRpcEndpoint {
-    pub fn all_endpoints(buddy_node: String) -> Vec<JsonRpcEndpoint> {
+    pub fn all_endpoints(all_peertest_nodes: &AllPeertestNodes) -> Vec<JsonRpcEndpoint> {
         vec![
             JsonRpcEndpoint {
                 method: "web3_clientVersion".to_string(),
@@ -104,7 +129,7 @@ impl JsonRpcEndpoint {
                 method: "portal_statePing".to_string(),
                 id: 6,
                 params: Params::Array(vec![
-                    Value::String(buddy_node.clone()),
+                    Value::String(all_peertest_nodes.bootnode.enr.clone()),
                     Value::String(DATA_RADIUS.to_owned()),
                 ]),
             },
@@ -112,8 +137,24 @@ impl JsonRpcEndpoint {
                 method: "portal_historyPing".to_string(),
                 id: 7,
                 params: Params::Array(vec![
-                    Value::String(buddy_node),
+                    Value::String(all_peertest_nodes.bootnode.enr.clone()),
                     Value::String(DATA_RADIUS.to_owned()),
+                ]),
+            },
+            JsonRpcEndpoint {
+                method: "portal_historyFindNodes".to_string(),
+                id: 8,
+                params: Params::Array(vec![
+                    Value::String(all_peertest_nodes.bootnode.enr.clone()),
+                    Value::Array(vec![json!(256)]),
+                ]),
+            },
+            JsonRpcEndpoint {
+                method: "portal_stateFindNodes".to_string(),
+                id: 9,
+                params: Params::Array(vec![
+                    Value::String(all_peertest_nodes.bootnode.enr.clone()),
+                    Value::Array(vec![json!(256)]),
                 ]),
             },
         ]
@@ -197,9 +238,12 @@ pub fn get_enode(ipc_path: &str) -> Result<String, String> {
 }
 
 #[allow(clippy::never_loop)]
-pub async fn test_jsonrpc_endpoints_over_ipc(peertest_config: PeertestConfig, buddy_enr: String) {
+pub async fn test_jsonrpc_endpoints_over_ipc(
+    peertest_config: PeertestConfig,
+    all_peertest_nodes: &AllPeertestNodes,
+) {
     info!("Testing IPC path: {}", peertest_config.target_ipc_path);
-    for endpoint in JsonRpcEndpoint::all_endpoints(buddy_enr) {
+    for endpoint in JsonRpcEndpoint::all_endpoints(all_peertest_nodes) {
         info!("Testing IPC method: {:?}", endpoint.method);
         let mut stream = get_ipc_stream(&peertest_config.target_ipc_path);
         stream
@@ -212,7 +256,9 @@ pub async fn test_jsonrpc_endpoints_over_ipc(peertest_config: PeertestConfig, bu
         let deser = serde_json::Deserializer::from_reader(stream);
         for obj in deser.into_iter::<Value>() {
             match get_response_result(obj) {
-                Ok(result) => validate_endpoint_response(&endpoint.method, &result),
+                Ok(result) => {
+                    validate_endpoint_response(&endpoint.method, &result, all_peertest_nodes)
+                }
                 Err(msg) => panic!(
                     "Jsonrpc error for {:?} endpoint ('os error 11' means timeout): {:?}",
                     endpoint.method, msg
@@ -252,9 +298,12 @@ fn get_response_result(
     }
 }
 
-pub async fn test_jsonrpc_endpoints_over_http(peertest_config: PeertestConfig, buddy_enr: String) {
+pub async fn test_jsonrpc_endpoints_over_http(
+    peertest_config: PeertestConfig,
+    all_peertest_nodes: &AllPeertestNodes,
+) {
     let client = Client::new();
-    for endpoint in JsonRpcEndpoint::all_endpoints(buddy_enr) {
+    for endpoint in JsonRpcEndpoint::all_endpoints(all_peertest_nodes) {
         info!("Testing over HTTP: {:?}", endpoint.method);
         let req = Request::builder()
             .method(Method::POST)
@@ -266,7 +315,7 @@ pub async fn test_jsonrpc_endpoints_over_http(peertest_config: PeertestConfig, b
         let body = hyper::body::to_bytes(resp.into_body()).await.unwrap();
         let response_obj = serde_json::from_slice(&body);
         match get_response_result(response_obj) {
-            Ok(result) => validate_endpoint_response(&endpoint.method, &result),
+            Ok(result) => validate_endpoint_response(&endpoint.method, &result, all_peertest_nodes),
             Err(msg) => panic!(
                 "Jsonrpc error for {:?} endpoint: {:?}",
                 endpoint.method, msg

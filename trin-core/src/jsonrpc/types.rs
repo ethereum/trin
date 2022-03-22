@@ -150,13 +150,13 @@ impl TryFrom<[&Value; 2]> for FindNodesParams {
     fn try_from(params: [&Value; 2]) -> Result<Self, Self::Error> {
         let enr: SszEnr = params[0].try_into()?;
 
-        let distances = params[1]
-            .as_str()
+        let distances: &Vec<Value> = params[1]
+            .as_array()
             .ok_or_else(|| ValidationError::new("Empty distances param"))?;
-        let distances: Vec<u16> = match serde_json::from_str(distances) {
-            Ok(val) => val,
-            Err(_) => return Err(ValidationError::new("Unable to decode distances")),
-        };
+        let distances: Vec<u16> = distances
+            .iter()
+            .map(|val| val.as_u64().unwrap().try_into().unwrap())
+            .collect();
         Ok(Self { enr, distances })
     }
 }
