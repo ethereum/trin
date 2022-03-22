@@ -3,6 +3,15 @@ use sha2::{Digest, Sha256};
 use ssz::{self, Decode, Encode};
 use ssz_derive::{Decode, Encode};
 
+//
+// *TODO*
+// This code has been duplicated from the trin-history crate to allow the trin-core crate to have
+// access to ContentKey derivation which enables `eth_getBlockByHash`. This is a temporary fix to
+// achieve a demo-able feature for Devconnect - April 2022. It's been decided by the team that this
+// is not a sustainable pattern, and a significant re-structuring of Trin is required, to be
+// evaluated post-Devconnect.
+//
+
 /// A content key in the history overlay network.
 #[derive(Clone, Debug, Decode, Encode)]
 #[ssz(enum_behaviour = "union")]

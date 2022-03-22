@@ -15,10 +15,9 @@ use crate::jsonrpc::types::{
     HistoryJsonRpcRequest, Params, PortalJsonRpcRequest, StateJsonRpcRequest,
 };
 use crate::portalnet::discovery::Discovery;
+use crate::TRIN_VERSION;
 
 type Responder<T, E> = mpsc::UnboundedSender<Result<T, E>>;
-
-const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Main JSON-RPC handler. It dispatches json-rpc requests to the overlay networks.
 pub struct JsonRpcHandler {
@@ -65,7 +64,7 @@ impl JsonRpcHandler {
         params: Params,
     ) -> anyhow::Result<Value> {
         match endpoint {
-            PortalEndpoint::ClientVersion => Ok(Value::String(format!("trin v{}", VERSION))),
+            PortalEndpoint::ClientVersion => Ok(Value::String(format!("trin v{}", TRIN_VERSION))),
             PortalEndpoint::GetBlockByHash => {
                 eth::get_block_by_hash(params, &self.history_jsonrpc_tx).await
             }

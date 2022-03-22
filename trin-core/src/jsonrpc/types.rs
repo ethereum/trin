@@ -1,3 +1,6 @@
+use std::str::FromStr;
+
+use ethereum_types::H256;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use ssz_types::VariableList;
@@ -195,7 +198,6 @@ impl TryFrom<[&Value; 2]> for FindContentParams {
 
 pub struct RecursiveFindContentParams {
     pub content_key: ByteList,
-    pub hydrated_transactions: bool,
 }
 
 impl TryFrom<Params> for RecursiveFindContentParams {
@@ -204,36 +206,35 @@ impl TryFrom<Params> for RecursiveFindContentParams {
     fn try_from(params: Params) -> Result<Self, Self::Error> {
         match params {
             Params::Array(val) => match val.len() {
-                2 => Self::try_from([&val[0], &val[1]]),
-                _ => Err(ValidationError::new("Expected 2 params")),
+                1 => Self::try_from(&val[0]),
+                _ => Err(ValidationError::new("Expected 1 param")),
             },
             _ => Err(ValidationError::new("Expected array of params")),
         }
     }
 }
 
-impl TryFrom<[&Value; 2]> for RecursiveFindContentParams {
+impl TryFrom<&Value> for RecursiveFindContentParams {
     type Error = ValidationError;
 
-    fn try_from(params: [&Value; 2]) -> Result<Self, Self::Error> {
-        let content_key = params[0]
+    fn try_from(param: &Value) -> Result<Self, Self::Error> {
+        let content_key = param
             .as_str()
             .ok_or_else(|| ValidationError::new("Empty content key param"))?;
         let content_key = match hex::decode(content_key) {
             Ok(val) => VariableList::from(val),
             Err(_) => return Err(ValidationError::new("Unable to decode content_key")),
         };
-        let hydrated_transactions: BoolParam = params[1].try_into()?;
-        Ok(Self {
-            content_key,
-            hydrated_transactions: hydrated_transactions.value,
-        })
+        Ok(Self { content_key })
     }
 }
 
 pub struct GetBlockByHashParams {
     pub block_hash: [u8; 32],
-    pub hydrated_transactions: bool,
+    // If full_transactions is True then the 'transactions' key will
+    // contain full transactions objects. Otherwise it will be an
+    // array of transaction hashes.
+    pub full_transactions: bool,
 }
 
 impl TryFrom<Params> for GetBlockByHashParams {
@@ -254,46 +255,22 @@ impl TryFrom<[&Value; 2]> for GetBlockByHashParams {
     type Error = ValidationError;
 
     fn try_from(params: [&Value; 2]) -> Result<Self, Self::Error> {
-        let block_hash: BlockHash = params[0].try_into()?;
-        let hydrated_transactions = BoolParam::try_from(params[1])?;
-        Ok(Self {
-            block_hash: block_hash.value,
-            hydrated_transactions: hydrated_transactions.value,
-        })
-    }
-}
-
-pub struct BlockHash {
-    pub value: [u8; 32],
-}
-
-impl TryFrom<&Value> for BlockHash {
-    type Error = ValidationError;
-
-    fn try_from(param: &Value) -> Result<Self, Self::Error> {
-        let block_hash = param
-            .as_str()
-            .ok_or_else(|| Self::Error::new("Invalid block hash param: Expected string."))?;
-
-        let prefix: String = block_hash.chars().skip(0).take(2).collect();
-        if prefix != "0x" {
-            return Err(Self::Error::new(
-                "Invalid block hash: Expected 0x-prefixed hexstring",
-            ));
-        }
-        if block_hash.len() != 66 {
-            return Err(Self::Error::new(
-                "Invalid block hash length: Expected 0x-prefixed 32 byte hexstring",
-            ));
-        }
-        let prefix_removed_block_hash = &block_hash[2..block_hash.len()];
-        let block_hash = match hex::decode(prefix_removed_block_hash) {
-            Ok(val) => val,
-            Err(_) => return Err(Self::Error::new("Unable to decode hex string")),
+        let block_hash = match params[0].as_str() {
+            Some(val) => match H256::from_str(val) {
+                Ok(val) => val,
+                Err(_) => {
+                    return Err(ValidationError::new(
+                        "Invalid hexstring: Unable to convert to H256.",
+                    ))
+                }
+            },
+            None => return Err(ValidationError::new("Invalid hexstring: Not a String.")),
         };
-        let mut value = [0u8; 32];
-        value.copy_from_slice(block_hash.as_slice());
-        Ok(Self { value })
+        let full_transactions = BoolParam::try_from(params[1])?;
+        Ok(Self {
+            block_hash: block_hash.into(),
+            full_transactions: full_transactions.value,
+        })
     }
 }
 
@@ -404,30 +381,5 @@ mod test {
     fn request_params_deserialization(#[case] input: &str, #[case] expected: Params) {
         let deserialized: Params = serde_json::from_str(input).unwrap();
         assert_eq!(deserialized, expected);
-    }
-
-    #[test]
-    fn block_hash_valid_values() {
-        BlockHash::try_from(&Value::String(
-            "0x2c6c2f0b25e36b96a3dddd756f130fb0645a59a59cdf6255bba426b390c73ca7".to_string(),
-        ))
-        .unwrap();
-    }
-
-    #[rstest]
-    #[case(Value::Bool(false))]
-    #[case(Value::String("0".to_string()))]
-    // No 0x prefix
-    #[case(Value::String("2c6c2f0b25e36b96a3dddd756f130fb0645a59a59cdf6255bba426b390c73ca7".to_string()))]
-    #[case(Value::String("x2c6c2f0b25e36b96a3dddd756f130fb0645a59a59cdf6255bba426b390c73ca7".to_string()))]
-    #[case(Value::String("Ox2c6c2f0b25e36b96a3dddd756f130fb0645a59a59cdf6255bba426b390c73ca7".to_string()))]
-    // Invalid Length
-    #[case(Value::String("0x2c6c2f0b25e36b96a3dddd756f130fb0645a59a59cdf6255bba426b390c73c".to_string()))]
-    #[case(Value::String("0x2c6c2f0b25e36b96a3dddd756f130fb0645a59a59cdf6255bba426b390c73ca700".to_string()))]
-    // Not a hexstring
-    #[case(Value::String("0xhhhc2f0b25e36b96a3dddd756f130fb0645a59a59cdf6255bba426b390c73ca7".to_string()))]
-    #[should_panic]
-    fn block_hash_catches_invalid_values(#[case] block_hash: Value) {
-        BlockHash::try_from(&block_hash).unwrap();
     }
 }

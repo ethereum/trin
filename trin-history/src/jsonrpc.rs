@@ -101,10 +101,16 @@ impl HistoryRequestHandler {
                                     Ok(content) => match content {
                                         Content::Content(val) => {
                                             let rlp = Rlp::new(&val);
-                                            let header = Header::decode_rlp(&rlp).unwrap();
-                                            Ok(json!(header))
+                                            match Header::decode_rlp(&rlp) {
+                                                Ok(header) => Ok(json!(header)),
+                                                Err(_) => Err(
+                                                    "Content retrieved has invalid RLP encoding"
+                                                        .to_string(),
+                                                ),
+                                            }
                                         }
-                                        _ => Err("Invalid Content value.".to_string()),
+                                        _ => Err("Unable to retrieve content from the network."
+                                            .to_string()),
                                     },
                                     Err(msg) => Err(format!(
                                         "RecursiveFindContent request timeout: {:?}",
