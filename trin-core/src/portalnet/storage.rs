@@ -11,14 +11,18 @@ use rocksdb::{Options, DB};
 use rusqlite::params;
 use thiserror::Error;
 
-use super::types::content_key::OverlayContentKey;
-use super::types::uint::U256;
-use crate::utils::{db::get_data_dir, distance::xor};
+use super::types::{
+    content_key::OverlayContentKey,
+    metric::{Metric, XorMetric},
+    uint::U256,
+};
+use crate::utils::db::get_data_dir;
 
+// TODO: Replace enum with generic type parameter. This will require that we have a way to
+// associate a "find farthest" query with the generic Metric.
 #[derive(Copy, Clone)]
 pub enum DistanceFunction {
     Xor,
-    State,
 }
 
 /// Struct for configuring a PortalStorage instance.
@@ -348,9 +352,6 @@ impl PortalStorage {
                 };
                 result_vec
             }
-            DistanceFunction::State => {
-                panic!("State distance function is not implemented yet.")
-            }
         };
 
         Ok(Some(result))
@@ -391,8 +392,12 @@ impl PortalStorage {
     /// Method that returns the distance between our node ID and a given content ID.
     /// Returns the most significant 8 bytes of the distance as a u64.
     pub fn distance_to_content_id(&self, content_id: &[u8; 32]) -> u64 {
-        let distance = xor(content_id, &self.node_id.raw());
-        distance.0[3]
+        match self.distance_function {
+            DistanceFunction::Xor => {
+                let distance = XorMetric::distance(content_id, &self.node_id.raw());
+                distance.0[3]
+            }
+        }
     }
 
     /// Converts most significant 4 bytes of a vector to a u32.
