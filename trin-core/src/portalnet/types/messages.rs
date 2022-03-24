@@ -5,6 +5,7 @@ use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 
 use base64;
+use ethereum_types::U256;
 use hex::FromHexError;
 use rlp::Encodable;
 use serde_json::{Map, Value};
@@ -14,7 +15,7 @@ use ssz_types::{typenum, BitList, VariableList};
 use thiserror::Error;
 use validator::ValidationError;
 
-use crate::portalnet::{types::uint::U256, Enr};
+use crate::portalnet::Enr;
 
 pub type ByteList = VariableList<u8, typenum::U2048>;
 

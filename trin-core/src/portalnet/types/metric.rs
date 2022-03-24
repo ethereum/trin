@@ -1,4 +1,4 @@
-use super::uint::U256;
+use ethereum_types::U256;
 
 /// Types whose values represent a metric (distance function) that defines a notion of distance
 /// between two elements in the DHT key space.

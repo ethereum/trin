@@ -77,13 +77,13 @@ mod test {
     use std::sync::Arc;
 
     use discv5::enr::NodeId;
+    use ethereum_types::U256;
     use serial_test::serial;
     use tempdir::TempDir;
 
     use trin_core::portalnet::storage::{
         DistanceFunction, PortalStorage, PortalStorageConfig, PortalStorageError,
     };
-    use trin_core::portalnet::types::uint::U256;
 
     use hex;
 

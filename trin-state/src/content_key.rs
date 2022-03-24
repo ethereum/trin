@@ -1,12 +1,11 @@
+use ethereum_types::{U256, U512};
 use sha2::{Digest as Sha2Digest, Sha256};
 use sha3::Keccak256;
 use ssz::{self, Decode, Encode};
 use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, FixedVector, VariableList};
-use trin_core::portalnet::types::{
-    content_key::OverlayContentKey,
-    uint::{U256, U512},
-};
+
+use trin_core::portalnet::types::content_key::OverlayContentKey;
 
 /// A content key in the state overlay network.
 #[derive(Clone, Debug, Decode, Encode)]

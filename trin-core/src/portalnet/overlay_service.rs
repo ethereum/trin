@@ -20,7 +20,6 @@ use crate::{
                 Offer, Ping, Pong, ProtocolId, Request, Response, SszEnr,
             },
             metric::Metric,
-            uint::U256,
         },
         Enr,
     },
@@ -36,6 +35,7 @@ use discv5::{
     },
     rpc::RequestId,
 };
+use ethereum_types::U256;
 use futures::{channel::oneshot, prelude::*};
 use log::{debug, error, info, warn};
 use parking_lot::RwLock;

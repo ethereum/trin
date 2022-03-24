@@ -11,7 +11,6 @@ use trin_core::{
             content_key::IdentityContentKey,
             messages::{Content, Message, PortalnetConfig, ProtocolId, SszEnr},
             metric::XorMetric,
-            uint::U256,
         },
         Enr,
     },
@@ -19,6 +18,7 @@ use trin_core::{
 };
 
 use discv5::Discv5Event;
+use ethereum_types::U256;
 use tokio::sync::{mpsc, RwLock};
 use tokio::time::{self, Duration};
 

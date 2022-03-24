@@ -2,7 +2,9 @@ use crate::{
     portalnet::types::metric::{Metric, XorMetric},
     utils::bytes,
 };
+
 use discv5::enr::NodeId;
+use ethereum_types::U256;
 
 #[cfg(test)]
 use crate::portalnet::Enr;
@@ -22,11 +24,18 @@ pub fn generate_random_node_id(
 ) -> anyhow::Result<NodeId> {
     let distance_leading_zeroes = 255 - target_bucket_idx;
     let random_distance = bytes::random_32byte_array(distance_leading_zeroes);
+
     let raw_node_id = XorMetric::distance(&local_node_id.raw(), &random_distance);
-    match NodeId::parse(raw_node_id.to_32_byte_array().as_slice()) {
-        Ok(node_id) => Ok(node_id),
-        Err(msg) => Err(anyhow::Error::msg(msg)),
-    }
+    let raw_node_id_be = u256_to_be_bytes(raw_node_id);
+
+    Ok(NodeId::new(&raw_node_id_be))
+}
+
+/// Returns the big-endian byte representation of a given `U256`.
+fn u256_to_be_bytes(value: U256) -> [u8; 32] {
+    let mut bytes: [u8; 32] = [0; 32];
+    value.to_big_endian(&mut bytes);
+    bytes
 }
 
 #[cfg(test)]
@@ -55,7 +64,7 @@ mod test {
         let local_node_id = NodeId::random();
         let random_node_id = generate_random_node_id(target_bucket_idx, local_node_id).unwrap();
         let distance = XorMetric::distance(&random_node_id.raw(), &local_node_id.raw());
-        let distance = distance.to_32_byte_array();
+        let distance = u256_to_be_bytes(distance);
 
         assert_eq!(distance[0..31], vec![0; 31]);
         assert!(distance[31] < 64 && distance[31] >= 32)
@@ -67,7 +76,7 @@ mod test {
         let local_node_id = NodeId::random();
         let random_node_id = generate_random_node_id(target_bucket_idx, local_node_id).unwrap();
         let distance = XorMetric::distance(&random_node_id.raw(), &local_node_id.raw());
-        let distance = distance.to_32_byte_array();
+        let distance = u256_to_be_bytes(distance);
 
         assert_eq!(distance[0..31], vec![0; 31]);
         assert_eq!(distance[31], 1);
@@ -79,7 +88,7 @@ mod test {
         let local_node_id = NodeId::random();
         let random_node_id = generate_random_node_id(target_bucket_idx, local_node_id).unwrap();
         let distance = XorMetric::distance(&random_node_id.raw(), &local_node_id.raw());
-        let distance = distance.to_32_byte_array();
+        let distance = u256_to_be_bytes(distance);
 
         assert!(distance[0] > 127);
     }
