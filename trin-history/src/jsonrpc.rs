@@ -12,7 +12,6 @@ use trin_core::jsonrpc::{
         RecursiveFindContentParams,
     },
 };
-use trin_core::portalnet::overlay::RequestDirection;
 use trin_core::portalnet::types::content_key::HistoryContentKey;
 use trin_core::portalnet::types::messages::{Content, FindContent, Request, Response, SszEnr};
 use trin_core::portalnet::Enr;
@@ -51,8 +50,6 @@ impl HistoryRequestHandler {
                     let _ = request.resp.send(response);
                 }
                 HistoryEndpoint::RecursiveFindContent => {
-                    let direction = RequestDirection::Initialize;
-
                     let find_content_params =
                         match RecursiveFindContentParams::try_from(request.params) {
                             Ok(params) => params,
@@ -66,11 +63,11 @@ impl HistoryRequestHandler {
                         };
 
                     let content_key = find_content_params.content_key.to_vec();
-                    let decoded_content_key = Request::FindContent(FindContent { content_key });
+                    let find_content_request = Request::FindContent(FindContent { content_key });
                     let first_response = match self
                         .network
                         .overlay
-                        .send_overlay_request(decoded_content_key, direction)
+                        .initiate_overlay_request(find_content_request)
                         .await
                     {
                         Ok(content) => content,
@@ -86,6 +83,7 @@ impl HistoryRequestHandler {
                     // iterative find content support
                     let response = match first_response {
                         Response::Content(val) => match val {
+                            // Perform secondary lookup if initial response is `enrs`
                             Content::Enrs(enrs) => {
                                 let target_enr: SszEnr = enrs.first().unwrap().clone();
                                 let target_enr: Enr = target_enr.into();
@@ -118,7 +116,17 @@ impl HistoryRequestHandler {
                                     )),
                                 }
                             }
-                            Content::Content(_) => Ok(val.try_into().unwrap()),
+                            // Return value if initial response is `content`
+                            Content::Content(val) => {
+                                let rlp = Rlp::new(&val);
+                                match Header::decode_rlp(&rlp) {
+                                    Ok(header) => Ok(json!(header)),
+                                    Err(_) => {
+                                        Err("Content retrieved has invalid RLP encoding"
+                                            .to_string())
+                                    }
+                                }
+                            }
                             _ => Err("Unsupported content".to_string()),
                         },
                         _ => Err("Invalid RecursiveFindContent params".to_string()),

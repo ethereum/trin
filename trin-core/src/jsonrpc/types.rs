@@ -318,8 +318,8 @@ impl<TContentKey: OverlayContentKey> TryFrom<Params> for LocalContentParams<TCon
 impl<TContentKey: OverlayContentKey> TryFrom<&Value> for LocalContentParams<TContentKey> {
     type Error = ValidationError;
 
-    fn try_from(params: &Value) -> Result<Self, Self::Error> {
-        let content_key = params[0]
+    fn try_from(param: &Value) -> Result<Self, Self::Error> {
+        let content_key = param
             .as_str()
             .ok_or_else(|| ValidationError::new("Empty content key param"))?;
         let content_key = match hex::decode(content_key) {

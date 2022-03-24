@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use super::{
     discovery::Discovery,
-    types::{content_key::OverlayContentKey, metric::Metric},
     overlay_service::{Node, OverlayRequest, OverlayService},
+    types::{content_key::OverlayContentKey, metric::Metric},
     Enr,
 };
 use crate::portalnet::storage::PortalStorage;
@@ -426,8 +426,17 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         Ok(response)
     }
 
+    /// Public method for initiating a network request through the overlay service.
+    pub async fn initiate_overlay_request(
+        &self,
+        request: Request,
+    ) -> Result<Response, OverlayRequestError> {
+        let direction = RequestDirection::Initialize;
+        self.send_overlay_request(request, direction).await
+    }
+
     /// Sends a request through the overlay service.
-    pub async fn send_overlay_request(
+    async fn send_overlay_request(
         &self,
         request: Request,
         direction: RequestDirection,
