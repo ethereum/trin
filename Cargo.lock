@@ -692,7 +692,7 @@ dependencies = [
  "rand 0.8.5",
  "rlp 0.5.1",
  "serde",
- "sha3 0.9.1",
+ "sha3",
  "zeroize",
 ]
 
@@ -2791,16 +2791,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sha3"
-version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "881bf8156c87b6301fc5ca6b27f11eeb2761224c7081e69b409d5a1951a70c86"
-dependencies = [
- "digest 0.10.3",
- "keccak",
-]
-
-[[package]]
 name = "sharded-slab"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3466,7 +3456,7 @@ dependencies = [
  "rand 0.8.5",
  "rlp 0.5.1",
  "serde_json",
- "sha3 0.9.1",
+ "sha3",
  "structopt",
  "tokio",
  "tracing",
@@ -3529,7 +3519,8 @@ dependencies = [
  "serde",
  "serde_json",
  "serial_test",
- "sha3 0.9.1",
+ "sha2 0.10.2",
+ "sha3",
  "structopt",
  "stunclient",
  "tempdir",
@@ -3553,10 +3544,6 @@ dependencies = [
  "anyhow",
  "bytes 1.1.0",
  "discv5",
- "eth2_ssz",
- "eth2_ssz_derive",
- "eth2_ssz_types",
- "ethereum-types 0.12.1",
  "hex",
  "keccak-hash",
  "log 0.4.14",
@@ -3564,8 +3551,6 @@ dependencies = [
  "rocksdb",
  "serde_json",
  "serial_test",
- "sha2 0.10.2",
- "sha3 0.9.1",
  "tempdir",
  "tokio",
  "tracing",
@@ -3579,9 +3564,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "discv5",
- "eth2_ssz",
- "eth2_ssz_derive",
- "eth2_ssz_types",
  "eth_trie",
  "ethereum-types 0.12.1",
  "hex",
@@ -3589,8 +3571,6 @@ dependencies = [
  "num",
  "rocksdb",
  "serde_json",
- "sha2 0.10.2",
- "sha3 0.10.1",
  "tokio",
  "tracing",
  "tracing-futures",

@@ -9,13 +9,12 @@ use trin_core::portalnet::{
     overlay::{OverlayConfig, OverlayProtocol, OverlayRequestError},
     storage::{PortalStorage, PortalStorageConfig},
     types::{
+        content_key::HistoryContentKey,
         messages::{PortalnetConfig, ProtocolId},
         metric::XorMetric,
     },
 };
 use trin_core::utp::stream::UtpListener;
-
-use super::content_key::HistoryContentKey;
 
 /// History network layer on top of the overlay protocol. Encapsulates history network specific data and logic.
 #[derive(Clone)]
