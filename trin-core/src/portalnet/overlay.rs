@@ -15,7 +15,7 @@ use crate::portalnet::types::messages::{
     ProtocolId, Request, Response,
 };
 
-use crate::utp::stream::{ConnectionKey, UtpListener};
+use crate::utp::stream::{ConnectionKey, UtpListener, BUF_SIZE};
 use crate::utp::trin_helpers::{UtpAccept, UtpMessage, UtpMessageId};
 use discv5::{
     enr::NodeId,
@@ -242,14 +242,60 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
     ) -> Result<Content, OverlayRequestError> {
         // Construct the request.
         let request = FindContent { content_key };
-        let direction = RequestDirection::Outgoing { destination: enr };
+        let direction = RequestDirection::Outgoing {
+            destination: enr.clone(),
+        };
 
         // Send the request and wait on the response.
         match self
             .send_overlay_request(Request::FindContent(request), direction)
             .await
         {
-            Ok(Response::Content(found_content)) => Ok(found_content),
+            Ok(Response::Content(found_content)) => {
+                match found_content {
+                    Content::Content(_) => Ok(found_content),
+                    Content::Enrs(_) => Ok(found_content),
+                    // Init uTP stream if `connection_id` is received
+                    Content::ConnectionId(conn_id) => {
+                        let conn_id = u16::from_be(conn_id);
+                        self.utp_listener
+                            .write()
+                            .await
+                            .listening
+                            .insert(conn_id, UtpMessageId::FindContentStream);
+
+                        // initiate the connection to the acceptor
+                        let conn = self
+                            .utp_listener
+                            .write()
+                            .await
+                            .connect(conn_id, enr.node_id())
+                            .await;
+
+                        match conn {
+                            Ok(mut conn) => {
+                                // TODO: Implement this with recv_from
+                                // Handle STATE packet for SYN
+                                let mut buf = [0; BUF_SIZE];
+                                match conn.recv(&mut buf).await {
+                                    Ok(_) => {
+                                        // TODO: Wait for uTP transfer and return the data
+                                        Ok(found_content)
+                                    }
+                                    Err(msg) => {
+                                        warn!("Unable to handle SYN-ACK packet: {msg}");
+                                        Err(OverlayRequestError::UtpError(msg.to_string()))
+                                    }
+                                }
+                            }
+                            Err(msg) => {
+                                warn!("Unable to initiate uTP stream with remote node {msg}");
+                                Err(OverlayRequestError::UtpError(msg.to_string()))
+                            }
+                        }
+                    }
+                }
+            }
             Ok(_) => Err(OverlayRequestError::InvalidResponse),
             Err(error) => Err(error),
         }

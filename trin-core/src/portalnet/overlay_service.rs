@@ -96,6 +96,10 @@ pub enum OverlayRequestError {
     /// Error types resulting from building ACCEPT message
     #[error("Error while sending offer message")]
     OfferError(String),
+
+    /// uTP request error
+    #[error("uTP request error")]
+    UtpError(String),
 }
 
 impl From<discv5::RequestError> for OverlayRequestError {
@@ -583,7 +587,34 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         match self.storage.get(&content_key) {
             Ok(Some(value)) => {
                 let content = ByteList::from(VariableList::from(value));
-                Ok(Content::Content(content))
+
+                // Check content size and initiate uTP connection if the size is over the threshold
+                // TODO: Properly calculate max content size
+                if content.len() < 1000 {
+                    Ok(Content::Content(content))
+                } else {
+                    let connection_id: u16 = crate::utp::stream::rand();
+
+                    let utp_listener = self.utp_listener.clone();
+                    tokio::spawn(async move {
+                        let mut utp_listener = utp_listener.write_with_warn().await;
+                        // listen for incoming connection request on conn_id, as part of utp handshake
+                        utp_listener.listening.insert(
+                            connection_id.clone(),
+                            // Temporaly storing content data, so we can send it right after we receive
+                            // SYN packet from the requester
+                            UtpMessageId::FindContentData(Content::Content(content)),
+                        );
+
+                        // also listen on conn_id + 1 because this is the receive path
+                        utp_listener
+                            .listening
+                            .insert(connection_id.clone() + 1, UtpMessageId::FindContentStream);
+                    });
+
+                    // Connection id is send as BE because uTP header values are stored also as BE
+                    Ok(Content::ConnectionId(connection_id.to_be()))
+                }
             }
             Ok(None) => {
                 let enrs = self.find_nodes_close_to_content(content_key);
