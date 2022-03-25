@@ -7,7 +7,7 @@ use discv5::enr::NodeId;
 use discv5::{Enr, TalkRequest};
 use log::{debug, warn};
 use rand::Rng;
-use ssz::{Decode, Encode};
+use ssz::Encode;
 use std::cmp::{max, min};
 use std::collections::{HashMap, VecDeque};
 use std::convert::TryFrom;
@@ -20,7 +20,7 @@ use crate::portalnet::types::messages::Content::Content;
 use crate::portalnet::types::messages::ProtocolId;
 use crate::utp::packets::{ExtensionType, Packet, PacketType, HEADER_SIZE};
 use crate::utp::time::{now_microseconds, Delay, Timestamp};
-use crate::utp::trin_helpers::{UtpAccept, UtpMessage, UtpMessageId};
+use crate::utp::trin_helpers::{UtpMessage, UtpMessageId};
 use crate::utp::util::{abs_diff, ewma, generate_sequential_identifiers};
 use std::time::Duration;
 
@@ -274,20 +274,14 @@ impl UtpListener {
 
                 match self.listening.get(&conn.receiver_connection_id) {
                     Some(message_type) => match message_type {
-                        UtpMessageId::OfferAcceptStream => {
-                            match UtpAccept::from_ssz_bytes(&received_stream[..]) {
-                                Ok(payload) => {
-                                    for (key, content) in payload.message {
-                                        // TODO: Implement this with overlay store
-                                        debug!("Store {key:?}, {content:?}");
-                                    }
-                                }
-                                Err(_) => debug!("Recv malformed data on handing UtpAccept"),
-                            }
+                        UtpMessageId::AcceptStream(content_keys) => {
+                            // TODO: Implement this with overlay store and decode receiver stream if multiple content values are send
+                            debug!("Store {content_keys:?}, {received_stream:?}");
                         }
-                        // TODO: Process Content data received via uTP stream
-                        UtpMessageId::FindContentData(_) => {}
-                        UtpMessageId::FindContentStream => {}
+                        UtpMessageId::FindContentData(_content) => {
+                            // TODO: Process Content data received via uTP stream
+                        }
+                        _ => {}
                     },
                     _ => warn!("uTP listening HashMap doesn't have uTP stream message type"),
                 }
@@ -717,7 +711,7 @@ impl UtpSocket {
             // When SYN is send and we receive STATE, do not reply
             (SocketState::SynSent, PacketType::State) => {
                 self.connected_to = src;
-                self.ack_nr = packet.seq_nr();
+                self.ack_nr = packet.seq_nr() - 1;
                 self.seq_nr += 1;
                 self.state = SocketState::Connected;
                 self.last_acked = packet.ack_nr();

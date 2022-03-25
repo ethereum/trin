@@ -19,7 +19,7 @@ impl TestApp {
             .write()
             .await
             .listening
-            .insert(connection_id, UtpMessageId::OfferAcceptStream);
+            .insert(connection_id, UtpMessageId::OfferStream);
 
         let mut conn = self
             .utp_listener
@@ -79,14 +79,14 @@ impl TestApp {
             .write()
             .await
             .listening
-            .insert(connection_id, UtpMessageId::OfferAcceptStream);
+            .insert(connection_id, UtpMessageId::OfferStream);
 
         // also listen on conn_id + 1 because this is the actual receive path for acceptor
         self.utp_listener
             .write()
             .await
             .listening
-            .insert(connection_id + 1, UtpMessageId::OfferAcceptStream);
+            .insert(connection_id + 1, UtpMessageId::OfferStream);
     }
 }
 

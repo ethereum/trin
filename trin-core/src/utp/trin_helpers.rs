@@ -57,7 +57,8 @@ pub struct UtpAccept {
 pub enum UtpMessageId {
     FindContentStream,
     FindContentData(Content),
-    OfferAcceptStream,
+    OfferStream,
+    AcceptStream(Vec<Vec<u8>>),
 }
 
 #[cfg(test)]

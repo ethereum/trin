@@ -15,7 +15,7 @@ use crate::portalnet::types::messages::{
     ProtocolId, Request, Response,
 };
 
-use crate::utp::stream::{ConnectionKey, UtpListener, BUF_SIZE};
+use crate::utp::stream::{UtpListener, BUF_SIZE};
 use crate::utp::trin_helpers::{UtpAccept, UtpMessage, UtpMessageId};
 use discv5::{
     enr::NodeId,
@@ -283,15 +283,15 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                                         // TODO: Wait for uTP transfer and return the data
                                         Ok(found_content)
                                     }
-                                    Err(msg) => {
-                                        warn!("Unable to handle SYN-ACK packet: {msg}");
-                                        Err(OverlayRequestError::UtpError(msg.to_string()))
+                                    Err(err) => {
+                                        warn!("Unable to handle SYN-ACK packet: {err}");
+                                        Err(OverlayRequestError::UtpError(err.to_string()))
                                     }
                                 }
                             }
-                            Err(msg) => {
-                                warn!("Unable to initiate uTP stream with remote node {msg}");
-                                Err(OverlayRequestError::UtpError(msg.to_string()))
+                            Err(err) => {
+                                warn!("Unable to initiate uTP stream with remote node {err}");
+                                Err(OverlayRequestError::UtpError(err.to_string()))
                             }
                         }
                     }
@@ -324,7 +324,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
             .collect();
         let content_keys_offered: Vec<TContentKey> = match content_keys_offered {
             Ok(val) => val,
-            Err(_msg) => return Err(OverlayRequestError::DecodeError),
+            Err(_) => return Err(OverlayRequestError::DecodeError),
         };
 
         // Send the request and wait on the response.
@@ -338,7 +338,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                     .await
                 {
                     Ok(accept) => Ok(accept),
-                    Err(msg) => Err(OverlayRequestError::OfferError(msg.to_string())),
+                    Err(err) => Err(OverlayRequestError::OfferError(err.to_string())),
                 }
             }
             Ok(_) => Err(OverlayRequestError::InvalidResponse),
@@ -352,25 +352,30 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         enr: Enr,
         content_keys_offered: Vec<TContentKey>,
     ) -> anyhow::Result<Accept> {
-        let connection_id = response.connection_id.clone();
+        let connection_id = response.connection_id.to_be();
+
+        // Do not initialize uTP stream if remote node doesn't have interest in the offered content keys
+        if response.content_keys.is_zero() {
+            return Ok(response);
+        }
 
         self.utp_listener
             .write()
             .await
             .listening
-            .insert(connection_id.clone(), UtpMessageId::OfferAcceptStream);
+            .insert(connection_id, UtpMessageId::OfferStream);
 
         // initiate the connection to the acceptor
         let mut conn = self
             .utp_listener
             .write()
             .await
-            .connect(connection_id.clone(), enr.node_id())
+            .connect(connection_id, enr.node_id())
             .await?;
 
         // TODO: Replace this with recv_from
         // Handle STATE packet for SYN
-        let mut buf = [0; 1500];
+        let mut buf = [0; BUF_SIZE];
         conn.recv(&mut buf).await?;
 
         // Return to acceptor: the content key and corresponding data
@@ -398,30 +403,18 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
             message: content_items,
         };
 
-        let utp_listener = self.utp_listener.clone();
         tokio::spawn(async move {
-            if let Some(conn) = utp_listener
-                .write()
+            // send the content to the acceptor over a uTP stream
+            if let Err(err) = conn
+                .send_to(&UtpMessage::new(content_message.as_ssz_bytes()).encode()[..])
                 .await
-                .utp_connections
-                .get_mut(&ConnectionKey {
-                    node_id: enr.node_id(),
-                    conn_id_recv: connection_id,
-                })
             {
-                // send the content to the acceptor over a uTP stream
-                if let Err(msg) = conn
-                    .send_to(&UtpMessage::new(content_message.as_ssz_bytes()).encode()[..])
-                    .await
-                {
-                    debug!("Error sending content {msg}");
-                } else {
-                    // Close uTP connection
-                    if let Err(msg) = conn.close().await {
-                        debug!("Unable to close uTP connection!: {msg}")
-                    }
-                };
-            }
+                warn!("Error sending content {err}");
+            };
+            // Close uTP connection
+            if let Err(err) = conn.close().await {
+                warn!("Unable to close uTP connection!: {err}")
+            };
         });
         Ok(response)
     }
