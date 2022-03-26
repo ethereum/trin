@@ -110,6 +110,13 @@ pub struct TrinConfig {
 
     #[structopt(long = "metrics-url", help = "URL for prometheus server")]
     pub metrics_url: Option<String>,
+
+    #[structopt(
+        short = "e",
+        long = "ephemeral",
+        help = "Enable temporary trin data storage that is deleted on exit."
+    )]
+    pub ephemeral: bool,
 }
 
 impl TrinConfig {
@@ -198,6 +205,7 @@ mod test {
                 .split(',')
                 .map(|n| n.to_string())
                 .collect(),
+            ephemeral: false,
         };
         let actual_config = TrinConfig::new_from(["trin"].iter()).unwrap();
         assert_eq!(actual_config.web3_transport, expected_config.web3_transport);
@@ -229,6 +237,7 @@ mod test {
                 .split(',')
                 .map(|n| n.to_string())
                 .collect(),
+            ephemeral: false,
         };
         let actual_config = TrinConfig::new_from(
             [
@@ -273,6 +282,7 @@ mod test {
                 .split(',')
                 .map(|n| n.to_string())
                 .collect(),
+            ephemeral: false,
         };
         assert_eq!(actual_config.web3_transport, expected_config.web3_transport);
         assert_eq!(
@@ -313,6 +323,7 @@ mod test {
                 .split(',')
                 .map(|n| n.to_string())
                 .collect(),
+            ephemeral: false,
         };
         assert_eq!(actual_config.web3_transport, expected_config.web3_transport);
         assert_eq!(
@@ -377,6 +388,7 @@ mod test {
                 .split(',')
                 .map(|n| n.to_string())
                 .collect(),
+            ephemeral: false,
         };
         let actual_config =
             TrinConfig::new_from(["trin", "--discovery-port", "999"].iter()).unwrap();
@@ -403,6 +415,7 @@ mod test {
                 .split(',')
                 .map(|n| n.to_string())
                 .collect(),
+            ephemeral: false,
         };
         let actual_config =
             TrinConfig::new_from(["trin", "--bootnodes", "enr:-aoeu,enr:-htns"].iter()).unwrap();
@@ -451,6 +464,7 @@ mod test {
                 .split(',')
                 .map(|n| n.to_string())
                 .collect(),
+            ephemeral: false,
         };
         let actual_config = TrinConfig::new_from(
             [
