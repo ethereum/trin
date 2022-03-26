@@ -21,6 +21,7 @@ use validator::Validate;
 use crate::cli::TrinConfig;
 use crate::jsonrpc::endpoints::TrinEndpoint;
 use crate::jsonrpc::types::{JsonRequest, PortalJsonRpcRequest};
+use crate::utils::db::cleanup_data_dir;
 
 pub struct JsonRpcExiter {
     should_exit: Arc<RwLock<bool>>,
@@ -86,6 +87,7 @@ fn set_ipc_cleanup_handlers(ipc_path: &str) {
             if let Err(err) = fs::remove_file(&ipc_path) {
                 debug!("Ctrl-C: Skipped removing {} because: {}", ipc_path, err);
             };
+            cleanup_data_dir();
             std::process::exit(1);
         }) {
             warn!(
