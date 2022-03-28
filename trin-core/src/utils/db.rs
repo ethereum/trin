@@ -23,7 +23,6 @@ pub fn get_default_data_dir(node_id: NodeId) -> String {
     let node_id_string = hex::encode(node_id.raw());
     let suffix = &node_id_string[..8];
     application_string.push_str(suffix);
-    application_string.push_str("/rocksdb");
 
     match ProjectDirs::from("", "", &application_string) {
         Some(proj_dirs) => proj_dirs.data_local_dir().to_str().unwrap().to_string(),
@@ -31,8 +30,11 @@ pub fn get_default_data_dir(node_id: NodeId) -> String {
     }
 }
 
+/// Used to setup a database for TrieDB in State Network
 pub fn setup_overlay_db(node_id: NodeId) -> DB {
-    let data_path = get_data_dir(node_id);
+    let data_path_root = get_data_dir(node_id);
+    let data_suffix: &str = "/rocksdb";
+    let data_path = data_path_root + data_suffix;
     let mut db_opts = Options::default();
     db_opts.create_if_missing(true);
     DB::open(&db_opts, data_path).unwrap()
