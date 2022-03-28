@@ -491,6 +491,12 @@ pub struct Accept {
     pub content_keys: BitList<typenum::U8>,
 }
 
+impl Into<Value> for Accept {
+    fn into(self) -> Value {
+        serde_json::json!({ "connection_id": format!("{:?}", self.connection_id.to_be()) , "content_keys": self.content_keys})
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct SszEnr(Enr);
 

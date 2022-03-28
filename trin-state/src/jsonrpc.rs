@@ -4,6 +4,7 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 
 use crate::network::StateNetwork;
+use trin_core::jsonrpc::types::OfferParams;
 use trin_core::jsonrpc::{
     endpoints::StateEndpoint,
     types::{
@@ -78,6 +79,26 @@ impl StateRequestHandler {
                             Err(msg) => Err(format!("FindNodes request timeout: {:?}", msg)),
                         },
                         Err(msg) => Err(format!("Invalid FindNodes params: {:?}", msg)),
+                    };
+                    let _ = request.resp.send(response);
+                }
+                StateEndpoint::Offer => {
+                    let response = match OfferParams::try_from(request.params) {
+                        Ok(val) => {
+                            let content_keys =
+                                val.content_keys.iter().map(|key| key.to_vec()).collect();
+
+                            match self
+                                .network
+                                .overlay
+                                .send_offer(content_keys, val.enr.into())
+                                .await
+                            {
+                                Ok(accept) => Ok(accept.into()),
+                                Err(msg) => Err(format!("Offer request timeout: {:?}", msg)),
+                            }
+                        }
+                        Err(msg) => Err(format!("Invalid Offer params: {:?}", msg)),
                     };
                     let _ = request.resp.send(response);
                 }
