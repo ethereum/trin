@@ -25,6 +25,7 @@ pub enum HistoryEndpoint {
     FindNodes,
     LocalContent,
     Ping,
+    RecursiveFindContent,
 }
 
 /// Ethereum JSON-RPC endpoints not currently supported by portal network requests, proxied to Infura
@@ -37,6 +38,7 @@ pub enum InfuraEndpoint {
 #[derive(Debug, PartialEq, Clone)]
 pub enum PortalEndpoint {
     ClientVersion, // Doesn't actually rely on portal network data, but it makes sense to live here
+    GetBlockByHash,
 }
 
 /// Global portal network endpoints supported by trin, including infura proxies, Discv5, Ethereum and all overlay network endpoints supported by portal network requests
@@ -60,9 +62,15 @@ impl FromStr for TrinEndpoint {
                 Discv5Endpoint::RoutingTableInfo,
             )),
             "eth_blockNumber" => Ok(TrinEndpoint::InfuraEndpoint(InfuraEndpoint::BlockNumber)),
+            "eth_getBlockByHash" => {
+                Ok(TrinEndpoint::PortalEndpoint(PortalEndpoint::GetBlockByHash))
+            }
             "portal_historyFindContent" => {
                 Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::FindContent))
             }
+            "portal_historyRecursiveFindContent" => Ok(TrinEndpoint::HistoryEndpoint(
+                HistoryEndpoint::RecursiveFindContent,
+            )),
             "portal_historyFindNodes" => {
                 Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::FindNodes))
             }

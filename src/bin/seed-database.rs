@@ -112,7 +112,10 @@ fn load_file_data(path: &Path, storage: &mut PortalStorage) {
                             total_count += 1;
                             match storage.should_store(&content_key).unwrap() {
                                 true => {
-                                    storage.store(&content_key, &bytes_rlp).unwrap();
+                                    let header_bytes = block.header.clone().unwrap().rlp(true);
+                                    storage
+                                        .store(&content_key, &header_bytes.as_ref().to_vec())
+                                        .unwrap();
                                     println!("Stored content key: {:?}", content_key_hex);
                                     println!("- Block RLP: {:?}", prefix_removed_rlp.get(0..31));
                                     stored_count += 1;

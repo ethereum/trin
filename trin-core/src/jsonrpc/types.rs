@@ -1,3 +1,6 @@
+use std::str::FromStr;
+
+use ethereum_types::H256;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use ssz_types::VariableList;
@@ -46,7 +49,7 @@ pub struct JsonRequest {
 #[derive(Debug, Clone)]
 pub struct PortalJsonRpcRequest {
     pub endpoint: TrinEndpoint,
-    pub resp: Responder<Value, String>,
+    pub resp: Responder<Value, anyhow::Error>,
     pub params: Params,
 }
 
@@ -193,6 +196,107 @@ impl TryFrom<[&Value; 2]> for FindContentParams {
     }
 }
 
+pub struct RecursiveFindContentParams {
+    pub content_key: ByteList,
+}
+
+impl TryFrom<Params> for RecursiveFindContentParams {
+    type Error = ValidationError;
+
+    fn try_from(params: Params) -> Result<Self, Self::Error> {
+        match params {
+            Params::Array(val) => match val.len() {
+                1 => Self::try_from(&val[0]),
+                _ => Err(ValidationError::new("Expected 1 param")),
+            },
+            _ => Err(ValidationError::new("Expected array of params")),
+        }
+    }
+}
+
+impl TryFrom<&Value> for RecursiveFindContentParams {
+    type Error = ValidationError;
+
+    fn try_from(param: &Value) -> Result<Self, Self::Error> {
+        let content_key = param
+            .as_str()
+            .ok_or_else(|| ValidationError::new("Empty content key param"))?;
+        let content_key = match hex::decode(content_key) {
+            Ok(val) => VariableList::from(val),
+            Err(_) => return Err(ValidationError::new("Unable to decode content_key")),
+        };
+        Ok(Self { content_key })
+    }
+}
+
+pub struct GetBlockByHashParams {
+    pub block_hash: [u8; 32],
+    // If full_transactions is True then the 'transactions' key will
+    // contain full transactions objects. Otherwise it will be an
+    // array of transaction hashes.
+    pub full_transactions: bool,
+}
+
+impl TryFrom<Params> for GetBlockByHashParams {
+    type Error = ValidationError;
+
+    fn try_from(params: Params) -> Result<Self, Self::Error> {
+        match params {
+            Params::Array(val) => match val.len() {
+                2 => GetBlockByHashParams::try_from([&val[0], &val[1]]),
+                _ => Err(ValidationError::new("Expected 2 params")),
+            },
+            _ => Err(ValidationError::new("Expected array of params")),
+        }
+    }
+}
+
+impl TryFrom<[&Value; 2]> for GetBlockByHashParams {
+    type Error = ValidationError;
+
+    fn try_from(params: [&Value; 2]) -> Result<Self, Self::Error> {
+        let block_hash = match params[0].as_str() {
+            Some(val) => match H256::from_str(val) {
+                Ok(val) => val,
+                Err(_) => {
+                    return Err(ValidationError::new(
+                        "Invalid hexstring: Unable to convert to H256.",
+                    ))
+                }
+            },
+            None => return Err(ValidationError::new("Invalid hexstring: Not a String.")),
+        };
+        let full_transactions = BoolParam::try_from(params[1])?;
+        Ok(Self {
+            block_hash: block_hash.into(),
+            full_transactions: full_transactions.value,
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct BoolParam {
+    value: bool,
+}
+
+impl TryFrom<&Value> for BoolParam {
+    type Error = ValidationError;
+
+    // Deserializes both Value::Bool and Value::String("true" || "false")
+    fn try_from(value: &Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::Bool(val) => Ok(Self { value: *val }),
+            Value::String(val) => match val.parse::<bool>() {
+                Ok(val) => Ok(Self { value: val }),
+                Err(_) => Err(ValidationError::new(
+                    "Invalid boolean parameter: Expected 'true' or 'false'.",
+                )),
+            },
+            _ => Err(ValidationError::new("Invalid boolean parameter")),
+        }
+    }
+}
+
 pub struct LocalContentParams<TContentKey> {
     pub content_key: TContentKey,
 }
@@ -214,8 +318,8 @@ impl<TContentKey: OverlayContentKey> TryFrom<Params> for LocalContentParams<TCon
 impl<TContentKey: OverlayContentKey> TryFrom<&Value> for LocalContentParams<TContentKey> {
     type Error = ValidationError;
 
-    fn try_from(params: &Value) -> Result<Self, Self::Error> {
-        let content_key = params[0]
+    fn try_from(param: &Value) -> Result<Self, Self::Error> {
+        let content_key = param
             .as_str()
             .ok_or_else(|| ValidationError::new("Empty content key param"))?;
         let content_key = match hex::decode(content_key) {

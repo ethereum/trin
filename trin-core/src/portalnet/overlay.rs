@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use super::{
     discovery::Discovery,
-    overlay_service::{Node, OverlayRequest, OverlayService, RequestDirection},
+    overlay_service::{Node, OverlayRequest, OverlayService},
     types::{content_key::OverlayContentKey, metric::Metric},
     Enr,
 };
@@ -31,6 +31,7 @@ use tokio::sync::RwLock as RwLockT;
 use tracing::{debug, warn};
 
 pub use super::overlay_service::OverlayRequestError;
+pub use super::overlay_service::RequestDirection;
 
 /// Configuration parameters for the overlay network.
 #[derive(Clone)]
@@ -423,6 +424,15 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
             }
         });
         Ok(response)
+    }
+
+    /// Public method for initiating a network request through the overlay service.
+    pub async fn initiate_overlay_request(
+        &self,
+        request: Request,
+    ) -> Result<Response, OverlayRequestError> {
+        let direction = RequestDirection::Initialize;
+        self.send_overlay_request(request, direction).await
     }
 
     /// Sends a request through the overlay service.

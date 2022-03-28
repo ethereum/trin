@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use serde_json::Value;
+use rlp::Rlp;
+use serde_json::{json, Value};
 use tokio::sync::mpsc;
 
 use crate::network::HistoryNetwork;
@@ -8,9 +9,13 @@ use trin_core::jsonrpc::{
     endpoints::HistoryEndpoint,
     types::{
         FindContentParams, FindNodesParams, HistoryJsonRpcRequest, LocalContentParams, PingParams,
+        RecursiveFindContentParams,
     },
 };
 use trin_core::portalnet::types::content_key::HistoryContentKey;
+use trin_core::portalnet::types::messages::{Content, FindContent, Request, Response, SszEnr};
+use trin_core::portalnet::Enr;
+use trin_core::types::header::Header;
 
 /// Handles History network JSON-RPC requests
 pub struct HistoryRequestHandler {
@@ -42,6 +47,90 @@ impl HistoryRequestHandler {
                             }
                             Err(msg) => Err(format!("Invalid LocalContent params: {msg:?}")),
                         };
+                    let _ = request.resp.send(response);
+                }
+                HistoryEndpoint::RecursiveFindContent => {
+                    let find_content_params =
+                        match RecursiveFindContentParams::try_from(request.params) {
+                            Ok(params) => params,
+                            Err(msg) => {
+                                let _ = request.resp.send(Err(format!(
+                                    "Invalid RecursiveFindContent params: {:?}",
+                                    msg.code
+                                )));
+                                return;
+                            }
+                        };
+
+                    let content_key = find_content_params.content_key.to_vec();
+                    let find_content_request = Request::FindContent(FindContent { content_key });
+                    let first_response = match self
+                        .network
+                        .overlay
+                        .initiate_overlay_request(find_content_request)
+                        .await
+                    {
+                        Ok(content) => content,
+                        Err(msg) => {
+                            let _ = request.resp.send(Err(format!(
+                                "Unable to initialize RecursiveFindContent request: {:?}",
+                                msg
+                            )));
+                            return;
+                        }
+                    };
+                    // Pretty much all this logic is temporary hack that will be replaced by
+                    // iterative find content support
+                    let response = match first_response {
+                        Response::Content(val) => match val {
+                            // Perform secondary lookup if initial response is `enrs`
+                            Content::Enrs(enrs) => {
+                                let target_enr: SszEnr = enrs.first().unwrap().clone();
+                                let target_enr: Enr = target_enr.into();
+                                match self
+                                    .network
+                                    .overlay
+                                    .send_find_content(
+                                        target_enr,
+                                        find_content_params.content_key.into(),
+                                    )
+                                    .await
+                                {
+                                    Ok(content) => match content {
+                                        Content::Content(val) => {
+                                            let rlp = Rlp::new(&val);
+                                            match Header::decode_rlp(&rlp) {
+                                                Ok(header) => Ok(json!(header)),
+                                                Err(_) => Err(
+                                                    "Content retrieved has invalid RLP encoding"
+                                                        .to_string(),
+                                                ),
+                                            }
+                                        }
+                                        _ => Err("Unable to retrieve content from the network."
+                                            .to_string()),
+                                    },
+                                    Err(msg) => Err(format!(
+                                        "RecursiveFindContent request timeout: {:?}",
+                                        msg
+                                    )),
+                                }
+                            }
+                            // Return value if initial response is `content`
+                            Content::Content(val) => {
+                                let rlp = Rlp::new(&val);
+                                match Header::decode_rlp(&rlp) {
+                                    Ok(header) => Ok(json!(header)),
+                                    Err(_) => {
+                                        Err("Content retrieved has invalid RLP encoding"
+                                            .to_string())
+                                    }
+                                }
+                            }
+                            _ => Err("Unsupported content".to_string()),
+                        },
+                        _ => Err("Invalid RecursiveFindContent params".to_string()),
+                    };
                     let _ = request.resp.send(response);
                 }
                 HistoryEndpoint::DataRadius => {
