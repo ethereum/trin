@@ -1,5 +1,4 @@
 pub mod cli;
-pub mod content_key;
 pub mod jsonrpc;
 pub mod locks;
 pub mod portalnet;
