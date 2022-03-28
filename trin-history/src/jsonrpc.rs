@@ -3,7 +3,6 @@ use std::sync::Arc;
 use serde_json::Value;
 use tokio::sync::mpsc;
 
-use crate::content_key::HistoryContentKey;
 use crate::network::HistoryNetwork;
 use trin_core::jsonrpc::{
     endpoints::HistoryEndpoint,
@@ -11,6 +10,7 @@ use trin_core::jsonrpc::{
         FindContentParams, FindNodesParams, HistoryJsonRpcRequest, LocalContentParams, PingParams,
     },
 };
+use trin_core::portalnet::types::content_key::HistoryContentKey;
 
 /// Handles History network JSON-RPC requests
 pub struct HistoryRequestHandler {

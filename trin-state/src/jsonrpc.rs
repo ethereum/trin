@@ -3,7 +3,6 @@ use std::sync::Arc;
 use serde_json::Value;
 use tokio::sync::mpsc;
 
-use crate::content_key::StateContentKey;
 use crate::network::StateNetwork;
 use trin_core::jsonrpc::{
     endpoints::StateEndpoint,
@@ -11,6 +10,7 @@ use trin_core::jsonrpc::{
         FindContentParams, FindNodesParams, LocalContentParams, PingParams, StateJsonRpcRequest,
     },
 };
+use trin_core::portalnet::types::content_key::StateContentKey;
 
 /// Handles State network JSON-RPC requests
 pub struct StateRequestHandler {

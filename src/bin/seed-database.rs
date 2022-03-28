@@ -12,10 +12,11 @@ use serde_json::Value;
 use structopt::StructOpt;
 
 use trin_core::portalnet::storage::PortalStorage;
-use trin_core::portalnet::types::content_key::IdentityContentKey;
+use trin_core::portalnet::types::content_key::{
+    BlockHeader, HistoryContentKey, IdentityContentKey,
+};
 use trin_core::types::header::Header;
 use trin_core::utils::db::get_data_dir;
-use trin_history::content_key::{BlockHeader, HistoryContentKey};
 
 // This script is used to seed testnet nodes with data from mainnetMM data dump
 // https://www.dropbox.com/s/y5n36ztppltgs7x/mainnetMM.zip?dl=0

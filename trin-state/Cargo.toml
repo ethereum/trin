@@ -10,9 +10,6 @@ rust-version = "1.58.0"
 [dependencies]
 anyhow = "1.0.52"
 discv5 = "0.1.0-beta.13"
-eth2_ssz = "0.4.0"
-eth2_ssz_derive = "0.3.0"
-eth2_ssz_types = "0.2.1"
 ethereum-types = "0.12.0"
 eth_trie = "0.1.0"
 hex = "0.4.3"
@@ -22,8 +19,6 @@ serde_json = "1.0.59"
 tracing = "0.1.26"
 tracing-subscriber = "0.2.18"
 tracing-futures = "0.2.5"
-sha2 = "0.10.1"
-sha3 = "0.10.0"
 tokio = {version = "1.8.0", features = ["full"]}
 trin-core = { path = "../trin-core" }
 rocksdb = "0.16.0"
