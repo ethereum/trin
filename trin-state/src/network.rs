@@ -15,7 +15,6 @@ use trin_core::portalnet::{
         metric::XorMetric,
     },
 };
-use trin_core::utils::db::setup_overlay_db;
 use trin_core::utp::stream::UtpListener;
 
 use crate::trie::TrieDB;
@@ -35,7 +34,7 @@ impl StateNetwork {
         portal_config: PortalnetConfig,
     ) -> Self {
         // todo: revisit triedb location
-        let db = setup_overlay_db(NodeId::random());
+        let db = PortalStorage::setup_rocksdb(NodeId::random()).unwrap();
         let triedb = TrieDB::new(Arc::new(db));
         let trie = EthTrie::new(Arc::new(triedb));
 
