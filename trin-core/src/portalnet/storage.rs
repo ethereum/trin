@@ -435,7 +435,9 @@ impl PortalStorage {
     /// Helper function for opening a SQLite connection.
     /// Used for testing.
     pub fn setup_rocksdb(node_id: NodeId) -> Result<rocksdb::DB, PortalStorageError> {
-        let data_path: String = get_data_dir(node_id).to_owned();
+        let data_path_root: String = get_data_dir(node_id).to_owned();
+        let data_suffix: &str = "/rocksdb";
+        let data_path = data_path_root + data_suffix;
         debug!("Setting up RocksDB at path: {:?}", data_path);
 
         let mut db_opts = Options::default();
