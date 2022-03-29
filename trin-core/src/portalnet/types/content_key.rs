@@ -15,7 +15,7 @@ pub trait OverlayContentKey: Into<Vec<u8>> + TryFrom<Vec<u8>> + Clone {
 
 /// A content key type whose content id is the inner value. Allows for the construction
 /// of a content key with an arbitary content ID.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct IdentityContentKey {
     value: [u8; 32],
 }
