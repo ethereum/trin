@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::marker::PhantomData;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::task::Poll;
 use std::time::Duration;
 
@@ -236,7 +236,7 @@ pub struct OverlayService<TContentKey, TMetric> {
     /// The underlying Discovery v5 protocol.
     discovery: Arc<Discovery>,
     /// The content database of the local node.
-    storage: Arc<PortalStorage>,
+    storage: Arc<Mutex<PortalStorage>>,
     /// The routing table of the local node.
     kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
     /// The data radius of the local node.
@@ -279,7 +279,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
     /// processes.
     pub async fn spawn(
         discovery: Arc<Discovery>,
-        storage: Arc<PortalStorage>,
+        storage: Arc<Mutex<PortalStorage>>,
         kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
         bootnode_enrs: Vec<Enr>,
         ping_queue_interval: Option<Duration>,
@@ -603,7 +603,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
             }
         };
 
-        match self.storage.get(&content_key) {
+        match self.storage.lock().unwrap().get(&content_key) {
             Ok(Some(value)) => {
                 let content = ByteList::from(VariableList::from(value));
 
@@ -1255,7 +1255,7 @@ mod tests {
         let storage_capacity: u32 = DEFAULT_STORAGE_CAPACITY.parse().unwrap();
         let node_id = discovery.local_enr().node_id();
         let storage_config = PortalStorage::setup_config(node_id, storage_capacity).unwrap();
-        let storage = Arc::new(PortalStorage::new(storage_config).unwrap());
+        let storage = Arc::new(Mutex::new(PortalStorage::new(storage_config).unwrap()));
 
         let overlay_config = OverlayConfig::default();
         let kbuckets = Arc::new(RwLock::new(KBucketsTable::new(

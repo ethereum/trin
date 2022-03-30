@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 use log::debug;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use tokio::sync::RwLock;
 
@@ -34,7 +34,7 @@ impl HistoryNetwork {
             enable_metrics: portal_config.enable_metrics,
             ..Default::default()
         };
-        let storage = Arc::new(PortalStorage::new(storage_config).unwrap());
+        let storage = Arc::new(Mutex::new(PortalStorage::new(storage_config).unwrap()));
         let overlay = OverlayProtocol::new(
             config,
             discovery,

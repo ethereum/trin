@@ -429,6 +429,53 @@ impl<TContentKey: OverlayContentKey> TryFrom<&Value> for LocalContentParams<TCon
     }
 }
 
+pub struct StoreContentParams<TContentKey> {
+    pub content_key: TContentKey,
+    pub content: Vec<u8>,
+}
+
+impl<TContentKey: OverlayContentKey> TryFrom<Params> for StoreContentParams<TContentKey> {
+    type Error = ValidationError;
+
+    fn try_from(params: Params) -> Result<Self, Self::Error> {
+        match params {
+            Params::Array(val) => match val.len() {
+                2 => StoreContentParams::<TContentKey>::try_from([&val[0], &val[1]]),
+                _ => Err(ValidationError::new("Expected 2 params")),
+            },
+            _ => Err(ValidationError::new("Expected array of params")),
+        }
+    }
+}
+
+impl<TContentKey: OverlayContentKey> TryFrom<[&Value; 2]> for StoreContentParams<TContentKey> {
+    type Error = ValidationError;
+
+    fn try_from(params: [&Value; 2]) -> Result<Self, Self::Error> {
+        let content_key = params[0]
+            .as_str()
+            .ok_or_else(|| ValidationError::new("Empty content key param"))?;
+        let content_key = match hex::decode(content_key) {
+            Ok(val) => match TContentKey::try_from(val) {
+                Ok(val) => val,
+                Err(_) => return Err(ValidationError::new("Unable to decode content_key")),
+            },
+            Err(_) => return Err(ValidationError::new("Unable to decode content_key")),
+        };
+        let content = params[1]
+            .as_str()
+            .ok_or_else(|| ValidationError::new("Empty content param"))?;
+        let content = match hex::decode(content) {
+            Ok(val) => val,
+            Err(_) => return Err(ValidationError::new("Unable to decode content")),
+        };
+        Ok(Self {
+            content_key,
+            content,
+        })
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

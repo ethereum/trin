@@ -15,6 +15,7 @@ pub enum StateEndpoint {
     FindNodes,
     LocalContent,
     Offer,
+    StoreContent,
     Ping,
 }
 
@@ -28,6 +29,7 @@ pub enum HistoryEndpoint {
     Offer,
     Ping,
     RecursiveFindContent,
+    StoreContent,
 }
 
 /// Ethereum JSON-RPC endpoints not currently supported by portal network requests, proxied to Infura
@@ -84,6 +86,9 @@ impl FromStr for TrinEndpoint {
             "portal_historyRadius" => {
                 Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::DataRadius))
             }
+            "portal_historyStoreContent" => {
+                Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::StoreContent))
+            }
             "portal_stateFindContent" => {
                 Ok(TrinEndpoint::StateEndpoint(StateEndpoint::FindContent))
             }
@@ -92,6 +97,9 @@ impl FromStr for TrinEndpoint {
                 Ok(TrinEndpoint::StateEndpoint(StateEndpoint::LocalContent))
             }
             "portal_stateOffer" => Ok(TrinEndpoint::StateEndpoint(StateEndpoint::Offer)),
+            "portal_stateStoreContent" => {
+                Ok(TrinEndpoint::StateEndpoint(StateEndpoint::StoreContent))
+            }
             "portal_statePing" => Ok(TrinEndpoint::StateEndpoint(StateEndpoint::Ping)),
             "portal_stateRadius" => Ok(TrinEndpoint::StateEndpoint(StateEndpoint::DataRadius)),
             _ => Err(()),

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use anyhow::anyhow;
 use discv5::enr::NodeId;
@@ -38,7 +38,7 @@ impl StateNetwork {
         let triedb = TrieDB::new(Arc::new(db));
         let trie = EthTrie::new(Arc::new(triedb));
 
-        let storage = Arc::new(PortalStorage::new(storage_config).unwrap());
+        let storage = Arc::new(Mutex::new(PortalStorage::new(storage_config).unwrap()));
         let config = OverlayConfig {
             bootnode_enrs: portal_config.bootnode_enrs.clone(),
             enable_metrics: portal_config.enable_metrics,

@@ -1,5 +1,5 @@
 use std::str::FromStr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use trin_core::{
     cli::DEFAULT_STORAGE_CAPACITY,
@@ -31,7 +31,7 @@ async fn init_overlay(
         DEFAULT_STORAGE_CAPACITY.parse().unwrap(),
     )
     .unwrap();
-    let db = Arc::new(PortalStorage::new(storage_config).unwrap());
+    let db = Arc::new(Mutex::new(PortalStorage::new(storage_config).unwrap()));
     let overlay_config = OverlayConfig::default();
     let utp_listener = Arc::new(RwLock::new(UtpListener::new(Arc::clone(&discovery))));
 

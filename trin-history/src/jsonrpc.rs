@@ -10,7 +10,7 @@ use trin_core::jsonrpc::{
     endpoints::HistoryEndpoint,
     types::{
         FindContentParams, FindNodesParams, HistoryJsonRpcRequest, LocalContentParams, PingParams,
-        RecursiveFindContentParams,
+        RecursiveFindContentParams, StoreContentParams,
     },
 };
 use trin_core::portalnet::types::content_key::HistoryContentKey;
@@ -32,7 +32,14 @@ impl HistoryRequestHandler {
                     let response =
                         match LocalContentParams::<HistoryContentKey>::try_from(request.params) {
                             Ok(params) => {
-                                match &self.network.overlay.storage.get(&params.content_key) {
+                                match &self
+                                    .network
+                                    .overlay
+                                    .storage
+                                    .lock()
+                                    .unwrap()
+                                    .get(&params.content_key)
+                                {
                                     Ok(val) => match val {
                                         Some(val) => Ok(Value::String(hex::encode(val.clone()))),
                                         None => Err(format!(
@@ -47,6 +54,30 @@ impl HistoryRequestHandler {
                                 }
                             }
                             Err(msg) => Err(format!("Invalid LocalContent params: {msg:?}")),
+                        };
+                    let _ = request.resp.send(response);
+                }
+                HistoryEndpoint::StoreContent => {
+                    let response =
+                        match StoreContentParams::<HistoryContentKey>::try_from(request.params) {
+                            Ok(params) => {
+                                let content_key = params.content_key.clone();
+                                let content = params.content.clone();
+                                match self
+                                    .network
+                                    .overlay
+                                    .storage
+                                    .lock()
+                                    .unwrap()
+                                    .store(&content_key, &content)
+                                {
+                                    Ok(_) => Ok(Value::String(
+                                        "Content successfully stored.".to_string(),
+                                    )),
+                                    Err(msg) => Err(format!("Unable to store content: {msg:?}")),
+                                }
+                            }
+                            Err(msg) => Err(format!("Invalid StoreContent params: {msg:?}")),
                         };
                     let _ = request.resp.send(response);
                 }

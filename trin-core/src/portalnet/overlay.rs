@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use std::marker::PhantomData;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use super::{
@@ -67,8 +67,8 @@ impl Default for OverlayConfig {
 pub struct OverlayProtocol<TContentKey, TMetric> {
     /// Reference to the underlying discv5 protocol
     pub discovery: Arc<Discovery>,
-    // Reference to the database instance
-    pub storage: Arc<PortalStorage>,
+    /// Reference to the database instance
+    pub storage: Arc<Mutex<PortalStorage>>,
     /// The data radius of the local node.
     pub data_radius: Arc<U256>,
     /// The overlay routing table of the local node.
@@ -93,7 +93,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         config: OverlayConfig,
         discovery: Arc<Discovery>,
         utp_listener: Arc<RwLockT<UtpListener>>,
-        storage: Arc<PortalStorage>,
+        storage: Arc<Mutex<PortalStorage>>,
         data_radius: U256,
         protocol: ProtocolId,
     ) -> Self {
@@ -386,7 +386,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
             .zip(content_keys_offered.iter())
         {
             if i == true {
-                match self.storage.get(&key.clone()) {
+                match self.storage.lock().unwrap().get(&key.clone()) {
                     Ok(content) => match content {
                         Some(content) => content_items.push((key.clone().into(), content)),
                         None => {}
