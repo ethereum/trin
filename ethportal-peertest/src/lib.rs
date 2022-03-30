@@ -28,15 +28,24 @@ impl AllPeertestNodes {
     }
 }
 
-pub async fn launch_node(mut id: u8, bootnode: Option<&String>) -> anyhow::Result<PeertestNode> {
-    // The bootnode's id is 1, the other node ids are subsequently incremented by one
-    if bootnode.is_some() {
+fn get_peertest_id_for_node(mut id: u8, bootnode_enr: Option<&String>) -> u16 {
+    // Peertest Id for bootnode is 1 (identified by bootnode_enr == None)
+    // For all other nodes (identified by bootnode_enr == Some()) Peertest ID needs to be
+    // incremented by one to account for the bootnode
+    if bootnode_enr.is_some() {
         id += 1;
     }
+    id as u16
+}
+
+pub async fn launch_node(id: u8, bootnode_enr: Option<&String>) -> anyhow::Result<PeertestNode> {
+    let id = get_peertest_id_for_node(id, bootnode_enr);
+
     // Run a client, as a buddy peer for ping tests, etc.
-    let discovery_port = format!("900{id}");
+    let discovery_port: u16 = 9000 + id;
+    let discovery_port: String = discovery_port.to_string();
     let web3_ipc_path = format!("/tmp/ethportal-peertest-buddy-{id}.ipc");
-    let trin_config_args: Vec<&str> = match bootnode {
+    let trin_config_args: Vec<&str> = match bootnode_enr {
         Some(enr) => vec![
             "trin",
             "--internal-ip",
@@ -59,7 +68,8 @@ pub async fn launch_node(mut id: u8, bootnode: Option<&String>) -> anyhow::Resul
     let trin_config = TrinConfig::new_from(trin_config_args.iter()).unwrap();
     let web3_ipc_path = trin_config.web3_ipc_path.clone();
     let exiter = trin::run_trin(trin_config, String::new()).await.unwrap();
-    let enr = get_enode(&web3_ipc_path).unwrap();
+    let enr = get_enode(&web3_ipc_path)?;
+
     Ok(PeertestNode { enr, exiter })
 }
 

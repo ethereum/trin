@@ -11,7 +11,7 @@ use ethportal_peertest::launch_peertest_nodes;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
-    let all_peertest_nodes = launch_peertest_nodes(2).await;
+    let all_peertest_nodes = launch_peertest_nodes(5).await;
     // Short sleep to make sure all peertest nodes can connect
     thread::sleep(time::Duration::from_secs(1));
 

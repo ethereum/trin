@@ -4,14 +4,14 @@ use std::os::unix;
 use std::panic;
 use std::time::Duration;
 
+use anyhow::anyhow;
 use hyper::{self, Body, Client, Method, Request};
 use log::info;
 use serde_json::{self, json, Value};
-use thiserror::Error;
 
 use crate::cli::PeertestConfig;
 use crate::AllPeertestNodes;
-use trin_core::jsonrpc::types::Params;
+use trin_core::jsonrpc::types::{NodesParams, Params};
 
 #[derive(Clone)]
 pub struct JsonRpcEndpoint {
@@ -25,7 +25,7 @@ const DATA_RADIUS: &str = "18446744073709551615";
 /// Default enr seq value
 const ENR_SEQ: &str = "1";
 
-fn validate_endpoint_response(method: &str, result: &Value, peertest_nodes: &AllPeertestNodes) {
+fn validate_endpoint_response(method: &str, result: &Value, _peertest_nodes: &AllPeertestNodes) {
     match method {
         "web3_clientVersion" => {
             assert_eq!(result.as_str().unwrap(), "trin v0.1.0");
@@ -59,16 +59,12 @@ fn validate_endpoint_response(method: &str, result: &Value, peertest_nodes: &All
             );
         }
         "portal_historyFindNodes" => {
-            assert_eq!(
-                result.get("total").unwrap().as_u64().unwrap(),
-                peertest_nodes.nodes.len() as u64
+            let nodes = NodesParams::try_from(result).unwrap();
+            assert_eq!(nodes.total, 1u8);
+            assert!(
+                // Exact enrs count is somewhat flaky, usually b/w 3-5
+                !nodes.enrs.is_empty()
             );
-            assert!(result
-                .get("enrs")
-                .unwrap()
-                .as_str()
-                .unwrap()
-                .contains("enr:"));
         }
         "portal_statePing" => {
             assert_eq!(
@@ -81,16 +77,12 @@ fn validate_endpoint_response(method: &str, result: &Value, peertest_nodes: &All
             );
         }
         "portal_stateFindNodes" => {
-            assert_eq!(
-                result.get("total").unwrap().as_u64().unwrap(),
-                peertest_nodes.nodes.len() as u64
+            let nodes = NodesParams::try_from(result).unwrap();
+            assert_eq!(nodes.total, 1u8);
+            assert!(
+                // Exact enrs count is somewhat flaky, usually b/w 3-5
+                !nodes.enrs.is_empty()
             );
-            assert!(result
-                .get("enrs")
-                .unwrap()
-                .as_str()
-                .unwrap()
-                .contains("enr:"));
         }
         _ => panic!("Unsupported endpoint"),
     };
@@ -200,7 +192,7 @@ fn get_ipc_stream(ipc_path: &str) -> uds_windows::UnixStream {
 pub fn make_ipc_request(
     ipc_path: &str,
     endpoint: JsonRpcEndpoint,
-) -> Result<serde_json::Value, JsonRpcResponseError> {
+) -> anyhow::Result<serde_json::Value> {
     let mut stream = get_ipc_stream(ipc_path);
     stream
         .set_read_timeout(Some(Duration::from_millis(500)))
@@ -212,28 +204,27 @@ pub fn make_ipc_request(
     stream.flush().unwrap();
     let deser = serde_json::Deserializer::from_reader(stream);
     let next_obj = deser.into_iter::<Value>().next();
-    let response_obj = next_obj.ok_or(JsonRpcResponseError::Empty())?;
+    let response_obj = next_obj.ok_or(anyhow!("Empty JsonRpc response"))?;
     get_response_result(response_obj)
 }
 
-pub fn get_enode(ipc_path: &str) -> Result<String, String> {
+pub fn get_enode(ipc_path: &str) -> anyhow::Result<String> {
     let info_endpoint = JsonRpcEndpoint {
         method: "discv5_nodeInfo".to_string(),
         id: 1,
         params: Params::None,
     };
     let result = make_ipc_request(ipc_path, info_endpoint).map_err(|jsonerr| {
-        format!(
-            "Error while trying to get enode for client at ipc_path {:?} endpoint: {:?}",
-            ipc_path, jsonerr
+        anyhow!(
+            "Error while trying to get enode for client at ipc_path {ipc_path:?} endpoint: {jsonerr:?}"
         )
     })?;
     match result.get("enr") {
         Some(val) => match val.as_str() {
             Some(enr) => Ok(enr.to_owned()),
-            None => Err("Reported ENR value was not a string".to_owned()),
+            None => Err(anyhow!("Reported ENR value was not a string")),
         },
-        None => Err("'enr' field not found in nodeInfo response".to_owned()),
+        None => Err(anyhow!("'enr' field not found in nodeInfo response")),
     }
 }
 
@@ -270,30 +261,14 @@ pub async fn test_jsonrpc_endpoints_over_ipc(
     }
 }
 
-#[derive(Error, Debug)]
-pub enum JsonRpcResponseError {
-    #[error("Empty JsonRpc response")]
-    Empty(),
-
-    #[error("JsonRpc response contains an error: {0}")]
-    Error(String),
-
-    #[error("Invalid object in JsonRpc response")]
-    Invalid(),
-
-    #[error("Deserialize failed on JsonRpc response")]
-    Unparseable(String),
-}
-
-fn get_response_result(
-    response: Result<Value, serde_json::Error>,
-) -> Result<Value, JsonRpcResponseError> {
-    let response = response.map_err(|err| JsonRpcResponseError::Unparseable(err.to_string()))?;
+fn get_response_result(response: Result<Value, serde_json::Error>) -> anyhow::Result<Value> {
+    let response =
+        response.map_err(|err| anyhow!("Deserialize failed on JsonRpc response: {err:?}"))?;
     match response.get("result") {
         Some(result) => Ok(result.clone()),
         None => match response.get("error") {
-            Some(error) => Err(JsonRpcResponseError::Error(error.to_string())),
-            None => Err(JsonRpcResponseError::Invalid()),
+            Some(error) => Err(anyhow!("JsonRpc response contains an error: {error:?}")),
+            None => Err(anyhow!("Invalid object in JsonRpc response")),
         },
     }
 }

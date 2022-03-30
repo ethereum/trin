@@ -858,7 +858,6 @@ dependencies = [
  "rocksdb",
  "serde_json",
  "structopt",
- "thiserror",
  "tokio",
  "tracing",
  "tracing-subscriber 0.2.25",
