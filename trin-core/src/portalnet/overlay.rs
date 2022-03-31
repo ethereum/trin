@@ -275,7 +275,6 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
 
                         match conn {
                             Ok(mut conn) => {
-                                // TODO: Implement this with recv_from
                                 // Handle STATE packet for SYN
                                 let mut buf = [0; BUF_SIZE];
                                 match conn.recv(&mut buf).await {
@@ -373,7 +372,6 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
             .connect(connection_id, enr.node_id())
             .await?;
 
-        // TODO: Replace this with recv_from
         // Handle STATE packet for SYN
         let mut buf = [0; BUF_SIZE];
         conn.recv(&mut buf).await?;
