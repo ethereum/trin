@@ -460,7 +460,7 @@ impl UtpSocket {
         Ok(total_length)
     }
 
-    pub async fn raw_receive(&mut self) -> anyhow::Result<Option<Packet>> {
+    pub async fn raw_receive(&mut self) -> Option<Packet> {
         // Listen on a channel for discovery utp packet
         match timeout(
             Duration::from_millis(DISCV5_SOCKET_TIMEOUT),
@@ -468,8 +468,8 @@ impl UtpSocket {
         )
         .await
         {
-            Ok(val) => Ok(val),
-            Err(msg) => Err(anyhow!("Discv5 socket timeout: {msg}")),
+            Ok(val) => val,
+            Err(_) => None,
         }
     }
 
@@ -1011,30 +1011,64 @@ impl UtpSocket {
         self.congestion_timeout = min(self.congestion_timeout, MAX_CONGESTION_TIMEOUT);
     }
 
+    /// Receives data from socket.
+    ///
+    /// On success, returns the number of bytes read and the sender's ENR.
+    /// Returns 0 bytes read after receiving a FIN packet when the remaining
+    /// in-flight packets are consumed.
+    pub async fn recv_from(&mut self, buf: &mut [u8]) -> anyhow::Result<(usize, Enr)> {
+        let read = self.flush_incoming_buffer(buf);
+
+        if read > 0 {
+            return Ok((read, self.connected_to.clone()));
+        }
+
+        // If the socket received a reset packet and all data has been flushed, then it can't
+        // receive anything else
+        if self.state == SocketState::ResetReceived {
+            return Err(anyhow!("Connection reset by remote peer"));
+        }
+
+        loop {
+            // A closed socket with no pending data can only "read" 0 new bytes.
+            if self.state == SocketState::Closed {
+                return Ok((0, self.connected_to.clone()));
+            }
+
+            match self.recv(buf).await {
+                Ok(Some(0)) => {
+                    continue;
+                }
+                Ok(Some(bytes)) => {
+                    return Ok((bytes, self.connected_to.clone()));
+                }
+                Ok(None) => {
+                    return Ok((0, self.connected_to.clone()));
+                }
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
     #[async_recursion]
-    pub async fn recv(&mut self, buf: &mut [u8]) -> anyhow::Result<usize> {
+    pub async fn recv(&mut self, buf: &mut [u8]) -> anyhow::Result<Option<usize>> {
         let packet;
 
         let mut recv_retries = 0;
         // Try to receive a packet. Abort loop if the current try exceeds the maximum number of retransmission retries.
         loop {
             let result = self.raw_receive().await;
+
             match result {
-                Ok(pkt) => {
-                    match pkt {
-                        Some(pkt) => packet = pkt,
-                        None => {
-                            debug!("Received packet is NONE");
-                            continue;
-                        }
-                    }
+                Some(pkt) => {
+                    packet = pkt;
                     break;
                 }
-                Err(_) => {
+                None => {
                     recv_retries += 1;
 
                     if recv_retries > self.max_retransmission_retries {
-                        return Err(anyhow!("Discv5 socket timeout"));
+                        return Ok(None);
                     }
                 }
             }
@@ -1069,7 +1103,7 @@ impl UtpSocket {
         // Flush incoming buffer if possible
         let read = self.flush_incoming_buffer(buf);
 
-        Ok(read)
+        Ok(Some(read))
     }
 
     /// Discards sequential, ordered packets in incoming buffer, starting from
@@ -1237,6 +1271,7 @@ mod tests {
     use crate::utils::node_id::generate_random_remote_enr;
     use crate::utp::packets::{Packet, PacketType};
     use crate::utp::stream::{SocketState, UtpSocket, BUF_SIZE};
+    use crate::utp::time::now_microseconds;
     use discv5::Discv5Event;
     use std::convert::TryFrom;
     use std::str::FromStr;
@@ -1623,7 +1658,7 @@ mod tests {
         client.send_to(&data_clone[..]).await.unwrap();
 
         // Receive data
-        let data_packet = server.raw_receive().await.unwrap().unwrap();
+        let data_packet = server.raw_receive().await.unwrap();
 
         assert_eq!(data_packet.get_type(), PacketType::Data);
         assert_eq!(&data_packet.payload(), &data.as_slice());
@@ -1650,17 +1685,12 @@ mod tests {
                 .unwrap();
         }
 
-        // TODO: implement `recv_from` to handle all packets
-        for _ in 0..3 {
-            let mut buf = [0; BUF_SIZE];
-            client.recv(&mut buf).await.unwrap();
-        }
+        client.recv_from(&mut buf).await.unwrap();
 
         // Receive data again and check that it's the same we reported as missing
         let client_addr = server.connected_to.clone();
         match server.raw_receive().await {
-            Ok(packet) => {
-                let packet = packet.unwrap();
+            Some(packet) => {
                 assert_eq!(packet.get_type(), PacketType::Data);
                 assert_eq!(packet.seq_nr(), data_packet.seq_nr());
                 assert_eq!(packet.payload(), data_packet.payload());
@@ -1680,7 +1710,7 @@ mod tests {
                     .await
                     .unwrap();
             }
-            Err(e) => panic!("{}", e),
+            None => panic!("Unable to receive packet"),
         }
 
         client.recv(&mut buf).await.unwrap();
@@ -1691,5 +1721,110 @@ mod tests {
         // Received FIN Packet
         server.recv(&mut buf).await.unwrap();
         handle.await.unwrap().unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_sorted_buffer_insertion() {
+        let mut socket = server_setup().await;
+
+        let mut packet = Packet::new();
+        packet.set_seq_nr(1);
+
+        assert!(socket.incoming_buffer.is_empty());
+
+        socket.insert_into_buffer(packet.clone());
+        assert_eq!(socket.incoming_buffer.len(), 1);
+
+        packet.set_seq_nr(2);
+        packet.set_timestamp(128.into());
+
+        socket.insert_into_buffer(packet.clone());
+        assert_eq!(socket.incoming_buffer.len(), 2);
+        assert_eq!(socket.incoming_buffer[1].seq_nr(), 2);
+        assert_eq!(socket.incoming_buffer[1].timestamp(), 128.into());
+
+        packet.set_seq_nr(3);
+        packet.set_timestamp(256.into());
+
+        socket.insert_into_buffer(packet.clone());
+        assert_eq!(socket.incoming_buffer.len(), 3);
+        assert_eq!(socket.incoming_buffer[2].seq_nr(), 3);
+        assert_eq!(socket.incoming_buffer[2].timestamp(), 256.into());
+
+        // Replacing a packet with a more recent version doesn't work
+        packet.set_seq_nr(2);
+        packet.set_timestamp(456.into());
+
+        socket.insert_into_buffer(packet.clone());
+        assert_eq!(socket.incoming_buffer.len(), 3);
+        assert_eq!(socket.incoming_buffer[1].seq_nr(), 2);
+        assert_eq!(socket.incoming_buffer[1].timestamp(), 128.into());
+    }
+
+    #[tokio::test]
+    async fn test_duplicate_packet_handling() {
+        let mut buf = [0; BUF_SIZE];
+        let mut server = server_setup().await;
+        let (enr, mut client) = client_setup(server.connected_to.clone()).await;
+
+        assert_eq!(server.state, SocketState::Uninitialized);
+        assert_eq!(client.state, SocketState::Uninitialized);
+
+        // Check proper difference in client's send connection id and receive connection id
+        assert_eq!(
+            client.sender_connection_id,
+            client.receiver_connection_id + 1
+        );
+        server.connected_to = enr;
+
+        client.make_connection(12).await;
+
+        server.recv_from(&mut buf).await.unwrap();
+        client.recv_from(&mut buf).await.unwrap();
+
+        // Expect SYN packet
+        assert_eq!(client.state, SocketState::Connected);
+
+        // After establishing a new connection, the server's ids are a mirror of the client's.
+        assert_eq!(
+            server.receiver_connection_id,
+            server.sender_connection_id + 1
+        );
+        assert_eq!(server.state, SocketState::Connected);
+
+        let mut packet = Packet::with_payload(&[1, 2, 3]);
+        packet.set_wnd_size(BUF_SIZE as u32);
+        packet.set_connection_id(client.sender_connection_id);
+        packet.set_seq_nr(client.seq_nr);
+        packet.set_ack_nr(client.ack_nr);
+
+        // Send two copies of the packet, with different timestamps
+        for _ in 0..2 {
+            packet.set_timestamp(now_microseconds());
+            client
+                .socket
+                .discv5
+                .talk_req(
+                    client.connected_to.clone(),
+                    Vec::try_from(ProtocolId::Utp).unwrap(),
+                    packet.as_ref().to_vec(),
+                )
+                .await
+                .unwrap();
+        }
+
+        let expected: Vec<u8> = vec![1, 2, 3];
+        let mut received: Vec<u8> = vec![];
+
+        loop {
+            match server.recv_from(&mut buf).await {
+                Ok((0, _src)) => break,
+                Ok((len, _src)) => received.extend(buf[..len].to_vec()),
+                Err(e) => panic!("{:?}", e),
+            }
+        }
+
+        assert_eq!(received.len(), expected.len());
+        assert_eq!(received, expected);
     }
 }
