@@ -9,7 +9,7 @@ mod test {
         tracing_subscriber::fmt::init();
 
         // Run a client, as a buddy peer for ping tests, etc.
-        let (bootnode, peertest_nodes) = peertest::launch_peertest_nodes(2).await;
+        let peertest = peertest::launch_peertest_nodes(2).await;
         // Short sleep to make sure all peertest nodes can connect
         thread::sleep(time::Duration::from_secs(1));
 
@@ -28,14 +28,9 @@ mod test {
         .unwrap();
         let test_client_exiter = trin::run_trin(trin_config, String::new()).await.unwrap();
 
-        peertest::jsonrpc::test_jsonrpc_endpoints_over_ipc(
-            peertest_config,
-            bootnode.enr.to_base64(),
-        )
-        .await;
+        peertest::jsonrpc::test_jsonrpc_endpoints_over_ipc(peertest_config, &peertest).await;
 
-        bootnode.exiter.exit();
-        peertest_nodes.iter().for_each(|node| node.exiter.exit());
+        peertest.exit_all_nodes();
         test_client_exiter.exit();
     }
 }
