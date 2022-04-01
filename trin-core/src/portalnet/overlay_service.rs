@@ -440,13 +440,10 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
             Some(bucket) => {
                 let target_bucket_idx = u8::try_from(bucket.0);
                 if let Ok(idx) = target_bucket_idx {
-                    // Randomly generate a NodeID that falls within the target bucket.
+                    // Randomly generate a node ID that falls within the target bucket.
                     let target_node_id = self.generate_random_node_id(idx);
-                    // Do the random lookup on this node-id.
-                    match target_node_id {
-                        Ok(node_id) => self.send_recursive_findnode(&node_id),
-                        Err(msg) => warn!("{:?}", msg),
-                    }
+                    // Do the random lookup on this node ID.
+                    self.send_recursive_findnode(&target_node_id);
                 } else {
                     error!("Unable to downcast bucket index.")
                 }
@@ -1211,7 +1208,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         // TODO: Implement Recursive(iterative) FINDNODE. This is a stub.
     }
 
-    fn generate_random_node_id(&self, target_bucket_idx: u8) -> anyhow::Result<NodeId> {
+    fn generate_random_node_id(&self, target_bucket_idx: u8) -> NodeId {
         node_id::generate_random_node_id(target_bucket_idx, self.local_enr().node_id())
     }
 }
@@ -1809,7 +1806,7 @@ mod tests {
     #[serial]
     fn test_generate_random_node_id(#[case] target_bucket_idx: u8) {
         let service = task::spawn(build_service());
-        let random_node_id = service.generate_random_node_id(target_bucket_idx).unwrap();
+        let random_node_id = service.generate_random_node_id(target_bucket_idx);
         let key = kbucket::Key::from(random_node_id);
         let bucket = service.kbuckets.read();
         let expected_index = bucket.get_index(&key).unwrap();

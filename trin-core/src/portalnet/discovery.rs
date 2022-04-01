@@ -212,21 +212,15 @@ impl Discovery {
                          Some(bucket) => {
                              let target_bucket_idx = u8::try_from(bucket.0);
                              if let Ok(idx) = target_bucket_idx {
-                                 // Randomly generate a NodeID that falls within the target bucket.
+                                 // Randomly generate a node ID that falls within the target bucket.
                                  let target_node_id = generate_random_node_id(idx, self.local_enr().node_id());
-                                 // Do the random lookup on this node-id.
-                                 match target_node_id {
-                                     Ok(node_id) => {
-                                        // get metrics
-                                        let metrics = self.discv5.metrics();
-                                        let connected_peers = self.discv5.connected_peers();
-                                        debug!("Connected peers: {}, Active sessions: {}, Unsolicited requests/s: {:.2}", connected_peers, metrics.active_sessions, metrics.unsolicited_requests_per_second);
-                                        debug!("Searching for discv5 peers...");
-                                        // execute a FINDNODE query
-                                        self.recursive_find_node(node_id).await;
-                            },
-                                     Err(msg) => warn!("{:?}", msg),
-                                 }
+                                 // Do the random lookup on this node ID.
+                                 let metrics = self.discv5.metrics();
+                                 let connected_peers = self.discv5.connected_peers();
+                                 debug!("Connected peers: {}, Active sessions: {}, Unsolicited requests/s: {:.2}", connected_peers, metrics.active_sessions, metrics.unsolicited_requests_per_second);
+                                 debug!("Searching for discv5 peers...");
+                                 // execute a FINDNODE query
+                                 self.recursive_find_node(target_node_id).await;
                              } else {
                                  error!("Unable to downcast bucket index.")
                              }
