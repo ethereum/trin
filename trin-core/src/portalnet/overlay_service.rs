@@ -661,6 +661,9 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
             .map_err(|e| OverlayRequestError::AcceptError(e))?;
         let connection_id: u16 = crate::utp::stream::rand();
 
+        // TODO: Pipe this with overlay DB and request only not available keys.
+        let accept_keys = request.content_keys.clone();
+
         for (i, key) in request.content_keys.iter().enumerate() {
             // should_store is currently a dummy function
             // the actual function will take ContentKey type, so we'll  have to decode keys here
@@ -676,18 +679,17 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                 .write_with_warn()
                 .await
                 .listening
-                .insert(connection_id.clone(), UtpMessageId::OfferAcceptStream);
+                .insert(connection_id.clone(), UtpMessageId::OfferStream);
 
             // also listen on conn_id + 1 because this is the actual receive path for acceptor
-            utp_listener
-                .write_with_warn()
-                .await
-                .listening
-                .insert(connection_id.clone() + 1, UtpMessageId::OfferAcceptStream);
+            utp_listener.write_with_warn().await.listening.insert(
+                connection_id.clone() + 1,
+                UtpMessageId::AcceptStream(accept_keys),
+            );
         });
 
         let accept = Accept {
-            connection_id,
+            connection_id: connection_id.to_be(),
             content_keys: requested_keys,
         };
 

@@ -196,6 +196,65 @@ impl TryFrom<[&Value; 2]> for FindContentParams {
     }
 }
 
+pub struct OfferParams {
+    pub enr: SszEnr,
+    pub content_keys: Vec<ByteList>,
+}
+
+impl TryFrom<Params> for OfferParams {
+    type Error = ValidationError;
+
+    fn try_from(params: Params) -> Result<Self, Self::Error> {
+        match params {
+            Params::Array(val) => match val.len() {
+                2 => Self::try_from([&val[0], &val[1]]),
+                _ => Err(ValidationError::new("Expected 2 params")),
+            },
+            _ => Err(ValidationError::new("Expected array of params")),
+        }
+    }
+}
+
+impl TryFrom<[&Value; 2]> for OfferParams {
+    type Error = ValidationError;
+
+    fn try_from(params: [&Value; 2]) -> Result<Self, Self::Error> {
+        let enr: SszEnr = params[0].try_into()?;
+
+        let content_keys = params[1].as_array();
+
+        match content_keys {
+            Some(content_keys) => {
+                let content_keys: Result<Vec<String>, _> = content_keys
+                    .iter()
+                    .cloned()
+                    .map(serde_json::from_value)
+                    .collect();
+
+                if let Ok(content_keys) = content_keys {
+                    let content_keys: Result<Vec<Vec<u8>>, _> =
+                        content_keys.iter().map(hex::decode).collect();
+
+                    if let Ok(content_keys) = content_keys {
+                        Ok(Self {
+                            enr,
+                            content_keys: content_keys
+                                .into_iter()
+                                .map(VariableList::from)
+                                .collect(),
+                        })
+                    } else {
+                        Err(ValidationError::new("Unable to hex decode content keys"))
+                    }
+                } else {
+                    Err(ValidationError::new("Unable to decode content keys"))
+                }
+            }
+            None => Err(ValidationError::new("Required a list of content keys")),
+        }
+    }
+}
+
 pub struct RecursiveFindContentParams {
     pub content_key: ByteList,
 }
