@@ -102,14 +102,10 @@ pub struct TrinConfig {
     pub kb: u32,
 
     #[structopt(
-        long = "enable-metrics",
-        help = "Enable prometheus metrics reporting (requires --metrics-url)",
-        requires = "metrics-url"
+        long = "enable-metrics-with-url",
+        help = "Enable prometheus metrics reporting (requires URL for prometheus server)"
     )]
-    pub enable_metrics: bool,
-
-    #[structopt(long = "metrics-url", help = "URL for prometheus server")]
-    pub metrics_url: Option<String>,
+    pub enable_metrics_with_url: Option<SocketAddr>,
 
     #[structopt(
         short = "e",
@@ -136,8 +132,7 @@ impl Default for TrinConfig {
                 .map(|n| n.to_string())
                 .collect(),
             kb: DEFAULT_STORAGE_CAPACITY.parse().unwrap(),
-            enable_metrics: false,
-            metrics_url: None,
+            enable_metrics_with_url: None,
             ephemeral: false,
         }
     }
@@ -204,6 +199,7 @@ fn check_private_key_length(private_key: String) -> Result<(), String> {
 mod test {
     use super::*;
     use std::env;
+    use std::net::{IpAddr, Ipv4Addr};
     use test_log::test;
 
     fn env_is_set() -> bool {
@@ -413,6 +409,25 @@ mod test {
         };
         let actual_config = TrinConfig::new_from(["trin", "--ephemeral"].iter()).unwrap();
         assert_eq!(actual_config.ephemeral, expected_config.ephemeral);
+    }
+
+    #[test]
+    fn test_enable_metrics_with_url() {
+        assert!(env_is_set());
+        let expected_config = TrinConfig {
+            enable_metrics_with_url: Some(SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                1234,
+            )),
+            ..Default::default()
+        };
+        let actual_config =
+            TrinConfig::new_from(["trin", "--enable-metrics-with-url", "127.0.0.1:1234"].iter())
+                .unwrap();
+        assert_eq!(
+            actual_config.enable_metrics_with_url,
+            expected_config.enable_metrics_with_url
+        );
     }
 
     #[test]
