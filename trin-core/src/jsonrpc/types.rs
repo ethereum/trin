@@ -183,8 +183,7 @@ impl TryFrom<&Value> for NodesParams {
     fn try_from(value: &Value) -> Result<Self, Self::Error> {
         let total = value
             .get("total")
-            .ok_or_else(|| ValidationError::new("Missing total param"))?;
-        let total = total
+            .ok_or_else(|| ValidationError::new("Missing total param"))?
             .as_u64()
             .ok_or_else(|| ValidationError::new("Invalid total param"))? as u8;
 

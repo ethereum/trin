@@ -5,43 +5,20 @@ pub use cli::PeertestConfig;
 pub use jsonrpc::get_enode;
 
 use std::sync::Arc;
+use std::{thread, time};
 
 use futures::future;
 
 use trin_core::cli::TrinConfig;
 use trin_core::jsonrpc::service::JsonRpcExiter;
+use trin_core::portalnet::types::messages::SszEnr;
 
 pub struct PeertestNode {
-    pub enr: String,
+    pub enr: SszEnr,
     pub exiter: Arc<JsonRpcExiter>,
 }
 
-pub struct AllPeertestNodes {
-    pub bootnode: PeertestNode,
-    pub nodes: Vec<PeertestNode>,
-}
-
-impl AllPeertestNodes {
-    pub fn exit(&self) {
-        self.bootnode.exiter.exit();
-        self.nodes.iter().for_each(|node| node.exiter.exit());
-    }
-}
-
-fn get_peertest_id_for_node(mut id: u8, bootnode_enr: Option<&String>) -> u16 {
-    // Peertest Id for bootnode is 1 (identified by bootnode_enr == None)
-    // For all other nodes (identified by bootnode_enr == Some()) Peertest ID needs to be
-    // incremented by one to account for the bootnode
-    if bootnode_enr.is_some() {
-        id += 1;
-    }
-    id as u16
-}
-
-pub async fn launch_node(id: u8, bootnode_enr: Option<&String>) -> anyhow::Result<PeertestNode> {
-    let id = get_peertest_id_for_node(id, bootnode_enr);
-
-    // Run a client, as a buddy peer for ping tests, etc.
+pub async fn launch_node(id: u16, bootnode_enr: Option<&String>) -> anyhow::Result<PeertestNode> {
     let discovery_port: u16 = 9000 + id;
     let discovery_port: String = discovery_port.to_string();
     let web3_ipc_path = format!("/tmp/ethportal-peertest-buddy-{id}.ipc");
@@ -70,17 +47,22 @@ pub async fn launch_node(id: u8, bootnode_enr: Option<&String>) -> anyhow::Resul
     let exiter = trin::run_trin(trin_config, String::new()).await.unwrap();
     let enr = get_enode(&web3_ipc_path)?;
 
+    // Short sleep to make sure all peertest nodes can connect
+    thread::sleep(time::Duration::from_secs(2));
     Ok(PeertestNode { enr, exiter })
 }
 
-pub async fn launch_peertest_nodes(count: u8) -> AllPeertestNodes {
+pub async fn launch_peertest_nodes(count: u16) -> (PeertestNode, Vec<PeertestNode>) {
+    // Bootnode uses a peertest id of 1
     let bootnode = launch_node(1, None).await.unwrap();
+    let bootnode_enr = bootnode.enr.to_base64();
+    // All other peertest node ids begin at 2, and increment from there
     let nodes = future::try_join_all(
-        (1..count)
+        (2..count + 1)
             .into_iter()
-            .map(|id| launch_node(id, Some(&bootnode.enr))),
+            .map(|id| launch_node(id, Some(&bootnode_enr))),
     )
     .await
     .unwrap();
-    AllPeertestNodes { bootnode, nodes }
+    (bootnode, nodes)
 }
