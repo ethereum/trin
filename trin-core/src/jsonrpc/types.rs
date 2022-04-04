@@ -192,12 +192,9 @@ impl TryFrom<&Value> for NodesParams {
             .ok_or_else(|| ValidationError::new("Missing enrs param"))?
             .as_array()
             .ok_or_else(|| ValidationError::new("Empty enrs param"))?;
-        let enrs: Vec<SszEnr> = enrs
-            .iter()
-            .map(|val| SszEnr::try_from(val).unwrap())
-            .collect();
+        let enrs: Result<Vec<SszEnr>, Self::Error> = enrs.iter().map(SszEnr::try_from).collect();
 
-        Ok(Self { total, enrs })
+        Ok(Self { total, enrs: enrs? })
     }
 }
 
