@@ -1,7 +1,7 @@
 use bytes::Bytes;
 use ethereum_types::{Bloom, H160, H256, U256};
 use rlp::{DecoderError, Encodable, Rlp, RlpStream};
-use serde::Serialize;
+use serde::{Serialize, Serializer};
 
 /// An Ethereum address.
 type Address = H160;
@@ -36,6 +36,7 @@ pub struct Header {
     /// Block timestamp.
     pub timestamp: u64,
     /// Block extra data.
+    #[serde(serialize_with = "as_hex")]
     pub extra_data: Vec<u8>,
     /// Block PoW mix hash.
     pub mix_hash: Option<H256>,
@@ -43,6 +44,13 @@ pub struct Header {
     pub nonce: Option<u64>,
     /// Block base fee per gas. Introduced by EIP-1559.
     pub base_fee_per_gas: Option<U256>,
+}
+
+fn as_hex<S>(value: &[u8], serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_str(format!("0x{}", hex::encode(value)).as_str())
 }
 
 // Based on https://github.com/openethereum/openethereum/blob/main/crates/ethcore/types/src/header.rs
