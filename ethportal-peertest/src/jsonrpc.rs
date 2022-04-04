@@ -3,14 +3,16 @@ use std::io::prelude::*;
 use std::os::unix;
 use std::panic;
 use std::time::Duration;
+use std::{thread, time};
 
+use anyhow::anyhow;
 use hyper::{self, Body, Client, Method, Request};
 use log::info;
-use serde_json::{self, Value};
-use thiserror::Error;
+use serde_json::{self, json, Value};
 
 use crate::cli::PeertestConfig;
-use trin_core::jsonrpc::types::Params;
+use trin_core::jsonrpc::types::{NodesParams, Params};
+use trin_core::portalnet::types::messages::SszEnr;
 
 #[derive(Clone)]
 pub struct JsonRpcEndpoint {
@@ -57,6 +59,15 @@ fn validate_endpoint_response(method: &str, result: &Value) {
                 ENR_SEQ.to_string()
             );
         }
+        "portal_historyFindNodes" => {
+            let nodes = NodesParams::try_from(result).unwrap();
+            assert_eq!(nodes.total, 1u8);
+            assert!(
+                // Exact enrs count is somewhat flaky, usually b/w 3-5
+                // Todo: improve the tested enr values in upcoming refactor
+                !nodes.enrs.is_empty()
+            );
+        }
         "portal_statePing" => {
             assert_eq!(
                 result.get("dataRadius").unwrap().as_str().unwrap(),
@@ -67,13 +78,22 @@ fn validate_endpoint_response(method: &str, result: &Value) {
                 ENR_SEQ.to_string()
             );
         }
+        "portal_stateFindNodes" => {
+            let nodes = NodesParams::try_from(result).unwrap();
+            assert_eq!(nodes.total, 1u8);
+            assert!(
+                // Exact enrs count is somewhat flaky, usually b/w 3-5
+                // Todo: improve the tested enr values in upcoming refactor
+                !nodes.enrs.is_empty()
+            );
+        }
         _ => panic!("Unsupported endpoint"),
     };
     info!("{:?} returned a valid response.", method);
 }
 
 impl JsonRpcEndpoint {
-    pub fn all_endpoints(buddy_node: String) -> Vec<JsonRpcEndpoint> {
+    pub fn all_endpoints(bootnode: String) -> Vec<JsonRpcEndpoint> {
         vec![
             JsonRpcEndpoint {
                 method: "web3_clientVersion".to_string(),
@@ -104,7 +124,7 @@ impl JsonRpcEndpoint {
                 method: "portal_statePing".to_string(),
                 id: 6,
                 params: Params::Array(vec![
-                    Value::String(buddy_node.clone()),
+                    Value::String(bootnode.clone()),
                     Value::String(DATA_RADIUS.to_owned()),
                 ]),
             },
@@ -112,8 +132,24 @@ impl JsonRpcEndpoint {
                 method: "portal_historyPing".to_string(),
                 id: 7,
                 params: Params::Array(vec![
-                    Value::String(buddy_node),
+                    Value::String(bootnode.clone()),
                     Value::String(DATA_RADIUS.to_owned()),
+                ]),
+            },
+            JsonRpcEndpoint {
+                method: "portal_historyFindNodes".to_string(),
+                id: 8,
+                params: Params::Array(vec![
+                    Value::String(bootnode.clone()),
+                    Value::Array(vec![json!(256)]),
+                ]),
+            },
+            JsonRpcEndpoint {
+                method: "portal_stateFindNodes".to_string(),
+                id: 9,
+                params: Params::Array(vec![
+                    Value::String(bootnode),
+                    Value::Array(vec![json!(256)]),
                 ]),
             },
         ]
@@ -159,56 +195,57 @@ fn get_ipc_stream(ipc_path: &str) -> uds_windows::UnixStream {
 pub fn make_ipc_request(
     ipc_path: &str,
     endpoint: JsonRpcEndpoint,
-) -> Result<serde_json::Value, JsonRpcResponseError> {
+) -> anyhow::Result<serde_json::Value> {
     let mut stream = get_ipc_stream(ipc_path);
     stream
         .set_read_timeout(Some(Duration::from_millis(500)))
         .expect("Couldn't set read timeout");
 
-    let v: Value = serde_json::from_str(&endpoint.to_jsonrpc()).unwrap();
-    let data = serde_json::to_vec(&v).unwrap();
+    let json_request: Value = serde_json::from_str(&endpoint.to_jsonrpc()).unwrap();
+    let data = serde_json::to_vec(&json_request).unwrap();
     stream.write_all(&data).unwrap();
     stream.flush().unwrap();
     let deser = serde_json::Deserializer::from_reader(stream);
     let next_obj = deser.into_iter::<Value>().next();
-    let response_obj = next_obj.ok_or(JsonRpcResponseError::Empty())?;
+    let response_obj = next_obj.ok_or(anyhow!("Empty JsonRpc response"))?;
     get_response_result(response_obj)
 }
 
-pub fn get_enode(ipc_path: &str) -> Result<String, String> {
+pub fn get_enode(ipc_path: &str) -> anyhow::Result<SszEnr> {
     let info_endpoint = JsonRpcEndpoint {
         method: "discv5_nodeInfo".to_string(),
         id: 1,
         params: Params::None,
     };
     let result = make_ipc_request(ipc_path, info_endpoint).map_err(|jsonerr| {
-        format!(
-            "Error while trying to get enode for client at ipc_path {:?} endpoint: {:?}",
-            ipc_path, jsonerr
+        anyhow!(
+            "Error while trying to get enode for client at ipc_path {ipc_path:?} endpoint: {jsonerr:?}"
         )
     })?;
     match result.get("enr") {
-        Some(val) => match val.as_str() {
-            Some(enr) => Ok(enr.to_owned()),
-            None => Err("Reported ENR value was not a string".to_owned()),
+        Some(val) => match SszEnr::try_from(val) {
+            Ok(enr) => Ok(enr),
+            Err(msg) => Err(anyhow!("Reported ENR value is an invalid enr: {msg:?}")),
         },
-        None => Err("'enr' field not found in nodeInfo response".to_owned()),
+        None => Err(anyhow!("'enr' field not found in nodeInfo response")),
     }
 }
 
 #[allow(clippy::never_loop)]
-pub async fn test_jsonrpc_endpoints_over_ipc(peertest_config: PeertestConfig, buddy_enr: String) {
+pub async fn test_jsonrpc_endpoints_over_ipc(peertest_config: PeertestConfig, bootnode: String) {
     info!("Testing IPC path: {}", peertest_config.target_ipc_path);
-    for endpoint in JsonRpcEndpoint::all_endpoints(buddy_enr) {
+    for endpoint in JsonRpcEndpoint::all_endpoints(bootnode) {
         info!("Testing IPC method: {:?}", endpoint.method);
         let mut stream = get_ipc_stream(&peertest_config.target_ipc_path);
         stream
             .set_read_timeout(Some(Duration::from_millis(500)))
             .expect("Couldn't set read timeout");
-        let v: Value = serde_json::from_str(&endpoint.to_jsonrpc()).unwrap();
-        let data = serde_json::to_vec(&v).unwrap();
+
+        let json_request: Value = serde_json::from_str(&endpoint.to_jsonrpc()).unwrap();
+        let data = serde_json::to_vec(&json_request).unwrap();
         stream.write_all(&data).unwrap();
         stream.flush().unwrap();
+
         let deser = serde_json::Deserializer::from_reader(stream);
         for obj in deser.into_iter::<Value>() {
             match get_response_result(obj) {
@@ -221,40 +258,26 @@ pub async fn test_jsonrpc_endpoints_over_ipc(peertest_config: PeertestConfig, bu
             // break out of loop here since EOF is not sent, and loop will hang
             break;
         }
+        // Short sleep to make sure all peertest nodes can connect
+        thread::sleep(time::Duration::from_secs(1));
     }
 }
 
-#[derive(Error, Debug)]
-pub enum JsonRpcResponseError {
-    #[error("Empty JsonRpc response")]
-    Empty(),
-
-    #[error("JsonRpc response contains an error: {0}")]
-    Error(String),
-
-    #[error("Invalid object in JsonRpc response")]
-    Invalid(),
-
-    #[error("Deserialize failed on JsonRpc response")]
-    Unparseable(String),
-}
-
-fn get_response_result(
-    response: Result<Value, serde_json::Error>,
-) -> Result<Value, JsonRpcResponseError> {
-    let response = response.map_err(|err| JsonRpcResponseError::Unparseable(err.to_string()))?;
+fn get_response_result(response: Result<Value, serde_json::Error>) -> anyhow::Result<Value> {
+    let response =
+        response.map_err(|err| anyhow!("Deserialize failed on JsonRpc response: {err:?}"))?;
     match response.get("result") {
         Some(result) => Ok(result.clone()),
         None => match response.get("error") {
-            Some(error) => Err(JsonRpcResponseError::Error(error.to_string())),
-            None => Err(JsonRpcResponseError::Invalid()),
+            Some(error) => Err(anyhow!("JsonRpc response contains an error: {error:?}")),
+            None => Err(anyhow!("Invalid object in JsonRpc response")),
         },
     }
 }
 
-pub async fn test_jsonrpc_endpoints_over_http(peertest_config: PeertestConfig, buddy_enr: String) {
+pub async fn test_jsonrpc_endpoints_over_http(peertest_config: PeertestConfig, bootnode: String) {
     let client = Client::new();
-    for endpoint in JsonRpcEndpoint::all_endpoints(buddy_enr) {
+    for endpoint in JsonRpcEndpoint::all_endpoints(bootnode) {
         info!("Testing over HTTP: {:?}", endpoint.method);
         let req = Request::builder()
             .method(Method::POST)

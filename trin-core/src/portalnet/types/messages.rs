@@ -446,7 +446,15 @@ impl ssz::Decode for Nodes {
 
 impl Into<Value> for Nodes {
     fn into(self) -> Value {
-        serde_json::json!({ "enrs": format!("{:?}", self.enrs) , "total": self.total})
+        let enrs: Vec<Value> = self
+            .enrs
+            .iter()
+            .map(|enr| {
+                let enr = Enr::from(enr.clone().0);
+                serde_json::json!(enr.to_base64())
+            })
+            .collect();
+        serde_json::json!({ "enrs":  enrs, "total": self.total})
     }
 }
 

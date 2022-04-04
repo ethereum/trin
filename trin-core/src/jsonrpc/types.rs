@@ -150,14 +150,51 @@ impl TryFrom<[&Value; 2]> for FindNodesParams {
     fn try_from(params: [&Value; 2]) -> Result<Self, Self::Error> {
         let enr: SszEnr = params[0].try_into()?;
 
-        let distances = params[1]
-            .as_str()
-            .ok_or_else(|| ValidationError::new("Empty distances param"))?;
-        let distances: Vec<u16> = match serde_json::from_str(distances) {
-            Ok(val) => val,
-            Err(_) => return Err(ValidationError::new("Unable to decode distances")),
-        };
-        Ok(Self { enr, distances })
+        let distances: &Vec<Value> = params[1]
+            .as_array()
+            .ok_or_else(|| Self::Error::new("Empty distances param."))?;
+        let distances: Result<Vec<u64>, Self::Error> = distances
+            .iter()
+            .map(|val| {
+                val.as_u64()
+                    .ok_or_else(|| Self::Error::new("Invalid distances param."))
+            })
+            .collect();
+        let distances: Result<Vec<u16>, std::num::TryFromIntError> =
+            distances?.into_iter().map(|val| val.try_into()).collect();
+        match distances {
+            Ok(val) => Ok(Self {
+                enr,
+                distances: val,
+            }),
+            Err(_) => Err(Self::Error::new("Invalid distances param.")),
+        }
+    }
+}
+
+pub struct NodesParams {
+    pub total: u8,
+    pub enrs: Vec<SszEnr>,
+}
+
+impl TryFrom<&Value> for NodesParams {
+    type Error = ValidationError;
+
+    fn try_from(value: &Value) -> Result<Self, Self::Error> {
+        let total = value
+            .get("total")
+            .ok_or_else(|| ValidationError::new("Missing total param"))?
+            .as_u64()
+            .ok_or_else(|| ValidationError::new("Invalid total param"))? as u8;
+
+        let enrs: &Vec<Value> = value
+            .get("enrs")
+            .ok_or_else(|| ValidationError::new("Missing enrs param"))?
+            .as_array()
+            .ok_or_else(|| ValidationError::new("Empty enrs param"))?;
+        let enrs: Result<Vec<SszEnr>, Self::Error> = enrs.iter().map(SszEnr::try_from).collect();
+
+        Ok(Self { total, enrs: enrs? })
     }
 }
 
@@ -437,6 +474,26 @@ mod test {
     #[case("[[0]]", Params::Array(vec![Value::Array(vec![Value::from(0)])]))]
     #[case("[[]]", Params::Array(vec![Value::Array(vec![])]))]
     #[case("[{\"key\": \"value\"}]", Params::Array(vec![Value::Object(expected_map())]))]
+    #[case("[\"abc\",[0,256]]", 
+        Params::Array(vec![
+            Value::String("abc".to_string()),
+            Value::Array(vec![
+                Value::from(0),
+                Value::from(256)
+            ]),
+        ])
+    )]
+    #[case("[[\"abc\", \"xyz\"],[256]]", 
+        Params::Array(vec![
+            Value::Array(vec![
+                Value::String("abc".to_string()),
+                Value::String("xyz".to_string())
+            ]),
+            Value::Array(vec![
+                Value::from(256)
+            ]),
+        ])
+    )]
     fn request_params_deserialization(#[case] input: &str, #[case] expected: Params) {
         let deserialized: Params = serde_json::from_str(input).unwrap();
         assert_eq!(deserialized, expected);

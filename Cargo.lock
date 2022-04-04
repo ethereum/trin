@@ -848,15 +848,16 @@ dependencies = [
 name = "ethportal-peertest"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "clap",
  "discv5",
+ "futures 0.3.21",
  "hex",
  "hyper",
  "log 0.4.14",
  "rocksdb",
  "serde_json",
  "structopt",
- "thiserror",
  "tokio",
  "tracing",
  "tracing-subscriber 0.2.25",

@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod test {
     use ethportal_peertest as peertest;
+    use std::{thread, time};
     use trin_core::cli::TrinConfig;
 
     #[tokio::test(flavor = "multi_thread")]
@@ -8,7 +9,9 @@ mod test {
         tracing_subscriber::fmt::init();
 
         // Run a client, as a buddy peer for ping tests, etc.
-        let (buddy_enode, buddy_client_exiter) = peertest::launch_buddy_node().await;
+        let (bootnode, peertest_nodes) = peertest::launch_peertest_nodes(2).await;
+        // Short sleep to make sure all peertest nodes can connect
+        thread::sleep(time::Duration::from_secs(1));
 
         let peertest_config = peertest::PeertestConfig::default();
 
@@ -25,9 +28,14 @@ mod test {
         .unwrap();
         let test_client_exiter = trin::run_trin(trin_config, String::new()).await.unwrap();
 
-        peertest::test_jsonrpc_endpoints_over_ipc(peertest_config, buddy_enode).await;
+        peertest::jsonrpc::test_jsonrpc_endpoints_over_ipc(
+            peertest_config,
+            bootnode.enr.to_base64(),
+        )
+        .await;
 
-        buddy_client_exiter.exit();
+        bootnode.exiter.exit();
+        peertest_nodes.iter().for_each(|node| node.exiter.exit());
         test_client_exiter.exit();
     }
 }
