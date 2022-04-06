@@ -429,18 +429,18 @@ impl<TContentKey: OverlayContentKey> TryFrom<&Value> for LocalContentParams<TCon
     }
 }
 
-pub struct StoreContentParams<TContentKey> {
+pub struct StoreParams<TContentKey> {
     pub content_key: TContentKey,
     pub content: Vec<u8>,
 }
 
-impl<TContentKey: OverlayContentKey> TryFrom<Params> for StoreContentParams<TContentKey> {
+impl<TContentKey: OverlayContentKey> TryFrom<Params> for StoreParams<TContentKey> {
     type Error = ValidationError;
 
     fn try_from(params: Params) -> Result<Self, Self::Error> {
         match params {
             Params::Array(val) => match val.len() {
-                2 => StoreContentParams::<TContentKey>::try_from([&val[0], &val[1]]),
+                2 => StoreParams::<TContentKey>::try_from([&val[0], &val[1]]),
                 _ => Err(ValidationError::new("Expected 2 params")),
             },
             _ => Err(ValidationError::new("Expected array of params")),
@@ -448,7 +448,7 @@ impl<TContentKey: OverlayContentKey> TryFrom<Params> for StoreContentParams<TCon
     }
 }
 
-impl<TContentKey: OverlayContentKey> TryFrom<[&Value; 2]> for StoreContentParams<TContentKey> {
+impl<TContentKey: OverlayContentKey> TryFrom<[&Value; 2]> for StoreParams<TContentKey> {
     type Error = ValidationError;
 
     fn try_from(params: [&Value; 2]) -> Result<Self, Self::Error> {

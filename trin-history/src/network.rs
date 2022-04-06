@@ -1,8 +1,9 @@
 use anyhow::anyhow;
 use log::debug;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
-use tokio::sync::RwLock;
+use parking_lot::RwLock;
+use tokio::sync::RwLock as RwLockT;
 
 use trin_core::portalnet::{
     discovery::Discovery,
@@ -25,7 +26,7 @@ pub struct HistoryNetwork {
 impl HistoryNetwork {
     pub async fn new(
         discovery: Arc<Discovery>,
-        utp_listener: Arc<RwLock<UtpListener>>,
+        utp_listener: Arc<RwLockT<UtpListener>>,
         storage_config: PortalStorageConfig,
         portal_config: PortalnetConfig,
     ) -> Self {
@@ -34,7 +35,7 @@ impl HistoryNetwork {
             enable_metrics: portal_config.enable_metrics,
             ..Default::default()
         };
-        let storage = Arc::new(Mutex::new(PortalStorage::new(storage_config).unwrap()));
+        let storage = Arc::new(RwLock::new(PortalStorage::new(storage_config).unwrap()));
         let overlay = OverlayProtocol::new(
             config,
             discovery,
