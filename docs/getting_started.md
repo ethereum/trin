@@ -24,6 +24,8 @@ RUST_LOG=debug cargo run -p trin
 
 (Trin might take a couple of minutes to compile the first time you launch it.)
 
+If you use a VPN, you should turn it off before starting a Trin process.
+
 You should now see logs from Trin as it boots up and connects to the Portal Network
 
 To run individual networks:
@@ -106,15 +108,20 @@ To view ENR information about your own Trin client.
 $ cargo run -p trin-cli -- discv5_nodeInfo
 ```
 
+### Interacting with the Portal Network
+
+##### Bootnode ENRs & Available Content Keys
+```
+- ENR: `enr:-IS4QB8hN50UDNFqwqF-9vzvqW0cYf2UuvIBAR1j47szLEnBE7L3TM85iVB3gppDTWPY8waLgvwko3wsl-P7lKaXsloBgmlkgnY0gmlwhKEjVaWJc2VjcDI1NmsxoQOSGugH1jSdiE_fRK1FIBe9oLxaWH8D_7xXSnaOVBe-SYN1ZHCCIyg`
+	- Content Key: `0001007a7d6975af1290a5110dc660872c23d4894d44f21a37ec92c1973b2127da47ed`
+- ENR: `enr:-IS4QOQ-e1fLwD31xh3hcYYdc7mvsFKwgD6KSjuvr2lO2gSmE1fYp109TwjepDY55y7basyVMDM8ZyIyyoBg-Tfe790BgmlkgnY0gmlwhM69ZOyJc2VjcDI1NmsxoQLaI-m2CDIjpwcnUf1ESspvOctJLpIrLA8AZ4zbo_1bFIN1ZHCCIyg`
+	- Content Key: `000100e2f81ab2f7a0aaa6c5cee61a82d176a2344603f8cf8569e135e1ee98667f0bc3`
+- ENR: `enr:-IS4QGqW_aBPPvEyyrw9E1XpqHmBp3If6D2GkQIokd01OuVPcyWAjKfEY7DP4y3ZAU7exCEgtJNp8TCj9ZLAtA4K1MsBgmlkgnY0gmlwhJ_fCDaJc2VjcDI1NmsxoQN9rahqamBOJfj4u6yssJQJ1-EZoyAw-7HIgp1FwNUdnoN1ZHCCIyg`
+	- Content Key: `000100373ea34c8e7b3c43aece207f3ece4ef6b0749e2ab3e62a38b746609f9e3b11dd`
+```
+
 ### Ping a bootnode
 Send a `PING` to another node on any of the Portal Networks (currently, only history and state are supported in Trin).
-
-##### Bootnode ENRs
-```
-- `enr:-IS4QJBALBigZVoKyz-NDBV8z34-pkVHU9yMxa6qXEqhCKYxOs5Psw6r5ueFOnBDOjsmgMGpC3Qjyr41By34wab1sKIBgmlkgnY0gmlwhKEjVaWJc2VjcDI1NmsxoQOSGugH1jSdiE_fRK1FIBe9oLxaWH8D_7xXSnaOVBe-SYN1ZHCCIyg`
-- `enr:-IS4QFm4gtstCnRtOC-MST-8AFO-eUhoNyM0u1XbXNlr4wl1O_rGr6y7zOrS3SIZrPDAge_ijFZ4e2B9eZVHhmgJtg8BgmlkgnY0gmlwhM69ZOyJc2VjcDI1NmsxoQLaI-m2CDIjpwcnUf1ESspvOctJLpIrLA8AZ4zbo_1bFIN1ZHCCIyg`
-- `enr:-IS4QBE8rpfrvCZVf0RISINpHU4GM-ZmkX4y3h_WxF7YflJ-dh88a6q9_42mGVSAetfpOQqujnPE-BkDWss5qF6d45UBgmlkgnY0gmlwhJ_fCDaJc2VjcDI1NmsxoQN9rahqamBOJfj4u6yssJQJ1-EZoyAw-7HIgp1FwNUdnoN1ZHCCIyg`
-```
 
 ```sh
 $ cargo run -p trin-cli -- portal_historyPing --params enr:....
@@ -122,5 +129,20 @@ $ cargo run -p trin-cli -- portal_historyPing --params enr:....
 
 After pinging a bootnode, you should be able to see the messages being sent and received in your node's logs. Now you can check your routing table again, where you should see the pinged bootnode (along with other nodes the bootnode shared with you). Congrats! You're now connected to the Portal network.
 
-### Request content
-(todo)
+### Request Content
+Send a `FindContent` message to a Portal Network bootnode.
+
+```sh
+$ cargo run -p trin-cli -- portal_historyFindContent --params enr:....,0001...
+```
+
+### Setting up local metrics reporting
+
+1 - Install [Grafana & Prometheus](https://grafana.com/docs/grafana/latest/getting-started/getting-started-prometheus/)
+2 - Configure your Prometheus server to target an open port to where `prometheus_exporter` will export Trin metrics.
+3 - Start your Trin process with `--enable-metrics --metrics-url 127.0.0.1:9100` as flags
+	- The `--metrics-url` parameter is the address for `prometheus_exporter` to export metrics to, and should be equal to the port to which your Prometheus server is targeting.
+4 - Navigate to the URL on which Grafana is running in your browser (probably `localhost:3000`) and login.
+5 - Add your Prometheus server as a Data Source, using the URL on which your Prometheus server is running.
+6 - Use the "Import" dashboard feature in Grafana to create your Trin dashboard, and copy and paste `metrics_dashboard.json` as the template.
+7 - You should now be able to see live metrics reporting for your Trin node.
