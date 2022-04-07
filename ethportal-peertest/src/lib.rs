@@ -18,6 +18,18 @@ pub struct PeertestNode {
     pub exiter: Arc<JsonRpcExiter>,
 }
 
+pub struct Peertest {
+    pub bootnode: PeertestNode,
+    pub nodes: Vec<PeertestNode>,
+}
+
+impl Peertest {
+    pub fn exit_all_nodes(&self) {
+        self.bootnode.exiter.exit();
+        self.nodes.iter().for_each(|node| node.exiter.exit());
+    }
+}
+
 pub async fn launch_node(id: u16, bootnode_enr: Option<&String>) -> anyhow::Result<PeertestNode> {
     let discovery_port: u16 = 9000 + id;
     let discovery_port: String = discovery_port.to_string();
@@ -52,7 +64,7 @@ pub async fn launch_node(id: u16, bootnode_enr: Option<&String>) -> anyhow::Resu
     Ok(PeertestNode { enr, exiter })
 }
 
-pub async fn launch_peertest_nodes(count: u16) -> (PeertestNode, Vec<PeertestNode>) {
+pub async fn launch_peertest_nodes(count: u16) -> Peertest {
     // Bootnode uses a peertest id of 1
     let bootnode = launch_node(1, None).await.unwrap();
     let bootnode_enr = bootnode.enr.to_base64();
@@ -64,5 +76,5 @@ pub async fn launch_peertest_nodes(count: u16) -> (PeertestNode, Vec<PeertestNod
     )
     .await
     .unwrap();
-    (bootnode, nodes)
+    Peertest { bootnode, nodes }
 }
