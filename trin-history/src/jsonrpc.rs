@@ -64,11 +64,11 @@ impl HistoryRequestHandler {
                                 .write()
                                 .store(&content_key, &content)
                             {
-                                Ok(_) => Ok(Value::Bool(true)),
-                                Err(_) => Ok(Value::Bool(false)),
+                                Ok(_) => Ok(Value::String("true".to_string())),
+                                Err(msg) => Ok(Value::String(msg.to_string())),
                             }
                         }
-                        Err(_) => Ok(Value::Bool(false)),
+                        Err(msg) => Ok(Value::String(msg.to_string())),
                     };
                     let _ = request.resp.send(response);
                 }
