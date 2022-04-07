@@ -62,12 +62,13 @@ pub const FIND_CONTENT_MAX_NODES: usize = 32;
 const EXPECTED_NON_EMPTY_BUCKETS: usize = 17;
 /// Bucket refresh lookup interval in seconds
 const BUCKET_REFRESH_INTERVAL_SECS: u64 = 60;
+
 /// Timeout for FINDNODES queries in seconds.
-pub const QUERY_TIMEOUT: u64 = 60;
+const FINDNODES_QUERY_TIMEOUT: u64 = 60;
 /// FINDNODES queries' distances per peer.
-const DISTANCES_TO_REQUEST_PER_PEER: usize = 3;
+const FINDNODES_DISTANCES_TO_REQUEST_PER_PEER: usize = 3;
 /// FINDNODES query concurrency factor (α from kademlia paper).
-const FIND_NODES_QUERY_CONCURRENCY: usize = 3;
+const FINDNODES_QUERY_CONCURRENCY: usize = 3;
 
 /// An overlay request error.
 #[derive(Clone, Error, Debug)]
@@ -344,7 +345,7 @@ where
                 request_tx: internal_request_tx,
                 active_outgoing_requests: Arc::new(RwLock::new(HashMap::new())),
                 active_query_requests: Arc::new(RwLock::new(HashMap::new())),
-                queries: QueryPool::new(Duration::from_secs(QUERY_TIMEOUT)),
+                queries: QueryPool::new(Duration::from_secs(FINDNODES_QUERY_TIMEOUT)),
                 response_rx,
                 response_tx,
                 utp_listener_tx: utp_listener_sender,
@@ -1461,12 +1462,12 @@ where
         Ok(closest_nodes)
     }
 
-    /// Starts a FindNode query to find nodes with IDs closest to _target.
-    fn send_iterative_findnode(&mut self, _target: &NodeId) {
+    /// Starts a FindNode query to find nodes with IDs closest to target.
+    fn send_iterative_findnode(&mut self, target: &NodeId) {
         let mut target = QueryInfo {
-            query_type: QueryType::FindNode(*_target),
+            query_type: QueryType::FindNode(*target),
             untrusted_enrs: Default::default(),
-            distances_to_request: DISTANCES_TO_REQUEST_PER_PEER,
+            distances_to_request: FINDNODES_DISTANCES_TO_REQUEST_PER_PEER,
         };
 
         let target_key: kbucket::Key<NodeId> = target.key();
@@ -1485,9 +1486,9 @@ where
             warn!("Iterative FindNodes query initiated but no closest peers in routing table. Aborting query.");
         } else {
             let query_config = FindNodeQueryConfig {
-                parallelism: FIND_NODES_QUERY_CONCURRENCY,
+                parallelism: FINDNODES_QUERY_CONCURRENCY,
                 num_results: MAX_NODES_PER_BUCKET,
-                peer_timeout: Duration::from_secs(QUERY_TIMEOUT),
+                peer_timeout: Duration::from_secs(FINDNODES_QUERY_TIMEOUT),
             };
             self.queries
                 .add_findnode_query(query_config, target, known_closest_peers);
@@ -1529,6 +1530,45 @@ pub enum QueryEvent {
     TimedOut(Box<Query<QueryInfo, NodeId, Enr>>),
     /// The query has completed successfully.
     Finished(Box<Query<QueryInfo, NodeId, Enr>>),
+}
+
+fn should_store(_key: &Vec<u8>) -> bool {
+    return true;
+}
+
+const MAX_ENR_SIZE: usize = 300;
+const MAX_DISCV5_PACKET_SIZE: usize = 1280;
+const TALK_REQ_PACKET_OVERHEAD: usize = 16 + // IV
+    55 + // Header
+    1 + // Discv5 Message Type
+    3 + // RLP Encoding of outer list
+    9 + // Request ID, max 8 bytes + 1 for RLP encoding
+    3 + // RLP Encoding of inner response
+    16; // RLP HMAC
+        // ENR SSZ overhead empirically observed to be double.
+        // Todo: determine why this is. It seems too high.
+const MAX_NODES_SIZE: usize = (MAX_DISCV5_PACKET_SIZE - TALK_REQ_PACKET_OVERHEAD) / 2;
+
+/// Limits a to a maximum packet size, including the discv5 header overhead.
+fn limit_nodes_response_size(enrs: Vec<SszEnr>) -> Vec<SszEnr> {
+    // If all ENRs would fit at max size, don't check individual sizes.
+    if enrs.len() < (MAX_NODES_SIZE / MAX_ENR_SIZE) {
+        return enrs;
+    }
+    let mut enrs_limited_size: Vec<SszEnr> = Vec::new();
+    let mut total_size: usize = 0;
+
+    for enr in enrs.iter() {
+        let enr_size = enr.size();
+        total_size = total_size + enr_size;
+        if total_size < MAX_NODES_SIZE {
+            enrs_limited_size.push(enr.clone());
+        } else {
+            break;
+        }
+    }
+
+    enrs_limited_size
 }
 
 #[cfg(test)]
@@ -1607,7 +1647,7 @@ mod tests {
             request_rx,
             active_outgoing_requests,
             active_query_requests: Arc::new(RwLock::new(HashMap::new())),
-            queries: QueryPool::new(Duration::from_secs(QUERY_TIMEOUT)),
+            queries: QueryPool::new(Duration::from_secs(FINDNODES_QUERY_TIMEOUT)),
             response_tx,
             response_rx,
             utp_listener_tx,
@@ -2198,11 +2238,15 @@ mod tests {
     }
 
     #[rstest]
-    #[case(3)]
-    #[case(17)]
-    #[case(25)]
-    #[case(50)]
-    fn test_limit_nodes_response_size(#[case] original_nodes_size: u8) {
+    #[case(3, 3)]
+    #[case(7, 7)]
+    #[case(8, 8)]
+    #[case(17, 8)]
+    #[case(25, 8)]
+    fn test_limit_nodes_response_size(
+        #[case] original_nodes_size: usize,
+        #[case] correct_limited_size: usize,
+    ) {
         let mut enrs: Vec<SszEnr> = Vec::new();
         for _ in 0..original_nodes_size {
             // Generates an ENR of size 63 bytes.
@@ -2211,15 +2255,6 @@ mod tests {
         }
 
         let enrs_limited = limit_nodes_response_size(enrs);
-
-        let correct_limited_size = match original_nodes_size {
-            3 => 3,
-            10 => 10,
-            17 => 17,
-            25 => 17,
-            50 => 17,
-            _ => 0,
-        };
 
         assert_eq!(enrs_limited.len(), correct_limited_size);
     }

@@ -28,12 +28,9 @@ pub enum HistoryEndpoint {
     LocalContent,
     Offer,
     Ping,
-<<<<<<< HEAD
     RecursiveFindContent,
     Store,
-=======
     RoutingTableInfo,
->>>>>>> Adds portal_historyRoutingTableInfo endpoint for verifying table population.
 }
 
 /// Ethereum JSON-RPC endpoints not currently supported by portal network requests, proxied to Infura

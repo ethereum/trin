@@ -37,7 +37,6 @@ use discv5::{
 use ethereum_types::U256;
 use futures::channel::oneshot;
 use parking_lot::RwLock;
-use serde_json::{json, Value};
 use ssz::Encode;
 use ssz_types::VariableList;
 use tokio::sync::mpsc::UnboundedSender;
@@ -232,29 +231,6 @@ where
                 )
             })
             .collect()
-    }
-
-    /// Returns vector of all ENR node IDs of nodes currently contained in the routing table mapped to JSON Value.
-    pub fn routing_table_info(&self) -> Value {
-        let buckets: Vec<(String, String, String)> = self
-            .table_entries()
-            .iter()
-            .map(|(node_id, enr, node_status)| {
-                (
-                    node_id.to_string(),
-                    enr.to_base64(),
-                    format!("{:?}", node_status.state),
-                )
-            })
-            .collect();
-
-        json!(
-            {
-                "localKey": self.discovery.discv5.local_enr().node_id().to_string(),
-                "buckets": buckets,
-                "count": buckets.len(),
-            }
-        )
     }
 
     /// Sends a `Ping` request to `enr`.

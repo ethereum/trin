@@ -223,9 +223,27 @@ impl HistoryRequestHandler {
                     let _ = request.resp.send(response);
                 }
                 HistoryEndpoint::RoutingTableInfo => {
-                    let _ = request
-                        .resp
-                        .send(Ok(self.network.overlay.routing_table_info()));
+                    let buckets: Vec<(String, String, String)> = self
+                        .network
+                        .overlay
+                        .table_entries()
+                        .iter()
+                        .map(|(node_id, enr, node_status)| {
+                            (
+                                format!("0x{}", hex::encode(node_id.raw())),
+                                enr.to_base64(),
+                                format!("{:?}", node_status.state),
+                            )
+                        })
+                        .collect();
+
+                    let _ = request.resp.send(Ok(json!(
+                        {
+                            "localKey": format!("0x{}", hex::encode(self.network.overlay.discovery.discv5.local_enr().node_id().raw())),
+                            "buckets": buckets,
+                            "count": buckets.len(),
+                        }
+                    )));
                 }
             }
         }
