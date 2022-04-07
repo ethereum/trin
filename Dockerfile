@@ -17,6 +17,7 @@ COPY ./trin-history ./trin-history
 COPY ./trin-state ./trin-state 
 COPY ./ethportal-peertest ./ethportal-peertest 
 COPY ./mainnetMM ./mainnetMM 
+COPY ./utp-testing ./utp-testing 
 
 # build for release
 RUN cargo build --all --release
