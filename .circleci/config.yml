@@ -45,7 +45,7 @@ jobs:
                 command: cargo build --workspace --jobs 2
             - run:
                 name: Test Trin workspace
-                command: cargo test --workspace --jobs 2
+                command: cargo test --workspace --jobs 2 -- --nocapture
             - save_cache:
                 key: cargo-{{ checksum "Cargo.lock" }}-v1
                 paths:
@@ -88,7 +88,7 @@ jobs:
           command: cargo build --target x86_64-pc-windows-msvc
       - run:
           name: Cargo Test --target x86_64-pc-windows-msvc
-          command: cargo test --target x86_64-pc-windows-msvc
+          command: cargo test --target x86_64-pc-windows-msvc -- --nocapture
       - save_cache:
           key: cargo-{{ checksum "Cargo.lock" }}-v1
           paths:
