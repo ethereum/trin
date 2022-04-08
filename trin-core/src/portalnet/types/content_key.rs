@@ -149,11 +149,11 @@ pub enum StateContentKey {
 #[derive(Clone, Debug, Decode, Encode)]
 pub struct AccountTrieNode {
     /// Trie path of the node.
-    path: VariableList<u8, typenum::U64>,
+    pub path: VariableList<u8, typenum::U64>,
     /// Hash of the node.
-    node_hash: [u8; 32],
+    pub node_hash: [u8; 32],
     /// Hash of the root of the state trie in which the node exists.
-    state_root: [u8; 32],
+    pub state_root: [u8; 32],
 }
 
 /// A key for a trie node from some account's contract storage.

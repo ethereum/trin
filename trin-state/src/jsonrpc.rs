@@ -9,6 +9,7 @@ use trin_core::jsonrpc::{
     endpoints::StateEndpoint,
     types::{
         FindContentParams, FindNodesParams, LocalContentParams, PingParams, StateJsonRpcRequest,
+        StoreParams,
     },
 };
 use trin_core::portalnet::types::content_key::StateContentKey;
@@ -27,7 +28,8 @@ impl StateRequestHandler {
                     let response =
                         match LocalContentParams::<StateContentKey>::try_from(request.params) {
                             Ok(params) => {
-                                match &self.network.overlay.storage.get(&params.content_key) {
+                                match &self.network.overlay.storage.read().get(&params.content_key)
+                                {
                                     Ok(val) => match val {
                                         Some(val) => Ok(Value::String(hex::encode(val.clone()))),
                                         None => Err(format!(
@@ -43,6 +45,26 @@ impl StateRequestHandler {
                             }
                             Err(msg) => Err(format!("Invalid LocalContent params: {msg:?}")),
                         };
+                    let _ = request.resp.send(response);
+                }
+                StateEndpoint::Store => {
+                    let response = match StoreParams::<StateContentKey>::try_from(request.params) {
+                        Ok(params) => {
+                            let content_key = params.content_key.clone();
+                            let content = params.content.clone();
+                            match self
+                                .network
+                                .overlay
+                                .storage
+                                .write()
+                                .store(&content_key, &content)
+                            {
+                                Ok(_) => Ok(Value::String("true".to_string())),
+                                Err(msg) => Ok(Value::String(msg.to_string())),
+                            }
+                        }
+                        Err(msg) => Ok(Value::String(msg.to_string())),
+                    };
                     let _ = request.resp.send(response);
                 }
                 StateEndpoint::DataRadius => {

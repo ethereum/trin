@@ -19,7 +19,9 @@ use trin_core::{
 
 use discv5::Discv5Event;
 use ethereum_types::U256;
-use tokio::sync::{mpsc, RwLock};
+use parking_lot::RwLock;
+use tokio::sync::mpsc;
+use tokio::sync::RwLock as RwLockT;
 use tokio::time::{self, Duration};
 
 async fn init_overlay(
@@ -31,9 +33,9 @@ async fn init_overlay(
         DEFAULT_STORAGE_CAPACITY.parse().unwrap(),
     )
     .unwrap();
-    let db = Arc::new(PortalStorage::new(storage_config).unwrap());
+    let db = Arc::new(RwLock::new(PortalStorage::new(storage_config).unwrap()));
     let overlay_config = OverlayConfig::default();
-    let utp_listener = Arc::new(RwLock::new(UtpListener::new(Arc::clone(&discovery))));
+    let utp_listener = Arc::new(RwLockT::new(UtpListener::new(Arc::clone(&discovery))));
 
     OverlayProtocol::new(
         overlay_config,

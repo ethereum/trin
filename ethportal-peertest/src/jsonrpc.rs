@@ -12,12 +12,30 @@ use serde_json::{self, json, Value};
 use crate::cli::PeertestConfig;
 use crate::Peertest;
 use trin_core::jsonrpc::types::{NodesParams, Params};
+use trin_core::portalnet::types::content_key::{
+    AccountTrieNode, BlockHeader, HistoryContentKey, StateContentKey,
+};
 use trin_core::portalnet::types::messages::SszEnr;
 
 /// Default data radius value: U256::from(u64::MAX)
 const DATA_RADIUS: &str = "18446744073709551615";
 /// Default enr seq value
 const ENR_SEQ: &str = "1";
+/// Default block hash for generating History content key
+const BLOCK_HASH: [u8; 32] = [
+    0xd1, 0xc3, 0x90, 0x62, 0x4d, 0x3b, 0xd4, 0xe4, 0x09, 0xa6, 0x1a, 0x85, 0x8e, 0x5d, 0xcc, 0x55,
+    0x17, 0x72, 0x9a, 0x91, 0x70, 0xd0, 0x14, 0xa6, 0xc9, 0x65, 0x30, 0xd6, 0x4d, 0xd8, 0x62, 0x1d,
+];
+/// Default node hash for generating State content key
+const NODE_HASH: [u8; 32] = [
+    0xb8, 0xbe, 0x79, 0x03, 0xae, 0xe7, 0x3b, 0x8f, 0x6a, 0x59, 0xcd, 0x44, 0xa1, 0xf5, 0x2c, 0x62,
+    0x14, 0x8e, 0x1f, 0x37, 0x6c, 0x0d, 0xfa, 0x1f, 0x5f, 0x77, 0x3a, 0x98, 0x66, 0x6e, 0xfc, 0x2b,
+];
+/// Default state root for generating State content key
+const STATE_ROOT: [u8; 32] = [
+    0xd1, 0xc3, 0x90, 0x62, 0x4d, 0x3b, 0xd4, 0xe4, 0x09, 0xa6, 0x1a, 0x85, 0x8e, 0x5d, 0xcc, 0x55,
+    0x17, 0x72, 0x9a, 0x91, 0x70, 0xd0, 0x14, 0xa6, 0xc9, 0x65, 0x30, 0xd6, 0x4d, 0xd8, 0x62, 0x1d,
+];
 
 #[derive(Clone)]
 pub struct JsonRpcRequest {
@@ -152,7 +170,7 @@ fn all_tests(peertest: &Peertest) -> Vec<Test<impl Fn(&Value, &Peertest)>> {
                     Value::Array(vec![json!(256u16)]),
                 ]),
             },
-            validate_portal_history_find_nodes,
+            validate_portal_find_nodes,
         ),
         // Test FindNodes with 0 distance -> Peer enr
         Test::new(
@@ -164,7 +182,7 @@ fn all_tests(peertest: &Peertest) -> Vec<Test<impl Fn(&Value, &Peertest)>> {
                     Value::Array(vec![json!(0u16)]),
                 ]),
             },
-            validate_portal_history_find_nodes_zero_distance,
+            validate_portal_find_nodes_zero_distance,
         ),
         // Test FindNodes with 256 distance -> Routing Table enrs
         Test::new(
@@ -176,7 +194,7 @@ fn all_tests(peertest: &Peertest) -> Vec<Test<impl Fn(&Value, &Peertest)>> {
                     Value::Array(vec![json!(256u16)]),
                 ]),
             },
-            validate_portal_state_find_nodes,
+            validate_portal_find_nodes,
         ),
         // Test FindNodes with 0 distance -> Peer enr
         Test::new(
@@ -188,7 +206,66 @@ fn all_tests(peertest: &Peertest) -> Vec<Test<impl Fn(&Value, &Peertest)>> {
                     Value::Array(vec![json!(0u16)]),
                 ]),
             },
-            validate_portal_state_find_nodes_zero_distance,
+            validate_portal_find_nodes_zero_distance,
+        ),
+        Test::new(
+            JsonRpcRequest {
+                method: "portal_historyStore".to_string(),
+                id: 11,
+                params: Params::Array(vec![
+                    Value::String(hex::encode(Into::<Vec<u8>>::into(
+                        HistoryContentKey::BlockHeader(BlockHeader {
+                            chain_id: 1,
+                            block_hash: BLOCK_HASH,
+                        }),
+                    ))),
+                    // todo: replace with valid content
+                    Value::String("01".to_string()),
+                ]),
+            },
+            validate_portal_store,
+        ),
+        Test::new(
+            JsonRpcRequest {
+                method: "portal_stateStore".to_string(),
+                id: 12,
+                params: Params::Array(vec![
+                    Value::String(hex::encode(Into::<Vec<u8>>::into(
+                        StateContentKey::AccountTrieNode(AccountTrieNode {
+                            node_hash: NODE_HASH,
+                            state_root: STATE_ROOT,
+                            path: vec![1, 2, 0, 1].into(),
+                        }),
+                    ))),
+                    // todo: replace with valid content
+                    Value::String("02".to_string()),
+                ]),
+            },
+            validate_portal_store,
+        ),
+        // Test store endpoint with invalid content key
+        Test::new(
+            JsonRpcRequest {
+                method: "portal_historyStore".to_string(),
+                id: 11,
+                params: Params::Array(vec![
+                    Value::String("1234".to_string()),
+                    Value::String("01".to_string()),
+                ]),
+            },
+            validate_portal_store_with_invalid_content_key,
+        ),
+        // Test store endpoint with invalid content key
+        Test::new(
+            JsonRpcRequest {
+                method: "portal_stateStore".to_string(),
+                id: 12,
+                params: Params::Array(vec![
+                    Value::String("1234".to_string()),
+                    Value::String("02".to_string()),
+                ]),
+            },
+            validate_portal_store_with_invalid_content_key,
         ),
     ]
 }
@@ -241,28 +318,27 @@ fn validate_portal_state_ping(result: &Value, _peertest: &Peertest) {
     );
 }
 
-fn validate_portal_history_find_nodes(result: &Value, peertest: &Peertest) {
+fn validate_portal_find_nodes(result: &Value, peertest: &Peertest) {
     let nodes = NodesParams::try_from(result).unwrap();
     assert_eq!(nodes.total, 1u8);
     assert!(nodes.enrs.contains(&peertest.nodes[0].enr));
 }
 
-fn validate_portal_history_find_nodes_zero_distance(result: &Value, peertest: &Peertest) {
+fn validate_portal_find_nodes_zero_distance(result: &Value, peertest: &Peertest) {
     let nodes = NodesParams::try_from(result).unwrap();
     assert_eq!(nodes.total, 1u8);
     assert!(nodes.enrs.contains(&peertest.bootnode.enr));
 }
 
-fn validate_portal_state_find_nodes(result: &Value, peertest: &Peertest) {
-    let nodes = NodesParams::try_from(result).unwrap();
-    assert_eq!(nodes.total, 1u8);
-    assert!(nodes.enrs.contains(&peertest.nodes[0].enr));
+fn validate_portal_store(result: &Value, _peertest: &Peertest) {
+    assert_eq!(result.as_str().unwrap(), "true");
 }
 
-fn validate_portal_state_find_nodes_zero_distance(result: &Value, peertest: &Peertest) {
-    let nodes = NodesParams::try_from(result).unwrap();
-    assert_eq!(nodes.total, 1u8);
-    assert!(nodes.enrs.contains(&peertest.bootnode.enr));
+fn validate_portal_store_with_invalid_content_key(result: &Value, _peertest: &Peertest) {
+    assert!(result
+        .as_str()
+        .unwrap()
+        .contains("Unable to decode content_key"));
 }
 
 #[cfg(unix)]
