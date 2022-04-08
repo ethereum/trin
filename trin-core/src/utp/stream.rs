@@ -273,16 +273,12 @@ impl UtpListener {
                 debug!("Received data: with len: {}", received_stream.len());
 
                 match self.listening.get(&conn.receiver_connection_id) {
-                    Some(message_type) => match message_type {
-                        UtpMessageId::AcceptStream(content_keys) => {
+                    Some(message_type) => {
+                        if let UtpMessageId::AcceptStream(content_keys) = message_type {
                             // TODO: Implement this with overlay store and decode receiver stream if multiple content values are send
                             debug!("Store {content_keys:?}, {received_stream:?}");
                         }
-                        UtpMessageId::FindContentData(_content) => {
-                            // TODO: Process Content data received via uTP stream
-                        }
-                        _ => {}
-                    },
+                    }
                     _ => warn!("uTP listening HashMap doesn't have uTP stream message type"),
                 }
                 utp_connections.remove(conn_key);

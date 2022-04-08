@@ -15,6 +15,7 @@ use crate::portalnet::types::messages::{
     ProtocolId, Request, Response,
 };
 
+use crate::locks::RwLoggingExt;
 use crate::utp::stream::{UtpListener, BUF_SIZE};
 use crate::utp::trin_helpers::{UtpAccept, UtpMessage, UtpMessageId};
 use discv5::{
@@ -26,6 +27,7 @@ use ethereum_types::U256;
 use futures::channel::oneshot;
 use parking_lot::RwLock;
 use ssz::Encode;
+use ssz_types::VariableList;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::RwLock as RwLockT;
 use tracing::{debug, warn};
@@ -260,7 +262,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                     Content::ConnectionId(conn_id) => {
                         let conn_id = u16::from_be(conn_id);
                         self.utp_listener
-                            .write()
+                            .write_with_warn()
                             .await
                             .listening
                             .insert(conn_id, UtpMessageId::FindContentStream);
@@ -268,25 +270,33 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                         // initiate the connection to the acceptor
                         let conn = self
                             .utp_listener
-                            .write()
+                            .write_with_warn()
                             .await
                             .connect(conn_id, enr.node_id())
                             .await;
 
                         match conn {
                             Ok(mut conn) => {
-                                // Handle STATE packet for SYN
-                                let mut buf = [0; BUF_SIZE];
-                                match conn.recv(&mut buf).await {
-                                    Ok(_) => {
-                                        // TODO: Wait for uTP transfer and return the data
-                                        Ok(found_content)
-                                    }
-                                    Err(err) => {
-                                        warn!("Unable to handle SYN-ACK packet: {err}");
-                                        Err(OverlayRequestError::UtpError(err.to_string()))
+                                let mut result = Vec::new();
+                                // Loop and receive all DATA packets, similar to `read_to_end`
+                                loop {
+                                    let mut buf = [0; BUF_SIZE];
+                                    match conn.recv_from(&mut buf).await {
+                                        Ok((0, _)) => {
+                                            break;
+                                        }
+                                        Ok((bytes, _)) => {
+                                            result.extend_from_slice(&mut buf[..bytes]);
+                                        }
+                                        Err(err) => {
+                                            warn!("Unable to receive content via uTP: {err}");
+                                            return Err(OverlayRequestError::UtpError(
+                                                err.to_string(),
+                                            ));
+                                        }
                                     }
                                 }
+                                Ok(Content::Content(VariableList::from(result)))
                             }
                             Err(err) => {
                                 warn!("Unable to initiate uTP stream with remote node {err}");
