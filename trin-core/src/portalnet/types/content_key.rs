@@ -87,18 +87,18 @@ pub struct BlockHeader {
 #[derive(Clone, Debug, Decode, Encode)]
 pub struct BlockBody {
     /// Chain identifier.
-    chain_id: u16,
+    pub chain_id: u16,
     /// Hash of the block.
-    block_hash: [u8; 32],
+    pub block_hash: [u8; 32],
 }
 
 /// A key for the transaction receipts for a block.
 #[derive(Clone, Debug, Decode, Encode)]
 pub struct BlockReceipts {
     /// Chain identifier.
-    chain_id: u16,
+    pub chain_id: u16,
     /// Hash of the block.
-    block_hash: [u8; 32],
+    pub block_hash: [u8; 32],
 }
 
 // Silence clippy to avoid implementing newtype pattern on imported type.

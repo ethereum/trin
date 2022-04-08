@@ -3497,6 +3497,8 @@ dependencies = [
 name = "trin-cli"
 version = "0.1.0"
 dependencies = [
+ "ethereum-types 0.12.1",
+ "hex",
  "jsonrpc",
  "serde",
  "serde_json",

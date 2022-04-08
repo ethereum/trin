@@ -3,56 +3,132 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use ethereum_types::H256;
 use serde_json::value::RawValue;
 use structopt::StructOpt;
 use thiserror::Error;
 
 use trin_core::cli::DEFAULT_WEB3_IPC_PATH;
+use trin_core::portalnet::types::content_key::{
+    BlockBody, BlockHeader, BlockReceipts, HistoryContentKey,
+};
 
-#[derive(StructOpt, Debug)]
+#[derive(StructOpt)]
 #[structopt(
     name = "trin-cli",
     version = "0.0.1",
     author = "Ethereum Foundation",
-    about = "Run JSON-RPC commands against trin nodes"
+    about = "Portal Network command line utilities"
 )]
-struct Config {
-    #[structopt(
-        default_value(DEFAULT_WEB3_IPC_PATH),
-        long,
-        help = "path to JSON-RPC endpoint"
-    )]
+enum Trin {
+    JsonRpc(JsonRpc),
+    EncodeKey(EncodeKey),
+}
+
+/// Run JSON-RPC commands against a trin node.
+#[derive(StructOpt, Debug)]
+struct JsonRpc {
+    /// IPC path of target JSON-RPC endpoint.
+    #[structopt(default_value(DEFAULT_WEB3_IPC_PATH), long)]
     ipc: PathBuf,
 
-    #[structopt(help = "e.g. discv5_routingTableInfo", required = true)]
+    /// JSON-RPC method (e.g. discv5_routingTableInfo).
+    #[structopt(required = true)]
     endpoint: String,
 
-    #[structopt(long, help = "parameters", use_delimiter = true)]
+    /// Comma-separated list of JSON-RPC parameters.
+    #[structopt(long, use_delimiter = true)]
     params: Option<Vec<String>>,
 }
 
+// TODO: Remove clippy allow once a variant with non-"Block" prefix is added.
+/// Encode a content key.
+#[derive(StructOpt)]
+#[allow(clippy::enum_variant_names)]
+enum EncodeKey {
+    /// Encode the content key for a block header.
+    BlockHeader {
+        /// Unsigned integer chain ID.
+        #[structopt(long)]
+        chain_id: u16,
+        /// Hex-encoded block hash (omit '0x' prefix).
+        #[structopt(long)]
+        block_hash: H256,
+    },
+    /// Encode the content key for a block body.
+    BlockBody {
+        /// Unsigned integer chain ID.
+        #[structopt(long)]
+        chain_id: u16,
+        /// Hex-encoded block hash (omit '0x' prefix).
+        #[structopt(long)]
+        block_hash: H256,
+    },
+    /// Encode the content key for a block's transaction receipts.
+    BlockReceipts {
+        /// Unsigned integer chain ID.
+        #[structopt(long)]
+        chain_id: u16,
+        /// Hex-encoded block hash (omit '0x' prefix).
+        #[structopt(long)]
+        block_hash: H256,
+    },
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let Config {
-        ipc,
-        endpoint,
-        params,
-    } = Config::from_args();
+    match Trin::from_args() {
+        Trin::JsonRpc(rpc) => json_rpc(rpc),
+        Trin::EncodeKey(content_key) => encode_content_key(content_key),
+    }
+}
 
-    let params: Option<Vec<Box<RawValue>>> =
-        params.map(|param| param.into_iter().map(jsonrpc::arg).collect());
-
+fn json_rpc(rpc: JsonRpc) -> Result<(), Box<dyn std::error::Error>> {
+    let params: Option<Vec<Box<RawValue>>> = rpc
+        .params
+        .map(|param| param.into_iter().map(jsonrpc::arg).collect());
     eprintln!(
         "Attempting RPC. endpoint={} params={:?} file={}",
-        endpoint,
+        rpc.endpoint,
         params,
-        ipc.to_string_lossy()
+        rpc.ipc.to_string_lossy()
     );
-    let mut client = TrinClient::from_ipc(&ipc)?;
+    let mut client = TrinClient::from_ipc(&rpc.ipc)?;
 
-    let req = client.build_request(endpoint.as_str(), &params);
+    let req = client.build_request(rpc.endpoint.as_str(), &params);
     let resp = client.make_request(req)?;
 
     println!("{}", serde_json::to_string_pretty(&resp).unwrap());
+
+    Ok(())
+}
+
+fn encode_content_key(content_key: EncodeKey) -> Result<(), Box<dyn std::error::Error>> {
+    let key = match content_key {
+        EncodeKey::BlockHeader {
+            chain_id,
+            block_hash,
+        } => HistoryContentKey::BlockHeader(BlockHeader {
+            chain_id,
+            block_hash: block_hash.into(),
+        }),
+        EncodeKey::BlockBody {
+            chain_id,
+            block_hash,
+        } => HistoryContentKey::BlockBody(BlockBody {
+            chain_id,
+            block_hash: block_hash.into(),
+        }),
+        EncodeKey::BlockReceipts {
+            chain_id,
+            block_hash,
+        } => HistoryContentKey::BlockReceipts(BlockReceipts {
+            chain_id,
+            block_hash: block_hash.into(),
+        }),
+    };
+
+    println!("{}", hex::encode(Into::<Vec<u8>>::into(key)));
+
     Ok(())
 }
 
