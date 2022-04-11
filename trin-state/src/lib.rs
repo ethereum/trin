@@ -9,6 +9,7 @@ use discv5::TalkRequest;
 use network::StateNetwork;
 use trin_core::cli::TrinConfig;
 use trin_core::jsonrpc::types::StateJsonRpcRequest;
+use trin_core::locks::RwLoggingExt;
 use trin_core::portalnet::discovery::Discovery;
 use trin_core::portalnet::events::PortalnetEvents;
 use trin_core::portalnet::storage::{PortalStorage, PortalStorageConfig};
@@ -45,7 +46,17 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Search for discv5 peers (bucket refresh lookup)
     tokio::spawn(Arc::clone(&discovery).bucket_refresh_lookup());
 
-    let utp_listener = Arc::new(RwLock::new(UtpListener::new(Arc::clone(&discovery))));
+    // Initialize and spawn UTP listener
+    let (utp_sender, utp_listener) = UtpListener::new(Arc::clone(&discovery));
+    let utp_listener = Arc::new(RwLock::new(utp_listener));
+    let utp_listener_clone = Arc::clone(&utp_listener);
+    tokio::spawn(async move {
+        utp_listener_clone
+            .write_with_warn()
+            .await
+            .process_utp_request()
+            .await
+    });
 
     let (state_event_tx, state_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
     let portal_events_discovery = Arc::clone(&discovery);
@@ -62,6 +73,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
             portal_events_utp_listener,
             None,
             Some(state_event_tx),
+            utp_sender,
         )
         .await;
         events.process_discv5_requests().await;
