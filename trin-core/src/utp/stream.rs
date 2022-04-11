@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::portalnet::discovery::Discovery;
 use anyhow::anyhow;
 use async_recursion::async_recursion;
@@ -96,146 +94,157 @@ pub struct UtpListener {
     pub listening: HashMap<u16, UtpMessageId>,
     tx: mpsc::UnboundedSender<Packet>,
     rx: Arc<RwLock<mpsc::UnboundedReceiver<Packet>>>,
+    utp_receiver: mpsc::UnboundedReceiver<TalkRequest>,
 }
 
 impl UtpListener {
-    pub fn new(discovery: Arc<Discovery>) -> Self {
+    pub fn new(discovery: Arc<Discovery>) -> (mpsc::UnboundedSender<TalkRequest>, Self) {
         let (tx, rx) = mpsc::unbounded_channel::<Packet>();
+        let (utp_sender, utp_receiver) = mpsc::unbounded_channel::<TalkRequest>();
 
-        UtpListener {
-            discovery,
-            utp_connections: HashMap::new(),
-            listening: HashMap::new(),
-            tx,
-            rx: Arc::new(RwLock::new(rx)),
-        }
+        (
+            utp_sender,
+            UtpListener {
+                discovery,
+                utp_connections: HashMap::new(),
+                listening: HashMap::new(),
+                tx,
+                rx: Arc::new(RwLock::new(rx)),
+                utp_receiver,
+            },
+        )
     }
 
-    pub async fn process_utp_request(&mut self, request: TalkRequest) {
-        let payload = request.body();
-        let node_id = request.node_id();
+    pub async fn process_utp_request(&mut self) {
+        while let Some(request) = self.utp_receiver.recv().await {
+            let payload = request.body();
+            let node_id = request.node_id();
 
-        match Packet::try_from(payload) {
-            Ok(packet) => {
-                self.tx.send(packet.clone()).unwrap();
+            match Packet::try_from(payload) {
+                Ok(packet) => {
+                    self.tx.send(packet.clone()).unwrap();
 
-                let connection_id = packet.connection_id();
+                    let connection_id = packet.connection_id();
 
-                match packet.get_type() {
-                    PacketType::Reset => {
-                        let key_fn =
-                            |offset| ConnectionKey::new(*node_id, connection_id - 1 + offset);
-                        let f = |conn: &&mut UtpSocket| -> bool {
-                            conn.sender_connection_id == connection_id
-                        };
+                    match packet.get_type() {
+                        PacketType::Reset => {
+                            let key_fn =
+                                |offset| ConnectionKey::new(*node_id, connection_id - 1 + offset);
+                            let f = |conn: &&mut UtpSocket| -> bool {
+                                conn.sender_connection_id == connection_id
+                            };
 
-                        if let Some(conn) = self.utp_connections.get_mut(&key_fn(1)) {
-                            conn.state = SocketState::Closed;
-                        } else if let Some(conn) =
-                            self.utp_connections.get_mut(&key_fn(2)).filter(f)
-                        {
-                            conn.state = SocketState::Closed;
-                        } else if let Some(conn) =
-                            self.utp_connections.get_mut(&key_fn(0)).filter(f)
-                        {
-                            conn.state = SocketState::Closed;
-                        }
-                    }
-                    PacketType::Syn => {
-                        if let Some(enr) = self.discovery.discv5.find_enr(node_id) {
-                            // If neither of those cases happened handle this is a new request
-                            let mut conn = UtpSocket::new(
-                                Arc::clone(&self.discovery),
-                                enr.clone(),
-                                Arc::clone(&self.rx),
-                            );
-
-                            let mut buf = [0; BUF_SIZE];
-
-                            if let Err(msg) = conn.recv(&mut buf).await {
-                                debug!("Unable to receive SYN packet {msg}");
-                                return;
-                            }
-
-                            self.utp_connections.insert(
-                                ConnectionKey {
-                                    node_id: *node_id,
-                                    conn_id_recv: conn.receiver_connection_id,
-                                },
-                                conn.clone(),
-                            );
-
-                            // Get ownership of FindContentData and re-add the receiver connection
-                            let utp_message_id = self.listening.remove(&conn.sender_connection_id);
-
-                            // TODO: Probably there is a better way with lifetimes to pass the HashMap value to a
-                            // different thread without removing the key and re-adding it.
-                            self.listening
-                                .insert(conn.sender_connection_id, UtpMessageId::FindContentStream);
-
-                            if let Some(UtpMessageId::FindContentData(Content(content_data))) =
-                                utp_message_id
+                            if let Some(conn) = self.utp_connections.get_mut(&key_fn(1)) {
+                                conn.state = SocketState::Closed;
+                            } else if let Some(conn) =
+                                self.utp_connections.get_mut(&key_fn(2)).filter(f)
                             {
-                                // We want to send uTP data only if the content is Content(ByteList)
-                                tokio::spawn(async move {
-                                    debug!(
-                                        "Sending content data via uTP with len: {}",
-                                        content_data.len()
-                                    );
-                                    // send the content to the requestor over a uTP stream
-                                    if let Err(msg) = conn
-                                        .send_to(
-                                            &UtpMessage::new(content_data.as_ssz_bytes()).encode()
-                                                [..],
-                                        )
-                                        .await
-                                    {
-                                        debug!("Error sending content {msg}");
-                                    } else {
-                                        // Close uTP connection
-                                        if let Err(msg) = conn.close().await {
-                                            debug!("Unable to close uTP connection!: {msg}")
-                                        }
-                                    };
-                                });
+                                conn.state = SocketState::Closed;
+                            } else if let Some(conn) =
+                                self.utp_connections.get_mut(&key_fn(0)).filter(f)
+                            {
+                                conn.state = SocketState::Closed;
                             }
-                        } else {
-                            debug!("Query requested an unknown ENR");
                         }
-                    }
-                    // Receive DATA and FIN packets
-                    PacketType::Data => {
-                        if let Some(conn) = self.utp_connections.get_mut(&ConnectionKey {
-                            node_id: *node_id,
-                            conn_id_recv: connection_id,
-                        }) {
-                            let mut buf = [0; BUF_SIZE];
-                            if let Err(msg) = conn.recv(&mut buf).await {
-                                warn!("Unable to receive uTP DATA packet: {msg}")
+                        PacketType::Syn => {
+                            if let Some(enr) = self.discovery.discv5.find_enr(node_id) {
+                                // If neither of those cases happened handle this is a new request
+                                let mut conn = UtpSocket::new(
+                                    Arc::clone(&self.discovery),
+                                    enr.clone(),
+                                    Arc::clone(&self.rx),
+                                );
+
+                                let mut buf = [0; BUF_SIZE];
+
+                                if let Err(msg) = conn.recv(&mut buf).await {
+                                    debug!("Unable to receive SYN packet {msg}");
+                                    return;
+                                }
+
+                                self.utp_connections.insert(
+                                    ConnectionKey {
+                                        node_id: *node_id,
+                                        conn_id_recv: conn.receiver_connection_id,
+                                    },
+                                    conn.clone(),
+                                );
+
+                                // Get ownership of FindContentData and re-add the receiver connection
+                                let utp_message_id =
+                                    self.listening.remove(&conn.sender_connection_id);
+
+                                // TODO: Probably there is a better way with lifetimes to pass the HashMap value to a
+                                // different thread without removing the key and re-adding it.
+                                self.listening.insert(
+                                    conn.sender_connection_id,
+                                    UtpMessageId::FindContentStream,
+                                );
+
+                                if let Some(UtpMessageId::FindContentData(Content(content_data))) =
+                                    utp_message_id
+                                {
+                                    // We want to send uTP data only if the content is Content(ByteList)
+                                    tokio::spawn(async move {
+                                        debug!(
+                                            "Sending content data via uTP with len: {}",
+                                            content_data.len()
+                                        );
+                                        // send the content to the requestor over a uTP stream
+                                        if let Err(msg) = conn
+                                            .send_to(
+                                                &UtpMessage::new(content_data.as_ssz_bytes())
+                                                    .encode()[..],
+                                            )
+                                            .await
+                                        {
+                                            debug!("Error sending content {msg}");
+                                        } else {
+                                            // Close uTP connection
+                                            if let Err(msg) = conn.close().await {
+                                                debug!("Unable to close uTP connection!: {msg}")
+                                            }
+                                        };
+                                    });
+                                }
                             } else {
-                                conn.recv_data_stream
-                                    .append(&mut Vec::from(packet.payload()));
+                                debug!("Query requested an unknown ENR");
                             }
                         }
-                    }
-                    PacketType::Fin => {
-                        if let Some(conn) = self.utp_connections.get_mut(&ConnectionKey {
-                            node_id: *node_id,
-                            conn_id_recv: connection_id,
-                        }) {
-                            let mut buf = [0; BUF_SIZE];
-                            if let Err(msg) = conn.recv(&mut buf).await {
-                                warn!("Unable to receive uTP FIN packet: {msg}")
+                        // Receive DATA and FIN packets
+                        PacketType::Data => {
+                            if let Some(conn) = self.utp_connections.get_mut(&ConnectionKey {
+                                node_id: *node_id,
+                                conn_id_recv: connection_id,
+                            }) {
+                                let mut buf = [0; BUF_SIZE];
+                                if let Err(msg) = conn.recv(&mut buf).await {
+                                    warn!("Unable to receive uTP DATA packet: {msg}")
+                                } else {
+                                    conn.recv_data_stream
+                                        .append(&mut Vec::from(packet.payload()));
+                                }
                             }
                         }
+                        PacketType::Fin => {
+                            if let Some(conn) = self.utp_connections.get_mut(&ConnectionKey {
+                                node_id: *node_id,
+                                conn_id_recv: connection_id,
+                            }) {
+                                let mut buf = [0; BUF_SIZE];
+                                if let Err(msg) = conn.recv(&mut buf).await {
+                                    warn!("Unable to receive uTP FIN packet: {msg}")
+                                }
+                            }
+                        }
+                        // We don't handle STATE packets here, because the uTP client is handling them
+                        // implicitly in the background when sending FIN packet with conn.close()
+                        PacketType::State => {}
                     }
-                    // We don't handle STATE packets here, because the uTP client is handling them
-                    // implicitly in the background when sending FIN packet with conn.close()
-                    PacketType::State => {}
                 }
-            }
-            Err(e) => {
-                debug!("Failed to decode packet: {}", e);
+                Err(e) => {
+                    debug!("Failed to decode packet: {}", e);
+                }
             }
         }
     }
@@ -587,14 +596,6 @@ impl UtpSocket {
             received_at: now,
             difference: our_delay,
         });
-    }
-
-    fn filter(current_delay: &[u32]) -> u32 {
-        let filt = (current_delay.len() as f64 / 3_f64).ceil() as usize;
-        *current_delay[current_delay.len() - filt..]
-            .iter()
-            .min()
-            .unwrap()
     }
 
     async fn make_connection(&mut self, connection_id: u16) {

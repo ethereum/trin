@@ -17,6 +17,7 @@ pub struct PortalnetEvents {
     pub utp_listener: Arc<RwLock<UtpListener>>,
     pub history_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
     pub state_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
+    pub utp_sender: mpsc::UnboundedSender<TalkRequest>,
 }
 
 impl PortalnetEvents {
@@ -25,6 +26,7 @@ impl PortalnetEvents {
         utp_listener: Arc<RwLock<UtpListener>>,
         history_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
         state_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
+        utp_sender: mpsc::UnboundedSender<TalkRequest>,
     ) -> Self {
         let protocol_receiver = discovery
             .discv5
@@ -39,6 +41,7 @@ impl PortalnetEvents {
             utp_listener,
             history_sender,
             state_sender,
+            utp_sender,
         }
     }
 
@@ -84,12 +87,10 @@ impl PortalnetEvents {
                         };
                     }
                     ProtocolId::Utp => {
-                        // process utp message and send response (deals with sending/handling utp protocol msgs)
-                        self.utp_listener
-                            .write_with_warn()
-                            .await
-                            .process_utp_request(request)
-                            .await;
+                        if let Err(err) = self.utp_sender.send(request) {
+                            warn! {"Error sending uTP request to uTP listener: {err}"};
+                        }
+
                         // handles actual data sent over utp. eg, stores data in db
                         self.utp_listener
                             .write_with_warn()

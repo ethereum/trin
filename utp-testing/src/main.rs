@@ -1,8 +1,10 @@
-use discv5::Discv5Event;
+use discv5::{Discv5Event, TalkRequest};
 use log::debug;
 use std::str::FromStr;
 use std::sync::Arc;
+use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::RwLock;
+use trin_core::locks::RwLoggingExt;
 use trin_core::portalnet::discovery::Discovery;
 use trin_core::portalnet::types::messages::{PortalnetConfig, ProtocolId};
 use trin_core::portalnet::Enr;
@@ -11,6 +13,7 @@ use trin_core::utp::trin_helpers::{UtpMessage, UtpMessageId};
 
 pub struct TestApp {
     utp_listener: Arc<RwLock<UtpListener>>,
+    utp_sender: UnboundedSender<TalkRequest>,
 }
 
 impl TestApp {
@@ -45,7 +48,7 @@ impl TestApp {
     async fn process_utp_request(&self) {
         let mut event_stream = self
             .utp_listener
-            .read()
+            .read_with_warn()
             .await
             .discovery
             .discv5
@@ -54,9 +57,20 @@ impl TestApp {
             .unwrap();
 
         let listener = Arc::clone(&self.utp_listener);
+        let listener_clone = Arc::clone(&listener);
+        tokio::spawn(async move {
+            listener_clone
+                .write_with_warn()
+                .await
+                .process_utp_request()
+                .await
+        });
+
+        let utp_sender = self.utp_sender.clone();
 
         tokio::spawn(async move {
             while let Some(event) = event_stream.recv().await {
+                debug!("event: {event:?}");
                 let request = match event {
                     Discv5Event::TalkRequest(r) => r,
                     _ => continue,
@@ -66,8 +80,8 @@ impl TestApp {
                     ProtocolId::from_str(&hex::encode_upper(request.protocol())).unwrap();
 
                 if let ProtocolId::Utp = protocol_id {
-                    listener.write().await.process_utp_request(request).await;
-                    listener.write().await.process_utp_byte_stream().await;
+                    utp_sender.send(request).unwrap();
+                    // listener.write().await.process_utp_byte_stream().await;
                 };
             }
         });
@@ -107,7 +121,7 @@ async fn main() {
 
     client
         .utp_listener
-        .write()
+        .write_with_warn()
         .await
         .discovery
         .send_talk_req(server_enr.clone(), ProtocolId::History, vec![])
@@ -135,10 +149,11 @@ async fn run_test_app(discv5_port: u16) -> TestApp {
     let mut discovery = Discovery::new(config).unwrap();
     discovery.start().await.unwrap();
 
-    let utp_listener = UtpListener::new(Arc::new(discovery));
+    let (utp_sender, utp_listener) = UtpListener::new(Arc::new(discovery));
 
     let test_app = TestApp {
         utp_listener: Arc::new(RwLock::new(utp_listener)),
+        utp_sender,
     };
 
     test_app.process_utp_request().await;

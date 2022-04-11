@@ -369,7 +369,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         }
 
         self.utp_listener
-            .write()
+            .write_with_warn()
             .await
             .listening
             .insert(connection_id, UtpMessageId::OfferStream);
@@ -377,7 +377,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         // initiate the connection to the acceptor
         let mut conn = self
             .utp_listener
-            .write()
+            .write_with_warn()
             .await
             .connect(connection_id, enr.node_id())
             .await?;
