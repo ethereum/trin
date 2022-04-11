@@ -34,6 +34,11 @@ pub async fn launch_node(id: u16, bootnode_enr: Option<&String>) -> anyhow::Resu
     let discovery_port: u16 = 9000 + id;
     let discovery_port: String = discovery_port.to_string();
     let web3_ipc_path = format!("/tmp/ethportal-peertest-buddy-{id}.ipc");
+    // This specific private key scheme is chosen to enforce that the first peer node will be in
+    // the 256 kbucket of the bootnode, to ensure consistent `FindNodes` tests.
+    let mut private_key = vec![id as u8; 3];
+    private_key.append(&mut vec![0u8; 29]);
+    let private_key = hex::encode(private_key);
     let trin_config_args: Vec<&str> = match bootnode_enr {
         Some(enr) => vec![
             "trin",
@@ -44,6 +49,8 @@ pub async fn launch_node(id: u16, bootnode_enr: Option<&String>) -> anyhow::Resu
             discovery_port.as_str(),
             "--web3-ipc-path",
             web3_ipc_path.as_str(),
+            "--unsafe-private-key",
+            private_key.as_str(),
         ],
         None => vec![
             "trin",
@@ -52,6 +59,8 @@ pub async fn launch_node(id: u16, bootnode_enr: Option<&String>) -> anyhow::Resu
             discovery_port.as_str(),
             "--web3-ipc-path",
             web3_ipc_path.as_str(),
+            "--unsafe-private-key",
+            private_key.as_str(),
         ],
     };
     let trin_config = TrinConfig::new_from(trin_config_args.iter()).unwrap();
