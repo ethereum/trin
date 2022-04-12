@@ -497,9 +497,11 @@ pub mod test {
     use super::*;
     use crate::portalnet::types::content_key::IdentityContentKey;
 
+    use std::env;
+
+    use quickcheck::{quickcheck, Arbitrary, Gen, TestResult};
     use rand::RngCore;
     use serial_test::serial;
-    use std::env;
     use tempdir::TempDir;
 
     fn generate_random_content_key() -> IdentityContentKey {
@@ -512,6 +514,16 @@ pub mod test {
         let temp_dir = TempDir::new("trin").unwrap();
         env::set_var("TRIN_DATA_PATH", temp_dir.path());
         temp_dir
+    }
+
+    impl Arbitrary for IdentityContentKey {
+        fn arbitrary(g: &mut Gen) -> Self {
+            let mut value = [0; 32];
+            for byte in value.iter_mut() {
+                *byte = u8::arbitrary(g);
+            }
+            Self::new(value)
+        }
     }
 
     #[tokio::test]
@@ -633,10 +645,10 @@ pub mod test {
 
     #[tokio::test]
     #[serial]
-    async fn test_find_farthest() -> Result<(), PortalStorageError> {
+    async fn test_find_farthest_empty_db() -> Result<(), PortalStorageError> {
         let temp_dir = setup_temp_dir();
 
-        let node_id = NodeId::new(&[0; 32]);
+        let node_id = NodeId::random();
 
         let db = Arc::new(PortalStorage::setup_rocksdb(node_id)?);
         let sql_connection_pool = PortalStorage::setup_sql(node_id)?;
@@ -649,28 +661,54 @@ pub mod test {
             sql_connection_pool,
         };
 
-        let mut storage = PortalStorage::new(storage_config)?;
+        let storage = PortalStorage::new(storage_config)?;
 
-        let value: Vec<u8> = "value".into();
-
-        let content_key_a = IdentityContentKey::new([1; 32]);
-        storage.store(&content_key_a, &value)?;
-
-        let content_key_b = IdentityContentKey::new([5; 32]);
-        storage.store(&content_key_b, &value)?;
-
-        let expected_content_id = content_key_b.content_id();
         let result = storage.find_farthest_content_id()?;
-        assert_eq!(result.unwrap(), expected_content_id);
-
-        let content_key_c = IdentityContentKey::new([10; 32]);
-        storage.store(&content_key_c, &value)?;
-
-        let expected_content_id = content_key_c.content_id();
-        let result = storage.find_farthest_content_id()?;
-        assert_eq!(result.unwrap(), expected_content_id);
+        assert!(result.is_none());
 
         temp_dir.close()?;
         Ok(())
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_find_farthest() {
+        fn prop(x: IdentityContentKey, y: IdentityContentKey) -> TestResult {
+            let temp_dir = setup_temp_dir();
+
+            let node_id = NodeId::random();
+            let val = vec![0x00, 0x01, 0x02, 0x03, 0x04];
+
+            let db = Arc::new(PortalStorage::setup_rocksdb(node_id).unwrap());
+            let sql_connection_pool = PortalStorage::setup_sql(node_id).unwrap();
+
+            let storage_config = PortalStorageConfig {
+                storage_capacity_kb: 100,
+                node_id,
+                distance_function: DistanceFunction::Xor,
+                db,
+                sql_connection_pool,
+            };
+
+            let mut storage = PortalStorage::new(storage_config).unwrap();
+            storage.store(&x, &val).unwrap();
+            storage.store(&y, &val).unwrap();
+
+            let expected_farthest = if storage.distance_to_content_id(&x.content_id())
+                > storage.distance_to_content_id(&y.content_id())
+            {
+                x.content_id()
+            } else {
+                y.content_id()
+            };
+
+            let farthest = storage.find_farthest_content_id();
+
+            temp_dir.close().unwrap();
+
+            TestResult::from_bool(farthest.unwrap().unwrap() == expected_farthest)
+        }
+
+        quickcheck(prop as fn(IdentityContentKey, IdentityContentKey) -> TestResult);
     }
 }
