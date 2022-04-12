@@ -3,34 +3,30 @@ use log::debug;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedSender;
-use tokio::sync::RwLock;
-use trin_core::locks::RwLoggingExt;
 use trin_core::portalnet::discovery::Discovery;
 use trin_core::portalnet::types::messages::{PortalnetConfig, ProtocolId};
 use trin_core::portalnet::Enr;
-use trin_core::utp::stream::UtpListener;
-use trin_core::utp::trin_helpers::{UtpMessage, UtpMessageId};
+use trin_core::utp::stream::{UtpListener, UtpListenerRequest, UtpSocket};
+use trin_core::utp::trin_helpers::UtpMessage;
 
 pub struct TestApp {
-    utp_listener: Arc<RwLock<UtpListener>>,
-    utp_sender: UnboundedSender<TalkRequest>,
+    discovery: Arc<Discovery>,
+    utp_listener_tx: UnboundedSender<UtpListenerRequest>,
+    utp_event_tx: UnboundedSender<TalkRequest>,
 }
 
 impl TestApp {
-    async fn send_utp_request(&mut self, connection_id: u16, payload: Vec<u8>, enr: Enr) {
-        self.utp_listener
-            .write()
-            .await
-            .listening
-            .insert(connection_id, UtpMessageId::OfferStream);
+    async fn send_utp_request(&mut self, conn_id: u16, payload: Vec<u8>, enr: Enr) {
+        let _ = self
+            .utp_listener_tx
+            .send(UtpListenerRequest::OfferStream(conn_id));
 
-        let mut conn = self
-            .utp_listener
-            .write()
-            .await
-            .connect(connection_id, enr.node_id())
-            .await
-            .unwrap();
+        let (tx, rx) = tokio::sync::oneshot::channel::<anyhow::Result<UtpSocket>>();
+        let _ = self
+            .utp_listener_tx
+            .send(UtpListenerRequest::Connect(conn_id, enr.node_id(), tx));
+
+        let mut conn = rx.await.unwrap().unwrap();
 
         let mut buf = [0; 1500];
         conn.recv(&mut buf).await.unwrap();
@@ -46,31 +42,13 @@ impl TestApp {
     }
 
     async fn process_utp_request(&self) {
-        let mut event_stream = self
-            .utp_listener
-            .read_with_warn()
-            .await
-            .discovery
-            .discv5
-            .event_stream()
-            .await
-            .unwrap();
+        let mut event_stream = self.discovery.discv5.event_stream().await.unwrap();
 
-        let listener = Arc::clone(&self.utp_listener);
-        let listener_clone = Arc::clone(&listener);
-        tokio::spawn(async move {
-            listener_clone
-                .write_with_warn()
-                .await
-                .process_utp_request()
-                .await
-        });
-
-        let utp_sender = self.utp_sender.clone();
+        let utp_sender = self.utp_event_tx.clone();
 
         tokio::spawn(async move {
             while let Some(event) = event_stream.recv().await {
-                debug!("event: {event:?}");
+                debug!("utp-testing TestApp handling event: {event:?}");
                 let request = match event {
                     Discv5Event::TalkRequest(r) => r,
                     _ => continue,
@@ -81,26 +59,22 @@ impl TestApp {
 
                 if let ProtocolId::Utp = protocol_id {
                     utp_sender.send(request).unwrap();
-                    // listener.write().await.process_utp_byte_stream().await;
                 };
             }
         });
     }
 
-    async fn prepare_to_receive(&self, connection_id: u16) {
+    async fn prepare_to_receive(&self, conn_id: u16) {
         // listen for incoming connection request on conn_id, as part of utp handshake
-        self.utp_listener
-            .write()
-            .await
-            .listening
-            .insert(connection_id, UtpMessageId::OfferStream);
+        let _ = self
+            .utp_listener_tx
+            .send(UtpListenerRequest::OfferStream(conn_id));
 
         // also listen on conn_id + 1 because this is the actual receive path for acceptor
-        self.utp_listener
-            .write()
-            .await
-            .listening
-            .insert(connection_id + 1, UtpMessageId::OfferStream);
+        let conn_id_recv = conn_id.wrapping_add(1);
+        let _ = self
+            .utp_listener_tx
+            .send(UtpListenerRequest::OfferStream(conn_id_recv));
     }
 }
 
@@ -114,15 +88,12 @@ async fn main() {
     let server_port = 9003;
     let server = run_test_app(server_port).await;
 
-    let server_enr = server.utp_listener.write().await.discovery.local_enr();
+    let server_enr = server.discovery.local_enr();
 
     let connection_id = 66;
     let payload = vec![6; 2000];
 
     client
-        .utp_listener
-        .write_with_warn()
-        .await
         .discovery
         .send_talk_req(server_enr.clone(), ProtocolId::History, vec![])
         .await
@@ -148,12 +119,16 @@ async fn run_test_app(discv5_port: u16) -> TestApp {
 
     let mut discovery = Discovery::new(config).unwrap();
     discovery.start().await.unwrap();
+    let discovery = Arc::new(discovery);
 
-    let (utp_sender, utp_listener) = UtpListener::new(Arc::new(discovery));
+    let (utp_event_sender, utp_listener_tx, mut utp_listener) =
+        UtpListener::new(Arc::clone(&discovery));
+    tokio::spawn(async move { utp_listener.start().await });
 
     let test_app = TestApp {
-        utp_listener: Arc::new(RwLock::new(utp_listener)),
-        utp_sender,
+        discovery,
+        utp_listener_tx,
+        utp_event_tx: utp_event_sender,
     };
 
     test_app.process_utp_request().await;

@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use std::collections::HashSet;
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -15,9 +16,8 @@ use crate::portalnet::types::messages::{
     ProtocolId, Request, Response,
 };
 
-use crate::locks::RwLoggingExt;
-use crate::utp::stream::{UtpListener, BUF_SIZE};
-use crate::utp::trin_helpers::{UtpAccept, UtpMessage, UtpMessageId};
+use crate::utp::stream::{UtpListenerRequest, UtpSocket, BUF_SIZE};
+use crate::utp::trin_helpers::{UtpAccept, UtpMessage};
 use discv5::{
     enr::NodeId,
     kbucket::{Filter, KBucketsTable},
@@ -29,7 +29,6 @@ use parking_lot::RwLock;
 use ssz::Encode;
 use ssz_types::VariableList;
 use tokio::sync::mpsc::UnboundedSender;
-use tokio::sync::RwLock as RwLockT;
 use tracing::{debug, warn};
 
 pub use super::overlay_service::OverlayRequestError;
@@ -79,7 +78,8 @@ pub struct OverlayProtocol<TContentKey, TMetric> {
     protocol: ProtocolId,
     /// A sender to send requests to the OverlayService.
     request_tx: UnboundedSender<OverlayRequest>,
-    utp_listener: Arc<RwLockT<UtpListener>>,
+    /// A sender to send request to UtpListener
+    utp_listener_tx: UnboundedSender<UtpListenerRequest>,
     /// Declare the allowed content key types for a given overlay network.
     /// Use a phantom, because we don't store any keys in this struct.
     /// For example, this type is used when decoding a content key received over the network.
@@ -94,7 +94,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
     pub async fn new(
         config: OverlayConfig,
         discovery: Arc<Discovery>,
-        utp_listener: Arc<RwLockT<UtpListener>>,
+        utp_listener_tx: UnboundedSender<UtpListenerRequest>,
         storage: Arc<RwLock<PortalStorage>>,
         data_radius: U256,
         protocol: ProtocolId,
@@ -116,7 +116,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
             config.ping_queue_interval,
             Arc::clone(&data_radius),
             protocol.clone(),
-            utp_listener.clone(),
+            utp_listener_tx.clone(),
             config.enable_metrics,
         )
         .await
@@ -129,7 +129,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
             storage,
             protocol,
             request_tx,
-            utp_listener,
+            utp_listener_tx,
             phantom_content_key: PhantomData,
             phantom_metric: PhantomData,
         }
@@ -258,56 +258,72 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                 match found_content {
                     Content::Content(_) => Ok(found_content),
                     Content::Enrs(_) => Ok(found_content),
-                    // Init uTP stream if `connection_id` is received
+                    // Init uTP stream if `connection_id`is received
                     Content::ConnectionId(conn_id) => {
                         let conn_id = u16::from_be(conn_id);
-                        self.utp_listener
-                            .write_with_warn()
-                            .await
-                            .listening
-                            .insert(conn_id, UtpMessageId::FindContentStream);
 
-                        // initiate the connection to the acceptor
-                        let conn = self
-                            .utp_listener
-                            .write_with_warn()
-                            .await
-                            .connect(conn_id, enr.node_id())
-                            .await;
-
-                        match conn {
-                            Ok(mut conn) => {
-                                let mut result = Vec::new();
-                                // Loop and receive all DATA packets, similar to `read_to_end`
-                                loop {
-                                    let mut buf = [0; BUF_SIZE];
-                                    match conn.recv_from(&mut buf).await {
-                                        Ok((0, _)) => {
-                                            break;
-                                        }
-                                        Ok((bytes, _)) => {
-                                            result.extend_from_slice(&mut buf[..bytes]);
-                                        }
-                                        Err(err) => {
-                                            warn!("Unable to receive content via uTP: {err}");
-                                            return Err(OverlayRequestError::UtpError(
-                                                err.to_string(),
-                                            ));
-                                        }
-                                    }
-                                }
-                                Ok(Content::Content(VariableList::from(result)))
-                            }
-                            Err(err) => {
-                                warn!("Unable to initiate uTP stream with remote node {err}");
-                                Err(OverlayRequestError::UtpError(err.to_string()))
-                            }
-                        }
+                        self.init_find_content_stream(enr, conn_id).await
                     }
                 }
             }
             Ok(_) => Err(OverlayRequestError::InvalidResponse),
             Err(error) => Err(error),
+        }
+    }
+
+    /// Initialize FIndContent uTP stream with remote node
+    async fn init_find_content_stream(
+        &self,
+        enr: Enr,
+        conn_id: u16,
+    ) -> Result<Content, OverlayRequestError> {
+        let utp_request = UtpListenerRequest::FindContentStream(conn_id);
+        if let Err(err) = self.utp_listener_tx.send(utp_request) {
+            return Err(OverlayRequestError::UtpError(format!(
+                "Unable to send uTP FindContent stream request: {err}"
+            )));
+        }
+
+        // initiate the connection to the acceptor
+        let (tx, rx) = tokio::sync::oneshot::channel::<anyhow::Result<UtpSocket>>();
+
+        let _ = self
+            .utp_listener_tx
+            .send(UtpListenerRequest::Connect(conn_id, enr.node_id(), tx));
+
+        match rx.await {
+            Ok(conn) => {
+                match conn {
+                    Ok(mut conn) => {
+                        let mut result = Vec::new();
+                        // Loop and receive all DATA packets, similar to `read_to_end`
+                        loop {
+                            let mut buf = [0; BUF_SIZE];
+                            match conn.recv_from(&mut buf).await {
+                                Ok((0, _)) => {
+                                    break;
+                                }
+                                Ok((bytes, _)) => {
+                                    result.extend_from_slice(&mut buf[..bytes]);
+                                }
+                                Err(err) => {
+                                    warn!("Unable to receive content via uTP: {err}");
+                                    return Err(OverlayRequestError::UtpError(err.to_string()));
+                                }
+                            }
+                        }
+                        Ok(Content::Content(VariableList::from(result)))
+                    }
+                    Err(err) => {
+                        warn!("Unable to initiate uTP stream with remote node. Error initializing uTP socket: {err}");
+                        Err(OverlayRequestError::UtpError(err.to_string()))
+                    }
+                }
+            }
+            Err(err) => {
+                warn!("Unable to receive from uTP listener channel: {err}");
+                Err(OverlayRequestError::UtpError(err.to_string()))
+            }
         }
     }
 
@@ -361,33 +377,65 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         enr: Enr,
         content_keys_offered: Vec<TContentKey>,
     ) -> anyhow::Result<Accept> {
-        let connection_id = response.connection_id.to_be();
+        let conn_id = response.connection_id.to_be();
 
         // Do not initialize uTP stream if remote node doesn't have interest in the offered content keys
         if response.content_keys.is_zero() {
             return Ok(response);
         }
 
-        self.utp_listener
-            .write_with_warn()
-            .await
-            .listening
-            .insert(connection_id, UtpMessageId::OfferStream);
+        let utp_request = UtpListenerRequest::OfferStream(conn_id);
+        if let Err(err) = self.utp_listener_tx.send(utp_request) {
+            return Err(anyhow!("Unable to send uTP Offer stream request: {err}"));
+        }
 
         // initiate the connection to the acceptor
-        let mut conn = self
-            .utp_listener
-            .write_with_warn()
-            .await
-            .connect(connection_id, enr.node_id())
-            .await?;
+        let (tx, rx) = tokio::sync::oneshot::channel::<anyhow::Result<UtpSocket>>();
 
-        // Handle STATE packet for SYN
-        let mut buf = [0; BUF_SIZE];
-        conn.recv(&mut buf).await?;
+        let _ = self
+            .utp_listener_tx
+            .send(UtpListenerRequest::Connect(conn_id, enr.node_id(), tx));
 
-        // Return to acceptor: the content key and corresponding data
-        let mut content_items: Vec<(Vec<u8>, Vec<u8>)> = vec![];
+        match rx.await? {
+            Ok(mut conn) => {
+                // Handle STATE packet for SYN
+                let mut buf = [0; BUF_SIZE];
+                conn.recv(&mut buf).await?;
+
+                let content_items = self.provide_requested_content(&response, content_keys_offered);
+
+                let content_message = UtpAccept {
+                    message: content_items,
+                };
+
+                tokio::spawn(async move {
+                    // send the content to the acceptor over a uTP stream
+                    if let Err(err) = conn
+                        .send_to(&UtpMessage::new(content_message.as_ssz_bytes()).encode()[..])
+                        .await
+                    {
+                        warn!("Error sending content {err}");
+                    };
+                    // Close uTP connection
+                    if let Err(err) = conn.close().await {
+                        warn!("Unable to close uTP connection!: {err}")
+                    };
+                });
+                Ok(response)
+            }
+            Err(err) => Err(anyhow!(
+                "Unable to initialize Offer uTP stream with remote node: {err}"
+            )),
+        }
+    }
+
+    /// Provide the requested content key and content value for the acceptor
+    fn provide_requested_content(
+        &self,
+        response: &Accept,
+        content_keys_offered: Vec<TContentKey>,
+    ) -> Vec<(Vec<u8>, Vec<u8>)> {
+        let mut content_items: Vec<(Vec<u8>, Vec<u8>)> = Vec::new();
 
         for (i, key) in response
             .content_keys
@@ -401,30 +449,11 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                         Some(content) => content_items.push((key.clone().into(), content)),
                         None => {}
                     },
-                    // should return some error if content not found
-                    Err(_) => {}
+                    Err(err) => warn!("Unable to get requested content from portal storage: {err}"),
                 }
             }
         }
-
-        let content_message = UtpAccept {
-            message: content_items,
-        };
-
-        tokio::spawn(async move {
-            // send the content to the acceptor over a uTP stream
-            if let Err(err) = conn
-                .send_to(&UtpMessage::new(content_message.as_ssz_bytes()).encode()[..])
-                .await
-            {
-                warn!("Error sending content {err}");
-            };
-            // Close uTP connection
-            if let Err(err) = conn.close().await {
-                warn!("Unable to close uTP connection!: {err}")
-            };
-        });
-        Ok(response)
+        content_items
     }
 
     /// Public method for initiating a network request through the overlay service.

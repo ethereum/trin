@@ -1,21 +1,21 @@
 use log::info;
 use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
 use crate::events::StateEvents;
 use crate::jsonrpc::StateRequestHandler;
 use discv5::TalkRequest;
 use network::StateNetwork;
+use tokio::sync::mpsc::UnboundedSender;
 use trin_core::cli::TrinConfig;
 use trin_core::jsonrpc::types::StateJsonRpcRequest;
-use trin_core::locks::RwLoggingExt;
 use trin_core::portalnet::discovery::Discovery;
 use trin_core::portalnet::events::PortalnetEvents;
 use trin_core::portalnet::storage::{PortalStorage, PortalStorageConfig};
 use trin_core::portalnet::types::messages::PortalnetConfig;
 use trin_core::utils::bootnodes::parse_bootnodes;
-use trin_core::utp::stream::UtpListener;
+use trin_core::utp::stream::{UtpListener, UtpListenerRequest};
 
 pub mod events;
 mod jsonrpc;
@@ -47,20 +47,11 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::spawn(Arc::clone(&discovery).bucket_refresh_lookup());
 
     // Initialize and spawn UTP listener
-    let (utp_sender, utp_listener) = UtpListener::new(Arc::clone(&discovery));
-    let utp_listener = Arc::new(RwLock::new(utp_listener));
-    let utp_listener_clone = Arc::clone(&utp_listener);
-    tokio::spawn(async move {
-        utp_listener_clone
-            .write_with_warn()
-            .await
-            .process_utp_request()
-            .await
-    });
+    let (utp_sender, overlay_sender, mut utp_listener) = UtpListener::new(Arc::clone(&discovery));
+    tokio::spawn(async move { utp_listener.start().await });
 
     let (state_event_tx, state_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
     let portal_events_discovery = Arc::clone(&discovery);
-    let portal_events_utp_listener = Arc::clone(&utp_listener);
 
     // Initialize DB config
     let storage_config =
@@ -70,7 +61,6 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::spawn(async move {
         let events = PortalnetEvents::new(
             portal_events_discovery,
-            portal_events_utp_listener,
             None,
             Some(state_event_tx),
             utp_sender,
@@ -81,7 +71,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let state_network = StateNetwork::new(
         discovery.clone(),
-        utp_listener.clone(),
+        overlay_sender,
         storage_config,
         portalnet_config.clone(),
     )
@@ -101,7 +91,7 @@ type StateJsonRpcTx = Option<mpsc::UnboundedSender<StateJsonRpcRequest>>;
 
 pub async fn initialize_state_network(
     discovery: &Arc<Discovery>,
-    utp_listener: &Arc<RwLock<UtpListener>>,
+    utp_listener_tx: UnboundedSender<UtpListenerRequest>,
     portalnet_config: PortalnetConfig,
     storage_config: PortalStorageConfig,
 ) -> (StateHandler, StateNetworkTask, StateEventTx, StateJsonRpcTx) {
@@ -109,7 +99,7 @@ pub async fn initialize_state_network(
     let (state_event_tx, state_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
     let state_network = StateNetwork::new(
         Arc::clone(discovery),
-        Arc::clone(utp_listener),
+        utp_listener_tx,
         storage_config,
         portalnet_config.clone(),
     )

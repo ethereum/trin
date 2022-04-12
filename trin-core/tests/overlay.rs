@@ -14,15 +14,15 @@ use trin_core::{
         },
         Enr,
     },
-    utp::stream::UtpListener,
 };
 
 use discv5::Discv5Event;
 use ethereum_types::U256;
 use parking_lot::RwLock;
 use tokio::sync::mpsc;
-use tokio::sync::RwLock as RwLockT;
+use tokio::sync::mpsc::unbounded_channel;
 use tokio::time::{self, Duration};
+use trin_core::utp::stream::UtpListenerRequest;
 
 async fn init_overlay(
     discovery: Arc<Discovery>,
@@ -35,12 +35,13 @@ async fn init_overlay(
     .unwrap();
     let db = Arc::new(RwLock::new(PortalStorage::new(storage_config).unwrap()));
     let overlay_config = OverlayConfig::default();
-    let utp_listener = Arc::new(RwLockT::new(UtpListener::new(Arc::clone(&discovery))));
+    // Ignore all uTP events
+    let (utp_listener_tx, _) = unbounded_channel::<UtpListenerRequest>();
 
     OverlayProtocol::new(
         overlay_config,
         discovery,
-        utp_listener,
+        utp_listener_tx,
         db,
         U256::MAX,
         protocol,

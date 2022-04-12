@@ -1,11 +1,10 @@
 use std::sync::Arc;
 
 use log::debug;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::mpsc;
 
 use trin_core::jsonrpc::handlers::JsonRpcHandler;
 use trin_core::jsonrpc::types::PortalJsonRpcRequest;
-use trin_core::locks::RwLoggingExt;
 use trin_core::portalnet::events::PortalnetEvents;
 use trin_core::utils::bootnodes::parse_bootnodes;
 use trin_core::utp::stream::UtpListener;
@@ -49,16 +48,9 @@ pub async fn run_trin(
     };
 
     // Initialize and spawn UTP listener
-    let (utp_sender, utp_listener) = UtpListener::new(Arc::clone(&discovery));
-    let utp_listener = Arc::new(RwLock::new(utp_listener));
-    let utp_listener_clone = Arc::clone(&utp_listener);
-    tokio::spawn(async move {
-        utp_listener_clone
-            .write_with_warn()
-            .await
-            .process_utp_request()
-            .await
-    });
+    let (utp_events_tx, utp_listener_tx, mut utp_listener) =
+        UtpListener::new(Arc::clone(&discovery));
+    tokio::spawn(async move { utp_listener.start().await });
 
     // Initialize Storage config
     let storage_config =
@@ -70,7 +62,7 @@ pub async fn run_trin(
         if trin_config.networks.iter().any(|val| val == STATE_NETWORK) {
             initialize_state_network(
                 &discovery,
-                &utp_listener,
+                utp_listener_tx.clone(),
                 portalnet_config.clone(),
                 storage_config.clone(),
             )
@@ -88,7 +80,7 @@ pub async fn run_trin(
         {
             initialize_history_network(
                 &discovery,
-                &utp_listener,
+                utp_listener_tx,
                 portalnet_config.clone(),
                 storage_config.clone(),
             )
@@ -139,10 +131,9 @@ pub async fn run_trin(
     tokio::spawn(async move {
         let events = PortalnetEvents::new(
             portal_events_discovery,
-            utp_listener,
             history_event_tx,
             state_event_tx,
-            utp_sender,
+            utp_events_tx,
         )
         .await;
         events.process_discv5_requests().await;

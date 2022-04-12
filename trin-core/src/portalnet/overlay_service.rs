@@ -5,10 +5,8 @@ use std::sync::Arc;
 use std::task::Poll;
 use std::time::Duration;
 
-use crate::locks::RwLoggingExt;
 use crate::portalnet::metrics::OverlayMetrics;
-use crate::utp::stream::UtpListener;
-use crate::utp::trin_helpers::UtpMessageId;
+use crate::utp::stream::UtpListenerRequest;
 use crate::{
     portalnet::{
         discovery::Discovery,
@@ -45,7 +43,6 @@ use ssz_types::BitList;
 use ssz_types::VariableList;
 use thiserror::Error;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
-use tokio::sync::RwLock as RwLockT;
 
 /// Maximum number of ENRs in response to FindNodes.
 pub const FIND_NODES_MAX_NODES: usize = 32;
@@ -260,7 +257,8 @@ pub struct OverlayService<TContentKey, TMetric> {
     response_rx: UnboundedReceiver<OverlayResponse>,
     /// The sender half of a channel for responses to outgoing requests.
     response_tx: UnboundedSender<OverlayResponse>,
-    utp_listener: Arc<RwLockT<UtpListener>>,
+    /// The sender half of a channel to send requests to uTP listener
+    utp_listener_tx: UnboundedSender<UtpListenerRequest>,
     /// Phantom content key.
     phantom_content_key: PhantomData<TContentKey>,
     /// Phantom metric (distance function).
@@ -285,7 +283,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         ping_queue_interval: Option<Duration>,
         data_radius: Arc<U256>,
         protocol: ProtocolId,
-        utp_listener: Arc<RwLockT<UtpListener>>,
+        utp_listener_sender: UnboundedSender<UtpListenerRequest>,
         enable_metrics: bool,
     ) -> Result<UnboundedSender<OverlayRequest>, String> {
         let (request_tx, request_rx) = mpsc::unbounded_channel();
@@ -317,7 +315,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                 active_outgoing_requests: Arc::new(RwLock::new(HashMap::new())),
                 response_rx,
                 response_tx,
-                utp_listener,
+                utp_listener_tx: utp_listener_sender,
                 phantom_content_key: PhantomData,
                 phantom_metric: PhantomData,
                 metrics,
@@ -612,27 +610,29 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                 if content.len() < 1000 {
                     Ok(Content::Content(content))
                 } else {
-                    let connection_id: u16 = crate::utp::stream::rand();
+                    let conn_id: u16 = crate::utp::stream::rand();
 
-                    let utp_listener = self.utp_listener.clone();
-                    tokio::spawn(async move {
-                        let mut utp_listener = utp_listener.write_with_warn().await;
-                        // listen for incoming connection request on conn_id, as part of utp handshake
-                        utp_listener.listening.insert(
-                            connection_id.clone(),
-                            // Temporaly storing content data, so we can send it right after we receive
-                            // SYN packet from the requester
-                            UtpMessageId::FindContentData(Content::Content(content)),
-                        );
+                    // listen for incoming connection request on conn_id, as part of utp handshake and
+                    // temporarily storing content data, so we can send it right after we receive
+                    // SYN packet from the requester
+                    let utp_request = UtpListenerRequest::FindContentData(conn_id, content);
+                    if let Err(err) = self.utp_listener_tx.send(utp_request) {
+                        return Err(OverlayRequestError::UtpError(format!(
+                            "Unable to send uTP FindContentData stream request: {err}"
+                        )));
+                    }
 
-                        // also listen on conn_id + 1 because this is the receive path
-                        utp_listener
-                            .listening
-                            .insert(connection_id.clone() + 1, UtpMessageId::FindContentStream);
-                    });
+                    // also listen on conn_id + 1 because this is the receive path
+                    let conn_id_recv = conn_id.wrapping_add(1);
+                    let utp_request = UtpListenerRequest::FindContentStream(conn_id_recv);
+                    if let Err(err) = self.utp_listener_tx.send(utp_request) {
+                        return Err(OverlayRequestError::UtpError(format!(
+                            "Unable to send uTP FindContent stream request: {err}"
+                        )));
+                    }
 
                     // Connection id is send as BE because uTP header values are stored also as BE
-                    Ok(Content::ConnectionId(connection_id.to_be()))
+                    Ok(Content::ConnectionId(conn_id.to_be()))
                 }
             }
             Ok(None) => {
@@ -656,7 +656,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
             .and_then(|m| Some(m.report_inbound_offer()));
         let mut requested_keys = BitList::with_capacity(request.content_keys.len())
             .map_err(|e| OverlayRequestError::AcceptError(e))?;
-        let connection_id: u16 = crate::utp::stream::rand();
+        let conn_id: u16 = crate::utp::stream::rand();
 
         // TODO: Pipe this with overlay DB and request only not available keys.
         let accept_keys = request.content_keys.clone();
@@ -669,24 +669,25 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                 .map_err(|e| OverlayRequestError::AcceptError(e))?;
         }
 
-        let utp_listener = self.utp_listener.clone();
-        tokio::spawn(async move {
-            // listen for incoming connection request on conn_id, as part of utp handshake
-            utp_listener
-                .write_with_warn()
-                .await
-                .listening
-                .insert(connection_id.clone(), UtpMessageId::OfferStream);
+        // listen for incoming connection request on conn_id, as part of utp handshake
+        let utp_request = UtpListenerRequest::OfferStream(conn_id);
+        if let Err(err) = self.utp_listener_tx.send(utp_request) {
+            return Err(OverlayRequestError::UtpError(format!(
+                "Unable to send uTP Offer stream request: {err}"
+            )));
+        }
 
-            // also listen on conn_id + 1 because this is the actual receive path for acceptor
-            utp_listener.write_with_warn().await.listening.insert(
-                connection_id.clone() + 1,
-                UtpMessageId::AcceptStream(accept_keys),
-            );
-        });
+        // also listen on conn_id + 1 because this is the actual receive path for acceptor
+        let conn_id_recv = conn_id.wrapping_add(1);
+        let utp_request = UtpListenerRequest::AcceptStream(conn_id_recv, accept_keys);
+        if let Err(err) = self.utp_listener_tx.send(utp_request) {
+            return Err(OverlayRequestError::UtpError(format!(
+                "Unable to send uTP Accept stream request: {err}"
+            )));
+        }
 
         let accept = Accept {
-            connection_id: connection_id.to_be(),
+            connection_id: conn_id.to_be(),
             content_keys: requested_keys,
         };
 
@@ -1234,6 +1235,7 @@ mod tests {
 
     use discv5::kbucket::Entry;
     use serial_test::serial;
+    use tokio::sync::mpsc::unbounded_channel;
     use tokio_test::{assert_pending, assert_ready, task};
 
     macro_rules! poll_request_rx {
@@ -1249,7 +1251,7 @@ mod tests {
         };
         let discovery = Arc::new(Discovery::new(portal_config).unwrap());
 
-        let utp_listener = Arc::new(RwLockT::new(UtpListener::new(Arc::clone(&discovery))));
+        let (utp_listener_tx, _) = unbounded_channel::<UtpListenerRequest>();
 
         // Initialize DB config
         let storage_capacity: u32 = DEFAULT_STORAGE_CAPACITY.parse().unwrap();
@@ -1286,7 +1288,7 @@ mod tests {
             active_outgoing_requests,
             response_tx,
             response_rx,
-            utp_listener,
+            utp_listener_tx,
             phantom_content_key: PhantomData,
             phantom_metric: PhantomData,
             metrics,

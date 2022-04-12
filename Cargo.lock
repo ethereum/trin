@@ -3735,6 +3735,7 @@ checksum = "b4ae116fef2b7fea257ed6440d3cfcff7f190865f170cdad00bb6465bf18ecba"
 name = "utp-testing"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "discv5",
  "hex",
  "log 0.4.14",
