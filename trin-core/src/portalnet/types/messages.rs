@@ -21,6 +21,7 @@ use crate::portalnet::{
     types::{content_key::RawContentKey, distance::Distance},
     Enr,
 };
+use crate::utils::bytes::hex_encode;
 
 pub type ByteList = VariableList<u8, typenum::U2048>;
 
@@ -510,7 +511,9 @@ impl TryInto<Value> for Content {
         if let Content::ConnectionId(val) = self {
             Ok(serde_json::json!({ "connection_id": val }))
         } else if let Content::Content(val) = self {
-            Ok(serde_json::json!({"content": hex::encode(val.to_vec())}))
+            Ok(serde_json::json!({
+                "content": hex_encode(val.to_vec())
+            }))
         } else if let Content::Enrs(val) = self {
             Ok(serde_json::json!({ "enrs": format!("{:?}", val) }))
         } else {

@@ -3,6 +3,7 @@ use super::{
     Enr,
 };
 use crate::socket;
+use crate::utils::bytes::hex_encode;
 
 use discv5::{
     enr::{CombinedKey, EnrBuilder, NodeId},
@@ -195,7 +196,7 @@ impl Discovery {
     pub fn node_info(&self) -> Value {
         json!({
             "enr":  self.discv5.local_enr().to_base64(),
-            "nodeId":  self.discv5.local_enr().node_id().to_string(),
+            "nodeId":  hex_encode(self.discv5.local_enr().node_id().raw()),
             "ip":  self.discv5.local_enr().ip4().map_or("None".to_owned(), |ip| ip.to_string())
         })
     }
@@ -208,7 +209,7 @@ impl Discovery {
             .iter()
             .map(|(node_id, enr, node_status)| {
                 (
-                    node_id.to_string(),
+                    hex_encode(node_id.raw()),
                     enr.to_base64(),
                     format!("{:?}", node_status.state),
                 )
@@ -217,7 +218,7 @@ impl Discovery {
 
         json!(
             {
-                "localKey": self.discv5.local_enr().node_id().to_string(),
+                "localKey": hex_encode(self.discv5.local_enr().node_id().raw()),
                 "buckets": buckets
             }
         )
