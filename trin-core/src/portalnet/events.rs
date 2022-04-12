@@ -2,19 +2,16 @@ use std::sync::Arc;
 
 use discv5::{Discv5Event, TalkRequest};
 use log::{debug, warn};
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::mpsc;
 
 use super::discovery::Discovery;
 use super::types::messages::ProtocolId;
-use crate::locks::RwLoggingExt;
-use crate::utp::stream::UtpListener;
 use hex;
 use std::str::FromStr;
 
 pub struct PortalnetEvents {
     pub discovery: Arc<Discovery>,
     pub protocol_receiver: mpsc::Receiver<Discv5Event>,
-    pub utp_listener: Arc<RwLock<UtpListener>>,
     pub history_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
     pub state_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
     pub utp_sender: mpsc::UnboundedSender<TalkRequest>,
@@ -23,7 +20,6 @@ pub struct PortalnetEvents {
 impl PortalnetEvents {
     pub async fn new(
         discovery: Arc<Discovery>,
-        utp_listener: Arc<RwLock<UtpListener>>,
         history_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
         state_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
         utp_sender: mpsc::UnboundedSender<TalkRequest>,
@@ -38,7 +34,6 @@ impl PortalnetEvents {
         Self {
             discovery: Arc::clone(&discovery),
             protocol_receiver,
-            utp_listener,
             history_sender,
             state_sender,
             utp_sender,
@@ -90,13 +85,6 @@ impl PortalnetEvents {
                         if let Err(err) = self.utp_sender.send(request) {
                             warn! {"Error sending uTP request to uTP listener: {err}"};
                         }
-
-                        // handles actual data sent over utp. eg, stores data in db
-                        self.utp_listener
-                            .write_with_warn()
-                            .await
-                            .process_utp_byte_stream()
-                            .await;
                     }
                     _ => {
                         warn!(

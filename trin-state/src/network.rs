@@ -5,8 +5,7 @@ use discv5::enr::NodeId;
 use eth_trie::EthTrie;
 use log::debug;
 use parking_lot::RwLock;
-use tokio::sync::RwLock as RwLockT;
-
+use tokio::sync::mpsc::UnboundedSender;
 use trin_core::portalnet::{
     discovery::Discovery,
     overlay::{OverlayConfig, OverlayProtocol, OverlayRequestError},
@@ -17,7 +16,7 @@ use trin_core::portalnet::{
         metric::XorMetric,
     },
 };
-use trin_core::utp::stream::UtpListener;
+use trin_core::utp::stream::UtpListenerRequest;
 
 use crate::trie::TrieDB;
 
@@ -31,7 +30,7 @@ pub struct StateNetwork {
 impl StateNetwork {
     pub async fn new(
         discovery: Arc<Discovery>,
-        utp_listener: Arc<RwLockT<UtpListener>>,
+        utp_listener_tx: UnboundedSender<UtpListenerRequest>,
         storage_config: PortalStorageConfig,
         portal_config: PortalnetConfig,
     ) -> Self {
@@ -49,7 +48,7 @@ impl StateNetwork {
         let overlay = OverlayProtocol::new(
             config,
             discovery,
-            utp_listener,
+            utp_listener_tx,
             storage,
             portal_config.data_radius,
             ProtocolId::State,

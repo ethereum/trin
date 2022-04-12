@@ -3,7 +3,7 @@ mod jsonrpc;
 pub mod network;
 
 use log::info;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
 use crate::events::HistoryEvents;
@@ -11,15 +11,15 @@ use crate::jsonrpc::HistoryRequestHandler;
 use discv5::TalkRequest;
 use network::HistoryNetwork;
 use std::sync::Arc;
+use tokio::sync::mpsc::UnboundedSender;
 use trin_core::cli::TrinConfig;
 use trin_core::jsonrpc::types::HistoryJsonRpcRequest;
-use trin_core::locks::RwLoggingExt;
 use trin_core::portalnet::discovery::Discovery;
 use trin_core::portalnet::events::PortalnetEvents;
 use trin_core::portalnet::storage::{PortalStorage, PortalStorageConfig};
 use trin_core::portalnet::types::messages::PortalnetConfig;
 use trin_core::utils::bootnodes::parse_bootnodes;
-use trin_core::utp::stream::UtpListener;
+use trin_core::utp::stream::{UtpListener, UtpListenerRequest};
 
 pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Launching trin-history...");
@@ -49,20 +49,11 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::spawn(Arc::clone(&discovery).bucket_refresh_lookup());
 
     // Initialize and spawn UTP listener
-    let (utp_sender, utp_listener) = UtpListener::new(Arc::clone(&discovery));
-    let utp_listener = Arc::new(RwLock::new(utp_listener));
-    let utp_listener_clone = Arc::clone(&utp_listener);
-    tokio::spawn(async move {
-        utp_listener_clone
-            .write_with_warn()
-            .await
-            .process_utp_request()
-            .await
-    });
+    let (utp_sender, overlay_sender, mut utp_listener) = UtpListener::new(Arc::clone(&discovery));
+    tokio::spawn(async move { utp_listener.start().await });
 
     let (history_event_tx, history_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
     let portal_events_discovery = Arc::clone(&discovery);
-    let portal_events_utp_listener = Arc::clone(&utp_listener);
 
     // Initialize DB config
     let storage_config =
@@ -72,7 +63,6 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::spawn(async move {
         let events = PortalnetEvents::new(
             portal_events_discovery,
-            portal_events_utp_listener,
             Some(history_event_tx),
             None,
             utp_sender,
@@ -83,7 +73,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let history_network = HistoryNetwork::new(
         discovery.clone(),
-        utp_listener.clone(),
+        overlay_sender,
         storage_config,
         portalnet_config.clone(),
     )
@@ -103,7 +93,7 @@ type HistoryJsonRpcTx = Option<mpsc::UnboundedSender<HistoryJsonRpcRequest>>;
 
 pub async fn initialize_history_network(
     discovery: &Arc<Discovery>,
-    utp_listener: &Arc<RwLock<UtpListener>>,
+    utp_listener_tx: UnboundedSender<UtpListenerRequest>,
     portalnet_config: PortalnetConfig,
     storage_config: PortalStorageConfig,
 ) -> (
@@ -117,7 +107,7 @@ pub async fn initialize_history_network(
     let (history_event_tx, history_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
     let history_network = HistoryNetwork::new(
         Arc::clone(discovery),
-        Arc::clone(utp_listener),
+        utp_listener_tx,
         storage_config,
         portalnet_config.clone(),
     )
