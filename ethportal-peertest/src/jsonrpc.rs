@@ -15,10 +15,10 @@ use trin_core::jsonrpc::types::{NodesParams, Params};
 use trin_core::portalnet::types::content_key::{
     AccountTrieNode, BlockHeader, HistoryContentKey, StateContentKey,
 };
-use trin_core::portalnet::types::messages::SszEnr;
+use trin_core::portalnet::types::{messages::SszEnr, metric::Distance};
 
-/// Default data radius value: U256::from(u64::MAX)
-const DATA_RADIUS: &str = "18446744073709551615";
+/// Default data radius value
+const DATA_RADIUS: Distance = Distance::MAX;
 /// Default enr seq value
 const ENR_SEQ: &str = "1";
 /// Default block hash for generating History content key
@@ -144,7 +144,7 @@ fn all_tests(peertest: &Peertest) -> Vec<Test<impl Fn(&Value, &Peertest)>> {
                 id: 5,
                 params: Params::Array(vec![
                     Value::String(peertest.bootnode.enr.to_base64()),
-                    Value::String(DATA_RADIUS.to_owned()),
+                    Value::String(DATA_RADIUS.to_string()),
                 ]),
             },
             validate_portal_state_ping,
@@ -155,7 +155,7 @@ fn all_tests(peertest: &Peertest) -> Vec<Test<impl Fn(&Value, &Peertest)>> {
                 id: 6,
                 params: Params::Array(vec![
                     Value::String(peertest.bootnode.enr.to_base64()),
-                    Value::String(DATA_RADIUS.to_owned()),
+                    Value::String(DATA_RADIUS.to_string()),
                 ]),
             },
             validate_portal_history_ping,
@@ -289,17 +289,17 @@ fn validate_discv5_routing_table_info(val: &Value, _peertest: &Peertest) {
 }
 
 fn validate_portal_history_radius(result: &Value, _peertest: &Peertest) {
-    assert_eq!(result.as_str().unwrap(), DATA_RADIUS);
+    assert_eq!(result.as_str().unwrap(), DATA_RADIUS.to_string());
 }
 
 fn validate_portal_state_radius(result: &Value, _peertest: &Peertest) {
-    assert_eq!(result.as_str().unwrap(), DATA_RADIUS);
+    assert_eq!(result.as_str().unwrap(), DATA_RADIUS.to_string());
 }
 
 fn validate_portal_history_ping(result: &Value, _peertest: &Peertest) {
     assert_eq!(
         result.get("dataRadius").unwrap().as_str().unwrap(),
-        DATA_RADIUS
+        DATA_RADIUS.to_string()
     );
     assert_eq!(
         result.get("enrSeq").unwrap().as_str().unwrap(),
@@ -310,7 +310,7 @@ fn validate_portal_history_ping(result: &Value, _peertest: &Peertest) {
 fn validate_portal_state_ping(result: &Value, _peertest: &Peertest) {
     assert_eq!(
         result.get("dataRadius").unwrap().as_str().unwrap(),
-        DATA_RADIUS
+        DATA_RADIUS.to_string()
     );
     assert_eq!(
         result.get("enrSeq").unwrap().as_str().unwrap(),

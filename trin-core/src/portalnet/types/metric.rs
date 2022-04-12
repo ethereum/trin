@@ -1,22 +1,65 @@
+use std::ops::Deref;
+
 use ethereum_types::U256;
+
+/// Represents a distance between two keys in the DHT key space.
+#[derive(Copy, Clone, PartialEq, Eq, Default, PartialOrd, Ord, Debug)]
+pub struct Distance(U256);
+
+impl Distance {
+    pub const MAX: Self = Self(U256::MAX);
+
+    /// Returns the integer base-2 logarithm of `self`.
+    ///
+    /// Returns `None` is `self` is zero, because the logarithm of zero is undefined. Otherwise,
+    /// returns `Some(log2)` where `log2` is in the range [1, 256].
+    pub fn log2(&self) -> Option<u64> {
+        if self.0.is_zero() {
+            None
+        } else {
+            Some(u64::from(256 - self.0.leading_zeros()))
+        }
+    }
+
+    /// Returns the big-endian representation of `self`.
+    pub fn big_endian(&self) -> [u8; 32] {
+        let mut be: [u8; 32] = [0; 32];
+        self.0.to_big_endian(&mut be);
+        be
+    }
+}
+
+impl From<U256> for Distance {
+    fn from(value: U256) -> Self {
+        Distance(value)
+    }
+}
+
+impl Deref for Distance {
+    type Target = U256;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 /// Types whose values represent a metric (distance function) that defines a notion of distance
 /// between two elements in the DHT key space.
 pub trait Metric {
     /// Returns the distance between two elements in the DHT key space.
-    fn distance(x: &[u8; 32], y: &[u8; 32]) -> U256;
+    fn distance(x: &[u8; 32], y: &[u8; 32]) -> Distance;
 }
 
 /// The XOR metric defined in the Kademlia paper.
 pub struct XorMetric;
 
 impl Metric for XorMetric {
-    fn distance(x: &[u8; 32], y: &[u8; 32]) -> U256 {
+    fn distance(x: &[u8; 32], y: &[u8; 32]) -> Distance {
         let mut z: [u8; 32] = [0; 32];
         for i in 0..32 {
             z[i] = x[i] ^ y[i];
         }
-        U256::from_big_endian(z.as_slice())
+        Distance(U256::from_big_endian(z.as_slice()))
     }
 }
 
@@ -42,6 +85,41 @@ mod test {
             }
             Self(value)
         }
+    }
+
+    #[test]
+    fn distance_log2() {
+        fn prop(x: DhtPoint) -> TestResult {
+            let x = U256::from_big_endian(&x.0);
+            let distance = Distance(x);
+            let log2_distance = distance.log2();
+
+            match log2_distance {
+                Some(log2) => {
+                    let x_floor = U256::from(1u8) << log2 - 1;
+                    let x_ceil = if log2 == 256 {
+                        U256::MAX
+                    } else {
+                        U256::from(1u8) << log2
+                    };
+
+                    TestResult::from_bool(x >= x_floor && x <= x_ceil)
+                }
+                None => TestResult::from_bool(distance.0.is_zero()),
+            }
+        }
+        quickcheck(prop as fn(DhtPoint) -> TestResult);
+    }
+
+    #[test]
+    fn distance_big_endian() {
+        fn prop(x: DhtPoint) -> TestResult {
+            let x_be_u256 = U256::from_big_endian(&x.0);
+            let distance = Distance(x_be_u256);
+            let distance_be = distance.big_endian();
+            TestResult::from_bool(distance_be == x.0)
+        }
+        quickcheck(prop as fn(DhtPoint) -> TestResult);
     }
 
     // For all x, distance(x, x) = 0.
@@ -71,12 +149,12 @@ mod test {
         fn prop(x: DhtPoint, y: DhtPoint, z: DhtPoint) -> TestResult {
             let distance_xy = XorMetric::distance(&x.0, &y.0);
             let distance_yz = XorMetric::distance(&y.0, &z.0);
-            let (xy_plus_yz, overflow) = distance_xy.overflowing_add(distance_yz);
+            let (xy_plus_yz, overflow) = distance_xy.overflowing_add(*distance_yz);
             if overflow {
                 TestResult::discard()
             } else {
                 let distance_xz = XorMetric::distance(&x.0, &z.0);
-                TestResult::from_bool(xy_plus_yz >= distance_xz)
+                TestResult::from_bool(xy_plus_yz >= *distance_xz)
             }
         }
         quickcheck(prop as fn(DhtPoint, DhtPoint, DhtPoint) -> TestResult)

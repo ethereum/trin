@@ -4,7 +4,6 @@ use crate::{
 };
 
 use discv5::enr::NodeId;
-use ethereum_types::U256;
 
 #[cfg(test)]
 use crate::portalnet::Enr;
@@ -24,16 +23,8 @@ pub fn generate_random_node_id(target_bucket_idx: u8, local_node_id: NodeId) -> 
     let random_distance = bytes::random_32byte_array(distance_leading_zeroes);
 
     let raw_node_id = XorMetric::distance(&local_node_id.raw(), &random_distance);
-    let raw_node_id_be = u256_to_be_bytes(raw_node_id);
 
-    NodeId::new(&raw_node_id_be)
-}
-
-/// Returns the big-endian byte representation of a given `U256`.
-fn u256_to_be_bytes(value: U256) -> [u8; 32] {
-    let mut bytes: [u8; 32] = [0; 32];
-    value.to_big_endian(&mut bytes);
-    bytes
+    NodeId::new(&raw_node_id.big_endian())
 }
 
 #[cfg(test)]
@@ -62,7 +53,7 @@ mod test {
         let local_node_id = NodeId::random();
         let random_node_id = generate_random_node_id(target_bucket_idx, local_node_id);
         let distance = XorMetric::distance(&random_node_id.raw(), &local_node_id.raw());
-        let distance = u256_to_be_bytes(distance);
+        let distance = distance.big_endian();
 
         assert_eq!(distance[0..31], vec![0; 31]);
         assert!(distance[31] < 64 && distance[31] >= 32)
@@ -74,7 +65,7 @@ mod test {
         let local_node_id = NodeId::random();
         let random_node_id = generate_random_node_id(target_bucket_idx, local_node_id);
         let distance = XorMetric::distance(&random_node_id.raw(), &local_node_id.raw());
-        let distance = u256_to_be_bytes(distance);
+        let distance = distance.big_endian();
 
         assert_eq!(distance[0..31], vec![0; 31]);
         assert_eq!(distance[31], 1);
@@ -86,7 +77,7 @@ mod test {
         let local_node_id = NodeId::random();
         let random_node_id = generate_random_node_id(target_bucket_idx, local_node_id);
         let distance = XorMetric::distance(&random_node_id.raw(), &local_node_id.raw());
-        let distance = u256_to_be_bytes(distance);
+        let distance = distance.big_endian();
 
         assert!(distance[0] > 127);
     }

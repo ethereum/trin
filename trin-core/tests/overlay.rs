@@ -10,7 +10,7 @@ use trin_core::{
         types::{
             content_key::IdentityContentKey,
             messages::{Content, Message, PortalnetConfig, ProtocolId, SszEnr},
-            metric::XorMetric,
+            metric::{Distance, XorMetric},
         },
         Enr,
     },
@@ -18,7 +18,6 @@ use trin_core::{
 };
 
 use discv5::Discv5Event;
-use ethereum_types::U256;
 use parking_lot::RwLock;
 use tokio::sync::mpsc;
 use tokio::sync::RwLock as RwLockT;
@@ -42,7 +41,7 @@ async fn init_overlay(
         discovery,
         utp_listener,
         db,
-        U256::MAX,
+        Distance::MAX,
         protocol,
     )
     .await

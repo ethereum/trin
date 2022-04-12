@@ -6,7 +6,10 @@ use std::time::Duration;
 use super::{
     discovery::Discovery,
     overlay_service::{Node, OverlayRequest, OverlayService},
-    types::{content_key::OverlayContentKey, metric::Metric},
+    types::{
+        content_key::OverlayContentKey,
+        metric::{Distance, Metric},
+    },
     Enr,
 };
 use crate::portalnet::storage::PortalStorage;
@@ -23,7 +26,6 @@ use discv5::{
     kbucket::{Filter, KBucketsTable},
     TalkRequest,
 };
-use ethereum_types::U256;
 use futures::channel::oneshot;
 use parking_lot::RwLock;
 use ssz::Encode;
@@ -72,7 +74,7 @@ pub struct OverlayProtocol<TContentKey, TMetric> {
     /// Reference to the database instance
     pub storage: Arc<RwLock<PortalStorage>>,
     /// The data radius of the local node.
-    pub data_radius: Arc<U256>,
+    pub data_radius: Arc<Distance>,
     /// The overlay routing table of the local node.
     kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
     /// The subnetwork protocol of the overlay.
@@ -96,7 +98,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         discovery: Arc<Discovery>,
         utp_listener: Arc<RwLockT<UtpListener>>,
         storage: Arc<RwLock<PortalStorage>>,
-        data_radius: U256,
+        data_radius: Distance,
         protocol: ProtocolId,
     ) -> Self {
         let kbuckets = Arc::new(RwLock::new(KBucketsTable::new(
@@ -146,7 +148,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
     }
 
     /// Returns the data radius of the local node.
-    pub fn data_radius(&self) -> U256 {
+    pub fn data_radius(&self) -> Distance {
         *self.data_radius
     }
 

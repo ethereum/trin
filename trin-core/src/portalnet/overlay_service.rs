@@ -19,7 +19,7 @@ use crate::{
                 Accept, ByteList, Content, CustomPayload, FindContent, FindNodes, Message, Nodes,
                 Offer, Ping, Pong, ProtocolId, Request, Response, SszEnr,
             },
-            metric::Metric,
+            metric::{Distance, Metric},
         },
         Enr,
     },
@@ -35,7 +35,6 @@ use discv5::{
     },
     rpc::RequestId,
 };
-use ethereum_types::U256;
 use futures::{channel::oneshot, prelude::*};
 use log::{debug, error, info, warn};
 use parking_lot::RwLock;
@@ -182,12 +181,12 @@ pub struct Node {
     /// The node's ENR.
     enr: Enr,
     /// The node's data radius.
-    data_radius: U256,
+    data_radius: Distance,
 }
 
 impl Node {
     /// Creates a new node.
-    pub fn new(enr: Enr, data_radius: U256) -> Node {
+    pub fn new(enr: Enr, data_radius: Distance) -> Node {
         Node { enr, data_radius }
     }
 
@@ -197,7 +196,7 @@ impl Node {
     }
 
     /// Returns the data radius of the node.
-    pub fn data_radius(&self) -> U256 {
+    pub fn data_radius(&self) -> Distance {
         self.data_radius.clone()
     }
 
@@ -207,7 +206,7 @@ impl Node {
     }
 
     /// Sets the data radius of the node.
-    pub fn set_data_radius(&mut self, radius: U256) {
+    pub fn set_data_radius(&mut self, radius: Distance) {
         self.data_radius = radius;
     }
 }
@@ -218,7 +217,7 @@ impl fmt::Display for Node {
             f,
             "Node(node_id={}, radius={})",
             self.enr.node_id(),
-            self.data_radius,
+            *self.data_radius,
         )
     }
 }
@@ -240,7 +239,7 @@ pub struct OverlayService<TContentKey, TMetric> {
     /// The routing table of the local node.
     kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
     /// The data radius of the local node.
-    data_radius: Arc<U256>,
+    data_radius: Arc<Distance>,
     /// The protocol identifier.
     protocol: ProtocolId,
     /// A queue of peers that require regular ping to check connectivity.
@@ -283,7 +282,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
         bootnode_enrs: Vec<Enr>,
         ping_queue_interval: Option<Duration>,
-        data_radius: Arc<U256>,
+        data_radius: Arc<Distance>,
         protocol: ProtocolId,
         utp_listener: Arc<RwLockT<UtpListener>>,
         enable_metrics: bool,
@@ -331,9 +330,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
             // further away than closet neighbor (see Kademlia paper section 2.3).
             for enr in bootnode_enrs {
                 let node_id = enr.node_id();
-                // TODO: Decide default data radius, and define a constant. Or if there is an
-                // associated database, then look for a radius value there.
-                let node = Node::new(enr, U256::from(u64::MAX));
+                let node = Node::new(enr, Distance::MAX);
                 let status = NodeStatus {
                     state: ConnectionState::Disconnected,
                     direction: ConnectionDirection::Outgoing,
@@ -458,7 +455,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
     }
 
     /// Returns the data radius of the node.
-    fn data_radius(&self) -> U256 {
+    fn data_radius(&self) -> Distance {
         *self.data_radius
     }
 
@@ -755,11 +752,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
             // changed. The TalkRequest object does not contain the requester's ENR, only
             // its NodeAddress.
             if let Some(enr) = self.discovery.discv5.find_enr(&source) {
-                // TODO: Decide default data radius, and define a constant.
-                let node = Node {
-                    enr,
-                    data_radius: U256::from(u64::MAX),
-                };
+                let node = Node::new(enr, Distance::MAX);
                 self.connect_node(node, ConnectionDirection::Incoming);
             }
         }
@@ -825,10 +818,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
             kbucket::Entry::Pending(ref mut entry, status) => (entry.value().clone(), status),
             _ => {
                 // TODO: Decide default data radius, and define a constant.
-                let node = Node {
-                    enr: source.clone(),
-                    data_radius: U256::from(u64::MAX),
-                };
+                let node = Node::new(source.clone(), Distance::MAX);
                 let status = NodeStatus {
                     state: ConnectionState::Disconnected,
                     direction: ConnectionDirection::Outgoing,
@@ -980,10 +970,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                     }
                 }
             } else {
-                let node = Node {
-                    enr,
-                    data_radius: U256::from(u64::MAX),
-                };
+                let node = Node::new(enr, Distance::MAX);
                 let status = NodeStatus {
                     state: ConnectionState::Disconnected,
                     direction: ConnectionDirection::Outgoing,
@@ -1186,7 +1173,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         let self_node_id = self.local_enr().node_id();
         let self_distance = TMetric::distance(&content_id, &self_node_id.raw());
 
-        let mut nodes_with_distance: Vec<(U256, Enr)> = self
+        let mut nodes_with_distance: Vec<(Distance, Enr)> = self
             .table_entries_enr()
             .into_iter()
             .map(|enr| (TMetric::distance(&content_id, &enr.node_id().raw()), enr))
@@ -1266,7 +1253,7 @@ mod tests {
             overlay_config.bucket_filter,
         )));
 
-        let data_radius = Arc::new(U256::from(u64::MAX));
+        let data_radius = Arc::new(Distance::MAX);
         let protocol = ProtocolId::History;
         let active_outgoing_requests = Arc::new(RwLock::new(HashMap::new()));
         let peers_to_ping = HashSetDelay::default();
@@ -1306,11 +1293,8 @@ mod tests {
             direction: ConnectionDirection::Outgoing,
         };
 
-        let data_radius = U256::from(u64::MAX);
-        let node = Node {
-            enr: source.clone(),
-            data_radius,
-        };
+        let data_radius = Distance::MAX;
+        let node = Node::new(source.clone(), data_radius);
 
         let _ = service
             .kbuckets
@@ -1354,7 +1338,7 @@ mod tests {
 
         let (_, source) = generate_random_remote_enr();
         let node_id = source.node_id();
-        let data_radius = U256::from(u64::MAX);
+        let data_radius = Distance::MAX;
 
         let ping = Ping {
             enr_seq: source.seq(),
@@ -1379,10 +1363,7 @@ mod tests {
             direction: ConnectionDirection::Outgoing,
         };
 
-        let node = Node {
-            enr: destination.clone(),
-            data_radius: U256::from(u64::MAX),
-        };
+        let node = Node::new(destination.clone(), Distance::MAX);
 
         let _ = service
             .kbuckets
@@ -1424,11 +1405,8 @@ mod tests {
             direction: ConnectionDirection::Outgoing,
         };
 
-        let data_radius = U256::from(u64::MAX);
-        let node = Node {
-            enr: source.clone(),
-            data_radius,
-        };
+        let data_radius = Distance::MAX;
+        let node = Node::new(source.clone(), data_radius);
 
         let _ = service
             .kbuckets
@@ -1471,7 +1449,7 @@ mod tests {
         let mut service = task::spawn(build_service());
 
         let (_, source) = generate_random_remote_enr();
-        let data_radius = U256::from(u64::MAX);
+        let data_radius = Distance::MAX;
 
         let pong = Pong {
             enr_seq: source.seq(),
@@ -1565,16 +1543,10 @@ mod tests {
             state: ConnectionState::Connected,
             direction: ConnectionDirection::Outgoing,
         };
-        let data_radius = U256::from(u64::MAX);
+        let data_radius = Distance::MAX;
 
-        let node1 = Node {
-            enr: enr1.clone(),
-            data_radius: data_radius.clone(),
-        };
-        let node2 = Node {
-            enr: enr2.clone(),
-            data_radius: data_radius.clone(),
-        };
+        let node1 = Node::new(enr1.clone(), data_radius.clone());
+        let node2 = Node::new(enr2.clone(), data_radius.clone());
 
         // Insert nodes into routing table.
         let _ = service
@@ -1683,11 +1655,8 @@ mod tests {
         let node_id = enr.node_id();
         let key = kbucket::Key::from(node_id);
 
-        let data_radius = U256::from(u64::MAX);
-        let node = Node {
-            enr: enr.clone(),
-            data_radius,
-        };
+        let data_radius = Distance::MAX;
+        let node = Node::new(enr.clone(), data_radius);
         let connection_direction = ConnectionDirection::Outgoing;
 
         assert!(!service.peers_to_ping.contains_key(&node_id));
@@ -1718,11 +1687,8 @@ mod tests {
         let node_id = enr.node_id();
         let key = kbucket::Key::from(node_id);
 
-        let data_radius = U256::from(u64::MAX);
-        let node = Node {
-            enr: enr.clone(),
-            data_radius,
-        };
+        let data_radius = Distance::MAX;
+        let node = Node::new(enr.clone(), data_radius);
 
         let connection_direction = ConnectionDirection::Outgoing;
         let status = NodeStatus {
@@ -1763,11 +1729,8 @@ mod tests {
         let node_id = enr.node_id();
         let key = kbucket::Key::from(node_id);
 
-        let data_radius = U256::from(u64::MAX);
-        let node = Node {
-            enr: enr.clone(),
-            data_radius,
-        };
+        let data_radius = Distance::MAX;
+        let node = Node::new(enr.clone(), data_radius);
 
         let connection_direction = ConnectionDirection::Outgoing;
         let status = NodeStatus {
