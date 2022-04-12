@@ -55,6 +55,7 @@ pub fn generate_random_remote_enr() -> (CombinedKey, Enr) {
 #[cfg(test)]
 mod test {
     use super::*;
+    use test_log::test;
 
     #[test]
     fn test_generate_random_node_id_1() {

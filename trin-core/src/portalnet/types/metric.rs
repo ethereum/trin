@@ -25,6 +25,7 @@ mod test {
     use super::*;
 
     use quickcheck::{quickcheck, Arbitrary, Gen, TestResult};
+    use test_log::test;
 
     /// Wrapper type around a 256-bit identifier in the DHT key space.
     ///

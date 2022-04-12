@@ -47,12 +47,17 @@ impl<'a> Iterator for BitIterator<'a> {
 
 impl<'a> ExactSizeIterator for BitIterator<'a> {}
 
-#[test]
-fn test_iterator() {
-    let bytes = vec![0xCA, 0xFE];
-    let expected_bits = vec![0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1];
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    for (i, bit) in BitIterator::from_bytes(&bytes).enumerate() {
-        assert_eq!(bit, expected_bits[i] == 1);
+    #[test_log::test]
+    fn test_iterator() {
+        let bytes = vec![0xCA, 0xFE];
+        let expected_bits = vec![0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1];
+
+        for (i, bit) in BitIterator::from_bytes(&bytes).enumerate() {
+            assert_eq!(bit, expected_bits[i] == 1);
+        }
     }
 }

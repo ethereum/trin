@@ -1574,7 +1574,7 @@ mod tests {
         });
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     async fn test_handle_packet() {
         // Boilerplate test setup
         let initial_connection_id: u16 = rand::random();
@@ -1673,7 +1673,7 @@ mod tests {
         assert_eq!(response.ack_nr(), packet.seq_nr());
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     async fn test_response_to_keepalive_ack() {
         // Boilerplate test setup
         let initial_connection_id: u16 = rand::random();
@@ -1719,7 +1719,7 @@ mod tests {
         stream.state = StreamState::Closed;
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     async fn test_response_to_wrong_connection_id() {
         // Boilerplate test setup
         let initial_connection_id: u16 = rand::random();
@@ -1759,7 +1759,7 @@ mod tests {
         stream.state = StreamState::Closed;
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     async fn test_unordered_packets() {
         // Boilerplate test setup
         let initial_connection_id: u16 = rand::random();
@@ -1816,7 +1816,7 @@ mod tests {
         stream.state = StreamState::Closed;
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     async fn test_base_delay_calculation() {
         let minute_in_microseconds = 60 * 10i64.pow(6);
         let samples = vec![
@@ -1846,7 +1846,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     async fn test_response_to_triple_ack() {
         let mut buf = [0; BUF_SIZE];
         let mut server = server_setup().await;
@@ -1937,7 +1937,7 @@ mod tests {
         handle.await.unwrap().unwrap();
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     async fn test_sorted_buffer_insertion() {
         let mut stream = server_setup().await;
 
@@ -1975,7 +1975,7 @@ mod tests {
         assert_eq!(stream.incoming_buffer[1].timestamp(), 128.into());
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     async fn test_duplicate_packet_handling() {
         let mut buf = [0; BUF_SIZE];
         let mut server = server_setup().await;

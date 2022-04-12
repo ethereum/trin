@@ -71,5 +71,7 @@ version = "0.26.3"
 features = ["bundled"]
 
 [dev-dependencies]
-quickcheck = "1.0.3"
 ntest = "0.8.0"
+quickcheck = "1.0.3"
+test-log = { version = "0.2.10", features = ["trace"] }
+tracing-subscriber = "0.2.18"

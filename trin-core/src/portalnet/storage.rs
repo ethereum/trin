@@ -524,7 +524,7 @@ pub mod test {
         }
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn test_new() -> Result<(), PortalStorageError> {
         let temp_dir = setup_temp_dir();
@@ -553,7 +553,7 @@ pub mod test {
         Ok(())
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn test_store() -> Result<(), PortalStorageError> {
         let temp_dir = setup_temp_dir();
@@ -580,7 +580,7 @@ pub mod test {
         Ok(())
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn test_get_data() -> Result<(), PortalStorageError> {
         let temp_dir = setup_temp_dir();
@@ -610,7 +610,7 @@ pub mod test {
         Ok(())
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn test_get_total_storage() -> Result<(), PortalStorageError> {
         let temp_dir = setup_temp_dir();
@@ -641,7 +641,7 @@ pub mod test {
         Ok(())
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn test_find_farthest_empty_db() -> Result<(), PortalStorageError> {
         let temp_dir = setup_temp_dir();
@@ -668,7 +668,7 @@ pub mod test {
         Ok(())
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn test_find_farthest() {
         fn prop(x: IdentityContentKey, y: IdentityContentKey) -> TestResult {

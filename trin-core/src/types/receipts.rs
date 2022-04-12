@@ -243,6 +243,7 @@ mod tests {
     use std::str::FromStr;
 
     use ethereum_types::H160;
+    use test_log::test;
 
     //
     // Tests using custom generated rlp encoded receipts from block 14764013

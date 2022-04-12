@@ -105,7 +105,7 @@ async fn spawn_overlay(
 // multiple nodes.
 //
 // Use sleeps to give time for background routing table processes.
-#[tokio::test]
+#[test_log::test(tokio::test)]
 async fn overlay() {
     let protocol = ProtocolId::History;
     let sleep_duration = Duration::from_millis(5);

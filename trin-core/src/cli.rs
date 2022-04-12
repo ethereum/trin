@@ -173,6 +173,7 @@ fn check_private_key_length(private_key: String) -> Result<(), String> {
 mod test {
     use super::*;
     use std::env;
+    use test_log::test;
 
     fn env_is_set() -> bool {
         matches!(env::var("TRIN_INFURA_PROJECT_ID"), Ok(_))

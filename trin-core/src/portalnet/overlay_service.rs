@@ -1803,7 +1803,7 @@ mod tests {
         service
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn process_ping_source_in_table_higher_enr_seq() {
         let mut service = task::spawn(build_service());
@@ -1857,7 +1857,7 @@ mod tests {
         };
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn process_ping_source_not_in_table() {
         let mut service = task::spawn(build_service());
@@ -1876,7 +1876,7 @@ mod tests {
         assert_pending!(poll_request_rx!(service));
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn process_request_failure() {
         let mut service = task::spawn(build_service());
@@ -1921,7 +1921,7 @@ mod tests {
         };
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn process_pong_source_in_table_higher_enr_seq() {
         let mut service = task::spawn(build_service());
@@ -1975,7 +1975,7 @@ mod tests {
         };
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn process_pong_source_not_in_table() {
         let mut service = task::spawn(build_service());
@@ -1993,7 +1993,7 @@ mod tests {
         assert_pending!(poll_request_rx!(service));
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn process_discovered_enrs_local_enr() {
         let mut service = task::spawn(build_service());
@@ -2013,7 +2013,7 @@ mod tests {
         assert!(service.peers_to_ping.is_empty());
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn process_discovered_enrs_unknown_enrs() {
         let mut service = task::spawn(build_service());
@@ -2059,7 +2059,7 @@ mod tests {
         assert!(service.peers_to_ping.contains_key(&enr2.node_id()));
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn process_discovered_enrs_known_enrs() {
         let mut service = task::spawn(build_service());
@@ -2133,7 +2133,7 @@ mod tests {
         };
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn request_node() {
         let mut service = task::spawn(build_service());
@@ -2162,7 +2162,7 @@ mod tests {
         };
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn ping_node() {
         let mut service = task::spawn(build_service());
@@ -2184,7 +2184,7 @@ mod tests {
         assert!(matches!(request.request, Request::Ping { .. }));
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn connect_node() {
         let mut service = task::spawn(build_service());
@@ -2219,7 +2219,7 @@ mod tests {
         };
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn update_node_connection_state_disconnected_to_connected() {
         let mut service = task::spawn(build_service());
@@ -2264,7 +2264,7 @@ mod tests {
         };
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn update_node_connection_state_connected_to_disconnected() {
         let mut service = task::spawn(build_service());
@@ -2409,7 +2409,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     async fn test_advance_findnodes_query() {
         let mut service = build_service();
 
@@ -2532,7 +2532,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     async fn test_find_enrs() {
         let mut service = task::spawn(build_service());
 

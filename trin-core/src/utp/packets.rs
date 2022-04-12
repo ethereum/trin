@@ -511,6 +511,7 @@ mod tests {
     };
     use quickcheck::{QuickCheck, TestResult};
     use std::convert::TryFrom;
+    use test_log::test;
 
     #[test]
     fn test_decode_packet() {

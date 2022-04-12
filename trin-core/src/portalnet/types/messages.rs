@@ -591,6 +591,7 @@ impl FromStr for HexData {
 #[cfg(test)]
 mod test {
     use super::*;
+    use test_log::test;
 
     #[test]
     #[should_panic]

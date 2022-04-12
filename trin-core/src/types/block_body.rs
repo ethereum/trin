@@ -235,7 +235,7 @@ mod tests {
         assert_eq!(tx_rlp, encoded_tx);
     }
 
-    #[test]
+    #[test_log::test]
     fn transactions_root() {
         let tx_list: Vec<Transaction> = vec![
             Transaction::decode(&hex::decode(TX1.to_string()).unwrap()).unwrap(),
@@ -264,7 +264,7 @@ mod tests {
         assert_eq!(expected_root, hex::encode(transactions.root().unwrap()));
     }
 
-    #[test]
+    #[test_log::test]
     fn uncles_root() {
         let uncle_rlp = &hex::decode(UNCLE).unwrap();
         let uncle_rlp = Rlp::new(uncle_rlp);
