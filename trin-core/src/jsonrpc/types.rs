@@ -172,6 +172,7 @@ impl TryFrom<[&Value; 2]> for FindNodesParams {
     }
 }
 
+#[derive(Debug)]
 pub struct NodesParams {
     pub total: u8,
     pub enrs: Vec<SszEnr>,
