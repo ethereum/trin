@@ -46,7 +46,7 @@ cargo build -p trin-core
 cargo test -p trin-core
 
 # Run
-cargo run -p trin
+cargo run
 ```
 
 Note: You may also pass environment variable values in the same command as the run command. This is especially useful for setting log levels.
@@ -75,10 +75,12 @@ cargo run -p trin -- --bootnodes <bootnode-enr>
 ## Default data directories
 
 - Linux/Unix: `$HOME/.local/share/trin`
-- MacOS: `~/Library/Application Support/Trin`
-- Windows: `C:\Users\Username\AppData\Roaming\Trin\data`
+- MacOS: `~/Library/Application Support/trin`
+- Windows: `C:\Users\Username\AppData\Roaming\trin`
 
 ## Using Trin
+
+In some of the following sections, we make use of the [web3.py](https://github.com/ethereum/web3.py/) library.
 
 ### Connect over IPC
 
@@ -127,6 +129,8 @@ nc -U /tmp/trin-jsonrpc.ipc
 {"jsonrpc":"2.0","id":86,"params":[],"method":"discv5_nodeInfo"}
 {"id":86,"jsonrpc":"2.0","result":"enr:-IS4QHK_CnCsQKT-mFTilJ5msHacIJtU91aYe8FhAd_K7G-ACO-FO2GPFOyM7kiphjXMwrNh8Y4mSbN3ufSdBQFzjikBgmlkgnY0gmlwhMCoAMKJc2VjcDI1NmsxoQNa58x56RRRcUeOegry5S4yQvLa6LKlDcbBPHL4H5Oy4oN1ZHCCIyg"}
 ```
+
+For something in between, you may use `curl` to send requests to the HTTP JSON-RPC endpoint.
 
 ## Using Trin-CLI
 
