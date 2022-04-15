@@ -13,7 +13,7 @@ clap = "2.33.3"
 ctrlc = "3.1.8"
 delay_map = "0.1.1"
 directories = "3.0"
-discv5 = { git = "https://github.com/sigp/discv5.git", branch = "master" }
+discv5 = "0.1.0-beta.13"
 env_logger = "0.8.2"
 eth2_ssz = "0.4.0"
 eth2_ssz_derive = "0.3.0"

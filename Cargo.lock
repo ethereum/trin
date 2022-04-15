@@ -597,7 +597,7 @@ dependencies = [
 [[package]]
 name = "discv5"
 version = "0.1.0-beta.13"
-source = "git+https://github.com/sigp/discv5.git?branch=master#4b4688b85c0d4c6ae1f8135e5a6e27d49fc4c909"
+source = "git+https://github.com/carver/discv5.git?branch=accept-mismatch-ip-sessions#d1db1c80610a8cc0c52cf05413c0c9ba963de162"
 dependencies = [
  "aes",
  "aes-gcm",
