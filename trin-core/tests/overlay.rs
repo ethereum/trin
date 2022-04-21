@@ -1,3 +1,4 @@
+use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -14,6 +15,7 @@ use trin_core::{
         },
         Enr,
     },
+    socket,
 };
 
 use discv5::Discv5Event;
@@ -104,11 +106,12 @@ async fn spawn_overlay(
 async fn overlay() {
     let protocol = ProtocolId::History;
     let sleep_duration = Duration::from_millis(5);
+    let ip_addr = socket::find_assigned_ip().expect("Could not find an IP for local connections");
 
     // Node one.
     let portal_config_one = PortalnetConfig {
         listen_port: 8001,
-        internal_ip: true,
+        external_addr: Some(SocketAddr::new(ip_addr, 8001)),
         ..PortalnetConfig::default()
     };
     let mut discovery_one = Discovery::new(portal_config_one).unwrap();
@@ -121,7 +124,7 @@ async fn overlay() {
     // Node two.
     let portal_config_two = PortalnetConfig {
         listen_port: 8002,
-        internal_ip: true,
+        external_addr: Some(SocketAddr::new(ip_addr, 8002)),
         ..PortalnetConfig::default()
     };
     let mut discovery_two = Discovery::new(portal_config_two).unwrap();
@@ -134,7 +137,7 @@ async fn overlay() {
     // Node three.
     let portal_config_three = PortalnetConfig {
         listen_port: 8003,
-        internal_ip: true,
+        external_addr: Some(SocketAddr::new(ip_addr, 8003)),
         ..PortalnetConfig::default()
     };
     let mut discovery_three = Discovery::new(portal_config_three).unwrap();

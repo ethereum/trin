@@ -1343,12 +1343,14 @@ mod tests {
     use crate::portalnet::discovery::Discovery;
     use crate::portalnet::types::messages::{PortalnetConfig, ProtocolId};
     use crate::portalnet::Enr;
+    use crate::socket;
     use crate::utils::node_id::generate_random_remote_enr;
     use crate::utp::packets::{Packet, PacketType};
     use crate::utp::stream::{SocketState, UtpSocket, BUF_SIZE};
     use crate::utp::time::now_microseconds;
     use discv5::Discv5Event;
     use std::convert::TryFrom;
+    use std::net::{IpAddr, SocketAddr};
     use std::str::FromStr;
     use std::sync::Arc;
     use tokio::sync::mpsc;
@@ -1362,16 +1364,15 @@ mod tests {
         BASE_PORT + NEXT_OFFSET.fetch_add(1, Ordering::Relaxed) as u16
     }
 
-    fn create_portal_config() -> PortalnetConfig {
-        PortalnetConfig {
-            listen_port: next_test_port(),
-            internal_ip: true,
-            ..Default::default()
-        }
-    }
-
     async fn server_setup() -> UtpSocket {
-        let config = create_portal_config();
+        let ip_addr =
+            socket::find_assigned_ip().expect("Could not find an IP for local connections");
+        let port = next_test_port();
+        let config = PortalnetConfig {
+            listen_port: port,
+            external_addr: Some(SocketAddr::new(ip_addr, port)),
+            ..Default::default()
+        };
         let mut discv5 = Discovery::new(config).unwrap();
         let enr = discv5.discv5.local_enr();
         discv5.start().await.unwrap();
@@ -1387,7 +1388,13 @@ mod tests {
     }
 
     async fn client_setup(connected_to: Enr) -> (Enr, UtpSocket) {
-        let config = create_portal_config();
+        let port = next_test_port();
+        let matching_ip = connected_to.ip().unwrap();
+        let config = PortalnetConfig {
+            listen_port: port,
+            external_addr: Some(SocketAddr::new(IpAddr::V4(matching_ip), port)),
+            ..Default::default()
+        };
         let mut discv5 = Discovery::new(config).unwrap();
         discv5.start().await.unwrap();
 
