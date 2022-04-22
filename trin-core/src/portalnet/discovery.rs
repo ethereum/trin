@@ -20,7 +20,7 @@ const EXPECTED_NON_EMPTY_BUCKETS: usize = 17;
 
 #[derive(Clone)]
 pub struct Config {
-    pub listen_address: Option<IpAddr>,
+    pub enr_address: Option<IpAddr>,
     pub listen_port: u16,
     pub discv5_config: Discv5Config,
     pub bootnode_enrs: Vec<Enr>,
@@ -30,7 +30,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            listen_address: None,
+            enr_address: None,
             listen_port: 4242,
             discv5_config: Discv5Config::default(),
             bootnode_enrs: vec![],
@@ -69,7 +69,7 @@ impl Discovery {
         let config = Config {
             discv5_config: Discv5ConfigBuilder::default().build(),
             // This is for defining the ENR:
-            listen_address: ip_addr,
+            enr_address: ip_addr,
             listen_port: ip_port,
             bootnode_enrs: portal_config.bootnode_enrs,
             private_key: portal_config.private_key,
@@ -83,7 +83,7 @@ impl Discovery {
 
         let enr = {
             let mut builder = EnrBuilder::new("v4");
-            if let Some(ip_address) = config.listen_address {
+            if let Some(ip_address) = config.enr_address {
                 builder.ip(ip_address);
             }
             builder.udp(config.listen_port);
