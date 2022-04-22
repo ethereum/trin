@@ -15,7 +15,7 @@ use crate::{
         find::{
             iterators::findnodes::FindNodeQueryConfig,
             query_info::{QueryInfo, QueryType},
-            query_pool::{Query, QueryId, QueryPool, QueryPoolState, TargetKey},
+            query_pool::{Query, QueryId, QueryPool, QueryPoolState},
         },
         storage::PortalStorage,
         types::{
@@ -39,7 +39,7 @@ use discv5::{
     enr::NodeId,
     kbucket::{
         self, ConnectionDirection, ConnectionState, FailureReason, InsertResult, KBucketsTable,
-        NodeStatus, UpdateResult, MAX_NODES_PER_BUCKET,
+        Key, NodeStatus, UpdateResult, MAX_NODES_PER_BUCKET,
     },
     rpc::RequestId,
 };
@@ -157,6 +157,8 @@ pub struct OverlayRequest {
     /// An optional responder to send a result of the request.
     /// The responder may be None if the request was initiated internally.
     pub responder: Option<OverlayResponder>,
+    /// Optional query ID associated with the request
+    pub query_id: Option<QueryId>,
 }
 
 impl OverlayRequest {
@@ -165,12 +167,14 @@ impl OverlayRequest {
         request: Request,
         direction: RequestDirection,
         responder: Option<OverlayResponder>,
+        query_id: Option<QueryId>,
     ) -> Self {
         OverlayRequest {
             id: rand::random(),
             request,
             direction,
             responder,
+            query_id,
         }
     }
 }
@@ -182,6 +186,8 @@ struct ActiveOutgoingRequest {
     /// An optional responder to send the result of the associated request.
     pub responder: Option<OverlayResponder>,
     pub request: Request,
+    /// An optional QueryID for the query that this request is associated with.
+    pub query_id: Option<QueryId>,
 }
 
 /// A response for a particular overlay request.
@@ -272,8 +278,6 @@ pub struct OverlayService<TContentKey, TMetric, TValidator> {
     request_tx: UnboundedSender<OverlayRequest>,
     /// A map of active outgoing requests.
     active_outgoing_requests: Arc<RwLock<HashMap<OverlayRequestId, ActiveOutgoingRequest>>>,
-    /// Keeps track of which queries a given node has been requested on behalf of.
-    active_query_requests: Arc<RwLock<HashMap<NodeId, QueryId>>>,
     /// All of the iterative queries currently being performed.
     queries: QueryPool<QueryInfo, NodeId, Enr>,
     /// The receiver half of a channel for responses to outgoing requests.
@@ -344,7 +348,6 @@ where
                 request_rx,
                 request_tx: internal_request_tx,
                 active_outgoing_requests: Arc::new(RwLock::new(HashMap::new())),
-                active_query_requests: Arc::new(RwLock::new(HashMap::new())),
                 queries: QueryPool::new(Duration::from_secs(FINDNODES_QUERY_TIMEOUT)),
                 response_rx,
                 response_tx,
@@ -355,9 +358,8 @@ where
                 validator,
             };
 
-            service.add_bootnodes(bootnode_enrs);
-
             info!("[{:?}] Starting overlay service", overlay_protocol);
+            service.initialize_routing_table(bootnode_enrs);
             service.start().await;
         });
 
@@ -404,11 +406,12 @@ where
             }
         }
 
-        // Perform FindNode lookup for local node's own node ID.
-        let local_node_id = self.discovery.local_enr().node_id();
-        self.send_iterative_findnode(&local_node_id);
-
-        // TODO: refresh all kbuckets further away than closet neighbor (see Kademlia paper section 2.3).
+    /// Begins initial FINDNODES query to populate the routing table.
+    fn initialize_routing_table(&mut self, bootnodes: Vec<Enr>) {
+        self.add_bootnodes(bootnodes.clone());
+        let node_id = self.discovery.discv5.local_enr().node_id();
+        // Begin request for our local node ID.
+        self.init_iterative_findnodes_with_initial_enrs(&node_id, bootnodes);
     }
 
     /// The main loop for the overlay service. The loop selects over different possible tasks to
@@ -436,6 +439,7 @@ where
                     // Look up active request that corresponds to the response.
                     let optional_active_request = self.active_outgoing_requests.write().remove(&response.request_id);
                     if let Some(active_request) = optional_active_request {
+
                         // Send response to responder if present.
                         if let Some(responder) = active_request.responder {
                             let _ = responder.send(response.response.clone());
@@ -443,9 +447,10 @@ where
 
                         // Perform background processing.
                         match response.response {
-                            Ok(response) => self.process_response(response, active_request.destination, active_request.request).await,
+                            Ok(response) => self.process_response(response, active_request.destination, active_request.request, active_request.query_id).await,
                             Err(error) => self.process_request_failure(response.request_id, active_request.destination, error),
                         }
+
                     } else {
                         warn!("No active request with id {} for response", response.request_id);
                     }
@@ -472,11 +477,8 @@ where
                                         destination: enr.clone()
                                     },
                                     None,
+                                    Some(query_id),
                                 );
-
-                                self.active_query_requests.write().insert(node_id, query_id);
-
-                                debug!("[{:?}] Sending FINDNODES on behalf of query {}", self.protocol, query_id);
                                 let _ = self.request_tx.send(request);
 
                             } else {
@@ -507,8 +509,8 @@ where
                 }
                 _ = OverlayService::<TContentKey>::bucket_maintenance_poll(self.protocol.clone(), &self.kbuckets) => {}
                 _ = bucket_refresh_interval.tick() => {
-                    debug!("[{:?}] Overlay bucket refresh lookup", self.protocol);
-                    self.bucket_refresh_lookup();
+                        info!("[{:?}] Overlay bucket refresh lookup.", self.protocol);
+                        self.bucket_refresh_lookup();
                 }
             }
         }
@@ -580,7 +582,7 @@ where
             random_node_id_in_bucket
         };
 
-        self.send_iterative_findnode(&target_node_id);
+        self.init_iterative_findnodes(&target_node_id);
     }
 
     /// Returns the local ENR of the node.
@@ -683,6 +685,7 @@ where
                         destination: destination.clone(),
                         responder: request.responder,
                         request: request.request.clone(),
+                        query_id: request.query_id,
                     },
                 );
                 self.send_talk_req(request.request, request.id, destination);
@@ -754,10 +757,10 @@ where
             .as_ref()
             .and_then(|m| Some(m.report_inbound_find_nodes()));
         let distances64: Vec<u64> = request.distances.iter().map(|x| (*x).into()).collect();
-        let all_enrs = self.nodes_by_distance(distances64);
+        let enrs = self.nodes_by_distance(distances64);
 
         // Limit the ENRs so that their summed sizes do not surpass the max TALKREQ packet size.
-        let enrs = limit_nodes_response_size(all_enrs);
+        let enrs = limit_nodes_response_size(enrs);
 
         Nodes { total: 1, enrs }
     }
@@ -1000,7 +1003,7 @@ where
     }
 
     /// Processes a response to an outgoing request from some source node.
-    async fn process_response(&mut self, response: Response, source: Enr, request: Request) {
+    async fn process_response(&mut self, response: Response, source: Enr, request: Request, query_id: Option<QueryId>) {
         // If the node is present in the routing table, but the node is not connected, then
         // use the existing entry's value and direction. Otherwise, build a new entry from
         // the source ENR and establish a connection in the outgoing direction, because this
@@ -1047,7 +1050,7 @@ where
 
         match response {
             Response::Pong(pong) => self.process_pong(pong, source),
-            Response::Nodes(nodes) => self.process_nodes(nodes, source),
+            Response::Nodes(nodes) => self.process_nodes(nodes, source, query_id),
             Response::Content(content) => {
                 let find_content_request = match request {
                     Request::FindContent(find_content) => find_content,
@@ -1090,7 +1093,7 @@ where
     }
 
     /// Processes a Nodes response.
-    fn process_nodes(&mut self, nodes: Nodes, source: Enr) {
+    fn process_nodes(&mut self, nodes: Nodes, source: Enr, query_id: Option<QueryId>) {
         debug!(
             "[{:?}] Processing Nodes response from node. Node: {}",
             self.protocol,
@@ -1104,7 +1107,9 @@ where
             .collect();
 
         self.process_discovered_enrs(enrs.clone());
-        self.advance_query(source, enrs);
+        if let Some(query_id) = query_id {
+            self.advance_query(source, enrs, query_id);
+        }
     }
 
     /// Processes a Content response.
@@ -1249,29 +1254,23 @@ where
 
     /// Advances a query (if one is active for the node) using the received ENRs.
     /// Does nothing if called with a node_id that does not have a corresponding active query request.
-    fn advance_query(&mut self, source: Enr, enrs: Vec<Enr>) {
+    fn advance_query(&mut self, source: Enr, enrs: Vec<Enr>, query_id: QueryId) {
         // Check whether this request was sent on behalf of a query.
         // If so, advance the query with the returned data.
-        let node_id = source.node_id();
-        if let Some(query_id) = self.active_query_requests.write().remove(&node_id) {
-            if let Some(query) = self.queries.get_mut(query_id) {
-                let mut peer_count = 0;
-                for enr_ref in enrs.iter() {
-                    if !query
-                        .target_mut()
-                        .untrusted_enrs
-                        .iter()
-                        .any(|e| e.node_id() == enr_ref.node_id())
-                    {
-                        query.target_mut().untrusted_enrs.push(enr_ref.clone());
-                    }
-                    peer_count += 1;
+        if let Some(query) = self.queries.get_mut(query_id) {
+            for enr_ref in enrs.iter() {
+                if !query
+                    .target_mut()
+                    .untrusted_enrs
+                    .iter()
+                    .any(|e| e.node_id() == enr_ref.node_id())
+                {
+                    query.target_mut().untrusted_enrs.push(enr_ref.clone());
                 }
-                debug!("{} peers found for query id {:?}", peer_count, query_id);
-                query.on_success(&source.node_id(), &enrs)
-            } else {
-                debug!("Response returned for ended query {:?}", query_id)
             }
+            query.on_success(&source.node_id(), &enrs);
+        } else {
+            debug!("Response returned for inactive query {:?}", query_id)
         }
     }
 
@@ -1296,6 +1295,7 @@ where
                 destination: destination.clone(),
             },
             None,
+            None,
         );
         let _ = self.request_tx.send(request);
     }
@@ -1308,6 +1308,7 @@ where
             RequestDirection::Outgoing {
                 destination: destination.clone(),
             },
+            None,
             None,
         );
         let _ = self.request_tx.send(request);
@@ -1462,24 +1463,22 @@ where
         Ok(closest_nodes)
     }
 
-    /// Starts a FindNode query to find nodes with IDs closest to target.
-    fn send_iterative_findnode(&mut self, target: &NodeId) {
+    fn init_iterative_findnodes_with_initial_enrs(&mut self, target: &NodeId, enrs: Vec<Enr>) {
         let mut target = QueryInfo {
             query_type: QueryType::FindNode(*target),
             untrusted_enrs: Default::default(),
+            callback: None,
             distances_to_request: FINDNODES_DISTANCES_TO_REQUEST_PER_PEER,
         };
 
-        let target_key: kbucket::Key<NodeId> = target.key();
         let mut known_closest_peers = Vec::new();
-        {
-            let mut kbuckets = self.kbuckets.write();
-            for closest in kbuckets.closest_values(&target_key) {
-                // Add the known ENRs to the untrusted list
-                target.untrusted_enrs.push(closest.value.enr);
-                // Add the key to the list for the query
-                known_closest_peers.push(closest.key);
-            }
+        for enr in enrs {
+            // Add the known ENRs to the untrusted list
+            target.untrusted_enrs.push(enr.clone());
+            // Add the key to the list for the query
+            let node_id = enr.node_id();
+            let key = Key::from(node_id);
+            known_closest_peers.push(key);
         }
 
         if known_closest_peers.is_empty() {
@@ -1493,6 +1492,22 @@ where
             self.queries
                 .add_findnode_query(query_config, target, known_closest_peers);
         }
+    }
+
+    /// Starts a FindNode query to find nodes with IDs closest to target.
+    fn init_iterative_findnodes(&mut self, target: &NodeId) {
+        let closest_enrs = {
+            let target_key = Key::from(*target);
+            let mut kbuckets = self.kbuckets.write();
+
+            let mut enrs: Vec<Enr> = Vec::new();
+            for closest in kbuckets.closest_values(&target_key) {
+                enrs.push(closest.value.enr);
+            }
+            enrs
+        };
+
+        self.init_iterative_findnodes_with_initial_enrs(target, closest_enrs);
     }
 
     /// Returns an ENR if one is known for the given NodeId.
@@ -1646,7 +1661,6 @@ mod tests {
             request_tx,
             request_rx,
             active_outgoing_requests,
-            active_query_requests: Arc::new(RwLock::new(HashMap::new())),
             queries: QueryPool::new(Duration::from_secs(FINDNODES_QUERY_TIMEOUT)),
             response_tx,
             response_rx,

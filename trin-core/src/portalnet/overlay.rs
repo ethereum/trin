@@ -505,7 +505,7 @@ where
         direction: RequestDirection,
     ) -> Result<Response, OverlayRequestError> {
         let (tx, rx) = oneshot::channel();
-        let overlay_request = OverlayRequest::new(request, direction, Some(tx));
+        let overlay_request = OverlayRequest::new(request, direction, Some(tx), None);
         if let Err(error) = self.request_tx.send(overlay_request) {
             warn!(
                 "Failure sending request over {:?} service channel",
