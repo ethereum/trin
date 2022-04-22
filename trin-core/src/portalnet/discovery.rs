@@ -131,7 +131,8 @@ impl Discovery {
     pub fn node_info(&self) -> Value {
         json!({
             "enr":  self.discv5.local_enr().to_base64(),
-            "nodeId":  self.discv5.local_enr().node_id().to_string()
+            "nodeId":  self.discv5.local_enr().node_id().to_string(),
+            "ip":  self.discv5.local_enr().ip().map_or("None".to_owned(), |ip| ip.to_string())
         })
     }
 
