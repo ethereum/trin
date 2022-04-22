@@ -68,12 +68,14 @@ pub struct TrinConfig {
 
     #[structopt(
         long = "external-address",
+        group = "external-ips",
         help = "(Only use this if you are behind a NAT) The address which will be advertised to peers (in an ENR). Changing it does not change which port or address trin binds to. Port number is required, ex: 127.0.0.1:9001"
     )]
     pub external_addr: Option<SocketAddr>,
 
     #[structopt(
         long = "no-stun",
+        group = "external-ips",
         help = "Do not use STUN to determine an external IP. Leaves ENR entry for IP blank. Some users report better connections over VPN."
     )]
     pub no_stun: bool,
