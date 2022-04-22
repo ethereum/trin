@@ -113,7 +113,7 @@ async fn main() {
 async fn run_test_app(discv5_port: u16) -> TestApp {
     let config = PortalnetConfig {
         listen_port: discv5_port,
-        internal_ip: true,
+        no_stun: true,
         ..Default::default()
     };
 

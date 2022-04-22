@@ -28,7 +28,7 @@ pub async fn run_trin(
         external_addr: trin_config.external_addr,
         private_key: trin_config.private_key.clone(),
         listen_port: trin_config.discovery_port,
-        internal_ip: trin_config.internal_ip,
+        no_stun: trin_config.no_stun,
         enable_metrics: trin_config.enable_metrics,
         bootnode_enrs,
         ..Default::default()

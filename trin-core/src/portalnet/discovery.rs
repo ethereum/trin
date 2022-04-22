@@ -53,7 +53,7 @@ impl Discovery {
     pub fn new(portal_config: PortalnetConfig) -> Result<Self, String> {
         let listen_all_ips = SocketAddr::new("0.0.0.0".parse().unwrap(), portal_config.listen_port);
 
-        let (ip_addr, ip_port) = if portal_config.internal_ip {
+        let (ip_addr, ip_port) = if portal_config.no_stun {
             (None, portal_config.listen_port)
         } else {
             let known_external = portal_config

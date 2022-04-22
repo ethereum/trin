@@ -1246,7 +1246,7 @@ mod tests {
 
     fn build_service() -> OverlayService<IdentityContentKey, XorMetric> {
         let portal_config = PortalnetConfig {
-            internal_ip: true,
+            no_stun: true,
             ..Default::default()
         };
         let discovery = Arc::new(Discovery::new(portal_config).unwrap());

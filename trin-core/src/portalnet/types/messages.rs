@@ -113,7 +113,7 @@ pub struct PortalnetConfig {
     pub listen_port: u16,
     pub bootnode_enrs: Vec<Enr>,
     pub data_radius: U256,
-    pub internal_ip: bool,
+    pub no_stun: bool,
     pub enable_metrics: bool,
 }
 
@@ -125,7 +125,7 @@ impl Default for PortalnetConfig {
             listen_port: 4242,
             bootnode_enrs: Vec::<Enr>::new(),
             data_radius: U256::from(u64::MAX), //TODO better data_radius default?
-            internal_ip: false,
+            no_stun: false,
             enable_metrics: false,
         }
     }
