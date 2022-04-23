@@ -68,15 +68,17 @@ pub struct TrinConfig {
 
     #[structopt(
         long = "external-address",
+        group = "external-ips",
         help = "(Only use this if you are behind a NAT) The address which will be advertised to peers (in an ENR). Changing it does not change which port or address trin binds to. Port number is required, ex: 127.0.0.1:9001"
     )]
     pub external_addr: Option<SocketAddr>,
 
     #[structopt(
-        long = "internal-ip",
-        help = "(For testing purposes) Use local ip address rather than external via STUN."
+        long = "no-stun",
+        group = "external-ips",
+        help = "Do not use STUN to determine an external IP. Leaves ENR entry for IP blank. Some users report better connections over VPN."
     )]
-    pub internal_ip: bool,
+    pub no_stun: bool,
 
     #[structopt(
         validator(check_private_key_length),
@@ -188,7 +190,7 @@ mod test {
             kb: DEFAULT_STORAGE_CAPACITY.parse().unwrap(),
             web3_transport: "ipc".to_string(),
             discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
-            internal_ip: false,
+            no_stun: false,
             bootnodes: vec![],
             external_addr: None,
             private_key: None,
@@ -221,7 +223,7 @@ mod test {
             pool_size: 3,
             web3_transport: "http".to_string(),
             discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
-            internal_ip: false,
+            no_stun: false,
             bootnodes: vec![],
             enable_metrics: false,
             metrics_url: None,
@@ -265,7 +267,7 @@ mod test {
             pool_size: 2,
             web3_transport: "ipc".to_string(),
             discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
-            internal_ip: false,
+            no_stun: false,
             bootnodes: vec![],
             enable_metrics: false,
             metrics_url: None,
@@ -305,7 +307,7 @@ mod test {
             pool_size: 2,
             web3_transport: "ipc".to_string(),
             discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
-            internal_ip: false,
+            no_stun: false,
             bootnodes: vec![],
             enable_metrics: false,
             metrics_url: None,
@@ -369,7 +371,7 @@ mod test {
             kb: DEFAULT_STORAGE_CAPACITY.parse().unwrap(),
             web3_transport: "ipc".to_string(),
             discovery_port: 999,
-            internal_ip: false,
+            no_stun: false,
             bootnodes: vec![],
             enable_metrics: false,
             metrics_url: None,
@@ -395,7 +397,7 @@ mod test {
             kb: DEFAULT_STORAGE_CAPACITY.parse().unwrap(),
             web3_transport: "ipc".to_string(),
             discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
-            internal_ip: false,
+            no_stun: false,
             bootnodes: vec!["enr:-aoeu".to_string(), "enr:-htns".to_string()],
             enable_metrics: false,
             metrics_url: None,
@@ -443,7 +445,7 @@ mod test {
             kb: DEFAULT_STORAGE_CAPACITY.parse().unwrap(),
             web3_transport: "ipc".to_string(),
             discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
-            internal_ip: false,
+            no_stun: false,
             bootnodes: vec![],
             enable_metrics: false,
             metrics_url: None,

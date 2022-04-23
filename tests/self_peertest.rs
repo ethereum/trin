@@ -19,7 +19,7 @@ mod test {
         let trin_config = TrinConfig::new_from(
             [
                 "trin",
-                "--internal-ip",
+                "--no-stun",
                 "--web3-ipc-path",
                 &peertest_config.target_ipc_path,
             ]

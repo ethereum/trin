@@ -1,5 +1,5 @@
 use log::{debug, info};
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
+use std::net::{IpAddr, SocketAddr, UdpSocket};
 
 #[cfg(unix)]
 use interfaces::{self, Interface};
@@ -32,13 +32,8 @@ pub fn stun_for_external(local_socket_addr: &SocketAddr) -> Option<SocketAddr> {
     }
 }
 
-pub fn default_local_address(port: u16) -> SocketAddr {
-    let ip = find_assigned_ip().unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST));
-    SocketAddr::new(ip, port)
-}
-
 #[cfg(unix)]
-fn find_assigned_ip() -> Option<IpAddr> {
+pub fn find_assigned_ip() -> Option<IpAddr> {
     let online_nics = Interface::get_all()
         .unwrap_or_default()
         .into_iter()
@@ -60,7 +55,7 @@ fn find_assigned_ip() -> Option<IpAddr> {
 }
 
 #[cfg(windows)]
-fn find_assigned_ip() -> Option<IpAddr> {
+pub fn find_assigned_ip() -> Option<IpAddr> {
     let adapters = ipconfig::get_adapters().unwrap_or_default();
 
     for adapter in adapters.iter() {
