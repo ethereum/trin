@@ -3,7 +3,7 @@ use std::{convert::TryInto, fs, sync::Arc};
 use discv5::enr::NodeId;
 use ethereum_types::U256;
 use hex;
-use log::{debug, error};
+use log::{debug, error, info};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rocksdb::{Options, DB};
@@ -449,7 +449,7 @@ impl PortalStorage {
         let data_path_root: String = get_data_dir(node_id).to_owned();
         let data_suffix: &str = "/trin.sqlite";
         let data_path = data_path_root + data_suffix;
-        debug!("Setting up SqliteDB at path: {:?}", data_path);
+        info!("Setting up SqliteDB at path: {:?}", data_path);
 
         let manager = SqliteConnectionManager::file(data_path);
         let pool = Pool::new(manager)?;
