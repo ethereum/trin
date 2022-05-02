@@ -23,10 +23,10 @@
 
 use super::iterators::findnodes::{FindNodeQuery, FindNodeQueryConfig};
 
-use discv5::kbucket::{Key};
+use discv5::kbucket::Key;
 use fnv::FnvHashMap;
-use std::time::{Duration, Instant};
 use std::marker::PhantomData;
+use std::time::{Duration, Instant};
 
 pub trait TargetKey<TNodeId> {
     fn key(&self) -> Key<TNodeId>;
@@ -41,7 +41,7 @@ pub struct QueryPool<TTarget, TNodeId, TResult> {
     next_id: QueryId,
     query_timeout: Duration,
     queries: FnvHashMap<QueryId, Query<TTarget, TNodeId, TResult>>,
-    result_type: PhantomData<TResult>
+    result_type: PhantomData<TResult>,
 }
 
 /// The observable states emitted by [`QueryPool::poll`].
@@ -67,10 +67,10 @@ where
     /// Creates a new `QueryPool` with the given configuration.
     pub fn new(query_timeout: Duration) -> Self {
         QueryPool {
-            next_id: 0,
+            next_id: QueryId(0),
             query_timeout,
             queries: Default::default(),
-            result_type: PhantomData
+            result_type: PhantomData,
         }
     }
 
@@ -96,8 +96,8 @@ where
     }
 
     fn add(&mut self, peer_iter: QueryPeerIter<TNodeId>, target: TTarget) -> QueryId {
-        let id = QueryId(self.next_id);
-        self.next_id = self.next_id.wrapping_add(1);
+        let id = self.next_id;
+        self.next_id = QueryId(self.next_id.wrapping_add(1));
         let query = Query::new(id, peer_iter, target);
         self.queries.insert(id, query);
         id
@@ -183,12 +183,11 @@ pub struct Query<TTarget, TNodeId, TResult> {
     target: TTarget,
     /// Phantom use of TResult generic type, which is used in implementation.
     unused_result: PhantomData<TResult>,
-    
 }
 
 /// The peer selection strategies that can be used by queries.
 enum QueryPeerIter<TNodeId> {
-    FindNode(FindNodeQuery<TNodeId>)
+    FindNode(FindNodeQuery<TNodeId>),
 }
 
 impl<TTarget, TNodeId, TResult> Query<TTarget, TNodeId, TResult>
@@ -292,4 +291,3 @@ pub enum QueryState<TNodeId> {
     /// The query finished.
     Finished,
 }
-

@@ -1,10 +1,9 @@
-use discv5::{kbucket::Key, Enr};
-use crate::portalnet::types::messages::{Request, FindNodes};
+use crate::portalnet::find::query_pool::TargetKey;
+use crate::portalnet::types::messages::{FindNodes, Request};
 use discv5::enr::NodeId;
+use discv5::{kbucket::Key, Enr};
 use sha3::digest::generic_array::GenericArray;
 use smallvec::SmallVec;
-use tokio::sync::oneshot;
-use crate::portalnet::find::query_pool::TargetKey;
 
 /// Information about a query.
 #[derive(Debug)]
@@ -28,6 +27,7 @@ pub enum QueryType {
 
 impl QueryInfo {
     /// Builds an RPC Request, given the QueryInfo
+    #[allow(dead_code)]
     pub(crate) fn rpc_request(&self, peer: NodeId) -> Result<Request, &'static str> {
         let request = match self.query_type {
             QueryType::FindNode(node_id) => {
@@ -41,8 +41,8 @@ impl QueryInfo {
     }
 }
 
-impl TargetKey<TNodeId> for QueryInfo {
-    fn key(&self) -> Key<TNodeId> {
+impl TargetKey<NodeId> for QueryInfo {
+    fn key(&self) -> Key<NodeId> {
         match self.query_type {
             QueryType::FindNode(ref node_id) => {
                 Key::new_raw(*node_id, *GenericArray::from_slice(&node_id.raw()))
@@ -66,7 +66,7 @@ fn findnode_log2distance(target: NodeId, peer: NodeId, size: usize) -> Option<Ve
     let dst_key: Key<NodeId> = peer.into();
     let distance_u64 = dst_key.log2_distance(&target.into())?;
     let distance: u16 = distance_u64 as u16;
-    
+
     let mut result_list = vec![distance];
     let mut difference = 1;
     while result_list.len() < size {
@@ -75,7 +75,6 @@ fn findnode_log2distance(target: NodeId, peer: NodeId, size: usize) -> Option<Ve
         }
         if result_list.len() < size {
             if let Some(d) = distance.checked_sub(difference) {
-
                 result_list.push(d);
             }
         }
