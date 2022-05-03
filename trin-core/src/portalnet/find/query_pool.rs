@@ -25,8 +25,10 @@ use super::iterators::findnodes::{FindNodeQuery, FindNodeQueryConfig};
 
 use discv5::kbucket::Key;
 use fnv::FnvHashMap;
-use std::marker::PhantomData;
-use std::time::{Duration, Instant};
+use std::{
+    marker::PhantomData,
+    time::{Duration, Instant},
+};
 
 pub trait TargetKey<TNodeId> {
     fn key(&self) -> Key<TNodeId>;

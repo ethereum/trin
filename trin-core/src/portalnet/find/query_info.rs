@@ -1,7 +1,8 @@
-use crate::portalnet::find::query_pool::TargetKey;
-use crate::portalnet::types::messages::{FindNodes, Request};
-use discv5::enr::NodeId;
-use discv5::{kbucket::Key, Enr};
+use crate::portalnet::{
+    find::query_pool::TargetKey,
+    types::messages::{FindNodes, Request},
+};
+use discv5::{enr::NodeId, kbucket::Key, Enr};
 use sha3::digest::generic_array::GenericArray;
 use smallvec::SmallVec;
 
