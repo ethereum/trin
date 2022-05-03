@@ -1,6 +1,6 @@
 use discv5::{Discv5Event, TalkRequest};
 use log::debug;
-use std::{str::FromStr, sync::Arc};
+use std::{net::SocketAddr, str::FromStr, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;
 use trin_core::{
     portalnet::{
@@ -8,6 +8,7 @@ use trin_core::{
         types::messages::{PortalnetConfig, ProtocolId},
         Enr,
     },
+    socket,
     utp::{
         stream::{UtpListener, UtpListenerRequest, UtpSocket},
         trin_helpers::UtpMessage,
@@ -88,10 +89,17 @@ async fn main() {
     tracing_subscriber::fmt::init();
 
     let client_port = 9002;
-    let mut client = run_test_app(client_port).await;
+    let client_ip_addr =
+        socket::find_assigned_ip().expect("Could not find an IP for local connections");
+    let client_external_addr = SocketAddr::new(client_ip_addr, client_port);
+    let mut client = run_test_app(client_port, client_external_addr).await;
 
     let server_port = 9003;
-    let server = run_test_app(server_port).await;
+    let server_ip_addr =
+        socket::find_assigned_ip().expect("Could not find an IP for local connections");
+    let server_external_addr = SocketAddr::new(server_ip_addr, server_port);
+
+    let server = run_test_app(server_port, server_external_addr).await;
 
     let server_enr = server.discovery.local_enr();
 
@@ -115,10 +123,10 @@ async fn main() {
         .expect("failed to pause until ctrl-c");
 }
 
-async fn run_test_app(discv5_port: u16) -> TestApp {
+async fn run_test_app(discv5_port: u16, socket_addr: SocketAddr) -> TestApp {
     let config = PortalnetConfig {
         listen_port: discv5_port,
-        no_stun: true,
+        external_addr: Some(socket_addr),
         ..Default::default()
     };
 
