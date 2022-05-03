@@ -3,15 +3,19 @@ use std::sync::Arc;
 use log::debug;
 use tokio::sync::mpsc;
 
-use trin_core::jsonrpc::handlers::JsonRpcHandler;
-use trin_core::jsonrpc::types::PortalJsonRpcRequest;
-use trin_core::portalnet::events::PortalnetEvents;
-use trin_core::utils::bootnodes::parse_bootnodes;
-use trin_core::utp::stream::UtpListener;
 use trin_core::{
     cli::{TrinConfig, HISTORY_NETWORK, STATE_NETWORK},
-    jsonrpc::service::{launch_jsonrpc_server, JsonRpcExiter},
-    portalnet::{discovery::Discovery, storage::PortalStorage, types::messages::PortalnetConfig},
+    jsonrpc::{
+        handlers::JsonRpcHandler,
+        service::{launch_jsonrpc_server, JsonRpcExiter},
+        types::PortalJsonRpcRequest,
+    },
+    portalnet::{
+        discovery::Discovery, events::PortalnetEvents, storage::PortalStorage,
+        types::messages::PortalnetConfig,
+    },
+    utils::bootnodes::parse_bootnodes,
+    utp::stream::UtpListener,
 };
 use trin_history::initialize_history_network;
 use trin_state::initialize_state_network;

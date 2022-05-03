@@ -1,21 +1,20 @@
-use std::io::prelude::*;
 #[cfg(unix)]
 use std::os::unix;
-use std::panic;
-use std::time::Duration;
+use std::{io::prelude::*, panic, time::Duration};
 
 use anyhow::anyhow;
 use hyper::{self, Body, Client, Method, Request};
 use log::info;
 use serde_json::{self, json, Value};
 
-use crate::cli::PeertestConfig;
-use crate::Peertest;
-use trin_core::jsonrpc::types::{NodesParams, Params};
-use trin_core::portalnet::types::content_key::{
-    AccountTrieNode, BlockHeader, HistoryContentKey, StateContentKey,
+use crate::{cli::PeertestConfig, Peertest};
+use trin_core::{
+    jsonrpc::types::{NodesParams, Params},
+    portalnet::types::{
+        content_key::{AccountTrieNode, BlockHeader, HistoryContentKey, StateContentKey},
+        messages::SszEnr,
+    },
 };
-use trin_core::portalnet::types::messages::SszEnr;
 
 /// Default data radius value: U256::from(u64::MAX)
 const DATA_RADIUS: &str = "18446744073709551615";

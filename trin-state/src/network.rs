@@ -6,17 +6,19 @@ use eth_trie::EthTrie;
 use log::debug;
 use parking_lot::RwLock;
 use tokio::sync::mpsc::UnboundedSender;
-use trin_core::portalnet::{
-    discovery::Discovery,
-    overlay::{OverlayConfig, OverlayProtocol, OverlayRequestError},
-    storage::{PortalStorage, PortalStorageConfig},
-    types::{
-        content_key::StateContentKey,
-        messages::{PortalnetConfig, ProtocolId},
-        metric::XorMetric,
+use trin_core::{
+    portalnet::{
+        discovery::Discovery,
+        overlay::{OverlayConfig, OverlayProtocol, OverlayRequestError},
+        storage::{PortalStorage, PortalStorageConfig},
+        types::{
+            content_key::StateContentKey,
+            messages::{PortalnetConfig, ProtocolId},
+            metric::XorMetric,
+        },
     },
+    utp::stream::UtpListenerRequest,
 };
-use trin_core::utp::stream::UtpListenerRequest;
 
 use crate::trie::TrieDB;
 

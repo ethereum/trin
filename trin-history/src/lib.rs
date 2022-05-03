@@ -3,23 +3,25 @@ mod jsonrpc;
 pub mod network;
 
 use log::info;
-use tokio::sync::mpsc;
-use tokio::task::JoinHandle;
+use tokio::{sync::mpsc, task::JoinHandle};
 
-use crate::events::HistoryEvents;
-use crate::jsonrpc::HistoryRequestHandler;
+use crate::{events::HistoryEvents, jsonrpc::HistoryRequestHandler};
 use discv5::TalkRequest;
 use network::HistoryNetwork;
 use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedSender;
-use trin_core::cli::TrinConfig;
-use trin_core::jsonrpc::types::HistoryJsonRpcRequest;
-use trin_core::portalnet::discovery::Discovery;
-use trin_core::portalnet::events::PortalnetEvents;
-use trin_core::portalnet::storage::{PortalStorage, PortalStorageConfig};
-use trin_core::portalnet::types::messages::PortalnetConfig;
-use trin_core::utils::bootnodes::parse_bootnodes;
-use trin_core::utp::stream::{UtpListener, UtpListenerRequest};
+use trin_core::{
+    cli::TrinConfig,
+    jsonrpc::types::HistoryJsonRpcRequest,
+    portalnet::{
+        discovery::Discovery,
+        events::PortalnetEvents,
+        storage::{PortalStorage, PortalStorageConfig},
+        types::messages::PortalnetConfig,
+    },
+    utils::bootnodes::parse_bootnodes,
+    utp::stream::{UtpListener, UtpListenerRequest},
+};
 
 pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Launching trin-history...");

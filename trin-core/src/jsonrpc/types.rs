@@ -7,9 +7,13 @@ use ssz_types::VariableList;
 use tokio::sync::mpsc;
 use validator::{Validate, ValidationError};
 
-use crate::jsonrpc::endpoints::{HistoryEndpoint, StateEndpoint, TrinEndpoint};
-use crate::portalnet::types::content_key::OverlayContentKey;
-use crate::portalnet::types::messages::{ByteList, CustomPayload, SszEnr};
+use crate::{
+    jsonrpc::endpoints::{HistoryEndpoint, StateEndpoint, TrinEndpoint},
+    portalnet::types::{
+        content_key::OverlayContentKey,
+        messages::{ByteList, CustomPayload, SszEnr},
+    },
+};
 
 type Responder<T, E> = mpsc::UnboundedSender<Result<T, E>>;
 

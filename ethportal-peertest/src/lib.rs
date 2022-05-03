@@ -4,15 +4,13 @@ pub mod jsonrpc;
 pub use cli::PeertestConfig;
 pub use jsonrpc::get_enode;
 
-use std::sync::Arc;
-use std::{thread, time};
+use std::{sync::Arc, thread, time};
 
 use futures::future;
 
-use trin_core::cli::TrinConfig;
-use trin_core::jsonrpc::service::JsonRpcExiter;
-use trin_core::portalnet::types::messages::SszEnr;
-use trin_core::socket;
+use trin_core::{
+    cli::TrinConfig, jsonrpc::service::JsonRpcExiter, portalnet::types::messages::SszEnr, socket,
+};
 
 pub struct PeertestNode {
     pub enr: SszEnr,

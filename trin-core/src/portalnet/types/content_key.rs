@@ -291,8 +291,7 @@ impl OverlayContentKey for StateContentKey {
 mod test {
     use super::*;
 
-    use std::env;
-    use std::sync::Arc;
+    use std::{env, sync::Arc};
 
     use discv5::enr::NodeId;
     use ethereum_types::U256;

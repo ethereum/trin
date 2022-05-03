@@ -1,26 +1,32 @@
-use std::io::{self, BufRead, Read, Write};
-use std::net::{TcpListener, TcpStream};
 #[cfg(unix)]
 use std::os::unix;
-use std::str::FromStr;
-use std::sync::{Arc, RwLock};
-use std::thread;
-use std::time::Duration;
-use std::{fs, panic, process};
+use std::{
+    fs,
+    io::{self, BufRead, Read, Write},
+    net::{TcpListener, TcpStream},
+    panic, process,
+    str::FromStr,
+    sync::{Arc, RwLock},
+    thread,
+    time::Duration,
+};
 
 use httparse;
 use log::{debug, info, warn};
 use serde_json::{json, Value};
 use thiserror::Error;
 use threadpool::ThreadPool;
-use tokio::sync::mpsc;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::{mpsc, mpsc::UnboundedSender};
 use ureq;
 use validator::Validate;
 
-use crate::cli::TrinConfig;
-use crate::jsonrpc::endpoints::TrinEndpoint;
-use crate::jsonrpc::types::{JsonRequest, PortalJsonRpcRequest};
+use crate::{
+    cli::TrinConfig,
+    jsonrpc::{
+        endpoints::TrinEndpoint,
+        types::{JsonRequest, PortalJsonRpcRequest},
+    },
+};
 
 pub struct JsonRpcExiter {
     should_exit: Arc<RwLock<bool>>,

@@ -5,18 +5,23 @@ use serde_json::{json, Value};
 use tokio::sync::mpsc;
 
 use crate::network::HistoryNetwork;
-use trin_core::jsonrpc::types::OfferParams;
-use trin_core::jsonrpc::{
-    endpoints::HistoryEndpoint,
-    types::{
-        FindContentParams, FindNodesParams, HistoryJsonRpcRequest, LocalContentParams, PingParams,
-        RecursiveFindContentParams, StoreParams,
+use trin_core::{
+    jsonrpc::{
+        endpoints::HistoryEndpoint,
+        types::{
+            FindContentParams, FindNodesParams, HistoryJsonRpcRequest, LocalContentParams,
+            OfferParams, PingParams, RecursiveFindContentParams, StoreParams,
+        },
     },
+    portalnet::{
+        types::{
+            content_key::HistoryContentKey,
+            messages::{Content, FindContent, Request, Response, SszEnr},
+        },
+        Enr,
+    },
+    types::header::Header,
 };
-use trin_core::portalnet::types::content_key::HistoryContentKey;
-use trin_core::portalnet::types::messages::{Content, FindContent, Request, Response, SszEnr};
-use trin_core::portalnet::Enr;
-use trin_core::types::header::Header;
 
 /// Handles History network JSON-RPC requests
 pub struct HistoryRequestHandler {

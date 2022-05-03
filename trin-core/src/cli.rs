@@ -1,6 +1,4 @@
-use std::env;
-use std::ffi::OsString;
-use std::net::SocketAddr;
+use std::{env, ffi::OsString, net::SocketAddr};
 
 use log::info;
 use structopt::StructOpt;

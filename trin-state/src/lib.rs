@@ -1,21 +1,23 @@
 use log::info;
 use std::sync::Arc;
-use tokio::sync::mpsc;
-use tokio::task::JoinHandle;
+use tokio::{sync::mpsc, task::JoinHandle};
 
-use crate::events::StateEvents;
-use crate::jsonrpc::StateRequestHandler;
+use crate::{events::StateEvents, jsonrpc::StateRequestHandler};
 use discv5::TalkRequest;
 use network::StateNetwork;
 use tokio::sync::mpsc::UnboundedSender;
-use trin_core::cli::TrinConfig;
-use trin_core::jsonrpc::types::StateJsonRpcRequest;
-use trin_core::portalnet::discovery::Discovery;
-use trin_core::portalnet::events::PortalnetEvents;
-use trin_core::portalnet::storage::{PortalStorage, PortalStorageConfig};
-use trin_core::portalnet::types::messages::PortalnetConfig;
-use trin_core::utils::bootnodes::parse_bootnodes;
-use trin_core::utp::stream::{UtpListener, UtpListenerRequest};
+use trin_core::{
+    cli::TrinConfig,
+    jsonrpc::types::StateJsonRpcRequest,
+    portalnet::{
+        discovery::Discovery,
+        events::PortalnetEvents,
+        storage::{PortalStorage, PortalStorageConfig},
+        types::messages::PortalnetConfig,
+    },
+    utils::bootnodes::parse_bootnodes,
+    utp::stream::{UtpListener, UtpListenerRequest},
+};
 
 pub mod events;
 mod jsonrpc;

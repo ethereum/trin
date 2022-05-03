@@ -1,8 +1,10 @@
-use std::convert::{TryFrom, TryInto};
-use std::fmt;
-use std::net::SocketAddr;
-use std::ops::{Deref, DerefMut};
-use std::str::FromStr;
+use std::{
+    convert::{TryFrom, TryInto},
+    fmt,
+    net::SocketAddr,
+    ops::{Deref, DerefMut},
+    str::FromStr,
+};
 
 use base64;
 use ethereum_types::U256;

@@ -5,17 +5,19 @@ use std::sync::Arc;
 use parking_lot::RwLock;
 use tokio::sync::mpsc::UnboundedSender;
 
-use trin_core::portalnet::{
-    discovery::Discovery,
-    overlay::{OverlayConfig, OverlayProtocol, OverlayRequestError},
-    storage::{PortalStorage, PortalStorageConfig},
-    types::{
-        content_key::HistoryContentKey,
-        messages::{PortalnetConfig, ProtocolId},
-        metric::XorMetric,
+use trin_core::{
+    portalnet::{
+        discovery::Discovery,
+        overlay::{OverlayConfig, OverlayProtocol, OverlayRequestError},
+        storage::{PortalStorage, PortalStorageConfig},
+        types::{
+            content_key::HistoryContentKey,
+            messages::{PortalnetConfig, ProtocolId},
+            metric::XorMetric,
+        },
     },
+    utp::stream::UtpListenerRequest,
 };
-use trin_core::utp::stream::UtpListenerRequest;
 
 /// History network layer on top of the overlay protocol. Encapsulates history network specific data and logic.
 #[derive(Clone)]

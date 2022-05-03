@@ -1,25 +1,33 @@
 use crate::portalnet::discovery::Discovery;
 use anyhow::anyhow;
 use async_recursion::async_recursion;
-use discv5::enr::NodeId;
-use discv5::{Enr, TalkRequest};
+use discv5::{enr::NodeId, Enr, TalkRequest};
 use log::{debug, warn};
 use rand::Rng;
 use ssz::Encode;
-use std::cmp::{max, min};
-use std::collections::{HashMap, VecDeque};
-use std::convert::TryFrom;
-use std::sync::Arc;
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
-use tokio::sync::{oneshot, RwLock};
-use tokio::time::timeout;
+use std::{
+    cmp::{max, min},
+    collections::{HashMap, VecDeque},
+    convert::TryFrom,
+    sync::Arc,
+};
+use tokio::{
+    sync::{
+        mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
+        oneshot, RwLock,
+    },
+    time::timeout,
+};
 
-use crate::portalnet::types::messages::Content::Content;
-use crate::portalnet::types::messages::{ByteList, ProtocolId};
-use crate::utp::packets::{ExtensionType, Packet, PacketType, HEADER_SIZE};
-use crate::utp::time::{now_microseconds, Delay, Timestamp};
-use crate::utp::trin_helpers::{UtpMessage, UtpMessageId};
-use crate::utp::util::{abs_diff, ewma, generate_sequential_identifiers};
+use crate::{
+    portalnet::types::messages::{ByteList, Content::Content, ProtocolId},
+    utp::{
+        packets::{ExtensionType, Packet, PacketType, HEADER_SIZE},
+        time::{now_microseconds, Delay, Timestamp},
+        trin_helpers::{UtpMessage, UtpMessageId},
+        util::{abs_diff, ewma, generate_sequential_identifiers},
+    },
+};
 use std::time::Duration;
 
 // For simplicity's sake, let us assume no packet will ever exceed the
@@ -1340,22 +1348,28 @@ impl UtpSocket {
 
 #[cfg(test)]
 mod tests {
-    use crate::portalnet::discovery::Discovery;
-    use crate::portalnet::types::messages::{PortalnetConfig, ProtocolId};
-    use crate::portalnet::Enr;
-    use crate::socket;
-    use crate::utils::node_id::generate_random_remote_enr;
-    use crate::utp::packets::{Packet, PacketType};
-    use crate::utp::stream::{SocketState, UtpSocket, BUF_SIZE};
-    use crate::utp::time::now_microseconds;
+    use crate::{
+        portalnet::{
+            discovery::Discovery,
+            types::messages::{PortalnetConfig, ProtocolId},
+            Enr,
+        },
+        socket,
+        utils::node_id::generate_random_remote_enr,
+        utp::{
+            packets::{Packet, PacketType},
+            stream::{SocketState, UtpSocket, BUF_SIZE},
+            time::now_microseconds,
+        },
+    };
     use discv5::Discv5Event;
-    use std::convert::TryFrom;
-    use std::net::{IpAddr, SocketAddr};
-    use std::str::FromStr;
-    use std::sync::Arc;
-    use tokio::sync::mpsc;
-    use tokio::sync::mpsc::UnboundedSender;
-    use tokio::sync::RwLock;
+    use std::{
+        convert::TryFrom,
+        net::{IpAddr, SocketAddr},
+        str::FromStr,
+        sync::Arc,
+    };
+    use tokio::sync::{mpsc, mpsc::UnboundedSender, RwLock};
 
     fn next_test_port() -> u16 {
         use std::sync::atomic::{AtomicUsize, Ordering};

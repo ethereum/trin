@@ -1,15 +1,9 @@
-use std::collections::HashMap;
-use std::fmt;
-use std::marker::PhantomData;
-use std::sync::Arc;
-use std::task::Poll;
-use std::time::Duration;
+use std::{collections::HashMap, fmt, marker::PhantomData, sync::Arc, task::Poll, time::Duration};
 
-use crate::portalnet::metrics::OverlayMetrics;
-use crate::utp::stream::UtpListenerRequest;
 use crate::{
     portalnet::{
         discovery::Discovery,
+        metrics::OverlayMetrics,
         storage::PortalStorage,
         types::{
             content_key::OverlayContentKey,
@@ -22,6 +16,7 @@ use crate::{
         Enr,
     },
     utils::node_id,
+    utp::stream::UtpListenerRequest,
 };
 
 use delay_map::HashSetDelay;
@@ -39,8 +34,7 @@ use log::{debug, error, info, warn};
 use parking_lot::RwLock;
 use rand::seq::SliceRandom;
 use ssz::Encode;
-use ssz_types::BitList;
-use ssz_types::VariableList;
+use ssz_types::{BitList, VariableList};
 use thiserror::Error;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 

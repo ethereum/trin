@@ -4,15 +4,16 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 
 use crate::network::StateNetwork;
-use trin_core::jsonrpc::types::OfferParams;
-use trin_core::jsonrpc::{
-    endpoints::StateEndpoint,
-    types::{
-        FindContentParams, FindNodesParams, LocalContentParams, PingParams, StateJsonRpcRequest,
-        StoreParams,
+use trin_core::{
+    jsonrpc::{
+        endpoints::StateEndpoint,
+        types::{
+            FindContentParams, FindNodesParams, LocalContentParams, OfferParams, PingParams,
+            StateJsonRpcRequest, StoreParams,
+        },
     },
+    portalnet::types::content_key::StateContentKey,
 };
-use trin_core::portalnet::types::content_key::StateContentKey;
 
 /// Handles State network JSON-RPC requests
 pub struct StateRequestHandler {
