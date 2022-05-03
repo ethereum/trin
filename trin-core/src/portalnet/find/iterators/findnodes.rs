@@ -21,15 +21,12 @@
 // This basis of this file has been taken from the rust-libp2p codebase:
 // https://github.com/libp2p/rust-libp2p
 //
-use super::super::query_pool::{QueryState};
-use discv5::{
-    kbucket::{Distance, Key},
-};
+use super::super::query_pool::QueryState;
+use discv5::kbucket::{Distance, Key};
 use std::{
     collections::btree_map::{BTreeMap, Entry},
     time::{Duration, Instant},
 };
-use log::error;
 
 #[derive(Debug, Clone)]
 pub struct FindNodeQuery<TNodeId> {
@@ -64,7 +61,7 @@ pub struct FindNodeQueryConfig {
     ///
     /// The number of closest peers that a query must obtain successful results
     /// for before it terminates. Kademlia paper specifices that this should be equal
-    /// to k, the max number of entries in a k-bucket. Currently defaults to `20`. 
+    /// to k, the max number of entries in a k-bucket. Currently defaults to `20`.
     pub num_results: usize,
 
     /// The timeout for a single peer.
@@ -152,17 +149,17 @@ where
             Entry::Vacant(..) => return,
             Entry::Occupied(mut entry) => match entry.get().state {
                 QueryPeerState::Waiting(..) => {
-                    if self.num_waiting < 0 {
-                       error!("In findenodes.rs on_success num_waiting is negative.")
-                       return
-                    }
+                    assert!(
+                        self.num_waiting > 0,
+                        "Query has invalid number of waiting queries"
+                    );
                     self.num_waiting -= 1;
-                    let peer = e.get_mut();
+                    let peer = entry.get_mut();
                     peer.peers_returned += closer_peers.len();
                     peer.state = QueryPeerState::Succeeded;
                 }
                 QueryPeerState::Unresponsive => {
-                    let peer = e.get_mut();
+                    let peer = entry.get_mut();
                     peer.peers_returned += closer_peers.len();
                     peer.state = QueryPeerState::Succeeded;
                 }
@@ -407,7 +404,6 @@ impl<TNodeId> QueryPeer<TNodeId> {
     pub fn new(key: Key<TNodeId>, state: QueryPeerState) -> Self {
         QueryPeer {
             key,
-            iteration: 1,
             peers_returned: 0,
             state,
         }
@@ -447,7 +443,7 @@ mod tests {
     use super::*;
     use discv5::enr::NodeId;
     use quickcheck::*;
-    use rand_07::{thread_rng, Rng};
+    use rand::{thread_rng, Rng};
     use std::time::Duration;
 
     type TestQuery = FindNodeQuery<NodeId>;
@@ -456,13 +452,15 @@ mod tests {
         (0..n).map(|_| NodeId::random())
     }
 
-    fn random_query<G: Rng>(g: &mut G) -> TestQuery {
-        let known_closest_peers = random_nodes(g.gen_range(1, 60)).map(Key::from);
+    fn random_query() -> TestQuery {
+        let mut rng = thread_rng();
+
+        let known_closest_peers = random_nodes(rng.gen_range(1..60)).map(Key::from);
         let target = NodeId::random();
         let config = FindNodeQueryConfig {
-            parallelism: g.gen_range(1, 10),
-            num_results: g.gen_range(1, 25),
-            peer_timeout: Duration::from_secs(g.gen_range(10, 30)),
+            parallelism: rng.gen_range(1..10),
+            num_results: rng.gen_range(1..25),
+            peer_timeout: Duration::from_secs(rng.gen_range(10..30)),
         };
         FindNodeQuery::with_config(config, target.into(), known_closest_peers)
     }
@@ -474,14 +472,14 @@ mod tests {
     }
 
     impl Arbitrary for TestQuery {
-        fn arbitrary<G: Gen>(g: &mut G) -> TestQuery {
-            random_query(g)
+        fn arbitrary(_: &mut Gen) -> TestQuery {
+            random_query()
         }
     }
 
     #[test]
     fn new_query() {
-        let query = random_query(&mut thread_rng());
+        let query = random_query();
         let target = query.target_key.clone();
 
         let (keys, states): (Vec<_>, Vec<_>) = query
@@ -559,7 +557,7 @@ mod tests {
                 // peers or an error, thus finishing the "in-flight requests".
                 for (i, k) in expected.iter().enumerate() {
                     if rng.gen_bool(0.75) {
-                        let num_closer = rng.gen_range(0, query.config.num_results + 1);
+                        let num_closer = rng.gen_range(0..query.config.num_results + 1);
                         let closer_peers = random_nodes(num_closer).collect::<Vec<_>>();
                         remaining.extend(closer_peers.iter().map(|x| Key::from(*x)));
                         query.on_success(k.preimage(), closer_peers);
