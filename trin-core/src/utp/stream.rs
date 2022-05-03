@@ -83,21 +83,6 @@ struct DelayDifferenceSample {
     difference: Delay,
 }
 
-#[derive(Hash, Eq, PartialEq, Copy, Clone, Debug)]
-pub struct ConnectionKey {
-    pub node_id: NodeId,
-    pub conn_id_recv: ConnId,
-}
-
-impl ConnectionKey {
-    fn new(node_id: NodeId, conn_id_recv: ConnId) -> Self {
-        Self {
-            node_id,
-            conn_id_recv,
-        }
-    }
-}
-
 /// Represent overlay to uTP listener request. It is used as a way to communicate between the overlay protocol
 /// and uTP listener
 pub enum UtpListenerRequest {
@@ -118,7 +103,7 @@ pub struct UtpListener {
     /// Base discv5 layer
     discovery: Arc<Discovery>,
     /// Store all active connections
-    utp_connections: HashMap<ConnectionKey, UtpSocket>,
+    utp_connections: HashMap<NodeId, UtpSocket>,
     /// uTP connection ids to listen for
     listening: HashMap<ConnId, UtpMessageId>,
     /// Receiver for uTP events sent from the main portal event handler
@@ -174,27 +159,10 @@ impl UtpListener {
 
         match Packet::try_from(payload) {
             Ok(packet) => {
-                let connection_id = packet.connection_id();
-
                 match packet.get_type() {
                     PacketType::Reset => {
-                        let key_fn =
-                            |offset| ConnectionKey::new(*node_id, connection_id - 1 + offset);
-                        let f = |conn: &&mut UtpSocket| -> bool {
-                            conn.sender_connection_id == connection_id
-                        };
-
-                        if let Some(conn) = self.utp_connections.get_mut(&key_fn(1)) {
-                            conn.state = SocketState::Closed;
-                        } else if let Some(conn) =
-                            self.utp_connections.get_mut(&key_fn(2)).filter(f)
-                        {
-                            conn.state = SocketState::Closed;
-                        } else if let Some(conn) =
-                            self.utp_connections.get_mut(&key_fn(0)).filter(f)
-                        {
-                            conn.state = SocketState::Closed;
-                        }
+                        // TODO: Handle uTP RESET packet
+                        warn!("Handling RESET packet not implemented")
                     }
                     PacketType::Syn => {
                         if let Some(enr) = self.discovery.discv5.find_enr(node_id) {
@@ -208,13 +176,7 @@ impl UtpListener {
                                 return;
                             }
 
-                            self.utp_connections.insert(
-                                ConnectionKey {
-                                    node_id: *node_id,
-                                    conn_id_recv: conn.receiver_connection_id,
-                                },
-                                conn.clone(),
-                            );
+                            self.utp_connections.insert(*node_id, conn.clone());
 
                             // Get ownership of FindContentData and re-add the receiver connection
                             let utp_message_id = self.listening.remove(&conn.sender_connection_id);
@@ -256,10 +218,7 @@ impl UtpListener {
                     }
                     // Receive DATA and FIN packets
                     PacketType::Data => {
-                        if let Some(conn) = self.utp_connections.get_mut(&ConnectionKey {
-                            node_id: *node_id,
-                            conn_id_recv: connection_id,
-                        }) {
+                        if let Some(conn) = self.utp_connections.get_mut(node_id) {
                             let mut buf = [0; BUF_SIZE];
                             if let Err(msg) = conn.recv(&mut buf).await {
                                 warn!("Unable to receive uTP DATA packet: {msg}")
@@ -270,10 +229,7 @@ impl UtpListener {
                         }
                     }
                     PacketType::Fin => {
-                        if let Some(conn) = self.utp_connections.get_mut(&ConnectionKey {
-                            node_id: *node_id,
-                            conn_id_recv: connection_id,
-                        }) {
+                        if let Some(conn) = self.utp_connections.get_mut(node_id) {
                             let mut buf = [0; BUF_SIZE];
                             if let Err(msg) = conn.recv(&mut buf).await {
                                 warn!("Unable to receive uTP FIN packet: {msg}")
@@ -327,13 +283,7 @@ impl UtpListener {
         if let Some(enr) = self.discovery.discv5.find_enr(&node_id) {
             let mut conn = UtpSocket::new(Arc::clone(&self.discovery), enr);
             conn.make_connection(connection_id).await;
-            self.utp_connections.insert(
-                ConnectionKey {
-                    node_id,
-                    conn_id_recv: connection_id,
-                },
-                conn.clone(),
-            );
+            self.utp_connections.insert(node_id, conn.clone());
             Ok(conn)
         } else {
             Err(anyhow!("Trying to connect to unknow Enr"))
