@@ -7,15 +7,15 @@ use log::debug;
 use serde_json::Value;
 use tokio::sync::mpsc;
 
-use crate::jsonrpc::endpoints::{
-    Discv5Endpoint, HistoryEndpoint, PortalEndpoint, StateEndpoint, TrinEndpoint,
+use crate::{
+    jsonrpc::{
+        endpoints::{Discv5Endpoint, HistoryEndpoint, PortalEndpoint, StateEndpoint, TrinEndpoint},
+        eth,
+        types::{HistoryJsonRpcRequest, Params, PortalJsonRpcRequest, StateJsonRpcRequest},
+    },
+    portalnet::discovery::Discovery,
+    TRIN_VERSION,
 };
-use crate::jsonrpc::eth;
-use crate::jsonrpc::types::{
-    HistoryJsonRpcRequest, Params, PortalJsonRpcRequest, StateJsonRpcRequest,
-};
-use crate::portalnet::discovery::Discovery;
-use crate::TRIN_VERSION;
 
 type Responder<T, E> = mpsc::UnboundedSender<Result<T, E>>;
 

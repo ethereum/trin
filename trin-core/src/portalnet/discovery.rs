@@ -1,18 +1,23 @@
 #![allow(dead_code)]
 
-use super::types::messages::{HexData, PortalnetConfig, ProtocolId};
-use super::Enr;
-use crate::socket;
-use crate::utils::node_id::generate_random_node_id;
-use discv5::enr::{CombinedKey, EnrBuilder, NodeId};
-use discv5::{Discv5, Discv5Config, Discv5ConfigBuilder, RequestError};
+use super::{
+    types::messages::{HexData, PortalnetConfig, ProtocolId},
+    Enr,
+};
+use crate::{socket, utils::node_id::generate_random_node_id};
+use discv5::{
+    enr::{CombinedKey, EnrBuilder, NodeId},
+    Discv5, Discv5Config, Discv5ConfigBuilder, RequestError,
+};
 use log::{debug, error, info, warn};
 use rand::seq::SliceRandom;
 use serde_json::{json, Value};
-use std::convert::TryFrom;
-use std::net::{IpAddr, SocketAddr};
-use std::sync::Arc;
-use std::time::Duration;
+use std::{
+    convert::TryFrom,
+    net::{IpAddr, SocketAddr},
+    sync::Arc,
+    time::Duration,
+};
 
 /// With even distribution assumptions, 2**17 is enough to put each node (estimating 100k nodes,
 /// which is more than 10x the ethereum mainnet node count) into a unique bucket by the 17th bucket index.

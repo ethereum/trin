@@ -1,16 +1,16 @@
 use futures::future::FutureExt;
-use std::future::Future;
-use std::marker::Sync;
-use std::ops::Deref;
-use std::ops::DerefMut;
-use std::panic::Location;
-use std::pin::Pin;
-use std::time::Duration;
-use std::time::Instant;
-use tokio::sync::RwLock;
-use tokio::sync::RwLockReadGuard;
-use tokio::sync::RwLockWriteGuard;
-use tokio::task::JoinHandle;
+use std::{
+    future::Future,
+    marker::Sync,
+    ops::{Deref, DerefMut},
+    panic::Location,
+    pin::Pin,
+    time::{Duration, Instant},
+};
+use tokio::{
+    sync::{RwLock, RwLockReadGuard, RwLockWriteGuard},
+    task::JoinHandle,
+};
 
 const ACQUIRE_TIMEOUT_MS: u64 = 100;
 const HOLD_TIMEOUT_MS: u64 = 100;

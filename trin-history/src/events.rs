@@ -2,8 +2,7 @@ use crate::network::HistoryNetwork;
 use discv5::TalkRequest;
 use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedReceiver;
-use tracing::Instrument;
-use tracing::{debug, error, warn};
+use tracing::{debug, error, warn, Instrument};
 use trin_core::portalnet::types::messages::Message;
 
 pub struct HistoryEvents {

@@ -1,6 +1,4 @@
-use std::net::SocketAddr;
-use std::str::FromStr;
-use std::sync::Arc;
+use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
 use trin_core::{
     cli::DEFAULT_STORAGE_CAPACITY,
@@ -21,9 +19,10 @@ use trin_core::{
 use discv5::Discv5Event;
 use ethereum_types::U256;
 use parking_lot::RwLock;
-use tokio::sync::mpsc;
-use tokio::sync::mpsc::unbounded_channel;
-use tokio::time::{self, Duration};
+use tokio::{
+    sync::{mpsc, mpsc::unbounded_channel},
+    time::{self, Duration},
+};
 use trin_core::utp::stream::UtpListenerRequest;
 
 async fn init_overlay(

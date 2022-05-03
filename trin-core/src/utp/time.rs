@@ -1,7 +1,5 @@
 use num::ToPrimitive;
-use std::fmt;
-use std::ops::Sub;
-use std::time;
+use std::{fmt, ops::Sub, time};
 
 /// Return current time in microseconds since the UNIX epoch.
 pub fn now_microseconds() -> Timestamp {

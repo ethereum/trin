@@ -1,8 +1,5 @@
 use anyhow::anyhow;
-use std::collections::HashSet;
-use std::marker::PhantomData;
-use std::sync::Arc;
-use std::time::Duration;
+use std::{collections::HashSet, marker::PhantomData, sync::Arc, time::Duration};
 
 use super::{
     discovery::Discovery,
@@ -10,14 +7,18 @@ use super::{
     types::{content_key::OverlayContentKey, metric::Metric},
     Enr,
 };
-use crate::portalnet::storage::PortalStorage;
-use crate::portalnet::types::messages::{
-    Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer, Ping, Pong,
-    ProtocolId, Request, Response,
+use crate::portalnet::{
+    storage::PortalStorage,
+    types::messages::{
+        Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer, Ping, Pong,
+        ProtocolId, Request, Response,
+    },
 };
 
-use crate::utp::stream::{UtpListenerRequest, UtpSocket, BUF_SIZE};
-use crate::utp::trin_helpers::{UtpAccept, UtpMessage};
+use crate::utp::{
+    stream::{UtpListenerRequest, UtpSocket, BUF_SIZE},
+    trin_helpers::{UtpAccept, UtpMessage},
+};
 use discv5::{
     enr::NodeId,
     kbucket::{Filter, KBucketsTable},
@@ -31,8 +32,7 @@ use ssz_types::VariableList;
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::{debug, warn};
 
-pub use super::overlay_service::OverlayRequestError;
-pub use super::overlay_service::RequestDirection;
+pub use super::overlay_service::{OverlayRequestError, RequestDirection};
 
 /// Configuration parameters for the overlay network.
 #[derive(Clone)]

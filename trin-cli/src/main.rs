@@ -1,5 +1,7 @@
-use std::os::unix::net::UnixStream;
-use std::path::{Path, PathBuf};
+use std::{
+    os::unix::net::UnixStream,
+    path::{Path, PathBuf},
+};
 
 use serde_json::value::RawValue;
 use structopt::StructOpt;

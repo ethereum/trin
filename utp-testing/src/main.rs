@@ -1,13 +1,18 @@
 use discv5::{Discv5Event, TalkRequest};
 use log::debug;
-use std::str::FromStr;
-use std::sync::Arc;
+use std::{str::FromStr, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;
-use trin_core::portalnet::discovery::Discovery;
-use trin_core::portalnet::types::messages::{PortalnetConfig, ProtocolId};
-use trin_core::portalnet::Enr;
-use trin_core::utp::stream::{UtpListener, UtpListenerRequest, UtpSocket};
-use trin_core::utp::trin_helpers::UtpMessage;
+use trin_core::{
+    portalnet::{
+        discovery::Discovery,
+        types::messages::{PortalnetConfig, ProtocolId},
+        Enr,
+    },
+    utp::{
+        stream::{UtpListener, UtpListenerRequest, UtpSocket},
+        trin_helpers::UtpMessage,
+    },
+};
 
 pub struct TestApp {
     discovery: Arc<Discovery>,

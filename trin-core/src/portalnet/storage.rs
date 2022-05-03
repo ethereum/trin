@@ -1,6 +1,4 @@
-use std::convert::TryInto;
-use std::fs;
-use std::sync::Arc;
+use std::{convert::TryInto, fs, sync::Arc};
 
 use discv5::enr::NodeId;
 use ethereum_types::U256;

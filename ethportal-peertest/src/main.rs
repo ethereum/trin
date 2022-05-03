@@ -1,11 +1,11 @@
 use log::info;
 use std::{thread, time};
 
-use ethportal_peertest::cli::PeertestConfig;
-use ethportal_peertest::jsonrpc::{
-    test_jsonrpc_endpoints_over_http, test_jsonrpc_endpoints_over_ipc,
+use ethportal_peertest::{
+    cli::PeertestConfig,
+    jsonrpc::{test_jsonrpc_endpoints_over_http, test_jsonrpc_endpoints_over_ipc},
+    launch_peertest_nodes,
 };
-use ethportal_peertest::launch_peertest_nodes;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

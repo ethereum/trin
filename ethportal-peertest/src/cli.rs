@@ -1,8 +1,9 @@
-use std::env;
-use std::ffi::OsString;
+use std::{env, ffi::OsString};
 use structopt::StructOpt;
-use trin_core::cli::DEFAULT_WEB3_HTTP_ADDRESS as DEFAULT_TARGET_HTTP_ADDRESS;
-use trin_core::cli::DEFAULT_WEB3_IPC_PATH as DEFAULT_TARGET_IPC_PATH;
+use trin_core::cli::{
+    DEFAULT_WEB3_HTTP_ADDRESS as DEFAULT_TARGET_HTTP_ADDRESS,
+    DEFAULT_WEB3_IPC_PATH as DEFAULT_TARGET_IPC_PATH,
+};
 
 const DEFAULT_LISTEN_PORT: &str = "9876";
 

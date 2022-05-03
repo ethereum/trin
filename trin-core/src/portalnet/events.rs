@@ -4,8 +4,7 @@ use discv5::{Discv5Event, TalkRequest};
 use log::{debug, warn};
 use tokio::sync::mpsc;
 
-use super::discovery::Discovery;
-use super::types::messages::ProtocolId;
+use super::{discovery::Discovery, types::messages::ProtocolId};
 use hex;
 use std::str::FromStr;
 

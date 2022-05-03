@@ -1,5 +1,4 @@
-use std::path::Path;
-use std::{env, fs};
+use std::{env, fs, path::Path};
 
 use directories::ProjectDirs;
 use discv5::enr::NodeId;
