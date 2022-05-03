@@ -2,7 +2,7 @@ use crate::portalnet::discovery::Discovery;
 use anyhow::anyhow;
 use async_recursion::async_recursion;
 use discv5::{enr::NodeId, Enr, TalkRequest};
-use log::{debug, warn};
+use log::{debug, error, warn};
 use rand::Rng;
 use ssz::Encode;
 use std::{
@@ -32,8 +32,8 @@ use crate::{
 use std::time::Duration;
 
 // For simplicity's sake, let us assume no packet will ever exceed the
-// Ethernet maximum transfer unit of 1500 bytes.
-pub const BUF_SIZE: usize = 1500;
+// Discv5 maximum transfer unit of 1280 bytes.
+pub const BUF_SIZE: usize = 1280;
 const GAIN: f64 = 1.0;
 const ALLOWED_INCREASE: u32 = 1;
 const MIN_CWND: u32 = 2; // minimum congestion window size
@@ -152,7 +152,7 @@ impl UtpListener {
         }
     }
 
-    /// Process uTP TalkReq
+    /// Process uTP TalkReq packets
     async fn process_utp_request(&mut self, request: TalkRequest) {
         let payload = request.body();
         let node_id = request.node_id();
@@ -161,18 +161,30 @@ impl UtpListener {
             Ok(packet) => {
                 match packet.get_type() {
                     PacketType::Reset => {
-                        // TODO: Handle uTP RESET packet
-                        warn!("Handling RESET packet not implemented")
+                        if let Some(conn) = self.utp_connections.get_mut(node_id) {
+                            if conn.discv5_tx.send(packet).is_ok() {
+                                let mut buf = [0; BUF_SIZE];
+                                if let Err(msg) = conn.recv(&mut buf).await {
+                                    error!("Unable to receive uTP RESET packet: {msg}")
+                                }
+                            } else {
+                                error!("Unable to send RESET packet to uTP stream handler")
+                            }
+                        }
                     }
                     PacketType::Syn => {
                         if let Some(enr) = self.discovery.discv5.find_enr(node_id) {
                             // If neither of those cases happened handle this is a new request
                             let mut conn = UtpSocket::new(Arc::clone(&self.discovery), enr.clone());
+                            if conn.discv5_tx.send(packet).is_err() {
+                                error!("Unable to send SYN packet to uTP stream handler");
+                                return;
+                            }
 
                             let mut buf = [0; BUF_SIZE];
 
                             if let Err(msg) = conn.recv(&mut buf).await {
-                                debug!("Unable to receive SYN packet {msg}");
+                                error!("Unable to receive SYN packet {msg}");
                                 return;
                             }
 
@@ -203,25 +215,30 @@ impl UtpListener {
                                         )
                                         .await
                                     {
-                                        debug!("Error sending content {msg}");
+                                        error!("Error sending content {msg}");
                                     } else {
                                         // Close uTP connection
                                         if let Err(msg) = conn.close().await {
-                                            debug!("Unable to close uTP connection!: {msg}")
+                                            error!("Unable to close uTP connection!: {msg}")
                                         }
                                     };
                                 });
                             }
                         } else {
-                            debug!("Query requested an unknown ENR");
+                            warn!("Query requested an unknown ENR");
                         }
                     }
                     // Receive DATA and FIN packets
                     PacketType::Data => {
                         if let Some(conn) = self.utp_connections.get_mut(node_id) {
+                            if conn.discv5_tx.send(packet.clone()).is_err() {
+                                error!("Unable to send DATA packet to uTP stream handler");
+                                return;
+                            }
+
                             let mut buf = [0; BUF_SIZE];
                             if let Err(msg) = conn.recv(&mut buf).await {
-                                warn!("Unable to receive uTP DATA packet: {msg}")
+                                error!("Unable to receive uTP DATA packet: {msg}")
                             } else {
                                 conn.recv_data_stream
                                     .append(&mut Vec::from(packet.payload()));
@@ -230,19 +247,30 @@ impl UtpListener {
                     }
                     PacketType::Fin => {
                         if let Some(conn) = self.utp_connections.get_mut(node_id) {
+                            if conn.discv5_tx.send(packet).is_err() {
+                                error!("Unable to send FIN packet to uTP stream handler");
+                                return;
+                            }
+
                             let mut buf = [0; BUF_SIZE];
                             if let Err(msg) = conn.recv(&mut buf).await {
-                                warn!("Unable to receive uTP FIN packet: {msg}")
+                                error!("Unable to receive uTP FIN packet: {msg}")
                             }
                         }
                     }
-                    // We don't handle STATE packets here, because the uTP client is handling them
-                    // implicitly in the background when sending FIN packet with conn.close()
-                    PacketType::State => {}
+                    PacketType::State => {
+                        if let Some(conn) = self.utp_connections.get_mut(node_id) {
+                            if conn.discv5_tx.send(packet).is_err() {
+                                error!("Unable to send STATE packet to uTP stream handler");
+                            }
+                            // We don't handle STATE packets here, because the uTP client is handling them
+                            // implicitly in the background when sending FIN packet with conn.close()
+                        }
+                    }
                 }
             }
-            Err(e) => {
-                debug!("Failed to decode packet: {}", e);
+            Err(err) => {
+                error!("Failed to decode packet: {err}");
             }
         }
     }
@@ -1328,10 +1356,11 @@ mod tests {
         let discv5_arc = Arc::new(discv5);
         let discv5_arc_clone = Arc::clone(&discv5_arc);
 
+        let conn = UtpSocket::new(discv5_arc, enr);
         // TODO: Create `Discv5Socket` struct to encapsulate all socket logic
-        spawn_socket_recv(discv5_arc_clone);
+        spawn_socket_recv(discv5_arc_clone, conn.clone());
 
-        UtpSocket::new(discv5_arc, enr)
+        conn
     }
 
     async fn client_setup(connected_to: Enr) -> (Enr, UtpSocket) {
@@ -1348,15 +1377,13 @@ mod tests {
         let discv5_arc = Arc::new(discv5);
         let discv5_arc_clone = Arc::clone(&discv5_arc);
 
-        spawn_socket_recv(discv5_arc_clone);
+        let conn = UtpSocket::new(Arc::clone(&discv5_arc), connected_to);
+        spawn_socket_recv(discv5_arc_clone, conn.clone());
 
-        (
-            discv5_arc.local_enr(),
-            UtpSocket::new(discv5_arc, connected_to),
-        )
+        (discv5_arc.local_enr(), conn)
     }
 
-    fn spawn_socket_recv(discv5_arc_clone: Arc<Discovery>) {
+    fn spawn_socket_recv(discv5_arc_clone: Arc<Discovery>, conn: UtpSocket) {
         tokio::spawn(async move {
             let mut receiver = discv5_arc_clone.discv5.event_stream().await.unwrap();
             while let Some(event) = receiver.recv().await {
@@ -1367,9 +1394,9 @@ mod tests {
 
                         match protocol_id {
                             ProtocolId::Utp => {
-                                // FIXME: Refactor send packet ot uTP socket
-                                // let payload = request.body();
-                                // let packet = Packet::try_from(payload).unwrap();
+                                let payload = request.body();
+                                let packet = Packet::try_from(payload).unwrap();
+                                conn.discv5_tx.send(packet).unwrap();
                             }
                             _ => {
                                 panic!(
