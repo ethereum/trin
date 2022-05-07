@@ -66,6 +66,23 @@ pub fn rand() -> u16 {
     rand::thread_rng().gen()
 }
 
+/// Connection key for storing active uTP connections
+#[derive(Hash, Eq, PartialEq, Copy, Clone, Debug)]
+pub struct ConnectionKey {
+    node_id: NodeId,
+    conn_id_recv: ConnId,
+}
+
+impl ConnectionKey {
+    fn new(node_id: NodeId, conn_id_recv: ConnId) -> Self {
+        Self {
+            node_id,
+            conn_id_recv,
+        }
+    }
+}
+
+/// uTP socket connection state
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum SocketState {
     Uninitialized,
@@ -103,7 +120,7 @@ pub struct UtpListener {
     /// Base discv5 layer
     discovery: Arc<Discovery>,
     /// Store all active connections
-    utp_connections: HashMap<NodeId, UtpSocket>,
+    utp_connections: HashMap<ConnectionKey, UtpSocket>,
     /// uTP connection ids to listen for
     listening: HashMap<ConnId, UtpMessageId>,
     /// Receiver for uTP events sent from the main portal event handler
@@ -159,9 +176,14 @@ impl UtpListener {
 
         match Packet::try_from(payload) {
             Ok(packet) => {
+                let connection_id = packet.connection_id();
+
                 match packet.get_type() {
                     PacketType::Reset => {
-                        if let Some(conn) = self.utp_connections.get_mut(node_id) {
+                        if let Some(conn) = self
+                            .utp_connections
+                            .get_mut(&ConnectionKey::new(*node_id, connection_id))
+                        {
                             if conn.discv5_tx.send(packet).is_ok() {
                                 let mut buf = [0; BUF_SIZE];
                                 if let Err(msg) = conn.recv(&mut buf).await {
@@ -188,7 +210,10 @@ impl UtpListener {
                                 return;
                             }
 
-                            self.utp_connections.insert(*node_id, conn.clone());
+                            self.utp_connections.insert(
+                                ConnectionKey::new(*node_id, conn.receiver_connection_id),
+                                conn.clone(),
+                            );
 
                             // Get ownership of FindContentData and re-add the receiver connection
                             let utp_message_id = self.listening.remove(&conn.sender_connection_id);
@@ -230,7 +255,10 @@ impl UtpListener {
                     }
                     // Receive DATA and FIN packets
                     PacketType::Data => {
-                        if let Some(conn) = self.utp_connections.get_mut(node_id) {
+                        if let Some(conn) = self
+                            .utp_connections
+                            .get_mut(&ConnectionKey::new(*node_id, connection_id))
+                        {
                             if conn.discv5_tx.send(packet.clone()).is_err() {
                                 error!("Unable to send DATA packet to uTP stream handler");
                                 return;
@@ -246,7 +274,10 @@ impl UtpListener {
                         }
                     }
                     PacketType::Fin => {
-                        if let Some(conn) = self.utp_connections.get_mut(node_id) {
+                        if let Some(conn) = self
+                            .utp_connections
+                            .get_mut(&ConnectionKey::new(*node_id, connection_id))
+                        {
                             if conn.discv5_tx.send(packet).is_err() {
                                 error!("Unable to send FIN packet to uTP stream handler");
                                 return;
@@ -259,7 +290,10 @@ impl UtpListener {
                         }
                     }
                     PacketType::State => {
-                        if let Some(conn) = self.utp_connections.get_mut(node_id) {
+                        if let Some(conn) = self
+                            .utp_connections
+                            .get_mut(&ConnectionKey::new(*node_id, connection_id))
+                        {
                             if conn.discv5_tx.send(packet).is_err() {
                                 error!("Unable to send STATE packet to uTP stream handler");
                             }
@@ -311,7 +345,10 @@ impl UtpListener {
         if let Some(enr) = self.discovery.discv5.find_enr(&node_id) {
             let mut conn = UtpSocket::new(Arc::clone(&self.discovery), enr);
             conn.make_connection(connection_id).await;
-            self.utp_connections.insert(node_id, conn.clone());
+            self.utp_connections.insert(
+                ConnectionKey::new(node_id, conn.receiver_connection_id),
+                conn.clone(),
+            );
             Ok(conn)
         } else {
             Err(anyhow!("Trying to connect to unknow Enr"))
@@ -1353,12 +1390,11 @@ mod tests {
         let enr = discv5.discv5.local_enr();
         discv5.start().await.unwrap();
 
-        let discv5_arc = Arc::new(discv5);
-        let discv5_arc_clone = Arc::clone(&discv5_arc);
+        let discv5 = Arc::new(discv5);
 
-        let conn = UtpSocket::new(discv5_arc, enr);
+        let conn = UtpSocket::new(Arc::clone(&discv5), enr);
         // TODO: Create `Discv5Socket` struct to encapsulate all socket logic
-        spawn_socket_recv(discv5_arc_clone, conn.clone());
+        spawn_socket_recv(Arc::clone(&discv5), conn.clone());
 
         conn
     }
@@ -1374,18 +1410,17 @@ mod tests {
         let mut discv5 = Discovery::new(config).unwrap();
         discv5.start().await.unwrap();
 
-        let discv5_arc = Arc::new(discv5);
-        let discv5_arc_clone = Arc::clone(&discv5_arc);
+        let discv5 = Arc::new(discv5);
 
-        let conn = UtpSocket::new(Arc::clone(&discv5_arc), connected_to);
-        spawn_socket_recv(discv5_arc_clone, conn.clone());
+        let conn = UtpSocket::new(Arc::clone(&discv5), connected_to);
+        spawn_socket_recv(Arc::clone(&discv5), conn.clone());
 
-        (discv5_arc.local_enr(), conn)
+        (discv5.local_enr(), conn)
     }
 
-    fn spawn_socket_recv(discv5_arc_clone: Arc<Discovery>, conn: UtpSocket) {
+    fn spawn_socket_recv(discv5: Arc<Discovery>, conn: UtpSocket) {
         tokio::spawn(async move {
-            let mut receiver = discv5_arc_clone.discv5.event_stream().await.unwrap();
+            let mut receiver = discv5.discv5.event_stream().await.unwrap();
             while let Some(event) = receiver.recv().await {
                 match event {
                     Discv5Event::TalkRequest(request) => {
