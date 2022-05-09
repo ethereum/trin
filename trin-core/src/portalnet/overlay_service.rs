@@ -81,15 +81,15 @@ pub enum OverlayRequestError {
     Discv5Error(discv5::RequestError),
 
     /// Error types resulting from building ACCEPT message
-    #[error("Error while building accept message")]
-    AcceptError(ssz_types::Error),
+    #[error("Error while building accept message: {0}")]
+    AcceptError(String),
 
     /// Error types resulting from building ACCEPT message
-    #[error("Error while sending offer message")]
+    #[error("Error while sending offer message: {0}")]
     OfferError(String),
 
     /// uTP request error
-    #[error("uTP request error")]
+    #[error("uTP request error: {0}")]
     UtpError(String),
 }
 
@@ -643,27 +643,46 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         }
     }
 
-    /// Attempts to build a `Accept` response for a `Offer` request.
+    /// Attempts to build an `Accept` response for an `Offer` request.
     fn handle_offer(&self, request: Offer) -> Result<Accept, OverlayRequestError> {
         self.metrics
             .as_ref()
             .and_then(|m| Some(m.report_inbound_offer()));
-        let mut requested_keys = BitList::with_capacity(request.content_keys.len())
-            .map_err(|e| OverlayRequestError::AcceptError(e))?;
-        let conn_id: u16 = crate::utp::stream::rand();
 
-        // TODO: Pipe this with overlay DB and request only not available keys.
+        let mut requested_keys =
+            BitList::with_capacity(request.content_keys.len()).map_err(|_| {
+                OverlayRequestError::AcceptError(
+                    "Unable to initialize bitlist for requested keys.".to_owned(),
+                )
+            })?;
+
         let accept_keys = request.content_keys.clone();
 
-        for (i, key) in request.content_keys.iter().enumerate() {
-            // should_store is currently a dummy function
-            // the actual function will take ContentKey type, so we'll  have to decode keys here
+        for (i, key) in request.content_keys.into_iter().enumerate() {
+            let key = (TContentKey::try_from)(key).map_err(|_| {
+                OverlayRequestError::AcceptError(format!(
+                    "Unable to build content key from OFFER request."
+                ))
+            })?;
+
             requested_keys
-                .set(i, should_store(key))
-                .map_err(|e| OverlayRequestError::AcceptError(e))?;
+                .set(
+                    i,
+                    self.storage.read().should_store(&key).map_err(|err| {
+                        OverlayRequestError::AcceptError(format!(
+                            "Unable to check content availability: {err}"
+                        ))
+                    })?,
+                )
+                .map_err(|err| {
+                    OverlayRequestError::AcceptError(format!(
+                        "Unable to set requested keys bits: {err:?}"
+                    ))
+                })?;
         }
 
         // listen for incoming connection request on conn_id, as part of utp handshake
+        let conn_id: u16 = crate::utp::stream::rand();
         let utp_request = UtpListenerRequest::OfferStream(conn_id);
         if let Err(err) = self.utp_listener_tx.send(utp_request) {
             return Err(OverlayRequestError::UtpError(format!(
@@ -1808,8 +1827,4 @@ mod tests {
         let expected_index = bucket.get_index(&key).unwrap();
         assert_eq!(target_bucket_idx, expected_index as u8);
     }
-}
-
-fn should_store(_key: &Vec<u8>) -> bool {
-    return true;
 }
