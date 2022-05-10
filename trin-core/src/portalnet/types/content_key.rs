@@ -6,6 +6,9 @@ use ssz::{self, Decode, Encode};
 use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, FixedVector, VariableList};
 
+/// SSZ encoded overlay content key as bytes
+pub type RawContentKey = Vec<u8>;
+
 /// Types whose values represent keys to lookup content items in an overlay network.
 /// Keys are serializable.
 pub trait OverlayContentKey: Into<Vec<u8>> + TryFrom<Vec<u8>> + Clone {

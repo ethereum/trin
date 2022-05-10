@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 // These are just some Trin helper functions
 
-use crate::portalnet::types::messages::Content;
+use crate::portalnet::types::{content_key::RawContentKey, messages::Content};
 use ssz_derive::{Decode, Encode};
 
 // These Utp impl are related to sending messages over uTP not the implementation itself or stream
@@ -51,14 +51,13 @@ pub struct UtpAccept {
     pub message: Vec<(Vec<u8>, Vec<u8>)>,
 }
 
-// This is not in a spec, this is just for internally tracking for what portal message
-// negotiated the uTP stream
-#[derive(Debug, Clone)]
-pub enum UtpMessageId {
+/// Used to track which stream to which overlay request correspond
+#[derive(Debug, Clone, PartialEq)]
+pub enum UtpStreamId {
     FindContentStream,
     FindContentData(Content),
     OfferStream,
-    AcceptStream(Vec<Vec<u8>>),
+    AcceptStream(Vec<RawContentKey>),
 }
 
 #[cfg(test)]

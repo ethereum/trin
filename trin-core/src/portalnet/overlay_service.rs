@@ -19,6 +19,14 @@ use crate::{
     utp::stream::UtpListenerRequest,
 };
 
+use crate::{
+    locks::RwLoggingExt,
+    portalnet::types::content_key::RawContentKey,
+    utp::{
+        stream::{UtpListenerEvent, UtpPayload},
+        trin_helpers::UtpStreamId,
+    },
+};
 use delay_map::HashSetDelay;
 use discv5::{
     enr::NodeId,
@@ -36,7 +44,10 @@ use rand::seq::SliceRandom;
 use ssz::Encode;
 use ssz_types::{BitList, VariableList};
 use thiserror::Error;
-use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::sync::{
+    mpsc::{self, UnboundedReceiver, UnboundedSender},
+    RwLock as TRwLock,
+};
 
 /// Maximum number of ENRs in response to FindNodes.
 pub const FIND_NODES_MAX_NODES: usize = 32;
@@ -45,6 +56,8 @@ pub const FIND_CONTENT_MAX_NODES: usize = 32;
 /// With even distribution assumptions, 2**17 is enough to put each node (estimating 100k nodes,
 /// which is more than 10x the ethereum mainnet node count) into a unique bucket by the 17th bucket index.
 const EXPECTED_NON_EMPTY_BUCKETS: usize = 17;
+/// Bucket refresh lookup interval in seconds
+const BUCKET_REFRESH_INTERVAL: u64 = 60;
 
 /// An overlay request error.
 #[derive(Clone, Error, Debug)]
@@ -253,6 +266,8 @@ pub struct OverlayService<TContentKey, TMetric> {
     response_tx: UnboundedSender<OverlayResponse>,
     /// The sender half of a channel to send requests to uTP listener
     utp_listener_tx: UnboundedSender<UtpListenerRequest>,
+    /// Receiver for UtpListener emitted events
+    utp_listener_rx: Arc<TRwLock<UnboundedReceiver<UtpListenerEvent>>>,
     /// Phantom content key.
     phantom_content_key: PhantomData<TContentKey>,
     /// Phantom metric (distance function).
@@ -278,6 +293,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         data_radius: Arc<U256>,
         protocol: ProtocolId,
         utp_listener_sender: UnboundedSender<UtpListenerRequest>,
+        utp_listener_receiver: Arc<TRwLock<UnboundedReceiver<UtpListenerEvent>>>,
         enable_metrics: bool,
     ) -> Result<UnboundedSender<OverlayRequest>, String> {
         let (request_tx, request_rx) = mpsc::unbounded_channel();
@@ -310,6 +326,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                 response_rx,
                 response_tx,
                 utp_listener_tx: utp_listener_sender,
+                utp_listener_rx: utp_listener_receiver,
                 phantom_content_key: PhantomData,
                 phantom_metric: PhantomData,
                 metrics,
@@ -377,9 +394,13 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
     /// Bucket maintenance: Maintain the routing table (more info documented above function).
     async fn start(&mut self) {
         // Construct bucket refresh interval
-        let mut bucket_refresh_interval = tokio::time::interval(Duration::from_secs(60));
+        let mut bucket_refresh_interval =
+            tokio::time::interval(Duration::from_secs(BUCKET_REFRESH_INTERVAL));
 
         loop {
+            let utp_listener_rx = self.utp_listener_rx.clone();
+            let mut utp_listener_lock = utp_listener_rx.write_with_warn().await;
+
             tokio::select! {
                 Some(request) = self.request_rx.recv() => self.process_request(request),
                 Some(response) = self.response_rx.recv() => {
@@ -406,6 +427,14 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                     if let kbucket::Entry::Present(ref mut entry, _) = self.kbuckets.write().entry(&key) {
                         self.ping_node(&entry.value().enr());
                         self.peers_to_ping.insert(node_id);
+                    }
+                }
+                Some(utp_event) = utp_listener_lock.recv() => {
+                    match utp_event {
+                        UtpListenerEvent::ProcessedClosedStreams(processed_streams) =>
+                        {
+                            self.handle_utp_payload(processed_streams);
+                        }
                     }
                 }
                 _ = OverlayService::<TContentKey, TMetric>::bucket_maintenance_poll(self.protocol.clone(), &self.kbuckets) => {}
@@ -707,6 +736,19 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         Ok(accept)
     }
 
+    /// Handle all closed uTP streams, currently we process only AcceptStream here.
+    /// FindContent payload is processed explicitly when we send FindContent request.
+    fn handle_utp_payload(&self, streams: Vec<(UtpPayload, UtpStreamId)>) {
+        for stream in streams {
+            match stream {
+                (payload, UtpStreamId::AcceptStream(content_keys)) => {
+                    self.process_accept_utp_payload(content_keys, payload);
+                }
+                _ => {}
+            }
+        }
+    }
+
     /// Sends a TALK request via Discovery v5 to some destination node.
     fn send_talk_req(&self, request: Request, request_id: OverlayRequestId, destination: Enr) {
         let discovery = Arc::clone(&self.discovery);
@@ -736,6 +778,12 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                 response,
             });
         });
+    }
+
+    /// Process accepted uTP payload of the OFFER?ACCEPT stream
+    fn process_accept_utp_payload(&self, content_keys: Vec<RawContentKey>, payload: UtpPayload) {
+        // TODO: Verify the payload, store the content and propagate gossip.
+        debug!("DEBUG: Processing content keys: {content_keys:?}, with payload: {payload:?}, protocol: {:?}", self.protocol);
     }
 
     /// Processes an incoming request from some source node.
@@ -1265,6 +1313,7 @@ mod tests {
         let discovery = Arc::new(Discovery::new(portal_config).unwrap());
 
         let (utp_listener_tx, _) = unbounded_channel::<UtpListenerRequest>();
+        let (_, utp_listener_rx) = unbounded_channel::<UtpListenerEvent>();
 
         // Initialize DB config
         let storage_capacity: u32 = DEFAULT_STORAGE_CAPACITY.parse().unwrap();
@@ -1302,6 +1351,7 @@ mod tests {
             response_tx,
             response_rx,
             utp_listener_tx,
+            utp_listener_rx: Arc::new(TRwLock::new(utp_listener_rx)),
             phantom_content_key: PhantomData,
             phantom_metric: PhantomData,
             metrics,

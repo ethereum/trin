@@ -10,14 +10,16 @@ use trin_core::{
     },
     socket,
     utp::{
-        stream::{UtpListener, UtpListenerRequest, UtpSocket},
+        stream::{UtpListener, UtpListenerRequest, UtpListenerUnboundedReceiver, UtpSocket},
         trin_helpers::UtpMessage,
     },
 };
 
+#[allow(dead_code)]
 pub struct TestApp {
     discovery: Arc<Discovery>,
     utp_listener_tx: UnboundedSender<UtpListenerRequest>,
+    utp_listener_rx: UtpListenerUnboundedReceiver,
     utp_event_tx: UnboundedSender<TalkRequest>,
 }
 
@@ -134,13 +136,14 @@ async fn run_test_app(discv5_port: u16, socket_addr: SocketAddr) -> TestApp {
     discovery.start().await.unwrap();
     let discovery = Arc::new(discovery);
 
-    let (utp_event_sender, utp_listener_tx, mut utp_listener) =
+    let (utp_event_sender, utp_listener_tx, utp_listener_rx, mut utp_listener) =
         UtpListener::new(Arc::clone(&discovery));
     tokio::spawn(async move { utp_listener.start().await });
 
     let test_app = TestApp {
         discovery,
         utp_listener_tx,
+        utp_listener_rx,
         utp_event_tx: utp_event_sender,
     };
 

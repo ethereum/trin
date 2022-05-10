@@ -52,7 +52,7 @@ pub async fn run_trin(
     };
 
     // Initialize and spawn UTP listener
-    let (utp_events_tx, utp_listener_tx, mut utp_listener) =
+    let (utp_events_tx, utp_listener_tx, utp_listener_rx, mut utp_listener) =
         UtpListener::new(Arc::clone(&discovery));
     tokio::spawn(async move { utp_listener.start().await });
 
@@ -67,6 +67,7 @@ pub async fn run_trin(
             initialize_state_network(
                 &discovery,
                 utp_listener_tx.clone(),
+                utp_listener_rx.clone(),
                 portalnet_config.clone(),
                 storage_config.clone(),
             )
@@ -85,6 +86,7 @@ pub async fn run_trin(
             initialize_history_network(
                 &discovery,
                 utp_listener_tx,
+                utp_listener_rx,
                 portalnet_config.clone(),
                 storage_config.clone(),
             )

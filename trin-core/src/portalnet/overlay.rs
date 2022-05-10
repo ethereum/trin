@@ -15,9 +15,12 @@ use crate::portalnet::{
     },
 };
 
-use crate::utp::{
-    stream::{UtpListenerRequest, UtpSocket, BUF_SIZE},
-    trin_helpers::{UtpAccept, UtpMessage},
+use crate::{
+    portalnet::types::content_key::RawContentKey,
+    utp::{
+        stream::{UtpListenerEvent, UtpListenerRequest, UtpSocket, BUF_SIZE},
+        trin_helpers::{UtpAccept, UtpMessage},
+    },
 };
 use discv5::{
     enr::NodeId,
@@ -29,7 +32,10 @@ use futures::channel::oneshot;
 use parking_lot::RwLock;
 use ssz::Encode;
 use ssz_types::VariableList;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::{
+    mpsc::{UnboundedReceiver, UnboundedSender},
+    RwLock as TRwLock,
+};
 use tracing::{debug, warn};
 
 pub use super::overlay_service::{OverlayRequestError, RequestDirection};
@@ -95,6 +101,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         config: OverlayConfig,
         discovery: Arc<Discovery>,
         utp_listener_tx: UnboundedSender<UtpListenerRequest>,
+        utp_listener_rx: Arc<TRwLock<UnboundedReceiver<UtpListenerEvent>>>,
         storage: Arc<RwLock<PortalStorage>>,
         data_radius: U256,
         protocol: ProtocolId,
@@ -117,6 +124,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
             Arc::clone(&data_radius),
             protocol.clone(),
             utp_listener_tx.clone(),
+            utp_listener_rx,
             config.enable_metrics,
         )
         .await
@@ -331,7 +339,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
     /// Offer is also sent to nodes after FindContent (POKE)
     pub async fn send_offer(
         &self,
-        content_keys: Vec<Vec<u8>>,
+        content_keys: Vec<RawContentKey>,
         enr: Enr,
     ) -> Result<Accept, OverlayRequestError> {
         // Construct the request.

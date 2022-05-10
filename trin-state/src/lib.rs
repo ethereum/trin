@@ -5,7 +5,10 @@ use tokio::{sync::mpsc, task::JoinHandle};
 use crate::{events::StateEvents, jsonrpc::StateRequestHandler};
 use discv5::TalkRequest;
 use network::StateNetwork;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::{
+    mpsc::{UnboundedReceiver, UnboundedSender},
+    RwLock,
+};
 use trin_core::{
     cli::TrinConfig,
     jsonrpc::types::StateJsonRpcRequest,
@@ -16,7 +19,7 @@ use trin_core::{
         types::messages::PortalnetConfig,
     },
     utils::bootnodes::parse_bootnodes,
-    utp::stream::{UtpListener, UtpListenerRequest},
+    utp::stream::{UtpListener, UtpListenerEvent, UtpListenerRequest},
 };
 
 pub mod events;
@@ -49,7 +52,8 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::spawn(Arc::clone(&discovery).bucket_refresh_lookup());
 
     // Initialize and spawn UTP listener
-    let (utp_sender, overlay_sender, mut utp_listener) = UtpListener::new(Arc::clone(&discovery));
+    let (utp_sender, overlay_sender, overlay_receiver, mut utp_listener) =
+        UtpListener::new(Arc::clone(&discovery));
     tokio::spawn(async move { utp_listener.start().await });
 
     let (state_event_tx, state_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
@@ -74,6 +78,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state_network = StateNetwork::new(
         discovery.clone(),
         overlay_sender,
+        overlay_receiver,
         storage_config,
         portalnet_config.clone(),
     )
@@ -94,6 +99,7 @@ type StateJsonRpcTx = Option<mpsc::UnboundedSender<StateJsonRpcRequest>>;
 pub async fn initialize_state_network(
     discovery: &Arc<Discovery>,
     utp_listener_tx: UnboundedSender<UtpListenerRequest>,
+    utp_listener_rx: Arc<RwLock<UnboundedReceiver<UtpListenerEvent>>>,
     portalnet_config: PortalnetConfig,
     storage_config: PortalStorageConfig,
 ) -> (StateHandler, StateNetworkTask, StateEventTx, StateJsonRpcTx) {
@@ -102,6 +108,7 @@ pub async fn initialize_state_network(
     let state_network = StateNetwork::new(
         Arc::clone(discovery),
         utp_listener_tx,
+        utp_listener_rx,
         storage_config,
         portalnet_config.clone(),
     )
