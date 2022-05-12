@@ -2,7 +2,7 @@ use crate::portalnet::discovery::Discovery;
 use anyhow::anyhow;
 use async_recursion::async_recursion;
 use discv5::{enr::NodeId, Enr, TalkRequest};
-use log::{debug, warn};
+use log::{debug, error, warn};
 use rand::Rng;
 use ssz::Encode;
 use std::{
@@ -20,6 +20,7 @@ use tokio::{
 };
 
 use crate::{
+    locks::RwLoggingExt,
     portalnet::types::messages::{ByteList, Content::Content, ProtocolId},
     utp::{
         packets::{ExtensionType, Packet, PacketType, HEADER_SIZE},
@@ -31,8 +32,8 @@ use crate::{
 use std::time::Duration;
 
 // For simplicity's sake, let us assume no packet will ever exceed the
-// Ethernet maximum transfer unit of 1500 bytes.
-pub const BUF_SIZE: usize = 1500;
+// Discv5 maximum transfer unit of 1280 bytes.
+pub const BUF_SIZE: usize = 1280;
 const GAIN: f64 = 1.0;
 const ALLOWED_INCREASE: u32 = 1;
 const MIN_CWND: u32 = 2; // minimum congestion window size
@@ -65,6 +66,23 @@ pub fn rand() -> u16 {
     rand::thread_rng().gen()
 }
 
+/// Connection key for storing active uTP connections
+#[derive(Hash, Eq, PartialEq, Copy, Clone, Debug)]
+pub struct ConnectionKey {
+    node_id: NodeId,
+    conn_id_recv: ConnId,
+}
+
+impl ConnectionKey {
+    fn new(node_id: NodeId, conn_id_recv: ConnId) -> Self {
+        Self {
+            node_id,
+            conn_id_recv,
+        }
+    }
+}
+
+/// uTP socket connection state
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum SocketState {
     Uninitialized,
@@ -80,21 +98,6 @@ pub enum SocketState {
 struct DelayDifferenceSample {
     received_at: Timestamp,
     difference: Delay,
-}
-
-#[derive(Hash, Eq, PartialEq, Copy, Clone, Debug)]
-pub struct ConnectionKey {
-    pub node_id: NodeId,
-    pub conn_id_recv: ConnId,
-}
-
-impl ConnectionKey {
-    fn new(node_id: NodeId, conn_id_recv: ConnId) -> Self {
-        Self {
-            node_id,
-            conn_id_recv,
-        }
-    }
 }
 
 /// Represent overlay to uTP listener request. It is used as a way to communicate between the overlay protocol
@@ -120,11 +123,6 @@ pub struct UtpListener {
     utp_connections: HashMap<ConnectionKey, UtpSocket>,
     /// uTP connection ids to listen for
     listening: HashMap<ConnId, UtpMessageId>,
-    // TODO: We should refactor internal packet channel ASAP so we can handle more than one uTP stream simultaneously
-    /// Internal uTP packet sender
-    packet_tx: UnboundedSender<Packet>,
-    /// Internal uTP packet receiver
-    packet_rx: Arc<RwLock<UnboundedReceiver<Packet>>>,
     /// Receiver for uTP events sent from the main portal event handler
     utp_event_rx: UnboundedReceiver<TalkRequest>,
     /// Receiver for uTP requests sent from the overlay layer
@@ -139,7 +137,6 @@ impl UtpListener {
         UnboundedSender<UtpListenerRequest>,
         Self,
     ) {
-        let (tx, rx) = unbounded_channel::<Packet>();
         // Channel to process uTP TalkReq packets from main portal event handler
         let (utp_event_tx, utp_event_rx) = unbounded_channel::<TalkRequest>();
         // Channel to process portal overlay requests
@@ -152,8 +149,6 @@ impl UtpListener {
                 discovery,
                 utp_connections: HashMap::new(),
                 listening: HashMap::new(),
-                packet_tx: tx,
-                packet_rx: Arc::new(RwLock::new(rx)),
                 utp_event_rx,
                 overlay_rx: utp_listener_rx,
             },
@@ -174,58 +169,49 @@ impl UtpListener {
         }
     }
 
-    /// Process uTP TalkReq
+    /// Process uTP TalkReq packets
     async fn process_utp_request(&mut self, request: TalkRequest) {
         let payload = request.body();
         let node_id = request.node_id();
 
         match Packet::try_from(payload) {
             Ok(packet) => {
-                self.packet_tx.send(packet.clone()).unwrap();
-
                 let connection_id = packet.connection_id();
 
                 match packet.get_type() {
                     PacketType::Reset => {
-                        let key_fn =
-                            |offset| ConnectionKey::new(*node_id, connection_id - 1 + offset);
-                        let f = |conn: &&mut UtpSocket| -> bool {
-                            conn.sender_connection_id == connection_id
-                        };
-
-                        if let Some(conn) = self.utp_connections.get_mut(&key_fn(1)) {
-                            conn.state = SocketState::Closed;
-                        } else if let Some(conn) =
-                            self.utp_connections.get_mut(&key_fn(2)).filter(f)
+                        if let Some(conn) = self
+                            .utp_connections
+                            .get_mut(&ConnectionKey::new(*node_id, connection_id))
                         {
-                            conn.state = SocketState::Closed;
-                        } else if let Some(conn) =
-                            self.utp_connections.get_mut(&key_fn(0)).filter(f)
-                        {
-                            conn.state = SocketState::Closed;
+                            if conn.discv5_tx.send(packet).is_ok() {
+                                let mut buf = [0; BUF_SIZE];
+                                if let Err(msg) = conn.recv(&mut buf).await {
+                                    error!("Unable to receive uTP RESET packet: {msg}")
+                                }
+                            } else {
+                                error!("Unable to send RESET packet to uTP stream handler")
+                            }
                         }
                     }
                     PacketType::Syn => {
                         if let Some(enr) = self.discovery.discv5.find_enr(node_id) {
                             // If neither of those cases happened handle this is a new request
-                            let mut conn = UtpSocket::new(
-                                Arc::clone(&self.discovery),
-                                enr.clone(),
-                                Arc::clone(&self.packet_rx),
-                            );
+                            let mut conn = UtpSocket::new(Arc::clone(&self.discovery), enr.clone());
+                            if conn.discv5_tx.send(packet).is_err() {
+                                error!("Unable to send SYN packet to uTP stream handler");
+                                return;
+                            }
 
                             let mut buf = [0; BUF_SIZE];
 
                             if let Err(msg) = conn.recv(&mut buf).await {
-                                debug!("Unable to receive SYN packet {msg}");
+                                error!("Unable to receive SYN packet {msg}");
                                 return;
                             }
 
                             self.utp_connections.insert(
-                                ConnectionKey {
-                                    node_id: *node_id,
-                                    conn_id_recv: conn.receiver_connection_id,
-                                },
+                                ConnectionKey::new(*node_id, conn.receiver_connection_id),
                                 conn.clone(),
                             );
 
@@ -254,28 +240,33 @@ impl UtpListener {
                                         )
                                         .await
                                     {
-                                        debug!("Error sending content {msg}");
+                                        error!("Error sending content {msg}");
                                     } else {
                                         // Close uTP connection
                                         if let Err(msg) = conn.close().await {
-                                            debug!("Unable to close uTP connection!: {msg}")
+                                            error!("Unable to close uTP connection!: {msg}")
                                         }
                                     };
                                 });
                             }
                         } else {
-                            debug!("Query requested an unknown ENR");
+                            warn!("Query requested an unknown ENR");
                         }
                     }
                     // Receive DATA and FIN packets
                     PacketType::Data => {
-                        if let Some(conn) = self.utp_connections.get_mut(&ConnectionKey {
-                            node_id: *node_id,
-                            conn_id_recv: connection_id,
-                        }) {
+                        if let Some(conn) = self
+                            .utp_connections
+                            .get_mut(&ConnectionKey::new(*node_id, connection_id))
+                        {
+                            if conn.discv5_tx.send(packet.clone()).is_err() {
+                                error!("Unable to send DATA packet to uTP stream handler");
+                                return;
+                            }
+
                             let mut buf = [0; BUF_SIZE];
                             if let Err(msg) = conn.recv(&mut buf).await {
-                                warn!("Unable to receive uTP DATA packet: {msg}")
+                                error!("Unable to receive uTP DATA packet: {msg}")
                             } else {
                                 conn.recv_data_stream
                                     .append(&mut Vec::from(packet.payload()));
@@ -283,23 +274,37 @@ impl UtpListener {
                         }
                     }
                     PacketType::Fin => {
-                        if let Some(conn) = self.utp_connections.get_mut(&ConnectionKey {
-                            node_id: *node_id,
-                            conn_id_recv: connection_id,
-                        }) {
+                        if let Some(conn) = self
+                            .utp_connections
+                            .get_mut(&ConnectionKey::new(*node_id, connection_id))
+                        {
+                            if conn.discv5_tx.send(packet).is_err() {
+                                error!("Unable to send FIN packet to uTP stream handler");
+                                return;
+                            }
+
                             let mut buf = [0; BUF_SIZE];
                             if let Err(msg) = conn.recv(&mut buf).await {
-                                warn!("Unable to receive uTP FIN packet: {msg}")
+                                error!("Unable to receive uTP FIN packet: {msg}")
                             }
                         }
                     }
-                    // We don't handle STATE packets here, because the uTP client is handling them
-                    // implicitly in the background when sending FIN packet with conn.close()
-                    PacketType::State => {}
+                    PacketType::State => {
+                        if let Some(conn) = self
+                            .utp_connections
+                            .get_mut(&ConnectionKey::new(*node_id, connection_id))
+                        {
+                            if conn.discv5_tx.send(packet).is_err() {
+                                error!("Unable to send STATE packet to uTP stream handler");
+                            }
+                            // We don't handle STATE packets here, because the uTP client is handling them
+                            // implicitly in the background when sending FIN packet with conn.close()
+                        }
+                    }
                 }
             }
-            Err(e) => {
-                debug!("Failed to decode packet: {}", e);
+            Err(err) => {
+                error!("Failed to decode packet: {err}");
             }
         }
     }
@@ -338,17 +343,10 @@ impl UtpListener {
         node_id: NodeId,
     ) -> anyhow::Result<UtpSocket> {
         if let Some(enr) = self.discovery.discv5.find_enr(&node_id) {
-            let mut conn = UtpSocket::new(
-                Arc::clone(&self.discovery),
-                enr,
-                Arc::clone(&self.packet_rx),
-            );
+            let mut conn = UtpSocket::new(Arc::clone(&self.discovery), enr);
             conn.make_connection(connection_id).await;
             self.utp_connections.insert(
-                ConnectionKey {
-                    node_id,
-                    conn_id_recv: connection_id,
-                },
+                ConnectionKey::new(node_id, conn.receiver_connection_id),
                 conn.clone(),
             );
             Ok(conn)
@@ -464,6 +462,9 @@ pub struct UtpSocket {
     /// Maximum retransmission retries
     max_retransmission_retries: u32,
 
+    /// Send channel for discv5 socket
+    discv5_tx: UnboundedSender<Packet>,
+
     /// Receive channel for discv5 socket
     discv5_rx: Arc<RwLock<UnboundedReceiver<Packet>>>,
 
@@ -471,12 +472,10 @@ pub struct UtpSocket {
 }
 
 impl UtpSocket {
-    pub fn new(
-        socket: Arc<Discovery>,
-        connected_to: Enr,
-        discv5_rx: Arc<RwLock<UnboundedReceiver<Packet>>>,
-    ) -> Self {
+    pub fn new(socket: Arc<Discovery>, connected_to: Enr) -> Self {
         let (receiver_id, sender_id) = generate_sequential_identifiers();
+
+        let (discv5_tx, discv5_rx) = unbounded_channel::<Packet>();
 
         Self {
             state: SocketState::Uninitialized,
@@ -506,7 +505,8 @@ impl UtpSocket {
             current_delays: Vec::with_capacity(8),
             recv_data_stream: Vec::new(),
             max_retransmission_retries: MAX_RETRANSMISSION_RETRIES,
-            discv5_rx,
+            discv5_tx,
+            discv5_rx: Arc::new(RwLock::new(discv5_rx)),
         }
     }
 
@@ -555,7 +555,7 @@ impl UtpSocket {
         // Listen on a channel for discovery utp packet
         match timeout(
             Duration::from_millis(DISCV5_SOCKET_TIMEOUT),
-            self.discv5_rx.write().await.recv(),
+            self.discv5_rx.write_with_warn().await.recv(),
         )
         .await
         {
@@ -1369,7 +1369,6 @@ mod tests {
         str::FromStr,
         sync::Arc,
     };
-    use tokio::sync::{mpsc, mpsc::UnboundedSender, RwLock};
 
     fn next_test_port() -> u16 {
         use std::sync::atomic::{AtomicUsize, Ordering};
@@ -1390,15 +1389,14 @@ mod tests {
         let mut discv5 = Discovery::new(config).unwrap();
         let enr = discv5.discv5.local_enr();
         discv5.start().await.unwrap();
-        let (tx, rx) = mpsc::unbounded_channel::<Packet>();
 
-        let discv5_arc = Arc::new(discv5);
-        let discv5_arc_clone = Arc::clone(&discv5_arc);
+        let discv5 = Arc::new(discv5);
 
+        let conn = UtpSocket::new(Arc::clone(&discv5), enr);
         // TODO: Create `Discv5Socket` struct to encapsulate all socket logic
-        spawn_socket_recv(tx, discv5_arc_clone);
+        spawn_socket_recv(Arc::clone(&discv5), conn.clone());
 
-        UtpSocket::new(discv5_arc, enr, Arc::new(RwLock::new(rx)))
+        conn
     }
 
     async fn client_setup(connected_to: Enr) -> (Enr, UtpSocket) {
@@ -1412,22 +1410,17 @@ mod tests {
         let mut discv5 = Discovery::new(config).unwrap();
         discv5.start().await.unwrap();
 
-        let (tx, rx) = mpsc::unbounded_channel::<Packet>();
+        let discv5 = Arc::new(discv5);
 
-        let discv5_arc = Arc::new(discv5);
-        let discv5_arc_clone = Arc::clone(&discv5_arc);
+        let conn = UtpSocket::new(Arc::clone(&discv5), connected_to);
+        spawn_socket_recv(Arc::clone(&discv5), conn.clone());
 
-        spawn_socket_recv(tx, discv5_arc_clone);
-
-        (
-            discv5_arc.local_enr(),
-            UtpSocket::new(discv5_arc, connected_to, Arc::new(RwLock::new(rx))),
-        )
+        (discv5.local_enr(), conn)
     }
 
-    fn spawn_socket_recv(tx: UnboundedSender<Packet>, discv5_arc_clone: Arc<Discovery>) {
+    fn spawn_socket_recv(discv5: Arc<Discovery>, conn: UtpSocket) {
         tokio::spawn(async move {
-            let mut receiver = discv5_arc_clone.discv5.event_stream().await.unwrap();
+            let mut receiver = discv5.discv5.event_stream().await.unwrap();
             while let Some(event) = receiver.recv().await {
                 match event {
                     Discv5Event::TalkRequest(request) => {
@@ -1438,7 +1431,7 @@ mod tests {
                             ProtocolId::Utp => {
                                 let payload = request.body();
                                 let packet = Packet::try_from(payload).unwrap();
-                                tx.send(packet).unwrap();
+                                conn.discv5_tx.send(packet).unwrap();
                             }
                             _ => {
                                 panic!(
