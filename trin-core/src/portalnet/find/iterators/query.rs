@@ -1,8 +1,67 @@
-use std::time::Instant;
+// Copyright 2018 Parity Technologies (UK) Ltd.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
+// Software is furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// DEALINGS IN THE SOFTWARE.
+
+// This basis of this file has been taken from the rust-libp2p codebase:
+// https://github.com/libp2p/rust-libp2p
 
 use super::super::query_pool::QueryState;
 
+use std::time::{Duration, Instant};
+
 use discv5::kbucket::Key;
+
+// Configuration for a `Query`.
+#[derive(Debug, Clone)]
+pub struct QueryConfig {
+    /// Allowed level of parallelism.
+    ///
+    /// The `α` parameter in the Kademlia paper. The maximum number of peers that a query
+    /// is allowed to wait for in parallel while iterating towards the closest
+    /// nodes to a target. Defaults to `3`.
+    pub parallelism: usize,
+
+    /// Number of results to produce.
+    ///
+    /// The number of closest peers that a query must obtain successful results
+    /// for before it terminates. Kademlia paper specifices that this should be equal
+    /// to k, the max number of entries in a k-bucket. Currently defaults to `20`.
+    pub num_results: usize,
+
+    /// The timeout for a single peer.
+    ///
+    /// If a successful result is not reported for a peer within this timeout
+    /// window, the iterator considers the peer unresponsive and will not wait for
+    /// the peer when evaluating the termination conditions, until and unless a
+    /// result is delivered. Defaults to `10` seconds.
+    pub peer_timeout: Duration,
+}
+
+impl QueryConfig {
+    pub fn default() -> Self {
+        Self {
+            parallelism: 3,
+            num_results: 20,
+            peer_timeout: Duration::from_secs(10),
+        }
+    }
+}
 
 pub trait Query<TNodeId, TResponse, TResult> {
     /// Returns the target of the query.

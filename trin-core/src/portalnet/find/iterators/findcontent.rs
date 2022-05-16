@@ -21,18 +21,36 @@
 // This basis of this file has been taken from the rust-libp2p codebase:
 // https://github.com/libp2p/rust-libp2p
 
-use super::super::query_pool::QueryState;
-use super::query::{Query, QueryConfig, QueryPeer, QueryPeerState, QueryProgress};
+use std::collections::btree_map::{BTreeMap, Entry};
+use std::time::Instant;
 
 use discv5::kbucket::{Distance, Key};
 
-use std::{
-    collections::btree_map::{BTreeMap, Entry},
-    time::Instant,
-};
+use super::super::query_pool::QueryState;
+use super::query::{Query, QueryConfig, QueryPeer, QueryPeerState, QueryProgress};
+
+pub enum FindContentResponse<TNodeId> {
+    ClosestNodes(Vec<TNodeId>),
+    Content(Vec<u8>),
+}
+
+#[derive(Debug)]
+pub enum FindContentQueryResult<TNodeId> {
+    ClosestNodes(Vec<TNodeId>),
+    Content {
+        content: Vec<u8>,
+        closest_nodes: Vec<TNodeId>,
+    },
+}
 
 #[derive(Debug, Clone)]
-pub struct FindNodeQuery<TNodeId> {
+struct ContentAndPeer<TNodeId> {
+    content: Vec<u8>,
+    peer: TNodeId,
+}
+
+#[derive(Debug, Clone)]
+pub struct FindContentQuery<TNodeId> {
     /// The target key we are looking for
     target_key: Key<TNodeId>,
 
@@ -46,6 +64,9 @@ pub struct FindNodeQuery<TNodeId> {
     /// Assumes that no two peers are equidistant.
     closest_peers: BTreeMap<Distance, QueryPeer<TNodeId>>,
 
+    /// The content possibly found by the query.
+    content: Option<ContentAndPeer<TNodeId>>,
+
     /// The number of peers for which the query is currently waiting for results.
     num_waiting: usize,
 
@@ -53,7 +74,8 @@ pub struct FindNodeQuery<TNodeId> {
     config: QueryConfig,
 }
 
-impl<TNodeId> Query<TNodeId, Vec<TNodeId>, Vec<TNodeId>> for FindNodeQuery<TNodeId>
+impl<TNodeId> Query<TNodeId, FindContentResponse<TNodeId>, FindContentQueryResult<TNodeId>>
+    for FindContentQuery<TNodeId>
 where
     TNodeId: Into<Key<TNodeId>> + Eq + Clone,
 {
@@ -69,6 +91,87 @@ where
         self.started = Some(start);
     }
 
+    fn on_success(&mut self, peer: &TNodeId, peer_response: FindContentResponse<TNodeId>) {
+        if let QueryProgress::Finished = self.progress {
+            return;
+        }
+
+        let key: Key<TNodeId> = peer.clone().into();
+        let distance = key.distance(&self.target_key);
+
+        // Mark the peer's progress.
+        match self.closest_peers.entry(distance) {
+            Entry::Vacant(..) => return,
+            Entry::Occupied(mut entry) => match entry.get().state() {
+                QueryPeerState::Waiting(..) => {
+                    assert!(
+                        self.num_waiting > 0,
+                        "Query reached invalid number of waiting queries"
+                    );
+                    self.num_waiting -= 1;
+
+                    let peer = entry.get_mut();
+                    peer.set_state(QueryPeerState::Succeeded);
+                }
+                QueryPeerState::Unresponsive => {
+                    let peer = entry.get_mut();
+                    peer.set_state(QueryPeerState::Succeeded);
+                }
+                QueryPeerState::NotContacted
+                | QueryPeerState::Failed
+                | QueryPeerState::Succeeded => return,
+            },
+        }
+
+        // Incorporate the peer response into the query.
+        match peer_response {
+            FindContentResponse::ClosestNodes(closer_peers) => {
+                // Incorporate the reported closer peers into the query.
+                let mut progress = false;
+                let num_closest = self.closest_peers.len();
+
+                for peer in closer_peers {
+                    let key: Key<TNodeId> = peer.into();
+                    let distance = self.target_key.distance(&key);
+                    let peer = QueryPeer::new(key, QueryPeerState::NotContacted);
+                    self.closest_peers.entry(distance).or_insert(peer);
+
+                    // The query makes progress if the new peer is either closer to the target
+                    // than any peer seen so far (i.e. is the first entry), or the query did
+                    // not yet accumulate enough closest peers.
+                    progress = self.closest_peers.keys().next() == Some(&distance)
+                        || num_closest < self.config.num_results;
+                }
+
+                self.progress = match self.progress {
+                    QueryProgress::Iterating { no_progress } => {
+                        let no_progress = if progress { 0 } else { no_progress + 1 };
+                        if no_progress >= self.config.parallelism {
+                            QueryProgress::Stalled
+                        } else {
+                            QueryProgress::Iterating { no_progress }
+                        }
+                    }
+                    QueryProgress::Stalled => {
+                        if progress {
+                            QueryProgress::Iterating { no_progress: 0 }
+                        } else {
+                            QueryProgress::Stalled
+                        }
+                    }
+                    QueryProgress::Finished => QueryProgress::Finished,
+                };
+            }
+            FindContentResponse::Content(content) => {
+                // Incorporate the found content into the query.
+                self.content = Some(ContentAndPeer {
+                    content,
+                    peer: peer.clone(),
+                });
+            }
+        }
+    }
+
     fn on_failure(&mut self, peer: &TNodeId) {
         if let QueryProgress::Finished = self.progress {
             return;
@@ -81,7 +184,10 @@ where
             Entry::Vacant(_) => {}
             Entry::Occupied(mut e) => match e.get().state() {
                 QueryPeerState::Waiting(..) => {
-                    debug_assert!(self.num_waiting > 0);
+                    assert!(
+                        self.num_waiting > 0,
+                        "Query reached invalid number of waiting queries"
+                    );
                     self.num_waiting -= 1;
                     e.get_mut().set_state(QueryPeerState::Failed);
                 }
@@ -91,84 +197,14 @@ where
         }
     }
 
-    /// Delivering results of requests back to the query allows the query to make
-    /// progress. The query is said to make progress either when the given
-    /// `peer_response` contain a peer closer to the target than any peer seen so far,
-    /// or when the query did not yet accumulate `num_results` closest peers and
-    /// `peer_response` contains a new peer, regardless of its distance to the target.
-    fn on_success(&mut self, peer: &TNodeId, peer_response: Vec<TNodeId>) {
-        if let QueryProgress::Finished = self.progress {
-            return;
-        }
-
-        let key: Key<TNodeId> = peer.clone().into();
-        let distance = key.distance(&self.target_key);
-
-        // Mark the peer's progress, the total nodes it has returned and it's current iteration.
-        // If the node returned peers, mark it as succeeded.
-        match self.closest_peers.entry(distance) {
-            Entry::Vacant(..) => return,
-            Entry::Occupied(mut entry) => match entry.get().state() {
-                QueryPeerState::Waiting(..) => {
-                    assert!(
-                        self.num_waiting > 0,
-                        "Query has invalid number of waiting queries"
-                    );
-                    self.num_waiting -= 1;
-                    let peer = entry.get_mut();
-                    peer.increment_peers_returned(peer_response.len());
-                    peer.set_state(QueryPeerState::Succeeded);
-                }
-                QueryPeerState::Unresponsive => {
-                    let peer = entry.get_mut();
-                    peer.increment_peers_returned(peer_response.len());
-                    peer.set_state(QueryPeerState::Succeeded);
-                }
-                QueryPeerState::NotContacted
-                | QueryPeerState::Failed
-                | QueryPeerState::Succeeded => return,
-            },
-        }
-
-        let mut progress = false;
-        let num_closest = self.closest_peers.len();
-
-        // Incorporate the reported closer peers into the query.
-        for peer in peer_response {
-            let key: Key<TNodeId> = peer.into();
-            let distance = self.target_key.distance(&key);
-            let peer = QueryPeer::new(key, QueryPeerState::NotContacted);
-            self.closest_peers.entry(distance).or_insert(peer);
-            // The query makes progress if the new peer is either closer to the target
-            // than any peer seen so far (i.e. is the first entry), or the query did
-            // not yet accumulate enough closest peers.
-            progress = self.closest_peers.keys().next() == Some(&distance)
-                || num_closest < self.config.num_results;
-        }
-
-        // Update the query progress.
-        self.progress = match self.progress {
-            QueryProgress::Iterating { no_progress } => {
-                let no_progress = if progress { 0 } else { no_progress + 1 };
-                if no_progress >= self.config.parallelism {
-                    QueryProgress::Stalled
-                } else {
-                    QueryProgress::Iterating { no_progress }
-                }
-            }
-            QueryProgress::Stalled => {
-                if progress {
-                    QueryProgress::Iterating { no_progress: 0 }
-                } else {
-                    QueryProgress::Stalled
-                }
-            }
-            QueryProgress::Finished => QueryProgress::Finished,
-        }
-    }
-
     fn poll(&mut self, now: Instant) -> QueryState<TNodeId> {
         if let QueryProgress::Finished = self.progress {
+            return QueryState::Finished;
+        }
+
+        // If the content was returned by a peer, then the query is finished.
+        if let Some(..) = self.content {
+            self.progress = QueryProgress::Finished;
             return QueryState::Finished;
         }
 
@@ -196,6 +232,7 @@ where
                         return QueryState::WaitingAtCapacity;
                     }
                 }
+
                 QueryPeerState::Waiting(timeout) => {
                     if now >= *timeout {
                         // Peers that don't respond within timeout are set to `Failed`.
@@ -217,6 +254,7 @@ where
                         result_counter = None;
                     }
                 }
+
                 QueryPeerState::Succeeded => {
                     if let Some(ref mut count) = result_counter {
                         *count += 1;
@@ -228,6 +266,7 @@ where
                         }
                     }
                 }
+
                 QueryPeerState::Failed | QueryPeerState::Unresponsive => {
                     // Skip over unresponsive or failed peers.
                 }
@@ -247,22 +286,53 @@ where
         }
     }
 
-    fn into_result(self) -> Vec<TNodeId> {
-        self.closest_peers
-            .into_iter()
-            .filter_map(|(_, peer)| {
-                if let QueryPeerState::Succeeded = peer.state() {
-                    Some(peer.key().clone().into_preimage())
-                } else {
-                    None
+    fn into_result(self) -> FindContentQueryResult<TNodeId> {
+        match self.content {
+            Some(content) => {
+                let closest_nodes = self
+                    .closest_peers
+                    .into_values()
+                    .filter_map(|peer| {
+                        if let QueryPeerState::Succeeded = peer.state() {
+                            // Do not include the peer who returned the content.
+                            if *peer.key().preimage() == content.peer {
+                                None
+                            } else {
+                                Some(peer.key().clone().into_preimage())
+                            }
+                        } else {
+                            None
+                        }
+                    })
+                    .take(self.config.num_results)
+                    .collect();
+
+                FindContentQueryResult::Content {
+                    content: content.content,
+                    closest_nodes,
                 }
-            })
-            .take(self.config.num_results)
-            .collect()
+            }
+            None => {
+                let closest_nodes = self
+                    .closest_peers
+                    .into_values()
+                    .filter_map(|peer| {
+                        if let QueryPeerState::Succeeded = peer.state() {
+                            Some(peer.key().clone().into_preimage())
+                        } else {
+                            None
+                        }
+                    })
+                    .take(self.config.num_results)
+                    .collect();
+
+                FindContentQueryResult::ClosestNodes(closest_nodes)
+            }
+        }
     }
 }
 
-impl<TNodeId> FindNodeQuery<TNodeId>
+impl<TNodeId> FindContentQuery<TNodeId>
 where
     TNodeId: Into<Key<TNodeId>> + Eq + Clone,
 {
@@ -290,13 +360,14 @@ where
         // The query initially makes progress by iterating towards the target.
         let progress = QueryProgress::Iterating { no_progress: 0 };
 
-        FindNodeQuery {
-            config,
+        Self {
             target_key,
             started: None,
             progress,
             closest_peers,
+            content: None,
             num_waiting: 0,
+            config,
         }
     }
 
@@ -323,7 +394,7 @@ mod tests {
     use rand::{thread_rng, Rng};
     use std::time::Duration;
 
-    type TestQuery = FindNodeQuery<NodeId>;
+    type TestQuery = FindContentQuery<NodeId>;
 
     fn random_nodes(n: usize) -> impl Iterator<Item = NodeId> + Clone {
         (0..n).map(|_| NodeId::random())
@@ -339,7 +410,7 @@ mod tests {
             num_results: rng.gen_range(1..25),
             peer_timeout: Duration::from_secs(rng.gen_range(10..30)),
         };
-        FindNodeQuery::with_config(config, target.into(), known_closest_peers)
+        FindContentQuery::with_config(config, target.into(), known_closest_peers)
     }
 
     fn sorted(target: &Key<NodeId>, peers: &[Key<NodeId>]) -> bool {
@@ -378,10 +449,17 @@ mod tests {
             query.num_waiting, 0,
             "Unexpected peers in progress in new query."
         );
-        assert!(
-            query.into_result().is_empty(),
-            "Unexpected closest peers in new query"
-        );
+
+        let result = query.into_result();
+        match result {
+            FindContentQueryResult::Content { .. } => {
+                panic!("Unexpected result variant from new query")
+            }
+            FindContentQueryResult::ClosestNodes(closest_nodes) => assert!(
+                closest_nodes.is_empty(),
+                "Unexpected closest peers in new query"
+            ),
+        }
     }
 
     #[test]
@@ -401,6 +479,9 @@ mod tests {
             let target = query.target_key.clone();
             let mut remaining;
             let mut num_failures = 0;
+
+            let found_content: Vec<u8> = vec![0xef];
+            let mut content_peer = None;
 
             'finished: loop {
                 if expected.is_empty() {
@@ -430,14 +511,25 @@ mod tests {
                     assert_eq!(query.poll(now), QueryState::WaitingAtCapacity)
                 }
 
-                // Report results back to the query with a random number of "closer"
-                // peers or an error, thus finishing the "in-flight requests".
                 for (i, k) in expected.iter().enumerate() {
                     if rng.gen_bool(0.75) {
-                        let num_closer = rng.gen_range(0..query.config.num_results + 1);
-                        let closer_peers = random_nodes(num_closer).collect::<Vec<_>>();
-                        remaining.extend(closer_peers.iter().map(|x| Key::from(*x)));
-                        query.on_success(k.preimage(), closer_peers);
+                        // With a small probability, return the desired content. Otherwise, return
+                        // a list of random "closer" peers.
+                        if rng.gen_bool(0.05) {
+                            query.on_success(
+                                k.preimage(),
+                                FindContentResponse::Content(found_content.clone()),
+                            );
+                            content_peer = Some(k.clone());
+                        } else {
+                            let num_closer = rng.gen_range(0..query.config.num_results + 1);
+                            let closer_peers = random_nodes(num_closer).collect::<Vec<_>>();
+                            remaining.extend(closer_peers.iter().map(|x| Key::from(*x)));
+                            query.on_success(
+                                k.preimage(),
+                                FindContentResponse::ClosestNodes(closer_peers),
+                            );
+                        }
                     } else {
                         num_failures += 1;
                         query.on_failure(k.preimage());
@@ -456,8 +548,8 @@ mod tests {
             assert_eq!(query.progress, QueryProgress::Finished);
 
             // Determine if all peers have been contacted by the query. This _must_ be
-            // the case if the query finished with fewer than the requested number
-            // of results.
+            // the case if the query finished without content and with fewer than the
+            // requested number of results.
             let all_contacted = query.closest_peers.values().all(|e| {
                 !matches!(
                     e.state(),
@@ -467,21 +559,42 @@ mod tests {
 
             let target_key = query.target_key.clone();
             let num_results = query.config.num_results;
+
             let result = query.into_result();
-            let closest = result.into_iter().map(Key::from).collect::<Vec<_>>();
+            match result {
+                FindContentQueryResult::Content {
+                    content,
+                    closest_nodes,
+                } => {
+                    let closest_nodes =
+                        closest_nodes.into_iter().map(Key::from).collect::<Vec<_>>();
+                    assert!(sorted(&target_key, &closest_nodes));
 
-            assert!(sorted(&target_key, &closest));
+                    let content_peer = content_peer.unwrap();
 
-            if closest.len() < num_results {
-                // The query returned fewer results than requested. Therefore
-                // either the initial number of known peers must have been
-                // less than the desired number of results, or there must
-                // have been failures.
-                assert!(num_known < num_results || num_failures > 0);
-                // All peers must have been contacted.
-                assert!(all_contacted, "Not all peers have been contacted.");
-            } else {
-                assert_eq!(num_results, closest.len(), "Too  many results.");
+                    // The peer who returned the content should not be included in the closest
+                    // nodes.
+                    assert!(!closest_nodes.contains(&content_peer));
+
+                    assert_eq!(content, found_content);
+                }
+                FindContentQueryResult::ClosestNodes(closest_nodes) => {
+                    let closest_nodes =
+                        closest_nodes.into_iter().map(Key::from).collect::<Vec<_>>();
+                    assert!(sorted(&target_key, &closest_nodes));
+
+                    if closest_nodes.len() < num_results {
+                        // The query returned fewer results than requested. Therefore
+                        // either the initial number of known peers must have been
+                        // less than the desired number of results, or there must
+                        // have been failures.
+                        assert!(num_known < num_results || num_failures > 0);
+                        // All peers must have been contacted.
+                        assert!(all_contacted, "Not all peers have been contacted.");
+                    } else {
+                        assert_eq!(num_results, closest_nodes.len(), "Too  many results.");
+                    }
+                }
             }
         }
 
@@ -500,15 +613,17 @@ mod tests {
             } else {
                 panic!("No peer.");
             };
-            query.on_success(&peer1, closer.clone());
+
+            query.on_success(&peer1, FindContentResponse::ClosestNodes(closer.clone()));
+
             // Duplicate result from the same peer.
-            query.on_success(&peer1, closer.clone());
+            query.on_success(&peer1, FindContentResponse::ClosestNodes(closer.clone()));
 
             // If there is a second peer, let it also report the same "closer" peer.
             match query.poll(now) {
                 QueryState::Waiting(Some(p)) => {
                     let peer2 = p;
-                    query.on_success(&peer2, closer.clone())
+                    query.on_success(&peer2, FindContentResponse::ClosestNodes(closer.clone()))
                 }
                 QueryState::Finished => {}
                 _ => panic!("Unexpectedly query state."),
@@ -540,6 +655,7 @@ mod tests {
                 .key()
                 .clone()
                 .into_preimage();
+
             // Poll the query for the first peer to be in progress.
             match query.poll(now) {
                 QueryState::Waiting(Some(id)) => assert_eq!(id, peer),
@@ -560,17 +676,36 @@ mod tests {
             }
 
             let finished = query.progress == QueryProgress::Finished;
-            query.on_success(&peer, Vec::<NodeId>::new());
+
+            // Deliver a result for the first peer. If the query is not marked finished, then the
+            // first peer would be marked successful and included in the result.
+            query.on_success(&peer, FindContentResponse::ClosestNodes(vec![]));
             let closest = query.into_result();
 
+            // The query may be finished if the first peer was the only peer, because there would
+            // not be any additional peers to contact.
             if finished {
                 // Delivering results when the query already finished must have
                 // no effect.
-                assert_eq!(Vec::<NodeId>::new(), closest);
+                match closest {
+                    FindContentQueryResult::ClosestNodes(closest) => {
+                        assert_eq!(closest, vec![]);
+                    }
+                    FindContentQueryResult::Content { .. } => {
+                        panic!("Unexpected query result variant")
+                    }
+                }
             } else {
                 // Unresponsive peers can still deliver results while the iterator
                 // is not finished.
-                assert_eq!(vec![peer], closest)
+                match closest {
+                    FindContentQueryResult::ClosestNodes(closest) => {
+                        assert_eq!(closest, vec![peer]);
+                    }
+                    FindContentQueryResult::Content { .. } => {
+                        panic!("Unexpected query result variant")
+                    }
+                }
             }
             true
         }
