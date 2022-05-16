@@ -122,7 +122,7 @@ impl PortalStorage {
     pub fn should_store(&self, key: &impl OverlayContentKey) -> Result<bool, PortalStorageError> {
         let content_id = key.content_id();
         // Don't store if we already have the data
-        match self.db.get(&content_id) {
+        match self.db.get_pinned(&content_id) {
             Ok(Some(_)) => return Ok(false),
             Err(e) => return Err(PortalStorageError::RocksDB(e)),
             _ => (),

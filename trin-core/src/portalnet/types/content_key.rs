@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use ethereum_types::{U256, U512};
 use sha2::{Digest as Sha2Digest, Sha256};
 use sha3::{Digest, Keccak256};
@@ -28,12 +29,12 @@ impl IdentityContentKey {
 }
 
 impl TryFrom<Vec<u8>> for IdentityContentKey {
-    type Error = String;
+    type Error = anyhow::Error;
 
     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
         // Require that length of input is equal to 32.
         if value.len() != 32 {
-            return Err(String::from("Input Vec has invalid length"));
+            return Err(anyhow!("Input Vec has invalid length"));
         }
 
         // The following will not panic because of the length check above.
