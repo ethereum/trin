@@ -133,6 +133,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-trait"
+version = "0.1.53"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ed6aa3524a2dfcf9fe180c51eae2b58738348d819517ceadf95789c51fff7600"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "atty"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3571,6 +3582,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-recursion",
+ "async-trait",
  "base64",
  "bytes 1.1.0",
  "clap",
@@ -3634,6 +3646,7 @@ name = "trin-history"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "bytes 1.1.0",
  "discv5",
  "hex",
@@ -3656,6 +3669,7 @@ name = "trin-state"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "discv5",
  "eth_trie",
  "ethereum-types 0.12.1",

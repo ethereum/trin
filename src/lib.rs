@@ -14,7 +14,9 @@ use trin_core::{
         discovery::Discovery, events::PortalnetEvents, storage::PortalStorage,
         types::messages::PortalnetConfig,
     },
+    types::validation::ValidationOracle,
     utils::bootnodes::parse_bootnodes,
+    utils::infura::get_infura_url,
     utp::stream::UtpListener,
 };
 use trin_history::initialize_history_network;
@@ -27,6 +29,7 @@ pub async fn run_trin(
     trin_config.display_config();
 
     let bootnode_enrs = parse_bootnodes(&trin_config.bootnodes)?;
+    let infura_url = get_infura_url(&infura_project_id);
 
     let portalnet_config = PortalnetConfig {
         external_addr: trin_config.external_addr,
@@ -35,6 +38,7 @@ pub async fn run_trin(
         no_stun: trin_config.no_stun,
         enable_metrics: trin_config.enable_metrics,
         bootnode_enrs,
+        infura_url: infura_url.clone(),
         ..Default::default()
     };
 
@@ -60,7 +64,37 @@ pub async fn run_trin(
     let storage_config =
         PortalStorage::setup_config(discovery.local_enr().node_id(), trin_config.kb)?;
 
+    // Initialize validation oracle
+    let validation_oracle = ValidationOracle {
+        infura_url: portalnet_config.infura_url.clone(),
+        ..ValidationOracle::default()
+    };
+
     debug!("Selected networks to spawn: {:?}", trin_config.networks);
+    // Initialize chain history sub-network service and event handlers, if selected
+    let (
+        history_handler,
+        history_network_task,
+        history_event_tx,
+        history_jsonrpc_tx,
+        _validation_oracle,
+    ) = if trin_config
+        .networks
+        .iter()
+        .any(|val| val == HISTORY_NETWORK)
+    {
+        initialize_history_network(
+            &discovery,
+            utp_listener_tx.clone(),
+            portalnet_config.clone(),
+            storage_config.clone(),
+            validation_oracle.clone(),
+        )
+        .await
+    } else {
+        (None, None, None, None, None)
+    };
+
     // Initialize state sub-network service and event handlers, if selected
     let (state_handler, state_network_task, state_event_tx, state_utp_tx, state_jsonrpc_tx) =
         if trin_config.networks.iter().any(|val| val == STATE_NETWORK) {
@@ -108,7 +142,7 @@ pub async fn run_trin(
         tokio::task::spawn_blocking(|| {
             launch_jsonrpc_server(
                 jsonrpc_trin_config,
-                infura_project_id,
+                infura_url,
                 portal_jsonrpc_tx,
                 live_server_tx,
                 json_exiter_clone,

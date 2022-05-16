@@ -1,6 +1,5 @@
-use std::env;
-
 use trin_core::cli::TrinConfig;
+use trin_core::utils::infura::fetch_infura_id_from_env;
 
 use trin::run_trin;
 
@@ -11,13 +10,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Launching trin");
 
     let trin_config = TrinConfig::from_cli();
-    let infura_project_id = match env::var("TRIN_INFURA_PROJECT_ID") {
-        Ok(val) => val,
-        Err(_) => panic!(
-            "Must supply Infura key as environment variable, like:\n\
-            TRIN_INFURA_PROJECT_ID=\"your-key-here\" trin"
-        ),
-    };
+    let infura_project_id = fetch_infura_id_from_env();
 
     let exiter = run_trin(trin_config, infura_project_id).await?;
 

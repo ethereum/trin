@@ -14,6 +14,7 @@ use trin_core::{
         Enr,
     },
     socket,
+    types::validation::{IdentityValidator, ValidationOracle},
 };
 
 use discv5::Discv5Event;
@@ -29,7 +30,7 @@ use trin_core::utp::stream::UtpListenerRequest;
 async fn init_overlay(
     discovery: Arc<Discovery>,
     protocol: ProtocolId,
-) -> OverlayProtocol<IdentityContentKey, XorMetric> {
+) -> OverlayProtocol<IdentityContentKey, XorMetric, IdentityValidator> {
     let storage_config = PortalStorage::setup_config(
         discovery.local_enr().node_id(),
         DEFAULT_STORAGE_CAPACITY.parse().unwrap(),
@@ -39,6 +40,8 @@ async fn init_overlay(
     let overlay_config = OverlayConfig::default();
     // Ignore all uTP events
     let (utp_listener_tx, _) = unbounded_channel::<UtpListenerRequest>();
+    let validation_oracle = ValidationOracle::default();
+    let validator = IdentityValidator { validation_oracle };
 
     OverlayProtocol::new(
         overlay_config,
@@ -47,13 +50,14 @@ async fn init_overlay(
         db,
         U256::MAX,
         protocol,
+        validator,
     )
     .await
 }
 
 async fn spawn_overlay(
     discovery: Arc<Discovery>,
-    overlay: Arc<OverlayProtocol<IdentityContentKey, XorMetric>>,
+    overlay: Arc<OverlayProtocol<IdentityContentKey, XorMetric, IdentityValidator>>,
 ) {
     let (overlay_tx, mut overlay_rx) = mpsc::unbounded_channel();
     let mut discovery_rx = discovery

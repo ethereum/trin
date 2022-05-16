@@ -24,6 +24,7 @@ mod jsonrpc;
 pub mod network;
 mod trie;
 pub mod utils;
+pub mod validation;
 
 pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Launching trin-state...");
