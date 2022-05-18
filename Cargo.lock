@@ -2591,6 +2591,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "rlp-derive"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e33d7b2abe0c340d8797fe2907d3f20d3b5ea5908683618bfe80df7f621f672a"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "rocksdb"
 version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3522,6 +3533,7 @@ dependencies = [
  "eth2_ssz",
  "eth2_ssz_derive",
  "eth2_ssz_types",
+ "eth_trie",
  "ethereum-types 0.12.1",
  "fnv",
  "futures 0.3.21",
@@ -3541,6 +3553,7 @@ dependencies = [
  "r2d2_sqlite",
  "rand 0.8.5",
  "rlp 0.5.1",
+ "rlp-derive",
  "rocksdb",
  "rstest",
  "rusqlite",
