@@ -23,5 +23,5 @@ guidelines for [contributing](/docs/contributing.md),
 then check out issues that are labeled
 [Good First Issue](https://github.com/ethereum/trin/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22).
 
-Join our [Discord](https://discord.gg/pWVEESXB) to participate in the conversation!
+Join our [Discord](https://discord.gg/JrwTY7FEf4) to participate in the conversation!
 
