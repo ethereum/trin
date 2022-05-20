@@ -1,5 +1,10 @@
 use anyhow::anyhow;
-use std::{collections::HashSet, marker::PhantomData, sync::Arc, time::Duration};
+use std::{
+    collections::HashSet,
+    marker::{PhantomData, Sync},
+    sync::Arc,
+    time::Duration,
+};
 
 use super::{
     discovery::Discovery,
@@ -95,7 +100,7 @@ pub struct OverlayProtocol<TContentKey, TMetric, TValidator> {
 }
 
 impl<
-        TContentKey: OverlayContentKey + Send,
+        TContentKey: OverlayContentKey + Send + Sync,
         TMetric: Metric + Send,
         TValidator: 'static + Validator<TContentKey> + Send,
     > OverlayProtocol<TContentKey, TMetric, TValidator>

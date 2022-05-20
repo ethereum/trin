@@ -363,7 +363,10 @@ pub fn make_ipc_request(ipc_path: &str, request: &JsonRpcRequest) -> anyhow::Res
     stream.flush().unwrap();
     let deser = serde_json::Deserializer::from_reader(stream);
     let next_obj = deser.into_iter::<Value>().next();
-    let response_obj = next_obj.ok_or(anyhow!("Empty JsonRpc response"))?;
+    let response_obj = match next_obj {
+        Some(val) => val,
+        None => return Err(anyhow!("Empty JsonRpc response")),
+    };
     get_response_result(response_obj)
 }
 

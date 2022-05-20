@@ -1,5 +1,5 @@
 use trin_core::cli::TrinConfig;
-use trin_core::utils::infura::fetch_infura_id_from_env;
+use trin_core::utils::infura::build_infura_project_url_from_env;
 
 use trin::run_trin;
 
@@ -10,9 +10,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Launching trin");
 
     let trin_config = TrinConfig::from_cli();
-    let infura_project_id = fetch_infura_id_from_env();
+    let infura_url = build_infura_project_url_from_env();
 
-    let exiter = run_trin(trin_config, infura_project_id).await?;
+    let exiter = run_trin(trin_config, infura_url).await?;
 
     tokio::signal::ctrl_c()
         .await

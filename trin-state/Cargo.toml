@@ -8,13 +8,13 @@ rust-version = "1.58.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.52"
+anyhow = "1.0.57"
 async-trait = "0.1.53"
 discv5 = { git = "https://github.com/sigp/discv5.git", branch = "master" }
 ethereum-types = "0.12.0"
 eth_trie = "0.1.0"
 hex = "0.4.3"
-log = "0.4.14"
+log = "0.4.17"
 num = "0.4.0"
 parking_lot = "0.11.2"
 serde_json = "1.0.59"

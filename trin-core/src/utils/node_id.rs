@@ -45,7 +45,7 @@ pub fn generate_random_remote_enr() -> (CombinedKey, Enr) {
 
     let enr = EnrBuilder::new("v4")
         .ip(ip.into())
-        .udp(8000)
+        .udp4(8000)
         .build(&key)
         .unwrap();
 

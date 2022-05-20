@@ -14,9 +14,8 @@ use trin_core::{
         discovery::Discovery, events::PortalnetEvents, storage::PortalStorage,
         types::messages::PortalnetConfig,
     },
-    types::validation::ValidationOracle,
+    types::validation::HeaderOracle,
     utils::bootnodes::parse_bootnodes,
-    utils::infura::get_infura_url,
     utp::stream::UtpListener,
 };
 use trin_history::initialize_history_network;
@@ -24,13 +23,11 @@ use trin_state::initialize_state_network;
 
 pub async fn run_trin(
     trin_config: TrinConfig,
-    infura_project_id: String,
+    infura_url: String,
 ) -> Result<Arc<JsonRpcExiter>, Box<dyn std::error::Error>> {
     trin_config.display_config();
 
     let bootnode_enrs = parse_bootnodes(&trin_config.bootnodes)?;
-    let infura_url = get_infura_url(&infura_project_id);
-
     let portalnet_config = PortalnetConfig {
         external_addr: trin_config.external_addr,
         private_key: trin_config.private_key.clone(),
@@ -38,7 +35,6 @@ pub async fn run_trin(
         no_stun: trin_config.no_stun,
         enable_metrics: trin_config.enable_metrics,
         bootnode_enrs,
-        infura_url: infura_url.clone(),
         ..Default::default()
     };
 
@@ -65,36 +61,12 @@ pub async fn run_trin(
         PortalStorage::setup_config(discovery.local_enr().node_id(), trin_config.kb)?;
 
     // Initialize validation oracle
-    let validation_oracle = ValidationOracle {
-        infura_url: portalnet_config.infura_url.clone(),
-        ..ValidationOracle::default()
+    let header_oracle = HeaderOracle {
+        infura_url: infura_url.clone(),
+        ..HeaderOracle::default()
     };
 
     debug!("Selected networks to spawn: {:?}", trin_config.networks);
-    // Initialize chain history sub-network service and event handlers, if selected
-    let (
-        history_handler,
-        history_network_task,
-        history_event_tx,
-        history_jsonrpc_tx,
-        _validation_oracle,
-    ) = if trin_config
-        .networks
-        .iter()
-        .any(|val| val == HISTORY_NETWORK)
-    {
-        initialize_history_network(
-            &discovery,
-            utp_listener_tx.clone(),
-            portalnet_config.clone(),
-            storage_config.clone(),
-            validation_oracle.clone(),
-        )
-        .await
-    } else {
-        (None, None, None, None, None)
-    };
-
     // Initialize state sub-network service and event handlers, if selected
     let (state_handler, state_network_task, state_event_tx, state_utp_tx, state_jsonrpc_tx) =
         if trin_config.networks.iter().any(|val| val == STATE_NETWORK) {
@@ -116,6 +88,7 @@ pub async fn run_trin(
         history_event_tx,
         history_utp_tx,
         history_jsonrpc_tx,
+        _header_oracle,
     ) = if trin_config
         .networks
         .iter()
@@ -126,6 +99,7 @@ pub async fn run_trin(
             utp_listener_tx,
             portalnet_config.clone(),
             storage_config.clone(),
+            header_oracle.clone(),
         )
         .await
     } else {

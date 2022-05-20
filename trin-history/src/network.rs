@@ -16,7 +16,7 @@ use trin_core::{
             metric::XorMetric,
         },
     },
-    types::validation::ValidationOracle,
+    types::validation::HeaderOracle,
     utp::stream::UtpListenerRequest,
 };
 
@@ -34,7 +34,7 @@ impl HistoryNetwork {
         utp_listener_tx: UnboundedSender<UtpListenerRequest>,
         storage_config: PortalStorageConfig,
         portal_config: PortalnetConfig,
-        validation_oracle: ValidationOracle,
+        header_oracle: HeaderOracle,
     ) -> Self {
         let config = OverlayConfig {
             bootnode_enrs: portal_config.bootnode_enrs.clone(),
@@ -42,7 +42,7 @@ impl HistoryNetwork {
             ..Default::default()
         };
         let storage = Arc::new(RwLock::new(PortalStorage::new(storage_config).unwrap()));
-        let validator = ChainHistoryValidator { validation_oracle };
+        let validator = ChainHistoryValidator { header_oracle };
         let overlay = OverlayProtocol::new(
             config,
             discovery,

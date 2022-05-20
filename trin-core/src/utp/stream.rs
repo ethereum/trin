@@ -1520,7 +1520,7 @@ mod tests {
 
     async fn client_setup(connected_to: Enr) -> (Enr, UtpStream) {
         let port = next_test_port();
-        let matching_ip = connected_to.ip().unwrap();
+        let matching_ip = connected_to.ip4().unwrap();
         let config = PortalnetConfig {
             listen_port: port,
             external_addr: Some(SocketAddr::new(IpAddr::V4(matching_ip), port)),

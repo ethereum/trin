@@ -7,12 +7,11 @@ use crate::jsonrpc::types::{HistoryJsonRpcRequest, JsonRequest, Params};
 use crate::portalnet::types::content_key::IdentityContentKey;
 use crate::portalnet::types::messages::ByteList;
 
-// aka. HeaderOracle
 // This struct is responsible for dispatching cross-overlay-network requests
 // for data to perform validation. Currently, it just proxies these requests
 // on to infura.
 #[derive(Clone)]
-pub struct ValidationOracle {
+pub struct HeaderOracle {
     pub infura_url: String,
     // We could simply store the main portal jsonrpc tx channel here, rather than each
     // individual channel. But my sense is that this will be more useful in terms of
@@ -23,10 +22,10 @@ pub struct ValidationOracle {
     pub state_jsonrpc_tx: Option<bool>,
 }
 
-impl Default for ValidationOracle {
+impl Default for HeaderOracle {
     fn default() -> Self {
         Self {
-            infura_url: "https://mainnet.infura.io::443/v3/".to_string(),
+            infura_url: "https://mainnet.infura.io:443/v3/".to_string(),
             history_jsonrpc_tx: None,
             header_gossip_jsonrpc_tx: None,
             block_indices_jsonrpc_tx: None,
@@ -35,7 +34,7 @@ impl Default for ValidationOracle {
     }
 }
 
-impl ValidationOracle {
+impl HeaderOracle {
     // Currently falls back to infura, to be updated to use canonical block indices network.
     pub fn get_hash_at_height(&mut self, hex_number: String) -> anyhow::Result<String> {
         let request = JsonRequest {
@@ -73,21 +72,30 @@ impl ValidationOracle {
 // This trait is used by all overlay-network Validators to validate content in the overlay service.
 #[async_trait]
 pub trait Validator<TContentKey> {
-    async fn validate_content(&mut self, content_key: TContentKey, content: ByteList)
+    async fn validate_content(
+        &mut self,
+        content_key: &TContentKey,
+        content: &ByteList,
+    ) -> anyhow::Result<()>
     where
         TContentKey: 'async_trait;
 }
 
 // This is a mock Validator for use in tests where no validation is required.
 pub struct IdentityValidator {
-    pub validation_oracle: ValidationOracle,
+    pub header_oracle: HeaderOracle,
 }
 
 #[async_trait]
 impl Validator<IdentityContentKey> for IdentityValidator {
-    async fn validate_content(&mut self, _content_key: IdentityContentKey, _content: ByteList)
+    async fn validate_content(
+        &mut self,
+        _content_key: &IdentityContentKey,
+        _content: &ByteList,
+    ) -> anyhow::Result<()>
     where
         IdentityContentKey: 'async_trait,
     {
+        Ok(())
     }
 }

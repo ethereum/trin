@@ -117,7 +117,6 @@ pub struct PortalnetConfig {
     pub data_radius: U256,
     pub no_stun: bool,
     pub enable_metrics: bool,
-    pub infura_url: String,
 }
 
 impl Default for PortalnetConfig {
@@ -130,7 +129,6 @@ impl Default for PortalnetConfig {
             data_radius: U256::from(u64::MAX), //TODO better data_radius default?
             no_stun: false,
             enable_metrics: false,
-            infura_url: "https://mainnet.infura.io:443/v3/".to_string(),
         }
     }
 }

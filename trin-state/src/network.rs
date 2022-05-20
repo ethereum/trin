@@ -17,7 +17,7 @@ use trin_core::{
             metric::XorMetric,
         },
     },
-    types::validation::ValidationOracle,
+    types::validation::HeaderOracle,
     utp::stream::UtpListenerRequest,
 };
 
@@ -45,7 +45,7 @@ impl StateNetwork {
 
         let storage = Arc::new(RwLock::new(PortalStorage::new(storage_config).unwrap()));
         let validator = StateValidator {
-            validation_oracle: ValidationOracle::default(),
+            header_oracle: HeaderOracle::default(),
         };
         let config = OverlayConfig {
             bootnode_enrs: portal_config.bootnode_enrs.clone(),

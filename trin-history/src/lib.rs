@@ -20,12 +20,12 @@ use trin_core::{
         storage::{PortalStorage, PortalStorageConfig},
         types::messages::PortalnetConfig,
     },
-    types::validation::ValidationOracle,
+    types::validation::HeaderOracle,
     utils::bootnodes::parse_bootnodes,
     utp::stream::{UtpListener, UtpListenerEvent, UtpListenerRequest},
 };
 
-pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
+pub async fn main(infura_url: String) -> Result<(), Box<dyn std::error::Error>> {
     println!("Launching trin-history...");
 
     let mut trin_config = TrinConfig::from_cli();
@@ -80,16 +80,16 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
         events.start().await;
     });
 
-    // todo: Update to a functional validation oracle.
-    // Currently running HistoryNetwork solo will not perform any validation,
-    // since supporting running individual networks is not currently a priority.
-    let validation_oracle = ValidationOracle::default();
+    let header_oracle = HeaderOracle {
+        infura_url,
+        ..HeaderOracle::default()
+    };
     let history_network = HistoryNetwork::new(
         discovery.clone(),
         overlay_sender,
         storage_config,
         portalnet_config.clone(),
-        validation_oracle,
+        header_oracle,
     )
     .await;
     let history_network = Arc::new(history_network);
@@ -110,25 +110,25 @@ type HistoryNetworkTask = Option<JoinHandle<()>>;
 type HistoryEventTx = Option<mpsc::UnboundedSender<TalkRequest>>;
 type HistoryUtpTx = Option<mpsc::UnboundedSender<UtpListenerEvent>>;
 type HistoryJsonRpcTx = Option<mpsc::UnboundedSender<HistoryJsonRpcRequest>>;
-type HistoryValidationOracle = Option<ValidationOracle>;
+type HistoryHeaderOracle = Option<HeaderOracle>;
 
 pub async fn initialize_history_network(
     discovery: &Arc<Discovery>,
     utp_listener_tx: UnboundedSender<UtpListenerRequest>,
     portalnet_config: PortalnetConfig,
     storage_config: PortalStorageConfig,
-    mut validation_oracle: ValidationOracle,
+    mut header_oracle: HeaderOracle,
 ) -> (
     HistoryHandler,
     HistoryNetworkTask,
     HistoryEventTx,
     HistoryUtpTx,
     HistoryJsonRpcTx,
-    HistoryValidationOracle,
+    HistoryHeaderOracle,
 ) {
     let (history_jsonrpc_tx, history_jsonrpc_rx) =
         mpsc::unbounded_channel::<HistoryJsonRpcRequest>();
-    validation_oracle.history_jsonrpc_tx = Some(history_jsonrpc_tx.clone());
+    header_oracle.history_jsonrpc_tx = Some(history_jsonrpc_tx.clone());
     let (history_event_tx, history_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
     let (utp_history_tx, utp_history_rx) = mpsc::unbounded_channel::<UtpListenerEvent>();
     let history_network = HistoryNetwork::new(
@@ -136,7 +136,7 @@ pub async fn initialize_history_network(
         utp_listener_tx,
         storage_config,
         portalnet_config.clone(),
-        validation_oracle.clone(),
+        header_oracle.clone(),
     )
     .await;
     let history_network = Arc::new(history_network);
@@ -156,7 +156,7 @@ pub async fn initialize_history_network(
         Some(history_event_tx),
         Some(utp_history_tx),
         Some(history_jsonrpc_tx),
-        Some(validation_oracle),
+        Some(header_oracle),
     )
 }
 

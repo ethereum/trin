@@ -42,7 +42,7 @@ pub async fn launch_node(id: u16, bootnode_enr: Option<&SszEnr>) -> anyhow::Resu
         Some(enr) => {
             let external_addr = format!(
                 "{}:{}",
-                enr.ip().expect("bootnode must have IP"),
+                enr.ip4().expect("bootnode must have IP"),
                 discovery_port
             );
             let enr_base64 = enr.to_base64();

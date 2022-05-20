@@ -14,7 +14,7 @@ use trin_core::{
         Enr,
     },
     socket,
-    types::validation::{IdentityValidator, ValidationOracle},
+    types::validation::{HeaderOracle, IdentityValidator},
 };
 
 use discv5::Discv5Event;
@@ -40,8 +40,8 @@ async fn init_overlay(
     let overlay_config = OverlayConfig::default();
     // Ignore all uTP events
     let (utp_listener_tx, _) = unbounded_channel::<UtpListenerRequest>();
-    let validation_oracle = ValidationOracle::default();
-    let validator = IdentityValidator { validation_oracle };
+    let header_oracle = HeaderOracle::default();
+    let validator = IdentityValidator { header_oracle };
 
     OverlayProtocol::new(
         overlay_config,

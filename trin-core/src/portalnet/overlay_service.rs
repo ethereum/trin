@@ -1,4 +1,11 @@
-use std::{collections::HashMap, fmt, marker::PhantomData, sync::Arc, task::Poll, time::Duration};
+use std::{
+    collections::HashMap,
+    fmt,
+    marker::{PhantomData, Sync},
+    sync::Arc,
+    task::Poll,
+    time::Duration,
+};
 
 use crate::{
     portalnet::{
@@ -269,7 +276,7 @@ pub struct OverlayService<TContentKey, TMetric, TValidator> {
 }
 
 impl<
-        TContentKey: OverlayContentKey + Send,
+        TContentKey: OverlayContentKey + Send + Sync,
         TMetric: Metric + Send,
         TValidator: 'static + Validator<TContentKey> + Send,
     > OverlayService<TContentKey, TMetric, TValidator>
@@ -998,18 +1005,23 @@ impl<
                 return;
             }
         };
-        let ck_clone = content_key.clone();
-        let content_clone = content.clone();
-        self.validator
-            .validate_content(ck_clone, content_clone)
-            .await;
+        match self
+            .validator
+            .validate_content(&content_key, &content)
+            .await
+        {
+            Ok(_) => (),
+            Err(_) => {
+                error!("Unable to validate received content.");
+                return;
+            }
+        }
         match self.storage.read().should_store(&content_key) {
             Ok(should_store) => match should_store {
-                true => self
-                    .storage
-                    .write()
-                    .store(&content_key, &content.into())
-                    .unwrap(),
+                true => match self.storage.write().store(&content_key, &content.into()) {
+                    Ok(_) => (),
+                    Err(_) => error!("Content received, but not stored: Error writing to db."),
+                },
                 false => debug!(
                     "Content received, but not stored: Distance falls outside current radius."
                 ),
@@ -1317,7 +1329,7 @@ mod tests {
                 content_key::IdentityContentKey, messages::PortalnetConfig, metric::XorMetric,
             },
         },
-        types::validation::{IdentityValidator, ValidationOracle},
+        types::validation::{HeaderOracle, IdentityValidator},
         utils::node_id::generate_random_remote_enr,
     };
 
@@ -1363,8 +1375,8 @@ mod tests {
         let (request_tx, request_rx) = mpsc::unbounded_channel();
         let (response_tx, response_rx) = mpsc::unbounded_channel();
         let metrics = None;
-        let validation_oracle = ValidationOracle::default();
-        let validator = IdentityValidator { validation_oracle };
+        let header_oracle = HeaderOracle::default();
+        let validator = IdentityValidator { header_oracle };
 
         OverlayService {
             discovery,
@@ -1689,7 +1701,7 @@ mod tests {
 
         // Modify first ENR to increment sequence number.
         let updated_udp: u16 = 9000;
-        let _ = enr1.set_udp(updated_udp, &sk1);
+        let _ = enr1.set_udp4(updated_udp, &sk1);
         assert_ne!(1, enr1.seq());
 
         let mut enrs: Vec<Enr> = vec![];
