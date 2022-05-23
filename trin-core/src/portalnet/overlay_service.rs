@@ -1020,10 +1020,10 @@ impl<
             Ok(should_store) => match should_store {
                 true => match self.storage.write().store(&content_key, &content.into()) {
                     Ok(_) => (),
-                    Err(_) => error!("Content received, but not stored: Error writing to db."),
+                    Err(msg) => error!("{}", format!("Content received, but not stored: {msg}")),
                 },
                 false => debug!(
-                    "Content received, but not stored: Distance falls outside current radius."
+                    "Content received, but not stored: Content is already stored or its distance falls outside current radius."
                 ),
             },
             Err(_) => {
@@ -1329,7 +1329,7 @@ mod tests {
                 content_key::IdentityContentKey, messages::PortalnetConfig, metric::XorMetric,
             },
         },
-        types::validation::{HeaderOracle, IdentityValidator},
+        types::validation::IdentityValidator,
         utils::node_id::generate_random_remote_enr,
     };
 
@@ -1375,8 +1375,7 @@ mod tests {
         let (request_tx, request_rx) = mpsc::unbounded_channel();
         let (response_tx, response_rx) = mpsc::unbounded_channel();
         let metrics = None;
-        let header_oracle = HeaderOracle::default();
-        let validator = IdentityValidator { header_oracle };
+        let validator = IdentityValidator {};
 
         OverlayService {
             discovery,

@@ -1,6 +1,7 @@
 use anyhow::anyhow;
 use log::debug;
 use std::sync::Arc;
+use std::sync::RwLock as StdRwLock;
 
 use parking_lot::RwLock;
 use tokio::sync::mpsc::UnboundedSender;
@@ -34,7 +35,7 @@ impl HistoryNetwork {
         utp_listener_tx: UnboundedSender<UtpListenerRequest>,
         storage_config: PortalStorageConfig,
         portal_config: PortalnetConfig,
-        header_oracle: HeaderOracle,
+        header_oracle: Arc<StdRwLock<HeaderOracle>>,
     ) -> Self {
         let config = OverlayConfig {
             bootnode_enrs: portal_config.bootnode_enrs.clone(),

@@ -3,14 +3,15 @@ mod jsonrpc;
 pub mod network;
 pub mod validation;
 
+use std::sync::{Arc, RwLock};
+
+use discv5::TalkRequest;
 use log::info;
+use network::HistoryNetwork;
+use tokio::sync::mpsc::UnboundedSender;
 use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::{events::HistoryEvents, jsonrpc::HistoryRequestHandler};
-use discv5::TalkRequest;
-use network::HistoryNetwork;
-use std::sync::Arc;
-use tokio::sync::mpsc::UnboundedSender;
 use trin_core::{
     cli::TrinConfig,
     jsonrpc::types::HistoryJsonRpcRequest,
@@ -80,10 +81,10 @@ pub async fn main(infura_url: String) -> Result<(), Box<dyn std::error::Error>> 
         events.start().await;
     });
 
-    let header_oracle = HeaderOracle {
+    let header_oracle = Arc::new(RwLock::new(HeaderOracle {
         infura_url,
         ..HeaderOracle::default()
-    };
+    }));
     let history_network = HistoryNetwork::new(
         discovery.clone(),
         overlay_sender,
@@ -110,25 +111,23 @@ type HistoryNetworkTask = Option<JoinHandle<()>>;
 type HistoryEventTx = Option<mpsc::UnboundedSender<TalkRequest>>;
 type HistoryUtpTx = Option<mpsc::UnboundedSender<UtpListenerEvent>>;
 type HistoryJsonRpcTx = Option<mpsc::UnboundedSender<HistoryJsonRpcRequest>>;
-type HistoryHeaderOracle = Option<HeaderOracle>;
 
 pub async fn initialize_history_network(
     discovery: &Arc<Discovery>,
     utp_listener_tx: UnboundedSender<UtpListenerRequest>,
     portalnet_config: PortalnetConfig,
     storage_config: PortalStorageConfig,
-    mut header_oracle: HeaderOracle,
+    header_oracle: Arc<RwLock<HeaderOracle>>,
 ) -> (
     HistoryHandler,
     HistoryNetworkTask,
     HistoryEventTx,
     HistoryUtpTx,
     HistoryJsonRpcTx,
-    HistoryHeaderOracle,
 ) {
     let (history_jsonrpc_tx, history_jsonrpc_rx) =
         mpsc::unbounded_channel::<HistoryJsonRpcRequest>();
-    header_oracle.history_jsonrpc_tx = Some(history_jsonrpc_tx.clone());
+    header_oracle.write().unwrap().history_jsonrpc_tx = Some(history_jsonrpc_tx.clone());
     let (history_event_tx, history_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
     let (utp_history_tx, utp_history_rx) = mpsc::unbounded_channel::<UtpListenerEvent>();
     let history_network = HistoryNetwork::new(
@@ -136,7 +135,7 @@ pub async fn initialize_history_network(
         utp_listener_tx,
         storage_config,
         portalnet_config.clone(),
-        header_oracle.clone(),
+        header_oracle,
     )
     .await;
     let history_network = Arc::new(history_network);
@@ -156,7 +155,6 @@ pub async fn initialize_history_network(
         Some(history_event_tx),
         Some(utp_history_tx),
         Some(history_jsonrpc_tx),
-        Some(header_oracle),
     )
 }
 

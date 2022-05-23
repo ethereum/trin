@@ -1,3 +1,5 @@
+use std::sync::{Arc, RwLock};
+
 use anyhow::anyhow;
 use async_trait::async_trait;
 use rlp::Rlp;
@@ -8,7 +10,7 @@ use trin_core::types::header::Header;
 use trin_core::types::validation::{HeaderOracle, Validator};
 
 pub struct ChainHistoryValidator {
-    pub header_oracle: HeaderOracle,
+    pub header_oracle: Arc<RwLock<HeaderOracle>>,
 }
 
 #[async_trait]
@@ -26,8 +28,13 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                 let rlp = Rlp::new(content);
                 let header = Header::decode_rlp(&rlp).expect("invalid header");
                 let number = format!("0x{:02X}", header.number);
-                let expected_hash = self.header_oracle.get_hash_at_height(number).unwrap();
-                let actual_hash = hex::encode(key.block_hash);
+                let expected_hash = &self
+                    .header_oracle
+                    .write()
+                    .unwrap()
+                    .get_hash_at_height(number)
+                    .unwrap();
+                let actual_hash = &hex::encode(key.block_hash);
                 if actual_hash == expected_hash {
                     Ok(())
                 } else {
@@ -120,10 +127,10 @@ mod tests {
 
         let header: Header = Header::decode_rlp(&rlp).expect("error decoding header");
         let infura_url = server.url("/get_header");
-        let header_oracle = HeaderOracle {
+        let header_oracle = Arc::new(RwLock::new(HeaderOracle {
             infura_url,
             ..HeaderOracle::default()
-        };
+        }));
         let mut chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = HistoryContentKey::BlockHeader(BlockHeader {
             chain_id: 1,
@@ -149,10 +156,10 @@ mod tests {
         header.number = 669052;
 
         let infura_url = server.url("/get_header");
-        let header_oracle = HeaderOracle {
+        let header_oracle = Arc::new(RwLock::new(HeaderOracle {
             infura_url,
             ..HeaderOracle::default()
-        };
+        }));
         let mut chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = HistoryContentKey::BlockHeader(BlockHeader {
             chain_id: 1,
@@ -179,10 +186,10 @@ mod tests {
         header.gas_limit = U256::from(3141591);
 
         let infura_url = server.url("/get_header");
-        let header_oracle = HeaderOracle {
+        let header_oracle = Arc::new(RwLock::new(HeaderOracle {
             infura_url,
             ..HeaderOracle::default()
-        };
+        }));
         let mut chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = HistoryContentKey::BlockHeader(BlockHeader {
             chain_id: 1,

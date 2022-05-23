@@ -82,9 +82,7 @@ pub trait Validator<TContentKey> {
 }
 
 // This is a mock Validator for use in tests where no validation is required.
-pub struct IdentityValidator {
-    pub header_oracle: HeaderOracle,
-}
+pub struct IdentityValidator {}
 
 #[async_trait]
 impl Validator<IdentityContentKey> for IdentityValidator {

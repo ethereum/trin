@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use log::debug;
 use tokio::sync::mpsc;
@@ -61,10 +61,10 @@ pub async fn run_trin(
         PortalStorage::setup_config(discovery.local_enr().node_id(), trin_config.kb)?;
 
     // Initialize validation oracle
-    let header_oracle = HeaderOracle {
+    let header_oracle = Arc::new(RwLock::new(HeaderOracle {
         infura_url: infura_url.clone(),
         ..HeaderOracle::default()
-    };
+    }));
 
     debug!("Selected networks to spawn: {:?}", trin_config.networks);
     // Initialize state sub-network service and event handlers, if selected
@@ -99,7 +99,7 @@ pub async fn run_trin(
             utp_listener_tx,
             portalnet_config.clone(),
             storage_config.clone(),
-            header_oracle.clone(),
+            header_oracle,
         )
         .await
     } else {
