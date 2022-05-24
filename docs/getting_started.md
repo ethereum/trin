@@ -58,7 +58,7 @@ RUST_LOG=debug cargo run
 View CLI options:
 
 ```sh
-cargo run -- -h
+cargo run -- --help
 ```
 
 ### Connect to the Portal Network testnet
