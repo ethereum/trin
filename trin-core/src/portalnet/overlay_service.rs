@@ -278,7 +278,7 @@ pub struct OverlayService<TContentKey, TMetric, TValidator> {
     request_tx: UnboundedSender<OverlayRequest>,
     /// A map of active outgoing requests.
     active_outgoing_requests: Arc<RwLock<HashMap<OverlayRequestId, ActiveOutgoingRequest>>>,
-    /// All of the iterative queries currently being performed.
+    /// All of the queries currently being performed.
     queries: QueryPool<QueryInfo, NodeId, Enr>,
     /// The receiver half of a channel for responses to outgoing requests.
     response_rx: UnboundedReceiver<OverlayResponse>,
@@ -411,7 +411,7 @@ where
         self.add_bootnodes(bootnodes.clone());
         let node_id = self.discovery.discv5.local_enr().node_id();
         // Begin request for our local node ID.
-        self.init_iterative_findnodes_with_initial_enrs(&node_id, bootnodes);
+        self.init_find_nodes_query_with_initial_enrs(&node_id, bootnodes);
     }
 
     /// The main loop for the overlay service. The loop selects over different possible tasks to
@@ -582,7 +582,7 @@ where
             random_node_id_in_bucket
         };
 
-        self.init_iterative_findnodes(&target_node_id);
+        self.init_find_nodes_query(&target_node_id);
     }
 
     /// Returns the local ENR of the node.
@@ -760,7 +760,7 @@ where
         let enrs = self.nodes_by_distance(distances64);
 
         // Limit the ENRs so that their summed sizes do not surpass the max TALKREQ packet size.
-        let enrs = limit_nodes_response_size(enrs);
+        let enrs = limit_enr_list_to_max_bytes(enrs, MAX_NODES_SIZE);
 
         Nodes { total: 1, enrs }
     }
@@ -1463,7 +1463,7 @@ where
         Ok(closest_nodes)
     }
 
-    fn init_iterative_findnodes_with_initial_enrs(&mut self, target: &NodeId, enrs: Vec<Enr>) {
+    fn init_find_nodes_query_with_initial_enrs(&mut self, target: &NodeId, enrs: Vec<Enr>) {
         let mut target = QueryInfo {
             query_type: QueryType::FindNode(*target),
             untrusted_enrs: Default::default(),
@@ -1495,7 +1495,7 @@ where
     }
 
     /// Starts a FindNode query to find nodes with IDs closest to target.
-    fn init_iterative_findnodes(&mut self, target: &NodeId) {
+    fn init_find_nodes_query(&mut self, target: &NodeId) {
         let closest_enrs = {
             let target_key = Key::from(*target);
             let mut kbuckets = self.kbuckets.write();
@@ -1507,7 +1507,7 @@ where
             enrs
         };
 
-        self.init_iterative_findnodes_with_initial_enrs(target, closest_enrs);
+        self.init_find_nodes_query_with_initial_enrs(target, closest_enrs);
     }
 
     /// Returns an ENR if one is known for the given NodeId.
@@ -1562,10 +1562,10 @@ const TALK_REQ_PACKET_OVERHEAD: usize = 16 + // IV
     16; // RLP HMAC
         // ENR SSZ overhead empirically observed to be double.
         // Todo: determine why this is. It seems too high.
-const MAX_NODES_SIZE: usize = (MAX_DISCV5_PACKET_SIZE - TALK_REQ_PACKET_OVERHEAD) / 2;
+const MAX_NODES_SIZE: usize = MAX_DISCV5_PACKET_SIZE - TALK_REQ_PACKET_OVERHEAD;
 
 /// Limits a to a maximum packet size, including the discv5 header overhead.
-fn limit_nodes_response_size(enrs: Vec<SszEnr>) -> Vec<SszEnr> {
+fn limit_enr_list_to_max_bytes(enrs: Vec<SszEnr>, max_size: usize) -> Vec<SszEnr> {
     // If all ENRs would fit at max size, don't check individual sizes.
     if enrs.len() < (MAX_NODES_SIZE / MAX_ENR_SIZE) {
         return enrs;
@@ -1574,9 +1574,9 @@ fn limit_nodes_response_size(enrs: Vec<SszEnr>) -> Vec<SszEnr> {
     let mut total_size: usize = 0;
 
     for enr in enrs.iter() {
-        let enr_size = enr.size();
+        let enr_size = enr.ssz_bytes_len();
         total_size = total_size + enr_size;
-        if total_size < MAX_NODES_SIZE {
+        if total_size < max_size {
             enrs_limited_size.push(enr.clone());
         } else {
             break;
@@ -2268,7 +2268,7 @@ mod tests {
             enrs.push(SszEnr::new(enr));
         }
 
-        let enrs_limited = limit_nodes_response_size(enrs);
+        let enrs_limited = limit_enr_list_to_max_bytes(enrs, MAX_NODES_SIZE);
 
         assert_eq!(enrs_limited.len(), correct_limited_size);
     }
