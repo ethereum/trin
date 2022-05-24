@@ -294,10 +294,18 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
 
         // initiate the connection to the acceptor
         let (tx, rx) = tokio::sync::oneshot::channel::<anyhow::Result<UtpSocket>>();
-
-        let _ = self
-            .utp_listener_tx
-            .send(UtpListenerRequest::Connect(conn_id, enr.node_id(), tx));
+        self.utp_listener_tx
+            .send(UtpListenerRequest::Connect(
+                conn_id,
+                enr.node_id(),
+                self.protocol.clone(),
+                tx,
+            ))
+            .map_err(|err| {
+                OverlayRequestError::UtpError(format!(
+                    "Unable to send Connect request with FindContent stream to UtpListener: {err}"
+                ))
+            })?;
 
         match rx.await {
             Ok(conn) => {
@@ -400,9 +408,12 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         // initiate the connection to the acceptor
         let (tx, rx) = tokio::sync::oneshot::channel::<anyhow::Result<UtpSocket>>();
 
-        let _ = self
-            .utp_listener_tx
-            .send(UtpListenerRequest::Connect(conn_id, enr.node_id(), tx));
+        self.utp_listener_tx.send(UtpListenerRequest::Connect(
+            conn_id,
+            enr.node_id(),
+            self.protocol.clone(),
+            tx,
+        )).map_err(|err| anyhow!("Unable to send Connect request to UtpListener when processing ACCEPT message: {err}"))?;
 
         match rx.await? {
             Ok(mut conn) => {

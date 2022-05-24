@@ -30,9 +30,12 @@ impl TestApp {
             .send(UtpListenerRequest::OfferStream(conn_id));
 
         let (tx, rx) = tokio::sync::oneshot::channel::<anyhow::Result<UtpSocket>>();
-        let _ = self
-            .utp_listener_tx
-            .send(UtpListenerRequest::Connect(conn_id, enr.node_id(), tx));
+        let _ = self.utp_listener_tx.send(UtpListenerRequest::Connect(
+            conn_id,
+            enr.node_id(),
+            ProtocolId::History,
+            tx,
+        ));
 
         let mut conn = rx.await.unwrap().unwrap();
 
@@ -72,7 +75,7 @@ impl TestApp {
         });
     }
 
-    async fn prepare_to_receive(&self, conn_id: u16) {
+    async fn prepare_to_receive(&self, source: Enr, conn_id: u16) {
         // listen for incoming connection request on conn_id, as part of utp handshake
         let _ = self
             .utp_listener_tx
@@ -83,6 +86,14 @@ impl TestApp {
         let _ = self
             .utp_listener_tx
             .send(UtpListenerRequest::OfferStream(conn_id_recv));
+
+        let _ = self
+            .utp_listener_tx
+            .send(UtpListenerRequest::AddActiveConnection(
+                source,
+                ProtocolId::History,
+                conn_id,
+            ));
     }
 }
 
@@ -114,7 +125,9 @@ async fn main() {
         .await
         .unwrap();
 
-    server.prepare_to_receive(connection_id).await;
+    server
+        .prepare_to_receive(client.discovery.discv5.local_enr(), connection_id)
+        .await;
 
     client
         .send_utp_request(connection_id, payload, server_enr)

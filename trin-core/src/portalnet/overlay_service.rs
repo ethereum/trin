@@ -20,7 +20,6 @@ use crate::{
 };
 
 use crate::{
-    locks::RwLoggingExt,
     portalnet::types::content_key::RawContentKey,
     utp::{
         stream::{UtpListenerEvent, UtpPayload},
@@ -398,8 +397,8 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
             tokio::time::interval(Duration::from_secs(BUCKET_REFRESH_INTERVAL));
 
         loop {
-            let utp_listener_rx = self.utp_listener_rx.clone();
-            let mut utp_listener_lock = utp_listener_rx.write_with_warn().await;
+            // let utp_listener_rx = self.utp_listener_rx.clone();
+            // let mut utp_listener_lock = utp_listener_rx.write_with_warn().await;
 
             tokio::select! {
                 Some(request) = self.request_rx.recv() => self.process_request(request),
@@ -429,14 +428,14 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                         self.peers_to_ping.insert(node_id);
                     }
                 }
-                Some(utp_event) = utp_listener_lock.recv() => {
-                    match utp_event {
-                        UtpListenerEvent::ProcessedClosedStreams(processed_streams) =>
-                        {
-                            self.handle_utp_payload(processed_streams);
-                        }
-                    }
-                }
+                // Some(utp_event) = utp_listener_lock.recv() => {
+                //     match utp_event {
+                //         UtpListenerEvent::ProcessedClosedStreams(processed_streams) =>
+                //         {
+                //             self.handle_utp_payload(processed_streams);
+                //         }
+                //     }
+                // }
                 _ = OverlayService::<TContentKey, TMetric>::bucket_maintenance_poll(self.protocol.clone(), &self.kbuckets) => {}
                 _ = bucket_refresh_interval.tick() => {
                     debug!("[{:?}] Overlay bucket refresh lookup", self.protocol);
@@ -444,6 +443,25 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                 }
             }
         }
+    }
+
+    /// Send request to UtpLister to add an uTP stream to the active connections
+    fn add_utp_connection(
+        &self,
+        source: &NodeId,
+        conn_id_recv: u16,
+    ) -> Result<(), OverlayRequestError> {
+        if let Some(enr) = self.discovery.discv5.find_enr(source) {
+            // Initialize active uTP stream with requested note
+            let utp_request =
+                UtpListenerRequest::AddActiveConnection(enr, self.protocol.clone(), conn_id_recv);
+            if let Err(err) = self.utp_listener_tx.send(utp_request) {
+                return Err(OverlayRequestError::UtpError(format!(
+                    "Unable to send uTP AddActiveConnection request: {err}"
+                )));
+            }
+        }
+        Ok(())
     }
 
     /// Main bucket refresh lookup logic
@@ -518,8 +536,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         // channel if the request was initiated internally (e.g. for maintenance).
         match request.direction {
             RequestDirection::Incoming { id, source } => {
-                let response =
-                    self.handle_request(request.request.clone(), id.clone(), source.clone());
+                let response = self.handle_request(request.request.clone(), id.clone(), &source);
                 // Send response to responder if present.
                 if let Some(responder) = request.responder {
                     let _ = responder.send(response);
@@ -552,7 +569,12 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         debug!("[{:?}] Initializing request", self.protocol);
         match request {
             Request::FindContent(find_content) => {
-                Ok(Response::Content(self.handle_find_content(find_content)?))
+                // TODO: Creating random NodeID here just to satisfy handle_find_content signature
+                // is a hack on top of the history RecursiveFindContent temporally hack.
+                let node_id = NodeId::random();
+                Ok(Response::Content(
+                    self.handle_find_content(find_content, &node_id)?,
+                ))
             }
             _ => Err(OverlayRequestError::InvalidRequest(
                 "Initializing this overlay service request is not yet supported.".to_string(),
@@ -565,23 +587,23 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         &mut self,
         request: Request,
         id: RequestId,
-        source: NodeId,
+        source: &NodeId,
     ) -> Result<Response, OverlayRequestError> {
         debug!("[{:?}] Handling request {}", self.protocol, id);
         match request {
-            Request::Ping(ping) => Ok(Response::Pong(self.handle_ping(ping, source))),
+            Request::Ping(ping) => Ok(Response::Pong(self.handle_ping(ping, &source))),
             Request::FindNodes(find_nodes) => {
                 Ok(Response::Nodes(self.handle_find_nodes(find_nodes)))
             }
-            Request::FindContent(find_content) => {
-                Ok(Response::Content(self.handle_find_content(find_content)?))
-            }
-            Request::Offer(offer) => Ok(Response::Accept(self.handle_offer(offer)?)),
+            Request::FindContent(find_content) => Ok(Response::Content(
+                self.handle_find_content(find_content, &source)?,
+            )),
+            Request::Offer(offer) => Ok(Response::Accept(self.handle_offer(offer, source)?)),
         }
     }
 
     /// Builds a `Pong` response for a `Ping` request.
-    fn handle_ping(&self, request: Ping, source: NodeId) -> Pong {
+    fn handle_ping(&self, request: Ping, source: &NodeId) -> Pong {
         debug!(
             "[{:?}] Handling ping request from node={}. Ping={:?}",
             self.protocol, source, request
@@ -611,7 +633,11 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
     }
 
     /// Attempts to build a `Content` response for a `FindContent` request.
-    fn handle_find_content(&self, request: FindContent) -> Result<Content, OverlayRequestError> {
+    fn handle_find_content(
+        &self,
+        request: FindContent,
+        source: &NodeId,
+    ) -> Result<Content, OverlayRequestError> {
         self.metrics
             .as_ref()
             .and_then(|m| Some(m.report_inbound_find_content()));
@@ -647,12 +673,15 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
 
                     // also listen on conn_id + 1 because this is the receive path
                     let conn_id_recv = conn_id.wrapping_add(1);
+
                     let utp_request = UtpListenerRequest::FindContentStream(conn_id_recv);
                     if let Err(err) = self.utp_listener_tx.send(utp_request) {
                         return Err(OverlayRequestError::UtpError(format!(
                             "Unable to send uTP FindContent stream request: {err}"
                         )));
                     }
+
+                    self.add_utp_connection(source, conn_id_recv)?;
 
                     // Connection id is send as BE because uTP header values are stored also as BE
                     Ok(Content::ConnectionId(conn_id.to_be()))
@@ -673,7 +702,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
     }
 
     /// Attempts to build an `Accept` response for an `Offer` request.
-    fn handle_offer(&self, request: Offer) -> Result<Accept, OverlayRequestError> {
+    fn handle_offer(&self, request: Offer, source: &NodeId) -> Result<Accept, OverlayRequestError> {
         self.metrics
             .as_ref()
             .and_then(|m| Some(m.report_inbound_offer()));
@@ -721,12 +750,15 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
 
         // also listen on conn_id + 1 because this is the actual receive path for acceptor
         let conn_id_recv = conn_id.wrapping_add(1);
+
         let utp_request = UtpListenerRequest::AcceptStream(conn_id_recv, accept_keys);
         if let Err(err) = self.utp_listener_tx.send(utp_request) {
             return Err(OverlayRequestError::UtpError(format!(
                 "Unable to send uTP Accept stream request: {err}"
             )));
         }
+
+        self.add_utp_connection(source, conn_id)?;
 
         let accept = Accept {
             connection_id: conn_id.to_be(),
