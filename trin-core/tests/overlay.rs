@@ -14,7 +14,7 @@ use trin_core::{
         Enr,
     },
     socket,
-    types::validation::IdentityValidator,
+    types::validation::MockValidator,
 };
 
 use discv5::Discv5Event;
@@ -30,7 +30,7 @@ use trin_core::utp::stream::UtpListenerRequest;
 async fn init_overlay(
     discovery: Arc<Discovery>,
     protocol: ProtocolId,
-) -> OverlayProtocol<IdentityContentKey, XorMetric, IdentityValidator> {
+) -> OverlayProtocol<IdentityContentKey, XorMetric, MockValidator> {
     let storage_config = PortalStorage::setup_config(
         discovery.local_enr().node_id(),
         DEFAULT_STORAGE_CAPACITY.parse().unwrap(),
@@ -40,7 +40,7 @@ async fn init_overlay(
     let overlay_config = OverlayConfig::default();
     // Ignore all uTP events
     let (utp_listener_tx, _) = unbounded_channel::<UtpListenerRequest>();
-    let validator = IdentityValidator {};
+    let validator = MockValidator {};
 
     OverlayProtocol::new(
         overlay_config,
@@ -56,7 +56,7 @@ async fn init_overlay(
 
 async fn spawn_overlay(
     discovery: Arc<Discovery>,
-    overlay: Arc<OverlayProtocol<IdentityContentKey, XorMetric, IdentityValidator>>,
+    overlay: Arc<OverlayProtocol<IdentityContentKey, XorMetric, MockValidator>>,
 ) {
     let (overlay_tx, mut overlay_rx) = mpsc::unbounded_channel();
     let mut discovery_rx = discovery

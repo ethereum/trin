@@ -7,9 +7,9 @@ use crate::jsonrpc::types::{HistoryJsonRpcRequest, JsonRequest, Params};
 use crate::portalnet::types::content_key::IdentityContentKey;
 use crate::portalnet::types::messages::ByteList;
 
-// This struct is responsible for dispatching cross-overlay-network requests
-// for data to perform validation. Currently, it just proxies these requests
-// on to infura.
+/// Responsible for dispatching cross-overlay-network requests
+/// for data to perform validation. Currently, it just proxies these requests
+/// on to infura.
 #[derive(Clone)]
 pub struct HeaderOracle {
     pub infura_url: String,
@@ -69,7 +69,7 @@ impl HeaderOracle {
     }
 }
 
-// This trait is used by all overlay-network Validators to validate content in the overlay service.
+/// Used by all overlay-network Validators to validate content in the overlay service.
 #[async_trait]
 pub trait Validator<TContentKey> {
     async fn validate_content(
@@ -81,11 +81,11 @@ pub trait Validator<TContentKey> {
         TContentKey: 'async_trait;
 }
 
-// This is a mock Validator for use in tests where no validation is required.
-pub struct IdentityValidator {}
+/// For use in tests where no validation needs to be performed.
+pub struct MockValidator {}
 
 #[async_trait]
-impl Validator<IdentityContentKey> for IdentityValidator {
+impl Validator<IdentityContentKey> for MockValidator {
     async fn validate_content(
         &mut self,
         _content_key: &IdentityContentKey,

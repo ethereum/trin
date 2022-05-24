@@ -26,14 +26,13 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
         match content_key {
             HistoryContentKey::BlockHeader(key) => {
                 let rlp = Rlp::new(content);
-                let header = Header::decode_rlp(&rlp).expect("invalid header");
+                let header = Header::decode_rlp(&rlp)?;
                 let number = format!("0x{:02X}", header.number);
                 let expected_hash = &self
                     .header_oracle
                     .write()
                     .unwrap()
-                    .get_hash_at_height(number)
-                    .unwrap();
+                    .get_hash_at_height(number)?;
                 let actual_hash = &hex::encode(key.block_hash);
                 if actual_hash == expected_hash {
                     Ok(())

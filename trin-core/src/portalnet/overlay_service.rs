@@ -925,7 +925,17 @@ impl<
         match response {
             Response::Pong(pong) => self.process_pong(pong, source),
             Response::Nodes(nodes) => self.process_nodes(nodes, source),
-            Response::Content(content) => self.process_content(content, source, request).await,
+            Response::Content(content) => {
+                let find_content_request = match request {
+                    Request::FindContent(find_content) => find_content,
+                    _ => {
+                        error!("Unable to process received content: Invalid request message.");
+                        return;
+                    }
+                };
+                self.process_content(content, source, find_content_request)
+                    .await
+            }
             _ => {}
         }
     }
@@ -973,7 +983,7 @@ impl<
     }
 
     /// Processes a Content response.
-    async fn process_content(&mut self, content: Content, source: Enr, request: Request) {
+    async fn process_content(&mut self, content: Content, source: Enr, request: FindContent) {
         debug!(
             "[{:?}] Processing Content response from node. Node: {}",
             self.protocol,
@@ -990,15 +1000,8 @@ impl<
         }
     }
 
-    async fn process_received_content(&mut self, content: ByteList, request: Request) {
-        let find_content = match request {
-            Request::FindContent(find_content) => find_content,
-            _ => {
-                error!("Unable to process received content: Invalid request message.");
-                return;
-            }
-        };
-        let content_key = match TContentKey::try_from(find_content.content_key) {
+    async fn process_received_content(&mut self, content: ByteList, request: FindContent) {
+        let content_key = match TContentKey::try_from(request.content_key) {
             Ok(val) => val,
             Err(_) => {
                 error!("Unable to process received content: Invalid content key.");
@@ -1011,8 +1014,8 @@ impl<
             .await
         {
             Ok(_) => (),
-            Err(_) => {
-                error!("Unable to validate received content.");
+            Err(msg) => {
+                error!("Unable to validate received content: {msg:?}");
                 return;
             }
         }
@@ -1020,7 +1023,7 @@ impl<
             Ok(should_store) => match should_store {
                 true => match self.storage.write().store(&content_key, &content.into()) {
                     Ok(_) => (),
-                    Err(msg) => error!("{}", format!("Content received, but not stored: {msg}")),
+                    Err(msg) => error!("Content received, but not stored: {msg}"),
                 },
                 false => debug!(
                     "Content received, but not stored: Content is already stored or its distance falls outside current radius."
@@ -1329,7 +1332,7 @@ mod tests {
                 content_key::IdentityContentKey, messages::PortalnetConfig, metric::XorMetric,
             },
         },
-        types::validation::IdentityValidator,
+        types::validation::MockValidator,
         utils::node_id::generate_random_remote_enr,
     };
 
@@ -1344,7 +1347,7 @@ mod tests {
         };
     }
 
-    fn build_service() -> OverlayService<IdentityContentKey, XorMetric, IdentityValidator> {
+    fn build_service() -> OverlayService<IdentityContentKey, XorMetric, MockValidator> {
         let portal_config = PortalnetConfig {
             no_stun: true,
             ..Default::default()
@@ -1375,7 +1378,7 @@ mod tests {
         let (request_tx, request_rx) = mpsc::unbounded_channel();
         let (response_tx, response_rx) = mpsc::unbounded_channel();
         let metrics = None;
-        let validator = IdentityValidator {};
+        let validator = MockValidator {};
 
         OverlayService {
             discovery,
