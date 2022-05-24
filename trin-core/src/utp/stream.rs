@@ -141,6 +141,15 @@ pub enum UtpListenerEvent {
     ProcessedClosedStreams(ProcessedClosedStreams),
 }
 
+/// uTP stream state events emitted from UtpSocket
+#[derive(Clone, Debug)]
+pub enum UtpStreamEvent {
+    /// Event containing received uTP payload, protocol id and receive connection id
+    Closed(UtpPayload, ProtocolId, ConnId),
+    /// Event containing protocol id and receive connection id
+    Reset(ProtocolId, ConnId),
+}
+
 /// Main uTP service used to listen and handle all uTP connections and streams
 pub struct UtpListener {
     /// Base discv5 layer
@@ -155,6 +164,10 @@ pub struct UtpListener {
     overlay_tx: UnboundedSender<UtpListenerEvent>,
     /// Receiver for uTP requests sent from the overlay layer
     overlay_rx: UnboundedReceiver<UtpListenerRequest>,
+    /// Sender used in UtpSocket to emit stream state events
+    stream_tx: UnboundedSender<UtpStreamEvent>,
+    /// Receiver for uTP stream state events
+    stream_rx: UnboundedReceiver<UtpStreamEvent>,
 }
 
 impl UtpListener {
@@ -172,6 +185,8 @@ impl UtpListener {
         let (utp_listener_tx, utp_listener_rx) = unbounded_channel::<UtpListenerRequest>();
         // Channel to emit processed uTP payload to overlay service
         let (overlay_tx, overlay_rx) = unbounded_channel::<UtpListenerEvent>();
+        // Channel to emit stream events from UtpSocket
+        let (stream_tx, stream_rx) = unbounded_channel::<UtpStreamEvent>();
 
         (
             utp_event_tx,
@@ -184,6 +199,8 @@ impl UtpListener {
                 utp_event_rx,
                 overlay_tx,
                 overlay_rx: utp_listener_rx,
+                stream_tx,
+                stream_rx,
             },
         )
     }
@@ -362,6 +379,7 @@ impl UtpListener {
                     Arc::clone(&self.discovery),
                     connected_to.clone(),
                     protocol_id,
+                    Some(self.stream_tx.clone()),
                 );
                 let conn_key = ConnectionKey::new(connected_to.node_id(), conn_id_recv);
                 self.utp_connections.insert(conn_key, conn);
@@ -398,7 +416,12 @@ impl UtpListener {
         protocol_id: ProtocolId,
     ) -> anyhow::Result<UtpSocket> {
         if let Some(enr) = self.discovery.discv5.find_enr(&node_id) {
-            let mut conn = UtpSocket::new(Arc::clone(&self.discovery), enr, protocol_id);
+            let mut conn = UtpSocket::new(
+                Arc::clone(&self.discovery),
+                enr,
+                protocol_id,
+                Some(self.stream_tx.clone()),
+            );
             conn.make_connection(connection_id).await;
             self.utp_connections.insert(
                 ConnectionKey::new(node_id, conn.receiver_connection_id),
@@ -530,11 +553,20 @@ pub struct UtpSocket {
     /// Receive channel for discv5 socket
     discv5_rx: Arc<RwLock<UnboundedReceiver<Packet>>>,
 
+    /// Sender to emit stream events to UtpListener
+    listener_tx: Option<UnboundedSender<UtpStreamEvent>>,
+
+    /// Store received uTP payload data over the stream
     pub recv_data_stream: Vec<u8>,
 }
 
 impl UtpSocket {
-    pub fn new(socket: Arc<Discovery>, connected_to: Enr, protocol_id: ProtocolId) -> Self {
+    pub fn new(
+        socket: Arc<Discovery>,
+        connected_to: Enr,
+        protocol_id: ProtocolId,
+        utp_listener_tx: Option<UnboundedSender<UtpStreamEvent>>,
+    ) -> Self {
         let (receiver_id, sender_id) = generate_sequential_identifiers();
 
         let (discv5_tx, discv5_rx) = unbounded_channel::<Packet>();
@@ -570,6 +602,7 @@ impl UtpSocket {
             max_retransmission_retries: MAX_RETRANSMISSION_RETRIES,
             discv5_tx,
             discv5_rx: Arc::new(RwLock::new(discv5_rx)),
+            listener_tx: utp_listener_tx,
         }
     }
 
@@ -901,6 +934,8 @@ impl UtpSocket {
 
                 // Give up, the remote peer might not care about our missing packets
                 self.state = SocketState::Closed;
+                self.emit_close_event();
+
                 Ok(Some(reply))
             }
             // Confirm with STATE packet when socket state is `Closed` and we receive FIN packet
@@ -910,6 +945,7 @@ impl UtpSocket {
             (SocketState::FinSent, PacketType::State) => {
                 if packet.ack_nr() == self.seq_nr {
                     self.state = SocketState::Closed;
+                    self.emit_close_event();
                 } else {
                     self.handle_state_packet(packet).await;
                 }
@@ -918,6 +954,15 @@ impl UtpSocket {
             // Reset connection when receiving RESET packet
             (_, PacketType::Reset) => {
                 self.state = SocketState::ResetReceived;
+                // Emit socket state event to UtpListener. Panic if error.
+                if let Some(listener_tx) = self.listener_tx.clone() {
+                    listener_tx
+                        .send(UtpStreamEvent::Reset(
+                            self.protocol_id.clone(),
+                            self.receiver_connection_id,
+                        ))
+                        .unwrap();
+                }
                 Err(anyhow!("Connection reset by remote peer"))
             }
             (state, ty) => {
@@ -925,6 +970,19 @@ impl UtpSocket {
                 debug!("{}", message);
                 Err(anyhow!(message))
             }
+        }
+    }
+
+    /// Emit socket state event to UtpListener. Panic if error.
+    fn emit_close_event(&mut self) {
+        if let Some(listener_tx) = self.listener_tx.clone() {
+            listener_tx
+                .send(UtpStreamEvent::Closed(
+                    self.recv_data_stream.clone(),
+                    self.protocol_id.clone(),
+                    self.receiver_connection_id,
+                ))
+                .unwrap();
         }
     }
 
@@ -1456,7 +1514,7 @@ mod tests {
 
         let discv5 = Arc::new(discv5);
 
-        let conn = UtpSocket::new(Arc::clone(&discv5), enr, ProtocolId::History);
+        let conn = UtpSocket::new(Arc::clone(&discv5), enr, ProtocolId::History, None);
         // TODO: Create `Discv5Socket` struct to encapsulate all socket logic
         spawn_socket_recv(Arc::clone(&discv5), conn.clone());
 
@@ -1476,7 +1534,7 @@ mod tests {
 
         let discv5 = Arc::new(discv5);
 
-        let conn = UtpSocket::new(Arc::clone(&discv5), connected_to, ProtocolId::History);
+        let conn = UtpSocket::new(Arc::clone(&discv5), connected_to, ProtocolId::History, None);
         spawn_socket_recv(Arc::clone(&discv5), conn.clone());
 
         (discv5.local_enr(), conn)
