@@ -39,7 +39,7 @@ use discv5::{
     enr::NodeId,
     kbucket::{
         self, ConnectionDirection, ConnectionState, FailureReason, InsertResult, KBucketsTable,
-        Key, NodeStatus, UpdateResult, MAX_NODES_PER_BUCKET,
+        Key, NodeStatus, UpdateResult,
     },
     rpc::RequestId,
 };
@@ -62,13 +62,6 @@ pub const FIND_CONTENT_MAX_NODES: usize = 32;
 const EXPECTED_NON_EMPTY_BUCKETS: usize = 17;
 /// Bucket refresh lookup interval in seconds
 const BUCKET_REFRESH_INTERVAL_SECS: u64 = 60;
-
-/// Timeout for FINDNODES queries in seconds.
-const FINDNODES_QUERY_TIMEOUT: u64 = 60;
-/// FINDNODES queries' distances per peer.
-const FINDNODES_DISTANCES_TO_REQUEST_PER_PEER: usize = 3;
-/// FINDNODES query concurrency factor (α from kademlia paper).
-const FINDNODES_QUERY_CONCURRENCY: usize = 3;
 
 /// An overlay request error.
 #[derive(Clone, Error, Debug)]
@@ -280,6 +273,14 @@ pub struct OverlayService<TContentKey, TMetric, TValidator> {
     active_outgoing_requests: Arc<RwLock<HashMap<OverlayRequestId, ActiveOutgoingRequest>>>,
     /// All of the queries currently being performed.
     queries: QueryPool<QueryInfo, NodeId, Enr>,
+    /// Timeout after which a peer in an ongoing query is marked unresponsive.
+    query_peer_timeout: Duration,
+    /// Number of peers to request data from in parallel for a single query.
+    query_parallelism: usize,
+    /// Number of new peers to discover before considering a FINDNODES query complete.
+    findnodes_query_num_results: usize,
+    /// The number of buckets we simultaneously request from each peer in a FINDNODES query.
+    findnodes_query_distances_per_peer: usize,
     /// The receiver half of a channel for responses to outgoing requests.
     response_rx: UnboundedReceiver<OverlayResponse>,
     /// The sender half of a channel for responses to outgoing requests.
@@ -319,7 +320,15 @@ where
         protocol: ProtocolId,
         utp_listener_sender: UnboundedSender<UtpListenerRequest>,
         enable_metrics: bool,
+<<<<<<< HEAD
         validator: TValidator,
+=======
+        query_timeout: Duration,
+        query_peer_timeout: Duration,
+        query_parallelism: usize,
+        findnodes_query_num_results: usize,
+        findnodes_query_distances_per_peer: usize,
+>>>>>>> Make all parameters of FindNodesQuery configurable via OverlayConfig with defaults
     ) -> Result<UnboundedSender<OverlayRequest>, String> {
         let (request_tx, request_rx) = mpsc::unbounded_channel();
         let internal_request_tx = request_tx.clone();
@@ -348,7 +357,11 @@ where
                 request_rx,
                 request_tx: internal_request_tx,
                 active_outgoing_requests: Arc::new(RwLock::new(HashMap::new())),
-                queries: QueryPool::new(Duration::from_secs(FINDNODES_QUERY_TIMEOUT)),
+                queries: QueryPool::new(query_timeout),
+                query_peer_timeout,
+                query_parallelism,
+                findnodes_query_num_results,
+                findnodes_query_distances_per_peer,
                 response_rx,
                 response_tx,
                 utp_listener_tx: utp_listener_sender,
@@ -1468,7 +1481,7 @@ where
             query_type: QueryType::FindNode(*target),
             untrusted_enrs: Default::default(),
             callback: None,
-            distances_to_request: FINDNODES_DISTANCES_TO_REQUEST_PER_PEER,
+            distances_to_request: self.findnodes_query_distances_per_peer,
         };
 
         let mut known_closest_peers = Vec::new();
@@ -1485,9 +1498,9 @@ where
             warn!("Iterative FindNodes query initiated but no closest peers in routing table. Aborting query.");
         } else {
             let query_config = FindNodeQueryConfig {
-                parallelism: FINDNODES_QUERY_CONCURRENCY,
-                num_results: MAX_NODES_PER_BUCKET,
-                peer_timeout: Duration::from_secs(FINDNODES_QUERY_TIMEOUT),
+                parallelism: self.query_parallelism,
+                num_results: self.findnodes_query_num_results,
+                peer_timeout: self.query_peer_timeout,
             };
             self.queries
                 .add_findnode_query(query_config, target, known_closest_peers);
@@ -1608,8 +1621,6 @@ mod tests {
 
     use discv5::kbucket::Entry;
     use serial_test::serial;
-    use tokio::sync::mpsc::unbounded_channel;
-    use tokio::time::{sleep, Duration};
     use tokio_test::{assert_pending, assert_ready, task};
 
     macro_rules! poll_request_rx {
@@ -1661,7 +1672,11 @@ mod tests {
             request_tx,
             request_rx,
             active_outgoing_requests,
-            queries: QueryPool::new(Duration::from_secs(FINDNODES_QUERY_TIMEOUT)),
+            queries: QueryPool::new(overlay_config.query_timeout),
+            query_peer_timeout: overlay_config.query_peer_timeout,
+            query_parallelism: overlay_config.query_parallelism,
+            findnodes_query_num_results: overlay_config.findnodes_query_num_results,
+            findnodes_query_distances_per_peer: overlay_config.findnodes_query_distances_per_peer,
             response_tx,
             response_rx,
             utp_listener_tx,

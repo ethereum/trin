@@ -31,7 +31,7 @@ use crate::{
 };
 use discv5::{
     enr::NodeId,
-    kbucket::{Filter, KBucketsTable, NodeStatus},
+    kbucket::{Filter, KBucketsTable, NodeStatus, MAX_NODES_PER_BUCKET},
     TalkRequest,
 };
 use ethereum_types::U256;
@@ -54,6 +54,11 @@ pub struct OverlayConfig {
     pub bucket_filter: Option<Box<dyn Filter<Node>>>,
     pub ping_queue_interval: Option<Duration>,
     pub enable_metrics: bool,
+    pub query_parallelism: usize,
+    pub query_timeout: Duration,
+    pub query_peer_timeout: Duration,
+    pub findnodes_query_num_results: usize,
+    pub findnodes_query_distances_per_peer: usize,
 }
 
 impl Default for OverlayConfig {
@@ -66,6 +71,11 @@ impl Default for OverlayConfig {
             bucket_filter: None,
             ping_queue_interval: None,
             enable_metrics: false,
+            query_parallelism: 3, // (recommended α from kademlia paper)
+            query_peer_timeout: Duration::from_secs(10),
+            query_timeout: Duration::from_secs(60),
+            findnodes_query_num_results: MAX_NODES_PER_BUCKET,
+            findnodes_query_distances_per_peer: 3,
         }
     }
 }
@@ -136,7 +146,15 @@ where
             protocol.clone(),
             utp_listener_tx.clone(),
             config.enable_metrics,
+<<<<<<< HEAD
             validator,
+=======
+            config.query_timeout,
+            config.query_peer_timeout,
+            config.query_parallelism,
+            config.findnodes_query_num_results,
+            config.findnodes_query_distances_per_peer,
+>>>>>>> Make all parameters of FindNodesQuery configurable via OverlayConfig with defaults
         )
         .await
         .unwrap();
