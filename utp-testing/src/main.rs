@@ -1,7 +1,7 @@
 use discv5::{Discv5Event, TalkRequest};
 use log::debug;
 use std::{net::SocketAddr, str::FromStr, sync::Arc};
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use trin_core::{
     portalnet::{
         discovery::Discovery,
@@ -10,7 +10,7 @@ use trin_core::{
     },
     socket,
     utp::{
-        stream::{UtpListener, UtpListenerRequest, UtpListenerUnboundedReceiver, UtpSocket},
+        stream::{UtpListener, UtpListenerEvent, UtpListenerRequest, UtpStream},
         trin_helpers::{UtpMessage, UtpStreamId},
     },
 };
@@ -19,22 +19,22 @@ use trin_core::{
 pub struct TestApp {
     discovery: Arc<Discovery>,
     utp_listener_tx: UnboundedSender<UtpListenerRequest>,
-    utp_listener_rx: UtpListenerUnboundedReceiver,
+    utp_listener_rx: UnboundedReceiver<UtpListenerEvent>,
     utp_event_tx: UnboundedSender<TalkRequest>,
 }
 
 impl TestApp {
     async fn send_utp_request(&mut self, conn_id: u16, payload: Vec<u8>, enr: Enr) {
-        let (tx, rx) = tokio::sync::oneshot::channel::<anyhow::Result<UtpSocket>>();
+        let (tx, rx) = tokio::sync::oneshot::channel::<UtpStream>();
         let _ = self.utp_listener_tx.send(UtpListenerRequest::Connect(
             conn_id,
-            enr.node_id(),
+            enr,
             ProtocolId::History,
             UtpStreamId::OfferStream,
             tx,
         ));
 
-        let mut conn = rx.await.unwrap().unwrap();
+        let mut conn = rx.await.unwrap();
 
         let mut buf = [0; 1500];
         conn.recv(&mut buf).await.unwrap();
@@ -76,7 +76,7 @@ impl TestApp {
         // Listen for incoming connection request on conn_id, as part of uTP handshake
         let _ = self
             .utp_listener_tx
-            .send(UtpListenerRequest::AddActiveConnection(
+            .send(UtpListenerRequest::InitiateConnection(
                 source,
                 ProtocolId::History,
                 UtpStreamId::AcceptStream(vec![vec![]]),

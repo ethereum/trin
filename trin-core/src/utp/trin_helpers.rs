@@ -51,13 +51,13 @@ pub struct UtpAccept {
     pub message: Vec<(Vec<u8>, Vec<u8>)>,
 }
 
-/// Used to track which stream to which overlay request correspond
+/// Used to track which stream an overlay request corresponds with
 #[derive(Debug, Clone, PartialEq)]
 pub enum UtpStreamId {
     /// Stream id to initialize FindContent uTP connection and to listen for content payload
     FindContentStream,
     /// Stream id to listen for incoming FindContent connection and to send back the content data to the requester
-    FindContentData(ByteList),
+    ContentStream(ByteList),
     /// Stream id to send requested content from received ACCEPT response
     OfferStream,
     /// Stream id to listen for OFFER uTP payload. Contains requested content keys.

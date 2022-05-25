@@ -58,17 +58,12 @@ const BASE_HISTORY: usize = 10; // base delays history size
 const MAX_BASE_DELAY_AGE: Delay = Delay(60_000_000);
 // Discv5 socket timeout in milliseconds
 const DISCV5_SOCKET_TIMEOUT: u64 = 25;
-/// Process uTP streams interval in milliseconds
-// const PROCESS_UTP_STREAMS_INTERVAL: u64 = 20;
 
 /// uTP connection id
 type ConnId = u16;
 
 /// uTP payload data
 pub type UtpPayload = Vec<u8>;
-
-/// UtpListener unbounded receiver for emitted events
-pub type UtpListenerUnboundedReceiver = Arc<RwLock<UnboundedReceiver<UtpListenerEvent>>>;
 
 pub fn rand() -> u16 {
     rand::thread_rng().gen()
@@ -90,9 +85,9 @@ impl ConnectionKey {
     }
 }
 
-/// uTP socket connection state
+/// uTP stream connection state
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
-pub enum SocketState {
+pub enum StreamState {
     Uninitialized,
     SynSent,
     SynRecv,
@@ -110,51 +105,53 @@ struct DelayDifferenceSample {
 
 /// Represent overlay to uTP listener request. It is used as a way to communicate between the overlay protocol
 /// and uTP listener
+#[derive(Debug)]
 pub enum UtpListenerRequest {
-    /// Request to initialize uTP stream with remote node
+    /// Request to create and connect to a uTP stream initiated by a remote node
     Connect(
         ConnId,
-        NodeId,
+        Enr,
         ProtocolId,
         UtpStreamId,
-        oneshot::Sender<anyhow::Result<UtpSocket>>,
+        oneshot::Sender<UtpStream>,
     ),
-    /// Request to add uTP stream to the active connections
-    AddActiveConnection(Enr, ProtocolId, UtpStreamId, ConnId),
+    /// Request to initiate and add uTP stream to the connections hash map
+    InitiateConnection(Enr, ProtocolId, UtpStreamId, ConnId),
 }
 
-/// Result from processing all closed uTP streams. Includes a tuple with the payload and the stream id.
-type ProcessedClosedStreams = Vec<(UtpPayload, UtpStreamId)>;
-
-/// Emitted event with all processed uTP streams. Used to handle the uTP payload in overlay service
+/// Emit global event to overlay handler
+#[derive(Debug, PartialEq)]
 pub enum UtpListenerEvent {
-    ProcessedClosedStreams(ProcessedClosedStreams),
+    /// uTP stream is closed
+    ClosedStream(UtpPayload, ProtocolId, UtpStreamId),
+    /// uTP stream is reset
+    ResetStream(ProtocolId, UtpStreamId),
 }
 
-/// uTP stream state events emitted from UtpSocket
+/// uTP stream state events emitted from `UtpStream`
 #[derive(Clone, Debug)]
 pub enum UtpStreamEvent {
-    /// Event containing received uTP payload, protocol id and receive connection id
-    Closed(UtpPayload, ProtocolId, ConnId),
-    /// Event containing protocol id and receive connection id
-    Reset(ProtocolId, ConnId),
+    /// Event signaling that a UtpStream has completed, containing received uTP payload, protocol id,
+    /// receive connection id and node id of the remote peer
+    Closed(UtpPayload, ProtocolId, UtpStreamId, ConnectionKey),
+    /// Event signaling that a UtpStream has been reset, containing protocol id, receive connection id
+    /// and node id of the remote peer
+    Reset(ProtocolId, UtpStreamId, ConnectionKey),
 }
 
 /// Main uTP service used to listen and handle all uTP connections and streams
-// FIXME: Deny dead_code
-#[allow(dead_code)]
 pub struct UtpListener {
     /// Base discv5 layer
     discovery: Arc<Discovery>,
     /// Store all active connections
-    utp_connections: HashMap<ConnectionKey, UtpSocket>,
+    utp_connections: HashMap<ConnectionKey, UtpStream>,
     /// Receiver for uTP events sent from the main portal event handler
     utp_event_rx: UnboundedReceiver<TalkRequest>,
     /// Sender to overlay layer with processed uTP stream
     overlay_tx: UnboundedSender<UtpListenerEvent>,
     /// Receiver for uTP requests sent from the overlay layer
     overlay_rx: UnboundedReceiver<UtpListenerRequest>,
-    /// Sender used in UtpSocket to emit stream state events
+    /// Sender used in UtpStream to emit stream state events
     stream_tx: UnboundedSender<UtpStreamEvent>,
     /// Receiver for uTP stream state events
     stream_rx: UnboundedReceiver<UtpStreamEvent>,
@@ -166,7 +163,7 @@ impl UtpListener {
     ) -> (
         UnboundedSender<TalkRequest>,
         UnboundedSender<UtpListenerRequest>,
-        UtpListenerUnboundedReceiver,
+        UnboundedReceiver<UtpListenerEvent>,
         Self,
     ) {
         // Channel to process uTP TalkReq packets from main portal event handler
@@ -175,13 +172,13 @@ impl UtpListener {
         let (utp_listener_tx, utp_listener_rx) = unbounded_channel::<UtpListenerRequest>();
         // Channel to emit processed uTP payload to overlay service
         let (overlay_tx, overlay_rx) = unbounded_channel::<UtpListenerEvent>();
-        // Channel to emit stream events from UtpSocket
+        // Channel to emit stream events from UtpStream
         let (stream_tx, stream_rx) = unbounded_channel::<UtpStreamEvent>();
 
         (
             utp_event_tx,
             utp_listener_tx,
-            Arc::new(RwLock::new(overlay_rx)),
+            overlay_rx,
             UtpListener {
                 discovery,
                 utp_connections: HashMap::new(),
@@ -196,16 +193,17 @@ impl UtpListener {
 
     /// The main execution loop of the UtpListener service.
     pub async fn start(&mut self) {
-        // let mut process_utp_streams_interval =
-        //     tokio::time::interval(Duration::from_millis(PROCESS_UTP_STREAMS_INTERVAL));
         loop {
             tokio::select! {
-                    Some(utp_request) = self.utp_event_rx.recv() => {
-                        self.process_utp_request(utp_request).await
-                    },
-                    Some(overlay_request) = self.overlay_rx.recv() => {
-                        self.process_overlay_request(overlay_request).await
-                    },
+                Some(utp_request) = self.utp_event_rx.recv() => {
+                    self.process_utp_request(utp_request).await
+                },
+                Some(overlay_request) = self.overlay_rx.recv() => {
+                    self.process_overlay_request(overlay_request).await
+                },
+                Some(stream_event) = self.stream_rx.recv() => {
+                    self.process_stream_event(stream_event)
+                }
             }
         }
     }
@@ -251,8 +249,8 @@ impl UtpListener {
                             }
 
                             // Send content data if the stream is listening for FindContent SYN packet
-                            if let UtpStreamId::FindContentData(content_data) =
-                                conn.stream_id.clone()
+                            if let UtpStreamId::ContentStream(content_data) = conn.stream_id.clone()
+                            // TODO: Change this `clone` to borrow after rust 1.62
                             {
                                 // We want to send uTP data only if the content is Content(ByteList)
                                 debug!(
@@ -282,7 +280,7 @@ impl UtpListener {
                     PacketType::Data => {
                         if let Some(conn) = self
                             .utp_connections
-                            .get_mut(&ConnectionKey::new(*node_id, connection_id - 1))
+                            .get_mut(&ConnectionKey::new(*node_id, connection_id.wrapping_sub(1)))
                         {
                             if conn.discv5_tx.send(packet.clone()).is_err() {
                                 error!("Unable to send DATA packet to uTP stream handler");
@@ -308,7 +306,7 @@ impl UtpListener {
                     PacketType::Fin => {
                         if let Some(conn) = self
                             .utp_connections
-                            .get_mut(&ConnectionKey::new(*node_id, connection_id - 1))
+                            .get_mut(&ConnectionKey::new(*node_id, connection_id.wrapping_sub(1)))
                         {
                             if conn.discv5_tx.send(packet).is_err() {
                                 error!("Unable to send FIN packet to uTP stream handler");
@@ -348,13 +346,13 @@ impl UtpListener {
     /// Process overlay uTP requests
     async fn process_overlay_request(&mut self, request: UtpListenerRequest) {
         match request {
-            UtpListenerRequest::AddActiveConnection(
+            UtpListenerRequest::InitiateConnection(
                 connected_to,
                 protocol_id,
                 stream_id,
                 conn_id_recv,
             ) => {
-                let conn = UtpSocket::new(
+                let conn = UtpStream::new(
                     Arc::clone(&self.discovery),
                     connected_to.clone(),
                     protocol_id,
@@ -364,11 +362,45 @@ impl UtpListener {
                 let conn_key = ConnectionKey::new(connected_to.node_id(), conn_id_recv);
                 self.utp_connections.insert(conn_key, conn);
             }
-            UtpListenerRequest::Connect(conn_id, node_id, protocol_id, stream_id, tx) => {
-                let conn = self.connect(conn_id, node_id, protocol_id, stream_id).await;
+            UtpListenerRequest::Connect(conn_id, enr, protocol_id, stream_id, tx) => {
+                let conn = self.connect(conn_id, enr, protocol_id, stream_id).await;
                 if tx.send(conn).is_err() {
-                    error!("Unable to send uTP socket to requester")
+                    error!("Unable to send the uTP stream to requester")
                 };
+            }
+        }
+    }
+
+    /// Emit global uTP listener event upon processing uTP stream event
+    fn process_stream_event(&mut self, event: UtpStreamEvent) {
+        match event {
+            UtpStreamEvent::Closed(utp_payload, protocol_id, stream_id, conn_key) => {
+                // Remove closed stream from active connections
+                if self.utp_connections.remove(&conn_key).is_none() {
+                    error!("Unable to remove closed uTP stream from active connections, STREAM_CONN_ID_RECV: {}, CONNECTED_TO: {}", conn_key.conn_id_recv, conn_key.node_id);
+                }
+
+                // Emit global event to overlay handler
+                if let Err(err) = self.overlay_tx.send(UtpListenerEvent::ClosedStream(
+                    utp_payload,
+                    protocol_id,
+                    stream_id,
+                )) {
+                    error!("Unable to send ClosedStream event to overlay handler: {err}");
+                }
+            }
+            UtpStreamEvent::Reset(protocol_id, stream_id, conn_key) => {
+                // Remove reset stream from active connections
+                if self.utp_connections.remove(&conn_key).is_none() {
+                    error!("Unable to remove reset uTP stream from active connections, STREAM_CONN_ID_RECV: {}, CONNECTED_TO: {}", conn_key.conn_id_recv, conn_key.node_id);
+                }
+
+                if let Err(err) = self
+                    .overlay_tx
+                    .send(UtpListenerEvent::ResetStream(protocol_id, stream_id))
+                {
+                    error!("Unable to send ResetStream event to overlay handler: {err}");
+                }
             }
         }
     }
@@ -377,42 +409,39 @@ impl UtpListener {
     async fn connect(
         &mut self,
         connection_id: ConnId,
-        node_id: NodeId,
+        enr: Enr,
         protocol_id: ProtocolId,
         stream_id: UtpStreamId,
-    ) -> anyhow::Result<UtpSocket> {
-        if let Some(enr) = self.discovery.discv5.find_enr(&node_id) {
-            let mut conn = UtpSocket::new(
-                Arc::clone(&self.discovery),
-                enr,
-                protocol_id,
-                stream_id,
-                Some(self.stream_tx.clone()),
-            );
-            conn.make_connection(connection_id).await;
-            self.utp_connections.insert(
-                ConnectionKey::new(node_id, conn.receiver_connection_id),
-                conn.clone(),
-            );
-            Ok(conn)
-        } else {
-            Err(anyhow!("Trying to connect to unknow Enr"))
-        }
+    ) -> UtpStream {
+        let mut conn = UtpStream::new(
+            Arc::clone(&self.discovery),
+            enr.clone(),
+            protocol_id,
+            stream_id,
+            Some(self.stream_tx.clone()),
+        );
+        conn.make_connection(connection_id).await;
+        self.utp_connections.insert(
+            ConnectionKey::new(enr.node_id(), conn.receiver_connection_id),
+            conn.clone(),
+        );
+
+        conn
     }
 }
 
 // Used to be MicroTransportProtocol impl but it is basically just called UtpStream compared to the
 // Rust Tcp Lib so I changed it
-#[derive(Clone)]
-pub struct UtpSocket {
+#[derive(Debug, Clone)]
+pub struct UtpStream {
     /// The wrapped discv5 protocol
     socket: Arc<Discovery>,
 
-    /// Socket state
-    pub state: SocketState,
+    /// uTP stream state
+    pub state: StreamState,
 
     /// ENR of the connected remote peer
-    connected_to: Enr,
+    pub connected_to: Enr,
 
     /// Overlay protocol identifier
     protocol_id: ProtocolId,
@@ -450,7 +479,7 @@ pub struct UtpSocket {
     /// Sent but not yet acknowledged packets
     send_window: Vec<Packet>,
 
-    /// How many ACKs did the socket receive for packet with sequence number equal to `ack_nr`
+    /// How many ACKs did the stream receive for packet with sequence number equal to `ack_nr`
     duplicate_ack_count: u8,
 
     /// Sequence number of the latest packet the remote peer acknowledged
@@ -496,13 +525,13 @@ pub struct UtpSocket {
     discv5_rx: Arc<RwLock<UnboundedReceiver<Packet>>>,
 
     /// Sender to emit stream events to UtpListener
-    listener_tx: Option<UnboundedSender<UtpStreamEvent>>,
+    event_tx: Option<UnboundedSender<UtpStreamEvent>>,
 
     /// Store received uTP payload data over the stream
     pub recv_data_stream: Vec<u8>,
 }
 
-impl UtpSocket {
+impl UtpStream {
     pub fn new(
         socket: Arc<Discovery>,
         connected_to: Enr,
@@ -515,7 +544,7 @@ impl UtpSocket {
         let (discv5_tx, discv5_rx) = unbounded_channel::<Packet>();
 
         Self {
-            state: SocketState::Uninitialized,
+            state: StreamState::Uninitialized,
             protocol_id,
             stream_id,
             seq_nr: 1,
@@ -546,7 +575,7 @@ impl UtpSocket {
             max_retransmission_retries: MAX_RETRANSMISSION_RETRIES,
             discv5_tx,
             discv5_rx: Arc::new(RwLock::new(discv5_rx)),
-            listener_tx: utp_listener_tx,
+            event_tx: utp_listener_tx,
         }
     }
 
@@ -562,8 +591,8 @@ impl UtpSocket {
     // Note that the buffer passed to `send_to` might exceed the maximum packet
     // size, which will result in the data being split over several packets.
     pub async fn send_to(&mut self, buf: &[u8]) -> anyhow::Result<usize> {
-        if self.state == SocketState::Closed {
-            return Err(anyhow!("The socket is closed"));
+        if self.state == StreamState::Closed {
+            return Err(anyhow!("The stream is closed"));
         }
 
         let total_length = buf.len();
@@ -725,7 +754,7 @@ impl UtpSocket {
     }
 
     async fn make_connection(&mut self, connection_id: ConnId) {
-        if self.state == SocketState::Uninitialized {
+        if self.state == StreamState::Uninitialized {
             self.receiver_connection_id = connection_id;
             self.sender_connection_id = self.receiver_connection_id + 1;
 
@@ -735,7 +764,7 @@ impl UtpSocket {
             packet.set_seq_nr(self.seq_nr);
 
             self.send_packet(&mut packet).await;
-            self.state = SocketState::SynSent;
+            self.state = StreamState::SynSent;
         }
     }
 
@@ -770,7 +799,7 @@ impl UtpSocket {
         packet.set_ack_nr(self.ack_nr);
 
         self.send_packet(&mut packet).await;
-        self.state = SocketState::FinSent;
+        self.state = StreamState::FinSent;
     }
 
     #[async_recursion]
@@ -782,7 +811,7 @@ impl UtpSocket {
         );
 
         // To make uTP connection bidirectional, we want to always acknowledge the received packet
-        if self.state == SocketState::SynSent {
+        if self.state == StreamState::SynSent {
             self.ack_nr = packet.seq_nr();
         } else {
             // Only acknowledge this if this follows the last one, else do it when we advance the send
@@ -797,7 +826,7 @@ impl UtpSocket {
         // Reset connection if connection id doesn't match and this isn't a SYN
 
         if packet.get_type() != PacketType::Syn
-            && self.state != SocketState::SynSent
+            && self.state != StreamState::SynSent
             && !(packet.connection_id() == self.sender_connection_id
                 || packet.connection_id() == self.receiver_connection_id)
         {
@@ -813,13 +842,13 @@ impl UtpSocket {
 
         match (self.state, packet.get_type()) {
             // New connection, when we receive SYN packet, respond with STATE packet
-            (SocketState::Uninitialized, PacketType::Syn) => {
+            (StreamState::Uninitialized, PacketType::Syn) => {
                 self.connected_to = src;
                 self.ack_nr = packet.seq_nr();
                 self.seq_nr = rand::random();
                 self.receiver_connection_id = packet.connection_id() + 1;
                 self.sender_connection_id = packet.connection_id();
-                self.state = SocketState::Connected;
+                self.state = StreamState::Connected;
                 self.last_dropped = self.ack_nr;
 
                 let reply = self.prepare_reply(packet, PacketType::State);
@@ -833,29 +862,29 @@ impl UtpSocket {
             // we want to forcibly terminate the connection
             (_, PacketType::Syn) => Ok(Some(self.prepare_reply(packet, PacketType::Reset))),
             // When SYN is send and we receive STATE, do not reply
-            (SocketState::SynSent, PacketType::State) => {
+            (StreamState::SynSent, PacketType::State) => {
                 self.connected_to = src;
                 self.ack_nr = packet.seq_nr() - 1;
                 self.seq_nr += 1;
-                self.state = SocketState::Connected;
+                self.state = StreamState::Connected;
                 self.last_acked = packet.ack_nr();
                 self.last_acked_timestamp = now_microseconds();
                 Ok(None)
             }
             // To make uTP connection bidirectional, we also can expect DATA packet if state is SynSent
-            (SocketState::SynSent, PacketType::Data) => Ok(self.handle_data_packet(packet)),
-            // Handle data packet if socket state is `Connected` or `FinSent` and packet type is DATA
-            (SocketState::Connected, PacketType::Data)
-            | (SocketState::FinSent, PacketType::Data) => Ok(self.handle_data_packet(packet)),
-            // Handle state packet if socket state is `Connected` and packet type is STATE
-            (SocketState::Connected, PacketType::State) => {
+            (StreamState::SynSent, PacketType::Data) => Ok(self.handle_data_packet(packet)),
+            // Handle data packet if stream state is `Connected` or `FinSent` and packet type is DATA
+            (StreamState::Connected, PacketType::Data)
+            | (StreamState::FinSent, PacketType::Data) => Ok(self.handle_data_packet(packet)),
+            // Handle state packet if stream state is `Connected` and packet type is STATE
+            (StreamState::Connected, PacketType::State) => {
                 self.handle_state_packet(packet).await;
                 Ok(None)
             }
             // Handle FIN packet. Check if all send packets are acknowledged.
-            (SocketState::Connected, PacketType::Fin)
-            | (SocketState::FinSent, PacketType::Fin)
-            | (SocketState::SynSent, PacketType::Fin) => {
+            (StreamState::Connected, PacketType::Fin)
+            | (StreamState::FinSent, PacketType::Fin)
+            | (StreamState::SynSent, PacketType::Fin) => {
                 if packet.ack_nr() < self.seq_nr {
                     debug!("FIN received but there are missing acknowledgements for sent packets");
                 }
@@ -877,18 +906,18 @@ impl UtpSocket {
                 }
 
                 // Give up, the remote peer might not care about our missing packets
-                self.state = SocketState::Closed;
+                self.state = StreamState::Closed;
                 self.emit_close_event();
 
                 Ok(Some(reply))
             }
-            // Confirm with STATE packet when socket state is `Closed` and we receive FIN packet
-            (SocketState::Closed, PacketType::Fin) => {
+            // Confirm with STATE packet when stream state is `Closed` and we receive FIN packet
+            (StreamState::Closed, PacketType::Fin) => {
                 Ok(Some(self.prepare_reply(packet, PacketType::State)))
             }
-            (SocketState::FinSent, PacketType::State) => {
+            (StreamState::FinSent, PacketType::State) => {
                 if packet.ack_nr() == self.seq_nr {
-                    self.state = SocketState::Closed;
+                    self.state = StreamState::Closed;
                     self.emit_close_event();
                 } else {
                     self.handle_state_packet(packet).await;
@@ -897,15 +926,18 @@ impl UtpSocket {
             }
             // Reset connection when receiving RESET packet
             (_, PacketType::Reset) => {
-                self.state = SocketState::ResetReceived;
-                // Emit socket state event to UtpListener. Panic if error.
-                if let Some(listener_tx) = self.listener_tx.clone() {
-                    listener_tx
-                        .send(UtpStreamEvent::Reset(
-                            self.protocol_id.clone(),
-                            self.receiver_connection_id,
-                        ))
-                        .unwrap();
+                self.state = StreamState::ResetReceived;
+                // Emit stream state event to UtpListener
+                if let Some(listener_tx) = self.event_tx.clone() {
+                    let conn_key = self.get_conn_key();
+
+                    if let Err(err) = listener_tx.send(UtpStreamEvent::Reset(
+                        self.protocol_id.clone(),
+                        self.stream_id.clone(),
+                        conn_key,
+                    )) {
+                        error!("Unable to send uTP RESET event to uTP listener: {err}");
+                    }
                 }
                 Err(anyhow!("Connection reset by remote peer"))
             }
@@ -917,17 +949,31 @@ impl UtpSocket {
         }
     }
 
-    /// Emit socket state event to UtpListener. Panic if error.
+    /// Emit stream state event to UtpListener
     fn emit_close_event(&mut self) {
-        if let Some(listener_tx) = self.listener_tx.clone() {
-            listener_tx
-                .send(UtpStreamEvent::Closed(
-                    self.recv_data_stream.clone(),
-                    self.protocol_id.clone(),
-                    self.receiver_connection_id,
-                ))
-                .unwrap();
+        if let Some(listener_tx) = self.event_tx.clone() {
+            let conn_key = self.get_conn_key();
+
+            if let Err(err) = listener_tx.send(UtpStreamEvent::Closed(
+                self.recv_data_stream.clone(),
+                self.protocol_id.clone(),
+                self.stream_id.clone(),
+                conn_key,
+            )) {
+                error!("Unable to send uTP CLOSED event to uTP listener: {err}");
+            }
         }
+    }
+
+    /// Get connection key used in uTP listener to store active uTP connections
+    fn get_conn_key(&self) -> ConnectionKey {
+        let conn_id = match self.stream_id {
+            UtpStreamId::FindContentStream => self.receiver_connection_id,
+            UtpStreamId::ContentStream(_) => self.sender_connection_id,
+            UtpStreamId::OfferStream => self.receiver_connection_id,
+            UtpStreamId::AcceptStream(_) => self.sender_connection_id,
+        };
+        ConnectionKey::new(self.connected_to.node_id(), conn_id)
     }
 
     fn prepare_reply(&self, original: &Packet, t: PacketType) -> Packet {
@@ -947,14 +993,14 @@ impl UtpSocket {
 
     fn handle_data_packet(&mut self, packet: &Packet) -> Option<Packet> {
         // We increase packet seq_nr if we are going to send DATA packet right after SYN-ACK.
-        if self.state == SocketState::SynSent {
+        if self.state == StreamState::SynSent {
             self.seq_nr += 1;
-            self.state = SocketState::Connected
+            self.state = StreamState::Connected
         }
 
         // If a FIN was previously sent, reply with a FIN packet acknowledging the received packet.
         let packet_type = match self.state {
-            SocketState::FinSent => PacketType::Fin,
+            StreamState::FinSent => PacketType::Fin,
             _ => PacketType::State,
         };
 
@@ -1172,15 +1218,15 @@ impl UtpSocket {
             return Ok((read, self.connected_to.clone()));
         }
 
-        // If the socket received a reset packet and all data has been flushed, then it can't
+        // If the stream received a reset packet and all data has been flushed, then it can't
         // receive anything else
-        if self.state == SocketState::ResetReceived {
+        if self.state == StreamState::ResetReceived {
             return Err(anyhow!("Connection reset by remote peer"));
         }
 
         loop {
-            // A closed socket with no pending data can only "read" 0 new bytes.
-            if self.state == SocketState::Closed {
+            // A closed stream with no pending data can only "read" 0 new bytes.
+            if self.state == StreamState::Closed {
                 return Ok((0, self.connected_to.clone()));
             }
 
@@ -1316,7 +1362,7 @@ impl UtpSocket {
         }
     }
 
-    /// Inserts a packet into the socket's buffer.
+    /// Inserts a packet into the stream's buffer.
     ///
     /// The packet is inserted in such a way that the packets in the buffer are sorted according to
     /// their sequence number in ascending order. This allows storing packets that were received out
@@ -1356,10 +1402,10 @@ impl UtpSocket {
     /// This method allows both peers to receive all packets still in
     /// flight.
     pub async fn close(&mut self) -> anyhow::Result<()> {
-        // Nothing to do if the socket's already closed or not connected
-        if self.state == SocketState::Closed
-            || self.state == SocketState::Uninitialized
-            || self.state == SocketState::SynSent
+        // Nothing to do if the stream's already closed or not connected
+        if self.state == StreamState::Closed
+            || self.state == StreamState::Uninitialized
+            || self.state == StreamState::SynSent
         {
             return Ok(());
         }
@@ -1390,11 +1436,11 @@ impl UtpSocket {
         }
 
         debug!("CLosing connection, sent {:?}", packet);
-        self.state = SocketState::FinSent;
+        self.state = StreamState::FinSent;
 
         // Receive JAKE
         let mut buf = [0; BUF_SIZE];
-        while self.state != SocketState::Closed {
+        while self.state != StreamState::Closed {
             self.recv(&mut buf).await?;
         }
 
@@ -1424,7 +1470,7 @@ mod tests {
         utils::node_id::generate_random_remote_enr,
         utp::{
             packets::{Packet, PacketType},
-            stream::{SocketState, UtpSocket, BUF_SIZE},
+            stream::{StreamState, UtpStream, BUF_SIZE},
             time::now_microseconds,
             trin_helpers::UtpStreamId,
         },
@@ -1444,7 +1490,7 @@ mod tests {
         BASE_PORT + NEXT_OFFSET.fetch_add(1, Ordering::Relaxed) as u16
     }
 
-    async fn server_setup() -> UtpSocket {
+    async fn server_setup() -> UtpStream {
         let ip_addr =
             socket::find_assigned_ip().expect("Could not find an IP for local connections");
         let port = next_test_port();
@@ -1459,7 +1505,7 @@ mod tests {
 
         let discv5 = Arc::new(discv5);
 
-        let conn = UtpSocket::new(
+        let conn = UtpStream::new(
             Arc::clone(&discv5),
             enr,
             ProtocolId::History,
@@ -1472,7 +1518,7 @@ mod tests {
         conn
     }
 
-    async fn client_setup(connected_to: Enr) -> (Enr, UtpSocket) {
+    async fn client_setup(connected_to: Enr) -> (Enr, UtpStream) {
         let port = next_test_port();
         let matching_ip = connected_to.ip().unwrap();
         let config = PortalnetConfig {
@@ -1485,7 +1531,7 @@ mod tests {
 
         let discv5 = Arc::new(discv5);
 
-        let conn = UtpSocket::new(
+        let conn = UtpStream::new(
             Arc::clone(&discv5),
             connected_to,
             ProtocolId::History,
@@ -1497,7 +1543,7 @@ mod tests {
         (discv5.local_enr(), conn)
     }
 
-    fn spawn_socket_recv(discv5: Arc<Discovery>, conn: UtpSocket) {
+    fn spawn_socket_recv(discv5: Arc<Discovery>, conn: UtpStream) {
         tokio::spawn(async move {
             let mut receiver = discv5.discv5.event_stream().await.unwrap();
             while let Some(event) = receiver.recv().await {
@@ -1534,7 +1580,7 @@ mod tests {
         let initial_connection_id: u16 = rand::random();
         let sender_connection_id = initial_connection_id + 1;
         let (_, client_enr) = generate_random_remote_enr();
-        let mut socket = server_setup().await;
+        let mut stream = server_setup().await;
 
         // ---------------------------------
         // Test connection setup - SYN packet
@@ -1545,7 +1591,7 @@ mod tests {
         packet.set_connection_id(initial_connection_id);
 
         // Do we have a response?
-        let response = socket.handle_packet(&packet, client_enr.clone()).await;
+        let response = stream.handle_packet(&packet, client_enr.clone()).await;
         assert!(response.is_ok());
         let response = response.unwrap();
         assert!(response.is_some());
@@ -1575,7 +1621,7 @@ mod tests {
         packet.set_seq_nr(old_packet.seq_nr() + 1);
         packet.set_ack_nr(old_response.seq_nr());
 
-        let response = socket.handle_packet(&packet, client_enr.clone()).await;
+        let response = stream.handle_packet(&packet, client_enr.clone()).await;
         assert!(response.is_ok());
         let response = response.unwrap();
         assert!(response.is_some());
@@ -1608,7 +1654,7 @@ mod tests {
         packet.set_seq_nr(old_packet.seq_nr() + 1);
         packet.set_ack_nr(old_response.seq_nr());
 
-        let response = socket.handle_packet(&packet, client_enr).await;
+        let response = stream.handle_packet(&packet, client_enr).await;
         assert!(response.is_ok());
         let response = response.unwrap();
         assert!(response.is_some());
@@ -1632,7 +1678,7 @@ mod tests {
         // Boilerplate test setup
         let initial_connection_id: u16 = rand::random();
         let (_, client_enr) = generate_random_remote_enr();
-        let mut socket = server_setup().await;
+        let mut stream = server_setup().await;
 
         // Establish connection
         let mut packet = Packet::new();
@@ -1640,7 +1686,7 @@ mod tests {
         packet.set_type(PacketType::Syn);
         packet.set_connection_id(initial_connection_id);
 
-        let response = socket.handle_packet(&packet, client_enr.clone()).await;
+        let response = stream.handle_packet(&packet, client_enr.clone()).await;
         assert!(response.is_ok());
         let response = response.unwrap();
         assert!(response.is_some());
@@ -1658,19 +1704,19 @@ mod tests {
         packet.set_seq_nr(old_packet.seq_nr() + 1);
         packet.set_ack_nr(old_response.seq_nr());
 
-        let response = socket.handle_packet(&packet, client_enr.clone()).await;
+        let response = stream.handle_packet(&packet, client_enr.clone()).await;
         assert!(response.is_ok());
         let response = response.unwrap();
         assert!(response.is_none());
 
         // Send a second keepalive packet, identical to the previous one
-        let response = socket.handle_packet(&packet, client_enr.clone()).await;
+        let response = stream.handle_packet(&packet, client_enr.clone()).await;
         assert!(response.is_ok());
         let response = response.unwrap();
         assert!(response.is_none());
 
-        // Mark socket as closed
-        socket.state = SocketState::Closed;
+        // Mark stream as closed
+        stream.state = StreamState::Closed;
     }
 
     #[tokio::test]
@@ -1678,7 +1724,7 @@ mod tests {
         // Boilerplate test setup
         let initial_connection_id: u16 = rand::random();
         let (_, client_enr) = generate_random_remote_enr();
-        let mut socket = server_setup().await;
+        let mut stream = server_setup().await;
 
         // Establish connection
         let mut packet = Packet::new();
@@ -1686,7 +1732,7 @@ mod tests {
         packet.set_type(PacketType::Syn);
         packet.set_connection_id(initial_connection_id);
 
-        let response = socket.handle_packet(&packet, client_enr.clone()).await;
+        let response = stream.handle_packet(&packet, client_enr.clone()).await;
         assert!(response.is_ok());
         let response = response.unwrap();
         assert!(response.is_some());
@@ -1700,7 +1746,7 @@ mod tests {
         packet.set_type(PacketType::State);
         packet.set_connection_id(new_connection_id);
 
-        let response = socket.handle_packet(&packet, client_enr).await;
+        let response = stream.handle_packet(&packet, client_enr).await;
         assert!(response.is_ok());
         let response = response.unwrap();
         assert!(response.is_some());
@@ -1709,8 +1755,8 @@ mod tests {
         assert_eq!(response.get_type(), PacketType::Reset);
         assert_eq!(response.ack_nr(), packet.seq_nr());
 
-        // Mark socket as closed
-        socket.state = SocketState::Closed;
+        // Mark stream as closed
+        stream.state = StreamState::Closed;
     }
 
     #[tokio::test]
@@ -1718,7 +1764,7 @@ mod tests {
         // Boilerplate test setup
         let initial_connection_id: u16 = rand::random();
         let (_, client_enr) = generate_random_remote_enr();
-        let mut socket = server_setup().await;
+        let mut stream = server_setup().await;
 
         // Establish connection
         let mut packet = Packet::new();
@@ -1726,7 +1772,7 @@ mod tests {
         packet.set_type(PacketType::Syn);
         packet.set_connection_id(initial_connection_id);
 
-        let response = socket.handle_packet(&packet, client_enr.clone()).await;
+        let response = stream.handle_packet(&packet, client_enr.clone()).await;
         assert!(response.is_ok());
         let response = response.unwrap();
         assert!(response.is_some());
@@ -1754,20 +1800,20 @@ mod tests {
         window.push(packet);
 
         // Send packets in reverse order
-        let response = socket.handle_packet(&window[1], client_enr.clone()).await;
+        let response = stream.handle_packet(&window[1], client_enr.clone()).await;
         assert!(response.is_ok());
         let response = response.unwrap();
         assert!(response.is_some());
         let response = response.unwrap();
         assert!(response.ack_nr() != window[1].seq_nr());
 
-        let response = socket.handle_packet(&window[0], client_enr).await;
+        let response = stream.handle_packet(&window[0], client_enr).await;
         assert!(response.is_ok());
         let response = response.unwrap();
         assert!(response.is_some());
 
-        // Mark socket as closed
-        socket.state = SocketState::Closed;
+        // Mark stream as closed
+        stream.state = StreamState::Closed;
     }
 
     #[tokio::test]
@@ -1782,20 +1828,20 @@ mod tests {
             (minute_in_microseconds + 2, 19),
             (minute_in_microseconds + 3, 9),
         ];
-        let mut socket = server_setup().await;
+        let mut stream = server_setup().await;
 
         for (timestamp, delay) in samples {
-            socket.update_base_delay(delay.into(), ((timestamp + delay) as u32).into());
+            stream.update_base_delay(delay.into(), ((timestamp + delay) as u32).into());
         }
 
         let expected = vec![7i64, 9i64]
             .into_iter()
             .map(Into::into)
             .collect::<Vec<_>>();
-        let actual = socket.base_delays.iter().cloned().collect::<Vec<_>>();
+        let actual = stream.base_delays.iter().cloned().collect::<Vec<_>>();
         assert_eq!(expected, actual);
         assert_eq!(
-            socket.min_base_delay(),
+            stream.min_base_delay(),
             expected.iter().min().cloned().unwrap_or_default()
         );
     }
@@ -1893,40 +1939,40 @@ mod tests {
 
     #[tokio::test]
     async fn test_sorted_buffer_insertion() {
-        let mut socket = server_setup().await;
+        let mut stream = server_setup().await;
 
         let mut packet = Packet::new();
         packet.set_seq_nr(1);
 
-        assert!(socket.incoming_buffer.is_empty());
+        assert!(stream.incoming_buffer.is_empty());
 
-        socket.insert_into_buffer(packet.clone());
-        assert_eq!(socket.incoming_buffer.len(), 1);
+        stream.insert_into_buffer(packet.clone());
+        assert_eq!(stream.incoming_buffer.len(), 1);
 
         packet.set_seq_nr(2);
         packet.set_timestamp(128.into());
 
-        socket.insert_into_buffer(packet.clone());
-        assert_eq!(socket.incoming_buffer.len(), 2);
-        assert_eq!(socket.incoming_buffer[1].seq_nr(), 2);
-        assert_eq!(socket.incoming_buffer[1].timestamp(), 128.into());
+        stream.insert_into_buffer(packet.clone());
+        assert_eq!(stream.incoming_buffer.len(), 2);
+        assert_eq!(stream.incoming_buffer[1].seq_nr(), 2);
+        assert_eq!(stream.incoming_buffer[1].timestamp(), 128.into());
 
         packet.set_seq_nr(3);
         packet.set_timestamp(256.into());
 
-        socket.insert_into_buffer(packet.clone());
-        assert_eq!(socket.incoming_buffer.len(), 3);
-        assert_eq!(socket.incoming_buffer[2].seq_nr(), 3);
-        assert_eq!(socket.incoming_buffer[2].timestamp(), 256.into());
+        stream.insert_into_buffer(packet.clone());
+        assert_eq!(stream.incoming_buffer.len(), 3);
+        assert_eq!(stream.incoming_buffer[2].seq_nr(), 3);
+        assert_eq!(stream.incoming_buffer[2].timestamp(), 256.into());
 
         // Replacing a packet with a more recent version doesn't work
         packet.set_seq_nr(2);
         packet.set_timestamp(456.into());
 
-        socket.insert_into_buffer(packet.clone());
-        assert_eq!(socket.incoming_buffer.len(), 3);
-        assert_eq!(socket.incoming_buffer[1].seq_nr(), 2);
-        assert_eq!(socket.incoming_buffer[1].timestamp(), 128.into());
+        stream.insert_into_buffer(packet.clone());
+        assert_eq!(stream.incoming_buffer.len(), 3);
+        assert_eq!(stream.incoming_buffer[1].seq_nr(), 2);
+        assert_eq!(stream.incoming_buffer[1].timestamp(), 128.into());
     }
 
     #[tokio::test]
@@ -1935,8 +1981,8 @@ mod tests {
         let mut server = server_setup().await;
         let (enr, mut client) = client_setup(server.connected_to.clone()).await;
 
-        assert_eq!(server.state, SocketState::Uninitialized);
-        assert_eq!(client.state, SocketState::Uninitialized);
+        assert_eq!(server.state, StreamState::Uninitialized);
+        assert_eq!(client.state, StreamState::Uninitialized);
 
         // Check proper difference in client's send connection id and receive connection id
         assert_eq!(
@@ -1951,14 +1997,14 @@ mod tests {
         client.recv_from(&mut buf).await.unwrap();
 
         // Expect SYN packet
-        assert_eq!(client.state, SocketState::Connected);
+        assert_eq!(client.state, StreamState::Connected);
 
         // After establishing a new connection, the server's ids are a mirror of the client's.
         assert_eq!(
             server.receiver_connection_id,
             server.sender_connection_id + 1
         );
-        assert_eq!(server.state, SocketState::Connected);
+        assert_eq!(server.state, StreamState::Connected);
 
         let mut packet = Packet::with_payload(&[1, 2, 3]);
         packet.set_wnd_size(BUF_SIZE as u32);

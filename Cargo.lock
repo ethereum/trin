@@ -1819,6 +1819,53 @@ dependencies = [
 ]
 
 [[package]]
+name = "ntest"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "241de7455530a09d0d91dacd07165fbf78c422d2c06ff5c77791988ee1f6bf13"
+dependencies = [
+ "ntest_proc_macro_helper 0.8.0",
+ "ntest_test_cases",
+ "ntest_timeout",
+]
+
+[[package]]
+name = "ntest_proc_macro_helper"
+version = "0.7.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8f52e34b414605b77efc95c3f0ecef01df0c324bcc7f68d9a9cb7a7552777e52"
+
+[[package]]
+name = "ntest_proc_macro_helper"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a0e328d267a679d683b55222b3d06c2fb7358220857945bfc4e65a6b531e9994"
+
+[[package]]
+name = "ntest_test_cases"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6f7caf063242bb66721e74515dc01a915901063fa1f994bee7a2b9136f13370e"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "ntest_timeout"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f8efc215375b8c392c77dc45dbe9d7f4802e36b7936808ccd71047a9b03443e6"
+dependencies = [
+ "ntest_proc_macro_helper 0.7.5",
+ "proc-macro-crate",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "num"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3535,6 +3582,7 @@ dependencies = [
  "keccak-hash",
  "lazy_static 1.4.0",
  "log 0.4.14",
+ "ntest",
  "num",
  "parking_lot 0.11.2",
  "prometheus_exporter",

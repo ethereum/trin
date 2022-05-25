@@ -143,7 +143,7 @@ pub enum ProtocolIdError {
 }
 
 /// Protocol identifiers
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ProtocolId {
     State,
     History,
