@@ -14,6 +14,7 @@ use trin_core::{
         content_key::{AccountTrieNode, BlockHeader, HistoryContentKey, StateContentKey},
         messages::SszEnr,
     },
+    utils::bytes::hex_encode,
 };
 
 /// Default data radius value: U256::from(u64::MAX)
@@ -212,14 +213,14 @@ fn all_tests(peertest: &Peertest) -> Vec<Test<impl Fn(&Value, &Peertest)>> {
                 method: "portal_historyStore".to_string(),
                 id: 11,
                 params: Params::Array(vec![
-                    Value::String(hex::encode(Into::<Vec<u8>>::into(
+                    Value::String(hex_encode(Into::<Vec<u8>>::into(
                         HistoryContentKey::BlockHeader(BlockHeader {
                             chain_id: 1,
                             block_hash: BLOCK_HASH,
                         }),
                     ))),
                     // todo: replace with valid content
-                    Value::String("01".to_string()),
+                    Value::String("0x01".to_string()),
                 ]),
             },
             validate_portal_store,
@@ -229,7 +230,7 @@ fn all_tests(peertest: &Peertest) -> Vec<Test<impl Fn(&Value, &Peertest)>> {
                 method: "portal_stateStore".to_string(),
                 id: 12,
                 params: Params::Array(vec![
-                    Value::String(hex::encode(Into::<Vec<u8>>::into(
+                    Value::String(hex_encode(Into::<Vec<u8>>::into(
                         StateContentKey::AccountTrieNode(AccountTrieNode {
                             node_hash: NODE_HASH,
                             state_root: STATE_ROOT,
@@ -237,7 +238,7 @@ fn all_tests(peertest: &Peertest) -> Vec<Test<impl Fn(&Value, &Peertest)>> {
                         }),
                     ))),
                     // todo: replace with valid content
-                    Value::String("02".to_string()),
+                    Value::String("0x02".to_string()),
                 ]),
             },
             validate_portal_store,
@@ -248,8 +249,8 @@ fn all_tests(peertest: &Peertest) -> Vec<Test<impl Fn(&Value, &Peertest)>> {
                 method: "portal_historyStore".to_string(),
                 id: 11,
                 params: Params::Array(vec![
-                    Value::String("1234".to_string()),
-                    Value::String("01".to_string()),
+                    Value::String("0x1234".to_string()),
+                    Value::String("0x01".to_string()),
                 ]),
             },
             validate_portal_store_with_invalid_content_key,
@@ -260,8 +261,8 @@ fn all_tests(peertest: &Peertest) -> Vec<Test<impl Fn(&Value, &Peertest)>> {
                 method: "portal_stateStore".to_string(),
                 id: 12,
                 params: Params::Array(vec![
-                    Value::String("1234".to_string()),
-                    Value::String("02".to_string()),
+                    Value::String("0x1234".to_string()),
+                    Value::String("0x02".to_string()),
                 ]),
             },
             validate_portal_store_with_invalid_content_key,

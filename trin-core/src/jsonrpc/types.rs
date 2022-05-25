@@ -13,6 +13,7 @@ use crate::{
         content_key::OverlayContentKey,
         messages::{ByteList, CustomPayload, SszEnr},
     },
+    utils::bytes::hex_decode,
 };
 
 type Responder<T, E> = mpsc::UnboundedSender<Result<T, E>>;
@@ -230,7 +231,7 @@ impl TryFrom<[&Value; 2]> for FindContentParams {
         let content_key = params[1]
             .as_str()
             .ok_or_else(|| ValidationError::new("Empty content key param"))?;
-        let content_key = match hex::decode(content_key) {
+        let content_key = match hex_decode(content_key) {
             Ok(val) => VariableList::from(val),
             Err(_) => return Err(ValidationError::new("Unable to decode content_key")),
         };
@@ -274,8 +275,10 @@ impl TryFrom<[&Value; 2]> for OfferParams {
                     .collect();
 
                 if let Ok(content_keys) = content_keys {
-                    let content_keys: Result<Vec<Vec<u8>>, _> =
-                        content_keys.iter().map(hex::decode).collect();
+                    let content_keys: Result<Vec<Vec<u8>>, _> = content_keys
+                        .iter()
+                        .map(|s| hex_decode(s.as_str()))
+                        .collect();
 
                     if let Ok(content_keys) = content_keys {
                         Ok(Self {
@@ -322,7 +325,7 @@ impl TryFrom<&Value> for RecursiveFindContentParams {
         let content_key = param
             .as_str()
             .ok_or_else(|| ValidationError::new("Empty content key param"))?;
-        let content_key = match hex::decode(content_key) {
+        let content_key = match hex_decode(content_key) {
             Ok(val) => VariableList::from(val),
             Err(_) => return Err(ValidationError::new("Unable to decode content_key")),
         };
@@ -423,7 +426,7 @@ impl<TContentKey: OverlayContentKey> TryFrom<&Value> for LocalContentParams<TCon
         let content_key = param
             .as_str()
             .ok_or_else(|| ValidationError::new("Empty content key param"))?;
-        let content_key = match hex::decode(content_key) {
+        let content_key = match hex_decode(content_key) {
             Ok(val) => match TContentKey::try_from(val) {
                 Ok(val) => val,
                 Err(_) => return Err(ValidationError::new("Unable to decode content_key")),
@@ -460,17 +463,24 @@ impl<TContentKey: OverlayContentKey> TryFrom<[&Value; 2]> for StoreParams<TConte
         let content_key = params[0]
             .as_str()
             .ok_or_else(|| ValidationError::new("Empty content key param"))?;
-        let content_key = match hex::decode(content_key) {
+        let content_key = match hex_decode(content_key) {
             Ok(val) => match TContentKey::try_from(val) {
                 Ok(val) => val,
                 Err(_) => return Err(ValidationError::new("Unable to decode content_key")),
             },
-            Err(_) => return Err(ValidationError::new("Unable to decode content_key")),
+            Err(err) => {
+                let mut ve = ValidationError::new("Cannot convert content_key hex to bytes");
+                ve.add_param(
+                    std::borrow::Cow::Borrowed("hex_decode_exception"),
+                    &err.to_string(),
+                );
+                return Err(ve);
+            }
         };
         let content = params[1]
             .as_str()
             .ok_or_else(|| ValidationError::new("Empty content param"))?;
-        let content = match hex::decode(content) {
+        let content = match hex_decode(content) {
             Ok(val) => val,
             Err(_) => return Err(ValidationError::new("Unable to decode content")),
         };
