@@ -98,6 +98,8 @@ pub struct QueryPeer<TNodeId> {
 }
 
 impl<TNodeId> QueryPeer<TNodeId> {
+    /// Constructs a new `QueryPeer<TNodeId>` whose `KBucket` key is `key` and whose initial state
+    /// is `state`.
     pub fn new(key: Key<TNodeId>, state: QueryPeerState) -> Self {
         QueryPeer {
             key,
@@ -106,22 +108,27 @@ impl<TNodeId> QueryPeer<TNodeId> {
         }
     }
 
+    /// Returns the `KBucket` key associated with the query peer.
     pub fn key(&self) -> &Key<TNodeId> {
         &self.key
     }
 
+    /// Returns the number of peers returned by the query peer.
     pub fn peers_returned(&self) -> usize {
         self.peers_returned
     }
 
+    /// Increments the number of peers returned by the query peer by `num_peers`.
     pub fn increment_peers_returned(&mut self, num_peers: usize) {
         self.peers_returned += num_peers;
     }
 
+    /// Returns the state of the query peer.
     pub fn state(&self) -> &QueryPeerState {
         &self.state
     }
 
+    /// Sets the state of the query peer to `state`.
     pub fn set_state(&mut self, state: QueryPeerState) {
         self.state = state;
     }
