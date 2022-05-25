@@ -19,13 +19,7 @@ use crate::{
     utp::stream::UtpListenerRequest,
 };
 
-use crate::{
-    portalnet::types::content_key::RawContentKey,
-    utp::{
-        stream::{UtpListenerEvent, UtpPayload},
-        trin_helpers::UtpStreamId,
-    },
-};
+use crate::utp::trin_helpers::UtpStreamId;
 use delay_map::HashSetDelay;
 use discv5::{
     enr::NodeId,
@@ -43,10 +37,7 @@ use rand::seq::SliceRandom;
 use ssz::Encode;
 use ssz_types::{BitList, VariableList};
 use thiserror::Error;
-use tokio::sync::{
-    mpsc::{self, UnboundedReceiver, UnboundedSender},
-    RwLock as TRwLock,
-};
+use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
 /// Maximum number of ENRs in response to FindNodes.
 pub const FIND_NODES_MAX_NODES: usize = 32;
@@ -265,8 +256,6 @@ pub struct OverlayService<TContentKey, TMetric> {
     response_tx: UnboundedSender<OverlayResponse>,
     /// The sender half of a channel to send requests to uTP listener
     utp_listener_tx: UnboundedSender<UtpListenerRequest>,
-    /// Receiver for UtpListener emitted events
-    utp_listener_rx: Arc<TRwLock<UnboundedReceiver<UtpListenerEvent>>>,
     /// Phantom content key.
     phantom_content_key: PhantomData<TContentKey>,
     /// Phantom metric (distance function).
@@ -292,7 +281,6 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         data_radius: Arc<U256>,
         protocol: ProtocolId,
         utp_listener_sender: UnboundedSender<UtpListenerRequest>,
-        utp_listener_receiver: Arc<TRwLock<UnboundedReceiver<UtpListenerEvent>>>,
         enable_metrics: bool,
     ) -> Result<UnboundedSender<OverlayRequest>, String> {
         let (request_tx, request_rx) = mpsc::unbounded_channel();
@@ -325,7 +313,6 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                 response_rx,
                 response_tx,
                 utp_listener_tx: utp_listener_sender,
-                utp_listener_rx: utp_listener_receiver,
                 phantom_content_key: PhantomData,
                 phantom_metric: PhantomData,
                 metrics,
@@ -397,9 +384,6 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
             tokio::time::interval(Duration::from_secs(BUCKET_REFRESH_INTERVAL));
 
         loop {
-            // let utp_listener_rx = self.utp_listener_rx.clone();
-            // let mut utp_listener_lock = utp_listener_rx.write_with_warn().await;
-
             tokio::select! {
                 Some(request) = self.request_rx.recv() => self.process_request(request),
                 Some(response) = self.response_rx.recv() => {
@@ -428,14 +412,6 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                         self.peers_to_ping.insert(node_id);
                     }
                 }
-                // Some(utp_event) = utp_listener_lock.recv() => {
-                //     match utp_event {
-                //         UtpListenerEvent::ProcessedClosedStreams(processed_streams) =>
-                //         {
-                //             self.handle_utp_payload(processed_streams);
-                //         }
-                //     }
-                // }
                 _ = OverlayService::<TContentKey, TMetric>::bucket_maintenance_poll(self.protocol.clone(), &self.kbuckets) => {}
                 _ = bucket_refresh_interval.tick() => {
                     debug!("[{:?}] Overlay bucket refresh lookup", self.protocol);
@@ -666,25 +642,10 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                 } else {
                     let conn_id: u16 = crate::utp::stream::rand();
 
-                    // listen for incoming connection request on conn_id, as part of utp handshake and
-                    // temporarily storing content data, so we can send it right after we receive
+                    // Listen for incoming uTP connection request on as part of uTP handshake and
+                    // storing content data, so we can send it inside UtpListener right after we receive
                     // SYN packet from the requester
-                    let utp_request = UtpListenerRequest::FindContentData(conn_id, content.clone());
-                    if let Err(err) = self.utp_listener_tx.send(utp_request) {
-                        return Err(OverlayRequestError::UtpError(format!(
-                            "Unable to send uTP FindContentData stream request: {err}"
-                        )));
-                    }
-
-                    // also listen on conn_id + 1 because this is the receive path
                     let conn_id_recv = conn_id.wrapping_add(1);
-
-                    let utp_request = UtpListenerRequest::FindContentStream(conn_id_recv);
-                    if let Err(err) = self.utp_listener_tx.send(utp_request) {
-                        return Err(OverlayRequestError::UtpError(format!(
-                            "Unable to send uTP FindContent stream request: {err}"
-                        )));
-                    }
 
                     self.add_utp_connection(
                         source,
@@ -704,8 +665,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                 }
             }
             Err(msg) => Err(OverlayRequestError::Failure(format!(
-                "Unable to respond to FindContent: {}",
-                msg
+                "Unable to respond to FindContent: {msg}",
             ))),
         }
     }
@@ -748,24 +708,8 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                 })?;
         }
 
-        // listen for incoming connection request on conn_id, as part of utp handshake
+        // Listen for incoming connection request on conn_id, as part of utp handshake
         let conn_id: u16 = crate::utp::stream::rand();
-        let utp_request = UtpListenerRequest::OfferStream(conn_id);
-        if let Err(err) = self.utp_listener_tx.send(utp_request) {
-            return Err(OverlayRequestError::UtpError(format!(
-                "Unable to send uTP Offer stream request: {err}"
-            )));
-        }
-
-        // also listen on conn_id + 1 because this is the actual receive path for acceptor
-        let conn_id_recv = conn_id.wrapping_add(1);
-
-        let utp_request = UtpListenerRequest::AcceptStream(conn_id_recv, accept_keys.clone());
-        if let Err(err) = self.utp_listener_tx.send(utp_request) {
-            return Err(OverlayRequestError::UtpError(format!(
-                "Unable to send uTP Accept stream request: {err}"
-            )));
-        }
 
         self.add_utp_connection(source, conn_id, UtpStreamId::AcceptStream(accept_keys))?;
 
@@ -775,19 +719,6 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         };
 
         Ok(accept)
-    }
-
-    /// Handle all closed uTP streams, currently we process only AcceptStream here.
-    /// FindContent payload is processed explicitly when we send FindContent request.
-    fn handle_utp_payload(&self, streams: Vec<(UtpPayload, UtpStreamId)>) {
-        for stream in streams {
-            match stream {
-                (payload, UtpStreamId::AcceptStream(content_keys)) => {
-                    self.process_accept_utp_payload(content_keys, payload);
-                }
-                _ => {}
-            }
-        }
     }
 
     /// Sends a TALK request via Discovery v5 to some destination node.
@@ -819,12 +750,6 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                 response,
             });
         });
-    }
-
-    /// Process accepted uTP payload of the OFFER?ACCEPT stream
-    fn process_accept_utp_payload(&self, content_keys: Vec<RawContentKey>, payload: UtpPayload) {
-        // TODO: Verify the payload, store the content and propagate gossip.
-        debug!("DEBUG: Processing content keys: {content_keys:?}, with payload: {payload:?}, protocol: {:?}", self.protocol);
     }
 
     /// Processes an incoming request from some source node.
@@ -1354,7 +1279,6 @@ mod tests {
         let discovery = Arc::new(Discovery::new(portal_config).unwrap());
 
         let (utp_listener_tx, _) = unbounded_channel::<UtpListenerRequest>();
-        let (_, utp_listener_rx) = unbounded_channel::<UtpListenerEvent>();
 
         // Initialize DB config
         let storage_capacity: u32 = DEFAULT_STORAGE_CAPACITY.parse().unwrap();
@@ -1392,7 +1316,6 @@ mod tests {
             response_tx,
             response_rx,
             utp_listener_tx,
-            utp_listener_rx: Arc::new(TRwLock::new(utp_listener_rx)),
             phantom_content_key: PhantomData,
             phantom_metric: PhantomData,
             metrics,

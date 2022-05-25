@@ -24,8 +24,7 @@ use tokio::{
     time::{self, Duration},
 };
 
-use tokio::sync::RwLock as TRwLock;
-use trin_core::utp::stream::{UtpListenerEvent, UtpListenerRequest};
+use trin_core::utp::stream::UtpListenerRequest;
 
 async fn init_overlay(
     discovery: Arc<Discovery>,
@@ -40,13 +39,11 @@ async fn init_overlay(
     let overlay_config = OverlayConfig::default();
     // Ignore all uTP events
     let (utp_listener_tx, _) = unbounded_channel::<UtpListenerRequest>();
-    let (_, utp_listener_rx) = unbounded_channel::<UtpListenerEvent>();
 
     OverlayProtocol::new(
         overlay_config,
         discovery,
         utp_listener_tx,
-        Arc::new(TRwLock::new(utp_listener_rx)),
         db,
         U256::MAX,
         protocol,

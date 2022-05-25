@@ -5,10 +5,7 @@ use discv5::enr::NodeId;
 use eth_trie::EthTrie;
 use log::debug;
 use parking_lot::RwLock;
-use tokio::sync::{
-    mpsc::{UnboundedReceiver, UnboundedSender},
-    RwLock as TRwLock,
-};
+use tokio::sync::mpsc::UnboundedSender;
 use trin_core::{
     portalnet::{
         discovery::Discovery,
@@ -20,7 +17,7 @@ use trin_core::{
             metric::XorMetric,
         },
     },
-    utp::stream::{UtpListenerEvent, UtpListenerRequest},
+    utp::stream::UtpListenerRequest,
 };
 
 use crate::trie::TrieDB;
@@ -36,7 +33,6 @@ impl StateNetwork {
     pub async fn new(
         discovery: Arc<Discovery>,
         utp_listener_tx: UnboundedSender<UtpListenerRequest>,
-        utp_listener_rx: Arc<TRwLock<UnboundedReceiver<UtpListenerEvent>>>,
         storage_config: PortalStorageConfig,
         portal_config: PortalnetConfig,
     ) -> Self {
@@ -55,7 +51,6 @@ impl StateNetwork {
             config,
             discovery,
             utp_listener_tx,
-            utp_listener_rx,
             storage,
             portal_config.data_radius,
             ProtocolId::State,

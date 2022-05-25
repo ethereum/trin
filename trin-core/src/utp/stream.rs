@@ -21,10 +21,7 @@ use tokio::{
 
 use crate::{
     locks::RwLoggingExt,
-    portalnet::types::{
-        content_key::RawContentKey,
-        messages::{ByteList, ProtocolId},
-    },
+    portalnet::types::messages::ProtocolId,
     utp::{
         packets::{ExtensionType, Packet, PacketType, HEADER_SIZE},
         time::{now_microseconds, Delay, Timestamp},
@@ -114,8 +111,6 @@ struct DelayDifferenceSample {
 /// Represent overlay to uTP listener request. It is used as a way to communicate between the overlay protocol
 /// and uTP listener
 pub enum UtpListenerRequest {
-    /// Request to listen for Accept stream
-    AcceptStream(ConnId, Vec<RawContentKey>),
     /// Request to initialize uTP stream with remote node
     Connect(
         ConnId,
@@ -126,12 +121,6 @@ pub enum UtpListenerRequest {
     ),
     /// Request to add uTP stream to the active connections
     AddActiveConnection(Enr, ProtocolId, UtpStreamId, ConnId),
-    /// Request to listen for FindCOntent stream and send content data
-    FindContentData(ConnId, ByteList),
-    /// Request to listen for FindContent stream
-    FindContentStream(ConnId),
-    /// Request to listen for Offer stream
-    OfferStream(ConnId),
 }
 
 /// Result from processing all closed uTP streams. Includes a tuple with the payload and the stream id.
@@ -152,13 +141,13 @@ pub enum UtpStreamEvent {
 }
 
 /// Main uTP service used to listen and handle all uTP connections and streams
+// FIXME: Deny dead_code
+#[allow(dead_code)]
 pub struct UtpListener {
     /// Base discv5 layer
     discovery: Arc<Discovery>,
     /// Store all active connections
     utp_connections: HashMap<ConnectionKey, UtpSocket>,
-    /// uTP connection ids to listen for
-    listening: HashMap<ConnId, UtpStreamId>,
     /// Receiver for uTP events sent from the main portal event handler
     utp_event_rx: UnboundedReceiver<TalkRequest>,
     /// Sender to overlay layer with processed uTP stream
@@ -196,7 +185,6 @@ impl UtpListener {
             UtpListener {
                 discovery,
                 utp_connections: HashMap::new(),
-                listening: HashMap::new(),
                 utp_event_rx,
                 overlay_tx,
                 overlay_rx: utp_listener_rx,
@@ -218,14 +206,6 @@ impl UtpListener {
                     Some(overlay_request) = self.overlay_rx.recv() => {
                         self.process_overlay_request(overlay_request).await
                     },
-                //     _ = process_utp_streams_interval.tick() => {
-                //         let processed_streams = self.process_closed_streams();
-                //
-                //         if let Err(err) = self.overlay_tx.send(UtpListenerEvent::ProcessedClosedStreams(processed_streams)) {
-                //             error!("Unable to send ProcessClosedStreams event to overlay layer: {err}");
-                //             continue
-                //         }
-                // }
             }
         }
     }
@@ -270,15 +250,9 @@ impl UtpListener {
                                 return;
                             }
 
-                            // Get ownership of FindContentData and re-add the receiver connection
-                            let utp_message_id = self.listening.remove(&conn.sender_connection_id);
-
-                            // TODO: Probably there is a better way with lifetimes to pass the HashMap value to a
-                            // different thread without removing the key and re-adding it.
-                            self.listening
-                                .insert(conn.sender_connection_id, UtpStreamId::FindContentStream);
-
-                            if let Some(UtpStreamId::FindContentData(content_data)) = utp_message_id
+                            // Send content data if the stream is listening for FindContent SYN packet
+                            if let UtpStreamId::FindContentData(content_data) =
+                                conn.stream_id.clone()
                             {
                                 // We want to send uTP data only if the content is Content(ByteList)
                                 debug!(
@@ -390,26 +364,11 @@ impl UtpListener {
                 let conn_key = ConnectionKey::new(connected_to.node_id(), conn_id_recv);
                 self.utp_connections.insert(conn_key, conn);
             }
-            UtpListenerRequest::FindContentStream(conn_id) => {
-                self.listening
-                    .insert(conn_id, UtpStreamId::FindContentStream);
-            }
             UtpListenerRequest::Connect(conn_id, node_id, protocol_id, stream_id, tx) => {
                 let conn = self.connect(conn_id, node_id, protocol_id, stream_id).await;
                 if tx.send(conn).is_err() {
                     error!("Unable to send uTP socket to requester")
                 };
-            }
-            UtpListenerRequest::OfferStream(conn_id) => {
-                self.listening.insert(conn_id, UtpStreamId::OfferStream);
-            }
-            UtpListenerRequest::FindContentData(conn_id, content) => {
-                self.listening
-                    .insert(conn_id, UtpStreamId::FindContentData(content));
-            }
-            UtpListenerRequest::AcceptStream(conn_id, accepted_keys) => {
-                self.listening
-                    .insert(conn_id, UtpStreamId::AcceptStream(accepted_keys));
             }
         }
     }
@@ -439,34 +398,6 @@ impl UtpListener {
         } else {
             Err(anyhow!("Trying to connect to unknow Enr"))
         }
-    }
-
-    /// Return and cleanup all active uTP streams where socket state is "Closed"
-    pub fn process_closed_streams(&mut self) -> Vec<(UtpPayload, UtpStreamId)> {
-        // This seems to be a hot loop, we may need to optimise it and find a better way to filter by closed
-        // connections without cloning all records. One reasonable way is to use some data-oriented
-        // design principles like Struct of Arrays vs. Array of Structs.
-        self.utp_connections
-            .clone()
-            .iter()
-            .filter(|conn| conn.1.state == SocketState::Closed)
-            .map(|conn| {
-                // Remove the closed connections from active connections
-                let receiver_stream_id = self
-                    .listening
-                    .remove(&conn.1.receiver_connection_id)
-                    .expect("Receiver connection id should match active listening connections.");
-                self.listening
-                    .remove(&conn.1.sender_connection_id)
-                    .expect("Sender connection id should match active listening connections.");
-                let utp_socket = self
-                    .utp_connections
-                    .remove(conn.0)
-                    .expect("uTP socket should match asctive utp connections.");
-
-                (utp_socket.recv_data_stream, receiver_stream_id)
-            })
-            .collect()
     }
 }
 

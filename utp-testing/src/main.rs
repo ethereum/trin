@@ -25,10 +25,6 @@ pub struct TestApp {
 
 impl TestApp {
     async fn send_utp_request(&mut self, conn_id: u16, payload: Vec<u8>, enr: Enr) {
-        let _ = self
-            .utp_listener_tx
-            .send(UtpListenerRequest::OfferStream(conn_id));
-
         let (tx, rx) = tokio::sync::oneshot::channel::<anyhow::Result<UtpSocket>>();
         let _ = self.utp_listener_tx.send(UtpListenerRequest::Connect(
             conn_id,
@@ -77,23 +73,13 @@ impl TestApp {
     }
 
     async fn prepare_to_receive(&self, source: Enr, conn_id: u16) {
-        // listen for incoming connection request on conn_id, as part of utp handshake
-        let _ = self
-            .utp_listener_tx
-            .send(UtpListenerRequest::OfferStream(conn_id));
-
-        // also listen on conn_id + 1 because this is the actual receive path for acceptor
-        let conn_id_recv = conn_id.wrapping_add(1);
-        let _ = self
-            .utp_listener_tx
-            .send(UtpListenerRequest::OfferStream(conn_id_recv));
-
+        // Listen for incoming connection request on conn_id, as part of uTP handshake
         let _ = self
             .utp_listener_tx
             .send(UtpListenerRequest::AddActiveConnection(
                 source,
                 ProtocolId::History,
-                UtpStreamId::OfferStream,
+                UtpStreamId::AcceptStream(vec![vec![]]),
                 conn_id,
             ));
     }

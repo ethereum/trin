@@ -18,7 +18,7 @@ use crate::portalnet::{
 use crate::{
     portalnet::types::content_key::RawContentKey,
     utp::{
-        stream::{UtpListenerEvent, UtpListenerRequest, UtpSocket, BUF_SIZE},
+        stream::{UtpListenerRequest, UtpSocket, BUF_SIZE},
         trin_helpers::{UtpAccept, UtpMessage, UtpStreamId},
     },
 };
@@ -32,10 +32,7 @@ use futures::channel::oneshot;
 use parking_lot::RwLock;
 use ssz::Encode;
 use ssz_types::VariableList;
-use tokio::sync::{
-    mpsc::{UnboundedReceiver, UnboundedSender},
-    RwLock as TRwLock,
-};
+use tokio::sync::mpsc::UnboundedSender;
 use tracing::{debug, warn};
 
 pub use super::overlay_service::{OverlayRequestError, RequestDirection};
@@ -101,7 +98,6 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         config: OverlayConfig,
         discovery: Arc<Discovery>,
         utp_listener_tx: UnboundedSender<UtpListenerRequest>,
-        utp_listener_rx: Arc<TRwLock<UnboundedReceiver<UtpListenerEvent>>>,
         storage: Arc<RwLock<PortalStorage>>,
         data_radius: U256,
         protocol: ProtocolId,
@@ -124,7 +120,6 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
             Arc::clone(&data_radius),
             protocol.clone(),
             utp_listener_tx.clone(),
-            utp_listener_rx,
             config.enable_metrics,
         )
         .await
@@ -285,13 +280,6 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         enr: Enr,
         conn_id: u16,
     ) -> Result<Content, OverlayRequestError> {
-        let utp_request = UtpListenerRequest::FindContentStream(conn_id);
-        if let Err(err) = self.utp_listener_tx.send(utp_request) {
-            return Err(OverlayRequestError::UtpError(format!(
-                "Unable to send uTP FindContent stream request: {err}"
-            )));
-        }
-
         // initiate the connection to the acceptor
         let (tx, rx) = tokio::sync::oneshot::channel::<anyhow::Result<UtpSocket>>();
         self.utp_listener_tx
@@ -399,11 +387,6 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         // Do not initialize uTP stream if remote node doesn't have interest in the offered content keys
         if response.content_keys.is_zero() {
             return Ok(response);
-        }
-
-        let utp_request = UtpListenerRequest::OfferStream(conn_id);
-        if let Err(err) = self.utp_listener_tx.send(utp_request) {
-            return Err(anyhow!("Unable to send uTP Offer stream request: {err}"));
         }
 
         // initiate the connection to the acceptor
