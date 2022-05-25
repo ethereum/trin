@@ -23,7 +23,7 @@ use crate::{
     locks::RwLoggingExt,
     portalnet::types::{
         content_key::RawContentKey,
-        messages::{ByteList, Content::Content, ProtocolId},
+        messages::{ByteList, ProtocolId},
     },
     utp::{
         packets::{ExtensionType, Packet, PacketType, HEADER_SIZE},
@@ -121,10 +121,11 @@ pub enum UtpListenerRequest {
         ConnId,
         NodeId,
         ProtocolId,
+        UtpStreamId,
         oneshot::Sender<anyhow::Result<UtpSocket>>,
     ),
     /// Request to add uTP stream to the active connections
-    AddActiveConnection(Enr, ProtocolId, ConnId),
+    AddActiveConnection(Enr, ProtocolId, UtpStreamId, ConnId),
     /// Request to listen for FindCOntent stream and send content data
     FindContentData(ConnId, ByteList),
     /// Request to listen for FindContent stream
@@ -277,8 +278,7 @@ impl UtpListener {
                             self.listening
                                 .insert(conn.sender_connection_id, UtpStreamId::FindContentStream);
 
-                            if let Some(UtpStreamId::FindContentData(Content(content_data))) =
-                                utp_message_id
+                            if let Some(UtpStreamId::FindContentData(content_data)) = utp_message_id
                             {
                                 // We want to send uTP data only if the content is Content(ByteList)
                                 debug!(
@@ -374,11 +374,17 @@ impl UtpListener {
     /// Process overlay uTP requests
     async fn process_overlay_request(&mut self, request: UtpListenerRequest) {
         match request {
-            UtpListenerRequest::AddActiveConnection(connected_to, protocol_id, conn_id_recv) => {
+            UtpListenerRequest::AddActiveConnection(
+                connected_to,
+                protocol_id,
+                stream_id,
+                conn_id_recv,
+            ) => {
                 let conn = UtpSocket::new(
                     Arc::clone(&self.discovery),
                     connected_to.clone(),
                     protocol_id,
+                    stream_id,
                     Some(self.stream_tx.clone()),
                 );
                 let conn_key = ConnectionKey::new(connected_to.node_id(), conn_id_recv);
@@ -388,8 +394,8 @@ impl UtpListener {
                 self.listening
                     .insert(conn_id, UtpStreamId::FindContentStream);
             }
-            UtpListenerRequest::Connect(conn_id, node_id, protocol_id, tx) => {
-                let conn = self.connect(conn_id, node_id, protocol_id).await;
+            UtpListenerRequest::Connect(conn_id, node_id, protocol_id, stream_id, tx) => {
+                let conn = self.connect(conn_id, node_id, protocol_id, stream_id).await;
                 if tx.send(conn).is_err() {
                     error!("Unable to send uTP socket to requester")
                 };
@@ -399,7 +405,7 @@ impl UtpListener {
             }
             UtpListenerRequest::FindContentData(conn_id, content) => {
                 self.listening
-                    .insert(conn_id, UtpStreamId::FindContentData(Content(content)));
+                    .insert(conn_id, UtpStreamId::FindContentData(content));
             }
             UtpListenerRequest::AcceptStream(conn_id, accepted_keys) => {
                 self.listening
@@ -414,12 +420,14 @@ impl UtpListener {
         connection_id: ConnId,
         node_id: NodeId,
         protocol_id: ProtocolId,
+        stream_id: UtpStreamId,
     ) -> anyhow::Result<UtpSocket> {
         if let Some(enr) = self.discovery.discv5.find_enr(&node_id) {
             let mut conn = UtpSocket::new(
                 Arc::clone(&self.discovery),
                 enr,
                 protocol_id,
+                stream_id,
                 Some(self.stream_tx.clone()),
             );
             conn.make_connection(connection_id).await;
@@ -477,6 +485,9 @@ pub struct UtpSocket {
 
     /// Overlay protocol identifier
     protocol_id: ProtocolId,
+
+    /// Overlay uTP stream id
+    stream_id: UtpStreamId,
 
     /// Sequence number for the next packet
     seq_nr: u16,
@@ -565,6 +576,7 @@ impl UtpSocket {
         socket: Arc<Discovery>,
         connected_to: Enr,
         protocol_id: ProtocolId,
+        stream_id: UtpStreamId,
         utp_listener_tx: Option<UnboundedSender<UtpStreamEvent>>,
     ) -> Self {
         let (receiver_id, sender_id) = generate_sequential_identifiers();
@@ -574,6 +586,7 @@ impl UtpSocket {
         Self {
             state: SocketState::Uninitialized,
             protocol_id,
+            stream_id,
             seq_nr: 1,
             ack_nr: 0,
             receiver_connection_id: receiver_id,
@@ -1482,6 +1495,7 @@ mod tests {
             packets::{Packet, PacketType},
             stream::{SocketState, UtpSocket, BUF_SIZE},
             time::now_microseconds,
+            trin_helpers::UtpStreamId,
         },
     };
     use discv5::Discv5Event;
@@ -1514,7 +1528,13 @@ mod tests {
 
         let discv5 = Arc::new(discv5);
 
-        let conn = UtpSocket::new(Arc::clone(&discv5), enr, ProtocolId::History, None);
+        let conn = UtpSocket::new(
+            Arc::clone(&discv5),
+            enr,
+            ProtocolId::History,
+            UtpStreamId::OfferStream,
+            None,
+        );
         // TODO: Create `Discv5Socket` struct to encapsulate all socket logic
         spawn_socket_recv(Arc::clone(&discv5), conn.clone());
 
@@ -1534,7 +1554,13 @@ mod tests {
 
         let discv5 = Arc::new(discv5);
 
-        let conn = UtpSocket::new(Arc::clone(&discv5), connected_to, ProtocolId::History, None);
+        let conn = UtpSocket::new(
+            Arc::clone(&discv5),
+            connected_to,
+            ProtocolId::History,
+            UtpStreamId::OfferStream,
+            None,
+        );
         spawn_socket_recv(Arc::clone(&discv5), conn.clone());
 
         (discv5.local_enr(), conn)

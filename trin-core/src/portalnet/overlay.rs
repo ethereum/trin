@@ -19,7 +19,7 @@ use crate::{
     portalnet::types::content_key::RawContentKey,
     utp::{
         stream::{UtpListenerEvent, UtpListenerRequest, UtpSocket, BUF_SIZE},
-        trin_helpers::{UtpAccept, UtpMessage},
+        trin_helpers::{UtpAccept, UtpMessage, UtpStreamId},
     },
 };
 use discv5::{
@@ -299,6 +299,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                 conn_id,
                 enr.node_id(),
                 self.protocol.clone(),
+                UtpStreamId::FindContentStream,
                 tx,
             ))
             .map_err(|err| {
@@ -412,6 +413,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
             conn_id,
             enr.node_id(),
             self.protocol.clone(),
+            UtpStreamId::OfferStream,
             tx,
         )).map_err(|err| anyhow!("Unable to send Connect request to UtpListener when processing ACCEPT message: {err}"))?;
 

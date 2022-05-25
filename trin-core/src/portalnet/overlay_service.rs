@@ -450,11 +450,16 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         &self,
         source: &NodeId,
         conn_id_recv: u16,
+        stream_id: UtpStreamId,
     ) -> Result<(), OverlayRequestError> {
         if let Some(enr) = self.discovery.discv5.find_enr(source) {
             // Initialize active uTP stream with requested note
-            let utp_request =
-                UtpListenerRequest::AddActiveConnection(enr, self.protocol.clone(), conn_id_recv);
+            let utp_request = UtpListenerRequest::AddActiveConnection(
+                enr,
+                self.protocol.clone(),
+                stream_id,
+                conn_id_recv,
+            );
             if let Err(err) = self.utp_listener_tx.send(utp_request) {
                 return Err(OverlayRequestError::UtpError(format!(
                     "Unable to send uTP AddActiveConnection request: {err}"
@@ -664,7 +669,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                     // listen for incoming connection request on conn_id, as part of utp handshake and
                     // temporarily storing content data, so we can send it right after we receive
                     // SYN packet from the requester
-                    let utp_request = UtpListenerRequest::FindContentData(conn_id, content);
+                    let utp_request = UtpListenerRequest::FindContentData(conn_id, content.clone());
                     if let Err(err) = self.utp_listener_tx.send(utp_request) {
                         return Err(OverlayRequestError::UtpError(format!(
                             "Unable to send uTP FindContentData stream request: {err}"
@@ -681,7 +686,11 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                         )));
                     }
 
-                    self.add_utp_connection(source, conn_id_recv)?;
+                    self.add_utp_connection(
+                        source,
+                        conn_id_recv,
+                        UtpStreamId::FindContentData(content),
+                    )?;
 
                     // Connection id is send as BE because uTP header values are stored also as BE
                     Ok(Content::ConnectionId(conn_id.to_be()))
@@ -751,14 +760,14 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         // also listen on conn_id + 1 because this is the actual receive path for acceptor
         let conn_id_recv = conn_id.wrapping_add(1);
 
-        let utp_request = UtpListenerRequest::AcceptStream(conn_id_recv, accept_keys);
+        let utp_request = UtpListenerRequest::AcceptStream(conn_id_recv, accept_keys.clone());
         if let Err(err) = self.utp_listener_tx.send(utp_request) {
             return Err(OverlayRequestError::UtpError(format!(
                 "Unable to send uTP Accept stream request: {err}"
             )));
         }
 
-        self.add_utp_connection(source, conn_id)?;
+        self.add_utp_connection(source, conn_id, UtpStreamId::AcceptStream(accept_keys))?;
 
         let accept = Accept {
             connection_id: conn_id.to_be(),

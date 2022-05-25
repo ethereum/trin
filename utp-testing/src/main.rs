@@ -11,7 +11,7 @@ use trin_core::{
     socket,
     utp::{
         stream::{UtpListener, UtpListenerRequest, UtpListenerUnboundedReceiver, UtpSocket},
-        trin_helpers::UtpMessage,
+        trin_helpers::{UtpMessage, UtpStreamId},
     },
 };
 
@@ -34,6 +34,7 @@ impl TestApp {
             conn_id,
             enr.node_id(),
             ProtocolId::History,
+            UtpStreamId::OfferStream,
             tx,
         ));
 
@@ -92,6 +93,7 @@ impl TestApp {
             .send(UtpListenerRequest::AddActiveConnection(
                 source,
                 ProtocolId::History,
+                UtpStreamId::OfferStream,
                 conn_id,
             ));
     }
