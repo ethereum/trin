@@ -10,7 +10,7 @@ pub fn get_data_dir(node_id: NodeId) -> String {
     let trin_data_dir = Path::new(&trin_data_dir);
 
     // Append first 8 characters of Node ID
-    let mut application_string = "Trin_".to_owned();
+    let mut application_string = "trin_".to_owned();
     let node_id_string = hex::encode(node_id.raw());
     let suffix = &node_id_string[..8];
     application_string.push_str(suffix);
