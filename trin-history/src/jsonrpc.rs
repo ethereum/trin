@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use rlp::Rlp;
 use serde_json::{json, Value};
 use tokio::sync::mpsc;
 
@@ -126,8 +125,7 @@ impl HistoryRequestHandler {
                                 {
                                     Ok(content) => match content {
                                         Content::Content(val) => {
-                                            let rlp = Rlp::new(&val);
-                                            match Header::decode_rlp(&rlp) {
+                                            match rlp::decode::<Header>(&val) {
                                                 Ok(header) => Ok(json!(header)),
                                                 Err(_) => Err(
                                                     "Content retrieved has invalid RLP encoding"
@@ -145,16 +143,12 @@ impl HistoryRequestHandler {
                                 }
                             }
                             // Return value if initial response is `content`
-                            Content::Content(val) => {
-                                let rlp = Rlp::new(&val);
-                                match Header::decode_rlp(&rlp) {
-                                    Ok(header) => Ok(json!(header)),
-                                    Err(_) => {
-                                        Err("Content retrieved has invalid RLP encoding"
-                                            .to_string())
-                                    }
+                            Content::Content(val) => match rlp::decode::<Header>(&val) {
+                                Ok(header) => Ok(json!(header)),
+                                Err(_) => {
+                                    Err("Content retrieved has invalid RLP encoding".to_string())
                                 }
-                            }
+                            },
                             _ => Err("Unsupported content".to_string()),
                         },
                         _ => Err("Invalid RecursiveFindContent params".to_string()),
