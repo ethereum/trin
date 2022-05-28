@@ -21,8 +21,7 @@ use trin_core::{
     utp::stream::UtpListenerRequest,
 };
 
-use crate::trie::TrieDB;
-use crate::validation::StateValidator;
+use crate::{trie::TrieDB, validation::StateValidator};
 
 /// State network layer on top of the overlay protocol. Encapsulates state network specific data and logic.
 #[derive(Clone)]

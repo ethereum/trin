@@ -1,8 +1,9 @@
 use async_trait::async_trait;
 
-use trin_core::portalnet::types::content_key::StateContentKey;
-use trin_core::portalnet::types::messages::ByteList;
-use trin_core::types::validation::{HeaderOracle, Validator};
+use trin_core::{
+    portalnet::types::{content_key::StateContentKey, messages::ByteList},
+    types::validation::{HeaderOracle, Validator},
+};
 
 pub struct StateValidator {
     pub header_oracle: HeaderOracle,

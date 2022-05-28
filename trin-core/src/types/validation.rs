@@ -2,15 +2,19 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use serde_json::{json, Value};
 
-use crate::jsonrpc::service::dispatch_infura_request;
-use crate::jsonrpc::types::{HistoryJsonRpcRequest, JsonRequest, Params};
-use crate::portalnet::types::content_key::IdentityContentKey;
-use crate::portalnet::types::messages::ByteList;
+use crate::{
+    jsonrpc::{
+        service::dispatch_infura_request,
+        types::{HistoryJsonRpcRequest, JsonRequest, Params},
+    },
+    portalnet::types::{content_key::IdentityContentKey, messages::ByteList},
+    utils::infura::INFURA_BASE_URL,
+};
 
 /// Responsible for dispatching cross-overlay-network requests
 /// for data to perform validation. Currently, it just proxies these requests
 /// on to infura.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct HeaderOracle {
     pub infura_url: String,
     // We could simply store the main portal jsonrpc tx channel here, rather than each
@@ -25,7 +29,7 @@ pub struct HeaderOracle {
 impl Default for HeaderOracle {
     fn default() -> Self {
         Self {
-            infura_url: "https://mainnet.infura.io:443/v3/".to_string(),
+            infura_url: INFURA_BASE_URL.to_string(),
             history_jsonrpc_tx: None,
             header_gossip_jsonrpc_tx: None,
             block_indices_jsonrpc_tx: None,

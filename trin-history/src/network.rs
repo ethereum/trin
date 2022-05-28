@@ -1,7 +1,6 @@
 use anyhow::anyhow;
 use log::debug;
-use std::sync::Arc;
-use std::sync::RwLock as StdRwLock;
+use std::sync::{Arc, RwLock as StdRwLock};
 
 use parking_lot::RwLock;
 use tokio::sync::mpsc::UnboundedSender;

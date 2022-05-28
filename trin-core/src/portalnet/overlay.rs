@@ -1,6 +1,7 @@
 use anyhow::anyhow;
 use std::{
     collections::HashSet,
+    fmt::Debug,
     marker::{PhantomData, Sync},
     sync::Arc,
     time::Duration,
@@ -104,6 +105,8 @@ impl<
         TMetric: Metric + Send,
         TValidator: 'static + Validator<TContentKey> + Send,
     > OverlayProtocol<TContentKey, TMetric, TValidator>
+where
+    <TContentKey as TryFrom<Vec<u8>>>::Error: Debug,
 {
     pub async fn new(
         config: OverlayConfig,

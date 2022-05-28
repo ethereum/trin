@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     fmt,
+    fmt::Debug,
     marker::{PhantomData, Sync},
     sync::Arc,
     task::Poll,
@@ -280,6 +281,8 @@ impl<
         TMetric: Metric + Send,
         TValidator: 'static + Validator<TContentKey> + Send,
     > OverlayService<TContentKey, TMetric, TValidator>
+where
+    <TContentKey as TryFrom<Vec<u8>>>::Error: Debug,
 {
     /// Spawns the overlay network service.
     ///
@@ -1003,32 +1006,31 @@ impl<
     async fn process_received_content(&mut self, content: ByteList, request: FindContent) {
         let content_key = match TContentKey::try_from(request.content_key) {
             Ok(val) => val,
-            Err(_) => {
-                error!("Unable to process received content: Invalid content key.");
+            Err(msg) => {
+                error!("Unable to process received content: Invalid content key: {msg:?}");
                 return;
             }
         };
-        match self
+        if let Err(err) = self
             .validator
             .validate_content(&content_key, &content)
             .await
         {
-            Ok(_) => (),
-            Err(msg) => {
-                error!("Unable to validate received content: {msg:?}");
-                return;
-            }
-        }
+            error!("Unable to validate received content: {err:?}");
+            return;
+        };
         match self.storage.read().should_store(&content_key) {
-            Ok(should_store) => match should_store {
-                true => match self.storage.write().store(&content_key, &content.into()) {
-                    Ok(_) => (),
-                    Err(msg) => error!("Content received, but not stored: {msg}"),
-                },
-                false => debug!(
-                    "Content received, but not stored: Content is already stored or its distance falls outside current radius."
-                ),
-            },
+            Ok(should_store) => {
+                if should_store {
+                    if let Err(err) = self.storage.write().store(&content_key, &content.into()) {
+                        error!("Content received, but not stored: {err}")
+                    }
+                } else {
+                    debug!(
+                        "Content received, but not stored: Content is already stored or its distance falls outside current radius."
+                    )
+                }
+            }
             Err(_) => {
                 error!("Content received, but not stored: Error communicating with db.");
             }

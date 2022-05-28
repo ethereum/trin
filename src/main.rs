@@ -1,5 +1,4 @@
-use trin_core::cli::TrinConfig;
-use trin_core::utils::infura::build_infura_project_url_from_env;
+use trin_core::{cli::TrinConfig, utils::infura::build_infura_project_url_from_env};
 
 use trin::run_trin;
 

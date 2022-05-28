@@ -8,8 +8,10 @@ use std::sync::{Arc, RwLock};
 use discv5::TalkRequest;
 use log::info;
 use network::HistoryNetwork;
-use tokio::sync::mpsc::UnboundedSender;
-use tokio::{sync::mpsc, task::JoinHandle};
+use tokio::{
+    sync::{mpsc, mpsc::UnboundedSender},
+    task::JoinHandle,
+};
 
 use crate::{events::HistoryEvents, jsonrpc::HistoryRequestHandler};
 use trin_core::{

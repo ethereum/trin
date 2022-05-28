@@ -4,10 +4,13 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use rlp::Rlp;
 
-use trin_core::portalnet::types::content_key::HistoryContentKey;
-use trin_core::portalnet::types::messages::ByteList;
-use trin_core::types::header::Header;
-use trin_core::types::validation::{HeaderOracle, Validator};
+use trin_core::{
+    portalnet::types::{content_key::HistoryContentKey, messages::ByteList},
+    types::{
+        header::Header,
+        validation::{HeaderOracle, Validator},
+    },
+};
 
 pub struct ChainHistoryValidator {
     pub header_oracle: Arc<RwLock<HeaderOracle>>,
