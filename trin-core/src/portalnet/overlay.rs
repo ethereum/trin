@@ -18,7 +18,7 @@ use crate::portalnet::{
 use crate::{
     portalnet::types::content_key::RawContentKey,
     utp::{
-        stream::{UtpListenerRequest, UtpStream, BUF_SIZE},
+        stream::{UtpListenerEvent, UtpListenerRequest, UtpStream, BUF_SIZE},
         trin_helpers::{UtpAccept, UtpMessage, UtpStreamId},
     },
 };
@@ -172,6 +172,15 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
 
         // Send the request and wait on the response.
         self.send_overlay_request(request, direction).await
+    }
+
+    /// Process overlay uTP listener event
+    pub fn process_utp_event(&self, event: UtpListenerEvent) {
+        // TODO: Handle overlay uTP events
+        debug!(
+            "Got overlay uTP event: {event:?}, protocol id: {:?}",
+            self.protocol
+        );
     }
 
     /// Returns a vector of all ENR node IDs of nodes currently contained in the routing table.

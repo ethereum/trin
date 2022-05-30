@@ -62,7 +62,7 @@ pub async fn run_trin(
 
     debug!("Selected networks to spawn: {:?}", trin_config.networks);
     // Initialize state sub-network service and event handlers, if selected
-    let (state_handler, state_network_task, state_event_tx, state_jsonrpc_tx) =
+    let (state_handler, state_network_task, state_event_tx, state_utp_tx, state_jsonrpc_tx) =
         if trin_config.networks.iter().any(|val| val == STATE_NETWORK) {
             initialize_state_network(
                 &discovery,
@@ -72,26 +72,31 @@ pub async fn run_trin(
             )
             .await
         } else {
-            (None, None, None, None)
+            (None, None, None, None, None)
         };
 
     // Initialize chain history sub-network service and event handlers, if selected
-    let (history_handler, history_network_task, history_event_tx, history_jsonrpc_tx) =
-        if trin_config
-            .networks
-            .iter()
-            .any(|val| val == HISTORY_NETWORK)
-        {
-            initialize_history_network(
-                &discovery,
-                utp_listener_tx,
-                portalnet_config.clone(),
-                storage_config.clone(),
-            )
-            .await
-        } else {
-            (None, None, None, None)
-        };
+    let (
+        history_handler,
+        history_network_task,
+        history_event_tx,
+        history_utp_tx,
+        history_jsonrpc_tx,
+    ) = if trin_config
+        .networks
+        .iter()
+        .any(|val| val == HISTORY_NETWORK)
+    {
+        initialize_history_network(
+            &discovery,
+            utp_listener_tx,
+            portalnet_config.clone(),
+            storage_config.clone(),
+        )
+        .await
+    } else {
+        (None, None, None, None, None)
+    };
 
     // Initialize json-rpc server
     let (portal_jsonrpc_tx, portal_jsonrpc_rx) = mpsc::unbounded_channel::<PortalJsonRpcRequest>();
@@ -137,7 +142,9 @@ pub async fn run_trin(
             portal_events_discovery,
             utp_listener_rx,
             history_event_tx,
+            history_utp_tx,
             state_event_tx,
+            state_utp_tx,
             utp_events_tx,
         )
         .await;

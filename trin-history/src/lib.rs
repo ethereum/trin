@@ -20,7 +20,7 @@ use trin_core::{
         types::messages::PortalnetConfig,
     },
     utils::bootnodes::parse_bootnodes,
-    utp::stream::{UtpListener, UtpListenerRequest},
+    utp::stream::{UtpListener, UtpListenerEvent, UtpListenerRequest},
 };
 
 pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -56,6 +56,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::spawn(async move { utp_listener.start().await });
 
     let (history_event_tx, history_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
+    let (history_utp_tx, history_utp_rx) = mpsc::unbounded_channel::<UtpListenerEvent>();
     let portal_events_discovery = Arc::clone(&discovery);
 
     // Initialize DB config
@@ -68,6 +69,8 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
             portal_events_discovery,
             utp_listener_rx,
             Some(history_event_tx),
+            Some(history_utp_tx),
+            None,
             None,
             utp_sender,
         )
@@ -84,15 +87,21 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .await;
     let history_network = Arc::new(history_network);
 
-    spawn_history_network(history_network, portalnet_config, history_event_rx)
-        .await
-        .unwrap();
+    spawn_history_network(
+        history_network,
+        portalnet_config,
+        history_utp_rx,
+        history_event_rx,
+    )
+    .await
+    .unwrap();
     Ok(())
 }
 
 type HistoryHandler = Option<HistoryRequestHandler>;
 type HistoryNetworkTask = Option<JoinHandle<()>>;
 type HistoryEventTx = Option<mpsc::UnboundedSender<TalkRequest>>;
+type HistoryUtpTx = Option<mpsc::UnboundedSender<UtpListenerEvent>>;
 type HistoryJsonRpcTx = Option<mpsc::UnboundedSender<HistoryJsonRpcRequest>>;
 
 pub async fn initialize_history_network(
@@ -104,11 +113,13 @@ pub async fn initialize_history_network(
     HistoryHandler,
     HistoryNetworkTask,
     HistoryEventTx,
+    HistoryUtpTx,
     HistoryJsonRpcTx,
 ) {
     let (history_jsonrpc_tx, history_jsonrpc_rx) =
         mpsc::unbounded_channel::<HistoryJsonRpcRequest>();
     let (history_event_tx, history_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
+    let (utp_history_tx, utp_history_rx) = mpsc::unbounded_channel::<UtpListenerEvent>();
     let history_network = HistoryNetwork::new(
         Arc::clone(discovery),
         utp_listener_tx,
@@ -124,12 +135,14 @@ pub async fn initialize_history_network(
     let history_network_task = spawn_history_network(
         Arc::clone(&history_network),
         portalnet_config,
+        utp_history_rx,
         history_event_rx,
     );
     (
         Some(history_handler),
         Some(history_network_task),
         Some(history_event_tx),
+        Some(utp_history_tx),
         Some(history_jsonrpc_tx),
     )
 }
@@ -137,6 +150,7 @@ pub async fn initialize_history_network(
 pub fn spawn_history_network(
     network: Arc<HistoryNetwork>,
     portalnet_config: PortalnetConfig,
+    utp_listener_rx: mpsc::UnboundedReceiver<UtpListenerEvent>,
     history_event_rx: mpsc::UnboundedReceiver<TalkRequest>,
 ) -> JoinHandle<()> {
     info!(
@@ -148,10 +162,11 @@ pub fn spawn_history_network(
         let history_events = HistoryEvents {
             network: Arc::clone(&network),
             event_rx: history_event_rx,
+            utp_listener_rx,
         };
 
         // Spawn history event handler
-        tokio::spawn(history_events.process_requests());
+        tokio::spawn(history_events.start());
 
         // hacky test: make sure we establish a session with the boot node
         network.ping_bootnodes().await.unwrap();
