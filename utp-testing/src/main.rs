@@ -2,6 +2,7 @@ use discv5::{Discv5Event, TalkRequest};
 use log::debug;
 use std::{net::SocketAddr, str::FromStr, sync::Arc};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::RwLock;
 use trin_core::{
     portalnet::{
         discovery::Discovery,

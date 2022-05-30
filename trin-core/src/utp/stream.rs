@@ -120,7 +120,7 @@ pub enum UtpListenerRequest {
 }
 
 /// Emit global event to overlay handler
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum UtpListenerEvent {
     /// uTP stream is closed
     ClosedStream(UtpPayload, ProtocolId, UtpStreamId),
