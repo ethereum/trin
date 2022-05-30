@@ -49,7 +49,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::spawn(Arc::clone(&discovery).bucket_refresh_lookup());
 
     // Initialize and spawn UTP listener
-    let (utp_sender, overlay_sender, _, mut utp_listener) =
+    let (utp_sender, overlay_sender, utp_listener_rx, mut utp_listener) =
         UtpListener::new(Arc::clone(&discovery));
     tokio::spawn(async move { utp_listener.start().await });
 
@@ -64,12 +64,13 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::spawn(async move {
         let events = PortalnetEvents::new(
             portal_events_discovery,
+            utp_listener_rx,
             None,
             Some(state_event_tx),
             utp_sender,
         )
         .await;
-        events.process_discv5_requests().await;
+        events.start().await;
     });
 
     let state_network = StateNetwork::new(
