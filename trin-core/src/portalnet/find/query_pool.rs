@@ -21,7 +21,7 @@
 // This basis of this file has been taken from the rust-libp2p codebase:
 // https://github.com/libp2p/rust-libp2p
 
-use super::iterators::query::Query;
+use super::{iterators::query::Query, query_info::QueryInfo};
 
 use discv5::kbucket::Key;
 use fnv::FnvHashMap;
@@ -42,7 +42,7 @@ pub trait TargetKey<TNodeId> {
 pub struct QueryPool<TNodeId, TResponse, TResult, TQuery> {
     _next_id: QueryId,
     query_timeout: Duration,
-    queries: FnvHashMap<QueryId, TQuery>,
+    queries: FnvHashMap<QueryId, (QueryInfo, TQuery)>,
     marker: PhantomData<(TNodeId, TResponse, TResult)>,
 }
 
@@ -53,11 +53,11 @@ pub enum QueryPoolState<'a, TNodeId, TQuery> {
     Idle,
     /// At least one query is waiting for results. `Some(request)` indicates
     /// that a new request is now being waited on.
-    Waiting(Option<(&'a mut TQuery, TNodeId)>),
+    Waiting(Option<(&'a mut QueryInfo, &'a mut TQuery, TNodeId)>),
     /// A query has finished.
-    Finished(TQuery),
+    Finished(QueryInfo, TQuery),
     /// A query has timed out.
-    Timeout(TQuery),
+    Timeout(QueryInfo, TQuery),
 }
 
 impl<TNodeId, TResponse, TResult, TQuery> QueryPool<TNodeId, TResponse, TResult, TQuery>
@@ -76,20 +76,20 @@ where
     }
 
     /// Returns an iterator over the queries in the pool.
-    pub fn iter(&self) -> impl Iterator<Item = &TQuery> {
+    pub fn iter(&self) -> impl Iterator<Item = &(QueryInfo, TQuery)> {
         self.queries.values()
     }
 
     /// Adds a query to the pool.
-    fn _add_query(&mut self, query: TQuery) -> QueryId {
+    fn _add_query(&mut self, query_info: QueryInfo, query: TQuery) -> QueryId {
         let id = self._next_id;
         self._next_id = QueryId(self._next_id.wrapping_add(1));
-        self.queries.insert(id, query);
+        self.queries.insert(id, (query_info, query));
         id
     }
 
     /// Returns a mutable reference to a query with the given ID, if it is in the pool.
-    pub fn get_mut(&mut self, id: QueryId) -> Option<&mut TQuery> {
+    pub fn get_mut(&mut self, id: QueryId) -> Option<&mut (QueryInfo, TQuery)> {
         self.queries.get_mut(&id)
     }
 
@@ -100,7 +100,7 @@ where
         let mut waiting = None;
         let mut timeout = None;
 
-        for (&query_id, query) in self.queries.iter_mut() {
+        for (&query_id, (_, query)) in self.queries.iter_mut() {
             if let None = query.started() {
                 query.start(now);
             }
@@ -124,18 +124,18 @@ where
         }
 
         if let Some((query_id, return_peer)) = waiting {
-            let query = self.queries.get_mut(&query_id).expect("s.a.");
-            return QueryPoolState::Waiting(Some((query, return_peer)));
+            let (query_info, query) = self.queries.get_mut(&query_id).expect("s.a.");
+            return QueryPoolState::Waiting(Some((query_info, query, return_peer)));
         }
 
         if let Some(query_id) = finished {
-            let query = self.queries.remove(&query_id).expect("s.a.");
-            return QueryPoolState::Finished(query);
+            let (query_info, query) = self.queries.remove(&query_id).expect("s.a.");
+            return QueryPoolState::Finished(query_info, query);
         }
 
         if let Some(query_id) = timeout {
-            let query = self.queries.remove(&query_id).expect("s.a.");
-            return QueryPoolState::Timeout(query);
+            let (query_info, query) = self.queries.remove(&query_id).expect("s.a.");
+            return QueryPoolState::Timeout(query_info, query);
         }
 
         if self.queries.is_empty() {
