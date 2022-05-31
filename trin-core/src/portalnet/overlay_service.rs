@@ -11,12 +11,16 @@ use std::{
 use crate::{
     portalnet::{
         discovery::Discovery,
-        metrics::OverlayMetrics,
         find::{
-            iterators::findnodes::FindNodeQueryConfig,
+            iterators::{
+                findnodes::{FindNodeQueryConfig, FindNodeQuery},
+                query::Query,
+            },
             query_info::{QueryInfo, QueryType},
-            query_pool::{Query, QueryId, QueryPool, QueryPoolState},
+            query_pool::{QueryId, QueryPool, QueryPoolState},
+
         },
+        metrics::OverlayMetrics,
         storage::PortalStorage,
         types::{
             content_key::OverlayContentKey,
@@ -272,7 +276,7 @@ pub struct OverlayService<TContentKey, TMetric, TValidator> {
     /// A map of active outgoing requests.
     active_outgoing_requests: Arc<RwLock<HashMap<OverlayRequestId, ActiveOutgoingRequest>>>,
     /// All of the queries currently being performed.
-    queries: QueryPool<QueryInfo, NodeId, Enr>,
+    queries: QueryPool<NodeId, Vec<NodeId>, Vec<NodeId>, FindNodeQuery<NodeId>>,
     /// Timeout after which a peer in an ongoing query is marked unresponsive.
     query_peer_timeout: Duration,
     /// Number of peers to request data from in parallel for a single query.
@@ -418,6 +422,7 @@ where
                 }
             }
         }
+    }
 
     /// Begins initial FINDNODES query to populate the routing table.
     fn initialize_routing_table(&mut self, bootnodes: Vec<Enr>) {
@@ -476,10 +481,10 @@ where
                         self.peers_to_ping.insert(node_id);
                     }
                 }
-                query_event = OverlayService::<TContentKey>::query_event_poll(&mut self.queries) => {
+                query_event = OverlayService::<TContentKey, TMetric>::query_event_poll(&mut self.queries) => {
                     match query_event {
                         // Send a FINDNODES on behalf of the query.
-                        QueryEvent::Waiting(query_id, node_id, request) => {
+                        FindNodeQueryEvent::Waiting(query_id, node_id, request) => {
 
                             // Look up the node's ENR.
                             if let Some(enr) = self.find_enr(&node_id) {
@@ -495,13 +500,13 @@ where
                                 let _ = self.request_tx.send(request);
 
                             } else {
-                                error!("[{:?}] Unable to send FINDNODES to unknown ENR with node ID {},
-                                        for query {}.", self.protocol, node_id, query_id);
+                                error!("[{:?}] Unable to send FINDNODES to unknown ENR with node ID {}",
+                                         self.protocol, node_id);
                             }
 
                         }
                         // Query has ended.
-                        QueryEvent::Finished(query) | QueryEvent::TimedOut(query) => {
+                        FindNodeQueryEvent::Finished(query_info, query) | FindNodeQueryEvent::TimedOut(query_info, query) => {
                             let mut result = query.into_result();
                             // Obtain the ENRs for the resulting nodes.
                             let mut found_enrs = Vec::new();
@@ -520,7 +525,7 @@ where
                         }
                     }
                 }
-                _ = OverlayService::<TContentKey>::bucket_maintenance_poll(self.protocol.clone(), &self.kbuckets) => {}
+                _ = OverlayService::<TContentKey, TMetric>::bucket_maintenance_poll(self.protocol.clone(), &self.kbuckets) => {}
                 _ = bucket_refresh_interval.tick() => {
                         info!("[{:?}] Overlay bucket refresh lookup.", self.protocol);
                         self.bucket_refresh_lookup();
@@ -574,14 +579,7 @@ where
                     debug!("[{:?} Refreshing bucket {}", self.protocol, bucket.0);
                     let target_bucket_idx = u8::try_from(bucket.0);
                     if let Ok(idx) = target_bucket_idx {
-                        // Randomly generate a NodeID that falls within the target bucket.
-                        match self.generate_random_node_id(idx) {
-                            Ok(node_id) => node_id,
-                            Err(msg) => {
-                                error!("Failed to generate random node ID: {}", msg);
-                                return;
-                            }
-                        }
+                        self.generate_random_node_id(idx) 
                     } else {
                         error!("Unable to downcast bucket index.");
                         return;
@@ -645,16 +643,16 @@ where
     
     /// Maintains the query pool.
     ///
-    /// Returns a `QueryEvent` when the `QueryPoolState` updates.
+    /// Returns a `FindNodeQueryEvent` when the `QueryPoolState` updates.
     /// This happens when a query needs to send a request to a node, when a query has completed,
     // or when a query has timed out.
-    async fn query_event_poll(queries: &mut QueryPool<QueryInfo, NodeId, Enr>) -> QueryEvent {
+    async fn query_event_poll(queries: &mut QueryPool<NodeId, Vec<NodeId>, Vec<NodeId>, FindNodeQuery<NodeId>>) -> FindNodeQueryEvent {
         future::poll_fn(move |_cx| match queries.poll() {
-            QueryPoolState::Finished(query) => Poll::Ready(QueryEvent::Finished(Box::new(query))),
-            QueryPoolState::Waiting(Some((query, return_peer))) => {
+            QueryPoolState::Finished(query_info, query, query_id) => Poll::Ready(FindNodeQueryEvent::Finished(query_id, query_info, query)),
+            QueryPoolState::Waiting(Some((query_info, query, return_peer, query_id))) => {
                 let node_id = return_peer;
 
-                let request_body = match query.target().rpc_request(return_peer) {
+                let request_body = match query_info.rpc_request(return_peer) {
                     Ok(request_body) => request_body,
                     Err(_) => {
                         query.on_failure(&node_id);
@@ -662,11 +660,11 @@ where
                     }
                 };
 
-                Poll::Ready(QueryEvent::Waiting(query.id(), node_id, request_body))
+                Poll::Ready(FindNodeQueryEvent::Waiting(query_id, node_id, request_body))
             }
-            QueryPoolState::Timeout(query) => {
-                warn!("Query id: {:?} timed out", query.id());
-                Poll::Ready(QueryEvent::TimedOut(Box::new(query)))
+            QueryPoolState::Timeout(query_info, query, query_id) => {
+                warn!("Query id: {:?} timed out", query_id);
+                Poll::Ready(FindNodeQueryEvent::TimedOut(query_id, query_info, query))
             }
             QueryPoolState::Waiting(None) | QueryPoolState::Idle => Poll::Pending,
         })
@@ -1270,18 +1268,17 @@ where
     fn advance_query(&mut self, source: Enr, enrs: Vec<Enr>, query_id: QueryId) {
         // Check whether this request was sent on behalf of a query.
         // If so, advance the query with the returned data.
-        if let Some(query) = self.queries.get_mut(query_id) {
+        if let Some((query_info, query)) = self.queries.get_mut(query_id) {
             for enr_ref in enrs.iter() {
-                if !query
-                    .target_mut()
+                if !query_info
                     .untrusted_enrs
                     .iter()
                     .any(|e| e.node_id() == enr_ref.node_id())
                 {
-                    query.target_mut().untrusted_enrs.push(enr_ref.clone());
+                    query_info.untrusted_enrs.push(enr_ref.clone());
                 }
             }
-            query.on_success(&source.node_id(), &enrs);
+            query.on_success(&source.node_id(), enrs);
         } else {
             debug!("Response returned for inactive query {:?}", query_id)
         }
@@ -1480,7 +1477,7 @@ where
         let mut target = QueryInfo {
             query_type: QueryType::FindNode(*target),
             untrusted_enrs: Default::default(),
-            callback: None,
+            // callback: None,
             distances_to_request: self.findnodes_query_distances_per_peer,
         };
 
@@ -1503,7 +1500,7 @@ where
                 peer_timeout: self.query_peer_timeout,
             };
             self.queries
-                .add_findnode_query(query_config, target, known_closest_peers);
+                .add_query(query_config, target, known_closest_peers);
         }
     }
 
@@ -1531,9 +1528,8 @@ where
             return Some(entry.value().clone().enr());
         }
         // Check the untrusted addresses for ongoing queries.
-        for query in self.queries.iter() {
-            if let Some(enr) = query
-                .target()
+        for (query_info, _) in self.queries.iter() {
+            if let Some(enr) = query_info
                 .untrusted_enrs
                 .iter()
                 .find(|v| v.node_id() == *node_id)
@@ -1544,20 +1540,20 @@ where
         None
     }
 
-    fn generate_random_node_id(&self, target_bucket_idx: u8) -> anyhow::Result<NodeId> {
+    fn generate_random_node_id(&self, target_bucket_idx: u8) -> NodeId {
         node_id::generate_random_node_id(target_bucket_idx, self.local_enr().node_id())
     }
 }
 
 /// The result of the `query_event_poll` indicating an action is required to further progress an
 /// active query.
-pub enum QueryEvent {
+pub enum FindNodeQueryEvent {
     /// The query is waiting for a peer to be contacted.
     Waiting(QueryId, NodeId, Request),
     /// The query has timed out, possible returning peers.
-    TimedOut(Box<Query<QueryInfo, NodeId, Enr>>),
+    TimedOut(QueryId, QueryInfo, FindNodeQuery<NodeId>),
     /// The query has completed successfully.
-    Finished(Box<Query<QueryInfo, NodeId, Enr>>),
+    Finished(QueryId, QueryInfo, FindNodeQuery<NodeId>),
 }
 
 fn should_store(_key: &Vec<u8>) -> bool {
@@ -1622,6 +1618,7 @@ mod tests {
     use discv5::kbucket::Entry;
     use serial_test::serial;
     use tokio_test::{assert_pending, assert_ready, task};
+    use tokio::sync::mpsc::unbounded_channel;
 
     macro_rules! poll_request_rx {
         ($service:ident) => {
@@ -1683,8 +1680,14 @@ mod tests {
             phantom_content_key: PhantomData,
             phantom_metric: PhantomData,
             metrics,
+<<<<<<< HEAD
             validator,
         }
+=======
+        };
+
+        service
+>>>>>>> Add init query and advance query unit tests
     }
 
     #[tokio::test]
@@ -2207,65 +2210,6 @@ mod tests {
         assert_eq!(target_bucket_idx, expected_index as u8);
     }
 
-    #[tokio::test]
-    #[serial]
-    #[ignore]
-    async fn test_find_nodes_query() {
-        // goal:
-        // make five services A, B, C, D, E
-        // make connections:
-        // A <-> B
-        // B <-> C
-        // C <-> D
-        // D <-> E
-        // Have E do a lookup for A's node ID
-        // Verify that E has found A's ENR
-        const NUM_NODES: u16 = 5;
-        let mut nodes = vec![];
-        let mut previous_enr: Option<Enr> = None;
-        for i in 0..NUM_NODES {
-            let bootnode_enrs = match previous_enr {
-                Some(enr) => vec![enr],
-                None => vec![],
-            };
-            let config = PortalnetConfig {
-                internal_ip: true,
-                listen_port: 9001 + i,
-                bootnode_enrs: bootnode_enrs,
-                data_radius: U256::MAX,
-                external_addr: None,
-                private_key: None,
-                enable_metrics: false,
-            };
-
-            let node = task::spawn(build_service_with_config(config));
-            let enr = node.discovery.local_enr().clone();
-            nodes.push(node);
-
-            previous_enr = Some(enr);
-        }
-
-        let node_0 = nodes.get(0).unwrap();
-        let node_id_0 = node_0.local_enr().node_id();
-
-        let final_index = NUM_NODES - 1;
-        let final_node = nodes.get_mut(final_index as usize).unwrap();
-
-        final_node.send_iterative_findnode(&node_id_0);
-
-        // todo: better way to do wait until done
-        sleep(Duration::from_secs(10)).await;
-
-        let key_0 = kbucket::Key::from(node_id_0);
-        let optional_node = match final_node.kbuckets.write().entry(&key_0) {
-            kbucket::Entry::Present(entry, _) => Some(entry.value().clone()),
-            kbucket::Entry::Pending(ref mut entry, _) => Some(entry.value().clone()),
-            _ => None,
-        };
-
-        assert_ne!(optional_node, None);
-    }
-
     #[rstest]
     #[case(3, 3)]
     #[case(7, 7)]
@@ -2286,5 +2230,113 @@ mod tests {
         let enrs_limited = limit_enr_list_to_max_bytes(enrs, MAX_NODES_SIZE);
 
         assert_eq!(enrs_limited.len(), correct_limited_size);
+    }
+
+    #[rstest]
+    fn test_init_find_nodes_query() {
+        let mut service = task::spawn(build_service());
+
+        let (_, bootnode1) = generate_random_remote_enr();
+        let (_, bootnode2) = generate_random_remote_enr();
+        let bootnodes = vec![bootnode1.clone(), bootnode2.clone()];
+
+        let (_, target_enr) = generate_random_remote_enr();
+        let target_node_id = target_enr.node_id();
+
+        assert_eq!(service.queries.iter().count(), 0);
+
+        service.init_find_nodes_query_with_initial_enrs(&target_node_id, bootnodes);
+
+        let query = service.queries.iter().next();
+
+        assert!(query.is_some());
+
+        let query = query.unwrap();
+
+        assert!(query_info.untrusted_enrs.contains(&bootnode1));
+        assert!(query_info.untrusted_enrs.contains(&bootnode2));
+        match query.target().query_type {
+            QueryType::FindNode(node_id) => {
+                assert_eq!(node_id, target_node_id)
+            }
+        }
+        assert_eq!(
+            query.target().distances_to_request,
+            service.findnodes_query_distances_per_peer
+        );
+    }
+
+    #[tokio::test]
+    async fn test_advance_findnodes_query() {
+        let mut service = task::spawn(build_service());
+
+        let (_, bootnode) = generate_random_remote_enr();
+        let bootnodes = vec![bootnode.clone()];
+        let bootnode_node_id = bootnode.node_id();
+
+        let (_, target_enr) = generate_random_remote_enr();
+        let target_node_id = target_enr.node_id();
+
+        service.init_find_nodes_query_with_initial_enrs(&target_node_id, bootnodes);
+
+        // Test that the first query event contains a proper query ID and request to the bootnode
+        let event =
+            OverlayService::<IdentityContentKey, XorMetric>::query_event_poll(&mut service.queries)
+                .await;
+        match event {
+            FindNodeQueryEvent::Waiting(query_id, node_id, request) => {
+                match request {
+                    Request::FindNodes(find_nodes) => {
+                        assert_eq!(
+                            find_nodes.distances.len(),
+                            service.findnodes_query_distances_per_peer
+                        );
+                    }
+                    _ => panic!(),
+                }
+                assert_eq!(query_id, QueryId(0));
+                assert_eq!(node_id, bootnode_node_id);
+            }
+            _ => panic!(),
+        }
+
+        // Create two ENRs to use as dummy responses to the query from the bootnode.
+        let (_, enr1) = generate_random_remote_enr();
+        let (_, enr2) = generate_random_remote_enr();
+        let node_id_1 = enr1.node_id();
+        let node_id_2 = enr2.node_id();
+
+        service.advance_query(bootnode, vec![enr1, enr2], QueryId(0));
+
+        let event =
+            OverlayService::<IdentityContentKey, XorMetric>::query_event_poll(&mut service.queries)
+                .await;
+
+        // Check that the request is being sent to either node 1 or node 2. Keep track of which.
+        let first_node_id: Option<NodeId>;
+        match event {
+            QueryEvent::Waiting(_, node_id, _) => {
+                assert!((node_id == node_id_1) || (node_id == node_id_2));
+                first_node_id = Some(node_id);
+            }
+            _ => panic!(),
+        }
+
+        let event =
+            OverlayService::<IdentityContentKey, XorMetric>::query_event_poll(&mut service.queries)
+                .await;
+
+        // Check that a request is being sent to the other node.
+        let second_node_id = if first_node_id.unwrap() == node_id_1 {
+            node_id_2
+        } else {
+            node_id_1
+        };
+        match event {
+            QueryEvent::Waiting(_, node_id, _) => {
+                assert_eq!(node_id, second_node_id);
+            }
+            _ => panic!(),
+        }
     }
 }
