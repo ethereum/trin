@@ -53,11 +53,11 @@ pub enum QueryPoolState<'a, TNodeId, TQuery> {
     Idle,
     /// At least one query is waiting for results. `Some(request)` indicates
     /// that a new request is now being waited on.
-    Waiting(Option<(&'a mut QueryInfo, &'a mut TQuery, TNodeId)>),
+    Waiting(Option<(QueryId, &'a mut QueryInfo, &'a mut TQuery, TNodeId)>),
     /// A query has finished.
-    Finished(QueryInfo, TQuery),
+    Finished(QueryId, QueryInfo, TQuery),
     /// A query has timed out.
-    Timeout(QueryInfo, TQuery),
+    Timeout(QueryId, QueryInfo, TQuery),
 }
 
 impl<TNodeId, TResponse, TResult, TQuery> QueryPool<TNodeId, TResponse, TResult, TQuery>
@@ -125,17 +125,17 @@ where
 
         if let Some((query_id, return_peer)) = waiting {
             let (query_info, query) = self.queries.get_mut(&query_id).expect("s.a.");
-            return QueryPoolState::Waiting(Some((query_info, query, return_peer)));
+            return QueryPoolState::Waiting(Some((query_id, query_info, query, return_peer)));
         }
 
         if let Some(query_id) = finished {
             let (query_info, query) = self.queries.remove(&query_id).expect("s.a.");
-            return QueryPoolState::Finished(query_info, query);
+            return QueryPoolState::Finished(query_id, query_info, query);
         }
 
         if let Some(query_id) = timeout {
             let (query_info, query) = self.queries.remove(&query_id).expect("s.a.");
-            return QueryPoolState::Timeout(query_info, query);
+            return QueryPoolState::Timeout(query_id, query_info, query);
         }
 
         if self.queries.is_empty() {
