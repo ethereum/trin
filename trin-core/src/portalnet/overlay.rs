@@ -1,11 +1,13 @@
 use anyhow::anyhow;
 use std::{
-    collections::HashSet,
-    fmt::Debug,
+    collections::{HashMap, HashSet},
+    fmt::{Debug, Display},
     marker::{PhantomData, Sync},
+    str::FromStr,
     sync::Arc,
     time::Duration,
 };
+use utils::bytes::hex_encode;
 
 use super::{
     discovery::Discovery,
@@ -22,22 +24,30 @@ use crate::portalnet::{
 };
 
 use crate::{
-    portalnet::types::content_key::RawContentKey,
+    portalnet::types::{
+        content_key::RawContentKey,
+        messages::{ByteList, ContentPayloadList},
+        metric::XorMetric,
+    },
     types::validation::Validator,
+    utils,
     utp::{
-        stream::{UtpListenerEvent, UtpListenerRequest, UtpStream, BUF_SIZE},
+        stream::{UtpListenerEvent, UtpListenerRequest, UtpPayload, UtpStream, BUF_SIZE},
         trin_helpers::{UtpAccept, UtpMessage, UtpStreamId},
     },
 };
 use discv5::{
     enr::NodeId,
+    kbucket,
     kbucket::{Filter, KBucketsTable, MAX_NODES_PER_BUCKET},
     TalkRequest,
 };
 use ethereum_types::U256;
 use futures::channel::oneshot;
+use log::error;
 use parking_lot::RwLock;
-use ssz::Encode;
+use rand::seq::IteratorRandom;
+use ssz::{Decode, Encode};
 use ssz_types::VariableList;
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::{debug, warn};
@@ -116,7 +126,7 @@ impl<
         TValidator: 'static + Validator<TContentKey> + Send,
     > OverlayProtocol<TContentKey, TMetric, TValidator>
 where
-    <TContentKey as TryFrom<Vec<u8>>>::Error: Debug,
+    <TContentKey as TryFrom<Vec<u8>>>::Error: Debug + Display,
 {
     pub async fn new(
         config: OverlayConfig,
@@ -207,12 +217,157 @@ where
     }
 
     /// Process overlay uTP listener event
-    pub fn process_utp_event(&self, event: UtpListenerEvent) {
-        // TODO: Handle overlay uTP events
-        debug!(
-            "Got overlay uTP event: {event:?}, protocol id: {:?}",
-            self.protocol
-        );
+    pub fn process_utp_event(&self, event: UtpListenerEvent) -> anyhow::Result<()> {
+        match event {
+            UtpListenerEvent::ClosedStream(utp_payload, _, stream_id) => {
+                // Handle all closed uTP streams, currently we process only AcceptStream here.
+                // FindContent payload is processed explicitly when we send FindContent request.
+                // We don't expect to process a payload for ContentStream and OfferStream.
+                match stream_id {
+                    UtpStreamId::AcceptStream(content_keys) => {
+                        self.process_accept_utp_payload(content_keys, utp_payload)?
+                    }
+                    UtpStreamId::ContentStream(_) => warn!("Unexpected ContentStream uTP id!"),
+                    UtpStreamId::FindContentStream => {}
+                    UtpStreamId::OfferStream => warn!("Unexpected OfferStream uTP id!"),
+                }
+            }
+            UtpListenerEvent::ResetStream(..) => {}
+        }
+        Ok(())
+    }
+
+    /// Process accepted uTP payload of the OFFER/ACCEPT stream
+    fn process_accept_utp_payload(
+        &self,
+        content_keys: Vec<RawContentKey>,
+        payload: UtpPayload,
+    ) -> anyhow::Result<()> {
+        // Process accepted uTP payload as SZZ decoded Container[payloads: List[ByteList, max_length=64]]
+        let content_values = ContentPayloadList::from_ssz_bytes(&payload)
+            .map_err(|err| anyhow!("Unable to decode uTP content payload: {err:?}"))?;
+        // Accepted content keys len should match content value len
+        if content_keys.len() != content_values.len() {
+            return Err(anyhow!(
+                "Content keys len doesn't match content values len."
+            ));
+        }
+
+        // TODO: Verify overlay content data with an Oracle
+
+        // Temporarily store content key/value pairs to propagate here
+        let mut content_keys_values: Vec<(TContentKey, ByteList)> = Vec::new();
+
+        // Try to store the content into the database and propagate gossip the content
+        for (content_key, content_value) in content_keys.into_iter().zip(content_values.to_vec()) {
+            match TContentKey::try_from(content_key) {
+                Ok(key) => {
+                    // Store accepted content in DB
+                    self.store_overlay_content(&key, content_value.clone());
+                    content_keys_values.push((key, content_value))
+                }
+                Err(err) => {
+                    return Err(anyhow!(
+                        "Unexpected error while decoding overlay content key: {err}"
+                    ));
+                }
+            }
+        }
+        // Propagate gossip accepted content
+        self.propagate_gossip(content_keys_values)?;
+        Ok(())
+    }
+
+    /// Propagate gossip accepted content via OFFER/ACCEPT:
+    fn propagate_gossip(&self, content: Vec<(TContentKey, ByteList)>) -> anyhow::Result<()> {
+        // Get all nodes from overlay routing table
+        let kbuckets = self.kbuckets.read();
+        let all_nodes: Vec<&kbucket::Node<NodeId, Node>> = kbuckets
+            .buckets_iter()
+            .map(|kbucket| {
+                kbucket
+                    .iter()
+                    .collect::<Vec<&kbucket::Node<NodeId, Node>>>()
+            })
+            .flatten()
+            .collect();
+
+        // HashMap to temporarily store all interested ENRs and the content.
+        // Key is base64 string of node's ENR.
+        let mut enrs_and_content: HashMap<String, Vec<RawContentKey>> = HashMap::new();
+
+        // Filter all nodes from overlay routing table where XOR_distance(content_id, nodeId) < node radius
+        for content_key_value in content {
+            let interested_enrs: Vec<Enr> = all_nodes
+                .clone()
+                .into_iter()
+                .filter(|node| {
+                    XorMetric::distance(
+                        &content_key_value.0.content_id(),
+                        &node.key.preimage().raw(),
+                    ) < node.value.data_radius()
+                })
+                .map(|node| node.value.enr())
+                .collect();
+
+            // Continue if no nodes are interested in the content
+            if interested_enrs.is_empty() {
+                debug!("No nodes interested in neighborhood gossip: content_key={} num_nodes_checked={}",
+                    hex_encode(content_key_value.0.into()), all_nodes.len());
+                continue;
+            }
+
+            // Get log2 random ENRs to gossip
+            let random_enrs = log2_random_enrs(interested_enrs)?;
+
+            // Temporarily store all randomly selected nodes with the content of interest.
+            // We want this so we can offer all the content to interested node in one request.
+            for enr in random_enrs {
+                enrs_and_content
+                    .entry(enr.to_base64())
+                    .or_default()
+                    .push(content_key_value.clone().0.into());
+            }
+        }
+
+        // Create and send OFFER overlay request to the interested nodes
+        for (enr_string, interested_content) in enrs_and_content.into_iter() {
+            let enr = match Enr::from_str(&enr_string) {
+                Ok(enr) => enr,
+                Err(err) => {
+                    error!("Error creating ENR from base_64 encoded string: {err}");
+                    continue;
+                }
+            };
+
+            let offer_request = Request::Offer(Offer {
+                content_keys: interested_content,
+            });
+
+            let overlay_request = OverlayRequest::new(
+                offer_request,
+                RequestDirection::Outgoing { destination: enr },
+                None,
+                None,
+            );
+
+            if let Err(err) = self.request_tx.send(overlay_request) {
+                error!("Unable to send OFFER request to overlay: {err}.")
+            }
+        }
+        Ok(())
+    }
+
+    /// Try to store overlay content into database
+    fn store_overlay_content(&self, content_key: &TContentKey, value: ByteList) {
+        match self.storage.read().should_store(content_key) {
+            Ok(_) => {
+                if let Err(err) = self.storage.write().store(content_key, &value.into()) {
+                    warn!("Unable to store accepted content: {err}");
+                }
+            }
+            Err(err) => error!("Unable to determine whether to store accepted content: {err}"),
+        }
     }
 
     /// Returns a vector of all ENR node IDs of nodes currently contained in the routing table.
@@ -522,6 +677,25 @@ where
     }
 }
 
+/// Randomly select log2 nodes. log2() is stable only for floats, that's why we cast it first to f32
+fn log2_random_enrs(enrs: Vec<Enr>) -> anyhow::Result<Vec<Enr>> {
+    if enrs.is_empty() {
+        return Err(anyhow!("Expected non-empty vector of ENRs"));
+    }
+    // log2(1) is zero but we want to propagate to at least one node
+    if enrs.len() == 1 {
+        return Ok(enrs);
+    }
+
+    // Greedy gossip by ceiling the log2 value
+    let log2_value = (enrs.len() as f32).log2().ceil();
+
+    let random_enrs: Vec<Enr> = enrs
+        .into_iter()
+        .choose_multiple(&mut rand::thread_rng(), log2_value as usize);
+    Ok(random_enrs)
+}
+
 fn validate_find_nodes_distances(distances: &Vec<u16>) -> Result<(), OverlayRequestError> {
     if distances.len() == 0 {
         return Err(OverlayRequestError::InvalidRequest(
@@ -552,6 +726,7 @@ fn validate_find_nodes_distances(distances: &Vec<u16>) -> Result<(), OverlayRequ
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::utils::node_id::generate_random_remote_enr;
     use rstest::rstest;
 
     #[rstest]
@@ -577,5 +752,21 @@ mod test {
             Ok(_) => panic!("Invalid test case passed"),
             Err(err) => assert!(err.to_string().contains(&msg)),
         }
+    }
+
+    #[rstest]
+    #[case(vec![generate_random_remote_enr().1; 8], 3)]
+    #[case(vec![generate_random_remote_enr().1; 1], 1)]
+    #[case(vec![generate_random_remote_enr().1; 9], 4)]
+    fn test_log2_random_enrs(#[case] all_nodes: Vec<Enr>, #[case] expected_log2: usize) {
+        let log2_random_nodes = log2_random_enrs(all_nodes).unwrap();
+        assert_eq!(log2_random_nodes.len(), expected_log2);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_log2_random_enrs_empty_input() {
+        let all_nodes = vec![];
+        log2_random_enrs(all_nodes).unwrap();
     }
 }
