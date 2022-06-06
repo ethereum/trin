@@ -19,7 +19,9 @@ impl StateEvents {
                     self.handle_state_talk_request(talk_request).await;
                 }
                 Some(event) = self.utp_listener_rx.recv() => {
-                    self.network.overlay.process_utp_event(event);
+                    if let Err(err) = self.network.overlay.process_utp_event(event) {
+                        warn!("Error processing uTP payload: {err}");
+                    }
                 }
             }
         }
