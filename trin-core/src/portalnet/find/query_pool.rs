@@ -55,9 +55,9 @@ pub enum QueryPoolState<'a, TNodeId, TQuery> {
     /// that a new request is now being waited on.
     Waiting(Option<(QueryId, &'a mut QueryInfo, &'a mut TQuery, TNodeId)>),
     /// A query has finished.
-    Finished(QueryId, QueryInfo, TQuery),
+    Finished(QueryId, TQuery),
     /// A query has timed out.
-    Timeout(QueryId, QueryInfo, TQuery),
+    Timeout(QueryId, TQuery),
 }
 
 impl<TNodeId, TResponse, TResult, TQuery> QueryPool<TNodeId, TResponse, TResult, TQuery>
@@ -81,7 +81,7 @@ where
     }
 
     /// Adds a query to the pool.
-    fn add_query(&mut self, query_info: QueryInfo, query: TQuery) -> QueryId {
+    pub fn add_query(&mut self, query_info: QueryInfo, query: TQuery) -> QueryId {
         let id = self.next_id;
         self.next_id = QueryId(self.next_id.wrapping_add(1));
         self.queries.insert(id, (query_info, query));
@@ -129,13 +129,13 @@ where
         }
 
         if let Some(query_id) = finished {
-            let (query_info, query) = self.queries.remove(&query_id).expect("s.a.");
-            return QueryPoolState::Finished(query_id, query_info, query);
+            let (_, query) = self.queries.remove(&query_id).expect("s.a.");
+            return QueryPoolState::Finished(query_id, query);
         }
 
         if let Some(query_id) = timeout {
-            let (query_info, query) = self.queries.remove(&query_id).expect("s.a.");
-            return QueryPoolState::Timeout(query_id, query_info, query);
+            let (_, query) = self.queries.remove(&query_id).expect("s.a.");
+            return QueryPoolState::Timeout(query_id, query);
         }
 
         if self.queries.is_empty() {
@@ -154,6 +154,12 @@ impl std::ops::Deref for QueryId {
     type Target = usize;
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl std::fmt::Display for QueryId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 

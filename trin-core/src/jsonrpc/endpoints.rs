@@ -30,7 +30,6 @@ pub enum HistoryEndpoint {
     Ping,
     RecursiveFindContent,
     Store,
-    RoutingTableInfo,
 }
 
 /// Ethereum JSON-RPC endpoints not currently supported by portal network requests, proxied to Infura
@@ -65,9 +64,6 @@ impl FromStr for TrinEndpoint {
             "discv5_nodeInfo" => Ok(TrinEndpoint::Discv5Endpoint(Discv5Endpoint::NodeInfo)),
             "discv5_routingTableInfo" => Ok(TrinEndpoint::Discv5Endpoint(
                 Discv5Endpoint::RoutingTableInfo,
-            )),
-            "portal_historyRoutingTableInfo" => Ok(TrinEndpoint::HistoryEndpoint(
-                HistoryEndpoint::RoutingTableInfo,
             )),
             "eth_blockNumber" => Ok(TrinEndpoint::InfuraEndpoint(InfuraEndpoint::BlockNumber)),
             "eth_getBlockByHash" => {

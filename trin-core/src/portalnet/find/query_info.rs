@@ -3,12 +3,11 @@ use crate::portalnet::{
     types::messages::{FindNodes, Request},
 };
 use discv5::{enr::NodeId, kbucket::Key, Enr};
-// use futures::channel::oneshot;
-use sha3::digest::generic_array::GenericArray;
+use futures::channel::oneshot;
 use smallvec::SmallVec;
 
 /// Information about a query.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct QueryInfo {
     /// What we are querying and why.
     pub query_type: QueryType,
@@ -17,21 +16,11 @@ pub struct QueryInfo {
     pub untrusted_enrs: SmallVec<[Enr; 16]>,
 
     /// A callback channel for the service that requested the query.
-    // pub callback: Option<oneshot::Sender<Vec<Enr>>>,
+    pub callback: Option<oneshot::Sender<Vec<Enr>>>,
 
     /// The number of distances we request for each peer.
     pub distances_to_request: usize,
 }
-
-impl PartialEq for QueryInfo {
-    fn eq(&self, other: &Self) -> bool {
-        (self.query_type == other.query_type) 
-        && (self.untrusted_enrs == other.untrusted_enrs)
-        && (self.distances_to_request == other.distances_to_request)
-    }
-}
-
-impl Eq for QueryInfo {}
 
 /// Additional information about the query.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -59,9 +48,7 @@ impl QueryInfo {
 impl TargetKey<NodeId> for QueryInfo {
     fn key(&self) -> Key<NodeId> {
         match self.query_type {
-            QueryType::FindNode(ref node_id) => {
-                Key::new_raw(*node_id, *GenericArray::from_slice(&node_id.raw()))
-            }
+            QueryType::FindNode(ref node_id) => Key::from(*node_id),
         }
     }
 }
