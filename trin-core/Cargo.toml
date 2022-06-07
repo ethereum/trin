@@ -69,3 +69,4 @@ features = ["bundled"]
 
 [dev-dependencies]
 quickcheck = "1.0.3"
+ntest = "0.8.0"

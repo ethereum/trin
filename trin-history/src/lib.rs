@@ -51,7 +51,8 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::spawn(Arc::clone(&discovery).bucket_refresh_lookup());
 
     // Initialize and spawn UTP listener
-    let (utp_sender, overlay_sender, mut utp_listener) = UtpListener::new(Arc::clone(&discovery));
+    let (utp_sender, overlay_sender, _, mut utp_listener) =
+        UtpListener::new(Arc::clone(&discovery));
     tokio::spawn(async move { utp_listener.start().await });
 
     let (history_event_tx, history_event_rx) = mpsc::unbounded_channel::<TalkRequest>();

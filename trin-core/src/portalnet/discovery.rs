@@ -14,6 +14,7 @@ use rand::seq::SliceRandom;
 use serde_json::{json, Value};
 use std::{
     convert::TryFrom,
+    fmt,
     net::{IpAddr, SocketAddr},
     sync::Arc,
     time::Duration,
@@ -52,6 +53,18 @@ pub struct Discovery {
     /// Indicates if the discv5 service has been started
     pub started: bool,
     pub listen_socket: SocketAddr,
+}
+
+impl fmt::Debug for Discovery {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Discovery: ( enr: {}, started: {}, listen_socket: {} )",
+            self.discv5.local_enr(),
+            self.started,
+            self.listen_socket
+        )
+    }
 }
 
 impl Discovery {

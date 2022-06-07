@@ -19,6 +19,7 @@ use crate::{
     utp::stream::UtpListenerRequest,
 };
 
+use crate::utp::trin_helpers::UtpStreamId;
 use delay_map::HashSetDelay;
 use discv5::{
     enr::NodeId,
@@ -45,6 +46,8 @@ pub const FIND_CONTENT_MAX_NODES: usize = 32;
 /// With even distribution assumptions, 2**17 is enough to put each node (estimating 100k nodes,
 /// which is more than 10x the ethereum mainnet node count) into a unique bucket by the 17th bucket index.
 const EXPECTED_NON_EMPTY_BUCKETS: usize = 17;
+/// Bucket refresh lookup interval in seconds
+const BUCKET_REFRESH_INTERVAL_SECS: u64 = 60;
 
 /// An overlay request error.
 #[derive(Clone, Error, Debug)]
@@ -377,7 +380,8 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
     /// Bucket maintenance: Maintain the routing table (more info documented above function).
     async fn start(&mut self) {
         // Construct bucket refresh interval
-        let mut bucket_refresh_interval = tokio::time::interval(Duration::from_secs(60));
+        let mut bucket_refresh_interval =
+            tokio::time::interval(Duration::from_secs(BUCKET_REFRESH_INTERVAL_SECS));
 
         loop {
             tokio::select! {
@@ -414,6 +418,34 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                     self.bucket_refresh_lookup();
                 }
             }
+        }
+    }
+
+    /// Send request to UtpListener to add a uTP stream to the active connections
+    fn add_utp_connection(
+        &self,
+        source: &NodeId,
+        conn_id_recv: u16,
+        stream_id: UtpStreamId,
+    ) -> Result<(), OverlayRequestError> {
+        if let Some(enr) = self.find_enr(source) {
+            // Initialize active uTP stream with requesting node
+            let utp_request = UtpListenerRequest::InitiateConnection(
+                enr,
+                self.protocol.clone(),
+                stream_id,
+                conn_id_recv,
+            );
+            if let Err(err) = self.utp_listener_tx.send(utp_request) {
+                return Err(OverlayRequestError::UtpError(format!(
+                    "Unable to send uTP AddActiveConnection request: {err}"
+                )));
+            }
+            Ok(())
+        } else {
+            Err(OverlayRequestError::UtpError(
+                "Can't find ENR in overlay routing table matching remote NodeId".to_string(),
+            ))
         }
     }
 
@@ -479,6 +511,16 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         .await
     }
 
+    /// Returns an ENR if one is known for the given NodeId in overlay routing table
+    pub fn find_enr(&self, node_id: &NodeId) -> Option<Enr> {
+        // check if we know this node id in our routing table
+        let key = kbucket::Key::from(*node_id);
+        if let kbucket::Entry::Present(entry, _) = self.kbuckets.write().entry(&key) {
+            return Some(entry.value().enr.clone());
+        }
+        None
+    }
+
     /// Processes an overlay request.
     fn process_request(&mut self, request: OverlayRequest) {
         // For incoming requests, handle the request, possibly send the response over the channel,
@@ -489,8 +531,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         // channel if the request was initiated internally (e.g. for maintenance).
         match request.direction {
             RequestDirection::Incoming { id, source } => {
-                let response =
-                    self.handle_request(request.request.clone(), id.clone(), source.clone());
+                let response = self.handle_request(request.request.clone(), id.clone(), &source);
                 // Send response to responder if present.
                 if let Some(responder) = request.responder {
                     let _ = responder.send(response);
@@ -522,9 +563,9 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
     fn initialize_request(&mut self, request: Request) -> Result<Response, OverlayRequestError> {
         debug!("[{:?}] Initializing request", self.protocol);
         match request {
-            Request::FindContent(find_content) => {
-                Ok(Response::Content(self.handle_find_content(find_content)?))
-            }
+            Request::FindContent(find_content) => Ok(Response::Content(
+                self.handle_find_content(find_content, None)?,
+            )),
             _ => Err(OverlayRequestError::InvalidRequest(
                 "Initializing this overlay service request is not yet supported.".to_string(),
             )),
@@ -536,23 +577,23 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         &mut self,
         request: Request,
         id: RequestId,
-        source: NodeId,
+        source: &NodeId,
     ) -> Result<Response, OverlayRequestError> {
         debug!("[{:?}] Handling request {}", self.protocol, id);
         match request {
-            Request::Ping(ping) => Ok(Response::Pong(self.handle_ping(ping, source))),
+            Request::Ping(ping) => Ok(Response::Pong(self.handle_ping(ping, &source))),
             Request::FindNodes(find_nodes) => {
                 Ok(Response::Nodes(self.handle_find_nodes(find_nodes)))
             }
-            Request::FindContent(find_content) => {
-                Ok(Response::Content(self.handle_find_content(find_content)?))
-            }
-            Request::Offer(offer) => Ok(Response::Accept(self.handle_offer(offer)?)),
+            Request::FindContent(find_content) => Ok(Response::Content(
+                self.handle_find_content(find_content, Some(&source))?,
+            )),
+            Request::Offer(offer) => Ok(Response::Accept(self.handle_offer(offer, source)?)),
         }
     }
 
     /// Builds a `Pong` response for a `Ping` request.
-    fn handle_ping(&self, request: Ping, source: NodeId) -> Pong {
+    fn handle_ping(&self, request: Ping, source: &NodeId) -> Pong {
         debug!(
             "[{:?}] Handling ping request from node={}. Ping={:?}",
             self.protocol, source, request
@@ -582,7 +623,11 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
     }
 
     /// Attempts to build a `Content` response for a `FindContent` request.
-    fn handle_find_content(&self, request: FindContent) -> Result<Content, OverlayRequestError> {
+    fn handle_find_content(
+        &self,
+        request: FindContent,
+        source: Option<&NodeId>,
+    ) -> Result<Content, OverlayRequestError> {
         self.metrics
             .as_ref()
             .and_then(|m| Some(m.report_inbound_find_content()));
@@ -604,29 +649,30 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                 if content.len() < 1000 {
                     Ok(Content::Content(content))
                 } else {
-                    let conn_id: u16 = crate::utp::stream::rand();
+                    match source {
+                        Some(source) => {
+                            let conn_id: u16 = crate::utp::stream::rand();
 
-                    // listen for incoming connection request on conn_id, as part of utp handshake and
-                    // temporarily storing content data, so we can send it right after we receive
-                    // SYN packet from the requester
-                    let utp_request = UtpListenerRequest::FindContentData(conn_id, content);
-                    if let Err(err) = self.utp_listener_tx.send(utp_request) {
-                        return Err(OverlayRequestError::UtpError(format!(
-                            "Unable to send uTP FindContentData stream request: {err}"
-                        )));
+                            // Listen for incoming uTP connection request on as part of uTP handshake and
+                            // storing content data, so we can send it inside UtpListener right after we receive
+                            // SYN packet from the requester
+                            let conn_id_recv = conn_id.wrapping_add(1);
+
+                            self.add_utp_connection(
+                                source,
+                                conn_id_recv,
+                                UtpStreamId::ContentStream(content),
+                            )?;
+
+                            // Connection id is send as BE because uTP header values are stored also as BE
+                            Ok(Content::ConnectionId(conn_id.to_be()))
+
+                        },
+                        None => {
+                           return Err(OverlayRequestError::UtpError(
+                               "Unable to start listening for uTP stream because source NodeID is not provided".to_string()))
+                        }
                     }
-
-                    // also listen on conn_id + 1 because this is the receive path
-                    let conn_id_recv = conn_id.wrapping_add(1);
-                    let utp_request = UtpListenerRequest::FindContentStream(conn_id_recv);
-                    if let Err(err) = self.utp_listener_tx.send(utp_request) {
-                        return Err(OverlayRequestError::UtpError(format!(
-                            "Unable to send uTP FindContent stream request: {err}"
-                        )));
-                    }
-
-                    // Connection id is send as BE because uTP header values are stored also as BE
-                    Ok(Content::ConnectionId(conn_id.to_be()))
                 }
             }
             Ok(None) => {
@@ -637,14 +683,13 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                 }
             }
             Err(msg) => Err(OverlayRequestError::Failure(format!(
-                "Unable to respond to FindContent: {}",
-                msg
+                "Unable to respond to FindContent: {msg}",
             ))),
         }
     }
 
     /// Attempts to build an `Accept` response for an `Offer` request.
-    fn handle_offer(&self, request: Offer) -> Result<Accept, OverlayRequestError> {
+    fn handle_offer(&self, request: Offer, source: &NodeId) -> Result<Accept, OverlayRequestError> {
         self.metrics
             .as_ref()
             .and_then(|m| Some(m.report_inbound_offer()));
@@ -681,23 +726,10 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                 })?;
         }
 
-        // listen for incoming connection request on conn_id, as part of utp handshake
+        // Listen for incoming connection request on conn_id, as part of utp handshake
         let conn_id: u16 = crate::utp::stream::rand();
-        let utp_request = UtpListenerRequest::OfferStream(conn_id);
-        if let Err(err) = self.utp_listener_tx.send(utp_request) {
-            return Err(OverlayRequestError::UtpError(format!(
-                "Unable to send uTP Offer stream request: {err}"
-            )));
-        }
 
-        // also listen on conn_id + 1 because this is the actual receive path for acceptor
-        let conn_id_recv = conn_id.wrapping_add(1);
-        let utp_request = UtpListenerRequest::AcceptStream(conn_id_recv, accept_keys);
-        if let Err(err) = self.utp_listener_tx.send(utp_request) {
-            return Err(OverlayRequestError::UtpError(format!(
-                "Unable to send uTP Accept stream request: {err}"
-            )));
-        }
+        self.add_utp_connection(source, conn_id, UtpStreamId::AcceptStream(accept_keys))?;
 
         let accept = Accept {
             connection_id: conn_id.to_be(),

@@ -17,7 +17,7 @@ use ssz_types::{typenum, BitList, VariableList};
 use thiserror::Error;
 use validator::ValidationError;
 
-use crate::portalnet::Enr;
+use crate::portalnet::{types::content_key::RawContentKey, Enr};
 
 pub type ByteList = VariableList<u8, typenum::U2048>;
 
@@ -143,7 +143,7 @@ pub enum ProtocolIdError {
 }
 
 /// Protocol identifiers
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ProtocolId {
     State,
     History,
@@ -492,7 +492,7 @@ impl TryInto<Value> for Content {
 
 #[derive(Debug, PartialEq, Clone, Encode, Decode)]
 pub struct Offer {
-    pub content_keys: Vec<Vec<u8>>,
+    pub content_keys: Vec<RawContentKey>,
 }
 
 #[derive(Debug, PartialEq, Clone, Encode, Decode)]
