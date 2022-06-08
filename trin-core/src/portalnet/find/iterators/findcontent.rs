@@ -106,7 +106,7 @@ where
                 QueryPeerState::Waiting(..) => {
                     assert!(
                         self.num_waiting > 0,
-                        "Query reached invalid number of waiting queries"
+                        "Query (on success) reached invalid number of waiting peers"
                     );
                     self.num_waiting -= 1;
 
@@ -182,16 +182,16 @@ where
 
         match self.closest_peers.entry(distance) {
             Entry::Vacant(_) => {}
-            Entry::Occupied(mut e) => match e.get().state() {
+            Entry::Occupied(mut entry) => match entry.get().state() {
                 QueryPeerState::Waiting(..) => {
                     assert!(
                         self.num_waiting > 0,
-                        "Query reached invalid number of waiting queries"
+                        "Query (on failure) reached invalid number of waiting peers"
                     );
                     self.num_waiting -= 1;
-                    e.get_mut().set_state(QueryPeerState::Failed);
+                    entry.get_mut().set_state(QueryPeerState::Failed);
                 }
-                QueryPeerState::Unresponsive => e.get_mut().set_state(QueryPeerState::Failed),
+                QueryPeerState::Unresponsive => entry.get_mut().set_state(QueryPeerState::Failed),
                 _ => {}
             },
         }
@@ -203,7 +203,7 @@ where
         }
 
         // If the content was returned by a peer, then the query is finished.
-        if let Some(..) = self.content {
+        if self.content.is_some() {
             self.progress = QueryProgress::Finished;
             return QueryState::Finished;
         }
@@ -238,7 +238,7 @@ where
                         // Peers that don't respond within timeout are set to `Failed`.
                         assert!(
                             self.num_waiting > 0,
-                            "Query reached invalid number of waiting queries"
+                            "Query (poll) reached invalid number of waiting peers"
                         );
                         self.num_waiting -= 1;
                         peer.set_state(QueryPeerState::Unresponsive);
