@@ -1,4 +1,12 @@
-use std::{collections::HashMap, fmt, marker::PhantomData, sync::Arc, task::Poll, time::Duration};
+use std::{
+    collections::HashMap,
+    fmt,
+    fmt::Debug,
+    marker::{PhantomData, Sync},
+    sync::Arc,
+    task::Poll,
+    time::Duration,
+};
 
 use crate::{
     portalnet::{
@@ -15,6 +23,7 @@ use crate::{
         },
         Enr,
     },
+    types::validation::Validator,
     utils::node_id,
     utp::stream::UtpListenerRequest,
 };
@@ -160,6 +169,7 @@ struct ActiveOutgoingRequest {
     pub destination: Enr,
     /// An optional responder to send the result of the associated request.
     pub responder: Option<OverlayResponder>,
+    pub request: Request,
 }
 
 /// A response for a particular overlay request.
@@ -226,7 +236,7 @@ impl PartialEq for Node {
 }
 
 /// The overlay service.
-pub struct OverlayService<TContentKey, TMetric> {
+pub struct OverlayService<TContentKey, TMetric, TValidator> {
     /// The underlying Discovery v5 protocol.
     discovery: Arc<Discovery>,
     /// The content database of the local node.
@@ -262,10 +272,17 @@ pub struct OverlayService<TContentKey, TMetric> {
     phantom_metric: PhantomData<TMetric>,
     /// Metrics reporting component
     metrics: Option<OverlayMetrics>,
+    /// Validator for overlay network content.
+    validator: TValidator,
 }
 
-impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
-    OverlayService<TContentKey, TMetric>
+impl<
+        TContentKey: OverlayContentKey + Send + Sync,
+        TMetric: Metric + Send,
+        TValidator: 'static + Validator<TContentKey> + Send,
+    > OverlayService<TContentKey, TMetric, TValidator>
+where
+    <TContentKey as TryFrom<Vec<u8>>>::Error: Debug,
 {
     /// Spawns the overlay network service.
     ///
@@ -282,6 +299,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         protocol: ProtocolId,
         utp_listener_sender: UnboundedSender<UtpListenerRequest>,
         enable_metrics: bool,
+        validator: TValidator,
     ) -> Result<UnboundedSender<OverlayRequest>, String> {
         let (request_tx, request_rx) = mpsc::unbounded_channel();
         let internal_request_tx = request_tx.clone();
@@ -316,6 +334,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                 phantom_content_key: PhantomData,
                 phantom_metric: PhantomData,
                 metrics,
+                validator,
             };
 
             // Attempt to insert bootnodes into the routing table in a disconnected state.
@@ -397,7 +416,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
 
                         // Perform background processing.
                         match response.response {
-                            Ok(response) => self.process_response(response, active_request.destination),
+                            Ok(response) => self.process_response(response, active_request.destination, active_request.request).await,
                             Err(error) => self.process_request_failure(response.request_id, active_request.destination, error),
                         }
                     } else {
@@ -412,7 +431,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                         self.peers_to_ping.insert(node_id);
                     }
                 }
-                _ = OverlayService::<TContentKey, TMetric>::bucket_maintenance_poll(self.protocol.clone(), &self.kbuckets) => {}
+                _ = OverlayService::<TContentKey, TMetric, TValidator>::bucket_maintenance_poll(self.protocol.clone(), &self.kbuckets) => {}
                 _ = bucket_refresh_interval.tick() => {
                     debug!("[{:?}] Overlay bucket refresh lookup", self.protocol);
                     self.bucket_refresh_lookup();
@@ -545,6 +564,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                     ActiveOutgoingRequest {
                         destination: destination.clone(),
                         responder: request.responder,
+                        request: request.request.clone(),
                     },
                 );
                 self.send_talk_req(request.request, request.id, destination);
@@ -860,7 +880,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
     }
 
     /// Processes a response to an outgoing request from some source node.
-    fn process_response(&mut self, response: Response, source: Enr) {
+    async fn process_response(&mut self, response: Response, source: Enr, request: Request) {
         // If the node is present in the routing table, but the node is not connected, then
         // use the existing entry's value and direction. Otherwise, build a new entry from
         // the source ENR and establish a connection in the outgoing direction, because this
@@ -908,7 +928,17 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         match response {
             Response::Pong(pong) => self.process_pong(pong, source),
             Response::Nodes(nodes) => self.process_nodes(nodes, source),
-            Response::Content(content) => self.process_content(content, source),
+            Response::Content(content) => {
+                let find_content_request = match request {
+                    Request::FindContent(find_content) => find_content,
+                    _ => {
+                        error!("Unable to process received content: Invalid request message.");
+                        return;
+                    }
+                };
+                self.process_content(content, source, find_content_request)
+                    .await
+            }
             _ => {}
         }
     }
@@ -956,7 +986,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
     }
 
     /// Processes a Content response.
-    fn process_content(&mut self, content: Content, source: Enr) {
+    async fn process_content(&mut self, content: Content, source: Enr, request: FindContent) {
         debug!(
             "[{:?}] Processing Content response from node. Node: {}",
             self.protocol,
@@ -967,14 +997,46 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                 "[{:?}] Skipping processing for content connection ID {}",
                 self.protocol, id
             ),
-            Content::Content(_) => {
-                debug!(
-                    "[{:?}] Skipping processing for content bytes",
-                    self.protocol
-                )
-            }
+            Content::Content(content) => self.process_received_content(content, request).await,
             Content::Enrs(enrs) => self
                 .process_discovered_enrs(enrs.into_iter().map(|ssz_enr| ssz_enr.into()).collect()),
+        }
+    }
+
+    async fn process_received_content(&mut self, content: ByteList, request: FindContent) {
+        let content_key = match TContentKey::try_from(request.content_key) {
+            Ok(val) => val,
+            Err(msg) => {
+                error!("Unable to process received content: We sent a request with an invalid content key: {msg:?}");
+                return;
+            }
+        };
+        let should_store = self.storage.read().should_store(&content_key);
+        match should_store {
+            Ok(val) => {
+                if val {
+                    // validate content before storing
+                    if let Err(err) = self
+                        .validator
+                        .validate_content(&content_key, &content)
+                        .await
+                    {
+                        error!("Unable to validate received content: {err:?}");
+                        return;
+                    };
+
+                    if let Err(err) = self.storage.write().store(&content_key, &content.into()) {
+                        error!("Content received, but not stored: {err}")
+                    }
+                } else {
+                    debug!(
+                        "Content received, but not stored: Content is already stored or its distance falls outside current radius."
+                    )
+                }
+            }
+            Err(_) => {
+                error!("Content received, but not stored: Error communicating with db.");
+            }
         }
     }
 
@@ -1275,6 +1337,7 @@ mod tests {
                 content_key::IdentityContentKey, messages::PortalnetConfig, metric::XorMetric,
             },
         },
+        types::validation::MockValidator,
         utils::node_id::generate_random_remote_enr,
     };
 
@@ -1289,7 +1352,7 @@ mod tests {
         };
     }
 
-    fn build_service() -> OverlayService<IdentityContentKey, XorMetric> {
+    fn build_service() -> OverlayService<IdentityContentKey, XorMetric, MockValidator> {
         let portal_config = PortalnetConfig {
             no_stun: true,
             ..Default::default()
@@ -1320,6 +1383,7 @@ mod tests {
         let (request_tx, request_rx) = mpsc::unbounded_channel();
         let (response_tx, response_rx) = mpsc::unbounded_channel();
         let metrics = None;
+        let validator = MockValidator {};
 
         OverlayService {
             discovery,
@@ -1337,6 +1401,7 @@ mod tests {
             phantom_content_key: PhantomData,
             phantom_metric: PhantomData,
             metrics,
+            validator,
         }
     }
 
@@ -1643,7 +1708,7 @@ mod tests {
 
         // Modify first ENR to increment sequence number.
         let updated_udp: u16 = 9000;
-        let _ = enr1.set_udp(updated_udp, &sk1);
+        let _ = enr1.set_udp4(updated_udp, &sk1);
         assert_ne!(1, enr1.seq());
 
         let mut enrs: Vec<Enr> = vec![];

@@ -58,7 +58,7 @@ impl Default for JsonRpcExiter {
 
 pub fn launch_jsonrpc_server(
     trin_config: TrinConfig,
-    infura_project_id: String,
+    infura_url: String,
     portal_tx: UnboundedSender<PortalJsonRpcRequest>,
     live_server_tx: tokio::sync::mpsc::Sender<bool>,
     json_rpc_exiter: Arc<JsonRpcExiter>,
@@ -68,19 +68,13 @@ pub fn launch_jsonrpc_server(
     match trin_config.web3_transport.as_str() {
         "ipc" => launch_ipc_client(
             pool,
-            infura_project_id,
+            infura_url,
             &trin_config.web3_ipc_path,
             portal_tx,
             live_server_tx,
             json_rpc_exiter,
         ),
-        "http" => launch_http_client(
-            pool,
-            infura_project_id,
-            trin_config,
-            portal_tx,
-            live_server_tx,
-        ),
+        "http" => launch_http_client(pool, infura_url, trin_config, portal_tx, live_server_tx),
         val => panic!("Unsupported web3 transport: {}", val),
     }
 }
@@ -126,7 +120,7 @@ fn get_listener_result(ipc_path: &str) -> tokio::io::Result<uds_windows::UnixLis
 
 fn launch_ipc_client(
     pool: ThreadPool,
-    infura_project_id: String,
+    infura_url: String,
     ipc_path: &str,
     portal_tx: UnboundedSender<PortalJsonRpcRequest>,
     live_server_tx: tokio::sync::mpsc::Sender<bool>,
@@ -174,10 +168,9 @@ fn launch_ipc_client(
             Err(_) => break, // Socket exited
         };
         debug!("New IPC client: {:?}", stream.peer_addr().unwrap());
-        let infura_project_id = infura_project_id.clone();
+        let infura_url = infura_url.clone();
         let portal_tx = portal_tx.clone();
         pool.execute(move || {
-            let infura_url = get_infura_url(&infura_project_id);
             let mut rx = stream.try_clone().unwrap();
             let mut tx = stream;
             serve_ipc_client(&mut rx, &mut tx, &infura_url, portal_tx);
@@ -192,7 +185,7 @@ fn launch_ipc_client(
 
 fn launch_http_client(
     pool: ThreadPool,
-    infura_project_id: String,
+    infura_url: String,
     trin_config: TrinConfig,
     portal_tx: UnboundedSender<PortalJsonRpcRequest>,
     live_server_tx: tokio::sync::mpsc::Sender<bool>,
@@ -212,10 +205,9 @@ fn launch_http_client(
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
-                let infura_project_id = infura_project_id.clone();
+                let infura_url = infura_url.clone();
                 let portal_tx = portal_tx.clone();
                 pool.execute(move || {
-                    let infura_url = get_infura_url(&infura_project_id);
                     serve_http_client(stream, &infura_url, portal_tx);
                 });
             }
@@ -386,7 +378,7 @@ fn dispatch_trin_request(
 }
 
 // Handle all requests served by infura
-fn dispatch_infura_request(obj: JsonRequest, infura_url: &str) -> Result<String, String> {
+pub fn dispatch_infura_request(obj: JsonRequest, infura_url: &str) -> Result<String, String> {
     match proxy_to_url(&obj, infura_url) {
         Ok(result_body) => Ok(std::str::from_utf8(&result_body).unwrap().to_owned()),
         Err(err) => Err(json!({
@@ -446,8 +438,4 @@ fn proxy_to_url(request: &JsonRequest, url: &str) -> io::Result<Vec<u8>> {
             format!("Request failure: {:?}", err),
         )),
     }
-}
-
-fn get_infura_url(infura_project_id: &str) -> String {
-    return format!("https://mainnet.infura.io:443/v3/{}", infura_project_id);
 }

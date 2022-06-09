@@ -13,7 +13,7 @@ repository = "https://github.com/ethereum/trin"
 discv5 = { git = "https://github.com/sigp/discv5.git", branch = "master" }
 ethereum-types = "0.12.1"
 hex = "0.4.3"
-log = "0.4.14"
+log = "0.4.17"
 prometheus_exporter = "0.8.4"
 rand = "0.8.4"
 rlp = "0.5.0"

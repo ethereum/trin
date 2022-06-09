@@ -104,7 +104,7 @@ impl Discovery {
             if let Some(ip_address) = config.enr_address {
                 builder.ip(ip_address);
             }
-            builder.udp(config.listen_port);
+            builder.udp4(config.listen_port);
             builder.build(&enr_key).unwrap()
         };
 
@@ -150,7 +150,7 @@ impl Discovery {
         json!({
             "enr":  self.discv5.local_enr().to_base64(),
             "nodeId":  self.discv5.local_enr().node_id().to_string(),
-            "ip":  self.discv5.local_enr().ip().map_or("None".to_owned(), |ip| ip.to_string())
+            "ip":  self.discv5.local_enr().ip4().map_or("None".to_owned(), |ip| ip.to_string())
         })
     }
 

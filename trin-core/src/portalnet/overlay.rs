@@ -1,5 +1,11 @@
 use anyhow::anyhow;
-use std::{collections::HashSet, marker::PhantomData, sync::Arc, time::Duration};
+use std::{
+    collections::HashSet,
+    fmt::Debug,
+    marker::{PhantomData, Sync},
+    sync::Arc,
+    time::Duration,
+};
 
 use super::{
     discovery::Discovery,
@@ -17,6 +23,7 @@ use crate::portalnet::{
 
 use crate::{
     portalnet::types::content_key::RawContentKey,
+    types::validation::Validator,
     utp::{
         stream::{UtpListenerEvent, UtpListenerRequest, UtpStream, BUF_SIZE},
         trin_helpers::{UtpAccept, UtpMessage, UtpStreamId},
@@ -68,7 +75,7 @@ impl Default for OverlayConfig {
 /// implement the overlay protocol and the overlay protocol is where we can encapsulate the logic for
 /// handling common network requests/responses.
 #[derive(Clone)]
-pub struct OverlayProtocol<TContentKey, TMetric> {
+pub struct OverlayProtocol<TContentKey, TMetric, TValidator> {
     /// Reference to the underlying discv5 protocol
     pub discovery: Arc<Discovery>,
     /// Reference to the database instance
@@ -89,10 +96,17 @@ pub struct OverlayProtocol<TContentKey, TMetric> {
     phantom_content_key: PhantomData<TContentKey>,
     /// Associate a metric with the overlay network.
     phantom_metric: PhantomData<TMetric>,
+    /// Declare the Validator type for a given overlay network.
+    phantom_validator: PhantomData<TValidator>,
 }
 
-impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
-    OverlayProtocol<TContentKey, TMetric>
+impl<
+        TContentKey: OverlayContentKey + Send + Sync,
+        TMetric: Metric + Send,
+        TValidator: 'static + Validator<TContentKey> + Send,
+    > OverlayProtocol<TContentKey, TMetric, TValidator>
+where
+    <TContentKey as TryFrom<Vec<u8>>>::Error: Debug,
 {
     pub async fn new(
         config: OverlayConfig,
@@ -101,6 +115,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         storage: Arc<RwLock<PortalStorage>>,
         data_radius: U256,
         protocol: ProtocolId,
+        validator: TValidator,
     ) -> Self {
         let kbuckets = Arc::new(RwLock::new(KBucketsTable::new(
             discovery.local_enr().node_id().into(),
@@ -111,7 +126,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         )));
 
         let data_radius = Arc::new(data_radius);
-        let request_tx = OverlayService::<TContentKey, TMetric>::spawn(
+        let request_tx = OverlayService::<TContentKey, TMetric, TValidator>::spawn(
             Arc::clone(&discovery),
             Arc::clone(&storage),
             Arc::clone(&kbuckets),
@@ -121,6 +136,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
             protocol.clone(),
             utp_listener_tx.clone(),
             config.enable_metrics,
+            validator,
         )
         .await
         .unwrap();
@@ -135,6 +151,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
             utp_listener_tx,
             phantom_content_key: PhantomData,
             phantom_metric: PhantomData,
+            phantom_validator: PhantomData,
         }
     }
 

@@ -7,7 +7,7 @@ rust-version = "1.58.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.52"
+anyhow = "1.0.57"
 clap = "2.33.3"
 discv5 = { git = "https://github.com/sigp/discv5.git", branch = "master" }
 futures = "0.3.21"

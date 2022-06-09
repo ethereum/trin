@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use log::debug;
 use tokio::sync::mpsc;
@@ -14,6 +14,7 @@ use trin_core::{
         discovery::Discovery, events::PortalnetEvents, storage::PortalStorage,
         types::messages::PortalnetConfig,
     },
+    types::validation::HeaderOracle,
     utils::bootnodes::parse_bootnodes,
     utp::stream::UtpListener,
 };
@@ -22,12 +23,11 @@ use trin_state::initialize_state_network;
 
 pub async fn run_trin(
     trin_config: TrinConfig,
-    infura_project_id: String,
+    infura_url: String,
 ) -> Result<Arc<JsonRpcExiter>, Box<dyn std::error::Error>> {
     trin_config.display_config();
 
     let bootnode_enrs = parse_bootnodes(&trin_config.bootnodes)?;
-
     let portalnet_config = PortalnetConfig {
         external_addr: trin_config.external_addr,
         private_key: trin_config.private_key.clone(),
@@ -59,6 +59,12 @@ pub async fn run_trin(
     // Initialize Storage config
     let storage_config =
         PortalStorage::setup_config(discovery.local_enr().node_id(), trin_config.kb)?;
+
+    // Initialize validation oracle
+    let header_oracle = Arc::new(RwLock::new(HeaderOracle {
+        infura_url: infura_url.clone(),
+        ..HeaderOracle::default()
+    }));
 
     debug!("Selected networks to spawn: {:?}", trin_config.networks);
     // Initialize state sub-network service and event handlers, if selected
@@ -92,6 +98,7 @@ pub async fn run_trin(
             utp_listener_tx,
             portalnet_config.clone(),
             storage_config.clone(),
+            header_oracle,
         )
         .await
     } else {
@@ -108,7 +115,7 @@ pub async fn run_trin(
         tokio::task::spawn_blocking(|| {
             launch_jsonrpc_server(
                 jsonrpc_trin_config,
-                infura_project_id,
+                infura_url,
                 portal_jsonrpc_tx,
                 live_server_tx,
                 json_exiter_clone,

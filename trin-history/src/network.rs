@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 use log::debug;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock as StdRwLock};
 
 use parking_lot::RwLock;
 use tokio::sync::mpsc::UnboundedSender;
@@ -16,13 +16,16 @@ use trin_core::{
             metric::XorMetric,
         },
     },
+    types::validation::HeaderOracle,
     utp::stream::UtpListenerRequest,
 };
+
+use crate::validation::ChainHistoryValidator;
 
 /// History network layer on top of the overlay protocol. Encapsulates history network specific data and logic.
 #[derive(Clone)]
 pub struct HistoryNetwork {
-    pub overlay: Arc<OverlayProtocol<HistoryContentKey, XorMetric>>,
+    pub overlay: Arc<OverlayProtocol<HistoryContentKey, XorMetric, ChainHistoryValidator>>,
 }
 
 impl HistoryNetwork {
@@ -31,6 +34,7 @@ impl HistoryNetwork {
         utp_listener_tx: UnboundedSender<UtpListenerRequest>,
         storage_config: PortalStorageConfig,
         portal_config: PortalnetConfig,
+        header_oracle: Arc<StdRwLock<HeaderOracle>>,
     ) -> Self {
         let config = OverlayConfig {
             bootnode_enrs: portal_config.bootnode_enrs.clone(),
@@ -38,6 +42,7 @@ impl HistoryNetwork {
             ..Default::default()
         };
         let storage = Arc::new(RwLock::new(PortalStorage::new(storage_config).unwrap()));
+        let validator = ChainHistoryValidator { header_oracle };
         let overlay = OverlayProtocol::new(
             config,
             discovery,
@@ -45,6 +50,7 @@ impl HistoryNetwork {
             storage,
             portal_config.data_radius,
             ProtocolId::History,
+            validator,
         )
         .await;
 
