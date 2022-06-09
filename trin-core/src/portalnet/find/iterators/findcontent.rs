@@ -104,6 +104,7 @@ where
             Entry::Vacant(..) => return,
             Entry::Occupied(mut entry) => match entry.get().state() {
                 QueryPeerState::Waiting(..) => {
+                    // Assert that the following subtraction will not overflow.
                     assert!(
                         self.num_waiting > 0,
                         "Query (on success) reached invalid number of waiting peers"
@@ -184,6 +185,7 @@ where
             Entry::Vacant(_) => {}
             Entry::Occupied(mut entry) => match entry.get().state() {
                 QueryPeerState::Waiting(..) => {
+                    // Assert that the following subtraction will not overflow.
                     assert!(
                         self.num_waiting > 0,
                         "Query (on failure) reached invalid number of waiting peers"
@@ -235,7 +237,8 @@ where
 
                 QueryPeerState::Waiting(timeout) => {
                     if now >= *timeout {
-                        // Peers that don't respond within timeout are set to `Failed`.
+                        // Peers that don't respond within timeout are set to `Unresponsive`.
+                        // Assert that the following subtraction will not overflow.
                         assert!(
                             self.num_waiting > 0,
                             "Query (poll) reached invalid number of waiting peers"
