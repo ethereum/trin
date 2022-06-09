@@ -29,7 +29,7 @@ use discv5::kbucket::{Distance, Key};
 use super::super::query_pool::QueryState;
 use super::query::{Query, QueryConfig, QueryPeer, QueryPeerState, QueryProgress};
 
-pub enum FindContentResponse<TNodeId> {
+pub enum FindContentQueryResponse<TNodeId> {
     ClosestNodes(Vec<TNodeId>),
     Content(Vec<u8>),
 }
@@ -74,7 +74,7 @@ pub struct FindContentQuery<TNodeId> {
     config: QueryConfig,
 }
 
-impl<TNodeId> Query<TNodeId, FindContentResponse<TNodeId>, FindContentQueryResult<TNodeId>>
+impl<TNodeId> Query<TNodeId, FindContentQueryResponse<TNodeId>, FindContentQueryResult<TNodeId>>
     for FindContentQuery<TNodeId>
 where
     TNodeId: Into<Key<TNodeId>> + Eq + Clone,
@@ -91,7 +91,7 @@ where
         self.started = Some(start);
     }
 
-    fn on_success(&mut self, peer: &TNodeId, peer_response: FindContentResponse<TNodeId>) {
+    fn on_success(&mut self, peer: &TNodeId, peer_response: FindContentQueryResponse<TNodeId>) {
         if let QueryProgress::Finished = self.progress {
             return;
         }
@@ -126,7 +126,7 @@ where
 
         // Incorporate the peer response into the query.
         match peer_response {
-            FindContentResponse::ClosestNodes(closer_peers) => {
+            FindContentQueryResponse::ClosestNodes(closer_peers) => {
                 // Incorporate the reported closer peers into the query.
                 let mut progress = false;
                 let num_closest = self.closest_peers.len();
@@ -163,7 +163,7 @@ where
                     QueryProgress::Finished => QueryProgress::Finished,
                 };
             }
-            FindContentResponse::Content(content) => {
+            FindContentQueryResponse::Content(content) => {
                 // Incorporate the found content into the query.
                 self.content = Some(ContentAndPeer {
                     content,
@@ -521,7 +521,7 @@ mod tests {
                         if rng.gen_bool(0.05) {
                             query.on_success(
                                 k.preimage(),
-                                FindContentResponse::Content(found_content.clone()),
+                                FindContentQueryResponse::Content(found_content.clone()),
                             );
                             content_peer = Some(k.clone());
                         } else {
@@ -530,7 +530,7 @@ mod tests {
                             remaining.extend(closer_peers.iter().map(|x| Key::from(*x)));
                             query.on_success(
                                 k.preimage(),
-                                FindContentResponse::ClosestNodes(closer_peers),
+                                FindContentQueryResponse::ClosestNodes(closer_peers),
                             );
                         }
                     } else {
@@ -617,16 +617,25 @@ mod tests {
                 panic!("No peer.");
             };
 
-            query.on_success(&peer1, FindContentResponse::ClosestNodes(closer.clone()));
+            query.on_success(
+                &peer1,
+                FindContentQueryResponse::ClosestNodes(closer.clone()),
+            );
 
             // Duplicate result from the same peer.
-            query.on_success(&peer1, FindContentResponse::ClosestNodes(closer.clone()));
+            query.on_success(
+                &peer1,
+                FindContentQueryResponse::ClosestNodes(closer.clone()),
+            );
 
             // If there is a second peer, let it also report the same "closer" peer.
             match query.poll(now) {
                 QueryState::Waiting(Some(p)) => {
                     let peer2 = p;
-                    query.on_success(&peer2, FindContentResponse::ClosestNodes(closer.clone()))
+                    query.on_success(
+                        &peer2,
+                        FindContentQueryResponse::ClosestNodes(closer.clone()),
+                    )
                 }
                 QueryState::Finished => {}
                 _ => panic!("Unexpectedly query state."),
@@ -682,7 +691,7 @@ mod tests {
 
             // Deliver a result for the first peer. If the query is not marked finished, then the
             // first peer would be marked successful and included in the result.
-            query.on_success(&peer, FindContentResponse::ClosestNodes(vec![]));
+            query.on_success(&peer, FindContentQueryResponse::ClosestNodes(vec![]));
             let closest = query.into_result();
 
             // The query may be finished if the first peer was the only peer, because there would
