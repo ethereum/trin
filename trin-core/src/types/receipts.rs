@@ -17,7 +17,7 @@ pub struct Receipts {
 impl Receipts {
     pub fn root(&self) -> anyhow::Result<H256> {
         let memdb = Arc::new(MemoryDB::new(true));
-        let mut trie = EthTrie::new(Arc::clone(&memdb));
+        let mut trie = EthTrie::new(memdb);
 
         // Insert receipts into receipts tree
         for (index, receipt) in self.receipt_list.iter().enumerate() {
@@ -208,12 +208,12 @@ impl Receipt {
     }
 
     pub fn decode(receipt: &[u8]) -> Result<Self, DecoderError> {
+        // at least one byte needs to be present
         if receipt.is_empty() {
-            // at least one byte needs to be present
             return Err(DecoderError::RlpIncorrectListLen);
         }
         let id = TransactionId::try_from(receipt[0])
-            .map_err(|_| DecoderError::Custom("Unknown transaction"))?;
+            .map_err(|_| DecoderError::Custom("Unknown transaction id"))?;
         //other transaction types
         match id {
             TransactionId::EIP1559 => Ok(Self::EIP1559(rlp::decode(&receipt[1..])?)),

@@ -24,7 +24,7 @@ pub struct Transactions {
 impl Transactions {
     pub fn root(&self) -> anyhow::Result<H256> {
         let memdb = Arc::new(MemoryDB::new(true));
-        let mut trie = EthTrie::new(Arc::clone(&memdb));
+        let mut trie = EthTrie::new(memdb);
 
         // Insert txs into tx tree
         for (index, tx) in self.tx_list.iter().enumerate() {
@@ -52,10 +52,7 @@ impl Uncles {
         let uncles_rlp = stream.out().freeze();
 
         // hash rlp uncles
-        let mut keccak = Keccak256::new();
-        keccak.update(uncles_rlp);
-        let hash = keccak.finalize().to_vec();
-
+        let hash = Keccak256::digest(&uncles_rlp);
         Ok(H256::from_slice(&hash))
     }
 }
@@ -69,15 +66,13 @@ pub enum Transaction {
 
 impl Transaction {
     pub fn decode(transaction: &[u8]) -> Result<Self, DecoderError> {
+        // at least one byte needs to be present
         if transaction.is_empty() {
-            // at least one byte needs to be present
             return Err(DecoderError::RlpIncorrectListLen);
         }
-        let id = TransactionId::try_from(transaction[0]);
-        if id.is_err() {
-            return Err(DecoderError::Custom("Unknown transaction type"));
-        }
-        match id.unwrap() {
+        let id = TransactionId::try_from(transaction[0])
+            .map_err(|_| DecoderError::Custom("Unknown transaction id"))?;
+        match id {
             TransactionId::EIP1559 => Ok(Self::EIP1559(rlp::decode(&transaction[1..])?)),
             TransactionId::AccessList => Ok(Self::AccessList(rlp::decode(&transaction[1..])?)),
             TransactionId::Legacy => Ok(Self::Legacy(rlp::decode(transaction)?)),
@@ -153,8 +148,8 @@ pub struct AccessList {
 }
 
 impl Decodable for AccessList {
-    fn decode(rlp: &Rlp) -> Result<Self, DecoderError> {
-        let list = rlp
+    fn decode(rlp_obj: &Rlp) -> Result<Self, DecoderError> {
+        let list = rlp_obj
             .iter()
             .map(|v| rlp::decode(v.as_raw()).unwrap())
             .collect();
@@ -164,17 +159,14 @@ impl Decodable for AccessList {
 
 impl Encodable for AccessList {
     fn rlp_append(&self, stream: &mut RlpStream) {
-        stream.begin_list(self.list.len());
-        for access in self.list.iter() {
-            stream.append(access);
-        }
+        stream.append_list(&self.list);
     }
 }
 
 #[derive(Debug, PartialEq, Clone, Eq)]
 pub struct AccessListItem {
     pub addr: H160,
-    pub keys: StorageKeys,
+    pub storage: StorageKeys,
 }
 
 impl Decodable for AccessListItem {
@@ -183,7 +175,7 @@ impl Decodable for AccessListItem {
         let keys: Vec<H256> = rlp.list_at(1)?;
         Ok(Self {
             addr,
-            keys: StorageKeys { keys },
+            storage: StorageKeys { keys },
         })
     }
 }
@@ -192,8 +184,8 @@ impl Encodable for AccessListItem {
     fn rlp_append(&self, stream: &mut RlpStream) {
         stream.begin_list(2);
         stream.append(&self.addr);
-        stream.begin_list(self.keys.keys.len());
-        for location in &self.keys.keys {
+        stream.begin_list(self.storage.keys.len());
+        for location in &self.storage.keys {
             stream.append(location);
         }
     }
@@ -229,6 +221,7 @@ mod tests {
     #[case(TX16, 3464424)]
     #[case(TX17, 1544975)]
     #[case(TX18, 12)]
+    #[case(TX19, 1)]
     fn encode_and_decode_txs(#[case] tx: &str, #[case] expected_nonce: u32) {
         let tx_rlp = hex::decode(tx.to_string()).unwrap();
         let tx: Transaction = Transaction::decode(&tx_rlp).expect("error decoding tx");
