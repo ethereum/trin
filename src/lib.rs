@@ -88,7 +88,6 @@ pub async fn run_trin(
         history_event_tx,
         history_utp_tx,
         history_jsonrpc_tx,
-        _header_oracle,
     ) = if trin_config
         .networks
         .iter()

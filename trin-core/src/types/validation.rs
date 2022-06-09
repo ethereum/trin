@@ -40,7 +40,8 @@ impl Default for HeaderOracle {
 
 impl HeaderOracle {
     // Currently falls back to infura, to be updated to use canonical block indices network.
-    pub fn get_hash_at_height(&mut self, hex_number: String) -> anyhow::Result<String> {
+    pub fn get_hash_at_height(&mut self, block_number: u64) -> anyhow::Result<String> {
+        let hex_number = format!("0x:{:02X}", block_number);
         let request = JsonRequest {
             jsonrpc: "2.0".to_string(),
             params: Params::Array(vec![json!(hex_number), json!(false)]),

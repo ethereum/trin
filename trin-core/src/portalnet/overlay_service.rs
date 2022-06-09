@@ -1007,21 +1007,24 @@ where
         let content_key = match TContentKey::try_from(request.content_key) {
             Ok(val) => val,
             Err(msg) => {
-                error!("Unable to process received content: Invalid content key: {msg:?}");
+                error!("Unable to process received content: We sent a request with an invalid content key: {msg:?}");
                 return;
             }
         };
-        if let Err(err) = self
-            .validator
-            .validate_content(&content_key, &content)
-            .await
-        {
-            error!("Unable to validate received content: {err:?}");
-            return;
-        };
-        match self.storage.read().should_store(&content_key) {
-            Ok(should_store) => {
-                if should_store {
+        let should_store = self.storage.read().should_store(&content_key);
+        match should_store {
+            Ok(val) => {
+                if val {
+                    // validate content before storing
+                    if let Err(err) = self
+                        .validator
+                        .validate_content(&content_key, &content)
+                        .await
+                    {
+                        error!("Unable to validate received content: {err:?}");
+                        return;
+                    };
+
                     if let Err(err) = self.storage.write().store(&content_key, &content.into()) {
                         error!("Content received, but not stored: {err}")
                     }

@@ -2,7 +2,6 @@ use std::sync::{Arc, RwLock};
 
 use anyhow::anyhow;
 use async_trait::async_trait;
-use rlp::Rlp;
 
 use trin_core::{
     portalnet::types::{content_key::HistoryContentKey, messages::ByteList},
@@ -28,14 +27,12 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
     {
         match content_key {
             HistoryContentKey::BlockHeader(key) => {
-                let rlp = Rlp::new(content);
-                let header = Header::decode_rlp(&rlp)?;
-                let number = format!("0x{:02X}", header.number);
+                let header: Header = rlp::decode(content)?;
                 let expected_hash = &self
                     .header_oracle
                     .write()
                     .unwrap()
-                    .get_hash_at_height(number)?;
+                    .get_hash_at_height(header.number)?;
                 let actual_hash = &hex::encode(key.block_hash);
                 if actual_hash == expected_hash {
                     Ok(())
@@ -73,7 +70,6 @@ mod tests {
     use ethereum_types::U256;
     use hex;
     use httpmock::prelude::*;
-    use rlp::{self, Rlp};
     use serde_json::json;
 
     use trin_core::portalnet::types::content_key::BlockHeader;
@@ -125,9 +121,8 @@ mod tests {
         let server = setup_mock_infura_server();
         let header_rlp = get_header_rlp();
         let header_bytelist = ByteList::try_from(header_rlp.clone()).unwrap();
-        let rlp = Rlp::new(&header_rlp);
 
-        let header: Header = Header::decode_rlp(&rlp).expect("error decoding header");
+        let header: Header = rlp::decode(&header_rlp).expect("error decoding header");
         let infura_url = server.url("/get_header");
         let header_oracle = Arc::new(RwLock::new(HeaderOracle {
             infura_url,
@@ -151,8 +146,7 @@ mod tests {
         // RLP encoded block header #669051
         let header_rlp = get_header_rlp();
         let header_bytelist = ByteList::try_from(header_rlp.clone()).unwrap();
-        let rlp = Rlp::new(&header_rlp);
-        let mut header: Header = Header::decode_rlp(&rlp).expect("error decoding header");
+        let mut header: Header = rlp::decode(&header_rlp).expect("error decoding header");
 
         // set invalid block height
         header.number = 669052;
@@ -180,8 +174,7 @@ mod tests {
         // RLP encoded block header #669051
         let header_rlp = get_header_rlp();
         let header_bytelist = ByteList::try_from(header_rlp.clone()).unwrap();
-        let rlp = Rlp::new(&header_rlp);
-        let mut header: Header = Header::decode_rlp(&rlp).expect("error decoding header");
+        let mut header: Header = rlp::decode(&header_rlp).expect("error decoding header");
 
         // set invalid block gaslimit
         // valid gaslimit = 3141592
