@@ -2838,17 +2838,8 @@ version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "588f6378e4dd99458b60ec275b4477add41ce4fa9f64dcba6f15adccb19b50d6"
 dependencies = [
-<<<<<<< HEAD
-<<<<<<< HEAD
  "env_logger",
  "log 0.4.17",
-=======
- "env_logger 0.8.4",
-=======
- "env_logger",
->>>>>>> Add init query and advance query unit tests
- "log 0.4.14",
->>>>>>> Initial integration of FindNodesQuery into OverlayService
  "rand 0.8.5",
 ]
 
@@ -4282,7 +4273,6 @@ dependencies = [
  "quickcheck",
  "r2d2",
  "r2d2_sqlite",
- "rand 0.7.3",
  "rand 0.8.5",
  "rlp 0.5.1",
  "rlp-derive",

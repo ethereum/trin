@@ -13,8 +13,8 @@ use crate::{
         discovery::Discovery,
         find::{
             iterators::{
-                findnodes::{FindNodeQuery, FindNodeQueryConfig},
-                query::Query,
+                findnodes::FindNodeQuery,
+                query::{Query, QueryConfig},
             },
             query_info::{QueryInfo, QueryType},
             query_pool::{QueryId, QueryPool, QueryPoolState, TargetKey},
@@ -281,7 +281,7 @@ pub struct OverlayService<TContentKey, TMetric, TValidator> {
     /// Number of peers to request data from in parallel for a single query.
     query_parallelism: usize,
     /// Number of new peers to discover before considering a FINDNODES query complete.
-    findnodes_query_num_results: usize,
+    query_num_results: usize,
     /// The number of buckets we simultaneously request from each peer in a FINDNODES query.
     findnodes_query_distances_per_peer: usize,
     /// The receiver half of a channel for responses to outgoing requests.
@@ -323,15 +323,12 @@ where
         protocol: ProtocolId,
         utp_listener_sender: UnboundedSender<UtpListenerRequest>,
         enable_metrics: bool,
-<<<<<<< HEAD
         validator: TValidator,
-=======
         query_timeout: Duration,
         query_peer_timeout: Duration,
         query_parallelism: usize,
-        findnodes_query_num_results: usize,
+        query_num_results: usize,
         findnodes_query_distances_per_peer: usize,
->>>>>>> Make all parameters of FindNodesQuery configurable via OverlayConfig with defaults
     ) -> Result<UnboundedSender<OverlayRequest>, String> {
         let (request_tx, request_rx) = mpsc::unbounded_channel();
         let internal_request_tx = request_tx.clone();
@@ -363,7 +360,7 @@ where
                 queries: QueryPool::new(query_timeout),
                 query_peer_timeout,
                 query_parallelism,
-                findnodes_query_num_results,
+                query_num_results,
                 findnodes_query_distances_per_peer,
                 response_rx,
                 response_tx,
@@ -480,7 +477,7 @@ where
                         self.peers_to_ping.insert(node_id);
                     }
                 }
-                query_event = OverlayService::<TContentKey, TMetric>::query_event_poll(&mut self.queries) => {
+                query_event = OverlayService::<TContentKey, TMetric, TValidator>::query_event_poll(&mut self.queries) => {
                     match query_event {
                         // Send a FINDNODES on behalf of the query.
                         FindNodeQueryEvent::Waiting(query_id, node_id, request) => {
@@ -523,7 +520,7 @@ where
                         }
                     }
                 }
-                _ = OverlayService::<TContentKey, TMetric>::bucket_maintenance_poll(self.protocol.clone(), &self.kbuckets) => {}
+                _ = OverlayService::<TContentKey, TMetric, TValidator>::bucket_maintenance_poll(self.protocol.clone(), &self.kbuckets) => {}
                 _ = bucket_refresh_interval.tick() => {
                         info!("[{:?}] Overlay bucket refresh lookup.", self.protocol);
                         self.bucket_refresh_lookup();
@@ -629,16 +626,6 @@ where
         .await
     }
 
-    /// Returns an ENR if one is known for the given NodeId in overlay routing table
-    pub fn find_enr(&self, node_id: &NodeId) -> Option<Enr> {
-        // check if we know this node id in our routing table
-        let key = kbucket::Key::from(*node_id);
-        if let kbucket::Entry::Present(entry, _) = self.kbuckets.write().entry(&key) {
-            return Some(entry.value().enr.clone());
-        }
-        None
-    }
-    
     /// Maintains the query pool.
     ///
     /// Returns a `FindNodeQueryEvent` when the `QueryPoolState` updates.
@@ -1017,7 +1004,13 @@ where
     }
 
     /// Processes a response to an outgoing request from some source node.
-    async fn process_response(&mut self, response: Response, source: Enr, request: Request, query_id: Option<QueryId>) {
+    async fn process_response(
+        &mut self,
+        response: Response,
+        source: Enr,
+        request: Request,
+        query_id: Option<QueryId>,
+    ) {
         // If the node is present in the routing table, but the node is not connected, then
         // use the existing entry's value and direction. Otherwise, build a new entry from
         // the source ENR and establish a connection in the outgoing direction, because this
@@ -1500,9 +1493,9 @@ where
         if known_closest_peers.is_empty() {
             warn!("Iterative FindNodes query initiated but no closest peers in routing table. Aborting query.");
         } else {
-            let query_config = FindNodeQueryConfig {
+            let query_config = QueryConfig {
                 parallelism: self.query_parallelism,
-                num_results: self.findnodes_query_num_results,
+                num_results: self.query_num_results,
                 peer_timeout: self.query_peer_timeout,
             };
 
@@ -1676,7 +1669,7 @@ mod tests {
             queries: QueryPool::new(overlay_config.query_timeout),
             query_peer_timeout: overlay_config.query_peer_timeout,
             query_parallelism: overlay_config.query_parallelism,
-            findnodes_query_num_results: overlay_config.findnodes_query_num_results,
+            query_num_results: overlay_config.query_num_results,
             findnodes_query_distances_per_peer: overlay_config.findnodes_query_distances_per_peer,
             response_tx,
             response_rx,
@@ -1684,14 +1677,10 @@ mod tests {
             phantom_content_key: PhantomData,
             phantom_metric: PhantomData,
             metrics,
-<<<<<<< HEAD
             validator,
-        }
-=======
         };
 
         service
->>>>>>> Add init query and advance query unit tests
     }
 
     #[tokio::test]
@@ -2289,8 +2278,10 @@ mod tests {
 
         // Test that the first query event contains a proper query ID and request to the bootnode
         let event =
-            OverlayService::<IdentityContentKey, XorMetric>::query_event_poll(&mut service.queries)
-                .await;
+            OverlayService::<IdentityContentKey, XorMetric, MockValidator>::query_event_poll(
+                &mut service.queries,
+            )
+            .await;
         match event {
             FindNodeQueryEvent::Waiting(query_id, node_id, request) => {
                 match request {
@@ -2317,8 +2308,10 @@ mod tests {
         service.advance_query(bootnode, vec![enr1, enr2], QueryId(0));
 
         let event =
-            OverlayService::<IdentityContentKey, XorMetric>::query_event_poll(&mut service.queries)
-                .await;
+            OverlayService::<IdentityContentKey, XorMetric, MockValidator>::query_event_poll(
+                &mut service.queries,
+            )
+            .await;
 
         // Check that the request is being sent to either node 1 or node 2. Keep track of which.
         let first_node_id: Option<NodeId>;
@@ -2331,8 +2324,10 @@ mod tests {
         }
 
         let event =
-            OverlayService::<IdentityContentKey, XorMetric>::query_event_poll(&mut service.queries)
-                .await;
+            OverlayService::<IdentityContentKey, XorMetric, MockValidator>::query_event_poll(
+                &mut service.queries,
+            )
+            .await;
 
         // Check that a request is being sent to the other node.
         let second_node_id = if first_node_id.unwrap() == node_id_1 {
@@ -2345,6 +2340,6 @@ mod tests {
                 assert_eq!(node_id, second_node_id);
             }
             _ => panic!(),
-        }
+        };
     }
 }
