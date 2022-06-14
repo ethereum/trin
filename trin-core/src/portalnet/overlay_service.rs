@@ -51,6 +51,7 @@ use futures::{channel::oneshot, prelude::*};
 use log::{debug, error, info, warn};
 use parking_lot::RwLock;
 use rand::seq::SliceRandom;
+use smallvec::SmallVec;
 use ssz::Encode;
 use ssz_types::{BitList, VariableList};
 use thiserror::Error;
@@ -489,7 +490,7 @@ where
                                 let request = OverlayRequest::new(
                                     request,
                                     RequestDirection::Outgoing {
-                                        destination: enr.clone()
+                                        destination: enr
                                     },
                                     None,
                                     Some(query_id),
@@ -499,22 +500,33 @@ where
                             } else {
                                 error!("[{:?}] Unable to send FINDNODES to unknown ENR with node ID {}",
                                          self.protocol, node_id);
+                                if let Some((_, query)) = self.query_pool.get_mut(query_id) {
+                                    query.on_failure(&node_id);
+                                }
                             }
 
                         }
                         // Query has ended.
-                        FindNodeQueryEvent::Finished(query_id, query) | FindNodeQueryEvent::TimedOut(query_id, query) => {
+                        FindNodeQueryEvent::Finished(query_id, mut query_info, query) | FindNodeQueryEvent::TimedOut(query_id, mut query_info, query) => {
                             let result = query.into_result();
                             // Obtain the ENRs for the resulting nodes.
                             let mut found_enrs = Vec::new();
                             for node_id in result.into_iter() {
-                                if let Some(enr) = self.find_enr(&node_id) {
+                                if let Some(position) = query_info.untrusted_enrs.iter().position(|enr| enr.node_id() == node_id) {
+                                    let enr = query_info.untrusted_enrs.swap_remove(position);
                                     found_enrs.push(enr);
-                                } else if let Some(enr) = self.discovery.discv5.find_enr(&node_id) {
+                                } else if let Some(enr) = self.find_enr(&node_id) {
+                                    // look up from the routing table
                                     found_enrs.push(enr);
                                 }
                                 else {
                                     warn!("ENR not present in queries results.");
+                                }
+                            }
+                            if let Some(callback) = query_info.callback {
+                                match callback.send(found_enrs.clone()) {
+                                    Ok(_) => {}
+                                    Err(_) => error!("Failed to send FindNode query {} results to callback", query_id)
                                 }
                             }
                             debug!("[{:?}] Query {} complete, discovered {} ENRs", self.protocol, query_id, found_enrs.len());
@@ -523,8 +535,8 @@ where
                 }
                 _ = OverlayService::<TContentKey, TMetric, TValidator>::bucket_maintenance_poll(self.protocol.clone(), &self.kbuckets) => {}
                 _ = bucket_refresh_interval.tick() => {
-                        info!("[{:?}] Overlay bucket refresh lookup.", self.protocol);
-                        self.bucket_refresh_lookup();
+                    info!("[{:?}] Overlay bucket refresh lookup.", self.protocol);
+                    self.bucket_refresh_lookup();
                 }
             }
         }
@@ -636,12 +648,12 @@ where
         queries: &mut QueryPool<NodeId, Vec<NodeId>, Vec<NodeId>, FindNodeQuery<NodeId>>,
     ) -> FindNodeQueryEvent {
         future::poll_fn(move |_cx| match queries.poll() {
-            QueryPoolState::Finished(query_id, query) => {
-                Poll::Ready(FindNodeQueryEvent::Finished(query_id, query))
+            QueryPoolState::Finished(query_id, query_info, query) => {
+                Poll::Ready(FindNodeQueryEvent::Finished(query_id, query_info, query))
             }
-            QueryPoolState::Timeout(query_id, query) => {
+            QueryPoolState::Timeout(query_id, query_info, query) => {
                 warn!("Query id: {:?} timed out", query_id);
-                Poll::Ready(FindNodeQueryEvent::TimedOut(query_id, query))
+                Poll::Ready(FindNodeQueryEvent::TimedOut(query_id, query_info, query))
             }
             QueryPoolState::Waiting(Some((query_id, query_info, query, return_peer))) => {
                 let node_id = return_peer;
@@ -1474,22 +1486,18 @@ where
     }
 
     fn init_find_nodes_query_with_initial_enrs(&mut self, target: &NodeId, enrs: Vec<Enr>) {
-        let mut query_info = QueryInfo {
+        let query_info = QueryInfo {
             query_type: QueryType::FindNode(*target),
-            untrusted_enrs: Default::default(),
+            untrusted_enrs: SmallVec::from_vec(enrs),
             callback: None,
             distances_to_request: self.findnodes_query_distances_per_peer,
         };
 
-        let mut known_closest_peers = Vec::new();
-        for enr in enrs {
-            // Add the known ENRs to the untrusted list
-            query_info.untrusted_enrs.push(enr.clone());
-            // Add the key to the list for the query
-            let node_id = enr.node_id();
-            let key = Key::from(node_id);
-            known_closest_peers.push(key);
-        }
+        let known_closest_peers: Vec<Key<NodeId>> = query_info
+            .untrusted_enrs
+            .iter()
+            .map(|enr| Key::from(enr.node_id()))
+            .collect();
 
         if known_closest_peers.is_empty() {
             warn!(
@@ -1554,9 +1562,9 @@ pub enum FindNodeQueryEvent {
     /// The query is waiting for a peer to be contacted.
     Waiting(QueryId, NodeId, Request),
     /// The query has timed out, possible returning peers.
-    TimedOut(QueryId, FindNodeQuery<NodeId>),
+    TimedOut(QueryId, QueryInfo, FindNodeQuery<NodeId>),
     /// The query has completed successfully.
-    Finished(QueryId, FindNodeQuery<NodeId>),
+    Finished(QueryId, QueryInfo, FindNodeQuery<NodeId>),
 }
 
 const MAX_ENR_SIZE: usize = 300;
@@ -2238,17 +2246,13 @@ mod tests {
         let (_, target_enr) = generate_random_remote_enr();
         let target_node_id = target_enr.node_id();
 
-        assert_eq!(service.queries.iter().count(), 0);
+        assert_eq!(service.query_pool.iter().count(), 0);
 
         // Initialize the query and call `poll` so that it starts
         service.init_find_nodes_query_with_initial_enrs(&target_node_id, bootnodes);
-        let _ = service.queries.poll();
+        let _ = service.query_pool.poll();
 
-        let query_tuple_optional = service.queries.iter().next();
-
-        assert!(query_tuple_optional.is_some());
-
-        let (query_info, query) = query_tuple_optional.unwrap();
+        let (query_info, query) = service.query_pool.iter().next().unwrap();
 
         assert!(query_info.untrusted_enrs.contains(&bootnode1));
         assert!(query_info.untrusted_enrs.contains(&bootnode2));
@@ -2375,19 +2379,13 @@ mod tests {
             QueryId(0),
         );
 
-        let found_bootnode_enr = service.find_enr(&bootnode_node_id);
+        let found_bootnode_enr = service.find_enr(&bootnode_node_id).unwrap();
+        assert_eq!(found_bootnode_enr, bootnode);
 
-        assert!(found_bootnode_enr.is_some());
-        assert_eq!(found_bootnode_enr.unwrap(), bootnode);
+        let found_enr1 = service.find_enr(&node_id_1).unwrap();
+        assert_eq!(found_enr1, enr1);
 
-        let found_enr1 = service.find_enr(&node_id_1);
-
-        assert!(found_enr1.is_some());
-        assert_eq!(found_enr1.unwrap(), enr1);
-
-        let found_enr2 = service.find_enr(&node_id_2);
-
-        assert!(found_enr2.is_some());
-        assert_eq!(found_enr2.unwrap(), enr2);
+        let found_enr2 = service.find_enr(&node_id_2).unwrap();
+        assert_eq!(found_enr2, enr2);
     }
 }

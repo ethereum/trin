@@ -55,9 +55,9 @@ pub enum QueryPoolState<'a, TNodeId, TQuery> {
     /// that a new request is now being waited on.
     Waiting(Option<(QueryId, &'a mut QueryInfo, &'a mut TQuery, TNodeId)>),
     /// A query has finished.
-    Finished(QueryId, TQuery),
+    Finished(QueryId, QueryInfo, TQuery),
     /// A query has timed out.
-    Timeout(QueryId, TQuery),
+    Timeout(QueryId, QueryInfo, TQuery),
 }
 
 impl<TNodeId, TResponse, TResult, TQuery> QueryPool<TNodeId, TResponse, TResult, TQuery>
@@ -129,13 +129,13 @@ where
         }
 
         if let Some(query_id) = finished {
-            let (_, query) = self.queries.remove(&query_id).expect("s.a.");
-            return QueryPoolState::Finished(query_id, query);
+            let (query_info, query) = self.queries.remove(&query_id).expect("s.a.");
+            return QueryPoolState::Finished(query_id, query_info, query);
         }
 
         if let Some(query_id) = timeout {
-            let (_, query) = self.queries.remove(&query_id).expect("s.a.");
-            return QueryPoolState::Timeout(query_id, query);
+            let (query_info, query) = self.queries.remove(&query_id).expect("s.a.");
+            return QueryPoolState::Timeout(query_id, query_info, query);
         }
 
         if self.queries.is_empty() {
