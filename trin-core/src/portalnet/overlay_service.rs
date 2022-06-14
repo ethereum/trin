@@ -425,6 +425,7 @@ where
         self.add_bootnodes(bootnodes.clone());
         let node_id = self.discovery.discv5.local_enr().node_id();
         // Begin request for our local node ID.
+
         self.init_find_nodes_query_with_initial_enrs(&node_id, bootnodes);
     }
 
@@ -1491,14 +1492,15 @@ where
         }
 
         if known_closest_peers.is_empty() {
-            warn!("Iterative FindNodes query initiated but no closest peers in routing table. Aborting query.");
+            warn!(
+                "FindNodes query initiated but no closest peers in routing table. Aborting query."
+            );
         } else {
             let query_config = QueryConfig {
                 parallelism: self.query_parallelism,
                 num_results: self.query_num_results,
                 peer_timeout: self.query_peer_timeout,
             };
-
             let find_nodes_query =
                 FindNodeQuery::with_config(query_config, query_info.key(), known_closest_peers);
             self.queries.add_query(query_info, find_nodes_query);
@@ -2341,5 +2343,51 @@ mod tests {
             }
             _ => panic!(),
         };
+    }
+
+    #[tokio::test]
+    async fn test_find_enrs() {
+        let mut service = task::spawn(build_service());
+
+        let (_, bootnode) = generate_random_remote_enr();
+        let bootnodes = vec![bootnode.clone()];
+        let bootnode_node_id = bootnode.node_id();
+
+        let (_, target_enr) = generate_random_remote_enr();
+        let target_node_id = target_enr.node_id();
+
+        service.init_find_nodes_query_with_initial_enrs(&target_node_id, bootnodes);
+
+        let _event =
+            OverlayService::<IdentityContentKey, XorMetric, MockValidator>::query_event_poll(
+                &mut service.queries,
+            )
+            .await;
+
+        let (_, enr1) = generate_random_remote_enr();
+        let (_, enr2) = generate_random_remote_enr();
+        let node_id_1 = enr1.node_id();
+        let node_id_2 = enr2.node_id();
+
+        service.advance_query(
+            bootnode.clone(),
+            vec![enr1.clone(), enr2.clone()],
+            QueryId(0),
+        );
+
+        let found_bootnode_enr = service.find_enr(&bootnode_node_id);
+
+        assert!(found_bootnode_enr.is_some());
+        assert_eq!(found_bootnode_enr.unwrap(), bootnode);
+
+        let found_enr1 = service.find_enr(&node_id_1);
+
+        assert!(found_enr1.is_some());
+        assert_eq!(found_enr1.unwrap(), enr1);
+
+        let found_enr2 = service.find_enr(&node_id_2);
+
+        assert!(found_enr2.is_some());
+        assert_eq!(found_enr2.unwrap(), enr2);
     }
 }
