@@ -154,7 +154,8 @@ pub struct OverlayRequest {
     /// An optional responder to send a result of the request.
     /// The responder may be None if the request was initiated internally.
     pub responder: Option<OverlayResponder>,
-    /// Optional query ID associated with the request
+    /// ID of query that request's response will advance.
+    /// Will be None for requests that are not associated with a query.
     pub query_id: Option<QueryId>,
 }
 
@@ -276,7 +277,7 @@ pub struct OverlayService<TContentKey, TMetric, TValidator> {
     /// A map of active outgoing requests.
     active_outgoing_requests: Arc<RwLock<HashMap<OverlayRequestId, ActiveOutgoingRequest>>>,
     /// All of the queries currently being performed.
-    queries: QueryPool<NodeId, Vec<NodeId>, Vec<NodeId>, FindNodeQuery<NodeId>>,
+    query_pool: QueryPool<NodeId, Vec<NodeId>, Vec<NodeId>, FindNodeQuery<NodeId>>,
     /// Timeout after which a peer in an ongoing query is marked unresponsive.
     query_peer_timeout: Duration,
     /// Number of peers to request data from in parallel for a single query.
@@ -358,7 +359,7 @@ where
                 request_rx,
                 request_tx: internal_request_tx,
                 active_outgoing_requests: Arc::new(RwLock::new(HashMap::new())),
-                queries: QueryPool::new(query_timeout),
+                query_pool: QueryPool::new(query_timeout),
                 query_peer_timeout,
                 query_parallelism,
                 query_num_results,
@@ -479,7 +480,7 @@ where
                         self.peers_to_ping.insert(node_id);
                     }
                 }
-                query_event = OverlayService::<TContentKey, TMetric, TValidator>::query_event_poll(&mut self.queries) => {
+                query_event = OverlayService::<TContentKey, TMetric, TValidator>::query_event_poll(&mut self.query_pool) => {
                     match query_event {
                         // Send a FINDNODES on behalf of the query.
                         FindNodeQueryEvent::Waiting(query_id, node_id, request) => {
@@ -585,12 +586,12 @@ where
             let random_node_id_in_bucket = match target_bucket {
                 Some(bucket) => {
                     debug!("[{:?} Refreshing bucket {}", self.protocol, bucket.0);
-                    let target_bucket_idx = u8::try_from(bucket.0);
-                    if let Ok(idx) = target_bucket_idx {
-                        self.generate_random_node_id(idx)
-                    } else {
-                        error!("Unable to downcast bucket index.");
-                        return;
+                    match u8::try_from(bucket.0) {
+                        Ok(idx) => self.generate_random_node_id(idx),
+                        Err(err) => {
+                            error!("Unable to downcast bucket index: {}", err);
+                            return;
+                        }
                     }
                 }
                 None => {
@@ -1277,12 +1278,12 @@ where
     fn advance_query(&mut self, source: Enr, enrs: Vec<Enr>, query_id: QueryId) {
         // Check whether this request was sent on behalf of a query.
         // If so, advance the query with the returned data.
-        if let Some((query_info, query)) = self.queries.get_mut(query_id) {
+        if let Some((query_info, query)) = self.query_pool.get_mut(query_id) {
             for enr_ref in enrs.iter() {
                 if !query_info
                     .untrusted_enrs
                     .iter()
-                    .any(|e| e.node_id() == enr_ref.node_id())
+                    .any(|enr| enr.node_id() == enr_ref.node_id())
                 {
                     query_info.untrusted_enrs.push(enr_ref.clone());
                 }
@@ -1511,22 +1512,19 @@ where
             };
             let find_nodes_query =
                 FindNodeQuery::with_config(query_config, query_info.key(), known_closest_peers);
-            self.queries.add_query(query_info, find_nodes_query);
+            self.query_pool.add_query(query_info, find_nodes_query);
         }
     }
 
     /// Starts a FindNode query to find nodes with IDs closest to target.
     fn init_find_nodes_query(&mut self, target: &NodeId) {
-        let closest_enrs = {
-            let target_key = Key::from(*target);
-            let mut kbuckets = self.kbuckets.write();
-
-            let mut enrs: Vec<Enr> = Vec::new();
-            for closest in kbuckets.closest_values(&target_key) {
-                enrs.push(closest.value.enr);
-            }
-            enrs
-        };
+        let target_key = Key::from(*target);
+        let closest_enrs = self
+            .kbuckets
+            .write()
+            .closest_values(&target_key)
+            .map(|closest| closest.value.enr)
+            .collect();
 
         self.init_find_nodes_query_with_initial_enrs(target, closest_enrs);
     }
@@ -1539,7 +1537,7 @@ where
             return Some(entry.value().clone().enr());
         }
         // Check the untrusted addresses for ongoing queries.
-        for (query_info, _) in self.queries.iter() {
+        for (query_info, _) in self.query_pool.iter() {
             if let Some(enr) = query_info
                 .untrusted_enrs
                 .iter()
@@ -1676,7 +1674,7 @@ mod tests {
             request_tx,
             request_rx,
             active_outgoing_requests,
-            queries: QueryPool::new(overlay_config.query_timeout),
+            query_pool: QueryPool::new(overlay_config.query_timeout),
             query_peer_timeout: overlay_config.query_peer_timeout,
             query_parallelism: overlay_config.query_parallelism,
             query_num_results: overlay_config.query_num_results,
@@ -2285,7 +2283,7 @@ mod tests {
         // Test that the first query event contains a proper query ID and request to the bootnode
         let event =
             OverlayService::<IdentityContentKey, XorMetric, MockValidator>::query_event_poll(
-                &mut service.queries,
+                &mut service.query_pool,
             )
             .await;
         match event {
@@ -2315,7 +2313,7 @@ mod tests {
 
         let event =
             OverlayService::<IdentityContentKey, XorMetric, MockValidator>::query_event_poll(
-                &mut service.queries,
+                &mut service.query_pool,
             )
             .await;
 
@@ -2331,7 +2329,7 @@ mod tests {
 
         let event =
             OverlayService::<IdentityContentKey, XorMetric, MockValidator>::query_event_poll(
-                &mut service.queries,
+                &mut service.query_pool,
             )
             .await;
 
@@ -2364,7 +2362,7 @@ mod tests {
 
         let _event =
             OverlayService::<IdentityContentKey, XorMetric, MockValidator>::query_event_poll(
-                &mut service.queries,
+                &mut service.query_pool,
             )
             .await;
 
