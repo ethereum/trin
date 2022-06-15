@@ -425,7 +425,7 @@ where
     /// Begins initial FINDNODES query to populate the routing table.
     fn initialize_routing_table(&mut self, bootnodes: Vec<Enr>) {
         self.add_bootnodes(bootnodes.clone());
-        let node_id = self.discovery.discv5.local_enr().node_id();
+        let node_id = self.local_enr().node_id();
         // Begin request for our local node ID.
 
         self.init_find_nodes_query_with_initial_enrs(&node_id, bootnodes);
@@ -1278,12 +1278,13 @@ where
     fn advance_query(&mut self, source: Enr, enrs: Vec<Enr>, query_id: QueryId) {
         // Check whether this request was sent on behalf of a query.
         // If so, advance the query with the returned data.
+        let local_node_id = self.local_enr().node_id();
         if let Some((query_info, query)) = self.query_pool.get_mut(query_id) {
             for enr_ref in enrs.iter() {
                 if !query_info
                     .untrusted_enrs
                     .iter()
-                    .any(|enr| enr.node_id() == enr_ref.node_id())
+                    .any(|enr| enr.node_id() == enr_ref.node_id() && enr.node_id() != local_node_id)
                 {
                     query_info.untrusted_enrs.push(enr_ref.clone());
                 }
