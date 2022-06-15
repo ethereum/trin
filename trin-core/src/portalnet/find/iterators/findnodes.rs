@@ -53,10 +53,13 @@ pub struct FindNodeQuery<TNodeId> {
     config: QueryConfig,
 }
 
-impl<TNodeId> Query<TNodeId, Vec<TNodeId>, Vec<TNodeId>> for FindNodeQuery<TNodeId>
+impl<TNodeId> Query<TNodeId> for FindNodeQuery<TNodeId>
 where
     TNodeId: Into<Key<TNodeId>> + Eq + Clone,
 {
+    type Response = Vec<TNodeId>;
+    type Result = Vec<TNodeId>;
+
     fn target(&self) -> Key<TNodeId> {
         self.target_key.clone()
     }
@@ -96,7 +99,7 @@ where
     /// `peer_response` contain a peer closer to the target than any peer seen so far,
     /// or when the query did not yet accumulate `num_results` closest peers and
     /// `peer_response` contains a new peer, regardless of its distance to the target.
-    fn on_success(&mut self, peer: &TNodeId, peer_response: Vec<TNodeId>) {
+    fn on_success(&mut self, peer: &TNodeId, peer_response: Self::Response) {
         if let QueryProgress::Finished = self.progress {
             return;
         }
@@ -247,7 +250,7 @@ where
         }
     }
 
-    fn into_result(self) -> Vec<TNodeId> {
+    fn into_result(self) -> Self::Result {
         self.closest_peers
             .into_iter()
             .filter_map(|(_, peer)| {

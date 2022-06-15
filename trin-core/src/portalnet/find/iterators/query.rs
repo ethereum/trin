@@ -63,7 +63,13 @@ impl QueryConfig {
     }
 }
 
-pub trait Query<TNodeId, TResponse, TResult> {
+pub trait Query<TNodeId> {
+    /// The type of the response to a request issued for the query.
+    type Response;
+
+    /// The type of the result produced by the query.
+    type Result;
+
     /// Returns the target of the query.
     fn target(&self) -> Key<TNodeId>;
 
@@ -95,7 +101,7 @@ pub trait Query<TNodeId, TResponse, TResult> {
     /// If the query is finished, the query is not currently waiting for a
     /// result from `peer`, or a result for `peer` has already been reported,
     /// calling this function has no effect.
-    fn on_success(&mut self, peer: &TNodeId, peer_response: TResponse);
+    fn on_success(&mut self, peer: &TNodeId, peer_response: Self::Response);
 
     /// Advances the state of the query, potentially getting a new peer to contact.
     ///
@@ -103,7 +109,7 @@ pub trait Query<TNodeId, TResponse, TResult> {
     fn poll(&mut self, now: Instant) -> QueryState<TNodeId>;
 
     /// Consumes the query, returning the result.
-    fn into_result(self) -> TResult;
+    fn into_result(self) -> Self::Result;
 }
 
 /// Stage of the query.

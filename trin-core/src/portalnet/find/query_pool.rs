@@ -39,11 +39,11 @@ pub trait TargetKey<TNodeId> {
 /// Internally, a `Query` is in turn driven by an underlying `QueryPeerIter`
 /// that determines the peer selection strategy, i.e. the order in which the
 /// peers involved in the query should be contacted.
-pub struct QueryPool<TNodeId, TResponse, TResult, TQuery> {
+pub struct QueryPool<TNodeId, TQuery> {
     _next_id: QueryId,
     query_timeout: Duration,
     queries: FnvHashMap<QueryId, (QueryInfo, TQuery)>,
-    marker: PhantomData<(TNodeId, TResponse, TResult)>,
+    marker: PhantomData<TNodeId>,
 }
 
 /// The observable states emitted by [`QueryPool::poll`].
@@ -60,10 +60,10 @@ pub enum QueryPoolState<'a, TNodeId, TQuery> {
     Timeout(QueryId, QueryInfo, TQuery),
 }
 
-impl<TNodeId, TResponse, TResult, TQuery> QueryPool<TNodeId, TResponse, TResult, TQuery>
+impl<TNodeId, TQuery> QueryPool<TNodeId, TQuery>
 where
     TNodeId: Into<Key<TNodeId>> + Eq + Clone,
-    TQuery: Query<TNodeId, TResponse, TResult>,
+    TQuery: Query<TNodeId>,
 {
     /// Creates a new `QueryPool` with the given configuration.
     pub fn new(query_timeout: Duration) -> Self {
