@@ -1587,11 +1587,12 @@ const TALK_REQ_PACKET_OVERHEAD: usize = 16 + // IV
         // ENR SSZ overhead empirically observed to be double.
         // Todo: determine why this is. It seems too high.
 const MAX_NODES_SIZE: usize = MAX_DISCV5_PACKET_SIZE - TALK_REQ_PACKET_OVERHEAD;
+const NUM_MAX_SIZE_ENRS_IN_MAX_SIZE_PACKET: usize = MAX_NODES_SIZE / MAX_ENR_SIZE;
 
 /// Limits a to a maximum packet size, including the discv5 header overhead.
 fn limit_enr_list_to_max_bytes(enrs: Vec<SszEnr>, max_size: usize) -> Vec<SszEnr> {
     // If all ENRs would fit at max size, don't check individual sizes.
-    if enrs.len() < (MAX_NODES_SIZE / MAX_ENR_SIZE) {
+    if enrs.len() < NUM_MAX_SIZE_ENRS_IN_MAX_SIZE_PACKET {
         return enrs;
     }
 
