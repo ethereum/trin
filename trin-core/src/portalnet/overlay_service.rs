@@ -1584,20 +1584,15 @@ fn limit_enr_list_to_max_bytes(enrs: Vec<SszEnr>, max_size: usize) -> Vec<SszEnr
     if enrs.len() < (MAX_NODES_SIZE / MAX_ENR_SIZE) {
         return enrs;
     }
-    let mut enrs_limited_size: Vec<SszEnr> = Vec::new();
+
     let mut total_size: usize = 0;
-
-    for enr in enrs.iter() {
-        let enr_size = enr.ssz_bytes_len();
-        total_size = total_size + enr_size;
-        if total_size < max_size {
-            enrs_limited_size.push(enr.clone());
-        } else {
-            break;
-        }
-    }
-
-    enrs_limited_size
+    enrs.into_iter()
+        .take_while(|enr| {
+            let enr_size = enr.ssz_bytes_len();
+            total_size = total_size + enr_size;
+            total_size < max_size
+        })
+        .collect()
 }
 
 #[cfg(test)]
