@@ -14,8 +14,13 @@ use crate::{
         discovery::Discovery,
         find::{
             iterators::{
-                findnodes::FindNodeQuery,
                 query::{Query, QueryConfig},
+                {
+                    findcontent::{
+                        FindContentQuery, FindContentQueryResponse, FindContentQueryResult,
+                    },
+                    findnodes::FindNodeQuery,
+                },
             },
             query_info::{QueryInfo, QueryType},
             query_pool::{QueryId, QueryPool, QueryPoolState, TargetKey},
@@ -283,8 +288,10 @@ pub struct OverlayService<TContentKey, TMetric, TValidator> {
     request_tx: UnboundedSender<OverlayRequest>,
     /// A map of active outgoing requests.
     active_outgoing_requests: Arc<RwLock<HashMap<OverlayRequestId, ActiveOutgoingRequest>>>,
-    /// All of the queries currently being performed.
-    query_pool: QueryPool<NodeId, FindNodeQuery<NodeId>, TContentKey>,
+    /// A query pool that manages find node queries.
+    find_node_query_pool: QueryPool<NodeId, FindNodeQuery<NodeId>, TContentKey>,
+    /// A query pool that manages find content queries.
+    find_content_query_pool: QueryPool<NodeId, FindContentQuery<NodeId>, TContentKey>,
     /// Timeout after which a peer in an ongoing query is marked unresponsive.
     query_peer_timeout: Duration,
     /// Number of peers to request data from in parallel for a single query.
@@ -369,7 +376,8 @@ where
                 request_rx,
                 request_tx: internal_request_tx,
                 active_outgoing_requests: Arc::new(RwLock::new(HashMap::new())),
-                query_pool: QueryPool::new(query_timeout),
+                find_node_query_pool: QueryPool::new(query_timeout),
+                find_content_query_pool: QueryPool::new(Duration::from_secs(60)),
                 query_peer_timeout,
                 query_parallelism,
                 query_num_results,
@@ -490,7 +498,7 @@ where
                         self.peers_to_ping.insert(node_id);
                     }
                 }
-                query_event = OverlayService::<TContentKey, TMetric, TValidator>::query_event_poll(&mut self.query_pool) => {
+                query_event = OverlayService::<TContentKey, TMetric, TValidator>::query_event_poll(&mut self.find_node_query_pool) => {
                     match query_event {
                         // Send a FINDNODES on behalf of the query.
                         QueryEvent::Waiting(query_id, node_id, request) => {
@@ -511,7 +519,7 @@ where
                             } else {
                                 error!("[{:?}] Unable to send FINDNODES to unknown ENR with node ID {}",
                                          self.protocol, node_id);
-                                if let Some((_, query)) = self.query_pool.get_mut(query_id) {
+                                if let Some((_, query)) = self.find_node_query_pool.get_mut(query_id) {
                                     query.on_failure(&node_id);
                                 }
                             }
@@ -540,6 +548,51 @@ where
                                 }
                             }
                             debug!("[{:?}] Query {} complete, discovered {} ENRs", self.protocol, query_id, found_enrs.len());
+                        }
+                    }
+                }
+                query_event = OverlayService::<TContentKey, TMetric, TValidator>::query_event_poll(&mut self.find_content_query_pool) => {
+                    match query_event {
+                        QueryEvent::Waiting(query_id, node_id, request) => {
+                            if let Some(enr) = self.find_enr(&node_id) {
+                            // If we find the node's ENR, then send the request on behalf of the
+                            // query. No callback channel is necessary for the request, because the
+                            // response will be incorporated into the query.
+                                let request = OverlayRequest::new(
+                                    request,
+                                    RequestDirection::Outgoing {
+                                        destination: enr
+                                    },
+                                    None,
+                                    Some(query_id),
+                                );
+                                let _ = self.request_tx.send(request);
+
+                            } else {
+                                // If we cannot find the node's ENR, then we cannot contact the
+                                // node, so fail the query for this node.
+                                error!("[{:?}] Unable to send FINDCONTENT to unknown ENR with node ID {}",
+                                         self.protocol, node_id);
+                                if let Some((_, query)) = self.find_node_query_pool.get_mut(query_id) {
+                                    query.on_failure(&node_id);
+                                }
+                            }
+                        }
+                        QueryEvent::Finished(query_id, query_info, query) | QueryEvent::TimedOut(query_id, query_info, query) => {
+                            let result = query.into_result();
+                            let (content, _closest_nodes) = match result {
+                                FindContentQueryResult::ClosestNodes(closest_nodes)  => (None, closest_nodes),
+                                FindContentQueryResult::Content { content, closest_nodes } => (Some(content), closest_nodes),
+                            };
+
+                            // Send (possibly `None`) content on callback channel.
+                            if let QueryType::FindContent { callback: Some(callback), .. } = query_info.query_type {
+                                if let Err(_) = callback.send(content) {
+                                    error!("Failed to send FindContent query {} result to callback", query_id);
+                                }
+                            }
+
+                            // TODO: Offer content to closest node(s).
                         }
                     }
                 }
@@ -1089,7 +1142,7 @@ where
                         return;
                     }
                 };
-                self.process_content(content, source, find_content_request)
+                self.process_content(content, source, find_content_request, query_id)
                     .await
             }
             Response::Accept(accept) => {
@@ -1211,12 +1264,18 @@ where
 
         self.process_discovered_enrs(enrs.clone());
         if let Some(query_id) = query_id {
-            self.advance_query(source, enrs, query_id);
+            self.advance_find_node_query(source, enrs, query_id);
         }
     }
 
     /// Processes a Content response.
-    async fn process_content(&mut self, content: Content, source: Enr, request: FindContent) {
+    async fn process_content(
+        &mut self,
+        content: Content,
+        source: Enr,
+        request: FindContent,
+        query_id: Option<QueryId>,
+    ) {
         debug!(
             "[{:?}] Processing Content response from node. Node: {}",
             self.protocol,
@@ -1227,9 +1286,21 @@ where
                 "[{:?}] Skipping processing for content connection ID {}",
                 self.protocol, id
             ),
-            Content::Content(content) => self.process_received_content(content, request).await,
-            Content::Enrs(enrs) => self
-                .process_discovered_enrs(enrs.into_iter().map(|ssz_enr| ssz_enr.into()).collect()),
+            Content::Content(content) => {
+                self.process_received_content(content.clone(), request)
+                    .await;
+                // TODO: Should we only advance the query if the content has been validated?
+                if let Some(query_id) = query_id {
+                    self.advance_find_content_query_with_content(&query_id, source, content.into());
+                }
+            }
+            Content::Enrs(enrs) => {
+                let enrs: Vec<Enr> = enrs.into_iter().map(|ssz_enr| ssz_enr.into()).collect();
+                self.process_discovered_enrs(enrs.clone());
+                if let Some(query_id) = query_id {
+                    self.advance_find_content_query_with_enrs(&query_id, source, enrs);
+                }
+            }
         }
     }
 
@@ -1386,13 +1457,13 @@ where
         Ok(content_items)
     }
 
-    /// Advances a query (if one is active for the node) using the received ENRs.
+    /// Advances a find node query (if one is active for the node) using the received ENRs.
     /// Does nothing if called with a node_id that does not have a corresponding active query request.
-    fn advance_query(&mut self, source: Enr, enrs: Vec<Enr>, query_id: QueryId) {
+    fn advance_find_node_query(&mut self, source: Enr, enrs: Vec<Enr>, query_id: QueryId) {
         // Check whether this request was sent on behalf of a query.
         // If so, advance the query with the returned data.
         let local_node_id = self.local_enr().node_id();
-        if let Some((query_info, query)) = self.query_pool.get_mut(query_id) {
+        if let Some((query_info, query)) = self.find_node_query_pool.get_mut(query_id) {
             for enr_ref in enrs.iter() {
                 if !query_info
                     .untrusted_enrs
@@ -1407,7 +1478,60 @@ where
                 enrs.iter().map(|enr| enr.into()).collect(),
             );
         } else {
-            debug!("Response returned for inactive query {:?}", query_id)
+            debug!(
+                "Response returned for inactive find node query {:?}",
+                query_id
+            )
+        }
+    }
+
+    /// Advances a find content query (if one exists for `query_id`) with ENRs close to content.
+    fn advance_find_content_query_with_enrs(
+        &mut self,
+        query_id: &QueryId,
+        source: Enr,
+        enrs: Vec<Enr>,
+    ) {
+        let local_node_id = self.local_enr().node_id();
+        if let Some((query_info, query)) = self.find_content_query_pool.get_mut(*query_id) {
+            // If an ENR is not present in the query's untrusted ENRs, then add the ENR.
+            // Ignore the local node's ENR.
+            for enr_ref in enrs.iter().filter(|enr| enr.node_id() != local_node_id) {
+                if !query_info
+                    .untrusted_enrs
+                    .iter()
+                    .any(|enr| enr.node_id() == enr_ref.node_id())
+                {
+                    query_info.untrusted_enrs.push(enr_ref.clone());
+                }
+            }
+            let closest_nodes: Vec<NodeId> = enrs
+                .iter()
+                .filter(|enr| enr.node_id() != local_node_id)
+                .map(|enr| enr.into())
+                .collect();
+
+            // Mark the query successful for the source of the response with the closest ENRs.
+            query.on_success(
+                &source.node_id(),
+                FindContentQueryResponse::ClosestNodes(closest_nodes),
+            );
+        }
+    }
+
+    /// Advances a find content query (if one exists for `query_id`) with content.
+    fn advance_find_content_query_with_content(
+        &mut self,
+        query_id: &QueryId,
+        source: Enr,
+        content: Vec<u8>,
+    ) {
+        if let Some((_, query)) = self.find_content_query_pool.get_mut(*query_id) {
+            // Mark the query successful for the source of the response with the content.
+            query.on_success(
+                &source.node_id(),
+                FindContentQueryResponse::Content(content),
+            );
         }
     }
 
@@ -1630,7 +1754,8 @@ where
         } else {
             let find_nodes_query =
                 FindNodeQuery::with_config(query_config, query_info.key(), known_closest_peers);
-            self.query_pool.add_query(query_info, find_nodes_query);
+            self.find_node_query_pool
+                .add_query(query_info, find_nodes_query);
         }
     }
 
@@ -1647,6 +1772,54 @@ where
         self.init_find_nodes_query_with_initial_enrs(target, closest_enrs);
     }
 
+    /// Starts a `FindContentQuery` for a target content key.
+    fn _init_find_content_query(
+        &mut self,
+        target: TContentKey,
+        callback: Option<oneshot::Sender<Option<Vec<u8>>>>,
+    ) {
+        // Represent the target content ID with a node ID.
+        let target_node_id = NodeId::new(&target.content_id());
+        let target_key = Key::from(target_node_id);
+
+        let query_config = QueryConfig {
+            parallelism: self.query_parallelism,
+            num_results: self.query_num_results,
+            peer_timeout: self.query_peer_timeout,
+        };
+
+        // Look up the closest ENRs to the target.
+        // Limit the number of ENRs according to the query config.
+        let closest_enrs = self
+            .kbuckets
+            .write()
+            .closest_values(&target_key)
+            .map(|closest| closest.value.enr)
+            .take(query_config.num_results)
+            .collect();
+
+        let query_info = QueryInfo {
+            query_type: QueryType::FindContent { target, callback },
+            untrusted_enrs: SmallVec::from_vec(closest_enrs),
+        };
+
+        // Convert ENRs into k-bucket keys.
+        let closest_enrs: Vec<Key<NodeId>> = query_info
+            .untrusted_enrs
+            .iter()
+            .map(|enr| Key::from(enr.node_id()))
+            .collect();
+
+        // If the initial set of peers is non-empty, then add the query to the query pool.
+        // Otherwise, there is no way for the query to progress, so drop it.
+        if closest_enrs.is_empty() {
+            warn!("Unable to initialize find content query without any known close peers");
+        } else {
+            let query = FindContentQuery::with_config(query_config, target_key, closest_enrs);
+            self.find_content_query_pool.add_query(query_info, query);
+        }
+    }
+
     /// Returns an ENR if one is known for the given NodeId.
     pub fn find_enr(&self, node_id: &NodeId) -> Option<Enr> {
         // Check whether we know this node id in our routing table.
@@ -1655,7 +1828,7 @@ where
             return Some(entry.value().clone().enr());
         }
         // Check the untrusted addresses for ongoing queries.
-        for (query_info, _) in self.query_pool.iter() {
+        for (query_info, _) in self.find_node_query_pool.iter() {
             if let Some(enr) = query_info
                 .untrusted_enrs
                 .iter()
@@ -1788,7 +1961,8 @@ mod tests {
             request_tx,
             request_rx,
             active_outgoing_requests,
-            query_pool: QueryPool::new(overlay_config.query_timeout),
+            find_node_query_pool: QueryPool::new(overlay_config.query_timeout),
+            find_content_query_pool: QueryPool::new(overlay_config.query_timeout),
             query_peer_timeout: overlay_config.query_peer_timeout,
             query_parallelism: overlay_config.query_parallelism,
             query_num_results: overlay_config.query_num_results,
@@ -2358,13 +2532,13 @@ mod tests {
         let (_, target_enr) = generate_random_remote_enr();
         let target_node_id = target_enr.node_id();
 
-        assert_eq!(service.query_pool.iter().count(), 0);
+        assert_eq!(service.find_node_query_pool.iter().count(), 0);
 
         // Initialize the query and call `poll` so that it starts
         service.init_find_nodes_query_with_initial_enrs(&target_node_id, bootnodes);
-        let _ = service.query_pool.poll();
+        let _ = service.find_node_query_pool.poll();
 
-        let (query_info, query) = service.query_pool.iter().next().unwrap();
+        let (query_info, query) = service.find_node_query_pool.iter().next().unwrap();
 
         assert!(query_info.untrusted_enrs.contains(&bootnode1));
         assert!(query_info.untrusted_enrs.contains(&bootnode2));
@@ -2414,7 +2588,9 @@ mod tests {
         } else {
             let find_nodes_query =
                 FindNodeQuery::with_config(query_config, query_info.key(), known_closest_peers);
-            service.query_pool.add_query(query_info, find_nodes_query);
+            service
+                .find_node_query_pool
+                .add_query(query_info, find_nodes_query);
         }
     }
 
@@ -2445,7 +2621,7 @@ mod tests {
         // Test that the first query event contains a proper query ID and request to the bootnode
         let event =
             OverlayService::<IdentityContentKey, XorMetric, MockValidator>::query_event_poll(
-                &mut service.query_pool,
+                &mut service.find_node_query_pool,
             )
             .await;
         match event {
@@ -2471,7 +2647,7 @@ mod tests {
         let node_id_1 = enr1.node_id();
         let node_id_2 = enr2.node_id();
 
-        service.advance_query(
+        service.advance_find_node_query(
             bootnode.clone(),
             vec![enr1.clone(), enr2.clone()],
             QueryId(0),
@@ -2479,7 +2655,7 @@ mod tests {
 
         let event =
             OverlayService::<IdentityContentKey, XorMetric, MockValidator>::query_event_poll(
-                &mut service.query_pool,
+                &mut service.find_node_query_pool,
             )
             .await;
 
@@ -2495,7 +2671,7 @@ mod tests {
 
         let event =
             OverlayService::<IdentityContentKey, XorMetric, MockValidator>::query_event_poll(
-                &mut service.query_pool,
+                &mut service.find_node_query_pool,
             )
             .await;
 
@@ -2512,12 +2688,12 @@ mod tests {
             _ => panic!(),
         };
 
-        service.advance_query(enr1.clone(), vec![enr2.clone()], QueryId(0));
-        service.advance_query(enr2.clone(), vec![enr1.clone()], QueryId(0));
+        service.advance_find_node_query(enr1.clone(), vec![enr2.clone()], QueryId(0));
+        service.advance_find_node_query(enr2.clone(), vec![enr1.clone()], QueryId(0));
 
         let event =
             OverlayService::<IdentityContentKey, XorMetric, MockValidator>::query_event_poll(
-                &mut service.query_pool,
+                &mut service.find_node_query_pool,
             )
             .await;
 
@@ -2556,7 +2732,7 @@ mod tests {
 
         let _event =
             OverlayService::<IdentityContentKey, XorMetric, MockValidator>::query_event_poll(
-                &mut service.query_pool,
+                &mut service.find_node_query_pool,
             )
             .await;
 
@@ -2565,7 +2741,7 @@ mod tests {
         let node_id_1 = enr1.node_id();
         let node_id_2 = enr2.node_id();
 
-        service.advance_query(
+        service.advance_find_node_query(
             bootnode.clone(),
             vec![enr1.clone(), enr2.clone()],
             QueryId(0),

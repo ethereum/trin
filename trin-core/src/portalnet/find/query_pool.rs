@@ -22,6 +22,7 @@
 // https://github.com/libp2p/rust-libp2p
 
 use super::{iterators::query::Query, query_info::QueryInfo};
+use crate::portalnet::types::content_key::OverlayContentKey;
 
 use discv5::kbucket::Key;
 use fnv::FnvHashMap;
@@ -71,6 +72,7 @@ impl<TNodeId, TQuery, TContentKey> QueryPool<TNodeId, TQuery, TContentKey>
 where
     TNodeId: Into<Key<TNodeId>> + Eq + Clone,
     TQuery: Query<TNodeId>,
+    TContentKey: OverlayContentKey,
 {
     /// Creates a new `QueryPool` with the given configuration.
     pub fn new(query_timeout: Duration) -> Self {
