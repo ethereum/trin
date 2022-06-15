@@ -1486,7 +1486,12 @@ where
         Ok(closest_nodes)
     }
 
-    fn init_find_nodes_query_with_initial_enrs(&mut self, target: &NodeId, enrs: Vec<Enr>) {
+    fn init_find_nodes_query_with_initial_enrs_and_config(
+        &mut self,
+        target: &NodeId,
+        enrs: Vec<Enr>,
+        query_config: QueryConfig,
+    ) {
         let query_info = QueryInfo {
             query_type: QueryType::FindNode(*target),
             untrusted_enrs: SmallVec::from_vec(enrs),
@@ -1505,15 +1510,20 @@ where
                 "FindNodes query initiated but no closest peers in routing table. Aborting query."
             );
         } else {
-            let query_config = QueryConfig {
-                parallelism: self.query_parallelism,
-                num_results: self.query_num_results,
-                peer_timeout: self.query_peer_timeout,
-            };
             let find_nodes_query =
                 FindNodeQuery::with_config(query_config, query_info.key(), known_closest_peers);
             self.query_pool.add_query(query_info, find_nodes_query);
         }
+    }
+
+    fn init_find_nodes_query_with_initial_enrs(&mut self, target: &NodeId, enrs: Vec<Enr>) {
+        let query_config = QueryConfig {
+            parallelism: self.query_parallelism,
+            num_results: self.query_num_results,
+            peer_timeout: self.query_peer_timeout,
+        };
+
+        self.init_find_nodes_query_with_initial_enrs_and_config(target, enrs, query_config);
     }
 
     /// Starts a FindNode query to find nodes with IDs closest to target.
@@ -2273,7 +2283,17 @@ mod tests {
         let (_, target_enr) = generate_random_remote_enr();
         let target_node_id = target_enr.node_id();
 
-        service.init_find_nodes_query_with_initial_enrs(&target_node_id, bootnodes);
+        let query_config = QueryConfig {
+            parallelism: service.query_parallelism,
+            num_results: 3,
+            peer_timeout: service.query_peer_timeout,
+        };
+
+        service.init_find_nodes_query_with_initial_enrs_and_config(
+            &target_node_id,
+            bootnodes,
+            query_config,
+        );
 
         // Test that the first query event contains a proper query ID and request to the bootnode
         let event =
@@ -2304,7 +2324,11 @@ mod tests {
         let node_id_1 = enr1.node_id();
         let node_id_2 = enr2.node_id();
 
-        service.advance_query(bootnode, vec![enr1, enr2], QueryId(0));
+        service.advance_query(
+            bootnode.clone(),
+            vec![enr1.clone(), enr2.clone()],
+            QueryId(0),
+        );
 
         let event =
             OverlayService::<IdentityContentKey, XorMetric, MockValidator>::query_event_poll(
@@ -2340,6 +2364,34 @@ mod tests {
             }
             _ => panic!(),
         };
+
+        service.advance_query(enr1.clone(), vec![enr2.clone()], QueryId(0));
+        service.advance_query(enr2.clone(), vec![enr1.clone()], QueryId(0));
+
+        let event =
+            OverlayService::<IdentityContentKey, XorMetric, MockValidator>::query_event_poll(
+                &mut service.query_pool,
+            )
+            .await;
+
+        match event {
+            FindNodeQueryEvent::Finished(query_id, query_info, query) => {
+                assert_eq!(query_id, QueryId(0));
+                let results = query.into_result();
+
+                assert_eq!(results.clone().len(), 3);
+
+                assert!(results.contains(&node_id_1));
+                assert!(results.contains(&node_id_2));
+                assert!(results.contains(&bootnode_node_id));
+
+                let untrusted_enrs = query_info.untrusted_enrs;
+                assert!(untrusted_enrs.contains(&enr1));
+                assert!(untrusted_enrs.contains(&enr2));
+                assert!(untrusted_enrs.contains(&bootnode));
+            }
+            _ => panic!(),
+        }
     }
 
     #[tokio::test]
