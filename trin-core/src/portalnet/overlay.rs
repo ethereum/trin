@@ -39,7 +39,7 @@ use crate::{
 use discv5::{
     enr::NodeId,
     kbucket,
-    kbucket::{Filter, KBucketsTable, MAX_NODES_PER_BUCKET},
+    kbucket::{Filter, KBucketsTable, NodeStatus, MAX_NODES_PER_BUCKET},
     TalkRequest,
 };
 use ethereum_types::U256;
@@ -386,6 +386,21 @@ where
             .write()
             .iter()
             .map(|entry| entry.node.value.enr().clone())
+            .collect()
+    }
+
+    /// Returns an iterator over all the entries in the routing table.
+    pub fn table_entries(&self) -> Vec<(NodeId, Enr, NodeStatus)> {
+        self.kbuckets
+            .write()
+            .iter()
+            .map(|entry| {
+                (
+                    *entry.node.key.preimage(),
+                    entry.node.value.enr().clone(),
+                    entry.status,
+                )
+            })
             .collect()
     }
 

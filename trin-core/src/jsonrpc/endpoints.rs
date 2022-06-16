@@ -17,6 +17,7 @@ pub enum StateEndpoint {
     Offer,
     Store,
     Ping,
+    RoutingTableInfo,
 }
 
 /// History network JSON-RPC endpoints. Start with "portalHistory_" prefix
@@ -30,6 +31,7 @@ pub enum HistoryEndpoint {
     Ping,
     RecursiveFindContent,
     Store,
+    RoutingTableInfo,
 }
 
 /// Ethereum JSON-RPC endpoints not currently supported by portal network requests, proxied to Infura
@@ -86,6 +88,9 @@ impl FromStr for TrinEndpoint {
             "portal_historyRadius" => {
                 Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::DataRadius))
             }
+            "portal_historyRoutingTableInfo" => Ok(TrinEndpoint::HistoryEndpoint(
+                HistoryEndpoint::RoutingTableInfo,
+            )),
             "portal_historyStore" => Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::Store)),
             "portal_stateFindContent" => {
                 Ok(TrinEndpoint::StateEndpoint(StateEndpoint::FindContent))
@@ -98,6 +103,9 @@ impl FromStr for TrinEndpoint {
             "portal_stateStore" => Ok(TrinEndpoint::StateEndpoint(StateEndpoint::Store)),
             "portal_statePing" => Ok(TrinEndpoint::StateEndpoint(StateEndpoint::Ping)),
             "portal_stateRadius" => Ok(TrinEndpoint::StateEndpoint(StateEndpoint::DataRadius)),
+            "portal_stateRoutingTableInfo" => {
+                Ok(TrinEndpoint::StateEndpoint(StateEndpoint::RoutingTableInfo))
+            }
             _ => Err(()),
         }
     }

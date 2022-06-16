@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use serde_json::Value;
+use serde_json::{json, Value};
 use tokio::sync::mpsc;
 
 use crate::network::StateNetwork;
@@ -134,6 +134,29 @@ impl StateRequestHandler {
                         Err(msg) => Err(format!("Invalid Ping params: {:?}", msg)),
                     };
                     let _ = request.resp.send(response);
+                }
+                StateEndpoint::RoutingTableInfo => {
+                    let buckets: Vec<(String, String, String)> = self
+                        .network
+                        .overlay
+                        .table_entries()
+                        .iter()
+                        .map(|(node_id, enr, node_status)| {
+                            (
+                                format!("0x{}", hex::encode(node_id.raw())),
+                                enr.to_base64(),
+                                format!("{:?}", node_status.state),
+                            )
+                        })
+                        .collect();
+
+                    let _ = request.resp.send(Ok(json!(
+                        {
+                            "localKey": format!("0x{}", hex::encode(self.network.overlay.discovery.discv5.local_enr().node_id().raw())),
+                            "buckets": buckets,
+                            "count": buckets.len(),
+                        }
+                    )));
                 }
             }
         }
