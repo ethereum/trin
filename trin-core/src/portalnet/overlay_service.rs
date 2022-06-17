@@ -525,9 +525,8 @@ where
                                 }
                             }
                             if let Some(callback) = query_info.callback {
-                                match callback.send(found_enrs.clone()) {
-                                    Ok(_) => {}
-                                    Err(_) => error!("Failed to send FindNode query {} results to callback", query_id)
+                                if let Err(_) = callback.send(found_enrs.clone()) {
+                                    error!("Failed to send FindNode query {} results to callback", query_id);
                                 }
                             }
                             debug!("[{:?}] Query {} complete, discovered {} ENRs", self.protocol, query_id, found_enrs.len());
@@ -1487,12 +1486,14 @@ where
         Ok(closest_nodes)
     }
 
-    fn init_find_nodes_query_with_initial_enrs_and_config(
-        &mut self,
-        target: &NodeId,
-        enrs: Vec<Enr>,
-        query_config: QueryConfig,
-    ) {
+    /// Starts a FindNode query to find nodes with IDs closest to target, starting with given enrs.
+    fn init_find_nodes_query_with_initial_enrs(&mut self, target: &NodeId, enrs: Vec<Enr>) {
+        let query_config = QueryConfig {
+            parallelism: self.query_parallelism,
+            num_results: self.query_num_results,
+            peer_timeout: self.query_peer_timeout,
+        };
+
         let query_info = QueryInfo {
             query_type: QueryType::FindNode(*target),
             untrusted_enrs: SmallVec::from_vec(enrs),
@@ -1515,16 +1516,6 @@ where
                 FindNodeQuery::with_config(query_config, query_info.key(), known_closest_peers);
             self.query_pool.add_query(query_info, find_nodes_query);
         }
-    }
-
-    fn init_find_nodes_query_with_initial_enrs(&mut self, target: &NodeId, enrs: Vec<Enr>) {
-        let query_config = QueryConfig {
-            parallelism: self.query_parallelism,
-            num_results: self.query_num_results,
-            peer_timeout: self.query_peer_timeout,
-        };
-
-        self.init_find_nodes_query_with_initial_enrs_and_config(target, enrs, query_config);
     }
 
     /// Starts a FindNode query to find nodes with IDs closest to target.
@@ -2274,9 +2265,39 @@ mod tests {
         assert!(query.started().is_some());
     }
 
+    fn init_find_nodes_query_with_initial_enrs_and_config(
+        service: &mut OverlayService<IdentityContentKey, XorMetric, MockValidator>,
+        target: &NodeId,
+        enrs: Vec<Enr>,
+        query_config: QueryConfig,
+    ) {
+        let query_info = QueryInfo {
+            query_type: QueryType::FindNode(*target),
+            untrusted_enrs: SmallVec::from_vec(enrs),
+            callback: None,
+            distances_to_request: service.findnodes_query_distances_per_peer,
+        };
+
+        let known_closest_peers: Vec<Key<NodeId>> = query_info
+            .untrusted_enrs
+            .iter()
+            .map(|enr| Key::from(enr.node_id()))
+            .collect();
+
+        if known_closest_peers.is_empty() {
+            warn!(
+                "FindNodes query initiated but no closest peers in routing table. Aborting query."
+            );
+        } else {
+            let find_nodes_query =
+                FindNodeQuery::with_config(query_config, query_info.key(), known_closest_peers);
+            service.query_pool.add_query(query_info, find_nodes_query);
+        }
+    }
+
     #[tokio::test]
     async fn test_advance_findnodes_query() {
-        let mut service = task::spawn(build_service());
+        let mut service = build_service();
 
         let (_, bootnode) = generate_random_remote_enr();
         let bootnodes = vec![bootnode.clone()];
@@ -2291,7 +2312,8 @@ mod tests {
             peer_timeout: service.query_peer_timeout,
         };
 
-        service.init_find_nodes_query_with_initial_enrs_and_config(
+        init_find_nodes_query_with_initial_enrs_and_config(
+            &mut service,
             &target_node_id,
             bootnodes,
             query_config,
