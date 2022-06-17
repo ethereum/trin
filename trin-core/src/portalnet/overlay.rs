@@ -31,7 +31,7 @@ use crate::{
 };
 use discv5::{
     enr::NodeId,
-    kbucket::{Filter, KBucketsTable},
+    kbucket::{Filter, KBucketsTable, MAX_NODES_PER_BUCKET},
     TalkRequest,
 };
 use ethereum_types::U256;
@@ -54,6 +54,11 @@ pub struct OverlayConfig {
     pub bucket_filter: Option<Box<dyn Filter<Node>>>,
     pub ping_queue_interval: Option<Duration>,
     pub enable_metrics: bool,
+    pub query_parallelism: usize,
+    pub query_timeout: Duration,
+    pub query_peer_timeout: Duration,
+    pub query_num_results: usize,
+    pub findnodes_query_distances_per_peer: usize,
 }
 
 impl Default for OverlayConfig {
@@ -66,6 +71,11 @@ impl Default for OverlayConfig {
             bucket_filter: None,
             ping_queue_interval: None,
             enable_metrics: false,
+            query_parallelism: 3, // (recommended α from kademlia paper)
+            query_peer_timeout: Duration::from_secs(10),
+            query_timeout: Duration::from_secs(60),
+            query_num_results: MAX_NODES_PER_BUCKET,
+            findnodes_query_distances_per_peer: 3,
         }
     }
 }
@@ -137,6 +147,11 @@ where
             utp_listener_tx.clone(),
             config.enable_metrics,
             validator,
+            config.query_timeout,
+            config.query_peer_timeout,
+            config.query_parallelism,
+            config.query_num_results,
+            config.findnodes_query_distances_per_peer,
         )
         .await
         .unwrap();
@@ -490,7 +505,7 @@ where
         direction: RequestDirection,
     ) -> Result<Response, OverlayRequestError> {
         let (tx, rx) = oneshot::channel();
-        let overlay_request = OverlayRequest::new(request, direction, Some(tx));
+        let overlay_request = OverlayRequest::new(request, direction, Some(tx), None);
         if let Err(error) = self.request_tx.send(overlay_request) {
             warn!(
                 "Failure sending request over {:?} service channel",
