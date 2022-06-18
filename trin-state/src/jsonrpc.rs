@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use serde_json::{Value};
+use serde_json::Value;
 use tokio::sync::mpsc;
 
 use crate::network::StateNetwork;
@@ -137,12 +137,8 @@ impl StateRequestHandler {
                     let _ = request.resp.send(response);
                 }
                 StateEndpoint::RoutingTableInfo => {
-                    let bucket_entries_json = bucket_entries_to_json(
-                        self
-                        .network
-                        .overlay
-                        .bucket_entries()
-                    );
+                    let bucket_entries_json =
+                        bucket_entries_to_json(self.network.overlay.bucket_entries());
 
                     let _ = request.resp.send(Ok(bucket_entries_json));
                 }

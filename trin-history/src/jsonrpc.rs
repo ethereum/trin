@@ -224,12 +224,8 @@ impl HistoryRequestHandler {
                     let _ = request.resp.send(response);
                 }
                 HistoryEndpoint::RoutingTableInfo => {
-                    let bucket_entries_json = bucket_entries_to_json(
-                        self
-                        .network
-                        .overlay
-                        .bucket_entries()
-                    );
+                    let bucket_entries_json =
+                        bucket_entries_to_json(self.network.overlay.bucket_entries());
 
                     let _ = request.resp.send(Ok(bucket_entries_json));
                 }

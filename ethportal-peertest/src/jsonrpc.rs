@@ -267,6 +267,22 @@ fn all_tests(peertest: &Peertest) -> Vec<Test<impl Fn(&Value, &Peertest)>> {
             },
             validate_portal_store_with_invalid_content_key,
         ),
+        Test::new(
+            JsonRpcRequest {
+                method: "portal_historyRoutingTableInfo".to_string(),
+                id: 13,
+                params: Params::None,
+            },
+            validate_portal_routing_table_info,
+        ),
+        Test::new(
+            JsonRpcRequest {
+                method: "portal_stateRoutingTableInfo".to_string(),
+                id: 14,
+                params: Params::None,
+            },
+            validate_portal_routing_table_info,
+        ),
     ]
 }
 
@@ -339,6 +355,13 @@ fn validate_portal_store_with_invalid_content_key(result: &Value, _peertest: &Pe
         .as_str()
         .unwrap()
         .contains("Unable to decode content_key"));
+}
+
+fn validate_portal_routing_table_info(result: &Value, _peertest: &Peertest) {
+    assert!(result.get("buckets").unwrap().is_array());
+    assert!(result.get("numBuckets").unwrap().is_u64());
+    assert!(result.get("numNodes").unwrap().is_u64());
+    assert!(result.get("numConnected").unwrap().is_u64());
 }
 
 #[cfg(unix)]
