@@ -389,16 +389,23 @@ where
             .collect()
     }
 
-    /// Returns an iterator over all the entries in the routing table.
-    pub fn table_entries(&self) -> Vec<(NodeId, Enr, NodeStatus)> {
+    /// Returns a Vec of tuples, where each tuple contains:
+    ///     a usize representing a bucket's index (1-256)
+    ///     a Vec of tuples, each tuple representing a node in the given bucket
+    /// Only returns buckets that are not empty.
+    pub fn bucket_entries(&self) -> Vec<(usize, Vec<(NodeId, Enr, NodeStatus)>)> {
         self.kbuckets
             .write()
-            .iter()
-            .map(|entry| {
+            .buckets_iter()
+            .enumerate()
+            .filter(|(_, bucket)| bucket.num_entries() > 0)
+            .map(|(index, bucket)| {
                 (
-                    *entry.node.key.preimage(),
-                    entry.node.value.enr().clone(),
-                    entry.status,
+                    index,
+                    bucket
+                        .iter()
+                        .map(|node| (*node.key.preimage(), node.value.enr().clone(), node.status))
+                        .collect(),
                 )
             })
             .collect()

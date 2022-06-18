@@ -11,6 +11,7 @@ use trin_core::{
             FindContentParams, FindNodesParams, HistoryJsonRpcRequest, LocalContentParams,
             OfferParams, PingParams, RecursiveFindContentParams, StoreParams,
         },
+        utils::bucket_entries_to_json,
     },
     portalnet::{
         types::{
@@ -223,27 +224,14 @@ impl HistoryRequestHandler {
                     let _ = request.resp.send(response);
                 }
                 HistoryEndpoint::RoutingTableInfo => {
-                    let buckets: Vec<(String, String, String)> = self
+                    let bucket_entries_json = bucket_entries_to_json(
+                        self
                         .network
                         .overlay
-                        .table_entries()
-                        .iter()
-                        .map(|(node_id, enr, node_status)| {
-                            (
-                                format!("0x{}", hex::encode(node_id.raw())),
-                                enr.to_base64(),
-                                format!("{:?}", node_status.state),
-                            )
-                        })
-                        .collect();
+                        .bucket_entries()
+                    );
 
-                    let _ = request.resp.send(Ok(json!(
-                        {
-                            "localKey": format!("0x{}", hex::encode(self.network.overlay.discovery.discv5.local_enr().node_id().raw())),
-                            "buckets": buckets,
-                            "count": buckets.len(),
-                        }
-                    )));
+                    let _ = request.resp.send(Ok(bucket_entries_json));
                 }
             }
         }
