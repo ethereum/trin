@@ -7,6 +7,7 @@ use std::{
     sync::Arc,
 };
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use trin_core::portalnet::types::messages::{ByteList, ContentPayloadList};
 use trin_core::{
     portalnet::{
         discovery::Discovery,
@@ -15,10 +16,7 @@ use trin_core::{
     },
     utp::{
         stream::{UtpListener, UtpListenerEvent, UtpListenerRequest, UtpStream, BUF_SIZE},
-        trin_helpers::{
-            UtpAccept, UtpMessage,
-            UtpStreamId::{AcceptStream, OfferStream},
-        },
+        trin_helpers::UtpStreamId::{AcceptStream, OfferStream},
     },
 };
 
@@ -86,7 +84,8 @@ async fn utp_listener_events() {
     let (enr_accept, listener_tx_accept, mut listener_rx_accept) = spawn_utp_listener().await;
 
     // Prepare to receive uTP stream from the offer node
-    let (requested_content_key, requested_content_value) = (vec![1], vec![1, 1, 1, 1]);
+    let (requested_content_key, requested_content_value) =
+        (vec![1], vec![ByteList::new(vec![1, 1, 1, 1]).unwrap()]);
     let stream_id = AcceptStream(vec![requested_content_key.clone()]);
     let conn_id = 1234;
     let request = UtpListenerRequest::InitiateConnection(
@@ -117,21 +116,15 @@ async fn utp_listener_events() {
     conn.recv(&mut buf).await.unwrap();
 
     // Send content key with content value to the acceptor node
-    let content_items = vec![(
-        requested_content_key.clone(),
-        requested_content_value.clone(),
-    )];
+    let content_items: Vec<ByteList> = requested_content_value.clone();
 
-    let content_message = UtpAccept {
-        message: content_items,
-    };
+    let utp_payload = ContentPayloadList::new(content_items).unwrap();
 
-    let utp_payload = UtpMessage::new(content_message.as_ssz_bytes()).encode();
-    let expected_utp_payload = utp_payload.clone();
+    let expected_utp_payload = utp_payload.as_ssz_bytes();
 
     tokio::spawn(async move {
         // Send the content to the acceptor over a uTP stream
-        conn.send_to(&utp_payload).await.unwrap();
+        conn.send_to(&utp_payload.as_ssz_bytes()).await.unwrap();
         // Close uTP connection
         conn.close().await.unwrap();
     });
