@@ -40,7 +40,7 @@ pub trait TargetKey<TNodeId> {
 /// that determines the peer selection strategy, i.e. the order in which the
 /// peers involved in the query should be contacted.
 pub struct QueryPool<TNodeId, TQuery> {
-    _next_id: QueryId,
+    next_id: QueryId,
     query_timeout: Duration,
     queries: FnvHashMap<QueryId, (QueryInfo, TQuery)>,
     marker: PhantomData<TNodeId>,
@@ -68,7 +68,7 @@ where
     /// Creates a new `QueryPool` with the given configuration.
     pub fn new(query_timeout: Duration) -> Self {
         QueryPool {
-            _next_id: QueryId(0),
+            next_id: QueryId(0),
             query_timeout,
             queries: Default::default(),
             marker: PhantomData,
@@ -81,9 +81,9 @@ where
     }
 
     /// Adds a query to the pool.
-    fn _add_query(&mut self, query_info: QueryInfo, query: TQuery) -> QueryId {
-        let id = self._next_id;
-        self._next_id = QueryId(self._next_id.wrapping_add(1));
+    pub fn add_query(&mut self, query_info: QueryInfo, query: TQuery) -> QueryId {
+        let id = self.next_id;
+        self.next_id = QueryId(self.next_id.wrapping_add(1));
         self.queries.insert(id, (query_info, query));
         id
     }
@@ -154,6 +154,12 @@ impl std::ops::Deref for QueryId {
     type Target = usize;
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl std::fmt::Display for QueryId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 

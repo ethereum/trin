@@ -25,7 +25,6 @@ use super::super::query_pool::QueryState;
 use super::query::{Query, QueryConfig, QueryPeer, QueryPeerState, QueryProgress};
 
 use discv5::kbucket::{Distance, Key};
-
 use std::{
     collections::btree_map::{BTreeMap, Entry},
     time::Instant,
