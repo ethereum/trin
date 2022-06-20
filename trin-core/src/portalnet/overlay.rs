@@ -33,7 +33,7 @@ use crate::{
     utils,
     utp::{
         stream::{UtpListenerEvent, UtpListenerRequest, UtpPayload, UtpStream, BUF_SIZE},
-        trin_helpers::{UtpAccept, UtpMessage, UtpStreamId},
+        trin_helpers::UtpStreamId,
     },
 };
 use discv5::{
@@ -227,9 +227,9 @@ where
                     UtpStreamId::AcceptStream(content_keys) => {
                         self.process_accept_utp_payload(content_keys, utp_payload)?
                     }
-                    UtpStreamId::ContentStream(_) => warn!("Unexpected ContentStream uTP id!"),
+                    UtpStreamId::ContentStream(_) => {}
                     UtpStreamId::FindContentStream => {}
-                    UtpStreamId::OfferStream => warn!("Unexpected OfferStream uTP id!"),
+                    UtpStreamId::OfferStream => {}
                 }
             }
             UtpListenerEvent::ResetStream(..) => {}
@@ -360,7 +360,8 @@ where
 
     /// Try to store overlay content into database
     fn store_overlay_content(&self, content_key: &TContentKey, value: ByteList) {
-        match self.storage.read().should_store(content_key) {
+        let should_store = self.storage.read().should_store(content_key);
+        match should_store {
             Ok(_) => {
                 if let Err(err) = self.storage.write().store(content_key, &value.into()) {
                     warn!("Unable to store accepted content: {err}");
@@ -597,16 +598,12 @@ where
 
         let content_items = self.provide_requested_content(&response, content_keys_offered);
 
-        let content_message = UtpAccept {
-            message: content_items,
-        };
+        let content_payload = ContentPayloadList::new(content_items)
+            .map_err(|err| anyhow!("Unable to build content payload: {err:?}"))?;
 
         tokio::spawn(async move {
             // send the content to the acceptor over a uTP stream
-            if let Err(err) = conn
-                .send_to(&UtpMessage::new(content_message.as_ssz_bytes()).encode()[..])
-                .await
-            {
+            if let Err(err) = conn.send_to(&content_payload.as_ssz_bytes()).await {
                 warn!("Error sending content {err}");
             };
             // Close uTP connection
@@ -622,8 +619,8 @@ where
         &self,
         response: &Accept,
         content_keys_offered: Vec<TContentKey>,
-    ) -> Vec<(Vec<u8>, Vec<u8>)> {
-        let mut content_items: Vec<(Vec<u8>, Vec<u8>)> = Vec::new();
+    ) -> Vec<ByteList> {
+        let mut content_items: Vec<ByteList> = Vec::new();
 
         for (i, key) in response
             .content_keys
@@ -634,7 +631,7 @@ where
             if i == true {
                 match self.storage.read().get(&key.clone()) {
                     Ok(content) => match content {
-                        Some(content) => content_items.push((key.clone().into(), content)),
+                        Some(content) => content_items.push(content.into()),
                         None => {}
                     },
                     Err(err) => warn!("Unable to get requested content from portal storage: {err}"),
