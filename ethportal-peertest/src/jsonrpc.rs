@@ -358,7 +358,7 @@ fn validate_portal_store_with_invalid_content_key(result: &Value, _peertest: &Pe
 }
 
 fn validate_portal_routing_table_info(result: &Value, _peertest: &Peertest) {
-    assert!(result.get("buckets").unwrap().is_array());
+    assert!(result.get("buckets").unwrap().is_object());
     assert!(result.get("numBuckets").unwrap().is_u64());
     assert!(result.get("numNodes").unwrap().is_u64());
     assert!(result.get("numConnected").unwrap().is_u64());
