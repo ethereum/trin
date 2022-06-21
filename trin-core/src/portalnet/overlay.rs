@@ -389,25 +389,29 @@ where
             .collect()
     }
 
-    /// Returns a Vec of tuples, where each tuple contains:
-    ///     a usize representing a bucket's index (1-256)
-    ///     a Vec of tuples, each tuple representing a node in the given bucket
-    /// Only returns buckets that are not empty.
-    pub fn bucket_entries(&self) -> Vec<(usize, Vec<(NodeId, Enr, NodeStatus)>)> {
+    /// Returns a Vec of tuples, where each tuple represents a node in the kbuckets table.
+    ///     the usize represents the index (1-256) of the bucket containing
+    ///     the node with NodeId, Enr, and NodeStatus
+    pub fn bucket_entries(&self) -> Vec<(usize, NodeId, Enr, NodeStatus)> {
         self.kbuckets
             .write()
             .buckets_iter()
             .enumerate()
             .filter(|(_, bucket)| bucket.num_entries() > 0)
             .map(|(index, bucket)| {
-                (
-                    index,
-                    bucket
-                        .iter()
-                        .map(|node| (*node.key.preimage(), node.value.enr().clone(), node.status))
-                        .collect(),
-                )
+                bucket
+                    .iter()
+                    .map(|node| {
+                        (
+                            index,
+                            *node.key.preimage(),
+                            node.value.enr().clone(),
+                            node.status,
+                        )
+                    })
+                    .collect::<Vec<(usize, NodeId, Enr, NodeStatus)>>()
             })
+            .flatten()
             .collect()
     }
 
