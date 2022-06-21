@@ -277,7 +277,7 @@ pub struct OverlayService<TContentKey, TMetric, TValidator> {
     /// A map of active outgoing requests.
     active_outgoing_requests: Arc<RwLock<HashMap<OverlayRequestId, ActiveOutgoingRequest>>>,
     /// All of the queries currently being performed.
-    query_pool: QueryPool<NodeId, Vec<NodeId>, Vec<NodeId>, FindNodeQuery<NodeId>>,
+    query_pool: QueryPool<NodeId, FindNodeQuery<NodeId>>,
     /// Timeout after which a peer in an ongoing query is marked unresponsive.
     query_peer_timeout: Duration,
     /// Number of peers to request data from in parallel for a single query.
@@ -645,7 +645,7 @@ where
     /// This happens when a query needs to send a request to a node, when a query has completed,
     // or when a query has timed out.
     async fn query_event_poll(
-        queries: &mut QueryPool<NodeId, Vec<NodeId>, Vec<NodeId>, FindNodeQuery<NodeId>>,
+        queries: &mut QueryPool<NodeId, FindNodeQuery<NodeId>>,
     ) -> FindNodeQueryEvent {
         future::poll_fn(move |_cx| match queries.poll() {
             QueryPoolState::Finished(query_id, query_info, query) => {

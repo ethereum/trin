@@ -74,11 +74,13 @@ pub struct FindContentQuery<TNodeId> {
     config: QueryConfig,
 }
 
-impl<TNodeId> Query<TNodeId, FindContentQueryResponse<TNodeId>, FindContentQueryResult<TNodeId>>
-    for FindContentQuery<TNodeId>
+impl<TNodeId> Query<TNodeId> for FindContentQuery<TNodeId>
 where
     TNodeId: Into<Key<TNodeId>> + Eq + Clone,
 {
+    type Response = FindContentQueryResponse<TNodeId>;
+    type Result = FindContentQueryResult<TNodeId>;
+
     fn target(&self) -> Key<TNodeId> {
         self.target_key.clone()
     }
@@ -91,7 +93,7 @@ where
         self.started = Some(start);
     }
 
-    fn on_success(&mut self, peer: &TNodeId, peer_response: FindContentQueryResponse<TNodeId>) {
+    fn on_success(&mut self, peer: &TNodeId, peer_response: Self::Response) {
         if let QueryProgress::Finished = self.progress {
             return;
         }
@@ -289,7 +291,7 @@ where
         }
     }
 
-    fn into_result(self) -> FindContentQueryResult<TNodeId> {
+    fn into_result(self) -> Self::Result {
         match self.content {
             Some(content) => {
                 let closest_nodes = self
