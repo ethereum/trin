@@ -392,26 +392,28 @@ where
     /// Returns a Vec of tuples, where each tuple represents a node in the kbuckets table.
     ///     the usize represents the index (1-256) of the bucket containing
     ///     the node with NodeId, Enr, and NodeStatus
-    pub fn bucket_entries(&self) -> Vec<(usize, NodeId, Enr, NodeStatus)> {
+    pub fn bucket_entries(&self) -> HashMap<usize, Vec<(NodeId, Enr, NodeStatus, U256)>> {
         self.kbuckets
             .write()
             .buckets_iter()
             .enumerate()
             .filter(|(_, bucket)| bucket.num_entries() > 0)
             .map(|(index, bucket)| {
-                bucket
-                    .iter()
-                    .map(|node| {
-                        (
-                            index,
-                            *node.key.preimage(),
-                            node.value.enr().clone(),
-                            node.status,
-                        )
-                    })
-                    .collect::<Vec<(usize, NodeId, Enr, NodeStatus)>>()
+                (
+                    index,
+                    bucket
+                        .iter()
+                        .map(|node| {
+                            (
+                                *node.key.preimage(),
+                                node.value.enr().clone(),
+                                node.status,
+                                node.value.data_radius(),
+                            )
+                        })
+                        .collect(),
+                )
             })
-            .flatten()
             .collect()
     }
 
