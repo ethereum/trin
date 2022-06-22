@@ -1,5 +1,6 @@
 use anyhow::anyhow;
 use async_trait::async_trait;
+use ethereum_types::H256;
 use serde_json::{json, Value};
 
 use crate::{
@@ -8,6 +9,7 @@ use crate::{
         types::{HistoryJsonRpcRequest, JsonRequest, Params},
     },
     portalnet::types::{content_key::IdentityContentKey, messages::ByteList},
+    types::header::Header,
     utils::infura::INFURA_BASE_URL,
 };
 
@@ -66,6 +68,27 @@ impl HeaderOracle {
             }
         };
         Ok(infura_hash.to_owned())
+    }
+
+    pub fn get_header_by_hash(&mut self, block_hash: H256) -> anyhow::Result<Header> {
+        let block_hash = format!("0x{:02X}", block_hash);
+        let request = JsonRequest {
+            jsonrpc: "2.0".to_string(),
+            params: Params::Array(vec![json!(block_hash), json!(false)]),
+            method: "eth_getBlockByHash".to_string(),
+            id: 1,
+        };
+        let response: Value = match dispatch_infura_request(request, &self.infura_url) {
+            Ok(val) => match serde_json::from_str(&val) {
+                Ok(val) => val,
+                Err(msg) => {
+                    return Err(anyhow!("Unable to validate content with Infura: {:?}", msg))
+                }
+            },
+            Err(msg) => return Err(anyhow!("Unable to validate content with Infura: {:?}", msg)),
+        };
+        let header = Header::from_infura_response(response).unwrap();
+        Ok(header)
     }
 
     // To be updated to use chain history || header gossip network.

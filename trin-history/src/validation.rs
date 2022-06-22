@@ -2,11 +2,15 @@ use std::sync::{Arc, RwLock};
 
 use anyhow::anyhow;
 use async_trait::async_trait;
+use ethereum_types::H256;
+use ssz::Decode;
 
 use trin_core::{
     portalnet::types::{content_key::HistoryContentKey, messages::ByteList},
     types::{
+        block_body::BlockBody,
         header::Header,
+        receipts::Receipts,
         validation::{HeaderOracle, Validator},
     },
 };
@@ -44,21 +48,47 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                     ))
                 }
             }
-            HistoryContentKey::BlockBody(_key) => {
-                // use timeout w/ fallback to infura
-                // send fetch header request to validation oracle
-                // - already validated whether it's fetched from local db or from network
-                // validate body against header
-                Err(anyhow!("Validation for block bodies is not yet supported."))
+            HistoryContentKey::BlockBody(key) => {
+                let block_body = BlockBody::from_ssz_bytes(content).unwrap();
+                let trusted_header: Header = self
+                    .header_oracle
+                    .write()
+                    .unwrap()
+                    .get_header_by_hash(H256::from(key.block_hash))?;
+                let actual_uncles_root = block_body.uncles_root()?;
+                if actual_uncles_root != trusted_header.uncles_hash {
+                    return Err(anyhow!(
+                        "Content validation failed: Invalid uncles root. Found: {:?} - Expected: {:?}",
+                        actual_uncles_root,
+                        trusted_header.uncles_hash
+                    ));
+                }
+                let actual_txs_root = block_body.transactions_root()?;
+                if actual_txs_root != trusted_header.transactions_root {
+                    return Err(anyhow!(
+                        "Content validation failed: Invalid transactions root. Found: {:?} - Expected: {:?}",
+                        actual_txs_root,
+                        trusted_header.transactions_root
+                    ));
+                }
+                Ok(())
             }
-            HistoryContentKey::BlockReceipts(_key) => {
-                // use timeout w/ fallback to infura
-                // send fetch header request to validation oracle
-                // - already validated whether it's fetched from local db or from network
-                // validate body against header
-                Err(anyhow!(
-                    "Validation for block receipts is not yet supported."
-                ))
+            HistoryContentKey::BlockReceipts(key) => {
+                let receipts = Receipts::from_ssz_bytes(content).unwrap();
+                let trusted_header: Header = self
+                    .header_oracle
+                    .write()
+                    .unwrap()
+                    .get_header_by_hash(H256::from(key.block_hash))?;
+                let actual_receipts_root = receipts.root()?;
+                if actual_receipts_root != trusted_header.receipts_root {
+                    return Err(anyhow!(
+                        "Content validation failed: Invalid receipts root. Found: {:?} - Expected: {:?}",
+                        actual_receipts_root,
+                        trusted_header.receipts_root
+                    ));
+                }
+                Ok(())
             }
         }
     }
@@ -72,7 +102,10 @@ mod tests {
     use httpmock::prelude::*;
     use serde_json::json;
 
+    use trin_core::portalnet::types::content_key::BlockBody as BlockBodyKey;
     use trin_core::portalnet::types::content_key::BlockHeader;
+    use trin_core::portalnet::types::content_key::BlockReceipts;
+    use trin_core::utils::bytes::hex_decode;
 
     fn get_header_rlp() -> Vec<u8> {
         // RLP encoded block header #669051
@@ -194,5 +227,67 @@ mod tests {
             .validate_content(&content_key, &header_bytelist)
             .await
             .unwrap();
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn validate_block_body() {
+        let server = setup_mock_infura_server();
+        let block_body_rlp = get_ssz_encoded_block_body();
+        let block_body_bytelist = ByteList::try_from(block_body_rlp.clone()).unwrap();
+
+        let infura_url = server.url("/get_block_body");
+        let header_oracle = Arc::new(RwLock::new(HeaderOracle {
+            infura_url,
+            ..HeaderOracle::default()
+        }));
+        let mut chain_history_validator = ChainHistoryValidator { header_oracle };
+        let block_hash = block_14764013_hash();
+        let block_hash = H256::from_slice(&block_hash);
+        let content_key = HistoryContentKey::BlockBody(BlockBodyKey {
+            chain_id: 1,
+            block_hash: block_hash.0,
+        });
+        chain_history_validator
+            .validate_content(&content_key, &block_body_bytelist)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn validate_receipts() {
+        let server = setup_mock_infura_server();
+        let receipts_rlp = get_ssz_encoded_receipts();
+        let receipts_bytelist = ByteList::try_from(receipts_rlp.clone()).unwrap();
+
+        let infura_url = server.url("/get_block_body");
+        let header_oracle = Arc::new(RwLock::new(HeaderOracle {
+            infura_url,
+            ..HeaderOracle::default()
+        }));
+        let mut chain_history_validator = ChainHistoryValidator { header_oracle };
+        let block_hash = block_14764013_hash();
+        let block_hash = H256::from_slice(&block_hash);
+        let content_key = HistoryContentKey::BlockReceipts(BlockReceipts {
+            chain_id: 1,
+            block_hash: block_hash.0,
+        });
+        chain_history_validator
+            .validate_content(&content_key, &receipts_bytelist)
+            .await
+            .unwrap();
+    }
+
+    fn block_14764013_hash() -> Vec<u8> {
+        hex_decode("0x720704f3aa11c53cf344ea069db95cecb81ad7453c8f276b2a1062979611f09c").unwrap()
+    }
+
+    fn get_ssz_encoded_block_body() -> Vec<u8> {
+        hex::decode("").unwrap()
+    }
+
+    fn get_ssz_encoded_receipts() -> Vec<u8> {
+        hex::decode("").unwrap()
     }
 }
