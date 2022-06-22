@@ -68,7 +68,12 @@ pub struct BlockRlp {
 
 impl Decodable for BlockRlp {
     fn decode(rlp: &rlp::Rlp) -> Result<Self, DecoderError> {
-        let header: Option<Header> = Some(rlp::decode(rlp.as_raw()).unwrap());
+        let header = match rlp::decode(rlp.as_raw()) {
+            // Valid header found
+            Ok(val) => Some(val),
+            // Skips block body / receipts
+            Err(_) => None,
+        };
         Ok(Self { header })
     }
 }
