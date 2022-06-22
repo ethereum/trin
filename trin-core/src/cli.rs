@@ -10,7 +10,7 @@ pub const DEFAULT_WEB3_HTTP_ADDRESS: &str = "127.0.0.1:8545";
 const DEFAULT_DISCOVERY_PORT: &str = "9000";
 pub const HISTORY_NETWORK: &str = "history";
 pub const STATE_NETWORK: &str = "state";
-const DEFAULT_SUBNETWORKS: &str = "history,state";
+const DEFAULT_SUBNETWORKS: &str = "history";
 pub const DEFAULT_STORAGE_CAPACITY: &str = "100000"; // 100mb
 
 #[derive(StructOpt, Debug, PartialEq, Clone)]
