@@ -1,5 +1,5 @@
 use anyhow::anyhow;
-use log::debug;
+use log::{debug, error};
 use std::sync::{Arc, RwLock as StdRwLock};
 
 use parking_lot::RwLock;
@@ -107,6 +107,10 @@ impl HistoryNetwork {
                 Err(OverlayRequestError::Discv5Error(error)) => {
                     debug!("Unexpected error while bonding with {} => {:?}", enr, error);
                     return Err(anyhow!(error.to_string()));
+                }
+                Err(OverlayRequestError::InvalidRemotePacket) => {
+                    error!("Received invalid response received after pinging a potentially faulty bootnode: {enr:?}");
+                    continue;
                 }
                 _ => {
                     let msg = format!("Unexpected error while bonding with {enr}");

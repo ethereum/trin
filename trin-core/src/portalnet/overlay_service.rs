@@ -112,12 +112,16 @@ pub enum OverlayRequestError {
     /// uTP request error
     #[error("uTP request error: {0}")]
     UtpError(String),
+
+    #[error("Received invalid remote packet.")]
+    InvalidRemotePacket,
 }
 
 impl From<discv5::RequestError> for OverlayRequestError {
     fn from(err: discv5::RequestError) -> Self {
         match err {
             discv5::RequestError::Timeout => Self::Timeout,
+            discv5::RequestError::InvalidRemotePacket => Self::InvalidRemotePacket,
             err => Self::Discv5Error(err),
         }
     }
