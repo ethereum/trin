@@ -7,17 +7,18 @@ use ethereum_types::U256;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
-type NodeStringTuple = (String, String, String, String);
+type NodeMap = HashMap<String, String>;
 type NodeTuple = (NodeId, Enr, NodeStatus, U256);
 
+/// Converts the output of the Overlay's bucket_entries method to a JSON Value
 pub fn bucket_entries_to_json(bucket_entries: HashMap<usize, Vec<NodeTuple>>) -> Value {
     let mut node_count: u16 = 0;
     let mut connected_count: u16 = 0;
-    let buckets_indexed: HashMap<String, Vec<NodeStringTuple>> = bucket_entries
+    let buckets_indexed: HashMap<usize, Vec<NodeMap>> = bucket_entries
         .into_iter()
         .map(|(bucket_index, bucket)| {
             (
-                format!("{}", bucket_index),
+                bucket_index,
                 bucket
                     .iter()
                     .map(|(node_id, enr, node_status, data_radius)| {
@@ -25,13 +26,15 @@ pub fn bucket_entries_to_json(bucket_entries: HashMap<usize, Vec<NodeTuple>>) ->
                         if node_status.state == ConnectionState::Connected {
                             connected_count += 1
                         }
-
-                        (
+                        let mut map = HashMap::new();
+                        map.insert(
+                            "node_id".to_owned(),
                             format!("0x{}", hex::encode(node_id.raw())),
-                            enr.to_base64(),
-                            format!("{:?}", node_status.state),
-                            format!("{}", data_radius),
-                        )
+                        );
+                        map.insert("enr".to_owned(), enr.to_base64());
+                        map.insert("status".to_owned(), format!("{:?}", node_status.state));
+                        map.insert("radius".to_owned(), format!("{}", data_radius));
+                        map
                     })
                     .collect(),
             )
