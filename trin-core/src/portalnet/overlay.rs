@@ -122,11 +122,11 @@ pub struct OverlayProtocol<TContentKey, TMetric, TValidator> {
 
 impl<
         TContentKey: OverlayContentKey + Send + Sync,
-        TMetric: Metric + Send,
-        TValidator: 'static + Validator<TContentKey> + Send,
+        TMetric: Metric + Send + Sync,
+        TValidator: 'static + Validator<TContentKey> + Send + Sync,
     > OverlayProtocol<TContentKey, TMetric, TValidator>
 where
-    <TContentKey as TryFrom<Vec<u8>>>::Error: Debug + Display,
+    <TContentKey as TryFrom<Vec<u8>>>::Error: Debug + Display + Send,
 {
     pub async fn new(
         config: OverlayConfig,
@@ -536,109 +536,15 @@ where
             destination: enr.clone(),
         };
 
-        // todo: remove after updating `Offer` to use `ContentKey` type
-        let content_keys_offered: Result<Vec<TContentKey>, TContentKey::Error> = content_keys
-            .into_iter()
-            .map(|key| (TContentKey::try_from)(key))
-            .collect();
-        let content_keys_offered: Vec<TContentKey> = match content_keys_offered {
-            Ok(val) => val,
-            Err(_) => return Err(OverlayRequestError::DecodeError),
-        };
-
         // Send the request and wait on the response.
         match self
             .send_overlay_request(Request::Offer(request), direction)
             .await
         {
-            Ok(Response::Accept(accept)) => {
-                match self
-                    .process_accept_response(accept, enr, content_keys_offered)
-                    .await
-                {
-                    Ok(accept) => Ok(accept),
-                    Err(err) => Err(OverlayRequestError::OfferError(err.to_string())),
-                }
-            }
+            Ok(Response::Accept(accept)) => Ok(accept),
             Ok(_) => Err(OverlayRequestError::InvalidResponse),
             Err(error) => Err(error),
         }
-    }
-
-    pub async fn process_accept_response(
-        &self,
-        response: Accept,
-        enr: Enr,
-        content_keys_offered: Vec<TContentKey>,
-    ) -> anyhow::Result<Accept> {
-        let conn_id = response.connection_id.to_be();
-
-        // Do not initialize uTP stream if remote node doesn't have interest in the offered content keys
-        if response.content_keys.is_zero() {
-            return Ok(response);
-        }
-
-        // initiate the connection to the acceptor
-        let (tx, rx) = tokio::sync::oneshot::channel::<UtpStream>();
-        let utp_request = UtpListenerRequest::Connect(
-            conn_id,
-            enr,
-            self.protocol.clone(),
-            UtpStreamId::OfferStream,
-            tx,
-        );
-
-        self.utp_listener_tx
-            .send(utp_request).map_err(|err| anyhow!("Unable to send Connect request to UtpListener when processing ACCEPT message: {err}"))?;
-
-        let mut conn = rx.await?;
-        // Handle STATE packet for SYN
-        let mut buf = [0; BUF_SIZE];
-        conn.recv(&mut buf).await?;
-
-        let content_items = self.provide_requested_content(&response, content_keys_offered);
-
-        let content_payload = ContentPayloadList::new(content_items)
-            .map_err(|err| anyhow!("Unable to build content payload: {err:?}"))?;
-
-        tokio::spawn(async move {
-            // send the content to the acceptor over a uTP stream
-            if let Err(err) = conn.send_to(&content_payload.as_ssz_bytes()).await {
-                warn!("Error sending content {err}");
-            };
-            // Close uTP connection
-            if let Err(err) = conn.close().await {
-                warn!("Unable to close uTP connection!: {err}")
-            };
-        });
-        Ok(response)
-    }
-
-    /// Provide the requested content key and content value for the acceptor
-    fn provide_requested_content(
-        &self,
-        response: &Accept,
-        content_keys_offered: Vec<TContentKey>,
-    ) -> Vec<ByteList> {
-        let mut content_items: Vec<ByteList> = Vec::new();
-
-        for (i, key) in response
-            .content_keys
-            .clone()
-            .iter()
-            .zip(content_keys_offered.iter())
-        {
-            if i == true {
-                match self.storage.read().get(&key.clone()) {
-                    Ok(content) => match content {
-                        Some(content) => content_items.push(content.into()),
-                        None => {}
-                    },
-                    Err(err) => warn!("Unable to get requested content from portal storage: {err}"),
-                }
-            }
-        }
-        content_items
     }
 
     /// Public method for initiating a network request through the overlay service.

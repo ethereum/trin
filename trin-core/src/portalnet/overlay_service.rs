@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use std::{
     collections::HashMap,
     fmt,
@@ -36,7 +37,13 @@ use crate::{
     utp::stream::UtpListenerRequest,
 };
 
-use crate::utp::trin_helpers::UtpStreamId;
+use crate::{
+    portalnet::types::{content_key::RawContentKey, messages::ContentPayloadList},
+    utp::{
+        stream::{UtpStream, BUF_SIZE},
+        trin_helpers::UtpStreamId,
+    },
+};
 use delay_map::HashSetDelay;
 use discv5::{
     enr::NodeId,
@@ -304,8 +311,8 @@ pub struct OverlayService<TContentKey, TMetric, TValidator> {
 
 impl<
         TContentKey: OverlayContentKey + Send + Sync,
-        TMetric: Metric + Send,
-        TValidator: 'static + Validator<TContentKey> + Send,
+        TMetric: Metric + Send + Sync,
+        TValidator: 'static + Validator<TContentKey> + Send + Sync,
     > OverlayService<TContentKey, TMetric, TValidator>
 where
     <TContentKey as TryFrom<Vec<u8>>>::Error: Debug,
@@ -331,7 +338,10 @@ where
         query_parallelism: usize,
         query_num_results: usize,
         findnodes_query_distances_per_peer: usize,
-    ) -> Result<UnboundedSender<OverlayRequest>, String> {
+    ) -> Result<UnboundedSender<OverlayRequest>, String>
+    where
+        <TContentKey as TryFrom<Vec<u8>>>::Error: Send,
+    {
         let (request_tx, request_rx) = mpsc::unbounded_channel();
         let internal_request_tx = request_tx.clone();
 
@@ -1082,8 +1092,81 @@ where
                 self.process_content(content, source, find_content_request)
                     .await
             }
-            _ => {}
+            Response::Accept(accept) => {
+                let offer_request = match request {
+                    Request::Offer(offer) => offer,
+                    _ => {
+                        error!("Unable to process received content: Invalid request message.");
+                        return;
+                    }
+                };
+
+                if let Err(err) = self
+                    .process_accept(accept, source, offer_request.content_keys)
+                    .await
+                {
+                    error!("Error processing ACCEPT response in overlay service: {err}")
+                }
+            }
         }
+    }
+
+    /// Process ACCEPT response
+    pub async fn process_accept(
+        &self,
+        response: Accept,
+        enr: Enr,
+        content_keys: Vec<RawContentKey>,
+    ) -> anyhow::Result<Accept> {
+        let content_keys_offered: Result<Vec<TContentKey>, TContentKey::Error> = content_keys
+            .into_iter()
+            .map(|key| TContentKey::try_from(key))
+            .collect();
+
+        let content_keys_offered: Vec<TContentKey> = content_keys_offered
+            .map_err(|_| anyhow!("Unable to decode our own offered content keys"))?;
+
+        let conn_id = response.connection_id.to_be();
+
+        // Do not initialize uTP stream if remote node doesn't have interest in the offered content keys
+        if response.content_keys.is_zero() {
+            return Ok(response);
+        }
+
+        // initiate the connection to the acceptor
+        let (tx, rx) = tokio::sync::oneshot::channel::<UtpStream>();
+        let utp_request = UtpListenerRequest::Connect(
+            conn_id,
+            enr,
+            self.protocol.clone(),
+            UtpStreamId::OfferStream,
+            tx,
+        );
+
+        self.utp_listener_tx
+            .send(utp_request).map_err(|err| anyhow!("Unable to send Connect request to UtpListener when processing ACCEPT message: {err}"))?;
+
+        let mut conn = rx.await?;
+        // Handle STATE packet for SYN
+        let mut buf = [0; BUF_SIZE];
+        conn.recv(&mut buf).await?;
+
+        let content_items = self.provide_requested_content(&response, content_keys_offered)?;
+
+        let content_payload = ContentPayloadList::new(content_items)
+            .map_err(|err| anyhow!("Unable to build content payload: {err:?}"))?;
+
+        tokio::spawn(async move {
+            // send the content to the acceptor over a uTP stream
+            if let Err(err) = conn.send_to(&content_payload.as_ssz_bytes()).await {
+                warn!("Error sending content {err}");
+            };
+            // Close uTP connection
+            if let Err(err) = conn.close().await {
+                warn!("Unable to close uTP connection!: {err}")
+            };
+        });
+        Ok(response)
     }
 
     /// Processes a Pong response.
@@ -1270,6 +1353,37 @@ where
                 }
             }
         }
+    }
+
+    /// Provide the requested content key and content value for the acceptor
+    fn provide_requested_content(
+        &self,
+        accept_message: &Accept,
+        content_keys_offered: Vec<TContentKey>,
+    ) -> anyhow::Result<Vec<ByteList>> {
+        let mut content_items: Vec<ByteList> = Vec::new();
+
+        for (i, key) in accept_message
+            .content_keys
+            .clone()
+            .iter()
+            .zip(content_keys_offered.iter())
+        {
+            if i == true {
+                match self.storage.read().get(key) {
+                    Ok(content) => match content {
+                        Some(content) => content_items.push(content.into()),
+                        None => return Err(anyhow!("Unable to read offered content!")),
+                    },
+                    Err(err) => {
+                        return Err(anyhow!(
+                            "Unable to get offered content from portal storage: {err}"
+                        ))
+                    }
+                }
+            }
+        }
+        Ok(content_items)
     }
 
     /// Advances a query (if one is active for the node) using the received ENRs.
