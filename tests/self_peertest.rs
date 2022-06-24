@@ -4,12 +4,20 @@ mod test {
     use std::{thread, time};
     use trin_core::cli::TrinConfig;
 
-    #[tokio::test(flavor = "multi_thread")]
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_launches() {
-        tracing_subscriber::fmt::init();
+        log::debug!("debug log");
+
+
+        // if the first failure is here, then `cargo test` *does* capture output
+        assert!(false);
 
         // Run a client, as a buddy peer for ping tests, etc.
         let peertest = peertest::launch_peertest_nodes(2).await;
+
+        // if the first failure is here or later, then `cargo test` does *not* capture output
+        assert!(false);
+
         // Short sleep to make sure all peertest nodes can connect
         thread::sleep(time::Duration::from_secs(1));
 

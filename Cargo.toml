@@ -29,6 +29,9 @@ trin-state = { path = "trin-state" }
 
 [dev-dependencies]
 ethportal-peertest = { path = "ethportal-peertest" }
+env_logger = "0.8.2"
+test-log = { version = "0.2.10", features = ["trace"] }
+tracing-subscriber = "0.2.18"
 
 [workspace]
 members = [
