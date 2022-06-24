@@ -394,7 +394,7 @@ where
     ///     the node with NodeId, Enr, and NodeStatus
     pub fn bucket_entries(&self) -> HashMap<usize, Vec<(NodeId, Enr, NodeStatus, U256)>> {
         self.kbuckets
-            .write()
+            .read()
             .buckets_iter()
             .enumerate()
             .filter(|(_, bucket)| bucket.num_entries() > 0)
