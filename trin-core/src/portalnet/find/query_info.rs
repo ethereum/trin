@@ -39,7 +39,7 @@ pub enum QueryType<TContentKey> {
         target: TContentKey,
 
         /// A callback channel for the result of the query.
-        callback: Option<oneshot::Sender<Vec<u8>>>,
+        callback: Option<oneshot::Sender<Option<Vec<u8>>>>,
     },
 }
 
