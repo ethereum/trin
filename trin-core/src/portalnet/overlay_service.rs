@@ -493,7 +493,7 @@ where
                 query_event = OverlayService::<TContentKey, TMetric, TValidator>::query_event_poll(&mut self.query_pool) => {
                     match query_event {
                         // Send a FINDNODES on behalf of the query.
-                        FindNodeQueryEvent::Waiting(query_id, node_id, request) => {
+                        QueryEvent::Waiting(query_id, node_id, request) => {
 
                             // Look up the node's ENR.
                             if let Some(enr) = self.find_enr(&node_id) {
@@ -518,7 +518,7 @@ where
 
                         }
                         // Query has ended.
-                        FindNodeQueryEvent::Finished(query_id, mut query_info, query) | FindNodeQueryEvent::TimedOut(query_id, mut query_info, query) => {
+                        QueryEvent::Finished(query_id, mut query_info, query) | QueryEvent::TimedOut(query_id, mut query_info, query) => {
                             let result = query.into_result();
                             // Obtain the ENRs for the resulting nodes.
                             let mut found_enrs = Vec::new();
@@ -651,19 +651,19 @@ where
 
     /// Maintains the query pool.
     ///
-    /// Returns a `FindNodeQueryEvent` when the `QueryPoolState` updates.
+    /// Returns a `QueryEvent` when the `QueryPoolState` updates.
     /// This happens when a query needs to send a request to a node, when a query has completed,
     // or when a query has timed out.
-    async fn query_event_poll(
-        queries: &mut QueryPool<NodeId, FindNodeQuery<NodeId>, TContentKey>,
-    ) -> FindNodeQueryEvent<TContentKey> {
+    async fn query_event_poll<TQuery: Query<NodeId>>(
+        queries: &mut QueryPool<NodeId, TQuery, TContentKey>,
+    ) -> QueryEvent<TQuery, TContentKey> {
         future::poll_fn(move |_cx| match queries.poll() {
             QueryPoolState::Finished(query_id, query_info, query) => {
-                Poll::Ready(FindNodeQueryEvent::Finished(query_id, query_info, query))
+                Poll::Ready(QueryEvent::Finished(query_id, query_info, query))
             }
             QueryPoolState::Timeout(query_id, query_info, query) => {
                 warn!("Query id: {:?} timed out", query_id);
-                Poll::Ready(FindNodeQueryEvent::TimedOut(query_id, query_info, query))
+                Poll::Ready(QueryEvent::TimedOut(query_id, query_info, query))
             }
             QueryPoolState::Waiting(Some((query_id, query_info, query, return_peer))) => {
                 let node_id = return_peer;
@@ -676,7 +676,7 @@ where
                     }
                 };
 
-                Poll::Ready(FindNodeQueryEvent::Waiting(query_id, node_id, request_body))
+                Poll::Ready(QueryEvent::Waiting(query_id, node_id, request_body))
             }
 
             QueryPoolState::Waiting(None) | QueryPoolState::Idle => Poll::Pending,
@@ -1674,13 +1674,13 @@ where
 
 /// The result of the `query_event_poll` indicating an action is required to further progress an
 /// active query.
-pub enum FindNodeQueryEvent<TContentKey> {
+pub enum QueryEvent<TQuery, TContentKey> {
     /// The query is waiting for a peer to be contacted.
     Waiting(QueryId, NodeId, Request),
     /// The query has timed out, possible returning peers.
-    TimedOut(QueryId, QueryInfo<TContentKey>, FindNodeQuery<NodeId>),
+    TimedOut(QueryId, QueryInfo<TContentKey>, TQuery),
     /// The query has completed successfully.
-    Finished(QueryId, QueryInfo<TContentKey>, FindNodeQuery<NodeId>),
+    Finished(QueryId, QueryInfo<TContentKey>, TQuery),
 }
 
 const MAX_ENR_SIZE: usize = 300;
@@ -2449,7 +2449,7 @@ mod tests {
             )
             .await;
         match event {
-            FindNodeQueryEvent::Waiting(query_id, node_id, request) => {
+            QueryEvent::Waiting(query_id, node_id, request) => {
                 match request {
                     Request::FindNodes(find_nodes) => {
                         assert_eq!(
@@ -2486,7 +2486,7 @@ mod tests {
         // Check that the request is being sent to either node 1 or node 2. Keep track of which.
         let first_node_id: Option<NodeId>;
         match event {
-            FindNodeQueryEvent::Waiting(_, node_id, _) => {
+            QueryEvent::Waiting(_, node_id, _) => {
                 assert!((node_id == node_id_1) || (node_id == node_id_2));
                 first_node_id = Some(node_id);
             }
@@ -2506,7 +2506,7 @@ mod tests {
             node_id_1
         };
         match event {
-            FindNodeQueryEvent::Waiting(_, node_id, _) => {
+            QueryEvent::Waiting(_, node_id, _) => {
                 assert_eq!(node_id, second_node_id);
             }
             _ => panic!(),
@@ -2522,7 +2522,7 @@ mod tests {
             .await;
 
         match event {
-            FindNodeQueryEvent::Finished(query_id, query_info, query) => {
+            QueryEvent::Finished(query_id, query_info, query) => {
                 assert_eq!(query_id, QueryId(0));
                 let results = query.into_result();
 
