@@ -284,7 +284,7 @@ pub struct OverlayService<TContentKey, TMetric, TValidator> {
     /// A map of active outgoing requests.
     active_outgoing_requests: Arc<RwLock<HashMap<OverlayRequestId, ActiveOutgoingRequest>>>,
     /// All of the queries currently being performed.
-    query_pool: QueryPool<NodeId, FindNodeQuery<NodeId>>,
+    query_pool: QueryPool<NodeId, FindNodeQuery<NodeId>, TContentKey>,
     /// Timeout after which a peer in an ongoing query is marked unresponsive.
     query_peer_timeout: Duration,
     /// Number of peers to request data from in parallel for a single query.
@@ -534,7 +534,7 @@ where
                                     warn!("ENR not present in queries results.");
                                 }
                             }
-                            if let Some(callback) = query_info.callback {
+                            if let QueryType::FindNode { callback: Some(callback), .. } = query_info.query_type {
                                 if let Err(_) = callback.send(found_enrs.clone()) {
                                     error!("Failed to send FindNode query {} results to callback", query_id);
                                 }
@@ -655,8 +655,8 @@ where
     /// This happens when a query needs to send a request to a node, when a query has completed,
     // or when a query has timed out.
     async fn query_event_poll(
-        queries: &mut QueryPool<NodeId, FindNodeQuery<NodeId>>,
-    ) -> FindNodeQueryEvent {
+        queries: &mut QueryPool<NodeId, FindNodeQuery<NodeId>, TContentKey>,
+    ) -> FindNodeQueryEvent<TContentKey> {
         future::poll_fn(move |_cx| match queries.poll() {
             QueryPoolState::Finished(query_id, query_info, query) => {
                 Poll::Ready(FindNodeQueryEvent::Finished(query_id, query_info, query))
@@ -1609,10 +1609,12 @@ where
         };
 
         let query_info = QueryInfo {
-            query_type: QueryType::FindNode(*target),
+            query_type: QueryType::FindNode {
+                target: *target,
+                distances_to_request: self.findnodes_query_distances_per_peer,
+                callback: None,
+            },
             untrusted_enrs: SmallVec::from_vec(enrs),
-            callback: None,
-            distances_to_request: self.findnodes_query_distances_per_peer,
         };
 
         let known_closest_peers: Vec<Key<NodeId>> = query_info
@@ -1672,13 +1674,13 @@ where
 
 /// The result of the `query_event_poll` indicating an action is required to further progress an
 /// active query.
-pub enum FindNodeQueryEvent {
+pub enum FindNodeQueryEvent<TContentKey> {
     /// The query is waiting for a peer to be contacted.
     Waiting(QueryId, NodeId, Request),
     /// The query has timed out, possible returning peers.
-    TimedOut(QueryId, QueryInfo, FindNodeQuery<NodeId>),
+    TimedOut(QueryId, QueryInfo<TContentKey>, FindNodeQuery<NodeId>),
     /// The query has completed successfully.
-    Finished(QueryId, QueryInfo, FindNodeQuery<NodeId>),
+    Finished(QueryId, QueryInfo<TContentKey>, FindNodeQuery<NodeId>),
 }
 
 const MAX_ENR_SIZE: usize = 300;
@@ -2367,14 +2369,19 @@ mod tests {
         assert!(query_info.untrusted_enrs.contains(&bootnode1));
         assert!(query_info.untrusted_enrs.contains(&bootnode2));
         match query_info.query_type {
-            QueryType::FindNode(node_id) => {
-                assert_eq!(node_id, target_node_id)
+            QueryType::FindNode {
+                target,
+                distances_to_request,
+                ..
+            } => {
+                assert_eq!(target, target_node_id);
+                assert_eq!(
+                    distances_to_request,
+                    service.findnodes_query_distances_per_peer
+                );
             }
+            _ => panic!("Unexpected query type"),
         }
-        assert_eq!(
-            query_info.distances_to_request,
-            service.findnodes_query_distances_per_peer
-        );
 
         assert!(query.started().is_some());
     }
@@ -2386,10 +2393,12 @@ mod tests {
         query_config: QueryConfig,
     ) {
         let query_info = QueryInfo {
-            query_type: QueryType::FindNode(*target),
+            query_type: QueryType::FindNode {
+                target: *target,
+                callback: None,
+                distances_to_request: service.findnodes_query_distances_per_peer,
+            },
             untrusted_enrs: SmallVec::from_vec(enrs),
-            callback: None,
-            distances_to_request: service.findnodes_query_distances_per_peer,
         };
 
         let known_closest_peers: Vec<Key<NodeId>> = query_info

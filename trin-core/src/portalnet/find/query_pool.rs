@@ -39,28 +39,35 @@ pub trait TargetKey<TNodeId> {
 /// Internally, a `Query` is in turn driven by an underlying `QueryPeerIter`
 /// that determines the peer selection strategy, i.e. the order in which the
 /// peers involved in the query should be contacted.
-pub struct QueryPool<TNodeId, TQuery> {
+pub struct QueryPool<TNodeId, TQuery, TContentKey> {
     next_id: QueryId,
     query_timeout: Duration,
-    queries: FnvHashMap<QueryId, (QueryInfo, TQuery)>,
+    queries: FnvHashMap<QueryId, (QueryInfo<TContentKey>, TQuery)>,
     marker: PhantomData<TNodeId>,
 }
 
 /// The observable states emitted by [`QueryPool::poll`].
 #[allow(clippy::type_complexity)]
-pub enum QueryPoolState<'a, TNodeId, TQuery> {
+pub enum QueryPoolState<'a, TNodeId, TQuery, TContentKey> {
     /// The pool is idle, i.e. there are no queries to process.
     Idle,
     /// At least one query is waiting for results. `Some(request)` indicates
     /// that a new request is now being waited on.
-    Waiting(Option<(QueryId, &'a mut QueryInfo, &'a mut TQuery, TNodeId)>),
+    Waiting(
+        Option<(
+            QueryId,
+            &'a mut QueryInfo<TContentKey>,
+            &'a mut TQuery,
+            TNodeId,
+        )>,
+    ),
     /// A query has finished.
-    Finished(QueryId, QueryInfo, TQuery),
+    Finished(QueryId, QueryInfo<TContentKey>, TQuery),
     /// A query has timed out.
-    Timeout(QueryId, QueryInfo, TQuery),
+    Timeout(QueryId, QueryInfo<TContentKey>, TQuery),
 }
 
-impl<TNodeId, TQuery> QueryPool<TNodeId, TQuery>
+impl<TNodeId, TQuery, TContentKey> QueryPool<TNodeId, TQuery, TContentKey>
 where
     TNodeId: Into<Key<TNodeId>> + Eq + Clone,
     TQuery: Query<TNodeId>,
@@ -76,12 +83,12 @@ where
     }
 
     /// Returns an iterator over the queries in the pool.
-    pub fn iter(&self) -> impl Iterator<Item = &(QueryInfo, TQuery)> {
+    pub fn iter(&self) -> impl Iterator<Item = &(QueryInfo<TContentKey>, TQuery)> {
         self.queries.values()
     }
 
     /// Adds a query to the pool.
-    pub fn add_query(&mut self, query_info: QueryInfo, query: TQuery) -> QueryId {
+    pub fn add_query(&mut self, query_info: QueryInfo<TContentKey>, query: TQuery) -> QueryId {
         let id = self.next_id;
         self.next_id = QueryId(self.next_id.wrapping_add(1));
         self.queries.insert(id, (query_info, query));
@@ -89,12 +96,12 @@ where
     }
 
     /// Returns a mutable reference to a query with the given ID, if it is in the pool.
-    pub fn get_mut(&mut self, id: QueryId) -> Option<&mut (QueryInfo, TQuery)> {
+    pub fn get_mut(&mut self, id: QueryId) -> Option<&mut (QueryInfo<TContentKey>, TQuery)> {
         self.queries.get_mut(&id)
     }
 
     /// Polls the pool to advance the queries.
-    pub fn poll(&mut self) -> QueryPoolState<'_, TNodeId, TQuery> {
+    pub fn poll(&mut self) -> QueryPoolState<'_, TNodeId, TQuery, TContentKey> {
         let now = Instant::now();
         let mut finished = None;
         let mut waiting = None;

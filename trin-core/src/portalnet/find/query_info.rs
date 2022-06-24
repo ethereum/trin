@@ -1,6 +1,9 @@
 use crate::portalnet::{
     find::query_pool::TargetKey,
-    types::messages::{FindNodes, Request},
+    types::{
+        content_key::OverlayContentKey,
+        messages::{FindContent, FindNodes, Request},
+    },
 };
 use discv5::{enr::NodeId, kbucket::Key, Enr};
 use futures::channel::oneshot;
@@ -8,47 +11,70 @@ use smallvec::SmallVec;
 
 /// Information about a query.
 #[derive(Debug)]
-pub struct QueryInfo {
+pub struct QueryInfo<TContentKey> {
     /// What we are querying and why.
-    pub query_type: QueryType,
+    pub query_type: QueryType<TContentKey>,
 
     /// Temporary ENRs used when trying to reach nodes.
     pub untrusted_enrs: SmallVec<[Enr; 16]>,
-
-    /// A callback channel for the service that requested the query.
-    pub callback: Option<oneshot::Sender<Vec<Enr>>>,
-
-    /// The number of distances we request for each peer.
-    pub distances_to_request: usize,
 }
 
 /// Additional information about the query.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum QueryType {
-    /// The user requested a `FIND_NODE` query to be performed. It should be reported when finished.
-    FindNode(NodeId),
+#[derive(Debug)]
+pub enum QueryType<TContentKey> {
+    /// The user requested a `FIND_NODE` query to be performed.
+    FindNode {
+        /// The target node.
+        target: NodeId,
+
+        /// A callback channel for the result of the query.
+        callback: Option<oneshot::Sender<Vec<Enr>>>,
+
+        /// The number of distances we request for each peer.
+        distances_to_request: usize,
+    },
+    /// The user requested a `FIND_CONTENT` query to be performed.
+    FindContent {
+        /// The target content.
+        target: TContentKey,
+
+        /// A callback channel for the result of the query.
+        callback: Option<oneshot::Sender<Vec<u8>>>,
+    },
 }
 
-impl QueryInfo {
+impl<TContentKey: OverlayContentKey> QueryInfo<TContentKey> {
     /// Builds an RPC Request, given the QueryInfo
     #[allow(dead_code)]
     pub(crate) fn rpc_request(&self, peer: NodeId) -> Result<Request, &'static str> {
         let request = match self.query_type {
-            QueryType::FindNode(node_id) => {
-                let distances = findnode_log2distance(node_id, peer, self.distances_to_request)
+            QueryType::FindNode {
+                target,
+                distances_to_request,
+                ..
+            } => {
+                let distances = findnode_log2distance(target, peer, distances_to_request)
                     .ok_or("Requested a node find itself")?;
                 Request::FindNodes(FindNodes { distances })
             }
+            QueryType::FindContent { ref target, .. } => Request::FindContent(FindContent {
+                content_key: target.clone().into(),
+            }),
         };
 
         Ok(request)
     }
 }
 
-impl TargetKey<NodeId> for QueryInfo {
+impl<TContentKey: OverlayContentKey> TargetKey<NodeId> for QueryInfo<TContentKey> {
     fn key(&self) -> Key<NodeId> {
         match self.query_type {
-            QueryType::FindNode(ref node_id) => Key::from(*node_id),
+            QueryType::FindNode { ref target, .. } => Key::from(*target),
+            QueryType::FindContent { ref target, .. } => {
+                let content_id = target.content_id();
+                let node_id = NodeId::new(&content_id);
+                Key::from(node_id)
+            }
         }
     }
 }
