@@ -4325,6 +4325,7 @@ dependencies = [
  "discv5",
  "env_logger",
  "eth2_ssz",
+ "eth2_ssz_types",
  "ethereum-types 0.12.1",
  "hex",
  "httpmock",

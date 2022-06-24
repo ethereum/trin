@@ -109,14 +109,17 @@ impl Header {
         }
     }
 
-    pub fn from_infura_response(response: Value) -> anyhow::Result<Self> {
+    pub fn from_get_block_jsonrpc_response(response: Value) -> anyhow::Result<Self> {
         if !response.is_object() {
-            return Err(anyhow!("Invalid infura response: Expected an object."));
+            return Err(anyhow!("Invalid jsonrpc response: Expected an object."));
         }
-        let result = response["result"].as_object().unwrap();
+        let result = response["result"]
+            .as_object()
+            .ok_or_else(|| anyhow!("Invalid jsonrpc response. Missing 'result'."))?;
 
         Ok(Self {
-            // todo: support all fields not strictly required for validation
+            // warning: this code skips a few fields, because the result is only used for
+            // peer content validation
             parent_hash: try_value_into_h256(&result["parentHash"])?,
             uncles_hash: try_value_into_h256(&result["sha3Uncles"])?,
             author: Address::random(),
@@ -138,7 +141,7 @@ impl Header {
 }
 
 //
-// Custom util fns for 0x-prefixed hexstrings returned by infura
+// Custom util fns for 0x-prefixed hexstrings returned by jsonrpc
 //
 fn try_value_into_h256(val: &Value) -> anyhow::Result<H256> {
     let result = val
@@ -194,6 +197,12 @@ impl Decodable for Header {
     }
 }
 
+impl Encodable for Header {
+    fn rlp_append(&self, s: &mut RlpStream) {
+        self.stream_rlp(s, true);
+    }
+}
+
 impl PartialEq for Header {
     fn eq(&self, other: &Self) -> bool {
         self.parent_hash == other.parent_hash
@@ -212,12 +221,6 @@ impl PartialEq for Header {
             && self.mix_hash == other.mix_hash
             && self.nonce == other.nonce
             && self.base_fee_per_gas == other.base_fee_per_gas
-    }
-}
-
-impl Encodable for Header {
-    fn rlp_append(&self, s: &mut RlpStream) {
-        self.stream_rlp(s, true);
     }
 }
 
@@ -252,7 +255,7 @@ mod tests {
     }
 
     #[test]
-    fn decode_infura_response() {
+    fn decode_infura_jsonrpc_response() {
         // https://etherscan.io/block/6008149
         let val = json!({
             "jsonrpc": "2.0",
@@ -283,7 +286,7 @@ mod tests {
                 ]
             }
         });
-        let header = Header::from_infura_response(val).unwrap();
+        let header = Header::from_get_block_jsonrpc_response(val).unwrap();
         assert_eq!(header.difficulty, U256::from(3371913793060314u64));
     }
 }

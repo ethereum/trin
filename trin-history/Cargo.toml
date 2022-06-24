@@ -13,6 +13,7 @@ async-trait = "0.1.53"
 bytes = "1.1.0"
 discv5 = { git = "https://github.com/sigp/discv5.git", branch = "master" }
 eth2_ssz = "0.4.0"
+eth2_ssz_types = "0.2.1"
 ethereum-types = "0.12.1"
 hex = "0.4.3"
 httpmock = "0.6.6"

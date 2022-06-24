@@ -8,7 +8,7 @@ use crate::{
         service::dispatch_infura_request,
         types::{HistoryJsonRpcRequest, JsonRequest, Params},
     },
-    portalnet::types::{content_key::IdentityContentKey, messages::ByteList},
+    portalnet::types::content_key::IdentityContentKey,
     types::header::Header,
     utils::infura::INFURA_BASE_URL,
 };
@@ -79,15 +79,15 @@ impl HeaderOracle {
             id: 1,
         };
         let response: Value = match dispatch_infura_request(request, &self.infura_url) {
-            Ok(val) => match serde_json::from_str(&val) {
-                Ok(val) => val,
-                Err(msg) => {
-                    return Err(anyhow!("Unable to validate content with Infura: {:?}", msg))
-                }
-            },
-            Err(msg) => return Err(anyhow!("Unable to validate content with Infura: {:?}", msg)),
+            Ok(val) => serde_json::from_str(&val)?,
+            Err(msg) => {
+                return Err(anyhow!(
+                    "Unable to request validation data from Infura: {:?}",
+                    msg
+                ))
+            }
         };
-        let header = Header::from_infura_response(response).unwrap();
+        let header = Header::from_get_block_jsonrpc_response(response)?;
         Ok(header)
     }
 
@@ -103,7 +103,7 @@ pub trait Validator<TContentKey> {
     async fn validate_content(
         &mut self,
         content_key: &TContentKey,
-        content: &ByteList,
+        content: &[u8],
     ) -> anyhow::Result<()>
     where
         TContentKey: 'async_trait;
@@ -117,7 +117,7 @@ impl Validator<IdentityContentKey> for MockValidator {
     async fn validate_content(
         &mut self,
         _content_key: &IdentityContentKey,
-        _content: &ByteList,
+        _content: &[u8],
     ) -> anyhow::Result<()>
     where
         IdentityContentKey: 'async_trait,

@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 
 use trin_core::{
-    portalnet::types::{content_key::StateContentKey, messages::ByteList},
+    portalnet::types::content_key::StateContentKey,
     types::validation::{HeaderOracle, Validator},
 };
 
@@ -14,7 +14,7 @@ impl Validator<StateContentKey> for StateValidator {
     async fn validate_content(
         &mut self,
         _content_key: &StateContentKey,
-        _content: &ByteList,
+        _content: &[u8],
     ) -> anyhow::Result<()>
     where
         StateContentKey: 'async_trait,

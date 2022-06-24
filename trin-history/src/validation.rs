@@ -6,7 +6,7 @@ use ethereum_types::H256;
 use ssz::Decode;
 
 use trin_core::{
-    portalnet::types::{content_key::HistoryContentKey, messages::ByteList},
+    portalnet::types::content_key::HistoryContentKey,
     types::{
         block_body::BlockBody,
         header::Header,
@@ -24,7 +24,7 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
     async fn validate_content(
         &mut self,
         content_key: &HistoryContentKey,
-        content: &ByteList,
+        content: &[u8],
     ) -> anyhow::Result<()>
     where
         HistoryContentKey: 'async_trait,
@@ -49,7 +49,15 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                 }
             }
             HistoryContentKey::BlockBody(key) => {
-                let block_body = BlockBody::from_ssz_bytes(content).unwrap();
+                let block_body = match BlockBody::from_ssz_bytes(content) {
+                    Ok(val) => val,
+                    Err(msg) => {
+                        return Err(anyhow!(
+                            "Block Body content has invalid encoding: {:?}",
+                            msg
+                        ))
+                    }
+                };
                 let trusted_header: Header = self
                     .header_oracle
                     .write()
@@ -74,7 +82,15 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                 Ok(())
             }
             HistoryContentKey::BlockReceipts(key) => {
-                let receipts = Receipts::from_ssz_bytes(content).unwrap();
+                let receipts = match Receipts::from_ssz_bytes(content) {
+                    Ok(val) => val,
+                    Err(msg) => {
+                        return Err(anyhow!(
+                            "Block Receipts content has invalid encoding: {:?}",
+                            msg
+                        ))
+                    }
+                };
                 let trusted_header: Header = self
                     .header_oracle
                     .write()
@@ -101,10 +117,12 @@ mod tests {
     use hex;
     use httpmock::prelude::*;
     use serde_json::json;
+    use ssz::Encode;
+    use ssz_types::{typenum, VariableList};
 
     use trin_core::portalnet::types::content_key::BlockBody as BlockBodyKey;
-    use trin_core::portalnet::types::content_key::BlockHeader;
-    use trin_core::portalnet::types::content_key::BlockReceipts;
+    use trin_core::portalnet::types::content_key::{BlockHeader, BlockReceipts};
+    use trin_core::portalnet::types::messages::ByteList;
     use trin_core::utils::bytes::hex_decode;
 
     fn get_header_rlp() -> Vec<u8> {
@@ -146,6 +164,39 @@ mod tests {
                     }
                 }));
         });
+        server.mock(|when, then| {
+            when.method(POST)
+                .path("/14764013");
+            then.status(200)
+                .header("content-type", "application/json")
+                .json_body(json!({
+                    "jsonrpc":"2.0",
+                    "id":1,
+                    "result": {
+                        "baseFeePerGas": "0x1aae1651b6",
+                        "difficulty": "0x327bd7ad3116ce",
+                        "extraData": "0x457468657265756d50504c4e532f326d696e6572735f55534133",
+                        "gasLimit": "0x1c9c364",
+                        "gasUsed": "0x140db1",
+                        "hash": "0x720704f3aa11c53cf344ea069db95cecb81ad7453c8f276b2a1062979611f09c",
+                        "logsBloom": "", // logs removed since they're unnecessary for validation
+                        "miner": "0x00192fb10df37c9fb26829eb2cc623cd1bf599e8",
+                        "mixHash": "0xf1a32e24eb62f01ec3f2b3b5893f7be9062fbf5482bc0d490a54352240350e26",
+                        "nonce": "0x2087fbb243327696",
+                        "number": "0xe147ed",
+                        "parentHash": "0x2c58e3212c085178dbb1277e2f3c24b3f451267a75a234945c1581af639f4a7a",
+                        "receiptsRoot": "0x168a3827607627e781941dc777737fc4b6beb69a8b139240b881992b35b854ea",
+                        "sha3Uncles": "0x58a694212e0416353a4d3865ccf475496b55af3a3d3b002057000741af973191",
+                        "size": "0x1f96",
+                        "stateRoot": "0x67a9fb631f4579f9015ef3c6f1f3830dfa2dc08afe156f750e90022134b9ebf6",
+                        "timestamp": "0x627d9afa",
+                        "totalDifficulty": "0xa55e1baf12dfa3fc50c",
+                        "transactions": [],
+                        "transactionsRoot": "0x18a2978fc62cd1a23e90de920af68c0c3af3330327927cda4c005faccefb5ce7",
+                        "uncles": ["0x817d4158df626cd8e9a20da9552c51a0d43f22b25de0b4dc5a089d81af899c70"]
+                    }
+                }));
+        });
         server
     }
 
@@ -167,7 +218,7 @@ mod tests {
             block_hash: header.hash().0,
         });
         chain_history_validator
-            .validate_content(&content_key, &header_bytelist)
+            .validate_content(&content_key, &header_bytelist.to_vec())
             .await
             .unwrap();
     }
@@ -195,7 +246,7 @@ mod tests {
             block_hash: header.hash().0,
         });
         chain_history_validator
-            .validate_content(&content_key, &header_bytelist)
+            .validate_content(&content_key, &header_bytelist.to_vec())
             .await
             .unwrap();
     }
@@ -224,70 +275,139 @@ mod tests {
             block_hash: header.hash().0,
         });
         chain_history_validator
-            .validate_content(&content_key, &header_bytelist)
+            .validate_content(&content_key, &header_bytelist.to_vec())
             .await
             .unwrap();
     }
 
     #[tokio::test]
-    #[ignore]
     async fn validate_block_body() {
         let server = setup_mock_infura_server();
-        let block_body_rlp = get_ssz_encoded_block_body();
-        let block_body_bytelist = ByteList::try_from(block_body_rlp.clone()).unwrap();
 
-        let infura_url = server.url("/get_block_body");
+        let ssz_block_body: Vec<u8> =
+            std::fs::read("../trin-core/src/types/assets/block_body_14764013.bin").unwrap();
+        let block_body_bytelist: VariableList<_, typenum::U16384> =
+            VariableList::from(ssz_block_body);
+
+        let infura_url = server.url("/14764013");
         let header_oracle = Arc::new(RwLock::new(HeaderOracle {
             infura_url,
             ..HeaderOracle::default()
         }));
         let mut chain_history_validator = ChainHistoryValidator { header_oracle };
-        let block_hash = block_14764013_hash();
-        let block_hash = H256::from_slice(&block_hash);
-        let content_key = HistoryContentKey::BlockBody(BlockBodyKey {
-            chain_id: 1,
-            block_hash: block_hash.0,
-        });
+        let content_key = block_14764013_body_key();
+
         chain_history_validator
-            .validate_content(&content_key, &block_body_bytelist)
+            .validate_content(&content_key, &block_body_bytelist.to_vec())
             .await
             .unwrap();
     }
 
     #[tokio::test]
-    #[ignore]
-    async fn validate_receipts() {
+    #[should_panic]
+    async fn invalidate_block_body() {
         let server = setup_mock_infura_server();
-        let receipts_rlp = get_ssz_encoded_receipts();
-        let receipts_bytelist = ByteList::try_from(receipts_rlp.clone()).unwrap();
 
-        let infura_url = server.url("/get_block_body");
+        let ssz_block_body: Vec<u8> =
+            std::fs::read("../trin-core/src/types/assets/block_body_14764013.bin").unwrap();
+        let mut valid_block = BlockBody::from_ssz_bytes(&ssz_block_body).unwrap();
+
+        // construct invalid ssz encoded block body
+        valid_block.txs.truncate(1);
+        let invalid_block = BlockBody {
+            txs: valid_block.txs,
+            uncles: valid_block.uncles,
+        };
+        let invalid_ssz_block_body = invalid_block.as_ssz_bytes();
+        let invalid_content: VariableList<_, typenum::U16384> =
+            VariableList::from(invalid_ssz_block_body);
+
+        let infura_url = server.url("/14764013");
         let header_oracle = Arc::new(RwLock::new(HeaderOracle {
             infura_url,
             ..HeaderOracle::default()
         }));
         let mut chain_history_validator = ChainHistoryValidator { header_oracle };
-        let block_hash = block_14764013_hash();
-        let block_hash = H256::from_slice(&block_hash);
-        let content_key = HistoryContentKey::BlockReceipts(BlockReceipts {
-            chain_id: 1,
-            block_hash: block_hash.0,
-        });
+        let content_key = block_14764013_body_key();
+
         chain_history_validator
-            .validate_content(&content_key, &receipts_bytelist)
+            .validate_content(&content_key, &invalid_content.to_vec())
             .await
             .unwrap();
     }
 
-    fn block_14764013_hash() -> Vec<u8> {
-        hex_decode("0x720704f3aa11c53cf344ea069db95cecb81ad7453c8f276b2a1062979611f09c").unwrap()
+    #[tokio::test]
+    async fn validate_receipts() {
+        let server = setup_mock_infura_server();
+        let ssz_receipts: Vec<u8> =
+            std::fs::read("../trin-core/src/types/assets/receipts_14764013.bin").unwrap();
+        let content: VariableList<_, typenum::U16384> = VariableList::from(ssz_receipts);
+
+        let infura_url = server.url("/14764013");
+        let header_oracle = Arc::new(RwLock::new(HeaderOracle {
+            infura_url,
+            ..HeaderOracle::default()
+        }));
+        let mut chain_history_validator = ChainHistoryValidator { header_oracle };
+        let content_key = block_14764013_receipts_key();
+
+        chain_history_validator
+            .validate_content(&content_key, &content.to_vec())
+            .await
+            .unwrap();
     }
 
-    fn get_ssz_encoded_block_body() -> Vec<u8> {
-        hex::decode("").unwrap()
+    #[tokio::test]
+    #[should_panic]
+    async fn invalidate_receipts() {
+        let server = setup_mock_infura_server();
+        let ssz_receipts: Vec<u8> =
+            std::fs::read("../trin-core/src/types/assets/receipts_14764013.bin").unwrap();
+        let mut valid_receipts = Receipts::from_ssz_bytes(&ssz_receipts).unwrap();
+
+        // construct invalid ssz encoded receipts
+        valid_receipts.receipt_list.truncate(1);
+        let invalid_receipts = Receipts {
+            receipt_list: valid_receipts.receipt_list,
+        };
+        let invalid_ssz_receipts = invalid_receipts.as_ssz_bytes();
+        let invalid_content: VariableList<_, typenum::U16384> =
+            VariableList::from(invalid_ssz_receipts);
+
+        let infura_url = server.url("/14764013");
+        let header_oracle = Arc::new(RwLock::new(HeaderOracle {
+            infura_url,
+            ..HeaderOracle::default()
+        }));
+        let mut chain_history_validator = ChainHistoryValidator { header_oracle };
+        let content_key = block_14764013_receipts_key();
+
+        chain_history_validator
+            .validate_content(&content_key, &invalid_content.to_vec())
+            .await
+            .unwrap();
     }
 
-    fn get_ssz_encoded_receipts() -> Vec<u8> {
-        hex::decode("").unwrap()
+    fn block_14764013_hash() -> H256 {
+        H256::from_slice(
+            &hex_decode("0x720704f3aa11c53cf344ea069db95cecb81ad7453c8f276b2a1062979611f09c")
+                .unwrap(),
+        )
+    }
+
+    fn block_14764013_body_key() -> HistoryContentKey {
+        let block_hash = block_14764013_hash();
+        HistoryContentKey::BlockBody(BlockBodyKey {
+            chain_id: 1,
+            block_hash: block_hash.0,
+        })
+    }
+
+    fn block_14764013_receipts_key() -> HistoryContentKey {
+        let block_hash = block_14764013_hash();
+        HistoryContentKey::BlockReceipts(BlockReceipts {
+            chain_id: 1,
+            block_hash: block_hash.0,
+        })
     }
 }
