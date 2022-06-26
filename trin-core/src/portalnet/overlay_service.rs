@@ -1777,7 +1777,7 @@ where
         &mut self,
         target: TContentKey,
         callback: Option<oneshot::Sender<Option<Vec<u8>>>>,
-    ) {
+    ) -> Option<QueryId> {
         // Represent the target content ID with a node ID.
         let target_node_id = NodeId::new(&target.content_id());
         let target_key = Key::from(target_node_id);
@@ -1814,9 +1814,10 @@ where
         // Otherwise, there is no way for the query to progress, so drop it.
         if closest_enrs.is_empty() {
             warn!("Unable to initialize find content query without any known close peers");
+            None
         } else {
             let query = FindContentQuery::with_config(query_config, target_key, closest_enrs);
-            self.find_content_query_pool.add_query(query_info, query);
+            Some(self.find_content_query_pool.add_query(query_info, query))
         }
     }
 
@@ -2714,6 +2715,59 @@ mod tests {
                 assert!(untrusted_enrs.contains(&bootnode));
             }
             _ => panic!(),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_init_find_content_query() {
+        let mut service = task::spawn(build_service());
+
+        let (_, bootnode_enr) = generate_random_remote_enr();
+        let bootnode_node_id = bootnode_enr.node_id();
+        let bootnode_key = kbucket::Key::from(bootnode_node_id);
+
+        let data_radius = U256::from(u64::MAX);
+        let bootnode = Node {
+            enr: bootnode_enr.clone(),
+            data_radius,
+        };
+
+        let connection_direction = ConnectionDirection::Outgoing;
+        let status = NodeStatus {
+            state: ConnectionState::Connected,
+            direction: connection_direction,
+        };
+
+        let _ = service
+            .kbuckets
+            .write()
+            .insert_or_update(&bootnode_key, bootnode, status);
+
+        let target_content = NodeId::random();
+        let target_content_key = IdentityContentKey::new(target_content.raw());
+
+        let query_id = service._init_find_content_query(target_content_key.clone(), None);
+
+        let query_id = query_id.expect("Query ID is `None`");
+        if let Some((query_info, query)) = service.find_content_query_pool.get_mut(query_id) {
+            // Query info should contain the corresponding target content key.
+            assert!(matches!(
+                &query_info.query_type,
+                QueryType::FindContent {
+                    target: _target_content_key,
+                    callback: None
+                }
+            ));
+
+            // Query target should be the key of the target content ID.
+            let target_key = kbucket::Key::from(NodeId::new(&target_content_key.content_id()));
+            assert_eq!(query.target(), target_key);
+
+            // Query info should contain bootnode ENR. It is the only node in the routing table, so
+            // it is among the "closest".
+            assert!(query_info.untrusted_enrs.contains(&bootnode_enr));
+        } else {
+            panic!("Find content query is not in query pool");
         }
     }
 
