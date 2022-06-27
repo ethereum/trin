@@ -1892,6 +1892,8 @@ fn limit_enr_list_to_max_bytes(enrs: Vec<SszEnr>, max_size: usize) -> Vec<SszEnr
 mod tests {
     use super::*;
 
+    use std::time::Instant;
+
     use rstest::rstest;
 
     use crate::{
@@ -2719,59 +2721,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_init_find_content_query() {
-        let mut service = task::spawn(build_service());
-
-        let (_, bootnode_enr) = generate_random_remote_enr();
-        let bootnode_node_id = bootnode_enr.node_id();
-        let bootnode_key = kbucket::Key::from(bootnode_node_id);
-
-        let data_radius = U256::from(u64::MAX);
-        let bootnode = Node {
-            enr: bootnode_enr.clone(),
-            data_radius,
-        };
-
-        let connection_direction = ConnectionDirection::Outgoing;
-        let status = NodeStatus {
-            state: ConnectionState::Connected,
-            direction: connection_direction,
-        };
-
-        let _ = service
-            .kbuckets
-            .write()
-            .insert_or_update(&bootnode_key, bootnode, status);
-
-        let target_content = NodeId::random();
-        let target_content_key = IdentityContentKey::new(target_content.raw());
-
-        let query_id = service._init_find_content_query(target_content_key.clone(), None);
-
-        let query_id = query_id.expect("Query ID is `None`");
-        if let Some((query_info, query)) = service.find_content_query_pool.get_mut(query_id) {
-            // Query info should contain the corresponding target content key.
-            assert!(matches!(
-                &query_info.query_type,
-                QueryType::FindContent {
-                    target: _target_content_key,
-                    callback: None
-                }
-            ));
-
-            // Query target should be the key of the target content ID.
-            let target_key = kbucket::Key::from(NodeId::new(&target_content_key.content_id()));
-            assert_eq!(query.target(), target_key);
-
-            // Query info should contain bootnode ENR. It is the only node in the routing table, so
-            // it is among the "closest".
-            assert!(query_info.untrusted_enrs.contains(&bootnode_enr));
-        } else {
-            panic!("Find content query is not in query pool");
-        }
-    }
-
-    #[tokio::test]
     async fn test_find_enrs() {
         let mut service = task::spawn(build_service());
 
@@ -2809,5 +2758,187 @@ mod tests {
 
         let found_enr2 = service.find_enr(&node_id_2).unwrap();
         assert_eq!(found_enr2, enr2);
+    }
+
+    #[tokio::test]
+    async fn init_find_content_query() {
+        let mut service = task::spawn(build_service());
+
+        let (_, bootnode_enr) = generate_random_remote_enr();
+        let bootnode_node_id = bootnode_enr.node_id();
+        let bootnode_key = kbucket::Key::from(bootnode_node_id);
+
+        let data_radius = U256::from(u64::MAX);
+        let bootnode = Node {
+            enr: bootnode_enr.clone(),
+            data_radius,
+        };
+
+        let connection_direction = ConnectionDirection::Outgoing;
+        let status = NodeStatus {
+            state: ConnectionState::Connected,
+            direction: connection_direction,
+        };
+
+        let _ = service
+            .kbuckets
+            .write()
+            .insert_or_update(&bootnode_key, bootnode, status);
+
+        let target_content = NodeId::random();
+        let target_content_key = IdentityContentKey::new(target_content.raw());
+
+        let query_id = service._init_find_content_query(target_content_key.clone(), None);
+        let query_id = query_id.expect("Query ID for new find content query is `None`");
+
+        let (query_info, query) = service
+            .find_content_query_pool
+            .get_mut(query_id)
+            .expect("Query pool does not contain query");
+
+        // Query info should contain the corresponding target content key.
+        assert!(matches!(
+            &query_info.query_type,
+            QueryType::FindContent {
+                target: _target_content_key,
+                callback: None
+            }
+        ));
+
+        // Query target should be the key of the target content ID.
+        let target_key = kbucket::Key::from(NodeId::new(&target_content_key.content_id()));
+        assert_eq!(query.target(), target_key);
+
+        // Query info should contain bootnode ENR. It is the only node in the routing table, so
+        // it is among the "closest".
+        assert!(query_info.untrusted_enrs.contains(&bootnode_enr));
+    }
+
+    #[tokio::test]
+    async fn advance_find_content_query_with_enrs() {
+        let mut service = task::spawn(build_service());
+
+        let (_, bootnode_enr) = generate_random_remote_enr();
+        let bootnode_node_id = bootnode_enr.node_id();
+        let bootnode_key = kbucket::Key::from(bootnode_node_id);
+
+        let data_radius = U256::from(u64::MAX);
+        let bootnode = Node {
+            enr: bootnode_enr.clone(),
+            data_radius,
+        };
+
+        let connection_direction = ConnectionDirection::Outgoing;
+        let status = NodeStatus {
+            state: ConnectionState::Connected,
+            direction: connection_direction,
+        };
+
+        let _ = service
+            .kbuckets
+            .write()
+            .insert_or_update(&bootnode_key, bootnode, status);
+
+        let target_content = NodeId::random();
+        let target_content_key = IdentityContentKey::new(target_content.raw());
+
+        let query_id = service._init_find_content_query(target_content_key.clone(), None);
+        let query_id = query_id.expect("Query ID for new find content query is `None`");
+
+        let (_, query) = service
+            .find_content_query_pool
+            .get_mut(query_id)
+            .expect("Query pool does not contain query");
+
+        // Poll query to put into waiting state.
+        query.poll(Instant::now());
+
+        // Simulate a response from the bootnode.
+        let (_, enr) = generate_random_remote_enr();
+        service.advance_find_content_query_with_enrs(
+            &query_id,
+            bootnode_enr.clone(),
+            vec![enr.clone()],
+        );
+
+        let (query_info, query) = service
+            .find_content_query_pool
+            .get_mut(query_id)
+            .expect("Query pool does not contain query");
+
+        // Query info should contain the "discovered" ENR.
+        assert!(query_info.untrusted_enrs.contains(&enr));
+
+        // Query result should contain bootnode who responded successfully.
+        match query.clone().into_result() {
+            FindContentQueryResult::ClosestNodes(closest_nodes) => {
+                assert!(closest_nodes.contains(&bootnode_enr.node_id()));
+            }
+            _ => panic!("Unexpected find content query result"),
+        }
+    }
+
+    #[tokio::test]
+    async fn advance_find_content_query_with_content() {
+        let mut service = task::spawn(build_service());
+
+        let (_, bootnode_enr) = generate_random_remote_enr();
+        let bootnode_node_id = bootnode_enr.node_id();
+        let bootnode_key = kbucket::Key::from(bootnode_node_id);
+
+        let data_radius = U256::from(u64::MAX);
+        let bootnode = Node {
+            enr: bootnode_enr.clone(),
+            data_radius,
+        };
+
+        let connection_direction = ConnectionDirection::Outgoing;
+        let status = NodeStatus {
+            state: ConnectionState::Connected,
+            direction: connection_direction,
+        };
+
+        let _ = service
+            .kbuckets
+            .write()
+            .insert_or_update(&bootnode_key, bootnode, status);
+
+        let target_content = NodeId::random();
+        let target_content_key = IdentityContentKey::new(target_content.raw());
+
+        let query_id = service._init_find_content_query(target_content_key.clone(), None);
+        let query_id = query_id.expect("Query ID for new find content query is `None`");
+
+        let (_, query) = service
+            .find_content_query_pool
+            .get_mut(query_id)
+            .expect("Query pool does not contain query");
+
+        // Poll query to put into waiting state.
+        query.poll(Instant::now());
+
+        // Simulate a response from the bootnode.
+        let content: Vec<u8> = vec![0, 1, 2, 3];
+        service.advance_find_content_query_with_content(
+            &query_id,
+            bootnode_enr.clone(),
+            content.clone(),
+        );
+
+        let (_, query) = service
+            .find_content_query_pool
+            .get_mut(query_id)
+            .expect("Query pool does not contain query");
+
+        // Query result should contain content.
+        match query.clone().into_result() {
+            FindContentQueryResult::Content {
+                content: result_content,
+                ..
+            } => {
+                assert_eq!(result_content, content);
+            }
+            _ => panic!("Unexpected find content query result"),
+        }
     }
 }
