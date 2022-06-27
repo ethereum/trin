@@ -694,6 +694,8 @@ where
         // channel if the request was initiated internally (e.g. for maintenance).
         match request.direction {
             RequestDirection::Incoming { id, source } => {
+                self.register_node_activity(source);
+
                 let response = self.handle_request(request.request.clone(), id.clone(), &source);
                 // Send response to responder if present.
                 if let Some(responder) = request.responder {
@@ -939,6 +941,14 @@ where
 
     /// Processes an incoming request from some source node.
     fn process_incoming_request(&mut self, request: Request, _id: RequestId, source: NodeId) {
+        match request {
+            Request::Ping(ping) => self.process_ping(ping, source),
+            _ => {}
+        }
+    }
+
+    /// Register source NodeId activity in overlay routing table
+    fn register_node_activity(&mut self, source: NodeId) {
         // Look up the node in the routing table.
         let key = kbucket::Key::from(source);
         let is_node_in_table = match self.kbuckets.write().entry(&key) {
@@ -975,11 +985,6 @@ where
                 };
                 self.connect_node(node, ConnectionDirection::Incoming);
             }
-        }
-
-        match request {
-            Request::Ping(ping) => self.process_ping(ping, source),
-            _ => {}
         }
     }
 
