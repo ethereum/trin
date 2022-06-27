@@ -551,50 +551,9 @@ where
                         }
                     }
                 }
+                // Handle query events for queries in the find content query pool.
                 query_event = OverlayService::<TContentKey, TMetric, TValidator>::query_event_poll(&mut self.find_content_query_pool) => {
-                    match query_event {
-                        QueryEvent::Waiting(query_id, node_id, request) => {
-                            if let Some(enr) = self.find_enr(&node_id) {
-                            // If we find the node's ENR, then send the request on behalf of the
-                            // query. No callback channel is necessary for the request, because the
-                            // response will be incorporated into the query.
-                                let request = OverlayRequest::new(
-                                    request,
-                                    RequestDirection::Outgoing {
-                                        destination: enr
-                                    },
-                                    None,
-                                    Some(query_id),
-                                );
-                                let _ = self.request_tx.send(request);
-
-                            } else {
-                                // If we cannot find the node's ENR, then we cannot contact the
-                                // node, so fail the query for this node.
-                                error!("[{:?}] Unable to send FINDCONTENT to unknown ENR with node ID {}",
-                                         self.protocol, node_id);
-                                if let Some((_, query)) = self.find_node_query_pool.get_mut(query_id) {
-                                    query.on_failure(&node_id);
-                                }
-                            }
-                        }
-                        QueryEvent::Finished(query_id, query_info, query) | QueryEvent::TimedOut(query_id, query_info, query) => {
-                            let result = query.into_result();
-                            let (content, _closest_nodes) = match result {
-                                FindContentQueryResult::ClosestNodes(closest_nodes)  => (None, closest_nodes),
-                                FindContentQueryResult::Content { content, closest_nodes } => (Some(content), closest_nodes),
-                            };
-
-                            // Send (possibly `None`) content on callback channel.
-                            if let QueryType::FindContent { callback: Some(callback), .. } = query_info.query_type {
-                                if let Err(_) = callback.send(content) {
-                                    error!("Failed to send FindContent query {} result to callback", query_id);
-                                }
-                            }
-
-                            // TODO: Offer content to closest node(s).
-                        }
-                    }
+                    self.handle_find_content_query_event(query_event);
                 }
                 _ = OverlayService::<TContentKey, TMetric, TValidator>::bucket_maintenance_poll(self.protocol.clone(), &self.kbuckets) => {}
                 _ = bucket_refresh_interval.tick() => {
@@ -735,6 +694,66 @@ where
             QueryPoolState::Waiting(None) | QueryPoolState::Idle => Poll::Pending,
         })
         .await
+    }
+
+    /// Handles a `QueryEvent` from a poll on the find content query pool.
+    fn handle_find_content_query_event(
+        &mut self,
+        query_event: QueryEvent<FindContentQuery<NodeId>, TContentKey>,
+    ) {
+        match query_event {
+            QueryEvent::Waiting(query_id, node_id, request) => {
+                if let Some(enr) = self.find_enr(&node_id) {
+                    // If we find the node's ENR, then send the request on behalf of the
+                    // query. No callback channel is necessary for the request, because the
+                    // response will be incorporated into the query.
+                    let request = OverlayRequest::new(
+                        request,
+                        RequestDirection::Outgoing { destination: enr },
+                        None,
+                        Some(query_id),
+                    );
+                    let _ = self.request_tx.send(request);
+                } else {
+                    // If we cannot find the node's ENR, then we cannot contact the
+                    // node, so fail the query for this node.
+                    error!(
+                        "[{:?}] Unable to send FINDCONTENT to unknown ENR with node ID {}",
+                        self.protocol, node_id
+                    );
+                    if let Some((_, query)) = self.find_node_query_pool.get_mut(query_id) {
+                        query.on_failure(&node_id);
+                    }
+                }
+            }
+            QueryEvent::Finished(query_id, query_info, query)
+            | QueryEvent::TimedOut(query_id, query_info, query) => {
+                let result = query.into_result();
+                let (content, _closest_nodes) = match result {
+                    FindContentQueryResult::ClosestNodes(closest_nodes) => (None, closest_nodes),
+                    FindContentQueryResult::Content {
+                        content,
+                        closest_nodes,
+                    } => (Some(content), closest_nodes),
+                };
+
+                // Send (possibly `None`) content on callback channel.
+                if let QueryType::FindContent {
+                    callback: Some(callback),
+                    ..
+                } = query_info.query_type
+                {
+                    if let Err(_) = callback.send(content) {
+                        error!(
+                            "Failed to send FindContent query {} result to callback",
+                            query_id
+                        );
+                    }
+                }
+
+                // TODO: Offer content to closest node(s).
+            }
+        }
     }
 
     /// Processes an overlay request.
@@ -2768,7 +2787,7 @@ mod tests {
         let bootnode_node_id = bootnode_enr.node_id();
         let bootnode_key = kbucket::Key::from(bootnode_node_id);
 
-        let data_radius = U256::from(u64::MAX);
+        let data_radius = U256::MAX;
         let bootnode = Node {
             enr: bootnode_enr.clone(),
             data_radius,
@@ -2822,7 +2841,7 @@ mod tests {
         let bootnode_node_id = bootnode_enr.node_id();
         let bootnode_key = kbucket::Key::from(bootnode_node_id);
 
-        let data_radius = U256::from(u64::MAX);
+        let data_radius = U256::MAX;
         let bootnode = Node {
             enr: bootnode_enr.clone(),
             data_radius,
@@ -2850,7 +2869,8 @@ mod tests {
             .get_mut(query_id)
             .expect("Query pool does not contain query");
 
-        // Poll query to put into waiting state.
+        // Poll query to put into waiting state. Otherwise, `on_success` has no effect on the
+        // query.
         query.poll(Instant::now());
 
         // Simulate a response from the bootnode.
@@ -2886,7 +2906,7 @@ mod tests {
         let bootnode_node_id = bootnode_enr.node_id();
         let bootnode_key = kbucket::Key::from(bootnode_node_id);
 
-        let data_radius = U256::from(u64::MAX);
+        let data_radius = U256::MAX;
         let bootnode = Node {
             enr: bootnode_enr.clone(),
             data_radius,
@@ -2914,7 +2934,8 @@ mod tests {
             .get_mut(query_id)
             .expect("Query pool does not contain query");
 
-        // Poll query to put into waiting state.
+        // Poll query to put into waiting state. Otherwise, `on_success` has no effect on the
+        // query.
         query.poll(Instant::now());
 
         // Simulate a response from the bootnode.
@@ -2939,6 +2960,90 @@ mod tests {
                 assert_eq!(result_content, content);
             }
             _ => panic!("Unexpected find content query result"),
+        }
+    }
+
+    #[tokio::test]
+    async fn handle_find_content_query_event() {
+        let mut service = task::spawn(build_service());
+
+        let (_, bootnode_enr) = generate_random_remote_enr();
+        let bootnode_node_id = bootnode_enr.node_id();
+        let bootnode_key = kbucket::Key::from(bootnode_node_id);
+
+        let data_radius = U256::MAX;
+        let bootnode = Node {
+            enr: bootnode_enr.clone(),
+            data_radius,
+        };
+
+        let connection_direction = ConnectionDirection::Outgoing;
+        let status = NodeStatus {
+            state: ConnectionState::Connected,
+            direction: connection_direction,
+        };
+
+        let _ = service
+            .kbuckets
+            .write()
+            .insert_or_update(&bootnode_key, bootnode, status);
+
+        let target_content = NodeId::random();
+        let target_content_key = IdentityContentKey::new(target_content.raw());
+
+        let (callback_tx, callback_rx) = oneshot::channel();
+        let query_id =
+            service._init_find_content_query(target_content_key.clone(), Some(callback_tx));
+        let query_id = query_id.expect("Query ID for new find content query is `None`");
+
+        let query_event = OverlayService::<_, XorMetric, MockValidator>::query_event_poll(
+            &mut service.find_content_query_pool,
+        )
+        .await;
+
+        // Query event should be `Waiting` variant.
+        assert!(matches!(query_event, QueryEvent::Waiting(_, _, _)));
+
+        service.handle_find_content_query_event(query_event);
+
+        // An outgoing request should be in the request channel.
+        // Check that the fields of the request correspond to the query.
+        let request = assert_ready!(poll_request_rx!(service));
+        let request = request.expect("Request for query is `None`");
+        assert_eq!(
+            request.direction,
+            RequestDirection::Outgoing {
+                destination: bootnode_enr.clone()
+            }
+        );
+        assert_eq!(request.query_id, Some(query_id));
+
+        // Simulate a response from the bootnode.
+        let content: Vec<u8> = vec![0, 1, 2, 3];
+        service.advance_find_content_query_with_content(
+            &query_id,
+            bootnode_enr.clone(),
+            content.clone(),
+        );
+
+        let query_event = OverlayService::<_, XorMetric, MockValidator>::query_event_poll(
+            &mut service.find_content_query_pool,
+        )
+        .await;
+
+        // Query event should be `Finished` variant.
+        assert!(matches!(query_event, QueryEvent::Finished(_, _, _)));
+
+        service.handle_find_content_query_event(query_event);
+
+        match callback_rx
+            .await
+            .expect("Expected result on callback channel receiver")
+        {
+            Some(result_content) => {
+                assert_eq!(result_content, content);
+            }
+            _ => panic!("Unexpected find content query result type"),
         }
     }
 }
