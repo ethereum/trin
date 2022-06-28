@@ -1,19 +1,22 @@
 pub mod cli;
 pub mod jsonrpc;
+pub mod scenarios;
 
 pub use cli::PeertestConfig;
 pub use jsonrpc::get_enode;
 
+use std::net::{IpAddr, Ipv4Addr};
 use std::{sync::Arc, thread, time};
 
 use futures::future;
 
 use trin_core::{
-    cli::TrinConfig, jsonrpc::service::JsonRpcExiter, portalnet::types::messages::SszEnr, socket,
+    cli::TrinConfig, jsonrpc::service::JsonRpcExiter, portalnet::types::messages::SszEnr,
 };
 
 pub struct PeertestNode {
     pub enr: SszEnr,
+    pub web3_ipc_path: String,
     pub exiter: Arc<JsonRpcExiter>,
 }
 
@@ -65,8 +68,7 @@ pub async fn launch_node(id: u16, bootnode_enr: Option<&SszEnr>) -> anyhow::Resu
             TrinConfig::new_from(trin_config_args.iter()).unwrap()
         }
         None => {
-            let ip_addr =
-                socket::find_assigned_ip().expect("Could not find an IP for local connections");
+            let ip_addr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
             let external_addr = format!("{}:{}", ip_addr, discovery_port);
             let trin_config_args = vec![
                 "trin",
@@ -91,7 +93,11 @@ pub async fn launch_node(id: u16, bootnode_enr: Option<&SszEnr>) -> anyhow::Resu
 
     // Short sleep to make sure all peertest nodes can connect
     thread::sleep(time::Duration::from_secs(2));
-    Ok(PeertestNode { enr, exiter })
+    Ok(PeertestNode {
+        enr,
+        web3_ipc_path,
+        exiter,
+    })
 }
 
 pub async fn launch_peertest_nodes(count: u16) -> Peertest {

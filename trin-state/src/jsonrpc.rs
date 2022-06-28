@@ -4,6 +4,7 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 
 use crate::network::StateNetwork;
+use trin_core::utils::bytes::hex_encode;
 use trin_core::{
     jsonrpc::{
         endpoints::StateEndpoint,
@@ -33,7 +34,7 @@ impl StateRequestHandler {
                                 match &self.network.overlay.storage.read().get(&params.content_key)
                                 {
                                     Ok(val) => match val {
-                                        Some(val) => Ok(Value::String(hex::encode(val.clone()))),
+                                        Some(val) => Ok(Value::String(hex_encode(val.clone()))),
                                         None => Err(format!(
                                             "Unable to find content key in local storage: {:?}",
                                             params.content_key
