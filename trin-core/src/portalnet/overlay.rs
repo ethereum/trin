@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     fmt::{Debug, Display},
     marker::{PhantomData, Sync},
     str::FromStr,
@@ -389,10 +389,10 @@ where
             .collect()
     }
 
-    /// Returns a Vec of tuples, where each tuple represents a node in the kbuckets table.
-    ///     the usize represents the index (1-256) of the bucket containing
-    ///     the node with NodeId, Enr, and NodeStatus
-    pub fn bucket_entries(&self) -> HashMap<usize, Vec<(NodeId, Enr, NodeStatus, U256)>> {
+    /// Returns a map (BTree for its ordering guarantees) with:
+    ///     key: usize representing bucket index
+    ///     value: Vec of tuples, each tuple represents a node
+    pub fn bucket_entries(&self) -> BTreeMap<usize, Vec<(NodeId, Enr, NodeStatus, U256)>> {
         self.kbuckets
             .read()
             .buckets_iter()
