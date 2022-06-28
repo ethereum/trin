@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     fmt::{Debug, Display},
     marker::{PhantomData, Sync},
     str::FromStr,
@@ -39,7 +39,7 @@ use crate::{
 use discv5::{
     enr::NodeId,
     kbucket,
-    kbucket::{Filter, KBucketsTable, MAX_NODES_PER_BUCKET},
+    kbucket::{Filter, KBucketsTable, NodeStatus, MAX_NODES_PER_BUCKET},
     TalkRequest,
 };
 use ethereum_types::U256;
@@ -386,6 +386,34 @@ where
             .write()
             .iter()
             .map(|entry| entry.node.value.enr().clone())
+            .collect()
+    }
+
+    /// Returns a map (BTree for its ordering guarantees) with:
+    ///     key: usize representing bucket index
+    ///     value: Vec of tuples, each tuple represents a node
+    pub fn bucket_entries(&self) -> BTreeMap<usize, Vec<(NodeId, Enr, NodeStatus, U256)>> {
+        self.kbuckets
+            .read()
+            .buckets_iter()
+            .enumerate()
+            .filter(|(_, bucket)| bucket.num_entries() > 0)
+            .map(|(index, bucket)| {
+                (
+                    index,
+                    bucket
+                        .iter()
+                        .map(|node| {
+                            (
+                                *node.key.preimage(),
+                                node.value.enr().clone(),
+                                node.status,
+                                node.value.data_radius(),
+                            )
+                        })
+                        .collect(),
+                )
+            })
             .collect()
     }
 

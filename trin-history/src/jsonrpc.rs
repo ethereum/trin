@@ -11,6 +11,7 @@ use trin_core::{
             FindContentParams, FindNodesParams, HistoryJsonRpcRequest, LocalContentParams,
             OfferParams, PingParams, RecursiveFindContentParams, StoreParams,
         },
+        utils::bucket_entries_to_json,
     },
     portalnet::{
         types::{
@@ -221,6 +222,12 @@ impl HistoryRequestHandler {
                         Err(msg) => Err(format!("Invalid Ping params: {:?}", msg)),
                     };
                     let _ = request.resp.send(response);
+                }
+                HistoryEndpoint::RoutingTableInfo => {
+                    let bucket_entries_json =
+                        bucket_entries_to_json(self.network.overlay.bucket_entries());
+
+                    let _ = request.resp.send(Ok(bucket_entries_json));
                 }
             }
         }
