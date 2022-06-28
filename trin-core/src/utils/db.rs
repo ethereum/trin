@@ -11,7 +11,6 @@ const TRIN_DATA_ENV_VAR: &str = "TRIN_DATA_PATH";
 pub fn setup_temp_dir() -> TempDir {
     let mut os_temp = env::temp_dir();
     os_temp.push("trin");
-    let _ = fs::remove_dir_all(&os_temp);
     fs::create_dir_all(&os_temp).unwrap();
 
     let temp_dir = TempDir::new_in(&os_temp).unwrap();
