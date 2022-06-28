@@ -187,7 +187,7 @@ where
 
     /// Returns the ENR of the local node.
     pub fn local_enr(&self) -> Enr {
-        self.discovery.discv5.local_enr()
+        self.discovery.local_enr()
     }
 
     /// Returns the data radius of the local node.

@@ -72,7 +72,7 @@ impl StateNetwork {
         // Trigger bonding with bootnodes, at both the base layer and portal overlay.
         // The overlay ping via talkreq will trigger a session at the base layer, then
         // a session on the (overlay) portal network.
-        for enr in self.overlay.discovery.discv5.table_entries_enr() {
+        for enr in self.overlay.discovery.table_entries_enr() {
             debug!("Attempting bond with bootnode {}", enr);
             let ping_result = self.overlay.send_ping(enr.clone()).await;
 

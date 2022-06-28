@@ -4,20 +4,22 @@ use super::{
     types::messages::{HexData, PortalnetConfig, ProtocolId},
     Enr,
 };
-use crate::{socket, utils::node_id::generate_random_node_id};
+use crate::socket;
 use discv5::{
     enr::{CombinedKey, EnrBuilder, NodeId},
-    Discv5, Discv5Config, Discv5ConfigBuilder, RequestError,
+    Discv5, Discv5Config, Discv5ConfigBuilder, Discv5Event, RequestError, TalkRequest,
 };
-use log::{debug, error, info, warn};
-use rand::seq::SliceRandom;
+use log::info;
+use lru::LruCache;
+use parking_lot::RwLock;
 use serde_json::{json, Value};
+use tokio::sync::mpsc;
+
 use std::{
     convert::TryFrom,
     fmt,
     net::{IpAddr, SocketAddr},
     sync::Arc,
-    time::Duration,
 };
 
 /// With even distribution assumptions, 2**17 is enough to put each node (estimating 100k nodes,
@@ -45,11 +47,39 @@ impl Default for Config {
     }
 }
 
+struct DiscoveryEvents {
+    event_rx: mpsc::Receiver<Discv5Event>,
+    enr_cache: Arc<RwLock<lru::LruCache<NodeId, (Enr, SocketAddr)>>>,
+}
+
+impl DiscoveryEvents {
+    async fn start(
+        mut event_rx: mpsc::Receiver<Discv5Event>,
+        talk_req_tx: mpsc::Sender<TalkRequest>,
+        enr_cache: Arc<RwLock<lru::LruCache<NodeId, (Enr, SocketAddr)>>>,
+    ) {
+        tokio::spawn(async move {
+            while let Some(event) = event_rx.recv().await {
+                match event {
+                    Discv5Event::TalkRequest(talk_req) => {
+                        let _ = talk_req_tx.send(talk_req).await;
+                    }
+                    Discv5Event::SessionEstablished(enr, socket_addr) => {
+                        enr_cache.write().put(enr.node_id(), (enr, socket_addr));
+                    }
+                    _ => {}
+                }
+            }
+        });
+    }
+}
+
 pub type ProtocolRequest = Vec<u8>;
 
 /// Base Node Discovery Protocol v5 layer
 pub struct Discovery {
-    pub discv5: Discv5,
+    discv5: Discv5,
+    enr_cache: Arc<RwLock<lru::LruCache<NodeId, (Enr, SocketAddr)>>>,
     /// Indicates if the discv5 service has been started
     pub started: bool,
     pub listen_socket: SocketAddr,
@@ -123,21 +153,31 @@ impl Discovery {
                 .map_err(|e| format!("Failed to add enr: {}", e))?;
         }
 
+        let enr_cache = LruCache::new(portal_config.enr_cache_capacity);
+        let enr_cache = Arc::new(RwLock::new(enr_cache));
+
         Ok(Self {
             discv5,
+            enr_cache,
             started: false,
             listen_socket: listen_all_ips,
         })
     }
 
-    pub async fn start(&mut self) -> Result<(), String> {
-        let _ = self
-            .discv5
-            .start(self.listen_socket)
-            .await
-            .map_err(|e| format!("Failed to start discv5 server: {:?}", e))?;
+    pub async fn start(&mut self) -> Result<mpsc::Receiver<TalkRequest>, String> {
+        self.discv5.start(self.listen_socket).await.unwrap();
+
+        let event_rx = self.discv5.event_stream().await.unwrap();
+
+        // TODO: Make channel capacity configurable.
+        let (talk_req_tx, talk_req_rx) = mpsc::channel(100);
+
+        let enr_cache = Arc::clone(&self.enr_cache);
+
+        DiscoveryEvents::start(event_rx, talk_req_tx, enr_cache).await;
+
         self.started = true;
-        Ok(())
+        Ok(talk_req_rx)
     }
 
     /// Returns number of connected peers in the dht
@@ -177,12 +217,28 @@ impl Discovery {
         )
     }
 
-    pub fn connected_peers(&mut self) -> Vec<NodeId> {
+    pub fn connected_peers(&self) -> Vec<NodeId> {
         self.discv5.table_entries_id()
+    }
+
+    pub fn table_entries_enr(&self) -> Vec<Enr> {
+        self.discv5.table_entries_enr()
     }
 
     pub fn local_enr(&self) -> Enr {
         self.discv5.local_enr()
+    }
+
+    pub fn find_enr(&self, node_id: &NodeId) -> Option<Enr> {
+        self.discv5.find_enr(node_id)
+    }
+
+    /// Returns the cached ENR and observed socket address or `None` if not cached.
+    pub fn cached_enr(&self, node_id: &NodeId) -> Option<(Enr, SocketAddr)> {
+        match self.enr_cache.write().get(node_id) {
+            Some(enr) => Some(enr.clone()),
+            None => None,
+        }
     }
 
     pub async fn send_talk_req(
@@ -196,60 +252,5 @@ impl Discovery {
 
         let response = self.discv5.talk_req(enr, protocol, request).await?;
         Ok(response)
-    }
-
-    pub async fn bucket_refresh_lookup(self: Arc<Self>) {
-        // construct a 30 second interval to search for new peers.
-        let mut query_interval = tokio::time::interval(Duration::from_secs(60));
-
-        loop {
-            tokio::select! {
-                _ = query_interval.tick() => {
-                    // Look at local routing table and select the largest 17 buckets.
-                    // We only need the 17 bits furthest from our own node ID, because the closest 239 bits of
-                    // buckets are going to be empty-ish.
-                    let buckets = self.discv5.kbuckets();
-                    let buckets = buckets.buckets_iter().enumerate().collect::<Vec<_>>();
-                    let buckets = &buckets[256 - EXPECTED_NON_EMPTY_BUCKETS..];
-                    // Randomly pick one of these buckets.
-                    let target_bucket = buckets.choose(&mut rand::thread_rng());
-
-                     match target_bucket {
-                         Some(bucket) => {
-                             let target_bucket_idx = u8::try_from(bucket.0);
-                             if let Ok(idx) = target_bucket_idx {
-                                 // Randomly generate a node ID that falls within the target bucket.
-                                 let target_node_id = generate_random_node_id(idx, self.local_enr().node_id());
-                                 // Do the random lookup on this node ID.
-                                 let metrics = self.discv5.metrics();
-                                 let connected_peers = self.discv5.connected_peers();
-                                 debug!("Connected peers: {}, Active sessions: {}, Unsolicited requests/s: {:.2}", connected_peers, metrics.active_sessions, metrics.unsolicited_requests_per_second);
-                                 debug!("Searching for discv5 peers...");
-                                 // execute a FINDNODE query
-                                 self.recursive_find_node(target_node_id).await;
-                             } else {
-                                 error!("Unable to downcast bucket index.")
-                             }
-                         }
-                         None => error!("Failed to choose random bucket index"),
-                     }
-                }
-            }
-        }
-    }
-
-    /// Searching for discv5 peers with recursive FINDNODE
-    async fn recursive_find_node(&self, node_id: NodeId) {
-        match self.discv5.find_node(node_id).await {
-            Err(e) => warn!("Find Node result failed: {:?}", e),
-            Ok(v) => {
-                // found a list of ENR's print their NodeIds
-                let node_ids = v.iter().map(|enr| enr.node_id()).collect::<Vec<_>>();
-                debug!("Nodes found: {}", node_ids.len());
-                for node_id in node_ids {
-                    debug!("Node: {}", node_id);
-                }
-            }
-        }
     }
 }

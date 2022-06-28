@@ -1,7 +1,7 @@
-use discv5::{Discv5Event, TalkRequest};
+use discv5::TalkRequest;
 use log::debug;
 use std::{net::SocketAddr, str::FromStr, sync::Arc};
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{Receiver, UnboundedReceiver, UnboundedSender};
 use trin_core::{
     portalnet::{
         discovery::Discovery,
@@ -49,18 +49,12 @@ impl TestApp {
         });
     }
 
-    async fn process_utp_request(&self) {
-        let mut event_stream = self.discovery.discv5.event_stream().await.unwrap();
-
+    async fn process_utp_request(&self, mut talk_req_rx: Receiver<TalkRequest>) {
         let utp_sender = self.utp_event_tx.clone();
 
         tokio::spawn(async move {
-            while let Some(event) = event_stream.recv().await {
-                debug!("utp-testing TestApp handling event: {event:?}");
-                let request = match event {
-                    Discv5Event::TalkRequest(r) => r,
-                    _ => continue,
-                };
+            while let Some(request) = talk_req_rx.recv().await {
+                debug!("utp-testing TestApp handling event: {request:?}");
 
                 let protocol_id =
                     ProtocolId::from_str(&hex::encode_upper(request.protocol())).unwrap();
@@ -114,7 +108,7 @@ async fn main() {
         .unwrap();
 
     server
-        .prepare_to_receive(client.discovery.discv5.local_enr(), connection_id)
+        .prepare_to_receive(client.discovery.local_enr(), connection_id)
         .await;
 
     client
@@ -134,7 +128,8 @@ async fn run_test_app(discv5_port: u16, socket_addr: SocketAddr) -> TestApp {
     };
 
     let mut discovery = Discovery::new(config).unwrap();
-    discovery.start().await.unwrap();
+    let talk_req_rx = discovery.start().await.unwrap();
+
     let discovery = Arc::new(discovery);
 
     let (utp_event_sender, utp_listener_tx, utp_listener_rx, mut utp_listener) =
@@ -148,7 +143,7 @@ async fn run_test_app(discv5_port: u16, socket_addr: SocketAddr) -> TestApp {
         utp_event_tx: utp_event_sender,
     };
 
-    test_app.process_utp_request().await;
+    test_app.process_utp_request(talk_req_rx).await;
 
     test_app
 }

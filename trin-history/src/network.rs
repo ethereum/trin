@@ -1,8 +1,8 @@
 use log::{debug, error};
-use std::sync::{Arc, RwLock as StdRwLock};
-
 use parking_lot::RwLock;
 use tokio::sync::mpsc::UnboundedSender;
+
+use std::sync::Arc;
 
 use trin_core::{
     portalnet::{
@@ -33,7 +33,7 @@ impl HistoryNetwork {
         utp_listener_tx: UnboundedSender<UtpListenerRequest>,
         storage_config: PortalStorageConfig,
         portal_config: PortalnetConfig,
-        header_oracle: Arc<StdRwLock<HeaderOracle>>,
+        header_oracle: Arc<RwLock<HeaderOracle>>,
     ) -> Self {
         let config = OverlayConfig {
             bootnode_enrs: portal_config.bootnode_enrs.clone(),
@@ -63,7 +63,7 @@ impl HistoryNetwork {
         // Trigger bonding with bootnodes, at both the base layer and portal overlay.
         // The overlay ping via talkreq will trigger a session at the base layer, then
         // a session on the (overlay) portal network.
-        for enr in self.overlay.discovery.discv5.table_entries_enr() {
+        for enr in self.overlay.discovery.table_entries_enr() {
             debug!("Attempting bond with bootnode {}", enr);
             let ping_result = self.overlay.send_ping(enr.clone()).await;
 

@@ -119,6 +119,7 @@ pub struct PortalnetConfig {
     pub data_radius: U256,
     pub no_stun: bool,
     pub enable_metrics: bool,
+    pub enr_cache_capacity: usize,
 }
 
 impl Default for PortalnetConfig {
@@ -131,6 +132,7 @@ impl Default for PortalnetConfig {
             data_radius: U256::from(u64::MAX), //TODO better data_radius default?
             no_stun: false,
             enable_metrics: false,
+            enr_cache_capacity: 256,
         }
     }
 }

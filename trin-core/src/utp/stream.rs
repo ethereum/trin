@@ -1475,7 +1475,9 @@ mod tests {
             trin_helpers::UtpStreamId,
         },
     };
-    use discv5::Discv5Event;
+    use discv5::TalkRequest;
+    use tokio::sync::mpsc;
+
     use std::{
         convert::TryFrom,
         net::{IpAddr, SocketAddr},
@@ -1500,8 +1502,8 @@ mod tests {
             ..Default::default()
         };
         let mut discv5 = Discovery::new(config).unwrap();
-        let enr = discv5.discv5.local_enr();
-        discv5.start().await.unwrap();
+        let enr = discv5.local_enr();
+        let talk_req_rx = discv5.start().await.unwrap();
 
         let discv5 = Arc::new(discv5);
 
@@ -1513,7 +1515,7 @@ mod tests {
             None,
         );
         // TODO: Create `Discv5Socket` struct to encapsulate all socket logic
-        spawn_socket_recv(Arc::clone(&discv5), conn.clone());
+        spawn_socket_recv(talk_req_rx, conn.clone());
 
         conn
     }
@@ -1527,7 +1529,7 @@ mod tests {
             ..Default::default()
         };
         let mut discv5 = Discovery::new(config).unwrap();
-        discv5.start().await.unwrap();
+        let talk_req_rx = discv5.start().await.unwrap();
 
         let discv5 = Arc::new(discv5);
 
@@ -1538,37 +1540,31 @@ mod tests {
             UtpStreamId::OfferStream,
             None,
         );
-        spawn_socket_recv(Arc::clone(&discv5), conn.clone());
+        spawn_socket_recv(talk_req_rx, conn.clone());
 
         (discv5.local_enr(), conn)
     }
 
-    fn spawn_socket_recv(discv5: Arc<Discovery>, conn: UtpStream) {
+    fn spawn_socket_recv(mut talk_req_rx: mpsc::Receiver<TalkRequest>, conn: UtpStream) {
         tokio::spawn(async move {
-            let mut receiver = discv5.discv5.event_stream().await.unwrap();
-            while let Some(event) = receiver.recv().await {
-                match event {
-                    Discv5Event::TalkRequest(request) => {
-                        let protocol_id =
-                            ProtocolId::from_str(&hex::encode_upper(request.protocol())).unwrap();
+            while let Some(request) = talk_req_rx.recv().await {
+                let protocol_id =
+                    ProtocolId::from_str(&hex::encode_upper(request.protocol())).unwrap();
 
-                        match protocol_id {
-                            ProtocolId::Utp => {
-                                let payload = request.body();
-                                let packet = Packet::try_from(payload).unwrap();
-                                conn.discv5_tx.send(packet).unwrap();
-                            }
-                            _ => {
-                                panic!(
-                                    "Received TalkRequest on unknown protocol from={} protocol={} body={}",
-                                    request.node_id(),
-                                    hex::encode_upper(request.protocol()),
-                                    hex::encode(request.body()),
-                                );
-                            }
-                        }
+                match protocol_id {
+                    ProtocolId::Utp => {
+                        let payload = request.body();
+                        let packet = Packet::try_from(payload).unwrap();
+                        conn.discv5_tx.send(packet).unwrap();
                     }
-                    _ => continue,
+                    _ => {
+                        panic!(
+                            "Received TalkRequest on unknown protocol from={} protocol={} body={}",
+                            request.node_id(),
+                            hex::encode_upper(request.protocol()),
+                            hex::encode(request.body()),
+                        );
+                    }
                 }
             }
         });
@@ -1889,10 +1885,9 @@ mod tests {
         for _ in 0..3 {
             server
                 .socket
-                .discv5
-                .talk_req(
+                .send_talk_req(
                     server.connected_to.clone(),
-                    Vec::try_from(ProtocolId::Utp).unwrap(),
+                    ProtocolId::Utp,
                     packet.as_ref().to_vec(),
                 )
                 .await
@@ -1915,12 +1910,7 @@ mod tests {
                 let response = response.unwrap();
                 server
                     .socket
-                    .discv5
-                    .talk_req(
-                        client_addr,
-                        Vec::try_from(ProtocolId::Utp).unwrap(),
-                        response.as_ref().to_vec(),
-                    )
+                    .send_talk_req(client_addr, ProtocolId::Utp, response.as_ref().to_vec())
                     .await
                     .unwrap();
             }
@@ -2017,10 +2007,9 @@ mod tests {
             packet.set_timestamp(now_microseconds());
             client
                 .socket
-                .discv5
-                .talk_req(
+                .send_talk_req(
                     client.connected_to.clone(),
-                    Vec::try_from(ProtocolId::Utp).unwrap(),
+                    ProtocolId::Utp,
                     packet.as_ref().to_vec(),
                 )
                 .await

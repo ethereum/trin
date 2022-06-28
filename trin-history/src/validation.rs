@@ -1,9 +1,10 @@
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use anyhow::anyhow;
 use async_trait::async_trait;
 use ethereum_types::H256;
 use log::warn;
+use parking_lot::RwLock;
 use ssz::Decode;
 
 use trin_core::{
@@ -36,7 +37,6 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                 let expected_hash = &self
                     .header_oracle
                     .write()
-                    .unwrap()
                     .get_hash_at_height(header.number)?;
                 let actual_hash = &hex::encode(key.block_hash);
                 if actual_hash == expected_hash {
@@ -62,7 +62,6 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                 let trusted_header: Header = self
                     .header_oracle
                     .write()
-                    .unwrap()
                     .get_header_by_hash(H256::from(key.block_hash))?;
                 let actual_uncles_root = block_body.uncles_root()?;
                 if actual_uncles_root != trusted_header.uncles_hash {
@@ -95,7 +94,6 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                 let trusted_header: Header = self
                     .header_oracle
                     .write()
-                    .unwrap()
                     .get_header_by_hash(H256::from(key.block_hash))?;
                 let actual_receipts_root = receipts.root()?;
                 if actual_receipts_root != trusted_header.receipts_root {
