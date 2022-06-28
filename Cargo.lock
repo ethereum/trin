@@ -3749,6 +3749,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "test-log"
+version = "0.2.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4235dbf7ea878b3ef12dea20a59c134b405a66aafc4fc2c7b9935916e289e735"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "textwrap"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4289,6 +4300,7 @@ dependencies = [
  "structopt",
  "stunclient",
  "tempdir",
+ "test-log",
  "thiserror",
  "threadpool",
  "tokio",
@@ -4296,6 +4308,7 @@ dependencies = [
  "tokio-util 0.6.10",
  "tracing",
  "tracing-futures",
+ "tracing-subscriber 0.2.25",
  "uds_windows",
  "uint 0.8.5",
  "ureq",
@@ -4310,6 +4323,7 @@ dependencies = [
  "async-trait",
  "bytes 1.1.0",
  "discv5",
+ "env_logger",
  "ethereum-types 0.12.1",
  "hex",
  "httpmock",
@@ -4321,6 +4335,7 @@ dependencies = [
  "serde_json",
  "serial_test",
  "tempdir",
+ "test-log",
  "tokio",
  "tracing",
  "tracing-subscriber 0.2.25",
@@ -4334,6 +4349,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "discv5",
+ "env_logger",
  "eth_trie",
  "ethereum-types 0.12.1",
  "hex",
@@ -4342,6 +4358,7 @@ dependencies = [
  "parking_lot 0.11.2",
  "rocksdb",
  "serde_json",
+ "test-log",
  "tokio",
  "tracing",
  "tracing-futures",

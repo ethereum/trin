@@ -114,6 +114,7 @@ fn findnode_log2distance(target: NodeId, peer: NodeId, size: usize) -> Option<Ve
 #[cfg(test)]
 mod tests {
     use super::*;
+    use test_log::test;
 
     #[test]
     fn test_log2distance() {

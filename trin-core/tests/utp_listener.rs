@@ -72,7 +72,7 @@ async fn spawn_utp_listener() -> (
     (enr, utp_listener_tx, utp_listener_rx)
 }
 
-#[tokio::test]
+#[test_log::test(tokio::test)]
 #[timeout(100)]
 /// Simulate simple OFFER -> ACCEPT uTP payload transfer
 async fn utp_listener_events() {

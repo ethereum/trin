@@ -324,6 +324,7 @@ mod tests {
     use quickcheck::*;
     use rand::{thread_rng, Rng};
     use std::time::Duration;
+    use test_log::test;
 
     type TestQuery = FindNodeQuery<NodeId>;
 

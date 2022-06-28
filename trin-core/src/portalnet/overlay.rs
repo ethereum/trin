@@ -694,7 +694,7 @@ mod test {
         assert_eq!(log2_random_nodes.len(), expected_log2);
     }
 
-    #[test]
+    #[test_log::test]
     #[should_panic]
     fn test_log2_random_enrs_empty_input() {
         let all_nodes = vec![];

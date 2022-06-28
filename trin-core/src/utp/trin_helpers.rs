@@ -67,6 +67,7 @@ pub enum UtpStreamId {
 #[cfg(test)]
 mod tests {
     use crate::utp::trin_helpers::UtpMessage;
+    use test_log::test;
 
     #[test]
     fn test_too_short_message() {

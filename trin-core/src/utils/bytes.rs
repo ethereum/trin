@@ -47,6 +47,7 @@ pub fn hex_decode(data: &str) -> anyhow::Result<Vec<u8>> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use test_log::test;
 
     #[test]
     fn test_random_32byte_array_1() {

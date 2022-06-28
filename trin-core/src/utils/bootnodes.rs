@@ -34,7 +34,7 @@ mod test {
     use crate::cli::TrinConfig;
     use rstest::rstest;
 
-    #[test]
+    #[test_log::test]
     fn test_parse_bootnodes_default_flag() {
         let config = TrinConfig::new_from(["trin", "--bootnodes", "default"].iter()).unwrap();
         let actual = parse_bootnodes(&config.bootnodes).unwrap();

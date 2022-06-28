@@ -497,7 +497,7 @@ mod test {
     use rstest::rstest;
     use validator::ValidationErrors;
 
-    #[test]
+    #[test_log::test]
     fn test_json_validator_accepts_valid_json() {
         let request = JsonRequest {
             jsonrpc: "2.0".to_string(),
@@ -508,7 +508,7 @@ mod test {
         assert_eq!(request.validate(), Ok(()));
     }
 
-    #[test]
+    #[test_log::test]
     fn test_json_validator_with_invalid_jsonrpc_field() {
         let request = JsonRequest {
             jsonrpc: "1.0".to_string(),

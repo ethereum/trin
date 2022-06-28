@@ -48,6 +48,8 @@ pub async fn launch_node(id: u16, bootnode_enr: Option<&SszEnr>) -> anyhow::Resu
             let enr_base64 = enr.to_base64();
             let trin_config_args = vec![
                 "trin",
+                "--networks",
+                "history,state",
                 "--external-address",
                 external_addr.as_str(),
                 "--bootnodes",
@@ -67,6 +69,8 @@ pub async fn launch_node(id: u16, bootnode_enr: Option<&SszEnr>) -> anyhow::Resu
             let external_addr = format!("{}:{}", ip_addr, discovery_port);
             let trin_config_args = vec![
                 "trin",
+                "--networks",
+                "history,state",
                 "--external-address",
                 external_addr.as_str(),
                 "--discovery-port",

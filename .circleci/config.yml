@@ -11,6 +11,7 @@ jobs:
             tag: 1.58.0
         environment:
             RUSTFLAGS: '-D warnings'
+            RUST_LOG: 'debug'
         steps:
             - checkout
             - restore_cache:
@@ -45,7 +46,7 @@ jobs:
                 command: cargo build --workspace --jobs 2
             - run:
                 name: Test Trin workspace
-                command: cargo test --workspace --jobs 2 -- --nocapture
+                command: cargo test --workspace --jobs 2
             - save_cache:
                 key: cargo-{{ checksum "Cargo.lock" }}-v1
                 paths:
@@ -57,6 +58,8 @@ jobs:
     executor:
       name: win/default
       shell: powershell.exe
+    environment:
+        RUST_LOG: 'debug'
     steps:
       - checkout
       - restore_cache:
@@ -88,7 +91,7 @@ jobs:
           command: cargo build --target x86_64-pc-windows-msvc
       - run:
           name: Cargo Test --target x86_64-pc-windows-msvc
-          command: cargo test --target x86_64-pc-windows-msvc -- --nocapture
+          command: cargo test --target x86_64-pc-windows-msvc
       - save_cache:
           key: cargo-{{ checksum "Cargo.lock" }}-v1
           paths:

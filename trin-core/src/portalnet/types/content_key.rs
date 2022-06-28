@@ -301,6 +301,7 @@ mod test {
     use ethereum_types::U256;
     use serial_test::serial;
     use tempdir::TempDir;
+    use test_log::test;
 
     use crate::portalnet::storage::{
         DistanceFunction, PortalStorage, PortalStorageConfig, PortalStorageError,
@@ -406,7 +407,7 @@ mod test {
     // This test is for PortalStorage functionality, but is located here to take advantage of
     // full-featured content key types, since MockContentKey is insufficient to test
     // some PortalStorage functionality
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn test_should_store() -> Result<(), PortalStorageError> {
         let temp_dir = setup_temp_dir();
@@ -463,7 +464,7 @@ mod test {
     // This test is for PortalStorage functionality, but is located here to take advantage of
     // full-featured content key types, since MockContentKey is insufficient to test
     // some PortalStorage functionality
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn test_distance_to_key() -> Result<(), PortalStorageError> {
         let temp_dir = setup_temp_dir();

@@ -116,7 +116,7 @@ mod tests {
         server
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     async fn validate_header() {
         let server = setup_mock_infura_server();
         let header_rlp = get_header_rlp();
@@ -139,7 +139,7 @@ mod tests {
             .unwrap();
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[should_panic]
     async fn invalidate_header_with_invalid_number() {
         let server = setup_mock_infura_server();
@@ -167,7 +167,7 @@ mod tests {
             .unwrap();
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[should_panic]
     async fn invalidate_header_with_invalid_gaslimit() {
         let server = setup_mock_infura_server();

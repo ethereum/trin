@@ -4,6 +4,7 @@ mod test {
     use std::{thread, time};
     use trin_core::cli::TrinConfig;
 
+    // Logs don't show up when trying to use test_log here, maybe because of multi_thread
     #[tokio::test(flavor = "multi_thread")]
     async fn test_launches() {
         tracing_subscriber::fmt::init();
@@ -19,6 +20,8 @@ mod test {
         let trin_config = TrinConfig::new_from(
             [
                 "trin",
+                "--networks",
+                "history,state",
                 "--no-stun",
                 "--web3-ipc-path",
                 &peertest_config.target_ipc_path,

@@ -169,6 +169,7 @@ impl Encodable for Header {
 mod tests {
     use super::Header;
     use hex;
+    use test_log::test;
 
     // Based on https://github.com/openethereum/openethereum/blob/main/crates/ethcore/types/src/header.rs
     #[test]
