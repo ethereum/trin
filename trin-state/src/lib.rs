@@ -7,16 +7,11 @@ use discv5::TalkRequest;
 use network::StateNetwork;
 use tokio::sync::mpsc::UnboundedSender;
 use trin_core::{
-    cli::TrinConfig,
     jsonrpc::types::StateJsonRpcRequest,
     portalnet::{
-        discovery::Discovery,
-        events::PortalnetEvents,
-        storage::{PortalStorage, PortalStorageConfig},
-        types::messages::PortalnetConfig,
+        discovery::Discovery, storage::PortalStorageConfig, types::messages::PortalnetConfig,
     },
-    utils::bootnodes::parse_bootnodes,
-    utp::stream::{UtpListener, UtpListenerEvent, UtpListenerRequest},
+    utp::stream::{UtpListenerEvent, UtpListenerRequest},
 };
 
 pub mod events;
@@ -25,77 +20,6 @@ pub mod network;
 mod trie;
 pub mod utils;
 pub mod validation;
-
-pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    info!("Launching trin-state...");
-
-    let trin_config = TrinConfig::from_cli();
-    trin_config.display_config();
-
-    let bootnode_enrs = parse_bootnodes(&trin_config.bootnodes)?;
-
-    let portalnet_config = PortalnetConfig {
-        external_addr: trin_config.external_addr,
-        private_key: trin_config.private_key.clone(),
-        listen_port: trin_config.discovery_port,
-        bootnode_enrs,
-        ..Default::default()
-    };
-
-    let mut discovery = Discovery::new(portalnet_config.clone()).unwrap();
-    discovery.start().await.unwrap();
-    let discovery = Arc::new(discovery);
-
-    // Search for discv5 peers (bucket refresh lookup)
-    tokio::spawn(Arc::clone(&discovery).bucket_refresh_lookup());
-
-    // Initialize and spawn UTP listener
-    let (utp_sender, overlay_sender, utp_listener_rx, mut utp_listener) =
-        UtpListener::new(Arc::clone(&discovery));
-    tokio::spawn(async move { utp_listener.start().await });
-
-    let (state_event_tx, state_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
-    let (state_utp_tx, state_utp_rx) = mpsc::unbounded_channel::<UtpListenerEvent>();
-    let portal_events_discovery = Arc::clone(&discovery);
-
-    // Initialize DB config
-    let storage_config =
-        PortalStorage::setup_config(discovery.local_enr().node_id(), trin_config.kb)?;
-
-    // Spawn main event handler
-    tokio::spawn(async move {
-        let events = PortalnetEvents::new(
-            portal_events_discovery,
-            utp_listener_rx,
-            None,
-            None,
-            Some(state_event_tx),
-            Some(state_utp_tx),
-            utp_sender,
-        )
-        .await;
-        events.start().await;
-    });
-
-    let state_network = StateNetwork::new(
-        discovery.clone(),
-        overlay_sender,
-        storage_config,
-        portalnet_config.clone(),
-    )
-    .await;
-    let state_network = Arc::new(state_network);
-
-    spawn_state_network(
-        state_network,
-        portalnet_config,
-        state_utp_rx,
-        state_event_rx,
-    )
-    .await
-    .unwrap();
-    Ok(())
-}
 
 type StateHandler = Option<StateRequestHandler>;
 type StateNetworkTask = Option<JoinHandle<()>>;
