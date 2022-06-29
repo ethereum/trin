@@ -3,6 +3,7 @@ use std::sync::{Arc, RwLock};
 use log::debug;
 use tokio::sync::mpsc;
 
+use trin_core::utils::db::setup_temp_dir;
 use trin_core::{
     cli::{TrinConfig, HISTORY_NETWORK, STATE_NETWORK},
     jsonrpc::{
@@ -57,6 +58,10 @@ pub async fn run_trin(
     tokio::spawn(async move { utp_listener.start().await });
 
     // Initialize Storage config
+    if trin_config.ephemeral {
+        setup_temp_dir();
+    }
+
     let storage_config =
         PortalStorage::setup_config(discovery.local_enr().node_id(), trin_config.kb)?;
 

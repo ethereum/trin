@@ -25,6 +25,7 @@ mod test {
                 "--no-stun",
                 "--web3-ipc-path",
                 &peertest_config.target_ipc_path,
+                "--ephemeral",
             ]
             .iter(),
         )
