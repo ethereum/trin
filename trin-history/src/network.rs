@@ -74,6 +74,7 @@ impl HistoryNetwork {
                 }
                 Err(err) => {
                     error!("{err} while pinging bootnode: {enr:?}");
+                    std::process::exit(1);
                 }
             }
         }
