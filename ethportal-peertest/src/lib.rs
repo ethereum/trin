@@ -60,6 +60,7 @@ pub async fn launch_node(id: u16, bootnode_enr: Option<&SszEnr>) -> anyhow::Resu
                 web3_ipc_path.as_str(),
                 "--unsafe-private-key",
                 private_key.as_str(),
+                "--ephemeral",
             ];
             TrinConfig::new_from(trin_config_args.iter()).unwrap()
         }
@@ -79,6 +80,7 @@ pub async fn launch_node(id: u16, bootnode_enr: Option<&SszEnr>) -> anyhow::Resu
                 web3_ipc_path.as_str(),
                 "--unsafe-private-key",
                 private_key.as_str(),
+                "--ephemeral",
             ];
             TrinConfig::new_from(trin_config_args.iter()).unwrap()
         }
