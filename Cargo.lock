@@ -4299,7 +4299,7 @@ dependencies = [
  "smallvec 1.8.0",
  "structopt",
  "stunclient",
- "tempdir",
+ "tempfile",
  "test-log",
  "thiserror",
  "threadpool",

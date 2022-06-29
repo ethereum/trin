@@ -494,23 +494,15 @@ pub mod test {
     use super::*;
     use crate::portalnet::types::content_key::IdentityContentKey;
 
-    use std::env;
-
+    use crate::utils::db::setup_temp_dir;
     use quickcheck::{quickcheck, Arbitrary, Gen, QuickCheck, TestResult};
     use rand::RngCore;
     use serial_test::serial;
-    use tempdir::TempDir;
 
     fn generate_random_content_key() -> IdentityContentKey {
         let mut key = [0u8; 32];
         rand::thread_rng().fill_bytes(&mut key);
         IdentityContentKey::new(key)
-    }
-
-    fn setup_temp_dir() -> TempDir {
-        let temp_dir = TempDir::new("trin").unwrap();
-        env::set_var("TRIN_DATA_PATH", temp_dir.path());
-        temp_dir
     }
 
     impl Arbitrary for IdentityContentKey {
