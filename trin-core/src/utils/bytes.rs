@@ -33,6 +33,7 @@ pub fn random_32byte_array(leading_bit_zeros: u8) -> [u8; 32] {
 pub fn hex_encode<T: AsRef<[u8]>>(data: T) -> String {
     format!("0x{}", hex::encode(data))
 }
+
 /// Decode hex with 0x prefix
 pub fn hex_decode(data: &str) -> anyhow::Result<Vec<u8>> {
     let first_two = &data[..2];

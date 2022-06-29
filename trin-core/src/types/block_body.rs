@@ -6,28 +6,26 @@ use eth_trie::{EthTrie, MemoryDB, Trie};
 use ethereum_types::{Address, H160, H256, U256, U64};
 use rlp::{Decodable, DecoderError, Encodable, Rlp, RlpStream};
 use rlp_derive::{RlpDecodable, RlpEncodable};
+use ssz_derive::{Decode, Encode};
+use ssz_types::{typenum, VariableList};
+
 use sha3::{Digest, Keccak256};
 
 use super::{header::Header, receipts::TransactionId};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BlockBody {
-    _txs: Transactions,
-    _uncle_list: Vec<Header>,
+    pub txs: Vec<Transaction>,
+    pub uncles: EncodableHeaderList,
 }
 
-#[derive(Clone, Debug)]
-pub struct Transactions {
-    tx_list: Vec<Transaction>,
-}
-
-impl Transactions {
-    pub fn root(&self) -> anyhow::Result<H256> {
+impl BlockBody {
+    pub fn transactions_root(&self) -> anyhow::Result<H256> {
         let memdb = Arc::new(MemoryDB::new(true));
         let mut trie = EthTrie::new(memdb);
 
         // Insert txs into tx tree
-        for (index, tx) in self.tx_list.iter().enumerate() {
+        for (index, tx) in self.txs.iter().enumerate() {
             let path = rlp::encode(&index).freeze().to_vec();
             let encoded_tx = tx.encode();
             trie.insert(&path, &encoded_tx)
@@ -37,23 +35,105 @@ impl Transactions {
         trie.root_hash()
             .map_err(|err| anyhow!("Error calculating transactions root: {err:?}"))
     }
-}
 
-#[derive(Clone, Debug)]
-pub struct Uncles {
-    uncle_list: Vec<Header>,
-}
-
-impl Uncles {
-    pub fn root(&self) -> anyhow::Result<H256> {
+    pub fn uncles_root(&self) -> anyhow::Result<H256> {
         // generate rlp encoded list of uncles
         let mut stream = RlpStream::new();
-        stream.append_list(&self.uncle_list);
+        stream.append_list(&self.uncles.list);
         let uncles_rlp = stream.out().freeze();
 
         // hash rlp uncles
         let hash = Keccak256::digest(&uncles_rlp);
         Ok(H256::from_slice(&hash))
+    }
+}
+
+impl TryFrom<EncodedBlockBodyParts> for BlockBody {
+    type Error = DecoderError;
+
+    fn try_from(block_body_parts: EncodedBlockBodyParts) -> Result<Self, Self::Error> {
+        let txs: Vec<Transaction> = block_body_parts
+            .encoded_txs
+            .iter()
+            .map(|bytes| Transaction::decode(bytes))
+            .collect::<Result<Vec<Transaction>, _>>()?;
+
+        // MAX_ENCODED_UNCLES_LENGTH = 131072
+        let uncles: VariableList<u8, typenum::U131072> =
+            VariableList::from(block_body_parts.rlp_uncles);
+        let uncles = rlp::decode(&uncles)?;
+        Ok(Self { txs, uncles })
+    }
+}
+
+impl ssz::Encode for BlockBody {
+    // note: MAX_LENGTH attributes (defined in portal history spec) are not currently enforced
+    fn is_ssz_fixed_len() -> bool {
+        false
+    }
+
+    fn ssz_append(&self, buf: &mut Vec<u8>) {
+        EncodedBlockBodyParts::from(self).ssz_append(buf);
+    }
+
+    fn ssz_bytes_len(&self) -> usize {
+        self.as_ssz_bytes().len()
+    }
+}
+
+impl ssz::Decode for BlockBody {
+    fn is_ssz_fixed_len() -> bool {
+        false
+    }
+
+    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
+        EncodedBlockBodyParts::from_ssz_bytes(bytes)?
+            .try_into()
+            .map_err(|msg: DecoderError| ssz::DecodeError::BytesInvalid(msg.to_string()))
+    }
+}
+
+#[derive(Debug, Decode, Encode)]
+struct EncodedBlockBodyParts {
+    // list of ( binary-encoded txs )
+    encoded_txs: Vec<Vec<u8>>,
+    // ssz encode (rlp encode (list of uncles) )
+    rlp_uncles: Vec<u8>,
+}
+
+impl From<&BlockBody> for EncodedBlockBodyParts {
+    fn from(block_body: &BlockBody) -> Self {
+        let encoded_txs: Vec<Vec<u8>> = block_body
+            .txs
+            .iter()
+            .map(|tx| tx.encode().to_vec())
+            .collect();
+        let rlp_uncles: Vec<u8> = rlp::encode(&block_body.uncles).to_vec();
+        Self {
+            encoded_txs,
+            rlp_uncles,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EncodableHeaderList {
+    list: Vec<Header>,
+}
+
+impl Decodable for EncodableHeaderList {
+    fn decode(rlp: &Rlp) -> Result<Self, DecoderError> {
+        let list = rlp
+            .into_iter()
+            .map(|header| rlp::decode(header.as_raw()))
+            .collect::<Result<Vec<Header>, _>>()?;
+        Ok(Self { list })
+    }
+}
+
+impl Encodable for EncodableHeaderList {
+    fn rlp_append(&self, s: &mut RlpStream) {
+        s.append_list(&self.list);
     }
 }
 
@@ -65,21 +145,21 @@ pub enum Transaction {
 }
 
 impl Transaction {
-    pub fn decode(transaction: &[u8]) -> Result<Self, DecoderError> {
+    fn decode(tx: &[u8]) -> Result<Self, DecoderError> {
         // at least one byte needs to be present
-        if transaction.is_empty() {
+        if tx.is_empty() {
             return Err(DecoderError::RlpIncorrectListLen);
         }
-        let id = TransactionId::try_from(transaction[0])
+        let id = TransactionId::try_from(tx[0])
             .map_err(|_| DecoderError::Custom("Unknown transaction id"))?;
         match id {
-            TransactionId::EIP1559 => Ok(Self::EIP1559(rlp::decode(&transaction[1..])?)),
-            TransactionId::AccessList => Ok(Self::AccessList(rlp::decode(&transaction[1..])?)),
-            TransactionId::Legacy => Ok(Self::Legacy(rlp::decode(transaction)?)),
+            TransactionId::EIP1559 => Ok(Self::EIP1559(rlp::decode(&tx[1..])?)),
+            TransactionId::AccessList => Ok(Self::AccessList(rlp::decode(&tx[1..])?)),
+            TransactionId::Legacy => Ok(Self::Legacy(rlp::decode(tx)?)),
         }
     }
 
-    pub fn encode(&self) -> Vec<u8> {
+    fn encode(&self) -> Vec<u8> {
         let mut stream = RlpStream::new();
         match self {
             Self::Legacy(tx) => {
@@ -200,31 +280,23 @@ pub struct StorageKeys {
 mod tests {
     use super::*;
     use rstest::rstest;
+    use ssz::{Decode, Encode};
 
     // tx data from: https://etherscan.io/txs?block=14764013
     #[rstest]
-    #[case(TX1, 102)]
-    #[case(TX2, 1078)]
-    #[case(TX3, 454)]
-    #[case(TX4, 455)]
-    #[case(TX5, 4414)]
-    #[case(TX6, 41942)]
+    // Legacy
     #[case(TX7, 132984)]
     #[case(TX8, 19177)]
     #[case(TX9, 19178)]
-    #[case(TX10, 253851)]
-    #[case(TX11, 1908311)]
-    #[case(TX12, 233965)]
-    #[case(TX13, 6642)]
-    #[case(TX14, 3664042)]
-    #[case(TX15, 1544974)]
-    #[case(TX16, 3464424)]
+    // EIP1559
+    #[case(TX4, 455)]
+    #[case(TX5, 4414)]
     #[case(TX17, 1544975)]
-    #[case(TX18, 12)]
-    #[case(TX19, 1)]
+    // EIP1559 w/ populated access list
+    #[case(TX6, 41942)]
     fn encode_and_decode_txs(#[case] tx: &str, #[case] expected_nonce: u32) {
         let tx_rlp = hex::decode(tx.to_string()).unwrap();
-        let tx: Transaction = Transaction::decode(&tx_rlp).expect("error decoding tx");
+        let tx = Transaction::decode(&tx_rlp).expect("error decoding tx");
         let expected_nonce = U256::from(expected_nonce);
         match &tx {
             Transaction::Legacy(tx) => assert_eq!(tx.nonce, expected_nonce),
@@ -232,12 +304,87 @@ mod tests {
             Transaction::EIP1559(tx) => assert_eq!(tx.nonce, expected_nonce),
         }
         let encoded_tx = tx.encode();
-        assert_eq!(tx_rlp, encoded_tx);
+        assert_eq!(hex::encode(tx_rlp), hex::encode(encoded_tx));
     }
 
     #[test_log::test]
-    fn transactions_root() {
-        let tx_list: Vec<Transaction> = vec![
+    fn block_body_validates_transactions_root() {
+        let block_body = get_14764013_block_body();
+        let expected_tx_root =
+            "18a2978fc62cd1a23e90de920af68c0c3af3330327927cda4c005faccefb5ce7".to_owned();
+        assert_eq!(
+            hex::encode(block_body.transactions_root().unwrap()),
+            expected_tx_root
+        );
+    }
+
+    #[test_log::test]
+    fn block_body_validates_uncles_root() {
+        let block_body = get_14764013_block_body();
+        let expected_uncles_root =
+            "58a694212e0416353a4d3865ccf475496b55af3a3d3b002057000741af973191".to_owned();
+        assert_eq!(
+            hex::encode(block_body.uncles_root().unwrap()),
+            expected_uncles_root
+        );
+    }
+
+    #[test_log::test]
+    fn block_body_roots_invalidates_transactions_root() {
+        let mut block_body = get_14764013_block_body();
+        // invalid txs
+        block_body.txs.truncate(1);
+        let invalid_block_body = BlockBody {
+            txs: block_body.txs,
+            uncles: block_body.uncles,
+        };
+
+        let expected_tx_root =
+            "18a2978fc62cd1a23e90de920af68c0c3af3330327927cda4c005faccefb5ce7".to_owned();
+        assert_ne!(
+            expected_tx_root,
+            hex::encode(invalid_block_body.transactions_root().unwrap())
+        );
+    }
+
+    #[test_log::test]
+    fn block_body_roots_invalidates_uncles_root() {
+        let mut block_body = get_14764013_block_body();
+        // invalid uncles
+        block_body.uncles = EncodableHeaderList {
+            list: vec![
+                block_body.uncles.list[0].clone(),
+                block_body.uncles.list[0].clone(),
+            ],
+        };
+        let invalid_block_body = BlockBody {
+            txs: block_body.txs,
+            uncles: block_body.uncles,
+        };
+
+        let expected_uncles_root =
+            "58a694212e0416353a4d3865ccf475496b55af3a3d3b002057000741af973191".to_owned();
+        assert_ne!(
+            expected_uncles_root,
+            hex::encode(invalid_block_body.uncles_root().unwrap())
+        );
+    }
+
+    #[test_log::test]
+    fn block_body_ssz_encoding_decoding_round_trip() {
+        let block_body = get_14764013_block_body();
+        let encoded = block_body.as_ssz_bytes();
+
+        let expected: Vec<u8> =
+            std::fs::read("./src/types/assets/block_body_14764013.bin").unwrap();
+        assert_eq!(hex::encode(&encoded), hex::encode(expected));
+
+        let decoded = BlockBody::from_ssz_bytes(&encoded).unwrap();
+        assert_eq!(block_body, decoded);
+    }
+
+    fn get_14764013_block_body() -> BlockBody {
+        let txs: Vec<Transaction> = vec![
             Transaction::decode(&hex::decode(TX1.to_string()).unwrap()).unwrap(),
             Transaction::decode(&hex::decode(TX2.to_string()).unwrap()).unwrap(),
             Transaction::decode(&hex::decode(TX3.to_string()).unwrap()).unwrap(),
@@ -258,22 +405,12 @@ mod tests {
             Transaction::decode(&hex::decode(TX18.to_string()).unwrap()).unwrap(),
             Transaction::decode(&hex::decode(TX19.to_string()).unwrap()).unwrap(),
         ];
-        let transactions = Transactions { tx_list };
-        let expected_root =
-            "18a2978fc62cd1a23e90de920af68c0c3af3330327927cda4c005faccefb5ce7".to_owned();
-        assert_eq!(expected_root, hex::encode(transactions.root().unwrap()));
-    }
-
-    #[test_log::test]
-    fn uncles_root() {
-        let uncle_rlp = &hex::decode(UNCLE).unwrap();
-        let uncle_rlp = Rlp::new(uncle_rlp);
-        let uncle: Header = uncle_rlp.val_at(0).unwrap();
-        let uncle_list: Vec<Header> = vec![uncle];
-        let uncles = Uncles { uncle_list };
-        let expected_root =
-            "58a694212e0416353a4d3865ccf475496b55af3a3d3b002057000741af973191".to_owned();
-        assert_eq!(expected_root, hex::encode(uncles.root().unwrap()));
+        let uncles_rlp = &hex::decode(UNCLE).unwrap();
+        let uncles: Vec<Header> = rlp::decode_list(uncles_rlp);
+        BlockBody {
+            txs,
+            uncles: EncodableHeaderList { list: uncles },
+        }
     }
 
     // Encoded transactions generated from block 14764013

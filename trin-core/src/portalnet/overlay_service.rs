@@ -1248,7 +1248,7 @@ where
                     // validate content before storing
                     if let Err(err) = self
                         .validator
-                        .validate_content(&content_key, &content)
+                        .validate_content(&content_key, &content.to_vec())
                         .await
                     {
                         error!("Unable to validate received content: {err:?}");

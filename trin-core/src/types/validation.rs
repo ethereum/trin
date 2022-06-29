@@ -1,5 +1,6 @@
 use anyhow::anyhow;
 use async_trait::async_trait;
+use ethereum_types::H256;
 use serde_json::{json, Value};
 
 use crate::{
@@ -7,7 +8,8 @@ use crate::{
         service::dispatch_infura_request,
         types::{HistoryJsonRpcRequest, JsonRequest, Params},
     },
-    portalnet::types::{content_key::IdentityContentKey, messages::ByteList},
+    portalnet::types::content_key::IdentityContentKey,
+    types::header::Header,
     utils::infura::INFURA_BASE_URL,
 };
 
@@ -68,6 +70,27 @@ impl HeaderOracle {
         Ok(infura_hash.to_owned())
     }
 
+    pub fn get_header_by_hash(&mut self, block_hash: H256) -> anyhow::Result<Header> {
+        let block_hash = format!("0x{:02X}", block_hash);
+        let request = JsonRequest {
+            jsonrpc: "2.0".to_string(),
+            params: Params::Array(vec![json!(block_hash), json!(false)]),
+            method: "eth_getBlockByHash".to_string(),
+            id: 1,
+        };
+        let response: Value = match dispatch_infura_request(request, &self.infura_url) {
+            Ok(val) => serde_json::from_str(&val)?,
+            Err(msg) => {
+                return Err(anyhow!(
+                    "Unable to request validation data from Infura: {:?}",
+                    msg
+                ))
+            }
+        };
+        let header = Header::from_get_block_jsonrpc_response(response)?;
+        Ok(header)
+    }
+
     // To be updated to use chain history || header gossip network.
     pub fn _is_hash_canonical() -> anyhow::Result<bool> {
         Ok(true)
@@ -80,7 +103,7 @@ pub trait Validator<TContentKey> {
     async fn validate_content(
         &mut self,
         content_key: &TContentKey,
-        content: &ByteList,
+        content: &[u8],
     ) -> anyhow::Result<()>
     where
         TContentKey: 'async_trait;
@@ -94,7 +117,7 @@ impl Validator<IdentityContentKey> for MockValidator {
     async fn validate_content(
         &mut self,
         _content_key: &IdentityContentKey,
-        _content: &ByteList,
+        _content: &[u8],
     ) -> anyhow::Result<()>
     where
         IdentityContentKey: 'async_trait,
