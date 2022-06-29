@@ -185,25 +185,6 @@ impl Discovery {
         self.discv5.local_enr()
     }
 
-    /// Do a FindNode query and add the discovered peers to the dht
-    pub async fn discover_nodes(&mut self) -> Result<(), String> {
-        let random_node = NodeId::random();
-        let nodes = self
-            .discv5
-            .find_node(random_node)
-            .await
-            .map_err(|e| format!("FindNode query failed: {:?}", e))?;
-
-        info!("FindNode query found {} nodes", nodes.len());
-
-        for node in nodes {
-            self.discv5
-                .add_enr(node)
-                .map_err(|e| format!("Failed to add node to dht: {}", e))?;
-        }
-        Ok(())
-    }
-
     pub async fn send_talk_req(
         &self,
         enr: Enr,
