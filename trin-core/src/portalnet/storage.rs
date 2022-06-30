@@ -4,6 +4,8 @@ use discv5::enr::NodeId;
 use ethereum_types::U256;
 use hex;
 use log::{debug, error, info};
+use lru::LruCache;
+use parking_lot::RwLock;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rocksdb::{Options, DB};
@@ -15,6 +17,9 @@ use super::types::{
     metric::{Metric, XorMetric},
 };
 use crate::utils::db::get_data_dir;
+
+// Assuming large 15kB content values, 5k elements consume 75MB of data
+const CACHE_NUM_ELEMENTS_MAX: usize = 5000;
 
 // TODO: Replace enum with generic type parameter. This will require that we have a way to
 // associate a "find farthest" query with the generic Metric.
@@ -41,6 +46,7 @@ pub struct PortalStorage {
     pub data_radius: u64,
     farthest_content_id: Option<[u8; 32]>,
     db: Arc<rocksdb::DB>,
+    cache: RwLock<LruCache<[u8; 32], Vec<u8>>>,
     sql_connection_pool: Pool<SqliteConnectionManager>,
     distance_function: DistanceFunction,
 }
@@ -96,6 +102,7 @@ impl PortalStorage {
             storage_capacity_in_bytes: config.storage_capacity_kb * 1000,
             data_radius: u64::MAX,
             db: config.db,
+            cache: RwLock::new(LruCache::new(CACHE_NUM_ELEMENTS_MAX)),
             farthest_content_id: None,
             sql_connection_pool: config.sql_connection_pool,
             distance_function: config.distance_function,
@@ -138,6 +145,24 @@ impl PortalStorage {
 
     /// Public method for storing a given value for a given content-key.
     pub fn store(
+        &mut self,
+        key: &impl OverlayContentKey,
+        value: &Vec<u8>,
+    ) -> Result<(), PortalStorageError> {
+        match self.durable_store(key, value) {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                // When the data cannot be stored locally, save it to an LRU. This supports
+                // a few use cases, like:
+                // - offering all portal_historyStore content to peers, ignoring radius
+                // - serving hotspots in network, outside of radius
+                self.cache.write().put(key.content_id(), value.clone());
+                Err(e)
+            }
+        }
+    }
+
+    fn durable_store(
         &mut self,
         key: &impl OverlayContentKey,
         value: &Vec<u8>,
@@ -226,7 +251,15 @@ impl PortalStorage {
     /// If no value exists for the given content-key, Result<None> is returned.
     pub fn get(&self, key: &impl OverlayContentKey) -> Result<Option<Vec<u8>>, PortalStorageError> {
         let content_id = key.content_id();
-        Ok(self.db.get(content_id)?)
+        let result = self.db.get(content_id);
+        if let Ok(Some(val)) = result {
+            Ok(Some(val))
+        } else if let Some(cached) = self.cache.write().get(&content_id) {
+            // When database doesn't return Some value, try to return cached value
+            Ok(Some(cached.clone()))
+        } else {
+            Ok(result?)
+        }
     }
 
     /// Public method for retrieving the node's current radius.
