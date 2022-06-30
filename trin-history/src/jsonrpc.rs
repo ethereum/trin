@@ -1,3 +1,4 @@
+use log::warn;
 use std::sync::Arc;
 
 use serde_json::{json, Value};
@@ -63,7 +64,7 @@ impl HistoryRequestHandler {
                         Ok(params) => {
                             let content_key = params.content_key.clone();
                             let content = params.content.clone();
-                            match self
+                            let rpc_response = match self
                                 .network
                                 .overlay
                                 .storage
@@ -72,7 +73,16 @@ impl HistoryRequestHandler {
                             {
                                 Ok(_) => Ok(Value::String("true".to_string())),
                                 Err(msg) => Ok(Value::String(msg.to_string())),
+                            };
+                            // We want to propagate even outside radius. For example: bridge nodes
+                            let gossip_keys = vec![content_key];
+                            if let Err(err) = self.network.overlay.propagate_gossip(gossip_keys) {
+                                warn!(
+                                    "Could not propagate during portal_historyStore, because: {}",
+                                    err
+                                );
                             }
+                            rpc_response
                         }
                         Err(msg) => Ok(Value::String(msg.to_string())),
                     };

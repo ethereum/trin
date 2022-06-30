@@ -279,7 +279,7 @@ where
     }
 
     /// Propagate gossip accepted content via OFFER/ACCEPT:
-    fn propagate_gossip(&self, offer_keys: Vec<TContentKey>) -> anyhow::Result<()> {
+    pub fn propagate_gossip(&self, offer_keys: Vec<TContentKey>) -> anyhow::Result<()> {
         // Get all nodes from overlay routing table
         let kbuckets = self.kbuckets.read();
         let all_nodes: Vec<&kbucket::Node<NodeId, Node>> = kbuckets
