@@ -255,8 +255,8 @@ where
 
         // TODO: Verify overlay content data with an Oracle
 
-        // Temporarily store content key/value pairs to propagate here
-        let mut content_keys_values: Vec<(TContentKey, ByteList)> = Vec::new();
+        // Track which content keys were successfully stored, for propagation
+        let mut stored_content_keys: Vec<TContentKey> = Vec::new();
 
         // Try to store the content into the database and propagate gossip the content
         for (content_key, content_value) in content_keys.into_iter().zip(content_values.to_vec()) {
@@ -264,7 +264,7 @@ where
                 Ok(key) => {
                     // Store accepted content in DB
                     self.store_overlay_content(&key, content_value.clone());
-                    content_keys_values.push((key, content_value))
+                    stored_content_keys.push(key)
                 }
                 Err(err) => {
                     return Err(anyhow!(
@@ -274,12 +274,12 @@ where
             }
         }
         // Propagate gossip accepted content
-        self.propagate_gossip(content_keys_values)?;
+        self.propagate_gossip(stored_content_keys)?;
         Ok(())
     }
 
     /// Propagate gossip accepted content via OFFER/ACCEPT:
-    fn propagate_gossip(&self, content: Vec<(TContentKey, ByteList)>) -> anyhow::Result<()> {
+    fn propagate_gossip(&self, offer_keys: Vec<TContentKey>) -> anyhow::Result<()> {
         // Get all nodes from overlay routing table
         let kbuckets = self.kbuckets.read();
         let all_nodes: Vec<&kbucket::Node<NodeId, Node>> = kbuckets
@@ -297,15 +297,13 @@ where
         let mut enrs_and_content: HashMap<String, Vec<RawContentKey>> = HashMap::new();
 
         // Filter all nodes from overlay routing table where XOR_distance(content_id, nodeId) < node radius
-        for content_key_value in content {
+        for content_key in offer_keys {
             let interested_enrs: Vec<Enr> = all_nodes
                 .clone()
                 .into_iter()
                 .filter(|node| {
-                    XorMetric::distance(
-                        &content_key_value.0.content_id(),
-                        &node.key.preimage().raw(),
-                    ) < node.value.data_radius()
+                    XorMetric::distance(&content_key.content_id(), &node.key.preimage().raw())
+                        < node.value.data_radius()
                 })
                 .map(|node| node.value.enr())
                 .collect();
@@ -313,7 +311,7 @@ where
             // Continue if no nodes are interested in the content
             if interested_enrs.is_empty() {
                 debug!("No nodes interested in neighborhood gossip: content_key={} num_nodes_checked={}",
-                    hex_encode(content_key_value.0.into()), all_nodes.len());
+                    hex_encode(content_key.into()), all_nodes.len());
                 continue;
             }
 
@@ -326,7 +324,7 @@ where
                 enrs_and_content
                     .entry(enr.to_base64())
                     .or_default()
-                    .push(content_key_value.clone().0.into());
+                    .push(content_key.clone().into());
             }
         }
 
