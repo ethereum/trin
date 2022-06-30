@@ -377,7 +377,7 @@ where
                 request_tx: internal_request_tx,
                 active_outgoing_requests: Arc::new(RwLock::new(HashMap::new())),
                 find_node_query_pool: QueryPool::new(query_timeout),
-                find_content_query_pool: QueryPool::new(Duration::from_secs(60)),
+                find_content_query_pool: QueryPool::new(query_timeout),
                 query_peer_timeout,
                 query_parallelism,
                 query_num_results,
@@ -1847,7 +1847,8 @@ where
         if let kbucket::Entry::Present(entry, _) = self.kbuckets.write().entry(&key) {
             return Some(entry.value().clone().enr());
         }
-        // Check the untrusted addresses for ongoing queries.
+
+        // Check the existing find node queries for the ENR.
         for (query_info, _) in self.find_node_query_pool.iter() {
             if let Some(enr) = query_info
                 .untrusted_enrs
@@ -1857,6 +1858,18 @@ where
                 return Some(enr.clone());
             }
         }
+
+        // Check the existing find content queries for the ENR.
+        for (query_info, _) in self.find_content_query_pool.iter() {
+            if let Some(enr) = query_info
+                .untrusted_enrs
+                .iter()
+                .find(|v| v.node_id() == *node_id)
+            {
+                return Some(enr.clone());
+            }
+        }
+
         None
     }
 
