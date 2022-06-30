@@ -73,7 +73,7 @@ async fn spawn_utp_listener() -> (
 }
 
 #[test_log::test(tokio::test)]
-#[timeout(100)]
+#[timeout(1000)]
 /// Simulate simple OFFER -> ACCEPT uTP payload transfer
 async fn utp_listener_events() {
     let protocol_id = ProtocolId::History;
