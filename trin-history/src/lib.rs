@@ -15,98 +15,13 @@ use tokio::{
 
 use crate::{events::HistoryEvents, jsonrpc::HistoryRequestHandler};
 use trin_core::{
-    cli::TrinConfig,
     jsonrpc::types::HistoryJsonRpcRequest,
     portalnet::{
-        discovery::Discovery,
-        events::PortalnetEvents,
-        storage::{PortalStorage, PortalStorageConfig},
-        types::messages::PortalnetConfig,
+        discovery::Discovery, storage::PortalStorageConfig, types::messages::PortalnetConfig,
     },
     types::validation::HeaderOracle,
-    utils::bootnodes::parse_bootnodes,
-    utp::stream::{UtpListener, UtpListenerEvent, UtpListenerRequest},
+    utp::stream::{UtpListenerEvent, UtpListenerRequest},
 };
-
-pub async fn main(infura_url: String) -> Result<(), Box<dyn std::error::Error>> {
-    println!("Launching trin-history...");
-
-    let mut trin_config = TrinConfig::from_cli();
-
-    // Set chain history default params
-    trin_config.discovery_port = 9001;
-
-    trin_config.display_config();
-
-    let bootnode_enrs = parse_bootnodes(&trin_config.bootnodes)?;
-
-    let portalnet_config = PortalnetConfig {
-        external_addr: trin_config.external_addr,
-        private_key: trin_config.private_key.clone(),
-        listen_port: trin_config.discovery_port,
-        bootnode_enrs,
-        ..Default::default()
-    };
-
-    let mut discovery = Discovery::new(portalnet_config.clone()).unwrap();
-    discovery.start().await.unwrap();
-    let discovery = Arc::new(discovery);
-
-    // Search for discv5 peers (bucket refresh lookup)
-    tokio::spawn(Arc::clone(&discovery).bucket_refresh_lookup());
-
-    // Initialize and spawn UTP listener
-    let (utp_sender, overlay_sender, utp_listener_rx, mut utp_listener) =
-        UtpListener::new(Arc::clone(&discovery));
-    tokio::spawn(async move { utp_listener.start().await });
-
-    let (history_event_tx, history_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
-    let (history_utp_tx, history_utp_rx) = mpsc::unbounded_channel::<UtpListenerEvent>();
-    let portal_events_discovery = Arc::clone(&discovery);
-
-    // Initialize DB config
-    let storage_config =
-        PortalStorage::setup_config(discovery.local_enr().node_id(), trin_config.kb)?;
-
-    // Spawn main event handler
-    tokio::spawn(async move {
-        let events = PortalnetEvents::new(
-            portal_events_discovery,
-            utp_listener_rx,
-            Some(history_event_tx),
-            Some(history_utp_tx),
-            None,
-            None,
-            utp_sender,
-        )
-        .await;
-        events.start().await;
-    });
-
-    let header_oracle = Arc::new(RwLock::new(HeaderOracle {
-        infura_url,
-        ..HeaderOracle::default()
-    }));
-    let history_network = HistoryNetwork::new(
-        discovery.clone(),
-        overlay_sender,
-        storage_config,
-        portalnet_config.clone(),
-        header_oracle,
-    )
-    .await;
-    let history_network = Arc::new(history_network);
-
-    spawn_history_network(
-        history_network,
-        portalnet_config,
-        history_utp_rx,
-        history_event_rx,
-    )
-    .await
-    .unwrap();
-    Ok(())
-}
 
 type HistoryHandler = Option<HistoryRequestHandler>;
 type HistoryNetworkTask = Option<JoinHandle<()>>;
