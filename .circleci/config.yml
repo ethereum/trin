@@ -14,9 +14,6 @@ jobs:
             RUST_LOG: 'debug'
         steps:
             - checkout
-            - restore_cache:
-                keys:
-                    - cargo-{{ checksum "Cargo.lock" }}-v1
             - run:
                 name: Prepare for apt upgrades
                 command: sudo apt update
@@ -47,11 +44,6 @@ jobs:
             - run:
                 name: Test Trin workspace
                 command: cargo test --workspace --jobs 2
-            - save_cache:
-                key: cargo-{{ checksum "Cargo.lock" }}-v1
-                paths:
-                    - ~/.cargo
-                    - target
   win-build:
     description: |
       Build the crate for windows.
@@ -62,9 +54,6 @@ jobs:
         RUST_LOG: 'debug'
     steps:
       - checkout
-      - restore_cache:
-          keys:
-            - cargo-{{ checksum "Cargo.lock" }}-v1
       - run:
           name: Install rustup
           command: choco install rustup.install
@@ -92,11 +81,6 @@ jobs:
       - run:
           name: Cargo Test --target x86_64-pc-windows-msvc
           command: cargo test --target x86_64-pc-windows-msvc
-      - save_cache:
-          key: cargo-{{ checksum "Cargo.lock" }}-v1
-          paths:
-            - ~/.cargo
-            - target
 workflows:
   merge-test:
     jobs:
