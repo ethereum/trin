@@ -1,5 +1,4 @@
-use anyhow::anyhow;
-use log::debug;
+use log::{debug, error};
 use std::sync::{Arc, RwLock as StdRwLock};
 
 use parking_lot::RwLock;
@@ -8,7 +7,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use trin_core::{
     portalnet::{
         discovery::Discovery,
-        overlay::{OverlayConfig, OverlayProtocol, OverlayRequestError},
+        overlay::{OverlayConfig, OverlayProtocol},
         storage::{PortalStorage, PortalStorageConfig},
         types::{
             content_key::HistoryContentKey,
@@ -65,7 +64,7 @@ impl HistoryNetwork {
         // The overlay ping via talkreq will trigger a session at the base layer, then
         // a session on the (overlay) portal network.
         for enr in self.overlay.discovery.discv5.table_entries_enr() {
-            debug!("Pinging {} on portal history network", enr);
+            debug!("Attempting bond with bootnode {}", enr);
             let ping_result = self.overlay.send_ping(enr.clone()).await;
 
             match ping_result {
@@ -73,45 +72,9 @@ impl HistoryNetwork {
                     debug!("Successfully bonded with {}", enr);
                     continue;
                 }
-                Err(OverlayRequestError::ChannelFailure(error)) => {
-                    debug!("Channel failure sending ping: {}", error);
-                    continue;
-                }
-                Err(OverlayRequestError::Timeout) => {
-                    debug!("Timed out while bonding with {}", enr);
-                    continue;
-                }
-                Err(OverlayRequestError::EmptyResponse) => {
-                    debug!("Empty response to ping from: {}", enr);
-                    continue;
-                }
-                Err(OverlayRequestError::InvalidRequest(_)) => {
-                    debug!("Sent invalid ping request to {}", enr);
-                    continue;
-                }
-                Err(OverlayRequestError::InvalidResponse) => {
-                    debug!("Invalid ping response from: {}", enr);
-                    continue;
-                }
-                Err(OverlayRequestError::Failure(_)) => {
-                    debug!("Failure to serve ping response from: {}", enr);
-                    continue;
-                }
-                Err(OverlayRequestError::DecodeError) => {
-                    debug!("Error decoding ping response from: {}", enr);
-                    continue;
-                }
-                Err(OverlayRequestError::AcceptError(error)) => {
-                    debug!("Error building Accept message: {:?}", error);
-                }
-                Err(OverlayRequestError::Discv5Error(error)) => {
-                    debug!("Unexpected error while bonding with {} => {:?}", enr, error);
-                    return Err(anyhow!(error.to_string()));
-                }
-                _ => {
-                    let msg = format!("Unexpected error while bonding with {enr}");
-                    debug!("{msg}");
-                    return Err(anyhow!(msg));
+                Err(err) => {
+                    error!("{err} while pinging bootnode: {enr:?}");
+                    std::process::exit(1);
                 }
             }
         }

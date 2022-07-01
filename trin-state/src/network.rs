@@ -1,15 +1,14 @@
 use std::sync::Arc;
 
-use anyhow::anyhow;
 use discv5::enr::NodeId;
 use eth_trie::EthTrie;
-use log::debug;
+use log::{debug, error};
 use parking_lot::RwLock;
 use tokio::sync::mpsc::UnboundedSender;
 use trin_core::{
     portalnet::{
         discovery::Discovery,
-        overlay::{OverlayConfig, OverlayProtocol, OverlayRequestError},
+        overlay::{OverlayConfig, OverlayProtocol},
         storage::{PortalStorage, PortalStorageConfig},
         types::{
             content_key::StateContentKey,
@@ -82,45 +81,8 @@ impl StateNetwork {
                     debug!("Successfully bonded with {}", enr);
                     continue;
                 }
-                Err(OverlayRequestError::ChannelFailure(error)) => {
-                    debug!("Channel failure sending ping: {}", error);
-                    continue;
-                }
-                Err(OverlayRequestError::Timeout) => {
-                    debug!("Timed out while bonding with {}", enr);
-                    continue;
-                }
-                Err(OverlayRequestError::EmptyResponse) => {
-                    debug!("Empty response to ping from: {}", enr);
-                    continue;
-                }
-                Err(OverlayRequestError::InvalidRequest(_)) => {
-                    debug!("Sent invalid ping request to {}", enr);
-                    continue;
-                }
-                Err(OverlayRequestError::InvalidResponse) => {
-                    debug!("Invalid ping response from: {}", enr);
-                    continue;
-                }
-                Err(OverlayRequestError::Failure(_)) => {
-                    debug!("Failure to serve ping response from: {}", enr);
-                    continue;
-                }
-                Err(OverlayRequestError::DecodeError) => {
-                    debug!("Error decoding ping response from: {}", enr);
-                    continue;
-                }
-                Err(OverlayRequestError::AcceptError(error)) => {
-                    debug!("Error building Accept message: {:?}", error);
-                }
-                Err(OverlayRequestError::Discv5Error(error)) => {
-                    debug!("Unexpected error while bonding with {} => {:?}", enr, error);
-                    return Err(anyhow!(error.to_string()));
-                }
-                _ => {
-                    let msg = format!("Unexpected error while bonding with {enr}");
-                    debug!("{msg}");
-                    return Err(anyhow!(msg));
+                Err(err) => {
+                    error!("{err} while pinging bootnode: {enr:?}");
                 }
             }
         }
