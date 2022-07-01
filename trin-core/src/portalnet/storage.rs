@@ -497,7 +497,7 @@ pub mod test {
 
     use std::env;
 
-    use quickcheck::{quickcheck, Arbitrary, Gen, TestResult};
+    use quickcheck::{quickcheck, Arbitrary, Gen, QuickCheck, TestResult};
     use rand::RngCore;
     use serial_test::serial;
     use tempdir::TempDir;
@@ -556,27 +556,32 @@ pub mod test {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn test_store() -> Result<(), PortalStorageError> {
-        let temp_dir = setup_temp_dir();
+        fn test_store_random_bytes() {
+            let temp_dir = setup_temp_dir();
 
-        let node_id = NodeId::random();
+            let node_id = NodeId::random();
 
-        let db = Arc::new(PortalStorage::setup_rocksdb(node_id)?);
-        let sql_connection_pool = PortalStorage::setup_sql(node_id)?;
+            let db = Arc::new(PortalStorage::setup_rocksdb(node_id).unwrap());
+            let sql_connection_pool = PortalStorage::setup_sql(node_id).unwrap();
 
-        let storage_config = PortalStorageConfig {
-            storage_capacity_kb: 100,
-            node_id,
-            distance_function: DistanceFunction::Xor,
-            db,
-            sql_connection_pool,
-        };
+            let storage_config = PortalStorageConfig {
+                storage_capacity_kb: 100,
+                node_id,
+                distance_function: DistanceFunction::Xor,
+                db,
+                sql_connection_pool,
+            };
 
-        let mut storage = PortalStorage::new(storage_config)?;
-        let content_key = generate_random_content_key();
-        let value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
-        storage.store(&content_key, &value)?;
-
-        temp_dir.close()?;
+            let mut storage = PortalStorage::new(storage_config).unwrap();
+            let content_key = generate_random_content_key();
+            let mut value = [0u8; 32];
+            rand::thread_rng().fill_bytes(&mut value);
+            storage.store(&content_key, &value.to_vec()).unwrap();
+            temp_dir.close().unwrap();
+        }
+        QuickCheck::new()
+            .tests(10)
+            .quickcheck(test_store_random_bytes as fn() -> _);
         Ok(())
     }
 
