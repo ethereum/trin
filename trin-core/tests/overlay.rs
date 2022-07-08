@@ -21,7 +21,7 @@ use discv5::Discv5Event;
 use ethereum_types::U256;
 use parking_lot::RwLock;
 use tokio::{
-    sync::{mpsc, mpsc::unbounded_channel},
+    sync::{mpsc, mpsc::unbounded_channel, Mutex},
     time::{self, Duration},
 };
 
@@ -40,7 +40,7 @@ async fn init_overlay(
     let overlay_config = OverlayConfig::default();
     // Ignore all uTP events
     let (utp_listener_tx, _) = unbounded_channel::<UtpListenerRequest>();
-    let validator = MockValidator {};
+    let validator = Arc::new(Mutex::new(MockValidator {}));
 
     OverlayProtocol::new(
         overlay_config,

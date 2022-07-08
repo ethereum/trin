@@ -50,6 +50,7 @@ use rand::seq::IteratorRandom;
 use ssz::{Decode, Encode};
 use ssz_types::VariableList;
 use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::Mutex;
 use tracing::{debug, warn};
 
 pub use super::overlay_service::{OverlayRequestError, RequestDirection};
@@ -121,7 +122,7 @@ pub struct OverlayProtocol<TContentKey, TMetric, TValidator> {
 }
 
 impl<
-        TContentKey: OverlayContentKey + Send + Sync,
+        TContentKey: 'static + OverlayContentKey + Send + Sync,
         TMetric: Metric + Send + Sync,
         TValidator: 'static + Validator<TContentKey> + Send + Sync,
     > OverlayProtocol<TContentKey, TMetric, TValidator>
@@ -135,7 +136,7 @@ where
         storage: Arc<RwLock<PortalStorage>>,
         data_radius: U256,
         protocol: ProtocolId,
-        validator: TValidator,
+        validator: Arc<Mutex<TValidator>>,
     ) -> Self {
         let kbuckets = Arc::new(RwLock::new(KBucketsTable::new(
             discovery.local_enr().node_id().into(),
