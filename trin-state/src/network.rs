@@ -3,6 +3,7 @@ use std::sync::Arc;
 use discv5::enr::NodeId;
 use eth_trie::EthTrie;
 use log::{debug, error};
+
 use parking_lot::RwLock;
 use tokio::sync::mpsc::UnboundedSender;
 use trin_core::{
@@ -68,17 +69,19 @@ impl StateNetwork {
     }
 
     /// Convenience call for testing, quick way to ping bootnodes
-    pub async fn ping_bootnodes(&self) -> anyhow::Result<()> {
+    pub async fn ping_bootnodes(&self) {
         // Trigger bonding with bootnodes, at both the base layer and portal overlay.
         // The overlay ping via talkreq will trigger a session at the base layer, then
         // a session on the (overlay) portal network.
+        // Will return error (and end execution) if zero bootnodes succeed bonding.
+        let mut successfully_bonded_bootnode = false;
         for enr in self.overlay.discovery.discv5.table_entries_enr() {
             debug!("Attempting bond with bootnode {}", enr);
             let ping_result = self.overlay.send_ping(enr.clone()).await;
-
             match ping_result {
                 Ok(_) => {
                     debug!("Successfully bonded with {}", enr);
+                    successfully_bonded_bootnode = true;
                     continue;
                 }
                 Err(err) => {
@@ -86,6 +89,8 @@ impl StateNetwork {
                 }
             }
         }
-        Ok(())
+        if !successfully_bonded_bootnode {
+            error!("Failed to bond with any bootnodes, cannot join Portal State Network.")
+        }
     }
 }
