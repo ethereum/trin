@@ -5,6 +5,7 @@ use eth_trie::EthTrie;
 use log::{debug, error};
 use parking_lot::RwLock;
 use tokio::sync::mpsc::UnboundedSender;
+
 use trin_core::{
     portalnet::{
         discovery::Discovery,

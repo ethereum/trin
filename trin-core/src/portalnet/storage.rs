@@ -144,6 +144,21 @@ impl PortalStorage {
         }
     }
 
+    /// Public method for automatically storing content after a `should_store` check.
+    pub fn store_if_should(
+        &mut self,
+        key: &impl OverlayContentKey,
+        value: &Vec<u8>,
+    ) -> Result<bool, PortalStorageError> {
+        match self.should_store(key)? {
+            true => {
+                self.store(key, value)?;
+                Ok(true)
+            }
+            false => Ok(false),
+        }
+    }
+
     /// Public method for storing a given value for a given content-key.
     pub fn store(
         &mut self,
