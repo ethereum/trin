@@ -42,8 +42,6 @@ pub async fn run_trin(
     let mut discovery = Discovery::new(portalnet_config.clone()).unwrap();
     discovery.start().await.unwrap();
     let discovery = Arc::new(discovery);
-    // Search for discv5 peers (bucket refresh lookup)
-    tokio::spawn(Arc::clone(&discovery).bucket_refresh_lookup());
 
     // Initialize metrics
     if trin_config.enable_metrics {
