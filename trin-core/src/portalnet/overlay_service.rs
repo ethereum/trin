@@ -1,4 +1,6 @@
 use anyhow::anyhow;
+use bytes::{BufMut, Bytes, BytesMut};
+use std::io::Write;
 use std::{
     collections::HashMap,
     fmt,
@@ -43,7 +45,7 @@ use crate::{
 };
 
 use crate::{
-    portalnet::types::{content_key::RawContentKey, messages::ContentPayloadList},
+    portalnet::types::content_key::RawContentKey,
     utp::{
         stream::{UtpStream, BUF_SIZE},
         trin_helpers::UtpStreamId,
@@ -1268,11 +1270,11 @@ where
                 Self::provide_requested_content(storage, &response_clone, content_keys_offered)
                     .expect("Unable to provide requested content for acceptor: {msg:?}");
 
-            let content_payload = ContentPayloadList::new(content_items)
+            let content_payload = encode_content_payload(content_items)
                 .expect("Unable to build content payload: {msg:?}");
 
             // send the content to the acceptor over a uTP stream
-            if let Err(err) = conn.send_to(&content_payload.as_ssz_bytes()).await {
+            if let Err(err) = conn.send_to(&content_payload).await {
                 warn!("Error sending content {err}");
             };
             // Close uTP connection
@@ -1495,8 +1497,8 @@ where
         storage: Arc<RwLock<PortalStorage>>,
         accept_message: &Accept,
         content_keys_offered: Vec<TContentKey>,
-    ) -> anyhow::Result<Vec<ByteList>> {
-        let mut content_items: Vec<ByteList> = Vec::new();
+    ) -> anyhow::Result<Vec<Bytes>> {
+        let mut content_items: Vec<Bytes> = Vec::new();
 
         for (i, key) in accept_message
             .content_keys
@@ -1963,6 +1965,24 @@ fn limit_enr_list_to_max_bytes(enrs: Vec<SszEnr>, max_size: usize) -> Vec<SszEnr
             total_size < max_size
         })
         .collect()
+}
+
+/// A variable length unsigned integer (varint) is prefixed to each content item.
+// The varint hold the size, in bytes, of the consecutive content item.
+//
+// The varint encoding used is [Unsigned LEB128](https://en.wikipedia.org/wiki/LEB128#Encode_unsigned_integer).
+// The maximum content size allowed for this application is limited to `uint32`.
+fn encode_content_payload(content_items: Vec<Bytes>) -> anyhow::Result<BytesMut> {
+    let mut content_payload = BytesMut::new().writer();
+
+    for content_item in content_items {
+        leb128::write::unsigned(&mut content_payload, content_item.len() as u64)
+            .map_err(|err| anyhow!("Unable to encode LEB128 varint: {err}"))?;
+        content_payload
+            .write(&content_item)
+            .map_err(|err| anyhow!("unable to write to content payload buf: {err}"))?;
+    }
+    Ok(content_payload.get_ref().clone())
 }
 
 #[cfg(test)]
@@ -3043,6 +3063,16 @@ mod tests {
             }
             _ => panic!("Unexpected find content query result"),
         }
+    }
+
+    #[tokio::test]
+    async fn test_encode_content_payload() {
+        let content_items: Vec<Bytes> = vec![vec![1, 1].into(), vec![2, 2, 2].into()];
+        let expected_content_payload = hex::decode("02010103020202").unwrap();
+
+        let content_payload = encode_content_payload(content_items).unwrap().to_vec();
+
+        assert_eq!(expected_content_payload, content_payload);
     }
 
     #[tokio::test]

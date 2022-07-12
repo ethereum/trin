@@ -1,4 +1,6 @@
 use anyhow::anyhow;
+use bytes::{Buf, BytesMut};
+use std::io::Read;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     fmt::{Debug, Display},
@@ -24,11 +26,7 @@ use crate::portalnet::{
 };
 
 use crate::{
-    portalnet::types::{
-        content_key::RawContentKey,
-        messages::{ByteList, ContentPayloadList},
-        metric::XorMetric,
-    },
+    portalnet::types::{content_key::RawContentKey, messages::ByteList, metric::XorMetric},
     types::validation::Validator,
     utils,
     utp::{
@@ -47,7 +45,7 @@ use futures::channel::oneshot;
 use log::error;
 use parking_lot::RwLock;
 use rand::seq::IteratorRandom;
-use ssz::{Decode, Encode};
+use ssz::Encode;
 use ssz_types::VariableList;
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::{debug, warn};
@@ -243,9 +241,8 @@ where
         content_keys: Vec<RawContentKey>,
         payload: UtpPayload,
     ) -> anyhow::Result<()> {
-        // Process accepted uTP payload as SZZ decoded Container[payloads: List[ByteList, max_length=64]]
-        let content_values = ContentPayloadList::from_ssz_bytes(&payload)
-            .map_err(|err| anyhow!("Unable to decode uTP content payload: {err:?}"))?;
+        let content_values = read_content_values(payload)?;
+
         // Accepted content keys len should match content value len
         if content_keys.len() != content_values.len() {
             return Err(anyhow!(
@@ -660,6 +657,43 @@ fn log2_random_enrs(enrs: Vec<Enr>) -> anyhow::Result<Vec<Enr>> {
     Ok(random_enrs)
 }
 
+/// Decode content values from uTP payload. ALl content values are encoded with a LEB128 varint prefix
+/// which indicates the length in bytes of the consecutive content item.
+fn read_content_values(payload: Vec<u8>) -> anyhow::Result<Vec<ByteList>> {
+    let mut payload = BytesMut::from(&payload[..]).reader();
+
+    let mut content_values: Vec<ByteList> = Vec::new();
+
+    // Read LEB128 encoded index and content items until all payload bytes are consumed
+    while !payload.get_ref().is_empty() {
+        // Read LEB128 index
+        let (bytes_to_read, var_int) = read_varint(&mut payload.get_ref())?;
+        let mut buf = vec![0u8; bytes_to_read];
+        payload
+            .read_exact(&mut buf)
+            .map_err(|err| anyhow!("Error reading varint index: {err}"))?;
+
+        // Read the content item
+        let mut buf = vec![0u8; var_int as usize];
+        payload
+            .read_exact(&mut buf)
+            .map_err(|err| anyhow!("Error reading content itemL {err}"))?;
+        content_values.push(buf.into());
+    }
+    Ok(content_values)
+}
+
+/// Try to read up to five LEB128 bytes (The maximum content size allowed for this application is limited to `uint32`).
+fn read_varint(buf: &[u8]) -> anyhow::Result<(usize, u64)> {
+    for i in 1..6 {
+        match leb128::read::unsigned(&mut &buf[0..i]) {
+            Ok(varint) => return Ok((i, varint)),
+            Err(_) => continue,
+        }
+    }
+    Err(anyhow!("Unable to read varint index"))
+}
+
 fn validate_find_nodes_distances(distances: &Vec<u16>) -> Result<(), OverlayRequestError> {
     if distances.len() == 0 {
         return Err(OverlayRequestError::InvalidRequest(
@@ -732,5 +766,48 @@ mod test {
     fn test_log2_random_enrs_empty_input() {
         let all_nodes = vec![];
         log2_random_enrs(all_nodes).unwrap();
+    }
+
+    #[rstest]
+    #[case[u8::MIN as u32]]
+    #[case(u8::MAX as u32)]
+    #[case(u16::MAX as u32)]
+    #[case(u32::MAX)]
+    fn test_read_varint(#[case] var_int: u32) {
+        let mut buf = [0; 1024];
+        let mut writable = &mut buf[..];
+
+        let bytes_written = leb128::write::unsigned(&mut writable, var_int.into()).unwrap();
+
+        let (bytes_read, var_int_result) = read_varint(&mut buf[..]).unwrap();
+
+        assert_eq!(bytes_read, bytes_written);
+        assert_eq!(var_int_result, var_int as u64);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_read_varint_panic() {
+        let mut buf = [0; 1024];
+        let mut writable = &mut buf[..];
+        let var_int = u64::MAX;
+
+        leb128::write::unsigned(&mut writable, var_int).unwrap();
+
+        read_varint(&mut buf[..]).unwrap();
+    }
+
+    #[test]
+    fn test_read_content_values() {
+        let hex_payload = "03010101020101";
+        let payload = hex::decode(hex_payload).unwrap();
+        let content_values = read_content_values(payload).unwrap();
+
+        let expected_content_values = vec![
+            ByteList::new(vec![1, 1, 1]).unwrap(),
+            ByteList::new(vec![1, 1]).unwrap(),
+        ];
+
+        assert_eq!(content_values, expected_content_values);
     }
 }

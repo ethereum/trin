@@ -20,8 +20,6 @@ use validator::ValidationError;
 use crate::portalnet::{types::content_key::RawContentKey, Enr};
 
 pub type ByteList = VariableList<u8, typenum::U2048>;
-/// uTP content payload list represented as SSZ encoded Container[payloads: List[ByteList, max_length=64]]
-pub type ContentPayloadList = VariableList<ByteList, typenum::U64>;
 
 /// Custom payload element of Ping and Pong overlay messages
 #[derive(Debug, PartialEq, Clone)]
