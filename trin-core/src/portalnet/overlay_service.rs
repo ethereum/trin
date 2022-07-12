@@ -1,4 +1,5 @@
 use anyhow::anyhow;
+use bytes::Bytes;
 use std::{
     collections::HashMap,
     fmt,
@@ -42,8 +43,9 @@ use crate::{
     utp::stream::UtpListenerRequest,
 };
 
+use crate::utils::portal_wire;
 use crate::{
-    portalnet::types::{content_key::RawContentKey, messages::ContentPayloadList},
+    portalnet::types::content_key::RawContentKey,
     utp::{
         stream::{UtpStream, BUF_SIZE},
         trin_helpers::UtpStreamId,
@@ -1270,19 +1272,22 @@ where
                 _ => Err(anyhow!("Invalid request message paired with ACCEPT")),
             };
 
-            let content_items = match content_items {
-                Ok(items) => items,
+            let content_items: Vec<Bytes> = match content_items {
+                Ok(items) => items
+                    .into_iter()
+                    .map(|item| Bytes::from(item.to_vec()))
+                    .collect(),
                 Err(err) => {
                     warn!("Could not serve offered content to peer: {err}");
                     return;
                 }
             };
 
-            let content_payload = ContentPayloadList::new(content_items)
+            let content_payload = portal_wire::encode_content_payload(&content_items)
                 .expect("Unable to build content payload: {msg:?}");
 
             // send the content to the acceptor over a uTP stream
-            if let Err(err) = conn.send_to(&content_payload.as_ssz_bytes()).await {
+            if let Err(err) = conn.send_to(&content_payload).await {
                 warn!("Error sending content {err}");
             };
             // Close uTP connection
@@ -1516,6 +1521,11 @@ where
             .map_err(|_| anyhow!("Unable to decode our own offered content keys"))?;
 
         let mut content_items: Vec<ByteList> = Vec::new();
+        // =======
+        //         content_keys_offered: Vec<TContentKey>,
+        //     ) -> anyhow::Result<Vec<Bytes>> {
+        //         let mut content_items: Vec<Bytes> = Vec::new();
+        // >>>>>>> 33b16f1 (Add varint prefix to content send over uTP stream)
 
         for (i, key) in accept_message
             .content_keys
