@@ -1224,16 +1224,34 @@ where
         self.utp_listener_tx
             .send(utp_request).map_err(|err| anyhow!("Unable to send Connect request to UtpListener when processing ACCEPT message: {err}"))?;
 
-        let content_items = self.provide_requested_content(&response, content_keys_offered)?;
-
-        let content_payload = ContentPayloadList::new(content_items)
-            .map_err(|err| anyhow!("Unable to build content payload: {err:?}"))?;
+        let storage = Arc::clone(&self.storage);
+        let response_clone = response.clone();
 
         tokio::spawn(async move {
             let mut conn = rx.await.unwrap();
             // Handle STATE packet for SYN
             let mut buf = [0; BUF_SIZE];
             conn.recv(&mut buf).await.unwrap();
+
+            let content_items = match Self::provide_requested_content(
+                storage,
+                &response_clone,
+                content_keys_offered,
+            ) {
+                Ok(val) => val,
+                Err(msg) => {
+                    warn!("Unable to provide requested content for acceptor: {msg:?}");
+                    return;
+                }
+            };
+
+            let content_payload = match ContentPayloadList::new(content_items) {
+                Ok(val) => val,
+                Err(msg) => {
+                    warn!("Unable to build content payload: {msg:?}");
+                    return;
+                }
+            };
 
             // send the content to the acceptor over a uTP stream
             if let Err(err) = conn.send_to(&content_payload.as_ssz_bytes()).await {
@@ -1456,7 +1474,7 @@ where
 
     /// Provide the requested content key and content value for the acceptor
     fn provide_requested_content(
-        &self,
+        storage: Arc<RwLock<PortalStorage>>,
         accept_message: &Accept,
         content_keys_offered: Vec<TContentKey>,
     ) -> anyhow::Result<Vec<ByteList>> {
@@ -1469,7 +1487,7 @@ where
             .zip(content_keys_offered.iter())
         {
             if i == true {
-                match self.storage.read().get(key) {
+                match storage.read().get(key) {
                     Ok(content) => match content {
                         Some(content) => content_items.push(content.into()),
                         None => return Err(anyhow!("Unable to read offered content!")),
