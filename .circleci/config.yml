@@ -67,7 +67,8 @@ jobs:
             - cargo-{{ checksum "Cargo.lock" }}-v1
       - run:
           name: Install rustup
-          command: choco install rustup.install
+          # todo: Remove --ignore-checksums flag
+          command: choco install rustup.install --ignore-checksums
       - run:
           name: Install clang
           command: choco install llvm
