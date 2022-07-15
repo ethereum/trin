@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{HashMap, HashSet},
     fmt::{Debug, Display},
     marker::{PhantomData, Sync},
     str::FromStr,
@@ -389,31 +389,30 @@ where
             .collect()
     }
 
-    /// Returns a map (BTree for its ordering guarantees) with:
+    /// Returns a tuple of:
     ///     key: usize representing bucket index
     ///     value: Vec of tuples, each tuple represents a node
-    pub fn bucket_entries(&self) -> BTreeMap<usize, Vec<(NodeId, Enr, NodeStatus, U256)>> {
+    pub fn bucket_entries(&self) -> Vec<(usize, NodeId, Enr, NodeStatus, U256)> {
         self.kbuckets
             .read()
             .buckets_iter()
             .enumerate()
             .filter(|(_, bucket)| bucket.num_entries() > 0)
             .map(|(index, bucket)| {
-                (
-                    index,
-                    bucket
-                        .iter()
-                        .map(|node| {
-                            (
-                                *node.key.preimage(),
-                                node.value.enr().clone(),
-                                node.status,
-                                node.value.data_radius(),
-                            )
-                        })
-                        .collect(),
-                )
+                bucket
+                    .iter()
+                    .map(|node| {
+                        (
+                            index,
+                            *node.key.preimage(),
+                            node.value.enr().clone(),
+                            node.status,
+                            node.value.data_radius(),
+                        )
+                    })
+                    .collect::<Vec<(usize, NodeId, Enr, NodeStatus, U256)>>()
             })
+            .flatten()
             .collect()
     }
 
