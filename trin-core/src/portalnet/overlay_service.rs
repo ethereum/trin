@@ -613,9 +613,9 @@ where
             }
             Ok(())
         } else {
-            Err(OverlayRequestError::UtpError(
-                "Can't find ENR in overlay routing table matching remote NodeId".to_string(),
-            ))
+            Err(OverlayRequestError::UtpError(format!(
+                "Can't find ENR in overlay routing table matching remote NodeId: {source}"
+            )))
         }
     }
 
