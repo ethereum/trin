@@ -1,5 +1,5 @@
 use anyhow::anyhow;
-use ethereum_types::{U256, U512};
+use ethereum_types::{H256, U256, U512};
 use sha2::{Digest as Sha2Digest, Sha256};
 use sha3::{Digest, Keccak256};
 use ssz::{self, Decode, Encode};
@@ -66,7 +66,7 @@ impl OverlayContentKey for IdentityContentKey {
 //
 
 /// A content key in the history overlay network.
-#[derive(Clone, Debug, Decode, Encode)]
+#[derive(Clone, Debug, Decode, Encode, PartialEq)]
 #[ssz(enum_behaviour = "union")]
 pub enum HistoryContentKey {
     /// A block header.
@@ -75,10 +75,14 @@ pub enum HistoryContentKey {
     BlockBody(BlockBody),
     /// The transaction receipts for a block.
     BlockReceipts(BlockReceipts),
+    /// An epoch header accumulator.
+    EpochAccumulator(EpochAccumulator),
+    /// The master header accumulator.
+    MasterAccumulator(MasterAccumulator),
 }
 
 /// A key for a block header.
-#[derive(Clone, Debug, Decode, Encode)]
+#[derive(Clone, Debug, Decode, Encode, PartialEq)]
 pub struct BlockHeader {
     /// Chain identifier.
     pub chain_id: u16,
@@ -87,7 +91,7 @@ pub struct BlockHeader {
 }
 
 /// A key for a block body.
-#[derive(Clone, Debug, Decode, Encode)]
+#[derive(Clone, Debug, Decode, Encode, PartialEq)]
 pub struct BlockBody {
     /// Chain identifier.
     pub chain_id: u16,
@@ -96,12 +100,67 @@ pub struct BlockBody {
 }
 
 /// A key for the transaction receipts for a block.
-#[derive(Clone, Debug, Decode, Encode)]
+#[derive(Clone, Debug, Decode, Encode, PartialEq)]
 pub struct BlockReceipts {
     /// Chain identifier.
     pub chain_id: u16,
     /// Hash of the block.
     pub block_hash: [u8; 32],
+}
+
+/// A key for the master header accumulator.
+#[derive(Clone, Debug, Decode, Encode, PartialEq)]
+#[ssz(enum_behaviour = "union")]
+pub enum MasterAccumulator {
+    Latest(SszNone),
+    MasterHash(H256),
+}
+
+/// Struct to represent encodable/decodable None value for an SSZ enum
+#[derive(Clone, Debug, PartialEq)]
+pub struct SszNone {
+    // In rust, None is a variant not a type,
+    // so we must use Option here to represent a None value
+    value: Option<()>,
+}
+
+impl SszNone {
+    pub fn new() -> Self {
+        Self { value: None }
+    }
+}
+
+impl ssz::Decode for SszNone {
+    fn is_ssz_fixed_len() -> bool {
+        true
+    }
+
+    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
+        match bytes.len() {
+            0 => Ok(Self { value: None }),
+            _ => Err(ssz::DecodeError::BytesInvalid(
+                "Expected None value to be empty, found bytes.".to_string(),
+            )),
+        }
+    }
+}
+
+impl ssz::Encode for SszNone {
+    fn is_ssz_fixed_len() -> bool {
+        true
+    }
+
+    fn ssz_append(&self, _buf: &mut Vec<u8>) {}
+
+    fn ssz_bytes_len(&self) -> usize {
+        0
+    }
+}
+
+/// A key for an epoch header accumulator.
+#[derive(Clone, Debug, Decode, Encode, PartialEq)]
+pub struct EpochAccumulator {
+    pub epoch_hash: H256,
 }
 
 // Silence clippy to avoid implementing newtype pattern on imported type.
@@ -657,5 +716,74 @@ mod test {
 
         assert_eq!(hex::decode(expected_content_key).unwrap(), encoded);
         assert_eq!(expected_content_id, key.content_id());
+    }
+
+    // test values sourced from: https://github.com/ethereum/portal-network-specs/blob/master/content-keys-test-vectors.md
+    #[test]
+    fn epoch_accumulator_key() {
+        let epoch_hash =
+            hex::decode("e242814b90ed3950e13aac7e56ce116540c71b41d1516605aada26c6c07cc491")
+                .unwrap();
+        let expected_content_key_encoding =
+            hex::decode("03e242814b90ed3950e13aac7e56ce116540c71b41d1516605aada26c6c07cc491")
+                .unwrap();
+        let expected_content_id =
+            &hex::decode("9fb2175e76c6989e0fdac3ee10c40d2a81eb176af32e1c16193e3904fe56896e")
+                .unwrap();
+
+        let content_key = HistoryContentKey::EpochAccumulator(EpochAccumulator {
+            epoch_hash: H256::from_slice(&epoch_hash),
+        });
+        assert_eq!(&content_key.content_id().to_vec(), expected_content_id);
+
+        let encoded_content_key: Vec<u8> = content_key.clone().into();
+        assert_eq!(encoded_content_key, expected_content_key_encoding);
+
+        // round trip
+        let decoded = HistoryContentKey::try_from(encoded_content_key).unwrap();
+        assert_eq!(decoded, content_key);
+    }
+
+    #[test]
+    fn master_accumulator_key_none() {
+        let expected_content_id =
+            &hex::decode("c0ba8a33ac67f44abff5984dfbb6f56c46b880ac2b86e1f23e7fa9c402c53ae7")
+                .unwrap();
+        let expected_content_key_encoding = hex::decode("0400").unwrap();
+
+        let content_key =
+            HistoryContentKey::MasterAccumulator(MasterAccumulator::Latest(SszNone::new()));
+        assert_eq!(&content_key.content_id().to_vec(), expected_content_id);
+
+        let encoded_content_key: Vec<u8> = content_key.clone().into();
+        assert_eq!(encoded_content_key, expected_content_key_encoding);
+
+        // round trip
+        let decoded = HistoryContentKey::try_from(encoded_content_key).unwrap();
+        assert_eq!(decoded, content_key);
+    }
+
+    #[test]
+    fn master_accumulator_key_master_hash() {
+        let expected_content_id =
+            &hex::decode("af75c3c9d0e89a5083361a3334a9c5583955f0dbe9a413eb79ba26400d1824a6")
+                .unwrap();
+        let expected_content_key_encoding =
+            hex::decode("040188cce8439ebc0c1d007177ffb6831c15c07b4361984cc52235b6fd728434f0c7")
+                .unwrap();
+        let master_hash = H256::from_slice(
+            &hex::decode("88cce8439ebc0c1d007177ffb6831c15c07b4361984cc52235b6fd728434f0c7")
+                .unwrap(),
+        );
+        let content_key =
+            HistoryContentKey::MasterAccumulator(MasterAccumulator::MasterHash(master_hash));
+        assert_eq!(&content_key.content_id().to_vec(), expected_content_id);
+
+        let encoded_content_key: Vec<u8> = content_key.clone().into();
+        assert_eq!(encoded_content_key, expected_content_key_encoding);
+
+        // round trip
+        let decoded = HistoryContentKey::try_from(encoded_content_key).unwrap();
+        assert_eq!(decoded, content_key);
     }
 }
