@@ -596,7 +596,7 @@ where
             callback: tx,
         }) {
             warn!(
-                "Failure sending request over {:?} service channel",
+                "Failure sending query over {:?} service channel",
                 self.protocol
             );
             return None;

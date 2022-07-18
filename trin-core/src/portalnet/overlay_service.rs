@@ -299,7 +299,7 @@ pub struct OverlayService<TContentKey, TMetric, TValidator> {
     /// expired entries.
     peers_to_ping: HashSetDelay<NodeId>,
     // TODO: This should probably be a bounded channel.
-    /// The receiver half of the service request channel.
+    /// The receiver half of the service command channel.
     command_rx: UnboundedReceiver<OverlayCommand<TContentKey>>,
     /// The sender half of a channel for service requests.
     /// This is used internally to submit requests (e.g. maintenance ping requests).
