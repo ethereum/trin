@@ -4212,6 +4212,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "tree_hash_derive"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3cd22d128157837a4434bb51119aef11103f17bfe8c402ce688cf25aa1e608ad"
+dependencies = [
+ "darling",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "trin"
 version = "0.1.0"
 dependencies = [
@@ -4310,6 +4321,8 @@ dependencies = [
  "tracing",
  "tracing-futures",
  "tracing-subscriber 0.2.25",
+ "tree_hash",
+ "tree_hash_derive",
  "uds_windows",
  "uint 0.8.5",
  "ureq",
