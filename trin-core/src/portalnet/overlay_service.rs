@@ -310,7 +310,7 @@ pub struct OverlayService<TContentKey, TMetric, TValidator> {
     // TODO: This should probably be a bounded channel.
     /// The receiver half of the service command channel.
     command_rx: UnboundedReceiver<OverlayCommand<TContentKey>>,
-    /// The sender half of a channel for service requests.
+    /// The sender half of the service command channel.
     /// This is used internally to submit requests (e.g. maintenance ping requests).
     command_tx: UnboundedSender<OverlayCommand<TContentKey>>,
     /// A map of active outgoing requests.
