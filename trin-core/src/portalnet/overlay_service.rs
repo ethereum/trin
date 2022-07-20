@@ -68,7 +68,6 @@ use ssz::Encode;
 use ssz_types::{BitList, VariableList};
 use thiserror::Error;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
-use tokio::sync::Mutex;
 
 /// Maximum number of ENRs in response to FindNodes.
 pub const FIND_NODES_MAX_NODES: usize = 32;
@@ -318,7 +317,7 @@ pub struct OverlayService<TContentKey, TMetric, TValidator> {
     /// Metrics reporting component
     metrics: Option<OverlayMetrics>,
     /// Validator for overlay network content.
-    validator: Arc<Mutex<TValidator>>,
+    validator: Arc<TValidator>,
 }
 
 impl<
@@ -344,7 +343,7 @@ where
         protocol: ProtocolId,
         utp_listener_sender: UnboundedSender<UtpListenerRequest>,
         enable_metrics: bool,
-        validator: Arc<Mutex<TValidator>>,
+        validator: Arc<TValidator>,
         query_timeout: Duration,
         query_peer_timeout: Duration,
         query_parallelism: usize,
@@ -1233,25 +1232,12 @@ where
             let mut buf = [0; BUF_SIZE];
             conn.recv(&mut buf).await.unwrap();
 
-            let content_items = match Self::provide_requested_content(
-                storage,
-                &response_clone,
-                content_keys_offered,
-            ) {
-                Ok(val) => val,
-                Err(msg) => {
-                    warn!("Unable to provide requested content for acceptor: {msg:?}");
-                    return;
-                }
-            };
+            let content_items =
+                Self::provide_requested_content(storage, &response_clone, content_keys_offered)
+                    .expect("Unable to provide requested content for acceptor: {msg:?}");
 
-            let content_payload = match ContentPayloadList::new(content_items) {
-                Ok(val) => val,
-                Err(msg) => {
-                    warn!("Unable to build content payload: {msg:?}");
-                    return;
-                }
-            };
+            let content_payload = ContentPayloadList::new(content_items)
+                .expect("Unable to build content payload: {msg:?}");
 
             // send the content to the acceptor over a uTP stream
             if let Err(err) = conn.send_to(&content_payload.as_ssz_bytes()).await {
@@ -1363,11 +1349,11 @@ where
                     // Spawn task that validates content before storing.
                     // Allows for non-blocking requests to this/other overlay services.
                     tokio::spawn(async move {
-                        let mut lock = validator.lock().await;
-                        if let Err(err) =
-                            lock.validate_content(&content_key, &content.to_vec()).await
+                        if let Err(err) = validator
+                            .validate_content(&content_key, &content.to_vec())
+                            .await
                         {
-                            error!("Unable to validate received content: {err:?}");
+                            warn!("Unable to validate received content: {err:?}");
                             return;
                         };
 
@@ -2011,7 +1997,7 @@ mod tests {
         let (request_tx, request_rx) = mpsc::unbounded_channel();
         let (response_tx, response_rx) = mpsc::unbounded_channel();
         let metrics = None;
-        let validator = Arc::new(Mutex::new(MockValidator {}));
+        let validator = Arc::new(MockValidator {});
 
         let service = OverlayService {
             discovery,

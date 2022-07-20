@@ -50,7 +50,6 @@ use rand::seq::IteratorRandom;
 use ssz::{Decode, Encode};
 use ssz_types::VariableList;
 use tokio::sync::mpsc::UnboundedSender;
-use tokio::sync::Mutex;
 use tracing::{debug, warn};
 
 pub use super::overlay_service::{OverlayRequestError, RequestDirection};
@@ -136,7 +135,7 @@ where
         storage: Arc<RwLock<PortalStorage>>,
         data_radius: U256,
         protocol: ProtocolId,
-        validator: Arc<Mutex<TValidator>>,
+        validator: Arc<TValidator>,
     ) -> Self {
         let kbuckets = Arc::new(RwLock::new(KBucketsTable::new(
             discovery.local_enr().node_id().into(),

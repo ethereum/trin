@@ -5,7 +5,6 @@ use eth_trie::EthTrie;
 use log::{debug, error};
 use parking_lot::RwLock;
 use tokio::sync::mpsc::UnboundedSender;
-use tokio::sync::Mutex;
 use trin_core::{
     portalnet::{
         discovery::Discovery,
@@ -43,9 +42,9 @@ impl StateNetwork {
         let trie = EthTrie::new(Arc::new(triedb));
 
         let storage = Arc::new(RwLock::new(PortalStorage::new(storage_config).unwrap()));
-        let validator = Arc::new(Mutex::new(StateValidator {
+        let validator = Arc::new(StateValidator {
             header_oracle: HeaderOracle::default(),
-        }));
+        });
         let config = OverlayConfig {
             bootnode_enrs: portal_config.bootnode_enrs.clone(),
             enable_metrics: portal_config.enable_metrics,
