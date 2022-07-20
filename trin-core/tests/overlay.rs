@@ -40,7 +40,7 @@ async fn init_overlay(
     let overlay_config = OverlayConfig::default();
     // Ignore all uTP events
     let (utp_listener_tx, _) = unbounded_channel::<UtpListenerRequest>();
-    let validator = MockValidator {};
+    let validator = Arc::new(MockValidator {});
 
     OverlayProtocol::new(
         overlay_config,

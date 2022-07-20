@@ -317,11 +317,11 @@ pub struct OverlayService<TContentKey, TMetric, TValidator> {
     /// Metrics reporting component
     metrics: Option<OverlayMetrics>,
     /// Validator for overlay network content.
-    validator: TValidator,
+    validator: Arc<TValidator>,
 }
 
 impl<
-        TContentKey: OverlayContentKey + Send + Sync,
+        TContentKey: 'static + OverlayContentKey + Send + Sync,
         TMetric: Metric + Send + Sync,
         TValidator: 'static + Validator<TContentKey> + Send + Sync,
     > OverlayService<TContentKey, TMetric, TValidator>
@@ -343,7 +343,7 @@ where
         protocol: ProtocolId,
         utp_listener_sender: UnboundedSender<UtpListenerRequest>,
         enable_metrics: bool,
-        validator: TValidator,
+        validator: Arc<TValidator>,
         query_timeout: Duration,
         query_peer_timeout: Duration,
         query_parallelism: usize,
@@ -486,7 +486,7 @@ where
 
                         // Perform background processing.
                         match response.response {
-                            Ok(response) => self.process_response(response, active_request.destination, active_request.request, active_request.query_id).await,
+                            Ok(response) => self.process_response(response, active_request.destination, active_request.request, active_request.query_id),
                             Err(error) => self.process_request_failure(response.request_id, active_request.destination, error),
                         }
 
@@ -1108,7 +1108,7 @@ where
     }
 
     /// Processes a response to an outgoing request from some source node.
-    async fn process_response(
+    fn process_response(
         &mut self,
         response: Response,
         source: Enr,
@@ -1171,7 +1171,6 @@ where
                     }
                 };
                 self.process_content(content, source, find_content_request, query_id)
-                    .await
             }
             Response::Accept(accept) => {
                 let offer_request = match request {
@@ -1182,10 +1181,7 @@ where
                     }
                 };
 
-                if let Err(err) = self
-                    .process_accept(accept, source, offer_request.content_keys)
-                    .await
-                {
+                if let Err(err) = self.process_accept(accept, source, offer_request.content_keys) {
                     error!("Error processing ACCEPT response in overlay service: {err}")
                 }
             }
@@ -1193,7 +1189,7 @@ where
     }
 
     /// Process ACCEPT response
-    pub async fn process_accept(
+    pub fn process_accept(
         &self,
         response: Accept,
         enr: Enr,
@@ -1227,17 +1223,22 @@ where
         self.utp_listener_tx
             .send(utp_request).map_err(|err| anyhow!("Unable to send Connect request to UtpListener when processing ACCEPT message: {err}"))?;
 
-        let mut conn = rx.await?;
-        // Handle STATE packet for SYN
-        let mut buf = [0; BUF_SIZE];
-        conn.recv(&mut buf).await?;
-
-        let content_items = self.provide_requested_content(&response, content_keys_offered)?;
-
-        let content_payload = ContentPayloadList::new(content_items)
-            .map_err(|err| anyhow!("Unable to build content payload: {err:?}"))?;
+        let storage = Arc::clone(&self.storage);
+        let response_clone = response.clone();
 
         tokio::spawn(async move {
+            let mut conn = rx.await.unwrap();
+            // Handle STATE packet for SYN
+            let mut buf = [0; BUF_SIZE];
+            conn.recv(&mut buf).await.unwrap();
+
+            let content_items =
+                Self::provide_requested_content(storage, &response_clone, content_keys_offered)
+                    .expect("Unable to provide requested content for acceptor: {msg:?}");
+
+            let content_payload = ContentPayloadList::new(content_items)
+                .expect("Unable to build content payload: {msg:?}");
+
             // send the content to the acceptor over a uTP stream
             if let Err(err) = conn.send_to(&content_payload.as_ssz_bytes()).await {
                 warn!("Error sending content {err}");
@@ -1297,7 +1298,7 @@ where
     }
 
     /// Processes a Content response.
-    async fn process_content(
+    fn process_content(
         &mut self,
         content: Content,
         source: Enr,
@@ -1315,8 +1316,7 @@ where
                 self.protocol, id
             ),
             Content::Content(content) => {
-                self.process_received_content(content.clone(), request)
-                    .await;
+                self.process_received_content(content.clone(), request);
                 // TODO: Should we only advance the query if the content has been validated?
                 if let Some(query_id) = query_id {
                     self.advance_find_content_query_with_content(&query_id, source, content.into());
@@ -1332,7 +1332,7 @@ where
         }
     }
 
-    async fn process_received_content(&mut self, content: ByteList, request: FindContent) {
+    fn process_received_content(&mut self, content: ByteList, request: FindContent) {
         let content_key = match TContentKey::try_from(request.content_key) {
             Ok(val) => val,
             Err(msg) => {
@@ -1344,19 +1344,23 @@ where
         match should_store {
             Ok(val) => {
                 if val {
-                    // validate content before storing
-                    if let Err(err) = self
-                        .validator
-                        .validate_content(&content_key, &content.to_vec())
-                        .await
-                    {
-                        error!("Unable to validate received content: {err:?}");
-                        return;
-                    };
+                    let validator = Arc::clone(&self.validator);
+                    let storage = Arc::clone(&self.storage);
+                    // Spawn task that validates content before storing.
+                    // Allows for non-blocking requests to this/other overlay services.
+                    tokio::spawn(async move {
+                        if let Err(err) = validator
+                            .validate_content(&content_key, &content.to_vec())
+                            .await
+                        {
+                            warn!("Unable to validate received content: {err:?}");
+                            return;
+                        };
 
-                    if let Err(err) = self.storage.write().store(&content_key, &content.into()) {
-                        error!("Content received, but not stored: {err}")
-                    }
+                        if let Err(err) = storage.write().store(&content_key, &content.into()) {
+                            error!("Content received, but not stored: {err}")
+                        }
+                    });
                 } else {
                     debug!(
                         "Content received, but not stored: Content is already stored or its distance falls outside current radius."
@@ -1456,7 +1460,7 @@ where
 
     /// Provide the requested content key and content value for the acceptor
     fn provide_requested_content(
-        &self,
+        storage: Arc<RwLock<PortalStorage>>,
         accept_message: &Accept,
         content_keys_offered: Vec<TContentKey>,
     ) -> anyhow::Result<Vec<ByteList>> {
@@ -1469,7 +1473,7 @@ where
             .zip(content_keys_offered.iter())
         {
             if i == true {
-                match self.storage.read().get(key) {
+                match storage.read().get(key) {
                     Ok(content) => match content {
                         Some(content) => content_items.push(content.into()),
                         None => return Err(anyhow!("Unable to read offered content!")),
@@ -1993,7 +1997,7 @@ mod tests {
         let (request_tx, request_rx) = mpsc::unbounded_channel();
         let (response_tx, response_rx) = mpsc::unbounded_channel();
         let metrics = None;
-        let validator = MockValidator {};
+        let validator = Arc::new(MockValidator {});
 
         let service = OverlayService {
             discovery,

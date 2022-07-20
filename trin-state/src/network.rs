@@ -42,9 +42,9 @@ impl StateNetwork {
         let trie = EthTrie::new(Arc::new(triedb));
 
         let storage = Arc::new(RwLock::new(PortalStorage::new(storage_config).unwrap()));
-        let validator = StateValidator {
+        let validator = Arc::new(StateValidator {
             header_oracle: HeaderOracle::default(),
-        };
+        });
         let config = OverlayConfig {
             bootnode_enrs: portal_config.bootnode_enrs.clone(),
             enable_metrics: portal_config.enable_metrics,

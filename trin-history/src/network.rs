@@ -41,7 +41,7 @@ impl HistoryNetwork {
             ..Default::default()
         };
         let storage = Arc::new(RwLock::new(PortalStorage::new(storage_config).unwrap()));
-        let validator = ChainHistoryValidator { header_oracle };
+        let validator = Arc::new(ChainHistoryValidator { header_oracle });
         let overlay = OverlayProtocol::new(
             config,
             discovery,

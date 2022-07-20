@@ -121,7 +121,7 @@ pub struct OverlayProtocol<TContentKey, TMetric, TValidator> {
 }
 
 impl<
-        TContentKey: OverlayContentKey + Send + Sync,
+        TContentKey: 'static + OverlayContentKey + Send + Sync,
         TMetric: Metric + Send + Sync,
         TValidator: 'static + Validator<TContentKey> + Send + Sync,
     > OverlayProtocol<TContentKey, TMetric, TValidator>
@@ -135,7 +135,7 @@ where
         storage: Arc<RwLock<PortalStorage>>,
         data_radius: U256,
         protocol: ProtocolId,
-        validator: TValidator,
+        validator: Arc<TValidator>,
     ) -> Self {
         let kbuckets = Arc::new(RwLock::new(KBucketsTable::new(
             discovery.local_enr().node_id().into(),

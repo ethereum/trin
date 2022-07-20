@@ -42,7 +42,7 @@ impl Default for HeaderOracle {
 
 impl HeaderOracle {
     // Currently falls back to infura, to be updated to use canonical block indices network.
-    pub fn get_hash_at_height(&mut self, block_number: u64) -> anyhow::Result<String> {
+    pub fn get_hash_at_height(&self, block_number: u64) -> anyhow::Result<String> {
         let hex_number = format!("0x:{:02X}", block_number);
         let request = JsonRequest {
             jsonrpc: "2.0".to_string(),
@@ -70,7 +70,7 @@ impl HeaderOracle {
         Ok(infura_hash.to_owned())
     }
 
-    pub fn get_header_by_hash(&mut self, block_hash: H256) -> anyhow::Result<Header> {
+    pub fn get_header_by_hash(&self, block_hash: H256) -> anyhow::Result<Header> {
         let block_hash = format!("0x{:02X}", block_hash);
         let request = JsonRequest {
             jsonrpc: "2.0".to_string(),
@@ -101,7 +101,7 @@ impl HeaderOracle {
 #[async_trait]
 pub trait Validator<TContentKey> {
     async fn validate_content(
-        &mut self,
+        &self,
         content_key: &TContentKey,
         content: &[u8],
     ) -> anyhow::Result<()>
@@ -115,7 +115,7 @@ pub struct MockValidator {}
 #[async_trait]
 impl Validator<IdentityContentKey> for MockValidator {
     async fn validate_content(
-        &mut self,
+        &self,
         _content_key: &IdentityContentKey,
         _content: &[u8],
     ) -> anyhow::Result<()>

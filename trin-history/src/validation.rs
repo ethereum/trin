@@ -22,7 +22,7 @@ pub struct ChainHistoryValidator {
 #[async_trait]
 impl Validator<HistoryContentKey> for ChainHistoryValidator {
     async fn validate_content(
-        &mut self,
+        &self,
         content_key: &HistoryContentKey,
         content: &[u8],
     ) -> anyhow::Result<()>
@@ -212,7 +212,7 @@ mod tests {
             infura_url,
             ..HeaderOracle::default()
         }));
-        let mut chain_history_validator = ChainHistoryValidator { header_oracle };
+        let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = HistoryContentKey::BlockHeader(BlockHeader {
             chain_id: 1,
             block_hash: header.hash().0,
@@ -240,7 +240,7 @@ mod tests {
             infura_url,
             ..HeaderOracle::default()
         }));
-        let mut chain_history_validator = ChainHistoryValidator { header_oracle };
+        let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = HistoryContentKey::BlockHeader(BlockHeader {
             chain_id: 1,
             block_hash: header.hash().0,
@@ -269,7 +269,7 @@ mod tests {
             infura_url,
             ..HeaderOracle::default()
         }));
-        let mut chain_history_validator = ChainHistoryValidator { header_oracle };
+        let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = HistoryContentKey::BlockHeader(BlockHeader {
             chain_id: 1,
             block_hash: header.hash().0,
@@ -294,7 +294,7 @@ mod tests {
             infura_url,
             ..HeaderOracle::default()
         }));
-        let mut chain_history_validator = ChainHistoryValidator { header_oracle };
+        let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = block_14764013_body_key();
 
         chain_history_validator
@@ -327,7 +327,7 @@ mod tests {
             infura_url,
             ..HeaderOracle::default()
         }));
-        let mut chain_history_validator = ChainHistoryValidator { header_oracle };
+        let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = block_14764013_body_key();
 
         chain_history_validator
@@ -348,7 +348,7 @@ mod tests {
             infura_url,
             ..HeaderOracle::default()
         }));
-        let mut chain_history_validator = ChainHistoryValidator { header_oracle };
+        let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = block_14764013_receipts_key();
 
         chain_history_validator
@@ -379,7 +379,7 @@ mod tests {
             infura_url,
             ..HeaderOracle::default()
         }));
-        let mut chain_history_validator = ChainHistoryValidator { header_oracle };
+        let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = block_14764013_receipts_key();
 
         chain_history_validator
