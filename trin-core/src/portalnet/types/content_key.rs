@@ -295,18 +295,18 @@ impl OverlayContentKey for StateContentKey {
 mod test {
     use super::*;
 
-    use std::{env, sync::Arc};
+    use std::sync::Arc;
 
     use discv5::enr::NodeId;
     use ethereum_types::U256;
     use serial_test::serial;
-    use tempdir::TempDir;
     use test_log::test;
 
     use crate::portalnet::storage::{
         DistanceFunction, PortalStorage, PortalStorageConfig, PortalStorageError,
     };
 
+    use crate::utils::db::setup_temp_dir;
     use hex;
 
     //
@@ -396,12 +396,6 @@ mod test {
             chain_id: 1u16,
             block_hash: key,
         })
-    }
-
-    fn setup_temp_dir() -> TempDir {
-        let temp_dir = TempDir::new("trin").unwrap();
-        env::set_var("TRIN_DATA_PATH", temp_dir.path());
-        temp_dir
     }
 
     // This test is for PortalStorage functionality, but is located here to take advantage of

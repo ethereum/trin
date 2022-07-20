@@ -3,6 +3,7 @@ use std::sync::{Arc, RwLock};
 use log::debug;
 use tokio::sync::mpsc;
 
+use trin_core::utils::db::setup_temp_dir;
 use trin_core::{
     cli::{TrinConfig, HISTORY_NETWORK, STATE_NETWORK},
     jsonrpc::{
@@ -33,7 +34,7 @@ pub async fn run_trin(
         private_key: trin_config.private_key.clone(),
         listen_port: trin_config.discovery_port,
         no_stun: trin_config.no_stun,
-        enable_metrics: trin_config.enable_metrics,
+        enable_metrics: trin_config.enable_metrics_with_url.is_some(),
         bootnode_enrs,
         ..Default::default()
     };
@@ -43,11 +44,10 @@ pub async fn run_trin(
     discovery.start().await.unwrap();
     let discovery = Arc::new(discovery);
 
-    // Initialize metrics
-    if trin_config.enable_metrics {
-        let binding = trin_config.metrics_url.as_ref().unwrap().parse().unwrap();
-        prometheus_exporter::start(binding).unwrap();
-    };
+    // Initialize prometheus metrics
+    if let Some(addr) = trin_config.enable_metrics_with_url {
+        prometheus_exporter::start(addr).unwrap();
+    }
 
     // Initialize and spawn UTP listener
     let (utp_events_tx, utp_listener_tx, utp_listener_rx, mut utp_listener) =
@@ -55,6 +55,10 @@ pub async fn run_trin(
     tokio::spawn(async move { utp_listener.start().await });
 
     // Initialize Storage config
+    if trin_config.ephemeral {
+        setup_temp_dir();
+    }
+
     let storage_config =
         PortalStorage::setup_config(discovery.local_enr().node_id(), trin_config.kb)?;
 

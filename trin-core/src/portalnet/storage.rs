@@ -1,3 +1,4 @@
+use std::path::{Path, PathBuf};
 use std::{convert::TryInto, fs, sync::Arc};
 
 use discv5::enr::NodeId;
@@ -358,7 +359,7 @@ impl PortalStorage {
     /// Internal method used to measure on-disk storage usage.
     fn get_total_size_of_directory_in_bytes(
         &self,
-        path: String,
+        path: impl AsRef<Path>,
     ) -> Result<u64, PortalStorageError> {
         let metadata = match fs::metadata(&path) {
             Ok(metadata) => metadata,
@@ -433,9 +434,8 @@ impl PortalStorage {
     /// Helper function for opening a SQLite connection.
     /// Used for testing.
     pub fn setup_rocksdb(node_id: NodeId) -> Result<rocksdb::DB, PortalStorageError> {
-        let data_path_root: String = get_data_dir(node_id).to_owned();
-        let data_suffix: &str = "/rocksdb";
-        let data_path = data_path_root + data_suffix;
+        let mut data_path: PathBuf = get_data_dir(node_id);
+        data_path.push("rocksdb");
         debug!("Setting up RocksDB at path: {:?}", data_path);
 
         let mut db_opts = Options::default();
@@ -446,9 +446,8 @@ impl PortalStorage {
     /// Helper function for opening a SQLite connection.
     /// Used for testing.
     pub fn setup_sql(node_id: NodeId) -> Result<Pool<SqliteConnectionManager>, PortalStorageError> {
-        let data_path_root: String = get_data_dir(node_id).to_owned();
-        let data_suffix: &str = "/trin.sqlite";
-        let data_path = data_path_root + data_suffix;
+        let mut data_path: PathBuf = get_data_dir(node_id);
+        data_path.push("trin.sqlite");
         info!("Setting up SqliteDB at path: {:?}", data_path);
 
         let manager = SqliteConnectionManager::file(data_path);
@@ -495,23 +494,15 @@ pub mod test {
     use super::*;
     use crate::portalnet::types::content_key::IdentityContentKey;
 
-    use std::env;
-
+    use crate::utils::db::setup_temp_dir;
     use quickcheck::{quickcheck, Arbitrary, Gen, QuickCheck, TestResult};
     use rand::RngCore;
     use serial_test::serial;
-    use tempdir::TempDir;
 
     fn generate_random_content_key() -> IdentityContentKey {
         let mut key = [0u8; 32];
         rand::thread_rng().fill_bytes(&mut key);
         IdentityContentKey::new(key)
-    }
-
-    fn setup_temp_dir() -> TempDir {
-        let temp_dir = TempDir::new("trin").unwrap();
-        env::set_var("TRIN_DATA_PATH", temp_dir.path());
-        temp_dir
     }
 
     impl Arbitrary for IdentityContentKey {
