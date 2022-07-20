@@ -79,12 +79,21 @@ const EXPECTED_NON_EMPTY_BUCKETS: usize = 17;
 /// Bucket refresh lookup interval in seconds
 const BUCKET_REFRESH_INTERVAL_SECS: u64 = 60;
 
-/// An action that the overlay may perform.
+/// A network-based action that the overlay may perform.
+///
+/// The overlay performs network-based actions on behalf of the command issuer. The issuer may be
+/// the overlay itself. The overlay manages network requests and responses and sends the result
+/// back to the issuer upon completion.
 #[derive(Debug)]
 pub enum OverlayCommand<TContentKey> {
-    /// Send a request through the overlay.
+    /// Send a single portal request through the overlay.
+    ///
+    /// A `Request` corresponds to a single request message defined in the portal wire spec.
     Request(OverlayRequest),
     /// Perform a find content query through the overlay.
+    ///
+    /// A `FindContentQuery` issues multiple requests to find the content identified by `target`.
+    /// The result is sent to the issuer over `callback`.
     FindContentQuery {
         /// The query target.
         target: TContentKey,
