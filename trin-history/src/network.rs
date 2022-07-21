@@ -71,7 +71,6 @@ impl HistoryNetwork {
                 Ok(_) => {
                     debug!("Successfully bonded with {}", enr);
                     successfully_bonded_bootnode = true;
-                    continue;
                 }
                 Err(err) => {
                     error!("{err} while pinging bootnode: {enr:?}");
