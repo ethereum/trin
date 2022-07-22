@@ -1,7 +1,13 @@
-use std::collections::HashSet;
-use std::marker::PhantomData;
-use std::sync::Arc;
-use std::time::Duration;
+use anyhow::anyhow;
+use std::{
+    collections::{BTreeMap, HashMap, HashSet},
+    fmt::{Debug, Display},
+    marker::{PhantomData, Sync},
+    str::FromStr,
+    sync::Arc,
+    time::Duration,
+};
+use utils::bytes::hex_encode;
 
 use super::{
     discovery::Discovery,
@@ -12,30 +18,43 @@ use super::{
     },
     Enr,
 };
-use crate::portalnet::storage::PortalStorage;
-use crate::portalnet::types::messages::{
-    Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer, Ping, Pong,
-    ProtocolId, Request, Response,
+use crate::portalnet::{
+    storage::PortalStorage,
+    types::messages::{
+        Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer, Ping, Pong,
+        ProtocolId, Request, Response,
+    },
 };
 
-use crate::locks::RwLoggingExt;
-use crate::utp::stream::{UtpListener, BUF_SIZE};
-use crate::utp::trin_helpers::{UtpAccept, UtpMessage, UtpMessageId};
+use crate::{
+    portalnet::types::{
+        content_key::RawContentKey,
+        messages::{ByteList, ContentPayloadList},
+        metric::XorMetric,
+    },
+    types::validation::Validator,
+    utils,
+    utp::{
+        stream::{UtpListenerEvent, UtpListenerRequest, UtpPayload, UtpStream, BUF_SIZE},
+        trin_helpers::UtpStreamId,
+    },
+};
 use discv5::{
     enr::NodeId,
-    kbucket::{Filter, KBucketsTable},
+    kbucket,
+    kbucket::{Filter, KBucketsTable, NodeStatus, MAX_NODES_PER_BUCKET},
     TalkRequest,
 };
 use futures::channel::oneshot;
+use log::error;
 use parking_lot::RwLock;
-use ssz::Encode;
+use rand::seq::IteratorRandom;
+use ssz::{Decode, Encode};
 use ssz_types::VariableList;
 use tokio::sync::mpsc::UnboundedSender;
-use tokio::sync::RwLock as RwLockT;
 use tracing::{debug, warn};
 
-pub use super::overlay_service::OverlayRequestError;
-pub use super::overlay_service::RequestDirection;
+pub use super::overlay_service::{OverlayRequestError, RequestDirection};
 
 /// Configuration parameters for the overlay network.
 #[derive(Clone)]
@@ -47,6 +66,11 @@ pub struct OverlayConfig {
     pub bucket_filter: Option<Box<dyn Filter<Node>>>,
     pub ping_queue_interval: Option<Duration>,
     pub enable_metrics: bool,
+    pub query_parallelism: usize,
+    pub query_timeout: Duration,
+    pub query_peer_timeout: Duration,
+    pub query_num_results: usize,
+    pub findnodes_query_distances_per_peer: usize,
 }
 
 impl Default for OverlayConfig {
@@ -59,6 +83,11 @@ impl Default for OverlayConfig {
             bucket_filter: None,
             ping_queue_interval: None,
             enable_metrics: false,
+            query_parallelism: 3, // (recommended α from kademlia paper)
+            query_peer_timeout: Duration::from_secs(10),
+            query_timeout: Duration::from_secs(60),
+            query_num_results: MAX_NODES_PER_BUCKET,
+            findnodes_query_distances_per_peer: 3,
         }
     }
 }
@@ -68,7 +97,7 @@ impl Default for OverlayConfig {
 /// implement the overlay protocol and the overlay protocol is where we can encapsulate the logic for
 /// handling common network requests/responses.
 #[derive(Clone)]
-pub struct OverlayProtocol<TContentKey, TMetric> {
+pub struct OverlayProtocol<TContentKey, TMetric, TValidator> {
     /// Reference to the underlying discv5 protocol
     pub discovery: Arc<Discovery>,
     /// Reference to the database instance
@@ -81,25 +110,34 @@ pub struct OverlayProtocol<TContentKey, TMetric> {
     protocol: ProtocolId,
     /// A sender to send requests to the OverlayService.
     request_tx: UnboundedSender<OverlayRequest>,
-    utp_listener: Arc<RwLockT<UtpListener>>,
+    /// A sender to send request to UtpListener
+    utp_listener_tx: UnboundedSender<UtpListenerRequest>,
     /// Declare the allowed content key types for a given overlay network.
     /// Use a phantom, because we don't store any keys in this struct.
     /// For example, this type is used when decoding a content key received over the network.
     phantom_content_key: PhantomData<TContentKey>,
     /// Associate a metric with the overlay network.
     phantom_metric: PhantomData<TMetric>,
+    /// Declare the Validator type for a given overlay network.
+    phantom_validator: PhantomData<TValidator>,
 }
 
-impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
-    OverlayProtocol<TContentKey, TMetric>
+impl<
+        TContentKey: 'static + OverlayContentKey + Send + Sync,
+        TMetric: Metric + Send + Sync,
+        TValidator: 'static + Validator<TContentKey> + Send + Sync,
+    > OverlayProtocol<TContentKey, TMetric, TValidator>
+where
+    <TContentKey as TryFrom<Vec<u8>>>::Error: Debug + Display + Send,
 {
     pub async fn new(
         config: OverlayConfig,
         discovery: Arc<Discovery>,
-        utp_listener: Arc<RwLockT<UtpListener>>,
+        utp_listener_tx: UnboundedSender<UtpListenerRequest>,
         storage: Arc<RwLock<PortalStorage>>,
         data_radius: Distance,
         protocol: ProtocolId,
+        validator: Arc<TValidator>,
     ) -> Self {
         let kbuckets = Arc::new(RwLock::new(KBucketsTable::new(
             discovery.local_enr().node_id().into(),
@@ -110,7 +148,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         )));
 
         let data_radius = Arc::new(data_radius);
-        let request_tx = OverlayService::<TContentKey, TMetric>::spawn(
+        let request_tx = OverlayService::<TContentKey, TMetric, TValidator>::spawn(
             Arc::clone(&discovery),
             Arc::clone(&storage),
             Arc::clone(&kbuckets),
@@ -118,8 +156,14 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
             config.ping_queue_interval,
             Arc::clone(&data_radius),
             protocol.clone(),
-            utp_listener.clone(),
+            utp_listener_tx.clone(),
             config.enable_metrics,
+            validator,
+            config.query_timeout,
+            config.query_peer_timeout,
+            config.query_parallelism,
+            config.query_num_results,
+            config.findnodes_query_distances_per_peer,
         )
         .await
         .unwrap();
@@ -131,9 +175,10 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
             storage,
             protocol,
             request_tx,
-            utp_listener,
+            utp_listener_tx,
             phantom_content_key: PhantomData,
             phantom_metric: PhantomData,
+            phantom_validator: PhantomData,
         }
     }
 
@@ -173,6 +218,161 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         self.send_overlay_request(request, direction).await
     }
 
+    /// Process overlay uTP listener event
+    pub fn process_utp_event(&self, event: UtpListenerEvent) -> anyhow::Result<()> {
+        match event {
+            UtpListenerEvent::ClosedStream(utp_payload, _, stream_id) => {
+                // Handle all closed uTP streams, currently we process only AcceptStream here.
+                // FindContent payload is processed explicitly when we send FindContent request.
+                // We don't expect to process a payload for ContentStream and OfferStream.
+                match stream_id {
+                    UtpStreamId::AcceptStream(content_keys) => {
+                        self.process_accept_utp_payload(content_keys, utp_payload)?
+                    }
+                    UtpStreamId::ContentStream(_) => {}
+                    UtpStreamId::FindContentStream => {}
+                    UtpStreamId::OfferStream => {}
+                }
+            }
+            UtpListenerEvent::ResetStream(..) => {}
+        }
+        Ok(())
+    }
+
+    /// Process accepted uTP payload of the OFFER/ACCEPT stream
+    fn process_accept_utp_payload(
+        &self,
+        content_keys: Vec<RawContentKey>,
+        payload: UtpPayload,
+    ) -> anyhow::Result<()> {
+        // Process accepted uTP payload as SZZ decoded Container[payloads: List[ByteList, max_length=64]]
+        let content_values = ContentPayloadList::from_ssz_bytes(&payload)
+            .map_err(|err| anyhow!("Unable to decode uTP content payload: {err:?}"))?;
+        // Accepted content keys len should match content value len
+        if content_keys.len() != content_values.len() {
+            return Err(anyhow!(
+                "Content keys len doesn't match content values len."
+            ));
+        }
+
+        // TODO: Verify overlay content data with an Oracle
+
+        // Temporarily store content key/value pairs to propagate here
+        let mut content_keys_values: Vec<(TContentKey, ByteList)> = Vec::new();
+
+        // Try to store the content into the database and propagate gossip the content
+        for (content_key, content_value) in content_keys.into_iter().zip(content_values.to_vec()) {
+            match TContentKey::try_from(content_key) {
+                Ok(key) => {
+                    // Store accepted content in DB
+                    self.store_overlay_content(&key, content_value.clone());
+                    content_keys_values.push((key, content_value))
+                }
+                Err(err) => {
+                    return Err(anyhow!(
+                        "Unexpected error while decoding overlay content key: {err}"
+                    ));
+                }
+            }
+        }
+        // Propagate gossip accepted content
+        self.propagate_gossip(content_keys_values)?;
+        Ok(())
+    }
+
+    /// Propagate gossip accepted content via OFFER/ACCEPT:
+    fn propagate_gossip(&self, content: Vec<(TContentKey, ByteList)>) -> anyhow::Result<()> {
+        // Get all nodes from overlay routing table
+        let kbuckets = self.kbuckets.read();
+        let all_nodes: Vec<&kbucket::Node<NodeId, Node>> = kbuckets
+            .buckets_iter()
+            .map(|kbucket| {
+                kbucket
+                    .iter()
+                    .collect::<Vec<&kbucket::Node<NodeId, Node>>>()
+            })
+            .flatten()
+            .collect();
+
+        // HashMap to temporarily store all interested ENRs and the content.
+        // Key is base64 string of node's ENR.
+        let mut enrs_and_content: HashMap<String, Vec<RawContentKey>> = HashMap::new();
+
+        // Filter all nodes from overlay routing table where XOR_distance(content_id, nodeId) < node radius
+        for content_key_value in content {
+            let interested_enrs: Vec<Enr> = all_nodes
+                .clone()
+                .into_iter()
+                .filter(|node| {
+                    XorMetric::distance(
+                        &content_key_value.0.content_id(),
+                        &node.key.preimage().raw(),
+                    ) < node.value.data_radius()
+                })
+                .map(|node| node.value.enr())
+                .collect();
+
+            // Continue if no nodes are interested in the content
+            if interested_enrs.is_empty() {
+                debug!("No nodes interested in neighborhood gossip: content_key={} num_nodes_checked={}",
+                    hex_encode(content_key_value.0.into()), all_nodes.len());
+                continue;
+            }
+
+            // Get log2 random ENRs to gossip
+            let random_enrs = log2_random_enrs(interested_enrs)?;
+
+            // Temporarily store all randomly selected nodes with the content of interest.
+            // We want this so we can offer all the content to interested node in one request.
+            for enr in random_enrs {
+                enrs_and_content
+                    .entry(enr.to_base64())
+                    .or_default()
+                    .push(content_key_value.clone().0.into());
+            }
+        }
+
+        // Create and send OFFER overlay request to the interested nodes
+        for (enr_string, interested_content) in enrs_and_content.into_iter() {
+            let enr = match Enr::from_str(&enr_string) {
+                Ok(enr) => enr,
+                Err(err) => {
+                    error!("Error creating ENR from base_64 encoded string: {err}");
+                    continue;
+                }
+            };
+
+            let offer_request = Request::Offer(Offer {
+                content_keys: interested_content,
+            });
+
+            let overlay_request = OverlayRequest::new(
+                offer_request,
+                RequestDirection::Outgoing { destination: enr },
+                None,
+                None,
+            );
+
+            if let Err(err) = self.request_tx.send(overlay_request) {
+                error!("Unable to send OFFER request to overlay: {err}.")
+            }
+        }
+        Ok(())
+    }
+
+    /// Try to store overlay content into database
+    fn store_overlay_content(&self, content_key: &TContentKey, value: ByteList) {
+        let should_store = self.storage.read().should_store(content_key);
+        match should_store {
+            Ok(_) => {
+                if let Err(err) = self.storage.write().store(content_key, &value.into()) {
+                    warn!("Unable to store accepted content: {err}");
+                }
+            }
+            Err(err) => error!("Unable to determine whether to store accepted content: {err}"),
+        }
+    }
+
     /// Returns a vector of all ENR node IDs of nodes currently contained in the routing table.
     pub fn table_entries_id(&self) -> Vec<NodeId> {
         self.kbuckets
@@ -188,6 +388,34 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
             .write()
             .iter()
             .map(|entry| entry.node.value.enr().clone())
+            .collect()
+    }
+
+    /// Returns a map (BTree for its ordering guarantees) with:
+    ///     key: usize representing bucket index
+    ///     value: Vec of tuples, each tuple represents a node
+    pub fn bucket_entries(&self) -> BTreeMap<usize, Vec<(NodeId, Enr, NodeStatus, Distance)>> {
+        self.kbuckets
+            .read()
+            .buckets_iter()
+            .enumerate()
+            .filter(|(_, bucket)| bucket.num_entries() > 0)
+            .map(|(index, bucket)| {
+                (
+                    index,
+                    bucket
+                        .iter()
+                        .map(|node| {
+                            (
+                                *node.key.preimage(),
+                                node.value.enr().clone(),
+                                node.status,
+                                node.value.data_radius(),
+                            )
+                        })
+                        .collect(),
+                )
+            })
             .collect()
     }
 
@@ -260,51 +488,11 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                 match found_content {
                     Content::Content(_) => Ok(found_content),
                     Content::Enrs(_) => Ok(found_content),
-                    // Init uTP stream if `connection_id` is received
+                    // Init uTP stream if `connection_id`is received
                     Content::ConnectionId(conn_id) => {
                         let conn_id = u16::from_be(conn_id);
-                        self.utp_listener
-                            .write_with_warn()
-                            .await
-                            .listening
-                            .insert(conn_id, UtpMessageId::FindContentStream);
 
-                        // initiate the connection to the acceptor
-                        let conn = self
-                            .utp_listener
-                            .write_with_warn()
-                            .await
-                            .connect(conn_id, enr.node_id())
-                            .await;
-
-                        match conn {
-                            Ok(mut conn) => {
-                                let mut result = Vec::new();
-                                // Loop and receive all DATA packets, similar to `read_to_end`
-                                loop {
-                                    let mut buf = [0; BUF_SIZE];
-                                    match conn.recv_from(&mut buf).await {
-                                        Ok((0, _)) => {
-                                            break;
-                                        }
-                                        Ok((bytes, _)) => {
-                                            result.extend_from_slice(&mut buf[..bytes]);
-                                        }
-                                        Err(err) => {
-                                            warn!("Unable to receive content via uTP: {err}");
-                                            return Err(OverlayRequestError::UtpError(
-                                                err.to_string(),
-                                            ));
-                                        }
-                                    }
-                                }
-                                Ok(Content::Content(VariableList::from(result)))
-                            }
-                            Err(err) => {
-                                warn!("Unable to initiate uTP stream with remote node {err}");
-                                Err(OverlayRequestError::UtpError(err.to_string()))
-                            }
-                        }
+                        self.init_find_content_stream(enr, conn_id).await
                     }
                 }
             }
@@ -313,11 +501,61 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         }
     }
 
+    /// Initialize FIndContent uTP stream with remote node
+    async fn init_find_content_stream(
+        &self,
+        enr: Enr,
+        conn_id: u16,
+    ) -> Result<Content, OverlayRequestError> {
+        // initiate the connection to the acceptor
+        let (tx, rx) = tokio::sync::oneshot::channel::<UtpStream>();
+        let utp_request = UtpListenerRequest::Connect(
+            conn_id,
+            enr,
+            self.protocol.clone(),
+            UtpStreamId::FindContentStream,
+            tx,
+        );
+
+        self.utp_listener_tx.send(utp_request).map_err(|err| {
+            OverlayRequestError::UtpError(format!(
+                "Unable to send Connect request with FindContent stream to UtpListener: {err}"
+            ))
+        })?;
+
+        match rx.await {
+            Ok(mut conn) => {
+                let mut result = Vec::new();
+                // Loop and receive all DATA packets, similar to `read_to_end`
+                loop {
+                    let mut buf = [0; BUF_SIZE];
+                    match conn.recv_from(&mut buf).await {
+                        Ok((0, _)) => {
+                            break;
+                        }
+                        Ok((bytes, _)) => {
+                            result.extend_from_slice(&mut buf[..bytes]);
+                        }
+                        Err(err) => {
+                            warn!("Unable to receive content via uTP: {err}");
+                            return Err(OverlayRequestError::UtpError(err.to_string()));
+                        }
+                    }
+                }
+                Ok(Content::Content(VariableList::from(result)))
+            }
+            Err(err) => {
+                warn!("Unable to receive from uTP listener channel: {err}");
+                Err(OverlayRequestError::UtpError(err.to_string()))
+            }
+        }
+    }
+
     /// Offer is sent in order to store content to k nodes with radii that contain content-id
     /// Offer is also sent to nodes after FindContent (POKE)
     pub async fn send_offer(
         &self,
-        content_keys: Vec<Vec<u8>>,
+        content_keys: Vec<RawContentKey>,
         enr: Enr,
     ) -> Result<Accept, OverlayRequestError> {
         // Construct the request.
@@ -328,105 +566,15 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
             destination: enr.clone(),
         };
 
-        // todo: remove after updating `Offer` to use `ContentKey` type
-        let content_keys_offered: Result<Vec<TContentKey>, TContentKey::Error> = content_keys
-            .into_iter()
-            .map(|key| (TContentKey::try_from)(key))
-            .collect();
-        let content_keys_offered: Vec<TContentKey> = match content_keys_offered {
-            Ok(val) => val,
-            Err(_) => return Err(OverlayRequestError::DecodeError),
-        };
-
         // Send the request and wait on the response.
         match self
             .send_overlay_request(Request::Offer(request), direction)
             .await
         {
-            Ok(Response::Accept(accept)) => {
-                match self
-                    .process_accept_response(accept, enr, content_keys_offered)
-                    .await
-                {
-                    Ok(accept) => Ok(accept),
-                    Err(err) => Err(OverlayRequestError::OfferError(err.to_string())),
-                }
-            }
+            Ok(Response::Accept(accept)) => Ok(accept),
             Ok(_) => Err(OverlayRequestError::InvalidResponse),
             Err(error) => Err(error),
         }
-    }
-
-    pub async fn process_accept_response(
-        &self,
-        response: Accept,
-        enr: Enr,
-        content_keys_offered: Vec<TContentKey>,
-    ) -> anyhow::Result<Accept> {
-        let connection_id = response.connection_id.to_be();
-
-        // Do not initialize uTP stream if remote node doesn't have interest in the offered content keys
-        if response.content_keys.is_zero() {
-            return Ok(response);
-        }
-
-        self.utp_listener
-            .write()
-            .await
-            .listening
-            .insert(connection_id, UtpMessageId::OfferStream);
-
-        // initiate the connection to the acceptor
-        let mut conn = self
-            .utp_listener
-            .write()
-            .await
-            .connect(connection_id, enr.node_id())
-            .await?;
-
-        // Handle STATE packet for SYN
-        let mut buf = [0; BUF_SIZE];
-        conn.recv(&mut buf).await?;
-
-        // Return to acceptor: the content key and corresponding data
-        let mut content_items: Vec<(Vec<u8>, Vec<u8>)> = vec![];
-
-        for (i, key) in response
-            .content_keys
-            .clone()
-            .iter()
-            .zip(content_keys_offered.iter())
-        {
-            if i == true {
-                match self.storage.read().get(&key.clone()) {
-                    Ok(content) => match content {
-                        Some(content) => content_items.push((key.clone().into(), content)),
-                        None => {}
-                    },
-                    // should return some error if content not found
-                    Err(_) => {}
-                }
-            }
-        }
-
-        let content_message = UtpAccept {
-            message: content_items,
-        };
-
-        tokio::spawn(async move {
-            // send the content to the acceptor over a uTP stream
-            if let Err(err) = conn
-                .send_to(&UtpMessage::new(content_message.as_ssz_bytes()).encode()[..])
-                .await
-            {
-                warn!("Error sending content {err}");
-            };
-            // Close uTP connection
-            if let Err(err) = conn.close().await {
-                warn!("Unable to close uTP connection!: {err}")
-            };
-        });
-        Ok(response)
     }
 
     /// Public method for initiating a network request through the overlay service.
@@ -445,7 +593,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         direction: RequestDirection,
     ) -> Result<Response, OverlayRequestError> {
         let (tx, rx) = oneshot::channel();
-        let overlay_request = OverlayRequest::new(request, direction, Some(tx));
+        let overlay_request = OverlayRequest::new(request, direction, Some(tx), None);
         if let Err(error) = self.request_tx.send(overlay_request) {
             warn!(
                 "Failure sending request over {:?} service channel",
@@ -460,6 +608,25 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
             Err(error) => Err(OverlayRequestError::ChannelFailure(error.to_string())),
         }
     }
+}
+
+/// Randomly select log2 nodes. log2() is stable only for floats, that's why we cast it first to f32
+fn log2_random_enrs(enrs: Vec<Enr>) -> anyhow::Result<Vec<Enr>> {
+    if enrs.is_empty() {
+        return Err(anyhow!("Expected non-empty vector of ENRs"));
+    }
+    // log2(1) is zero but we want to propagate to at least one node
+    if enrs.len() == 1 {
+        return Ok(enrs);
+    }
+
+    // Greedy gossip by ceiling the log2 value
+    let log2_value = (enrs.len() as f32).log2().ceil();
+
+    let random_enrs: Vec<Enr> = enrs
+        .into_iter()
+        .choose_multiple(&mut rand::thread_rng(), log2_value as usize);
+    Ok(random_enrs)
 }
 
 fn validate_find_nodes_distances(distances: &Vec<u16>) -> Result<(), OverlayRequestError> {
@@ -492,6 +659,7 @@ fn validate_find_nodes_distances(distances: &Vec<u16>) -> Result<(), OverlayRequ
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::utils::node_id::generate_random_remote_enr;
     use rstest::rstest;
 
     #[rstest]
@@ -517,5 +685,21 @@ mod test {
             Ok(_) => panic!("Invalid test case passed"),
             Err(err) => assert!(err.to_string().contains(&msg)),
         }
+    }
+
+    #[rstest]
+    #[case(vec![generate_random_remote_enr().1; 8], 3)]
+    #[case(vec![generate_random_remote_enr().1; 1], 1)]
+    #[case(vec![generate_random_remote_enr().1; 9], 4)]
+    fn test_log2_random_enrs(#[case] all_nodes: Vec<Enr>, #[case] expected_log2: usize) {
+        let log2_random_nodes = log2_random_enrs(all_nodes).unwrap();
+        assert_eq!(log2_random_nodes.len(), expected_log2);
+    }
+
+    #[test_log::test]
+    #[should_panic]
+    fn test_log2_random_enrs_empty_input() {
+        let all_nodes = vec![];
+        log2_random_enrs(all_nodes).unwrap();
     }
 }

@@ -1,6 +1,4 @@
-use std::env;
-use std::ffi::OsString;
-use std::net::SocketAddr;
+use std::{env, ffi::OsString, net::SocketAddr};
 
 use log::info;
 use structopt::StructOpt;
@@ -12,7 +10,7 @@ pub const DEFAULT_WEB3_HTTP_ADDRESS: &str = "127.0.0.1:8545";
 const DEFAULT_DISCOVERY_PORT: &str = "9000";
 pub const HISTORY_NETWORK: &str = "history";
 pub const STATE_NETWORK: &str = "state";
-const DEFAULT_SUBNETWORKS: &str = "history,state";
+const DEFAULT_SUBNETWORKS: &str = "history";
 pub const DEFAULT_STORAGE_CAPACITY: &str = "100000"; // 100mb
 
 #[derive(StructOpt, Debug, PartialEq, Clone)]
@@ -68,15 +66,17 @@ pub struct TrinConfig {
 
     #[structopt(
         long = "external-address",
+        group = "external-ips",
         help = "(Only use this if you are behind a NAT) The address which will be advertised to peers (in an ENR). Changing it does not change which port or address trin binds to. Port number is required, ex: 127.0.0.1:9001"
     )]
     pub external_addr: Option<SocketAddr>,
 
     #[structopt(
-        long = "internal-ip",
-        help = "(For testing purposes) Use local ip address rather than external via STUN."
+        long = "no-stun",
+        group = "external-ips",
+        help = "Do not use STUN to determine an external IP. Leaves ENR entry for IP blank. Some users report better connections over VPN."
     )]
-    pub internal_ip: bool,
+    pub no_stun: bool,
 
     #[structopt(
         validator(check_private_key_length),
@@ -102,14 +102,40 @@ pub struct TrinConfig {
     pub kb: u32,
 
     #[structopt(
-        long = "enable-metrics",
-        help = "Enable prometheus metrics reporting (requires --metrics-url)",
-        requires = "metrics-url"
+        long = "enable-metrics-with-url",
+        help = "Enable prometheus metrics reporting (requires URL for prometheus server)"
     )]
-    pub enable_metrics: bool,
+    pub enable_metrics_with_url: Option<SocketAddr>,
 
-    #[structopt(long = "metrics-url", help = "URL for prometheus server")]
-    pub metrics_url: Option<String>,
+    #[structopt(
+        short = "e",
+        long = "ephemeral",
+        help = "Use temporary data storage that is deleted on exit."
+    )]
+    pub ephemeral: bool,
+}
+
+impl Default for TrinConfig {
+    fn default() -> Self {
+        TrinConfig {
+            web3_transport: "ipc".to_string(),
+            web3_http_address: DEFAULT_WEB3_HTTP_ADDRESS.to_string(),
+            web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
+            pool_size: 2,
+            discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
+            bootnodes: vec![],
+            external_addr: None,
+            no_stun: false,
+            private_key: None,
+            networks: DEFAULT_SUBNETWORKS
+                .split(',')
+                .map(|n| n.to_string())
+                .collect(),
+            kb: DEFAULT_STORAGE_CAPACITY.parse().unwrap(),
+            enable_metrics_with_url: None,
+            ephemeral: false,
+        }
+    }
 }
 
 impl TrinConfig {
@@ -173,6 +199,8 @@ fn check_private_key_length(private_key: String) -> Result<(), String> {
 mod test {
     use super::*;
     use std::env;
+    use std::net::{IpAddr, Ipv4Addr};
+    use test_log::test;
 
     fn env_is_set() -> bool {
         matches!(env::var("TRIN_INFURA_PROJECT_ID"), Ok(_))
@@ -181,24 +209,7 @@ mod test {
     #[test]
     fn test_default_args() {
         assert!(env_is_set());
-        let expected_config = TrinConfig {
-            web3_http_address: DEFAULT_WEB3_HTTP_ADDRESS.to_string(),
-            web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
-            pool_size: 2,
-            kb: DEFAULT_STORAGE_CAPACITY.parse().unwrap(),
-            web3_transport: "ipc".to_string(),
-            discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
-            internal_ip: false,
-            bootnodes: vec![],
-            external_addr: None,
-            private_key: None,
-            enable_metrics: false,
-            metrics_url: None,
-            networks: DEFAULT_SUBNETWORKS
-                .split(',')
-                .map(|n| n.to_string())
-                .collect(),
-        };
+        let expected_config = TrinConfig::default();
         let actual_config = TrinConfig::new_from(["trin"].iter()).unwrap();
         assert_eq!(actual_config.web3_transport, expected_config.web3_transport);
         assert_eq!(
@@ -207,28 +218,18 @@ mod test {
         );
         assert_eq!(actual_config.pool_size, expected_config.pool_size);
         assert_eq!(actual_config.external_addr, expected_config.external_addr);
+        assert_eq!(actual_config.no_stun, expected_config.no_stun);
+        assert_eq!(actual_config.ephemeral, expected_config.ephemeral);
     }
 
     #[test]
     fn test_custom_http_args() {
         assert!(env_is_set());
         let expected_config = TrinConfig {
-            external_addr: None,
-            private_key: None,
-            kb: DEFAULT_STORAGE_CAPACITY.parse().unwrap(),
             web3_http_address: "0.0.0.0:8080".to_string(),
-            web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
             pool_size: 3,
             web3_transport: "http".to_string(),
-            discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
-            internal_ip: false,
-            bootnodes: vec![],
-            enable_metrics: false,
-            metrics_url: None,
-            networks: DEFAULT_SUBNETWORKS
-                .split(',')
-                .map(|n| n.to_string())
-                .collect(),
+            ..Default::default()
         };
         let actual_config = TrinConfig::new_from(
             [
@@ -257,22 +258,10 @@ mod test {
         let actual_config =
             TrinConfig::new_from(["trin", "--web3-transport", "ipc"].iter()).unwrap();
         let expected_config = TrinConfig {
-            external_addr: None,
-            private_key: None,
-            kb: DEFAULT_STORAGE_CAPACITY.parse().unwrap(),
             web3_http_address: DEFAULT_WEB3_HTTP_ADDRESS.to_string(),
-            web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
             pool_size: 2,
             web3_transport: "ipc".to_string(),
-            discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
-            internal_ip: false,
-            bootnodes: vec![],
-            enable_metrics: false,
-            metrics_url: None,
-            networks: DEFAULT_SUBNETWORKS
-                .split(',')
-                .map(|n| n.to_string())
-                .collect(),
+            ..Default::default()
         };
         assert_eq!(actual_config.web3_transport, expected_config.web3_transport);
         assert_eq!(
@@ -297,22 +286,11 @@ mod test {
         )
         .unwrap();
         let expected_config = TrinConfig {
-            private_key: None,
-            external_addr: None,
             web3_http_address: DEFAULT_WEB3_HTTP_ADDRESS.to_string(),
             web3_ipc_path: "/path/test.ipc".to_string(),
-            kb: DEFAULT_STORAGE_CAPACITY.parse().unwrap(),
             pool_size: 2,
             web3_transport: "ipc".to_string(),
-            discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
-            internal_ip: false,
-            bootnodes: vec![],
-            enable_metrics: false,
-            metrics_url: None,
-            networks: DEFAULT_SUBNETWORKS
-                .split(',')
-                .map(|n| n.to_string())
-                .collect(),
+            ..Default::default()
         };
         assert_eq!(actual_config.web3_transport, expected_config.web3_transport);
         assert_eq!(
@@ -361,22 +339,8 @@ mod test {
     fn test_custom_discovery_port() {
         assert!(env_is_set());
         let expected_config = TrinConfig {
-            external_addr: None,
-            private_key: None,
-            web3_http_address: DEFAULT_WEB3_HTTP_ADDRESS.to_string(),
-            web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
-            pool_size: 2,
-            kb: DEFAULT_STORAGE_CAPACITY.parse().unwrap(),
-            web3_transport: "ipc".to_string(),
             discovery_port: 999,
-            internal_ip: false,
-            bootnodes: vec![],
-            enable_metrics: false,
-            metrics_url: None,
-            networks: DEFAULT_SUBNETWORKS
-                .split(',')
-                .map(|n| n.to_string())
-                .collect(),
+            ..Default::default()
         };
         let actual_config =
             TrinConfig::new_from(["trin", "--discovery-port", "999"].iter()).unwrap();
@@ -387,22 +351,8 @@ mod test {
     fn test_custom_bootnodes() {
         assert!(env_is_set());
         let expected_config = TrinConfig {
-            external_addr: None,
-            private_key: None,
-            web3_http_address: DEFAULT_WEB3_HTTP_ADDRESS.to_string(),
-            web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
-            pool_size: 2,
-            kb: DEFAULT_STORAGE_CAPACITY.parse().unwrap(),
-            web3_transport: "ipc".to_string(),
-            discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
-            internal_ip: false,
             bootnodes: vec!["enr:-aoeu".to_string(), "enr:-htns".to_string()],
-            enable_metrics: false,
-            metrics_url: None,
-            networks: DEFAULT_SUBNETWORKS
-                .split(',')
-                .map(|n| n.to_string())
-                .collect(),
+            ..Default::default()
         };
         let actual_config =
             TrinConfig::new_from(["trin", "--bootnodes", "enr:-aoeu,enr:-htns"].iter()).unwrap();
@@ -435,22 +385,8 @@ mod test {
     fn test_custom_private_key() {
         assert!(env_is_set());
         let expected_config = TrinConfig {
-            external_addr: None,
             private_key: Some(HexData(vec![1; 32])),
-            web3_http_address: DEFAULT_WEB3_HTTP_ADDRESS.to_string(),
-            web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
-            pool_size: 2,
-            kb: DEFAULT_STORAGE_CAPACITY.parse().unwrap(),
-            web3_transport: "ipc".to_string(),
-            discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
-            internal_ip: false,
-            bootnodes: vec![],
-            enable_metrics: false,
-            metrics_url: None,
-            networks: DEFAULT_SUBNETWORKS
-                .split(',')
-                .map(|n| n.to_string())
-                .collect(),
+            ..Default::default()
         };
         let actual_config = TrinConfig::new_from(
             [
@@ -462,6 +398,36 @@ mod test {
         )
         .unwrap();
         assert_eq!(actual_config.private_key, expected_config.private_key);
+    }
+
+    #[test]
+    fn test_ephemeral() {
+        assert!(env_is_set());
+        let expected_config = TrinConfig {
+            ephemeral: true,
+            ..Default::default()
+        };
+        let actual_config = TrinConfig::new_from(["trin", "--ephemeral"].iter()).unwrap();
+        assert_eq!(actual_config.ephemeral, expected_config.ephemeral);
+    }
+
+    #[test]
+    fn test_enable_metrics_with_url() {
+        assert!(env_is_set());
+        let expected_config = TrinConfig {
+            enable_metrics_with_url: Some(SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                1234,
+            )),
+            ..Default::default()
+        };
+        let actual_config =
+            TrinConfig::new_from(["trin", "--enable-metrics-with-url", "127.0.0.1:1234"].iter())
+                .unwrap();
+        assert_eq!(
+            actual_config.enable_metrics_with_url,
+            expected_config.enable_metrics_with_url
+        );
     }
 
     #[test]

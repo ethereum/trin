@@ -1,8 +1,4 @@
-use std::fs;
-use std::fs::File;
-use std::io::BufReader;
-use std::path::Path;
-use std::process::Command;
+use std::{fs, fs::File, io::BufReader, path::Path, process::Command};
 
 use discv5::enr::{CombinedKey, EnrBuilder};
 use log::debug;
@@ -11,12 +7,14 @@ use rlp::{Decodable, DecoderError};
 use serde_json::Value;
 use structopt::StructOpt;
 
-use trin_core::portalnet::storage::PortalStorage;
-use trin_core::portalnet::types::content_key::{
-    BlockHeader, HistoryContentKey, IdentityContentKey,
+use trin_core::{
+    portalnet::{
+        storage::PortalStorage,
+        types::content_key::{BlockHeader, HistoryContentKey, IdentityContentKey},
+    },
+    types::header::Header,
+    utils::db::get_data_dir,
 };
-use trin_core::types::header::Header;
-use trin_core::utils::db::get_data_dir;
 
 // This script is used to seed testnet nodes with data from mainnetMM data dump
 // https://www.dropbox.com/s/y5n36ztppltgs7x/mainnetMM.zip?dl=0
@@ -70,7 +68,12 @@ pub struct BlockRlp {
 
 impl Decodable for BlockRlp {
     fn decode(rlp: &rlp::Rlp) -> Result<Self, DecoderError> {
-        let header = Header::decode_rlp(rlp).ok();
+        let header = match rlp::decode(rlp.as_raw()) {
+            // Valid header found
+            Ok(val) => Some(val),
+            // Skips block body / receipts
+            Err(_) => None,
+        };
         Ok(Self { header })
     }
 }

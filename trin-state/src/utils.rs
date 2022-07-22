@@ -1,6 +1,8 @@
 use ethereum_types::U256;
-use num::bigint::{BigInt, Sign};
-use num::Signed;
+use num::{
+    bigint::{BigInt, Sign},
+    Signed,
+};
 
 // 2 ** 256
 const MODULO: [u8; 78] = [
@@ -70,6 +72,7 @@ pub fn distance(node_id: U256, content_id: U256) -> Result<U256, String> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use test_log::test;
 
     // 2 ** 256 - 1
     const MOD_SUB_ONE: &str =

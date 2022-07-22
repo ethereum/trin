@@ -4,6 +4,7 @@ use discv5::enr::CombinedKey;
 
 pub mod discovery;
 pub mod events;
+pub mod find;
 pub mod metrics;
 pub mod overlay;
 mod overlay_service;

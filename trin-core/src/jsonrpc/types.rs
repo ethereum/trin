@@ -7,9 +7,14 @@ use ssz_types::VariableList;
 use tokio::sync::mpsc;
 use validator::{Validate, ValidationError};
 
-use crate::jsonrpc::endpoints::{HistoryEndpoint, StateEndpoint, TrinEndpoint};
-use crate::portalnet::types::content_key::OverlayContentKey;
-use crate::portalnet::types::messages::{ByteList, CustomPayload, SszEnr};
+use crate::{
+    jsonrpc::endpoints::{HistoryEndpoint, StateEndpoint, TrinEndpoint},
+    portalnet::types::{
+        content_key::{OverlayContentKey, RawContentKey},
+        messages::{ByteList, CustomPayload, SszEnr},
+    },
+    utils::bytes::hex_decode,
+};
 
 type Responder<T, E> = mpsc::UnboundedSender<Result<T, E>>;
 
@@ -226,7 +231,7 @@ impl TryFrom<[&Value; 2]> for FindContentParams {
         let content_key = params[1]
             .as_str()
             .ok_or_else(|| ValidationError::new("Empty content key param"))?;
-        let content_key = match hex::decode(content_key) {
+        let content_key = match hex_decode(content_key) {
             Ok(val) => VariableList::from(val),
             Err(_) => return Err(ValidationError::new("Unable to decode content_key")),
         };
@@ -270,8 +275,10 @@ impl TryFrom<[&Value; 2]> for OfferParams {
                     .collect();
 
                 if let Ok(content_keys) = content_keys {
-                    let content_keys: Result<Vec<Vec<u8>>, _> =
-                        content_keys.iter().map(hex::decode).collect();
+                    let content_keys: Result<Vec<RawContentKey>, _> = content_keys
+                        .iter()
+                        .map(|s| hex_decode(s.as_str()))
+                        .collect();
 
                     if let Ok(content_keys) = content_keys {
                         Ok(Self {
@@ -318,7 +325,7 @@ impl TryFrom<&Value> for RecursiveFindContentParams {
         let content_key = param
             .as_str()
             .ok_or_else(|| ValidationError::new("Empty content key param"))?;
-        let content_key = match hex::decode(content_key) {
+        let content_key = match hex_decode(content_key) {
             Ok(val) => VariableList::from(val),
             Err(_) => return Err(ValidationError::new("Unable to decode content_key")),
         };
@@ -419,7 +426,7 @@ impl<TContentKey: OverlayContentKey> TryFrom<&Value> for LocalContentParams<TCon
         let content_key = param
             .as_str()
             .ok_or_else(|| ValidationError::new("Empty content key param"))?;
-        let content_key = match hex::decode(content_key) {
+        let content_key = match hex_decode(content_key) {
             Ok(val) => match TContentKey::try_from(val) {
                 Ok(val) => val,
                 Err(_) => return Err(ValidationError::new("Unable to decode content_key")),
@@ -456,17 +463,24 @@ impl<TContentKey: OverlayContentKey> TryFrom<[&Value; 2]> for StoreParams<TConte
         let content_key = params[0]
             .as_str()
             .ok_or_else(|| ValidationError::new("Empty content key param"))?;
-        let content_key = match hex::decode(content_key) {
+        let content_key = match hex_decode(content_key) {
             Ok(val) => match TContentKey::try_from(val) {
                 Ok(val) => val,
                 Err(_) => return Err(ValidationError::new("Unable to decode content_key")),
             },
-            Err(_) => return Err(ValidationError::new("Unable to decode content_key")),
+            Err(err) => {
+                let mut ve = ValidationError::new("Cannot convert content_key hex to bytes");
+                ve.add_param(
+                    std::borrow::Cow::Borrowed("hex_decode_exception"),
+                    &err.to_string(),
+                );
+                return Err(ve);
+            }
         };
         let content = params[1]
             .as_str()
             .ok_or_else(|| ValidationError::new("Empty content param"))?;
-        let content = match hex::decode(content) {
+        let content = match hex_decode(content) {
             Ok(val) => val,
             Err(_) => return Err(ValidationError::new("Unable to decode content")),
         };
@@ -483,7 +497,7 @@ mod test {
     use rstest::rstest;
     use validator::ValidationErrors;
 
-    #[test]
+    #[test_log::test]
     fn test_json_validator_accepts_valid_json() {
         let request = JsonRequest {
             jsonrpc: "2.0".to_string(),
@@ -494,7 +508,7 @@ mod test {
         assert_eq!(request.validate(), Ok(()));
     }
 
-    #[test]
+    #[test_log::test]
     fn test_json_validator_with_invalid_jsonrpc_field() {
         let request = JsonRequest {
             jsonrpc: "1.0".to_string(),

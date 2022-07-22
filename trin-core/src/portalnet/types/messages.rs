@@ -1,8 +1,10 @@
-use std::convert::{TryFrom, TryInto};
-use std::fmt;
-use std::net::SocketAddr;
-use std::ops::{Deref, DerefMut};
-use std::str::FromStr;
+use std::{
+    convert::{TryFrom, TryInto},
+    fmt,
+    net::SocketAddr,
+    ops::{Deref, DerefMut},
+    str::FromStr,
+};
 
 use base64;
 use ethereum_types::U256;
@@ -15,9 +17,14 @@ use ssz_types::{typenum, BitList, VariableList};
 use thiserror::Error;
 use validator::ValidationError;
 
-use crate::portalnet::{types::metric::Distance, Enr};
+use crate::portalnet::{
+    types::{content_key::RawContentKey, metric::Distance},
+    Enr,
+};
 
 pub type ByteList = VariableList<u8, typenum::U2048>;
+/// uTP content payload list represented as SSZ encoded Container[payloads: List[ByteList, max_length=64]]
+pub type ContentPayloadList = VariableList<ByteList, typenum::U64>;
 
 /// Custom payload element of Ping and Pong overlay messages
 #[derive(Debug, PartialEq, Clone)]
@@ -114,6 +121,7 @@ pub struct PortalnetConfig {
     pub bootnode_enrs: Vec<Enr>,
     pub data_radius: Distance,
     pub internal_ip: bool,
+    pub no_stun: bool,
     pub enable_metrics: bool,
 }
 
@@ -126,6 +134,7 @@ impl Default for PortalnetConfig {
             bootnode_enrs: Vec::<Enr>::new(),
             data_radius: Distance::MAX,
             internal_ip: false,
+            no_stun: false,
             enable_metrics: false,
         }
     }
@@ -141,7 +150,7 @@ pub enum ProtocolIdError {
 }
 
 /// Protocol identifiers
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ProtocolId {
     State,
     History,
@@ -490,7 +499,7 @@ impl TryInto<Value> for Content {
 
 #[derive(Debug, PartialEq, Clone, Encode, Decode)]
 pub struct Offer {
-    pub content_keys: Vec<Vec<u8>>,
+    pub content_keys: Vec<RawContentKey>,
 }
 
 #[derive(Debug, PartialEq, Clone, Encode, Decode)]
@@ -587,6 +596,7 @@ impl FromStr for HexData {
 #[cfg(test)]
 mod test {
     use super::*;
+    use test_log::test;
 
     #[test]
     #[should_panic]

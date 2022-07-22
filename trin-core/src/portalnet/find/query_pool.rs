@@ -21,12 +21,15 @@
 // This basis of this file has been taken from the rust-libp2p codebase:
 // https://github.com/libp2p/rust-libp2p
 
-use super::iterators::findnodes::{FindNodeQuery, FindNodeQueryConfig};
+use super::{iterators::query::Query, query_info::QueryInfo};
+use crate::portalnet::types::content_key::OverlayContentKey;
 
-use discv5::kbucket::{Key};
+use discv5::kbucket::Key;
 use fnv::FnvHashMap;
-use std::time::{Duration, Instant};
-use std::marker::PhantomData;
+use std::{
+    marker::PhantomData,
+    time::{Duration, Instant},
+};
 
 pub trait TargetKey<TNodeId> {
     fn key(&self) -> Key<TNodeId>;
@@ -37,87 +40,80 @@ pub trait TargetKey<TNodeId> {
 /// Internally, a `Query` is in turn driven by an underlying `QueryPeerIter`
 /// that determines the peer selection strategy, i.e. the order in which the
 /// peers involved in the query should be contacted.
-pub struct QueryPool<TTarget, TNodeId, TResult> {
+pub struct QueryPool<TNodeId, TQuery, TContentKey> {
     next_id: QueryId,
     query_timeout: Duration,
-    queries: FnvHashMap<QueryId, Query<TTarget, TNodeId, TResult>>,
-    result_type: PhantomData<TResult>
+    queries: FnvHashMap<QueryId, (QueryInfo<TContentKey>, TQuery)>,
+    marker: PhantomData<TNodeId>,
 }
 
 /// The observable states emitted by [`QueryPool::poll`].
 #[allow(clippy::type_complexity)]
-pub enum QueryPoolState<'a, TTarget, TNodeId, TResult> {
+pub enum QueryPoolState<'a, TNodeId, TQuery, TContentKey> {
     /// The pool is idle, i.e. there are no queries to process.
     Idle,
     /// At least one query is waiting for results. `Some(request)` indicates
     /// that a new request is now being waited on.
-    Waiting(Option<(&'a mut Query<TTarget, TNodeId, TResult>, TNodeId)>),
+    Waiting(
+        Option<(
+            QueryId,
+            &'a mut QueryInfo<TContentKey>,
+            &'a mut TQuery,
+            TNodeId,
+        )>,
+    ),
     /// A query has finished.
-    Finished(Query<TTarget, TNodeId, TResult>),
+    Finished(QueryId, QueryInfo<TContentKey>, TQuery),
     /// A query has timed out.
-    Timeout(Query<TTarget, TNodeId, TResult>),
+    Timeout(QueryId, QueryInfo<TContentKey>, TQuery),
 }
 
-impl<TTarget, TNodeId, TResult> QueryPool<TTarget, TNodeId, TResult>
+impl<TNodeId, TQuery, TContentKey> QueryPool<TNodeId, TQuery, TContentKey>
 where
-    TTarget: TargetKey<TNodeId>,
     TNodeId: Into<Key<TNodeId>> + Eq + Clone,
-    TResult: Into<TNodeId> + Clone,
+    TQuery: Query<TNodeId>,
+    TContentKey: OverlayContentKey,
 {
     /// Creates a new `QueryPool` with the given configuration.
     pub fn new(query_timeout: Duration) -> Self {
         QueryPool {
-            next_id: 0,
+            next_id: QueryId(0),
             query_timeout,
             queries: Default::default(),
-            result_type: PhantomData
+            marker: PhantomData,
         }
     }
 
     /// Returns an iterator over the queries in the pool.
-    pub fn iter(&self) -> impl Iterator<Item = &Query<TTarget, TNodeId, TResult>> {
+    pub fn iter(&self) -> impl Iterator<Item = &(QueryInfo<TContentKey>, TQuery)> {
         self.queries.values()
     }
 
-    /// Adds a query to the pool that iterates towards the closest peers to the target.
-    pub fn add_findnode_query<I>(
-        &mut self,
-        config: FindNodeQueryConfig,
-        target: TTarget,
-        peers: I,
-    ) -> QueryId
-    where
-        I: IntoIterator<Item = Key<TNodeId>>,
-    {
-        let target_key = target.key();
-        let findnode_query = FindNodeQuery::with_config(config, target_key, peers);
-        let peer_iter = QueryPeerIter::FindNode(findnode_query);
-        self.add(peer_iter, target)
-    }
-
-    fn add(&mut self, peer_iter: QueryPeerIter<TNodeId>, target: TTarget) -> QueryId {
-        let id = QueryId(self.next_id);
-        self.next_id = self.next_id.wrapping_add(1);
-        let query = Query::new(id, peer_iter, target);
-        self.queries.insert(id, query);
+    /// Adds a query to the pool.
+    pub fn add_query(&mut self, query_info: QueryInfo<TContentKey>, query: TQuery) -> QueryId {
+        let id = self.next_id;
+        self.next_id = QueryId(self.next_id.wrapping_add(1));
+        self.queries.insert(id, (query_info, query));
         id
     }
 
     /// Returns a mutable reference to a query with the given ID, if it is in the pool.
-    pub fn get_mut(&mut self, id: QueryId) -> Option<&mut Query<TTarget, TNodeId, TResult>> {
+    pub fn get_mut(&mut self, id: QueryId) -> Option<&mut (QueryInfo<TContentKey>, TQuery)> {
         self.queries.get_mut(&id)
     }
 
     /// Polls the pool to advance the queries.
-    pub fn poll(&mut self) -> QueryPoolState<'_, TTarget, TNodeId, TResult> {
+    pub fn poll(&mut self) -> QueryPoolState<'_, TNodeId, TQuery, TContentKey> {
         let now = Instant::now();
         let mut finished = None;
         let mut waiting = None;
         let mut timeout = None;
 
-        for (&query_id, query) in self.queries.iter_mut() {
-            query.started = query.started.or(Some(now));
-            match query.next(now) {
+        for (&query_id, (_, query)) in self.queries.iter_mut() {
+            if let None = query.started() {
+                query.start(now);
+            }
+            match query.poll(now) {
                 QueryState::Finished => {
                     finished = Some(query_id);
                     break;
@@ -127,7 +123,7 @@ where
                     break;
                 }
                 QueryState::Waiting(None) | QueryState::WaitingAtCapacity => {
-                    let elapsed = now - query.started.unwrap_or(now);
+                    let elapsed = now - query.started().unwrap_or(now);
                     if elapsed >= self.query_timeout {
                         timeout = Some(query_id);
                         break;
@@ -137,18 +133,18 @@ where
         }
 
         if let Some((query_id, return_peer)) = waiting {
-            let query = self.queries.get_mut(&query_id).expect("s.a.");
-            return QueryPoolState::Waiting(Some((query, return_peer)));
+            let (query_info, query) = self.queries.get_mut(&query_id).expect("s.a.");
+            return QueryPoolState::Waiting(Some((query_id, query_info, query, return_peer)));
         }
 
         if let Some(query_id) = finished {
-            let query = self.queries.remove(&query_id).expect("s.a.");
-            return QueryPoolState::Finished(query);
+            let (query_info, query) = self.queries.remove(&query_id).expect("s.a.");
+            return QueryPoolState::Finished(query_id, query_info, query);
         }
 
         if let Some(query_id) = timeout {
-            let query = self.queries.remove(&query_id).expect("s.a.");
-            return QueryPoolState::Timeout(query);
+            let (query_info, query) = self.queries.remove(&query_id).expect("s.a.");
+            return QueryPoolState::Timeout(query_id, query_info, query);
         }
 
         if self.queries.is_empty() {
@@ -170,105 +166,10 @@ impl std::ops::Deref for QueryId {
     }
 }
 
-/// A query in a `QueryPool`.
-pub struct Query<TTarget, TNodeId, TResult> {
-    /// The unique ID of the query.
-    id: QueryId,
-    /// The peer iterator that drives the query state.
-    peer_iter: QueryPeerIter<TNodeId>,
-    /// The instant when the query started (i.e. began waiting for the first
-    /// result from a peer).
-    started: Option<Instant>,
-    /// Target we are looking for.
-    target: TTarget,
-    /// Phantom use of TResult generic type, which is used in implementation.
-    unused_result: PhantomData<TResult>,
-    
-}
-
-/// The peer selection strategies that can be used by queries.
-enum QueryPeerIter<TNodeId> {
-    FindNode(FindNodeQuery<TNodeId>)
-}
-
-impl<TTarget, TNodeId, TResult> Query<TTarget, TNodeId, TResult>
-where
-    TTarget: TargetKey<TNodeId>,
-    TNodeId: Into<Key<TNodeId>> + Eq + Clone,
-    TResult: Into<TNodeId> + Clone,
-{
-    /// Creates a new query without starting it.
-    fn new(id: QueryId, peer_iter: QueryPeerIter<TNodeId>, target: TTarget) -> Self {
-        Query {
-            id,
-            peer_iter,
-            target,
-            started: None,
-            unused_result: PhantomData,
-        }
+impl std::fmt::Display for QueryId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
-
-    /// Gets the unique ID of the query.
-    pub fn id(&self) -> QueryId {
-        self.id
-    }
-
-    /// Informs the query that the attempt to contact `peer` failed.
-    pub fn on_failure(&mut self, peer: &TNodeId) {
-        match &mut self.peer_iter {
-            QueryPeerIter::FindNode(iter) => iter.on_failure(&peer),
-        }
-    }
-
-    /// Informs the query that the attempt to contact `peer` succeeded,
-    /// possibly resulting in new peers that should be incorporated into
-    /// the query, if applicable.
-    pub fn on_success<'a>(&mut self, peer: &TNodeId, new_peers: &'a [TResult])
-    where
-        &'a TResult: Into<TNodeId>,
-    {
-        match &mut self.peer_iter {
-            QueryPeerIter::FindNode(iter) => {
-                iter.on_success(peer, new_peers.iter().map(|result| result.into()).collect())
-            }
-        }
-    }
-
-    /// Advances the state of the underlying peer iterator.
-    fn next(&mut self, now: Instant) -> QueryState<TNodeId> {
-        match &mut self.peer_iter {
-            QueryPeerIter::FindNode(iter) => iter.next(now),
-        }
-    }
-
-    /// Consumes the query, producing the final `QueryResult`.
-    pub fn into_result(self) -> QueryResult<TTarget, impl Iterator<Item = TNodeId>> {
-        let peers = match self.peer_iter {
-            QueryPeerIter::FindNode(iter) => iter.into_result(),
-        };
-        QueryResult {
-            target: self.target,
-            closest_peers: peers.into_iter(),
-        }
-    }
-
-    /// Returns a reference to the query `target`.
-    pub fn target(&self) -> &TTarget {
-        &self.target
-    }
-
-    /// Returns a mutable reference to the query `target`.
-    pub fn target_mut(&mut self) -> &mut TTarget {
-        &mut self.target
-    }
-}
-
-/// The result of a `Query`.
-pub struct QueryResult<TTarget, TClosest> {
-    /// The target of the query.
-    pub target: TTarget,
-    /// The closest peers to the target found by the query.
-    pub closest_peers: TClosest,
 }
 
 /// The state of the query reported by [`closest::FindNodeQuery::next`].
@@ -292,4 +193,3 @@ pub enum QueryState<TNodeId> {
     /// The query finished.
     Finished,
 }
-

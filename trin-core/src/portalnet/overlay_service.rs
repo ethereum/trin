@@ -1,17 +1,31 @@
-use std::collections::HashMap;
-use std::fmt;
-use std::marker::PhantomData;
-use std::sync::Arc;
-use std::task::Poll;
-use std::time::Duration;
+use anyhow::anyhow;
+use std::{
+    collections::HashMap,
+    fmt,
+    fmt::Debug,
+    marker::{PhantomData, Sync},
+    sync::Arc,
+    task::Poll,
+    time::Duration,
+};
 
-use crate::locks::RwLoggingExt;
-use crate::portalnet::metrics::OverlayMetrics;
-use crate::utp::stream::UtpListener;
-use crate::utp::trin_helpers::UtpMessageId;
 use crate::{
     portalnet::{
         discovery::Discovery,
+        find::{
+            iterators::{
+                query::{Query, QueryConfig},
+                {
+                    findcontent::{
+                        FindContentQuery, FindContentQueryResponse, FindContentQueryResult,
+                    },
+                    findnodes::FindNodeQuery,
+                },
+            },
+            query_info::{QueryInfo, QueryType},
+            query_pool::{QueryId, QueryPool, QueryPoolState, TargetKey},
+        },
+        metrics::OverlayMetrics,
         storage::PortalStorage,
         types::{
             content_key::OverlayContentKey,
@@ -23,15 +37,24 @@ use crate::{
         },
         Enr,
     },
+    types::validation::Validator,
     utils::node_id,
+    utp::stream::UtpListenerRequest,
 };
 
+use crate::{
+    portalnet::types::{content_key::RawContentKey, messages::ContentPayloadList},
+    utp::{
+        stream::{UtpStream, BUF_SIZE},
+        trin_helpers::UtpStreamId,
+    },
+};
 use delay_map::HashSetDelay;
 use discv5::{
     enr::NodeId,
     kbucket::{
         self, ConnectionDirection, ConnectionState, FailureReason, InsertResult, KBucketsTable,
-        NodeStatus, UpdateResult,
+        Key, NodeStatus, UpdateResult,
     },
     rpc::RequestId,
 };
@@ -39,12 +62,11 @@ use futures::{channel::oneshot, prelude::*};
 use log::{debug, error, info, warn};
 use parking_lot::RwLock;
 use rand::seq::SliceRandom;
+use smallvec::SmallVec;
 use ssz::Encode;
-use ssz_types::BitList;
-use ssz_types::VariableList;
+use ssz_types::{BitList, VariableList};
 use thiserror::Error;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
-use tokio::sync::RwLock as RwLockT;
 
 /// Maximum number of ENRs in response to FindNodes.
 pub const FIND_NODES_MAX_NODES: usize = 32;
@@ -53,6 +75,8 @@ pub const FIND_CONTENT_MAX_NODES: usize = 32;
 /// With even distribution assumptions, 2**17 is enough to put each node (estimating 100k nodes,
 /// which is more than 10x the ethereum mainnet node count) into a unique bucket by the 17th bucket index.
 const EXPECTED_NON_EMPTY_BUCKETS: usize = 17;
+/// Bucket refresh lookup interval in seconds
+const BUCKET_REFRESH_INTERVAL_SECS: u64 = 60;
 
 /// An overlay request error.
 #[derive(Clone, Error, Debug)]
@@ -89,22 +113,26 @@ pub enum OverlayRequestError {
     Discv5Error(discv5::RequestError),
 
     /// Error types resulting from building ACCEPT message
-    #[error("Error while building accept message")]
-    AcceptError(ssz_types::Error),
+    #[error("Error while building accept message: {0}")]
+    AcceptError(String),
 
     /// Error types resulting from building ACCEPT message
-    #[error("Error while sending offer message")]
+    #[error("Error while sending offer message: {0}")]
     OfferError(String),
 
     /// uTP request error
-    #[error("uTP request error")]
+    #[error("uTP request error: {0}")]
     UtpError(String),
+
+    #[error("Received invalid remote discv5 packet")]
+    InvalidRemoteDiscv5Packet,
 }
 
 impl From<discv5::RequestError> for OverlayRequestError {
     fn from(err: discv5::RequestError) -> Self {
         match err {
             discv5::RequestError::Timeout => Self::Timeout,
+            discv5::RequestError::InvalidRemotePacket => Self::InvalidRemoteDiscv5Packet,
             err => Self::Discv5Error(err),
         }
     }
@@ -141,6 +169,9 @@ pub struct OverlayRequest {
     /// An optional responder to send a result of the request.
     /// The responder may be None if the request was initiated internally.
     pub responder: Option<OverlayResponder>,
+    /// ID of query that request's response will advance.
+    /// Will be None for requests that are not associated with a query.
+    pub query_id: Option<QueryId>,
 }
 
 impl OverlayRequest {
@@ -149,12 +180,14 @@ impl OverlayRequest {
         request: Request,
         direction: RequestDirection,
         responder: Option<OverlayResponder>,
+        query_id: Option<QueryId>,
     ) -> Self {
         OverlayRequest {
             id: rand::random(),
             request,
             direction,
             responder,
+            query_id,
         }
     }
 }
@@ -165,6 +198,9 @@ struct ActiveOutgoingRequest {
     pub destination: Enr,
     /// An optional responder to send the result of the associated request.
     pub responder: Option<OverlayResponder>,
+    pub request: Request,
+    /// An optional QueryID for the query that this request is associated with.
+    pub query_id: Option<QueryId>,
 }
 
 /// A response for a particular overlay request.
@@ -231,7 +267,7 @@ impl PartialEq for Node {
 }
 
 /// The overlay service.
-pub struct OverlayService<TContentKey, TMetric> {
+pub struct OverlayService<TContentKey, TMetric, TValidator> {
     /// The underlying Discovery v5 protocol.
     discovery: Arc<Discovery>,
     /// The content database of the local node.
@@ -255,21 +291,41 @@ pub struct OverlayService<TContentKey, TMetric> {
     request_tx: UnboundedSender<OverlayRequest>,
     /// A map of active outgoing requests.
     active_outgoing_requests: Arc<RwLock<HashMap<OverlayRequestId, ActiveOutgoingRequest>>>,
+    /// A query pool that manages find node queries.
+    find_node_query_pool: QueryPool<NodeId, FindNodeQuery<NodeId>, TContentKey>,
+    /// A query pool that manages find content queries.
+    find_content_query_pool: QueryPool<NodeId, FindContentQuery<NodeId>, TContentKey>,
+    /// Timeout after which a peer in an ongoing query is marked unresponsive.
+    query_peer_timeout: Duration,
+    /// Number of peers to request data from in parallel for a single query.
+    query_parallelism: usize,
+    /// Number of new peers to discover before considering a FINDNODES query complete.
+    query_num_results: usize,
+    /// The number of buckets we simultaneously request from each peer in a FINDNODES query.
+    findnodes_query_distances_per_peer: usize,
     /// The receiver half of a channel for responses to outgoing requests.
     response_rx: UnboundedReceiver<OverlayResponse>,
     /// The sender half of a channel for responses to outgoing requests.
     response_tx: UnboundedSender<OverlayResponse>,
-    utp_listener: Arc<RwLockT<UtpListener>>,
+    /// The sender half of a channel to send requests to uTP listener
+    utp_listener_tx: UnboundedSender<UtpListenerRequest>,
     /// Phantom content key.
     phantom_content_key: PhantomData<TContentKey>,
     /// Phantom metric (distance function).
     phantom_metric: PhantomData<TMetric>,
     /// Metrics reporting component
     metrics: Option<OverlayMetrics>,
+    /// Validator for overlay network content.
+    validator: Arc<TValidator>,
 }
 
-impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
-    OverlayService<TContentKey, TMetric>
+impl<
+        TContentKey: 'static + OverlayContentKey + Send + Sync,
+        TMetric: Metric + Send + Sync,
+        TValidator: 'static + Validator<TContentKey> + Send + Sync,
+    > OverlayService<TContentKey, TMetric, TValidator>
+where
+    <TContentKey as TryFrom<Vec<u8>>>::Error: Debug,
 {
     /// Spawns the overlay network service.
     ///
@@ -284,9 +340,18 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         ping_queue_interval: Option<Duration>,
         data_radius: Arc<Distance>,
         protocol: ProtocolId,
-        utp_listener: Arc<RwLockT<UtpListener>>,
+        utp_listener_sender: UnboundedSender<UtpListenerRequest>,
         enable_metrics: bool,
-    ) -> Result<UnboundedSender<OverlayRequest>, String> {
+        validator: Arc<TValidator>,
+        query_timeout: Duration,
+        query_peer_timeout: Duration,
+        query_parallelism: usize,
+        query_num_results: usize,
+        findnodes_query_distances_per_peer: usize,
+    ) -> Result<UnboundedSender<OverlayRequest>, String>
+    where
+        <TContentKey as TryFrom<Vec<u8>>>::Error: Send,
+    {
         let (request_tx, request_rx) = mpsc::unbounded_channel();
         let internal_request_tx = request_tx.clone();
 
@@ -314,57 +379,77 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                 request_rx,
                 request_tx: internal_request_tx,
                 active_outgoing_requests: Arc::new(RwLock::new(HashMap::new())),
+                find_node_query_pool: QueryPool::new(query_timeout),
+                find_content_query_pool: QueryPool::new(query_timeout),
+                query_peer_timeout,
+                query_parallelism,
+                query_num_results,
+                findnodes_query_distances_per_peer,
                 response_rx,
                 response_tx,
-                utp_listener,
+                utp_listener_tx: utp_listener_sender,
                 phantom_content_key: PhantomData,
                 phantom_metric: PhantomData,
                 metrics,
+                validator,
             };
 
-            // Attempt to insert bootnodes into the routing table in a disconnected state.
-            // If successful, then add the node to the ping queue. A subsequent successful ping
-            // will mark the node as connected.
-            //
-            // TODO: Perform FindNode lookup for local node's own node ID and refresh all kbuckets
-            // further away than closet neighbor (see Kademlia paper section 2.3).
-            for enr in bootnode_enrs {
-                let node_id = enr.node_id();
-                let node = Node::new(enr, Distance::MAX);
-                let status = NodeStatus {
-                    state: ConnectionState::Disconnected,
-                    direction: ConnectionDirection::Outgoing,
-                };
-
-                // Attempt to insert the node into the routing table.
-                match service.kbuckets.write().insert_or_update(
-                    &kbucket::Key::from(node_id.clone()),
-                    node,
-                    status,
-                ) {
-                    InsertResult::Failed(reason) => {
-                        warn!(
-                            "[{:?}] Failed to insert bootnode into overlay routing table. Node: {}, Reason {:?}",
-                            service.protocol, node_id, reason
-                        );
-                    }
-                    _ => {
-                        debug!(
-                            "[{:?}] Inserted bootnode into overlay routing table, adding to ping queue. Node {}",
-                            service.protocol, node_id
-                        );
-
-                        // Queue the node in the ping queue.
-                        service.peers_to_ping.insert(node_id);
-                    }
-                }
-            }
-
             info!("[{:?}] Starting overlay service", overlay_protocol);
+            service.initialize_routing_table(bootnode_enrs);
             service.start().await;
         });
 
         Ok(request_tx)
+    }
+
+    fn add_bootnodes(&mut self, bootnode_enrs: Vec<Enr>) {
+        // Attempt to insert bootnodes into the routing table in a disconnected state.
+        // If successful, then add the node to the ping queue. A subsequent successful ping
+        // will mark the node as connected.
+
+        for enr in bootnode_enrs {
+            let node_id = enr.node_id();
+
+            // TODO: Decide default data radius, and define a constant. Or if there is an
+            // associated database, then look for a radius value there.
+            let node = Node::new(enr, Distance::MAX);
+            let status = NodeStatus {
+                state: ConnectionState::Disconnected,
+                direction: ConnectionDirection::Outgoing,
+            };
+
+            // Attempt to insert the node into the routing table.
+            match self.kbuckets.write().insert_or_update(
+                &kbucket::Key::from(node_id.clone()),
+                node,
+                status,
+            ) {
+                InsertResult::Failed(reason) => {
+                    warn!(
+                        "[{:?}] Failed to insert bootnode into overlay routing table. Node: {}, Reason {:?}",
+                        self.protocol, node_id, reason
+                    );
+                }
+                _ => {
+                    debug!(
+                        "[{:?}] Inserted bootnode into overlay routing table, adding to ping queue. Node {}",
+                        self.protocol, node_id
+                    );
+
+                    // Queue the node in the ping queue.
+                    self.peers_to_ping.insert(node_id);
+                }
+            }
+        }
+    }
+
+    /// Begins initial FINDNODES query to populate the routing table.
+    fn initialize_routing_table(&mut self, bootnodes: Vec<Enr>) {
+        self.add_bootnodes(bootnodes.clone());
+        let node_id = self.local_enr().node_id();
+        // Begin request for our local node ID.
+
+        self.init_find_nodes_query_with_initial_enrs(&node_id, bootnodes);
     }
 
     /// The main loop for the overlay service. The loop selects over different possible tasks to
@@ -382,7 +467,8 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
     /// Bucket maintenance: Maintain the routing table (more info documented above function).
     async fn start(&mut self) {
         // Construct bucket refresh interval
-        let mut bucket_refresh_interval = tokio::time::interval(Duration::from_secs(60));
+        let mut bucket_refresh_interval =
+            tokio::time::interval(Duration::from_secs(BUCKET_REFRESH_INTERVAL_SECS));
 
         loop {
             tokio::select! {
@@ -391,6 +477,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                     // Look up active request that corresponds to the response.
                     let optional_active_request = self.active_outgoing_requests.write().remove(&response.request_id);
                     if let Some(active_request) = optional_active_request {
+
                         // Send response to responder if present.
                         if let Some(responder) = active_request.responder {
                             let _ = responder.send(response.response.clone());
@@ -398,9 +485,10 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
 
                         // Perform background processing.
                         match response.response {
-                            Ok(response) => self.process_response(response, active_request.destination),
+                            Ok(response) => self.process_response(response, active_request.destination, active_request.request, active_request.query_id),
                             Err(error) => self.process_request_failure(response.request_id, active_request.destination, error),
                         }
+
                     } else {
                         warn!("No active request with id {} for response", response.request_id);
                     }
@@ -413,40 +501,132 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                         self.peers_to_ping.insert(node_id);
                     }
                 }
-                _ = OverlayService::<TContentKey, TMetric>::bucket_maintenance_poll(self.protocol.clone(), &self.kbuckets) => {}
+                query_event = OverlayService::<TContentKey, TMetric, TValidator>::query_event_poll(&mut self.find_node_query_pool) => {
+                    match query_event {
+                        // Send a FINDNODES on behalf of the query.
+                        QueryEvent::Waiting(query_id, node_id, request) => {
+
+                            // Look up the node's ENR.
+                            if let Some(enr) = self.find_enr(&node_id) {
+
+                                let request = OverlayRequest::new(
+                                    request,
+                                    RequestDirection::Outgoing {
+                                        destination: enr
+                                    },
+                                    None,
+                                    Some(query_id),
+                                );
+                                let _ = self.request_tx.send(request);
+
+                            } else {
+                                error!("[{:?}] Unable to send FINDNODES to unknown ENR with node ID {}",
+                                         self.protocol, node_id);
+                                if let Some((_, query)) = self.find_node_query_pool.get_mut(query_id) {
+                                    query.on_failure(&node_id);
+                                }
+                            }
+
+                        }
+                        // Query has ended.
+                        QueryEvent::Finished(query_id, mut query_info, query) | QueryEvent::TimedOut(query_id, mut query_info, query) => {
+                            let result = query.into_result();
+                            // Obtain the ENRs for the resulting nodes.
+                            let mut found_enrs = Vec::new();
+                            for node_id in result.into_iter() {
+                                if let Some(position) = query_info.untrusted_enrs.iter().position(|enr| enr.node_id() == node_id) {
+                                    let enr = query_info.untrusted_enrs.swap_remove(position);
+                                    found_enrs.push(enr);
+                                } else if let Some(enr) = self.find_enr(&node_id) {
+                                    // look up from the routing table
+                                    found_enrs.push(enr);
+                                }
+                                else {
+                                    warn!("ENR not present in queries results.");
+                                }
+                            }
+                            if let QueryType::FindNode { callback: Some(callback), .. } = query_info.query_type {
+                                if let Err(_) = callback.send(found_enrs.clone()) {
+                                    error!("Failed to send FindNode query {} results to callback", query_id);
+                                }
+                            }
+                            debug!("[{:?}] Query {} complete, discovered {} ENRs", self.protocol, query_id, found_enrs.len());
+                        }
+                    }
+                }
+                // Handle query events for queries in the find content query pool.
+                query_event = OverlayService::<TContentKey, TMetric, TValidator>::query_event_poll(&mut self.find_content_query_pool) => {
+                    self.handle_find_content_query_event(query_event);
+                }
+                _ = OverlayService::<TContentKey, TMetric, TValidator>::bucket_maintenance_poll(self.protocol.clone(), &self.kbuckets) => {}
                 _ = bucket_refresh_interval.tick() => {
-                    debug!("[{:?}] Overlay bucket refresh lookup", self.protocol);
+                    info!("[{:?}] Overlay bucket refresh lookup.", self.protocol);
                     self.bucket_refresh_lookup();
                 }
             }
         }
     }
 
+    /// Send request to UtpListener to add a uTP stream to the active connections
+    fn add_utp_connection(
+        &self,
+        source: &NodeId,
+        conn_id_recv: u16,
+        stream_id: UtpStreamId,
+    ) -> Result<(), OverlayRequestError> {
+        if let Some(enr) = self.find_enr(source) {
+            // Initialize active uTP stream with requesting node
+            let utp_request = UtpListenerRequest::InitiateConnection(
+                enr,
+                self.protocol.clone(),
+                stream_id,
+                conn_id_recv,
+            );
+            if let Err(err) = self.utp_listener_tx.send(utp_request) {
+                return Err(OverlayRequestError::UtpError(format!(
+                    "Unable to send uTP AddActiveConnection request: {err}"
+                )));
+            }
+            Ok(())
+        } else {
+            Err(OverlayRequestError::UtpError(format!(
+                "Can't find ENR in overlay routing table matching remote NodeId: {source}"
+            )))
+        }
+    }
+
     /// Main bucket refresh lookup logic
-    fn bucket_refresh_lookup(&self) {
+    fn bucket_refresh_lookup(&mut self) {
         // Look at local routing table and select the largest 17 buckets.
         // We only need the 17 bits furthest from our own node ID, because the closest 239 bits of
         // buckets are going to be empty-ish.
-        let buckets = self.kbuckets.read();
-        let buckets = buckets.buckets_iter().enumerate().collect::<Vec<_>>();
-        let buckets = &buckets[256 - EXPECTED_NON_EMPTY_BUCKETS..];
+        let target_node_id = {
+            let buckets = self.kbuckets.read();
+            let buckets = buckets.buckets_iter().enumerate().collect::<Vec<_>>();
+            let buckets = &buckets[256 - EXPECTED_NON_EMPTY_BUCKETS..];
 
-        // Randomly pick one of these buckets.
-        let target_bucket = buckets.choose(&mut rand::thread_rng());
-        match target_bucket {
-            Some(bucket) => {
-                let target_bucket_idx = u8::try_from(bucket.0);
-                if let Ok(idx) = target_bucket_idx {
-                    // Randomly generate a node ID that falls within the target bucket.
-                    let target_node_id = self.generate_random_node_id(idx);
-                    // Do the random lookup on this node ID.
-                    self.send_recursive_findnode(&target_node_id);
-                } else {
-                    error!("Unable to downcast bucket index.")
+            // Randomly pick one of these buckets.
+            let target_bucket = buckets.choose(&mut rand::thread_rng());
+            let random_node_id_in_bucket = match target_bucket {
+                Some(bucket) => {
+                    debug!("[{:?} Refreshing bucket {}", self.protocol, bucket.0);
+                    match u8::try_from(bucket.0) {
+                        Ok(idx) => self.generate_random_node_id(idx),
+                        Err(err) => {
+                            error!("Unable to downcast bucket index: {}", err);
+                            return;
+                        }
+                    }
                 }
-            }
-            None => error!("Failed to choose random bucket index"),
-        }
+                None => {
+                    error!("Failed to choose random bucket index");
+                    return;
+                }
+            };
+            random_node_id_in_bucket
+        };
+
+        self.init_find_nodes_query(&target_node_id);
     }
 
     /// Returns the local ENR of the node.
@@ -484,6 +664,101 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         .await
     }
 
+    /// Maintains the query pool.
+    ///
+    /// Returns a `QueryEvent` when the `QueryPoolState` updates.
+    /// This happens when a query needs to send a request to a node, when a query has completed,
+    // or when a query has timed out.
+    async fn query_event_poll<TQuery: Query<NodeId>>(
+        queries: &mut QueryPool<NodeId, TQuery, TContentKey>,
+    ) -> QueryEvent<TQuery, TContentKey> {
+        future::poll_fn(move |_cx| match queries.poll() {
+            QueryPoolState::Finished(query_id, query_info, query) => {
+                Poll::Ready(QueryEvent::Finished(query_id, query_info, query))
+            }
+            QueryPoolState::Timeout(query_id, query_info, query) => {
+                warn!("Query id: {:?} timed out", query_id);
+                Poll::Ready(QueryEvent::TimedOut(query_id, query_info, query))
+            }
+            QueryPoolState::Waiting(Some((query_id, query_info, query, return_peer))) => {
+                let node_id = return_peer;
+
+                let request_body = match query_info.rpc_request(return_peer) {
+                    Ok(request_body) => request_body,
+                    Err(_) => {
+                        query.on_failure(&node_id);
+                        return Poll::Pending;
+                    }
+                };
+
+                Poll::Ready(QueryEvent::Waiting(query_id, node_id, request_body))
+            }
+
+            QueryPoolState::Waiting(None) | QueryPoolState::Idle => Poll::Pending,
+        })
+        .await
+    }
+
+    /// Handles a `QueryEvent` from a poll on the find content query pool.
+    fn handle_find_content_query_event(
+        &mut self,
+        query_event: QueryEvent<FindContentQuery<NodeId>, TContentKey>,
+    ) {
+        match query_event {
+            QueryEvent::Waiting(query_id, node_id, request) => {
+                if let Some(enr) = self.find_enr(&node_id) {
+                    // If we find the node's ENR, then send the request on behalf of the
+                    // query. No callback channel is necessary for the request, because the
+                    // response will be incorporated into the query.
+                    let request = OverlayRequest::new(
+                        request,
+                        RequestDirection::Outgoing { destination: enr },
+                        None,
+                        Some(query_id),
+                    );
+                    let _ = self.request_tx.send(request);
+                } else {
+                    // If we cannot find the node's ENR, then we cannot contact the
+                    // node, so fail the query for this node.
+                    error!(
+                        "[{:?}] Unable to send FINDCONTENT to unknown ENR with node ID {}",
+                        self.protocol, node_id
+                    );
+                    if let Some((_, query)) = self.find_node_query_pool.get_mut(query_id) {
+                        query.on_failure(&node_id);
+                    }
+                }
+            }
+            QueryEvent::Finished(query_id, query_info, query)
+            | QueryEvent::TimedOut(query_id, query_info, query) => {
+                let result = query.into_result();
+                let (content, _closest_nodes) = match result {
+                    FindContentQueryResult::ClosestNodes(closest_nodes) => (None, closest_nodes),
+                    FindContentQueryResult::Content {
+                        content,
+                        closest_nodes,
+                    } => (Some(content), closest_nodes),
+                };
+
+                // Send (possibly `None`) content on callback channel.
+                if let QueryType::FindContent {
+                    callback: Some(callback),
+                    ..
+                } = query_info.query_type
+                {
+                    if let Err(_) = callback.send(content) {
+                        error!(
+                            "Failed to send FindContent query {} result to callback",
+                            query_id
+                        );
+                    }
+                }
+
+                // TODO: Offer content to closest node(s).
+            }
+        }
+    }
+
     /// Processes an overlay request.
     fn process_request(&mut self, request: OverlayRequest) {
         // For incoming requests, handle the request, possibly send the response over the channel,
@@ -494,8 +769,9 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         // channel if the request was initiated internally (e.g. for maintenance).
         match request.direction {
             RequestDirection::Incoming { id, source } => {
-                let response =
-                    self.handle_request(request.request.clone(), id.clone(), source.clone());
+                self.register_node_activity(source);
+
+                let response = self.handle_request(request.request.clone(), id.clone(), &source);
                 // Send response to responder if present.
                 if let Some(responder) = request.responder {
                     let _ = responder.send(response);
@@ -509,6 +785,8 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                     ActiveOutgoingRequest {
                         destination: destination.clone(),
                         responder: request.responder,
+                        request: request.request.clone(),
+                        query_id: request.query_id,
                     },
                 );
                 self.send_talk_req(request.request, request.id, destination);
@@ -527,9 +805,9 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
     fn initialize_request(&mut self, request: Request) -> Result<Response, OverlayRequestError> {
         debug!("[{:?}] Initializing request", self.protocol);
         match request {
-            Request::FindContent(find_content) => {
-                Ok(Response::Content(self.handle_find_content(find_content)?))
-            }
+            Request::FindContent(find_content) => Ok(Response::Content(
+                self.handle_find_content(find_content, None)?,
+            )),
             _ => Err(OverlayRequestError::InvalidRequest(
                 "Initializing this overlay service request is not yet supported.".to_string(),
             )),
@@ -541,23 +819,23 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         &mut self,
         request: Request,
         id: RequestId,
-        source: NodeId,
+        source: &NodeId,
     ) -> Result<Response, OverlayRequestError> {
         debug!("[{:?}] Handling request {}", self.protocol, id);
         match request {
-            Request::Ping(ping) => Ok(Response::Pong(self.handle_ping(ping, source))),
+            Request::Ping(ping) => Ok(Response::Pong(self.handle_ping(ping, &source))),
             Request::FindNodes(find_nodes) => {
                 Ok(Response::Nodes(self.handle_find_nodes(find_nodes)))
             }
-            Request::FindContent(find_content) => {
-                Ok(Response::Content(self.handle_find_content(find_content)?))
-            }
-            Request::Offer(offer) => Ok(Response::Accept(self.handle_offer(offer)?)),
+            Request::FindContent(find_content) => Ok(Response::Content(
+                self.handle_find_content(find_content, Some(&source))?,
+            )),
+            Request::Offer(offer) => Ok(Response::Accept(self.handle_offer(offer, source)?)),
         }
     }
 
     /// Builds a `Pong` response for a `Ping` request.
-    fn handle_ping(&self, request: Ping, source: NodeId) -> Pong {
+    fn handle_ping(&self, request: Ping, source: &NodeId) -> Pong {
         debug!(
             "[{:?}] Handling ping request from node={}. Ping={:?}",
             self.protocol, source, request
@@ -581,13 +859,19 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
             .and_then(|m| Some(m.report_inbound_find_nodes()));
         let distances64: Vec<u64> = request.distances.iter().map(|x| (*x).into()).collect();
         let enrs = self.nodes_by_distance(distances64);
-        // `total` represents the total number of `Nodes` response messages being sent.
-        // TODO: support returning multiple messages.
+
+        // Limit the ENRs so that their summed sizes do not surpass the max TALKREQ packet size.
+        let enrs = limit_enr_list_to_max_bytes(enrs, MAX_NODES_SIZE);
+
         Nodes { total: 1, enrs }
     }
 
     /// Attempts to build a `Content` response for a `FindContent` request.
-    fn handle_find_content(&self, request: FindContent) -> Result<Content, OverlayRequestError> {
+    fn handle_find_content(
+        &self,
+        request: FindContent,
+        source: Option<&NodeId>,
+    ) -> Result<Content, OverlayRequestError> {
         self.metrics
             .as_ref()
             .and_then(|m| Some(m.report_inbound_find_content()));
@@ -609,27 +893,30 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                 if content.len() < 1000 {
                     Ok(Content::Content(content))
                 } else {
-                    let connection_id: u16 = crate::utp::stream::rand();
+                    match source {
+                        Some(source) => {
+                            let conn_id: u16 = crate::utp::stream::rand();
 
-                    let utp_listener = self.utp_listener.clone();
-                    tokio::spawn(async move {
-                        let mut utp_listener = utp_listener.write_with_warn().await;
-                        // listen for incoming connection request on conn_id, as part of utp handshake
-                        utp_listener.listening.insert(
-                            connection_id.clone(),
-                            // Temporaly storing content data, so we can send it right after we receive
+                            // Listen for incoming uTP connection request on as part of uTP handshake and
+                            // storing content data, so we can send it inside UtpListener right after we receive
                             // SYN packet from the requester
-                            UtpMessageId::FindContentData(Content::Content(content)),
-                        );
+                            let conn_id_recv = conn_id.wrapping_add(1);
 
-                        // also listen on conn_id + 1 because this is the receive path
-                        utp_listener
-                            .listening
-                            .insert(connection_id.clone() + 1, UtpMessageId::FindContentStream);
-                    });
+                            self.add_utp_connection(
+                                source,
+                                conn_id_recv,
+                                UtpStreamId::ContentStream(content),
+                            )?;
 
-                    // Connection id is send as BE because uTP header values are stored also as BE
-                    Ok(Content::ConnectionId(connection_id.to_be()))
+                            // Connection id is send as BE because uTP header values are stored also as BE
+                            Ok(Content::ConnectionId(conn_id.to_be()))
+
+                        },
+                        None => {
+                           return Err(OverlayRequestError::UtpError(
+                               "Unable to start listening for uTP stream because source NodeID is not provided".to_string()))
+                        }
+                    }
                 }
             }
             Ok(None) => {
@@ -640,50 +927,56 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                 }
             }
             Err(msg) => Err(OverlayRequestError::Failure(format!(
-                "Unable to respond to FindContent: {}",
-                msg
+                "Unable to respond to FindContent: {msg}",
             ))),
         }
     }
 
-    /// Attempts to build a `Accept` response for a `Offer` request.
-    fn handle_offer(&self, request: Offer) -> Result<Accept, OverlayRequestError> {
+    /// Attempts to build an `Accept` response for an `Offer` request.
+    fn handle_offer(&self, request: Offer, source: &NodeId) -> Result<Accept, OverlayRequestError> {
         self.metrics
             .as_ref()
             .and_then(|m| Some(m.report_inbound_offer()));
-        let mut requested_keys = BitList::with_capacity(request.content_keys.len())
-            .map_err(|e| OverlayRequestError::AcceptError(e))?;
-        let connection_id: u16 = crate::utp::stream::rand();
 
-        // TODO: Pipe this with overlay DB and request only not available keys.
+        let mut requested_keys =
+            BitList::with_capacity(request.content_keys.len()).map_err(|_| {
+                OverlayRequestError::AcceptError(
+                    "Unable to initialize bitlist for requested keys.".to_owned(),
+                )
+            })?;
+
         let accept_keys = request.content_keys.clone();
 
-        for (i, key) in request.content_keys.iter().enumerate() {
-            // should_store is currently a dummy function
-            // the actual function will take ContentKey type, so we'll  have to decode keys here
+        for (i, key) in request.content_keys.into_iter().enumerate() {
+            let key = (TContentKey::try_from)(key).map_err(|_| {
+                OverlayRequestError::AcceptError(format!(
+                    "Unable to build content key from OFFER request."
+                ))
+            })?;
+
             requested_keys
-                .set(i, should_store(key))
-                .map_err(|e| OverlayRequestError::AcceptError(e))?;
+                .set(
+                    i,
+                    self.storage.read().should_store(&key).map_err(|err| {
+                        OverlayRequestError::AcceptError(format!(
+                            "Unable to check content availability: {err}"
+                        ))
+                    })?,
+                )
+                .map_err(|err| {
+                    OverlayRequestError::AcceptError(format!(
+                        "Unable to set requested keys bits: {err:?}"
+                    ))
+                })?;
         }
 
-        let utp_listener = self.utp_listener.clone();
-        tokio::spawn(async move {
-            // listen for incoming connection request on conn_id, as part of utp handshake
-            utp_listener
-                .write_with_warn()
-                .await
-                .listening
-                .insert(connection_id.clone(), UtpMessageId::OfferStream);
+        // Listen for incoming connection request on conn_id, as part of utp handshake
+        let conn_id: u16 = crate::utp::stream::rand();
 
-            // also listen on conn_id + 1 because this is the actual receive path for acceptor
-            utp_listener.write_with_warn().await.listening.insert(
-                connection_id.clone() + 1,
-                UtpMessageId::AcceptStream(accept_keys),
-            );
-        });
+        self.add_utp_connection(source, conn_id, UtpStreamId::AcceptStream(accept_keys))?;
 
         let accept = Accept {
-            connection_id: connection_id.to_be(),
+            connection_id: conn_id.to_be(),
             content_keys: requested_keys,
         };
 
@@ -723,6 +1016,14 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
 
     /// Processes an incoming request from some source node.
     fn process_incoming_request(&mut self, request: Request, _id: RequestId, source: NodeId) {
+        match request {
+            Request::Ping(ping) => self.process_ping(ping, source),
+            _ => {}
+        }
+    }
+
+    /// Register source NodeId activity in overlay routing table
+    fn register_node_activity(&mut self, source: NodeId) {
         // Look up the node in the routing table.
         let key = kbucket::Key::from(source);
         let is_node_in_table = match self.kbuckets.write().entry(&key) {
@@ -755,11 +1056,6 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                 let node = Node::new(enr, Distance::MAX);
                 self.connect_node(node, ConnectionDirection::Incoming);
             }
-        }
-
-        match request {
-            Request::Ping(ping) => self.process_ping(ping, source),
-            _ => {}
         }
     }
 
@@ -807,7 +1103,13 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
     }
 
     /// Processes a response to an outgoing request from some source node.
-    fn process_response(&mut self, response: Response, source: Enr) {
+    fn process_response(
+        &mut self,
+        response: Response,
+        source: Enr,
+        request: Request,
+        query_id: Option<QueryId>,
+    ) {
         // If the node is present in the routing table, but the node is not connected, then
         // use the existing entry's value and direction. Otherwise, build a new entry from
         // the source ENR and establish a connection in the outgoing direction, because this
@@ -851,10 +1153,94 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
 
         match response {
             Response::Pong(pong) => self.process_pong(pong, source),
-            Response::Nodes(nodes) => self.process_nodes(nodes, source),
-            Response::Content(content) => self.process_content(content, source),
-            _ => {}
+            Response::Nodes(nodes) => self.process_nodes(nodes, source, query_id),
+            Response::Content(content) => {
+                let find_content_request = match request {
+                    Request::FindContent(find_content) => find_content,
+                    _ => {
+                        error!("Unable to process received content: Invalid request message.");
+                        return;
+                    }
+                };
+                self.process_content(content, source, find_content_request, query_id)
+            }
+            Response::Accept(accept) => {
+                let offer_request = match request {
+                    Request::Offer(offer) => offer,
+                    _ => {
+                        error!("Unable to process received content: Invalid request message.");
+                        return;
+                    }
+                };
+
+                if let Err(err) = self.process_accept(accept, source, offer_request.content_keys) {
+                    error!("Error processing ACCEPT response in overlay service: {err}")
+                }
+            }
         }
+    }
+
+    /// Process ACCEPT response
+    pub fn process_accept(
+        &self,
+        response: Accept,
+        enr: Enr,
+        content_keys: Vec<RawContentKey>,
+    ) -> anyhow::Result<Accept> {
+        let content_keys_offered: Result<Vec<TContentKey>, TContentKey::Error> = content_keys
+            .into_iter()
+            .map(|key| TContentKey::try_from(key))
+            .collect();
+
+        let content_keys_offered: Vec<TContentKey> = content_keys_offered
+            .map_err(|_| anyhow!("Unable to decode our own offered content keys"))?;
+
+        let conn_id = response.connection_id.to_be();
+
+        // Do not initialize uTP stream if remote node doesn't have interest in the offered content keys
+        if response.content_keys.is_zero() {
+            return Ok(response);
+        }
+
+        // initiate the connection to the acceptor
+        let (tx, rx) = tokio::sync::oneshot::channel::<UtpStream>();
+        let utp_request = UtpListenerRequest::Connect(
+            conn_id,
+            enr,
+            self.protocol.clone(),
+            UtpStreamId::OfferStream,
+            tx,
+        );
+
+        self.utp_listener_tx
+            .send(utp_request).map_err(|err| anyhow!("Unable to send Connect request to UtpListener when processing ACCEPT message: {err}"))?;
+
+        let storage = Arc::clone(&self.storage);
+        let response_clone = response.clone();
+
+        tokio::spawn(async move {
+            let mut conn = rx.await.unwrap();
+            // Handle STATE packet for SYN
+            let mut buf = [0; BUF_SIZE];
+            conn.recv(&mut buf).await.unwrap();
+
+            let content_items =
+                Self::provide_requested_content(storage, &response_clone, content_keys_offered)
+                    .expect("Unable to provide requested content for acceptor: {msg:?}");
+
+            let content_payload = ContentPayloadList::new(content_items)
+                .expect("Unable to build content payload: {msg:?}");
+
+            // send the content to the acceptor over a uTP stream
+            if let Err(err) = conn.send_to(&content_payload.as_ssz_bytes()).await {
+                warn!("Error sending content {err}");
+            };
+            // Close uTP connection
+            if let Err(err) = conn.close().await {
+                warn!("Unable to close uTP connection!: {err}")
+            };
+        });
+        Ok(response)
     }
 
     /// Processes a Pong response.
@@ -884,23 +1270,33 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
     }
 
     /// Processes a Nodes response.
-    fn process_nodes(&mut self, nodes: Nodes, source: Enr) {
+    fn process_nodes(&mut self, nodes: Nodes, source: Enr, query_id: Option<QueryId>) {
         debug!(
             "[{:?}] Processing Nodes response from node. Node: {}",
             self.protocol,
             source.node_id()
         );
-        self.process_discovered_enrs(
-            nodes
-                .enrs
-                .into_iter()
-                .map(|ssz_enr| ssz_enr.into())
-                .collect(),
-        );
+
+        let enrs: Vec<Enr> = nodes
+            .enrs
+            .into_iter()
+            .map(|ssz_enr| ssz_enr.into())
+            .collect();
+
+        self.process_discovered_enrs(enrs.clone());
+        if let Some(query_id) = query_id {
+            self.advance_find_node_query(source, enrs, query_id);
+        }
     }
 
     /// Processes a Content response.
-    fn process_content(&mut self, content: Content, source: Enr) {
+    fn process_content(
+        &mut self,
+        content: Content,
+        source: Enr,
+        request: FindContent,
+        query_id: Option<QueryId>,
+    ) {
         debug!(
             "[{:?}] Processing Content response from node. Node: {}",
             self.protocol,
@@ -911,14 +1307,61 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                 "[{:?}] Skipping processing for content connection ID {}",
                 self.protocol, id
             ),
-            Content::Content(_) => {
-                debug!(
-                    "[{:?}] Skipping processing for content bytes",
-                    self.protocol
-                )
+            Content::Content(content) => {
+                self.process_received_content(content.clone(), request);
+                // TODO: Should we only advance the query if the content has been validated?
+                if let Some(query_id) = query_id {
+                    self.advance_find_content_query_with_content(&query_id, source, content.into());
+                }
             }
-            Content::Enrs(enrs) => self
-                .process_discovered_enrs(enrs.into_iter().map(|ssz_enr| ssz_enr.into()).collect()),
+            Content::Enrs(enrs) => {
+                let enrs: Vec<Enr> = enrs.into_iter().map(|ssz_enr| ssz_enr.into()).collect();
+                self.process_discovered_enrs(enrs.clone());
+                if let Some(query_id) = query_id {
+                    self.advance_find_content_query_with_enrs(&query_id, source, enrs);
+                }
+            }
+        }
+    }
+
+    fn process_received_content(&mut self, content: ByteList, request: FindContent) {
+        let content_key = match TContentKey::try_from(request.content_key) {
+            Ok(val) => val,
+            Err(msg) => {
+                error!("Unable to process received content: We sent a request with an invalid content key: {msg:?}");
+                return;
+            }
+        };
+        let should_store = self.storage.read().should_store(&content_key);
+        match should_store {
+            Ok(val) => {
+                if val {
+                    let validator = Arc::clone(&self.validator);
+                    let storage = Arc::clone(&self.storage);
+                    // Spawn task that validates content before storing.
+                    // Allows for non-blocking requests to this/other overlay services.
+                    tokio::spawn(async move {
+                        if let Err(err) = validator
+                            .validate_content(&content_key, &content.to_vec())
+                            .await
+                        {
+                            warn!("Unable to validate received content: {err:?}");
+                            return;
+                        };
+
+                        if let Err(err) = storage.write().store(&content_key, &content.into()) {
+                            error!("Content received, but not stored: {err}")
+                        }
+                    });
+                } else {
+                    debug!(
+                        "Content received, but not stored: Content is already stored or its distance falls outside current radius."
+                    )
+                }
+            }
+            Err(_) => {
+                error!("Content received, but not stored: Error communicating with db.");
+            }
         }
     }
 
@@ -1004,6 +1447,115 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         }
     }
 
+    /// Provide the requested content key and content value for the acceptor
+    fn provide_requested_content(
+        storage: Arc<RwLock<PortalStorage>>,
+        accept_message: &Accept,
+        content_keys_offered: Vec<TContentKey>,
+    ) -> anyhow::Result<Vec<ByteList>> {
+        let mut content_items: Vec<ByteList> = Vec::new();
+
+        for (i, key) in accept_message
+            .content_keys
+            .clone()
+            .iter()
+            .zip(content_keys_offered.iter())
+        {
+            if i == true {
+                match storage.read().get(key) {
+                    Ok(content) => match content {
+                        Some(content) => content_items.push(content.into()),
+                        None => return Err(anyhow!("Unable to read offered content!")),
+                    },
+                    Err(err) => {
+                        return Err(anyhow!(
+                            "Unable to get offered content from portal storage: {err}"
+                        ))
+                    }
+                }
+            }
+        }
+        Ok(content_items)
+    }
+
+    /// Advances a find node query (if one is active for the node) using the received ENRs.
+    /// Does nothing if called with a node_id that does not have a corresponding active query request.
+    fn advance_find_node_query(&mut self, source: Enr, enrs: Vec<Enr>, query_id: QueryId) {
+        // Check whether this request was sent on behalf of a query.
+        // If so, advance the query with the returned data.
+        let local_node_id = self.local_enr().node_id();
+        if let Some((query_info, query)) = self.find_node_query_pool.get_mut(query_id) {
+            for enr_ref in enrs.iter() {
+                if !query_info
+                    .untrusted_enrs
+                    .iter()
+                    .any(|enr| enr.node_id() == enr_ref.node_id() && enr.node_id() != local_node_id)
+                {
+                    query_info.untrusted_enrs.push(enr_ref.clone());
+                }
+            }
+            query.on_success(
+                &source.node_id(),
+                enrs.iter().map(|enr| enr.into()).collect(),
+            );
+        } else {
+            debug!(
+                "Response returned for inactive find node query {:?}",
+                query_id
+            )
+        }
+    }
+
+    /// Advances a find content query (if one exists for `query_id`) with ENRs close to content.
+    fn advance_find_content_query_with_enrs(
+        &mut self,
+        query_id: &QueryId,
+        source: Enr,
+        enrs: Vec<Enr>,
+    ) {
+        let local_node_id = self.local_enr().node_id();
+        if let Some((query_info, query)) = self.find_content_query_pool.get_mut(*query_id) {
+            // If an ENR is not present in the query's untrusted ENRs, then add the ENR.
+            // Ignore the local node's ENR.
+            for enr_ref in enrs.iter().filter(|enr| enr.node_id() != local_node_id) {
+                if !query_info
+                    .untrusted_enrs
+                    .iter()
+                    .any(|enr| enr.node_id() == enr_ref.node_id())
+                {
+                    query_info.untrusted_enrs.push(enr_ref.clone());
+                }
+            }
+            let closest_nodes: Vec<NodeId> = enrs
+                .iter()
+                .filter(|enr| enr.node_id() != local_node_id)
+                .map(|enr| enr.into())
+                .collect();
+
+            // Mark the query successful for the source of the response with the closest ENRs.
+            query.on_success(
+                &source.node_id(),
+                FindContentQueryResponse::ClosestNodes(closest_nodes),
+            );
+        }
+    }
+
+    /// Advances a find content query (if one exists for `query_id`) with content.
+    fn advance_find_content_query_with_content(
+        &mut self,
+        query_id: &QueryId,
+        source: Enr,
+        content: Vec<u8>,
+    ) {
+        if let Some((_, query)) = self.find_content_query_pool.get_mut(*query_id) {
+            // Mark the query successful for the source of the response with the content.
+            query.on_success(
+                &source.node_id(),
+                FindContentQueryResponse::Content(content),
+            );
+        }
+    }
+
     /// Submits a request to ping a destination (target) node.
     fn ping_node(&self, destination: &Enr) {
         debug!(
@@ -1025,6 +1577,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
                 destination: destination.clone(),
             },
             None,
+            None,
         );
         let _ = self.request_tx.send(request);
     }
@@ -1037,6 +1590,7 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
             RequestDirection::Outgoing {
                 destination: destination.clone(),
             },
+            None,
             None,
         );
         let _ = self.request_tx.send(request);
@@ -1191,8 +1745,134 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
         Ok(closest_nodes)
     }
 
-    fn send_recursive_findnode(&self, _target: &NodeId) {
-        // TODO: Implement Recursive(iterative) FINDNODE. This is a stub.
+    /// Starts a FindNode query to find nodes with IDs closest to target, starting with given enrs.
+    fn init_find_nodes_query_with_initial_enrs(&mut self, target: &NodeId, enrs: Vec<Enr>) {
+        let query_config = QueryConfig {
+            parallelism: self.query_parallelism,
+            num_results: self.query_num_results,
+            peer_timeout: self.query_peer_timeout,
+        };
+
+        let query_info = QueryInfo {
+            query_type: QueryType::FindNode {
+                target: *target,
+                distances_to_request: self.findnodes_query_distances_per_peer,
+                callback: None,
+            },
+            untrusted_enrs: SmallVec::from_vec(enrs),
+        };
+
+        let known_closest_peers: Vec<Key<NodeId>> = query_info
+            .untrusted_enrs
+            .iter()
+            .map(|enr| Key::from(enr.node_id()))
+            .collect();
+
+        if known_closest_peers.is_empty() {
+            warn!(
+                "FindNodes query initiated but no closest peers in routing table. Aborting query."
+            );
+        } else {
+            let find_nodes_query =
+                FindNodeQuery::with_config(query_config, query_info.key(), known_closest_peers);
+            self.find_node_query_pool
+                .add_query(query_info, find_nodes_query);
+        }
+    }
+
+    /// Starts a FindNode query to find nodes with IDs closest to target.
+    fn init_find_nodes_query(&mut self, target: &NodeId) {
+        let target_key = Key::from(*target);
+        let closest_enrs = self
+            .kbuckets
+            .write()
+            .closest_values(&target_key)
+            .map(|closest| closest.value.enr)
+            .collect();
+
+        self.init_find_nodes_query_with_initial_enrs(target, closest_enrs);
+    }
+
+    /// Starts a `FindContentQuery` for a target content key.
+    fn _init_find_content_query(
+        &mut self,
+        target: TContentKey,
+        callback: Option<oneshot::Sender<Option<Vec<u8>>>>,
+    ) -> Option<QueryId> {
+        // Represent the target content ID with a node ID.
+        let target_node_id = NodeId::new(&target.content_id());
+        let target_key = Key::from(target_node_id);
+
+        let query_config = QueryConfig {
+            parallelism: self.query_parallelism,
+            num_results: self.query_num_results,
+            peer_timeout: self.query_peer_timeout,
+        };
+
+        // Look up the closest ENRs to the target.
+        // Limit the number of ENRs according to the query config.
+        let closest_enrs = self
+            .kbuckets
+            .write()
+            .closest_values(&target_key)
+            .map(|closest| closest.value.enr)
+            .take(query_config.num_results)
+            .collect();
+
+        let query_info = QueryInfo {
+            query_type: QueryType::FindContent { target, callback },
+            untrusted_enrs: SmallVec::from_vec(closest_enrs),
+        };
+
+        // Convert ENRs into k-bucket keys.
+        let closest_enrs: Vec<Key<NodeId>> = query_info
+            .untrusted_enrs
+            .iter()
+            .map(|enr| Key::from(enr.node_id()))
+            .collect();
+
+        // If the initial set of peers is non-empty, then add the query to the query pool.
+        // Otherwise, there is no way for the query to progress, so drop it.
+        if closest_enrs.is_empty() {
+            warn!("Unable to initialize find content query without any known close peers");
+            None
+        } else {
+            let query = FindContentQuery::with_config(query_config, target_key, closest_enrs);
+            Some(self.find_content_query_pool.add_query(query_info, query))
+        }
+    }
+
+    /// Returns an ENR if one is known for the given NodeId.
+    pub fn find_enr(&self, node_id: &NodeId) -> Option<Enr> {
+        // Check whether we know this node id in our routing table.
+        let key = kbucket::Key::from(*node_id);
+        if let kbucket::Entry::Present(entry, _) = self.kbuckets.write().entry(&key) {
+            return Some(entry.value().clone().enr());
+        }
+
+        // Check the existing find node queries for the ENR.
+        for (query_info, _) in self.find_node_query_pool.iter() {
+            if let Some(enr) = query_info
+                .untrusted_enrs
+                .iter()
+                .find(|v| v.node_id() == *node_id)
+            {
+                return Some(enr.clone());
+            }
+        }
+
+        // Check the existing find content queries for the ENR.
+        for (query_info, _) in self.find_content_query_pool.iter() {
+            if let Some(enr) = query_info
+                .untrusted_enrs
+                .iter()
+                .find(|v| v.node_id() == *node_id)
+            {
+                return Some(enr.clone());
+            }
+        }
+
+        None
     }
 
     fn generate_random_node_id(&self, target_bucket_idx: u8) -> NodeId {
@@ -1200,9 +1880,53 @@ impl<TContentKey: OverlayContentKey + Send, TMetric: Metric + Send>
     }
 }
 
+/// The result of the `query_event_poll` indicating an action is required to further progress an
+/// active query.
+pub enum QueryEvent<TQuery, TContentKey> {
+    /// The query is waiting for a peer to be contacted.
+    Waiting(QueryId, NodeId, Request),
+    /// The query has timed out, possible returning peers.
+    TimedOut(QueryId, QueryInfo<TContentKey>, TQuery),
+    /// The query has completed successfully.
+    Finished(QueryId, QueryInfo<TContentKey>, TQuery),
+}
+
+const MAX_ENR_SIZE: usize = 300;
+const MAX_DISCV5_PACKET_SIZE: usize = 1280;
+const TALK_REQ_PACKET_OVERHEAD: usize = 16 + // IV
+    55 + // Header
+    1 + // Discv5 Message Type
+    3 + // RLP Encoding of outer list
+    9 + // Request ID, max 8 bytes + 1 for RLP encoding
+    3 + // RLP Encoding of inner response
+    16; // RLP HMAC
+        // ENR SSZ overhead empirically observed to be double.
+        // Todo: determine why this is. It seems too high.
+const MAX_NODES_SIZE: usize = MAX_DISCV5_PACKET_SIZE - TALK_REQ_PACKET_OVERHEAD;
+const NUM_MAX_SIZE_ENRS_IN_MAX_SIZE_PACKET: usize = MAX_NODES_SIZE / MAX_ENR_SIZE;
+
+/// Limits a to a maximum packet size, including the discv5 header overhead.
+fn limit_enr_list_to_max_bytes(enrs: Vec<SszEnr>, max_size: usize) -> Vec<SszEnr> {
+    // If all ENRs would fit at max size, don't check individual sizes.
+    if enrs.len() < NUM_MAX_SIZE_ENRS_IN_MAX_SIZE_PACKET {
+        return enrs;
+    }
+
+    let mut total_size: usize = 0;
+    enrs.into_iter()
+        .take_while(|enr| {
+            let enr_size = enr.ssz_bytes_len();
+            total_size = total_size + enr_size;
+            total_size < max_size
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use std::time::Instant;
 
     use rstest::rstest;
 
@@ -1216,11 +1940,13 @@ mod tests {
                 content_key::IdentityContentKey, messages::PortalnetConfig, metric::XorMetric,
             },
         },
+        types::validation::MockValidator,
         utils::node_id::generate_random_remote_enr,
     };
 
     use discv5::kbucket::Entry;
     use serial_test::serial;
+    use tokio::sync::mpsc::unbounded_channel;
     use tokio_test::{assert_pending, assert_ready, task};
 
     macro_rules! poll_request_rx {
@@ -1229,14 +1955,14 @@ mod tests {
         };
     }
 
-    fn build_service() -> OverlayService<IdentityContentKey, XorMetric> {
+    fn build_service() -> OverlayService<IdentityContentKey, XorMetric, MockValidator> {
         let portal_config = PortalnetConfig {
-            internal_ip: true,
+            no_stun: true,
             ..Default::default()
         };
         let discovery = Arc::new(Discovery::new(portal_config).unwrap());
 
-        let utp_listener = Arc::new(RwLockT::new(UtpListener::new(Arc::clone(&discovery))));
+        let (utp_listener_tx, _) = unbounded_channel::<UtpListenerRequest>();
 
         // Initialize DB config
         let storage_capacity: u32 = DEFAULT_STORAGE_CAPACITY.parse().unwrap();
@@ -1260,8 +1986,9 @@ mod tests {
         let (request_tx, request_rx) = mpsc::unbounded_channel();
         let (response_tx, response_rx) = mpsc::unbounded_channel();
         let metrics = None;
+        let validator = Arc::new(MockValidator {});
 
-        OverlayService {
+        let service = OverlayService {
             discovery,
             storage,
             kbuckets,
@@ -1271,16 +1998,25 @@ mod tests {
             request_tx,
             request_rx,
             active_outgoing_requests,
+            find_node_query_pool: QueryPool::new(overlay_config.query_timeout),
+            find_content_query_pool: QueryPool::new(overlay_config.query_timeout),
+            query_peer_timeout: overlay_config.query_peer_timeout,
+            query_parallelism: overlay_config.query_parallelism,
+            query_num_results: overlay_config.query_num_results,
+            findnodes_query_distances_per_peer: overlay_config.findnodes_query_distances_per_peer,
             response_tx,
             response_rx,
-            utp_listener,
+            utp_listener_tx,
             phantom_content_key: PhantomData,
             phantom_metric: PhantomData,
             metrics,
-        }
+            validator,
+        };
+
+        service
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn process_ping_source_in_table_higher_enr_seq() {
         let mut service = task::spawn(build_service());
@@ -1331,7 +2067,7 @@ mod tests {
         };
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn process_ping_source_not_in_table() {
         let mut service = task::spawn(build_service());
@@ -1350,7 +2086,7 @@ mod tests {
         assert_pending!(poll_request_rx!(service));
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn process_request_failure() {
         let mut service = task::spawn(build_service());
@@ -1392,7 +2128,7 @@ mod tests {
         };
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn process_pong_source_in_table_higher_enr_seq() {
         let mut service = task::spawn(build_service());
@@ -1443,7 +2179,7 @@ mod tests {
         };
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn process_pong_source_not_in_table() {
         let mut service = task::spawn(build_service());
@@ -1461,7 +2197,7 @@ mod tests {
         assert_pending!(poll_request_rx!(service));
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn process_discovered_enrs_local_enr() {
         let mut service = task::spawn(build_service());
@@ -1481,7 +2217,7 @@ mod tests {
         assert!(service.peers_to_ping.is_empty());
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn process_discovered_enrs_unknown_enrs() {
         let mut service = task::spawn(build_service());
@@ -1527,7 +2263,7 @@ mod tests {
         assert!(service.peers_to_ping.contains_key(&enr2.node_id()));
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn process_discovered_enrs_known_enrs() {
         let mut service = task::spawn(build_service());
@@ -1568,7 +2304,7 @@ mod tests {
 
         // Modify first ENR to increment sequence number.
         let updated_udp: u16 = 9000;
-        let _ = enr1.set_udp(updated_udp, &sk1);
+        let _ = enr1.set_udp4(updated_udp, &sk1);
         assert_ne!(1, enr1.seq());
 
         let mut enrs: Vec<Enr> = vec![];
@@ -1595,7 +2331,7 @@ mod tests {
         };
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn request_node() {
         let mut service = task::spawn(build_service());
@@ -1624,7 +2360,7 @@ mod tests {
         };
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn ping_node() {
         let mut service = task::spawn(build_service());
@@ -1646,7 +2382,7 @@ mod tests {
         assert!(matches!(request.request, Request::Ping { .. }));
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn connect_node() {
         let mut service = task::spawn(build_service());
@@ -1678,7 +2414,7 @@ mod tests {
         };
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn update_node_connection_state_disconnected_to_connected() {
         let mut service = task::spawn(build_service());
@@ -1720,7 +2456,7 @@ mod tests {
         };
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn update_node_connection_state_connected_to_disconnected() {
         let mut service = task::spawn(build_service());
@@ -1775,8 +2511,530 @@ mod tests {
         let expected_index = bucket.get_index(&key).unwrap();
         assert_eq!(target_bucket_idx, expected_index as u8);
     }
-}
 
-fn should_store(_key: &Vec<u8>) -> bool {
-    return true;
+    #[rstest]
+    #[case(3, 3)]
+    #[case(7, 7)]
+    #[case(8, 8)]
+    #[case(17, 8)]
+    #[case(25, 8)]
+    fn test_limit_nodes_response_size(
+        #[case] original_nodes_size: usize,
+        #[case] correct_limited_size: usize,
+    ) {
+        let mut enrs: Vec<SszEnr> = Vec::new();
+        for _ in 0..original_nodes_size {
+            // Generates an ENR of size 63 bytes.
+            let (_, enr) = generate_random_remote_enr();
+            enrs.push(SszEnr::new(enr));
+        }
+
+        let enrs_limited = limit_enr_list_to_max_bytes(enrs, MAX_NODES_SIZE);
+
+        assert_eq!(enrs_limited.len(), correct_limited_size);
+    }
+
+    #[rstest]
+    fn test_init_find_nodes_query() {
+        let mut service = task::spawn(build_service());
+
+        let (_, bootnode1) = generate_random_remote_enr();
+        let (_, bootnode2) = generate_random_remote_enr();
+        let bootnodes = vec![bootnode1.clone(), bootnode2.clone()];
+
+        let (_, target_enr) = generate_random_remote_enr();
+        let target_node_id = target_enr.node_id();
+
+        assert_eq!(service.find_node_query_pool.iter().count(), 0);
+
+        // Initialize the query and call `poll` so that it starts
+        service.init_find_nodes_query_with_initial_enrs(&target_node_id, bootnodes);
+        let _ = service.find_node_query_pool.poll();
+
+        let (query_info, query) = service.find_node_query_pool.iter().next().unwrap();
+
+        assert!(query_info.untrusted_enrs.contains(&bootnode1));
+        assert!(query_info.untrusted_enrs.contains(&bootnode2));
+        match query_info.query_type {
+            QueryType::FindNode {
+                target,
+                distances_to_request,
+                ..
+            } => {
+                assert_eq!(target, target_node_id);
+                assert_eq!(
+                    distances_to_request,
+                    service.findnodes_query_distances_per_peer
+                );
+            }
+            _ => panic!("Unexpected query type"),
+        }
+
+        assert!(query.started().is_some());
+    }
+
+    fn init_find_nodes_query_with_initial_enrs_and_config(
+        service: &mut OverlayService<IdentityContentKey, XorMetric, MockValidator>,
+        target: &NodeId,
+        enrs: Vec<Enr>,
+        query_config: QueryConfig,
+    ) {
+        let query_info = QueryInfo {
+            query_type: QueryType::FindNode {
+                target: *target,
+                callback: None,
+                distances_to_request: service.findnodes_query_distances_per_peer,
+            },
+            untrusted_enrs: SmallVec::from_vec(enrs),
+        };
+
+        let known_closest_peers: Vec<Key<NodeId>> = query_info
+            .untrusted_enrs
+            .iter()
+            .map(|enr| Key::from(enr.node_id()))
+            .collect();
+
+        if known_closest_peers.is_empty() {
+            warn!(
+                "FindNodes query initiated but no closest peers in routing table. Aborting query."
+            );
+        } else {
+            let find_nodes_query =
+                FindNodeQuery::with_config(query_config, query_info.key(), known_closest_peers);
+            service
+                .find_node_query_pool
+                .add_query(query_info, find_nodes_query);
+        }
+    }
+
+    #[test_log::test(tokio::test)]
+    async fn test_advance_findnodes_query() {
+        let mut service = build_service();
+
+        let (_, bootnode) = generate_random_remote_enr();
+        let bootnodes = vec![bootnode.clone()];
+        let bootnode_node_id = bootnode.node_id();
+
+        let (_, target_enr) = generate_random_remote_enr();
+        let target_node_id = target_enr.node_id();
+
+        let query_config = QueryConfig {
+            parallelism: service.query_parallelism,
+            num_results: 3,
+            peer_timeout: service.query_peer_timeout,
+        };
+
+        init_find_nodes_query_with_initial_enrs_and_config(
+            &mut service,
+            &target_node_id,
+            bootnodes,
+            query_config,
+        );
+
+        // Test that the first query event contains a proper query ID and request to the bootnode
+        let event =
+            OverlayService::<IdentityContentKey, XorMetric, MockValidator>::query_event_poll(
+                &mut service.find_node_query_pool,
+            )
+            .await;
+        match event {
+            QueryEvent::Waiting(query_id, node_id, request) => {
+                match request {
+                    Request::FindNodes(find_nodes) => {
+                        assert_eq!(
+                            find_nodes.distances.len(),
+                            service.findnodes_query_distances_per_peer
+                        );
+                    }
+                    _ => panic!(),
+                }
+                assert_eq!(query_id, QueryId(0));
+                assert_eq!(node_id, bootnode_node_id);
+            }
+            _ => panic!(),
+        }
+
+        // Create two ENRs to use as dummy responses to the query from the bootnode.
+        let (_, enr1) = generate_random_remote_enr();
+        let (_, enr2) = generate_random_remote_enr();
+        let node_id_1 = enr1.node_id();
+        let node_id_2 = enr2.node_id();
+
+        service.advance_find_node_query(
+            bootnode.clone(),
+            vec![enr1.clone(), enr2.clone()],
+            QueryId(0),
+        );
+
+        let event =
+            OverlayService::<IdentityContentKey, XorMetric, MockValidator>::query_event_poll(
+                &mut service.find_node_query_pool,
+            )
+            .await;
+
+        // Check that the request is being sent to either node 1 or node 2. Keep track of which.
+        let first_node_id: Option<NodeId>;
+        match event {
+            QueryEvent::Waiting(_, node_id, _) => {
+                assert!((node_id == node_id_1) || (node_id == node_id_2));
+                first_node_id = Some(node_id);
+            }
+            _ => panic!(),
+        }
+
+        let event =
+            OverlayService::<IdentityContentKey, XorMetric, MockValidator>::query_event_poll(
+                &mut service.find_node_query_pool,
+            )
+            .await;
+
+        // Check that a request is being sent to the other node.
+        let second_node_id = if first_node_id.unwrap() == node_id_1 {
+            node_id_2
+        } else {
+            node_id_1
+        };
+        match event {
+            QueryEvent::Waiting(_, node_id, _) => {
+                assert_eq!(node_id, second_node_id);
+            }
+            _ => panic!(),
+        };
+
+        service.advance_find_node_query(enr1.clone(), vec![enr2.clone()], QueryId(0));
+        service.advance_find_node_query(enr2.clone(), vec![enr1.clone()], QueryId(0));
+
+        let event =
+            OverlayService::<IdentityContentKey, XorMetric, MockValidator>::query_event_poll(
+                &mut service.find_node_query_pool,
+            )
+            .await;
+
+        match event {
+            QueryEvent::Finished(query_id, query_info, query) => {
+                assert_eq!(query_id, QueryId(0));
+                let results = query.into_result();
+
+                assert_eq!(results.clone().len(), 3);
+
+                assert!(results.contains(&node_id_1));
+                assert!(results.contains(&node_id_2));
+                assert!(results.contains(&bootnode_node_id));
+
+                let untrusted_enrs = query_info.untrusted_enrs;
+                assert!(untrusted_enrs.contains(&enr1));
+                assert!(untrusted_enrs.contains(&enr2));
+                assert!(untrusted_enrs.contains(&bootnode));
+            }
+            _ => panic!(),
+        }
+    }
+
+    #[test_log::test(tokio::test)]
+    async fn test_find_enrs() {
+        let mut service = task::spawn(build_service());
+
+        let (_, bootnode) = generate_random_remote_enr();
+        let bootnodes = vec![bootnode.clone()];
+        let bootnode_node_id = bootnode.node_id();
+
+        let (_, target_enr) = generate_random_remote_enr();
+        let target_node_id = target_enr.node_id();
+
+        service.init_find_nodes_query_with_initial_enrs(&target_node_id, bootnodes);
+
+        let _event =
+            OverlayService::<IdentityContentKey, XorMetric, MockValidator>::query_event_poll(
+                &mut service.find_node_query_pool,
+            )
+            .await;
+
+        let (_, enr1) = generate_random_remote_enr();
+        let (_, enr2) = generate_random_remote_enr();
+        let node_id_1 = enr1.node_id();
+        let node_id_2 = enr2.node_id();
+
+        service.advance_find_node_query(
+            bootnode.clone(),
+            vec![enr1.clone(), enr2.clone()],
+            QueryId(0),
+        );
+
+        let found_bootnode_enr = service.find_enr(&bootnode_node_id).unwrap();
+        assert_eq!(found_bootnode_enr, bootnode);
+
+        let found_enr1 = service.find_enr(&node_id_1).unwrap();
+        assert_eq!(found_enr1, enr1);
+
+        let found_enr2 = service.find_enr(&node_id_2).unwrap();
+        assert_eq!(found_enr2, enr2);
+    }
+
+    #[tokio::test]
+    async fn init_find_content_query() {
+        let mut service = task::spawn(build_service());
+
+        let (_, bootnode_enr) = generate_random_remote_enr();
+        let bootnode_node_id = bootnode_enr.node_id();
+        let bootnode_key = kbucket::Key::from(bootnode_node_id);
+
+        let data_radius = Distance::MAX;
+        let bootnode = Node {
+            enr: bootnode_enr.clone(),
+            data_radius,
+        };
+
+        let connection_direction = ConnectionDirection::Outgoing;
+        let status = NodeStatus {
+            state: ConnectionState::Connected,
+            direction: connection_direction,
+        };
+
+        let _ = service
+            .kbuckets
+            .write()
+            .insert_or_update(&bootnode_key, bootnode, status);
+
+        let target_content = NodeId::random();
+        let target_content_key = IdentityContentKey::new(target_content.raw());
+
+        let query_id = service._init_find_content_query(target_content_key.clone(), None);
+        let query_id = query_id.expect("Query ID for new find content query is `None`");
+
+        let (query_info, query) = service
+            .find_content_query_pool
+            .get_mut(query_id)
+            .expect("Query pool does not contain query");
+
+        // Query info should contain the corresponding target content key.
+        assert!(matches!(
+            &query_info.query_type,
+            QueryType::FindContent {
+                target: _target_content_key,
+                callback: None
+            }
+        ));
+
+        // Query target should be the key of the target content ID.
+        let target_key = kbucket::Key::from(NodeId::new(&target_content_key.content_id()));
+        assert_eq!(query.target(), target_key);
+
+        // Query info should contain bootnode ENR. It is the only node in the routing table, so
+        // it is among the "closest".
+        assert!(query_info.untrusted_enrs.contains(&bootnode_enr));
+    }
+
+    #[tokio::test]
+    async fn advance_find_content_query_with_enrs() {
+        let mut service = task::spawn(build_service());
+
+        let (_, bootnode_enr) = generate_random_remote_enr();
+        let bootnode_node_id = bootnode_enr.node_id();
+        let bootnode_key = kbucket::Key::from(bootnode_node_id);
+
+        let data_radius = Distance::MAX;
+        let bootnode = Node {
+            enr: bootnode_enr.clone(),
+            data_radius,
+        };
+
+        let connection_direction = ConnectionDirection::Outgoing;
+        let status = NodeStatus {
+            state: ConnectionState::Connected,
+            direction: connection_direction,
+        };
+
+        let _ = service
+            .kbuckets
+            .write()
+            .insert_or_update(&bootnode_key, bootnode, status);
+
+        let target_content = NodeId::random();
+        let target_content_key = IdentityContentKey::new(target_content.raw());
+
+        let query_id = service._init_find_content_query(target_content_key.clone(), None);
+        let query_id = query_id.expect("Query ID for new find content query is `None`");
+
+        let (_, query) = service
+            .find_content_query_pool
+            .get_mut(query_id)
+            .expect("Query pool does not contain query");
+
+        // Poll query to put into waiting state. Otherwise, `on_success` has no effect on the
+        // query.
+        query.poll(Instant::now());
+
+        // Simulate a response from the bootnode.
+        let (_, enr) = generate_random_remote_enr();
+        service.advance_find_content_query_with_enrs(
+            &query_id,
+            bootnode_enr.clone(),
+            vec![enr.clone()],
+        );
+
+        let (query_info, query) = service
+            .find_content_query_pool
+            .get_mut(query_id)
+            .expect("Query pool does not contain query");
+
+        // Query info should contain the "discovered" ENR.
+        assert!(query_info.untrusted_enrs.contains(&enr));
+
+        // Query result should contain bootnode who responded successfully.
+        match query.clone().into_result() {
+            FindContentQueryResult::ClosestNodes(closest_nodes) => {
+                assert!(closest_nodes.contains(&bootnode_enr.node_id()));
+            }
+            _ => panic!("Unexpected find content query result"),
+        }
+    }
+
+    #[tokio::test]
+    async fn advance_find_content_query_with_content() {
+        let mut service = task::spawn(build_service());
+
+        let (_, bootnode_enr) = generate_random_remote_enr();
+        let bootnode_node_id = bootnode_enr.node_id();
+        let bootnode_key = kbucket::Key::from(bootnode_node_id);
+
+        let data_radius = Distance::MAX;
+        let bootnode = Node {
+            enr: bootnode_enr.clone(),
+            data_radius,
+        };
+
+        let connection_direction = ConnectionDirection::Outgoing;
+        let status = NodeStatus {
+            state: ConnectionState::Connected,
+            direction: connection_direction,
+        };
+
+        let _ = service
+            .kbuckets
+            .write()
+            .insert_or_update(&bootnode_key, bootnode, status);
+
+        let target_content = NodeId::random();
+        let target_content_key = IdentityContentKey::new(target_content.raw());
+
+        let query_id = service._init_find_content_query(target_content_key.clone(), None);
+        let query_id = query_id.expect("Query ID for new find content query is `None`");
+
+        let (_, query) = service
+            .find_content_query_pool
+            .get_mut(query_id)
+            .expect("Query pool does not contain query");
+
+        // Poll query to put into waiting state. Otherwise, `on_success` has no effect on the
+        // query.
+        query.poll(Instant::now());
+
+        // Simulate a response from the bootnode.
+        let content: Vec<u8> = vec![0, 1, 2, 3];
+        service.advance_find_content_query_with_content(
+            &query_id,
+            bootnode_enr.clone(),
+            content.clone(),
+        );
+
+        let (_, query) = service
+            .find_content_query_pool
+            .get_mut(query_id)
+            .expect("Query pool does not contain query");
+
+        // Query result should contain content.
+        match query.clone().into_result() {
+            FindContentQueryResult::Content {
+                content: result_content,
+                ..
+            } => {
+                assert_eq!(result_content, content);
+            }
+            _ => panic!("Unexpected find content query result"),
+        }
+    }
+
+    #[tokio::test]
+    async fn handle_find_content_query_event() {
+        let mut service = task::spawn(build_service());
+
+        let (_, bootnode_enr) = generate_random_remote_enr();
+        let bootnode_node_id = bootnode_enr.node_id();
+        let bootnode_key = kbucket::Key::from(bootnode_node_id);
+
+        let data_radius = Distance::MAX;
+        let bootnode = Node {
+            enr: bootnode_enr.clone(),
+            data_radius,
+        };
+
+        let connection_direction = ConnectionDirection::Outgoing;
+        let status = NodeStatus {
+            state: ConnectionState::Connected,
+            direction: connection_direction,
+        };
+
+        let _ = service
+            .kbuckets
+            .write()
+            .insert_or_update(&bootnode_key, bootnode, status);
+
+        let target_content = NodeId::random();
+        let target_content_key = IdentityContentKey::new(target_content.raw());
+
+        let (callback_tx, callback_rx) = oneshot::channel();
+        let query_id =
+            service._init_find_content_query(target_content_key.clone(), Some(callback_tx));
+        let query_id = query_id.expect("Query ID for new find content query is `None`");
+
+        let query_event = OverlayService::<_, XorMetric, MockValidator>::query_event_poll(
+            &mut service.find_content_query_pool,
+        )
+        .await;
+
+        // Query event should be `Waiting` variant.
+        assert!(matches!(query_event, QueryEvent::Waiting(_, _, _)));
+
+        service.handle_find_content_query_event(query_event);
+
+        // An outgoing request should be in the request channel.
+        // Check that the fields of the request correspond to the query.
+        let request = assert_ready!(poll_request_rx!(service));
+        let request = request.expect("Request for query is `None`");
+        assert_eq!(
+            request.direction,
+            RequestDirection::Outgoing {
+                destination: bootnode_enr.clone()
+            }
+        );
+        assert_eq!(request.query_id, Some(query_id));
+
+        // Simulate a response from the bootnode.
+        let content: Vec<u8> = vec![0, 1, 2, 3];
+        service.advance_find_content_query_with_content(
+            &query_id,
+            bootnode_enr.clone(),
+            content.clone(),
+        );
+
+        let query_event = OverlayService::<_, XorMetric, MockValidator>::query_event_poll(
+            &mut service.find_content_query_pool,
+        )
+        .await;
+
+        // Query event should be `Finished` variant.
+        assert!(matches!(query_event, QueryEvent::Finished(_, _, _)));
+
+        service.handle_find_content_query_event(query_event);
+
+        match callback_rx
+            .await
+            .expect("Expected result on callback channel receiver")
+        {
+            Some(result_content) => {
+                assert_eq!(result_content, content);
+            }
+            _ => panic!("Unexpected find content query result type"),
+        }
+    }
 }

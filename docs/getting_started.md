@@ -52,13 +52,13 @@ cargo run
 Note: You may also pass environment variable values in the same command as the run command. This is especially useful for setting log levels.
 
 ```sh
-RUST_LOG=debug cargo run -p trin
+RUST_LOG=debug cargo run 
 ```
 
 View CLI options:
 
 ```sh
-cargo run -p trin -- --help
+cargo run -- --help
 ```
 
 ### Connect to the Portal Network testnet
@@ -69,7 +69,7 @@ Here, we connect to one of the designated Portal Network testnet bootnodes. Find
 Pass the ENR as the value for the `--bootnodes` CLI flag.
 
 ```sh
-cargo run -p trin -- --bootnodes <bootnode-enr> 
+cargo run -- --bootnodes <bootnode-enr> 
 ```
 
 ## Default data directories
@@ -150,13 +150,13 @@ Each Trin client uses a routing table to maintain a record of members in the Por
 View your routing table:
 
 ```sh
-cargo run -p trin-cli -- discv5_routingTableInfo
+cargo run -p trin-cli -- json-rpc discv5_routingTableInfo
 ```
 
 View ENR information about your own Trin client:
 
 ```sh
-cargo run -p trin-cli -- discv5_nodeInfo
+cargo run -p trin-cli -- json-rpc discv5_nodeInfo
 ```
 
 ### Connect to the Portal Network testnet
@@ -168,17 +168,35 @@ Find a [testnet bootnode ENR](https://github.com/ethereum/portal-network-specs/b
 Send a `PING` to the node on any of the Portal sub-networks (currently, only history and state are supported in Trin).
 
 ```sh
-cargo run -p trin-cli -- portal_historyPing --params <bootnode-enr> 
+cargo run -p trin-cli -- json-rpc portal_historyPing --params <enr> 
 ```
 
 After pinging a bootnode, you should be able to see the messages being sent and received in your node's logs. Now you can check your routing table again, where you should see the pinged bootnode (along with other nodes the bootnode shared with you). Congrats! You're now connected to the Portal Network testnet.
+
+### Encode Content Keys
+
+Pieces of content (data) on the Portal Network have unique identifiers that we refer to as "content keys". To request a particular piece of content, you will need the corresponding content key.
+
+The encoding for the content key depends on the kind of content that the key refers to.
+
+See available content keys (e.g. block header):
+
+```sh
+cargo run -p trin-cli -- encode-key -h 
+```
+
+See arguments for a specific content key:
+
+```sh
+cargo run -p trin-cli -- encode-key block-header -h
+```
 
 ### Request Content
 
 Send a `FindContent` message to a Portal Network bootnode.
 
 ```sh
-cargo run -p trin-cli -- portal_historyFindContent --params <bootnode-enr>,<content-key>
+cargo run -p trin-cli -- json-rpc portal_historyFindContent --params <enr>,<content-key>
 ```
 
 ### Setting up local metrics reporting

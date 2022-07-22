@@ -2,10 +2,14 @@ use anyhow::anyhow;
 use serde_json::Value;
 use tokio::sync::mpsc;
 
-use crate::jsonrpc::endpoints::HistoryEndpoint;
-use crate::jsonrpc::handlers::proxy_query_to_history_subnet;
-use crate::jsonrpc::types::{GetBlockByHashParams, HistoryJsonRpcRequest, Params};
-use crate::portalnet::types::content_key::{BlockHeader, HistoryContentKey};
+use crate::{
+    jsonrpc::{
+        endpoints::HistoryEndpoint,
+        handlers::proxy_query_to_history_subnet,
+        types::{GetBlockByHashParams, HistoryJsonRpcRequest, Params},
+    },
+    portalnet::types::content_key::{BlockHeader, HistoryContentKey},
+};
 
 /// eth_getBlockByHash
 pub async fn get_block_by_hash(

@@ -2,29 +2,42 @@ use std::sync::Arc;
 
 use discv5::{Discv5Event, TalkRequest};
 use log::{debug, warn};
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::mpsc;
 
-use super::discovery::Discovery;
-use super::types::messages::ProtocolId;
-use crate::locks::RwLoggingExt;
-use crate::utp::stream::UtpListener;
+use super::{discovery::Discovery, types::messages::ProtocolId};
+use crate::utp::stream::UtpListenerEvent;
 use hex;
 use std::str::FromStr;
 
+/// Main handler for portal network events
 pub struct PortalnetEvents {
+    /// Discv5 service layer
     pub discovery: Arc<Discovery>,
+    /// Receive Discv5 events
     pub protocol_receiver: mpsc::Receiver<Discv5Event>,
-    pub utp_listener: Arc<RwLock<UtpListener>>,
-    pub history_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
-    pub state_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
+    /// Send overlay `TalkReq` to history network
+    pub history_overlay_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
+    /// Send uTP events with payload to history overlay network
+    pub history_utp_sender: Option<mpsc::UnboundedSender<UtpListenerEvent>>,
+    /// Send overlay `TalkReq` to state network
+    pub state_overlay_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
+    /// Send uTP events with payload to state overlay network
+    pub state_utp_sender: Option<mpsc::UnboundedSender<UtpListenerEvent>>,
+    /// Send TalkReq events with "utp" protocol id to `UtpListener`
+    pub utp_listener_sender: mpsc::UnboundedSender<TalkRequest>,
+    /// Receive uTP payload events from `UtpListener`
+    pub utp_listener_receiver: mpsc::UnboundedReceiver<UtpListenerEvent>,
 }
 
 impl PortalnetEvents {
     pub async fn new(
         discovery: Arc<Discovery>,
-        utp_listener: Arc<RwLock<UtpListener>>,
-        history_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
-        state_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
+        utp_listener_receiver: mpsc::UnboundedReceiver<UtpListenerEvent>,
+        history_overlay_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
+        history_utp_sender: Option<mpsc::UnboundedSender<UtpListenerEvent>>,
+        state_overlay_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
+        state_utp_sender: Option<mpsc::UnboundedSender<UtpListenerEvent>>,
+        utp_listener_sender: mpsc::UnboundedSender<TalkRequest>,
     ) -> Self {
         let protocol_receiver = discovery
             .discv5
@@ -36,78 +49,114 @@ impl PortalnetEvents {
         Self {
             discovery: Arc::clone(&discovery),
             protocol_receiver,
-            utp_listener,
-            history_sender,
-            state_sender,
+            utp_listener_receiver,
+            history_overlay_sender,
+            history_utp_sender,
+            state_overlay_sender,
+            state_utp_sender,
+            utp_listener_sender,
         }
     }
 
-    /// Receives a request from the talkreq handler and sends a response back
-    pub async fn process_discv5_requests(mut self) {
-        while let Some(event) = self.protocol_receiver.recv().await {
-            let request = match event {
-                Discv5Event::TalkRequest(r) => r,
-                Discv5Event::NodeInserted { node_id, replaced } => {
-                    match replaced {
-                        Some(old_node_id) => {
-                            debug!(
-                                "Received NodeInserted(node_id={}, replaced={})",
-                                node_id, old_node_id,
-                            );
+    /// Main loop to dispatch `Discv5` and `UtpListener` events to overlay networks
+    pub async fn start(mut self) {
+        loop {
+            tokio::select! {
+                Some(event) = self.protocol_receiver.recv() => {
+                    let talk_req = match event {
+                        Discv5Event::TalkRequest(r) => r,
+                        Discv5Event::NodeInserted { node_id, replaced } => {
+                            match replaced {
+                                Some(old_node_id) => {
+                                    debug!(
+                                        "Received NodeInserted(node_id={}, replaced={})",
+                                        node_id, old_node_id,
+                                    );
+                                }
+                                None => {
+                                    debug!("Received NodeInserted(node_id={})", node_id);
+                                }
+                            }
+                            continue;
                         }
-                        None => {
-                            debug!("Received NodeInserted(node_id={})", node_id);
+                        event => {
+                            debug!("Got discv5 event {:?}", event);
+                            continue;
                         }
-                    }
-                    continue;
-                }
-                event => {
-                    debug!("Got discv5 event {:?}", event);
-                    continue;
-                }
-            };
-
-            let protocol_id = ProtocolId::from_str(&hex::encode_upper(request.protocol()));
-
-            match protocol_id {
-                Ok(protocol) => match protocol {
-                    ProtocolId::History => {
-                        match &self.history_sender {
-                            Some(tx) => tx.send(request).unwrap(),
-                            None => warn!("History event handler not initialized!"),
-                        };
-                    }
-                    ProtocolId::State => {
-                        match &self.state_sender {
-                            Some(tx) => tx.send(request).unwrap(),
-                            None => warn!("State event handler not initialized!"),
-                        };
-                    }
-                    ProtocolId::Utp => {
-                        // process utp message and send response (deals with sending/handling utp protocol msgs)
-                        self.utp_listener
-                            .write_with_warn()
-                            .await
-                            .process_utp_request(request)
-                            .await;
-                        // handles actual data sent over utp. eg, stores data in db
-                        self.utp_listener
-                            .write_with_warn()
-                            .await
-                            .process_utp_byte_stream()
-                            .await;
-                    }
-                    _ => {
-                        warn!(
-                            "Received TalkRequest on unknown protocol from={} protocol={} body={}",
-                            request.node_id(),
-                            hex::encode_upper(request.protocol()),
-                            hex::encode(request.body()),
-                        );
-                    }
+                    };
+                    self.dispatch_discv5_talk_req(talk_req);
                 },
-                Err(_) => warn!("Unable to decode protocol id"),
+                Some(event) = self.utp_listener_receiver.recv() => self.handle_utp_listener_event(event)
             }
+        }
+    }
+
+    /// Dispatch Discv5 TalkRequest event to overlay networks or uTP listener
+    fn dispatch_discv5_talk_req(&self, request: TalkRequest) {
+        let protocol_id = ProtocolId::from_str(&hex::encode_upper(request.protocol()));
+
+        match protocol_id {
+            Ok(protocol) => match protocol {
+                ProtocolId::History => {
+                    match &self.history_overlay_sender {
+                        Some(tx) => tx.send(request).unwrap(),
+                        None => warn!("History event handler not initialized!"),
+                    };
+                }
+                ProtocolId::State => {
+                    match &self.state_overlay_sender {
+                        Some(tx) => tx.send(request).unwrap(),
+                        None => warn!("State event handler not initialized!"),
+                    };
+                }
+                ProtocolId::Utp => {
+                    if let Err(err) = self.utp_listener_sender.send(request) {
+                        warn! {"Error sending uTP request to uTP listener: {err}"};
+                    }
+                }
+                _ => {
+                    warn!(
+                        "Received TalkRequest on unknown protocol from={} protocol={} body={}",
+                        request.node_id(),
+                        hex::encode_upper(request.protocol()),
+                        hex::encode(request.body()),
+                    );
+                }
+            },
+            Err(_) => warn!("Unable to decode protocol id"),
+        }
+    }
+
+    /// Handle uTP listener event
+    fn handle_utp_listener_event(&self, event: UtpListenerEvent) {
+        let event_clone = event.clone();
+
+        match event {
+            UtpListenerEvent::ClosedStream(_, ref protocol_id, _) => {
+                self.dispatch_utp_listener_event(event_clone, &protocol_id)
+            }
+            UtpListenerEvent::ResetStream(ref protocol_id, _) => {
+                self.dispatch_utp_listener_event(event_clone, &protocol_id)
+            }
+        }
+    }
+
+    /// Dispatch uTP listener event to overlay network
+    fn dispatch_utp_listener_event(&self, event: UtpListenerEvent, protocol_id: &ProtocolId) {
+        match protocol_id {
+            ProtocolId::History => {
+                match &self.history_utp_sender {
+                    Some(tx) => tx.send(event).unwrap(),
+                    None => warn!("History uTP event handler not initialized!"),
+                };
+            }
+            ProtocolId::State => {
+                match &self.state_utp_sender {
+                    Some(tx) => tx.send(event).unwrap(),
+                    None => warn!("State uTP event handler not initialized!"),
+                };
+            }
+            _ => warn!("Unsupported protocol id event to dispatch"),
         }
     }
 }

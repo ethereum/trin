@@ -1,9 +1,13 @@
+use anyhow::anyhow;
 use ethereum_types::{U256, U512};
 use sha2::{Digest as Sha2Digest, Sha256};
 use sha3::{Digest, Keccak256};
 use ssz::{self, Decode, Encode};
 use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, FixedVector, VariableList};
+
+/// SSZ encoded overlay content key as bytes
+pub type RawContentKey = Vec<u8>;
 
 /// Types whose values represent keys to lookup content items in an overlay network.
 /// Keys are serializable.
@@ -28,12 +32,12 @@ impl IdentityContentKey {
 }
 
 impl TryFrom<Vec<u8>> for IdentityContentKey {
-    type Error = String;
+    type Error = anyhow::Error;
 
     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
         // Require that length of input is equal to 32.
         if value.len() != 32 {
-            return Err(String::from("Input Vec has invalid length"));
+            return Err(anyhow!("Input Vec has invalid length"));
         }
 
         // The following will not panic because of the length check above.
@@ -86,18 +90,18 @@ pub struct BlockHeader {
 #[derive(Clone, Debug, Decode, Encode)]
 pub struct BlockBody {
     /// Chain identifier.
-    chain_id: u16,
+    pub chain_id: u16,
     /// Hash of the block.
-    block_hash: [u8; 32],
+    pub block_hash: [u8; 32],
 }
 
 /// A key for the transaction receipts for a block.
 #[derive(Clone, Debug, Decode, Encode)]
 pub struct BlockReceipts {
     /// Chain identifier.
-    chain_id: u16,
+    pub chain_id: u16,
     /// Hash of the block.
-    block_hash: [u8; 32],
+    pub block_hash: [u8; 32],
 }
 
 // Silence clippy to avoid implementing newtype pattern on imported type.
@@ -291,19 +295,19 @@ impl OverlayContentKey for StateContentKey {
 mod test {
     use super::*;
 
-    use std::env;
     use std::sync::Arc;
 
     use discv5::enr::NodeId;
     use ethereum_types::U256;
     use serial_test::serial;
-    use tempdir::TempDir;
+    use test_log::test;
 
     use crate::portalnet::{
         storage::{DistanceFunction, PortalStorage, PortalStorageConfig, PortalStorageError},
         types::metric::Distance,
     };
 
+    use crate::utils::db::setup_temp_dir;
     use hex;
 
     //
@@ -395,16 +399,10 @@ mod test {
         })
     }
 
-    fn setup_temp_dir() -> TempDir {
-        let temp_dir = TempDir::new("trin").unwrap();
-        env::set_var("TRIN_DATA_PATH", temp_dir.path());
-        temp_dir
-    }
-
     // This test is for PortalStorage functionality, but is located here to take advantage of
     // full-featured content key types, since MockContentKey is insufficient to test
     // some PortalStorage functionality
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn test_should_store() -> Result<(), PortalStorageError> {
         let temp_dir = setup_temp_dir();
@@ -461,7 +459,7 @@ mod test {
     // This test is for PortalStorage functionality, but is located here to take advantage of
     // full-featured content key types, since MockContentKey is insufficient to test
     // some PortalStorage functionality
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     #[serial]
     async fn test_distance_to_key() -> Result<(), PortalStorageError> {
         let temp_dir = setup_temp_dir();

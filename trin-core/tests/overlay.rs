@@ -1,5 +1,4 @@
-use std::str::FromStr;
-use std::sync::Arc;
+use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
 use trin_core::{
     cli::DEFAULT_STORAGE_CAPACITY,
@@ -14,19 +13,23 @@ use trin_core::{
         },
         Enr,
     },
-    utp::stream::UtpListener,
+    socket,
+    types::validation::MockValidator,
 };
 
 use discv5::Discv5Event;
 use parking_lot::RwLock;
-use tokio::sync::mpsc;
-use tokio::sync::RwLock as RwLockT;
-use tokio::time::{self, Duration};
+use tokio::{
+    sync::{mpsc, mpsc::unbounded_channel},
+    time::{self, Duration},
+};
+
+use trin_core::utp::stream::UtpListenerRequest;
 
 async fn init_overlay(
     discovery: Arc<Discovery>,
     protocol: ProtocolId,
-) -> OverlayProtocol<IdentityContentKey, XorMetric> {
+) -> OverlayProtocol<IdentityContentKey, XorMetric, MockValidator> {
     let storage_config = PortalStorage::setup_config(
         discovery.local_enr().node_id(),
         DEFAULT_STORAGE_CAPACITY.parse().unwrap(),
@@ -34,22 +37,25 @@ async fn init_overlay(
     .unwrap();
     let db = Arc::new(RwLock::new(PortalStorage::new(storage_config).unwrap()));
     let overlay_config = OverlayConfig::default();
-    let utp_listener = Arc::new(RwLockT::new(UtpListener::new(Arc::clone(&discovery))));
+    // Ignore all uTP events
+    let (utp_listener_tx, _) = unbounded_channel::<UtpListenerRequest>();
+    let validator = Arc::new(MockValidator {});
 
     OverlayProtocol::new(
         overlay_config,
         discovery,
-        utp_listener,
+        utp_listener_tx,
         db,
         Distance::MAX,
         protocol,
+        validator,
     )
     .await
 }
 
 async fn spawn_overlay(
     discovery: Arc<Discovery>,
-    overlay: Arc<OverlayProtocol<IdentityContentKey, XorMetric>>,
+    overlay: Arc<OverlayProtocol<IdentityContentKey, XorMetric, MockValidator>>,
 ) {
     let (overlay_tx, mut overlay_rx) = mpsc::unbounded_channel();
     let mut discovery_rx = discovery
@@ -98,15 +104,16 @@ async fn spawn_overlay(
 // multiple nodes.
 //
 // Use sleeps to give time for background routing table processes.
-#[tokio::test]
+#[test_log::test(tokio::test)]
 async fn overlay() {
     let protocol = ProtocolId::History;
     let sleep_duration = Duration::from_millis(5);
+    let ip_addr = socket::find_assigned_ip().expect("Could not find an IP for local connections");
 
     // Node one.
     let portal_config_one = PortalnetConfig {
         listen_port: 8001,
-        internal_ip: true,
+        external_addr: Some(SocketAddr::new(ip_addr, 8001)),
         ..PortalnetConfig::default()
     };
     let mut discovery_one = Discovery::new(portal_config_one).unwrap();
@@ -119,7 +126,7 @@ async fn overlay() {
     // Node two.
     let portal_config_two = PortalnetConfig {
         listen_port: 8002,
-        internal_ip: true,
+        external_addr: Some(SocketAddr::new(ip_addr, 8002)),
         ..PortalnetConfig::default()
     };
     let mut discovery_two = Discovery::new(portal_config_two).unwrap();
@@ -132,7 +139,7 @@ async fn overlay() {
     // Node three.
     let portal_config_three = PortalnetConfig {
         listen_port: 8003,
-        internal_ip: true,
+        external_addr: Some(SocketAddr::new(ip_addr, 8003)),
         ..PortalnetConfig::default()
     };
     let mut discovery_three = Discovery::new(portal_config_three).unwrap();

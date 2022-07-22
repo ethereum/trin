@@ -6,12 +6,14 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-structopt="0.3.25"
-trin-core = { path = "../trin-core" }
+ethereum-types = "0.12.1"
+hex = "0.4.3"
 jsonrpc = "0.12.0"
-serde_json = { version = "1.0.68", features = ["raw_value"] }
 serde = "1.0.117"
+serde_json = { version = "1.0.68", features = ["raw_value"] }
+structopt="0.3.25"
 thiserror = "1.0.29"
+trin-core = { path = "../trin-core" }
 
 [[bin]]
 name="trin-cli"

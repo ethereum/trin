@@ -1,8 +1,9 @@
-use crate::utp::bit_iterator::BitIterator;
-use crate::utp::time::{Delay, Timestamp};
+use crate::utp::{
+    bit_iterator::BitIterator,
+    time::{Delay, Timestamp},
+};
 use anyhow::anyhow;
-use std::convert::TryFrom;
-use std::fmt;
+use std::{convert::TryFrom, fmt};
 
 pub const HEADER_SIZE: usize = 20;
 pub const VERSION: u8 = 1;
@@ -501,11 +502,16 @@ impl fmt::Debug for Packet {
 
 #[cfg(test)]
 mod tests {
-    use crate::utp::packets::PacketType::{Data, State};
-    use crate::utp::packets::*;
-    use crate::utp::time::{Delay, Timestamp};
+    use crate::utp::{
+        packets::{
+            PacketType::{Data, State},
+            *,
+        },
+        time::{Delay, Timestamp},
+    };
     use quickcheck::{QuickCheck, TestResult};
     use std::convert::TryFrom;
+    use test_log::test;
 
     #[test]
     fn test_decode_packet() {

@@ -1,22 +1,28 @@
 use std::sync::Arc;
 
-use rlp::Rlp;
 use serde_json::{json, Value};
 use tokio::sync::mpsc;
 
 use crate::network::HistoryNetwork;
-use trin_core::jsonrpc::types::OfferParams;
-use trin_core::jsonrpc::{
-    endpoints::HistoryEndpoint,
-    types::{
-        FindContentParams, FindNodesParams, HistoryJsonRpcRequest, LocalContentParams, PingParams,
-        RecursiveFindContentParams, StoreParams,
+use trin_core::utils::bytes::hex_encode;
+use trin_core::{
+    jsonrpc::{
+        endpoints::HistoryEndpoint,
+        types::{
+            FindContentParams, FindNodesParams, HistoryJsonRpcRequest, LocalContentParams,
+            OfferParams, PingParams, RecursiveFindContentParams, StoreParams,
+        },
+        utils::bucket_entries_to_json,
     },
+    portalnet::{
+        types::{
+            content_key::HistoryContentKey,
+            messages::{Content, FindContent, Request, Response, SszEnr},
+        },
+        Enr,
+    },
+    types::header::Header,
 };
-use trin_core::portalnet::types::content_key::HistoryContentKey;
-use trin_core::portalnet::types::messages::{Content, FindContent, Request, Response, SszEnr};
-use trin_core::portalnet::Enr;
-use trin_core::types::header::Header;
 
 /// Handles History network JSON-RPC requests
 pub struct HistoryRequestHandler {
@@ -35,7 +41,7 @@ impl HistoryRequestHandler {
                                 match &self.network.overlay.storage.read().get(&params.content_key)
                                 {
                                     Ok(val) => match val {
-                                        Some(val) => Ok(Value::String(hex::encode(val.clone()))),
+                                        Some(val) => Ok(Value::String(hex_encode(val.clone()))),
                                         None => Err(format!(
                                             "Unable to find content key in local storage: {:?}",
                                             params.content_key
@@ -121,8 +127,7 @@ impl HistoryRequestHandler {
                                 {
                                     Ok(content) => match content {
                                         Content::Content(val) => {
-                                            let rlp = Rlp::new(&val);
-                                            match Header::decode_rlp(&rlp) {
+                                            match rlp::decode::<Header>(&val) {
                                                 Ok(header) => Ok(json!(header)),
                                                 Err(_) => Err(
                                                     "Content retrieved has invalid RLP encoding"
@@ -140,16 +145,12 @@ impl HistoryRequestHandler {
                                 }
                             }
                             // Return value if initial response is `content`
-                            Content::Content(val) => {
-                                let rlp = Rlp::new(&val);
-                                match Header::decode_rlp(&rlp) {
-                                    Ok(header) => Ok(json!(header)),
-                                    Err(_) => {
-                                        Err("Content retrieved has invalid RLP encoding"
-                                            .to_string())
-                                    }
+                            Content::Content(val) => match rlp::decode::<Header>(&val) {
+                                Ok(header) => Ok(json!(header)),
+                                Err(_) => {
+                                    Err("Content retrieved has invalid RLP encoding".to_string())
                                 }
-                            }
+                            },
                             _ => Err("Unsupported content".to_string()),
                         },
                         _ => Err("Invalid RecursiveFindContent params".to_string()),
@@ -222,6 +223,12 @@ impl HistoryRequestHandler {
                         Err(msg) => Err(format!("Invalid Ping params: {:?}", msg)),
                     };
                     let _ = request.resp.send(response);
+                }
+                HistoryEndpoint::RoutingTableInfo => {
+                    let bucket_entries_json =
+                        bucket_entries_to_json(self.network.overlay.bucket_entries());
+
+                    let _ = request.resp.send(Ok(bucket_entries_json));
                 }
             }
         }

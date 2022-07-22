@@ -1,31 +1,44 @@
-use std::io::prelude::*;
 #[cfg(unix)]
 use std::os::unix;
-use std::panic;
-use std::time::Duration;
+use std::{io::prelude::*, panic, time::Duration};
 
 use anyhow::anyhow;
 use hyper::{self, Body, Client, Method, Request};
 use log::info;
 use serde_json::{self, json, Value};
 
-use crate::cli::PeertestConfig;
-use crate::Peertest;
-use trin_core::jsonrpc::types::{NodesParams, Params};
-use trin_core::portalnet::types::content_key::{
-    AccountTrieNode, BlockHeader, HistoryContentKey, StateContentKey,
+use crate::{cli::PeertestConfig, Peertest};
+use trin_core::{
+    jsonrpc::types::{NodesParams, Params},
+    portalnet::types::{
+        content_key::{AccountTrieNode, StateContentKey},
+        messages::SszEnr,
+        metric::Distance,
+    },
+    utils::bytes::hex_encode,
 };
-use trin_core::portalnet::types::{messages::SszEnr, metric::Distance};
 
 /// Default data radius value
 const DATA_RADIUS: Distance = Distance::MAX;
 /// Default enr seq value
 const ENR_SEQ: &str = "1";
-/// Default block hash for generating History content key
-const BLOCK_HASH: [u8; 32] = [
-    0xd1, 0xc3, 0x90, 0x62, 0x4d, 0x3b, 0xd4, 0xe4, 0x09, 0xa6, 0x1a, 0x85, 0x8e, 0x5d, 0xcc, 0x55,
-    0x17, 0x72, 0x9a, 0x91, 0x70, 0xd0, 0x14, 0xa6, 0xc9, 0x65, 0x30, 0xd6, 0x4d, 0xd8, 0x62, 0x1d,
-];
+/// Default history header content key presuming chain ID 3
+pub const HISTORY_CONTENT_KEY: &str =
+    "0x000300720704f3aa11c53cf344ea069db95cecb81ad7453c8f276b2a1062979611f09c";
+/// Default history header content value
+pub const HISTORY_CONTENT_VALUE: &str =
+    "0xf90222a02c58e3212c085178dbb1277e2f3c24b3f451267a75a234945c15\
+81af639f4a7aa058a694212e0416353a4d3865ccf475496b55af3a3d3b002057000741af9731919400192fb10df37c9fb26\
+829eb2cc623cd1bf599e8a067a9fb631f4579f9015ef3c6f1f3830dfa2dc08afe156f750e90022134b9ebf6a018a2978fc6\
+2cd1a23e90de920af68c0c3af3330327927cda4c005faccefb5ce7a0168a3827607627e781941dc777737fc4b6beb69a8b1\
+39240b881992b35b854eab90100002000004000000010004000800800000000000100040100010000080000000020001100\
+00000000000090020001110402008000080208040010000000a800000000000000000021082200090020502000000000016\
+002002000040080004000000000004208000000040000400808402000100000100400400000100000000000000100000011\
+000004000001020084404004810100000800200040481008200280000010802000020040800800010000000000000000202\
+0000b00010080600902000200000050000400000000000000400000002002101000000a0000200000342000080040000002\
+0100002000000000000000c00040000001000000100187327bd7ad3116ce83e147ed8401c9c36483140db184627d9afa9a4\
+57468657265756d50504c4e532f326d696e6572735f55534133a0f1a32e24eb62f01ec3f2b3b5893f7be9062fbf5482bc0d\
+490a54352240350e26882087fbb243327696851aae1651b6";
 /// Default node hash for generating State content key
 const NODE_HASH: [u8; 32] = [
     0xb8, 0xbe, 0x79, 0x03, 0xae, 0xe7, 0x3b, 0x8f, 0x6a, 0x59, 0xcd, 0x44, 0xa1, 0xf5, 0x2c, 0x62,
@@ -213,14 +226,8 @@ fn all_tests(peertest: &Peertest) -> Vec<Test<impl Fn(&Value, &Peertest)>> {
                 method: "portal_historyStore".to_string(),
                 id: 11,
                 params: Params::Array(vec![
-                    Value::String(hex::encode(Into::<Vec<u8>>::into(
-                        HistoryContentKey::BlockHeader(BlockHeader {
-                            chain_id: 1,
-                            block_hash: BLOCK_HASH,
-                        }),
-                    ))),
-                    // todo: replace with valid content
-                    Value::String("01".to_string()),
+                    Value::String(HISTORY_CONTENT_KEY.to_string()),
+                    Value::String(HISTORY_CONTENT_VALUE.to_string()),
                 ]),
             },
             validate_portal_store,
@@ -230,7 +237,7 @@ fn all_tests(peertest: &Peertest) -> Vec<Test<impl Fn(&Value, &Peertest)>> {
                 method: "portal_stateStore".to_string(),
                 id: 12,
                 params: Params::Array(vec![
-                    Value::String(hex::encode(Into::<Vec<u8>>::into(
+                    Value::String(hex_encode(Into::<Vec<u8>>::into(
                         StateContentKey::AccountTrieNode(AccountTrieNode {
                             node_hash: NODE_HASH,
                             state_root: STATE_ROOT,
@@ -238,7 +245,7 @@ fn all_tests(peertest: &Peertest) -> Vec<Test<impl Fn(&Value, &Peertest)>> {
                         }),
                     ))),
                     // todo: replace with valid content
-                    Value::String("02".to_string()),
+                    Value::String("0x02".to_string()),
                 ]),
             },
             validate_portal_store,
@@ -249,8 +256,8 @@ fn all_tests(peertest: &Peertest) -> Vec<Test<impl Fn(&Value, &Peertest)>> {
                 method: "portal_historyStore".to_string(),
                 id: 11,
                 params: Params::Array(vec![
-                    Value::String("1234".to_string()),
-                    Value::String("01".to_string()),
+                    Value::String("0x1234".to_string()),
+                    Value::String(HISTORY_CONTENT_VALUE.to_string()),
                 ]),
             },
             validate_portal_store_with_invalid_content_key,
@@ -261,11 +268,27 @@ fn all_tests(peertest: &Peertest) -> Vec<Test<impl Fn(&Value, &Peertest)>> {
                 method: "portal_stateStore".to_string(),
                 id: 12,
                 params: Params::Array(vec![
-                    Value::String("1234".to_string()),
-                    Value::String("02".to_string()),
+                    Value::String("0x1234".to_string()),
+                    Value::String("0x02".to_string()),
                 ]),
             },
             validate_portal_store_with_invalid_content_key,
+        ),
+        Test::new(
+            JsonRpcRequest {
+                method: "portal_historyRoutingTableInfo".to_string(),
+                id: 13,
+                params: Params::None,
+            },
+            validate_portal_routing_table_info,
+        ),
+        Test::new(
+            JsonRpcRequest {
+                method: "portal_stateRoutingTableInfo".to_string(),
+                id: 14,
+                params: Params::None,
+            },
+            validate_portal_routing_table_info,
         ),
     ]
 }
@@ -341,6 +364,21 @@ fn validate_portal_store_with_invalid_content_key(result: &Value, _peertest: &Pe
         .contains("Unable to decode content_key"));
 }
 
+fn validate_portal_routing_table_info(result: &Value, _peertest: &Peertest) {
+    assert!(result.get("buckets").unwrap().is_object());
+    assert!(result.get("numBuckets").unwrap().is_u64());
+    assert!(result.get("numNodes").unwrap().is_u64());
+    assert!(result.get("numConnected").unwrap().is_u64());
+}
+
+pub fn validate_portal_offer(result: &Value, _peertest: &Peertest) {
+    // Expect u64 connection id
+    let connection_id = result.get("connection_id").unwrap().as_str().unwrap();
+    assert!(connection_id.parse::<u64>().is_ok());
+    // Should accept the requested content
+    assert_eq!(result.get("content_keys").unwrap().as_str(), Some("0x03"))
+}
+
 #[cfg(unix)]
 fn get_ipc_stream(ipc_path: &str) -> unix::net::UnixStream {
     unix::net::UnixStream::connect(ipc_path).unwrap()
@@ -363,7 +401,7 @@ pub fn make_ipc_request(ipc_path: &str, request: &JsonRpcRequest) -> anyhow::Res
     stream.flush().unwrap();
     let deser = serde_json::Deserializer::from_reader(stream);
     let next_obj = deser.into_iter::<Value>().next();
-    let response_obj = next_obj.ok_or(anyhow!("Empty JsonRpc response"))?;
+    let response_obj = next_obj.ok_or_else(|| anyhow!("Empty JsonRpc response"))?;
     get_response_result(response_obj)
 }
 

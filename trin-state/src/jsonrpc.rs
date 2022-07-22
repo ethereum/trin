@@ -4,15 +4,18 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 
 use crate::network::StateNetwork;
-use trin_core::jsonrpc::types::OfferParams;
-use trin_core::jsonrpc::{
-    endpoints::StateEndpoint,
-    types::{
-        FindContentParams, FindNodesParams, LocalContentParams, PingParams, StateJsonRpcRequest,
-        StoreParams,
+use trin_core::utils::bytes::hex_encode;
+use trin_core::{
+    jsonrpc::{
+        endpoints::StateEndpoint,
+        types::{
+            FindContentParams, FindNodesParams, LocalContentParams, OfferParams, PingParams,
+            StateJsonRpcRequest, StoreParams,
+        },
+        utils::bucket_entries_to_json,
     },
+    portalnet::types::content_key::StateContentKey,
 };
-use trin_core::portalnet::types::content_key::StateContentKey;
 
 /// Handles State network JSON-RPC requests
 pub struct StateRequestHandler {
@@ -31,7 +34,7 @@ impl StateRequestHandler {
                                 match &self.network.overlay.storage.read().get(&params.content_key)
                                 {
                                     Ok(val) => match val {
-                                        Some(val) => Ok(Value::String(hex::encode(val.clone()))),
+                                        Some(val) => Ok(Value::String(hex_encode(val.clone()))),
                                         None => Err(format!(
                                             "Unable to find content key in local storage: {:?}",
                                             params.content_key
@@ -133,6 +136,12 @@ impl StateRequestHandler {
                         Err(msg) => Err(format!("Invalid Ping params: {:?}", msg)),
                     };
                     let _ = request.resp.send(response);
+                }
+                StateEndpoint::RoutingTableInfo => {
+                    let bucket_entries_json =
+                        bucket_entries_to_json(self.network.overlay.bucket_entries());
+
+                    let _ = request.resp.send(Ok(bucket_entries_json));
                 }
             }
         }
