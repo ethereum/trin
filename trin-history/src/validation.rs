@@ -3,6 +3,7 @@ use std::sync::{Arc, RwLock};
 use anyhow::anyhow;
 use async_trait::async_trait;
 use ethereum_types::H256;
+use log::warn;
 use ssz::Decode;
 
 use trin_core::{
@@ -104,6 +105,14 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                         trusted_header.receipts_root
                     ));
                 }
+                Ok(())
+            }
+            HistoryContentKey::MasterAccumulator(_key) => {
+                warn!("Skipping content validation for master accumulator content.");
+                Ok(())
+            }
+            HistoryContentKey::EpochAccumulator(_key) => {
+                warn!("Skipping content validation for epoch accumulator content.");
                 Ok(())
             }
         }
