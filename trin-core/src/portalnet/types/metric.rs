@@ -1,3 +1,4 @@
+use std::fmt;
 use std::ops::Deref;
 
 use ethereum_types::U256;
@@ -6,7 +7,14 @@ use ethereum_types::U256;
 #[derive(Copy, Clone, PartialEq, Eq, Default, PartialOrd, Ord, Debug)]
 pub struct Distance(U256);
 
+impl fmt::Display for Distance {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 impl Distance {
+    /// The maximum value.
     pub const MAX: Self = Self(U256::MAX);
 
     /// Returns the integer base-2 logarithm of `self`.

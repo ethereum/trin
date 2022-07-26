@@ -32,10 +32,7 @@ pub fn bucket_entries_to_json(bucket_entries: BTreeMap<usize, Vec<NodeTuple>>) -
                         );
                         map.insert("enr".to_owned(), enr.to_base64());
                         map.insert("status".to_owned(), format!("{:?}", node_status.state));
-                        map.insert(
-                            "radius".to_owned(),
-                            format!("{}", data_radius.log2().unwrap_or(0)),
-                        );
+                        map.insert("radius".to_owned(), format!("{}", data_radius));
                         map
                     })
                     .collect(),
