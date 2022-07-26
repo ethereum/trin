@@ -66,7 +66,7 @@ impl ssz::Decode for CustomPayload {
     }
 
     fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
-        Ok(CustomPayload {
+        Ok(Self {
             payload: ByteList::from(bytes.to_vec()),
         })
     }
