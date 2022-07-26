@@ -11,7 +11,7 @@ use utils::bytes::hex_encode;
 
 use super::{
     discovery::Discovery,
-    overlay_service::{Node, OverlayRequest, OverlayService},
+    overlay_service::{Node, OverlayCommand, OverlayRequest, OverlayService},
     types::{
         content_key::OverlayContentKey,
         metric::{Distance, Metric},
@@ -108,8 +108,8 @@ pub struct OverlayProtocol<TContentKey, TMetric, TValidator> {
     kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
     /// The subnetwork protocol of the overlay.
     protocol: ProtocolId,
-    /// A sender to send requests to the OverlayService.
-    request_tx: UnboundedSender<OverlayRequest>,
+    /// A sender to send commands to the OverlayService.
+    command_tx: UnboundedSender<OverlayCommand<TContentKey>>,
     /// A sender to send request to UtpListener
     utp_listener_tx: UnboundedSender<UtpListenerRequest>,
     /// Declare the allowed content key types for a given overlay network.
@@ -148,7 +148,7 @@ where
         )));
 
         let data_radius = Arc::new(data_radius);
-        let request_tx = OverlayService::<TContentKey, TMetric, TValidator>::spawn(
+        let command_tx = OverlayService::<TContentKey, TMetric, TValidator>::spawn(
             Arc::clone(&discovery),
             Arc::clone(&storage),
             Arc::clone(&kbuckets),
@@ -174,7 +174,7 @@ where
             kbuckets,
             storage,
             protocol,
-            request_tx,
+            command_tx,
             utp_listener_tx,
             phantom_content_key: PhantomData,
             phantom_metric: PhantomData,
@@ -353,7 +353,10 @@ where
                 None,
             );
 
-            if let Err(err) = self.request_tx.send(overlay_request) {
+            if let Err(err) = self
+                .command_tx
+                .send(OverlayCommand::Request(overlay_request))
+            {
                 error!("Unable to send OFFER request to overlay: {err}.")
             }
         }
@@ -586,6 +589,33 @@ where
         self.send_overlay_request(request, direction).await
     }
 
+    /// Performs a content lookup for `target`.
+    pub async fn lookup_content(&self, target: TContentKey) -> Option<Vec<u8>> {
+        let (tx, rx) = oneshot::channel();
+
+        if let Err(_) = self.command_tx.send(OverlayCommand::FindContentQuery {
+            target,
+            callback: tx,
+        }) {
+            warn!(
+                "Failure sending query over {:?} service channel",
+                self.protocol
+            );
+            return None;
+        }
+
+        match rx.await {
+            Ok(result) => result,
+            Err(_) => {
+                warn!(
+                    "Unable to receive content over {:?} service channel",
+                    self.protocol
+                );
+                None
+            }
+        }
+    }
+
     /// Sends a request through the overlay service.
     async fn send_overlay_request(
         &self,
@@ -594,7 +624,10 @@ where
     ) -> Result<Response, OverlayRequestError> {
         let (tx, rx) = oneshot::channel();
         let overlay_request = OverlayRequest::new(request, direction, Some(tx), None);
-        if let Err(error) = self.request_tx.send(overlay_request) {
+        if let Err(error) = self
+            .command_tx
+            .send(OverlayCommand::Request(overlay_request))
+        {
             warn!(
                 "Failure sending request over {:?} service channel",
                 self.protocol

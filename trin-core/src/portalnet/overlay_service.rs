@@ -78,6 +78,29 @@ const EXPECTED_NON_EMPTY_BUCKETS: usize = 17;
 /// Bucket refresh lookup interval in seconds
 const BUCKET_REFRESH_INTERVAL_SECS: u64 = 60;
 
+/// A network-based action that the overlay may perform.
+///
+/// The overlay performs network-based actions on behalf of the command issuer. The issuer may be
+/// the overlay itself. The overlay manages network requests and responses and sends the result
+/// back to the issuer upon completion.
+#[derive(Debug)]
+pub enum OverlayCommand<TContentKey> {
+    /// Send a single portal request through the overlay.
+    ///
+    /// A `Request` corresponds to a single request message defined in the portal wire spec.
+    Request(OverlayRequest),
+    /// Perform a find content query through the overlay.
+    ///
+    /// A `FindContentQuery` issues multiple requests to find the content identified by `target`.
+    /// The result is sent to the issuer over `callback`.
+    FindContentQuery {
+        /// The query target.
+        target: TContentKey,
+        /// A callback channel to transmit the result of the query.
+        callback: oneshot::Sender<Option<Vec<u8>>>,
+    },
+}
+
 /// An overlay request error.
 #[derive(Clone, Error, Debug)]
 pub enum OverlayRequestError {
@@ -284,11 +307,11 @@ pub struct OverlayService<TContentKey, TMetric, TValidator> {
     /// expired entries.
     peers_to_ping: HashSetDelay<NodeId>,
     // TODO: This should probably be a bounded channel.
-    /// The receiver half of the service request channel.
-    request_rx: UnboundedReceiver<OverlayRequest>,
-    /// The sender half of a channel for service requests.
+    /// The receiver half of the service command channel.
+    command_rx: UnboundedReceiver<OverlayCommand<TContentKey>>,
+    /// The sender half of the service command channel.
     /// This is used internally to submit requests (e.g. maintenance ping requests).
-    request_tx: UnboundedSender<OverlayRequest>,
+    command_tx: UnboundedSender<OverlayCommand<TContentKey>>,
     /// A map of active outgoing requests.
     active_outgoing_requests: Arc<RwLock<HashMap<OverlayRequestId, ActiveOutgoingRequest>>>,
     /// A query pool that manages find node queries.
@@ -348,12 +371,12 @@ where
         query_parallelism: usize,
         query_num_results: usize,
         findnodes_query_distances_per_peer: usize,
-    ) -> Result<UnboundedSender<OverlayRequest>, String>
+    ) -> Result<UnboundedSender<OverlayCommand<TContentKey>>, String>
     where
         <TContentKey as TryFrom<Vec<u8>>>::Error: Send,
     {
-        let (request_tx, request_rx) = mpsc::unbounded_channel();
-        let internal_request_tx = request_tx.clone();
+        let (command_tx, command_rx) = mpsc::unbounded_channel();
+        let internal_command_tx = command_tx.clone();
 
         let overlay_protocol = protocol.clone();
 
@@ -376,8 +399,8 @@ where
                 data_radius,
                 protocol,
                 peers_to_ping,
-                request_rx,
-                request_tx: internal_request_tx,
+                command_rx,
+                command_tx: internal_command_tx,
                 active_outgoing_requests: Arc::new(RwLock::new(HashMap::new())),
                 find_node_query_pool: QueryPool::new(query_timeout),
                 find_content_query_pool: QueryPool::new(query_timeout),
@@ -399,7 +422,7 @@ where
             service.start().await;
         });
 
-        Ok(request_tx)
+        Ok(command_tx)
     }
 
     fn add_bootnodes(&mut self, bootnode_enrs: Vec<Enr>) {
@@ -472,7 +495,16 @@ where
 
         loop {
             tokio::select! {
-                Some(request) = self.request_rx.recv() => self.process_request(request),
+                Some(command) = self.command_rx.recv() => {
+                    match command {
+                        OverlayCommand::Request(request) => self.process_request(request),
+                        OverlayCommand::FindContentQuery { target, callback } => {
+                            if let Some(query_id) = self.init_find_content_query(target, Some(callback)) {
+                                debug!("Find content query {} initialized", query_id);
+                            }
+                        }
+                    }
+                }
                 Some(response) = self.response_rx.recv() => {
                     // Look up active request that corresponds to the response.
                     let optional_active_request = self.active_outgoing_requests.write().remove(&response.request_id);
@@ -517,7 +549,7 @@ where
                                     None,
                                     Some(query_id),
                                 );
-                                let _ = self.request_tx.send(request);
+                                let _ = self.command_tx.send(OverlayCommand::Request(request));
 
                             } else {
                                 error!("[{:?}] Unable to send FINDNODES to unknown ENR with node ID {}",
@@ -716,7 +748,7 @@ where
                         None,
                         Some(query_id),
                     );
-                    let _ = self.request_tx.send(request);
+                    let _ = self.command_tx.send(OverlayCommand::Request(request));
                 } else {
                     // If we cannot find the node's ENR, then we cannot contact the
                     // node, so fail the query for this node.
@@ -1579,7 +1611,7 @@ where
             None,
             None,
         );
-        let _ = self.request_tx.send(request);
+        let _ = self.command_tx.send(OverlayCommand::Request(request));
     }
 
     /// Submits a request for the node info of a destination (target) node.
@@ -1593,7 +1625,7 @@ where
             None,
             None,
         );
-        let _ = self.request_tx.send(request);
+        let _ = self.command_tx.send(OverlayCommand::Request(request));
     }
 
     /// Attempts to insert a newly connected node or update an existing node to connected.
@@ -1794,7 +1826,7 @@ where
     }
 
     /// Starts a `FindContentQuery` for a target content key.
-    fn _init_find_content_query(
+    fn init_find_content_query(
         &mut self,
         target: TContentKey,
         callback: Option<oneshot::Sender<Option<Vec<u8>>>>,
@@ -1949,9 +1981,9 @@ mod tests {
     use tokio::sync::mpsc::unbounded_channel;
     use tokio_test::{assert_pending, assert_ready, task};
 
-    macro_rules! poll_request_rx {
+    macro_rules! poll_command_rx {
         ($service:ident) => {
-            $service.enter(|cx, mut service| service.request_rx.poll_recv(cx))
+            $service.enter(|cx, mut service| service.command_rx.poll_recv(cx))
         };
     }
 
@@ -1983,7 +2015,7 @@ mod tests {
         let protocol = ProtocolId::History;
         let active_outgoing_requests = Arc::new(RwLock::new(HashMap::new()));
         let peers_to_ping = HashSetDelay::default();
-        let (request_tx, request_rx) = mpsc::unbounded_channel();
+        let (command_tx, command_rx) = mpsc::unbounded_channel();
         let (response_tx, response_rx) = mpsc::unbounded_channel();
         let metrics = None;
         let validator = Arc::new(MockValidator {});
@@ -1995,8 +2027,8 @@ mod tests {
             data_radius,
             protocol,
             peers_to_ping,
-            request_tx,
-            request_rx,
+            command_tx,
+            command_rx,
             active_outgoing_requests,
             find_node_query_pool: QueryPool::new(overlay_config.query_timeout),
             find_content_query_pool: QueryPool::new(overlay_config.query_timeout),
@@ -2044,10 +2076,16 @@ mod tests {
 
         service.process_ping(ping, node_id);
 
-        let request = assert_ready!(poll_request_rx!(service));
-        assert!(request.is_some());
+        let command = assert_ready!(poll_command_rx!(service));
+        assert!(command.is_some());
 
-        let request = request.unwrap();
+        let command = command.unwrap();
+        let request = if let OverlayCommand::Request(request) = command {
+            request
+        } else {
+            panic!("Unexpected overlay command variant");
+        };
+
         assert!(request.responder.is_none());
 
         assert_eq!(
@@ -2083,7 +2121,7 @@ mod tests {
 
         service.process_ping(ping, node_id);
 
-        assert_pending!(poll_request_rx!(service));
+        assert_pending!(poll_command_rx!(service));
     }
 
     #[test_log::test(tokio::test)]
@@ -2156,10 +2194,16 @@ mod tests {
 
         service.process_pong(pong, source.clone());
 
-        let request = assert_ready!(poll_request_rx!(service));
-        assert!(request.is_some());
+        let command = assert_ready!(poll_command_rx!(service));
+        assert!(command.is_some());
 
-        let request = request.unwrap();
+        let command = command.unwrap();
+        let request = if let OverlayCommand::Request(request) = command {
+            request
+        } else {
+            panic!("Unexpected overlay command variant");
+        };
+
         assert!(request.responder.is_none());
 
         assert_eq!(
@@ -2194,7 +2238,7 @@ mod tests {
 
         service.process_pong(pong, source);
 
-        assert_pending!(poll_request_rx!(service));
+        assert_pending!(poll_command_rx!(service));
     }
 
     #[test_log::test(tokio::test)]
@@ -2339,10 +2383,16 @@ mod tests {
         let (_, destination) = generate_random_remote_enr();
         service.request_node(&destination);
 
-        let request = assert_ready!(poll_request_rx!(service));
-        assert!(request.is_some());
+        let command = assert_ready!(poll_command_rx!(service));
+        assert!(command.is_some());
 
-        let request = request.unwrap();
+        let command = command.unwrap();
+        let request = if let OverlayCommand::Request(request) = command {
+            request
+        } else {
+            panic!("Unexpected overlay command variant");
+        };
+
         assert!(request.responder.is_none());
 
         assert_eq!(
@@ -2368,10 +2418,16 @@ mod tests {
         let (_, destination) = generate_random_remote_enr();
         service.ping_node(&destination);
 
-        let request = assert_ready!(poll_request_rx!(service));
-        assert!(request.is_some());
+        let command = assert_ready!(poll_command_rx!(service));
+        assert!(command.is_some());
 
-        let request = request.unwrap();
+        let command = command.unwrap();
+        let request = if let OverlayCommand::Request(request) = command {
+            request
+        } else {
+            panic!("Unexpected overlay command variant");
+        };
+
         assert!(request.responder.is_none());
 
         assert_eq!(
@@ -2798,7 +2854,7 @@ mod tests {
         let target_content = NodeId::random();
         let target_content_key = IdentityContentKey::new(target_content.raw());
 
-        let query_id = service._init_find_content_query(target_content_key.clone(), None);
+        let query_id = service.init_find_content_query(target_content_key.clone(), None);
         let query_id = query_id.expect("Query ID for new find content query is `None`");
 
         let (query_info, query) = service
@@ -2852,7 +2908,7 @@ mod tests {
         let target_content = NodeId::random();
         let target_content_key = IdentityContentKey::new(target_content.raw());
 
-        let query_id = service._init_find_content_query(target_content_key.clone(), None);
+        let query_id = service.init_find_content_query(target_content_key.clone(), None);
         let query_id = query_id.expect("Query ID for new find content query is `None`");
 
         let (_, query) = service
@@ -2917,7 +2973,7 @@ mod tests {
         let target_content = NodeId::random();
         let target_content_key = IdentityContentKey::new(target_content.raw());
 
-        let query_id = service._init_find_content_query(target_content_key.clone(), None);
+        let query_id = service.init_find_content_query(target_content_key.clone(), None);
         let query_id = query_id.expect("Query ID for new find content query is `None`");
 
         let (_, query) = service
@@ -2984,7 +3040,7 @@ mod tests {
 
         let (callback_tx, callback_rx) = oneshot::channel();
         let query_id =
-            service._init_find_content_query(target_content_key.clone(), Some(callback_tx));
+            service.init_find_content_query(target_content_key.clone(), Some(callback_tx));
         let query_id = query_id.expect("Query ID for new find content query is `None`");
 
         let query_event = OverlayService::<_, XorMetric, MockValidator>::query_event_poll(
@@ -2999,8 +3055,16 @@ mod tests {
 
         // An outgoing request should be in the request channel.
         // Check that the fields of the request correspond to the query.
-        let request = assert_ready!(poll_request_rx!(service));
-        let request = request.expect("Request for query is `None`");
+        let command = assert_ready!(poll_command_rx!(service));
+        assert!(command.is_some());
+
+        let command = command.unwrap();
+        let request = if let OverlayCommand::Request(request) = command {
+            request
+        } else {
+            panic!("Unexpected overlay command variant");
+        };
+
         assert_eq!(
             request.direction,
             RequestDirection::Outgoing {
