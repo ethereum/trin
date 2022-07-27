@@ -135,10 +135,12 @@ impl PortalStorage {
             _ => (),
         }
 
-        // Don't store if it's outside our radius
         if self.data_radius < Distance::MAX {
+            // We should store the content if the distance between the local node and the content
+            // is less than the radius.
             Ok(self.distance_to_content_id(&content_id) < self.data_radius)
         } else {
+            // If the radius is equal to the maximum value, then we should store any content.
             Ok(true)
         }
     }

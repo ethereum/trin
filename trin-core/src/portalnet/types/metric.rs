@@ -21,11 +21,11 @@ impl Distance {
     ///
     /// Returns `None` is `self` is zero, because the logarithm of zero is undefined. Otherwise,
     /// returns `Some(log2)` where `log2` is in the range [1, 256].
-    pub fn log2(&self) -> Option<u64> {
+    pub fn log2(&self) -> Option<usize> {
         if self.0.is_zero() {
             None
         } else {
-            Some(u64::from(256 - self.0.leading_zeros()))
+            Some(256 - (self.0.leading_zeros() as usize))
         }
     }
 
@@ -105,14 +105,14 @@ mod test {
 
             match log2_distance {
                 Some(log2) => {
-                    let x_floor = U256::from(1u8) << log2 - 1;
-                    let x_ceil = if log2 == 256 {
-                        U256::MAX
-                    } else {
-                        U256::from(1u8) << log2
-                    };
+                    let x_floor = U256::from(1u8) << (log2 - 1);
 
-                    TestResult::from_bool(x >= x_floor && x <= x_ceil)
+                    if log2 == 256 {
+                        TestResult::from_bool(x >= x_floor)
+                    } else {
+                        let x_ceil = U256::from(1u8) << log2;
+                        TestResult::from_bool(x >= x_floor && x < x_ceil)
+                    }
                 }
                 None => TestResult::from_bool(distance.0.is_zero()),
             }
