@@ -41,31 +41,6 @@ impl Default for Config {
 
 pub type ProtocolRequest = Vec<u8>;
 
-/// A struct to manage the `Discv5Event` stream from `Discv5`.
-struct Discv5Events {
-    /// The receiver of `Discv5Event` messages.
-    event_rx: mpsc::Receiver<Discv5Event>,
-}
-
-impl Discv5Events {
-    /// Starts the `Discv5Event` listener.
-    ///
-    /// `talk_req_tx` is a transmitter for incoming TALKREQ messages. The receiver is able to
-    /// respond to incoming talk requests.
-    async fn start(event_rx: mpsc::Receiver<Discv5Event>, talk_req_tx: mpsc::Sender<TalkRequest>) {
-        let mut discv5_events = Self { event_rx };
-
-        tokio::spawn(async move {
-            while let Some(event) = discv5_events.event_rx.recv().await {
-                // Forward all TALKREQ messages.
-                if let Discv5Event::TalkRequest(talk_req) = event {
-                    let _ = talk_req_tx.send(talk_req).await;
-                }
-            }
-        });
-    }
-}
-
 /// Base Node Discovery Protocol v5 layer
 pub struct Discovery {
     /// The inner Discv5 service.
@@ -159,12 +134,19 @@ impl Discovery {
             .map_err(|e| format!("Failed to start discv5 server: {:?}", e))?;
         self.started = true;
 
-        let event_rx = self.discv5.event_stream().await.unwrap();
+        let mut event_rx = self.discv5.event_stream().await.unwrap();
 
         // TODO: Make channel capacity configurable.
         let (talk_req_tx, talk_req_rx) = mpsc::channel(100);
 
-        Discv5Events::start(event_rx, talk_req_tx).await;
+        tokio::spawn(async move {
+            while let Some(event) = event_rx.recv().await {
+                // Forward all TALKREQ messages.
+                if let Discv5Event::TalkRequest(talk_req) = event {
+                    let _ = talk_req_tx.send(talk_req).await;
+                }
+            }
+        });
 
         Ok(talk_req_rx)
     }
