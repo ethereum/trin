@@ -41,10 +41,8 @@ pub async fn run_trin(
 
     // Initialize base discovery protocol
     let mut discovery = Discovery::new(portalnet_config.clone()).unwrap();
-    discovery.start().await.unwrap();
+    let talk_req_rx = discovery.start().await.unwrap();
     let discovery = Arc::new(discovery);
-    // Search for discv5 peers (bucket refresh lookup)
-    tokio::spawn(Arc::clone(&discovery).bucket_refresh_lookup());
 
     // Initialize prometheus metrics
     if let Some(addr) = trin_config.enable_metrics_with_url {
@@ -145,12 +143,10 @@ pub async fn run_trin(
         tokio::spawn(handler.handle_client_queries());
     }
 
-    let portal_events_discovery = Arc::clone(&discovery);
-
     // Spawn main portal events handler
     tokio::spawn(async move {
         let events = PortalnetEvents::new(
-            portal_events_discovery,
+            talk_req_rx,
             utp_listener_rx,
             history_event_tx,
             history_utp_tx,

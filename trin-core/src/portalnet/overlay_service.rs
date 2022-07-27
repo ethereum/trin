@@ -664,7 +664,7 @@ where
 
     /// Returns the local ENR of the node.
     fn local_enr(&self) -> Enr {
-        self.discovery.discv5.local_enr()
+        self.discovery.local_enr()
     }
 
     /// Returns the data radius of the node.
@@ -1085,7 +1085,7 @@ where
             // ENR sequence number has changed, then the node's address info may have
             // changed. The TalkRequest object does not contain the requester's ENR, only
             // its NodeAddress.
-            if let Some(enr) = self.discovery.discv5.find_enr(&source) {
+            if let Some(enr) = self.discovery.find_enr(&source) {
                 // TODO: Decide default data radius, and define a constant.
                 let node = Node {
                     enr,

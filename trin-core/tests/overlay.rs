@@ -17,7 +17,7 @@ use trin_core::{
     types::validation::MockValidator,
 };
 
-use discv5::Discv5Event;
+use discv5::TalkRequest;
 use ethereum_types::U256;
 use parking_lot::RwLock;
 use tokio::{
@@ -55,25 +55,14 @@ async fn init_overlay(
 }
 
 async fn spawn_overlay(
-    discovery: Arc<Discovery>,
+    mut talk_req_rx: mpsc::Receiver<TalkRequest>,
     overlay: Arc<OverlayProtocol<IdentityContentKey, XorMetric, MockValidator>>,
 ) {
     let (overlay_tx, mut overlay_rx) = mpsc::unbounded_channel();
-    let mut discovery_rx = discovery
-        .discv5
-        .event_stream()
-        .await
-        .map_err(|err| err.to_string())
-        .unwrap();
 
     let overlay_protocol = overlay.protocol().clone();
     tokio::spawn(async move {
-        while let Some(discovery_event) = discovery_rx.recv().await {
-            let talk_req = match discovery_event {
-                Discv5Event::TalkRequest(req) => req,
-                _ => continue,
-            };
-
+        while let Some(talk_req) = talk_req_rx.recv().await {
             let req_protocol = ProtocolId::from_str(&hex::encode_upper(talk_req.protocol()));
 
             if let Ok(req_protocol) = req_protocol {
@@ -118,10 +107,10 @@ async fn overlay() {
         ..PortalnetConfig::default()
     };
     let mut discovery_one = Discovery::new(portal_config_one).unwrap();
-    let _ = discovery_one.start().await.unwrap();
+    let talk_req_rx_one = discovery_one.start().await.unwrap();
     let discovery_one = Arc::new(discovery_one);
     let overlay_one = Arc::new(init_overlay(Arc::clone(&discovery_one), protocol.clone()).await);
-    spawn_overlay(Arc::clone(&discovery_one), Arc::clone(&overlay_one)).await;
+    spawn_overlay(talk_req_rx_one, Arc::clone(&overlay_one)).await;
     time::sleep(sleep_duration).await;
 
     // Node two.
@@ -131,10 +120,10 @@ async fn overlay() {
         ..PortalnetConfig::default()
     };
     let mut discovery_two = Discovery::new(portal_config_two).unwrap();
-    let _ = discovery_two.start().await.unwrap();
+    let talk_req_rx_two = discovery_two.start().await.unwrap();
     let discovery_two = Arc::new(discovery_two);
     let overlay_two = Arc::new(init_overlay(Arc::clone(&discovery_two), protocol.clone()).await);
-    spawn_overlay(Arc::clone(&discovery_two), Arc::clone(&overlay_two)).await;
+    spawn_overlay(talk_req_rx_two, Arc::clone(&overlay_two)).await;
     time::sleep(sleep_duration).await;
 
     // Node three.
@@ -144,11 +133,11 @@ async fn overlay() {
         ..PortalnetConfig::default()
     };
     let mut discovery_three = Discovery::new(portal_config_three).unwrap();
-    let _ = discovery_three.start().await.unwrap();
+    let talk_req_rx_three = discovery_three.start().await.unwrap();
     let discovery_three = Arc::new(discovery_three);
     let overlay_three =
         Arc::new(init_overlay(Arc::clone(&discovery_three), protocol.clone()).await);
-    spawn_overlay(Arc::clone(&discovery_three), Arc::clone(&overlay_three)).await;
+    spawn_overlay(talk_req_rx_three, Arc::clone(&overlay_three)).await;
     time::sleep(sleep_duration).await;
 
     // All routing tables are empty.
