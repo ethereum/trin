@@ -1220,8 +1220,8 @@ where
         }
     }
 
-    /// Process ACCEPT response
-    pub fn process_accept(
+    // Process ACCEPT response
+    fn process_accept(
         &self,
         response: Accept,
         enr: Enr,
