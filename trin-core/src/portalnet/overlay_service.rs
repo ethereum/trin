@@ -1,6 +1,5 @@
 use anyhow::anyhow;
-use bytes::{BufMut, Bytes, BytesMut};
-use std::io::Write;
+use bytes::Bytes;
 use std::{
     collections::HashMap,
     fmt,
@@ -44,6 +43,7 @@ use crate::{
     utp::stream::UtpListenerRequest,
 };
 
+use crate::utils::portal_wire;
 use crate::{
     portalnet::types::content_key::RawContentKey,
     utp::{
@@ -1270,7 +1270,7 @@ where
                 Self::provide_requested_content(storage, &response_clone, content_keys_offered)
                     .expect("Unable to provide requested content for acceptor: {msg:?}");
 
-            let content_payload = encode_content_payload(content_items)
+            let content_payload = portal_wire::encode_content_payload(&content_items)
                 .expect("Unable to build content payload: {msg:?}");
 
             // send the content to the acceptor over a uTP stream
@@ -1965,30 +1965,6 @@ fn limit_enr_list_to_max_bytes(enrs: Vec<SszEnr>, max_size: usize) -> Vec<SszEnr
             total_size < max_size
         })
         .collect()
-}
-
-/// A variable length unsigned integer (varint) is prefixed to each content item.
-// The varint hold the size, in bytes, of the subsequent content item.
-//
-// The varint encoding used is [Unsigned LEB128](https://en.wikipedia.org/wiki/LEB128#Encode_unsigned_integer).
-// The maximum content size allowed for this application is limited to `uint32`.
-fn encode_content_payload(content_items: Vec<Bytes>) -> anyhow::Result<BytesMut> {
-    let mut content_payload = BytesMut::new().writer();
-
-    for content_item in content_items {
-        if content_item.len() > u32::MAX as usize {
-            return Err(anyhow!(
-                "Content item exceeds max allowed size of u32 bytes"
-            ));
-        }
-
-        leb128::write::unsigned(&mut content_payload, content_item.len() as u64)
-            .map_err(|err| anyhow!("Unable to encode LEB128 varint: {err}"))?;
-        content_payload
-            .write(&content_item)
-            .map_err(|err| anyhow!("unable to write to content payload buf: {err}"))?;
-    }
-    Ok(content_payload.into_inner())
 }
 
 #[cfg(test)]
@@ -3069,25 +3045,6 @@ mod tests {
             }
             _ => panic!("Unexpected find content query result"),
         }
-    }
-
-    #[test]
-    fn test_encode_content_payload() {
-        let content_items: Vec<Bytes> = vec![vec![1, 1].into(), vec![2, 2, 2].into()];
-        let expected_content_payload = hex::decode("02010103020202").unwrap();
-
-        let content_payload = encode_content_payload(content_items).unwrap().to_vec();
-
-        assert_eq!(expected_content_payload, content_payload);
-    }
-
-    #[test]
-    #[ignore] // This test is ignored for now because CI fails for unknown reason
-    #[should_panic(expected = "Content item exceeds max allowed size of u32 bytes")]
-    fn test_encode_content_item_max_size() {
-        let content_items: Vec<Bytes> =
-            vec![vec![1, 1].into(), vec![2; u32::MAX as usize + 1].into()];
-        encode_content_payload(content_items).unwrap();
     }
 
     #[tokio::test]
