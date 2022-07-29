@@ -140,7 +140,6 @@ mod test {
     }
 
     #[test]
-    #[ignore] // This test is ignored for now because CI fails for unknown reason
     #[should_panic(expected = "Content item exceeds max allowed size of u32 bytes")]
     fn test_encode_content_item_max_size() {
         let content_items: Vec<Bytes> =
