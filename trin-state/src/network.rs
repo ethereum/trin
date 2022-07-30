@@ -68,24 +68,32 @@ impl StateNetwork {
     }
 
     /// Convenience call for testing, quick way to ping bootnodes
-    pub async fn ping_bootnodes(&self) -> anyhow::Result<()> {
+    pub async fn ping_bootnodes(&self) {
         // Trigger bonding with bootnodes, at both the base layer and portal overlay.
         // The overlay ping via talkreq will trigger a session at the base layer, then
         // a session on the (overlay) portal network.
-        for enr in self.overlay.discovery.discv5.table_entries_enr() {
+        let mut successfully_bonded_bootnode = false;
+        let enrs = self.overlay.discovery.discv5.table_entries_enr();
+        if enrs.is_empty() {
+            error!("No bootnodes provided, cannot join Portal State Network.");
+            return;
+        }
+        for enr in enrs {
             debug!("Attempting bond with bootnode {}", enr);
             let ping_result = self.overlay.send_ping(enr.clone()).await;
 
             match ping_result {
                 Ok(_) => {
                     debug!("Successfully bonded with {}", enr);
-                    continue;
+                    successfully_bonded_bootnode = true;
                 }
                 Err(err) => {
                     error!("{err} while pinging bootnode: {enr:?}");
                 }
             }
         }
-        Ok(())
+        if !successfully_bonded_bootnode {
+            error!("Failed to bond with any bootnodes, cannot join Portal State Network.");
+        }
     }
 }
