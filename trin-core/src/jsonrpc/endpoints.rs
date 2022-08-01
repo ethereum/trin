@@ -17,6 +17,7 @@ pub enum StateEndpoint {
     Offer,
     Store,
     Ping,
+    RecursiveFindContent,
     RoutingTableInfo,
 }
 
@@ -103,6 +104,9 @@ impl FromStr for TrinEndpoint {
             "portal_stateStore" => Ok(TrinEndpoint::StateEndpoint(StateEndpoint::Store)),
             "portal_statePing" => Ok(TrinEndpoint::StateEndpoint(StateEndpoint::Ping)),
             "portal_stateRadius" => Ok(TrinEndpoint::StateEndpoint(StateEndpoint::DataRadius)),
+            "portal_stateRecursiveFindContent" => Ok(TrinEndpoint::StateEndpoint(
+                StateEndpoint::RecursiveFindContent,
+            )),
             "portal_stateRoutingTableInfo" => {
                 Ok(TrinEndpoint::StateEndpoint(StateEndpoint::RoutingTableInfo))
             }

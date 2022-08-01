@@ -578,15 +578,6 @@ where
         }
     }
 
-    /// Public method for initiating a network request through the overlay service.
-    pub async fn initiate_overlay_request(
-        &self,
-        request: Request,
-    ) -> Result<Response, OverlayRequestError> {
-        let direction = RequestDirection::Initialize;
-        self.send_overlay_request(request, direction).await
-    }
-
     /// Performs a content lookup for `target`.
     pub async fn lookup_content(&self, target: TContentKey) -> Option<Vec<u8>> {
         let (tx, rx) = oneshot::channel();
