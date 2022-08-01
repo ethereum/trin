@@ -103,7 +103,7 @@ mod test {
         read_varint(&buf[..]).unwrap();
     }
 
-    #[test]
+    #[test_log::test]
     #[should_panic(expected = "Exceed maximum allowed varint value of u32 bytes size")]
     fn test_read_varint_max_varint_size() {
         let mut buf = [0; 1024];

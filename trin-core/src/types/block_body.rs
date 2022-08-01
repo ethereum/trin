@@ -295,7 +295,7 @@ mod tests {
     // EIP1559 w/ populated access list
     #[case(TX6, 41942)]
     fn encode_and_decode_txs(#[case] tx: &str, #[case] expected_nonce: u32) {
-        let tx_rlp = hex::decode(tx.to_string()).unwrap();
+        let tx_rlp = hex::decode(tx).unwrap();
         let tx = Transaction::decode(&tx_rlp).expect("error decoding tx");
         let expected_nonce = U256::from(expected_nonce);
         match &tx {
@@ -385,25 +385,25 @@ mod tests {
 
     fn get_14764013_block_body() -> BlockBody {
         let txs: Vec<Transaction> = vec![
-            Transaction::decode(&hex::decode(TX1.to_string()).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX2.to_string()).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX3.to_string()).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX4.to_string()).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX5.to_string()).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX6.to_string()).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX7.to_string()).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX8.to_string()).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX9.to_string()).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX10.to_string()).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX11.to_string()).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX12.to_string()).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX13.to_string()).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX14.to_string()).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX15.to_string()).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX16.to_string()).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX17.to_string()).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX18.to_string()).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX19.to_string()).unwrap()).unwrap(),
+            Transaction::decode(&hex::decode(TX1).unwrap()).unwrap(),
+            Transaction::decode(&hex::decode(TX2).unwrap()).unwrap(),
+            Transaction::decode(&hex::decode(TX3).unwrap()).unwrap(),
+            Transaction::decode(&hex::decode(TX4).unwrap()).unwrap(),
+            Transaction::decode(&hex::decode(TX5).unwrap()).unwrap(),
+            Transaction::decode(&hex::decode(TX6).unwrap()).unwrap(),
+            Transaction::decode(&hex::decode(TX7).unwrap()).unwrap(),
+            Transaction::decode(&hex::decode(TX8).unwrap()).unwrap(),
+            Transaction::decode(&hex::decode(TX9).unwrap()).unwrap(),
+            Transaction::decode(&hex::decode(TX10).unwrap()).unwrap(),
+            Transaction::decode(&hex::decode(TX11).unwrap()).unwrap(),
+            Transaction::decode(&hex::decode(TX12).unwrap()).unwrap(),
+            Transaction::decode(&hex::decode(TX13).unwrap()).unwrap(),
+            Transaction::decode(&hex::decode(TX14).unwrap()).unwrap(),
+            Transaction::decode(&hex::decode(TX15).unwrap()).unwrap(),
+            Transaction::decode(&hex::decode(TX16).unwrap()).unwrap(),
+            Transaction::decode(&hex::decode(TX17).unwrap()).unwrap(),
+            Transaction::decode(&hex::decode(TX18).unwrap()).unwrap(),
+            Transaction::decode(&hex::decode(TX19).unwrap()).unwrap(),
         ];
         let uncles_rlp = &hex::decode(UNCLE).unwrap();
         let uncles: Vec<Header> = rlp::decode_list(uncles_rlp);
