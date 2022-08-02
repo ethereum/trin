@@ -308,6 +308,10 @@ impl UtpListener {
                         }
                     }
                     PacketType::Fin => {
+                        // As we can receive bidirectional FIN packets, we handle explicitly here
+                        // only the packet received when we are receiver of the data.
+                        // When we send the data and receive a FIN packet, those packet is handled
+                        // implicitly in overlay when we close the connection with `conn.close()`
                         if let Some(conn) = self
                             .utp_connections
                             .get_mut(&ConnectionKey::new(*node_id, connection_id.wrapping_sub(1)))
@@ -315,6 +319,18 @@ impl UtpListener {
                             if conn.discv5_tx.send(packet).is_err() {
                                 error!("Unable to send FIN packet to uTP stream handler");
                                 return;
+                            }
+                            let mut buf = [0; BUF_SIZE];
+                            if let Err(msg) = conn.recv(&mut buf).await {
+                                error!("Unable to receive uTP FIN packet: {msg}")
+                            }
+                        } else if let Some(conn) = self
+                            .utp_connections
+                            .get_mut(&ConnectionKey::new(*node_id, connection_id))
+                        {
+                            // Do not handle the packet here, send it to uTP socket layer
+                            if conn.discv5_tx.send(packet).is_err() {
+                                error!("Unable to send FIN packet to uTP stream handler");
                             }
                         } else {
                             warn!(
