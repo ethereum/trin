@@ -234,4 +234,21 @@ async fn overlay() {
         }
         assert!(overlay_two_peers.contains(&enr.into()));
     }
+
+    // Store content with node three and perform a content lookup from node one.
+    let content_key = IdentityContentKey::new([0xef; 32]);
+    let content = vec![0xef];
+    overlay_three
+        .storage
+        .write()
+        .store(&content_key, &content)
+        .expect("Unable to store content");
+    match overlay_one.lookup_content(content_key).await {
+        Some(found_content) => {
+            assert_eq!(found_content, content);
+        }
+        None => {
+            panic!("Unable to find content stored with peer");
+        }
+    }
 }
