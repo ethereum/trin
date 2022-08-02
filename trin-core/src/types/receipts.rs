@@ -337,7 +337,7 @@ mod tests {
 
     #[test]
     fn legacy_receipt() {
-        let receipt_rlp = hex::decode(RECEIPT_6.to_owned()).unwrap();
+        let receipt_rlp = hex::decode(RECEIPT_6).unwrap();
         let receipt = Receipt::decode(&receipt_rlp).expect("error decoding receipt");
         // tx link: https://etherscan.io/tx/0x147c84ddb366ae572ce5aa4d815e62de3a151133479fbb414e25d32bd7db9aa5
         assert_eq!(receipt.cumulative_gas_used, U256::from(579367));
@@ -349,7 +349,7 @@ mod tests {
 
     #[test]
     fn typed_receipt() {
-        let receipt_rlp = hex::decode(RECEIPT_0.to_owned()).unwrap();
+        let receipt_rlp = hex::decode(RECEIPT_0).unwrap();
         let receipt = Receipt::decode(&receipt_rlp).expect("error decoding receipt");
         // tx link: https://etherscan.io/tx/0x163dae461ab32787eaecdad0748c9cf5fe0a22b443bc694efae9b80e319d9559
         assert_eq!(receipt.cumulative_gas_used, U256::from(189807));
@@ -362,7 +362,7 @@ mod tests {
     #[test]
     fn cumulative_gas_used() {
         // cumulative gas for last tx in block should match block's gas used
-        let receipt_rlp = hex::decode(RECEIPT_18.to_owned()).unwrap();
+        let receipt_rlp = hex::decode(RECEIPT_18).unwrap();
         let receipt = Receipt::decode(&receipt_rlp).expect("error decoding receipt");
         // https://etherscan.io/block/14764013
         assert_eq!(receipt.cumulative_gas_used, U256::from(1314225));
