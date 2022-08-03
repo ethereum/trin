@@ -19,7 +19,7 @@ use crate::portalnet::{
     storage::PortalStorage,
     types::messages::{
         Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer, Ping, Pong,
-        ProtocolId, Request, Response,
+        PopulatedOffer, ProtocolId, Request, Response,
     },
 };
 
@@ -294,18 +294,16 @@ where
 
         // HashMap to temporarily store all interested ENRs and the content.
         // Key is base64 string of node's ENR.
-        let mut enrs_and_content: HashMap<String, Vec<RawContentKey>> = HashMap::new();
+        let mut enrs_and_content: HashMap<String, Vec<(RawContentKey, ByteList)>> = HashMap::new();
 
         // Filter all nodes from overlay routing table where XOR_distance(content_id, nodeId) < node radius
-        for content_key_value in content {
+        for (content_key, content_value) in content {
             let interested_enrs: Vec<Enr> = all_nodes
                 .clone()
                 .into_iter()
                 .filter(|node| {
-                    XorMetric::distance(
-                        &content_key_value.0.content_id(),
-                        &node.key.preimage().raw(),
-                    ) < node.value.data_radius()
+                    XorMetric::distance(&content_key.content_id(), &node.key.preimage().raw())
+                        < node.value.data_radius()
                 })
                 .map(|node| node.value.enr())
                 .collect();
@@ -313,7 +311,7 @@ where
             // Continue if no nodes are interested in the content
             if interested_enrs.is_empty() {
                 debug!("No nodes interested in neighborhood gossip: content_key={} num_nodes_checked={}",
-                    hex_encode(content_key_value.0.into()), all_nodes.len());
+                    hex_encode(content_key.into()), all_nodes.len());
                 continue;
             }
 
@@ -322,11 +320,12 @@ where
 
             // Temporarily store all randomly selected nodes with the content of interest.
             // We want this so we can offer all the content to interested node in one request.
+            let raw_item = (content_key.into(), content_value);
             for enr in random_enrs {
                 enrs_and_content
                     .entry(enr.to_base64())
                     .or_default()
-                    .push(content_key_value.clone().0.into());
+                    .push(raw_item.clone());
             }
         }
 
@@ -340,8 +339,8 @@ where
                 }
             };
 
-            let offer_request = Request::Offer(Offer {
-                content_keys: interested_content,
+            let offer_request = Request::PopulatedOffer(PopulatedOffer {
+                content_items: interested_content,
             });
 
             let overlay_request = OverlayRequest::new(

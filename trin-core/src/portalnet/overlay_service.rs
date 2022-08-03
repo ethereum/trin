@@ -864,6 +864,10 @@ where
                 self.handle_find_content(find_content, Some(&source))?,
             )),
             Request::Offer(offer) => Ok(Response::Accept(self.handle_offer(offer, source)?)),
+            Request::PopulatedOffer(_) => Err(OverlayRequestError::InvalidRequest(
+                "An offer with content attached is not a valid network message to receive"
+                    .to_owned(),
+            )),
         }
     }
 
@@ -1205,37 +1209,23 @@ where
                 self.process_content(content, source, find_content_request, query_id)
             }
             Response::Accept(accept) => {
-                let offer_request = match request {
-                    Request::Offer(offer) => offer,
-                    _ => {
-                        error!("Unable to process received content: Invalid request message.");
-                        return;
-                    }
-                };
-
-                if let Err(err) = self.process_accept(accept, source, offer_request.content_keys) {
+                if let Err(err) = self.process_accept(accept, source, request) {
                     error!("Error processing ACCEPT response in overlay service: {err}")
                 }
             }
         }
     }
 
-    /// Process ACCEPT response
-    pub fn process_accept(
-        &self,
-        response: Accept,
-        enr: Enr,
-        content_keys: Vec<RawContentKey>,
-    ) -> anyhow::Result<Accept> {
-        let content_keys_offered: Result<Vec<TContentKey>, TContentKey::Error> = content_keys
-            .into_iter()
-            .map(|key| TContentKey::try_from(key))
-            .collect();
-
-        let content_keys_offered: Vec<TContentKey> = content_keys_offered
-            .map_err(|_| anyhow!("Unable to decode our own offered content keys"))?;
-
-        let conn_id = response.connection_id.to_be();
+    // Process ACCEPT response
+    fn process_accept(&self, response: Accept, enr: Enr, offer: Request) -> anyhow::Result<Accept> {
+        // Check that a valid triggering request was sent
+        match &offer {
+            Request::Offer(_) => {}
+            Request::PopulatedOffer(_) => {}
+            _ => {
+                return Err(anyhow!("Invalid request message paired with ACCEPT"));
+            }
+        };
 
         // Do not initialize uTP stream if remote node doesn't have interest in the offered content keys
         if response.content_keys.is_zero() {
@@ -1243,6 +1233,7 @@ where
         }
 
         // initiate the connection to the acceptor
+        let conn_id = response.connection_id.to_be();
         let (tx, rx) = tokio::sync::oneshot::channel::<UtpStream>();
         let utp_request = UtpListenerRequest::Connect(
             conn_id,
@@ -1264,9 +1255,28 @@ where
             let mut buf = [0; BUF_SIZE];
             conn.recv(&mut buf).await.unwrap();
 
-            let content_items =
-                Self::provide_requested_content(storage, &response_clone, content_keys_offered)
-                    .expect("Unable to provide requested content for acceptor: {msg:?}");
+            let content_items = match offer {
+                Request::Offer(offer) => {
+                    Self::provide_requested_content(storage, &response_clone, offer.content_keys)
+                }
+                Request::PopulatedOffer(offer) => Ok(response_clone
+                    .content_keys
+                    .iter()
+                    .zip(offer.content_items.into_iter())
+                    .filter(|(is_accepted, _item)| *is_accepted)
+                    .map(|(_is_accepted, (_key, val))| val)
+                    .collect()),
+                // Unreachable because of early return at top of method:
+                _ => Err(anyhow!("Invalid request message paired with ACCEPT")),
+            };
+
+            let content_items = match content_items {
+                Ok(items) => items,
+                Err(err) => {
+                    warn!("Could not serve offered content to peer: {err}");
+                    return;
+                }
+            };
 
             let content_payload = ContentPayloadList::new(content_items)
                 .expect("Unable to build content payload: {msg:?}");
@@ -1494,8 +1504,17 @@ where
     fn provide_requested_content(
         storage: Arc<RwLock<PortalStorage>>,
         accept_message: &Accept,
-        content_keys_offered: Vec<TContentKey>,
+        content_keys_offered: Vec<RawContentKey>,
     ) -> anyhow::Result<Vec<ByteList>> {
+        let content_keys_offered: Result<Vec<TContentKey>, TContentKey::Error> =
+            content_keys_offered
+                .into_iter()
+                .map(|key| TContentKey::try_from(key))
+                .collect();
+
+        let content_keys_offered: Vec<TContentKey> = content_keys_offered
+            .map_err(|_| anyhow!("Unable to decode our own offered content keys"))?;
+
         let mut content_items: Vec<ByteList> = Vec::new();
 
         for (i, key) in accept_message
