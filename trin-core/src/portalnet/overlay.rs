@@ -638,6 +638,44 @@ where
             Err(error) => Err(OverlayRequestError::ChannelFailure(error.to_string())),
         }
     }
+
+    pub async fn ping_bootnodes(&self) {
+        // Trigger bonding with bootnodes, at both the base layer and portal overlay.
+        // The overlay ping via talkreq will trigger a session at the base layer, then
+        // a session on the (overlay) portal network.
+        let mut successfully_bonded_bootnode = false;
+        let enrs = self.discovery.discv5.table_entries_enr();
+        if enrs.is_empty() {
+            error!(
+                "No bootnodes provided, cannot join Portal {:?} Network.",
+                self.protocol
+            );
+            return;
+        }
+        for enr in enrs {
+            debug!("Attempting to bond with bootnode: {}", enr);
+            let ping_result = self.send_ping(enr.clone()).await;
+
+            match ping_result {
+                Ok(_) => {
+                    debug!("Successfully bonded with bootnode: {}", enr);
+                    successfully_bonded_bootnode = true;
+                }
+                Err(err) => {
+                    error!(
+                        "{err} while pinging {:?} network bootnode: {enr:?}",
+                        self.protocol
+                    );
+                }
+            }
+        }
+        if !successfully_bonded_bootnode {
+            error!(
+                "Failed to bond with any bootnodes, cannot join Portal {:?} Network.",
+                self.protocol
+            );
+        }
+    }
 }
 
 /// Randomly select log2 nodes. log2() is stable only for floats, that's why we cast it first to f32
