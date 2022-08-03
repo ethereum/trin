@@ -91,7 +91,7 @@ pub fn spawn_state_network(
         tokio::spawn(state_events.start());
 
         // hacky test: make sure we establish a session with the boot node
-        network.ping_bootnodes().await;
+        network.overlay.ping_bootnodes().await;
 
         tokio::signal::ctrl_c()
             .await
