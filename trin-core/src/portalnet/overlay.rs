@@ -458,7 +458,9 @@ where
     /// Returns a map (BTree for its ordering guarantees) with:
     ///     key: usize representing bucket index
     ///     value: Vec of tuples, each tuple represents a node
-    pub fn bucket_entries(&self) -> BTreeMap<usize, Vec<(NodeId, Enr, NodeStatus, Distance)>> {
+    pub fn bucket_entries(
+        &self,
+    ) -> BTreeMap<usize, Vec<(NodeId, Enr, NodeStatus, Distance, Option<String>)>> {
         self.kbuckets
             .read()
             .buckets_iter()
@@ -470,11 +472,25 @@ where
                     bucket
                         .iter()
                         .map(|node| {
+                            // "c" is used as short-hand for "client" within the ENR's key-values.
+                            let client_info: Option<String> = match node.value.enr().clone().get("c") {
+                                Some(slice) => {
+                                    match std::str::from_utf8(slice) {
+                                        Ok(client_string) => Some(client_string.to_string()),
+                                        Err(err) => {
+                                            error!("Failed to parse remote client info from ENR: {err:?}");
+                                            None
+                                        }
+                                    }
+                                }
+                                None => None
+                            };
                             (
                                 *node.key.preimage(),
                                 node.value.enr().clone(),
                                 node.status,
                                 node.value.data_radius(),
+                                client_info,
                             )
                         })
                         .collect(),
