@@ -82,6 +82,7 @@ jobs:
       - run:
           name: Cargo Test --target x86_64-pc-windows-msvc
           command: cargo test --target x86_64-pc-windows-msvc
+          no_output_timeout: 30m
 workflows:
   merge-test:
     jobs:
