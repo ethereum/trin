@@ -23,12 +23,9 @@ use crate::portalnet::{
     },
 };
 
+use crate::utils::portal_wire;
 use crate::{
-    portalnet::types::{
-        content_key::RawContentKey,
-        messages::{ByteList, ContentPayloadList},
-        metric::XorMetric,
-    },
+    portalnet::types::{content_key::RawContentKey, messages::ByteList, metric::XorMetric},
     types::validation::Validator,
     utils,
     utp::{
@@ -47,7 +44,7 @@ use futures::channel::oneshot;
 use log::error;
 use parking_lot::RwLock;
 use rand::seq::IteratorRandom;
-use ssz::{Decode, Encode};
+use ssz::Encode;
 use ssz_types::VariableList;
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::{debug, warn};
@@ -243,9 +240,8 @@ where
         content_keys: Vec<RawContentKey>,
         payload: UtpPayload,
     ) -> anyhow::Result<()> {
-        // Process accepted uTP payload as SZZ decoded Container[payloads: List[ByteList, max_length=64]]
-        let content_values = ContentPayloadList::from_ssz_bytes(&payload)
-            .map_err(|err| anyhow!("Unable to decode uTP content payload: {err:?}"))?;
+        let content_values = portal_wire::decode_content_payload(payload)?;
+
         // Accepted content keys len should match content value len
         if content_keys.len() != content_values.len() {
             return Err(anyhow!(
