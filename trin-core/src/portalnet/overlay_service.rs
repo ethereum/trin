@@ -1521,11 +1521,6 @@ where
             .map_err(|_| anyhow!("Unable to decode our own offered content keys"))?;
 
         let mut content_items: Vec<ByteList> = Vec::new();
-        // =======
-        //         content_keys_offered: Vec<TContentKey>,
-        //     ) -> anyhow::Result<Vec<Bytes>> {
-        //         let mut content_items: Vec<Bytes> = Vec::new();
-        // >>>>>>> 33b16f1 (Add varint prefix to content send over uTP stream)
 
         for (i, key) in accept_message
             .content_keys
