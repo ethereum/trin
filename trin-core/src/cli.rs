@@ -44,7 +44,7 @@ pub struct TrinConfig {
     pub web3_ipc_path: String, // TODO: Change to PathBuf
 
     #[structopt(
-        default_value = "2",
+        default_value = "5",
         long = "pool-size",
         help = "max size of threadpool"
     )]
