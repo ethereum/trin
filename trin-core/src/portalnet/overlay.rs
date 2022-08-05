@@ -19,16 +19,13 @@ use crate::portalnet::{
     storage::PortalStorage,
     types::messages::{
         Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer, Ping, Pong,
-        ProtocolId, Request, Response,
+        PopulatedOffer, ProtocolId, Request, Response,
     },
 };
 
+use crate::utils::portal_wire;
 use crate::{
-    portalnet::types::{
-        content_key::RawContentKey,
-        messages::{ByteList, ContentPayloadList},
-        metric::XorMetric,
-    },
+    portalnet::types::{content_key::RawContentKey, messages::ByteList, metric::XorMetric},
     types::validation::Validator,
     utils,
     utp::{
@@ -47,7 +44,7 @@ use futures::channel::oneshot;
 use log::error;
 use parking_lot::RwLock;
 use rand::seq::IteratorRandom;
-use ssz::{Decode, Encode};
+use ssz::Encode;
 use ssz_types::VariableList;
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::{debug, warn};
@@ -243,9 +240,8 @@ where
         content_keys: Vec<RawContentKey>,
         payload: UtpPayload,
     ) -> anyhow::Result<()> {
-        // Process accepted uTP payload as SZZ decoded Container[payloads: List[ByteList, max_length=64]]
-        let content_values = ContentPayloadList::from_ssz_bytes(&payload)
-            .map_err(|err| anyhow!("Unable to decode uTP content payload: {err:?}"))?;
+        let content_values = portal_wire::decode_content_payload(payload)?;
+
         // Accepted content keys len should match content value len
         if content_keys.len() != content_values.len() {
             return Err(anyhow!(
@@ -294,18 +290,16 @@ where
 
         // HashMap to temporarily store all interested ENRs and the content.
         // Key is base64 string of node's ENR.
-        let mut enrs_and_content: HashMap<String, Vec<RawContentKey>> = HashMap::new();
+        let mut enrs_and_content: HashMap<String, Vec<(RawContentKey, ByteList)>> = HashMap::new();
 
         // Filter all nodes from overlay routing table where XOR_distance(content_id, nodeId) < node radius
-        for content_key_value in content {
+        for (content_key, content_value) in content {
             let interested_enrs: Vec<Enr> = all_nodes
                 .clone()
                 .into_iter()
                 .filter(|node| {
-                    XorMetric::distance(
-                        &content_key_value.0.content_id(),
-                        &node.key.preimage().raw(),
-                    ) < node.value.data_radius()
+                    XorMetric::distance(&content_key.content_id(), &node.key.preimage().raw())
+                        < node.value.data_radius()
                 })
                 .map(|node| node.value.enr())
                 .collect();
@@ -313,7 +307,7 @@ where
             // Continue if no nodes are interested in the content
             if interested_enrs.is_empty() {
                 debug!("No nodes interested in neighborhood gossip: content_key={} num_nodes_checked={}",
-                    hex_encode(content_key_value.0.into()), all_nodes.len());
+                    hex_encode(content_key.into()), all_nodes.len());
                 continue;
             }
 
@@ -322,11 +316,12 @@ where
 
             // Temporarily store all randomly selected nodes with the content of interest.
             // We want this so we can offer all the content to interested node in one request.
+            let raw_item = (content_key.into(), content_value);
             for enr in random_enrs {
                 enrs_and_content
                     .entry(enr.to_base64())
                     .or_default()
-                    .push(content_key_value.clone().0.into());
+                    .push(raw_item.clone());
             }
         }
 
@@ -340,8 +335,8 @@ where
                 }
             };
 
-            let offer_request = Request::Offer(Offer {
-                content_keys: interested_content,
+            let offer_request = Request::PopulatedOffer(PopulatedOffer {
+                content_items: interested_content,
             });
 
             let overlay_request = OverlayRequest::new(
@@ -637,6 +632,44 @@ where
         match rx.await {
             Ok(result) => result,
             Err(error) => Err(OverlayRequestError::ChannelFailure(error.to_string())),
+        }
+    }
+
+    pub async fn ping_bootnodes(&self) {
+        // Trigger bonding with bootnodes, at both the base layer and portal overlay.
+        // The overlay ping via talkreq will trigger a session at the base layer, then
+        // a session on the (overlay) portal network.
+        let mut successfully_bonded_bootnode = false;
+        let enrs = self.discovery.table_entries_enr();
+        if enrs.is_empty() {
+            error!(
+                "No bootnodes provided, cannot join Portal {:?} Network.",
+                self.protocol
+            );
+            return;
+        }
+        for enr in enrs {
+            debug!("Attempting to bond with bootnode: {}", enr);
+            let ping_result = self.send_ping(enr.clone()).await;
+
+            match ping_result {
+                Ok(_) => {
+                    debug!("Successfully bonded with bootnode: {}", enr);
+                    successfully_bonded_bootnode = true;
+                }
+                Err(err) => {
+                    error!(
+                        "{err} while pinging {:?} network bootnode: {enr:?}",
+                        self.protocol
+                    );
+                }
+            }
+        }
+        if !successfully_bonded_bootnode {
+            error!(
+                "Failed to bond with any bootnodes, cannot join Portal {:?} Network.",
+                self.protocol
+            );
         }
     }
 }

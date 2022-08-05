@@ -97,7 +97,7 @@ pub fn spawn_history_network(
         tokio::spawn(history_events.start());
 
         // hacky test: make sure we establish a session with the boot node
-        network.ping_bootnodes().await.unwrap();
+        network.overlay.ping_bootnodes().await;
 
         tokio::signal::ctrl_c()
             .await

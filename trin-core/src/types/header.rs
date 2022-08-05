@@ -7,9 +7,6 @@ use serde_json::Value;
 
 use crate::utils::bytes::hex_decode;
 
-/// An Ethereum address.
-type Address = H160;
-
 const LONDON_BLOCK_NUMBER: u64 = 12965000;
 
 /// A block header.
@@ -20,7 +17,7 @@ pub struct Header {
     /// Block uncles hash.
     pub uncles_hash: H256,
     /// Block author.
-    pub author: Address,
+    pub author: H160,
     /// Block state root.
     pub state_root: H256,
     /// Block transactions root.
@@ -45,9 +42,18 @@ pub struct Header {
     /// Block PoW mix hash.
     pub mix_hash: Option<H256>,
     /// Block PoW nonce.
-    pub nonce: Option<u64>,
+    #[serde(serialize_with = "raw_bytes")]
+    pub nonce: Option<Bytes>,
     /// Block base fee per gas. Introduced by EIP-1559.
     pub base_fee_per_gas: Option<U256>,
+}
+
+fn raw_bytes<S>(value: &Option<Bytes>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let value = value.clone().unwrap();
+    serializer.serialize_str(format!("0x{}", hex::encode(&value)).as_str())
 }
 
 fn as_hex<S>(value: &[u8], serializer: S) -> Result<S::Ok, S::Error>
@@ -61,14 +67,7 @@ where
 impl Header {
     /// Returns the Keccak-256 hash of the header.
     pub fn hash(&self) -> H256 {
-        keccak_hash::keccak(self.rlp(true))
-    }
-
-    /// Returns the RLP representation of the header.
-    pub fn rlp(&self, with_seal: bool) -> Bytes {
-        let mut s = RlpStream::new();
-        self.stream_rlp(&mut s, with_seal);
-        s.out().freeze()
+        keccak_hash::keccak(rlp::encode(self))
     }
 
     /// Append header to RLP stream `s`, optionally `with_seal`.
@@ -101,7 +100,7 @@ impl Header {
 
         if with_seal && self.mix_hash.is_some() && self.nonce.is_some() {
             s.append(&self.mix_hash.unwrap())
-                .append(&self.nonce.unwrap());
+                .append(self.nonce.as_ref().unwrap());
         }
 
         if self.base_fee_per_gas.is_some() {
@@ -117,26 +116,30 @@ impl Header {
             .as_object()
             .ok_or_else(|| anyhow!("Invalid jsonrpc response. Missing 'result'."))?;
 
-        Ok(Self {
-            // warning: this code skips a few fields, because the result is only used for
-            // peer content validation
+        let mut header = Self {
             parent_hash: try_value_into_h256(&result["parentHash"])?,
             uncles_hash: try_value_into_h256(&result["sha3Uncles"])?,
-            author: Address::random(),
+            author: try_value_into_h160(&result["miner"])?,
             state_root: try_value_into_h256(&result["stateRoot"])?,
             transactions_root: try_value_into_h256(&result["transactionsRoot"])?,
             receipts_root: try_value_into_h256(&result["receiptsRoot"])?,
-            log_bloom: Bloom::random(),
+            log_bloom: try_value_into_bloom(&result["logsBloom"])?,
             difficulty: try_value_into_u256(&result["difficulty"])?,
             number: try_value_into_u64(&result["number"])?,
             gas_limit: try_value_into_u256(&result["gasLimit"])?,
             gas_used: try_value_into_u256(&result["gasUsed"])?,
             timestamp: try_value_into_u64(&result["timestamp"])?,
-            extra_data: vec![],
+            extra_data: try_value_into_bytes(&result["extraData"])?,
             mix_hash: Some(try_value_into_h256(&result["mixHash"])?),
-            nonce: Some(try_value_into_u64(&result["nonce"])?),
+            nonce: Some(try_value_into_u64_be_bytes(&result["nonce"])?),
             base_fee_per_gas: None,
-        })
+        };
+
+        if result.get("baseFeePerGas").is_some() {
+            let fee = result.get("baseFeePerGas").unwrap();
+            header.base_fee_per_gas = Some(try_value_into_u256(fee)?)
+        }
+        Ok(header)
     }
 }
 
@@ -149,6 +152,30 @@ fn try_value_into_h256(val: &Value) -> anyhow::Result<H256> {
         .ok_or_else(|| anyhow!("Value is not a string."))?;
     let result = hex_decode(result)?;
     Ok(H256::from_slice(&result))
+}
+
+fn try_value_into_h160(val: &Value) -> anyhow::Result<H160> {
+    let result = val
+        .as_str()
+        .ok_or_else(|| anyhow!("Value is not a string."))?;
+    let result = hex_decode(result)?;
+    Ok(H160::from_slice(&result))
+}
+
+fn try_value_into_bloom(val: &Value) -> anyhow::Result<Bloom> {
+    let result = val
+        .as_str()
+        .ok_or_else(|| anyhow!("Value is not a string."))?;
+    let result = hex_decode(result)?;
+    Ok(Bloom::from_slice(&result))
+}
+
+fn try_value_into_bytes(val: &Value) -> anyhow::Result<Vec<u8>> {
+    let result = val
+        .as_str()
+        .ok_or_else(|| anyhow!("Value is not a string."))?;
+    let result = hex_decode(result)?;
+    Ok(result)
 }
 
 fn try_value_into_u256(val: &Value) -> anyhow::Result<U256> {
@@ -165,6 +192,11 @@ fn try_value_into_u64(val: &Value) -> anyhow::Result<u64> {
         .ok_or_else(|| anyhow!("Value is not a string."))?;
     let result = result.trim_start_matches("0x");
     Ok(u64::from_str_radix(result, 16)?)
+}
+
+fn try_value_into_u64_be_bytes(val: &Value) -> anyhow::Result<Bytes> {
+    let result = try_value_into_u64(val)?;
+    Ok(Bytes::copy_from_slice(&result.to_be_bytes()))
 }
 
 impl Decodable for Header {
@@ -231,26 +263,45 @@ mod tests {
     use serde_json::json;
     use test_log::test;
 
-    // Based on https://github.com/openethereum/openethereum/blob/main/crates/ethcore/types/src/header.rs
     #[test]
     fn decode_and_encode_header() {
-        let header_rlp = hex::decode("f901f9a0d405da4e66f1445d455195229624e133f5baafe72b5cf7b3c36c12c8146e98b7a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347948888f1f195afa192cfee860698584c030f4c9db1a05fb2b4bfdef7b314451cb138a534d225c922fc0e5fbe25e451142732c3e25c25a088d2ec6b9860aae1a2c3b299f72b6a5d70d7f7ba4722c78f2c49ba96273c2158a007c6fdfa8eea7e86b81f5b0fc0f78f90cc19f4aa60d323151e0cac660199e9a1b90100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008302008003832fefba82524d84568e932a80a0a0349d8c3df71f1a48a9df7d03fd5f14aeee7d91332c009ecaff0a71ead405bd88ab4e252a7e8c2a23").unwrap();
+        // Mainnet block #1 rlp encoded header
+        // sourced from mainnetMM data dump
+        // https://www.dropbox.com/s/y5n36ztppltgs7x/mainnetMM.zip?dl=0
+        let header_rlp = hex::decode("f90211a0d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d493479405a56e2d52c817161883f50c441c3228cfe54d9fa0d67e4d450343046425ae4271474353857ab860dbc0a1dde64b41b5cd3a532bf3a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421b90100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008503ff80000001821388808455ba422499476574682f76312e302e302f6c696e75782f676f312e342e32a0969b900de27b6ac6a67742365dd65f55a0526c41fd18e1b16f1a1215c2e66f5988539bd4979fef1ec4").unwrap();
 
         let header: Header = rlp::decode(&header_rlp).expect("error decoding header");
-        let encoded_header = rlp::encode(&header);
+        assert_eq!(header.number, 1);
+        assert_eq!(
+            header.hash(),
+            H256::from_slice(
+                // https://etherscan.io/block/1
+                &hex::decode("88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6")
+                    .unwrap()
+            )
+        );
 
+        let encoded_header = rlp::encode(&header);
         assert_eq!(header_rlp, encoded_header);
     }
 
-    // Based on https://github.com/openethereum/openethereum/blob/main/crates/ethcore/types/src/header.rs
     #[test]
     fn decode_and_encode_header_after_1559() {
         // RLP encoded block header #14037611
-        let header_rlp = hex::decode("f90217a02320c9ca606618919c2a4cf5c6012cfac99399446c60a07f084334dea25f69eca01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794ea674fdde714fd979de3edf0f56aa9716b898ec8a0604a0ab7fe0d434943fbf2c525c4086818b8305349d91d6f4b205aca0759a2b8a0fdfe28e250fb15f7cb360d36ebb7dafa6da4f74543ce593baa96c27891ccac83a0cb9f9e60fb971068b76a8dece4202dde6b4075ebd90e7b2cd21c7fd8e121bba1b90100082e01d13f40116b1e1a0244090289b6920c51418685a0855031b988aef1b494313054c4002584928380267bc11cec18b0b30c456ca30651d9b06c931ea78aa0c40849859c7e0432df944341b489322b0450ce12026cafa1ba590f20af8051024fb8722a43610800381a531aa92042dd02448b1549052d6f06e4005b1000e063035c0220402a09c0124daab9028836209c446240d652c927bc7e4004b849256db5ba8d08b4a2321fd1e25c4d1dc480d18465d8600a41e864001cae44f38609d1c7414a8d62b5869d5a8001180d87228d788e852119c8a03df162471a317832622153da12fc21d828710062c7103534eb19714280201341ce6889ae926e0250678a0855859c0252f96de25683d6326b8401caa84183b062808461e859a88c617369612d65617374322d32a03472320df4ea70d29b89afdf195c3aa2289560a453957eea5058b57b80b908bf88d6450793e6dcec1c8532ff3f048d").unwrap();
+        let header_rlp = hex::decode("f90214a02320c9ca606618919c2a4cf5c6012cfac99399446c60a07f084334dea25f69eca01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794ea674fdde714fd979de3edf0f56aa9716b898ec8a0604a0ab7fe0d434943fbf2c525c4086818b8305349d91d6f4b205aca0759a2b8a0fdfe28e250fb15f7cb360d36ebb7dafa6da4f74543ce593baa96c27891ccac83a0cb9f9e60fb971068b76a8dece4202dde6b4075ebd90e7b2cd21c7fd8e121bba1b9010082e01d13f40116b1e1a0244090289b6920c51418685a0855031b988aef1b494313054c4002584928380267bc11cec18b0b30c456ca30651d9b06c931ea78aa0c40849859c7e0432df944341b489322b0450ce12026cafa1ba590f20af8051024fb8722a43610800381a531aa92042dd02448b1549052d6f06e4005b1000e063035c0220402a09c0124daab9028836209c446240d652c927bc7e4004b849256db5ba8d08b4a2321fd1e25c4d1dc480d18465d8600a41e864001cae44f38609d1c7414a8d62b5869d5a8001180d87228d788e852119c8a03df162471a317832622153da12fc21d828710062c7103534eb119714280201341ce6889ae926e025067872b68048d94e1ed83d6326b8401caa84183b062808461e859a88c617369612d65617374322d32a03472320df4ea70d29b89afdf195c3aa2289560a453957eea5058b57b80b908bf88d6450793e6dcec1c8532ff3f048d").unwrap();
 
         let header: Header = rlp::decode(&header_rlp).unwrap();
-        let encoded_header = rlp::encode(&header);
 
+        assert_eq!(header.number, 14037611);
+        assert_eq!(
+            header.hash(),
+            H256::from_slice(
+                // https://etherscan.io/block/14037611
+                &hex::decode("a8227474afb7372058aceb724e44fd32bcebf3d39bc2e5e00dcdda2e442eebde")
+                    .unwrap()
+            )
+        );
+        let encoded_header = rlp::encode(&header);
         assert_eq!(header_rlp, encoded_header);
     }
 

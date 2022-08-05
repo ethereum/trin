@@ -4,7 +4,7 @@ use std::{
     fs,
     io::{self, BufRead, Read, Write},
     net::{TcpListener, TcpStream},
-    panic, process,
+    panic,
     str::FromStr,
     sync::{Arc, RwLock},
     thread,
@@ -103,7 +103,6 @@ fn set_ipc_cleanup_handlers(ipc_path: &str) {
                 debug!("Panic hook: Skipped removing {} because: {}", ipc_path, err);
             };
             original_panic(panic_info);
-            process::exit(1);
         }));
     }
 }
