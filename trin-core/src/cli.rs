@@ -44,7 +44,7 @@ pub struct TrinConfig {
     pub web3_ipc_path: String, // TODO: Change to PathBuf
 
     #[structopt(
-        default_value = "2",
+        default_value = "5",
         long = "pool-size",
         help = "max size of threadpool"
     )]
@@ -121,7 +121,7 @@ impl Default for TrinConfig {
             web3_transport: "ipc".to_string(),
             web3_http_address: DEFAULT_WEB3_HTTP_ADDRESS.to_string(),
             web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
-            pool_size: 2,
+            pool_size: 5,
             discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
             bootnodes: vec![],
             external_addr: None,
@@ -259,7 +259,6 @@ mod test {
             TrinConfig::new_from(["trin", "--web3-transport", "ipc"].iter()).unwrap();
         let expected_config = TrinConfig {
             web3_http_address: DEFAULT_WEB3_HTTP_ADDRESS.to_string(),
-            pool_size: 2,
             web3_transport: "ipc".to_string(),
             ..Default::default()
         };
@@ -288,7 +287,6 @@ mod test {
         let expected_config = TrinConfig {
             web3_http_address: DEFAULT_WEB3_HTTP_ADDRESS.to_string(),
             web3_ipc_path: "/path/test.ipc".to_string(),
-            pool_size: 2,
             web3_transport: "ipc".to_string(),
             ..Default::default()
         };
