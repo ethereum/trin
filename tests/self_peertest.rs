@@ -1,8 +1,9 @@
 #[cfg(test)]
 mod test {
-    use ethportal_peertest as peertest;
     use std::net::{IpAddr, Ipv4Addr};
     use std::{thread, time};
+
+    use ethportal_peertest as peertest;
     use trin_core::cli::TrinConfig;
 
     // Logs don't show up when trying to use test_log here, maybe because of multi_thread

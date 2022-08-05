@@ -41,12 +41,14 @@ use discv5::{
 };
 use ethereum_types::U256;
 use futures::channel::oneshot;
+use futures::future::join_all;
 use log::error;
 use parking_lot::RwLock;
 use rand::seq::IteratorRandom;
 use ssz::Encode;
 use ssz_types::VariableList;
 use tokio::sync::mpsc::UnboundedSender;
+use tokio::task::JoinHandle;
 use tracing::{debug, warn};
 
 pub use super::overlay_service::{OverlayRequestError, RequestDirection};
@@ -113,8 +115,8 @@ pub struct OverlayProtocol<TContentKey, TMetric, TValidator> {
     phantom_content_key: PhantomData<TContentKey>,
     /// Associate a metric with the overlay network.
     phantom_metric: PhantomData<TMetric>,
-    /// Declare the Validator type for a given overlay network.
-    phantom_validator: PhantomData<TValidator>,
+    /// Accepted content validator that makes requests to this/other overlay networks (or infura)
+    validator: Arc<TValidator>,
 }
 
 impl<
@@ -153,7 +155,7 @@ where
             protocol.clone(),
             utp_listener_tx.clone(),
             config.enable_metrics,
-            validator,
+            Arc::clone(&validator),
             config.query_timeout,
             config.query_peer_timeout,
             config.query_parallelism,
@@ -173,7 +175,7 @@ where
             utp_listener_tx,
             phantom_content_key: PhantomData,
             phantom_metric: PhantomData,
-            phantom_validator: PhantomData,
+            validator,
         }
     }
 
@@ -249,35 +251,71 @@ where
             ));
         }
 
-        // TODO: Verify overlay content data with an Oracle
+        let validator = Arc::clone(&self.validator);
+        let storage = Arc::clone(&self.storage);
+        let kbuckets = Arc::clone(&self.kbuckets);
+        let command_tx = self.command_tx.clone();
 
-        // Temporarily store content key/value pairs to propagate here
-        let mut content_keys_values: Vec<(TContentKey, ByteList)> = Vec::new();
+        // Spawn a task that spawns a validation task for each piece of content,
+        // collects validated content and propagates it via gossip.
+        tokio::spawn(async move {
+            let handles: Vec<JoinHandle<_>> = content_keys
+                .into_iter()
+                .zip(content_values.to_vec())
+                .map(
+                    |(content_key, content_value)| match TContentKey::try_from(content_key) {
+                        Ok(key) => {
+                            // Spawn a task that...
+                            // - Validates accepted content (this step requires a dedicated task since it
+                            // might require non-blocking requests to this/other overlay networks)
+                            // - Checks if validated content should be stored, and stores it if true
+                            // - Propagate all validated content
+                            let validator = Arc::clone(&validator);
+                            let storage = Arc::clone(&storage);
+                            Some(tokio::spawn(async move {
+                                // Validated received content
+                                validator
+                                    .validate_content(&key, &content_value.to_vec())
+                                    .await
+                                    // Skip storing & propagating content if it's not valid
+                                    .expect("Unable to validate received content: {err:?}");
 
-        // Try to store the content into the database and propagate gossip the content
-        for (content_key, content_value) in content_keys.into_iter().zip(content_values.to_vec()) {
-            match TContentKey::try_from(content_key) {
-                Ok(key) => {
-                    // Store accepted content in DB
-                    self.store_overlay_content(&key, content_value.clone());
-                    content_keys_values.push((key, content_value))
-                }
-                Err(err) => {
-                    return Err(anyhow!(
-                        "Unexpected error while decoding overlay content key: {err}"
-                    ));
-                }
-            }
-        }
-        // Propagate gossip accepted content
-        self.propagate_gossip(content_keys_values)?;
+                                // Check if data should be stored, and store if true.
+                                // Ignore error since all validated content is propagated.
+                                let _ = storage
+                                    .write()
+                                    .store_if_should(&key, &content_value.to_vec());
+
+                                (key, content_value)
+                            }))
+                        }
+                        Err(err) => {
+                            warn!("Unexpected error while decoding overlay content key: {err}");
+                            None
+                        }
+                    },
+                )
+                .flatten()
+                .collect();
+            let validated_content = join_all(handles)
+                .await
+                .into_iter()
+                .filter_map(|content| content.ok())
+                .collect();
+            // Propagate all validated content, whether or not it was stored.
+            Self::propagate_gossip(validated_content, kbuckets, command_tx);
+        });
         Ok(())
     }
 
     /// Propagate gossip accepted content via OFFER/ACCEPT:
-    fn propagate_gossip(&self, content: Vec<(TContentKey, ByteList)>) -> anyhow::Result<()> {
+    fn propagate_gossip(
+        content: Vec<(TContentKey, ByteList)>,
+        kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
+        command_tx: UnboundedSender<OverlayCommand<TContentKey>>,
+    ) {
         // Get all nodes from overlay routing table
-        let kbuckets = self.kbuckets.read();
+        let kbuckets = kbuckets.read();
         let all_nodes: Vec<&kbucket::Node<NodeId, Node>> = kbuckets
             .buckets_iter()
             .map(|kbucket| {
@@ -312,7 +350,13 @@ where
             }
 
             // Get log2 random ENRs to gossip
-            let random_enrs = log2_random_enrs(interested_enrs)?;
+            let random_enrs = match log2_random_enrs(interested_enrs) {
+                Ok(val) => val,
+                Err(msg) => {
+                    debug!("Error calculating log2 random enrs for gossip propagation: {msg}");
+                    return;
+                }
+            };
 
             // Temporarily store all randomly selected nodes with the content of interest.
             // We want this so we can offer all the content to interested node in one request.
@@ -346,26 +390,9 @@ where
                 None,
             );
 
-            if let Err(err) = self
-                .command_tx
-                .send(OverlayCommand::Request(overlay_request))
-            {
+            if let Err(err) = command_tx.send(OverlayCommand::Request(overlay_request)) {
                 error!("Unable to send OFFER request to overlay: {err}.")
             }
-        }
-        Ok(())
-    }
-
-    /// Try to store overlay content into database
-    fn store_overlay_content(&self, content_key: &TContentKey, value: ByteList) {
-        let should_store = self.storage.read().should_store(content_key);
-        match should_store {
-            Ok(_) => {
-                if let Err(err) = self.storage.write().store(content_key, &value.into()) {
-                    warn!("Unable to store accepted content: {err}");
-                }
-            }
-            Err(err) => error!("Unable to determine whether to store accepted content: {err}"),
         }
     }
 
