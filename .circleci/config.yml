@@ -77,7 +77,7 @@ jobs:
           # Remove the first two lines of gitconfig as work around
           command: |
             (gc ..\.gitconfig | select -Skip 2) | sc ..\.gitconfig
-            cargo clippy --package trin -- --deny warnings
+            cargo clippy --workspace --all-targets --all-features --no-deps -- --deny warnings
       - run:
           name: Build Trin workspace
           command: cargo build --workspace --target x86_64-pc-windows-msvc
