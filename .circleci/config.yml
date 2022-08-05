@@ -77,11 +77,11 @@ jobs:
             (gc ..\.gitconfig | select -Skip 2) | sc ..\.gitconfig
             cargo clippy --package trin -- --deny warnings
       - run:
-          name: Cargo Build --target x86_64-pc-windows-msvc
-          command: cargo build --target x86_64-pc-windows-msvc
+          name: Build Trin workspace
+          command: cargo build --workspace --target x86_64-pc-windows-msvc
       - run:
-          name: Cargo Test --target x86_64-pc-windows-msvc
-          command: cargo test --target x86_64-pc-windows-msvc
+          name: Test Trin workspace
+          command: cargo test --workspace --target x86_64-pc-windows-msvc
 workflows:
   merge-test:
     jobs:
