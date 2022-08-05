@@ -1,7 +1,9 @@
-use std::{
-    os::unix::net::UnixStream,
-    path::{Path, PathBuf},
-};
+#[cfg(unix)]
+use std::os::unix::net::UnixStream;
+#[cfg(windows)]
+use uds_windows::UnixStream;
+
+use std::path::{Path, PathBuf};
 
 use ethereum_types::H256;
 use serde_json::value::RawValue;

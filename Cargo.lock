@@ -4641,6 +4641,7 @@ dependencies = [
  "structopt",
  "thiserror",
  "trin-core",
+ "uds_windows",
 ]
 
 [[package]]
