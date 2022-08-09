@@ -4,6 +4,7 @@ use discv5::enr::NodeId;
 use eth_trie::EthTrie;
 use parking_lot::RwLock;
 use tokio::sync::mpsc::UnboundedSender;
+
 use trin_core::{
     portalnet::{
         discovery::Discovery,

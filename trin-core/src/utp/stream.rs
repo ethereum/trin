@@ -1430,12 +1430,12 @@ impl UtpStream {
             )
             .await
         {
-            let msg = format!("Unavle to send FIN packet: {msg}");
+            let msg = format!("Unable to send FIN packet: {msg}");
             debug!("{msg}");
             return Err(anyhow!(msg));
         }
 
-        debug!("CLosing connection, sent {:?}", packet);
+        debug!("Closing connection, sent {:?}", packet);
         self.state = StreamState::FinSent;
 
         // Receive JAKE
