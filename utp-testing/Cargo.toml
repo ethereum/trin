@@ -12,3 +12,11 @@ tokio = {version = "1.8.0", features = ["full"]}
 discv5 = { git = "https://github.com/sigp/discv5.git", branch = "master" }
 hex = "0.4.3"
 log = "0.4.14"
+
+[[bin]]
+name = "utp-testing"
+path = "src/bin/local_test.rs"
+
+[[bin]]
+name = "utp-test-app"
+path = "src/bin/test_app.rs"

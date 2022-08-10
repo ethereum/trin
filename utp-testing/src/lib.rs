@@ -1,30 +1,24 @@
 use discv5::{Discv5Event, TalkRequest};
 use log::debug;
-use std::{net::SocketAddr, str::FromStr, sync::Arc};
+use std::net::SocketAddr;
+use std::str::FromStr;
+use std::sync::Arc;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
-use trin_core::{
-    portalnet::{
-        discovery::Discovery,
-        types::messages::{PortalnetConfig, ProtocolId},
-        Enr,
-    },
-    socket,
-    utp::{
-        stream::{UtpListener, UtpListenerEvent, UtpListenerRequest, UtpStream},
-        trin_helpers::{UtpMessage, UtpStreamId},
-    },
-};
+use trin_core::portalnet::discovery::Discovery;
+use trin_core::portalnet::types::messages::{PortalnetConfig, ProtocolId};
+use trin_core::portalnet::Enr;
+use trin_core::utp::stream::{UtpListener, UtpListenerEvent, UtpListenerRequest, UtpStream};
+use trin_core::utp::trin_helpers::{UtpMessage, UtpStreamId};
 
-#[allow(dead_code)]
 pub struct TestApp {
-    discovery: Arc<Discovery>,
-    utp_listener_tx: UnboundedSender<UtpListenerRequest>,
-    utp_listener_rx: UnboundedReceiver<UtpListenerEvent>,
-    utp_event_tx: UnboundedSender<TalkRequest>,
+    pub discovery: Arc<Discovery>,
+    pub utp_listener_tx: UnboundedSender<UtpListenerRequest>,
+    pub utp_listener_rx: UnboundedReceiver<UtpListenerEvent>,
+    pub utp_event_tx: UnboundedSender<TalkRequest>,
 }
 
 impl TestApp {
-    async fn send_utp_request(&mut self, conn_id: u16, payload: Vec<u8>, enr: Enr) {
+    pub async fn send_utp_request(&mut self, conn_id: u16, payload: Vec<u8>, enr: Enr) {
         let (tx, rx) = tokio::sync::oneshot::channel::<UtpStream>();
         let _ = self.utp_listener_tx.send(UtpListenerRequest::Connect(
             conn_id,
@@ -49,7 +43,7 @@ impl TestApp {
         });
     }
 
-    async fn process_utp_request(&self) {
+    pub async fn process_utp_request(&self) {
         let mut event_stream = self.discovery.discv5.event_stream().await.unwrap();
 
         let utp_sender = self.utp_event_tx.clone();
@@ -72,7 +66,7 @@ impl TestApp {
         });
     }
 
-    async fn prepare_to_receive(&self, source: Enr, conn_id: u16) {
+    pub async fn prepare_to_receive(&self, source: Enr, conn_id: u16) {
         // Listen for incoming connection request on conn_id, as part of uTP handshake
         let _ = self
             .utp_listener_tx
@@ -85,48 +79,7 @@ impl TestApp {
     }
 }
 
-#[tokio::main]
-async fn main() {
-    tracing_subscriber::fmt::init();
-
-    let client_port = 9002;
-    let client_ip_addr =
-        socket::find_assigned_ip().expect("Could not find an IP for local connections");
-    let client_external_addr = SocketAddr::new(client_ip_addr, client_port);
-    let mut client = run_test_app(client_port, client_external_addr).await;
-
-    let server_port = 9003;
-    let server_ip_addr =
-        socket::find_assigned_ip().expect("Could not find an IP for local connections");
-    let server_external_addr = SocketAddr::new(server_ip_addr, server_port);
-
-    let server = run_test_app(server_port, server_external_addr).await;
-
-    let server_enr = server.discovery.local_enr();
-
-    let connection_id = 66;
-    let payload = vec![6; 2000];
-
-    client
-        .discovery
-        .send_talk_req(server_enr.clone(), ProtocolId::History, vec![])
-        .await
-        .unwrap();
-
-    server
-        .prepare_to_receive(client.discovery.discv5.local_enr(), connection_id)
-        .await;
-
-    client
-        .send_utp_request(connection_id, payload, server_enr)
-        .await;
-
-    tokio::signal::ctrl_c()
-        .await
-        .expect("failed to pause until ctrl-c");
-}
-
-async fn run_test_app(discv5_port: u16, socket_addr: SocketAddr) -> TestApp {
+pub async fn run_test_app(discv5_port: u16, socket_addr: SocketAddr) -> TestApp {
     let config = PortalnetConfig {
         listen_port: discv5_port,
         external_addr: Some(socket_addr),
