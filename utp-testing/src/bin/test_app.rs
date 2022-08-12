@@ -7,7 +7,7 @@ async fn main() {
 
     let client_port = 9002;
     let client_external_addr = SocketAddr::from(([127, 0, 0, 1], client_port));
-    let _ = run_test_app(client_port, client_external_addr).await;
+    let _ = run_test_app(client_port, client_external_addr, 5555).await;
 
     tokio::signal::ctrl_c()
         .await

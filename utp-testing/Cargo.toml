@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.52"
+jsonrpsee = {version = "0.15.1", features = ["full"]}
 tracing = "0.1.26"
 tracing-subscriber = "0.2.18"
 trin-core = { path = "../trin-core" }
@@ -20,3 +21,7 @@ path = "src/bin/local_test.rs"
 [[bin]]
 name = "utp-test-app"
 path = "src/bin/test_app.rs"
+
+[[bin]]
+name = "test"
+path = "src/bin/test.rs"

@@ -1,4 +1,7 @@
 use discv5::{Discv5Event, TalkRequest};
+use jsonrpsee::core::{async_trait, RpcResult};
+use jsonrpsee::http_server::{HttpServerBuilder, HttpServerHandle};
+use jsonrpsee::proc_macros::rpc;
 use log::debug;
 use std::net::SocketAddr;
 use std::str::FromStr;
@@ -10,6 +13,23 @@ use trin_core::portalnet::Enr;
 use trin_core::utp::stream::{UtpListener, UtpListenerEvent, UtpListenerRequest, UtpStream};
 use trin_core::utp::trin_helpers::{UtpMessage, UtpStreamId};
 
+#[rpc(server, client)]
+pub trait Rpc {
+    #[method(name = "talk_request")]
+    async fn send_talk_req(&self, enr: String) -> RpcResult<String>;
+
+    #[method(name = "prepare_to_recv")]
+    async fn prepare_to_recv(&self, enr: String, conn_idj: u16) -> RpcResult<String>;
+
+    #[method(name = "send_utp_payload")]
+    async fn send_utp_payload(
+        &self,
+        enr: String,
+        conn_id: u16,
+        payload: Vec<u8>,
+    ) -> RpcResult<String>;
+}
+
 pub struct TestApp {
     pub discovery: Arc<Discovery>,
     pub utp_listener_tx: UnboundedSender<UtpListenerRequest>,
@@ -17,8 +37,38 @@ pub struct TestApp {
     pub utp_event_tx: UnboundedSender<TalkRequest>,
 }
 
+#[async_trait]
+impl RpcServer for TestApp {
+    async fn send_talk_req(&self, enr: String) -> RpcResult<String> {
+        let enr = Enr::from_str(&*enr).unwrap();
+
+        self.discovery
+            .send_talk_req(enr, ProtocolId::History, vec![])
+            .await
+            .unwrap();
+        Ok("OK".to_owned())
+    }
+
+    async fn prepare_to_recv(&self, enr: String, conn_id: u16) -> RpcResult<String> {
+        let enr = Enr::from_str(&*enr).unwrap();
+        self.prepare_to_receive(enr, conn_id).await;
+        Ok("OK".to_owned())
+    }
+
+    async fn send_utp_payload(
+        &self,
+        enr: String,
+        conn_id: u16,
+        payload: Vec<u8>,
+    ) -> RpcResult<String> {
+        let enr = Enr::from_str(&*enr).unwrap();
+        self.send_utp_request(conn_id, payload, enr).await;
+        Ok("OK".to_owned())
+    }
+}
+
 impl TestApp {
-    pub async fn send_utp_request(&mut self, conn_id: u16, payload: Vec<u8>, enr: Enr) {
+    pub async fn send_utp_request(&self, conn_id: u16, payload: Vec<u8>, enr: Enr) {
         let (tx, rx) = tokio::sync::oneshot::channel::<UtpStream>();
         let _ = self.utp_listener_tx.send(UtpListenerRequest::Connect(
             conn_id,
@@ -79,7 +129,11 @@ impl TestApp {
     }
 }
 
-pub async fn run_test_app(discv5_port: u16, socket_addr: SocketAddr) -> TestApp {
+pub async fn run_test_app(
+    discv5_port: u16,
+    socket_addr: SocketAddr,
+    rpc_port: u16,
+) -> anyhow::Result<(SocketAddr, Enr, HttpServerHandle)> {
     let config = PortalnetConfig {
         listen_port: discv5_port,
         external_addr: Some(socket_addr),
@@ -88,6 +142,7 @@ pub async fn run_test_app(discv5_port: u16, socket_addr: SocketAddr) -> TestApp 
 
     let mut discovery = Discovery::new(config).unwrap();
     discovery.start().await.unwrap();
+    let enr = discovery.local_enr();
     let discovery = Arc::new(discovery);
 
     let (utp_event_sender, utp_listener_tx, utp_listener_rx, mut utp_listener) =
@@ -103,5 +158,17 @@ pub async fn run_test_app(discv5_port: u16, socket_addr: SocketAddr) -> TestApp 
 
     test_app.process_utp_request().await;
 
-    test_app
+    let rpc_addr = format!("127.0.0.1:{rpc_port}");
+
+    // Start HTTP json-rpc server
+    let server = HttpServerBuilder::default()
+        .build(rpc_addr.parse::<SocketAddr>()?)
+        .await?;
+
+    let addr = server.local_addr()?;
+    debug!("HTTP server started on address: {addr}");
+    let handle = server.start(test_app.into_rpc()).unwrap();
+    debug!("bambam");
+
+    Ok((addr, enr, handle))
 }
