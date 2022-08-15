@@ -7,7 +7,7 @@ RUN apt-get update \
 
 ARG BRANCH_NAME=master
 
-# FIXME: Fix repo link
+# TODO: pass branch url as ARG
 RUN git clone https://github.com/ogenev/trin.git \
  && cd trin \
  && git checkout ${BRANCH_NAME} --
