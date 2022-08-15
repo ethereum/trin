@@ -10,7 +10,7 @@ use trin_core::{
         endpoints::HistoryEndpoint,
         types::{
             FindContentParams, FindNodesParams, HistoryJsonRpcRequest, LocalContentParams,
-            OfferParams, PingParams, RecursiveFindContentParams, StoreParams,
+            PingParams, RecursiveFindContentParams, SendOfferParams, StoreParams,
         },
         utils::bucket_entries_to_json,
     },
@@ -194,8 +194,8 @@ impl HistoryRequestHandler {
                     };
                     let _ = request.resp.send(response);
                 }
-                HistoryEndpoint::Offer => {
-                    let response = match OfferParams::try_from(request.params) {
+                HistoryEndpoint::SendOffer => {
+                    let response = match SendOfferParams::try_from(request.params) {
                         Ok(val) => {
                             let content_keys =
                                 val.content_keys.iter().map(|key| key.to_vec()).collect();
@@ -207,10 +207,10 @@ impl HistoryRequestHandler {
                                 .await
                             {
                                 Ok(accept) => Ok(accept.into()),
-                                Err(msg) => Err(format!("Offer request timeout: {:?}", msg)),
+                                Err(msg) => Err(format!("SendOffer request timeout: {:?}", msg)),
                             }
                         }
-                        Err(msg) => Err(format!("Invalid Offer params: {:?}", msg)),
+                        Err(msg) => Err(format!("Invalid SendOffer params: {:?}", msg)),
                     };
                     let _ = request.resp.send(response);
                 }

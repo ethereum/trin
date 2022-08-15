@@ -239,12 +239,12 @@ impl TryFrom<[&Value; 2]> for FindContentParams {
     }
 }
 
-pub struct OfferParams {
+pub struct SendOfferParams {
     pub enr: SszEnr,
     pub content_keys: Vec<ByteList>,
 }
 
-impl TryFrom<Params> for OfferParams {
+impl TryFrom<Params> for SendOfferParams {
     type Error = ValidationError;
 
     fn try_from(params: Params) -> Result<Self, Self::Error> {
@@ -258,7 +258,7 @@ impl TryFrom<Params> for OfferParams {
     }
 }
 
-impl TryFrom<[&Value; 2]> for OfferParams {
+impl TryFrom<[&Value; 2]> for SendOfferParams {
     type Error = ValidationError;
 
     fn try_from(params: [&Value; 2]) -> Result<Self, Self::Error> {
