@@ -17,6 +17,9 @@ use trin_core::utp::trin_helpers::{UtpMessage, UtpStreamId};
 
 #[rpc(server, client)]
 pub trait Rpc {
+    #[method(name = "local_enr")]
+    fn local_enr(&self) -> RpcResult<String>;
+
     #[method(name = "talk_request")]
     async fn send_talk_req(&self, enr: String) -> RpcResult<String>;
 
@@ -41,6 +44,10 @@ pub struct TestApp {
 
 #[async_trait]
 impl RpcServer for TestApp {
+    fn local_enr(&self) -> RpcResult<String> {
+        Ok(self.discovery.local_enr().to_base64())
+    }
+
     async fn send_talk_req(&self, enr: String) -> RpcResult<String> {
         let enr = Enr::from_str(&*enr).unwrap();
 
@@ -169,9 +176,7 @@ pub async fn run_test_app(
         .await?;
 
     let addr = server.local_addr()?;
-    debug!("HTTP server started on address: {addr}");
     let handle = server.start(test_app.into_rpc()).unwrap();
-    debug!("bambam");
 
     Ok((addr, enr, handle))
 }

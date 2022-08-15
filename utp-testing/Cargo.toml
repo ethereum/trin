@@ -22,3 +22,7 @@ path = "src/bin/local_test.rs"
 [[bin]]
 name = "utp-test-app"
 path = "src/bin/test_app.rs"
+
+[[bin]]
+name = "utp-test-suite"
+path = "src/bin/test_suite.rs"
