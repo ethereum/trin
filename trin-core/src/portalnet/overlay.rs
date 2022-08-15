@@ -300,13 +300,20 @@ where
                 .filter_map(|content| content.ok())
                 .collect();
             // Propagate all validated content, whether or not it was stored.
-            Self::propagate_gossip(validated_content, kbuckets, command_tx);
+            Self::propagate_gossip_cross_thread(validated_content, kbuckets, command_tx);
         });
         Ok(())
     }
 
     /// Propagate gossip accepted content via OFFER/ACCEPT:
-    fn propagate_gossip(
+    pub fn propagate_gossip(&self, content: Vec<(TContentKey, ByteList)>) {
+        let kbuckets = Arc::clone(&self.kbuckets);
+        let command_tx = self.command_tx.clone();
+        Self::propagate_gossip_cross_thread(content, kbuckets, command_tx);
+    }
+
+    // Propagate gossip in a way that can be used across threads, without &self
+    fn propagate_gossip_cross_thread(
         content: Vec<(TContentKey, ByteList)>,
         kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
         command_tx: UnboundedSender<OverlayCommand<TContentKey>>,
