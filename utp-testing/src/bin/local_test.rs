@@ -18,19 +18,27 @@ async fn main() -> anyhow::Result<()> {
 
     let client_port = 9002;
     let client_external_addr = SocketAddr::from(([127, 0, 0, 1], client_port));
-    let (client_addr, client_enr, _client_handle) =
-        run_test_app(client_port, client_external_addr, 35025)
-            .await
-            .unwrap();
+    let (client_addr, client_enr, _client_handle) = run_test_app(
+        client_port,
+        client_external_addr,
+        "127.0.0.1".to_string(),
+        35025,
+    )
+    .await
+    .unwrap();
     let url = format!("http://{}", client_addr);
     let client_rpc = HttpClientBuilder::default().build(url)?;
 
     let server_port = 9003;
     let server_external_addr = SocketAddr::from(([127, 0, 0, 1], server_port));
-    let (server_addr, server_enr, _server_handle) =
-        run_test_app(server_port, server_external_addr, 4365)
-            .await
-            .unwrap();
+    let (server_addr, server_enr, _server_handle) = run_test_app(
+        server_port,
+        server_external_addr,
+        "127.0.0.1".to_string(),
+        4365,
+    )
+    .await
+    .unwrap();
     let url = format!("http://{}", server_addr);
     let server_rpc = HttpClientBuilder::default().build(url)?;
 

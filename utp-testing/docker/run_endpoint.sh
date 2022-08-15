@@ -6,4 +6,4 @@ set -e
 
 echo "Client params: $CLIENT_PARAMS"
 
-./bin/utp-test-app "$CLIENT_PARAMS"
+./bin/utp-test-app $CLIENT_PARAMS

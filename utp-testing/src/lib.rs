@@ -1,3 +1,5 @@
+pub mod cli;
+
 use discv5::{Discv5Event, TalkRequest};
 use jsonrpsee::core::{async_trait, RpcResult};
 use jsonrpsee::http_server::{HttpServerBuilder, HttpServerHandle};
@@ -130,12 +132,13 @@ impl TestApp {
 }
 
 pub async fn run_test_app(
-    discv5_port: u16,
+    udp_port: u16,
     socket_addr: SocketAddr,
+    rpc_addr: String,
     rpc_port: u16,
 ) -> anyhow::Result<(SocketAddr, Enr, HttpServerHandle)> {
     let config = PortalnetConfig {
-        listen_port: discv5_port,
+        listen_port: udp_port,
         external_addr: Some(socket_addr),
         ..Default::default()
     };
@@ -158,7 +161,7 @@ pub async fn run_test_app(
 
     test_app.process_utp_request().await;
 
-    let rpc_addr = format!("127.0.0.1:{rpc_port}");
+    let rpc_addr = format!("{rpc_addr}:{rpc_port}");
 
     // Start HTTP json-rpc server
     let server = HttpServerBuilder::default()
