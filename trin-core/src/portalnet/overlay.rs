@@ -305,11 +305,11 @@ where
         Ok(())
     }
 
-    /// Propagate gossip accepted content via OFFER/ACCEPT:
-    pub fn propagate_gossip(&self, content: Vec<(TContentKey, ByteList)>) {
+    /// Propagate gossip accepted content via OFFER/ACCEPT, return number of peers propagated
+    pub fn propagate_gossip(&self, content: Vec<(TContentKey, ByteList)>) -> usize {
         let kbuckets = Arc::clone(&self.kbuckets);
         let command_tx = self.command_tx.clone();
-        Self::propagate_gossip_cross_thread(content, kbuckets, command_tx);
+        Self::propagate_gossip_cross_thread(content, kbuckets, command_tx)
     }
 
     // Propagate gossip in a way that can be used across threads, without &self
@@ -317,7 +317,7 @@ where
         content: Vec<(TContentKey, ByteList)>,
         kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
         command_tx: UnboundedSender<OverlayCommand<TContentKey>>,
-    ) {
+    ) -> usize {
         // Get all nodes from overlay routing table
         let kbuckets = kbuckets.read();
         let all_nodes: Vec<&kbucket::Node<NodeId, Node>> = kbuckets
@@ -358,7 +358,7 @@ where
                 Ok(val) => val,
                 Err(msg) => {
                     debug!("Error calculating log2 random enrs for gossip propagation: {msg}");
-                    return;
+                    return 0;
                 }
             };
 
@@ -373,6 +373,7 @@ where
             }
         }
 
+        let num_propagated_peers = enrs_and_content.len();
         // Create and send OFFER overlay request to the interested nodes
         for (enr_string, interested_content) in enrs_and_content.into_iter() {
             let enr = match Enr::from_str(&enr_string) {
@@ -398,6 +399,8 @@ where
                 error!("Unable to send OFFER request to overlay: {err}.")
             }
         }
+
+        num_propagated_peers
     }
 
     /// Returns a vector of all ENR node IDs of nodes currently contained in the routing table.

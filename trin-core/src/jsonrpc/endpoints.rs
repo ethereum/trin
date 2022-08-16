@@ -27,6 +27,7 @@ pub enum HistoryEndpoint {
     FindContent,
     FindNodes,
     LocalContent,
+    Offer,
     SendOffer,
     Ping,
     RecursiveFindContent,
@@ -83,6 +84,7 @@ impl FromStr for TrinEndpoint {
             "portal_historyLocalContent" => {
                 Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::LocalContent))
             }
+            "portal_historyOffer" => Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::Offer)),
             "portal_historySendOffer" => {
                 Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::SendOffer))
             }

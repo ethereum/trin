@@ -10,7 +10,7 @@ use trin_core::{
         endpoints::HistoryEndpoint,
         types::{
             FindContentParams, FindNodesParams, HistoryJsonRpcRequest, LocalContentParams,
-            PingParams, RecursiveFindContentParams, SendOfferParams, StoreParams,
+            OfferParams, PingParams, RecursiveFindContentParams, SendOfferParams, StoreParams,
         },
         utils::bucket_entries_to_json,
     },
@@ -191,6 +191,20 @@ impl HistoryRequestHandler {
                             Err(msg) => Err(format!("FindNodes request timeout: {:?}", msg)),
                         },
                         Err(msg) => Err(format!("Invalid FindNodes params: {:?}", msg)),
+                    };
+                    let _ = request.resp.send(response);
+                }
+                HistoryEndpoint::Offer => {
+                    let response = match OfferParams::<HistoryContentKey>::try_from(request.params)
+                    {
+                        Ok(params) => {
+                            let content_key = params.content_key.clone();
+                            let content = params.content.into();
+                            let content_items = vec![(content_key, content)];
+                            let num_peers = self.network.overlay.propagate_gossip(content_items);
+                            Ok(num_peers.into())
+                        }
+                        Err(msg) => Err(format!("Invalid Offer params: {:?}", msg)),
                     };
                     let _ = request.resp.send(response);
                 }
