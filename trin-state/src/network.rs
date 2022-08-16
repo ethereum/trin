@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use discv5::enr::NodeId;
 use eth_trie::EthTrie;
 use parking_lot::RwLock as PLRwLock;
 use tokio::sync::{mpsc::UnboundedSender, RwLock};
@@ -38,7 +37,9 @@ impl StateNetwork {
         header_oracle: Arc<RwLock<HeaderOracle>>,
     ) -> Self {
         // todo: revisit triedb location
-        let db = PortalStorage::setup_rocksdb(NodeId::random()).unwrap();
+        let mut path = storage_config.path.clone();
+        path.push("trie");
+        let db = PortalStorage::setup_rocksdb(path).unwrap();
         let triedb = TrieDB::new(Arc::new(db));
         let trie = EthTrie::new(Arc::new(triedb));
 

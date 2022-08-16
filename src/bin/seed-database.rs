@@ -16,7 +16,7 @@ use trin_core::{
         },
     },
     types::header::Header,
-    utils::db::get_data_dir,
+    utils::db,
 };
 
 // This script is used to seed testnet nodes with data from mainnetMM data dump
@@ -37,22 +37,25 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         builder.build(&enr_key).unwrap()
     };
     let node_id = enr.node_id();
-    let data_dir_path = get_data_dir(node_id);
+
+    let data_dir = db::data_dir(node_id, None).expect("Unable to create data directory");
+    std::fs::create_dir_all(data_dir.as_path())?;
+
     println!("Storing data for NodeID: {:02X?}", node_id);
     println!("ENR: {:?}", enr);
-    println!("DB Path: {:?}", data_dir_path);
+    println!("DB Path: {:?}", data_dir.as_path());
 
     if generator_config.overwrite {
         let _ = Command::new("rm")
             .arg("-rf")
-            .arg(data_dir_path)
+            .arg(data_dir.as_path())
             .output()
             .expect("Failed to overwrite DB.");
     }
 
     let num_kilobytes = generator_config.kb;
 
-    let storage_config = PortalStorageConfig::new(num_kilobytes.into(), node_id, false);
+    let storage_config = PortalStorageConfig::new(num_kilobytes.into(), data_dir, node_id, false);
     let storage = PortalStorage::new(storage_config, ProtocolId::History)?;
 
     match generator_config.data_folder {

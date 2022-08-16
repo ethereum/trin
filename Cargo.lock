@@ -4579,6 +4579,7 @@ dependencies = [
  "serde_json",
  "sha3",
  "structopt",
+ "tempfile",
  "tokio",
  "tracing",
  "tracing-subscriber",

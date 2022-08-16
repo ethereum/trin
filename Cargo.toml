@@ -21,6 +21,7 @@ rlp = "0.5.0"
 serde_json = {version = "1.0.59", features = ["preserve_order"]}
 sha3 = "0.9.1"
 structopt = "0.3"
+tempfile = "3.3.0"
 tokio = { version = "1.8.0", features = ["full"] }
 tracing = "0.1.36"
 tracing-subscriber = "0.3.15"

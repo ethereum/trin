@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{path::PathBuf, str::FromStr, sync::Arc};
 
 use tokio::sync::{mpsc, RwLock};
 use tracing::debug;
@@ -15,11 +15,14 @@ use trin_core::{
         types::messages::PortalnetConfig,
     },
     types::{accumulator::MasterAccumulator, validation::HeaderOracle},
-    utils::{bootnodes::parse_bootnodes, db::setup_temp_dir, provider::TrustedProvider},
+    utils::{bootnodes::parse_bootnodes, db, provider::TrustedProvider},
     utp::stream::UtpListener,
 };
 use trin_history::initialize_history_network;
 use trin_state::initialize_state_network;
+
+/// Environment variable for path to data directory.
+const TRIN_DATA_ENV_VAR: &str = "TRIN_DATA_PATH";
 
 pub async fn run_trin(
     trin_config: TrinConfig,
@@ -42,6 +45,7 @@ pub async fn run_trin(
     let mut discovery = Discovery::new(portalnet_config.clone()).unwrap();
     let talk_req_rx = discovery.start().await.unwrap();
     let discovery = Arc::new(discovery);
+    let local_node_id = discovery.local_enr().node_id();
 
     // Initialize prometheus metrics
     if let Some(addr) = trin_config.enable_metrics_with_url {
@@ -54,12 +58,24 @@ pub async fn run_trin(
     tokio::spawn(async move { utp_listener.start().await });
 
     // Initialize Storage config
-    if trin_config.ephemeral {
-        setup_temp_dir();
-    }
+    let data_dir = if trin_config.ephemeral {
+        // If ephemeral, then use a temporary directory.
+        let path = db::temp_dir_path();
+        tempfile::TempDir::new_in(&path)?;
+        let path = db::data_dir(local_node_id, Some(path)).unwrap();
+        path
+    } else {
+        // If not ephemeral, then check the environment for a data directory.
+        let env_data_path = std::env::var(TRIN_DATA_ENV_VAR).ok();
+        let env_data_path = env_data_path.and_then(|path| PathBuf::from_str(path.as_str()).ok());
+        let path = db::data_dir(local_node_id, env_data_path).unwrap();
+        std::fs::create_dir_all(&path)?;
+        path
+    };
 
     let storage_config = PortalStorageConfig::new(
         trin_config.kb.into(),
+        data_dir,
         discovery.local_enr().node_id(),
         trin_config.enable_metrics_with_url.is_some(),
     );
