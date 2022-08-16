@@ -1,5 +1,5 @@
 # select build image
-FROM rust:1.58.1 AS builder
+FROM rust:1.62 AS builder
 
 # create a new empty shell project
 RUN USER=root cargo new --bin trin
@@ -23,7 +23,7 @@ COPY ./utp-testing ./utp-testing
 RUN cargo build --all --release
 
 # final base
-FROM rust:1.58.1
+FROM rust:1.62
 
 # copy build artifact from build stage
 COPY --from=builder /trin/target/release/trin .
