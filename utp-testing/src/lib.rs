@@ -1,3 +1,5 @@
+extern crate core;
+
 pub mod cli;
 
 use discv5::{Discv5Event, TalkRequest};
@@ -9,14 +11,21 @@ use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::RwLock;
 use trin_core::portalnet::discovery::Discovery;
 use trin_core::portalnet::types::messages::{PortalnetConfig, ProtocolId};
 use trin_core::portalnet::Enr;
-use trin_core::utp::stream::{UtpListener, UtpListenerEvent, UtpListenerRequest, UtpStream};
-use trin_core::utp::trin_helpers::{UtpMessage, UtpStreamId};
+use trin_core::utils::bytes::hex_encode;
+use trin_core::utp::stream::{
+    UtpListener, UtpListenerEvent, UtpListenerRequest, UtpPayload, UtpStream,
+};
+use trin_core::utp::trin_helpers::UtpStreamId;
 
 #[rpc(server, client)]
 pub trait Rpc {
+    #[method(name = "utp_payload")]
+    async fn get_utp_payload(&self) -> RpcResult<String>;
+
     #[method(name = "local_enr")]
     fn local_enr(&self) -> RpcResult<String>;
 
@@ -38,14 +47,25 @@ pub trait Rpc {
 pub struct TestApp {
     pub discovery: Arc<Discovery>,
     pub utp_listener_tx: UnboundedSender<UtpListenerRequest>,
-    pub utp_listener_rx: UnboundedReceiver<UtpListenerEvent>,
+    pub utp_listener_rx: Arc<RwLock<UnboundedReceiver<UtpListenerEvent>>>,
     pub utp_event_tx: UnboundedSender<TalkRequest>,
+    pub utp_payload: Arc<RwLock<Vec<UtpPayload>>>,
 }
 
 #[async_trait]
 impl RpcServer for TestApp {
     fn local_enr(&self) -> RpcResult<String> {
         Ok(self.discovery.local_enr().to_base64())
+    }
+
+    async fn get_utp_payload(&self) -> RpcResult<String> {
+        let utp_payload = self.utp_payload.read().await;
+        let utp_payload = utp_payload.last();
+
+        match utp_payload {
+            Some(payload) => Ok(hex_encode(payload)),
+            None => Ok("None".to_string()),
+        }
     }
 
     async fn send_talk_req(&self, enr: String) -> RpcResult<String> {
@@ -92,9 +112,7 @@ impl TestApp {
         let mut buf = [0; 1500];
         conn.recv(&mut buf).await.unwrap();
 
-        conn.send_to(&UtpMessage::new(payload.clone()).encode()[..])
-            .await
-            .unwrap();
+        conn.send_to(&payload).await.unwrap();
 
         tokio::spawn(async move {
             conn.close().await.unwrap();
@@ -121,6 +139,17 @@ impl TestApp {
                 if let ProtocolId::Utp = protocol_id {
                     utp_sender.send(request).unwrap();
                 };
+            }
+        });
+
+        let utp_listener_rx = self.utp_listener_rx.clone();
+        let utp_payload_store = self.utp_payload.clone();
+
+        tokio::spawn(async move {
+            while let Some(event) = utp_listener_rx.write().await.recv().await {
+                if let UtpListenerEvent::ClosedStream(utp_payload, _, _) = event {
+                    utp_payload_store.write().await.push(utp_payload)
+                }
             }
         });
     }
@@ -162,8 +191,9 @@ pub async fn run_test_app(
     let test_app = TestApp {
         discovery,
         utp_listener_tx,
-        utp_listener_rx,
+        utp_listener_rx: Arc::new(RwLock::new(utp_listener_rx)),
         utp_event_tx: utp_event_sender,
+        utp_payload: Arc::new(RwLock::new(Vec::new())),
     };
 
     test_app.process_utp_request().await;

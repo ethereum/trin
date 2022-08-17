@@ -42,6 +42,9 @@ async fn main() -> anyhow::Result<()> {
 
     assert_eq!(response, "OK");
 
+    let server_utp_payload: String = server_rpc.request("utp_payload", None).await.unwrap();
+    println!("Utp payload: {server_utp_payload}");
+
     tokio::time::sleep(Duration::from_secs(1)).await;
 
     Ok(())
