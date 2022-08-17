@@ -497,7 +497,9 @@ where
         content_key: Vec<u8>,
     ) -> Result<Content, OverlayRequestError> {
         // Construct the request.
-        let request = FindContent { content_key };
+        let request = FindContent {
+            content_key: content_key.clone(),
+        };
         let direction = RequestDirection::Outgoing {
             destination: enr.clone(),
         };
@@ -514,8 +516,23 @@ where
                     // Init uTP stream if `connection_id`is received
                     Content::ConnectionId(conn_id) => {
                         let conn_id = u16::from_be(conn_id);
-
-                        self.init_find_content_stream(enr, conn_id).await
+                        let content = self.init_find_content_stream(enr, conn_id).await?;
+                        let content_key = TContentKey::try_from(content_key).map_err(|err| {
+                            OverlayRequestError::FailedValidation(format!(
+                                "Error decoding content key for received utp content: {err}"
+                            ))
+                        })?;
+                        match self
+                            .validator
+                            .validate_content(&content_key, &content)
+                            .await
+                        {
+                            Ok(_) => Ok(Content::Content(VariableList::from(content))),
+                            Err(msg) => Err(OverlayRequestError::FailedValidation(format!(
+                                "Network: {:?}, Reason: {:?}",
+                                self.protocol, msg
+                            ))),
+                        }
                     }
                 }
             }
@@ -529,7 +546,7 @@ where
         &self,
         enr: Enr,
         conn_id: u16,
-    ) -> Result<Content, OverlayRequestError> {
+    ) -> Result<Vec<u8>, OverlayRequestError> {
         // initiate the connection to the acceptor
         let (tx, rx) = tokio::sync::oneshot::channel::<UtpStream>();
         let utp_request = UtpListenerRequest::Connect(
@@ -565,7 +582,7 @@ where
                         }
                     }
                 }
-                Ok(Content::Content(VariableList::from(result)))
+                Ok(result)
             }
             Err(err) => {
                 warn!("Unable to receive from uTP listener channel: {err}");
