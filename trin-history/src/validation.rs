@@ -228,7 +228,7 @@ mod tests {
             block_hash: header.hash().0,
         });
         chain_history_validator
-            .validate_content(&content_key, &header_bytelist.to_vec())
+            .validate_content(&content_key, &header_bytelist)
             .await
             .unwrap();
     }
@@ -256,7 +256,7 @@ mod tests {
             block_hash: header.hash().0,
         });
         chain_history_validator
-            .validate_content(&content_key, &header_bytelist.to_vec())
+            .validate_content(&content_key, &header_bytelist)
             .await
             .unwrap();
     }
@@ -285,7 +285,7 @@ mod tests {
             block_hash: header.hash().0,
         });
         chain_history_validator
-            .validate_content(&content_key, &header_bytelist.to_vec())
+            .validate_content(&content_key, &header_bytelist)
             .await
             .unwrap();
     }
@@ -308,7 +308,7 @@ mod tests {
         let content_key = block_14764013_body_key();
 
         chain_history_validator
-            .validate_content(&content_key, &block_body_bytelist.to_vec())
+            .validate_content(&content_key, &block_body_bytelist)
             .await
             .unwrap();
     }
@@ -341,7 +341,7 @@ mod tests {
         let content_key = block_14764013_body_key();
 
         chain_history_validator
-            .validate_content(&content_key, &invalid_content.to_vec())
+            .validate_content(&content_key, &invalid_content)
             .await
             .unwrap();
     }
@@ -362,7 +362,7 @@ mod tests {
         let content_key = block_14764013_receipts_key();
 
         chain_history_validator
-            .validate_content(&content_key, &content.to_vec())
+            .validate_content(&content_key, &content)
             .await
             .unwrap();
     }
@@ -393,7 +393,7 @@ mod tests {
         let content_key = block_14764013_receipts_key();
 
         chain_history_validator
-            .validate_content(&content_key, &invalid_content.to_vec())
+            .validate_content(&content_key, &invalid_content)
             .await
             .unwrap();
     }
