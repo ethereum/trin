@@ -18,7 +18,7 @@ use crate::{
 
 type Responder<T, E> = mpsc::UnboundedSender<Result<T, E>>;
 
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 #[serde(untagged)]
 pub enum Params {

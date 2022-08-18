@@ -172,7 +172,7 @@ fn generate_random_value(number_of_bytes: u32) -> Vec<u8> {
 }
 
 // CLI Parameter Handling
-#[derive(StructOpt, Debug, PartialEq)]
+#[derive(StructOpt, Debug, PartialEq, Eq)]
 #[structopt(
     name = "Trin DB Util",
     version = "0.0.1",
