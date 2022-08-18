@@ -6,6 +6,7 @@ use utp_testing::run_test_app;
 use structopt::StructOpt;
 use utp_testing::cli::TestAppConfig;
 
+/// uTP test app, used for creation of a `test-app` docker image
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();

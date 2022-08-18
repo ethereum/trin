@@ -1,7 +1,9 @@
 extern crate core;
 
 pub mod cli;
+pub mod rpc;
 
+use crate::rpc::RpcServer;
 use discv5::{Discv5Event, TalkRequest};
 use jsonrpsee::core::{async_trait, RpcResult};
 use jsonrpsee::http_server::{HttpServerBuilder, HttpServerHandle};
@@ -21,29 +23,7 @@ use trin_core::utp::stream::{
 };
 use trin_core::utp::trin_helpers::UtpStreamId;
 
-#[rpc(server, client)]
-pub trait Rpc {
-    #[method(name = "utp_payload")]
-    async fn get_utp_payload(&self) -> RpcResult<String>;
-
-    #[method(name = "local_enr")]
-    fn local_enr(&self) -> RpcResult<String>;
-
-    #[method(name = "talk_request")]
-    async fn send_talk_req(&self, enr: String) -> RpcResult<String>;
-
-    #[method(name = "prepare_to_recv")]
-    async fn prepare_to_recv(&self, enr: String, conn_idj: u16) -> RpcResult<String>;
-
-    #[method(name = "send_utp_payload")]
-    async fn send_utp_payload(
-        &self,
-        enr: String,
-        conn_id: u16,
-        payload: Vec<u8>,
-    ) -> RpcResult<String>;
-}
-
+/// uTP test app
 pub struct TestApp {
     pub discovery: Arc<Discovery>,
     pub utp_listener_tx: UnboundedSender<UtpListenerRequest>,
@@ -64,24 +44,14 @@ impl RpcServer for TestApp {
 
         match utp_payload {
             Some(payload) => Ok(hex_encode(payload)),
-            None => Ok("None".to_string()),
+            None => Ok("false".to_string()),
         }
-    }
-
-    async fn send_talk_req(&self, enr: String) -> RpcResult<String> {
-        let enr = Enr::from_str(&*enr).unwrap();
-
-        self.discovery
-            .send_talk_req(enr, ProtocolId::History, vec![])
-            .await
-            .unwrap();
-        Ok("OK".to_owned())
     }
 
     async fn prepare_to_recv(&self, enr: String, conn_id: u16) -> RpcResult<String> {
         let enr = Enr::from_str(&*enr).unwrap();
         self.prepare_to_receive(enr, conn_id).await;
-        Ok("OK".to_owned())
+        Ok("true".to_string())
     }
 
     async fn send_utp_payload(
@@ -92,7 +62,7 @@ impl RpcServer for TestApp {
     ) -> RpcResult<String> {
         let enr = Enr::from_str(&*enr).unwrap();
         self.send_utp_request(conn_id, payload, enr).await;
-        Ok("OK".to_owned())
+        Ok("true".to_string())
     }
 }
 
@@ -116,18 +86,18 @@ impl TestApp {
 
         tokio::spawn(async move {
             conn.close().await.unwrap();
-            debug!("connecton state: {:?}", conn.state)
+            debug!("Connection state: {:?}", conn.state)
         });
     }
 
-    pub async fn process_utp_request(&self) {
+    pub async fn start(&self) {
         let mut event_stream = self.discovery.discv5.event_stream().await.unwrap();
 
         let utp_sender = self.utp_event_tx.clone();
 
+        // Forward discv5 uTP packets to uTP socket
         tokio::spawn(async move {
             while let Some(event) = event_stream.recv().await {
-                debug!("utp-testing TestApp handling event: {event:?}");
                 let request = match event {
                     Discv5Event::TalkRequest(r) => r,
                     _ => continue,
@@ -142,6 +112,7 @@ impl TestApp {
             }
         });
 
+        // Listen for uTP listener closed streams
         let utp_listener_rx = self.utp_listener_rx.clone();
         let utp_payload_store = self.utp_payload.clone();
 
@@ -167,6 +138,7 @@ impl TestApp {
     }
 }
 
+/// Main method to spawn uTP Test App
 pub async fn run_test_app(
     udp_port: u16,
     socket_addr: SocketAddr,
@@ -196,7 +168,7 @@ pub async fn run_test_app(
         utp_payload: Arc::new(RwLock::new(Vec::new())),
     };
 
-    test_app.process_utp_request().await;
+    test_app.start().await;
 
     let rpc_addr = format!("{rpc_addr}:{rpc_port}");
 

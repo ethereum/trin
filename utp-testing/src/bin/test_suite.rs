@@ -1,51 +1,60 @@
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::http_client::HttpClientBuilder;
 use jsonrpsee::rpc_params;
-use log::info;
+use rand::{thread_rng, Rng};
 use std::time::Duration;
+use trin_core::utils::bytes::hex_encode;
 
 const SERVER_ADDR: &str = "193.167.100.100:9041";
 const CLIENT_ADDR: &str = "193.167.0.100:9042";
 
+/// Test suite for testing uTP protocol with network simulator
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt::init();
+    send_1000_bytes().await?;
 
+    Ok(())
+}
+
+/// Send 1k bytes payload from client to server
+async fn send_1000_bytes() -> anyhow::Result<()> {
+    println!("Sending 1000 bytes uTP payload from client to server...");
     let client_url = format!("http://{}", CLIENT_ADDR);
     let client_rpc = HttpClientBuilder::default().build(client_url)?;
     let client_enr: String = client_rpc.request("local_enr", None).await.unwrap();
-    info!("Client Enr: {client_enr}");
 
     let server_url = format!("http://{}", SERVER_ADDR);
     let server_rpc = HttpClientBuilder::default().build(server_url)?;
     let server_enr: String = server_rpc.request("local_enr", None).await.unwrap();
-    info!("Server Enr: {server_enr}");
 
-    // Send talk request from client to server to establish discv5 session
-    let params = rpc_params!(server_enr.clone());
-    let response: String = client_rpc.request("talk_request", params).await.unwrap();
-    assert_eq!(response, "OK");
+    let connection_id: u16 = thread_rng().gen();
 
-    let connection_id = 66;
-
+    // Add client enr to allowed server uTP connections
     let params = rpc_params!(client_enr, connection_id);
     let response: String = server_rpc.request("prepare_to_recv", params).await.unwrap();
-    assert_eq!(response, "OK");
+    assert_eq!(response, "true");
 
-    let payload = vec![6; 1000];
+    // Send uTP payload from client to server
+    let payload: Vec<u8> = vec![thread_rng().gen(); 1000];
 
-    let params = rpc_params!(server_enr, connection_id, payload);
+    let params = rpc_params!(server_enr, connection_id, payload.clone());
     let response: String = client_rpc
         .request("send_utp_payload", params)
         .await
         .unwrap();
 
-    assert_eq!(response, "OK");
+    assert_eq!(response, "true");
 
-    let server_utp_payload: String = server_rpc.request("utp_payload", None).await.unwrap();
-    println!("Utp payload: {server_utp_payload}");
-
+    // Sleep to allow time for uTP transmission
     tokio::time::sleep(Duration::from_secs(1)).await;
+
+    // Verify received uTP payload
+    let utp_payload: String = server_rpc.request("get_utp_payload", None).await.unwrap();
+    let expected_payload = hex_encode(payload);
+
+    assert_eq!(expected_payload, utp_payload);
+
+    println!("Sent 1000 bytes uTP payload from client to server: OK");
 
     Ok(())
 }

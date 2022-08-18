@@ -6,9 +6,9 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 ARG BRANCH_NAME=master
+ARG REPO_URL="https://github.com/ethereum/trin.git"
 
-# TODO: pass branch url as ARG
-RUN git clone https://github.com/ogenev/trin.git \
+RUN git clone $REPO_URL \
  && cd trin \
  && git checkout ${BRANCH_NAME} --
 

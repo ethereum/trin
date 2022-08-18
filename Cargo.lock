@@ -4940,6 +4940,7 @@ dependencies = [
  "hex",
  "jsonrpsee",
  "log 0.4.17",
+ "rand 0.8.5",
  "structopt",
  "tokio",
  "tracing",
