@@ -789,6 +789,14 @@ impl UtpStream {
 
     /// Builds the selective acknowledgement extension data for usage in packets.
     fn build_selective_ack(&self) -> Vec<u8> {
+        // Build selective ack for empty incoming buffer
+        if self.incoming_buffer.is_empty() {
+            let mut sack: Vec<u8> = vec![0u8; 4];
+            sack[0] |= 1 << 0;
+
+            return sack;
+        }
+
         let stashed = self
             .incoming_buffer
             .iter()
