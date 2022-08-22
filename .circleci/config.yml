@@ -6,6 +6,7 @@ jobs:
   lint-build-test:
         description: |
             Check linting with Clippy and rustfmt, build the crate, and run tests.
+        resource_class: xlarge
         executor:
             name: rust/default
             tag: 1.62.0
@@ -40,16 +41,17 @@ jobs:
                 command: cargo clippy --all --all-targets --all-features --no-deps -- --deny warnings
             - run:
                 name: Build Trin workspace
-                command: cargo build --workspace --jobs 2
+                command: cargo build --workspace
             - run:
                 name: Test Trin workspace
-                command: cargo test --workspace --jobs 2
+                command: cargo test --workspace
   win-build:
     description: |
       Build the crate for windows.
     executor:
       name: win/default
       shell: powershell.exe
+      size: large
     environment:
         RUST_LOG: 'debug'
     steps:

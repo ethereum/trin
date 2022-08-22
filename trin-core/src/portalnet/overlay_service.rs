@@ -119,6 +119,10 @@ pub enum OverlayRequestError {
     #[error("Invalid response")]
     InvalidResponse,
 
+    /// Received content failed validation for a response.
+    #[error("Response content failed validation: {0}")]
+    FailedValidation(String),
+
     #[error("The request returned an empty response")]
     EmptyResponse,
 

@@ -95,6 +95,15 @@ In a python shell:
 11870768
 ```
 
+To request a custom jsonrpc endpoint, provide the endpoint and array of params. eg:
+```py
+>>> w3.provider.make_request("portal_historyPing", ["enr:-IS4QBz_40AQVBaqlhPIWFwVEphZqPKS3EPso1PwK01nwDMtMCcgK73FppW1C9V_BQRsvWV5QTbT1IYUR-zv8_cnIakDgmlkgnY0gmlwhKRc9_OJc2VjcDI1NmsxoQM-ccaM0TOFvYqC_RY_KhZNhEmWx8zdf6AQALhKyMVyboN1ZHCCE4w", "18446744073709551615"])
+{'jsonrpc': '2.0',
+ 'id': 0,
+ 'result': {'enrSeq': '3',
+  'dataRadius': '115792089237316195423570985008687907853269984665640564039457584007913129639935'}}
+```
+
 See the [wiki](https://eth.wiki/json-rpc/API#json-rpc-methods) for other standard methods that are implemented. You can use the [web3.py](https://web3py.readthedocs.io/en/stable/web3.eth.html#module-web3.eth) API to access these. Note that currently most of them proxy to Infura rather than requesting the data from the Portal Network.
 
 ### Connect over HTTP
