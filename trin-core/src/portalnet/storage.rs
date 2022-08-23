@@ -88,14 +88,17 @@ pub trait PortalContentStore {
         &self,
         key: &K,
     ) -> Result<Option<Vec<u8>>, PortalContentStoreError>;
+
     /// Puts a piece of content into the store.
     fn put<K: OverlayContentKey, V: AsRef<[u8]>>(
         &mut self,
         key: K,
         value: V,
     ) -> Result<(), PortalContentStoreError>;
+
     /// Returns whether the content denoted by `key` is within the radius of the data store.
     fn is_key_within_radius<K: OverlayContentKey>(&self, key: &K) -> bool;
+
     /// Returns the radius of the data store.
     fn radius(&self) -> U256;
 }
@@ -146,19 +149,16 @@ impl PortalContentStore for MemoryPortalContentStore {
         key: K,
         value: V,
     ) -> Result<(), PortalContentStoreError> {
-        let content_id = key.content_id();
-
         // Check whether `value` falls outside the radius.
-        let distance = match self.distance_fn {
-            DistanceFunction::Xor => XorMetric::distance(&content_id, &self.node_id.raw()),
-        };
-        if distance > self.radius {
+        if !self.is_key_within_radius(&key) {
+            let distance = self.distance_to_key(&key);
             return Err(PortalContentStoreError::InsufficientRadius {
                 radius: self.radius,
                 distance,
             });
         }
 
+        let content_id = key.content_id();
         let value: &[u8] = value.as_ref();
         self.store.insert(content_id.to_vec(), value.to_vec());
 
