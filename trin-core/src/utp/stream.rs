@@ -1105,6 +1105,25 @@ impl UtpStream {
                 }
 
                 if let Some(last_seq_nr) = self.send_window.last().map(Packet::seq_nr) {
+                    // Remove all acknowledged packets from the send window
+                    let ack_packets = extension
+                        .iter()
+                        .enumerate()
+                        .filter(|&(_, received)| received)
+                        .map(|(idx, _)| packet.ack_nr() + 2 + idx as u16)
+                        .take_while(|&seq_nr| seq_nr <= last_seq_nr);
+
+                    for seq_nr in ack_packets {
+                        if let Some(position) = self
+                            .send_window
+                            .iter()
+                            .position(|packet| packet.seq_nr() == seq_nr)
+                        {
+                            let packet = self.send_window.remove(position);
+                            self.cur_window -= packet.len() as u32;
+                        }
+                    }
+                    // Resend lost packets
                     let lost_packets = extension
                         .iter()
                         .enumerate()

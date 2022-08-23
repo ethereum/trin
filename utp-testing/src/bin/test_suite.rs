@@ -35,7 +35,7 @@ async fn send_1000_bytes() -> anyhow::Result<()> {
     assert_eq!(response, "true");
 
     // Send uTP payload from client to server
-    let payload: Vec<u8> = vec![thread_rng().gen(); 1000];
+    let payload: Vec<u8> = vec![thread_rng().gen(); 100_000];
 
     let params = rpc_params!(server_enr, connection_id, payload.clone());
     let response: String = client_rpc
@@ -54,7 +54,7 @@ async fn send_1000_bytes() -> anyhow::Result<()> {
 
     assert_eq!(expected_payload, utp_payload);
 
-    println!("Sent 1000 bytes uTP payload from client to server: OK");
+    println!("Sent 100k bytes uTP payload from client to server: OK");
 
     Ok(())
 }
