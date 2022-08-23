@@ -14,7 +14,7 @@ use trin_core::{
         },
         utils::bucket_entries_to_json,
     },
-    portalnet::types::content_key::StateContentKey,
+    portalnet::{storage::PortalContentStore, types::content_key::StateContentKey},
 };
 
 /// Handles State network JSON-RPC requests
@@ -31,8 +31,7 @@ impl StateRequestHandler {
                     let response =
                         match LocalContentParams::<StateContentKey>::try_from(request.params) {
                             Ok(params) => {
-                                match &self.network.overlay.storage.read().get(&params.content_key)
-                                {
+                                match &self.network.overlay.store.read().get(&params.content_key) {
                                     Ok(val) => match val {
                                         Some(val) => Ok(Value::String(hex_encode(val.clone()))),
                                         None => Err(format!(
@@ -58,9 +57,9 @@ impl StateRequestHandler {
                             match self
                                 .network
                                 .overlay
-                                .storage
+                                .store
                                 .write()
-                                .store(&content_key, &content)
+                                .put(content_key, &content)
                             {
                                 Ok(_) => Ok(Value::String("true".to_string())),
                                 Err(msg) => Ok(Value::String(msg.to_string())),

@@ -16,7 +16,7 @@ use super::{
     Enr,
 };
 use crate::portalnet::{
-    storage::PortalStorage,
+    storage::PortalContentStore,
     types::messages::{
         Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer, Ping, Pong,
         PopulatedOffer, ProtocolId, Request, Response,
@@ -94,11 +94,11 @@ impl Default for OverlayConfig {
 /// implement the overlay protocol and the overlay protocol is where we can encapsulate the logic for
 /// handling common network requests/responses.
 #[derive(Clone)]
-pub struct OverlayProtocol<TContentKey, TMetric, TValidator> {
+pub struct OverlayProtocol<TContentKey, TMetric, TValidator, TStore> {
     /// Reference to the underlying discv5 protocol
     pub discovery: Arc<Discovery>,
-    /// Reference to the database instance
-    pub storage: Arc<RwLock<PortalStorage>>,
+    /// The data store.
+    pub store: Arc<RwLock<TStore>>,
     /// The data radius of the local node.
     pub data_radius: Arc<U256>,
     /// The overlay routing table of the local node.
@@ -123,7 +123,8 @@ impl<
         TContentKey: 'static + OverlayContentKey + Send + Sync,
         TMetric: Metric + Send + Sync,
         TValidator: 'static + Validator<TContentKey> + Send + Sync,
-    > OverlayProtocol<TContentKey, TMetric, TValidator>
+        TStore: 'static + PortalContentStore + Send + Sync,
+    > OverlayProtocol<TContentKey, TMetric, TValidator, TStore>
 where
     <TContentKey as TryFrom<Vec<u8>>>::Error: Debug + Display + Send,
 {
@@ -131,7 +132,7 @@ where
         config: OverlayConfig,
         discovery: Arc<Discovery>,
         utp_listener_tx: UnboundedSender<UtpListenerRequest>,
-        storage: Arc<RwLock<PortalStorage>>,
+        store: Arc<RwLock<TStore>>,
         data_radius: U256,
         protocol: ProtocolId,
         validator: Arc<TValidator>,
@@ -145,9 +146,9 @@ where
         )));
 
         let data_radius = Arc::new(data_radius);
-        let command_tx = OverlayService::<TContentKey, TMetric, TValidator>::spawn(
+        let command_tx = OverlayService::<TContentKey, TMetric, TValidator, TStore>::spawn(
             Arc::clone(&discovery),
-            Arc::clone(&storage),
+            Arc::clone(&store),
             Arc::clone(&kbuckets),
             config.bootnode_enrs,
             config.ping_queue_interval,
@@ -169,7 +170,7 @@ where
             discovery,
             data_radius,
             kbuckets,
-            storage,
+            store,
             protocol,
             command_tx,
             utp_listener_tx,
@@ -252,7 +253,7 @@ where
         }
 
         let validator = Arc::clone(&self.validator);
-        let storage = Arc::clone(&self.storage);
+        let store = Arc::clone(&self.store);
         let kbuckets = Arc::clone(&self.kbuckets);
         let command_tx = self.command_tx.clone();
 
@@ -271,7 +272,7 @@ where
                             // - Checks if validated content should be stored, and stores it if true
                             // - Propagate all validated content
                             let validator = Arc::clone(&validator);
-                            let storage = Arc::clone(&storage);
+                            let store = Arc::clone(&store);
                             Some(tokio::spawn(async move {
                                 // Validated received content
                                 validator
@@ -280,11 +281,8 @@ where
                                     // Skip storing & propagating content if it's not valid
                                     .expect("Unable to validate received content: {err:?}");
 
-                                // Check if data should be stored, and store if true.
                                 // Ignore error since all validated content is propagated.
-                                let _ = storage
-                                    .write()
-                                    .store_if_should(&key, &content_value.to_vec());
+                                let _ = store.write().put(key.clone(), &content_value.to_vec());
 
                                 (key, content_value)
                             }))

@@ -1,11 +1,10 @@
 use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
 use trin_core::{
-    cli::DEFAULT_STORAGE_CAPACITY,
     portalnet::{
         discovery::Discovery,
         overlay::{OverlayConfig, OverlayProtocol},
-        storage::PortalStorage,
+        storage::{DistanceFunction, MemoryPortalContentStore, PortalContentStore},
         types::{
             content_key::IdentityContentKey,
             messages::{Content, Message, PortalnetConfig, ProtocolId, SszEnr},
@@ -30,23 +29,23 @@ use trin_core::utp::stream::UtpListenerRequest;
 async fn init_overlay(
     discovery: Arc<Discovery>,
     protocol: ProtocolId,
-) -> OverlayProtocol<IdentityContentKey, XorMetric, MockValidator> {
-    let storage_config = PortalStorage::setup_config(
-        discovery.local_enr().node_id(),
-        DEFAULT_STORAGE_CAPACITY.parse().unwrap(),
-    )
-    .unwrap();
-    let db = Arc::new(RwLock::new(PortalStorage::new(storage_config).unwrap()));
+) -> OverlayProtocol<IdentityContentKey, XorMetric, MockValidator, MemoryPortalContentStore> {
     let overlay_config = OverlayConfig::default();
+
+    let node_id = discovery.local_enr().node_id();
+    let store = MemoryPortalContentStore::new(node_id, DistanceFunction::Xor);
+    let store = Arc::new(RwLock::new(store));
+
     // Ignore all uTP events
     let (utp_listener_tx, _) = unbounded_channel::<UtpListenerRequest>();
+
     let validator = Arc::new(MockValidator {});
 
     OverlayProtocol::new(
         overlay_config,
         discovery,
         utp_listener_tx,
-        db,
+        store,
         U256::MAX,
         protocol,
         validator,
@@ -56,7 +55,9 @@ async fn init_overlay(
 
 async fn spawn_overlay(
     discovery: Arc<Discovery>,
-    overlay: Arc<OverlayProtocol<IdentityContentKey, XorMetric, MockValidator>>,
+    overlay: Arc<
+        OverlayProtocol<IdentityContentKey, XorMetric, MockValidator, MemoryPortalContentStore>,
+    >,
 ) {
     let (overlay_tx, mut overlay_rx) = mpsc::unbounded_channel();
     let mut discovery_rx = discovery
@@ -239,9 +240,9 @@ async fn overlay() {
     let content_key = IdentityContentKey::new([0xef; 32]);
     let content = vec![0xef];
     overlay_three
-        .storage
+        .store
         .write()
-        .store(&content_key, &content)
+        .put(content_key.clone(), &content)
         .expect("Unable to store content");
     match overlay_one.lookup_content(content_key).await {
         Some(found_content) => {

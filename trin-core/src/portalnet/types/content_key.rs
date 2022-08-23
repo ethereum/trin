@@ -354,18 +354,9 @@ impl OverlayContentKey for StateContentKey {
 mod test {
     use super::*;
 
-    use std::sync::Arc;
-
-    use discv5::enr::NodeId;
     use ethereum_types::U256;
-    use serial_test::serial;
     use test_log::test;
 
-    use crate::portalnet::storage::{
-        DistanceFunction, PortalStorage, PortalStorageConfig, PortalStorageError,
-    };
-
-    use crate::utils::db::setup_temp_dir;
     use hex;
 
     //
@@ -445,128 +436,6 @@ mod test {
 
         assert_eq!(encoded, expected_content_key);
         assert_eq!(key.content_id(), expected_content_id);
-    }
-
-    fn generate_content_key(block_hash: &str) -> HistoryContentKey {
-        let block_hash = hex::decode(block_hash).unwrap();
-        let mut key = [0u8; 32];
-        key.copy_from_slice(block_hash.as_slice());
-        HistoryContentKey::BlockHeader(BlockHeader {
-            chain_id: 1u16,
-            block_hash: key,
-        })
-    }
-
-    // This test is for PortalStorage functionality, but is located here to take advantage of
-    // full-featured content key types, since MockContentKey is insufficient to test
-    // some PortalStorage functionality
-    #[test_log::test(tokio::test)]
-    #[serial]
-    async fn test_should_store() -> Result<(), PortalStorageError> {
-        let temp_dir = setup_temp_dir();
-
-        // As u256: 35251939465458175391971645015054168096878481684263240321586233488997076805486
-        let example_node_id_bytes: [u8; 32] = [
-            77, 239, 228, 2, 227, 174, 123, 117, 195, 237, 200, 80, 219, 0, 188, 225, 18, 196, 162,
-            89, 204, 144, 204, 187, 71, 12, 147, 65, 19, 65, 167, 110,
-        ];
-        let node_id = match NodeId::parse(&example_node_id_bytes) {
-            Ok(node_id) => node_id,
-            Err(string) => panic!("Failed to parse Node ID: {}", string),
-        };
-
-        let db = Arc::new(PortalStorage::setup_rocksdb(node_id)?);
-        let sql_connection_pool = PortalStorage::setup_sql(node_id)?;
-
-        let storage_config = PortalStorageConfig {
-            storage_capacity_kb: 100,
-            node_id,
-            distance_function: DistanceFunction::Xor,
-            db,
-            sql_connection_pool,
-        };
-
-        let mut storage = PortalStorage::new(storage_config)?;
-        storage.data_radius = u64::MAX / 2;
-
-        // randomly generated block hash
-        let block_hash = "66e52cf632d725120ddd5fca0b104c79a06dd7dec20e9e1e09b27befa1f11c8d";
-        let content_key_a = generate_content_key(block_hash);
-
-        // randomly generated block hash
-        let block_hash = "57fc90b0a2913a387822736cfc39e94805e84608beccf326a43121be6ef2e62e";
-        let content_key_b = generate_content_key(block_hash);
-
-        let should_store_a = storage.should_store(&content_key_a)?;
-        let should_store_b = storage.should_store(&content_key_b)?;
-
-        assert!(!should_store_a);
-        assert!(should_store_b);
-
-        // Store content key, to validate should_store returns false if data exists in db
-        let value: Vec<u8> = "value".into();
-        storage.store(&content_key_b, &value)?;
-
-        let should_store_b = storage.should_store(&content_key_b)?;
-        assert!(!should_store_b);
-
-        temp_dir.close()?;
-        Ok(())
-    }
-
-    // This test is for PortalStorage functionality, but is located here to take advantage of
-    // full-featured content key types, since MockContentKey is insufficient to test
-    // some PortalStorage functionality
-    #[test_log::test(tokio::test)]
-    #[serial]
-    async fn test_distance_to_key() -> Result<(), PortalStorageError> {
-        let temp_dir = setup_temp_dir();
-
-        // As u256: 35251939465458175391971645015054168096878481684263240321586233488997076805486
-        let example_node_id_bytes: [u8; 32] = [
-            77, 239, 228, 2, 227, 174, 123, 117, 195, 237, 200, 80, 219, 0, 188, 225, 18, 196, 162,
-            89, 204, 144, 204, 187, 71, 12, 147, 65, 19, 65, 167, 110,
-        ];
-        let node_id = match NodeId::parse(&example_node_id_bytes) {
-            Ok(node_id) => node_id,
-            Err(string) => panic!("Failed to parse Node ID: {}", string),
-        };
-
-        let db = Arc::new(PortalStorage::setup_rocksdb(node_id)?);
-        let sql_connection_pool = PortalStorage::setup_sql(node_id)?;
-
-        let storage_config = PortalStorageConfig {
-            storage_capacity_kb: 100,
-            node_id,
-            distance_function: DistanceFunction::Xor,
-            db,
-            sql_connection_pool,
-        };
-
-        let storage = PortalStorage::new(storage_config)?;
-
-        // block 14115690
-        // As u256: 5701445789546971387853890390228320669946681132619292758904237535384791812776
-        let block_hash = "05c7941834c39a98cbcec5a4890cc6dfcde245ba9fd885980b1544dca2373ff7";
-        let content_key = generate_content_key(block_hash);
-        let content_id = content_key.content_id();
-        let content_id = Into::<[u8; 32]>::into(content_id);
-        let distance = storage.distance_to_content_id(&content_id);
-
-        // Answer from https://xor.pw/
-        // as u256: 29607079854947394638644290140513652007972538914554032181524285051455066058182
-        // as hex: 4175036b04c5ef373b3444ae47832cbeae4623c14104029275f90a8979bbadc6
-        let expected =
-            hex::decode("4175036b04c5ef373b3444ae47832cbeae4623c14104029275f90a8979bbadc6")
-                .unwrap();
-        let mut expected_distance = [0u8; 32];
-        expected_distance.copy_from_slice(expected.as_slice());
-
-        let expected = U256::from(expected_distance);
-        assert_eq!(distance, expected.0[3]);
-
-        temp_dir.close()?;
-        Ok(())
     }
 
     //

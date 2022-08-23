@@ -7,7 +7,7 @@ use trin_core::{
     portalnet::{
         discovery::Discovery,
         overlay::{OverlayConfig, OverlayProtocol},
-        storage::{PortalStorage, PortalStorageConfig},
+        storage::{PortalStore, PortalStoreConfig},
         types::{
             content_key::HistoryContentKey,
             messages::{PortalnetConfig, ProtocolId},
@@ -23,14 +23,15 @@ use crate::validation::ChainHistoryValidator;
 /// History network layer on top of the overlay protocol. Encapsulates history network specific data and logic.
 #[derive(Clone)]
 pub struct HistoryNetwork {
-    pub overlay: Arc<OverlayProtocol<HistoryContentKey, XorMetric, ChainHistoryValidator>>,
+    pub overlay:
+        Arc<OverlayProtocol<HistoryContentKey, XorMetric, ChainHistoryValidator, PortalStore>>,
 }
 
 impl HistoryNetwork {
     pub async fn new(
         discovery: Arc<Discovery>,
         utp_listener_tx: UnboundedSender<UtpListenerRequest>,
-        storage_config: PortalStorageConfig,
+        store_config: PortalStoreConfig,
         portal_config: PortalnetConfig,
         header_oracle: Arc<StdRwLock<HeaderOracle>>,
     ) -> Self {
@@ -39,13 +40,13 @@ impl HistoryNetwork {
             enable_metrics: portal_config.enable_metrics,
             ..Default::default()
         };
-        let storage = Arc::new(RwLock::new(PortalStorage::new(storage_config).unwrap()));
+        let store = Arc::new(RwLock::new(PortalStore::new(store_config).unwrap()));
         let validator = Arc::new(ChainHistoryValidator { header_oracle });
         let overlay = OverlayProtocol::new(
             config,
             discovery,
             utp_listener_tx,
-            storage,
+            store,
             portal_config.data_radius,
             ProtocolId::History,
             validator,

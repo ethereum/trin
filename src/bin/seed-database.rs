@@ -9,7 +9,7 @@ use structopt::StructOpt;
 
 use trin_core::{
     portalnet::{
-        storage::PortalStorage,
+        storage::{PortalContentStore, PortalStore},
         types::content_key::{BlockHeader, HistoryContentKey, IdentityContentKey},
     },
     types::header::Header,
@@ -49,12 +49,12 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let num_kilobytes = generator_config.kb;
 
-    let storage_config = PortalStorage::setup_config(node_id, num_kilobytes)?;
-    let storage = PortalStorage::new(storage_config)?;
+    let store_config = PortalStore::setup_config(node_id, num_kilobytes)?;
+    let store = PortalStore::new(store_config)?;
 
     match generator_config.data_folder {
-        Some(data_folder) => load_mainnet_data(storage, data_folder),
-        None => load_random_data(storage, generator_config),
+        Some(data_folder) => load_mainnet_data(store, data_folder),
+        None => load_random_data(store, generator_config),
     }
 
     Ok(())
@@ -78,15 +78,15 @@ impl Decodable for BlockRlp {
     }
 }
 
-fn load_mainnet_data(mut storage: PortalStorage, data_folder: String) {
+fn load_mainnet_data(mut store: PortalStore, data_folder: String) {
     let mainnet_data_dir = Path::new(&data_folder);
     let paths = fs::read_dir(mainnet_data_dir).unwrap();
     for path in paths {
-        load_file_data(&path.unwrap().path(), &mut storage);
+        load_file_data(&path.unwrap().path(), &mut store);
     }
 }
 
-fn load_file_data(path: &Path, storage: &mut PortalStorage) {
+fn load_file_data(path: &Path, store: &mut PortalStore) {
     println!("Loading data from file: {:?}", path);
     let file = File::open(path).unwrap();
     let reader = BufReader::new(file);
@@ -113,17 +113,18 @@ fn load_file_data(path: &Path, storage: &mut PortalStorage) {
                             let content_key_bytes: Vec<u8> = content_key.clone().into();
                             let content_key_hex = hex::encode(&content_key_bytes);
                             total_count += 1;
-                            match storage.should_store(&content_key).unwrap() {
-                                true => {
+                            if !store.is_key_within_radius(&content_key) {
+                                continue;
+                            }
+                            match store.get(&content_key).unwrap() {
+                                None => {
                                     let header_bytes = rlp::encode(&block.header.clone().unwrap());
-                                    storage
-                                        .store(&content_key, &header_bytes.as_ref().to_vec())
-                                        .unwrap();
+                                    store.put(content_key, &header_bytes.as_ref()).unwrap();
                                     println!("Stored content key: {:?}", content_key_hex);
                                     println!("- Block RLP: {:?}", prefix_removed_rlp.get(0..31));
                                     stored_count += 1;
                                 }
-                                false => {}
+                                Some(_) => {}
                             }
                         }
                     }
@@ -139,7 +140,7 @@ fn load_file_data(path: &Path, storage: &mut PortalStorage) {
     );
 }
 
-fn load_random_data(mut storage: PortalStorage, generator_config: GeneratorConfig) {
+fn load_random_data(mut store: PortalStore, generator_config: GeneratorConfig) {
     let num_kilobytes = generator_config.kb;
     let size_of_values = generator_config.value_size;
     let num_entries = ((num_kilobytes * 1000) as f64 / (size_of_values) as f64) / DATA_OVERHEAD;
@@ -149,7 +150,7 @@ fn load_random_data(mut storage: PortalStorage, generator_config: GeneratorConfi
         let value = generate_random_value(size_of_values);
         let key = generate_random_content_key();
 
-        storage.store(&key, &value).unwrap();
+        store.put(key, &value).unwrap();
     }
 
     println!(

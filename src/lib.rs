@@ -12,7 +12,7 @@ use trin_core::{
         types::PortalJsonRpcRequest,
     },
     portalnet::{
-        discovery::Discovery, events::PortalnetEvents, storage::PortalStorage,
+        discovery::Discovery, events::PortalnetEvents, storage::PortalStore,
         types::messages::PortalnetConfig,
     },
     types::validation::HeaderOracle,
@@ -59,8 +59,7 @@ pub async fn run_trin(
         setup_temp_dir();
     }
 
-    let storage_config =
-        PortalStorage::setup_config(discovery.local_enr().node_id(), trin_config.kb)?;
+    let store_config = PortalStore::setup_config(discovery.local_enr().node_id(), trin_config.kb)?;
 
     // Initialize validation oracle
     let header_oracle = Arc::new(RwLock::new(HeaderOracle {
@@ -76,7 +75,7 @@ pub async fn run_trin(
                 &discovery,
                 utp_listener_tx.clone(),
                 portalnet_config.clone(),
-                storage_config.clone(),
+                store_config.clone(),
             )
             .await
         } else {
@@ -99,7 +98,7 @@ pub async fn run_trin(
             &discovery,
             utp_listener_tx,
             portalnet_config.clone(),
-            storage_config.clone(),
+            store_config.clone(),
             header_oracle,
         )
         .await

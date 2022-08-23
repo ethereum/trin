@@ -15,6 +15,7 @@ use trin_core::{
         utils::bucket_entries_to_json,
     },
     portalnet::{
+        storage::PortalContentStore,
         types::{
             content_key::HistoryContentKey,
             messages::{Content, FindContent, Request, Response, SszEnr},
@@ -38,8 +39,7 @@ impl HistoryRequestHandler {
                     let response =
                         match LocalContentParams::<HistoryContentKey>::try_from(request.params) {
                             Ok(params) => {
-                                match &self.network.overlay.storage.read().get(&params.content_key)
-                                {
+                                match &self.network.overlay.store.read().get(&params.content_key) {
                                     Ok(val) => match val {
                                         Some(val) => Ok(Value::String(hex_encode(val.clone()))),
                                         None => Err(format!(
@@ -66,9 +66,9 @@ impl HistoryRequestHandler {
                             match self
                                 .network
                                 .overlay
-                                .storage
+                                .store
                                 .write()
-                                .store(&content_key, &content)
+                                .put(content_key, &content)
                             {
                                 Ok(_) => Ok(Value::String("true".to_string())),
                                 Err(msg) => Ok(Value::String(msg.to_string())),

@@ -17,7 +17,7 @@ use crate::{events::HistoryEvents, jsonrpc::HistoryRequestHandler};
 use trin_core::{
     jsonrpc::types::HistoryJsonRpcRequest,
     portalnet::{
-        discovery::Discovery, storage::PortalStorageConfig, types::messages::PortalnetConfig,
+        discovery::Discovery, storage::PortalStoreConfig, types::messages::PortalnetConfig,
     },
     types::validation::HeaderOracle,
     utp::stream::{UtpListenerEvent, UtpListenerRequest},
@@ -33,7 +33,7 @@ pub async fn initialize_history_network(
     discovery: &Arc<Discovery>,
     utp_listener_tx: UnboundedSender<UtpListenerRequest>,
     portalnet_config: PortalnetConfig,
-    storage_config: PortalStorageConfig,
+    store_config: PortalStoreConfig,
     header_oracle: Arc<RwLock<HeaderOracle>>,
 ) -> (
     HistoryHandler,
@@ -50,7 +50,7 @@ pub async fn initialize_history_network(
     let history_network = HistoryNetwork::new(
         Arc::clone(discovery),
         utp_listener_tx,
-        storage_config,
+        store_config,
         portalnet_config.clone(),
         header_oracle,
     )
