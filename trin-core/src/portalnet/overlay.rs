@@ -1,4 +1,3 @@
-use anyhow::anyhow;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     fmt::{Debug, Display},
@@ -7,32 +6,8 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use utils::bytes::hex_encode;
 
-use super::{
-    discovery::Discovery,
-    overlay_service::{Node, OverlayCommand, OverlayRequest, OverlayService},
-    types::{content_key::OverlayContentKey, metric::Metric},
-    Enr,
-};
-use crate::portalnet::{
-    storage::PortalContentStore,
-    types::messages::{
-        Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer, Ping, Pong,
-        PopulatedOffer, ProtocolId, Request, Response,
-    },
-};
-
-use crate::utils::portal_wire;
-use crate::{
-    portalnet::types::{content_key::RawContentKey, messages::ByteList, metric::XorMetric},
-    types::validation::Validator,
-    utils,
-    utp::{
-        stream::{UtpListenerEvent, UtpListenerRequest, UtpPayload, UtpStream, BUF_SIZE},
-        trin_helpers::UtpStreamId,
-    },
-};
+use anyhow::anyhow;
 use discv5::{
     enr::NodeId,
     kbucket,
@@ -40,18 +15,40 @@ use discv5::{
     TalkRequest,
 };
 use ethereum_types::U256;
-use futures::channel::oneshot;
-use futures::future::join_all;
+use futures::{channel::oneshot, future::join_all};
 use log::error;
 use parking_lot::RwLock;
 use rand::seq::IteratorRandom;
 use ssz::Encode;
 use ssz_types::VariableList;
-use tokio::sync::mpsc::UnboundedSender;
-use tokio::task::JoinHandle;
+use tokio::{sync::mpsc::UnboundedSender, task::JoinHandle};
 use tracing::{debug, warn};
 
-pub use super::overlay_service::{OverlayRequestError, RequestDirection};
+use crate::{
+    portalnet::{
+        discovery::Discovery,
+        overlay_service::{
+            OverlayCommand, OverlayRequest, OverlayRequestError, OverlayService, RequestDirection,
+        },
+        storage::PortalContentStore,
+        types::{
+            content_key::{OverlayContentKey, RawContentKey},
+            messages::{
+                Accept, ByteList, Content, CustomPayload, FindContent, FindNodes, Message, Nodes,
+                Offer, Ping, Pong, PopulatedOffer, ProtocolId, Request, Response,
+            },
+            metric::{Metric, XorMetric},
+            node::Node,
+        },
+        Enr,
+    },
+    types::validation::Validator,
+    utils::{bytes::hex_encode, portal_wire},
+    utp::{
+        stream::{UtpListenerEvent, UtpListenerRequest, UtpPayload, UtpStream, BUF_SIZE},
+        trin_helpers::UtpStreamId,
+    },
+};
 
 /// Configuration parameters for the overlay network.
 #[derive(Clone)]
