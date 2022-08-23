@@ -9,7 +9,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use trin_core::{
     jsonrpc::types::StateJsonRpcRequest,
     portalnet::{
-        discovery::Discovery, storage::PortalStoreConfig, types::messages::PortalnetConfig,
+        discovery::Discovery, storage::PortalStorageConfig, types::messages::PortalnetConfig,
     },
     utp::stream::{UtpListenerEvent, UtpListenerRequest},
 };
@@ -31,7 +31,7 @@ pub async fn initialize_state_network(
     discovery: &Arc<Discovery>,
     utp_listener_tx: UnboundedSender<UtpListenerRequest>,
     portalnet_config: PortalnetConfig,
-    store_config: PortalStoreConfig,
+    storage_config: PortalStorageConfig,
 ) -> (
     StateHandler,
     StateNetworkTask,
@@ -45,7 +45,7 @@ pub async fn initialize_state_network(
     let state_network = StateNetwork::new(
         Arc::clone(discovery),
         utp_listener_tx,
-        store_config,
+        storage_config,
         portalnet_config.clone(),
     )
     .await;
