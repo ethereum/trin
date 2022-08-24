@@ -35,7 +35,7 @@ through github via pull requests.
   * `cargo fmt --all -- --check` and `cargo clippy --all -- --deny warnings` for linting checks
   * `RUSTFLAGS='-D warnings' cargo test --workspace` to run all tests
   * Run the `ethportal-peertest` harness against a locally running node. Instructions
-	can be found in [README](ethportal-peertest/README.md).
+	can be found in [README](../ethportal-peertest/README.md).
 * Pull requests **should** always be reviewed by another member of the team
   prior to being merged.
     * Obvious exceptions include very small pull requests.
@@ -91,6 +91,9 @@ One way to test whether you have it right is to complete the following sentence.
 
 > If you apply this commit it will ________________.
 
+### Release Notes
+
+Every pull request should include a Newsfragment markdown file to describe the contents of the pull request. These files are automatically formatted & collected upon each new release. The format for creating a Newsfragment file can be found in the [README](../newsfragments/README.md).
 
 ## Code Review
 

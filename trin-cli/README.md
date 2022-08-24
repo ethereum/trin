@@ -25,3 +25,6 @@ $ cargo run -p trin-cli -- portal_statePing --params enr:....
 ```sh
 $ cargo run -p trin-cli -- discv5_routingTableInfo --ipc /tmp/trin-jsonrpc-2.ipc
 ```
+
+### To use trin-cli to encode content keys:
+Check out the `Encode Content Keys` section of the [Getting Started docs](../docs/getting_started.md#encode-content-keys).
