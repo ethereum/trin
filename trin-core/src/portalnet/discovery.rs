@@ -18,6 +18,9 @@ use std::{
     net::{IpAddr, SocketAddr},
 };
 
+/// Size of the buffer of the Discv5 TALKREQ channel.
+const TALKREQ_CHANNEL_BUFFER: usize = 100;
+
 #[derive(Clone)]
 pub struct Config {
     pub enr_address: Option<IpAddr>,
@@ -136,8 +139,7 @@ impl Discovery {
 
         let mut event_rx = self.discv5.event_stream().await.unwrap();
 
-        // TODO: Make channel capacity configurable.
-        let (talk_req_tx, talk_req_rx) = mpsc::channel(100);
+        let (talk_req_tx, talk_req_rx) = mpsc::channel(TALKREQ_CHANNEL_BUFFER);
 
         tokio::spawn(async move {
             while let Some(event) = event_rx.recv().await {
