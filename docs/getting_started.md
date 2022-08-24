@@ -212,8 +212,8 @@ cargo run -p trin-cli -- json-rpc portal_historyFindContent --params <enr>,<cont
 
 1. Install [Grafana & Prometheus](https://grafana.com/docs/grafana/latest/getting-started/getting-started-prometheus/)
 2. Configure your Prometheus server to target an open port to where `prometheus_exporter` will export Trin metrics.
-3. Start your Trin process with `--enable-metrics --metrics-url 127.0.0.1:9100` as flags
-	- The `--metrics-url` parameter is the address for `prometheus_exporter` to export metrics to, and should be equal to the port to which your Prometheus server is targeting.
+3. Start your Trin process with `--enable-metrics-with-url 127.0.0.1:9100` as flags
+	- The `--enable-metrics-with-url` parameter is the address for `prometheus_exporter` to export metrics to, and should be equal to the port to which your Prometheus server is targeting.
 4. Navigate to the URL on which Grafana is running in your browser (probably `localhost:3000`) and login.
 5. Add your Prometheus server as a Data Source, using the URL on which your Prometheus server is running.
 6. Use the "Import" dashboard feature in Grafana to create your Trin dashboard, and copy and paste `metrics_dashboard.json` as the template.

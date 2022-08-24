@@ -1,8 +1,5 @@
-use anyhow::anyhow;
-use bytes::Bytes;
 use std::{
     collections::HashMap,
-    fmt,
     fmt::Debug,
     marker::{PhantomData, Sync},
     sync::Arc,
@@ -10,47 +7,8 @@ use std::{
     time::Duration,
 };
 
-use crate::{
-    portalnet::{
-        discovery::Discovery,
-        find::{
-            iterators::{
-                query::{Query, QueryConfig},
-                {
-                    findcontent::{
-                        FindContentQuery, FindContentQueryResponse, FindContentQueryResult,
-                    },
-                    findnodes::FindNodeQuery,
-                },
-            },
-            query_info::{QueryInfo, QueryType},
-            query_pool::{QueryId, QueryPool, QueryPoolState, TargetKey},
-        },
-        metrics::OverlayMetrics,
-        storage::PortalStorage,
-        types::{
-            content_key::OverlayContentKey,
-            messages::{
-                Accept, ByteList, Content, CustomPayload, FindContent, FindNodes, Message, Nodes,
-                Offer, Ping, Pong, ProtocolId, Request, Response, SszEnr,
-            },
-            metric::Metric,
-        },
-        Enr,
-    },
-    types::validation::Validator,
-    utils::node_id,
-    utp::stream::UtpListenerRequest,
-};
-
-use crate::utils::portal_wire;
-use crate::{
-    portalnet::types::content_key::RawContentKey,
-    utp::{
-        stream::{UtpStream, BUF_SIZE},
-        trin_helpers::UtpStreamId,
-    },
-};
+use anyhow::anyhow;
+use bytes::Bytes;
 use delay_map::HashSetDelay;
 use discv5::{
     enr::NodeId,
@@ -70,6 +28,39 @@ use ssz::Encode;
 use ssz_types::{BitList, VariableList};
 use thiserror::Error;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+
+use crate::{
+    portalnet::{
+        discovery::Discovery,
+        find::{
+            iterators::{
+                findcontent::{FindContentQuery, FindContentQueryResponse, FindContentQueryResult},
+                findnodes::FindNodeQuery,
+                query::{Query, QueryConfig},
+            },
+            query_info::{QueryInfo, QueryType},
+            query_pool::{QueryId, QueryPool, QueryPoolState, TargetKey},
+        },
+        metrics::OverlayMetrics,
+        storage::PortalStorage,
+        types::{
+            content_key::{OverlayContentKey, RawContentKey},
+            messages::{
+                Accept, ByteList, Content, CustomPayload, FindContent, FindNodes, Message, Nodes,
+                Offer, Ping, Pong, ProtocolId, Request, Response, SszEnr,
+            },
+            metric::Metric,
+            node::Node,
+        },
+        Enr,
+    },
+    types::validation::Validator,
+    utils::{node_id, portal_wire},
+    utp::{
+        stream::{UtpListenerRequest, UtpStream, BUF_SIZE},
+        trin_helpers::UtpStreamId,
+    },
+};
 
 /// Maximum number of ENRs in response to FindNodes.
 pub const FIND_NODES_MAX_NODES: usize = 32;
@@ -239,61 +230,6 @@ struct OverlayResponse {
     pub request_id: OverlayRequestId,
     /// The result of the associated request.
     pub response: Result<Response, OverlayRequestError>,
-}
-
-/// A node in the overlay network routing table.
-#[derive(Clone, Debug)]
-pub struct Node {
-    /// The node's ENR.
-    enr: Enr,
-    /// The node's data radius.
-    data_radius: U256,
-}
-
-impl Node {
-    /// Creates a new node.
-    pub fn new(enr: Enr, data_radius: U256) -> Node {
-        Node { enr, data_radius }
-    }
-
-    /// Returns the ENR of the node.
-    pub fn enr(&self) -> Enr {
-        self.enr.clone()
-    }
-
-    /// Returns the data radius of the node.
-    pub fn data_radius(&self) -> U256 {
-        self.data_radius.clone()
-    }
-
-    /// Sets the ENR of the node.
-    pub fn set_enr(&mut self, enr: Enr) {
-        self.enr = enr;
-    }
-
-    /// Sets the data radius of the node.
-    pub fn set_data_radius(&mut self, radius: U256) {
-        self.data_radius = radius;
-    }
-}
-
-impl fmt::Display for Node {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "Node(node_id={}, radius={})",
-            self.enr.node_id(),
-            self.data_radius,
-        )
-    }
-}
-
-impl std::cmp::Eq for Node {}
-
-impl PartialEq for Node {
-    fn eq(&self, other: &Self) -> bool {
-        self.enr == other.enr
-    }
 }
 
 /// The overlay service.
