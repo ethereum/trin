@@ -1,14 +1,14 @@
 use std::str::FromStr;
 
 /// Discv5 JSON-RPC endpoints. Start with "discv5_" prefix
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Discv5Endpoint {
     NodeInfo,
     RoutingTableInfo,
 }
 
 /// State network JSON-RPC endpoints. Start with "portalState_" prefix
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum StateEndpoint {
     DataRadius,
     FindContent,
@@ -21,7 +21,7 @@ pub enum StateEndpoint {
 }
 
 /// History network JSON-RPC endpoints. Start with "portalHistory_" prefix
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum HistoryEndpoint {
     DataRadius,
     FindContent,
@@ -35,20 +35,20 @@ pub enum HistoryEndpoint {
 }
 
 /// Ethereum JSON-RPC endpoints not currently supported by portal network requests, proxied to Infura
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum InfuraEndpoint {
     BlockNumber,
 }
 
 /// Ethereum JSON-RPC endpoints supported by portal network requests
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum PortalEndpoint {
     ClientVersion, // Doesn't actually rely on portal network data, but it makes sense to live here
     GetBlockByHash,
 }
 
 /// Global portal network endpoints supported by trin, including infura proxies, Discv5, Ethereum and all overlay network endpoints supported by portal network requests
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum TrinEndpoint {
     Discv5Endpoint(Discv5Endpoint),
     HistoryEndpoint(HistoryEndpoint),

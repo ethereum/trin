@@ -1,4 +1,3 @@
-use anyhow::anyhow;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     fmt::{Debug, Display},
@@ -7,32 +6,8 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use utils::bytes::hex_encode;
 
-use super::{
-    discovery::Discovery,
-    overlay_service::{Node, OverlayCommand, OverlayRequest, OverlayService},
-    types::{content_key::OverlayContentKey, metric::Metric},
-    Enr,
-};
-use crate::portalnet::{
-    storage::PortalStorage,
-    types::messages::{
-        Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer, Ping, Pong,
-        PopulatedOffer, ProtocolId, Request, Response,
-    },
-};
-
-use crate::utils::portal_wire;
-use crate::{
-    portalnet::types::{content_key::RawContentKey, messages::ByteList, metric::XorMetric},
-    types::validation::Validator,
-    utils,
-    utp::{
-        stream::{UtpListenerEvent, UtpListenerRequest, UtpPayload, UtpStream, BUF_SIZE},
-        trin_helpers::UtpStreamId,
-    },
-};
+use anyhow::anyhow;
 use discv5::{
     enr::NodeId,
     kbucket,
@@ -40,18 +15,40 @@ use discv5::{
     TalkRequest,
 };
 use ethereum_types::U256;
-use futures::channel::oneshot;
-use futures::future::join_all;
+use futures::{channel::oneshot, future::join_all};
 use log::error;
 use parking_lot::RwLock;
 use rand::seq::IteratorRandom;
 use ssz::Encode;
 use ssz_types::VariableList;
-use tokio::sync::mpsc::UnboundedSender;
-use tokio::task::JoinHandle;
+use tokio::{sync::mpsc::UnboundedSender, task::JoinHandle};
 use tracing::{debug, warn};
 
-pub use super::overlay_service::{OverlayRequestError, RequestDirection};
+use crate::{
+    portalnet::{
+        discovery::Discovery,
+        overlay_service::{
+            OverlayCommand, OverlayRequest, OverlayRequestError, OverlayService, RequestDirection,
+        },
+        storage::PortalStorage,
+        types::{
+            content_key::{OverlayContentKey, RawContentKey},
+            messages::{
+                Accept, ByteList, Content, CustomPayload, FindContent, FindNodes, Message, Nodes,
+                Offer, Ping, Pong, PopulatedOffer, ProtocolId, Request, Response,
+            },
+            metric::{Metric, XorMetric},
+            node::Node,
+        },
+        Enr,
+    },
+    types::validation::Validator,
+    utils::{bytes::hex_encode, portal_wire},
+    utp::{
+        stream::{UtpListenerEvent, UtpListenerRequest, UtpPayload, UtpStream, BUF_SIZE},
+        trin_helpers::UtpStreamId,
+    },
+};
 
 /// Configuration parameters for the overlay network.
 #[derive(Clone)]
@@ -497,7 +494,9 @@ where
         content_key: Vec<u8>,
     ) -> Result<Content, OverlayRequestError> {
         // Construct the request.
-        let request = FindContent { content_key };
+        let request = FindContent {
+            content_key: content_key.clone(),
+        };
         let direction = RequestDirection::Outgoing {
             destination: enr.clone(),
         };
@@ -514,8 +513,23 @@ where
                     // Init uTP stream if `connection_id`is received
                     Content::ConnectionId(conn_id) => {
                         let conn_id = u16::from_be(conn_id);
-
-                        self.init_find_content_stream(enr, conn_id).await
+                        let content = self.init_find_content_stream(enr, conn_id).await?;
+                        let content_key = TContentKey::try_from(content_key).map_err(|err| {
+                            OverlayRequestError::FailedValidation(format!(
+                                "Error decoding content key for received utp content: {err}"
+                            ))
+                        })?;
+                        match self
+                            .validator
+                            .validate_content(&content_key, &content)
+                            .await
+                        {
+                            Ok(_) => Ok(Content::Content(VariableList::from(content))),
+                            Err(msg) => Err(OverlayRequestError::FailedValidation(format!(
+                                "Network: {:?}, Reason: {:?}",
+                                self.protocol, msg
+                            ))),
+                        }
                     }
                 }
             }
@@ -529,7 +543,7 @@ where
         &self,
         enr: Enr,
         conn_id: u16,
-    ) -> Result<Content, OverlayRequestError> {
+    ) -> Result<Vec<u8>, OverlayRequestError> {
         // initiate the connection to the acceptor
         let (tx, rx) = tokio::sync::oneshot::channel::<UtpStream>();
         let utp_request = UtpListenerRequest::Connect(
@@ -565,7 +579,7 @@ where
                         }
                     }
                 }
-                Ok(Content::Content(VariableList::from(result)))
+                Ok(result)
             }
             Err(err) => {
                 warn!("Unable to receive from uTP listener channel: {err}");

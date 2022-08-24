@@ -7,7 +7,7 @@ use trin_core::cli::{
 
 const DEFAULT_LISTEN_PORT: &str = "9876";
 
-#[derive(StructOpt, Debug, PartialEq, Clone)]
+#[derive(StructOpt, Debug, PartialEq, Eq, Clone)]
 #[structopt(
     name = "ethportal-peertest",
     version = "0.0.1",
