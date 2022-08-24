@@ -927,7 +927,7 @@ impl UtpStream {
                 let mut reply = self.prepare_reply(packet, PacketType::State);
 
                 if packet.seq_nr().wrapping_sub(self.ack_nr) > 1 {
-                    debug!(
+                    warn!(
                         "current ack_nr ({}) is behind received packet seq_nr ({})",
                         self.ack_nr,
                         packet.seq_nr()
@@ -1325,6 +1325,14 @@ impl UtpStream {
 
         debug!("received {:?}", packet);
 
+        // Insert data packet into the incoming buffer if it isn't a duplicate of a previously
+        // discarded packet
+        if packet.get_type() == PacketType::Data
+            && packet.seq_nr().wrapping_sub(self.last_dropped) > 0
+        {
+            self.insert_into_buffer(packet.clone());
+        }
+
         // Process packet, including sending a reply if necessary
         if let Some(mut pkt) = self
             .handle_packet(&packet, self.connected_to.clone())
@@ -1348,13 +1356,6 @@ impl UtpStream {
             debug!("sent {:?}", pkt);
         }
 
-        // Insert data packet into the incoming buffer if it isn't a duplicate of a previously
-        // discarded packet
-        if packet.get_type() == PacketType::Data
-            && packet.seq_nr().wrapping_sub(self.last_dropped) > 0
-        {
-            self.insert_into_buffer(packet);
-        }
         // Flush incoming buffer if possible
         let read = self.flush_incoming_buffer(buf);
 
