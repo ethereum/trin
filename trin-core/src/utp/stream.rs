@@ -320,9 +320,18 @@ impl UtpListener {
                                 error!("Unable to send FIN packet to uTP stream handler");
                                 return;
                             }
+                            let mut result = Vec::new();
                             let mut buf = [0; BUF_SIZE];
-                            if let Err(msg) = conn.recv(&mut buf).await {
-                                error!("Unable to receive uTP FIN packet: {msg}")
+
+                            match conn.recv(&mut buf).await {
+                                Ok(bytes_read) => {
+                                    if let Some(bytes) = bytes_read {
+                                        result.extend_from_slice(&buf[..bytes]);
+                                        conn.recv_data_stream.append(&mut result);
+                                        conn.emit_close_event();
+                                    }
+                                }
+                                Err(err) => error!("Unable to receive uTP FIN packet: {err}"),
                             }
                         } else if let Some(conn) = self
                             .utp_connections
@@ -934,7 +943,6 @@ impl UtpStream {
 
                 // Give up, the remote peer might not care about our missing packets
                 self.state = StreamState::Closed;
-                self.emit_close_event();
 
                 Ok(Some(reply))
             }
