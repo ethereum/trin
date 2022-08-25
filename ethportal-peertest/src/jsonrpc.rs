@@ -290,6 +290,14 @@ fn all_tests(peertest: &Peertest) -> Vec<Test<impl Fn(&Value, &Peertest)>> {
             },
             validate_portal_routing_table_info,
         ),
+        Test::new(
+            JsonRpcRequest {
+                method: "portal_historySampleLatestMasterAccumulator".to_string(),
+                id: 15,
+                params: Params::None,
+            },
+            validate_portal_sample_latest_master_accumulator,
+        ),
     ]
 }
 
@@ -377,6 +385,11 @@ pub fn validate_portal_offer(result: &Value, _peertest: &Peertest) {
     assert!(connection_id.parse::<u64>().is_ok());
     // Should accept the requested content
     assert_eq!(result.get("content_keys").unwrap().as_str(), Some("0x03"))
+}
+
+pub fn validate_portal_sample_latest_master_accumulator(result: &Value, _peertest: &Peertest) {
+    assert!(result.get("historical_epochs").unwrap().is_object());
+    assert!(result.get("current_epoch").unwrap().is_object());
 }
 
 #[cfg(unix)]

@@ -354,19 +354,18 @@ impl OverlayContentKey for StateContentKey {
 mod test {
     use super::*;
 
-    use std::sync::Arc;
-
     use discv5::enr::NodeId;
     use ethereum_types::U256;
     use serial_test::serial;
     use test_log::test;
 
-    use crate::portalnet::{
-        storage::{DistanceFunction, PortalStorage, PortalStorageConfig, PortalStorageError},
-        types::distance::Distance,
+    use crate::{
+        portalnet::{
+            storage::{PortalStorage, PortalStorageConfig, PortalStorageError},
+            types::distance::Distance,
+        },
+        utils::db::setup_temp_dir,
     };
-
-    use crate::utils::db::setup_temp_dir;
     use hex;
 
     //
@@ -476,17 +475,7 @@ mod test {
             Err(string) => panic!("Failed to parse Node ID: {}", string),
         };
 
-        let db = Arc::new(PortalStorage::setup_rocksdb(node_id)?);
-        let sql_connection_pool = PortalStorage::setup_sql(node_id)?;
-
-        let storage_config = PortalStorageConfig {
-            storage_capacity_kb: 100,
-            node_id,
-            distance_function: DistanceFunction::Xor,
-            db,
-            sql_connection_pool,
-        };
-
+        let storage_config = PortalStorageConfig::new(100, node_id);
         let mut storage = PortalStorage::new(storage_config)?;
         storage.data_radius = Distance::from(U256::MAX / U256::from(2));
 
@@ -534,17 +523,7 @@ mod test {
             Err(string) => panic!("Failed to parse Node ID: {}", string),
         };
 
-        let db = Arc::new(PortalStorage::setup_rocksdb(node_id)?);
-        let sql_connection_pool = PortalStorage::setup_sql(node_id)?;
-
-        let storage_config = PortalStorageConfig {
-            storage_capacity_kb: 100,
-            node_id,
-            distance_function: DistanceFunction::Xor,
-            db,
-            sql_connection_pool,
-        };
-
+        let storage_config = PortalStorageConfig::new(100, node_id);
         let storage = PortalStorage::new(storage_config)?;
 
         // block 14115690

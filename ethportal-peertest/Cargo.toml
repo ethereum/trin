@@ -10,6 +10,7 @@ rust-version = "1.62.0"
 anyhow = "1.0.57"
 clap = "2.33.3"
 discv5 = { git = "https://github.com/sigp/discv5.git", branch = "master" }
+eth2_ssz = "0.4.0"
 futures = "0.3.21"
 hex = "0.4.3"
 httpmock = "0.6.6"
