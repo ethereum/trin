@@ -1,3 +1,5 @@
+use std::{thread, time};
+
 use crate::jsonrpc::{
     make_ipc_request, validate_portal_offer, JsonRpcRequest, HISTORY_CONTENT_KEY,
     HISTORY_CONTENT_VALUE,
@@ -44,8 +46,15 @@ pub fn test_offer_accept(peertest_config: PeertestConfig, peertest: &Peertest) {
         id: 16,
         params: Params::Array(vec![Value::String(HISTORY_CONTENT_KEY.to_string())]),
     };
-    let received_content_value =
+    let mut received_content_value =
         make_ipc_request(&peertest.bootnode.web3_ipc_path, &local_content_request);
+    while let Err(err) = received_content_value {
+        error!("Retrying after 0.5sec, because content should have been present: {err}");
+        thread::sleep(time::Duration::from_millis(500));
+        received_content_value =
+            make_ipc_request(&peertest.bootnode.web3_ipc_path, &local_content_request);
+    }
+
     let received_content_value = match received_content_value {
         Ok(val) => val,
         Err(err) => {
