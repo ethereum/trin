@@ -35,26 +35,27 @@ impl HistoryRequestHandler {
         while let Some(request) = self.history_rx.recv().await {
             match request.endpoint {
                 HistoryEndpoint::LocalContent => {
-                    let response =
-                        match LocalContentParams::<HistoryContentKey>::try_from(request.params) {
-                            Ok(params) => {
-                                match &self.network.overlay.storage.read().get(&params.content_key)
+                    let response = match LocalContentParams::<HistoryContentKey>::try_from(
+                        request.params,
+                    ) {
+                        Ok(params) => {
+                            match &self.network.overlay.storage.read().get(&params.content_key)
                                 {
                                     Ok(val) => match val {
                                         Some(val) => Ok(Value::String(hex_encode(val.clone()))),
                                         None => Err(format!(
-                                            "Unable to find content key in local storage: {:?}",
+                                            "Content key is not in local storage: {:?}",
                                             params.content_key
                                         )),
                                     },
-                                    Err(_) => Err(format!(
-                                        "Unable to find content key in local storage: {:?}",
-                                        params.content_key
+                                    Err(err) => Err(format!(
+                                        "Database error while looking for content key in local storage: {:?}, with error: {}",
+                                        params.content_key, err
                                     )),
                                 }
-                            }
-                            Err(msg) => Err(format!("Invalid LocalContent params: {msg:?}")),
-                        };
+                        }
+                        Err(msg) => Err(format!("Invalid LocalContent params: {msg:?}")),
+                    };
                     let _ = request.resp.send(response);
                 }
                 HistoryEndpoint::Store => {
