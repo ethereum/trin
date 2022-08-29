@@ -289,14 +289,11 @@ impl UtpListener {
                                 return;
                             }
 
-                            let mut result = Vec::new();
-
                             let mut buf = [0; BUF_SIZE];
                             match conn.recv(&mut buf).await {
                                 Ok(bytes_read) => {
                                     if let Some(bytes) = bytes_read {
-                                        result.extend_from_slice(&buf[..bytes]);
-                                        conn.recv_data_stream.append(&mut result);
+                                        conn.recv_data_stream.extend_from_slice(&buf[..bytes]);
                                     }
                                 }
                                 Err(err) => error!("Unable to receive uTP DATA packet: {err}"),
@@ -320,14 +317,12 @@ impl UtpListener {
                                 error!("Unable to send FIN packet to uTP stream handler");
                                 return;
                             }
-                            let mut result = Vec::new();
                             let mut buf = [0; BUF_SIZE];
 
                             match conn.recv(&mut buf).await {
                                 Ok(bytes_read) => {
                                     if let Some(bytes) = bytes_read {
-                                        result.extend_from_slice(&buf[..bytes]);
-                                        conn.recv_data_stream.append(&mut result);
+                                        conn.recv_data_stream.extend_from_slice(&buf[..bytes]);
                                         conn.emit_close_event();
                                     }
                                 }
@@ -497,7 +492,7 @@ pub struct UtpStream {
     unsent_queue: VecDeque<Packet>,
 
     /// Bytes in flight
-    cur_window: u32,
+    pub cur_window: u32,
 
     /// Window size of the remote peer
     remote_wnd_size: u32,
@@ -801,7 +796,7 @@ impl UtpStream {
         // Build selective ack for empty incoming buffer
         if self.incoming_buffer.is_empty() {
             let mut sack: Vec<u8> = vec![0u8; 4];
-            sack[0] |= 1 << 0;
+            sack[0] = 1;
 
             return sack;
         }
@@ -1522,6 +1517,7 @@ impl UtpStream {
 
 #[cfg(test)]
 mod tests {
+    use crate::utp::packets::PacketType::State;
     use crate::{
         portalnet::{
             discovery::Discovery,
@@ -1635,6 +1631,14 @@ mod tests {
     }
 
     #[test_log::test(tokio::test)]
+    async fn test_build_selective_ack_empty_buffer() {
+        let stream = server_setup().await;
+        let sack = stream.build_selective_ack();
+
+        assert_eq!(sack, vec![1, 0, 0, 0]);
+    }
+
+    #[test_log::test(tokio::test)]
     async fn test_handle_packet() {
         // Boilerplate test setup
         let initial_connection_id: u16 = rand::random();
@@ -1731,6 +1735,31 @@ mod tests {
 
         // FIN should be acknowledged
         assert_eq!(response.ack_nr(), packet.seq_nr());
+    }
+
+    #[test_log::test(tokio::test)]
+    async fn test_handle_state_packet() {
+        let (_, server_enr) = generate_random_remote_enr();
+        let (_, mut stream) = client_setup(server_enr).await;
+
+        // Push DATA packet to send window
+        let mut data_packet = Packet::new();
+        data_packet.set_seq_nr(3);
+        stream.cur_window += data_packet.len() as u32;
+        stream.send_window.push(data_packet);
+
+        // Handle STATE packet with ack_nr + 2 selective ack
+        let mut state_packet = Packet::new();
+        state_packet.set_type(State);
+        state_packet.set_seq_nr(100);
+        state_packet.set_ack_nr(1);
+        state_packet.set_selective_ack(vec![1, 0, 0, 0]);
+
+        stream.last_acked = 1;
+        stream.handle_state_packet(&state_packet).await;
+
+        // Send window should be empty
+        assert!(stream.send_window.is_empty())
     }
 
     #[test_log::test(tokio::test)]
