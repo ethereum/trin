@@ -1296,14 +1296,20 @@ impl UtpStream {
             .await?
         {
             pkt.set_wnd_size(WINDOW_SIZE.saturating_sub(self.cur_window));
-            self.socket
+            if let Err(msg) = self
+                .socket
                 .send_talk_req(
                     self.connected_to.clone(),
                     ProtocolId::Utp,
                     Vec::from(pkt.as_ref()),
                 )
                 .await
-                .unwrap();
+            {
+                let msg = format!("reply packet error: {msg}");
+                warn!("{msg}");
+                return Err(anyhow!(msg));
+            }
+
             debug!("sent {:?}", pkt);
         }
 
