@@ -70,18 +70,6 @@ jobs:
           name: Install target toolchain
           command: rustup toolchain install stable-x86_64-pc-windows-msvc
       - run:
-          name: Install Clippy
-          command: rustup component add clippy
-      - run:
-          name: Run Clippy
-          # Remove the first two lines of gitconfig as work around
-          command: |
-            (gc ..\.gitconfig | select -Skip 2) | sc ..\.gitconfig
-            cargo clippy --package trin -- --deny warnings
-      - run:
-          name: Cargo Build --target x86_64-pc-windows-msvc
-          command: cargo build --target x86_64-pc-windows-msvc
-      - run:
           name: Cargo Test --target x86_64-pc-windows-msvc
           command: cargo test --target x86_64-pc-windows-msvc
   utp-test:
