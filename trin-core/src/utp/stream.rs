@@ -273,7 +273,9 @@ impl UtpListener {
                                 };
                             }
                         } else {
-                            warn!("Received SYN packet for an unknown active uTP stream");
+                            warn!(
+                                "Received SYN packet for an unknown active uTP stream: {packet:?}"
+                            );
                         }
                     }
                     // Receive DATA and FIN packets
@@ -300,10 +302,16 @@ impl UtpListener {
                                 Err(err) => error!("Unable to receive uTP DATA packet: {err}"),
                             }
                         } else {
-                            warn!("Received DATA packet for an unknown active uTP stream")
+                            warn!(
+                                "Received DATA packet for an unknown active uTP stream: {packet:?}"
+                            )
                         }
                     }
                     PacketType::Fin => {
+                        // As we can receive bidirectional FIN packets, we handle explicitly here
+                        // only the packet received when we are receiver of the data.
+                        // When we send the data and receive a FIN packet, those packet is handled
+                        // implicitly in overlay when we close the connection with `conn.close()`
                         if let Some(conn) = self
                             .utp_connections
                             .get_mut(&ConnectionKey::new(*node_id, connection_id.wrapping_sub(1)))
@@ -312,13 +320,22 @@ impl UtpListener {
                                 error!("Unable to send FIN packet to uTP stream handler");
                                 return;
                             }
-
                             let mut buf = [0; BUF_SIZE];
                             if let Err(msg) = conn.recv(&mut buf).await {
                                 error!("Unable to receive uTP FIN packet: {msg}")
                             }
+                        } else if let Some(conn) = self
+                            .utp_connections
+                            .get_mut(&ConnectionKey::new(*node_id, connection_id))
+                        {
+                            // Do not handle the packet here, send it to uTP socket layer
+                            if conn.discv5_tx.send(packet).is_err() {
+                                error!("Unable to send FIN packet to uTP stream handler");
+                            }
                         } else {
-                            warn!("Received FIN packet for an unknown active uTP stream")
+                            warn!(
+                                "Received FIN packet for an unknown active uTP stream: {packet:?}"
+                            )
                         }
                     }
                     PacketType::State => {
@@ -332,7 +349,7 @@ impl UtpListener {
                             // We don't handle STATE packets here, because the uTP client is handling them
                             // implicitly in the background when sending FIN packet with conn.close()
                         } else {
-                            warn!("Received STATE packet for an unknown active uTP stream");
+                            warn!("Received STATE packet for an unknown active uTP stream: {packet:?}");
                         }
                     }
                 }
@@ -606,6 +623,7 @@ impl UtpStream {
             let mut packet = Packet::with_payload(chunk);
             packet.set_seq_nr(self.seq_nr);
             packet.set_ack_nr(self.ack_nr);
+            packet.set_wnd_size(WINDOW_SIZE.saturating_sub(self.cur_window));
             packet.set_connection_id(self.sender_connection_id);
 
             self.unsent_queue.push_back(packet);
@@ -761,6 +779,7 @@ impl UtpStream {
             let mut packet = Packet::new();
             packet.set_type(PacketType::Syn);
             packet.set_connection_id(self.receiver_connection_id);
+            packet.set_wnd_size(WINDOW_SIZE);
             packet.set_seq_nr(self.seq_nr);
 
             self.send_packet(&mut packet).await;
@@ -1276,7 +1295,7 @@ impl UtpStream {
             .handle_packet(&packet, self.connected_to.clone())
             .await?
         {
-            pkt.set_wnd_size(WINDOW_SIZE);
+            pkt.set_wnd_size(WINDOW_SIZE.saturating_sub(self.cur_window));
             self.socket
                 .send_talk_req(
                     self.connected_to.clone(),
@@ -1417,6 +1436,7 @@ impl UtpStream {
         packet.set_connection_id(self.sender_connection_id);
         packet.set_seq_nr(self.seq_nr);
         packet.set_ack_nr(self.ack_nr);
+        packet.set_wnd_size(WINDOW_SIZE.saturating_sub(self.cur_window));
         packet.set_timestamp(now_microseconds());
         packet.set_type(PacketType::Fin);
 
@@ -1430,12 +1450,12 @@ impl UtpStream {
             )
             .await
         {
-            let msg = format!("Unavle to send FIN packet: {msg}");
+            let msg = format!("Unable to send FIN packet: {msg}");
             debug!("{msg}");
             return Err(anyhow!(msg));
         }
 
-        debug!("CLosing connection, sent {:?}", packet);
+        debug!("Closing connection, sent {:?}", packet);
         self.state = StreamState::FinSent;
 
         // Receive JAKE

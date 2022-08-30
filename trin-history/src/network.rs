@@ -1,4 +1,3 @@
-use log::{debug, error};
 use std::sync::{Arc, RwLock as StdRwLock};
 
 use parking_lot::RwLock;
@@ -56,28 +55,5 @@ impl HistoryNetwork {
         Self {
             overlay: Arc::new(overlay),
         }
-    }
-
-    /// Convenience call for testing, quick way to ping bootnodes
-    pub async fn ping_bootnodes(&self) -> anyhow::Result<()> {
-        // Trigger bonding with bootnodes, at both the base layer and portal overlay.
-        // The overlay ping via talkreq will trigger a session at the base layer, then
-        // a session on the (overlay) portal network.
-        for enr in self.overlay.discovery.discv5.table_entries_enr() {
-            debug!("Attempting bond with bootnode {}", enr);
-            let ping_result = self.overlay.send_ping(enr.clone()).await;
-
-            match ping_result {
-                Ok(_) => {
-                    debug!("Successfully bonded with {}", enr);
-                    continue;
-                }
-                Err(err) => {
-                    error!("{err} while pinging bootnode: {enr:?}");
-                    std::process::exit(1);
-                }
-            }
-        }
-        Ok(())
     }
 }

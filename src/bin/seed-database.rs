@@ -115,7 +115,7 @@ fn load_file_data(path: &Path, storage: &mut PortalStorage) {
                             total_count += 1;
                             match storage.should_store(&content_key).unwrap() {
                                 true => {
-                                    let header_bytes = block.header.clone().unwrap().rlp(true);
+                                    let header_bytes = rlp::encode(&block.header.clone().unwrap());
                                     storage
                                         .store(&content_key, &header_bytes.as_ref().to_vec())
                                         .unwrap();
@@ -172,7 +172,7 @@ fn generate_random_value(number_of_bytes: u32) -> Vec<u8> {
 }
 
 // CLI Parameter Handling
-#[derive(StructOpt, Debug, PartialEq)]
+#[derive(StructOpt, Debug, PartialEq, Eq)]
 #[structopt(
     name = "Trin DB Util",
     version = "0.0.1",

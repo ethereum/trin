@@ -118,7 +118,7 @@ async fn overlay() {
         ..PortalnetConfig::default()
     };
     let mut discovery_one = Discovery::new(portal_config_one).unwrap();
-    let _ = discovery_one.start().await.unwrap();
+    discovery_one.start().await.unwrap();
     let discovery_one = Arc::new(discovery_one);
     let overlay_one = Arc::new(init_overlay(Arc::clone(&discovery_one), protocol.clone()).await);
     spawn_overlay(Arc::clone(&discovery_one), Arc::clone(&overlay_one)).await;
@@ -131,7 +131,7 @@ async fn overlay() {
         ..PortalnetConfig::default()
     };
     let mut discovery_two = Discovery::new(portal_config_two).unwrap();
-    let _ = discovery_two.start().await.unwrap();
+    discovery_two.start().await.unwrap();
     let discovery_two = Arc::new(discovery_two);
     let overlay_two = Arc::new(init_overlay(Arc::clone(&discovery_two), protocol.clone()).await);
     spawn_overlay(Arc::clone(&discovery_two), Arc::clone(&overlay_two)).await;
@@ -144,7 +144,7 @@ async fn overlay() {
         ..PortalnetConfig::default()
     };
     let mut discovery_three = Discovery::new(portal_config_three).unwrap();
-    let _ = discovery_three.start().await.unwrap();
+    discovery_three.start().await.unwrap();
     let discovery_three = Arc::new(discovery_three);
     let overlay_three =
         Arc::new(init_overlay(Arc::clone(&discovery_three), protocol.clone()).await);
