@@ -259,58 +259,69 @@ where
             let handles: Vec<JoinHandle<_>> = content_keys
                 .into_iter()
                 .zip(content_values.to_vec())
-                .map(
-                    |(content_key, content_value)| match TContentKey::try_from(content_key) {
-                        Ok(key) => {
-                            // Spawn a task that...
-                            // - Validates accepted content (this step requires a dedicated task since it
-                            // might require non-blocking requests to this/other overlay networks)
-                            // - Checks if validated content should be stored, and stores it if true
-                            // - Propagate all validated content
-                            let validator = Arc::clone(&validator);
-                            let storage = Arc::clone(&storage);
-                            Some(tokio::spawn(async move {
-                                // Validated received content
-                                validator
-                                    .validate_content(&key, &content_value.to_vec())
-                                    .await
-                                    // Skip storing & propagating content if it's not valid
-                                    .expect("Unable to validate received content: {err:?}");
-
-                                // Check if data should be stored, and store if true.
-                                // Ignore error since all validated content is propagated.
-                                let _ = storage
-                                    .write()
-                                    .store_if_should(&key, &content_value.to_vec());
-
-                                (key, content_value)
-                            }))
-                        }
+                .filter_map(
+                    |(raw_key, content_value)| match TContentKey::try_from(raw_key) {
+                        Ok(content_key) => Some((content_key, content_value)),
                         Err(err) => {
                             warn!("Unexpected error while decoding overlay content key: {err}");
                             None
                         }
                     },
                 )
-                .flatten()
+                .map(|(key, content_value)| {
+                    // Spawn a task that...
+                    // - Validates accepted content (this step requires a dedicated task since it
+                    // might require non-blocking requests to this/other overlay networks)
+                    // - Checks if validated content should be stored, and stores it if true
+                    // - Propagate all validated content
+                    let validator = Arc::clone(&validator);
+                    let storage = Arc::clone(&storage);
+                    tokio::spawn(async move {
+                        // Validated received content
+                        if let Err(err) = validator
+                            .validate_content(&key, &content_value.to_vec())
+                            .await
+                        {
+                            // Skip storing & propagating content if it's not valid
+                            warn!("Unable to validate received content: {err:?}");
+                            return None;
+                        }
+
+                        // Check if data should be stored, and store if true.
+                        // Ignore error since all validated content is propagated.
+                        let _ = storage
+                            .write()
+                            .store_if_should(&key, &content_value.to_vec());
+
+                        Some((key, content_value))
+                    })
+                })
                 .collect();
             let validated_content = join_all(handles)
                 .await
                 .into_iter()
-                .filter_map(|content| content.ok())
+                // Whether the spawn fails or the content fails validation, we don't want it:
+                .filter_map(|content| content.unwrap_or(None))
                 .collect();
             // Propagate all validated content, whether or not it was stored.
-            Self::propagate_gossip(validated_content, kbuckets, command_tx);
+            Self::propagate_gossip_cross_thread(validated_content, kbuckets, command_tx);
         });
         Ok(())
     }
 
-    /// Propagate gossip accepted content via OFFER/ACCEPT:
-    fn propagate_gossip(
+    /// Propagate gossip accepted content via OFFER/ACCEPT, return number of peers propagated
+    pub fn propagate_gossip(&self, content: Vec<(TContentKey, ByteList)>) -> usize {
+        let kbuckets = Arc::clone(&self.kbuckets);
+        let command_tx = self.command_tx.clone();
+        Self::propagate_gossip_cross_thread(content, kbuckets, command_tx)
+    }
+
+    // Propagate gossip in a way that can be used across threads, without &self
+    fn propagate_gossip_cross_thread(
         content: Vec<(TContentKey, ByteList)>,
         kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
         command_tx: UnboundedSender<OverlayCommand<TContentKey>>,
-    ) {
+    ) -> usize {
         // Get all nodes from overlay routing table
         let kbuckets = kbuckets.read();
         let all_nodes: Vec<&kbucket::Node<NodeId, Node>> = kbuckets
@@ -351,7 +362,7 @@ where
                 Ok(val) => val,
                 Err(msg) => {
                     debug!("Error calculating log2 random enrs for gossip propagation: {msg}");
-                    return;
+                    return 0;
                 }
             };
 
@@ -366,6 +377,7 @@ where
             }
         }
 
+        let num_propagated_peers = enrs_and_content.len();
         // Create and send OFFER overlay request to the interested nodes
         for (enr_string, interested_content) in enrs_and_content.into_iter() {
             let enr = match Enr::from_str(&enr_string) {
@@ -391,6 +403,8 @@ where
                 error!("Unable to send OFFER request to overlay: {err}.")
             }
         }
+
+        num_propagated_peers
     }
 
     /// Returns a vector of all ENR node IDs of nodes currently contained in the routing table.

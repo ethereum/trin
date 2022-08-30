@@ -9,7 +9,7 @@ use trin_core::{
     jsonrpc::{
         endpoints::StateEndpoint,
         types::{
-            FindContentParams, FindNodesParams, LocalContentParams, OfferParams, PingParams,
+            FindContentParams, FindNodesParams, LocalContentParams, PingParams, SendOfferParams,
             StateJsonRpcRequest, StoreParams,
         },
         utils::bucket_entries_to_json,
@@ -107,8 +107,8 @@ impl StateRequestHandler {
                     };
                     let _ = request.resp.send(response);
                 }
-                StateEndpoint::Offer => {
-                    let response = match OfferParams::try_from(request.params) {
+                StateEndpoint::SendOffer => {
+                    let response = match SendOfferParams::try_from(request.params) {
                         Ok(val) => {
                             let content_keys =
                                 val.content_keys.iter().map(|key| key.to_vec()).collect();
