@@ -392,7 +392,7 @@ fn get_ipc_stream(ipc_path: &str) -> uds_windows::UnixStream {
 pub fn make_ipc_request(ipc_path: &str, request: &JsonRpcRequest) -> anyhow::Result<Value> {
     let mut stream = get_ipc_stream(ipc_path);
     stream
-        .set_read_timeout(Some(Duration::from_millis(500)))
+        .set_read_timeout(Some(Duration::from_millis(1500)))
         .expect("Couldn't set read timeout");
 
     let json_request: Value = serde_json::from_str(&request.to_jsonrpc()).unwrap();
