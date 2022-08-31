@@ -1,5 +1,5 @@
 use crate::{
-    portalnet::types::metric::{Metric, XorMetric},
+    portalnet::types::distance::{Metric, XorMetric},
     utils::bytes,
 };
 

@@ -18,7 +18,7 @@ use thiserror::Error;
 use validator::ValidationError;
 
 use crate::portalnet::{
-    types::{content_key::RawContentKey, metric::Distance},
+    types::{content_key::RawContentKey, distance::Distance},
     Enr,
 };
 

@@ -44,11 +44,11 @@ use crate::{
         storage::PortalStorage,
         types::{
             content_key::{OverlayContentKey, RawContentKey},
+            distance::{Distance, Metric},
             messages::{
                 Accept, ByteList, Content, CustomPayload, FindContent, FindNodes, Message, Nodes,
                 Offer, Ping, Pong, ProtocolId, Request, Response, SszEnr,
             },
-            metric::{Distance, Metric},
             node::Node,
         },
         Enr,
@@ -1936,7 +1936,7 @@ mod tests {
             overlay::OverlayConfig,
             storage::PortalStorage,
             types::{
-                content_key::IdentityContentKey, messages::PortalnetConfig, metric::XorMetric,
+                content_key::IdentityContentKey, distance::XorMetric, messages::PortalnetConfig,
             },
         },
         types::validation::MockValidator,

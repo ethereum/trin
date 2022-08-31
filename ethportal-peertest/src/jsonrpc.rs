@@ -12,8 +12,8 @@ use trin_core::{
     jsonrpc::types::{NodesParams, Params},
     portalnet::types::{
         content_key::{AccountTrieNode, StateContentKey},
+        distance::Distance,
         messages::SszEnr,
-        metric::Distance,
     },
     utils::bytes::hex_encode,
 };

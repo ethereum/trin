@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::portalnet::{types::metric::Distance, Enr};
+use crate::portalnet::{types::distance::Distance, Enr};
 
 /// A node in the overlay network routing table.
 #[derive(Clone, Debug)]

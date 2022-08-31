@@ -1,4 +1,4 @@
-use crate::portalnet::{types::metric::Distance, Enr};
+use crate::portalnet::{types::distance::Distance, Enr};
 use discv5::{
     enr::NodeId,
     kbucket::{ConnectionState, NodeStatus},

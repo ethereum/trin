@@ -363,7 +363,7 @@ mod test {
 
     use crate::portalnet::{
         storage::{DistanceFunction, PortalStorage, PortalStorageConfig, PortalStorageError},
-        types::metric::Distance,
+        types::distance::Distance,
     };
 
     use crate::utils::db::setup_temp_dir;

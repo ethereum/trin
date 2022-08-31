@@ -8,8 +8,8 @@ use trin_core::{
         storage::PortalStorage,
         types::{
             content_key::IdentityContentKey,
+            distance::{Distance, XorMetric},
             messages::{Content, Message, PortalnetConfig, ProtocolId, SszEnr},
-            metric::{Distance, XorMetric},
         },
         Enr,
     },

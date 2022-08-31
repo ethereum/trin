@@ -12,7 +12,7 @@ use thiserror::Error;
 
 use super::types::{
     content_key::OverlayContentKey,
-    metric::{Distance, Metric, XorMetric},
+    distance::{Distance, Metric, XorMetric},
 };
 use crate::utils::db::get_data_dir;
 

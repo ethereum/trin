@@ -32,11 +32,11 @@ use crate::{
         storage::PortalStorage,
         types::{
             content_key::{OverlayContentKey, RawContentKey},
+            distance::{Distance, Metric, XorMetric},
             messages::{
                 Accept, ByteList, Content, CustomPayload, FindContent, FindNodes, Message, Nodes,
                 Offer, Ping, Pong, PopulatedOffer, ProtocolId, Request, Response,
             },
-            metric::{Distance, Metric, XorMetric},
             node::Node,
         },
         Enr,
