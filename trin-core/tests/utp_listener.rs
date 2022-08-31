@@ -1,13 +1,10 @@
-use discv5::Discv5Event;
 use ntest::timeout;
-use ssz::Encode;
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
     str::FromStr,
     sync::Arc,
 };
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
-use trin_core::portalnet::types::messages::{ByteList, ContentPayloadList};
 use trin_core::{
     portalnet::{
         discovery::Discovery,
@@ -42,8 +39,8 @@ async fn spawn_utp_listener() -> (
         ..Default::default()
     };
     let mut discv5 = Discovery::new(config).unwrap();
-    let enr = discv5.discv5.local_enr();
-    discv5.start().await.unwrap();
+    let enr = discv5.local_enr();
+    let mut talk_req_rx = discv5.start().await.unwrap();
 
     let discv5 = Arc::new(discv5);
 
@@ -51,18 +48,11 @@ async fn spawn_utp_listener() -> (
         UtpListener::new(Arc::clone(&discv5));
 
     tokio::spawn(async move {
-        let mut receiver = discv5.discv5.event_stream().await.unwrap();
-        while let Some(event) = receiver.recv().await {
-            match event {
-                Discv5Event::TalkRequest(request) => {
-                    let protocol_id =
-                        ProtocolId::from_str(&hex::encode_upper(request.protocol())).unwrap();
+        while let Some(request) = talk_req_rx.recv().await {
+            let protocol_id = ProtocolId::from_str(&hex::encode_upper(request.protocol())).unwrap();
 
-                    match protocol_id {
-                        ProtocolId::Utp => utp_event_tx.send(request).unwrap(),
-                        _ => continue,
-                    }
-                }
+            match protocol_id {
+                ProtocolId::Utp => utp_event_tx.send(request).unwrap(),
                 _ => continue,
             }
         }
@@ -84,8 +74,7 @@ async fn utp_listener_events() {
     let (enr_accept, listener_tx_accept, mut listener_rx_accept) = spawn_utp_listener().await;
 
     // Prepare to receive uTP stream from the offer node
-    let (requested_content_key, requested_content_value) =
-        (vec![1], vec![ByteList::new(vec![1, 1, 1, 1]).unwrap()]);
+    let (requested_content_key, requested_content_value) = (vec![1], vec![1, 1, 1, 1]);
     let stream_id = AcceptStream(vec![requested_content_key.clone()]);
     let conn_id = 1234;
     let request = UtpListenerRequest::InitiateConnection(
@@ -116,15 +105,12 @@ async fn utp_listener_events() {
     conn.recv(&mut buf).await.unwrap();
 
     // Send content key with content value to the acceptor node
-    let content_items: Vec<ByteList> = requested_content_value.clone();
-
-    let utp_payload = ContentPayloadList::new(content_items).unwrap();
-
-    let expected_utp_payload = utp_payload.as_ssz_bytes();
+    let utp_payload: Vec<u8> = requested_content_value;
+    let expected_utp_payload = utp_payload.clone();
 
     tokio::spawn(async move {
         // Send the content to the acceptor over a uTP stream
-        conn.send_to(&utp_payload.as_ssz_bytes()).await.unwrap();
+        conn.send_to(&utp_payload).await.unwrap();
         // Close uTP connection
         conn.close().await.unwrap();
     });

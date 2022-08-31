@@ -4,7 +4,7 @@ use std::{io::prelude::*, panic, time::Duration};
 
 use anyhow::anyhow;
 use hyper::{self, Body, Client, Method, Request};
-use log::info;
+use log::{error, info};
 use serde_json::{self, json, Value};
 
 use crate::{cli::PeertestConfig, Peertest};
@@ -449,10 +449,13 @@ pub async fn test_jsonrpc_endpoints_over_ipc(peertest_config: PeertestConfig, pe
         let response = make_ipc_request(&peertest_config.target_ipc_path, &test.request);
         match response {
             Ok(val) => test.validate(&val, peertest),
-            Err(msg) => panic!(
-                "Jsonrpc error for {:?} endpoint ('os error 11' means timeout): {:?}",
-                test.request.method, msg
-            ),
+            Err(msg) => {
+                error!(
+                    "Jsonrpc error for {:?} endpoint ('os error 11' means timeout): {:?}",
+                    test.request.method, msg
+                );
+                panic!("Must always get jsonrpc success");
+            }
         }
     }
 }

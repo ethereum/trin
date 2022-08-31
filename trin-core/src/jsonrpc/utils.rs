@@ -5,6 +5,9 @@ use discv5::{
 };
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
+use validator::ValidationError;
+
+use crate::{portalnet::types::content_key::OverlayContentKey, utils::bytes::hex_decode};
 
 type NodeMap = BTreeMap<String, String>;
 type NodeTuple = (NodeId, Enr, NodeStatus, Distance);
@@ -48,4 +51,35 @@ pub fn bucket_entries_to_json(bucket_entries: BTreeMap<usize, Vec<NodeTuple>>) -
             "numConnected": connected_count
         }
     )
+}
+
+/// Parse out a (content_key, content_value) pair from the given json parameter list
+pub fn parse_content_item<TContentKey: OverlayContentKey>(
+    params: [&Value; 2],
+) -> Result<(TContentKey, Vec<u8>), ValidationError> {
+    let content_key = params[0]
+        .as_str()
+        .ok_or_else(|| ValidationError::new("Empty content key param"))?;
+    let content_key = match hex_decode(content_key) {
+        Ok(val) => match TContentKey::try_from(val) {
+            Ok(val) => val,
+            Err(_) => return Err(ValidationError::new("Unable to decode content_key")),
+        },
+        Err(err) => {
+            let mut ve = ValidationError::new("Cannot convert content_key hex to bytes");
+            ve.add_param(
+                std::borrow::Cow::Borrowed("hex_decode_exception"),
+                &err.to_string(),
+            );
+            return Err(ve);
+        }
+    };
+    let content = params[1]
+        .as_str()
+        .ok_or_else(|| ValidationError::new("Empty content param"))?;
+    let content = match hex_decode(content) {
+        Ok(val) => val,
+        Err(_) => return Err(ValidationError::new("Unable to decode content")),
+    };
+    Ok((content_key, content))
 }

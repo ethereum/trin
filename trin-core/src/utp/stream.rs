@@ -273,7 +273,9 @@ impl UtpListener {
                                 };
                             }
                         } else {
-                            warn!("Received SYN packet for an unknown active uTP stream");
+                            warn!(
+                                "Received SYN packet for an unknown active uTP stream: {packet:?}"
+                            );
                         }
                     }
                     // Receive DATA and FIN packets
@@ -300,10 +302,16 @@ impl UtpListener {
                                 Err(err) => error!("Unable to receive uTP DATA packet: {err}"),
                             }
                         } else {
-                            warn!("Received DATA packet for an unknown active uTP stream")
+                            warn!(
+                                "Received DATA packet for an unknown active uTP stream: {packet:?}"
+                            )
                         }
                     }
                     PacketType::Fin => {
+                        // As we can receive bidirectional FIN packets, we handle explicitly here
+                        // only the packet received when we are receiver of the data.
+                        // When we send the data and receive a FIN packet, those packet is handled
+                        // implicitly in overlay when we close the connection with `conn.close()`
                         if let Some(conn) = self
                             .utp_connections
                             .get_mut(&ConnectionKey::new(*node_id, connection_id.wrapping_sub(1)))
@@ -312,13 +320,22 @@ impl UtpListener {
                                 error!("Unable to send FIN packet to uTP stream handler");
                                 return;
                             }
-
                             let mut buf = [0; BUF_SIZE];
                             if let Err(msg) = conn.recv(&mut buf).await {
                                 error!("Unable to receive uTP FIN packet: {msg}")
                             }
+                        } else if let Some(conn) = self
+                            .utp_connections
+                            .get_mut(&ConnectionKey::new(*node_id, connection_id))
+                        {
+                            // Do not handle the packet here, send it to uTP socket layer
+                            if conn.discv5_tx.send(packet).is_err() {
+                                error!("Unable to send FIN packet to uTP stream handler");
+                            }
                         } else {
-                            warn!("Received FIN packet for an unknown active uTP stream")
+                            warn!(
+                                "Received FIN packet for an unknown active uTP stream: {packet:?}"
+                            )
                         }
                     }
                     PacketType::State => {
@@ -332,7 +349,7 @@ impl UtpListener {
                             // We don't handle STATE packets here, because the uTP client is handling them
                             // implicitly in the background when sending FIN packet with conn.close()
                         } else {
-                            warn!("Received STATE packet for an unknown active uTP stream");
+                            warn!("Received STATE packet for an unknown active uTP stream: {packet:?}");
                         }
                     }
                 }
@@ -606,6 +623,7 @@ impl UtpStream {
             let mut packet = Packet::with_payload(chunk);
             packet.set_seq_nr(self.seq_nr);
             packet.set_ack_nr(self.ack_nr);
+            packet.set_wnd_size(WINDOW_SIZE.saturating_sub(self.cur_window));
             packet.set_connection_id(self.sender_connection_id);
 
             self.unsent_queue.push_back(packet);
@@ -761,6 +779,7 @@ impl UtpStream {
             let mut packet = Packet::new();
             packet.set_type(PacketType::Syn);
             packet.set_connection_id(self.receiver_connection_id);
+            packet.set_wnd_size(WINDOW_SIZE);
             packet.set_seq_nr(self.seq_nr);
 
             self.send_packet(&mut packet).await;
@@ -1276,15 +1295,21 @@ impl UtpStream {
             .handle_packet(&packet, self.connected_to.clone())
             .await?
         {
-            pkt.set_wnd_size(WINDOW_SIZE);
-            self.socket
+            pkt.set_wnd_size(WINDOW_SIZE.saturating_sub(self.cur_window));
+            if let Err(msg) = self
+                .socket
                 .send_talk_req(
                     self.connected_to.clone(),
                     ProtocolId::Utp,
                     Vec::from(pkt.as_ref()),
                 )
                 .await
-                .unwrap();
+            {
+                let msg = format!("reply packet error: {msg}");
+                warn!("{msg}");
+                return Err(anyhow!(msg));
+            }
+
             debug!("sent {:?}", pkt);
         }
 
@@ -1417,6 +1442,7 @@ impl UtpStream {
         packet.set_connection_id(self.sender_connection_id);
         packet.set_seq_nr(self.seq_nr);
         packet.set_ack_nr(self.ack_nr);
+        packet.set_wnd_size(WINDOW_SIZE.saturating_sub(self.cur_window));
         packet.set_timestamp(now_microseconds());
         packet.set_type(PacketType::Fin);
 
@@ -1430,12 +1456,12 @@ impl UtpStream {
             )
             .await
         {
-            let msg = format!("Unavle to send FIN packet: {msg}");
+            let msg = format!("Unable to send FIN packet: {msg}");
             debug!("{msg}");
             return Err(anyhow!(msg));
         }
 
-        debug!("CLosing connection, sent {:?}", packet);
+        debug!("Closing connection, sent {:?}", packet);
         self.state = StreamState::FinSent;
 
         // Receive JAKE
@@ -1475,7 +1501,10 @@ mod tests {
             trin_helpers::UtpStreamId,
         },
     };
-    use discv5::Discv5Event;
+
+    use discv5::TalkRequest;
+    use tokio::sync::mpsc;
+
     use std::{
         convert::TryFrom,
         net::{IpAddr, SocketAddr},
@@ -1500,8 +1529,8 @@ mod tests {
             ..Default::default()
         };
         let mut discv5 = Discovery::new(config).unwrap();
-        let enr = discv5.discv5.local_enr();
-        discv5.start().await.unwrap();
+        let enr = discv5.local_enr();
+        let talk_req_rx = discv5.start().await.unwrap();
 
         let discv5 = Arc::new(discv5);
 
@@ -1513,7 +1542,7 @@ mod tests {
             None,
         );
         // TODO: Create `Discv5Socket` struct to encapsulate all socket logic
-        spawn_socket_recv(Arc::clone(&discv5), conn.clone());
+        spawn_socket_recv(talk_req_rx, conn.clone());
 
         conn
     }
@@ -1527,7 +1556,7 @@ mod tests {
             ..Default::default()
         };
         let mut discv5 = Discovery::new(config).unwrap();
-        discv5.start().await.unwrap();
+        let talk_req_rx = discv5.start().await.unwrap();
 
         let discv5 = Arc::new(discv5);
 
@@ -1538,37 +1567,32 @@ mod tests {
             UtpStreamId::OfferStream,
             None,
         );
-        spawn_socket_recv(Arc::clone(&discv5), conn.clone());
+
+        spawn_socket_recv(talk_req_rx, conn.clone());
 
         (discv5.local_enr(), conn)
     }
 
-    fn spawn_socket_recv(discv5: Arc<Discovery>, conn: UtpStream) {
+    fn spawn_socket_recv(mut talk_req_rx: mpsc::Receiver<TalkRequest>, conn: UtpStream) {
         tokio::spawn(async move {
-            let mut receiver = discv5.discv5.event_stream().await.unwrap();
-            while let Some(event) = receiver.recv().await {
-                match event {
-                    Discv5Event::TalkRequest(request) => {
-                        let protocol_id =
-                            ProtocolId::from_str(&hex::encode_upper(request.protocol())).unwrap();
+            while let Some(request) = talk_req_rx.recv().await {
+                let protocol_id =
+                    ProtocolId::from_str(&hex::encode_upper(request.protocol())).unwrap();
 
-                        match protocol_id {
-                            ProtocolId::Utp => {
-                                let payload = request.body();
-                                let packet = Packet::try_from(payload).unwrap();
-                                conn.discv5_tx.send(packet).unwrap();
-                            }
-                            _ => {
-                                panic!(
-                                    "Received TalkRequest on unknown protocol from={} protocol={} body={}",
-                                    request.node_id(),
-                                    hex::encode_upper(request.protocol()),
-                                    hex::encode(request.body()),
-                                );
-                            }
-                        }
+                match protocol_id {
+                    ProtocolId::Utp => {
+                        let payload = request.body();
+                        let packet = Packet::try_from(payload).unwrap();
+                        conn.discv5_tx.send(packet).unwrap();
                     }
-                    _ => continue,
+                    _ => {
+                        panic!(
+                            "Received TalkRequest on unknown protocol from={} protocol={} body={}",
+                            request.node_id(),
+                            hex::encode_upper(request.protocol()),
+                            hex::encode(request.body()),
+                        );
+                    }
                 }
             }
         });
@@ -1889,10 +1913,9 @@ mod tests {
         for _ in 0..3 {
             server
                 .socket
-                .discv5
-                .talk_req(
+                .send_talk_req(
                     server.connected_to.clone(),
-                    Vec::try_from(ProtocolId::Utp).unwrap(),
+                    ProtocolId::Utp,
                     packet.as_ref().to_vec(),
                 )
                 .await
@@ -1915,12 +1938,7 @@ mod tests {
                 let response = response.unwrap();
                 server
                     .socket
-                    .discv5
-                    .talk_req(
-                        client_addr,
-                        Vec::try_from(ProtocolId::Utp).unwrap(),
-                        response.as_ref().to_vec(),
-                    )
+                    .send_talk_req(client_addr, ProtocolId::Utp, response.as_ref().to_vec())
                     .await
                     .unwrap();
             }
@@ -2017,10 +2035,9 @@ mod tests {
             packet.set_timestamp(now_microseconds());
             client
                 .socket
-                .discv5
-                .talk_req(
+                .send_talk_req(
                     client.connected_to.clone(),
-                    Vec::try_from(ProtocolId::Utp).unwrap(),
+                    ProtocolId::Utp,
                     packet.as_ref().to_vec(),
                 )
                 .await

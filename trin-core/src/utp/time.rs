@@ -11,7 +11,7 @@ pub fn now_microseconds() -> Timestamp {
         .into()
 }
 
-#[derive(Debug, Clone, Default, Copy, PartialOrd, PartialEq)]
+#[derive(Debug, Clone, Default, Copy, PartialOrd, PartialEq, Ord, Eq)]
 pub struct Timestamp(pub u32);
 
 impl Sub for Timestamp {

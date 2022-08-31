@@ -1,33 +1,34 @@
 use std::str::FromStr;
 
 /// Discv5 JSON-RPC endpoints. Start with "discv5_" prefix
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Discv5Endpoint {
     NodeInfo,
     RoutingTableInfo,
 }
 
 /// State network JSON-RPC endpoints. Start with "portalState_" prefix
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum StateEndpoint {
     DataRadius,
     FindContent,
     FindNodes,
     LocalContent,
-    Offer,
+    SendOffer,
     Store,
     Ping,
     RoutingTableInfo,
 }
 
 /// History network JSON-RPC endpoints. Start with "portalHistory_" prefix
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum HistoryEndpoint {
     DataRadius,
     FindContent,
     FindNodes,
     LocalContent,
     Offer,
+    SendOffer,
     Ping,
     RecursiveFindContent,
     Store,
@@ -35,20 +36,20 @@ pub enum HistoryEndpoint {
 }
 
 /// Ethereum JSON-RPC endpoints not currently supported by portal network requests, proxied to Infura
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum InfuraEndpoint {
     BlockNumber,
 }
 
 /// Ethereum JSON-RPC endpoints supported by portal network requests
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum PortalEndpoint {
     ClientVersion, // Doesn't actually rely on portal network data, but it makes sense to live here
     GetBlockByHash,
 }
 
 /// Global portal network endpoints supported by trin, including infura proxies, Discv5, Ethereum and all overlay network endpoints supported by portal network requests
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum TrinEndpoint {
     Discv5Endpoint(Discv5Endpoint),
     HistoryEndpoint(HistoryEndpoint),
@@ -84,6 +85,9 @@ impl FromStr for TrinEndpoint {
                 Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::LocalContent))
             }
             "portal_historyOffer" => Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::Offer)),
+            "portal_historySendOffer" => {
+                Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::SendOffer))
+            }
             "portal_historyPing" => Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::Ping)),
             "portal_historyRadius" => {
                 Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::DataRadius))
@@ -99,7 +103,7 @@ impl FromStr for TrinEndpoint {
             "portal_stateLocalContent" => {
                 Ok(TrinEndpoint::StateEndpoint(StateEndpoint::LocalContent))
             }
-            "portal_stateOffer" => Ok(TrinEndpoint::StateEndpoint(StateEndpoint::Offer)),
+            "portal_stateSendOffer" => Ok(TrinEndpoint::StateEndpoint(StateEndpoint::SendOffer)),
             "portal_stateStore" => Ok(TrinEndpoint::StateEndpoint(StateEndpoint::Store)),
             "portal_statePing" => Ok(TrinEndpoint::StateEndpoint(StateEndpoint::Ping)),
             "portal_stateRadius" => Ok(TrinEndpoint::StateEndpoint(StateEndpoint::DataRadius)),

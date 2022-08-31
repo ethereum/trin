@@ -95,6 +95,15 @@ In a python shell:
 11870768
 ```
 
+To request a custom jsonrpc endpoint, provide the endpoint and array of params. eg:
+```py
+>>> w3.provider.make_request("portal_historyPing", ["enr:-IS4QBz_40AQVBaqlhPIWFwVEphZqPKS3EPso1PwK01nwDMtMCcgK73FppW1C9V_BQRsvWV5QTbT1IYUR-zv8_cnIakDgmlkgnY0gmlwhKRc9_OJc2VjcDI1NmsxoQM-ccaM0TOFvYqC_RY_KhZNhEmWx8zdf6AQALhKyMVyboN1ZHCCE4w", "18446744073709551615"])
+{'jsonrpc': '2.0',
+ 'id': 0,
+ 'result': {'enrSeq': '3',
+  'dataRadius': '115792089237316195423570985008687907853269984665640564039457584007913129639935'}}
+```
+
 See the [wiki](https://eth.wiki/json-rpc/API#json-rpc-methods) for other standard methods that are implemented. You can use the [web3.py](https://web3py.readthedocs.io/en/stable/web3.eth.html#module-web3.eth) API to access these. Note that currently most of them proxy to Infura rather than requesting the data from the Portal Network.
 
 ### Connect over HTTP
@@ -191,6 +200,12 @@ See arguments for a specific content key:
 cargo run -p trin-cli -- encode-key block-header -h
 ```
 
+Example:
+
+```sh
+$ cargo run -p trin-cli -- encode-key block-body --chain-id 1 --block-hash 59834fe81c78b1838745e4ac352e455ec23cb542658cbba91a4337759f5bf3fc 
+```
+
 ### Request Content
 
 Send a `FindContent` message to a Portal Network bootnode.
@@ -203,8 +218,8 @@ cargo run -p trin-cli -- json-rpc portal_historyFindContent --params <enr>,<cont
 
 1. Install [Grafana & Prometheus](https://grafana.com/docs/grafana/latest/getting-started/getting-started-prometheus/)
 2. Configure your Prometheus server to target an open port to where `prometheus_exporter` will export Trin metrics.
-3. Start your Trin process with `--enable-metrics --metrics-url 127.0.0.1:9100` as flags
-	- The `--metrics-url` parameter is the address for `prometheus_exporter` to export metrics to, and should be equal to the port to which your Prometheus server is targeting.
+3. Start your Trin process with `--enable-metrics-with-url 127.0.0.1:9100` as flags
+	- The `--enable-metrics-with-url` parameter is the address for `prometheus_exporter` to export metrics to, and should be equal to the port to which your Prometheus server is targeting.
 4. Navigate to the URL on which Grafana is running in your browser (probably `localhost:3000`) and login.
 5. Add your Prometheus server as a Data Source, using the URL on which your Prometheus server is running.
 6. Use the "Import" dashboard feature in Grafana to create your Trin dashboard, and copy and paste `metrics_dashboard.json` as the template.

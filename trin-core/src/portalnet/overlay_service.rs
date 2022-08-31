@@ -1,7 +1,5 @@
-use anyhow::anyhow;
 use std::{
     collections::HashMap,
-    fmt,
     fmt::Debug,
     marker::{PhantomData, Sync},
     sync::Arc,
@@ -9,46 +7,8 @@ use std::{
     time::Duration,
 };
 
-use crate::{
-    portalnet::{
-        discovery::Discovery,
-        find::{
-            iterators::{
-                query::{Query, QueryConfig},
-                {
-                    findcontent::{
-                        FindContentQuery, FindContentQueryResponse, FindContentQueryResult,
-                    },
-                    findnodes::FindNodeQuery,
-                },
-            },
-            query_info::{QueryInfo, QueryType},
-            query_pool::{QueryId, QueryPool, QueryPoolState, TargetKey},
-        },
-        metrics::OverlayMetrics,
-        storage::PortalStorage,
-        types::{
-            content_key::OverlayContentKey,
-            messages::{
-                Accept, ByteList, Content, CustomPayload, FindContent, FindNodes, Message, Nodes,
-                Offer, Ping, Pong, ProtocolId, Request, Response, SszEnr,
-            },
-            metric::{Distance, Metric},
-        },
-        Enr,
-    },
-    types::validation::Validator,
-    utils::node_id,
-    utp::stream::UtpListenerRequest,
-};
-
-use crate::{
-    portalnet::types::{content_key::RawContentKey, messages::ContentPayloadList},
-    utp::{
-        stream::{UtpStream, BUF_SIZE},
-        trin_helpers::UtpStreamId,
-    },
-};
+use anyhow::anyhow;
+use bytes::Bytes;
 use delay_map::HashSetDelay;
 use discv5::{
     enr::NodeId,
@@ -67,6 +27,39 @@ use ssz::Encode;
 use ssz_types::{BitList, VariableList};
 use thiserror::Error;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+
+use crate::{
+    portalnet::{
+        discovery::Discovery,
+        find::{
+            iterators::{
+                findcontent::{FindContentQuery, FindContentQueryResponse, FindContentQueryResult},
+                findnodes::FindNodeQuery,
+                query::{Query, QueryConfig},
+            },
+            query_info::{QueryInfo, QueryType},
+            query_pool::{QueryId, QueryPool, QueryPoolState, TargetKey},
+        },
+        metrics::OverlayMetrics,
+        storage::PortalStorage,
+        types::{
+            content_key::{OverlayContentKey, RawContentKey},
+            messages::{
+                Accept, ByteList, Content, CustomPayload, FindContent, FindNodes, Message, Nodes,
+                Offer, Ping, Pong, ProtocolId, Request, Response, SszEnr,
+            },
+            metric::{Distance, Metric},
+            node::Node,
+        },
+        Enr,
+    },
+    types::validation::Validator,
+    utils::{node_id, portal_wire},
+    utp::{
+        stream::{UtpListenerRequest, UtpStream, BUF_SIZE},
+        trin_helpers::UtpStreamId,
+    },
+};
 
 /// Maximum number of ENRs in response to FindNodes.
 pub const FIND_NODES_MAX_NODES: usize = 32;
@@ -115,6 +108,10 @@ pub enum OverlayRequestError {
     /// An invalid response was received.
     #[error("Invalid response")]
     InvalidResponse,
+
+    /// Received content failed validation for a response.
+    #[error("Response content failed validation: {0}")]
+    FailedValidation(String),
 
     #[error("The request returned an empty response")]
     EmptyResponse,
@@ -232,61 +229,6 @@ struct OverlayResponse {
     pub request_id: OverlayRequestId,
     /// The result of the associated request.
     pub response: Result<Response, OverlayRequestError>,
-}
-
-/// A node in the overlay network routing table.
-#[derive(Clone, Debug)]
-pub struct Node {
-    /// The node's ENR.
-    enr: Enr,
-    /// The node's data radius.
-    data_radius: Distance,
-}
-
-impl Node {
-    /// Creates a new node.
-    pub fn new(enr: Enr, data_radius: Distance) -> Node {
-        Node { enr, data_radius }
-    }
-
-    /// Returns the ENR of the node.
-    pub fn enr(&self) -> Enr {
-        self.enr.clone()
-    }
-
-    /// Returns the data radius of the node.
-    pub fn data_radius(&self) -> Distance {
-        self.data_radius.clone()
-    }
-
-    /// Sets the ENR of the node.
-    pub fn set_enr(&mut self, enr: Enr) {
-        self.enr = enr;
-    }
-
-    /// Sets the data radius of the node.
-    pub fn set_data_radius(&mut self, radius: Distance) {
-        self.data_radius = radius;
-    }
-}
-
-impl fmt::Display for Node {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "Node(node_id={}, radius={})",
-            self.enr.node_id(),
-            *self.data_radius,
-        )
-    }
-}
-
-impl std::cmp::Eq for Node {}
-
-impl PartialEq for Node {
-    fn eq(&self, other: &Self) -> bool {
-        self.enr == other.enr
-    }
 }
 
 /// The overlay service.
@@ -663,7 +605,7 @@ where
 
     /// Returns the local ENR of the node.
     fn local_enr(&self) -> Enr {
-        self.discovery.discv5.local_enr()
+        self.discovery.local_enr()
     }
 
     /// Returns the data radius of the node.
@@ -697,7 +639,6 @@ where
     }
 
     /// Maintains the query pool.
-    ///
     /// Returns a `QueryEvent` when the `QueryPoolState` updates.
     /// This happens when a query needs to send a request to a node, when a query has completed,
     // or when a query has timed out.
@@ -863,6 +804,10 @@ where
                 self.handle_find_content(find_content, Some(&source))?,
             )),
             Request::Offer(offer) => Ok(Response::Accept(self.handle_offer(offer, source)?)),
+            Request::PopulatedOffer(_) => Err(OverlayRequestError::InvalidRequest(
+                "An offer with content attached is not a valid network message to receive"
+                    .to_owned(),
+            )),
         }
     }
 
@@ -1084,8 +1029,12 @@ where
             // ENR sequence number has changed, then the node's address info may have
             // changed. The TalkRequest object does not contain the requester's ENR, only
             // its NodeAddress.
-            if let Some(enr) = self.discovery.discv5.find_enr(&source) {
-                let node = Node::new(enr, Distance::MAX);
+            if let Some(enr) = self.discovery.find_enr(&source) {
+                // TODO: Decide default data radius, and define a constant.
+                let node = Node {
+                    enr,
+                    data_radius: Distance::MAX,
+                };
                 self.connect_node(node, ConnectionDirection::Incoming);
             }
         }
@@ -1197,37 +1146,23 @@ where
                 self.process_content(content, source, find_content_request, query_id)
             }
             Response::Accept(accept) => {
-                let offer_request = match request {
-                    Request::Offer(offer) => offer,
-                    _ => {
-                        error!("Unable to process received content: Invalid request message.");
-                        return;
-                    }
-                };
-
-                if let Err(err) = self.process_accept(accept, source, offer_request.content_keys) {
+                if let Err(err) = self.process_accept(accept, source, request) {
                     error!("Error processing ACCEPT response in overlay service: {err}")
                 }
             }
         }
     }
 
-    /// Process ACCEPT response
-    pub fn process_accept(
-        &self,
-        response: Accept,
-        enr: Enr,
-        content_keys: Vec<RawContentKey>,
-    ) -> anyhow::Result<Accept> {
-        let content_keys_offered: Result<Vec<TContentKey>, TContentKey::Error> = content_keys
-            .into_iter()
-            .map(|key| TContentKey::try_from(key))
-            .collect();
-
-        let content_keys_offered: Vec<TContentKey> = content_keys_offered
-            .map_err(|_| anyhow!("Unable to decode our own offered content keys"))?;
-
-        let conn_id = response.connection_id.to_be();
+    // Process ACCEPT response
+    fn process_accept(&self, response: Accept, enr: Enr, offer: Request) -> anyhow::Result<Accept> {
+        // Check that a valid triggering request was sent
+        match &offer {
+            Request::Offer(_) => {}
+            Request::PopulatedOffer(_) => {}
+            _ => {
+                return Err(anyhow!("Invalid request message paired with ACCEPT"));
+            }
+        };
 
         // Do not initialize uTP stream if remote node doesn't have interest in the offered content keys
         if response.content_keys.is_zero() {
@@ -1235,6 +1170,7 @@ where
         }
 
         // initiate the connection to the acceptor
+        let conn_id = response.connection_id.to_be();
         let (tx, rx) = tokio::sync::oneshot::channel::<UtpStream>();
         let utp_request = UtpListenerRequest::Connect(
             conn_id,
@@ -1256,15 +1192,37 @@ where
             let mut buf = [0; BUF_SIZE];
             conn.recv(&mut buf).await.unwrap();
 
-            let content_items =
-                Self::provide_requested_content(storage, &response_clone, content_keys_offered)
-                    .expect("Unable to provide requested content for acceptor: {msg:?}");
+            let content_items = match offer {
+                Request::Offer(offer) => {
+                    Self::provide_requested_content(storage, &response_clone, offer.content_keys)
+                }
+                Request::PopulatedOffer(offer) => Ok(response_clone
+                    .content_keys
+                    .iter()
+                    .zip(offer.content_items.into_iter())
+                    .filter(|(is_accepted, _item)| *is_accepted)
+                    .map(|(_is_accepted, (_key, val))| val)
+                    .collect()),
+                // Unreachable because of early return at top of method:
+                _ => Err(anyhow!("Invalid request message paired with ACCEPT")),
+            };
 
-            let content_payload = ContentPayloadList::new(content_items)
+            let content_items: Vec<Bytes> = match content_items {
+                Ok(items) => items
+                    .into_iter()
+                    .map(|item| Bytes::from(item.to_vec()))
+                    .collect(),
+                Err(err) => {
+                    warn!("Could not serve offered content to peer: {err}");
+                    return;
+                }
+            };
+
+            let content_payload = portal_wire::encode_content_payload(&content_items)
                 .expect("Unable to build content payload: {msg:?}");
 
             // send the content to the acceptor over a uTP stream
-            if let Err(err) = conn.send_to(&content_payload.as_ssz_bytes()).await {
+            if let Err(err) = conn.send_to(&content_payload).await {
                 warn!("Error sending content {err}");
             };
             // Close uTP connection
@@ -1483,8 +1441,17 @@ where
     fn provide_requested_content(
         storage: Arc<RwLock<PortalStorage>>,
         accept_message: &Accept,
-        content_keys_offered: Vec<TContentKey>,
+        content_keys_offered: Vec<RawContentKey>,
     ) -> anyhow::Result<Vec<ByteList>> {
+        let content_keys_offered: Result<Vec<TContentKey>, TContentKey::Error> =
+            content_keys_offered
+                .into_iter()
+                .map(|key| TContentKey::try_from(key))
+                .collect();
+
+        let content_keys_offered: Vec<TContentKey> = content_keys_offered
+            .map_err(|_| anyhow!("Unable to decode our own offered content keys"))?;
+
         let mut content_items: Vec<ByteList> = Vec::new();
 
         for (i, key) in accept_message
