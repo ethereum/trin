@@ -4975,7 +4975,6 @@ dependencies = [
  "hex",
  "jsonrpsee",
  "log 0.4.17",
- "parking_lot 0.11.2",
  "rand 0.8.5",
  "structopt",
  "tokio",
