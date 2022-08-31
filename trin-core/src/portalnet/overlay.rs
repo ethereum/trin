@@ -183,7 +183,7 @@ where
 
     /// Returns the ENR of the local node.
     pub fn local_enr(&self) -> Enr {
-        self.discovery.discv5.local_enr()
+        self.discovery.local_enr()
     }
 
     /// Returns the data radius of the local node.
@@ -695,7 +695,7 @@ where
         // The overlay ping via talkreq will trigger a session at the base layer, then
         // a session on the (overlay) portal network.
         let mut successfully_bonded_bootnode = false;
-        let enrs = self.discovery.discv5.table_entries_enr();
+        let enrs = self.discovery.table_entries_enr();
         if enrs.is_empty() {
             error!(
                 "No bootnodes provided, cannot join Portal {:?} Network.",

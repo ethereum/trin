@@ -4,7 +4,7 @@ pub mod cli;
 pub mod rpc;
 
 use crate::rpc::RpcServer;
-use discv5::{Discv5Event, TalkRequest};
+use discv5::TalkRequest;
 use jsonrpsee::core::{async_trait, RpcResult};
 use jsonrpsee::http_server::{HttpServerBuilder, HttpServerHandle};
 use jsonrpsee::proc_macros::rpc;
@@ -12,7 +12,7 @@ use log::debug;
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 use trin_core::portalnet::discovery::Discovery;
 use trin_core::portalnet::types::messages::{PortalnetConfig, ProtocolId};
@@ -26,9 +26,9 @@ use trin_core::utp::trin_helpers::UtpStreamId;
 /// uTP test app
 pub struct TestApp {
     pub discovery: Arc<Discovery>,
-    pub utp_listener_tx: UnboundedSender<UtpListenerRequest>,
-    pub utp_listener_rx: Arc<RwLock<UnboundedReceiver<UtpListenerEvent>>>,
-    pub utp_event_tx: UnboundedSender<TalkRequest>,
+    pub utp_listener_tx: mpsc::UnboundedSender<UtpListenerRequest>,
+    pub utp_listener_rx: Arc<RwLock<mpsc::UnboundedReceiver<UtpListenerEvent>>>,
+    pub utp_event_tx: mpsc::UnboundedSender<TalkRequest>,
     pub utp_payload: Arc<RwLock<Vec<UtpPayload>>>,
 }
 
@@ -90,19 +90,12 @@ impl TestApp {
         });
     }
 
-    pub async fn start(&self) {
-        let mut event_stream = self.discovery.discv5.event_stream().await.unwrap();
-
+    pub async fn start(&self, mut talk_req_rx: mpsc::Receiver<TalkRequest>) {
         let utp_sender = self.utp_event_tx.clone();
 
         // Forward discv5 uTP packets to uTP socket
         tokio::spawn(async move {
-            while let Some(event) = event_stream.recv().await {
-                let request = match event {
-                    Discv5Event::TalkRequest(r) => r,
-                    _ => continue,
-                };
-
+            while let Some(request) = talk_req_rx.recv().await {
                 let protocol_id =
                     ProtocolId::from_str(&hex::encode_upper(request.protocol())).unwrap();
 
@@ -152,7 +145,7 @@ pub async fn run_test_app(
     };
 
     let mut discovery = Discovery::new(config).unwrap();
-    discovery.start().await.unwrap();
+    let talk_req_rx = discovery.start().await.unwrap();
     let enr = discovery.local_enr();
     let discovery = Arc::new(discovery);
 
@@ -168,7 +161,7 @@ pub async fn run_test_app(
         utp_payload: Arc::new(RwLock::new(Vec::new())),
     };
 
-    test_app.start().await;
+    test_app.start(talk_req_rx).await;
 
     let rpc_addr = format!("{rpc_addr}:{rpc_port}");
 

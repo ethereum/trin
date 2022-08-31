@@ -1,4 +1,3 @@
-use discv5::Discv5Event;
 use ntest::timeout;
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
@@ -40,8 +39,8 @@ async fn spawn_utp_listener() -> (
         ..Default::default()
     };
     let mut discv5 = Discovery::new(config).unwrap();
-    let enr = discv5.discv5.local_enr();
-    discv5.start().await.unwrap();
+    let enr = discv5.local_enr();
+    let mut talk_req_rx = discv5.start().await.unwrap();
 
     let discv5 = Arc::new(discv5);
 
@@ -49,18 +48,11 @@ async fn spawn_utp_listener() -> (
         UtpListener::new(Arc::clone(&discv5));
 
     tokio::spawn(async move {
-        let mut receiver = discv5.discv5.event_stream().await.unwrap();
-        while let Some(event) = receiver.recv().await {
-            match event {
-                Discv5Event::TalkRequest(request) => {
-                    let protocol_id =
-                        ProtocolId::from_str(&hex::encode_upper(request.protocol())).unwrap();
+        while let Some(request) = talk_req_rx.recv().await {
+            let protocol_id = ProtocolId::from_str(&hex::encode_upper(request.protocol())).unwrap();
 
-                    match protocol_id {
-                        ProtocolId::Utp => utp_event_tx.send(request).unwrap(),
-                        _ => continue,
-                    }
-                }
+            match protocol_id {
+                ProtocolId::Utp => utp_event_tx.send(request).unwrap(),
                 _ => continue,
             }
         }
