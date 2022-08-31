@@ -1,10 +1,9 @@
-#![allow(dead_code)]
-
 use super::{
     types::messages::{HexData, PortalnetConfig, ProtocolId},
     Enr,
 };
 use crate::socket;
+
 use discv5::{
     enr::{CombinedKey, EnrBuilder, NodeId},
     Discv5, Discv5Config, Discv5ConfigBuilder, Discv5Event, RequestError, TalkRequest,
@@ -22,9 +21,8 @@ use std::{
     sync::Arc,
 };
 
-/// With even distribution assumptions, 2**17 is enough to put each node (estimating 100k nodes,
-/// which is more than 10x the ethereum mainnet node count) into a unique bucket by the 17th bucket index.
-const EXPECTED_NON_EMPTY_BUCKETS: usize = 17;
+/// Size of the buffer of the Discv5 TALKREQ channel.
+const TALKREQ_CHANNEL_BUFFER: usize = 100;
 
 #[derive(Clone)]
 pub struct Config {
@@ -47,41 +45,17 @@ impl Default for Config {
     }
 }
 
-struct DiscoveryEvents {
-    event_rx: mpsc::Receiver<Discv5Event>,
-    enr_cache: Arc<RwLock<lru::LruCache<NodeId, (Enr, SocketAddr)>>>,
-}
-
-impl DiscoveryEvents {
-    async fn start(
-        mut event_rx: mpsc::Receiver<Discv5Event>,
-        talk_req_tx: mpsc::Sender<TalkRequest>,
-        enr_cache: Arc<RwLock<lru::LruCache<NodeId, (Enr, SocketAddr)>>>,
-    ) {
-        tokio::spawn(async move {
-            while let Some(event) = event_rx.recv().await {
-                match event {
-                    Discv5Event::TalkRequest(talk_req) => {
-                        let _ = talk_req_tx.send(talk_req).await;
-                    }
-                    Discv5Event::SessionEstablished(enr, socket_addr) => {
-                        enr_cache.write().put(enr.node_id(), (enr, socket_addr));
-                    }
-                    _ => {}
-                }
-            }
-        });
-    }
-}
-
 pub type ProtocolRequest = Vec<u8>;
 
 /// Base Node Discovery Protocol v5 layer
 pub struct Discovery {
+    /// The inner Discv5 service.
     discv5: Discv5,
+    /// A cache of the latest ENR and socket address pairs seen for a node ID.
     enr_cache: Arc<RwLock<lru::LruCache<NodeId, (Enr, SocketAddr)>>>,
-    /// Indicates if the discv5 service has been started
+    /// Indicates if the Discv5 service has been started.
     pub started: bool,
+    /// The socket address that the Discv5 service listens on.
     pub listen_socket: SocketAddr,
 }
 
@@ -138,19 +112,13 @@ impl Discovery {
             builder.build(&enr_key).unwrap()
         };
 
-        info!(
-            "Starting discv5 with local enr encoded={:?} decoded={}",
-            enr, enr
-        );
-
         let discv5 = Discv5::new(enr, enr_key, config.discv5_config)
             .map_err(|e| format!("Failed to create discv5 instance: {}", e))?;
 
         for enr in config.bootnode_enrs {
-            info!("Adding bootnode {}", enr);
             discv5
                 .add_enr(enr)
-                .map_err(|e| format!("Failed to add enr: {}", e))?;
+                .map_err(|e| format!("Failed to add bootnode enr: {}", e))?;
         }
 
         let enr_cache = LruCache::new(portal_config.enr_cache_capacity);
@@ -165,27 +133,54 @@ impl Discovery {
     }
 
     pub async fn start(&mut self) -> Result<mpsc::Receiver<TalkRequest>, String> {
-        self.discv5.start(self.listen_socket).await.unwrap();
+        info!(
+            "Starting discv5 with local enr encoded={:?} decoded={}",
+            self.local_enr(),
+            self.local_enr()
+        );
 
-        let event_rx = self.discv5.event_stream().await.unwrap();
+        let _ = self
+            .discv5
+            .start(self.listen_socket)
+            .await
+            .map_err(|e| format!("Failed to start discv5 server: {:?}", e))?;
+        self.started = true;
 
-        // TODO: Make channel capacity configurable.
-        let (talk_req_tx, talk_req_rx) = mpsc::channel(100);
+        let mut event_rx = self.discv5.event_stream().await.unwrap();
+
+        let (talk_req_tx, talk_req_rx) = mpsc::channel(TALKREQ_CHANNEL_BUFFER);
 
         let enr_cache = Arc::clone(&self.enr_cache);
 
-        DiscoveryEvents::start(event_rx, talk_req_tx, enr_cache).await;
+        tokio::spawn(async move {
+            while let Some(event) = event_rx.recv().await {
+                match event {
+                    Discv5Event::TalkRequest(talk_req) => {
+                        // Forward all TALKREQ messages.
+                        let _ = talk_req_tx.send(talk_req).await;
+                    }
+                    Discv5Event::SessionEstablished(enr, socket_addr) => {
+                        enr_cache.write().put(enr.node_id(), (enr, socket_addr));
+                    }
+                    _ => continue,
+                }
+            }
+        });
 
-        self.started = true;
         Ok(talk_req_rx)
     }
 
-    /// Returns number of connected peers in the dht
+    /// Returns number of connected peers in the Discv5 routing table.
     pub fn connected_peers_len(&self) -> usize {
         self.discv5.connected_peers()
     }
 
-    /// Returns ENR and nodeId information of the local discv5 node
+    /// Returns the ENRs in the Discv5 routing table.
+    pub fn table_entries_enr(&self) -> Vec<Enr> {
+        self.discv5.table_entries_enr()
+    }
+
+    /// Returns ENR and nodeId information of the local Discv5 node.
     pub fn node_info(&self) -> Value {
         json!({
             "enr":  self.discv5.local_enr().to_base64(),
@@ -217,18 +212,17 @@ impl Discovery {
         )
     }
 
+    /// Returns the node IDs of connected peers in the Discv5 routing table.
     pub fn connected_peers(&self) -> Vec<NodeId> {
         self.discv5.table_entries_id()
     }
 
-    pub fn table_entries_enr(&self) -> Vec<Enr> {
-        self.discv5.table_entries_enr()
-    }
-
+    /// Returns the ENR of the local node.
     pub fn local_enr(&self) -> Enr {
         self.discv5.local_enr()
     }
 
+    /// Looks up the ENR for `node_id`.
     pub fn find_enr(&self, node_id: &NodeId) -> Option<Enr> {
         self.discv5.find_enr(node_id)
     }
@@ -241,6 +235,7 @@ impl Discovery {
         }
     }
 
+    /// Sends a TALKREQ message to `enr`.
     pub async fn send_talk_req(
         &self,
         enr: Enr,

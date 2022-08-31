@@ -59,8 +59,8 @@ async fn spawn_overlay(
     overlay: Arc<OverlayProtocol<IdentityContentKey, XorMetric, MockValidator>>,
 ) {
     let (overlay_tx, mut overlay_rx) = mpsc::unbounded_channel();
-    let overlay_protocol = overlay.protocol().clone();
 
+    let overlay_protocol = overlay.protocol().clone();
     tokio::spawn(async move {
         while let Some(talk_req) = talk_req_rx.recv().await {
             let req_protocol = ProtocolId::from_str(&hex::encode_upper(talk_req.protocol()));
@@ -222,5 +222,22 @@ async fn overlay() {
             continue;
         }
         assert!(overlay_two_peers.contains(&enr.into()));
+    }
+
+    // Store content with node three and perform a content lookup from node one.
+    let content_key = IdentityContentKey::new([0xef; 32]);
+    let content = vec![0xef];
+    overlay_three
+        .storage
+        .write()
+        .store(&content_key, &content)
+        .expect("Unable to store content");
+    match overlay_one.lookup_content(content_key).await {
+        Some(found_content) => {
+            assert_eq!(found_content, content);
+        }
+        None => {
+            panic!("Unable to find content stored with peer");
+        }
     }
 }

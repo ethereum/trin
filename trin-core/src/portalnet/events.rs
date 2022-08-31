@@ -1,10 +1,11 @@
+use super::types::messages::ProtocolId;
+use crate::utp::stream::UtpListenerEvent;
+
 use discv5::TalkRequest;
+use hex;
 use log::warn;
 use tokio::sync::mpsc;
 
-use super::types::messages::ProtocolId;
-use crate::utp::stream::UtpListenerEvent;
-use hex;
 use std::str::FromStr;
 
 /// Main handler for portal network events

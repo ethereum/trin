@@ -2,7 +2,7 @@
 name = "trin-core"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.58.0"
+rust-version = "1.62.0"
 
 [dependencies]
 anyhow = "1.0.57"
@@ -29,6 +29,7 @@ hmac-sha256 = "1.1.1"
 httparse = "1.5.1"
 keccak-hash = "0.8.0"
 lazy_static = "1.4.0"
+leb128 = "0.2.1"
 log = "0.4.17"
 lru = "0.7.7"
 num = "0.4.0"
@@ -57,6 +58,8 @@ tokio-test = "0.4.2"
 tokio-util = "0.6.8"
 tracing = "0.1.26"
 tracing-futures = "0.2.5"
+tree_hash = "0.4.0"
+tree_hash_derive = "0.4.0"
 uint = { version = "0.8.5", default-features = false }
 ureq = { version = "2.2.0", features = ["json"] }
 validator = { version = "0.13.0", features = ["derive"] }

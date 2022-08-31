@@ -32,7 +32,7 @@ macro_rules! make_setter {
     };
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum PacketType {
     Data,  // packet carries a data payload
     Fin,   // signals the end of a connection

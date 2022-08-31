@@ -153,7 +153,7 @@ mod tests {
                         "gasLimit":"0x2fefd8",
                         "gasUsed":"0x0",
                         "hash":"0xe2f81ab2f7a0aaa6c5cee61a82d176a2344603f8cf8569e135e1ee98667f0bc3",
-                        "logsBloom":"0x0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+                        "logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
                         "miner":"0xf8b483dba2c3b7176a3da549ad41a48bb3121069",
                         "mixHash":"0xdaa40d4b72000209b43526ada798b90b98f9cd6e4cdc5bebbad690208aa17287",
                         "nonce":"0xe6b9441a5df2f6ad",
@@ -186,7 +186,8 @@ mod tests {
                         "gasLimit": "0x1c9c364",
                         "gasUsed": "0x140db1",
                         "hash": "0x720704f3aa11c53cf344ea069db95cecb81ad7453c8f276b2a1062979611f09c",
-                        "logsBloom": "", // logs removed since they're unnecessary for validation
+                        // Using an empty bloom that doesn't match the real logs, because it is easy and isn't validated
+                        "logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
                         "miner": "0x00192fb10df37c9fb26829eb2cc623cd1bf599e8",
                         "mixHash": "0xf1a32e24eb62f01ec3f2b3b5893f7be9062fbf5482bc0d490a54352240350e26",
                         "nonce": "0x2087fbb243327696",
@@ -225,7 +226,7 @@ mod tests {
             block_hash: header.hash().0,
         });
         chain_history_validator
-            .validate_content(&content_key, &header_bytelist.to_vec())
+            .validate_content(&content_key, &header_bytelist)
             .await
             .unwrap();
     }
@@ -253,7 +254,7 @@ mod tests {
             block_hash: header.hash().0,
         });
         chain_history_validator
-            .validate_content(&content_key, &header_bytelist.to_vec())
+            .validate_content(&content_key, &header_bytelist)
             .await
             .unwrap();
     }
@@ -282,7 +283,7 @@ mod tests {
             block_hash: header.hash().0,
         });
         chain_history_validator
-            .validate_content(&content_key, &header_bytelist.to_vec())
+            .validate_content(&content_key, &header_bytelist)
             .await
             .unwrap();
     }
@@ -305,7 +306,7 @@ mod tests {
         let content_key = block_14764013_body_key();
 
         chain_history_validator
-            .validate_content(&content_key, &block_body_bytelist.to_vec())
+            .validate_content(&content_key, &block_body_bytelist)
             .await
             .unwrap();
     }
@@ -338,7 +339,7 @@ mod tests {
         let content_key = block_14764013_body_key();
 
         chain_history_validator
-            .validate_content(&content_key, &invalid_content.to_vec())
+            .validate_content(&content_key, &invalid_content)
             .await
             .unwrap();
     }
@@ -359,7 +360,7 @@ mod tests {
         let content_key = block_14764013_receipts_key();
 
         chain_history_validator
-            .validate_content(&content_key, &content.to_vec())
+            .validate_content(&content_key, &content)
             .await
             .unwrap();
     }
@@ -390,7 +391,7 @@ mod tests {
         let content_key = block_14764013_receipts_key();
 
         chain_history_validator
-            .validate_content(&content_key, &invalid_content.to_vec())
+            .validate_content(&content_key, &invalid_content)
             .await
             .unwrap();
     }

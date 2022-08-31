@@ -46,13 +46,13 @@ impl UtpMessage {
     }
 }
 
-#[derive(PartialEq, Debug, Encode, Decode)]
+#[derive(PartialEq, Eq, Debug, Encode, Decode)]
 pub struct UtpAccept {
     pub message: Vec<(Vec<u8>, Vec<u8>)>,
 }
 
 /// Used to track which stream an overlay request corresponds with
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UtpStreamId {
     /// Stream id to initialize FindContent uTP connection and to listen for content payload
     FindContentStream,

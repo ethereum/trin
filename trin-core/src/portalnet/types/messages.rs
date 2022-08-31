@@ -20,8 +20,6 @@ use validator::ValidationError;
 use crate::portalnet::{types::content_key::RawContentKey, Enr};
 
 pub type ByteList = VariableList<u8, typenum::U2048>;
-/// uTP content payload list represented as SSZ encoded Container[payloads: List[ByteList, max_length=64]]
-pub type ContentPayloadList = VariableList<ByteList, typenum::U64>;
 
 /// Custom payload element of Ping and Pong overlay messages
 #[derive(Debug, PartialEq, Clone)]
@@ -235,6 +233,7 @@ impl From<Request> for Message {
             Request::FindNodes(find_nodes) => Message::FindNodes(find_nodes),
             Request::FindContent(find_content) => Message::FindContent(find_content),
             Request::Offer(offer) => Message::Offer(offer),
+            Request::PopulatedOffer(offer) => Request::Offer(offer.into()).into(),
         }
     }
 }
@@ -265,6 +264,8 @@ pub enum Request {
     FindNodes(FindNodes),
     FindContent(FindContent),
     Offer(Offer),
+    /// Equivalent to Offer, but with content values supplied, to skip the DB lookup
+    PopulatedOffer(PopulatedOffer),
 }
 
 impl TryFrom<Message> for Request {
@@ -497,6 +498,24 @@ impl TryInto<Value> for Content {
 #[derive(Debug, PartialEq, Clone, Encode, Decode)]
 pub struct Offer {
     pub content_keys: Vec<RawContentKey>,
+}
+
+/// The content necessary to make an offer message, with key/value pairs
+#[derive(Debug, Clone)]
+pub struct PopulatedOffer {
+    /// All the offered content, pairing the keys and values
+    pub content_items: Vec<(RawContentKey, ByteList)>,
+}
+
+impl Into<Offer> for PopulatedOffer {
+    fn into(self) -> Offer {
+        let content_keys = self
+            .content_items
+            .into_iter()
+            .map(|(key, _val)| key)
+            .collect();
+        Offer { content_keys }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone, Encode, Decode)]
