@@ -2,7 +2,6 @@ use std::path::{Path, PathBuf};
 use std::{convert::TryInto, fs, sync::Arc};
 
 use discv5::enr::NodeId;
-use ethereum_types::U256;
 use hex;
 use log::{debug, error, info};
 use r2d2::Pool;
@@ -13,7 +12,7 @@ use thiserror::Error;
 
 use super::types::{
     content_key::OverlayContentKey,
-    metric::{Metric, XorMetric},
+    distance::{Distance, Metric, XorMetric},
 };
 use crate::utils::db::get_data_dir;
 
@@ -39,7 +38,7 @@ pub struct PortalStorage {
     node_id: NodeId,
     storage_capacity_in_bytes: u64,
     // pub to allow for tests in trin-history/src/content_key.rs
-    pub data_radius: u64,
+    pub data_radius: Distance,
     farthest_content_id: Option<[u8; 32]>,
     db: Arc<rocksdb::DB>,
     sql_connection_pool: Pool<SqliteConnectionManager>,
@@ -95,7 +94,7 @@ impl PortalStorage {
         let mut storage = Self {
             node_id: config.node_id,
             storage_capacity_in_bytes: config.storage_capacity_kb * 1000,
-            data_radius: u64::MAX,
+            data_radius: Distance::MAX,
             db: config.db,
             farthest_content_id: None,
             sql_connection_pool: config.sql_connection_pool,
@@ -129,10 +128,12 @@ impl PortalStorage {
             _ => (),
         }
 
-        // Don't store if it's outside our radius
-        if self.data_radius < u64::MAX {
+        if self.data_radius < Distance::MAX {
+            // We should store the content if the distance between the local node and the content
+            // is less than the radius.
             Ok(self.distance_to_content_id(&content_id) < self.data_radius)
         } else {
+            // If the radius is equal to the maximum value, then we should store any content.
             Ok(true)
         }
     }
@@ -246,17 +247,8 @@ impl PortalStorage {
     }
 
     /// Public method for retrieving the node's current radius.
-    pub fn get_current_radius(&self) -> U256 {
-        let u64_radius_bytes: [u8; 8] = u64::to_be_bytes(self.data_radius);
-        let empty_bytes: [u8; 24] = [0; 24];
-        let combined_array: [u8; 32] = {
-            let mut whole: [u8; 32] = [255; 32];
-            let (one, two) = whole.split_at_mut(u64_radius_bytes.len());
-            one.copy_from_slice(&u64_radius_bytes);
-            two.copy_from_slice(&empty_bytes);
-            whole
-        };
-        U256::from(combined_array)
+    pub fn radius(&self) -> Distance {
+        self.data_radius
     }
 
     /// Public method for determining how much actual disk space is being used to store this node's Portal Network data.
@@ -404,13 +396,9 @@ impl PortalStorage {
     }
 
     /// Method that returns the distance between our node ID and a given content ID.
-    /// Returns the most significant 8 bytes of the distance as a u64.
-    pub fn distance_to_content_id(&self, content_id: &[u8; 32]) -> u64 {
+    pub fn distance_to_content_id(&self, content_id: &[u8; 32]) -> Distance {
         match self.distance_function {
-            DistanceFunction::Xor => {
-                let distance = XorMetric::distance(content_id, &self.node_id.raw());
-                distance.0[3]
-            }
+            DistanceFunction::Xor => XorMetric::distance(content_id, &self.node_id.raw()),
         }
     }
 

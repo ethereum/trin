@@ -237,7 +237,13 @@ fn serve_ipc_client(
                             Err(contents) => contents.into_bytes(),
                         }
                     }
-                    Err(e) => format!("Unsupported trin request: {}", e).into_bytes(),
+                    Err(e) => json!({
+                        "jsonrpc": "2.0",
+                        "id": obj.id,
+                        "error": format!("Unsupported trin request: {}", e),
+                    })
+                    .to_string()
+                    .into_bytes(),
                 };
                 tx.write_all(&formatted_response).unwrap();
                 tx.flush().unwrap();

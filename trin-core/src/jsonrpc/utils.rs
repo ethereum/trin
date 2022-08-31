@@ -1,9 +1,8 @@
-use crate::portalnet::Enr;
+use crate::portalnet::{types::distance::Distance, Enr};
 use discv5::{
     enr::NodeId,
     kbucket::{ConnectionState, NodeStatus},
 };
-use ethereum_types::U256;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use validator::ValidationError;
@@ -11,7 +10,7 @@ use validator::ValidationError;
 use crate::{portalnet::types::content_key::OverlayContentKey, utils::bytes::hex_decode};
 
 type NodeMap = BTreeMap<String, String>;
-type NodeTuple = (NodeId, Enr, NodeStatus, U256);
+type NodeTuple = (NodeId, Enr, NodeStatus, Distance);
 
 /// Converts the output of the Overlay's bucket_entries method to a JSON Value
 pub fn bucket_entries_to_json(bucket_entries: BTreeMap<usize, Vec<NodeTuple>>) -> Value {

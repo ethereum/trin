@@ -17,7 +17,10 @@ use ssz_types::{typenum, BitList, VariableList};
 use thiserror::Error;
 use validator::ValidationError;
 
-use crate::portalnet::{types::content_key::RawContentKey, Enr};
+use crate::portalnet::{
+    types::{content_key::RawContentKey, distance::Distance},
+    Enr,
+};
 
 pub type ByteList = VariableList<u8, typenum::U2048>;
 
@@ -114,7 +117,8 @@ pub struct PortalnetConfig {
     pub private_key: Option<HexData>,
     pub listen_port: u16,
     pub bootnode_enrs: Vec<Enr>,
-    pub data_radius: U256,
+    pub data_radius: Distance,
+    pub internal_ip: bool,
     pub no_stun: bool,
     pub enable_metrics: bool,
 }
@@ -126,7 +130,8 @@ impl Default for PortalnetConfig {
             private_key: None,
             listen_port: 4242,
             bootnode_enrs: Vec::<Enr>::new(),
-            data_radius: U256::from(u64::MAX), //TODO better data_radius default?
+            data_radius: Distance::MAX,
+            internal_ip: false,
             no_stun: false,
             enable_metrics: false,
         }

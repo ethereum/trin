@@ -18,7 +18,6 @@ use discv5::{
     },
     rpc::RequestId,
 };
-use ethereum_types::U256;
 use futures::{channel::oneshot, prelude::*};
 use log::{debug, error, info, warn};
 use parking_lot::RwLock;
@@ -45,11 +44,11 @@ use crate::{
         storage::PortalStorage,
         types::{
             content_key::{OverlayContentKey, RawContentKey},
+            distance::{Distance, Metric},
             messages::{
                 Accept, ByteList, Content, CustomPayload, FindContent, FindNodes, Message, Nodes,
                 Offer, Ping, Pong, ProtocolId, Request, Response, SszEnr,
             },
-            metric::Metric,
             node::Node,
         },
         Enr,
@@ -241,7 +240,7 @@ pub struct OverlayService<TContentKey, TMetric, TValidator> {
     /// The routing table of the local node.
     kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
     /// The data radius of the local node.
-    data_radius: Arc<U256>,
+    data_radius: Arc<Distance>,
     /// The protocol identifier.
     protocol: ProtocolId,
     /// A queue of peers that require regular ping to check connectivity.
@@ -304,7 +303,7 @@ where
         kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
         bootnode_enrs: Vec<Enr>,
         ping_queue_interval: Option<Duration>,
-        data_radius: Arc<U256>,
+        data_radius: Arc<Distance>,
         protocol: ProtocolId,
         utp_listener_sender: UnboundedSender<UtpListenerRequest>,
         enable_metrics: bool,
@@ -378,7 +377,7 @@ where
 
             // TODO: Decide default data radius, and define a constant. Or if there is an
             // associated database, then look for a radius value there.
-            let node = Node::new(enr, U256::from(u64::MAX));
+            let node = Node::new(enr, Distance::MAX);
             let status = NodeStatus {
                 state: ConnectionState::Disconnected,
                 direction: ConnectionDirection::Outgoing,
@@ -610,7 +609,7 @@ where
     }
 
     /// Returns the data radius of the node.
-    fn data_radius(&self) -> U256 {
+    fn data_radius(&self) -> Distance {
         *self.data_radius
     }
 
@@ -640,7 +639,6 @@ where
     }
 
     /// Maintains the query pool.
-    ///
     /// Returns a `QueryEvent` when the `QueryPoolState` updates.
     /// This happens when a query needs to send a request to a node, when a query has completed,
     // or when a query has timed out.
@@ -1035,7 +1033,7 @@ where
                 // TODO: Decide default data radius, and define a constant.
                 let node = Node {
                     enr,
-                    data_radius: U256::from(u64::MAX),
+                    data_radius: Distance::MAX,
                 };
                 self.connect_node(node, ConnectionDirection::Incoming);
             }
@@ -1103,10 +1101,7 @@ where
             kbucket::Entry::Pending(ref mut entry, status) => (entry.value().clone(), status),
             _ => {
                 // TODO: Decide default data radius, and define a constant.
-                let node = Node {
-                    enr: source.clone(),
-                    data_radius: U256::from(u64::MAX),
-                };
+                let node = Node::new(source.clone(), Distance::MAX);
                 let status = NodeStatus {
                     state: ConnectionState::Disconnected,
                     direction: ConnectionDirection::Outgoing,
@@ -1408,10 +1403,7 @@ where
                     }
                 }
             } else {
-                let node = Node {
-                    enr,
-                    data_radius: U256::from(u64::MAX),
-                };
+                let node = Node::new(enr, Distance::MAX);
                 let status = NodeStatus {
                     state: ConnectionState::Disconnected,
                     direction: ConnectionDirection::Outgoing,
@@ -1734,7 +1726,7 @@ where
         let self_node_id = self.local_enr().node_id();
         let self_distance = TMetric::distance(&content_id, &self_node_id.raw());
 
-        let mut nodes_with_distance: Vec<(U256, Enr)> = self
+        let mut nodes_with_distance: Vec<(Distance, Enr)> = self
             .table_entries_enr()
             .into_iter()
             .map(|enr| (TMetric::distance(&content_id, &enr.node_id().raw()), enr))
@@ -1944,7 +1936,7 @@ mod tests {
             overlay::OverlayConfig,
             storage::PortalStorage,
             types::{
-                content_key::IdentityContentKey, messages::PortalnetConfig, metric::XorMetric,
+                content_key::IdentityContentKey, distance::XorMetric, messages::PortalnetConfig,
             },
         },
         types::validation::MockValidator,
@@ -1986,7 +1978,7 @@ mod tests {
             overlay_config.bucket_filter,
         )));
 
-        let data_radius = Arc::new(U256::from(u64::MAX));
+        let data_radius = Arc::new(Distance::MAX);
         let protocol = ProtocolId::History;
         let active_outgoing_requests = Arc::new(RwLock::new(HashMap::new()));
         let peers_to_ping = HashSetDelay::default();
@@ -2036,11 +2028,8 @@ mod tests {
             direction: ConnectionDirection::Outgoing,
         };
 
-        let data_radius = U256::from(u64::MAX);
-        let node = Node {
-            enr: source.clone(),
-            data_radius,
-        };
+        let data_radius = Distance::MAX;
+        let node = Node::new(source.clone(), data_radius);
 
         let _ = service
             .kbuckets
@@ -2090,7 +2079,7 @@ mod tests {
 
         let (_, source) = generate_random_remote_enr();
         let node_id = source.node_id();
-        let data_radius = U256::from(u64::MAX);
+        let data_radius = Distance::MAX;
 
         let ping = Ping {
             enr_seq: source.seq(),
@@ -2115,10 +2104,7 @@ mod tests {
             direction: ConnectionDirection::Outgoing,
         };
 
-        let node = Node {
-            enr: destination.clone(),
-            data_radius: U256::from(u64::MAX),
-        };
+        let node = Node::new(destination.clone(), Distance::MAX);
 
         let _ = service
             .kbuckets
@@ -2160,11 +2146,8 @@ mod tests {
             direction: ConnectionDirection::Outgoing,
         };
 
-        let data_radius = U256::from(u64::MAX);
-        let node = Node {
-            enr: source.clone(),
-            data_radius,
-        };
+        let data_radius = Distance::MAX;
+        let node = Node::new(source.clone(), data_radius);
 
         let _ = service
             .kbuckets
@@ -2213,7 +2196,7 @@ mod tests {
         let mut service = task::spawn(build_service());
 
         let (_, source) = generate_random_remote_enr();
-        let data_radius = U256::from(u64::MAX);
+        let data_radius = Distance::MAX;
 
         let pong = Pong {
             enr_seq: source.seq(),
@@ -2307,16 +2290,10 @@ mod tests {
             state: ConnectionState::Connected,
             direction: ConnectionDirection::Outgoing,
         };
-        let data_radius = U256::from(u64::MAX);
+        let data_radius = Distance::MAX;
 
-        let node1 = Node {
-            enr: enr1.clone(),
-            data_radius: data_radius.clone(),
-        };
-        let node2 = Node {
-            enr: enr2.clone(),
-            data_radius: data_radius.clone(),
-        };
+        let node1 = Node::new(enr1.clone(), data_radius.clone());
+        let node2 = Node::new(enr2.clone(), data_radius.clone());
 
         // Insert nodes into routing table.
         let _ = service
@@ -2437,11 +2414,8 @@ mod tests {
         let node_id = enr.node_id();
         let key = kbucket::Key::from(node_id);
 
-        let data_radius = U256::from(u64::MAX);
-        let node = Node {
-            enr: enr.clone(),
-            data_radius,
-        };
+        let data_radius = Distance::MAX;
+        let node = Node::new(enr.clone(), data_radius);
         let connection_direction = ConnectionDirection::Outgoing;
 
         assert!(!service.peers_to_ping.contains_key(&node_id));
@@ -2472,11 +2446,8 @@ mod tests {
         let node_id = enr.node_id();
         let key = kbucket::Key::from(node_id);
 
-        let data_radius = U256::from(u64::MAX);
-        let node = Node {
-            enr: enr.clone(),
-            data_radius,
-        };
+        let data_radius = Distance::MAX;
+        let node = Node::new(enr.clone(), data_radius);
 
         let connection_direction = ConnectionDirection::Outgoing;
         let status = NodeStatus {
@@ -2517,11 +2488,8 @@ mod tests {
         let node_id = enr.node_id();
         let key = kbucket::Key::from(node_id);
 
-        let data_radius = U256::from(u64::MAX);
-        let node = Node {
-            enr: enr.clone(),
-            data_radius,
-        };
+        let data_radius = Distance::MAX;
+        let node = Node::new(enr.clone(), data_radius);
 
         let connection_direction = ConnectionDirection::Outgoing;
         let status = NodeStatus {
@@ -2833,7 +2801,7 @@ mod tests {
         let bootnode_node_id = bootnode_enr.node_id();
         let bootnode_key = kbucket::Key::from(bootnode_node_id);
 
-        let data_radius = U256::MAX;
+        let data_radius = Distance::MAX;
         let bootnode = Node {
             enr: bootnode_enr.clone(),
             data_radius,
@@ -2887,7 +2855,7 @@ mod tests {
         let bootnode_node_id = bootnode_enr.node_id();
         let bootnode_key = kbucket::Key::from(bootnode_node_id);
 
-        let data_radius = U256::MAX;
+        let data_radius = Distance::MAX;
         let bootnode = Node {
             enr: bootnode_enr.clone(),
             data_radius,
@@ -2952,7 +2920,7 @@ mod tests {
         let bootnode_node_id = bootnode_enr.node_id();
         let bootnode_key = kbucket::Key::from(bootnode_node_id);
 
-        let data_radius = U256::MAX;
+        let data_radius = Distance::MAX;
         let bootnode = Node {
             enr: bootnode_enr.clone(),
             data_radius,
@@ -3017,7 +2985,7 @@ mod tests {
         let bootnode_node_id = bootnode_enr.node_id();
         let bootnode_key = kbucket::Key::from(bootnode_node_id);
 
-        let data_radius = U256::MAX;
+        let data_radius = Distance::MAX;
         let bootnode = Node {
             enr: bootnode_enr.clone(),
             data_radius,

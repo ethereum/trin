@@ -8,8 +8,8 @@ use trin_core::{
         storage::PortalStorage,
         types::{
             content_key::IdentityContentKey,
+            distance::{Distance, XorMetric},
             messages::{Content, Message, PortalnetConfig, ProtocolId, SszEnr},
-            metric::XorMetric,
         },
         Enr,
     },
@@ -18,7 +18,6 @@ use trin_core::{
 };
 
 use discv5::TalkRequest;
-use ethereum_types::U256;
 use parking_lot::RwLock;
 use tokio::{
     sync::{mpsc, mpsc::unbounded_channel},
@@ -47,7 +46,7 @@ async fn init_overlay(
         discovery,
         utp_listener_tx,
         db,
-        U256::MAX,
+        Distance::MAX,
         protocol,
         validator,
     )

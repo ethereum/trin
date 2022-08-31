@@ -361,8 +361,9 @@ mod test {
     use serial_test::serial;
     use test_log::test;
 
-    use crate::portalnet::storage::{
-        DistanceFunction, PortalStorage, PortalStorageConfig, PortalStorageError,
+    use crate::portalnet::{
+        storage::{DistanceFunction, PortalStorage, PortalStorageConfig, PortalStorageError},
+        types::distance::Distance,
     };
 
     use crate::utils::db::setup_temp_dir;
@@ -487,7 +488,7 @@ mod test {
         };
 
         let mut storage = PortalStorage::new(storage_config)?;
-        storage.data_radius = u64::MAX / 2;
+        storage.data_radius = Distance::from(U256::MAX / U256::from(2));
 
         // randomly generated block hash
         let block_hash = "66e52cf632d725120ddd5fca0b104c79a06dd7dec20e9e1e09b27befa1f11c8d";
@@ -551,7 +552,7 @@ mod test {
         let content_key = generate_content_key(block_hash);
         let content_id = content_key.content_id();
         let content_id = Into::<[u8; 32]>::into(content_id);
-        let distance = storage.distance_to_content_id(&content_id);
+        let dist = storage.distance_to_content_id(&content_id);
 
         // Answer from https://xor.pw/
         // as u256: 29607079854947394638644290140513652007972538914554032181524285051455066058182
@@ -563,7 +564,7 @@ mod test {
         expected_distance.copy_from_slice(expected.as_slice());
 
         let expected = U256::from(expected_distance);
-        assert_eq!(distance, expected.0[3]);
+        assert_eq!(dist, Distance::from(expected));
 
         temp_dir.close()?;
         Ok(())
