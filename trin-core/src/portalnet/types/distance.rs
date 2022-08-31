@@ -118,6 +118,27 @@ mod test {
             }
         }
         quickcheck(prop as fn(DhtPoint) -> TestResult);
+
+        // 256 (2^8).
+        let point = U256::from(256);
+        let mut distance = [0u8; 32];
+        point.to_big_endian(&mut distance);
+        let point = DhtPoint(distance);
+        assert!(!prop(point).is_failure());
+
+        // 255 (2^8 - 1).
+        let point = U256::from(255);
+        let mut distance = [0u8; 32];
+        point.to_big_endian(&mut distance);
+        let point = DhtPoint(distance);
+        assert!(!prop(point).is_failure());
+
+        // 257 (2^8 + 1).
+        let point = U256::from(257);
+        let mut distance = [0u8; 32];
+        point.to_big_endian(&mut distance);
+        let point = DhtPoint(distance);
+        assert!(!prop(point).is_failure());
     }
 
     #[test]
