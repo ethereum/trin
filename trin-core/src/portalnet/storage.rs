@@ -543,6 +543,7 @@ pub mod test {
         assert_eq!(storage.node_id, node_id);
         assert_eq!(storage.storage_capacity_in_bytes, CAPACITY * 1000);
 
+        std::mem::drop(storage);
         temp_dir.close()?;
         Ok(())
     }
@@ -571,6 +572,8 @@ pub mod test {
             let mut value = [0u8; 32];
             rand::thread_rng().fill_bytes(&mut value);
             storage.store(&content_key, &value.to_vec()).unwrap();
+
+            std::mem::drop(storage);
             temp_dir.close().unwrap();
         }
         QuickCheck::new()
@@ -605,6 +608,7 @@ pub mod test {
 
         assert_eq!(result, value);
 
+        std::mem::drop(storage);
         temp_dir.close()?;
         Ok(())
     }
@@ -636,6 +640,7 @@ pub mod test {
 
         assert_eq!(32, bytes);
 
+        std::mem::drop(storage);
         temp_dir.close()?;
         Ok(())
     }
@@ -663,6 +668,7 @@ pub mod test {
         let result = storage.find_farthest_content_id()?;
         assert!(result.is_none());
 
+        std::mem::drop(storage);
         temp_dir.close()?;
         Ok(())
     }
@@ -701,6 +707,7 @@ pub mod test {
 
             let farthest = storage.find_farthest_content_id();
 
+            std::mem::drop(storage);
             temp_dir.close().unwrap();
 
             TestResult::from_bool(farthest.unwrap().unwrap() == expected_farthest)

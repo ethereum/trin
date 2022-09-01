@@ -511,6 +511,7 @@ mod test {
         let should_store_b = storage.should_store(&content_key_b)?;
         assert!(!should_store_b);
 
+        std::mem::drop(storage);
         temp_dir.close()?;
         Ok(())
     }
@@ -566,6 +567,7 @@ mod test {
         let expected = U256::from(expected_distance);
         assert_eq!(dist, Distance::from(expected));
 
+        std::mem::drop(storage);
         temp_dir.close()?;
         Ok(())
     }

@@ -71,7 +71,7 @@ jobs:
           command: rustup toolchain install stable-x86_64-pc-windows-msvc
       - run:
           name: Cargo Test --target x86_64-pc-windows-msvc
-          command: cargo test --target x86_64-pc-windows-msvc
+          command: cargo test --workspace --target x86_64-pc-windows-msvc
   utp-test:
     description: |
       Run uTP network simulator
@@ -125,7 +125,6 @@ jobs:
       - run:
           name: Stop containers
           command: docker-compose -f utp-testing/docker/docker-compose.yml down
-
 workflows:
   merge-test:
     jobs:
