@@ -411,10 +411,15 @@ where
     /// Begins initial FINDNODES query to populate the routing table.
     fn initialize_routing_table(&mut self, bootnodes: Vec<Enr>) {
         self.add_bootnodes(bootnodes.clone());
-        let node_id = self.local_enr().node_id();
-        // Begin request for our local node ID.
+        let local_node_id = self.local_enr().node_id();
 
-        self.init_find_nodes_query_with_initial_enrs(&node_id, bootnodes);
+        // Begin request for our local node ID.
+        self.init_find_nodes_query(&local_node_id);
+
+        for bucket_index in (255 - EXPECTED_NON_EMPTY_BUCKETS as u8)..255 {
+            let target_node_id = self.generate_random_node_id(bucket_index);
+            self.init_find_nodes_query(&target_node_id);
+        }
     }
 
     /// The main loop for the overlay service. The loop selects over different possible tasks to
