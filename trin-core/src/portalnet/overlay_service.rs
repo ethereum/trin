@@ -1764,8 +1764,24 @@ where
         Ok(closest_nodes)
     }
 
-    /// Starts a FindNode query to find nodes with IDs closest to target, starting with given enrs.
-    fn init_find_nodes_query_with_initial_enrs(&mut self, target: &NodeId, enrs: Vec<Enr>) {
+    /// Starts a FindNode query to find nodes with IDs closest to `target`.
+    fn init_find_nodes_query(&mut self, target: &NodeId) {
+        let target_key = Key::from(*target);
+        let mut closest_enrs: Vec<Enr> = self
+            .kbuckets
+            .write()
+            .closest_values(&target_key)
+            .map(|closest| closest.value.enr)
+            .collect();
+
+        // `closest_enrs` will be empty if `target` is our local node ID
+        // due to the behavior of `closest_values`. In this case, set closest_enrs
+        // to be all ENRs in routing table.
+        if closest_enrs.is_empty() {
+            let mut all_enrs: Vec<Enr> = self.table_entries_enr();
+            closest_enrs.append(&mut all_enrs);
+        }
+
         let query_config = QueryConfig {
             parallelism: self.query_parallelism,
             num_results: self.query_num_results,
@@ -1778,7 +1794,7 @@ where
                 distances_to_request: self.findnodes_query_distances_per_peer,
                 callback: None,
             },
-            untrusted_enrs: SmallVec::from_vec(enrs),
+            untrusted_enrs: SmallVec::from_vec(closest_enrs),
         };
 
         let known_closest_peers: Vec<Key<NodeId>> = query_info
@@ -1797,19 +1813,6 @@ where
             self.find_node_query_pool
                 .add_query(query_info, find_nodes_query);
         }
-    }
-
-    /// Starts a FindNode query to find nodes with IDs closest to target.
-    fn init_find_nodes_query(&mut self, target: &NodeId) {
-        let target_key = Key::from(*target);
-        let closest_enrs = self
-            .kbuckets
-            .write()
-            .closest_values(&target_key)
-            .map(|closest| closest.value.enr)
-            .collect();
-
-        self.init_find_nodes_query_with_initial_enrs(target, closest_enrs);
     }
 
     /// Starts a `FindContentQuery` for a target content key.
@@ -2577,8 +2580,8 @@ mod tests {
         assert_eq!(enrs_limited.len(), correct_limited_size);
     }
 
-    #[rstest]
-    fn test_init_find_nodes_query() {
+    #[test_log::test(tokio::test)]
+    async fn test_init_find_nodes_query() {
         let mut service = task::spawn(build_service());
 
         let (_, bootnode1) = generate_random_remote_enr();
@@ -2590,8 +2593,10 @@ mod tests {
 
         assert_eq!(service.find_node_query_pool.iter().count(), 0);
 
+        service.add_bootnodes(bootnodes);
+
         // Initialize the query and call `poll` so that it starts
-        service.init_find_nodes_query_with_initial_enrs(&target_node_id, bootnodes);
+        service.init_find_nodes_query(&target_node_id);
         let _ = service.find_node_query_pool.poll();
 
         let (query_info, query) = service.find_node_query_pool.iter().next().unwrap();
@@ -2616,40 +2621,6 @@ mod tests {
         assert!(query.started().is_some());
     }
 
-    fn init_find_nodes_query_with_initial_enrs_and_config(
-        service: &mut OverlayService<IdentityContentKey, XorMetric, MockValidator>,
-        target: &NodeId,
-        enrs: Vec<Enr>,
-        query_config: QueryConfig,
-    ) {
-        let query_info = QueryInfo {
-            query_type: QueryType::FindNode {
-                target: *target,
-                callback: None,
-                distances_to_request: service.findnodes_query_distances_per_peer,
-            },
-            untrusted_enrs: SmallVec::from_vec(enrs),
-        };
-
-        let known_closest_peers: Vec<Key<NodeId>> = query_info
-            .untrusted_enrs
-            .iter()
-            .map(|enr| Key::from(enr.node_id()))
-            .collect();
-
-        if known_closest_peers.is_empty() {
-            warn!(
-                "FindNodes query initiated but no closest peers in routing table. Aborting query."
-            );
-        } else {
-            let find_nodes_query =
-                FindNodeQuery::with_config(query_config, query_info.key(), known_closest_peers);
-            service
-                .find_node_query_pool
-                .add_query(query_info, find_nodes_query);
-        }
-    }
-
     #[test_log::test(tokio::test)]
     async fn test_advance_findnodes_query() {
         let mut service = build_service();
@@ -2661,18 +2632,9 @@ mod tests {
         let (_, target_enr) = generate_random_remote_enr();
         let target_node_id = target_enr.node_id();
 
-        let query_config = QueryConfig {
-            parallelism: service.query_parallelism,
-            num_results: 3,
-            peer_timeout: service.query_peer_timeout,
-        };
-
-        init_find_nodes_query_with_initial_enrs_and_config(
-            &mut service,
-            &target_node_id,
-            bootnodes,
-            query_config,
-        );
+        service.add_bootnodes(bootnodes);
+        service.query_num_results = 3;
+        service.init_find_nodes_query(&target_node_id);
 
         // Test that the first query event contains a proper query ID and request to the bootnode
         let event =
@@ -2784,7 +2746,9 @@ mod tests {
         let (_, target_enr) = generate_random_remote_enr();
         let target_node_id = target_enr.node_id();
 
-        service.init_find_nodes_query_with_initial_enrs(&target_node_id, bootnodes);
+        service.add_bootnodes(bootnodes);
+
+        service.init_find_nodes_query(&target_node_id);
 
         let _event =
             OverlayService::<IdentityContentKey, XorMetric, MockValidator>::query_event_poll(
