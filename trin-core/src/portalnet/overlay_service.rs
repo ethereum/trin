@@ -476,57 +476,7 @@ where
                     }
                 }
                 query_event = OverlayService::<TContentKey, TMetric, TValidator>::query_event_poll(&mut self.find_node_query_pool) => {
-                    match query_event {
-                        // Send a FINDNODES on behalf of the query.
-                        QueryEvent::Waiting(query_id, node_id, request) => {
-
-                            // Look up the node's ENR.
-                            if let Some(enr) = self.find_enr(&node_id) {
-
-                                let request = OverlayRequest::new(
-                                    request,
-                                    RequestDirection::Outgoing {
-                                        destination: enr
-                                    },
-                                    None,
-                                    Some(query_id),
-                                );
-                                let _ = self.command_tx.send(OverlayCommand::Request(request));
-
-                            } else {
-                                error!("[{:?}] Unable to send FINDNODES to unknown ENR with node ID {}",
-                                         self.protocol, node_id);
-                                if let Some((_, query)) = self.find_node_query_pool.get_mut(query_id) {
-                                    query.on_failure(&node_id);
-                                }
-                            }
-
-                        }
-                        // Query has ended.
-                        QueryEvent::Finished(query_id, mut query_info, query) | QueryEvent::TimedOut(query_id, mut query_info, query) => {
-                            let result = query.into_result();
-                            // Obtain the ENRs for the resulting nodes.
-                            let mut found_enrs = Vec::new();
-                            for node_id in result.into_iter() {
-                                if let Some(position) = query_info.untrusted_enrs.iter().position(|enr| enr.node_id() == node_id) {
-                                    let enr = query_info.untrusted_enrs.swap_remove(position);
-                                    found_enrs.push(enr);
-                                } else if let Some(enr) = self.find_enr(&node_id) {
-                                    // look up from the routing table
-                                    found_enrs.push(enr);
-                                }
-                                else {
-                                    warn!("ENR not present in queries results.");
-                                }
-                            }
-                            if let QueryType::FindNode { callback: Some(callback), .. } = query_info.query_type {
-                                if let Err(_) = callback.send(found_enrs.clone()) {
-                                    error!("Failed to send FindNode query {} results to callback", query_id);
-                                }
-                            }
-                            debug!("[{:?}] Query {} complete, discovered {} ENRs", self.protocol, query_id, found_enrs.len());
-                        }
-                    }
+                    self.handle_find_nodes_query_event(query_event);
                 }
                 // Handle query events for queries in the find content query pool.
                 query_event = OverlayService::<TContentKey, TMetric, TValidator>::query_event_poll(&mut self.find_content_query_pool) => {
@@ -670,6 +620,76 @@ where
             QueryPoolState::Waiting(None) | QueryPoolState::Idle => Poll::Pending,
         })
         .await
+    }
+
+    /// Handles a `QueryEvent` from a poll on the find nodes query pool.
+    fn handle_find_nodes_query_event(
+        &mut self,
+        query_event: QueryEvent<FindNodeQuery<NodeId>, TContentKey>,
+    ) {
+        match query_event {
+            // Send a FINDNODES on behalf of the query.
+            QueryEvent::Waiting(query_id, node_id, request) => {
+                // Look up the node's ENR.
+                if let Some(enr) = self.find_enr(&node_id) {
+                    let request = OverlayRequest::new(
+                        request,
+                        RequestDirection::Outgoing { destination: enr },
+                        None,
+                        Some(query_id),
+                    );
+                    let _ = self.command_tx.send(OverlayCommand::Request(request));
+                } else {
+                    error!(
+                        "[{:?}] Unable to send FINDNODES to unknown ENR with node ID {}",
+                        self.protocol, node_id
+                    );
+                    if let Some((_, query)) = self.find_node_query_pool.get_mut(query_id) {
+                        query.on_failure(&node_id);
+                    }
+                }
+            }
+            // Query has ended.
+            QueryEvent::Finished(query_id, mut query_info, query)
+            | QueryEvent::TimedOut(query_id, mut query_info, query) => {
+                let result = query.into_result();
+                // Obtain the ENRs for the resulting nodes.
+                let mut found_enrs = Vec::new();
+                for node_id in result.into_iter() {
+                    if let Some(position) = query_info
+                        .untrusted_enrs
+                        .iter()
+                        .position(|enr| enr.node_id() == node_id)
+                    {
+                        let enr = query_info.untrusted_enrs.swap_remove(position);
+                        found_enrs.push(enr);
+                    } else if let Some(enr) = self.find_enr(&node_id) {
+                        // look up from the routing table
+                        found_enrs.push(enr);
+                    } else {
+                        warn!("ENR not present in queries results.");
+                    }
+                }
+                if let QueryType::FindNode {
+                    callback: Some(callback),
+                    ..
+                } = query_info.query_type
+                {
+                    if let Err(_) = callback.send(found_enrs.clone()) {
+                        error!(
+                            "Failed to send FindNode query {} results to callback",
+                            query_id
+                        );
+                    }
+                }
+                debug!(
+                    "[{:?}] Query {} complete, discovered {} ENRs",
+                    self.protocol,
+                    query_id,
+                    found_enrs.len()
+                );
+            }
+        }
     }
 
     /// Handles a `QueryEvent` from a poll on the find content query pool.
