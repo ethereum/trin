@@ -36,9 +36,10 @@ pub enum HistoryEndpoint {
     SampleLatestMasterAccumulator,
 }
 
-/// Ethereum JSON-RPC endpoints not currently supported by portal network requests, proxied to Infura
+/// Ethereum JSON-RPC endpoints not currently supported by portal network requests, proxied to
+/// trusted provider
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum InfuraEndpoint {
+pub enum TrustedProviderEndpoint {
     BlockNumber,
 }
 
@@ -49,13 +50,13 @@ pub enum PortalEndpoint {
     GetBlockByHash,
 }
 
-/// Global portal network endpoints supported by trin, including infura proxies, Discv5, Ethereum and all overlay network endpoints supported by portal network requests
+/// Global portal network endpoints supported by trin, including trusted providers, Discv5, Ethereum and all overlay network endpoints supported by portal network requests
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum TrinEndpoint {
     Discv5Endpoint(Discv5Endpoint),
     HistoryEndpoint(HistoryEndpoint),
     StateEndpoint(StateEndpoint),
-    InfuraEndpoint(InfuraEndpoint),
+    TrustedProviderEndpoint(TrustedProviderEndpoint),
     PortalEndpoint(PortalEndpoint),
 }
 
@@ -69,7 +70,9 @@ impl FromStr for TrinEndpoint {
             "discv5_routingTableInfo" => Ok(TrinEndpoint::Discv5Endpoint(
                 Discv5Endpoint::RoutingTableInfo,
             )),
-            "eth_blockNumber" => Ok(TrinEndpoint::InfuraEndpoint(InfuraEndpoint::BlockNumber)),
+            "eth_blockNumber" => Ok(TrinEndpoint::TrustedProviderEndpoint(
+                TrustedProviderEndpoint::BlockNumber,
+            )),
             "eth_getBlockByHash" => {
                 Ok(TrinEndpoint::PortalEndpoint(PortalEndpoint::GetBlockByHash))
             }

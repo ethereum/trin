@@ -30,6 +30,7 @@ tracing = "0.1.26"
 tracing-subscriber = "0.2.18"
 tokio = { version = "1.8.0", features = ["full"] }
 trin-core = { path = "../trin-core" }
+ureq = { version = "2.2.0", features = ["json"] }
 
 [dev-dependencies]
 env_logger = "0.8.2"
