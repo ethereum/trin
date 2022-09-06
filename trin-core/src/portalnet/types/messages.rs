@@ -111,6 +111,11 @@ pub enum DiscoveryRequestError {
     InvalidMessage,
 }
 
+/// Capacity of the cache for observed `NodeAddress` values.
+/// Provides capacity for 32 full k-buckets. This capacity will be shared among all active portal
+/// subnetworks.
+const NODE_ADDR_CACHE_CAPACITY: usize = discv5::kbucket::MAX_NODES_PER_BUCKET * 32;
+
 #[derive(Clone)]
 pub struct PortalnetConfig {
     pub external_addr: Option<SocketAddr>,
@@ -121,6 +126,7 @@ pub struct PortalnetConfig {
     pub internal_ip: bool,
     pub no_stun: bool,
     pub enable_metrics: bool,
+    pub node_addr_cache_capacity: usize,
 }
 
 impl Default for PortalnetConfig {
@@ -134,6 +140,7 @@ impl Default for PortalnetConfig {
             internal_ip: false,
             no_stun: false,
             enable_metrics: false,
+            node_addr_cache_capacity: NODE_ADDR_CACHE_CAPACITY,
         }
     }
 }

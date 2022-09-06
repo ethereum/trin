@@ -1,6 +1,7 @@
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use log::debug;
+use parking_lot::RwLock;
 use tokio::sync::mpsc;
 
 use trin_core::utils::db::setup_temp_dir;

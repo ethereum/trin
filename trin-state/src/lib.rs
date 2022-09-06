@@ -1,6 +1,7 @@
 use log::info;
-use std::sync::Arc;
 use tokio::{sync::mpsc, task::JoinHandle};
+
+use std::sync::Arc;
 
 use crate::{events::StateEvents, jsonrpc::StateRequestHandler};
 use discv5::TalkRequest;

@@ -9,6 +9,8 @@ use discv5::{
     Discv5, Discv5Config, Discv5ConfigBuilder, Discv5Event, RequestError, TalkRequest,
 };
 use log::info;
+use lru::LruCache;
+use parking_lot::RwLock;
 use serde_json::{json, Value};
 use tokio::sync::mpsc;
 
@@ -16,6 +18,7 @@ use std::{
     convert::TryFrom,
     fmt,
     net::{IpAddr, SocketAddr},
+    sync::Arc,
 };
 
 /// Size of the buffer of the Discv5 TALKREQ channel.
@@ -44,11 +47,22 @@ impl Default for Config {
 
 pub type ProtocolRequest = Vec<u8>;
 
+/// The contact info for a remote node.
+#[derive(Clone, Debug)]
+pub struct NodeAddress {
+    /// The node's ENR.
+    pub enr: Enr,
+    /// The node's observed socket address.
+    pub socket_addr: SocketAddr,
+}
+
 /// Base Node Discovery Protocol v5 layer
 pub struct Discovery {
     /// The inner Discv5 service.
     discv5: Discv5,
-    /// Indicates if the Discv5 service has been started
+    /// A cache of the latest observed `NodeAddress` for a node ID.
+    node_addr_cache: Arc<RwLock<LruCache<NodeId, NodeAddress>>>,
+    /// Indicates if the Discv5 service has been started.
     pub started: bool,
     /// The socket address that the Discv5 service listens on.
     pub listen_socket: SocketAddr,
@@ -116,8 +130,12 @@ impl Discovery {
                 .map_err(|e| format!("Failed to add bootnode enr: {}", e))?;
         }
 
+        let node_addr_cache = LruCache::new(portal_config.node_addr_cache_capacity);
+        let node_addr_cache = Arc::new(RwLock::new(node_addr_cache));
+
         Ok(Self {
             discv5,
+            node_addr_cache,
             started: false,
             listen_socket: listen_all_ips,
         })
@@ -141,11 +159,21 @@ impl Discovery {
 
         let (talk_req_tx, talk_req_rx) = mpsc::channel(TALKREQ_CHANNEL_BUFFER);
 
+        let node_addr_cache = Arc::clone(&self.node_addr_cache);
+
         tokio::spawn(async move {
             while let Some(event) = event_rx.recv().await {
-                // Forward all TALKREQ messages.
-                if let Discv5Event::TalkRequest(talk_req) = event {
-                    let _ = talk_req_tx.send(talk_req).await;
+                match event {
+                    Discv5Event::TalkRequest(talk_req) => {
+                        // Forward all TALKREQ messages.
+                        let _ = talk_req_tx.send(talk_req).await;
+                    }
+                    Discv5Event::SessionEstablished(enr, socket_addr) => {
+                        node_addr_cache
+                            .write()
+                            .put(enr.node_id(), NodeAddress { enr, socket_addr });
+                    }
+                    _ => continue,
                 }
             }
         });
@@ -208,6 +236,14 @@ impl Discovery {
     /// Looks up the ENR for `node_id`.
     pub fn find_enr(&self, node_id: &NodeId) -> Option<Enr> {
         self.discv5.find_enr(node_id)
+    }
+
+    /// Returns the cached `NodeAddress` or `None` if not cached.
+    pub fn cached_node_addr(&self, node_id: &NodeId) -> Option<NodeAddress> {
+        match self.node_addr_cache.write().get(node_id) {
+            Some(addr) => Some(addr.clone()),
+            None => None,
+        }
     }
 
     /// Sends a TALKREQ message to `enr`.
