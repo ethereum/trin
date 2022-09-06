@@ -58,6 +58,8 @@ const BASE_HISTORY: usize = 10; // base delays history size
 const MAX_BASE_DELAY_AGE: Delay = Delay(60_000_000);
 // Discv5 socket timeout in milliseconds
 const DISCV5_SOCKET_TIMEOUT: u64 = 25;
+/// uTP receive timeout in milliseconds
+const UTP_RECEIVE_TIMEOUT: u64 = 1000;
 
 /// uTP connection id
 type ConnId = u16;
@@ -290,13 +292,15 @@ impl UtpListener {
                             }
 
                             let mut buf = [0; BUF_SIZE];
-                            match conn.recv(&mut buf).await {
-                                Ok(bytes_read) => {
-                                    if let Some(bytes) = bytes_read {
-                                        conn.recv_data_stream.extend_from_slice(&buf[..bytes]);
+                            match conn.recv_from(&mut buf).await {
+                                Ok((bytes_read, _)) => {
+                                    if bytes_read > 0 {
+                                        conn.recv_data_stream.extend_from_slice(&buf[..bytes_read]);
                                     }
                                 }
-                                Err(err) => error!("Unable to receive uTP DATA packet: {err}"),
+                                Err(err) => {
+                                    error!("Unable to receive uTP packet {packet:?}: {err}")
+                                }
                             }
                         } else {
                             warn!(
@@ -317,16 +321,23 @@ impl UtpListener {
                                 error!("Unable to send FIN packet to uTP stream handler");
                                 return;
                             }
-                            let mut buf = [0; BUF_SIZE];
 
-                            match conn.recv(&mut buf).await {
-                                Ok(bytes_read) => {
-                                    if let Some(bytes) = bytes_read {
-                                        conn.recv_data_stream.extend_from_slice(&buf[..bytes]);
-                                        conn.emit_close_event();
+                            // When FIN is received, loop and collect all remaining payload before closing the connection
+                            loop {
+                                let mut buf = [0; BUF_SIZE];
+
+                                match conn.recv_from(&mut buf).await {
+                                    Ok((bytes_read, _)) => {
+                                        if bytes_read > 0 {
+                                            conn.recv_data_stream
+                                                .extend_from_slice(&buf[..bytes_read]);
+                                        } else {
+                                            conn.emit_close_event();
+                                            break;
+                                        }
                                     }
+                                    Err(err) => error!("Unable to receive uTP FIN packet: {err}"),
                                 }
-                                Err(err) => error!("Unable to receive uTP FIN packet: {err}"),
                             }
                         } else if let Some(conn) = self
                             .utp_connections
@@ -722,16 +733,16 @@ impl UtpStream {
 
         let packet_to_send = packet.clone();
 
+        debug!("Sending uTP packet ... {packet:?}");
         // Handle talkreq/talkresp in the background
         tokio::spawn(async move {
             if let Err(response) = discovery
                 .send_talk_req(enr, ProtocolId::Utp, Vec::from(packet_to_send.as_ref()))
                 .await
             {
-                debug!("Unable to send utp talk req: {response}")
+                debug!("Unable to send uTP packet {:?}: {response}", packet_to_send)
             }
         });
-        debug!("sent {:?}", packet);
     }
 
     // Insert a new sample in the base delay list.
@@ -833,6 +844,7 @@ impl UtpStream {
         self.state = StreamState::FinSent;
     }
 
+    /// Handle uTP socket timeout
     async fn handle_receive_timeout(&mut self) -> anyhow::Result<()> {
         self.congestion_timeout *= 2;
         self.cwnd = INIT_CWND * MAX_DISCV5_PACKET_SIZE;
@@ -897,11 +909,10 @@ impl UtpStream {
                     )
                     .await;
 
+                // When resending SYN packet, we want to make sure that we increase the socket seq_nr
                 if self.seq_nr == 1 {
                     self.seq_nr = self.seq_nr.wrapping_add(1)
                 }
-
-                assert_eq!(self.seq_nr, 2)
             } else if self.state != StreamState::Uninitialized {
                 // The socket is waiting for incoming packets but the remote peer is silent:
                 // send a fast resend request.
@@ -1406,7 +1417,7 @@ impl UtpStream {
                     recv_retries += 1;
 
                     if recv_retries > self.max_retransmission_retries {
-                        tokio::time::sleep(Duration::from_millis(1000)).await;
+                        tokio::time::sleep(Duration::from_millis(UTP_RECEIVE_TIMEOUT)).await;
                         self.handle_receive_timeout().await?;
                         return Ok(None);
                     }
@@ -1439,7 +1450,7 @@ impl UtpStream {
                 )
                 .await
             {
-                let msg = format!("reply packet error: {msg}");
+                let msg = format!("reply packet error {packet:?}: {msg}");
                 warn!("{msg}");
                 return Err(anyhow!(msg));
             }
@@ -1555,10 +1566,7 @@ impl UtpStream {
     /// flight.
     pub async fn close(&mut self) -> anyhow::Result<()> {
         // Nothing to do if the stream's already closed or not connected
-        if self.state == StreamState::Closed
-            || self.state == StreamState::Uninitialized
-            || self.state == StreamState::SynSent
-        {
+        if self.state == StreamState::Closed || self.state == StreamState::Uninitialized {
             return Ok(());
         }
 
@@ -1574,6 +1582,7 @@ impl UtpStream {
         packet.set_type(PacketType::Fin);
 
         // Send FIN
+        debug!("Closing connection, sending {:?}", packet);
         if let Err(msg) = self
             .socket
             .send_talk_req(
@@ -1588,14 +1597,15 @@ impl UtpStream {
             return Err(anyhow!(msg));
         }
 
-        debug!("Closing connection, sent {:?}", packet);
         self.state = StreamState::FinSent;
 
-        // Receive JAKE
+        // Attempts to receive ST_FIN
         let mut buf = [0; BUF_SIZE];
-        while self.state != StreamState::Closed {
+        if self.state != StreamState::Closed {
             self.recv(&mut buf).await?;
         }
+
+        self.state = StreamState::Closed;
 
         Ok(())
     }
