@@ -833,6 +833,100 @@ impl UtpStream {
         self.state = StreamState::FinSent;
     }
 
+    async fn handle_receive_timeout(&mut self) -> anyhow::Result<()> {
+        self.congestion_timeout *= 2;
+        self.cwnd = INIT_CWND * MAX_DISCV5_PACKET_SIZE;
+
+        // There are four possible cases here:
+        //
+        // - If the socket is sending and waiting for acknowledgements (the send window is
+        //   not empty), resend the first unacknowledged packet;
+        //
+        // - If the socket is not sending and it hasn't sent a FIN yet, then it's waiting
+        //   for incoming packets: send a fast resend request;
+        //
+        // - If the socket sent a FIN previously, resend it.
+        //
+        // - If the socket sent a SYN previously, resend it.
+        debug!(
+            "self.send_window: {:?}",
+            self.send_window
+                .iter()
+                .map(Packet::seq_nr)
+                .collect::<Vec<u16>>()
+        );
+
+        if self.send_window.is_empty() {
+            // The socket is trying to close, all sent packets were acknowledged, and it has
+            // already sent a FIN: resend it.
+            if self.state == StreamState::FinSent {
+                let mut packet = Packet::new();
+                packet.set_connection_id(self.sender_connection_id);
+                packet.set_seq_nr(self.seq_nr);
+                packet.set_ack_nr(self.ack_nr);
+                packet.set_timestamp(now_microseconds());
+                packet.set_type(PacketType::Fin);
+
+                // Send FIN
+                debug!("resending FIN: {:?}", packet);
+                let _ = self
+                    .socket
+                    .send_talk_req(
+                        self.connected_to.clone(),
+                        ProtocolId::Utp,
+                        Vec::from(packet.as_ref()),
+                    )
+                    .await;
+            } else if self.state == StreamState::SynSent {
+                // SYN packet is sent but no response from remote peer, try to resend SYN packet
+                let mut packet = Packet::new();
+                packet.set_type(PacketType::Syn);
+                packet.set_timestamp(now_microseconds());
+                packet.set_connection_id(self.receiver_connection_id);
+                packet.set_wnd_size(WINDOW_SIZE);
+                packet.set_seq_nr(1);
+
+                // Send SYN
+                debug!("resending SYN: {:?}", packet);
+                let _ = self
+                    .socket
+                    .send_talk_req(
+                        self.connected_to.clone(),
+                        ProtocolId::Utp,
+                        Vec::from(packet.as_ref()),
+                    )
+                    .await;
+
+                if self.seq_nr == 1 {
+                    self.seq_nr = self.seq_nr.wrapping_add(1)
+                }
+
+                assert_eq!(self.seq_nr, 2)
+            } else if self.state != StreamState::Uninitialized {
+                // The socket is waiting for incoming packets but the remote peer is silent:
+                // send a fast resend request.
+                debug!("sending fast resend request");
+                // TODO: send fast resend request
+            }
+        } else {
+            // The socket is sending data packets but there is no reply from the remote
+            // peer: resend the first unacknowledged packet with the current timestamp.
+            let packet = &mut self.send_window[0];
+            packet.set_timestamp(now_microseconds());
+            let _ = self
+                .socket
+                .send_talk_req(
+                    self.connected_to.clone(),
+                    ProtocolId::Utp,
+                    Vec::from(packet.as_ref()),
+                )
+                .await;
+            debug!("resent {:?}", packet);
+        }
+
+        Ok(())
+    }
+
     #[async_recursion]
     async fn handle_packet(&mut self, packet: &Packet, src: Enr) -> anyhow::Result<Option<Packet>> {
         debug!(
@@ -1312,6 +1406,8 @@ impl UtpStream {
                     recv_retries += 1;
 
                     if recv_retries > self.max_retransmission_retries {
+                        tokio::time::sleep(Duration::from_millis(1000)).await;
+                        self.handle_receive_timeout().await?;
                         return Ok(None);
                     }
                 }
