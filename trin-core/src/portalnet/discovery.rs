@@ -47,12 +47,21 @@ impl Default for Config {
 
 pub type ProtocolRequest = Vec<u8>;
 
+/// The contact info for a remote node.
+#[derive(Clone, Debug)]
+pub struct NodeAddress {
+    /// The node's ENR.
+    pub enr: Enr,
+    /// The node's observed socket address.
+    pub socket_addr: SocketAddr,
+}
+
 /// Base Node Discovery Protocol v5 layer
 pub struct Discovery {
     /// The inner Discv5 service.
     discv5: Discv5,
-    /// A cache of the latest ENR and socket address pairs seen for a node ID.
-    enr_cache: Arc<RwLock<LruCache<NodeId, (Enr, SocketAddr)>>>,
+    /// A cache of the latest observed `NodeAddress` for a node ID.
+    node_addr_cache: Arc<RwLock<LruCache<NodeId, NodeAddress>>>,
     /// Indicates if the Discv5 service has been started.
     pub started: bool,
     /// The socket address that the Discv5 service listens on.
@@ -121,12 +130,12 @@ impl Discovery {
                 .map_err(|e| format!("Failed to add bootnode enr: {}", e))?;
         }
 
-        let enr_cache = LruCache::new(portal_config.enr_cache_capacity);
-        let enr_cache = Arc::new(RwLock::new(enr_cache));
+        let node_addr_cache = LruCache::new(portal_config.node_addr_cache_capacity);
+        let node_addr_cache = Arc::new(RwLock::new(node_addr_cache));
 
         Ok(Self {
             discv5,
-            enr_cache,
+            node_addr_cache,
             started: false,
             listen_socket: listen_all_ips,
         })
@@ -150,7 +159,7 @@ impl Discovery {
 
         let (talk_req_tx, talk_req_rx) = mpsc::channel(TALKREQ_CHANNEL_BUFFER);
 
-        let enr_cache = Arc::clone(&self.enr_cache);
+        let node_addr_cache = Arc::clone(&self.node_addr_cache);
 
         tokio::spawn(async move {
             while let Some(event) = event_rx.recv().await {
@@ -160,7 +169,9 @@ impl Discovery {
                         let _ = talk_req_tx.send(talk_req).await;
                     }
                     Discv5Event::SessionEstablished(enr, socket_addr) => {
-                        enr_cache.write().put(enr.node_id(), (enr, socket_addr));
+                        node_addr_cache
+                            .write()
+                            .put(enr.node_id(), NodeAddress { enr, socket_addr });
                     }
                     _ => continue,
                 }
@@ -227,10 +238,10 @@ impl Discovery {
         self.discv5.find_enr(node_id)
     }
 
-    /// Returns the cached ENR and observed socket address or `None` if not cached.
-    pub fn cached_enr(&self, node_id: &NodeId) -> Option<(Enr, SocketAddr)> {
-        match self.enr_cache.write().get(node_id) {
-            Some(enr) => Some(enr.clone()),
+    /// Returns the cached `NodeAddress` or `None` if not cached.
+    pub fn cached_node_addr(&self, node_id: &NodeId) -> Option<NodeAddress> {
+        match self.node_addr_cache.write().get(node_id) {
+            Some(addr) => Some(addr.clone()),
             None => None,
         }
     }
