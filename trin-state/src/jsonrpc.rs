@@ -14,7 +14,7 @@ use trin_core::{
         },
         utils::bucket_entries_to_json,
     },
-    portalnet::{storage::PortalContentStore, types::content_key::StateContentKey},
+    portalnet::{storage::ContentStore, types::content_key::StateContentKey},
 };
 
 /// Handles State network JSON-RPC requests

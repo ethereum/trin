@@ -15,7 +15,7 @@ use trin_core::{
         utils::bucket_entries_to_json,
     },
     portalnet::{
-        storage::PortalContentStore,
+        storage::ContentStore,
         types::{
             content_key::HistoryContentKey,
             messages::{Content, FindContent, Request, Response, SszEnr},

@@ -9,7 +9,7 @@ use structopt::StructOpt;
 
 use trin_core::{
     portalnet::{
-        storage::{PortalContentStore, PortalStorage},
+        storage::{ContentStore, PortalStorage},
         types::content_key::{BlockHeader, HistoryContentKey, IdentityContentKey},
     },
     types::header::Header,
@@ -113,18 +113,16 @@ fn load_file_data(path: &Path, storage: &mut PortalStorage) {
                             let content_key_bytes: Vec<u8> = content_key.clone().into();
                             let content_key_hex = hex::encode(&content_key_bytes);
                             total_count += 1;
-                            if !storage.is_key_within_radius(&content_key) {
-                                continue;
-                            }
-                            match storage.get(&content_key).unwrap() {
-                                None => {
-                                    let header_bytes = rlp::encode(&block.header.clone().unwrap());
-                                    storage.put(content_key, &header_bytes.as_ref()).unwrap();
-                                    println!("Stored content key: {:?}", content_key_hex);
-                                    println!("- Block RLP: {:?}", prefix_removed_rlp.get(0..31));
-                                    stored_count += 1;
-                                }
-                                Some(_) => {}
+
+                            if storage
+                                .is_key_within_radius_and_unavailable(&content_key)
+                                .unwrap()
+                            {
+                                let header_bytes = rlp::encode(&block.header.clone().unwrap());
+                                storage.put(content_key, &header_bytes.as_ref()).unwrap();
+                                println!("Stored content key: {:?}", content_key_hex);
+                                println!("- Block RLP: {:?}", prefix_removed_rlp.get(0..31));
+                                stored_count += 1;
                             }
                         }
                     }

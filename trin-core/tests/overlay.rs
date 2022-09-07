@@ -4,7 +4,7 @@ use trin_core::{
     portalnet::{
         discovery::Discovery,
         overlay::{OverlayConfig, OverlayProtocol},
-        storage::{DistanceFunction, MemoryPortalContentStore, PortalContentStore},
+        storage::{ContentStore, DistanceFunction, MemoryContentStore},
         types::{
             content_key::IdentityContentKey,
             messages::{Content, Message, PortalnetConfig, ProtocolId, SszEnr},
@@ -29,11 +29,11 @@ use trin_core::utp::stream::UtpListenerRequest;
 async fn init_overlay(
     discovery: Arc<Discovery>,
     protocol: ProtocolId,
-) -> OverlayProtocol<IdentityContentKey, XorMetric, MockValidator, MemoryPortalContentStore> {
+) -> OverlayProtocol<IdentityContentKey, XorMetric, MockValidator, MemoryContentStore> {
     let overlay_config = OverlayConfig::default();
 
     let node_id = discovery.local_enr().node_id();
-    let store = MemoryPortalContentStore::new(node_id, DistanceFunction::Xor);
+    let store = MemoryContentStore::new(node_id, DistanceFunction::Xor);
     let store = Arc::new(RwLock::new(store));
 
     // Ignore all uTP events
@@ -55,9 +55,7 @@ async fn init_overlay(
 
 async fn spawn_overlay(
     discovery: Arc<Discovery>,
-    overlay: Arc<
-        OverlayProtocol<IdentityContentKey, XorMetric, MockValidator, MemoryPortalContentStore>,
-    >,
+    overlay: Arc<OverlayProtocol<IdentityContentKey, XorMetric, MockValidator, MemoryContentStore>>,
 ) {
     let (overlay_tx, mut overlay_rx) = mpsc::unbounded_channel();
     let mut discovery_rx = discovery

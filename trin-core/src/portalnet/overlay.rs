@@ -30,7 +30,7 @@ use crate::{
         overlay_service::{
             OverlayCommand, OverlayRequest, OverlayRequestError, OverlayService, RequestDirection,
         },
-        storage::PortalContentStore,
+        storage::ContentStore,
         types::{
             content_key::{OverlayContentKey, RawContentKey},
             messages::{
@@ -120,7 +120,7 @@ impl<
         TContentKey: 'static + OverlayContentKey + Send + Sync,
         TMetric: Metric + Send + Sync,
         TValidator: 'static + Validator<TContentKey> + Send + Sync,
-        TStore: 'static + PortalContentStore + Send + Sync,
+        TStore: 'static + ContentStore + Send + Sync,
     > OverlayProtocol<TContentKey, TMetric, TValidator, TStore>
 where
     <TContentKey as TryFrom<Vec<u8>>>::Error: Debug + Display + Send,
@@ -279,7 +279,13 @@ where
                                     .expect("Unable to validate received content: {err:?}");
 
                                 // Ignore error since all validated content is propagated.
-                                let _ = store.write().put(key.clone(), &content_value.to_vec());
+                                if store
+                                    .read()
+                                    .is_key_within_radius_and_unavailable(&key)
+                                    .expect("unable to check data store for content")
+                                {
+                                    let _ = store.write().put(key.clone(), &content_value.to_vec());
+                                }
 
                                 (key, content_value)
                             }))
