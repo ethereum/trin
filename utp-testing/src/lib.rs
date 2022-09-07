@@ -85,7 +85,7 @@ impl TestApp {
         conn.send_to(&payload).await.unwrap();
 
         tokio::spawn(async move {
-            conn.close().await.unwrap();
+            let _ = conn.close().await;
             debug!("Connection state: {:?}", conn.state)
         });
     }

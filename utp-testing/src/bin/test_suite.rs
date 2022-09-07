@@ -46,7 +46,7 @@ async fn send_10k_bytes() -> anyhow::Result<()> {
     assert_eq!(response, "true");
 
     // Sleep to allow time for uTP transmission
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    tokio::time::sleep(Duration::from_secs(4)).await;
 
     // Verify received uTP payload
     let utp_payload: String = server_rpc.request("get_utp_payload", None).await.unwrap();
