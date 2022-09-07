@@ -58,6 +58,8 @@ const BASE_HISTORY: usize = 10; // base delays history size
 const MAX_BASE_DELAY_AGE: Delay = Delay(60_000_000);
 // Discv5 socket timeout in milliseconds
 const DISCV5_SOCKET_TIMEOUT: u64 = 25;
+/// uTP receive timeout in milliseconds
+const UTP_RECEIVE_TIMEOUT: u64 = 1000;
 
 /// uTP connection id
 type ConnId = u16;
@@ -289,17 +291,16 @@ impl UtpListener {
                                 return;
                             }
 
-                            let mut result = Vec::new();
-
                             let mut buf = [0; BUF_SIZE];
-                            match conn.recv(&mut buf).await {
-                                Ok(bytes_read) => {
-                                    if let Some(bytes) = bytes_read {
-                                        result.extend_from_slice(&buf[..bytes]);
-                                        conn.recv_data_stream.append(&mut result);
+                            match conn.recv_from(&mut buf).await {
+                                Ok((bytes_read, _)) => {
+                                    if bytes_read > 0 {
+                                        conn.recv_data_stream.extend_from_slice(&buf[..bytes_read]);
                                     }
                                 }
-                                Err(err) => error!("Unable to receive uTP DATA packet: {err}"),
+                                Err(err) => {
+                                    error!("Unable to receive uTP packet {packet:?}: {err}")
+                                }
                             }
                         } else {
                             warn!(
@@ -320,9 +321,23 @@ impl UtpListener {
                                 error!("Unable to send FIN packet to uTP stream handler");
                                 return;
                             }
-                            let mut buf = [0; BUF_SIZE];
-                            if let Err(msg) = conn.recv(&mut buf).await {
-                                error!("Unable to receive uTP FIN packet: {msg}")
+
+                            // When FIN is received, loop and collect all remaining payload before closing the connection
+                            loop {
+                                let mut buf = [0; BUF_SIZE];
+
+                                match conn.recv_from(&mut buf).await {
+                                    Ok((bytes_read, _)) => {
+                                        if bytes_read > 0 {
+                                            conn.recv_data_stream
+                                                .extend_from_slice(&buf[..bytes_read]);
+                                        } else {
+                                            conn.emit_close_event();
+                                            break;
+                                        }
+                                    }
+                                    Err(err) => error!("Unable to receive uTP FIN packet: {err}"),
+                                }
                             }
                         } else if let Some(conn) = self
                             .utp_connections
@@ -488,7 +503,7 @@ pub struct UtpStream {
     unsent_queue: VecDeque<Packet>,
 
     /// Bytes in flight
-    cur_window: u32,
+    pub cur_window: u32,
 
     /// Window size of the remote peer
     remote_wnd_size: u32,
@@ -718,16 +733,16 @@ impl UtpStream {
 
         let packet_to_send = packet.clone();
 
+        debug!("Sending uTP packet ... {packet:?}");
         // Handle talkreq/talkresp in the background
         tokio::spawn(async move {
             if let Err(response) = discovery
                 .send_talk_req(enr, ProtocolId::Utp, Vec::from(packet_to_send.as_ref()))
                 .await
             {
-                debug!("Unable to send utp talk req: {response}")
+                debug!("Unable to send uTP packet {:?}: {response}", packet_to_send)
             }
         });
-        debug!("sent {:?}", packet);
     }
 
     // Insert a new sample in the base delay list.
@@ -789,6 +804,14 @@ impl UtpStream {
 
     /// Builds the selective acknowledgement extension data for usage in packets.
     fn build_selective_ack(&self) -> Vec<u8> {
+        // Build selective ack for empty incoming buffer
+        if self.incoming_buffer.is_empty() {
+            let mut sack: Vec<u8> = vec![0u8; 4];
+            sack[0] = 1;
+
+            return sack;
+        }
+
         let stashed = self
             .incoming_buffer
             .iter()
@@ -819,6 +842,100 @@ impl UtpStream {
 
         self.send_packet(&mut packet).await;
         self.state = StreamState::FinSent;
+    }
+
+    /// Handle uTP socket timeout
+    async fn handle_receive_timeout(&mut self) -> anyhow::Result<()> {
+        self.congestion_timeout *= 2;
+        self.cwnd = INIT_CWND * MAX_DISCV5_PACKET_SIZE;
+
+        // There are four possible cases here:
+        //
+        // - If the socket is sending and waiting for acknowledgements (the send window is
+        //   not empty), resend the first unacknowledged packet;
+        //
+        // - If the socket is not sending and it hasn't sent a FIN yet, then it's waiting
+        //   for incoming packets: send a fast resend request;
+        //
+        // - If the socket sent a FIN previously, resend it.
+        //
+        // - If the socket sent a SYN previously, resend it.
+        debug!(
+            "self.send_window: {:?}",
+            self.send_window
+                .iter()
+                .map(Packet::seq_nr)
+                .collect::<Vec<u16>>()
+        );
+
+        if self.send_window.is_empty() {
+            // The socket is trying to close, all sent packets were acknowledged, and it has
+            // already sent a FIN: resend it.
+            if self.state == StreamState::FinSent {
+                let mut packet = Packet::new();
+                packet.set_connection_id(self.sender_connection_id);
+                packet.set_seq_nr(self.seq_nr);
+                packet.set_ack_nr(self.ack_nr);
+                packet.set_timestamp(now_microseconds());
+                packet.set_type(PacketType::Fin);
+
+                // Send FIN
+                debug!("resending FIN: {:?}", packet);
+                let _ = self
+                    .socket
+                    .send_talk_req(
+                        self.connected_to.clone(),
+                        ProtocolId::Utp,
+                        Vec::from(packet.as_ref()),
+                    )
+                    .await;
+            } else if self.state == StreamState::SynSent {
+                // SYN packet is sent but no response from remote peer, try to resend SYN packet
+                let mut packet = Packet::new();
+                packet.set_type(PacketType::Syn);
+                packet.set_timestamp(now_microseconds());
+                packet.set_connection_id(self.receiver_connection_id);
+                packet.set_wnd_size(WINDOW_SIZE);
+                packet.set_seq_nr(1);
+
+                // Send SYN
+                debug!("resending SYN: {:?}", packet);
+                let _ = self
+                    .socket
+                    .send_talk_req(
+                        self.connected_to.clone(),
+                        ProtocolId::Utp,
+                        Vec::from(packet.as_ref()),
+                    )
+                    .await;
+
+                // When resending SYN packet, we want to make sure that we increase the socket seq_nr
+                if self.seq_nr == 1 {
+                    self.seq_nr = self.seq_nr.wrapping_add(1)
+                }
+            } else if self.state != StreamState::Uninitialized {
+                // The socket is waiting for incoming packets but the remote peer is silent:
+                // send a fast resend request.
+                debug!("sending fast resend request");
+                // TODO: send fast resend request
+            }
+        } else {
+            // The socket is sending data packets but there is no reply from the remote
+            // peer: resend the first unacknowledged packet with the current timestamp.
+            let packet = &mut self.send_window[0];
+            packet.set_timestamp(now_microseconds());
+            let _ = self
+                .socket
+                .send_talk_req(
+                    self.connected_to.clone(),
+                    ProtocolId::Utp,
+                    Vec::from(packet.as_ref()),
+                )
+                .await;
+            debug!("resent {:?}", packet);
+        }
+
+        Ok(())
     }
 
     #[async_recursion]
@@ -910,7 +1027,7 @@ impl UtpStream {
                 let mut reply = self.prepare_reply(packet, PacketType::State);
 
                 if packet.seq_nr().wrapping_sub(self.ack_nr) > 1 {
-                    debug!(
+                    warn!(
                         "current ack_nr ({}) is behind received packet seq_nr ({})",
                         self.ack_nr,
                         packet.seq_nr()
@@ -926,7 +1043,6 @@ impl UtpStream {
 
                 // Give up, the remote peer might not care about our missing packets
                 self.state = StreamState::Closed;
-                self.emit_close_event();
 
                 Ok(Some(reply))
             }
@@ -1097,6 +1213,25 @@ impl UtpStream {
                 }
 
                 if let Some(last_seq_nr) = self.send_window.last().map(Packet::seq_nr) {
+                    // Remove all acknowledged packets from the send window
+                    let ack_packets = extension
+                        .iter()
+                        .enumerate()
+                        .filter(|&(_, received)| received)
+                        .map(|(idx, _)| packet.ack_nr() + 2 + idx as u16)
+                        .take_while(|&seq_nr| seq_nr <= last_seq_nr);
+
+                    for seq_nr in ack_packets {
+                        if let Some(position) = self
+                            .send_window
+                            .iter()
+                            .position(|packet| packet.seq_nr() == seq_nr)
+                        {
+                            let packet = self.send_window.remove(position);
+                            self.cur_window -= packet.len() as u32;
+                        }
+                    }
+                    // Resend lost packets
                     let lost_packets = extension
                         .iter()
                         .enumerate()
@@ -1282,6 +1417,8 @@ impl UtpStream {
                     recv_retries += 1;
 
                     if recv_retries > self.max_retransmission_retries {
+                        tokio::time::sleep(Duration::from_millis(UTP_RECEIVE_TIMEOUT)).await;
+                        self.handle_receive_timeout().await?;
                         return Ok(None);
                     }
                 }
@@ -1290,30 +1427,37 @@ impl UtpStream {
 
         debug!("received {:?}", packet);
 
+        // Insert data packet into the incoming buffer if it isn't a duplicate of a previously
+        // discarded packet
+        if packet.get_type() == PacketType::Data
+            && packet.seq_nr().wrapping_sub(self.last_dropped) > 0
+        {
+            self.insert_into_buffer(packet.clone());
+        }
+
         // Process packet, including sending a reply if necessary
         if let Some(mut pkt) = self
             .handle_packet(&packet, self.connected_to.clone())
             .await?
         {
             pkt.set_wnd_size(WINDOW_SIZE.saturating_sub(self.cur_window));
-            self.socket
+            if let Err(msg) = self
+                .socket
                 .send_talk_req(
                     self.connected_to.clone(),
                     ProtocolId::Utp,
                     Vec::from(pkt.as_ref()),
                 )
                 .await
-                .unwrap();
+            {
+                let msg = format!("reply packet error {packet:?}: {msg}");
+                warn!("{msg}");
+                return Err(anyhow!(msg));
+            }
+
             debug!("sent {:?}", pkt);
         }
 
-        // Insert data packet into the incoming buffer if it isn't a duplicate of a previously
-        // discarded packet
-        if packet.get_type() == PacketType::Data
-            && packet.seq_nr().wrapping_sub(self.last_dropped) > 0
-        {
-            self.insert_into_buffer(packet);
-        }
         // Flush incoming buffer if possible
         let read = self.flush_incoming_buffer(buf);
 
@@ -1422,10 +1566,7 @@ impl UtpStream {
     /// flight.
     pub async fn close(&mut self) -> anyhow::Result<()> {
         // Nothing to do if the stream's already closed or not connected
-        if self.state == StreamState::Closed
-            || self.state == StreamState::Uninitialized
-            || self.state == StreamState::SynSent
-        {
+        if self.state == StreamState::Closed || self.state == StreamState::Uninitialized {
             return Ok(());
         }
 
@@ -1441,6 +1582,7 @@ impl UtpStream {
         packet.set_type(PacketType::Fin);
 
         // Send FIN
+        debug!("Closing connection, sending {:?}", packet);
         if let Err(msg) = self
             .socket
             .send_talk_req(
@@ -1455,14 +1597,15 @@ impl UtpStream {
             return Err(anyhow!(msg));
         }
 
-        debug!("Closing connection, sent {:?}", packet);
         self.state = StreamState::FinSent;
 
-        // Receive JAKE
+        // Attempts to receive ST_FIN
         let mut buf = [0; BUF_SIZE];
-        while self.state != StreamState::Closed {
+        if self.state != StreamState::Closed {
             self.recv(&mut buf).await?;
         }
+
+        self.state = StreamState::Closed;
 
         Ok(())
     }
@@ -1480,6 +1623,7 @@ impl UtpStream {
 
 #[cfg(test)]
 mod tests {
+    use crate::utp::packets::PacketType::State;
     use crate::{
         portalnet::{
             discovery::Discovery,
@@ -1495,7 +1639,10 @@ mod tests {
             trin_helpers::UtpStreamId,
         },
     };
-    use discv5::Discv5Event;
+
+    use discv5::TalkRequest;
+    use tokio::sync::mpsc;
+
     use std::{
         convert::TryFrom,
         net::{IpAddr, SocketAddr},
@@ -1520,8 +1667,8 @@ mod tests {
             ..Default::default()
         };
         let mut discv5 = Discovery::new(config).unwrap();
-        let enr = discv5.discv5.local_enr();
-        discv5.start().await.unwrap();
+        let enr = discv5.local_enr();
+        let talk_req_rx = discv5.start().await.unwrap();
 
         let discv5 = Arc::new(discv5);
 
@@ -1533,7 +1680,7 @@ mod tests {
             None,
         );
         // TODO: Create `Discv5Socket` struct to encapsulate all socket logic
-        spawn_socket_recv(Arc::clone(&discv5), conn.clone());
+        spawn_socket_recv(talk_req_rx, conn.clone());
 
         conn
     }
@@ -1547,7 +1694,7 @@ mod tests {
             ..Default::default()
         };
         let mut discv5 = Discovery::new(config).unwrap();
-        discv5.start().await.unwrap();
+        let talk_req_rx = discv5.start().await.unwrap();
 
         let discv5 = Arc::new(discv5);
 
@@ -1558,40 +1705,43 @@ mod tests {
             UtpStreamId::OfferStream,
             None,
         );
-        spawn_socket_recv(Arc::clone(&discv5), conn.clone());
+
+        spawn_socket_recv(talk_req_rx, conn.clone());
 
         (discv5.local_enr(), conn)
     }
 
-    fn spawn_socket_recv(discv5: Arc<Discovery>, conn: UtpStream) {
+    fn spawn_socket_recv(mut talk_req_rx: mpsc::Receiver<TalkRequest>, conn: UtpStream) {
         tokio::spawn(async move {
-            let mut receiver = discv5.discv5.event_stream().await.unwrap();
-            while let Some(event) = receiver.recv().await {
-                match event {
-                    Discv5Event::TalkRequest(request) => {
-                        let protocol_id =
-                            ProtocolId::from_str(&hex::encode_upper(request.protocol())).unwrap();
+            while let Some(request) = talk_req_rx.recv().await {
+                let protocol_id =
+                    ProtocolId::from_str(&hex::encode_upper(request.protocol())).unwrap();
 
-                        match protocol_id {
-                            ProtocolId::Utp => {
-                                let payload = request.body();
-                                let packet = Packet::try_from(payload).unwrap();
-                                conn.discv5_tx.send(packet).unwrap();
-                            }
-                            _ => {
-                                panic!(
-                                    "Received TalkRequest on unknown protocol from={} protocol={} body={}",
-                                    request.node_id(),
-                                    hex::encode_upper(request.protocol()),
-                                    hex::encode(request.body()),
-                                );
-                            }
-                        }
+                match protocol_id {
+                    ProtocolId::Utp => {
+                        let payload = request.body();
+                        let packet = Packet::try_from(payload).unwrap();
+                        conn.discv5_tx.send(packet).unwrap();
                     }
-                    _ => continue,
+                    _ => {
+                        panic!(
+                            "Received TalkRequest on unknown protocol from={} protocol={} body={}",
+                            request.node_id(),
+                            hex::encode_upper(request.protocol()),
+                            hex::encode(request.body()),
+                        );
+                    }
                 }
             }
         });
+    }
+
+    #[test_log::test(tokio::test)]
+    async fn test_build_selective_ack_empty_buffer() {
+        let stream = server_setup().await;
+        let sack = stream.build_selective_ack();
+
+        assert_eq!(sack, vec![1, 0, 0, 0]);
     }
 
     #[test_log::test(tokio::test)]
@@ -1691,6 +1841,31 @@ mod tests {
 
         // FIN should be acknowledged
         assert_eq!(response.ack_nr(), packet.seq_nr());
+    }
+
+    #[test_log::test(tokio::test)]
+    async fn test_handle_state_packet() {
+        let (_, server_enr) = generate_random_remote_enr();
+        let (_, mut stream) = client_setup(server_enr).await;
+
+        // Push DATA packet to send window
+        let mut data_packet = Packet::new();
+        data_packet.set_seq_nr(3);
+        stream.cur_window += data_packet.len() as u32;
+        stream.send_window.push(data_packet);
+
+        // Handle STATE packet with ack_nr + 2 selective ack
+        let mut state_packet = Packet::new();
+        state_packet.set_type(State);
+        state_packet.set_seq_nr(100);
+        state_packet.set_ack_nr(1);
+        state_packet.set_selective_ack(vec![1, 0, 0, 0]);
+
+        stream.last_acked = 1;
+        stream.handle_state_packet(&state_packet).await;
+
+        // Send window should be empty
+        assert!(stream.send_window.is_empty())
     }
 
     #[test_log::test(tokio::test)]
@@ -1909,10 +2084,9 @@ mod tests {
         for _ in 0..3 {
             server
                 .socket
-                .discv5
-                .talk_req(
+                .send_talk_req(
                     server.connected_to.clone(),
-                    Vec::try_from(ProtocolId::Utp).unwrap(),
+                    ProtocolId::Utp,
                     packet.as_ref().to_vec(),
                 )
                 .await
@@ -1935,12 +2109,7 @@ mod tests {
                 let response = response.unwrap();
                 server
                     .socket
-                    .discv5
-                    .talk_req(
-                        client_addr,
-                        Vec::try_from(ProtocolId::Utp).unwrap(),
-                        response.as_ref().to_vec(),
-                    )
+                    .send_talk_req(client_addr, ProtocolId::Utp, response.as_ref().to_vec())
                     .await
                     .unwrap();
             }
@@ -2037,10 +2206,9 @@ mod tests {
             packet.set_timestamp(now_microseconds());
             client
                 .socket
-                .discv5
-                .talk_req(
+                .send_talk_req(
                     client.connected_to.clone(),
-                    Vec::try_from(ProtocolId::Utp).unwrap(),
+                    ProtocolId::Utp,
                     packet.as_ref().to_vec(),
                 )
                 .await

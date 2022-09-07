@@ -14,7 +14,7 @@ pub enum StateEndpoint {
     FindContent,
     FindNodes,
     LocalContent,
-    Offer,
+    SendOffer,
     Store,
     Ping,
     RoutingTableInfo,
@@ -28,6 +28,7 @@ pub enum HistoryEndpoint {
     FindNodes,
     LocalContent,
     Offer,
+    SendOffer,
     Ping,
     RecursiveFindContent,
     Store,
@@ -84,6 +85,9 @@ impl FromStr for TrinEndpoint {
                 Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::LocalContent))
             }
             "portal_historyOffer" => Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::Offer)),
+            "portal_historySendOffer" => {
+                Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::SendOffer))
+            }
             "portal_historyPing" => Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::Ping)),
             "portal_historyRadius" => {
                 Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::DataRadius))
@@ -99,7 +103,7 @@ impl FromStr for TrinEndpoint {
             "portal_stateLocalContent" => {
                 Ok(TrinEndpoint::StateEndpoint(StateEndpoint::LocalContent))
             }
-            "portal_stateOffer" => Ok(TrinEndpoint::StateEndpoint(StateEndpoint::Offer)),
+            "portal_stateSendOffer" => Ok(TrinEndpoint::StateEndpoint(StateEndpoint::SendOffer)),
             "portal_stateStore" => Ok(TrinEndpoint::StateEndpoint(StateEndpoint::Store)),
             "portal_statePing" => Ok(TrinEndpoint::StateEndpoint(StateEndpoint::Ping)),
             "portal_stateRadius" => Ok(TrinEndpoint::StateEndpoint(StateEndpoint::DataRadius)),

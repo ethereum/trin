@@ -10,7 +10,7 @@ use trin_core::{
         endpoints::HistoryEndpoint,
         types::{
             FindContentParams, FindNodesParams, HistoryJsonRpcRequest, LocalContentParams,
-            OfferParams, PingParams, RecursiveFindContentParams, StoreParams,
+            OfferParams, PingParams, RecursiveFindContentParams, SendOfferParams, StoreParams,
         },
         utils::bucket_entries_to_json,
     },
@@ -36,25 +36,27 @@ impl HistoryRequestHandler {
         while let Some(request) = self.history_rx.recv().await {
             match request.endpoint {
                 HistoryEndpoint::LocalContent => {
-                    let response =
-                        match LocalContentParams::<HistoryContentKey>::try_from(request.params) {
-                            Ok(params) => {
-                                match &self.network.overlay.store.read().get(&params.content_key) {
+                    let response = match LocalContentParams::<HistoryContentKey>::try_from(
+                        request.params,
+                    ) {
+                        Ok(params) => {
+                            match &self.network.overlay.store.read().get(&params.content_key)
+                                {
                                     Ok(val) => match val {
                                         Some(val) => Ok(Value::String(hex_encode(val.clone()))),
                                         None => Err(format!(
-                                            "Unable to find content key in local storage: {:?}",
+                                            "Content key is not in local storage: {:?}",
                                             params.content_key
                                         )),
                                     },
-                                    Err(_) => Err(format!(
-                                        "Unable to find content key in local storage: {:?}",
-                                        params.content_key
+                                    Err(err) => Err(format!(
+                                        "Database error while looking for content key in local storage: {:?}, with error: {}",
+                                        params.content_key, err
                                     )),
                                 }
-                            }
-                            Err(msg) => Err(format!("Invalid LocalContent params: {msg:?}")),
-                        };
+                        }
+                        Err(msg) => Err(format!("Invalid LocalContent params: {msg:?}")),
+                    };
                     let _ = request.resp.send(response);
                 }
                 HistoryEndpoint::Store => {
@@ -195,7 +197,21 @@ impl HistoryRequestHandler {
                     let _ = request.resp.send(response);
                 }
                 HistoryEndpoint::Offer => {
-                    let response = match OfferParams::try_from(request.params) {
+                    let response = match OfferParams::<HistoryContentKey>::try_from(request.params)
+                    {
+                        Ok(params) => {
+                            let content_key = params.content_key.clone();
+                            let content = params.content.into();
+                            let content_items = vec![(content_key, content)];
+                            let num_peers = self.network.overlay.propagate_gossip(content_items);
+                            Ok(num_peers.into())
+                        }
+                        Err(msg) => Err(format!("Invalid Offer params: {:?}", msg)),
+                    };
+                    let _ = request.resp.send(response);
+                }
+                HistoryEndpoint::SendOffer => {
+                    let response = match SendOfferParams::try_from(request.params) {
                         Ok(val) => {
                             let content_keys =
                                 val.content_keys.iter().map(|key| key.to_vec()).collect();
@@ -207,10 +223,10 @@ impl HistoryRequestHandler {
                                 .await
                             {
                                 Ok(accept) => Ok(accept.into()),
-                                Err(msg) => Err(format!("Offer request timeout: {:?}", msg)),
+                                Err(msg) => Err(format!("SendOffer request timeout: {:?}", msg)),
                             }
                         }
-                        Err(msg) => Err(format!("Invalid Offer params: {:?}", msg)),
+                        Err(msg) => Err(format!("Invalid SendOffer params: {:?}", msg)),
                     };
                     let _ = request.resp.send(response);
                 }

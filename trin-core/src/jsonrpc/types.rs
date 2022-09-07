@@ -8,7 +8,10 @@ use tokio::sync::mpsc;
 use validator::{Validate, ValidationError};
 
 use crate::{
-    jsonrpc::endpoints::{HistoryEndpoint, StateEndpoint, TrinEndpoint},
+    jsonrpc::{
+        endpoints::{HistoryEndpoint, StateEndpoint, TrinEndpoint},
+        utils::parse_content_item,
+    },
     portalnet::types::{
         content_key::{OverlayContentKey, RawContentKey},
         messages::{ByteList, CustomPayload, SszEnr},
@@ -239,12 +242,43 @@ impl TryFrom<[&Value; 2]> for FindContentParams {
     }
 }
 
-pub struct OfferParams {
+pub struct OfferParams<TContentKey> {
+    pub content_key: TContentKey,
+    pub content: Vec<u8>,
+}
+
+impl<TContentKey: OverlayContentKey> TryFrom<Params> for OfferParams<TContentKey> {
+    type Error = ValidationError;
+
+    fn try_from(params: Params) -> Result<Self, Self::Error> {
+        match params {
+            Params::Array(val) => match val.len() {
+                2 => OfferParams::<TContentKey>::try_from([&val[0], &val[1]]),
+                _ => Err(ValidationError::new("Expected 2 params")),
+            },
+            _ => Err(ValidationError::new("Expected array of params")),
+        }
+    }
+}
+
+impl<TContentKey: OverlayContentKey> TryFrom<[&Value; 2]> for OfferParams<TContentKey> {
+    type Error = ValidationError;
+
+    fn try_from(params: [&Value; 2]) -> Result<Self, Self::Error> {
+        let (content_key, content) = parse_content_item(params)?;
+        Ok(Self {
+            content_key,
+            content,
+        })
+    }
+}
+
+pub struct SendOfferParams {
     pub enr: SszEnr,
     pub content_keys: Vec<ByteList>,
 }
 
-impl TryFrom<Params> for OfferParams {
+impl TryFrom<Params> for SendOfferParams {
     type Error = ValidationError;
 
     fn try_from(params: Params) -> Result<Self, Self::Error> {
@@ -258,7 +292,7 @@ impl TryFrom<Params> for OfferParams {
     }
 }
 
-impl TryFrom<[&Value; 2]> for OfferParams {
+impl TryFrom<[&Value; 2]> for SendOfferParams {
     type Error = ValidationError;
 
     fn try_from(params: [&Value; 2]) -> Result<Self, Self::Error> {
@@ -460,30 +494,7 @@ impl<TContentKey: OverlayContentKey> TryFrom<[&Value; 2]> for StoreParams<TConte
     type Error = ValidationError;
 
     fn try_from(params: [&Value; 2]) -> Result<Self, Self::Error> {
-        let content_key = params[0]
-            .as_str()
-            .ok_or_else(|| ValidationError::new("Empty content key param"))?;
-        let content_key = match hex_decode(content_key) {
-            Ok(val) => match TContentKey::try_from(val) {
-                Ok(val) => val,
-                Err(_) => return Err(ValidationError::new("Unable to decode content_key")),
-            },
-            Err(err) => {
-                let mut ve = ValidationError::new("Cannot convert content_key hex to bytes");
-                ve.add_param(
-                    std::borrow::Cow::Borrowed("hex_decode_exception"),
-                    &err.to_string(),
-                );
-                return Err(ve);
-            }
-        };
-        let content = params[1]
-            .as_str()
-            .ok_or_else(|| ValidationError::new("Empty content param"))?;
-        let content = match hex_decode(content) {
-            Ok(val) => val,
-            Err(_) => return Err(ValidationError::new("Unable to decode content")),
-        };
+        let (content_key, content) = parse_content_item(params)?;
         Ok(Self {
             content_key,
             content,

@@ -12,8 +12,8 @@ use trin_core::{
         storage::{PortalStorage, PortalStorageConfig},
         types::{
             content_key::StateContentKey,
+            distance::XorMetric,
             messages::{PortalnetConfig, ProtocolId},
-            metric::XorMetric,
         },
     },
     types::validation::HeaderOracle,

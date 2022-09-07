@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use discv5::enr::NodeId;
-use ethereum_types::U256;
 use hex;
 use log::{debug, error, info};
 use r2d2::Pool;
@@ -15,7 +14,7 @@ use rusqlite::params;
 
 use super::types::{
     content_key::OverlayContentKey,
-    metric::{Metric, XorMetric},
+    distance::{Distance, Metric, XorMetric},
 };
 use crate::utils::db::get_data_dir;
 
@@ -34,7 +33,10 @@ pub enum ContentStoreError {
     /// An IO error.
     Io(std::io::Error),
     /// Unable to store content because it does not fall within the store's radius.
-    InsufficientRadius { radius: U256, distance: U256 },
+    InsufficientRadius {
+        radius: Distance,
+        distance: Distance,
+    },
     /// Unable to store or retrieve data because it is invalid.
     InvalidData(String),
 }
@@ -101,7 +103,7 @@ pub trait ContentStore {
     ) -> Result<bool, ContentStoreError>;
 
     /// Returns the radius of the data store.
-    fn radius(&self) -> U256;
+    fn radius(&self) -> Distance;
 }
 
 /// An in-memory `ContentStore`.
@@ -113,7 +115,7 @@ pub struct MemoryContentStore {
     /// The distance function used by the store to compute distances.
     distance_fn: DistanceFunction,
     /// The radius of the store.
-    radius: U256,
+    radius: Distance,
 }
 
 impl MemoryContentStore {
@@ -123,12 +125,12 @@ impl MemoryContentStore {
             store: std::collections::HashMap::new(),
             node_id,
             distance_fn,
-            radius: U256::MAX,
+            radius: Distance::MAX,
         }
     }
 
     /// Returns the distance to `key` from the local `NodeId` according to the distance function.
-    fn distance_to_key<K: OverlayContentKey>(&self, key: &K) -> U256 {
+    fn distance_to_key<K: OverlayContentKey>(&self, key: &K) -> Distance {
         match self.distance_fn {
             DistanceFunction::Xor => XorMetric::distance(&key.content_id(), &self.node_id.raw()),
         }
@@ -172,7 +174,7 @@ impl ContentStore for MemoryContentStore {
         Ok(!self.contains_key(key))
     }
 
-    fn radius(&self) -> U256 {
+    fn radius(&self) -> Distance {
         self.radius
     }
 }
@@ -191,7 +193,7 @@ pub struct PortalStorageConfig {
 pub struct PortalStorage {
     node_id: NodeId,
     storage_capacity_in_bytes: u64,
-    radius: U256,
+    radius: Distance,
     farthest_content_id: Option<[u8; 32]>,
     db: Arc<rocksdb::DB>,
     sql_connection_pool: Pool<SqliteConnectionManager>,
@@ -227,7 +229,7 @@ impl ContentStore for PortalStorage {
         Ok(!is_key_available)
     }
 
-    fn radius(&self) -> U256 {
+    fn radius(&self) -> Distance {
         self.radius
     }
 }
@@ -240,7 +242,7 @@ impl PortalStorage {
         let mut storage = Self {
             node_id: config.node_id,
             storage_capacity_in_bytes: config.storage_capacity_kb * 1000,
-            radius: U256::MAX,
+            radius: Distance::MAX,
             db: config.db,
             farthest_content_id: None,
             sql_connection_pool: config.sql_connection_pool,
@@ -264,7 +266,7 @@ impl PortalStorage {
     }
 
     /// Returns the distance to `key` from the local `NodeId` according to the distance function.
-    fn distance_to_key<K: OverlayContentKey>(&self, key: &K) -> U256 {
+    fn distance_to_key<K: OverlayContentKey>(&self, key: &K) -> Distance {
         match self.distance_fn {
             DistanceFunction::Xor => XorMetric::distance(&key.content_id(), &self.node_id.raw()),
         }
@@ -502,7 +504,7 @@ impl PortalStorage {
     }
 
     /// Method that returns the distance between our node ID and a given content ID.
-    pub fn distance_to_content_id(&self, content_id: &[u8; 32]) -> U256 {
+    pub fn distance_to_content_id(&self, content_id: &[u8; 32]) -> Distance {
         match self.distance_fn {
             DistanceFunction::Xor => XorMetric::distance(content_id, &self.node_id.raw()),
         }
@@ -649,6 +651,7 @@ pub mod test {
         assert_eq!(storage.node_id, node_id);
         assert_eq!(storage.storage_capacity_in_bytes, CAPACITY * 1000);
 
+        std::mem::drop(storage);
         temp_dir.close()?;
         Ok(())
     }
@@ -677,6 +680,8 @@ pub mod test {
             let mut value = [0u8; 32];
             rand::thread_rng().fill_bytes(&mut value);
             storage.store(&content_key, &value.to_vec()).unwrap();
+
+            std::mem::drop(storage);
             temp_dir.close().unwrap();
         }
         QuickCheck::new()
@@ -711,6 +716,7 @@ pub mod test {
 
         assert_eq!(result, value);
 
+        std::mem::drop(storage);
         temp_dir.close()?;
         Ok(())
     }
@@ -742,6 +748,7 @@ pub mod test {
 
         assert_eq!(32, bytes);
 
+        std::mem::drop(storage);
         temp_dir.close()?;
         Ok(())
     }
@@ -769,6 +776,7 @@ pub mod test {
         let result = storage.find_farthest_content_id()?;
         assert!(result.is_none());
 
+        std::mem::drop(storage);
         temp_dir.close()?;
         Ok(())
     }
@@ -807,6 +815,7 @@ pub mod test {
 
             let farthest = storage.find_farthest_content_id();
 
+            std::mem::drop(storage);
             temp_dir.close().unwrap();
 
             TestResult::from_bool(farthest.unwrap().unwrap() == expected_farthest)
