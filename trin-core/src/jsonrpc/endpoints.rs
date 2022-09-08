@@ -33,6 +33,7 @@ pub enum HistoryEndpoint {
     RecursiveFindContent,
     Store,
     RoutingTableInfo,
+    SampleLatestMasterAccumulator,
 }
 
 /// Ethereum JSON-RPC endpoints not currently supported by portal network requests, proxied to Infura
@@ -96,6 +97,9 @@ impl FromStr for TrinEndpoint {
                 HistoryEndpoint::RoutingTableInfo,
             )),
             "portal_historyStore" => Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::Store)),
+            "portal_historySampleLatestMasterAccumulator" => Ok(TrinEndpoint::HistoryEndpoint(
+                HistoryEndpoint::SampleLatestMasterAccumulator,
+            )),
             "portal_stateFindContent" => {
                 Ok(TrinEndpoint::StateEndpoint(StateEndpoint::FindContent))
             }

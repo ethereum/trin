@@ -1,7 +1,7 @@
-use parking_lot::RwLock;
-use tokio::sync::mpsc::UnboundedSender;
-
 use std::sync::Arc;
+
+use parking_lot::RwLock as PLRwLock;
+use tokio::sync::{mpsc::UnboundedSender, RwLock};
 
 use trin_core::{
     portalnet::{
@@ -39,7 +39,7 @@ impl HistoryNetwork {
             enable_metrics: portal_config.enable_metrics,
             ..Default::default()
         };
-        let storage = Arc::new(RwLock::new(PortalStorage::new(storage_config).unwrap()));
+        let storage = Arc::new(PLRwLock::new(PortalStorage::new(storage_config).unwrap()));
         let validator = Arc::new(ChainHistoryValidator { header_oracle });
         let overlay = OverlayProtocol::new(
             config,

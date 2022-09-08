@@ -62,7 +62,7 @@ pub struct PortalJsonRpcRequest {
 }
 
 /// History network JSON-RPC request
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct HistoryJsonRpcRequest {
     pub endpoint: HistoryEndpoint,
     pub resp: Responder<Value, String>,

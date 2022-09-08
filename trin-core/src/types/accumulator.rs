@@ -1,5 +1,6 @@
 use anyhow::anyhow;
-use ethereum_types::U256;
+use ethereum_types::{Bloom, H160, H256, U256};
+use serde::{Deserialize, Serialize};
 use ssz::Encode;
 use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, VariableList};
@@ -9,7 +10,7 @@ use tree_hash_derive::TreeHash;
 use crate::types::header::Header;
 
 /// Number of blocks / epoch
-const EPOCH_SIZE: usize = 8192;
+pub const EPOCH_SIZE: usize = 8192;
 
 /// Max number of epochs - 2 ** 17
 const MAX_HISTORICAL_EPOCHS: usize = 131072;
@@ -25,7 +26,7 @@ type HeaderRecordList = VariableList<HeaderRecord, typenum::U131072>;
 /// SSZ Container
 /// Primary datatype used to maintain record of historical and current epoch.
 /// Verifies canonical-ness of a given header.
-#[derive(Clone, Debug, Decode, Encode, TreeHash)]
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq, Deserialize, Serialize, TreeHash)]
 pub struct MasterAccumulator {
     historical_epochs: HistoricalEpochs,
     current_epoch: EpochAccumulator,
@@ -34,15 +35,8 @@ pub struct MasterAccumulator {
 // todo: remove dead-code exception as MasterAccumulator is connected to HeaderOracle
 #[allow(dead_code)]
 impl MasterAccumulator {
-    fn new() -> Self {
-        Self {
-            historical_epochs: HistoricalEpochs {
-                epochs: HistoricalEpochsList::empty(),
-            },
-            current_epoch: EpochAccumulator {
-                header_records: HeaderRecordList::empty(),
-            },
-        }
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn latest_height(&self) -> u64 {
@@ -155,9 +149,22 @@ impl MasterAccumulator {
     }
 }
 
+impl Default for MasterAccumulator {
+    fn default() -> Self {
+        Self {
+            historical_epochs: HistoricalEpochs {
+                epochs: HistoricalEpochsList::empty(),
+            },
+            current_epoch: EpochAccumulator {
+                header_records: HeaderRecordList::empty(),
+            },
+        }
+    }
+}
+
 /// Datatype responsible for storing all of the merkle roots
 /// for epoch accumulators preceding the current epoch.
-#[derive(Clone, Debug, Decode, Encode)]
+#[derive(Clone, Debug, Eq, PartialEq, Decode, Encode, Deserialize, Serialize)]
 pub struct HistoricalEpochs {
     epochs: HistoricalEpochsList,
 }
@@ -200,7 +207,7 @@ impl TreeHash for HistoricalEpochs {
 
 /// Data type responsible for maintaining a store
 /// of all header records within an epoch.
-#[derive(Clone, Debug, Decode, Encode)]
+#[derive(Clone, Debug, Eq, PartialEq, Decode, Encode, Deserialize, Serialize)]
 pub struct EpochAccumulator {
     header_records: HeaderRecordList,
 }
@@ -246,66 +253,68 @@ impl TreeHash for EpochAccumulator {
 /// Block hash and total difficulty are used to validate whether
 /// a header is canonical or not.
 /// Every HeaderRecord is 64bytes.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Decode, Encode, TreeHash)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Decode, Encode, Deserialize, Serialize, TreeHash)]
 pub struct HeaderRecord {
     block_hash: tree_hash::Hash256,
     total_difficulty: U256,
 }
 
+//
+// Testing utils
+//
+pub fn generate_random_macc(block_height: u32) -> MasterAccumulator {
+    let epoch_height = block_height / EPOCH_SIZE as u32;
+    let current_height = block_height % EPOCH_SIZE as u32;
+    let mut random_historical_epochs: Vec<H256> = vec![];
+    for _h in 0..epoch_height {
+        random_historical_epochs.push(H256::random());
+    }
+    let mut random_header_records: Vec<HeaderRecord> = vec![];
+    for h in 0..current_height {
+        random_header_records.push(HeaderRecord {
+            block_hash: tree_hash::Hash256::random(),
+            total_difficulty: U256::from(h + (epoch_height * EPOCH_SIZE as u32)),
+        });
+    }
+    MasterAccumulator {
+        historical_epochs: HistoricalEpochs {
+            epochs: HistoricalEpochsList::from(random_historical_epochs),
+        },
+        current_epoch: EpochAccumulator {
+            header_records: HeaderRecordList::from(random_header_records),
+        },
+    }
+}
+
+pub fn add_blocks_to_macc(macc: &mut MasterAccumulator, count: u32) {
+    for _height in 0..count {
+        let new_header = Header {
+            parent_hash: H256::random(),
+            uncles_hash: H256::random(),
+            author: H160::random(),
+            state_root: H256::random(),
+            transactions_root: H256::random(),
+            receipts_root: H256::random(),
+            log_bloom: Bloom::zero(),
+            difficulty: U256::from_dec_str("1").unwrap(),
+            number: (macc.latest_height() + 1_u64) as u64,
+            gas_limit: U256::from_dec_str("1").unwrap(),
+            gas_used: U256::from_dec_str("1").unwrap(),
+            timestamp: 1,
+            extra_data: vec![],
+            mix_hash: None,
+            nonce: None,
+            base_fee_per_gas: None,
+        };
+        macc.update_accumulator(&new_header);
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
-    use ethereum_types::{Bloom, H160, H256};
     use rand::Rng;
     use rstest::rstest;
-
-    fn generate_random_macc(block_height: u32) -> MasterAccumulator {
-        let epoch_height = block_height / EPOCH_SIZE as u32;
-        let current_height = block_height % EPOCH_SIZE as u32;
-        let mut random_historical_epochs: Vec<H256> = vec![];
-        for _h in 0..epoch_height {
-            random_historical_epochs.push(H256::random());
-        }
-        let mut random_header_records: Vec<HeaderRecord> = vec![];
-        for h in 0..current_height {
-            random_header_records.push(HeaderRecord {
-                block_hash: tree_hash::Hash256::random(),
-                total_difficulty: U256::from(h + (epoch_height * EPOCH_SIZE as u32)),
-            });
-        }
-        MasterAccumulator {
-            historical_epochs: HistoricalEpochs {
-                epochs: HistoricalEpochsList::from(random_historical_epochs),
-            },
-            current_epoch: EpochAccumulator {
-                header_records: HeaderRecordList::from(random_header_records),
-            },
-        }
-    }
-
-    fn add_blocks_to_macc(macc: &mut MasterAccumulator, count: u32) {
-        for _height in 0..count {
-            let new_header = Header {
-                parent_hash: H256::random(),
-                uncles_hash: H256::random(),
-                author: H160::random(),
-                state_root: H256::random(),
-                transactions_root: H256::random(),
-                receipts_root: H256::random(),
-                log_bloom: Bloom::zero(),
-                difficulty: U256::from_dec_str("1").unwrap(),
-                number: (macc.latest_height() + 1_u64) as u64,
-                gas_limit: U256::from_dec_str("1").unwrap(),
-                gas_used: U256::from_dec_str("1").unwrap(),
-                timestamp: 1,
-                extra_data: vec![],
-                mix_hash: None,
-                nonce: None,
-                base_fee_per_gas: None,
-            };
-            macc.update_accumulator(&new_header);
-        }
-    }
 
     #[rstest]
     #[case(0)]
@@ -394,7 +403,7 @@ mod test {
             hex::decode("88cce8439ebc0c1d007177ffb6831c15c07b4361984cc52235b6fd728434f0c7")
                 .unwrap(),
         ];
-        let mut master_accumulator = MasterAccumulator::new();
+        let mut master_accumulator = MasterAccumulator::default();
         headers
             .iter()
             .zip(hash_tree_roots)

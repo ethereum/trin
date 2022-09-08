@@ -1,10 +1,8 @@
 use std::sync::Arc;
 
 use log::debug;
-use parking_lot::RwLock;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, RwLock};
 
-use trin_core::utils::db::setup_temp_dir;
 use trin_core::{
     cli::{TrinConfig, HISTORY_NETWORK, STATE_NETWORK},
     jsonrpc::{
@@ -17,7 +15,7 @@ use trin_core::{
         types::messages::PortalnetConfig,
     },
     types::validation::HeaderOracle,
-    utils::bootnodes::parse_bootnodes,
+    utils::{bootnodes::parse_bootnodes, db::setup_temp_dir},
     utp::stream::UtpListener,
 };
 use trin_history::initialize_history_network;
@@ -64,10 +62,8 @@ pub async fn run_trin(
         PortalStorage::setup_config(discovery.local_enr().node_id(), trin_config.kb)?;
 
     // Initialize validation oracle
-    let header_oracle = Arc::new(RwLock::new(HeaderOracle {
-        infura_url: infura_url.clone(),
-        ..HeaderOracle::default()
-    }));
+    let header_oracle = HeaderOracle::new(infura_url.clone(), storage_config.clone());
+    let header_oracle = Arc::new(RwLock::new(header_oracle));
 
     debug!("Selected networks to spawn: {:?}", trin_config.networks);
     // Initialize state sub-network service and event handlers, if selected
@@ -78,6 +74,7 @@ pub async fn run_trin(
                 utp_listener_tx.clone(),
                 portalnet_config.clone(),
                 storage_config.clone(),
+                header_oracle.clone(),
             )
             .await
         } else {
@@ -101,7 +98,7 @@ pub async fn run_trin(
             utp_listener_tx,
             portalnet_config.clone(),
             storage_config.clone(),
-            header_oracle,
+            header_oracle.clone(),
         )
         .await
     } else {
@@ -165,6 +162,15 @@ pub async fn run_trin(
     if let Some(network) = state_network_task {
         tokio::spawn(async { network.await });
     }
+
+    // Spawn task to
+    // - bootstrap our header oracle's master accumulator
+    // - follow the head of the blockchain (via geth now / hg network later) & update macc
+    tokio::spawn(async move {
+        let mut lock = header_oracle.write().await;
+        lock.bootstrap().await;
+        // todo: lock.follow_head().await;
+    });
 
     let _ = live_server_rx.recv().await;
     live_server_rx.close();
