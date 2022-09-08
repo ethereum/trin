@@ -76,9 +76,15 @@ pub fn spawn_state_network(
     utp_listener_rx: mpsc::UnboundedReceiver<UtpListenerEvent>,
     state_event_rx: mpsc::UnboundedReceiver<TalkRequest>,
 ) -> JoinHandle<()> {
+    let bootnodes: Vec<String> = portalnet_config
+        .bootnode_enrs
+        .iter()
+        .map(|enr| format!("{{ {}, Encoded ENR: {} }}", enr, enr.to_base64()))
+        .collect();
+    let bootnodes = bootnodes.join(", ");
     info!(
-        "About to spawn State Network with boot nodes: {:?}",
-        portalnet_config.bootnode_enrs
+        "About to spawn State Network with boot nodes: {}",
+        bootnodes
     );
 
     tokio::spawn(async move {
