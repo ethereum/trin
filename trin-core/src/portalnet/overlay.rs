@@ -288,11 +288,15 @@ where
                         }
 
                         // Check if data should be stored, and store if true.
-                        if let Err(err) = store.read().is_key_within_radius_and_unavailable(&key) {
-                            warn!("Failed to check data store for content key {err}");
-                        } else {
-                            // Ignore error since all validated content is propagated.
-                            let _ = store.write().put(key.clone(), &content_value.to_vec());
+                        match store.read().is_key_within_radius_and_unavailable(&key) {
+                            Ok(true) => {
+                                // Ignore error since all validated content is propagated.
+                                let _ = store.write().put(key.clone(), &content_value.to_vec());
+                            }
+                            Ok(false) => {
+                                debug!("Accepted content not within radius or already stored")
+                            }
+                            Err(err) => warn!("Failed to check data store for content key {err}"),
                         }
 
                         Some((key, content_value))
