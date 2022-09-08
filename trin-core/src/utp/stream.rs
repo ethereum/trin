@@ -1074,7 +1074,11 @@ impl UtpStream {
                         error!("Unable to send uTP RESET event to uTP listener: {err}");
                     }
                 }
-                Err(anyhow!("Connection reset by remote peer"))
+                debug!(
+                    "Connection reset by remote peer. Connection id: {}",
+                    packet.connection_id()
+                );
+                Ok(None)
             }
             (state, ty) => {
                 let message = format!("Unimplemented handling for ({state:?},{ty:?})");
