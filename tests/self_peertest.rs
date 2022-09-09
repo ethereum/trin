@@ -1,7 +1,9 @@
 #[cfg(test)]
 mod test {
-    use std::net::{IpAddr, Ipv4Addr};
-    use std::{thread, time};
+    use std::{
+        net::{IpAddr, Ipv4Addr},
+        thread, time,
+    };
 
     use ethportal_peertest as peertest;
     use trin_core::cli::TrinConfig;
@@ -41,7 +43,8 @@ mod test {
 
         peertest::jsonrpc::test_jsonrpc_endpoints_over_ipc(peertest_config.clone(), &peertest)
             .await;
-        peertest::scenarios::test_offer_accept(peertest_config, &peertest);
+        peertest::scenarios::test_offer_accept(peertest_config.clone(), &peertest);
+        peertest::scenarios::test_sample_master_accumulator(peertest_config, &peertest);
 
         peertest.exit_all_nodes();
         test_client_exiter.exit();

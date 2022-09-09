@@ -1,17 +1,20 @@
-use log::info;
-use tokio::{sync::mpsc, task::JoinHandle};
-
 use std::sync::Arc;
 
-use crate::{events::StateEvents, jsonrpc::StateRequestHandler};
 use discv5::TalkRequest;
+use log::info;
 use network::StateNetwork;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::{
+    sync::{mpsc, mpsc::UnboundedSender, RwLock},
+    task::JoinHandle,
+};
+
+use crate::{events::StateEvents, jsonrpc::StateRequestHandler};
 use trin_core::{
     jsonrpc::types::StateJsonRpcRequest,
     portalnet::{
         discovery::Discovery, storage::PortalStorageConfig, types::messages::PortalnetConfig,
     },
+    types::validation::HeaderOracle,
     utp::stream::{UtpListenerEvent, UtpListenerRequest},
 };
 
@@ -33,6 +36,7 @@ pub async fn initialize_state_network(
     utp_listener_tx: UnboundedSender<UtpListenerRequest>,
     portalnet_config: PortalnetConfig,
     storage_config: PortalStorageConfig,
+    header_oracle: Arc<RwLock<HeaderOracle>>,
 ) -> (
     StateHandler,
     StateNetworkTask,
@@ -48,6 +52,7 @@ pub async fn initialize_state_network(
         utp_listener_tx,
         storage_config,
         portalnet_config.clone(),
+        header_oracle,
     )
     .await;
     let state_network = Arc::new(state_network);

@@ -1,13 +1,24 @@
 use std::{thread, time};
 
-use crate::jsonrpc::{
-    make_ipc_request, validate_portal_offer, JsonRpcRequest, HISTORY_CONTENT_KEY,
-    HISTORY_CONTENT_VALUE,
-};
-use crate::{Peertest, PeertestConfig};
 use log::{error, info};
 use serde_json::{json, Value};
-use trin_core::jsonrpc::types::Params;
+use ssz::Encode;
+
+use crate::{
+    jsonrpc::{
+        make_ipc_request, validate_portal_offer, validate_portal_sample_latest_master_accumulator,
+        JsonRpcRequest, HISTORY_CONTENT_KEY, HISTORY_CONTENT_VALUE,
+    },
+    Peertest, PeertestConfig,
+};
+use trin_core::{
+    jsonrpc::types::Params,
+    portalnet::types::content_key::{
+        HistoryContentKey, MasterAccumulator as MasterAccumulatorKey, SszNone,
+    },
+    types::accumulator::{add_blocks_to_macc, generate_random_macc, MasterAccumulator},
+    utils::bytes::hex_encode,
+};
 
 pub fn test_offer_accept(peertest_config: PeertestConfig, peertest: &Peertest) {
     info!("Testing OFFER/ACCEPT flow");
@@ -69,4 +80,59 @@ pub fn test_offer_accept(peertest_config: PeertestConfig, peertest: &Peertest) {
         "The received content {}, must match the expected {}",
         HISTORY_CONTENT_VALUE, received_content_str,
     );
+}
+
+pub fn test_sample_master_accumulator(peertest_config: PeertestConfig, peertest: &Peertest) {
+    info!("Testing Sample Master Accumulator");
+
+    // todo: update to larger macc's once utp bugs are sorted
+    // generate a macc
+    let shortest_macc = generate_random_macc(1);
+    // generate a longer macc
+    let mut latest_macc = shortest_macc.clone();
+    add_blocks_to_macc(&mut latest_macc, 1);
+
+    let latest_acc_content_key: Vec<u8> =
+        HistoryContentKey::MasterAccumulator(MasterAccumulatorKey::Latest(SszNone::new())).into();
+    let latest_acc_content_key = hex_encode(latest_acc_content_key);
+
+    // Store shortest macc inside testnet node 1
+    let shortest_macc_value = hex_encode(shortest_macc.as_ssz_bytes());
+    let store_request = JsonRpcRequest {
+        method: "portal_historyStore".to_string(),
+        id: 11,
+        params: Params::Array(vec![
+            Value::String(latest_acc_content_key.clone()),
+            Value::String(shortest_macc_value),
+        ]),
+    };
+    let store_result = make_ipc_request(&peertest.bootnode.web3_ipc_path, &store_request).unwrap();
+    assert_eq!(store_result.as_str().unwrap(), "true");
+
+    // Store latest macc inside testnet node 2
+    let latest_macc_value = hex_encode(latest_macc.as_ssz_bytes());
+    let store_request = JsonRpcRequest {
+        method: "portal_historyStore".to_string(),
+        id: 12,
+        params: Params::Array(vec![
+            Value::String(latest_acc_content_key),
+            Value::String(latest_macc_value),
+        ]),
+    };
+    let store_result = make_ipc_request(&peertest.nodes[0].web3_ipc_path, &store_request).unwrap();
+    assert_eq!(store_result.as_str().unwrap(), "true");
+
+    // Send sample latest master accumulator request to bootnode
+    let offer_request = JsonRpcRequest {
+        method: "portal_historySampleLatestMasterAccumulator".to_string(),
+        id: 13,
+        params: Params::None,
+    };
+    let latest_macc_response =
+        make_ipc_request(&peertest_config.target_ipc_path, &offer_request).unwrap();
+    validate_portal_sample_latest_master_accumulator(&latest_macc_response, peertest);
+
+    let latest_macc_response: MasterAccumulator =
+        serde_json::from_value(latest_macc_response).unwrap();
+    assert_eq!(latest_macc_response, latest_macc);
 }

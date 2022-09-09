@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use discv5::enr::NodeId;
 use eth_trie::EthTrie;
-use parking_lot::RwLock;
-use tokio::sync::mpsc::UnboundedSender;
+use parking_lot::RwLock as PLRwLock;
+use tokio::sync::{mpsc::UnboundedSender, RwLock};
 
 use trin_core::{
     portalnet::{
@@ -35,16 +35,15 @@ impl StateNetwork {
         utp_listener_tx: UnboundedSender<UtpListenerRequest>,
         storage_config: PortalStorageConfig,
         portal_config: PortalnetConfig,
+        header_oracle: Arc<RwLock<HeaderOracle>>,
     ) -> Self {
         // todo: revisit triedb location
         let db = PortalStorage::setup_rocksdb(NodeId::random()).unwrap();
         let triedb = TrieDB::new(Arc::new(db));
         let trie = EthTrie::new(Arc::new(triedb));
 
-        let storage = Arc::new(RwLock::new(PortalStorage::new(storage_config).unwrap()));
-        let validator = Arc::new(StateValidator {
-            header_oracle: HeaderOracle::default(),
-        });
+        let storage = Arc::new(PLRwLock::new(PortalStorage::new(storage_config).unwrap()));
+        let validator = Arc::new(StateValidator { header_oracle });
         let config = OverlayConfig {
             bootnode_enrs: portal_config.bootnode_enrs.clone(),
             enable_metrics: portal_config.enable_metrics,
