@@ -14,7 +14,6 @@ use discv5::{
     kbucket::{Filter, KBucketsTable, NodeStatus, MAX_NODES_PER_BUCKET},
     TalkRequest,
 };
-use ethereum_types::U256;
 use futures::{channel::oneshot, future::join_all};
 use log::error;
 use parking_lot::RwLock;
@@ -33,11 +32,11 @@ use crate::{
         storage::PortalStorage,
         types::{
             content_key::{OverlayContentKey, RawContentKey},
+            distance::{Distance, Metric, XorMetric},
             messages::{
                 Accept, ByteList, Content, CustomPayload, FindContent, FindNodes, Message, Nodes,
                 Offer, Ping, Pong, PopulatedOffer, ProtocolId, Request, Response,
             },
-            metric::{Metric, XorMetric},
             node::Node,
         },
         Enr,
@@ -97,7 +96,7 @@ pub struct OverlayProtocol<TContentKey, TMetric, TValidator> {
     /// Reference to the database instance
     pub storage: Arc<RwLock<PortalStorage>>,
     /// The data radius of the local node.
-    pub data_radius: Arc<U256>,
+    pub data_radius: Arc<Distance>,
     /// The overlay routing table of the local node.
     kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
     /// The subnetwork protocol of the overlay.
@@ -129,7 +128,7 @@ where
         discovery: Arc<Discovery>,
         utp_listener_tx: UnboundedSender<UtpListenerRequest>,
         storage: Arc<RwLock<PortalStorage>>,
-        data_radius: U256,
+        data_radius: Distance,
         protocol: ProtocolId,
         validator: Arc<TValidator>,
     ) -> Self {
@@ -183,11 +182,11 @@ where
 
     /// Returns the ENR of the local node.
     pub fn local_enr(&self) -> Enr {
-        self.discovery.discv5.local_enr()
+        self.discovery.local_enr()
     }
 
     /// Returns the data radius of the local node.
-    pub fn data_radius(&self) -> U256 {
+    pub fn data_radius(&self) -> Distance {
         *self.data_radius
     }
 
@@ -428,7 +427,7 @@ where
     /// Returns a map (BTree for its ordering guarantees) with:
     ///     key: usize representing bucket index
     ///     value: Vec of tuples, each tuple represents a node
-    pub fn bucket_entries(&self) -> BTreeMap<usize, Vec<(NodeId, Enr, NodeStatus, U256)>> {
+    pub fn bucket_entries(&self) -> BTreeMap<usize, Vec<(NodeId, Enr, NodeStatus, Distance)>> {
         self.kbuckets
             .read()
             .buckets_iter()
@@ -686,7 +685,7 @@ where
         // The overlay ping via talkreq will trigger a session at the base layer, then
         // a session on the (overlay) portal network.
         let mut successfully_bonded_bootnode = false;
-        let enrs = self.discovery.discv5.table_entries_enr();
+        let enrs = self.discovery.table_entries_enr();
         if enrs.is_empty() {
             error!(
                 "No bootnodes provided, cannot join Portal {:?} Network.",

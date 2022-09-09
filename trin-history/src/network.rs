@@ -1,7 +1,7 @@
-use std::sync::{Arc, RwLock as StdRwLock};
+use std::sync::Arc;
 
-use parking_lot::RwLock;
-use tokio::sync::mpsc::UnboundedSender;
+use parking_lot::RwLock as PLRwLock;
+use tokio::sync::{mpsc::UnboundedSender, RwLock};
 
 use trin_core::{
     portalnet::{
@@ -10,8 +10,8 @@ use trin_core::{
         storage::{PortalStorage, PortalStorageConfig},
         types::{
             content_key::HistoryContentKey,
+            distance::XorMetric,
             messages::{PortalnetConfig, ProtocolId},
-            metric::XorMetric,
         },
     },
     types::validation::HeaderOracle,
@@ -32,14 +32,14 @@ impl HistoryNetwork {
         utp_listener_tx: UnboundedSender<UtpListenerRequest>,
         storage_config: PortalStorageConfig,
         portal_config: PortalnetConfig,
-        header_oracle: Arc<StdRwLock<HeaderOracle>>,
+        header_oracle: Arc<RwLock<HeaderOracle>>,
     ) -> Self {
         let config = OverlayConfig {
             bootnode_enrs: portal_config.bootnode_enrs.clone(),
             enable_metrics: portal_config.enable_metrics,
             ..Default::default()
         };
-        let storage = Arc::new(RwLock::new(PortalStorage::new(storage_config).unwrap()));
+        let storage = Arc::new(PLRwLock::new(PortalStorage::new(storage_config).unwrap()));
         let validator = Arc::new(ChainHistoryValidator { header_oracle });
         let overlay = OverlayProtocol::new(
             config,

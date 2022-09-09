@@ -12,13 +12,14 @@ use trin_core::{
     jsonrpc::types::{NodesParams, Params},
     portalnet::types::{
         content_key::{AccountTrieNode, StateContentKey},
+        distance::Distance,
         messages::SszEnr,
     },
     utils::bytes::hex_encode,
 };
 
-/// Default data radius value: U256::from(u64::MAX)
-const DATA_RADIUS: &str = "18446744073709551615";
+/// Default data radius value
+const DATA_RADIUS: Distance = Distance::MAX;
 /// Default enr seq value
 const ENR_SEQ: &str = "1";
 /// Default history header content key presuming chain ID 3
@@ -156,7 +157,7 @@ fn all_tests(peertest: &Peertest) -> Vec<Test<impl Fn(&Value, &Peertest)>> {
                 id: 5,
                 params: Params::Array(vec![
                     Value::String(peertest.bootnode.enr.to_base64()),
-                    Value::String(DATA_RADIUS.to_owned()),
+                    Value::String(DATA_RADIUS.to_string()),
                 ]),
             },
             validate_portal_state_ping,
@@ -167,7 +168,7 @@ fn all_tests(peertest: &Peertest) -> Vec<Test<impl Fn(&Value, &Peertest)>> {
                 id: 6,
                 params: Params::Array(vec![
                     Value::String(peertest.bootnode.enr.to_base64()),
-                    Value::String(DATA_RADIUS.to_owned()),
+                    Value::String(DATA_RADIUS.to_string()),
                 ]),
             },
             validate_portal_history_ping,
@@ -289,6 +290,14 @@ fn all_tests(peertest: &Peertest) -> Vec<Test<impl Fn(&Value, &Peertest)>> {
             },
             validate_portal_routing_table_info,
         ),
+        Test::new(
+            JsonRpcRequest {
+                method: "portal_historySampleLatestMasterAccumulator".to_string(),
+                id: 15,
+                params: Params::None,
+            },
+            validate_portal_sample_latest_master_accumulator,
+        ),
     ]
 }
 
@@ -311,17 +320,17 @@ fn validate_discv5_routing_table_info(val: &Value, _peertest: &Peertest) {
 }
 
 fn validate_portal_history_radius(result: &Value, _peertest: &Peertest) {
-    assert_eq!(result.as_str().unwrap(), DATA_RADIUS);
+    assert_eq!(result.as_str().unwrap(), DATA_RADIUS.to_string());
 }
 
 fn validate_portal_state_radius(result: &Value, _peertest: &Peertest) {
-    assert_eq!(result.as_str().unwrap(), DATA_RADIUS);
+    assert_eq!(result.as_str().unwrap(), DATA_RADIUS.to_string());
 }
 
 fn validate_portal_history_ping(result: &Value, _peertest: &Peertest) {
     assert_eq!(
         result.get("dataRadius").unwrap().as_str().unwrap(),
-        DATA_RADIUS
+        DATA_RADIUS.to_string()
     );
     assert_eq!(
         result.get("enrSeq").unwrap().as_str().unwrap(),
@@ -332,7 +341,7 @@ fn validate_portal_history_ping(result: &Value, _peertest: &Peertest) {
 fn validate_portal_state_ping(result: &Value, _peertest: &Peertest) {
     assert_eq!(
         result.get("dataRadius").unwrap().as_str().unwrap(),
-        DATA_RADIUS
+        DATA_RADIUS.to_string()
     );
     assert_eq!(
         result.get("enrSeq").unwrap().as_str().unwrap(),
@@ -378,6 +387,11 @@ pub fn validate_portal_offer(result: &Value, _peertest: &Peertest) {
     assert_eq!(result.get("content_keys").unwrap().as_str(), Some("0x03"))
 }
 
+pub fn validate_portal_sample_latest_master_accumulator(result: &Value, _peertest: &Peertest) {
+    assert!(result.get("historical_epochs").unwrap().is_object());
+    assert!(result.get("current_epoch").unwrap().is_object());
+}
+
 #[cfg(unix)]
 fn get_ipc_stream(ipc_path: &str) -> unix::net::UnixStream {
     unix::net::UnixStream::connect(ipc_path).unwrap()
@@ -391,7 +405,7 @@ fn get_ipc_stream(ipc_path: &str) -> uds_windows::UnixStream {
 pub fn make_ipc_request(ipc_path: &str, request: &JsonRpcRequest) -> anyhow::Result<Value> {
     let mut stream = get_ipc_stream(ipc_path);
     stream
-        .set_read_timeout(Some(Duration::from_millis(500)))
+        .set_read_timeout(Some(Duration::from_millis(1500)))
         .expect("Couldn't set read timeout");
 
     let json_request: Value = serde_json::from_str(&request.to_jsonrpc()).unwrap();

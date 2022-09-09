@@ -11,14 +11,14 @@ const CLIENT_ADDR: &str = "193.167.0.100:9042";
 /// Test suite for testing uTP protocol with network simulator
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    send_1000_bytes().await?;
+    send_10k_bytes().await?;
 
     Ok(())
 }
 
-/// Send 1k bytes payload from client to server
-async fn send_1000_bytes() -> anyhow::Result<()> {
-    println!("Sending 1000 bytes uTP payload from client to server...");
+/// Send 10k bytes payload from client to server
+async fn send_10k_bytes() -> anyhow::Result<()> {
+    println!("Sending 10k bytes uTP payload from client to server...");
     let client_url = format!("http://{}", CLIENT_ADDR);
     let client_rpc = HttpClientBuilder::default().build(client_url)?;
     let client_enr: String = client_rpc.request("local_enr", None).await.unwrap();
@@ -35,7 +35,7 @@ async fn send_1000_bytes() -> anyhow::Result<()> {
     assert_eq!(response, "true");
 
     // Send uTP payload from client to server
-    let payload: Vec<u8> = vec![thread_rng().gen(); 1000];
+    let payload: Vec<u8> = vec![thread_rng().gen(); 10_000];
 
     let params = rpc_params!(server_enr, connection_id, payload.clone());
     let response: String = client_rpc
@@ -46,7 +46,7 @@ async fn send_1000_bytes() -> anyhow::Result<()> {
     assert_eq!(response, "true");
 
     // Sleep to allow time for uTP transmission
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    tokio::time::sleep(Duration::from_secs(4)).await;
 
     // Verify received uTP payload
     let utp_payload: String = server_rpc.request("get_utp_payload", None).await.unwrap();
@@ -54,7 +54,7 @@ async fn send_1000_bytes() -> anyhow::Result<()> {
 
     assert_eq!(expected_payload, utp_payload);
 
-    println!("Sent 1000 bytes uTP payload from client to server: OK");
+    println!("Sent 10k bytes uTP payload from client to server: OK");
 
     Ok(())
 }

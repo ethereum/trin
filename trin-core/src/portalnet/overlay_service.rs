@@ -18,7 +18,6 @@ use discv5::{
     },
     rpc::RequestId,
 };
-use ethereum_types::U256;
 use futures::{channel::oneshot, prelude::*};
 use log::{debug, error, info, warn};
 use parking_lot::RwLock;
@@ -45,11 +44,11 @@ use crate::{
         storage::PortalStorage,
         types::{
             content_key::{OverlayContentKey, RawContentKey},
+            distance::{Distance, Metric},
             messages::{
                 Accept, ByteList, Content, CustomPayload, FindContent, FindNodes, Message, Nodes,
                 Offer, Ping, Pong, ProtocolId, Request, Response, SszEnr,
             },
-            metric::Metric,
             node::Node,
         },
         Enr,
@@ -239,7 +238,7 @@ pub struct OverlayService<TContentKey, TMetric, TValidator> {
     /// The routing table of the local node.
     kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
     /// The data radius of the local node.
-    data_radius: Arc<U256>,
+    data_radius: Arc<Distance>,
     /// The protocol identifier.
     protocol: ProtocolId,
     /// A queue of peers that require regular ping to check connectivity.
@@ -302,7 +301,7 @@ where
         kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
         bootnode_enrs: Vec<Enr>,
         ping_queue_interval: Option<Duration>,
-        data_radius: Arc<U256>,
+        data_radius: Arc<Distance>,
         protocol: ProtocolId,
         utp_listener_sender: UnboundedSender<UtpListenerRequest>,
         enable_metrics: bool,
@@ -376,7 +375,7 @@ where
 
             // TODO: Decide default data radius, and define a constant. Or if there is an
             // associated database, then look for a radius value there.
-            let node = Node::new(enr, U256::from(u64::MAX));
+            let node = Node::new(enr, Distance::MAX);
             let status = NodeStatus {
                 state: ConnectionState::Disconnected,
                 direction: ConnectionDirection::Outgoing,
@@ -410,10 +409,15 @@ where
     /// Begins initial FINDNODES query to populate the routing table.
     fn initialize_routing_table(&mut self, bootnodes: Vec<Enr>) {
         self.add_bootnodes(bootnodes.clone());
-        let node_id = self.local_enr().node_id();
-        // Begin request for our local node ID.
+        let local_node_id = self.local_enr().node_id();
 
-        self.init_find_nodes_query_with_initial_enrs(&node_id, bootnodes);
+        // Begin request for our local node ID.
+        self.init_find_nodes_query(&local_node_id);
+
+        for bucket_index in (255 - EXPECTED_NON_EMPTY_BUCKETS as u8)..255 {
+            let target_node_id = self.generate_random_node_id(bucket_index);
+            self.init_find_nodes_query(&target_node_id);
+        }
     }
 
     /// The main loop for the overlay service. The loop selects over different possible tasks to
@@ -475,57 +479,7 @@ where
                     }
                 }
                 query_event = OverlayService::<TContentKey, TMetric, TValidator>::query_event_poll(&mut self.find_node_query_pool) => {
-                    match query_event {
-                        // Send a FINDNODES on behalf of the query.
-                        QueryEvent::Waiting(query_id, node_id, request) => {
-
-                            // Look up the node's ENR.
-                            if let Some(enr) = self.find_enr(&node_id) {
-
-                                let request = OverlayRequest::new(
-                                    request,
-                                    RequestDirection::Outgoing {
-                                        destination: enr
-                                    },
-                                    None,
-                                    Some(query_id),
-                                );
-                                let _ = self.command_tx.send(OverlayCommand::Request(request));
-
-                            } else {
-                                error!("[{:?}] Unable to send FINDNODES to unknown ENR with node ID {}",
-                                         self.protocol, node_id);
-                                if let Some((_, query)) = self.find_node_query_pool.get_mut(query_id) {
-                                    query.on_failure(&node_id);
-                                }
-                            }
-
-                        }
-                        // Query has ended.
-                        QueryEvent::Finished(query_id, mut query_info, query) | QueryEvent::TimedOut(query_id, mut query_info, query) => {
-                            let result = query.into_result();
-                            // Obtain the ENRs for the resulting nodes.
-                            let mut found_enrs = Vec::new();
-                            for node_id in result.into_iter() {
-                                if let Some(position) = query_info.untrusted_enrs.iter().position(|enr| enr.node_id() == node_id) {
-                                    let enr = query_info.untrusted_enrs.swap_remove(position);
-                                    found_enrs.push(enr);
-                                } else if let Some(enr) = self.find_enr(&node_id) {
-                                    // look up from the routing table
-                                    found_enrs.push(enr);
-                                }
-                                else {
-                                    warn!("ENR not present in queries results.");
-                                }
-                            }
-                            if let QueryType::FindNode { callback: Some(callback), .. } = query_info.query_type {
-                                if let Err(_) = callback.send(found_enrs.clone()) {
-                                    error!("Failed to send FindNode query {} results to callback", query_id);
-                                }
-                            }
-                            debug!("[{:?}] Query {} complete, discovered {} ENRs", self.protocol, query_id, found_enrs.len());
-                        }
-                    }
+                    self.handle_find_nodes_query_event(query_event);
                 }
                 // Handle query events for queries in the find content query pool.
                 query_event = OverlayService::<TContentKey, TMetric, TValidator>::query_event_poll(&mut self.find_content_query_pool) => {
@@ -604,11 +558,11 @@ where
 
     /// Returns the local ENR of the node.
     fn local_enr(&self) -> Enr {
-        self.discovery.discv5.local_enr()
+        self.discovery.local_enr()
     }
 
     /// Returns the data radius of the node.
-    fn data_radius(&self) -> U256 {
+    fn data_radius(&self) -> Distance {
         *self.data_radius
     }
 
@@ -638,7 +592,6 @@ where
     }
 
     /// Maintains the query pool.
-    ///
     /// Returns a `QueryEvent` when the `QueryPoolState` updates.
     /// This happens when a query needs to send a request to a node, when a query has completed,
     // or when a query has timed out.
@@ -670,6 +623,76 @@ where
             QueryPoolState::Waiting(None) | QueryPoolState::Idle => Poll::Pending,
         })
         .await
+    }
+
+    /// Handles a `QueryEvent` from a poll on the find nodes query pool.
+    fn handle_find_nodes_query_event(
+        &mut self,
+        query_event: QueryEvent<FindNodeQuery<NodeId>, TContentKey>,
+    ) {
+        match query_event {
+            // Send a FINDNODES on behalf of the query.
+            QueryEvent::Waiting(query_id, node_id, request) => {
+                // Look up the node's ENR.
+                if let Some(enr) = self.find_enr(&node_id) {
+                    let request = OverlayRequest::new(
+                        request,
+                        RequestDirection::Outgoing { destination: enr },
+                        None,
+                        Some(query_id),
+                    );
+                    let _ = self.command_tx.send(OverlayCommand::Request(request));
+                } else {
+                    error!(
+                        "[{:?}] Unable to send FINDNODES to unknown ENR with node ID {}",
+                        self.protocol, node_id
+                    );
+                    if let Some((_, query)) = self.find_node_query_pool.get_mut(query_id) {
+                        query.on_failure(&node_id);
+                    }
+                }
+            }
+            // Query has ended.
+            QueryEvent::Finished(query_id, mut query_info, query)
+            | QueryEvent::TimedOut(query_id, mut query_info, query) => {
+                let result = query.into_result();
+                // Obtain the ENRs for the resulting nodes.
+                let mut found_enrs = Vec::new();
+                for node_id in result.into_iter() {
+                    if let Some(position) = query_info
+                        .untrusted_enrs
+                        .iter()
+                        .position(|enr| enr.node_id() == node_id)
+                    {
+                        let enr = query_info.untrusted_enrs.swap_remove(position);
+                        found_enrs.push(enr);
+                    } else if let Some(enr) = self.find_enr(&node_id) {
+                        // look up from the routing table
+                        found_enrs.push(enr);
+                    } else {
+                        warn!("ENR not present in queries results.");
+                    }
+                }
+                if let QueryType::FindNode {
+                    callback: Some(callback),
+                    ..
+                } = query_info.query_type
+                {
+                    if let Err(_) = callback.send(found_enrs.clone()) {
+                        error!(
+                            "Failed to send FindNode query {} results to callback",
+                            query_id
+                        );
+                    }
+                }
+                debug!(
+                    "[{:?}] Query {} complete, discovered {} ENRs",
+                    self.protocol,
+                    query_id,
+                    found_enrs.len()
+                );
+            }
+        }
     }
 
     /// Handles a `QueryEvent` from a poll on the find content query pool.
@@ -1009,11 +1032,11 @@ where
             // ENR sequence number has changed, then the node's address info may have
             // changed. The TalkRequest object does not contain the requester's ENR, only
             // its NodeAddress.
-            if let Some(enr) = self.discovery.discv5.find_enr(&source) {
+            if let Some(enr) = self.discovery.find_enr(&source) {
                 // TODO: Decide default data radius, and define a constant.
                 let node = Node {
                     enr,
-                    data_radius: U256::from(u64::MAX),
+                    data_radius: Distance::MAX,
                 };
                 self.connect_node(node, ConnectionDirection::Incoming);
             }
@@ -1081,10 +1104,7 @@ where
             kbucket::Entry::Pending(ref mut entry, status) => (entry.value().clone(), status),
             _ => {
                 // TODO: Decide default data radius, and define a constant.
-                let node = Node {
-                    enr: source.clone(),
-                    data_radius: U256::from(u64::MAX),
-                };
+                let node = Node::new(source.clone(), Distance::MAX);
                 let status = NodeStatus {
                     state: ConnectionState::Disconnected,
                     direction: ConnectionDirection::Outgoing,
@@ -1386,10 +1406,7 @@ where
                     }
                 }
             } else {
-                let node = Node {
-                    enr,
-                    data_radius: U256::from(u64::MAX),
-                };
+                let node = Node::new(enr, Distance::MAX);
                 let status = NodeStatus {
                     state: ConnectionState::Disconnected,
                     direction: ConnectionDirection::Outgoing,
@@ -1712,7 +1729,7 @@ where
         let self_node_id = self.local_enr().node_id();
         let self_distance = TMetric::distance(&content_id, &self_node_id.raw());
 
-        let mut nodes_with_distance: Vec<(U256, Enr)> = self
+        let mut nodes_with_distance: Vec<(Distance, Enr)> = self
             .table_entries_enr()
             .into_iter()
             .map(|enr| (TMetric::distance(&content_id, &enr.node_id().raw()), enr))
@@ -1730,8 +1747,24 @@ where
         Ok(closest_nodes)
     }
 
-    /// Starts a FindNode query to find nodes with IDs closest to target, starting with given enrs.
-    fn init_find_nodes_query_with_initial_enrs(&mut self, target: &NodeId, enrs: Vec<Enr>) {
+    /// Starts a FindNode query to find nodes with IDs closest to `target`.
+    fn init_find_nodes_query(&mut self, target: &NodeId) {
+        let target_key = Key::from(*target);
+        let mut closest_enrs: Vec<Enr> = self
+            .kbuckets
+            .write()
+            .closest_values(&target_key)
+            .map(|closest| closest.value.enr)
+            .collect();
+
+        // `closest_enrs` will be empty if `target` is our local node ID
+        // due to the behavior of `closest_values`. In this case, set closest_enrs
+        // to be all ENRs in routing table.
+        if closest_enrs.is_empty() {
+            let mut all_enrs: Vec<Enr> = self.table_entries_enr();
+            closest_enrs.append(&mut all_enrs);
+        }
+
         let query_config = QueryConfig {
             parallelism: self.query_parallelism,
             num_results: self.query_num_results,
@@ -1744,7 +1777,7 @@ where
                 distances_to_request: self.findnodes_query_distances_per_peer,
                 callback: None,
             },
-            untrusted_enrs: SmallVec::from_vec(enrs),
+            untrusted_enrs: SmallVec::from_vec(closest_enrs),
         };
 
         let known_closest_peers: Vec<Key<NodeId>> = query_info
@@ -1763,19 +1796,6 @@ where
             self.find_node_query_pool
                 .add_query(query_info, find_nodes_query);
         }
-    }
-
-    /// Starts a FindNode query to find nodes with IDs closest to target.
-    fn init_find_nodes_query(&mut self, target: &NodeId) {
-        let target_key = Key::from(*target);
-        let closest_enrs = self
-            .kbuckets
-            .write()
-            .closest_values(&target_key)
-            .map(|closest| closest.value.enr)
-            .collect();
-
-        self.init_find_nodes_query_with_initial_enrs(target, closest_enrs);
     }
 
     /// Starts a `FindContentQuery` for a target content key.
@@ -1922,7 +1942,7 @@ mod tests {
             overlay::OverlayConfig,
             storage::PortalStorage,
             types::{
-                content_key::IdentityContentKey, messages::PortalnetConfig, metric::XorMetric,
+                content_key::IdentityContentKey, distance::XorMetric, messages::PortalnetConfig,
             },
         },
         types::validation::MockValidator,
@@ -1964,7 +1984,7 @@ mod tests {
             overlay_config.bucket_filter,
         )));
 
-        let data_radius = Arc::new(U256::from(u64::MAX));
+        let data_radius = Arc::new(Distance::MAX);
         let protocol = ProtocolId::History;
         let active_outgoing_requests = Arc::new(RwLock::new(HashMap::new()));
         let peers_to_ping = HashSetDelay::default();
@@ -2014,11 +2034,8 @@ mod tests {
             direction: ConnectionDirection::Outgoing,
         };
 
-        let data_radius = U256::from(u64::MAX);
-        let node = Node {
-            enr: source.clone(),
-            data_radius,
-        };
+        let data_radius = Distance::MAX;
+        let node = Node::new(source.clone(), data_radius);
 
         let _ = service
             .kbuckets
@@ -2068,7 +2085,7 @@ mod tests {
 
         let (_, source) = generate_random_remote_enr();
         let node_id = source.node_id();
-        let data_radius = U256::from(u64::MAX);
+        let data_radius = Distance::MAX;
 
         let ping = Ping {
             enr_seq: source.seq(),
@@ -2093,10 +2110,7 @@ mod tests {
             direction: ConnectionDirection::Outgoing,
         };
 
-        let node = Node {
-            enr: destination.clone(),
-            data_radius: U256::from(u64::MAX),
-        };
+        let node = Node::new(destination.clone(), Distance::MAX);
 
         let _ = service
             .kbuckets
@@ -2138,11 +2152,8 @@ mod tests {
             direction: ConnectionDirection::Outgoing,
         };
 
-        let data_radius = U256::from(u64::MAX);
-        let node = Node {
-            enr: source.clone(),
-            data_radius,
-        };
+        let data_radius = Distance::MAX;
+        let node = Node::new(source.clone(), data_radius);
 
         let _ = service
             .kbuckets
@@ -2191,7 +2202,7 @@ mod tests {
         let mut service = task::spawn(build_service());
 
         let (_, source) = generate_random_remote_enr();
-        let data_radius = U256::from(u64::MAX);
+        let data_radius = Distance::MAX;
 
         let pong = Pong {
             enr_seq: source.seq(),
@@ -2285,16 +2296,10 @@ mod tests {
             state: ConnectionState::Connected,
             direction: ConnectionDirection::Outgoing,
         };
-        let data_radius = U256::from(u64::MAX);
+        let data_radius = Distance::MAX;
 
-        let node1 = Node {
-            enr: enr1.clone(),
-            data_radius: data_radius.clone(),
-        };
-        let node2 = Node {
-            enr: enr2.clone(),
-            data_radius: data_radius.clone(),
-        };
+        let node1 = Node::new(enr1.clone(), data_radius.clone());
+        let node2 = Node::new(enr2.clone(), data_radius.clone());
 
         // Insert nodes into routing table.
         let _ = service
@@ -2415,11 +2420,8 @@ mod tests {
         let node_id = enr.node_id();
         let key = kbucket::Key::from(node_id);
 
-        let data_radius = U256::from(u64::MAX);
-        let node = Node {
-            enr: enr.clone(),
-            data_radius,
-        };
+        let data_radius = Distance::MAX;
+        let node = Node::new(enr.clone(), data_radius);
         let connection_direction = ConnectionDirection::Outgoing;
 
         assert!(!service.peers_to_ping.contains_key(&node_id));
@@ -2450,11 +2452,8 @@ mod tests {
         let node_id = enr.node_id();
         let key = kbucket::Key::from(node_id);
 
-        let data_radius = U256::from(u64::MAX);
-        let node = Node {
-            enr: enr.clone(),
-            data_radius,
-        };
+        let data_radius = Distance::MAX;
+        let node = Node::new(enr.clone(), data_radius);
 
         let connection_direction = ConnectionDirection::Outgoing;
         let status = NodeStatus {
@@ -2495,11 +2494,8 @@ mod tests {
         let node_id = enr.node_id();
         let key = kbucket::Key::from(node_id);
 
-        let data_radius = U256::from(u64::MAX);
-        let node = Node {
-            enr: enr.clone(),
-            data_radius,
-        };
+        let data_radius = Distance::MAX;
+        let node = Node::new(enr.clone(), data_radius);
 
         let connection_direction = ConnectionDirection::Outgoing;
         let status = NodeStatus {
@@ -2567,8 +2563,8 @@ mod tests {
         assert_eq!(enrs_limited.len(), correct_limited_size);
     }
 
-    #[rstest]
-    fn test_init_find_nodes_query() {
+    #[test_log::test(tokio::test)]
+    async fn test_init_find_nodes_query() {
         let mut service = task::spawn(build_service());
 
         let (_, bootnode1) = generate_random_remote_enr();
@@ -2580,8 +2576,10 @@ mod tests {
 
         assert_eq!(service.find_node_query_pool.iter().count(), 0);
 
+        service.add_bootnodes(bootnodes);
+
         // Initialize the query and call `poll` so that it starts
-        service.init_find_nodes_query_with_initial_enrs(&target_node_id, bootnodes);
+        service.init_find_nodes_query(&target_node_id);
         let _ = service.find_node_query_pool.poll();
 
         let (query_info, query) = service.find_node_query_pool.iter().next().unwrap();
@@ -2606,40 +2604,6 @@ mod tests {
         assert!(query.started().is_some());
     }
 
-    fn init_find_nodes_query_with_initial_enrs_and_config(
-        service: &mut OverlayService<IdentityContentKey, XorMetric, MockValidator>,
-        target: &NodeId,
-        enrs: Vec<Enr>,
-        query_config: QueryConfig,
-    ) {
-        let query_info = QueryInfo {
-            query_type: QueryType::FindNode {
-                target: *target,
-                callback: None,
-                distances_to_request: service.findnodes_query_distances_per_peer,
-            },
-            untrusted_enrs: SmallVec::from_vec(enrs),
-        };
-
-        let known_closest_peers: Vec<Key<NodeId>> = query_info
-            .untrusted_enrs
-            .iter()
-            .map(|enr| Key::from(enr.node_id()))
-            .collect();
-
-        if known_closest_peers.is_empty() {
-            warn!(
-                "FindNodes query initiated but no closest peers in routing table. Aborting query."
-            );
-        } else {
-            let find_nodes_query =
-                FindNodeQuery::with_config(query_config, query_info.key(), known_closest_peers);
-            service
-                .find_node_query_pool
-                .add_query(query_info, find_nodes_query);
-        }
-    }
-
     #[test_log::test(tokio::test)]
     async fn test_advance_findnodes_query() {
         let mut service = build_service();
@@ -2651,18 +2615,9 @@ mod tests {
         let (_, target_enr) = generate_random_remote_enr();
         let target_node_id = target_enr.node_id();
 
-        let query_config = QueryConfig {
-            parallelism: service.query_parallelism,
-            num_results: 3,
-            peer_timeout: service.query_peer_timeout,
-        };
-
-        init_find_nodes_query_with_initial_enrs_and_config(
-            &mut service,
-            &target_node_id,
-            bootnodes,
-            query_config,
-        );
+        service.add_bootnodes(bootnodes);
+        service.query_num_results = 3;
+        service.init_find_nodes_query(&target_node_id);
 
         // Test that the first query event contains a proper query ID and request to the bootnode
         let event =
@@ -2774,7 +2729,9 @@ mod tests {
         let (_, target_enr) = generate_random_remote_enr();
         let target_node_id = target_enr.node_id();
 
-        service.init_find_nodes_query_with_initial_enrs(&target_node_id, bootnodes);
+        service.add_bootnodes(bootnodes);
+
+        service.init_find_nodes_query(&target_node_id);
 
         let _event =
             OverlayService::<IdentityContentKey, XorMetric, MockValidator>::query_event_poll(
@@ -2811,7 +2768,7 @@ mod tests {
         let bootnode_node_id = bootnode_enr.node_id();
         let bootnode_key = kbucket::Key::from(bootnode_node_id);
 
-        let data_radius = U256::MAX;
+        let data_radius = Distance::MAX;
         let bootnode = Node {
             enr: bootnode_enr.clone(),
             data_radius,
@@ -2865,7 +2822,7 @@ mod tests {
         let bootnode_node_id = bootnode_enr.node_id();
         let bootnode_key = kbucket::Key::from(bootnode_node_id);
 
-        let data_radius = U256::MAX;
+        let data_radius = Distance::MAX;
         let bootnode = Node {
             enr: bootnode_enr.clone(),
             data_radius,
@@ -2930,7 +2887,7 @@ mod tests {
         let bootnode_node_id = bootnode_enr.node_id();
         let bootnode_key = kbucket::Key::from(bootnode_node_id);
 
-        let data_radius = U256::MAX;
+        let data_radius = Distance::MAX;
         let bootnode = Node {
             enr: bootnode_enr.clone(),
             data_radius,
@@ -2995,7 +2952,7 @@ mod tests {
         let bootnode_node_id = bootnode_enr.node_id();
         let bootnode_key = kbucket::Key::from(bootnode_node_id);
 
-        let data_radius = U256::MAX;
+        let data_radius = Distance::MAX;
         let bootnode = Node {
             enr: bootnode_enr.clone(),
             data_radius,

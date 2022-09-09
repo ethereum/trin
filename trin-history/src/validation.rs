@@ -1,10 +1,11 @@
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use anyhow::anyhow;
 use async_trait::async_trait;
 use ethereum_types::H256;
 use log::warn;
 use ssz::Decode;
+use tokio::sync::RwLock;
 
 use trin_core::{
     portalnet::types::content_key::HistoryContentKey,
@@ -36,7 +37,7 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                 let expected_hash = &self
                     .header_oracle
                     .write()
-                    .unwrap()
+                    .await
                     .get_hash_at_height(header.number)?;
                 let actual_hash = &hex::encode(key.block_hash);
                 if actual_hash == expected_hash {
@@ -62,7 +63,7 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                 let trusted_header: Header = self
                     .header_oracle
                     .write()
-                    .unwrap()
+                    .await
                     .get_header_by_hash(H256::from(key.block_hash))?;
                 let actual_uncles_root = block_body.uncles_root()?;
                 if actual_uncles_root != trusted_header.uncles_hash {
@@ -95,7 +96,7 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                 let trusted_header: Header = self
                     .header_oracle
                     .write()
-                    .unwrap()
+                    .await
                     .get_header_by_hash(H256::from(key.block_hash))?;
                 let actual_receipts_root = receipts.root()?;
                 if actual_receipts_root != trusted_header.receipts_root {
@@ -122,6 +123,7 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use discv5::enr::NodeId;
     use ethereum_types::U256;
     use hex;
     use httpmock::prelude::*;
@@ -129,10 +131,16 @@ mod tests {
     use ssz::Encode;
     use ssz_types::{typenum, VariableList};
 
-    use trin_core::portalnet::types::content_key::BlockBody as BlockBodyKey;
-    use trin_core::portalnet::types::content_key::{BlockHeader, BlockReceipts};
-    use trin_core::portalnet::types::messages::ByteList;
-    use trin_core::utils::bytes::hex_decode;
+    use trin_core::{
+        portalnet::{
+            storage::PortalStorageConfig,
+            types::{
+                content_key::{BlockBody as BlockBodyKey, BlockHeader, BlockReceipts},
+                messages::ByteList,
+            },
+        },
+        utils::bytes::hex_decode,
+    };
 
     fn get_header_rlp() -> Vec<u8> {
         // RLP encoded block header #669051
@@ -217,11 +225,7 @@ mod tests {
         let header_bytelist = ByteList::try_from(header_rlp.clone()).unwrap();
 
         let header: Header = rlp::decode(&header_rlp).expect("error decoding header");
-        let infura_url = server.url("/get_header");
-        let header_oracle = Arc::new(RwLock::new(HeaderOracle {
-            infura_url,
-            ..HeaderOracle::default()
-        }));
+        let header_oracle = default_header_oracle(server.url("/get_header"));
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = HistoryContentKey::BlockHeader(BlockHeader {
             chain_id: 1,
@@ -245,11 +249,7 @@ mod tests {
         // set invalid block height
         header.number = 669052;
 
-        let infura_url = server.url("/get_header");
-        let header_oracle = Arc::new(RwLock::new(HeaderOracle {
-            infura_url,
-            ..HeaderOracle::default()
-        }));
+        let header_oracle = default_header_oracle(server.url("/get_header"));
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = HistoryContentKey::BlockHeader(BlockHeader {
             chain_id: 1,
@@ -274,11 +274,7 @@ mod tests {
         // valid gaslimit = 3141592
         header.gas_limit = U256::from(3141591);
 
-        let infura_url = server.url("/get_header");
-        let header_oracle = Arc::new(RwLock::new(HeaderOracle {
-            infura_url,
-            ..HeaderOracle::default()
-        }));
+        let header_oracle = default_header_oracle(server.url("/get_header"));
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = HistoryContentKey::BlockHeader(BlockHeader {
             chain_id: 1,
@@ -299,11 +295,7 @@ mod tests {
         let block_body_bytelist: VariableList<_, typenum::U16384> =
             VariableList::from(ssz_block_body);
 
-        let infura_url = server.url("/14764013");
-        let header_oracle = Arc::new(RwLock::new(HeaderOracle {
-            infura_url,
-            ..HeaderOracle::default()
-        }));
+        let header_oracle = default_header_oracle(server.url("/14764013"));
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = block_14764013_body_key();
 
@@ -332,11 +324,7 @@ mod tests {
         let invalid_content: VariableList<_, typenum::U16384> =
             VariableList::from(invalid_ssz_block_body);
 
-        let infura_url = server.url("/14764013");
-        let header_oracle = Arc::new(RwLock::new(HeaderOracle {
-            infura_url,
-            ..HeaderOracle::default()
-        }));
+        let header_oracle = default_header_oracle(server.url("/14764013"));
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = block_14764013_body_key();
 
@@ -353,11 +341,7 @@ mod tests {
             std::fs::read("../trin-core/src/types/assets/receipts_14764013.bin").unwrap();
         let content: VariableList<_, typenum::U16384> = VariableList::from(ssz_receipts);
 
-        let infura_url = server.url("/14764013");
-        let header_oracle = Arc::new(RwLock::new(HeaderOracle {
-            infura_url,
-            ..HeaderOracle::default()
-        }));
+        let header_oracle = default_header_oracle(server.url("/14764013"));
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = block_14764013_receipts_key();
 
@@ -384,11 +368,7 @@ mod tests {
         let invalid_content: VariableList<_, typenum::U16384> =
             VariableList::from(invalid_ssz_receipts);
 
-        let infura_url = server.url("/14764013");
-        let header_oracle = Arc::new(RwLock::new(HeaderOracle {
-            infura_url,
-            ..HeaderOracle::default()
-        }));
+        let header_oracle = default_header_oracle(server.url("/14764013"));
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = block_14764013_receipts_key();
 
@@ -396,6 +376,12 @@ mod tests {
             .validate_content(&content_key, &invalid_content)
             .await
             .unwrap();
+    }
+
+    fn default_header_oracle(infura_url: String) -> Arc<RwLock<HeaderOracle>> {
+        let node_id = NodeId::random();
+        let storage_config = PortalStorageConfig::new(100, node_id);
+        Arc::new(RwLock::new(HeaderOracle::new(infura_url, storage_config)))
     }
 
     fn block_14764013_hash() -> H256 {

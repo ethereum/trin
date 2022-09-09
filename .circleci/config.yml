@@ -71,7 +71,7 @@ jobs:
           command: rustup toolchain install stable-x86_64-pc-windows-msvc
       - run:
           name: Cargo Test --target x86_64-pc-windows-msvc
-          command: cargo test --target x86_64-pc-windows-msvc
+          command: cargo test --workspace --target x86_64-pc-windows-msvc
   utp-test:
     description: |
       Run uTP network simulator
@@ -112,7 +112,8 @@ jobs:
           command: docker build -t test-utp --no-cache utp-testing/docker/circleci/
       - run:
           name: Run Test App with network simulator
-          command: SCENARIO="drop-rate --delay=15ms --bandwidth=10Mbps --queue=25 --rate_to_client=0 --rate_to_server=0" docker-compose -f utp-testing/docker/docker-compose.yml up -d
+          # Dropping packets from both sides of the stream to test dealing with lost packets
+          command: SCENARIO="droplist --delay=15ms --bandwidth=10Mbps --queue=25 --drops_to_server=2,5,7 --drops_to_client=6,8" docker-compose -f utp-testing/docker/docker-compose.yml up -d
       - run:
           name: Wait all containers to start
           command: sleep 5
@@ -125,7 +126,6 @@ jobs:
       - run:
           name: Stop containers
           command: docker-compose -f utp-testing/docker/docker-compose.yml down
-
 workflows:
   merge-test:
     jobs:

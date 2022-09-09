@@ -354,18 +354,18 @@ impl OverlayContentKey for StateContentKey {
 mod test {
     use super::*;
 
-    use std::sync::Arc;
-
     use discv5::enr::NodeId;
     use ethereum_types::U256;
     use serial_test::serial;
     use test_log::test;
 
-    use crate::portalnet::storage::{
-        DistanceFunction, PortalStorage, PortalStorageConfig, PortalStorageError,
+    use crate::{
+        portalnet::{
+            storage::{PortalStorage, PortalStorageConfig, PortalStorageError},
+            types::distance::Distance,
+        },
+        utils::db::setup_temp_dir,
     };
-
-    use crate::utils::db::setup_temp_dir;
     use hex;
 
     //
@@ -475,19 +475,9 @@ mod test {
             Err(string) => panic!("Failed to parse Node ID: {}", string),
         };
 
-        let db = Arc::new(PortalStorage::setup_rocksdb(node_id)?);
-        let sql_connection_pool = PortalStorage::setup_sql(node_id)?;
-
-        let storage_config = PortalStorageConfig {
-            storage_capacity_kb: 100,
-            node_id,
-            distance_function: DistanceFunction::Xor,
-            db,
-            sql_connection_pool,
-        };
-
+        let storage_config = PortalStorageConfig::new(100, node_id);
         let mut storage = PortalStorage::new(storage_config)?;
-        storage.data_radius = u64::MAX / 2;
+        storage.data_radius = Distance::from(U256::MAX / U256::from(2));
 
         // randomly generated block hash
         let block_hash = "66e52cf632d725120ddd5fca0b104c79a06dd7dec20e9e1e09b27befa1f11c8d";
@@ -510,6 +500,7 @@ mod test {
         let should_store_b = storage.should_store(&content_key_b)?;
         assert!(!should_store_b);
 
+        std::mem::drop(storage);
         temp_dir.close()?;
         Ok(())
     }
@@ -532,17 +523,7 @@ mod test {
             Err(string) => panic!("Failed to parse Node ID: {}", string),
         };
 
-        let db = Arc::new(PortalStorage::setup_rocksdb(node_id)?);
-        let sql_connection_pool = PortalStorage::setup_sql(node_id)?;
-
-        let storage_config = PortalStorageConfig {
-            storage_capacity_kb: 100,
-            node_id,
-            distance_function: DistanceFunction::Xor,
-            db,
-            sql_connection_pool,
-        };
-
+        let storage_config = PortalStorageConfig::new(100, node_id);
         let storage = PortalStorage::new(storage_config)?;
 
         // block 14115690
@@ -551,7 +532,7 @@ mod test {
         let content_key = generate_content_key(block_hash);
         let content_id = content_key.content_id();
         let content_id = Into::<[u8; 32]>::into(content_id);
-        let distance = storage.distance_to_content_id(&content_id);
+        let dist = storage.distance_to_content_id(&content_id);
 
         // Answer from https://xor.pw/
         // as u256: 29607079854947394638644290140513652007972538914554032181524285051455066058182
@@ -563,8 +544,9 @@ mod test {
         expected_distance.copy_from_slice(expected.as_slice());
 
         let expected = U256::from(expected_distance);
-        assert_eq!(distance, expected.0[3]);
+        assert_eq!(dist, Distance::from(expected));
 
+        std::mem::drop(storage);
         temp_dir.close()?;
         Ok(())
     }

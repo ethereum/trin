@@ -1,16 +1,20 @@
-use log::info;
 use std::sync::Arc;
-use tokio::{sync::mpsc, task::JoinHandle};
+
+use discv5::TalkRequest;
+use log::info;
+use network::StateNetwork;
+use tokio::{
+    sync::{mpsc, mpsc::UnboundedSender, RwLock},
+    task::JoinHandle,
+};
 
 use crate::{events::StateEvents, jsonrpc::StateRequestHandler};
-use discv5::TalkRequest;
-use network::StateNetwork;
-use tokio::sync::mpsc::UnboundedSender;
 use trin_core::{
     jsonrpc::types::StateJsonRpcRequest,
     portalnet::{
         discovery::Discovery, storage::PortalStorageConfig, types::messages::PortalnetConfig,
     },
+    types::validation::HeaderOracle,
     utp::stream::{UtpListenerEvent, UtpListenerRequest},
 };
 
@@ -32,6 +36,7 @@ pub async fn initialize_state_network(
     utp_listener_tx: UnboundedSender<UtpListenerRequest>,
     portalnet_config: PortalnetConfig,
     storage_config: PortalStorageConfig,
+    header_oracle: Arc<RwLock<HeaderOracle>>,
 ) -> (
     StateHandler,
     StateNetworkTask,
@@ -47,6 +52,7 @@ pub async fn initialize_state_network(
         utp_listener_tx,
         storage_config,
         portalnet_config.clone(),
+        header_oracle,
     )
     .await;
     let state_network = Arc::new(state_network);
@@ -75,9 +81,15 @@ pub fn spawn_state_network(
     utp_listener_rx: mpsc::UnboundedReceiver<UtpListenerEvent>,
     state_event_rx: mpsc::UnboundedReceiver<TalkRequest>,
 ) -> JoinHandle<()> {
+    let bootnodes: Vec<String> = portalnet_config
+        .bootnode_enrs
+        .iter()
+        .map(|enr| format!("{{ {}, Encoded ENR: {} }}", enr, enr.to_base64()))
+        .collect();
+    let bootnodes = bootnodes.join(", ");
     info!(
-        "About to spawn State Network with boot nodes: {:?}",
-        portalnet_config.bootnode_enrs
+        "About to spawn State Network with boot nodes: {}",
+        bootnodes
     );
 
     tokio::spawn(async move {
