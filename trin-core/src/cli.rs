@@ -4,6 +4,7 @@ use log::info;
 use structopt::StructOpt;
 
 use crate::portalnet::types::messages::HexData;
+use crate::utils::provider::TrustedProviderType;
 
 pub const DEFAULT_WEB3_IPC_PATH: &str = "/tmp/trin-jsonrpc.ipc";
 pub const DEFAULT_WEB3_HTTP_ADDRESS: &str = "127.0.0.1:8545";
@@ -12,6 +13,7 @@ pub const HISTORY_NETWORK: &str = "history";
 pub const STATE_NETWORK: &str = "state";
 const DEFAULT_SUBNETWORKS: &str = "history";
 pub const DEFAULT_STORAGE_CAPACITY: &str = "100000"; // 100mb
+pub const DEFAULT_TRUSTED_PROVIDER: &str = "infura";
 
 #[derive(StructOpt, Debug, PartialEq, Clone)]
 #[structopt(
@@ -113,6 +115,25 @@ pub struct TrinConfig {
         help = "Use temporary data storage that is deleted on exit."
     )]
     pub ephemeral: bool,
+
+    #[structopt(
+        long = "trusted-provider",
+        help = "Trusted provider to use. (options: 'infura' (default) or 'geth' (experimental))",
+        default_value(DEFAULT_TRUSTED_PROVIDER)
+    )]
+    pub trusted_provider: TrustedProviderType,
+
+    #[structopt(
+        long = "geth-url",
+        help = "URL for geth client to use as trusted http provider (experimental)"
+    )]
+    pub geth_url: Option<String>,
+
+    #[structopt(
+        long = "bridge",
+        help = "Activate to run this node in bridge mode (experimental)."
+    )]
+    pub bridge: bool,
 }
 
 impl Default for TrinConfig {
@@ -134,6 +155,9 @@ impl Default for TrinConfig {
             kb: DEFAULT_STORAGE_CAPACITY.parse().unwrap(),
             enable_metrics_with_url: None,
             ephemeral: false,
+            trusted_provider: TrustedProviderType::Infura,
+            geth_url: None,
+            bridge: false,
         }
     }
 }
@@ -161,6 +185,18 @@ impl TrinConfig {
             val => panic!("Unsupported json-rpc protocol: {}", val),
         }
 
+        match config.geth_url {
+            Some(_) => {
+                if config.trusted_provider != TrustedProviderType::Geth {
+                    panic!("--geth-url flag is incompatible without Geth as the trusted provider.")
+                }
+            }
+            None => {
+                if config.trusted_provider == TrustedProviderType::Geth {
+                    panic!("Using Geth for a trusted provider requires a --geth-url flag.")
+                }
+            }
+        }
         Ok(config)
     }
 
@@ -456,5 +492,67 @@ mod test {
             .iter(),
         )
         .unwrap_err();
+    }
+
+    #[test]
+    fn test_default_trusted_provider_is_infura() {
+        assert!(env_is_set());
+        let config = TrinConfig::new_from(["trin"].iter()).unwrap();
+        assert_eq!(config.trusted_provider, TrustedProviderType::Infura);
+    }
+
+    #[test]
+    fn test_geth_trusted_provider() {
+        assert!(env_is_set());
+        let config = TrinConfig::new_from(
+            [
+                "trin",
+                "--trusted-provider",
+                "geth",
+                "--geth-url",
+                "www.geth.com",
+            ]
+            .iter(),
+        )
+        .unwrap();
+        assert_eq!(config.trusted_provider, TrustedProviderType::Geth);
+    }
+
+    #[test]
+    #[should_panic(expected = "requires a --geth-url flag")]
+    fn test_geth_trusted_provider_requires_geth_url() {
+        assert!(env_is_set());
+        TrinConfig::new_from(["trin", "--trusted-provider", "geth"].iter()).unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "Invalid trusted provider arg")]
+    fn test_trusted_provider_invalid_argument() {
+        assert!(env_is_set());
+        TrinConfig::new_from(["trin", "--trusted-provider", "prysm"].iter()).unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "incompatible without Geth as the trusted provider")]
+    fn test_geth_url_invalid_without_geth_as_trusted_provider() {
+        assert!(env_is_set());
+        TrinConfig::new_from(["trin", "--geth-url", "www.geth.com"].iter()).unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "incompatible without Geth as the trusted provider")]
+    fn test_geth_url_invalid_with_infura_as_trusted_provider() {
+        assert!(env_is_set());
+        TrinConfig::new_from(
+            [
+                "trin",
+                "--trusted-provider",
+                "infura",
+                "--geth-url",
+                "www.geth.com",
+            ]
+            .iter(),
+        )
+        .unwrap();
     }
 }

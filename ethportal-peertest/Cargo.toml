@@ -26,6 +26,7 @@ trin = { path = ".." }
 trin-core = { path = "../trin-core" }
 trin-history = { path = "../trin-history" }
 trin-state = { path = "../trin-state" }
+ureq = { version = "2.2.0", features = ["json"] }
 
 [target.'cfg(windows)'.dependencies]
 uds_windows = "1.0.1"

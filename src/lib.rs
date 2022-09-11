@@ -15,7 +15,7 @@ use trin_core::{
         types::messages::PortalnetConfig,
     },
     types::validation::HeaderOracle,
-    utils::{bootnodes::parse_bootnodes, db::setup_temp_dir},
+    utils::{bootnodes::parse_bootnodes, db::setup_temp_dir, provider::TrustedProvider},
     utp::stream::UtpListener,
 };
 use trin_history::initialize_history_network;
@@ -23,7 +23,7 @@ use trin_state::initialize_state_network;
 
 pub async fn run_trin(
     trin_config: TrinConfig,
-    infura_url: String,
+    trusted_provider: TrustedProvider,
 ) -> Result<Arc<JsonRpcExiter>, Box<dyn std::error::Error>> {
     trin_config.display_config();
 
@@ -62,7 +62,7 @@ pub async fn run_trin(
         PortalStorage::setup_config(discovery.local_enr().node_id(), trin_config.kb)?;
 
     // Initialize validation oracle
-    let header_oracle = HeaderOracle::new(infura_url.clone(), storage_config.clone());
+    let header_oracle = HeaderOracle::new(trusted_provider.clone(), storage_config.clone());
     let header_oracle = Arc::new(RwLock::new(header_oracle));
 
     debug!("Selected networks to spawn: {:?}", trin_config.networks);
@@ -115,7 +115,7 @@ pub async fn run_trin(
         tokio::task::spawn_blocking(|| {
             launch_jsonrpc_server(
                 jsonrpc_trin_config,
-                infura_url,
+                trusted_provider,
                 portal_jsonrpc_tx,
                 live_server_tx,
                 json_exiter_clone,
