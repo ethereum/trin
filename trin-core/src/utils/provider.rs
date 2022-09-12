@@ -66,9 +66,9 @@ impl TrustedProvider {
         let trusted_ws_url = match trin_config.bridge {
             true => match trin_config.trusted_provider {
                 TrustedProviderType::Infura => Some(build_infura_ws_url_from_env()),
-                TrustedProviderType::Geth => {
-                    panic!("Geth connection is not currently supported over websockets.")
-                }
+                // Geth over websockets is not yet supported
+                // Will fall back to http for bridge functionality
+                TrustedProviderType::Geth => None,
             },
             false => None,
         };

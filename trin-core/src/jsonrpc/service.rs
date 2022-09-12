@@ -402,7 +402,7 @@ pub fn dispatch_trusted_http_request(
         Err(err) => Err(json!({
             "jsonrpc": "2.0",
             "id": obj.id,
-            "error": format!("Infura failure: {}", err),
+            "error": format!("Dispatch http request failure: {}", err),
         })
         .to_string()),
     }

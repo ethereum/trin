@@ -10,10 +10,8 @@ use tokio::sync::RwLock;
 use trin_core::{
     portalnet::types::content_key::HistoryContentKey,
     types::{
-        block_body::BlockBody,
-        header::Header,
-        receipts::Receipts,
-        validation::{HeaderOracle, Validator},
+        block_body::BlockBody, header::Header, header_oracle::HeaderOracle, receipts::Receipts,
+        validation::Validator,
     },
 };
 

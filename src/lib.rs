@@ -14,7 +14,8 @@ use trin_core::{
         discovery::Discovery, events::PortalnetEvents, storage::PortalStorage,
         types::messages::PortalnetConfig,
     },
-    types::validation::HeaderOracle,
+    types::bridge::Bridge,
+    types::header_oracle::HeaderOracle,
     utils::{bootnodes::parse_bootnodes, db::setup_temp_dir, provider::TrustedProvider},
     utp::stream::UtpListener,
 };
@@ -169,7 +170,14 @@ pub async fn run_trin(
     tokio::spawn(async move {
         let mut lock = header_oracle.write().await;
         lock.bootstrap().await;
-        // todo: lock.follow_head().await;
+        if trin_config.bridge {
+            let bridge = Bridge {
+                trusted_provider: lock.trusted_provider.clone(),
+                // safe naked unwrap, since we always require history network to be run
+                history_jsonrpc_tx: lock.history_jsonrpc_tx.as_ref().unwrap().clone(),
+            };
+            bridge.follow_head().await;
+        }
     });
 
     let _ = live_server_rx.recv().await;

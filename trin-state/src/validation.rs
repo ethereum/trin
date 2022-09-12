@@ -5,7 +5,7 @@ use tokio::sync::RwLock;
 
 use trin_core::{
     portalnet::types::content_key::StateContentKey,
-    types::validation::{HeaderOracle, Validator},
+    types::{header_oracle::HeaderOracle, validation::Validator},
 };
 
 pub struct StateValidator {
