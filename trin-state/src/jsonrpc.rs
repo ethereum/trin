@@ -9,8 +9,8 @@ use trin_core::{
     jsonrpc::{
         endpoints::StateEndpoint,
         types::{
-            FindContentParams, FindNodesParams, LocalContentParams, PingParams, SendOfferParams,
-            StateJsonRpcRequest, StoreParams,
+            FindContentParams, FindNodesParams, LocalContentParams, PingParams,
+            RecursiveFindContentParams, SendOfferParams, StateJsonRpcRequest, StoreParams,
         },
         utils::bucket_entries_to_json,
     },
@@ -67,6 +67,35 @@ impl StateRequestHandler {
                         }
                         Err(msg) => Ok(Value::String(msg.to_string())),
                     };
+                    let _ = request.resp.send(response);
+                }
+                StateEndpoint::RecursiveFindContent => {
+                    let find_content_params =
+                        match RecursiveFindContentParams::try_from(request.params) {
+                            Ok(params) => params,
+                            Err(msg) => {
+                                let _ = request.resp.send(Err(format!(
+                                    "Invalid RecursiveFindContent params: {:?}",
+                                    msg.code
+                                )));
+                                return;
+                            }
+                        };
+
+                    let response =
+                        match StateContentKey::try_from(find_content_params.content_key.to_vec()) {
+                            Ok(content_key) => {
+                                match self.network.overlay.lookup_content(content_key).await {
+                                    Some(content) => {
+                                        let value = Value::String(hex_encode(content));
+                                        Ok(value)
+                                    }
+                                    None => Ok(Value::Null),
+                                }
+                            }
+                            Err(err) => Err(format!("Invalid content key requested: {}", err)),
+                        };
+
                     let _ = request.resp.send(response);
                 }
                 StateEndpoint::DataRadius => {

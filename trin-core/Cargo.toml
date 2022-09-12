@@ -63,6 +63,7 @@ tree_hash_derive = "0.4.0"
 uint = { version = "0.8.5", default-features = false }
 ureq = { version = "2.2.0", features = ["json"] }
 validator = { version = "0.13.0", features = ["derive"] }
+websocket = "0.26.5"
 
 [target.'cfg(windows)'.dependencies]
 ipconfig = "0.2.2"

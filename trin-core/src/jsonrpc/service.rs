@@ -17,7 +17,7 @@ use serde_json::{json, Value};
 use thiserror::Error;
 use threadpool::ThreadPool;
 use tokio::sync::{mpsc, mpsc::UnboundedSender};
-use ureq;
+use ureq::{self, Request};
 use validator::Validate;
 
 use crate::{
@@ -26,6 +26,7 @@ use crate::{
         endpoints::TrinEndpoint,
         types::{JsonRequest, PortalJsonRpcRequest},
     },
+    utils::provider::TrustedProvider,
 };
 
 pub struct JsonRpcExiter {
@@ -58,7 +59,7 @@ impl Default for JsonRpcExiter {
 
 pub fn launch_jsonrpc_server(
     trin_config: TrinConfig,
-    infura_url: String,
+    trusted_provider: TrustedProvider,
     portal_tx: UnboundedSender<PortalJsonRpcRequest>,
     live_server_tx: tokio::sync::mpsc::Sender<bool>,
     json_rpc_exiter: Arc<JsonRpcExiter>,
@@ -68,13 +69,19 @@ pub fn launch_jsonrpc_server(
     match trin_config.web3_transport.as_str() {
         "ipc" => launch_ipc_client(
             pool,
-            infura_url,
+            trusted_provider,
             &trin_config.web3_ipc_path,
             portal_tx,
             live_server_tx,
             json_rpc_exiter,
         ),
-        "http" => launch_http_client(pool, infura_url, trin_config, portal_tx, live_server_tx),
+        "http" => launch_http_client(
+            pool,
+            trusted_provider,
+            trin_config,
+            portal_tx,
+            live_server_tx,
+        ),
         val => panic!("Unsupported web3 transport: {}", val),
     }
 }
@@ -119,7 +126,7 @@ fn get_listener_result(ipc_path: &str) -> tokio::io::Result<uds_windows::UnixLis
 
 fn launch_ipc_client(
     pool: ThreadPool,
-    infura_url: String,
+    trusted_provider: TrustedProvider,
     ipc_path: &str,
     portal_tx: UnboundedSender<PortalJsonRpcRequest>,
     live_server_tx: tokio::sync::mpsc::Sender<bool>,
@@ -167,12 +174,12 @@ fn launch_ipc_client(
             Err(_) => break, // Socket exited
         };
         debug!("New IPC client: {:?}", stream.peer_addr().unwrap());
-        let infura_url = infura_url.clone();
+        let trusted_provider = trusted_provider.clone();
         let portal_tx = portal_tx.clone();
         pool.execute(move || {
             let mut rx = stream.try_clone().unwrap();
             let mut tx = stream;
-            serve_ipc_client(&mut rx, &mut tx, &infura_url, portal_tx);
+            serve_ipc_client(&mut rx, &mut tx, trusted_provider, portal_tx);
         });
     }
     info!("JSON-RPC server over IPC exited cleanly");
@@ -184,7 +191,7 @@ fn launch_ipc_client(
 
 fn launch_http_client(
     pool: ThreadPool,
-    infura_url: String,
+    trusted_provider: TrustedProvider,
     trin_config: TrinConfig,
     portal_tx: UnboundedSender<PortalJsonRpcRequest>,
     live_server_tx: tokio::sync::mpsc::Sender<bool>,
@@ -204,10 +211,10 @@ fn launch_http_client(
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
-                let infura_url = infura_url.clone();
+                let trusted_provider = trusted_provider.clone();
                 let portal_tx = portal_tx.clone();
                 pool.execute(move || {
-                    serve_http_client(stream, &infura_url, portal_tx);
+                    serve_http_client(stream, trusted_provider, portal_tx);
                 });
             }
             Err(e) => {
@@ -221,7 +228,7 @@ fn launch_http_client(
 fn serve_ipc_client(
     rx: &mut impl Read,
     tx: &mut impl Write,
-    infura_url: &str,
+    trusted_provider: TrustedProvider,
     portal_tx: UnboundedSender<PortalJsonRpcRequest>,
 ) {
     let deser = serde_json::Deserializer::from_reader(rx);
@@ -231,7 +238,8 @@ fn serve_ipc_client(
             Ok(obj) => {
                 let formatted_response = match obj.validate() {
                     Ok(_) => {
-                        let result = handle_request(obj, infura_url, portal_tx.clone());
+                        let result =
+                            handle_request(obj, trusted_provider.clone(), portal_tx.clone());
                         match result {
                             Ok(contents) => contents.into_bytes(),
                             Err(contents) => contents.into_bytes(),
@@ -263,7 +271,7 @@ fn serve_ipc_client(
 
 fn serve_http_client(
     mut stream: TcpStream,
-    infura_url: &str,
+    trusted_provider: TrustedProvider,
     portal_tx: UnboundedSender<PortalJsonRpcRequest>,
 ) {
     let mut reader = io::BufReader::new(&mut stream);
@@ -288,7 +296,7 @@ fn serve_http_client(
             }
         };
         let formatted_response = match obj.validate() {
-            Ok(_) => process_http_request(obj, infura_url, portal_tx.clone()),
+            Ok(_) => process_http_request(obj, trusted_provider.clone(), portal_tx.clone()),
             Err(e) => format!("HTTP/1.1 400 BAD REQUEST\r\n\r\n{}", e).into_bytes(),
         };
         stream.write_all(&formatted_response).unwrap();
@@ -332,10 +340,10 @@ fn parse_http_body(buf: Vec<u8>) -> Result<String, HttpParseError> {
 
 fn process_http_request(
     obj: JsonRequest,
-    infura_url: &str,
+    trusted_provider: TrustedProvider,
     portal_tx: UnboundedSender<PortalJsonRpcRequest>,
 ) -> Vec<u8> {
-    let result = handle_request(obj, infura_url, portal_tx);
+    let result = handle_request(obj, trusted_provider, portal_tx);
     match result {
         Ok(contents) => format!(
             "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}",
@@ -355,12 +363,12 @@ fn process_http_request(
 // Match json-rpc requests by "method" and forwards request onto respective dispatcher
 fn handle_request(
     obj: JsonRequest,
-    infura_url: &str,
+    trusted_provider: TrustedProvider,
     portal_tx: UnboundedSender<PortalJsonRpcRequest>,
 ) -> Result<String, String> {
     let method = obj.method.as_str();
     match TrinEndpoint::from_str(method) {
-        Ok(val) => dispatch_trin_request(obj, val, infura_url, portal_tx),
+        Ok(val) => dispatch_trin_request(obj, val, trusted_provider, portal_tx),
         Err(_) => Err(json!({
             "jsonrpc": "2.0",
             "id": obj.id,
@@ -373,18 +381,23 @@ fn handle_request(
 fn dispatch_trin_request(
     obj: JsonRequest,
     endpoint: TrinEndpoint,
-    infura_url: &str,
+    trusted_provider: TrustedProvider,
     portal_tx: UnboundedSender<PortalJsonRpcRequest>,
 ) -> Result<String, String> {
     match endpoint {
-        TrinEndpoint::InfuraEndpoint(_) => dispatch_infura_request(obj, infura_url),
+        TrinEndpoint::TrustedProviderEndpoint(_) => {
+            dispatch_trusted_http_request(obj, trusted_provider.http)
+        }
         _ => dispatch_portal_request(obj, endpoint, portal_tx),
     }
 }
 
-// Handle all requests served by infura
-pub fn dispatch_infura_request(obj: JsonRequest, infura_url: &str) -> Result<String, String> {
-    match proxy_to_url(&obj, infura_url) {
+// Handle all http requests served by the trusted provider
+pub fn dispatch_trusted_http_request(
+    obj: JsonRequest,
+    trusted_http_client: Request,
+) -> Result<String, String> {
+    match proxy_to_url(&obj, trusted_http_client) {
         Ok(result_body) => Ok(std::str::from_utf8(&result_body).unwrap().to_owned()),
         Err(err) => Err(json!({
             "jsonrpc": "2.0",
@@ -425,8 +438,8 @@ fn dispatch_portal_request(
     }
 }
 
-fn proxy_to_url(request: &JsonRequest, url: &str) -> io::Result<Vec<u8>> {
-    match ureq::post(url).send_json(ureq::json!(request)) {
+fn proxy_to_url(request: &JsonRequest, trusted_http_client: Request) -> io::Result<Vec<u8>> {
+    match trusted_http_client.send_json(ureq::json!(request)) {
         Ok(response) => match response.into_string() {
             Ok(val) => Ok(val.as_bytes().to_vec()),
             Err(msg) => Err(io::Error::new(

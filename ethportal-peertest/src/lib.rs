@@ -14,12 +14,13 @@ use serde_json::json;
 
 use trin_core::{
     cli::TrinConfig, jsonrpc::service::JsonRpcExiter, portalnet::types::messages::SszEnr,
+    utils::provider::TrustedProvider,
 };
 
-fn setup_mock_infura_server() -> MockServer {
+pub fn setup_mock_trusted_http_server() -> MockServer {
     let server = MockServer::start();
     server.mock(|when, then| {
-        // setup up a mock infura response for validating accepted content
+        // setup up a mock trusted http response for validating accepted content
         // inside test_offer_accept scenario
         when.method(POST)
             .body_contains("eth_getBlockByNumber");
@@ -131,9 +132,14 @@ pub async fn launch_node(id: u16, bootnode_enr: Option<&SszEnr>) -> anyhow::Resu
         }
     };
     let web3_ipc_path = trin_config.web3_ipc_path.clone();
-    let server = setup_mock_infura_server();
-    let mock_infura_url = server.url("/");
-    let exiter = trin::run_trin(trin_config, mock_infura_url).await.unwrap();
+    let server = setup_mock_trusted_http_server();
+    let mock_trusted_provider = TrustedProvider {
+        http: ureq::post(&server.url("/")),
+        ws: None,
+    };
+    let exiter = trin::run_trin(trin_config, mock_trusted_provider)
+        .await
+        .unwrap();
     let enr = get_enode(&web3_ipc_path)?;
 
     // Short sleep to make sure all peertest nodes can connect

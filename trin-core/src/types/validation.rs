@@ -10,8 +10,7 @@ use tokio::sync::mpsc;
 use crate::{
     jsonrpc::{
         endpoints::HistoryEndpoint,
-        service::dispatch_infura_request,
-        types::{HistoryJsonRpcRequest, JsonRequest, Params},
+        types::{HistoryJsonRpcRequest, Params},
     },
     portalnet::{
         storage::{ContentStore, PortalStorage, PortalStorageConfig},
@@ -21,14 +20,15 @@ use crate::{
         },
     },
     types::{accumulator::MasterAccumulator, header::Header},
+    utils::provider::TrustedProvider,
 };
 
 /// Responsible for dispatching cross-overlay-network requests
 /// for data to perform validation. Currently, it just proxies these requests
-/// on to infura.
+/// on to the trusted provider.
 #[derive(Clone, Debug)]
 pub struct HeaderOracle {
-    pub infura_url: String,
+    pub trusted_provider: TrustedProvider,
     // We could simply store the main portal jsonrpc tx channel here, rather than each
     // individual channel. But my sense is that this will be more useful in terms of
     // determining which subnetworks are actually available.
@@ -38,10 +38,10 @@ pub struct HeaderOracle {
 }
 
 impl HeaderOracle {
-    pub fn new(infura_url: String, storage_config: PortalStorageConfig) -> Self {
+    pub fn new(trusted_provider: TrustedProvider, storage_config: PortalStorageConfig) -> Self {
         let portal_storage = Arc::new(RwLock::new(PortalStorage::new(storage_config).unwrap()));
         Self {
-            infura_url,
+            trusted_provider,
             history_jsonrpc_tx: None,
             master_accumulator: MasterAccumulator::default(),
             portal_storage,
@@ -103,45 +103,34 @@ impl HeaderOracle {
         }
     }
 
-    // Currently falls back to infura, to be updated to use canonical block indices network.
+    // Currently falls back to trusted provider, to be updated to use canonical block indices network.
     pub fn get_hash_at_height(&self, block_number: u64) -> anyhow::Result<String> {
         let hex_number = format!("0x{:02X}", block_number);
-        let params = Params::Array(vec![json!(hex_number), json!(false)]);
         let method = "eth_getBlockByNumber".to_string();
-        let response = self.make_infura_request(method, params)?;
-        let infura_hash = match response["result"]["hash"].as_str() {
+        let params = Params::Array(vec![json!(hex_number), json!(false)]);
+        let response: Value = self
+            .trusted_provider
+            .dispatch_http_request(method, params)?;
+        let hash = match response["result"]["hash"].as_str() {
             Some(val) => val.trim_start_matches("0x"),
             None => {
                 return Err(anyhow!(
-                    "Unable to validate content with Infura: Invalid Infura response."
+                    "Unable to validate content received from trusted provider."
                 ))
             }
         };
-        Ok(infura_hash.to_owned())
+        Ok(hash.to_owned())
     }
 
     pub fn get_header_by_hash(&self, block_hash: H256) -> anyhow::Result<Header> {
         let block_hash = format!("0x{:02X}", block_hash);
-        let params = Params::Array(vec![json!(block_hash), json!(false)]);
         let method = "eth_getBlockByHash".to_string();
-        let response = self.make_infura_request(method, params)?;
-        Header::from_get_block_jsonrpc_response(response)
-    }
-
-    fn make_infura_request(&self, method: String, params: Params) -> anyhow::Result<Value> {
-        let request = JsonRequest {
-            jsonrpc: "2.0".to_string(),
-            params,
-            method,
-            id: 1,
-        };
-        match dispatch_infura_request(request, &self.infura_url) {
-            Ok(val) => serde_json::from_str(&val).map_err(|e| anyhow!(e)),
-            Err(msg) => Err(anyhow!(
-                "Unable to request validation data from Infura: {:?}",
-                msg
-            )),
-        }
+        let params = Params::Array(vec![json!(block_hash), json!(false)]);
+        let response: Value = self
+            .trusted_provider
+            .dispatch_http_request(method, params)?;
+        let header = Header::from_get_block_jsonrpc_response(response)?;
+        Ok(header)
     }
 
     // To be updated to use chain history || header gossip network.

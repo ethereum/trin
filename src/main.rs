@@ -1,4 +1,4 @@
-use trin_core::{cli::TrinConfig, utils::infura::build_infura_project_url_from_env};
+use trin_core::{cli::TrinConfig, utils::provider::TrustedProvider};
 
 use trin::run_trin;
 
@@ -9,9 +9,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Launching trin");
 
     let trin_config = TrinConfig::from_cli();
-    let infura_url = build_infura_project_url_from_env();
-
-    let exiter = run_trin(trin_config, infura_url).await?;
+    let trusted_provider = TrustedProvider::from_trin_config(&trin_config);
+    let exiter = run_trin(trin_config, trusted_provider).await?;
 
     tokio::signal::ctrl_c()
         .await

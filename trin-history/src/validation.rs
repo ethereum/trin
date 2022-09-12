@@ -139,7 +139,7 @@ mod tests {
                 messages::ByteList,
             },
         },
-        utils::bytes::hex_decode,
+        utils::{bytes::hex_decode, provider::TrustedProvider},
     };
 
     fn get_header_rlp() -> Vec<u8> {
@@ -381,7 +381,14 @@ mod tests {
     fn default_header_oracle(infura_url: String) -> Arc<RwLock<HeaderOracle>> {
         let node_id = NodeId::random();
         let storage_config = PortalStorageConfig::new(100, node_id);
-        Arc::new(RwLock::new(HeaderOracle::new(infura_url, storage_config)))
+        let trusted_provider = TrustedProvider {
+            http: ureq::post(&infura_url),
+            ws: None,
+        };
+        Arc::new(RwLock::new(HeaderOracle::new(
+            trusted_provider,
+            storage_config,
+        )))
     }
 
     fn block_14764013_hash() -> H256 {

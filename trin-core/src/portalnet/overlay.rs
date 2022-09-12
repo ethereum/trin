@@ -111,7 +111,8 @@ pub struct OverlayProtocol<TContentKey, TMetric, TValidator, TStore> {
     phantom_content_key: PhantomData<TContentKey>,
     /// Associate a metric with the overlay network.
     phantom_metric: PhantomData<TMetric>,
-    /// Accepted content validator that makes requests to this/other overlay networks (or infura)
+    /// Accepted content validator that makes requests to this/other overlay networks (or trusted
+    /// http server)
     validator: Arc<TValidator>,
 }
 
@@ -632,15 +633,6 @@ where
             Ok(_) => Err(OverlayRequestError::InvalidResponse),
             Err(error) => Err(error),
         }
-    }
-
-    /// Public method for initiating a network request through the overlay service.
-    pub async fn initiate_overlay_request(
-        &self,
-        request: Request,
-    ) -> Result<Response, OverlayRequestError> {
-        let direction = RequestDirection::Initialize;
-        self.send_overlay_request(request, direction).await
     }
 
     /// Performs a content lookup for `target`.

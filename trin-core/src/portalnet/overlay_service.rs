@@ -165,8 +165,6 @@ pub enum RequestDirection {
     Incoming { id: RequestId, source: NodeId },
     /// An outgoing request to `destination`.
     Outgoing { destination: Enr },
-    /// Initialize a request from node.
-    Initialize,
 }
 
 /// An identifier for an overlay network request. The ID is used to track active outgoing requests.
@@ -790,26 +788,6 @@ where
                 );
                 self.send_talk_req(request.request, request.id, destination);
             }
-            RequestDirection::Initialize => {
-                let response = self.initialize_request(request.request.clone());
-                // Send response to responder if present.
-                if let Some(responder) = request.responder {
-                    let _ = responder.send(response);
-                }
-            }
-        }
-    }
-
-    /// Initializes a overlay service request from source node.
-    fn initialize_request(&mut self, request: Request) -> Result<Response, OverlayRequestError> {
-        debug!("[{:?}] Initializing request", self.protocol);
-        match request {
-            Request::FindContent(find_content) => Ok(Response::Content(
-                self.handle_find_content(find_content, None)?,
-            )),
-            _ => Err(OverlayRequestError::InvalidRequest(
-                "Initializing this overlay service request is not yet supported.".to_string(),
-            )),
         }
     }
 
