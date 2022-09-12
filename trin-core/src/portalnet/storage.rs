@@ -692,8 +692,8 @@ pub mod test {
 
     #[test_log::test(tokio::test)]
     #[serial]
-    async fn test_store() -> Result<(), ContentStoreError> {
-        fn test_store_random_bytes() {
+    async fn test_store() {
+        fn test_store_random_bytes() -> TestResult {
             let temp_dir = setup_temp_dir();
 
             let node_id = NodeId::random();
@@ -706,11 +706,12 @@ pub mod test {
 
             std::mem::drop(storage);
             temp_dir.close().unwrap();
+
+            TestResult::passed()
         }
         QuickCheck::new()
             .tests(10)
             .quickcheck(test_store_random_bytes as fn() -> _);
-        Ok(())
     }
 
     #[test_log::test(tokio::test)]
