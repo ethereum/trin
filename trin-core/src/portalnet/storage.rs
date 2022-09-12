@@ -7,12 +7,12 @@ use std::{
 
 use discv5::enr::NodeId;
 use hex;
-use log::{debug, error, info};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rocksdb::{Options, DB};
 use rusqlite::params;
 use thiserror::Error;
+use tracing::{debug, error, info};
 
 use super::types::{
     content_key::OverlayContentKey,

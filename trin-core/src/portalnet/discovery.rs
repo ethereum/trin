@@ -8,11 +8,11 @@ use discv5::{
     enr::{CombinedKey, EnrBuilder, NodeId},
     Discv5, Discv5Config, Discv5ConfigBuilder, Discv5Event, RequestError, TalkRequest,
 };
-use log::info;
 use lru::LruCache;
 use parking_lot::RwLock;
 use serde_json::{json, Value};
 use tokio::sync::mpsc;
+use tracing::info;
 
 use std::{
     convert::TryFrom,

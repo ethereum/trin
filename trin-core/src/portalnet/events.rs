@@ -3,8 +3,8 @@ use crate::utp::stream::UtpListenerEvent;
 
 use discv5::TalkRequest;
 use hex;
-use log::warn;
 use tokio::sync::mpsc;
+use tracing::warn;
 
 use std::str::FromStr;
 

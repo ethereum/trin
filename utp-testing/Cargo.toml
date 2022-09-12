@@ -14,7 +14,6 @@ trin-core = { path = "../trin-core" }
 tokio = {version = "1.8.0", features = ["full"]}
 discv5 = { git = "https://github.com/sigp/discv5.git", branch = "master" }
 hex = "0.4.3"
-log = "0.4.14"
 
 [[bin]]
 name = "utp-test-app"

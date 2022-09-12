@@ -1,11 +1,11 @@
 use std::{fs, fs::File, io::BufReader, path::Path, process::Command};
 
 use discv5::enr::{CombinedKey, EnrBuilder};
-use log::debug;
 use rand::{distributions::Alphanumeric, Rng, RngCore};
 use rlp::{Decodable, DecoderError};
 use serde_json::Value;
 use structopt::StructOpt;
+use tracing::debug;
 
 use trin_core::{
     portalnet::{

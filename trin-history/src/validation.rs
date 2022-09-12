@@ -3,9 +3,9 @@ use std::sync::Arc;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use ethereum_types::H256;
-use log::warn;
 use ssz::Decode;
 use tokio::sync::RwLock;
+use tracing::warn;
 
 use trin_core::{
     portalnet::types::content_key::HistoryContentKey,

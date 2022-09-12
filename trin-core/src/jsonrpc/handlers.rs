@@ -3,9 +3,9 @@
 use std::sync::Arc;
 
 use anyhow::anyhow;
-use log::debug;
 use serde_json::Value;
 use tokio::sync::mpsc;
+use tracing::debug;
 
 use crate::{
     jsonrpc::{
