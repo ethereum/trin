@@ -26,8 +26,8 @@ rocksdb = "0.18.0"
 serde_json = "1.0.59"
 serial_test = "0.5.1"
 tempdir = "0.3.7"
-tracing = "0.1.26"
-tracing-subscriber = "0.2.18"
+tracing = "0.1.36"
+tracing-subscriber = "0.3.15"
 tokio = { version = "1.8.0", features = ["full"] }
 trin-core = { path = "../trin-core" }
 ureq = { version = "2.2.0", features = ["json"] }
@@ -35,4 +35,4 @@ ureq = { version = "2.2.0", features = ["json"] }
 [dev-dependencies]
 env_logger = "0.8.2"
 test-log = { version = "0.2.10", features = ["trace"] }
-tracing-subscriber = "0.2.18"
+tracing-subscriber = "0.3.15"
