@@ -16,7 +16,6 @@ delay_map = "0.1.1"
 directories = "3.0"
 discv5 = { git = "https://github.com/sigp/discv5.git", branch = "master" }
 enr = { version = "=0.6.0", features = ["k256", "ed25519"] }
-env_logger = "0.8.2"
 eth_trie = "0.1.0"
 eth2_ssz = "0.4.0"
 eth2_ssz_derive = "0.3.0"
@@ -56,7 +55,6 @@ tokio = { version = "1.8.0", features = ["full"] }
 tokio-test = "0.4.2"
 tokio-util = "0.6.8"
 tracing = "0.1.36"
-tracing-futures = "0.2.5"
 tree_hash = "0.4.0"
 tree_hash_derive = "0.4.0"
 uint = { version = "0.8.5", default-features = false }
@@ -76,7 +74,8 @@ version = "0.26.3"
 features = ["bundled"]
 
 [dev-dependencies]
+env_logger = "0.9.0"
 ntest = "0.8.0"
 quickcheck = "1.0.3"
-test-log = { version = "0.2.10", features = ["trace"] }
+test-log = { version = "0.2.11", features = ["trace"] }
 tracing-subscriber = "0.3.15"
