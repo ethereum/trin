@@ -130,6 +130,11 @@ impl MemoryContentStore {
         }
     }
 
+    /// Sets the radius of the store to `radius`.
+    pub fn set_radius(&mut self, radius: Distance) {
+        self.radius = radius;
+    }
+
     /// Returns the distance to `key` from the local `NodeId` according to the distance function.
     fn distance_to_key<K: OverlayContentKey>(&self, key: &K) -> Distance {
         match self.distance_fn {
