@@ -16,15 +16,12 @@ eth2_ssz = "0.4.0"
 eth2_ssz_types = "0.2.1"
 ethereum-types = "0.12.1"
 hex = "0.4.3"
-httpmock = "0.6.6"
 keccak-hash = "0.8.0"
 parking_lot = "0.11.2"
 rand = "0.8.4"
 rlp = "0.5.0"
 rocksdb = "0.18.0"
 serde_json = "1.0.59"
-serial_test = "0.5.1"
-tempdir = "0.3.7"
 tracing = "0.1.36"
 tokio = { version = "1.8.0", features = ["full"] }
 trin-core = { path = "../trin-core" }
@@ -32,5 +29,6 @@ ureq = { version = "2.2.0", features = ["json"] }
 
 [dev-dependencies]
 env_logger = "0.9.0"
+httpmock = "0.6.6"
 test-log = { version = "0.2.11", features = ["trace"] }
 tracing-subscriber = "0.3.15"
