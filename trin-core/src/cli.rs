@@ -1,7 +1,7 @@
 use std::{env, ffi::OsString, net::SocketAddr};
 
-use log::info;
 use structopt::StructOpt;
+use tracing::info;
 
 use crate::portalnet::types::messages::HexData;
 use crate::utils::provider::TrustedProviderType;

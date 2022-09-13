@@ -1,5 +1,5 @@
-use log::{debug, info};
 use std::net::{IpAddr, SocketAddr, UdpSocket};
+use tracing::{debug, info};
 
 #[cfg(unix)]
 use interfaces::{self, Interface};

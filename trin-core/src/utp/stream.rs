@@ -2,7 +2,6 @@ use crate::portalnet::discovery::Discovery;
 use anyhow::anyhow;
 use async_recursion::async_recursion;
 use discv5::{enr::NodeId, Enr, TalkRequest};
-use log::{debug, error, warn};
 use rand::Rng;
 use ssz::Encode;
 use std::{
@@ -18,6 +17,7 @@ use tokio::{
     },
     time::timeout,
 };
+use tracing::{debug, error, warn};
 
 use crate::{
     locks::RwLoggingExt,

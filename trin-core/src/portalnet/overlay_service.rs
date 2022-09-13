@@ -19,7 +19,6 @@ use discv5::{
     rpc::RequestId,
 };
 use futures::{channel::oneshot, prelude::*};
-use log::{debug, error, info, warn};
 use parking_lot::RwLock;
 use rand::seq::SliceRandom;
 use smallvec::SmallVec;
@@ -27,6 +26,7 @@ use ssz::Encode;
 use ssz_types::{BitList, VariableList};
 use thiserror::Error;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tracing::{debug, error, info, warn};
 
 use crate::{
     portalnet::{

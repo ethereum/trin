@@ -1,8 +1,8 @@
 use std::{thread, time};
 
-use log::{error, info};
 use serde_json::{json, Value};
 use ssz::Encode;
+use tracing::{error, info};
 
 use crate::{
     jsonrpc::{

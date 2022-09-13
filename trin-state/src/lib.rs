@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
 use discv5::TalkRequest;
-use log::info;
 use network::StateNetwork;
 use tokio::{
     sync::{mpsc, mpsc::UnboundedSender, RwLock},
     task::JoinHandle,
 };
+use tracing::info;
 
 use crate::{events::StateEvents, jsonrpc::StateRequestHandler};
 use trin_core::{
