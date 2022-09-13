@@ -1,6 +1,6 @@
-use log::info;
 use std::net::SocketAddr;
 use std::str::FromStr;
+use tracing::info;
 use utp_testing::run_test_app;
 
 use structopt::StructOpt;

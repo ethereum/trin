@@ -6,12 +6,12 @@ pub mod validation;
 use std::sync::Arc;
 
 use discv5::TalkRequest;
-use log::info;
 use network::HistoryNetwork;
 use tokio::{
     sync::{mpsc, mpsc::UnboundedSender, RwLock},
     task::JoinHandle,
 };
+use tracing::info;
 
 use crate::{events::HistoryEvents, jsonrpc::HistoryRequestHandler};
 use trin_core::{

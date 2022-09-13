@@ -11,6 +11,7 @@ use tokio::{
     sync::{RwLock, RwLockReadGuard, RwLockWriteGuard},
     task::JoinHandle,
 };
+use tracing::warn;
 
 const ACQUIRE_TIMEOUT_MS: u64 = 100;
 const HOLD_TIMEOUT_MS: u64 = 100;
@@ -63,11 +64,9 @@ impl<T> Drop for TimedGuard<T> {
         self.sleep_task.abort();
         let held_for = self.acquisition_time.elapsed().as_millis();
         if held_for > HOLD_TIMEOUT_MS.into() {
-            log::warn!(
+            warn!(
                 "[{}:{}] lock held for too long: {}ms",
-                self.acquisition_file,
-                self.acquisition_line,
-                held_for,
+                self.acquisition_file, self.acquisition_line, held_for,
             )
         }
     }
@@ -75,7 +74,7 @@ impl<T> Drop for TimedGuard<T> {
 
 async fn sleep_then_log(file: &'static str, line: u32) {
     tokio::time::sleep(Duration::from_millis(HOLD_TIMEOUT_MS)).await;
-    log::warn!(
+    warn!(
         "[{}:{}] lock held for over {}ms, not yet released",
         file,
         line,
@@ -97,7 +96,7 @@ where
 
     futures::select! {
         _ = sleep => {
-            log::warn!(
+            warn!(
                 "[{}:{}] waiting more than {}ms to acquire lock, still waiting",
                 file, line, ACQUIRE_TIMEOUT_MS,
             );
@@ -109,7 +108,7 @@ where
 
     let guard = fused.await;
     let wait_time = now.elapsed().as_millis();
-    log::warn!("[{}:{}] waited {}ms to acquire lock", file, line, wait_time);
+    warn!("[{}:{}] waited {}ms to acquire lock", file, line, wait_time);
 
     TimedGuard::new(guard, line, file)
 }

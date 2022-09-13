@@ -15,13 +15,12 @@ use discv5::{
     TalkRequest,
 };
 use futures::{channel::oneshot, future::join_all};
-use log::error;
 use parking_lot::RwLock;
 use rand::seq::IteratorRandom;
 use ssz::Encode;
 use ssz_types::VariableList;
 use tokio::{sync::mpsc::UnboundedSender, task::JoinHandle};
-use tracing::{debug, warn};
+use tracing::{debug, error, warn};
 
 use crate::{
     portalnet::{

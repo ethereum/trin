@@ -4,8 +4,8 @@ use std::{io::prelude::*, panic, time::Duration};
 
 use anyhow::anyhow;
 use hyper::{self, Body, Client, Method, Request};
-use log::{error, info};
 use serde_json::{self, json, Value};
+use tracing::{error, info};
 
 use crate::{cli::PeertestConfig, Peertest};
 use trin_core::{

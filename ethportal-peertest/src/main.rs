@@ -1,5 +1,5 @@
-use log::info;
 use std::{thread, time};
+use tracing::info;
 
 use ethportal_peertest::{
     cli::PeertestConfig,

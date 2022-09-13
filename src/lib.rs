@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use log::debug;
 use tokio::sync::{mpsc, RwLock};
+use tracing::debug;
 
 use trin_core::{
     cli::{TrinConfig, HISTORY_NETWORK, STATE_NETWORK},

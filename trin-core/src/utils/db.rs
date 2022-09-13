@@ -1,6 +1,6 @@
-use log::debug;
 use std::path::PathBuf;
 use std::{env, fs};
+use tracing::debug;
 
 use directories::ProjectDirs;
 use discv5::enr::NodeId;

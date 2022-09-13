@@ -12,11 +12,11 @@ use std::{
 };
 
 use httparse;
-use log::{debug, info, warn};
 use serde_json::{json, Value};
 use thiserror::Error;
 use threadpool::ThreadPool;
 use tokio::sync::{mpsc, mpsc::UnboundedSender};
+use tracing::{debug, info, warn};
 use ureq::{self, Request};
 use validator::Validate;
 
