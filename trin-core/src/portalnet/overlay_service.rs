@@ -1024,18 +1024,13 @@ where
                 }
             }
         } else {
-            // The node is not in the overlay routing table, so look for the node's ENR
-            // in the underlying Discovery v5 routing table. If an entry is found, then
-            // attempt to insert the node as a connected peer.
-            //
-            // TODO: Remove this fallback logic. Request ENR via Discovery v5. If the
-            // ENR sequence number has changed, then the node's address info may have
-            // changed. The TalkRequest object does not contain the requester's ENR, only
-            // its NodeAddress.
-            if let Some(enr) = self.discovery.find_enr(&source) {
+            // The node is not in the overlay routing table, so look for the node's ENR in the node
+            // address cache. If an entry is found, then attempt to insert the node as a connected
+            // peer.
+            if let Some(node_addr) = self.discovery.cached_node_addr(&source) {
                 // TODO: Decide default data radius, and define a constant.
                 let node = Node {
-                    enr,
+                    enr: node_addr.enr,
                     data_radius: Distance::MAX,
                 };
                 self.connect_node(node, ConnectionDirection::Incoming);
