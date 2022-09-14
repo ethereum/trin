@@ -16,7 +16,6 @@ use trin_core::{
     cli::TrinConfig, jsonrpc::service::JsonRpcExiter, portalnet::types::messages::SszEnr,
     utils::provider::TrustedProvider,
 };
-
 pub fn setup_mock_trusted_http_server() -> MockServer {
     let server = MockServer::start();
     server.mock(|when, then| {
@@ -76,7 +75,28 @@ impl Peertest {
     }
 }
 
-pub async fn launch_node(id: u16, bootnode_enr: Option<&SszEnr>) -> anyhow::Result<PeertestNode> {
+pub async fn launch_node(trin_config: TrinConfig) -> anyhow::Result<PeertestNode> {
+    let web3_ipc_path = trin_config.web3_ipc_path.clone();
+    let server = setup_mock_trusted_http_server();
+    let mock_trusted_provider = TrustedProvider {
+        http: ureq::post(&server.url("/")),
+        ws: None,
+    };
+    let exiter = trin::run_trin(trin_config, mock_trusted_provider)
+        .await
+        .unwrap();
+    let enr = get_enode(&web3_ipc_path)?;
+
+    // Short sleep to make sure all peertest nodes can connect
+    thread::sleep(time::Duration::from_secs(2));
+    Ok(PeertestNode {
+        enr,
+        web3_ipc_path,
+        exiter,
+    })
+}
+
+fn generate_trin_config(id: u16, bootnode_enr: Option<&SszEnr>) -> TrinConfig {
     let discovery_port: u16 = 9000 + id;
     let discovery_port: String = discovery_port.to_string();
     let web3_ipc_path = format!("/tmp/ethportal-peertest-buddy-{id}.ipc");
@@ -85,7 +105,7 @@ pub async fn launch_node(id: u16, bootnode_enr: Option<&SszEnr>) -> anyhow::Resu
     let mut private_key = vec![id as u8; 3];
     private_key.append(&mut vec![0u8; 29]);
     let private_key = hex::encode(private_key);
-    let trin_config = match bootnode_enr {
+    match bootnode_enr {
         Some(enr) => {
             let external_addr = format!(
                 "{}:{}",
@@ -130,37 +150,19 @@ pub async fn launch_node(id: u16, bootnode_enr: Option<&SszEnr>) -> anyhow::Resu
             ];
             TrinConfig::new_from(trin_config_args.iter()).unwrap()
         }
-    };
-    let web3_ipc_path = trin_config.web3_ipc_path.clone();
-    let server = setup_mock_trusted_http_server();
-    let mock_trusted_provider = TrustedProvider {
-        http: ureq::post(&server.url("/")),
-        ws: None,
-    };
-    let exiter = trin::run_trin(trin_config, mock_trusted_provider)
-        .await
-        .unwrap();
-    let enr = get_enode(&web3_ipc_path)?;
-
-    // Short sleep to make sure all peertest nodes can connect
-    thread::sleep(time::Duration::from_secs(2));
-    Ok(PeertestNode {
-        enr,
-        web3_ipc_path,
-        exiter,
-    })
+    }
 }
 
 pub async fn launch_peertest_nodes(count: u16) -> Peertest {
     // Bootnode uses a peertest id of 1
-    let bootnode = launch_node(1, None).await.unwrap();
+    let bootnode_config = generate_trin_config(1, None);
+    let bootnode = launch_node(bootnode_config).await.unwrap();
     let bootnode_enr = &bootnode.enr;
     // All other peertest node ids begin at 2, and increment from there
-    let nodes = future::try_join_all(
-        (2..count + 1)
-            .into_iter()
-            .map(|id| launch_node(id, Some(bootnode_enr))),
-    )
+    let nodes = future::try_join_all((2..count + 1).into_iter().map(|id| {
+        let node_config = generate_trin_config(id, Some(bootnode_enr));
+        launch_node(node_config)
+    }))
     .await
     .unwrap();
     Peertest { bootnode, nodes }

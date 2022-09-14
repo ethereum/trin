@@ -1,30 +1,21 @@
-use std::sync::{Arc, RwLock};
+use std::str::FromStr;
 
 use anyhow::anyhow;
 use async_trait::async_trait;
 use ethereum_types::H256;
 use serde_json::{json, Value};
-use ssz::{Decode, Encode};
 use tokio::sync::mpsc;
 
 use crate::{
-    jsonrpc::{
-        endpoints::HistoryEndpoint,
-        types::{HistoryJsonRpcRequest, Params},
-    },
-    portalnet::{
-        storage::{ContentStore, PortalStorage, PortalStorageConfig},
-        types::{
-            content_key::{
-                HistoryContentKey, IdentityContentKey, MasterAccumulator as MasterAccumulatorKey,
-                SszNone,
-            },
-            messages::ProtocolId,
-        },
-    },
+    jsonrpc::types::{HistoryJsonRpcRequest, Params},
+    portalnet::types::content_key::IdentityContentKey,
     types::{accumulator::MasterAccumulator, header::Header},
     utils::provider::TrustedProvider,
 };
+
+pub const MERGE_BLOCK_NUMBER: u64 = 15_537_394u64;
+pub const DEFAULT_MASTER_ACC_HASH: &str =
+    "0x40d0ec5ce5b60d8f350a5c7651aac39d85a9e5ee52695a796f4c18496aa16a3d";
 
 /// Responsible for dispatching cross-overlay-network requests
 /// for data to perform validation. Currently, it just proxies these requests
@@ -35,96 +26,33 @@ pub struct HeaderOracle {
     // We could simply store the main portal jsonrpc tx channel here, rather than each
     // individual channel. But my sense is that this will be more useful in terms of
     // determining which subnetworks are actually available.
-    pub history_jsonrpc_tx: Option<tokio::sync::mpsc::UnboundedSender<HistoryJsonRpcRequest>>,
-    pub master_accumulator: MasterAccumulator,
-    pub portal_storage: Arc<RwLock<PortalStorage>>,
+    pub history_jsonrpc_tx: Option<mpsc::UnboundedSender<HistoryJsonRpcRequest>>,
+    pub master_acc: MasterAccumulator,
 }
 
 impl HeaderOracle {
-    pub fn new(trusted_provider: TrustedProvider, storage_config: PortalStorageConfig) -> Self {
-        let portal_storage = Arc::new(RwLock::new(
-            PortalStorage::new(storage_config, ProtocolId::History).unwrap(),
-        ));
+    pub fn new(trusted_provider: TrustedProvider, master_acc: MasterAccumulator) -> Self {
         Self {
             trusted_provider,
             history_jsonrpc_tx: None,
-            master_accumulator: MasterAccumulator::default(),
-            portal_storage,
-        }
-    }
-
-    /// 1. Sample latest accumulator from 10 peers
-    /// 2. Get latest master accumulator from portal storage
-    /// 3. Update PortalStorage if new accumulator from network is latest
-    /// 4. Set current master accumulator to latest
-    pub async fn bootstrap(&mut self) {
-        // Get latest master accumulator from AccumulatorDB
-        let latest_macc_content_key =
-            HistoryContentKey::MasterAccumulator(MasterAccumulatorKey::Latest(SszNone::new()));
-        let latest_local_macc: &Option<Vec<u8>> = &self
-            .portal_storage
-            .as_ref()
-            .read()
-            .unwrap()
-            .get(&latest_macc_content_key)
-            .unwrap_or(None);
-        let latest_local_macc = match latest_local_macc {
-            Some(val) => MasterAccumulator::from_ssz_bytes(val).unwrap_or_default(),
-            None => MasterAccumulator::default(),
-        };
-
-        // Sample latest accumulator from 10 network peers
-        let (resp_tx, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
-        let request = HistoryJsonRpcRequest {
-            endpoint: HistoryEndpoint::SampleLatestMasterAccumulator,
-            resp: resp_tx,
-            params: Params::None,
-        };
-        let history_jsonrpc_tx = match self.history_jsonrpc_tx.as_ref() {
-            Some(val) => val,
-            None => {
-                // use latest_local_macc if history jsonrpc is unavailable
-                self.master_accumulator = latest_local_macc;
-                return;
-            }
-        };
-        history_jsonrpc_tx.send(request).unwrap();
-        let latest_network_macc: MasterAccumulator = match resp_rx.recv().await {
-            Some(val) => serde_json::from_value(val.unwrap()).unwrap_or_default(),
-            None => MasterAccumulator::default(),
-        };
-
-        // Set current macc to latest macc
-        self.master_accumulator = latest_local_macc.clone();
-
-        // Update portal storage with latest network macc if network macc is latest
-        if latest_local_macc.latest_height() < latest_network_macc.latest_height() {
-            let _ = &self
-                .portal_storage
-                .as_ref()
-                .write()
-                .unwrap()
-                .put(latest_macc_content_key, &latest_local_macc.as_ssz_bytes());
+            master_acc,
         }
     }
 
     // Currently falls back to trusted provider, to be updated to use canonical block indices network.
-    pub fn get_hash_at_height(&self, block_number: u64) -> anyhow::Result<String> {
+    pub fn get_hash_at_height(&self, block_number: u64) -> anyhow::Result<H256> {
         let hex_number = format!("0x{:02X}", block_number);
         let method = "eth_getBlockByNumber".to_string();
         let params = Params::Array(vec![json!(hex_number), json!(false)]);
         let response: Value = self
             .trusted_provider
             .dispatch_http_request(method, params)?;
-        let hash = match response["result"]["hash"].as_str() {
-            Some(val) => val.trim_start_matches("0x"),
-            None => {
-                return Err(anyhow!(
-                    "Unable to validate content received from trusted provider."
-                ))
-            }
-        };
-        Ok(hash.to_owned())
+        match response["result"]["hash"].as_str() {
+            Some(val) => Ok(H256::from_str(val)?),
+            None => Err(anyhow!(
+                "Unable to validate content received from trusted provider."
+            )),
+        }
     }
 
     pub fn get_header_by_hash(&self, block_hash: H256) -> anyhow::Result<Header> {
@@ -138,9 +66,40 @@ impl HeaderOracle {
         Ok(header)
     }
 
-    // To be updated to use chain history || header gossip network.
-    pub fn _is_hash_canonical() -> anyhow::Result<bool> {
-        Ok(true)
+    fn history_jsonrpc_tx(&self) -> anyhow::Result<mpsc::UnboundedSender<HistoryJsonRpcRequest>> {
+        match self.history_jsonrpc_tx.clone() {
+            Some(val) => Ok(val),
+            None => Err(anyhow!("History subnetwork is not available")),
+        }
+    }
+
+    pub async fn validate_header_is_canonical(&self, header: Header) -> anyhow::Result<()> {
+        if header.number <= MERGE_BLOCK_NUMBER {
+            if let Ok(history_jsonrpc_tx) = self.history_jsonrpc_tx() {
+                if let Ok(val) = &self
+                    .master_acc
+                    .validate_pre_merge_header(&header, history_jsonrpc_tx)
+                    .await
+                {
+                    match val {
+                        true => return Ok(()),
+                        false => return Err(anyhow!("hash is invalid")),
+                    }
+                }
+            }
+        }
+        // either header is post-merge or there was an error trying to validate it via chain
+        // history network, so we fallback to infura
+        let trusted_hash = self.get_hash_at_height(header.number)?;
+        if trusted_hash == header.hash() {
+            Ok(())
+        } else {
+            Err(anyhow!(
+                "Content validation failed. Found: {:?} - Expected: {:?}",
+                header.hash(),
+                trusted_hash
+            ))
+        }
     }
 }
 
@@ -170,5 +129,27 @@ impl Validator<IdentityContentKey> for MockValidator {
         IdentityContentKey: 'async_trait,
     {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::str::FromStr;
+
+    use tree_hash::TreeHash;
+
+    use crate::cli::TrinConfig;
+
+    #[tokio::test]
+    async fn header_oracle_bootstraps_with_default_merge_master_acc() {
+        let trin_config = TrinConfig::default();
+        let trusted_provider = TrustedProvider::from_trin_config(&trin_config);
+        let master_acc = MasterAccumulator::try_from_file(trin_config.master_acc_path).unwrap();
+        let header_oracle = HeaderOracle::new(trusted_provider, master_acc);
+        assert_eq!(
+            header_oracle.master_acc.tree_hash_root(),
+            H256::from_str(DEFAULT_MASTER_ACC_HASH).unwrap(),
+        );
     }
 }

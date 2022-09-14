@@ -63,14 +63,11 @@ impl TrustedProvider {
                 }
             },
         };
-        let trusted_ws_url = match trin_config.bridge {
-            true => match trin_config.trusted_provider {
-                TrustedProviderType::Infura => Some(build_infura_ws_url_from_env()),
-                TrustedProviderType::Geth => {
-                    panic!("Geth connection is not currently supported over websockets.")
-                }
-            },
-            false => None,
+        let trusted_ws_url = match trin_config.trusted_provider {
+            TrustedProviderType::Infura => Some(build_infura_ws_url_from_env()),
+            TrustedProviderType::Geth => {
+                panic!("Geth connection is not currently supported over websockets.")
+            }
         };
         Self {
             http: trusted_http_client,

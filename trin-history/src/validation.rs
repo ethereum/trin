@@ -32,23 +32,13 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
         HistoryContentKey: 'async_trait,
     {
         match content_key {
-            HistoryContentKey::BlockHeader(key) => {
+            HistoryContentKey::BlockHeader(_key) => {
                 let header: Header = rlp::decode(content)?;
-                let expected_hash = &self
-                    .header_oracle
+                self.header_oracle
                     .write()
                     .await
-                    .get_hash_at_height(header.number)?;
-                let actual_hash = &hex::encode(key.block_hash);
-                if actual_hash == expected_hash {
-                    Ok(())
-                } else {
-                    Err(anyhow!(
-                        "Content validation failed. Found: {:?} - Expected: {:?}",
-                        actual_hash,
-                        expected_hash
-                    ))
-                }
+                    .validate_header_is_canonical(header)
+                    .await
             }
             HistoryContentKey::BlockBody(key) => {
                 let block_body = match BlockBody::from_ssz_bytes(content) {
@@ -123,7 +113,8 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use discv5::enr::NodeId;
+    use std::path::PathBuf;
+
     use ethereum_types::U256;
     use hex;
     use httpmock::prelude::*;
@@ -132,13 +123,12 @@ mod tests {
     use ssz_types::{typenum, VariableList};
 
     use trin_core::{
-        portalnet::{
-            storage::PortalStorageConfig,
-            types::{
-                content_key::{BlockBody as BlockBodyKey, BlockHeader, BlockReceipts},
-                messages::ByteList,
-            },
+        cli::DEFAULT_MASTER_ACC_PATH,
+        portalnet::types::{
+            content_key::{BlockBody as BlockBodyKey, BlockHeader, BlockReceipts},
+            messages::ByteList,
         },
+        types::accumulator::MasterAccumulator,
         utils::{bytes::hex_decode, provider::TrustedProvider},
     };
 
@@ -242,12 +232,12 @@ mod tests {
         let server = setup_mock_infura_server();
         // RLP encoded block header #669051
         let header_rlp = get_header_rlp();
-        let header_bytelist = ByteList::try_from(header_rlp.clone()).unwrap();
         let mut header: Header = rlp::decode(&header_rlp).expect("error decoding header");
 
         // set invalid block height
         header.number = 669052;
 
+        let header_bytelist = ByteList::from(rlp::encode(&header).to_vec());
         let header_oracle = default_header_oracle(server.url("/get_header"));
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = HistoryContentKey::BlockHeader(BlockHeader {
@@ -265,13 +255,13 @@ mod tests {
         let server = setup_mock_infura_server();
         // RLP encoded block header #669051
         let header_rlp = get_header_rlp();
-        let header_bytelist = ByteList::try_from(header_rlp.clone()).unwrap();
         let mut header: Header = rlp::decode(&header_rlp).expect("error decoding header");
 
         // set invalid block gaslimit
         // valid gaslimit = 3141592
         header.gas_limit = U256::from(3141591);
 
+        let header_bytelist = ByteList::from(rlp::encode(&header).to_vec());
         let header_oracle = default_header_oracle(server.url("/get_header"));
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = HistoryContentKey::BlockHeader(BlockHeader {
@@ -376,16 +366,14 @@ mod tests {
     }
 
     fn default_header_oracle(infura_url: String) -> Arc<RwLock<HeaderOracle>> {
-        let node_id = NodeId::random();
-        let storage_config = PortalStorageConfig::new(100, node_id, false);
         let trusted_provider = TrustedProvider {
             http: ureq::post(&infura_url),
             ws: None,
         };
-        Arc::new(RwLock::new(HeaderOracle::new(
-            trusted_provider,
-            storage_config,
-        )))
+        let master_acc =
+            MasterAccumulator::try_from_file(PathBuf::from(DEFAULT_MASTER_ACC_PATH.to_string()))
+                .unwrap();
+        Arc::new(RwLock::new(HeaderOracle::new(trusted_provider, master_acc)))
     }
 
     fn block_14764013_hash() -> H256 {

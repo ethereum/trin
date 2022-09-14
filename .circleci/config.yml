@@ -44,7 +44,7 @@ jobs:
                 command: cargo build --workspace
             - run:
                 name: Test Trin workspace
-                command: cargo test --workspace
+                command: cargo test --workspace -- --nocapture
   win-build:
     description: |
       Build the crate for windows.
