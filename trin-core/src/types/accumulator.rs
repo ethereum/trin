@@ -38,12 +38,10 @@ type HeaderRecordList = VariableList<HeaderRecord, typenum::U131072>;
 /// Verifies canonical-ness of a given header.
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq, Deserialize, Serialize, TreeHash)]
 pub struct MasterAccumulator {
-    historical_epochs: HistoricalEpochs,
+    pub historical_epochs: HistoricalEpochs,
     current_epoch: EpochAccumulator,
 }
 
-// todo: remove dead-code exception as MasterAccumulator is connected to HeaderOracle
-#[allow(dead_code)]
 impl MasterAccumulator {
     pub fn new() -> Self {
         Self::default()
@@ -102,62 +100,6 @@ impl MasterAccumulator {
             _ => self.historical_epochs_header_count() - 1,
         };
         header.number > current_epoch_block_min && header.number < self.next_header_height()
-    }
-
-    /// Update the master accumulator state with a new header.
-    /// Adds new HeaderRecord to current epoch.
-    /// If current epoch fills up, it will refresh the epoch and add the
-    /// preceding epoch's merkle root to historical epochs.
-    // as defined in:
-    // https://github.com/ethereum/portal-network-specs/blob/e807eb09d2859016e25b976f082735d3aceceb8e/history-network.md#the-header-accumulator
-    fn update_accumulator(&mut self, new_header: &Header) -> anyhow::Result<()> {
-        if new_header.number > MERGE_BLOCK_NUMBER {
-            return Err(anyhow!("Invalid master acc update: Header is post-merge."));
-        }
-        if new_header.number != self.next_header_height() {
-            return Err(anyhow!(
-                "Invalid master acc update: Header is not at the expected height."
-            ));
-        }
-
-        // get the previous total difficulty
-        let last_total_difficulty = match self.current_epoch_header_count() {
-            // genesis
-            0 => U256::zero(),
-            _ => {
-                self.current_epoch
-                    .header_records
-                    .last()
-                    .expect("Invalid master accumulator state: No header records for current epoch on non-genesis header.")
-                    .total_difficulty
-            }
-        };
-
-        // check if the epoch accumulator is full
-        if self.current_epoch_header_count() == EPOCH_SIZE as u64 {
-            // compute the final hash for this epoch
-            let epoch_hash = self.current_epoch.tree_hash_root();
-            // append the hash for this epoch to the list of historical epochs
-            self.historical_epochs
-                .epochs
-                .push(epoch_hash)
-                .expect("Invalid accumulator state, more historical epochs than allowed.");
-            // initialize a new empty epoch
-            self.current_epoch = EpochAccumulator {
-                header_records: HeaderRecordList::empty(),
-            };
-        }
-
-        // construct the concise record for the new header and add it to the current epoch
-        let header_record = HeaderRecord {
-            block_hash: new_header.hash(),
-            total_difficulty: last_total_difficulty + new_header.difficulty,
-        };
-        self.current_epoch
-            .header_records
-            .push(header_record)
-            .expect("Invalid accumulator state, more current epochs than allowed.");
-        Ok(())
     }
 
     /// Validation function for pre merge headers that will use the master accumulator to validate
@@ -236,7 +178,7 @@ impl Default for MasterAccumulator {
 /// for epoch accumulators preceding the current epoch.
 #[derive(Clone, Debug, Eq, PartialEq, Decode, Encode, Deserialize, Serialize)]
 pub struct HistoricalEpochs {
-    epochs: HistoricalEpochsList,
+    pub epochs: HistoricalEpochsList,
 }
 
 impl TreeHash for HistoricalEpochs {
@@ -279,7 +221,7 @@ impl TreeHash for HistoricalEpochs {
 /// of all header records within an epoch.
 #[derive(Clone, Debug, Eq, PartialEq, Decode, Encode, Deserialize, Serialize)]
 pub struct EpochAccumulator {
-    header_records: HeaderRecordList,
+    pub header_records: HeaderRecordList,
 }
 
 impl TreeHash for EpochAccumulator {
@@ -325,8 +267,8 @@ impl TreeHash for EpochAccumulator {
 /// Every HeaderRecord is 64bytes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Decode, Encode, Deserialize, Serialize, TreeHash)]
 pub struct HeaderRecord {
-    block_hash: tree_hash::Hash256,
-    total_difficulty: U256,
+    pub block_hash: tree_hash::Hash256,
+    pub total_difficulty: U256,
 }
 
 #[cfg(test)]
@@ -360,7 +302,7 @@ mod test {
             .iter()
             .zip(hash_tree_roots)
             .for_each(|(header, expected_root)| {
-                let _ = master_accumulator.update_accumulator(header);
+                let _ = update_accumulator(&mut master_accumulator, header);
                 assert_eq!(
                     master_accumulator.tree_hash_root(),
                     H256::from_slice(&expected_root)
@@ -432,7 +374,7 @@ mod test {
         let mut master_acc = MasterAccumulator::default();
         let headers = generate_random_headers(0, 10000);
         for header in &headers {
-            let _ = master_acc.update_accumulator(header);
+            let _ = update_accumulator(&mut master_acc, header);
         }
         let random_header = &headers[9999];
         let (tx, _) = mpsc::unbounded_channel::<HistoryJsonRpcRequest>();
@@ -453,7 +395,7 @@ mod test {
         let mut master_acc = MasterAccumulator::default();
         let headers = generate_random_headers(0, 10000);
         for header in &headers {
-            let _ = master_acc.update_accumulator(header);
+            let _ = update_accumulator(&mut master_acc, header);
         }
         // get header from current epoch
         let mut last_header = headers[9999].clone();
@@ -477,7 +419,7 @@ mod test {
         let mut master_acc = MasterAccumulator::default();
         let headers = generate_random_headers(0, 10000);
         for header in &headers {
-            let _ = master_acc.update_accumulator(header);
+            let _ = update_accumulator(&mut master_acc, header);
         }
         let historical_header = &headers[0];
         assert!(!master_acc.is_header_in_current_epoch(historical_header));
@@ -595,7 +537,6 @@ mod test {
             2 => rlp::decode(&hex::decode("f90218a088e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794dd2f1e6e498202e86d8f5442af596580a4f03c2ca04943d941637411107494da9ec8bc04359d731bfd08b72b4d0edcbd4cd2ecb341a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421b90100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008503ff00100002821388808455ba4241a0476574682f76312e302e302d30636463373634372f6c696e75782f676f312e34a02f0790c5aa31ab94195e1f6443d645af5b75c46c04fbf9911711198a0ce8fdda88b853fa261a86aa9e").unwrap()).unwrap(),
             200_000 => rlp::decode(&hex::decode("f90213a07f27ffbccbbf32b53697930c508137e451e8de080231008d945c6e3ed631b74aa01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347941dcb8d1f0fcc8cbc8c2d76528e877f915e299fbea0632964149a2056cb246ccee21838d139516578712f13b2a7cbf0086969d0f4aba056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421b90100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008605ae701ab58e83030d40832fefd8808455ee029596d583010102844765746885676f312e35856c696e7578a0f9d7884dab1938bd8100a4564a949256aedb8936ad3f72f48eaa679269560a65883ec79c2d077b8db2").unwrap()).unwrap(),
             MERGE_BLOCK_NUMBER => rlp::decode(&hex::decode("f9021ba02b3ea3cd4befcab070812443affb08bf17a91ce382c714a536ca3cacab82278ba01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794829bd824b016326a401d083b33d092293333a830a04919dafa6ac8becfbbd0c2808f6c9511a057c21e42839caff5dfb6d3ef514951a0dd5eec02b019ff76e359b09bfa19395a2a0e97bc01e70d8d5491e640167c96a8a0baa842cfd552321a9c2450576126311e071680a1258032219c6490b663c1dab8b90100000004000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000800000000000000000000000080000000000000000000000000000000000000000000000000200000000000000000008000000000040000000000000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000084000000000010020000000000000000000000000000000000020000000200000000200000000000000000000000000000000000000000400000000000000000000000008727472e1db3626a83ed14f18401c9c3808401c9a205846322c96292e4b883e5bda9e7a59ee4bb99e9b1bc460021a04cbec03dddd4b939730a7fe6048729604d4266e82426d472a2b2024f3cc4043f8862a3ee77461d4fc9850a1a4e5f06").unwrap()).unwrap(),
-
             _ => panic!("Test failed: header not available"),
         }
     }
@@ -606,7 +547,7 @@ mod test {
     pub fn add_blocks_to_master_acc(master_acc: &mut MasterAccumulator, count: u64) {
         let headers = generate_random_headers(master_acc.next_header_height(), count);
         for header in headers {
-            let _ = master_acc.update_accumulator(&header);
+            let _ = update_accumulator(master_acc, &header);
         }
     }
 
@@ -637,5 +578,66 @@ mod test {
             nonce: None,
             base_fee_per_gas: None,
         }
+    }
+
+    /// Update the master accumulator state with a new header.
+    /// Adds new HeaderRecord to current epoch.
+    /// If current epoch fills up, it will refresh the epoch and add the
+    /// preceding epoch's merkle root to historical epochs.
+    // as defined in:
+    // https://github.com/ethereum/portal-network-specs/blob/e807eb09d2859016e25b976f082735d3aceceb8e/history-network.md#the-header-accumulator
+    fn update_accumulator(
+        master_acc: &mut MasterAccumulator,
+        new_header: &Header,
+    ) -> anyhow::Result<()> {
+        if new_header.number > MERGE_BLOCK_NUMBER {
+            return Err(anyhow!("Invalid master acc update: Header is post-merge."));
+        }
+        if new_header.number != master_acc.next_header_height() {
+            return Err(anyhow!(
+                "Invalid master acc update: Header is not at the expected height."
+            ));
+        }
+
+        // get the previous total difficulty
+        let last_total_difficulty = match master_acc.current_epoch_header_count() {
+            // genesis
+            0 => U256::zero(),
+            _ => {
+                master_acc.current_epoch
+                    .header_records
+                    .last()
+                    .expect("Invalid master accumulator state: No header records for current epoch on non-genesis header.")
+                    .total_difficulty
+            }
+        };
+
+        // check if the epoch accumulator is full
+        if master_acc.current_epoch_header_count() == EPOCH_SIZE as u64 {
+            // compute the final hash for this epoch
+            let epoch_hash = master_acc.current_epoch.tree_hash_root();
+            // append the hash for this epoch to the list of historical epochs
+            master_acc
+                .historical_epochs
+                .epochs
+                .push(epoch_hash)
+                .expect("Invalid accumulator state, more historical epochs than allowed.");
+            // initialize a new empty epoch
+            master_acc.current_epoch = EpochAccumulator {
+                header_records: HeaderRecordList::empty(),
+            };
+        }
+
+        // construct the concise record for the new header and add it to the current epoch
+        let header_record = HeaderRecord {
+            block_hash: new_header.hash(),
+            total_difficulty: last_total_difficulty + new_header.difficulty,
+        };
+        master_acc
+            .current_epoch
+            .header_records
+            .push(header_record)
+            .expect("Invalid accumulator state, more current epochs than allowed.");
+        Ok(())
     }
 }

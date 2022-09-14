@@ -5,11 +5,12 @@ use async_trait::async_trait;
 use ethereum_types::H256;
 use ssz::Decode;
 use tokio::sync::RwLock;
-use tracing::warn;
+use tree_hash::TreeHash;
 
 use trin_core::{
     portalnet::types::content_key::HistoryContentKey,
     types::{
+        accumulator::EpochAccumulator,
         block_body::BlockBody,
         header::Header,
         receipts::Receipts,
@@ -41,15 +42,8 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                     .await
             }
             HistoryContentKey::BlockBody(key) => {
-                let block_body = match BlockBody::from_ssz_bytes(content) {
-                    Ok(val) => val,
-                    Err(msg) => {
-                        return Err(anyhow!(
-                            "Block Body content has invalid encoding: {:?}",
-                            msg
-                        ))
-                    }
-                };
+                let block_body = BlockBody::from_ssz_bytes(content)
+                    .map_err(|msg| anyhow!("Block Body content has invalid encoding: {:?}", msg))?;
                 let trusted_header: Header = self
                     .header_oracle
                     .write()
@@ -74,15 +68,9 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                 Ok(())
             }
             HistoryContentKey::BlockReceipts(key) => {
-                let receipts = match Receipts::from_ssz_bytes(content) {
-                    Ok(val) => val,
-                    Err(msg) => {
-                        return Err(anyhow!(
-                            "Block Receipts content has invalid encoding: {:?}",
-                            msg
-                        ))
-                    }
-                };
+                let receipts = Receipts::from_ssz_bytes(content).map_err(|msg| {
+                    anyhow!("Block Receipts content has invalid encoding: {:?}", msg)
+                })?;
                 let trusted_header: Header = self
                     .header_oracle
                     .write()
@@ -98,8 +86,30 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                 }
                 Ok(())
             }
-            HistoryContentKey::EpochAccumulator(_key) => {
-                warn!("Skipping content validation for epoch accumulator content.");
+            HistoryContentKey::EpochAccumulator(key) => {
+                let epoch_acc = EpochAccumulator::from_ssz_bytes(content).map_err(|msg| {
+                    anyhow!("Epoch Accumulator content has invalid encoding: {:?}", msg)
+                })?;
+
+                let tree_hash_root = epoch_acc.tree_hash_root();
+                if key.epoch_hash != tree_hash_root {
+                    return Err(anyhow!(
+                        "Content validation failed: Invalid epoch accumulator tree hash root.
+                        Found: {:?} - Expected: {:?}",
+                        tree_hash_root,
+                        key.epoch_hash,
+                    ));
+                }
+                let master_acc = &self.header_oracle.read().await.master_acc;
+                if !master_acc
+                    .historical_epochs
+                    .epochs
+                    .contains(&tree_hash_root)
+                {
+                    return Err(anyhow!(
+                        "Content validation failed: Invalid epoch accumulator, missing from master accumulator."
+                    ));
+                }
                 Ok(())
             }
         }
@@ -121,7 +131,10 @@ mod tests {
     use trin_core::{
         cli::DEFAULT_MASTER_ACC_PATH,
         portalnet::types::{
-            content_key::{BlockBody as BlockBodyKey, BlockHeader, BlockReceipts},
+            content_key::{
+                BlockBody as BlockBodyKey, BlockHeader, BlockReceipts,
+                EpochAccumulator as EpochAccumulatorKey,
+            },
             messages::ByteList,
         },
         types::accumulator::MasterAccumulator,
@@ -354,6 +367,73 @@ mod tests {
         let header_oracle = default_header_oracle(server.url("/14764013"));
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = block_14764013_receipts_key();
+
+        chain_history_validator
+            .validate_content(&content_key, &invalid_content)
+            .await
+            .unwrap();
+    }
+
+    use trin_core::types::accumulator::HeaderRecord;
+
+    #[tokio::test]
+    async fn validate_epoch_acc() {
+        let server = setup_mock_infura_server();
+        let epoch_acc = std::fs::read("./../trin-core/src/assets/0x5ec1…4218.bin").unwrap();
+        let epoch_acc = EpochAccumulator::from_ssz_bytes(&epoch_acc).unwrap();
+        let header_oracle = default_header_oracle(server.url("/14764013"));
+        let chain_history_validator = ChainHistoryValidator { header_oracle };
+        let content_key = HistoryContentKey::EpochAccumulator(EpochAccumulatorKey {
+            epoch_hash: epoch_acc.tree_hash_root(),
+        });
+        let content = epoch_acc.as_ssz_bytes();
+        chain_history_validator
+            .validate_content(&content_key, &content)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    #[should_panic(expected = "Invalid epoch accumulator tree hash root.")]
+    async fn invalidate_epoch_acc_with_invalid_root_hash() {
+        let server = setup_mock_infura_server();
+        let epoch_acc = std::fs::read("./../trin-core/src/assets/0x5ec1…4218.bin").unwrap();
+        let mut epoch_acc = EpochAccumulator::from_ssz_bytes(&epoch_acc).unwrap();
+        let header_oracle = default_header_oracle(server.url("/14764013"));
+        let chain_history_validator = ChainHistoryValidator { header_oracle };
+        let content_key = HistoryContentKey::EpochAccumulator(EpochAccumulatorKey {
+            epoch_hash: epoch_acc.tree_hash_root(),
+        });
+
+        epoch_acc.header_records[0] = HeaderRecord {
+            block_hash: H256::random(),
+            total_difficulty: U256::from_dec_str("0").unwrap(),
+        };
+        let invalid_content = epoch_acc.as_ssz_bytes();
+
+        chain_history_validator
+            .validate_content(&content_key, &invalid_content)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    #[should_panic(expected = "Invalid epoch accumulator, missing from master accumulator.")]
+    async fn invalidate_epoch_acc_missing_from_master_acc() {
+        let server = setup_mock_infura_server();
+        let epoch_acc = std::fs::read("./../trin-core/src/assets/0x5ec1…4218.bin").unwrap();
+        let mut epoch_acc = EpochAccumulator::from_ssz_bytes(&epoch_acc).unwrap();
+        let header_oracle = default_header_oracle(server.url("/14764013"));
+        let chain_history_validator = ChainHistoryValidator { header_oracle };
+
+        epoch_acc.header_records[0] = HeaderRecord {
+            block_hash: H256::random(),
+            total_difficulty: U256::from_dec_str("0").unwrap(),
+        };
+        let content_key = HistoryContentKey::EpochAccumulator(EpochAccumulatorKey {
+            epoch_hash: epoch_acc.tree_hash_root(),
+        });
+        let invalid_content = epoch_acc.as_ssz_bytes();
 
         chain_history_validator
             .validate_content(&content_key, &invalid_content)
