@@ -4,6 +4,7 @@ use rand::seq::SliceRandom;
 use serde_json::{json, Value};
 use ssz::Decode;
 use tokio::sync::mpsc;
+use tracing::error;
 
 use crate::network::HistoryNetwork;
 use trin_core::{
@@ -98,12 +99,31 @@ impl HistoryRequestHandler {
                         match HistoryContentKey::try_from(find_content_params.content_key.to_vec())
                         {
                             Ok(content_key) => {
-                                match self.network.overlay.lookup_content(content_key).await {
-                                    Some(content) => {
-                                        let value = Value::String(hex_encode(content));
-                                        Ok(value)
+                                // Check whether we have the data locally.
+                                let local_content: Option<Vec<u8>> =
+                                    match self.network.overlay.storage.read().get(&content_key) {
+                                        Ok(Some(data)) => Some(data),
+                                        Ok(None) => None,
+                                        Err(err) => {
+                                            error!(
+                                            "Error while checking local storage for content: {}",
+                                            err
+                                        );
+                                            None
+                                        }
+                                    };
+                                match local_content {
+                                    None => {
+                                        match self.network.overlay.lookup_content(content_key).await
+                                        {
+                                            Some(content) => {
+                                                let value = Value::String(hex_encode(content));
+                                                Ok(value)
+                                            }
+                                            None => Ok(Value::Null),
+                                        }
                                     }
-                                    None => Ok(Value::Null),
+                                    Some(content) => Ok(Value::String(hex_encode(content))),
                                 }
                             }
                             Err(err) => Err(format!("Invalid content key requested: {}", err)),
