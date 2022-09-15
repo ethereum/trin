@@ -460,16 +460,6 @@ impl PortalStorage {
         u32::from_be_bytes(array)
     }
 
-    pub fn setup_config(
-        node_id: NodeId,
-        storage_capacity_kb: u32,
-    ) -> Result<PortalStorageConfig, PortalStorageError> {
-        // Arbitrarily set capacity at a quarter of what we're storing.
-        // todo: make this ratio configurable
-        let storage_capacity_kb = (storage_capacity_kb / 4) as u64;
-        Ok(PortalStorageConfig::new(storage_capacity_kb, node_id))
-    }
-
     /// Helper function for opening a RocksDB connection for the accumulatordb.
     pub fn setup_accumulatordb(node_id: NodeId) -> Result<rocksdb::DB, PortalStorageError> {
         let mut data_path: PathBuf = get_data_dir(node_id);

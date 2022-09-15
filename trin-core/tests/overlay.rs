@@ -5,7 +5,7 @@ use trin_core::{
     portalnet::{
         discovery::Discovery,
         overlay::{OverlayConfig, OverlayProtocol},
-        storage::PortalStorage,
+        storage::{PortalStorage, PortalStorageConfig},
         types::{
             content_key::IdentityContentKey,
             distance::{Distance, XorMetric},
@@ -30,11 +30,10 @@ async fn init_overlay(
     discovery: Arc<Discovery>,
     protocol: ProtocolId,
 ) -> OverlayProtocol<IdentityContentKey, XorMetric, MockValidator> {
-    let storage_config = PortalStorage::setup_config(
-        discovery.local_enr().node_id(),
+    let storage_config = PortalStorageConfig::new(
         DEFAULT_STORAGE_CAPACITY.parse().unwrap(),
-    )
-    .unwrap();
+        discovery.local_enr().node_id(),
+    );
     let db = Arc::new(RwLock::new(PortalStorage::new(storage_config).unwrap()));
     let overlay_config = OverlayConfig::default();
     // Ignore all uTP events
