@@ -102,7 +102,7 @@ impl HistoryRequestHandler {
                             Ok(content_key) => {
                                 // Check whether we have the data locally.
                                 let local_content: Option<Vec<u8>> =
-                                    match self.network.overlay.storage.read().get(&content_key) {
+                                    match self.network.overlay.store.read().get(&content_key) {
                                         Ok(Some(data)) => Some(data),
                                         Ok(None) => None,
                                         Err(err) => {

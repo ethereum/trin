@@ -942,7 +942,7 @@ where
                 .is_key_within_radius_and_unavailable(&key)
                 .map_err(|err| {
                     OverlayRequestError::AcceptError(format!(
-                        "unable to check content availability {err}"
+                        "Unable to check content availability {err}"
                     ))
                 })?;
             requested_keys.set(i, accept).map_err(|err| {
@@ -1188,7 +1188,7 @@ where
         self.utp_listener_tx
             .send(utp_request).map_err(|err| anyhow!("Unable to send Connect request to UtpListener when processing ACCEPT message: {err}"))?;
 
-        let storage = Arc::clone(&self.store);
+        let store = Arc::clone(&self.store);
         let response_clone = response.clone();
 
         tokio::spawn(async move {
@@ -1199,7 +1199,7 @@ where
 
             let content_items = match offer {
                 Request::Offer(offer) => {
-                    Self::provide_requested_content(storage, &response_clone, offer.content_keys)
+                    Self::provide_requested_content(store, &response_clone, offer.content_keys)
                 }
                 Request::PopulatedOffer(offer) => Ok(response_clone
                     .content_keys
@@ -1445,7 +1445,7 @@ where
 
     /// Provide the requested content key and content value for the acceptor
     fn provide_requested_content(
-        storage: Arc<RwLock<TStore>>,
+        store: Arc<RwLock<TStore>>,
         accept_message: &Accept,
         content_keys_offered: Vec<RawContentKey>,
     ) -> anyhow::Result<Vec<ByteList>> {
@@ -1467,14 +1467,14 @@ where
             .zip(content_keys_offered.iter())
         {
             if i == true {
-                match storage.read().get(key) {
+                match store.read().get(key) {
                     Ok(content) => match content {
                         Some(content) => content_items.push(content.into()),
                         None => return Err(anyhow!("Unable to read offered content!")),
                     },
                     Err(err) => {
                         return Err(anyhow!(
-                            "Unable to get offered content from portal storage: {err}"
+                            "Unable to get offered content from portal store: {err}"
                         ))
                     }
                 }
