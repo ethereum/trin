@@ -182,6 +182,20 @@ impl FromStr for ProtocolId {
     }
 }
 
+impl fmt::Display for ProtocolId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let protocol = match self {
+            ProtocolId::State => "State",
+            ProtocolId::History => "History",
+            ProtocolId::TransactionGossip => "Transaction Gossip",
+            ProtocolId::HeaderGossip => "Header Gossip",
+            ProtocolId::CanonicalIndices => "Canonical Indices",
+            ProtocolId::Utp => "uTP",
+        };
+        write!(f, "{}", protocol)
+    }
+}
+
 /// Decode ProtocolId to raw bytes
 impl TryFrom<ProtocolId> for Vec<u8> {
     type Error = ProtocolIdError;

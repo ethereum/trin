@@ -357,7 +357,7 @@ where
                 validator,
             };
 
-            info!("[{:?}] Starting overlay service", overlay_protocol);
+            info!(protocol = %overlay_protocol, "Starting overlay service");
             service.initialize_routing_table(bootnode_enrs);
             service.start().await;
         });
@@ -389,14 +389,16 @@ where
             ) {
                 InsertResult::Failed(reason) => {
                     warn!(
-                        "[{:?}] Failed to insert bootnode into overlay routing table. Node: {}, Reason {:?}",
-                        self.protocol, node_id, reason
+                        protocol = %self.protocol,
+                        "Failed to insert bootnode into overlay routing table. Node: {}, Reason {:?}",
+                        node_id, reason
                     );
                 }
                 _ => {
                     debug!(
-                        "[{:?}] Inserted bootnode into overlay routing table, adding to ping queue. Node {}",
-                        self.protocol, node_id
+                        protocol = %self.protocol,
+                        "Inserted bootnode into overlay routing table, adding to ping queue. Node {}",
+                        node_id
                     );
 
                     // Queue the node in the ping queue.
@@ -487,7 +489,7 @@ where
                 }
                 _ = OverlayService::<TContentKey, TMetric, TValidator>::bucket_maintenance_poll(self.protocol.clone(), &self.kbuckets) => {}
                 _ = bucket_refresh_interval.tick() => {
-                    info!("[{:?}] Overlay bucket refresh lookup.", self.protocol);
+                    info!(protocol = %self.protocol, "Overlay bucket refresh lookup");
                     self.bucket_refresh_lookup();
                 }
             }
@@ -536,7 +538,7 @@ where
             let target_bucket = buckets.choose(&mut rand::thread_rng());
             let random_node_id_in_bucket = match target_bucket {
                 Some(bucket) => {
-                    debug!("[{:?} Refreshing bucket {}", self.protocol, bucket.0);
+                    debug!(protocol = %self.protocol, "Refreshing bucket {}", bucket.0);
                     match u8::try_from(bucket.0) {
                         Ok(idx) => self.generate_random_node_id(idx),
                         Err(err) => {
@@ -579,8 +581,8 @@ where
             // Drain applied pending entries from the routing table.
             if let Some(entry) = kbuckets.write().take_applied_pending() {
                 debug!(
-                    "[{:?}] Node {:?} inserted and node {:?} evicted",
-                    protocol,
+                    %protocol,
+                    "Node {:?} inserted and node {:?} evicted",
                     entry.inserted.into_preimage(),
                     entry.evicted.map(|n| n.key.into_preimage())
                 );
@@ -644,8 +646,9 @@ where
                     let _ = self.command_tx.send(OverlayCommand::Request(request));
                 } else {
                     error!(
-                        "[{:?}] Unable to send FINDNODES to unknown ENR with node ID {}",
-                        self.protocol, node_id
+                        protocol = %self.protocol,
+                        "Unable to send FINDNODES to unknown ENR with node ID {}",
+                        node_id
                     );
                     if let Some((_, query)) = self.find_node_query_pool.get_mut(query_id) {
                         query.on_failure(&node_id);
@@ -686,8 +689,9 @@ where
                     }
                 }
                 debug!(
-                    "[{:?}] Query {} complete, discovered {} ENRs",
-                    self.protocol,
+                    protocol = %self.protocol,
+                    "Query {} complete, discovered {} ENRs",
+
                     query_id,
                     found_enrs.len()
                 );
@@ -717,8 +721,9 @@ where
                     // If we cannot find the node's ENR, then we cannot contact the
                     // node, so fail the query for this node.
                     error!(
-                        "[{:?}] Unable to send FINDCONTENT to unknown ENR with node ID {}",
-                        self.protocol, node_id
+                        protocol = %self.protocol,
+                        "Unable to send FINDCONTENT to unknown ENR with node ID {}",
+                        node_id
                     );
                     if let Some((_, query)) = self.find_node_query_pool.get_mut(query_id) {
                         query.on_failure(&node_id);
@@ -797,7 +802,7 @@ where
         id: RequestId,
         source: &NodeId,
     ) -> Result<Response, OverlayRequestError> {
-        debug!("[{:?}] Handling request {}", self.protocol, id);
+        debug!(protocol = %self.protocol, "Handling request {}", id);
         match request {
             Request::Ping(ping) => Ok(Response::Pong(self.handle_ping(ping, &source))),
             Request::FindNodes(find_nodes) => {
@@ -817,8 +822,9 @@ where
     /// Builds a `Pong` response for a `Ping` request.
     fn handle_ping(&self, request: Ping, source: &NodeId) -> Pong {
         debug!(
-            "[{:?}] Handling ping request from node={}. Ping={:?}",
-            self.protocol, source, request
+            protocol = %self.protocol,
+            "Handling ping request from node={}. Ping={:?}",
+            source, request
         );
         self.metrics
             .as_ref()
@@ -1075,8 +1081,9 @@ where
         error: OverlayRequestError,
     ) {
         debug!(
-            "[{:?}] Request {} failed. Error: {}",
-            self.protocol, request_id, error
+            protocol = %self.protocol,
+            "Request {} failed. Error: {}",
+            request_id, error
         );
 
         // Attempt to mark the node as disconnected.
@@ -1242,8 +1249,9 @@ where
     fn process_pong(&mut self, pong: Pong, source: Enr) {
         let node_id = source.node_id();
         debug!(
-            "[{:?}] Processing Pong response from node. Node: {}",
-            self.protocol, node_id
+            protocol = %self.protocol,
+            "Processing Pong response from node. Node: {}",
+            node_id
         );
         // If the ENR sequence number in pong is less than the ENR sequence number for the routing
         // table entry, then request the node.
@@ -1265,8 +1273,8 @@ where
     /// Processes a Nodes response.
     fn process_nodes(&mut self, nodes: Nodes, source: Enr, query_id: Option<QueryId>) {
         debug!(
-            "[{:?}] Processing Nodes response from node. Node: {}",
-            self.protocol,
+            protocol = %self.protocol,
+            "Processing Nodes response from node. Node: {}",
             source.node_id()
         );
 
@@ -1291,14 +1299,15 @@ where
         query_id: Option<QueryId>,
     ) {
         debug!(
-            "[{:?}] Processing Content response from node. Node: {}",
-            self.protocol,
+            protocol = %self.protocol,
+            "Processing Content response from node. Node: {}",
             source.node_id()
         );
         match content {
             Content::ConnectionId(id) => debug!(
-                "[{:?}] Skipping processing for content connection ID {}",
-                self.protocol, id
+                protocol = %self.protocol,
+                "Skipping processing for content connection ID {}",
+                id
             ),
             Content::Content(content) => {
                 self.process_received_content(content.clone(), request);
@@ -1561,8 +1570,8 @@ where
     /// Submits a request to ping a destination (target) node.
     fn ping_node(&self, destination: &Enr) {
         debug!(
-            "[{:?}] Sending Ping request to node. Node: {}",
-            self.protocol,
+            protocol = %self.protocol,
+            "Sending Ping request to node. Node: {}",
             destination.node_id()
         );
 
@@ -1612,8 +1621,9 @@ where
             InsertResult::Inserted => {
                 // The node was inserted into the routing table. Add the node to the ping queue.
                 debug!(
-                    "[{:?}] New connected node added to routing table. Node: {}",
-                    self.protocol, node_id
+                    protocol = %self.protocol,
+                    "New connected node added to routing table. Node: {}",
+                    node_id
                 );
                 self.peers_to_ping.insert(node_id);
             }
@@ -1632,8 +1642,9 @@ where
                 // The node existed in the routing table, and it was updated to connected.
                 if promoted_to_connected {
                     debug!(
-                        "[{:?}] Node promoted to connected. Node: {}",
-                        self.protocol, node_id
+                        protocol = %self.protocol,
+                        "Node promoted to connected. Node: {}",
+                        node_id
                     );
                     self.peers_to_ping.insert(node_id);
                 }
@@ -1642,8 +1653,9 @@ where
             InsertResult::Failed(reason) => {
                 self.peers_to_ping.remove(&node_id);
                 debug!(
-                    "[{:?}] Could not insert node. Node: {}, Reason: {:?}",
-                    self.protocol, node_id, reason
+                    protocol = %self.protocol,
+                    "Could not insert node. Node: {}, Reason: {:?}",
+                    node_id, reason
                 );
             }
         }
@@ -1668,8 +1680,9 @@ where
                 FailureReason::KeyNonExistant => Err(FailureReason::KeyNonExistant),
                 other => {
                     warn!(
-                        "[{:?}] Could not update node to {:?}. Node: {}, Reason: {:?}",
-                        self.protocol, state, node_id, other
+                        protocol = %self.protocol,
+                        "Could not update node to {:?}. Node: {}, Reason: {:?}",
+                        state, node_id, other
                     );
 
                     Err(other)
@@ -1677,8 +1690,9 @@ where
             },
             _ => {
                 debug!(
-                    "[{:?}] Node set to {:?}. Node: {}",
-                    self.protocol, state, node_id
+                    protocol = %self.protocol,
+                    "Node set to {:?}. Node: {}",
+                    state, node_id
                 );
                 Ok(())
             }
