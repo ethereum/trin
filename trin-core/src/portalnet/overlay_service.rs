@@ -1940,7 +1940,7 @@ mod tests {
         portalnet::{
             discovery::Discovery,
             overlay::OverlayConfig,
-            storage::PortalStorage,
+            storage::{PortalStorage, PortalStorageConfig},
             types::{
                 content_key::IdentityContentKey, distance::XorMetric, messages::PortalnetConfig,
             },
@@ -1972,7 +1972,7 @@ mod tests {
         // Initialize DB config
         let storage_capacity: u32 = DEFAULT_STORAGE_CAPACITY.parse().unwrap();
         let node_id = discovery.local_enr().node_id();
-        let storage_config = PortalStorage::setup_config(node_id, storage_capacity).unwrap();
+        let storage_config = PortalStorageConfig::new(storage_capacity.into(), node_id);
         let storage = Arc::new(RwLock::new(PortalStorage::new(storage_config).unwrap()));
 
         let overlay_config = OverlayConfig::default();

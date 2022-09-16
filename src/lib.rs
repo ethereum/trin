@@ -11,7 +11,7 @@ use trin_core::{
         types::PortalJsonRpcRequest,
     },
     portalnet::{
-        discovery::Discovery, events::PortalnetEvents, storage::PortalStorage,
+        discovery::Discovery, events::PortalnetEvents, storage::PortalStorageConfig,
         types::messages::PortalnetConfig,
     },
     types::validation::HeaderOracle,
@@ -59,7 +59,7 @@ pub async fn run_trin(
     }
 
     let storage_config =
-        PortalStorage::setup_config(discovery.local_enr().node_id(), trin_config.kb)?;
+        PortalStorageConfig::new(trin_config.kb.into(), discovery.local_enr().node_id());
 
     // Initialize validation oracle
     let header_oracle = HeaderOracle::new(trusted_provider.clone(), storage_config.clone());

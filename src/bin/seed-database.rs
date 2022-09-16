@@ -9,7 +9,7 @@ use tracing::debug;
 
 use trin_core::{
     portalnet::{
-        storage::PortalStorage,
+        storage::{PortalStorage, PortalStorageConfig},
         types::content_key::{BlockHeader, HistoryContentKey, IdentityContentKey},
     },
     types::header::Header,
@@ -49,7 +49,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let num_kilobytes = generator_config.kb;
 
-    let storage_config = PortalStorage::setup_config(node_id, num_kilobytes)?;
+    let storage_config = PortalStorageConfig::new(num_kilobytes.into(), node_id);
     let storage = PortalStorage::new(storage_config)?;
 
     match generator_config.data_folder {
