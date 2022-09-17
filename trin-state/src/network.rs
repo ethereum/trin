@@ -25,7 +25,7 @@ use crate::{trie::TrieDB, validation::StateValidator};
 /// State network layer on top of the overlay protocol. Encapsulates state network specific data and logic.
 #[derive(Clone)]
 pub struct StateNetwork {
-    pub overlay: Arc<OverlayProtocol<StateContentKey, XorMetric, StateValidator>>,
+    pub overlay: Arc<OverlayProtocol<StateContentKey, XorMetric, StateValidator, PortalStorage>>,
     pub trie: Arc<EthTrie<TrieDB>>,
 }
 

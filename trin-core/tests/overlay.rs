@@ -1,11 +1,10 @@
 use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
 use trin_core::{
-    cli::DEFAULT_STORAGE_CAPACITY,
     portalnet::{
         discovery::Discovery,
         overlay::{OverlayConfig, OverlayProtocol},
-        storage::{PortalStorage, PortalStorageConfig},
+        storage::{ContentStore, DistanceFunction, MemoryContentStore},
         types::{
             content_key::IdentityContentKey,
             distance::{Distance, XorMetric},
@@ -29,22 +28,23 @@ use trin_core::utp::stream::UtpListenerRequest;
 async fn init_overlay(
     discovery: Arc<Discovery>,
     protocol: ProtocolId,
-) -> OverlayProtocol<IdentityContentKey, XorMetric, MockValidator> {
-    let storage_config = PortalStorageConfig::new(
-        DEFAULT_STORAGE_CAPACITY.parse().unwrap(),
-        discovery.local_enr().node_id(),
-    );
-    let db = Arc::new(RwLock::new(PortalStorage::new(storage_config).unwrap()));
+) -> OverlayProtocol<IdentityContentKey, XorMetric, MockValidator, MemoryContentStore> {
     let overlay_config = OverlayConfig::default();
+
+    let node_id = discovery.local_enr().node_id();
+    let store = MemoryContentStore::new(node_id, DistanceFunction::Xor);
+    let store = Arc::new(RwLock::new(store));
+
     // Ignore all uTP events
     let (utp_listener_tx, _) = unbounded_channel::<UtpListenerRequest>();
+
     let validator = Arc::new(MockValidator {});
 
     OverlayProtocol::new(
         overlay_config,
         discovery,
         utp_listener_tx,
-        db,
+        store,
         Distance::MAX,
         protocol,
         validator,
@@ -54,7 +54,7 @@ async fn init_overlay(
 
 async fn spawn_overlay(
     mut talk_req_rx: mpsc::Receiver<TalkRequest>,
-    overlay: Arc<OverlayProtocol<IdentityContentKey, XorMetric, MockValidator>>,
+    overlay: Arc<OverlayProtocol<IdentityContentKey, XorMetric, MockValidator, MemoryContentStore>>,
 ) {
     let (overlay_tx, mut overlay_rx) = mpsc::unbounded_channel();
 
@@ -226,9 +226,9 @@ async fn overlay() {
     let content_key = IdentityContentKey::new([0xef; 32]);
     let content = vec![0xef];
     overlay_three
-        .storage
+        .store
         .write()
-        .store(&content_key, &content)
+        .put(content_key.clone(), &content)
         .expect("Unable to store content");
     match overlay_one.lookup_content(content_key).await {
         Some(found_content) => {

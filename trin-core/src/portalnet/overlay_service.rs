@@ -41,7 +41,7 @@ use crate::{
             query_pool::{QueryId, QueryPool, QueryPoolState, TargetKey},
         },
         metrics::OverlayMetrics,
-        storage::PortalStorage,
+        storage::ContentStore,
         types::{
             content_key::{OverlayContentKey, RawContentKey},
             distance::{Distance, Metric},
@@ -230,11 +230,11 @@ struct OverlayResponse {
 }
 
 /// The overlay service.
-pub struct OverlayService<TContentKey, TMetric, TValidator> {
+pub struct OverlayService<TContentKey, TMetric, TValidator, TStore> {
     /// The underlying Discovery v5 protocol.
     discovery: Arc<Discovery>,
     /// The content database of the local node.
-    storage: Arc<RwLock<PortalStorage>>,
+    store: Arc<RwLock<TStore>>,
     /// The routing table of the local node.
     kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
     /// The data radius of the local node.
@@ -286,7 +286,8 @@ impl<
         TContentKey: 'static + OverlayContentKey + Send + Sync,
         TMetric: Metric + Send + Sync,
         TValidator: 'static + Validator<TContentKey> + Send + Sync,
-    > OverlayService<TContentKey, TMetric, TValidator>
+        TStore: 'static + ContentStore + Send + Sync,
+    > OverlayService<TContentKey, TMetric, TValidator, TStore>
 where
     <TContentKey as TryFrom<Vec<u8>>>::Error: Debug,
 {
@@ -297,7 +298,7 @@ where
     /// processes.
     pub async fn spawn(
         discovery: Arc<Discovery>,
-        storage: Arc<RwLock<PortalStorage>>,
+        store: Arc<RwLock<TStore>>,
         kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
         bootnode_enrs: Vec<Enr>,
         ping_queue_interval: Option<Duration>,
@@ -334,7 +335,7 @@ where
         tokio::spawn(async move {
             let mut service = Self {
                 discovery,
-                storage,
+                store,
                 kbuckets,
                 data_radius,
                 protocol,
@@ -478,14 +479,14 @@ where
                         self.peers_to_ping.insert(node_id);
                     }
                 }
-                query_event = OverlayService::<TContentKey, TMetric, TValidator>::query_event_poll(&mut self.find_node_query_pool) => {
+                query_event = OverlayService::<TContentKey, TMetric, TValidator, TStore>::query_event_poll(&mut self.find_node_query_pool) => {
                     self.handle_find_nodes_query_event(query_event);
                 }
                 // Handle query events for queries in the find content query pool.
-                query_event = OverlayService::<TContentKey, TMetric, TValidator>::query_event_poll(&mut self.find_content_query_pool) => {
+                query_event = OverlayService::<TContentKey, TMetric, TValidator, TStore>::query_event_poll(&mut self.find_content_query_pool) => {
                     self.handle_find_content_query_event(query_event);
                 }
-                _ = OverlayService::<TContentKey, TMetric, TValidator>::bucket_maintenance_poll(self.protocol.clone(), &self.kbuckets) => {}
+                _ = OverlayService::<TContentKey, TMetric, TValidator, TStore>::bucket_maintenance_poll(self.protocol.clone(), &self.kbuckets) => {}
                 _ = bucket_refresh_interval.tick() => {
                     info!("[{:?}] Overlay bucket refresh lookup.", self.protocol);
                     self.bucket_refresh_lookup();
@@ -864,7 +865,7 @@ where
             }
         };
 
-        match self.storage.read().get(&content_key) {
+        match self.store.read().get(&content_key) {
             Ok(Some(value)) => {
                 let content = ByteList::from(VariableList::from(value));
 
@@ -934,20 +935,21 @@ where
                 ))
             })?;
 
-            requested_keys
-                .set(
-                    i,
-                    self.storage.read().should_store(&key).map_err(|err| {
-                        OverlayRequestError::AcceptError(format!(
-                            "Unable to check content availability: {err}"
-                        ))
-                    })?,
-                )
+            // Accept content if within radius and not already present in the data store.
+            let accept = self
+                .store
+                .read()
+                .is_key_within_radius_and_unavailable(&key)
                 .map_err(|err| {
                     OverlayRequestError::AcceptError(format!(
-                        "Unable to set requested keys bits: {err:?}"
+                        "Unable to check content availability {err}"
                     ))
                 })?;
+            requested_keys.set(i, accept).map_err(|err| {
+                OverlayRequestError::AcceptError(format!(
+                    "Unable to set requested keys bits: {err:?}"
+                ))
+            })?;
         }
 
         // Listen for incoming connection request on conn_id, as part of utp handshake
@@ -1186,7 +1188,7 @@ where
         self.utp_listener_tx
             .send(utp_request).map_err(|err| anyhow!("Unable to send Connect request to UtpListener when processing ACCEPT message: {err}"))?;
 
-        let storage = Arc::clone(&self.storage);
+        let store = Arc::clone(&self.store);
         let response_clone = response.clone();
 
         tokio::spawn(async move {
@@ -1197,7 +1199,7 @@ where
 
             let content_items = match offer {
                 Request::Offer(offer) => {
-                    Self::provide_requested_content(storage, &response_clone, offer.content_keys)
+                    Self::provide_requested_content(store, &response_clone, offer.content_keys)
                 }
                 Request::PopulatedOffer(offer) => Ok(response_clone
                     .content_keys
@@ -1325,35 +1327,36 @@ where
                 return;
             }
         };
-        let should_store = self.storage.read().should_store(&content_key);
-        match should_store {
-            Ok(val) => {
-                if val {
-                    let validator = Arc::clone(&self.validator);
-                    let storage = Arc::clone(&self.storage);
-                    // Spawn task that validates content before storing.
-                    // Allows for non-blocking requests to this/other overlay services.
-                    tokio::spawn(async move {
-                        if let Err(err) = validator
-                            .validate_content(&content_key, &content.to_vec())
-                            .await
-                        {
-                            warn!("Unable to validate received content: {err:?}");
-                            return;
-                        };
 
-                        if let Err(err) = storage.write().store(&content_key, &content.into()) {
-                            error!("Content received, but not stored: {err}")
-                        }
-                    });
-                } else {
-                    debug!(
-                        "Content received, but not stored: Content is already stored or its distance falls outside current radius."
-                    )
-                }
+        match self
+            .store
+            .read()
+            .is_key_within_radius_and_unavailable(&content_key)
+        {
+            Ok(true) => {
+                let validator = Arc::clone(&self.validator);
+                let store = Arc::clone(&self.store);
+                // Spawn task that validates content before storing.
+                // Allows for non-blocking requests to this/other overlay services.
+                tokio::spawn(async move {
+                    if let Err(err) = validator
+                        .validate_content(&content_key, &content.to_vec())
+                        .await
+                    {
+                        warn!("Unable to validate received content: {err:?}");
+                        return;
+                    };
+
+                    if let Err(err) = store.write().put(content_key, content.to_vec()) {
+                        error!("Content received, but not stored: {err}")
+                    }
+                });
             }
-            Err(_) => {
-                error!("Content received, but not stored: Error communicating with db.");
+            Ok(false) => {
+                debug!("Content received, but not stored: key not within radius or already stored");
+            }
+            Err(err) => {
+                error!("Content received, but not stored: {}", err);
             }
         }
     }
@@ -1442,7 +1445,7 @@ where
 
     /// Provide the requested content key and content value for the acceptor
     fn provide_requested_content(
-        storage: Arc<RwLock<PortalStorage>>,
+        store: Arc<RwLock<TStore>>,
         accept_message: &Accept,
         content_keys_offered: Vec<RawContentKey>,
     ) -> anyhow::Result<Vec<ByteList>> {
@@ -1464,14 +1467,14 @@ where
             .zip(content_keys_offered.iter())
         {
             if i == true {
-                match storage.read().get(key) {
+                match store.read().get(key) {
                     Ok(content) => match content {
                         Some(content) => content_items.push(content.into()),
                         None => return Err(anyhow!("Unable to read offered content!")),
                     },
                     Err(err) => {
                         return Err(anyhow!(
-                            "Unable to get offered content from portal storage: {err}"
+                            "Unable to get offered content from portal store: {err}"
                         ))
                     }
                 }
@@ -1936,11 +1939,10 @@ mod tests {
     use rstest::rstest;
 
     use crate::{
-        cli::DEFAULT_STORAGE_CAPACITY,
         portalnet::{
             discovery::Discovery,
             overlay::OverlayConfig,
-            storage::{PortalStorage, PortalStorageConfig},
+            storage::{DistanceFunction, MemoryContentStore},
             types::{
                 content_key::IdentityContentKey, distance::XorMetric, messages::PortalnetConfig,
             },
@@ -1960,7 +1962,8 @@ mod tests {
         };
     }
 
-    fn build_service() -> OverlayService<IdentityContentKey, XorMetric, MockValidator> {
+    fn build_service(
+    ) -> OverlayService<IdentityContentKey, XorMetric, MockValidator, MemoryContentStore> {
         let portal_config = PortalnetConfig {
             no_stun: true,
             ..Default::default()
@@ -1969,11 +1972,9 @@ mod tests {
 
         let (utp_listener_tx, _) = unbounded_channel::<UtpListenerRequest>();
 
-        // Initialize DB config
-        let storage_capacity: u32 = DEFAULT_STORAGE_CAPACITY.parse().unwrap();
         let node_id = discovery.local_enr().node_id();
-        let storage_config = PortalStorageConfig::new(storage_capacity.into(), node_id);
-        let storage = Arc::new(RwLock::new(PortalStorage::new(storage_config).unwrap()));
+        let store = MemoryContentStore::new(node_id, DistanceFunction::Xor);
+        let store = Arc::new(RwLock::new(store));
 
         let overlay_config = OverlayConfig::default();
         let kbuckets = Arc::new(RwLock::new(KBucketsTable::new(
@@ -1995,7 +1996,7 @@ mod tests {
 
         let service = OverlayService {
             discovery,
-            storage,
+            store,
             kbuckets,
             data_radius,
             protocol,
@@ -2620,11 +2621,13 @@ mod tests {
         service.init_find_nodes_query(&target_node_id);
 
         // Test that the first query event contains a proper query ID and request to the bootnode
-        let event =
-            OverlayService::<IdentityContentKey, XorMetric, MockValidator>::query_event_poll(
-                &mut service.find_node_query_pool,
-            )
-            .await;
+        let event = OverlayService::<
+            IdentityContentKey,
+            XorMetric,
+            MockValidator,
+            MemoryContentStore,
+        >::query_event_poll(&mut service.find_node_query_pool)
+        .await;
         match event {
             QueryEvent::Waiting(query_id, node_id, request) => {
                 match request {
@@ -2654,11 +2657,13 @@ mod tests {
             QueryId(0),
         );
 
-        let event =
-            OverlayService::<IdentityContentKey, XorMetric, MockValidator>::query_event_poll(
-                &mut service.find_node_query_pool,
-            )
-            .await;
+        let event = OverlayService::<
+            IdentityContentKey,
+            XorMetric,
+            MockValidator,
+            MemoryContentStore,
+        >::query_event_poll(&mut service.find_node_query_pool)
+        .await;
 
         // Check that the request is being sent to either node 1 or node 2. Keep track of which.
         let first_node_id: Option<NodeId>;
@@ -2670,11 +2675,13 @@ mod tests {
             _ => panic!(),
         }
 
-        let event =
-            OverlayService::<IdentityContentKey, XorMetric, MockValidator>::query_event_poll(
-                &mut service.find_node_query_pool,
-            )
-            .await;
+        let event = OverlayService::<
+            IdentityContentKey,
+            XorMetric,
+            MockValidator,
+            MemoryContentStore,
+        >::query_event_poll(&mut service.find_node_query_pool)
+        .await;
 
         // Check that a request is being sent to the other node.
         let second_node_id = if first_node_id.unwrap() == node_id_1 {
@@ -2692,11 +2699,13 @@ mod tests {
         service.advance_find_node_query(enr1.clone(), vec![enr2.clone()], QueryId(0));
         service.advance_find_node_query(enr2.clone(), vec![enr1.clone()], QueryId(0));
 
-        let event =
-            OverlayService::<IdentityContentKey, XorMetric, MockValidator>::query_event_poll(
-                &mut service.find_node_query_pool,
-            )
-            .await;
+        let event = OverlayService::<
+            IdentityContentKey,
+            XorMetric,
+            MockValidator,
+            MemoryContentStore,
+        >::query_event_poll(&mut service.find_node_query_pool)
+        .await;
 
         match event {
             QueryEvent::Finished(query_id, query_info, query) => {
@@ -2733,11 +2742,13 @@ mod tests {
 
         service.init_find_nodes_query(&target_node_id);
 
-        let _event =
-            OverlayService::<IdentityContentKey, XorMetric, MockValidator>::query_event_poll(
-                &mut service.find_node_query_pool,
-            )
-            .await;
+        let _event = OverlayService::<
+            IdentityContentKey,
+            XorMetric,
+            MockValidator,
+            MemoryContentStore,
+        >::query_event_poll(&mut service.find_node_query_pool)
+        .await;
 
         let (_, enr1) = generate_random_remote_enr();
         let (_, enr2) = generate_random_remote_enr();
@@ -2977,10 +2988,11 @@ mod tests {
             service.init_find_content_query(target_content_key.clone(), Some(callback_tx));
         let query_id = query_id.expect("Query ID for new find content query is `None`");
 
-        let query_event = OverlayService::<_, XorMetric, MockValidator>::query_event_poll(
-            &mut service.find_content_query_pool,
-        )
-        .await;
+        let query_event =
+            OverlayService::<_, XorMetric, MockValidator, MemoryContentStore>::query_event_poll(
+                &mut service.find_content_query_pool,
+            )
+            .await;
 
         // Query event should be `Waiting` variant.
         assert!(matches!(query_event, QueryEvent::Waiting(_, _, _)));
@@ -3015,10 +3027,11 @@ mod tests {
             content.clone(),
         );
 
-        let query_event = OverlayService::<_, XorMetric, MockValidator>::query_event_poll(
-            &mut service.find_content_query_pool,
-        )
-        .await;
+        let query_event =
+            OverlayService::<_, XorMetric, MockValidator, MemoryContentStore>::query_event_poll(
+                &mut service.find_content_query_pool,
+            )
+            .await;
 
         // Query event should be `Finished` variant.
         assert!(matches!(query_event, QueryEvent::Finished(_, _, _)));

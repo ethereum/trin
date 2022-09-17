@@ -9,7 +9,7 @@ use tracing::debug;
 
 use trin_core::{
     portalnet::{
-        storage::{PortalStorage, PortalStorageConfig},
+        storage::{ContentStore, PortalStorage, PortalStorageConfig},
         types::content_key::{BlockHeader, HistoryContentKey, IdentityContentKey},
     },
     types::header::Header,
@@ -113,17 +113,16 @@ fn load_file_data(path: &Path, storage: &mut PortalStorage) {
                             let content_key_bytes: Vec<u8> = content_key.clone().into();
                             let content_key_hex = hex::encode(&content_key_bytes);
                             total_count += 1;
-                            match storage.should_store(&content_key).unwrap() {
-                                true => {
-                                    let header_bytes = rlp::encode(&block.header.clone().unwrap());
-                                    storage
-                                        .store(&content_key, &header_bytes.as_ref().to_vec())
-                                        .unwrap();
-                                    println!("Stored content key: {:?}", content_key_hex);
-                                    println!("- Block RLP: {:?}", prefix_removed_rlp.get(0..31));
-                                    stored_count += 1;
-                                }
-                                false => {}
+
+                            if storage
+                                .is_key_within_radius_and_unavailable(&content_key)
+                                .unwrap()
+                            {
+                                let header_bytes = rlp::encode(&block.header.clone().unwrap());
+                                storage.put(content_key, &header_bytes.as_ref()).unwrap();
+                                println!("Stored content key: {:?}", content_key_hex);
+                                println!("- Block RLP: {:?}", prefix_removed_rlp.get(0..31));
+                                stored_count += 1;
                             }
                         }
                     }
@@ -149,7 +148,7 @@ fn load_random_data(mut storage: PortalStorage, generator_config: GeneratorConfi
         let value = generate_random_value(size_of_values);
         let key = generate_random_content_key();
 
-        storage.store(&key, &value).unwrap();
+        storage.put(key, &value).unwrap();
     }
 
     println!(

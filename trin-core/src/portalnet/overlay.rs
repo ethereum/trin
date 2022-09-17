@@ -28,7 +28,7 @@ use crate::{
         overlay_service::{
             OverlayCommand, OverlayRequest, OverlayRequestError, OverlayService, RequestDirection,
         },
-        storage::PortalStorage,
+        storage::ContentStore,
         types::{
             content_key::{OverlayContentKey, RawContentKey},
             distance::{Distance, Metric, XorMetric},
@@ -89,11 +89,11 @@ impl Default for OverlayConfig {
 /// implement the overlay protocol and the overlay protocol is where we can encapsulate the logic for
 /// handling common network requests/responses.
 #[derive(Clone)]
-pub struct OverlayProtocol<TContentKey, TMetric, TValidator> {
+pub struct OverlayProtocol<TContentKey, TMetric, TValidator, TStore> {
     /// Reference to the underlying discv5 protocol
     pub discovery: Arc<Discovery>,
-    /// Reference to the database instance
-    pub storage: Arc<RwLock<PortalStorage>>,
+    /// The data store.
+    pub store: Arc<RwLock<TStore>>,
     /// The data radius of the local node.
     pub data_radius: Arc<Distance>,
     /// The overlay routing table of the local node.
@@ -119,7 +119,8 @@ impl<
         TContentKey: 'static + OverlayContentKey + Send + Sync,
         TMetric: Metric + Send + Sync,
         TValidator: 'static + Validator<TContentKey> + Send + Sync,
-    > OverlayProtocol<TContentKey, TMetric, TValidator>
+        TStore: 'static + ContentStore + Send + Sync,
+    > OverlayProtocol<TContentKey, TMetric, TValidator, TStore>
 where
     <TContentKey as TryFrom<Vec<u8>>>::Error: Debug + Display + Send,
 {
@@ -127,7 +128,7 @@ where
         config: OverlayConfig,
         discovery: Arc<Discovery>,
         utp_listener_tx: UnboundedSender<UtpListenerRequest>,
-        storage: Arc<RwLock<PortalStorage>>,
+        store: Arc<RwLock<TStore>>,
         data_radius: Distance,
         protocol: ProtocolId,
         validator: Arc<TValidator>,
@@ -141,9 +142,9 @@ where
         )));
 
         let data_radius = Arc::new(data_radius);
-        let command_tx = OverlayService::<TContentKey, TMetric, TValidator>::spawn(
+        let command_tx = OverlayService::<TContentKey, TMetric, TValidator, TStore>::spawn(
             Arc::clone(&discovery),
-            Arc::clone(&storage),
+            Arc::clone(&store),
             Arc::clone(&kbuckets),
             config.bootnode_enrs,
             config.ping_queue_interval,
@@ -165,7 +166,7 @@ where
             discovery,
             data_radius,
             kbuckets,
-            storage,
+            store,
             protocol,
             command_tx,
             utp_listener_tx,
@@ -248,7 +249,7 @@ where
         }
 
         let validator = Arc::clone(&self.validator);
-        let storage = Arc::clone(&self.storage);
+        let store = Arc::clone(&self.store);
         let kbuckets = Arc::clone(&self.kbuckets);
         let command_tx = self.command_tx.clone();
 
@@ -274,7 +275,7 @@ where
                     // - Checks if validated content should be stored, and stores it if true
                     // - Propagate all validated content
                     let validator = Arc::clone(&validator);
-                    let storage = Arc::clone(&storage);
+                    let store = Arc::clone(&store);
                     tokio::spawn(async move {
                         // Validated received content
                         if let Err(err) = validator
@@ -287,10 +288,20 @@ where
                         }
 
                         // Check if data should be stored, and store if true.
-                        // Ignore error since all validated content is propagated.
-                        let _ = storage
-                            .write()
-                            .store_if_should(&key, &content_value.to_vec());
+                        let key_desired = store.read().is_key_within_radius_and_unavailable(&key);
+                        match key_desired {
+                            Ok(true) => {
+                                if let Err(err) =
+                                    store.write().put(key.clone(), &content_value.to_vec())
+                                {
+                                    warn!("Unable to store data for content {err}");
+                                }
+                            }
+                            Ok(false) => {
+                                warn!("Accepted content not within radius or already stored")
+                            }
+                            Err(err) => warn!("Failed to check data store for content key {err}"),
+                        }
 
                         Some((key, content_value))
                     })

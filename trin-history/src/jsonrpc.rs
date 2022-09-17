@@ -17,6 +17,7 @@ use trin_core::{
         utils::bucket_entries_to_json,
     },
     portalnet::{
+        storage::ContentStore,
         types::{
             content_key::{HistoryContentKey, MasterAccumulator as MasterAccumulatorKey, SszNone},
             messages::Content,
@@ -42,7 +43,7 @@ impl HistoryRequestHandler {
                         request.params,
                     ) {
                         Ok(params) => {
-                            match &self.network.overlay.storage.read().get(&params.content_key)
+                            match &self.network.overlay.store.read().get(&params.content_key)
                                 {
                                     Ok(val) => match val {
                                         Some(val) => Ok(Value::String(hex_encode(val.clone()))),
@@ -70,9 +71,9 @@ impl HistoryRequestHandler {
                             match self
                                 .network
                                 .overlay
-                                .storage
+                                .store
                                 .write()
-                                .store(&content_key, &content)
+                                .put(content_key, &content)
                             {
                                 Ok(_) => Ok(Value::String("true".to_string())),
                                 Err(msg) => Ok(Value::String(msg.to_string())),
@@ -101,7 +102,7 @@ impl HistoryRequestHandler {
                             Ok(content_key) => {
                                 // Check whether we have the data locally.
                                 let local_content: Option<Vec<u8>> =
-                                    match self.network.overlay.storage.read().get(&content_key) {
+                                    match self.network.overlay.store.read().get(&content_key) {
                                         Ok(Some(data)) => Some(data),
                                         Ok(None) => None,
                                         Err(err) => {

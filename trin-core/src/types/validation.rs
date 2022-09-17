@@ -13,7 +13,7 @@ use crate::{
         types::{HistoryJsonRpcRequest, Params},
     },
     portalnet::{
-        storage::{PortalStorage, PortalStorageConfig},
+        storage::{ContentStore, PortalStorage, PortalStorageConfig},
         types::content_key::{
             HistoryContentKey, IdentityContentKey, MasterAccumulator as MasterAccumulatorKey,
             SszNone,
@@ -99,7 +99,7 @@ impl HeaderOracle {
                 .as_ref()
                 .write()
                 .unwrap()
-                .store(&latest_macc_content_key, &latest_local_macc.as_ssz_bytes());
+                .put(latest_macc_content_key, &latest_local_macc.as_ssz_bytes());
         }
     }
 
