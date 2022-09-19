@@ -647,8 +647,8 @@ where
             callback: tx,
         }) {
             warn!(
-                "Failure sending query over {:?} service channel",
-                self.protocol
+                protocol = %self.protocol,
+                "Failure sending query over service channel",
             );
             return None;
         }
@@ -657,8 +657,8 @@ where
             Ok(result) => result,
             Err(_) => {
                 warn!(
-                    "Unable to receive content over {:?} service channel",
-                    self.protocol
+                    protocol = %self.protocol,
+                    "Unable to receive content over service channel",
                 );
                 None
             }
@@ -678,8 +678,8 @@ where
             .send(OverlayCommand::Request(overlay_request))
         {
             warn!(
-                "Failure sending request over {:?} service channel",
-                self.protocol
+                protocol = %self.protocol,
+                "Failure sending request over service channel",
             );
             return Err(OverlayRequestError::ChannelFailure(error.to_string()));
         }
@@ -699,8 +699,8 @@ where
         let enrs = self.discovery.table_entries_enr();
         if enrs.is_empty() {
             error!(
-                "No bootnodes provided, cannot join Portal {:?} Network.",
-                self.protocol
+                protocol = %self.protocol,
+                "No bootnodes provided, cannot join Portal {} Network.", self.protocol,
             );
             return;
         }
@@ -715,7 +715,8 @@ where
                 }
                 Err(err) => {
                     error!(
-                        "{err} while pinging {:?} network bootnode: {enr:?}",
+                        protocol = %self.protocol,
+                        "{err} while pinging {} network bootnode: {enr:?}",
                         self.protocol
                     );
                 }
@@ -723,7 +724,8 @@ where
         }
         if !successfully_bonded_bootnode {
             error!(
-                "Failed to bond with any bootnodes, cannot join Portal {:?} Network.",
+                protocol = %self.protocol,
+                "Failed to bond with any bootnodes, cannot join Portal {} Network.",
                 self.protocol
             );
         }
