@@ -47,7 +47,7 @@ use crate::{
             distance::{Distance, Metric},
             messages::{
                 Accept, ByteList, Content, CustomPayload, FindContent, FindNodes, Message, Nodes,
-                Offer, Ping, Pong, ProtocolId, Request, Response, SszEnr,
+                Offer, Ping, Pong, PopulatedOffer, ProtocolId, Request, Response, SszEnr,
             },
             node::Node,
         },
@@ -734,7 +734,7 @@ where
             QueryEvent::Finished(query_id, query_info, query)
             | QueryEvent::TimedOut(query_id, query_info, query) => {
                 let result = query.into_result();
-                let (content, _closest_nodes) = match result {
+                let (content, closest_nodes) = match result {
                     FindContentQueryResult::ClosestNodes(closest_nodes) => (None, closest_nodes),
                     FindContentQueryResult::Content {
                         content,
@@ -742,21 +742,72 @@ where
                     } => (Some(content), closest_nodes),
                 };
 
-                // Send (possibly `None`) content on callback channel.
                 if let QueryType::FindContent {
                     callback: Some(callback),
-                    ..
+                    target: content_key,
                 } = query_info.query_type
                 {
-                    if let Err(_) = callback.send(content) {
+                    // Send (possibly `None`) content on callback channel.
+                    if let Err(_) = callback.send(content.clone()) {
                         error!(
                             "Failed to send FindContent query {} result to callback",
                             query_id
                         );
                     }
-                }
 
-                // TODO: Offer content to closest node(s).
+                    // If content was found, then offer the content to the closest nodes who did
+                    // not possess the content.
+                    if let Some(content) = content {
+                        self.poke_content(content_key, content, closest_nodes);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Submits outgoing requests to offer `content` to the closest known nodes whose radius
+    /// contains `content_key`.
+    fn poke_content(&self, content_key: TContentKey, content: Vec<u8>, closest_nodes: Vec<NodeId>) {
+        let content_id = content_key.content_id();
+
+        // Offer content to closest nodes with sufficient radius.
+        let mut offers_made: usize = 0;
+        for node_id in closest_nodes.iter() {
+            // Look up node in the routing table. We need the ENR and the radius. If we can't find
+            // the node, then move on to the next.
+            let key = kbucket::Key::from(*node_id);
+            let node = match self.kbuckets.write().entry(&key) {
+                kbucket::Entry::Present(entry, _) => entry.value().clone(),
+                kbucket::Entry::Pending(mut entry, _) => entry.value().clone(),
+                _ => continue,
+            };
+
+            // If the content is within the node's radius, then offer the node the content.
+            let is_within_radius =
+                TMetric::distance(&node_id.raw(), &content_id) < node.data_radius;
+            if is_within_radius {
+                let content_items = vec![(content_key.clone().into(), content.clone().into())];
+                let offer_request = Request::PopulatedOffer(PopulatedOffer { content_items });
+
+                let request = OverlayRequest::new(
+                    offer_request,
+                    RequestDirection::Outgoing {
+                        destination: node.enr(),
+                    },
+                    None,
+                    None,
+                );
+
+                // Only increment the number of offers made if the transmission succeeds.
+                if let Ok(..) = self.command_tx.send(OverlayCommand::Request(request)) {
+                    offers_made += 1;
+                }
+            }
+
+            // If we have made the maximum number of offers, then break so that no further offers
+            // are made.
+            if offers_made >= self.query_parallelism {
+                break;
             }
         }
     }
