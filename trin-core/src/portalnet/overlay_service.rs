@@ -26,7 +26,7 @@ use ssz::Encode;
 use ssz_types::{BitList, VariableList};
 use thiserror::Error;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, trace, warn};
 
 use crate::{
     portalnet::{
@@ -800,6 +800,7 @@ where
 
                 // Only increment the number of offers made if the transmission succeeds.
                 if let Ok(..) = self.command_tx.send(OverlayCommand::Request(request)) {
+                    trace!(protocol = %self.protocol, "Content {:?} offered to {}", content_id, node_id);
                     offers_made += 1;
                 }
             }
