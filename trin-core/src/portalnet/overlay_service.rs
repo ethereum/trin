@@ -2017,6 +2017,7 @@ mod tests {
     };
 
     use discv5::kbucket::Entry;
+    use ethereum_types::U256;
     use serial_test::serial;
     use tokio::sync::mpsc::unbounded_channel;
     use tokio_test::{assert_pending, assert_ready, task};
@@ -2412,6 +2413,179 @@ mod tests {
             }
             _ => panic!(),
         };
+    }
+
+    #[test_log::test(tokio::test)]
+    #[serial]
+    async fn poke_content() {
+        let mut service = task::spawn(build_service());
+
+        let content_key = IdentityContentKey::new(service.local_enr().node_id().raw());
+        let content = vec![0xef];
+
+        let status = NodeStatus {
+            state: ConnectionState::Connected,
+            direction: ConnectionDirection::Outgoing,
+        };
+
+        let (_, enr) = generate_random_remote_enr();
+        let key = kbucket::Key::from(enr.node_id());
+        let peer = Node {
+            enr,
+            data_radius: Distance::MAX,
+        };
+        let _ = service
+            .kbuckets
+            .write()
+            .insert_or_update(&key, peer.clone(), status);
+
+        let peer_node_ids: Vec<NodeId> = vec![peer.enr.node_id()];
+
+        // Node has maximum radius, so there should be one offer in the channel.
+        service.poke_content(content_key.clone(), content.clone(), peer_node_ids.clone());
+        let cmd = assert_ready!(poll_command_rx!(service));
+        let cmd = cmd.unwrap();
+        if let OverlayCommand::Request(req) = cmd {
+            assert!(matches!(req.request, Request::PopulatedOffer { .. }));
+            assert_eq!(
+                RequestDirection::Outgoing {
+                    destination: peer.enr()
+                },
+                req.direction
+            );
+        } else {
+            panic!("Unexpected overlay command variant");
+        }
+        assert_pending!(poll_command_rx!(service));
+    }
+
+    #[test_log::test(tokio::test)]
+    #[serial]
+    async fn poke_content_unknown_peers() {
+        let mut service = task::spawn(build_service());
+
+        let content_key = IdentityContentKey::new(service.local_enr().node_id().raw());
+        let content = vec![0xef];
+
+        let (_, enr1) = generate_random_remote_enr();
+        let (_, enr2) = generate_random_remote_enr();
+        let peers = vec![enr1, enr2];
+        let peer_node_ids: Vec<NodeId> = peers.iter().map(|p| p.node_id()).collect();
+
+        // No nodes in the routing table, so no commands should be in the channel.
+        service.poke_content(content_key, content, peer_node_ids);
+        assert_pending!(poll_command_rx!(service));
+    }
+
+    #[test_log::test(tokio::test)]
+    #[serial]
+    async fn poke_content_peers_with_sufficient_radius() {
+        let mut service = task::spawn(build_service());
+
+        let content_key = IdentityContentKey::new(service.local_enr().node_id().raw());
+        let content = vec![0xef];
+
+        let status = NodeStatus {
+            state: ConnectionState::Connected,
+            direction: ConnectionDirection::Outgoing,
+        };
+
+        // The first node has a maximum radius, so the content SHOULD be offered.
+        let (_, enr1) = generate_random_remote_enr();
+        let key1 = kbucket::Key::from(enr1.node_id());
+        let peer1 = Node {
+            enr: enr1,
+            data_radius: Distance::MAX,
+        };
+        let _ = service
+            .kbuckets
+            .write()
+            .insert_or_update(&key1, peer1.clone(), status);
+
+        // The second node has a radius of zero, so the content SHOULD NOT not be offered.
+        let (_, enr2) = generate_random_remote_enr();
+        let key2 = kbucket::Key::from(enr2.node_id());
+        let peer2 = Node {
+            enr: enr2.clone(),
+            data_radius: Distance::from(U256::zero()),
+        };
+        let _ = service
+            .kbuckets
+            .write()
+            .insert_or_update(&key2, peer2.clone(), status);
+
+        let peers = vec![peer1.clone(), peer2.clone()];
+        let peer_node_ids: Vec<NodeId> = peers.iter().map(|p| p.enr.node_id()).collect();
+
+        // One offer should be in the channel for the maximum radius node.
+        service.poke_content(content_key, content, peer_node_ids);
+        let cmd = assert_ready!(poll_command_rx!(service));
+        let cmd = cmd.unwrap();
+        if let OverlayCommand::Request(req) = cmd {
+            assert!(matches!(req.request, Request::PopulatedOffer { .. }));
+            assert_eq!(
+                RequestDirection::Outgoing {
+                    destination: peer1.enr()
+                },
+                req.direction
+            );
+        } else {
+            panic!("Unexpected overlay command variant");
+        }
+        assert_pending!(poll_command_rx!(service));
+    }
+
+    #[test_log::test(tokio::test)]
+    #[serial]
+    async fn poke_content_limited_number_of_peers() {
+        let mut service = task::spawn(build_service());
+
+        let content_key = IdentityContentKey::new(service.local_enr().node_id().raw());
+        let content = vec![0xef];
+
+        let status = NodeStatus {
+            state: ConnectionState::Connected,
+            direction: ConnectionDirection::Outgoing,
+        };
+
+        // Construct an array of peers with length one greater than the maximum number of offers.
+        // Give all peers maximum radius so that all are eligible for the offer.
+        let mut peers = vec![];
+        for _ in 0..service.query_parallelism + 1 {
+            let (_, enr) = generate_random_remote_enr();
+            let key = kbucket::Key::from(enr.node_id());
+            let peer = Node {
+                enr,
+                data_radius: Distance::MAX,
+            };
+            let _ = service
+                .kbuckets
+                .write()
+                .insert_or_update(&key, peer.clone(), status);
+            peers.push(peer);
+        }
+
+        let peer_node_ids: Vec<NodeId> = peers.iter().map(|p| p.enr.node_id()).collect();
+
+        // There should be an offer in the channel for the first `query_parallelism` nodes and no
+        // more.
+        service.poke_content(content_key, content, peer_node_ids);
+        for i in 0..service.query_parallelism {
+            let cmd = assert_ready!(poll_command_rx!(service));
+            let cmd = cmd.unwrap();
+            if let OverlayCommand::Request(req) = cmd {
+                assert!(matches!(req.request, Request::PopulatedOffer { .. }));
+                assert_eq!(
+                    RequestDirection::Outgoing {
+                        destination: peers[i].enr()
+                    },
+                    req.direction
+                );
+            } else {
+                panic!("Unexpected overlay command variant");
+            }
+        }
+        assert_pending!(poll_command_rx!(service));
     }
 
     #[test_log::test(tokio::test)]
