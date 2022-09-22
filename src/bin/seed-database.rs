@@ -10,7 +10,10 @@ use tracing::debug;
 use trin_core::{
     portalnet::{
         storage::{ContentStore, PortalStorage, PortalStorageConfig},
-        types::content_key::{BlockHeader, HistoryContentKey, IdentityContentKey},
+        types::{
+            content_key::{BlockHeader, HistoryContentKey, IdentityContentKey},
+            messages::ProtocolId,
+        },
     },
     types::header::Header,
     utils::db::get_data_dir,
@@ -49,8 +52,8 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let num_kilobytes = generator_config.kb;
 
-    let storage_config = PortalStorageConfig::new(num_kilobytes.into(), node_id);
-    let storage = PortalStorage::new(storage_config)?;
+    let storage_config = PortalStorageConfig::new(num_kilobytes.into(), node_id, false);
+    let storage = PortalStorage::new(storage_config, ProtocolId::History)?;
 
     match generator_config.data_folder {
         Some(data_folder) => load_mainnet_data(storage, data_folder),

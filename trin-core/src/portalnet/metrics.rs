@@ -12,6 +12,7 @@ use crate::portalnet::types::messages::ProtocolId;
 /// - - https://github.com/sigp/lighthouse/blob/c3a793fd73a3b11b130b82032904d39c952869e4/beacon_node/lighthouse_network/src/metrics.rs
 
 /// Overlay Service Metrics Reporter
+#[derive(Clone, Debug)]
 pub struct OverlayMetrics {
     inbound_ping: Counter,
     inbound_find_nodes: Counter,

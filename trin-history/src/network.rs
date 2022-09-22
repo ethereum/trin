@@ -40,7 +40,9 @@ impl HistoryNetwork {
             enable_metrics: portal_config.enable_metrics,
             ..Default::default()
         };
-        let storage = Arc::new(PLRwLock::new(PortalStorage::new(storage_config).unwrap()));
+        let storage = Arc::new(PLRwLock::new(
+            PortalStorage::new(storage_config, ProtocolId::History).unwrap(),
+        ));
         let validator = Arc::new(ChainHistoryValidator { header_oracle });
         let overlay = OverlayProtocol::new(
             config,

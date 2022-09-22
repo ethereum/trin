@@ -1630,6 +1630,7 @@ where
                     "New connected node added to routing table. Node: {}",
                     node_id
                 );
+
                 self.peers_to_ping.insert(node_id);
             }
             InsertResult::Pending { disconnected } => {
@@ -1680,6 +1681,7 @@ where
         state: ConnectionState,
     ) -> Result<(), FailureReason> {
         let key = kbucket::Key::from(node_id);
+
         match self.kbuckets.write().update_node_status(&key, state, None) {
             UpdateResult::Failed(reason) => match reason {
                 FailureReason::KeyNonExistant => Err(FailureReason::KeyNonExistant),

@@ -58,11 +58,18 @@ pub async fn run_trin(
         setup_temp_dir();
     }
 
-    let storage_config =
-        PortalStorageConfig::new(trin_config.kb.into(), discovery.local_enr().node_id());
+    let storage_config = PortalStorageConfig::new(
+        trin_config.kb.into(),
+        discovery.local_enr().node_id(),
+        trin_config.enable_metrics_with_url.is_some(),
+    );
+
+    // Header oracle requires a storage config. Currently metrics for this instance are turned off.
+    let mut oracle_storage_config = storage_config.clone();
+    oracle_storage_config.metrics_enabled = false;
 
     // Initialize validation oracle
-    let header_oracle = HeaderOracle::new(trusted_provider.clone(), storage_config.clone());
+    let header_oracle = HeaderOracle::new(trusted_provider.clone(), oracle_storage_config);
     let header_oracle = Arc::new(RwLock::new(header_oracle));
 
     debug!("Selected networks to spawn: {:?}", trin_config.networks);
