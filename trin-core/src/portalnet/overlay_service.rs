@@ -771,7 +771,6 @@ where
         let content_id = content_key.content_id();
 
         // Offer content to closest nodes with sufficient radius.
-        let mut offers_made: usize = 0;
         for node_id in closest_nodes.iter() {
             // Look up node in the routing table. We need the ENR and the radius. If we can't find
             // the node, then move on to the next.
@@ -784,7 +783,7 @@ where
 
             // If the content is within the node's radius, then offer the node the content.
             let is_within_radius =
-                TMetric::distance(&node_id.raw(), &content_id) < node.data_radius;
+                TMetric::distance(&node_id.raw(), &content_id) <= node.data_radius;
             if is_within_radius {
                 let content_items = vec![(content_key.clone().into(), content.clone().into())];
                 let offer_request = Request::PopulatedOffer(PopulatedOffer { content_items });
@@ -798,17 +797,14 @@ where
                     None,
                 );
 
-                // Only increment the number of offers made if the transmission succeeds.
                 if let Ok(..) = self.command_tx.send(OverlayCommand::Request(request)) {
-                    trace!(protocol = %self.protocol, "Content {:?} offered to {}", content_id, node_id);
-                    offers_made += 1;
+                    trace!(
+                        protocol = %self.protocol,
+                        content.id = ?content_id,
+                        peer.node_id = %node_id,
+                        "Content poked"
+                    );
                 }
-            }
-
-            // If we have made the maximum number of offers, then break so that no further offers
-            // are made.
-            if offers_made >= self.query_parallelism {
-                break;
             }
         }
     }
@@ -2532,59 +2528,6 @@ mod tests {
             );
         } else {
             panic!("Unexpected overlay command variant");
-        }
-        assert_pending!(poll_command_rx!(service));
-    }
-
-    #[test_log::test(tokio::test)]
-    #[serial]
-    async fn poke_content_limited_number_of_peers() {
-        let mut service = task::spawn(build_service());
-
-        let content_key = IdentityContentKey::new(service.local_enr().node_id().raw());
-        let content = vec![0xef];
-
-        let status = NodeStatus {
-            state: ConnectionState::Connected,
-            direction: ConnectionDirection::Outgoing,
-        };
-
-        // Construct an array of peers with length one greater than the maximum number of offers.
-        // Give all peers maximum radius so that all are eligible for the offer.
-        let mut peers = vec![];
-        for _ in 0..service.query_parallelism + 1 {
-            let (_, enr) = generate_random_remote_enr();
-            let key = kbucket::Key::from(enr.node_id());
-            let peer = Node {
-                enr,
-                data_radius: Distance::MAX,
-            };
-            let _ = service
-                .kbuckets
-                .write()
-                .insert_or_update(&key, peer.clone(), status);
-            peers.push(peer);
-        }
-
-        let peer_node_ids: Vec<NodeId> = peers.iter().map(|p| p.enr.node_id()).collect();
-
-        // There should be an offer in the channel for the first `query_parallelism` nodes and no
-        // more.
-        service.poke_content(content_key, content, peer_node_ids);
-        for i in 0..service.query_parallelism {
-            let cmd = assert_ready!(poll_command_rx!(service));
-            let cmd = cmd.unwrap();
-            if let OverlayCommand::Request(req) = cmd {
-                assert!(matches!(req.request, Request::PopulatedOffer { .. }));
-                assert_eq!(
-                    RequestDirection::Outgoing {
-                        destination: peers[i].enr()
-                    },
-                    req.direction
-                );
-            } else {
-                panic!("Unexpected overlay command variant");
-            }
         }
         assert_pending!(poll_command_rx!(service));
     }
