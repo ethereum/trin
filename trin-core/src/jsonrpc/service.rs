@@ -146,7 +146,7 @@ fn launch_ipc_client(
         }
     };
 
-    info!("Listening for commands: {}", ipc_path);
+    info!(path = %ipc_path, "IPC JSON-RPC server listening for commands");
     std::thread::spawn(move || {
         live_server_tx.blocking_send(true).unwrap();
     });
@@ -182,7 +182,7 @@ fn launch_ipc_client(
             serve_ipc_client(&mut rx, &mut tx, trusted_provider, portal_tx);
         });
     }
-    info!("JSON-RPC server over IPC exited cleanly");
+    info!("IPC JSON-RPC server exited cleanly");
 
     if let Err(err) = fs::remove_file(ipc_path) {
         debug!("Clean Exit: Skipped removing {} because: {}", ipc_path, err);
@@ -203,7 +203,7 @@ fn launch_http_client(
 
     let listener = TcpListener::bind(&trin_config.web3_http_address).unwrap();
 
-    info!("Listening for commands: {}", trin_config.web3_http_address);
+    info!(url = %trin_config.web3_http_address, "HTTP JSON-RPC server listening for commands");
     std::thread::spawn(move || {
         live_server_tx.blocking_send(true).unwrap();
     });
@@ -222,7 +222,7 @@ fn launch_http_client(
             }
         };
     }
-    info!("Clean exit");
+    info!("HTTP JSON-RPC server exited cleanly");
 }
 
 fn serve_ipc_client(

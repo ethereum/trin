@@ -20,7 +20,7 @@ use rand::seq::IteratorRandom;
 use ssz::Encode;
 use ssz_types::VariableList;
 use tokio::{sync::mpsc::UnboundedSender, task::JoinHandle};
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::{
     portalnet::{
@@ -263,7 +263,7 @@ where
                     |(raw_key, content_value)| match TContentKey::try_from(raw_key) {
                         Ok(content_key) => Some((content_key, content_value)),
                         Err(err) => {
-                            warn!("Unexpected error while decoding overlay content key: {err}");
+                            warn!(error = %err, "Error decoding overlay content key");
                             None
                         }
                     },
@@ -283,7 +283,11 @@ where
                             .await
                         {
                             // Skip storing & propagating content if it's not valid
-                            warn!("Unable to validate received content: {err:?}");
+                            warn!(
+                                error = %err,
+                                content.id = %hex_encode(key.content_id()),
+                                "Error validating accepted content"
+                            );
                             return None;
                         }
 
@@ -294,13 +298,26 @@ where
                                 if let Err(err) =
                                     store.write().put(key.clone(), &content_value.to_vec())
                                 {
-                                    warn!("Unable to store data for content {err}");
+                                    warn!(
+                                        error = %err,
+                                        content.id = %hex_encode(key.content_id()),
+                                        "Error storing accepted content"
+                                    );
                                 }
                             }
                             Ok(false) => {
-                                warn!("Accepted content not within radius or already stored")
+                                warn!(
+                                    content.id = %hex_encode(key.content_id()),
+                                    "Accepted content outside radius or already stored"
+                                );
                             }
-                            Err(err) => warn!("Failed to check data store for content key {err}"),
+                            Err(err) => {
+                                warn!(
+                                    error = %err,
+                                    content.id = %hex_encode(key.content_id()),
+                                    "Error checking data store for content key"
+                                );
+                            }
                         }
 
                         Some((key, content_value))
@@ -362,8 +379,11 @@ where
 
             // Continue if no nodes are interested in the content
             if interested_enrs.is_empty() {
-                debug!("No nodes interested in neighborhood gossip: content_key={} num_nodes_checked={}",
-                    hex_encode(content_key.into()), all_nodes.len());
+                debug!(
+                    content.id = %hex_encode(content_key.content_id()),
+                    kbuckets.len = all_nodes.len(),
+                    "No peers eligible for neighborhood gossip"
+                );
                 continue;
             }
 
@@ -371,7 +391,7 @@ where
             let random_enrs = match log2_random_enrs(interested_enrs) {
                 Ok(val) => val,
                 Err(msg) => {
-                    debug!("Error calculating log2 random enrs for gossip propagation: {msg}");
+                    warn!(error = %msg, "Error producing ENRs for gossip");
                     return 0;
                 }
             };
@@ -393,7 +413,7 @@ where
             let enr = match Enr::from_str(&enr_string) {
                 Ok(enr) => enr,
                 Err(err) => {
-                    error!("Error creating ENR from base_64 encoded string: {err}");
+                    error!(error = %err, enr.base64 = %enr_string, "Error decoding ENR from base-64");
                     continue;
                 }
             };
@@ -410,7 +430,7 @@ where
             );
 
             if let Err(err) = command_tx.send(OverlayCommand::Request(overlay_request)) {
-                error!("Unable to send OFFER request to overlay: {err}.")
+                error!(error = %err, "Error sending OFFER message to service")
             }
         }
 
@@ -474,11 +494,9 @@ where
             custom_payload,
         };
 
-        let node_id = enr.node_id();
         let direction = RequestDirection::Outgoing { destination: enr };
 
         // Send the request and wait on the response.
-        debug!("Sending {} dest={}", request, node_id);
         match self
             .send_overlay_request(Request::Ping(request), direction)
             .await
@@ -598,7 +616,12 @@ where
                             result.extend_from_slice(&mut buf[..bytes]);
                         }
                         Err(err) => {
-                            warn!("Unable to receive content via uTP: {err}");
+                            warn!(
+                                error = %err,
+                                utp.conn_id = %conn_id,
+                                utp.peer = %conn.connected_to,
+                                "Error receiving content from uTP conn"
+                            );
                             return Err(OverlayRequestError::UtpError(err.to_string()));
                         }
                     }
@@ -606,7 +629,7 @@ where
                 Ok(result)
             }
             Err(err) => {
-                warn!("Unable to receive from uTP listener channel: {err}");
+                warn!(error = %err, "Error receiving content from uTP listener");
                 Err(OverlayRequestError::UtpError(err.to_string()))
             }
         }
@@ -641,6 +664,7 @@ where
     /// Performs a content lookup for `target`.
     pub async fn lookup_content(&self, target: TContentKey) -> Option<Vec<u8>> {
         let (tx, rx) = oneshot::channel();
+        let content_id = target.content_id();
 
         if let Err(_) = self.command_tx.send(OverlayCommand::FindContentQuery {
             target,
@@ -648,17 +672,20 @@ where
         }) {
             warn!(
                 protocol = %self.protocol,
-                "Failure sending query over service channel",
+                content.id = %hex_encode(content_id),
+                "Error submitting FindContent query to service"
             );
             return None;
         }
 
         match rx.await {
             Ok(result) => result,
-            Err(_) => {
+            Err(err) => {
                 warn!(
                     protocol = %self.protocol,
-                    "Unable to receive content over service channel",
+                    error = %err,
+                    content.id = %hex_encode(content_id),
+                    "Error receiving content from service",
                 );
                 None
             }
@@ -679,7 +706,8 @@ where
         {
             warn!(
                 protocol = %self.protocol,
-                "Failure sending request over service channel",
+                error = %error,
+                "Error submitting request to service",
             );
             return Err(OverlayRequestError::ChannelFailure(error.to_string()));
         }
@@ -700,24 +728,25 @@ where
         if enrs.is_empty() {
             error!(
                 protocol = %self.protocol,
-                "No bootnodes provided, cannot join Portal {} Network.", self.protocol,
+                "No bootnodes provided to join portal network",
             );
             return;
         }
         for enr in enrs {
-            debug!("Attempting to bond with bootnode: {}", enr);
+            debug!(bootnode.enr = %enr, "Attempting to bond with bootnode");
             let ping_result = self.send_ping(enr.clone()).await;
 
             match ping_result {
                 Ok(_) => {
-                    debug!("Successfully bonded with bootnode: {}", enr);
+                    info!(bootnode.enr = %enr, "Bonded with bootnode");
                     successfully_bonded_bootnode = true;
                 }
                 Err(err) => {
                     error!(
                         protocol = %self.protocol,
-                        "{err} while pinging {} network bootnode: {enr:?}",
-                        self.protocol
+                        error = %err,
+                        bootnode.enr = %enr,
+                        "Error bonding with bootnode",
                     );
                 }
             }
@@ -725,8 +754,7 @@ where
         if !successfully_bonded_bootnode {
             error!(
                 protocol = %self.protocol,
-                "Failed to bond with any bootnodes, cannot join Portal {} Network.",
-                self.protocol
+                "Failed to bond with any bootnodes",
             );
         }
     }

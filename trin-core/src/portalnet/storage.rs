@@ -609,7 +609,7 @@ impl PortalStorage {
     pub fn setup_rocksdb(node_id: NodeId) -> Result<rocksdb::DB, ContentStoreError> {
         let mut data_path: PathBuf = get_data_dir(node_id);
         data_path.push("rocksdb");
-        debug!("Setting up RocksDB at path: {:?}", data_path);
+        info!(path = %data_path.display(), "Setting up RocksDB");
 
         let mut db_opts = Options::default();
         db_opts.create_if_missing(true);
@@ -620,7 +620,7 @@ impl PortalStorage {
     pub fn setup_sql(node_id: NodeId) -> Result<Pool<SqliteConnectionManager>, ContentStoreError> {
         let mut data_path: PathBuf = get_data_dir(node_id);
         data_path.push("trin.sqlite");
-        info!("Setting up SqliteDB at path: {:?}", data_path);
+        info!(path = %data_path.display(), "Setting up SqliteDB");
 
         let manager = SqliteConnectionManager::file(data_path);
         let pool = Pool::new(manager)?;

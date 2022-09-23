@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use tokio::sync::{mpsc, RwLock};
-use tracing::debug;
+use tracing::info;
 
 use trin_core::{
     cli::{TrinConfig, HISTORY_NETWORK, STATE_NETWORK},
@@ -25,7 +25,7 @@ pub async fn run_trin(
     trin_config: TrinConfig,
     trusted_provider: TrustedProvider,
 ) -> Result<Arc<JsonRpcExiter>, Box<dyn std::error::Error>> {
-    trin_config.display_config();
+    info!(config = %trin_config, "Launching trin");
 
     let bootnode_enrs = parse_bootnodes(&trin_config.bootnodes)?;
     let portalnet_config = PortalnetConfig {
@@ -69,7 +69,6 @@ pub async fn run_trin(
     let header_oracle = HeaderOracle::new(trusted_provider.clone(), master_accumulator);
     let header_oracle = Arc::new(RwLock::new(header_oracle));
 
-    debug!("Selected networks to spawn: {:?}", trin_config.networks);
     // Initialize state sub-network service and event handlers, if selected
     let (state_handler, state_network_task, state_event_tx, state_utp_tx, state_jsonrpc_tx) =
         if trin_config.networks.iter().any(|val| val == STATE_NETWORK) {

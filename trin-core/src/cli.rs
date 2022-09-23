@@ -1,7 +1,6 @@
-use std::{env, ffi::OsString, net::SocketAddr, path::PathBuf};
+use std::{env, ffi::OsString, fmt, net::SocketAddr, path::PathBuf};
 
 use structopt::StructOpt;
-use tracing::info;
 
 use crate::portalnet::types::messages::HexData;
 use crate::utils::provider::TrustedProviderType;
@@ -207,26 +206,6 @@ impl TrinConfig {
         }
         Ok(config)
     }
-
-    pub fn display_config(&self) {
-        info!("Launching with config:");
-        match self.web3_transport.as_str() {
-            "http" => {
-                info!("- JSON-RPC HTTP address: {}", self.web3_http_address)
-            }
-            "ipc" => {
-                info!("- JSON-RPC IPC path: {}", self.web3_ipc_path)
-            }
-            val => panic!("Unsupported json-rpc transport: {}", val),
-        }
-
-        info!("- Pool Size: {}", self.pool_size);
-
-        match self.bootnodes.is_empty() {
-            true => info!("- Bootnodes: None"),
-            _ => info!("- Bootnodes: {:?}", self.bootnodes),
-        }
-    }
 }
 
 fn check_private_key_length(private_key: String) -> Result<(), String> {
@@ -237,6 +216,22 @@ fn check_private_key_length(private_key: String) -> Result<(), String> {
         "Invalid private key length: {}, expected 32 byte hexstring",
         private_key
     )
+}
+
+impl fmt::Display for TrinConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let json_rpc_url = match self.web3_transport.as_str() {
+            "http" => &self.web3_http_address,
+            "ipc" => &self.web3_ipc_path,
+            _ => "",
+        };
+
+        write!(
+            f,
+            "TrinConfig {{ networks: {:?}, capacity_kb: {}, ephemeral: {}, json_rpc_url: {}, pool_size: {}, metrics_enabled: {} }}",
+            self.networks, self.kb, self.ephemeral, json_rpc_url, self.pool_size, self.enable_metrics_with_url.is_some()
+        )
+    }
 }
 
 #[cfg(test)]
