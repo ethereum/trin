@@ -2544,6 +2544,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7843ec2de400bcbc6a6328c958dc38e5359da6e93e72e37bc5246bf1ae776389"
 
 [[package]]
+name = "nanotemplate"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f247bfe894f8a04e0d8b1eb5eed9dfb7424f6dda47cf83e3f03670e87cb2831b"
+
+[[package]]
 name = "net2"
 version = "0.2.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4585,15 +4591,20 @@ dependencies = [
 name = "trin-cli"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "base64",
  "ethereum-types 0.12.1",
  "hex",
  "jsonrpc",
+ "nanotemplate",
  "serde",
  "serde_json",
  "structopt",
  "thiserror",
+ "tracing",
  "trin-core",
  "uds_windows",
+ "ureq",
 ]
 
 [[package]]
