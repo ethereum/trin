@@ -909,7 +909,10 @@ where
             Ok(None) => {
                 let enrs = self.find_nodes_close_to_content(content_key);
                 match enrs {
-                    Ok(val) => Ok(Content::Enrs(val)),
+                    Ok(val) => {
+                        let enrs = limit_enr_list_to_max_bytes(val, MAX_NODES_SIZE);
+                        Ok(Content::Enrs(enrs))
+                    }
                     Err(msg) => Err(OverlayRequestError::InvalidRequest(msg.to_string())),
                 }
             }
