@@ -85,7 +85,6 @@ pub enum HistoryContentKey {
 #[derive(Clone, Debug, Decode, Encode, PartialEq)]
 pub struct BlockHeader {
     /// Chain identifier.
-    pub chain_id: u16,
     /// Hash of the block.
     pub block_hash: [u8; 32],
 }
@@ -94,7 +93,6 @@ pub struct BlockHeader {
 #[derive(Clone, Debug, Decode, Encode, PartialEq)]
 pub struct BlockBody {
     /// Chain identifier.
-    pub chain_id: u16,
     /// Hash of the block.
     pub block_hash: [u8; 32],
 }
@@ -103,7 +101,6 @@ pub struct BlockBody {
 #[derive(Clone, Debug, Decode, Encode, PartialEq)]
 pub struct BlockReceipts {
     /// Chain identifier.
-    pub chain_id: u16,
     /// Hash of the block.
     pub block_hash: [u8; 32],
 }
@@ -372,16 +369,15 @@ mod test {
     #[test]
     fn block_header() {
         let expected_content_key =
-            hex::decode("000f00d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d")
+            hex::decode("00d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d")
                 .unwrap();
         let expected_content_id: [u8; 32] = [
-            0x21, 0x37, 0xf1, 0x85, 0xb7, 0x13, 0xa6, 0x0d, 0xd1, 0x19, 0x0e, 0x65, 0x0d, 0x01,
-            0x22, 0x7b, 0x4f, 0x94, 0xec, 0xdd, 0xc9, 0xc9, 0x54, 0x78, 0xe2, 0xc5, 0x91, 0xc4,
-            0x05, 0x57, 0xda, 0x99,
+            0x3e, 0x86, 0xb3, 0x76, 0x7b, 0x57, 0x40, 0x2e, 0xa7, 0x2e, 0x36, 0x9a, 0xe0, 0x49,
+            0x6c, 0xe4, 0x7c, 0xc1, 0x5b, 0xe6, 0x85, 0xbe, 0xc3, 0xb4, 0x72, 0x6b, 0x9f, 0x31,
+            0x6e, 0x38, 0x95, 0xfe,
         ];
 
         let header = BlockHeader {
-            chain_id: 15,
             block_hash: BLOCK_HASH,
         };
 
@@ -395,16 +391,15 @@ mod test {
     #[test]
     fn block_body() {
         let expected_content_key =
-            hex::decode("011400d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d")
+            hex::decode("01d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d")
                 .unwrap();
         let expected_content_id: [u8; 32] = [
-            0x1c, 0x60, 0x46, 0x47, 0x5f, 0x07, 0x72, 0x13, 0x27, 0x74, 0xab, 0x54, 0x91, 0x73,
-            0xca, 0x84, 0x87, 0xbe, 0xa0, 0x31, 0xce, 0x53, 0x9c, 0xad, 0x8e, 0x99, 0x0c, 0x08,
-            0xdf, 0x58, 0x02, 0xca,
+            0xeb, 0xe4, 0x14, 0x85, 0x46, 0x29, 0xd6, 0x0c, 0x58, 0xdd, 0xd5, 0xbf, 0x60, 0xfd,
+            0x72, 0xe4, 0x17, 0x60, 0xa5, 0xf7, 0xa4, 0x63, 0xfd, 0xcb, 0x16, 0x9f, 0x13, 0xee,
+            0x4a, 0x26, 0x78, 0x6b,
         ];
 
         let body = BlockBody {
-            chain_id: 20,
             block_hash: BLOCK_HASH,
         };
 
@@ -418,20 +413,19 @@ mod test {
     #[test]
     fn block_receipts() {
         let expected_content_key =
-            hex::decode("020400d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d")
+            hex::decode("02d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d")
                 .unwrap();
         let expected_content_id: [u8; 32] = [
-            0xaa, 0x39, 0xe1, 0x42, 0x3e, 0x92, 0xf5, 0xa6, 0x67, 0xac, 0xe5, 0xb7, 0x9c, 0x2c,
-            0x98, 0xad, 0xbf, 0xd7, 0x9c, 0x05, 0x5d, 0x89, 0x1d, 0x0b, 0x9c, 0x49, 0xc4, 0x0f,
-            0x81, 0x65, 0x63, 0xb2,
+            0xa8, 0x88, 0xf4, 0xaa, 0xfe, 0x91, 0x09, 0xd4, 0x95, 0xac, 0x4d, 0x47, 0x74, 0xa6,
+            0x27, 0x7c, 0x1a, 0xda, 0x42, 0x03, 0x5e, 0x3d, 0xa5, 0xe1, 0x0a, 0x04, 0xcc, 0x93,
+            0x24, 0x7c, 0x04, 0xa4,
         ];
 
-        let body = BlockReceipts {
-            chain_id: 4,
+        let receipts = BlockReceipts {
             block_hash: BLOCK_HASH,
         };
 
-        let key = HistoryContentKey::BlockReceipts(body);
+        let key = HistoryContentKey::BlockReceipts(receipts);
         let encoded: Vec<u8> = key.clone().into();
 
         assert_eq!(encoded, expected_content_key);
