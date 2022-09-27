@@ -3,7 +3,7 @@ use std::fmt;
 use crate::portalnet::{types::distance::Distance, Enr};
 
 /// A node in the overlay network routing table.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Node {
     /// The node's ENR.
     pub enr: Enr,
@@ -46,13 +46,5 @@ impl fmt::Display for Node {
             self.enr.node_id(),
             self.data_radius,
         )
-    }
-}
-
-impl std::cmp::Eq for Node {}
-
-impl PartialEq for Node {
-    fn eq(&self, other: &Self) -> bool {
-        self.enr == other.enr
     }
 }

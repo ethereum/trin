@@ -26,7 +26,7 @@ use ssz::Encode;
 use ssz_types::{BitList, VariableList};
 use thiserror::Error;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, trace, warn};
 
 use crate::{
     portalnet::{
@@ -47,7 +47,7 @@ use crate::{
             distance::{Distance, Metric},
             messages::{
                 Accept, ByteList, Content, CustomPayload, FindContent, FindNodes, Message, Nodes,
-                Offer, Ping, Pong, ProtocolId, Request, Response, SszEnr,
+                Offer, Ping, Pong, PopulatedOffer, ProtocolId, Request, Response, SszEnr,
             },
             node::Node,
         },
@@ -734,7 +734,7 @@ where
             QueryEvent::Finished(query_id, query_info, query)
             | QueryEvent::TimedOut(query_id, query_info, query) => {
                 let result = query.into_result();
-                let (content, _closest_nodes) = match result {
+                let (content, closest_nodes) = match result {
                     FindContentQueryResult::ClosestNodes(closest_nodes) => (None, closest_nodes),
                     FindContentQueryResult::Content {
                         content,
@@ -742,21 +742,69 @@ where
                     } => (Some(content), closest_nodes),
                 };
 
-                // Send (possibly `None`) content on callback channel.
                 if let QueryType::FindContent {
                     callback: Some(callback),
-                    ..
+                    target: content_key,
                 } = query_info.query_type
                 {
-                    if let Err(_) = callback.send(content) {
+                    // Send (possibly `None`) content on callback channel.
+                    if let Err(_) = callback.send(content.clone()) {
                         error!(
                             "Failed to send FindContent query {} result to callback",
                             query_id
                         );
                     }
-                }
 
-                // TODO: Offer content to closest node(s).
+                    // If content was found, then offer the content to the closest nodes who did
+                    // not possess the content.
+                    if let Some(content) = content {
+                        self.poke_content(content_key, content, closest_nodes);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Submits outgoing requests to offer `content` to the closest known nodes whose radius
+    /// contains `content_key`.
+    fn poke_content(&self, content_key: TContentKey, content: Vec<u8>, closest_nodes: Vec<NodeId>) {
+        let content_id = content_key.content_id();
+
+        // Offer content to closest nodes with sufficient radius.
+        for node_id in closest_nodes.iter() {
+            // Look up node in the routing table. We need the ENR and the radius. If we can't find
+            // the node, then move on to the next.
+            let key = kbucket::Key::from(*node_id);
+            let node = match self.kbuckets.write().entry(&key) {
+                kbucket::Entry::Present(entry, _) => entry.value().clone(),
+                kbucket::Entry::Pending(mut entry, _) => entry.value().clone(),
+                _ => continue,
+            };
+
+            // If the content is within the node's radius, then offer the node the content.
+            let is_within_radius =
+                TMetric::distance(&node_id.raw(), &content_id) <= node.data_radius;
+            if is_within_radius {
+                let content_items = vec![(content_key.clone().into(), content.clone().into())];
+                let offer_request = Request::PopulatedOffer(PopulatedOffer { content_items });
+
+                let request = OverlayRequest::new(
+                    offer_request,
+                    RequestDirection::Outgoing {
+                        destination: node.enr(),
+                    },
+                    None,
+                    None,
+                );
+
+                if let Ok(..) = self.command_tx.send(OverlayCommand::Request(request)) {
+                    trace!(
+                        protocol = %self.protocol,
+                        content.id = ?content_id,
+                        peer.node_id = %node_id,
+                        "Content poked"
+                    );
+                }
             }
         }
     }
@@ -1955,6 +2003,7 @@ mod tests {
     };
 
     use discv5::kbucket::Entry;
+    use ethereum_types::U256;
     use serial_test::serial;
     use tokio::sync::mpsc::unbounded_channel;
     use tokio_test::{assert_pending, assert_ready, task};
@@ -2350,6 +2399,126 @@ mod tests {
             }
             _ => panic!(),
         };
+    }
+
+    #[test_log::test(tokio::test)]
+    #[serial]
+    async fn poke_content() {
+        let mut service = task::spawn(build_service());
+
+        let content_key = IdentityContentKey::new(service.local_enr().node_id().raw());
+        let content = vec![0xef];
+
+        let status = NodeStatus {
+            state: ConnectionState::Connected,
+            direction: ConnectionDirection::Outgoing,
+        };
+
+        let (_, enr) = generate_random_remote_enr();
+        let key = kbucket::Key::from(enr.node_id());
+        let peer = Node {
+            enr,
+            data_radius: Distance::MAX,
+        };
+        let _ = service
+            .kbuckets
+            .write()
+            .insert_or_update(&key, peer.clone(), status);
+
+        let peer_node_ids: Vec<NodeId> = vec![peer.enr.node_id()];
+
+        // Node has maximum radius, so there should be one offer in the channel.
+        service.poke_content(content_key.clone(), content.clone(), peer_node_ids.clone());
+        let cmd = assert_ready!(poll_command_rx!(service));
+        let cmd = cmd.unwrap();
+        if let OverlayCommand::Request(req) = cmd {
+            assert!(matches!(req.request, Request::PopulatedOffer { .. }));
+            assert_eq!(
+                RequestDirection::Outgoing {
+                    destination: peer.enr()
+                },
+                req.direction
+            );
+        } else {
+            panic!("Unexpected overlay command variant");
+        }
+        assert_pending!(poll_command_rx!(service));
+    }
+
+    #[test_log::test(tokio::test)]
+    #[serial]
+    async fn poke_content_unknown_peers() {
+        let mut service = task::spawn(build_service());
+
+        let content_key = IdentityContentKey::new(service.local_enr().node_id().raw());
+        let content = vec![0xef];
+
+        let (_, enr1) = generate_random_remote_enr();
+        let (_, enr2) = generate_random_remote_enr();
+        let peers = vec![enr1, enr2];
+        let peer_node_ids: Vec<NodeId> = peers.iter().map(|p| p.node_id()).collect();
+
+        // No nodes in the routing table, so no commands should be in the channel.
+        service.poke_content(content_key, content, peer_node_ids);
+        assert_pending!(poll_command_rx!(service));
+    }
+
+    #[test_log::test(tokio::test)]
+    #[serial]
+    async fn poke_content_peers_with_sufficient_radius() {
+        let mut service = task::spawn(build_service());
+
+        let content_key = IdentityContentKey::new(service.local_enr().node_id().raw());
+        let content = vec![0xef];
+
+        let status = NodeStatus {
+            state: ConnectionState::Connected,
+            direction: ConnectionDirection::Outgoing,
+        };
+
+        // The first node has a maximum radius, so the content SHOULD be offered.
+        let (_, enr1) = generate_random_remote_enr();
+        let key1 = kbucket::Key::from(enr1.node_id());
+        let peer1 = Node {
+            enr: enr1,
+            data_radius: Distance::MAX,
+        };
+        let _ = service
+            .kbuckets
+            .write()
+            .insert_or_update(&key1, peer1.clone(), status);
+
+        // The second node has a radius of zero, so the content SHOULD NOT not be offered.
+        let (_, enr2) = generate_random_remote_enr();
+        let key2 = kbucket::Key::from(enr2.node_id());
+        let peer2 = Node {
+            enr: enr2.clone(),
+            data_radius: Distance::from(U256::zero()),
+        };
+        let _ = service
+            .kbuckets
+            .write()
+            .insert_or_update(&key2, peer2.clone(), status);
+
+        let peers = vec![peer1.clone(), peer2.clone()];
+        let peer_node_ids: Vec<NodeId> = peers.iter().map(|p| p.enr.node_id()).collect();
+
+        // One offer should be in the channel for the maximum radius node.
+        service.poke_content(content_key, content, peer_node_ids);
+        let cmd = assert_ready!(poll_command_rx!(service));
+        let cmd = cmd.unwrap();
+        if let OverlayCommand::Request(req) = cmd {
+            assert!(matches!(req.request, Request::PopulatedOffer { .. }));
+            assert_eq!(
+                RequestDirection::Outgoing {
+                    destination: peer1.enr()
+                },
+                req.direction
+            );
+        } else {
+            panic!("Unexpected overlay command variant");
+        }
+        assert_pending!(poll_command_rx!(service));
     }
 
     #[test_log::test(tokio::test)]
