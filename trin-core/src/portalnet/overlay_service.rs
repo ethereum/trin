@@ -810,7 +810,7 @@ where
                 Ok(Response::Nodes(self.handle_find_nodes(find_nodes)))
             }
             Request::FindContent(find_content) => Ok(Response::Content(
-                self.handle_find_content(find_content, Some(&source))?,
+                self.handle_find_content(find_content, &source)?,
             )),
             Request::Offer(offer) => Ok(Response::Accept(self.handle_offer(offer, source)?)),
             Request::PopulatedOffer(_) => Err(OverlayRequestError::InvalidRequest(
@@ -857,7 +857,7 @@ where
     fn handle_find_content(
         &self,
         request: FindContent,
-        source: Option<&NodeId>,
+        source: &NodeId,
     ) -> Result<Content, OverlayRequestError> {
         self.metrics
             .as_ref()
@@ -880,30 +880,21 @@ where
                 if content.len() < 1000 {
                     Ok(Content::Content(content))
                 } else {
-                    match source {
-                        Some(source) => {
-                            let conn_id: u16 = crate::utp::stream::rand();
+                    let conn_id: u16 = crate::utp::stream::rand();
 
-                            // Listen for incoming uTP connection request on as part of uTP handshake and
-                            // storing content data, so we can send it inside UtpListener right after we receive
-                            // SYN packet from the requester
-                            let conn_id_recv = conn_id.wrapping_add(1);
+                    // Listen for incoming uTP connection request on as part of uTP handshake and
+                    // storing content data, so we can send it inside UtpListener right after we receive
+                    // SYN packet from the requester
+                    let conn_id_recv = conn_id.wrapping_add(1);
 
-                            self.add_utp_connection(
-                                source,
-                                conn_id_recv,
-                                UtpStreamId::ContentStream(content),
-                            )?;
+                    self.add_utp_connection(
+                        source,
+                        conn_id_recv,
+                        UtpStreamId::ContentStream(content),
+                    )?;
 
-                            // Connection id is send as BE because uTP header values are stored also as BE
-                            Ok(Content::ConnectionId(conn_id.to_be()))
-
-                        },
-                        None => {
-                           return Err(OverlayRequestError::UtpError(
-                               "Unable to start listening for uTP stream because source NodeID is not provided".to_string()))
-                        }
-                    }
+                    // Connection id is send as BE because uTP header values are stored also as BE
+                    Ok(Content::ConnectionId(conn_id.to_be()))
                 }
             }
             Ok(None) => {
