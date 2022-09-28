@@ -20,7 +20,6 @@ pub async fn get_block_by_hash(
 ) -> anyhow::Result<Value> {
     let params: GetBlockByHashParams = params.clone().try_into()?;
     let content_key = HistoryContentKey::BlockHeader(BlockHeader {
-        chain_id: 1,
         block_hash: params.block_hash,
     });
     let endpoint = HistoryEndpoint::RecursiveFindContent;

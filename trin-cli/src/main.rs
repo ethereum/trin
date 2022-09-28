@@ -50,27 +50,18 @@ struct JsonRpc {
 enum EncodeKey {
     /// Encode the content key for a block header.
     BlockHeader {
-        /// Unsigned integer chain ID.
-        #[structopt(long)]
-        chain_id: u16,
         /// Hex-encoded block hash (omit '0x' prefix).
         #[structopt(long)]
         block_hash: H256,
     },
     /// Encode the content key for a block body.
     BlockBody {
-        /// Unsigned integer chain ID.
-        #[structopt(long)]
-        chain_id: u16,
         /// Hex-encoded block hash (omit '0x' prefix).
         #[structopt(long)]
         block_hash: H256,
     },
     /// Encode the content key for a block's transaction receipts.
     BlockReceipts {
-        /// Unsigned integer chain ID.
-        #[structopt(long)]
-        chain_id: u16,
         /// Hex-encoded block hash (omit '0x' prefix).
         #[structopt(long)]
         block_hash: H256,
@@ -106,27 +97,17 @@ fn json_rpc(rpc: JsonRpc) -> Result<(), Box<dyn std::error::Error>> {
 
 fn encode_content_key(content_key: EncodeKey) -> Result<(), Box<dyn std::error::Error>> {
     let key = match content_key {
-        EncodeKey::BlockHeader {
-            chain_id,
-            block_hash,
-        } => HistoryContentKey::BlockHeader(BlockHeader {
-            chain_id,
+        EncodeKey::BlockHeader { block_hash } => HistoryContentKey::BlockHeader(BlockHeader {
             block_hash: block_hash.into(),
         }),
-        EncodeKey::BlockBody {
-            chain_id,
-            block_hash,
-        } => HistoryContentKey::BlockBody(BlockBody {
-            chain_id,
+        EncodeKey::BlockBody { block_hash } => HistoryContentKey::BlockBody(BlockBody {
             block_hash: block_hash.into(),
         }),
-        EncodeKey::BlockReceipts {
-            chain_id,
-            block_hash,
-        } => HistoryContentKey::BlockReceipts(BlockReceipts {
-            chain_id,
-            block_hash: block_hash.into(),
-        }),
+        EncodeKey::BlockReceipts { block_hash } => {
+            HistoryContentKey::BlockReceipts(BlockReceipts {
+                block_hash: block_hash.into(),
+            })
+        }
     };
 
     println!("{}", hex::encode(Into::<Vec<u8>>::into(key)));

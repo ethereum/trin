@@ -106,7 +106,6 @@ fn load_file_data(path: &Path, storage: &mut PortalStorage) {
 
                         if block.header.is_some() {
                             let content_key = HistoryContentKey::BlockHeader(BlockHeader {
-                                chain_id: 1u16,
                                 block_hash: block.clone().header.unwrap().hash().into(),
                             });
 

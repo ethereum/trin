@@ -22,9 +22,9 @@ use trin_core::{
 const DATA_RADIUS: Distance = Distance::MAX;
 /// Default enr seq value
 const ENR_SEQ: &str = "1";
-/// Default history header content key presuming chain ID 3
+/// Default history header content key
 pub const HISTORY_CONTENT_KEY: &str =
-    "0x000300720704f3aa11c53cf344ea069db95cecb81ad7453c8f276b2a1062979611f09c";
+    "0x00720704f3aa11c53cf344ea069db95cecb81ad7453c8f276b2a1062979611f09c";
 /// Default history header content value
 pub const HISTORY_CONTENT_VALUE: &str =
     "0xf90222a02c58e3212c085178dbb1277e2f3c24b3f451267a75a234945c15\

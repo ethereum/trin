@@ -203,7 +203,7 @@ cargo run -p trin-cli -- encode-key block-header -h
 Example:
 
 ```sh
-$ cargo run -p trin-cli -- encode-key block-body --chain-id 1 --block-hash 59834fe81c78b1838745e4ac352e455ec23cb542658cbba91a4337759f5bf3fc 
+$ cargo run -p trin-cli -- encode-key block-body --block-hash 59834fe81c78b1838745e4ac352e455ec23cb542658cbba91a4337759f5bf3fc 
 ```
 
 ### Request Content

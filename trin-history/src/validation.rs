@@ -228,7 +228,6 @@ mod tests {
         let header_oracle = default_header_oracle(server.url("/get_header"));
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = HistoryContentKey::BlockHeader(BlockHeader {
-            chain_id: 1,
             block_hash: header.hash().0,
         });
         chain_history_validator
@@ -252,7 +251,6 @@ mod tests {
         let header_oracle = default_header_oracle(server.url("/get_header"));
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = HistoryContentKey::BlockHeader(BlockHeader {
-            chain_id: 1,
             block_hash: header.hash().0,
         });
         chain_history_validator
@@ -277,7 +275,6 @@ mod tests {
         let header_oracle = default_header_oracle(server.url("/get_header"));
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = HistoryContentKey::BlockHeader(BlockHeader {
-            chain_id: 1,
             block_hash: header.hash().0,
         });
         chain_history_validator
@@ -401,7 +398,6 @@ mod tests {
     fn block_14764013_body_key() -> HistoryContentKey {
         let block_hash = block_14764013_hash();
         HistoryContentKey::BlockBody(BlockBodyKey {
-            chain_id: 1,
             block_hash: block_hash.0,
         })
     }
@@ -409,7 +405,6 @@ mod tests {
     fn block_14764013_receipts_key() -> HistoryContentKey {
         let block_hash = block_14764013_hash();
         HistoryContentKey::BlockReceipts(BlockReceipts {
-            chain_id: 1,
             block_hash: block_hash.0,
         })
     }
