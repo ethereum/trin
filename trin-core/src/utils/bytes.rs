@@ -45,6 +45,16 @@ pub fn hex_decode(data: &str) -> anyhow::Result<Vec<u8>> {
     }
 }
 
+/// Returns a compact hex-encoded `String` representation of `data`.
+pub fn hex_encode_compact<T: AsRef<[u8]>>(data: T) -> String {
+    if data.as_ref().len() <= 8 {
+        hex_encode(data)
+    } else {
+        let hex = hex::encode(data);
+        format!("0x{}..{}", &hex[0..4], &hex[hex.len() - 4..])
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

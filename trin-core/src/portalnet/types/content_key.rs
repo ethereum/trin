@@ -6,12 +6,18 @@ use ssz::{self, Decode, Encode};
 use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, FixedVector, VariableList};
 
+use std::fmt;
+
+use crate::utils::bytes;
+
 /// SSZ encoded overlay content key as bytes
 pub type RawContentKey = Vec<u8>;
 
 /// Types whose values represent keys to lookup content items in an overlay network.
 /// Keys are serializable.
-pub trait OverlayContentKey: Into<Vec<u8>> + TryFrom<Vec<u8>> + Clone {
+pub trait OverlayContentKey:
+    Into<Vec<u8>> + TryFrom<Vec<u8>> + Clone + fmt::Debug + fmt::Display
+{
     /// Returns the identifier for the content referred to by the key.
     /// The identifier locates the content in the overlay.
     fn content_id(&self) -> [u8; 32];
@@ -45,6 +51,16 @@ impl TryFrom<Vec<u8>> for IdentityContentKey {
         key_value.copy_from_slice(&value[..32]);
 
         Ok(Self { value: key_value })
+    }
+}
+
+impl fmt::Display for IdentityContentKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Identity {{ value: {} }}",
+            bytes::hex_encode_compact(&self.value)
+        )
     }
 }
 
@@ -182,6 +198,44 @@ impl TryFrom<Vec<u8>> for HistoryContentKey {
     }
 }
 
+impl fmt::Display for HistoryContentKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            Self::BlockHeader(header) => format!(
+                "BlockHeader {{ block_hash: {} }}",
+                bytes::hex_encode_compact(header.block_hash)
+            ),
+            Self::BlockBody(body) => format!(
+                "BlockBody {{ block_hash: {} }}",
+                bytes::hex_encode_compact(body.block_hash)
+            ),
+            Self::BlockReceipts(receipts) => {
+                format!(
+                    "BlockReceipts {{ block_hash: {} }}",
+                    bytes::hex_encode_compact(receipts.block_hash)
+                )
+            }
+            Self::EpochAccumulator(acc) => {
+                format!(
+                    "EpochAccumulator {{ epoch_hash: {} }}",
+                    bytes::hex_encode_compact(acc.epoch_hash.as_fixed_bytes())
+                )
+            }
+            Self::MasterAccumulator(acc) => match acc {
+                MasterAccumulator::Latest(..) => format!("MasterAccumulator (latest)"),
+                MasterAccumulator::MasterHash(hash) => {
+                    format!(
+                        "MasterAccumulator {{ hash: {} }}",
+                        bytes::hex_encode_compact(hash.as_fixed_bytes())
+                    )
+                }
+            },
+        };
+
+        write!(f, "{}", s)
+    }
+}
+
 impl OverlayContentKey for HistoryContentKey {
     fn content_id(&self) -> [u8; 32] {
         let mut sha256 = Sha256::new();
@@ -279,6 +333,50 @@ impl TryFrom<Vec<u8>> for StateContentKey {
             Ok(key) => Ok(key),
             Err(_err) => Err("Unable to decode SSZ"),
         }
+    }
+}
+
+impl fmt::Display for StateContentKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            Self::AccountTrieNode(node) => format!(
+                "AccountTrieNode {{ node_hash: {}, state_root: {} }}",
+                bytes::hex_encode_compact(node.node_hash),
+                bytes::hex_encode_compact(node.state_root)
+            ),
+            Self::ContractStorageTrieNode(node) => {
+                format!(
+                    "ContractStorageTrieNode {{ address: {}, node_hash: {}, state_root: {} }}",
+                    bytes::hex_encode_compact(node.address.to_vec().as_slice()),
+                    bytes::hex_encode_compact(node.node_hash),
+                    bytes::hex_encode_compact(node.state_root)
+                )
+            }
+            Self::AccountTrieProof(proof) => {
+                format!(
+                    "AccountTrieProof {{ address: {}, state_root: {} }}",
+                    bytes::hex_encode_compact(proof.address.to_vec().as_slice()),
+                    bytes::hex_encode_compact(&proof.state_root)
+                )
+            }
+            Self::ContractStorageTrieProof(proof) => {
+                format!(
+                    "ContractStorageTrieProof {{ address: {}, slot: {}, state_root: {} }}",
+                    bytes::hex_encode_compact(proof.address.to_vec().as_slice()),
+                    bytes::hex_encode_compact(Into::<[u8; 32]>::into(proof.slot)),
+                    bytes::hex_encode_compact(proof.state_root)
+                )
+            }
+            Self::ContractBytecode(bytecode) => {
+                format!(
+                    "ContractBytecode {{ address: {}, code_hash: {} }}",
+                    bytes::hex_encode_compact(bytecode.address.to_vec().as_slice()),
+                    bytes::hex_encode_compact(bytecode.code_hash)
+                )
+            }
+        };
+
+        write!(f, "{}", s)
     }
 }
 
