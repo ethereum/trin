@@ -391,7 +391,7 @@ where
                 InsertResult::Failed(reason) => {
                     warn!(
                         protocol = %self.protocol,
-                        bootnode.node_id = %node_id,
+                        bootnode = %node_id,
                         error = ?reason,
                         "Error inserting bootnode into routing table",
                     );
@@ -399,7 +399,7 @@ where
                 _ => {
                     debug!(
                         protocol = %self.protocol,
-                        bootnode.node_id = %node_id,
+                        bootnode = %node_id,
                         "Inserted bootnode into routing table",
                     );
 
@@ -448,8 +448,8 @@ where
                     match command {
                         OverlayCommand::Request(request) => self.process_request(request),
                         OverlayCommand::FindContentQuery { target, callback } => {
-                            if let Some(query_id) = self.init_find_content_query(target, Some(callback)) {
-                                trace!(query.id = %query_id, "FindContent query initialized");
+                            if let Some(query_id) = self.init_find_content_query(target.clone(), Some(callback)) {
+                                trace!(query.id = %query_id, content.id = %hex_encode(target.content_id()), "FindContent query initialized");
                             }
                         }
                     }
@@ -471,7 +471,7 @@ where
                         }
 
                     } else {
-                        warn!(request.id = %response.request_id, "No request found for response");
+                        warn!(request.id = %hex_encode(response.request_id.to_be_bytes()), "No request found for response");
                     }
                 }
                 Some(Ok(node_id)) = self.peers_to_ping.next() => {
@@ -540,7 +540,7 @@ where
             let target_bucket = buckets.choose(&mut rand::thread_rng());
             let random_node_id_in_bucket = match target_bucket {
                 Some(bucket) => {
-                    trace!(protocol = %self.protocol, bucket= %bucket.0, "Refreshing routing table bucket");
+                    trace!(protocol = %self.protocol, bucket = %bucket.0, "Refreshing routing table bucket");
                     match u8::try_from(bucket.0) {
                         Ok(idx) => self.generate_random_node_id(idx),
                         Err(err) => {
@@ -650,7 +650,7 @@ where
                 } else {
                     error!(
                         protocol = %self.protocol,
-                        peer.node_id = %node_id,
+                        peer = %node_id,
                         query.id = %query_id,
                         "Cannot query peer with unknown ENR",
                     );
@@ -729,7 +729,7 @@ where
                     // node, so fail the query for this node.
                     error!(
                         protocol = %self.protocol,
-                        peer.node_id = %node_id,
+                        peer = %node_id,
                         query.id = %query_id,
                         "Cannot query peer with unknown ENR"
                     );
@@ -755,7 +755,7 @@ where
                 } = query_info.query_type
                 {
                     // Send (possibly `None`) content on callback channel.
-                    if let Err(err) = callback.send(content) {
+                    if let Err(err) = callback.send(content.clone()) {
                         error!(
                             query.id = %query_id,
                             error = ?err,
@@ -1172,9 +1172,9 @@ where
     ) {
         debug!(
             protocol = %self.protocol,
-            request.id = %request_id,
+            request.id = %hex_encode(request_id.to_be_bytes()),
             request.dest = %destination.node_id(),
-            request.error = %error,
+            error = %error,
             "Request failed",
         );
 
@@ -1333,7 +1333,7 @@ where
             // send the content to the acceptor over a uTP stream
             if let Err(err) = conn.send_to(&content_payload).await {
                 warn!(
-                    utp.error = %err,
+                    error = %err,
                     utp.conn_id = %conn_id,
                     utp.peer = %conn.connected_to,
                     "Error sending content over uTP connection"
@@ -1342,7 +1342,7 @@ where
             // Close uTP connection
             if let Err(err) = conn.close().await {
                 warn!(
-                    utp.error = %err,
+                    error = %err,
                     utp.conn_id = %conn_id,
                     utp.peer = %conn.connected_to,
                     "Error closing uTP connection"
@@ -1684,7 +1684,7 @@ where
     fn ping_node(&self, destination: &Enr) {
         trace!(
             protocol = %self.protocol,
-            message.dest = %destination.node_id(),
+            request.dest = %destination.node_id(),
             "Sending Ping message",
         );
 

@@ -666,12 +666,13 @@ where
         let (tx, rx) = oneshot::channel();
         let content_id = target.content_id();
 
-        if let Err(_) = self.command_tx.send(OverlayCommand::FindContentQuery {
+        if let Err(err) = self.command_tx.send(OverlayCommand::FindContentQuery {
             target,
             callback: tx,
         }) {
             warn!(
                 protocol = %self.protocol,
+                error = %err,
                 content.id = %hex_encode(content_id),
                 "Error submitting FindContent query to service"
             );
