@@ -54,7 +54,7 @@ use crate::{
         Enr,
     },
     types::validation::Validator,
-    utils::{bytes::hex_encode, node_id, portal_wire},
+    utils::{bytes::hex_encode_compact, node_id, portal_wire},
     utp::{
         stream::{UtpListenerRequest, UtpStream, BUF_SIZE},
         trin_helpers::UtpStreamId,
@@ -449,7 +449,12 @@ where
                         OverlayCommand::Request(request) => self.process_request(request),
                         OverlayCommand::FindContentQuery { target, callback } => {
                             if let Some(query_id) = self.init_find_content_query(target.clone(), Some(callback)) {
-                                trace!(query.id = %query_id, content.id = %hex_encode(target.content_id()), "FindContent query initialized");
+                                trace!(
+                                    query.id = %query_id,
+                                    content.id = %hex_encode_compact(target.content_id()),
+                                    content.key = %target,
+                                    "FindContent query initialized"
+                                );
                             }
                         }
                     }
@@ -471,7 +476,7 @@ where
                         }
 
                     } else {
-                        warn!(request.id = %hex_encode(response.request_id.to_be_bytes()), "No request found for response");
+                        warn!(request.id = %hex_encode_compact(response.request_id.to_be_bytes()), "No request found for response");
                     }
                 }
                 Some(Ok(node_id)) = self.peers_to_ping.next() => {
@@ -808,7 +813,8 @@ where
                 if let Ok(..) = self.command_tx.send(OverlayCommand::Request(request)) {
                     trace!(
                         protocol = %self.protocol,
-                        content.id = ?content_id,
+                        content.id = %hex_encode_compact(content_id),
+                        content.key = %content_key,
                         peer.node_id = %node_id,
                         "Content poked"
                     );
@@ -1172,7 +1178,7 @@ where
     ) {
         debug!(
             protocol = %self.protocol,
-            request.id = %hex_encode(request_id.to_be_bytes()),
+            request.id = %hex_encode_compact(request_id.to_be_bytes()),
             request.dest = %destination.node_id(),
             error = %error,
             "Request failed",
@@ -1462,23 +1468,39 @@ where
                         .validate_content(&content_key, &content.to_vec())
                         .await
                     {
-                        warn!(error = ?err, content.id = %hex_encode(content_id), "Error validating content");
+                        warn!(
+                            error = ?err,
+                            content.id = %hex_encode_compact(content_id),
+                            content.key = %content_key,
+                            "Error validating content"
+                        );
                         return;
                     };
 
                     if let Err(err) = store.write().put(content_key.clone(), content.to_vec()) {
-                        error!(error = %err, content.id = %hex_encode(content_id), "Error storing content")
+                        error!(
+                            error = %err,
+                            content.id = %hex_encode_compact(content_id),
+                            content.key = %content_key,
+                            "Error storing content"
+                        );
                     }
                 });
             }
             Ok(false) => {
                 debug!(
-                    content.id = %hex_encode(content_id),
+                    content.id = %hex_encode_compact(content_id),
+                    content.key = %content_key,
                     "Content not stored (key outside radius or already stored)"
                 );
             }
             Err(err) => {
-                error!(error = %err, content.id = %hex_encode(content_id), "Error storing content");
+                error!(
+                    error = %err,
+                    content.id = %hex_encode_compact(content_id),
+                    content.key = %content_key,
+                    "Error storing content"
+                );
             }
         }
     }
