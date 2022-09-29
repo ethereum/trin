@@ -287,20 +287,28 @@ fn serve_http_client(
         }
     };
     let deser = serde_json::Deserializer::from_str(&http_body);
-    for obj in deser.into_iter::<JsonRequest>() {
-        let obj = match obj {
-            Ok(val) => val,
-            Err(msg) => {
-                respond_with_parsing_error(stream, msg.to_string());
-                break;
-            }
-        };
-        let formatted_response = match obj.validate() {
-            Ok(_) => process_http_request(obj, trusted_provider.clone(), portal_tx.clone()),
-            Err(e) => format!("HTTP/1.1 400 BAD REQUEST\r\n\r\n{}", e).into_bytes(),
-        };
-        stream.write_all(&formatted_response).unwrap();
-        stream.flush().unwrap();
+    let mut json_objects = deser.into_iter::<JsonRequest>();
+
+    // Currently we assume a single JSON-RPC object within each received request.
+    // Other valid JSON objects contained within the request will currently be ignored.
+    let obj = json_objects.next();
+    match obj {
+        None => respond_with_parsing_error(stream, "No valid JSON object in request.".to_string()),
+        Some(obj) => {
+            let obj = match obj {
+                Ok(val) => val,
+                Err(msg) => {
+                    respond_with_parsing_error(stream, msg.to_string());
+                    return;
+                }
+            };
+            let formatted_response = match obj.validate() {
+                Ok(_) => process_http_request(obj, trusted_provider, portal_tx),
+                Err(e) => format!("HTTP/1.1 400 BAD REQUEST\r\n\r\n{}", e).into_bytes(),
+            };
+            stream.write_all(&formatted_response).unwrap();
+            stream.flush().unwrap();
+        }
     }
 }
 

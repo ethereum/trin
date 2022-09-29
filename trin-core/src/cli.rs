@@ -105,7 +105,7 @@ pub struct TrinConfig {
 
     #[structopt(
         long = "enable-metrics-with-url",
-        help = "Enable prometheus metrics reporting (requires URL for prometheus server)"
+        help = "Enable prometheus metrics reporting (provide local IP/Port from which your Prometheus server is configured to fetch metrics)"
     )]
     pub enable_metrics_with_url: Option<SocketAddr>,
 

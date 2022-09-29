@@ -1,3 +1,5 @@
+pub mod dashboard;
+
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
 #[cfg(windows)]
@@ -10,6 +12,7 @@ use serde_json::value::RawValue;
 use structopt::StructOpt;
 use thiserror::Error;
 
+use dashboard::grafana::GrafanaAPI;
 use trin_core::cli::DEFAULT_WEB3_IPC_PATH;
 use trin_core::portalnet::types::content_key::{
     BlockBody, BlockHeader, BlockReceipts, HistoryContentKey,
@@ -25,6 +28,7 @@ use trin_core::portalnet::types::content_key::{
 enum Trin {
     JsonRpc(JsonRpc),
     EncodeKey(EncodeKey),
+    CreateDashboard(DashboardConfig),
 }
 
 /// Run JSON-RPC commands against a trin node.
@@ -68,10 +72,30 @@ enum EncodeKey {
     },
 }
 
+#[derive(StructOpt)]
+#[allow(clippy::enum_variant_names)]
+struct DashboardConfig {
+    #[structopt(default_value = "http://localhost:3000")]
+    grafana_address: String,
+
+    #[structopt(default_value = "admin")]
+    grafana_username: String,
+
+    #[structopt(default_value = "admin")]
+    grafana_password: String,
+
+    #[structopt(default_value = "http://host.docker.internal:8545")]
+    trin_rpc_address: String,
+
+    #[structopt(default_value = "http://host.docker.internal:9090")]
+    prometheus_address: String,
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     match Trin::from_args() {
         Trin::JsonRpc(rpc) => json_rpc(rpc),
         Trin::EncodeKey(content_key) => encode_content_key(content_key),
+        Trin::CreateDashboard(dashboard_config) => create_dashboard(dashboard_config),
     }
 }
 
@@ -112,6 +136,32 @@ fn encode_content_key(content_key: EncodeKey) -> Result<(), Box<dyn std::error::
 
     println!("{}", hex::encode(Into::<Vec<u8>>::into(key)));
 
+    Ok(())
+}
+
+fn create_dashboard(dashboard_config: DashboardConfig) -> Result<(), Box<dyn std::error::Error>> {
+    let grafana = GrafanaAPI::new(
+        dashboard_config.grafana_username,
+        dashboard_config.grafana_password,
+        dashboard_config.grafana_address,
+    );
+
+    // Create JSON-HTTP Datasource
+    let json_rpc_uid = grafana.create_datasource(
+        "yesoreyeram-infinity-datasource".to_string(),
+        "json-rpc".to_string(),
+        dashboard_config.trin_rpc_address,
+    )?;
+
+    let prometheus_uid = grafana.create_datasource(
+        "prometheus".to_string(),
+        "prometheus".to_string(),
+        dashboard_config.prometheus_address,
+    )?;
+
+    let dashboard_url = grafana.create_dashboard(json_rpc_uid, prometheus_uid)?;
+
+    println!("Dashboard successfully created: {}", dashboard_url);
     Ok(())
 }
 

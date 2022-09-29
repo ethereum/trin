@@ -839,6 +839,13 @@ where
                         query_id: request.query_id,
                     },
                 );
+                self.metrics.as_ref().and_then(|m| match request.request {
+                    Request::Ping(_) => Some(m.report_outbound_ping()),
+                    Request::FindNodes(_) => Some(m.report_outbound_find_nodes()),
+                    Request::FindContent(_) => Some(m.report_outbound_find_content()),
+                    Request::Offer(_) => Some(m.report_outbound_offer()),
+                    Request::PopulatedOffer(_) => Some(m.report_outbound_offer()),
+                });
                 self.send_talk_req(request.request, request.id, destination);
             }
         }
@@ -1665,6 +1672,7 @@ where
                     "New connected node added to routing table. Node: {}",
                     node_id
                 );
+
                 self.peers_to_ping.insert(node_id);
             }
             InsertResult::Pending { disconnected } => {
@@ -1715,6 +1723,7 @@ where
         state: ConnectionState,
     ) -> Result<(), FailureReason> {
         let key = kbucket::Key::from(node_id);
+
         match self.kbuckets.write().update_node_status(&key, state, None) {
             UpdateResult::Failed(reason) => match reason {
                 FailureReason::KeyNonExistant => Err(FailureReason::KeyNonExistant),

@@ -216,16 +216,18 @@ cargo run -p trin-cli -- json-rpc portal_historyFindContent --params <enr>,<cont
 
 ### Setting up local metrics reporting
 
-1. Install [Grafana & Prometheus](https://grafana.com/docs/grafana/latest/getting-started/getting-started-prometheus/)
-2. Configure your Prometheus server to target an open port to where `prometheus_exporter` will export Trin metrics.
-3. Start your Trin process with `--enable-metrics-with-url 127.0.0.1:9100` as flags
-	- The `--enable-metrics-with-url` parameter is the address for `prometheus_exporter` to export metrics to, and should be equal to the port to which your Prometheus server is targeting.
-4. Navigate to the URL on which Grafana is running in your browser (probably `localhost:3000`) and login.
-5. Add your Prometheus server as a Data Source, using the URL on which your Prometheus server is running.
-6. Use the "Import" dashboard feature in Grafana to create your Trin dashboard, and copy and paste `metrics_dashboard.json` as the template.
-7. You should now be able to see live metrics reporting for your Trin node.
+1. Install Docker.
+2. Run Prometheus: `docker run -d -p 9090:9090 -v /absolute/path/to/trin/docs/metrics_config:/etc/prometheus prom/prometheus`. Set the correct absolute path to your copy of Trin's `docs/metrics_config/`.
+3. Run Grafana: `docker run -d -p 3000:3000 -e "GF_INSTALL_PLUGINS=yesoreyeram-infinity-datasource" grafana/grafana:latest`.
+4. Start your Trin process with `--enable-metrics-with-url 127.0.0.1:9100 --web3-transport http`.
+	- The `--enable-metrics-with-url` parameter is the address that Trin exports metrics to, and should be equal to the port to which your Prometheus server is targeting at the bottom of `metrics_config/prometheus.yml`. 
+    - The `--web-transport http` will allow Grafana to request routing table information from Trin via JSON-RPC over HTTP.
+5. From the root of the Trin repo, run `cargo run -p trin-cli -- create-dashboard`. If you used different ports than detailed in the above steps, or you are not using docker, then this command's defaults will not work. Run the command with the `-h` flag to see how to provide non-default addresses or credentials. 
+6. Upon successful dashboard creation, navigate to the dashboard URL that the `create-dashboard` outputs. Use `admin`/`admin` to login.
 
 ## Gotchas
+
+- If `create-dashboard` fails with an error, the most likely reason is that it has already been run. From within the Grafana UI, delete the "json-rpc" and    "prometheus" datasources and the "trin" dashboard and re-run the command. 
 
 - There is a limit on concurrent connections given by the threadpool. At last
   doc update, that number was 2, but will surely change. If you leave

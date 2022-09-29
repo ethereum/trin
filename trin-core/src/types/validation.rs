@@ -14,9 +14,12 @@ use crate::{
     },
     portalnet::{
         storage::{ContentStore, PortalStorage, PortalStorageConfig},
-        types::content_key::{
-            HistoryContentKey, IdentityContentKey, MasterAccumulator as MasterAccumulatorKey,
-            SszNone,
+        types::{
+            content_key::{
+                HistoryContentKey, IdentityContentKey, MasterAccumulator as MasterAccumulatorKey,
+                SszNone,
+            },
+            messages::ProtocolId,
         },
     },
     types::{accumulator::MasterAccumulator, header::Header},
@@ -39,7 +42,9 @@ pub struct HeaderOracle {
 
 impl HeaderOracle {
     pub fn new(trusted_provider: TrustedProvider, storage_config: PortalStorageConfig) -> Self {
-        let portal_storage = Arc::new(RwLock::new(PortalStorage::new(storage_config).unwrap()));
+        let portal_storage = Arc::new(RwLock::new(
+            PortalStorage::new(storage_config, ProtocolId::History).unwrap(),
+        ));
         Self {
             trusted_provider,
             history_jsonrpc_tx: None,

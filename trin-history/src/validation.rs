@@ -377,7 +377,7 @@ mod tests {
 
     fn default_header_oracle(infura_url: String) -> Arc<RwLock<HeaderOracle>> {
         let node_id = NodeId::random();
-        let storage_config = PortalStorageConfig::new(100, node_id);
+        let storage_config = PortalStorageConfig::new(100, node_id, false);
         let trusted_provider = TrustedProvider {
             http: ureq::post(&infura_url),
             ws: None,

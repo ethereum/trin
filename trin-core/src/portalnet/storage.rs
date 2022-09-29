@@ -7,6 +7,10 @@ use std::{
 
 use discv5::enr::NodeId;
 use hex;
+use prometheus_exporter::{
+    self,
+    prometheus::{register_gauge, Gauge},
+};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rocksdb::{Options, DB};
@@ -17,7 +21,7 @@ use super::types::{
     content_key::OverlayContentKey,
     distance::{Distance, Metric, XorMetric},
 };
-use crate::utils::db::get_data_dir;
+use crate::{portalnet::types::messages::ProtocolId, utils::db::get_data_dir};
 
 // TODO: Replace enum with generic type parameter. This will require that we have a way to
 // associate a "find farthest" query with the generic Metric.
@@ -225,10 +229,11 @@ pub struct PortalStorageConfig {
     pub db: Arc<rocksdb::DB>,
     pub accumulator_db: Arc<rocksdb::DB>,
     pub sql_connection_pool: Pool<SqliteConnectionManager>,
+    pub metrics_enabled: bool,
 }
 
 impl PortalStorageConfig {
-    pub fn new(storage_capacity_kb: u64, node_id: NodeId) -> Self {
+    pub fn new(storage_capacity_kb: u64, node_id: NodeId, metrics_enabled: bool) -> Self {
         let db = Arc::new(PortalStorage::setup_rocksdb(node_id).unwrap());
         let accumulator_db = Arc::new(PortalStorage::setup_accumulatordb(node_id).unwrap());
         let sql_connection_pool = PortalStorage::setup_sql(node_id).unwrap();
@@ -239,6 +244,7 @@ impl PortalStorageConfig {
             db,
             accumulator_db,
             sql_connection_pool,
+            metrics_enabled,
         }
     }
 }
@@ -254,6 +260,8 @@ pub struct PortalStorage {
     accumulator_db: Arc<rocksdb::DB>,
     sql_connection_pool: Pool<SqliteConnectionManager>,
     distance_fn: DistanceFunction,
+    metrics: Option<StorageMetrics>,
+    protocol: ProtocolId,
 }
 
 impl ContentStore for PortalStorage {
@@ -299,7 +307,10 @@ impl ContentStore for PortalStorage {
 impl PortalStorage {
     /// Public constructor for building a `PortalStorage` object.
     /// Checks whether a populated database already exists vs a fresh instance.
-    pub fn new(config: PortalStorageConfig) -> Result<Self, ContentStoreError> {
+    pub fn new(
+        config: PortalStorageConfig,
+        protocol: ProtocolId,
+    ) -> Result<Self, ContentStoreError> {
         // Initialize the instance
         let mut storage = Self {
             node_id: config.node_id,
@@ -310,6 +321,8 @@ impl PortalStorage {
             farthest_content_id: None,
             sql_connection_pool: config.sql_connection_pool,
             distance_fn: config.distance_fn,
+            metrics: None,
+            protocol: protocol,
         };
 
         // Check whether we already have data, and if so
@@ -323,6 +336,35 @@ impl PortalStorage {
             }
             // No farthest key found, carry on with blank slate settings
             None => (),
+        }
+
+        if config.metrics_enabled {
+            let metrics = StorageMetrics::new(&storage.protocol);
+            storage.metrics = Some(metrics);
+
+            // Report current storage capacity.
+            storage.metrics.as_ref().and_then(|metrics| {
+                Some(
+                    metrics
+                        .report_storage_capacity(storage.storage_capacity_in_bytes as f64 / 1000.0),
+                )
+            });
+
+            // Report current total storage usage.
+            let total_storage_usage = storage.get_total_storage_usage_in_bytes_on_disk()?;
+            storage.metrics.as_ref().and_then(|metrics| {
+                Some(metrics.report_total_storage_usage(total_storage_usage as f64 / 1000.0))
+            });
+
+            // Report total storage used by network content.
+            let network_content_storage_usage =
+                storage.get_total_storage_usage_in_bytes_from_network()?;
+            storage.metrics.as_ref().and_then(|metrics| {
+                Some(
+                    metrics
+                        .report_content_data_storage(network_content_storage_usage as f64 / 1000.0),
+                )
+            });
         }
 
         Ok(storage)
@@ -422,6 +464,11 @@ impl PortalStorage {
             }
         }
 
+        if let Some(metrics) = &self.metrics {
+            let total_bytes_on_disk = self.get_total_storage_usage_in_bytes_on_disk()?;
+            metrics.report_total_storage_usage(total_bytes_on_disk as f64 / 1000.0)
+        }
+
         Ok(())
     }
 
@@ -434,7 +481,12 @@ impl PortalStorage {
     /// Intended for analysis purposes. PortalStorage's capacity decision-making is not based off of this method.
     /// Does not include accumulator database.
     pub fn get_total_storage_usage_in_bytes_on_disk(&self) -> Result<u64, ContentStoreError> {
-        Ok(self.get_total_size_of_directory_in_bytes(get_data_dir(self.node_id))?)
+        let storage_usage =
+            self.get_total_size_of_directory_in_bytes(get_data_dir(self.node_id))?;
+        self.metrics.as_ref().and_then(|metrics| {
+            Some(metrics.report_total_storage_usage(storage_usage as f64 / 1000.0))
+        });
+        Ok(storage_usage)
     }
 
     /// Internal method for inserting data into the db.
@@ -497,7 +549,11 @@ impl PortalStorage {
         }?
         .sum;
 
-        Ok(sum)
+        self.metrics
+            .as_ref()
+            .and_then(|metrics| Some(metrics.report_content_data_storage(sum as f64 / 1000.0)));
+
+        Ok(sum as u64)
     }
 
     /// Internal method for finding the piece of stored data that has the farthest content id from our
@@ -632,6 +688,48 @@ impl PortalStorage {
     }
 }
 
+#[derive(Debug)]
+struct StorageMetrics {
+    content_storage_usage_kb: Gauge,
+    total_storage_usage_kb: Gauge,
+    storage_capacity_kb: Gauge,
+}
+
+impl StorageMetrics {
+    pub fn new(protocol: &ProtocolId) -> Self {
+        let content_storage_usage_kb = register_gauge!(
+            format!("trin_content_storage_usage_kb_{:?}", protocol),
+            "help"
+        )
+        .unwrap();
+        let total_storage_usage_kb = register_gauge!(
+            format!("trin_total_storage_usage_kb_{:?}", protocol),
+            "help"
+        )
+        .unwrap();
+        let storage_capacity_kb =
+            register_gauge!(format!("trin_storage_capacity_kb_{:?}", protocol), "help").unwrap();
+
+        Self {
+            content_storage_usage_kb,
+            total_storage_usage_kb,
+            storage_capacity_kb,
+        }
+    }
+
+    pub fn report_content_data_storage(&self, kb: f64) {
+        self.content_storage_usage_kb.set(kb);
+    }
+
+    pub fn report_total_storage_usage(&self, kb: f64) {
+        self.total_storage_usage_kb.set(kb);
+    }
+
+    pub fn report_storage_capacity(&self, kb: f64) {
+        self.storage_capacity_kb.set(kb);
+    }
+}
+
 // SQLite Statements
 const CREATE_QUERY: &str = "create table if not exists content_metadata (
                                 content_id_long TEXT PRIMARY KEY,
@@ -652,7 +750,7 @@ const XOR_FIND_FARTHEST_QUERY: &str = "SELECT
                                     FROM content_metadata
                                     ORDER BY ((?1 | content_id_short) - (?1 & content_id_short)) DESC";
 
-const TOTAL_DATA_SIZE_QUERY: &str = "SELECT SUM(content_size) FROM content_metadata";
+const TOTAL_DATA_SIZE_QUERY: &str = "SELECT TOTAL(content_size) FROM content_metadata";
 
 // SQLite Result Containers
 struct ContentId {
@@ -660,7 +758,7 @@ struct ContentId {
 }
 
 struct DataSizeSum {
-    sum: u64,
+    sum: f64,
 }
 
 #[cfg(test)]
@@ -699,8 +797,8 @@ pub mod test {
 
         let node_id = NodeId::random();
 
-        let storage_config = PortalStorageConfig::new(CAPACITY, node_id);
-        let storage = PortalStorage::new(storage_config)?;
+        let storage_config = PortalStorageConfig::new(CAPACITY, node_id, false);
+        let storage = PortalStorage::new(storage_config, ProtocolId::History)?;
 
         // Assert that configs match the storage object's fields
         assert_eq!(storage.node_id, node_id);
@@ -718,8 +816,8 @@ pub mod test {
             let temp_dir = setup_temp_dir();
 
             let node_id = NodeId::random();
-            let storage_config = PortalStorageConfig::new(CAPACITY, node_id);
-            let mut storage = PortalStorage::new(storage_config).unwrap();
+            let storage_config = PortalStorageConfig::new(CAPACITY, node_id, false);
+            let mut storage = PortalStorage::new(storage_config, ProtocolId::History).unwrap();
             let content_key = generate_random_content_key();
             let mut value = [0u8; 32];
             rand::thread_rng().fill_bytes(&mut value);
@@ -741,8 +839,8 @@ pub mod test {
         let temp_dir = setup_temp_dir();
 
         let node_id = NodeId::random();
-        let storage_config = PortalStorageConfig::new(CAPACITY, node_id);
-        let mut storage = PortalStorage::new(storage_config)?;
+        let storage_config = PortalStorageConfig::new(CAPACITY, node_id, false);
+        let mut storage = PortalStorage::new(storage_config, ProtocolId::History)?;
         let content_key = generate_random_content_key();
         let value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
         storage.store(&content_key, &value)?;
@@ -762,8 +860,8 @@ pub mod test {
         let temp_dir = setup_temp_dir();
 
         let node_id = NodeId::random();
-        let storage_config = PortalStorageConfig::new(10, node_id);
-        let mut storage = PortalStorage::new(storage_config)?;
+        let storage_config = PortalStorageConfig::new(10, node_id, false);
+        let mut storage = PortalStorage::new(storage_config, ProtocolId::History)?;
         let master_accumulator_content_key = IdentityContentKey::new(LATEST_MASTER_ACC_CONTENT_ID);
         let master_accumulator_value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
 
@@ -801,8 +899,8 @@ pub mod test {
         let temp_dir = setup_temp_dir();
 
         let node_id = NodeId::random();
-        let storage_config = PortalStorageConfig::new(CAPACITY, node_id);
-        let mut storage = PortalStorage::new(storage_config)?;
+        let storage_config = PortalStorageConfig::new(CAPACITY, node_id, false);
+        let mut storage = PortalStorage::new(storage_config, ProtocolId::History)?;
 
         let content_key = generate_random_content_key();
         let value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
@@ -823,8 +921,8 @@ pub mod test {
         let temp_dir = setup_temp_dir();
 
         let node_id = NodeId::random();
-        let storage_config = PortalStorageConfig::new(CAPACITY, node_id);
-        let storage = PortalStorage::new(storage_config)?;
+        let storage_config = PortalStorageConfig::new(CAPACITY, node_id, false);
+        let storage = PortalStorage::new(storage_config, ProtocolId::History)?;
 
         let result = storage.find_farthest_content_id()?;
         assert!(result.is_none());
@@ -842,8 +940,8 @@ pub mod test {
 
             let node_id = NodeId::random();
             let val = vec![0x00, 0x01, 0x02, 0x03, 0x04];
-            let storage_config = PortalStorageConfig::new(CAPACITY, node_id);
-            let mut storage = PortalStorage::new(storage_config).unwrap();
+            let storage_config = PortalStorageConfig::new(CAPACITY, node_id, false);
+            let mut storage = PortalStorage::new(storage_config, ProtocolId::History).unwrap();
             storage.store(&x, &val).unwrap();
             storage.store(&y, &val).unwrap();
 
