@@ -16,17 +16,17 @@ const STUN_SERVER: &str = "159.223.0.83:3478";
 /// - Returns the public IP and port that corresponds to your local port
 pub fn stun_for_external(local_socket_addr: &SocketAddr) -> Option<SocketAddr> {
     let socket = UdpSocket::bind(local_socket_addr).unwrap();
-    info!("Blocking: connecting to STUN server to find public network endpoint");
+    info!("Connecting to STUN server to find public network endpoint");
     let external_addr =
         stunclient::StunClient::new(STUN_SERVER.parse().unwrap()).query_external_address(&socket);
 
     match external_addr {
         Ok(addr) => {
-            debug!("STUN gave us a public address: {:?}", addr);
+            debug!(addr = ?addr, "Public address returned from STUN server");
             Some(addr)
         }
         Err(err) => {
-            debug!("Failed to setup STUN traversal: {:?}", err);
+            debug!(error = %err, "Error setting up STUN traversal");
             None
         }
     }
