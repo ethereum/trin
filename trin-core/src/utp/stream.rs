@@ -259,20 +259,25 @@ impl UtpListener {
                                     "Sending content data via uTP with len: {}",
                                     content_data.len()
                                 );
-                                // send the content to the requestor over a uTP stream
-                                if let Err(msg) = conn
+                                // send the content to the requester over a uTP stream
+                                let result = conn
                                     .send_to(
                                         &UtpMessage::new(content_data.as_ssz_bytes()).encode()[..],
                                     )
-                                    .await
-                                {
-                                    error!("Error sending content {msg}");
-                                } else {
-                                    // Close uTP connection
-                                    if let Err(msg) = conn.close().await {
+                                    .await;
+
+                                if let Err(err) = result {
+                                    error!("Error sending content {err}");
+                                    return;
+                                }
+
+                                // Close uTP connection
+                                let mut conn_clone = conn.clone();
+                                tokio::spawn(async move {
+                                    if let Err(msg) = conn_clone.close().await {
                                         error!("Unable to close uTP connection!: {msg}")
                                     }
-                                };
+                                });
                             }
                         } else {
                             warn!(
@@ -282,10 +287,17 @@ impl UtpListener {
                     }
                     // Receive DATA and FIN packets
                     PacketType::Data => {
-                        if let Some(conn) = self
-                            .utp_connections
-                            .get_mut(&ConnectionKey::new(*node_id, connection_id.wrapping_sub(1)))
-                        {
+                        let conn_key = ConnectionKey::new(*node_id, connection_id);
+                        let mut conn = self.utp_connections.get_mut(&conn_key);
+
+                        // To resolve bidirectional uTP packets, we also check for a key with connection_id - 1
+                        if conn.is_none() {
+                            let conn_key =
+                                ConnectionKey::new(*node_id, connection_id.wrapping_sub(1));
+                            conn = self.utp_connections.get_mut(&conn_key);
+                        }
+
+                        if let Some(conn) = conn {
                             if conn.discv5_tx.send(packet.clone()).is_err() {
                                 error!("Unable to send DATA packet to uTP stream handler");
                                 return;
@@ -304,7 +316,7 @@ impl UtpListener {
                             }
                         } else {
                             warn!(
-                                "Received DATA packet for an unknown active uTP stream: {packet:?}"
+                                "Received DATA packet for an unknown active uTP stream: {packet:?}, stream id: {}", connection_id
                             )
                         }
                     }
@@ -343,9 +355,20 @@ impl UtpListener {
                             .utp_connections
                             .get_mut(&ConnectionKey::new(*node_id, connection_id))
                         {
-                            // Do not handle the packet here, send it to uTP socket layer
-                            if conn.discv5_tx.send(packet).is_err() {
-                                error!("Unable to send FIN packet to uTP stream handler");
+                            if conn.state == StreamState::Connected {
+                                // Do not handle the packet here, send it to uTP socket layer
+                                if conn.discv5_tx.send(packet).is_err() {
+                                    error!("Unable to send FIN packet to uTP stream handler");
+                                }
+
+                                let mut buf = [0; BUF_SIZE];
+
+                                match conn.recv(&mut buf).await {
+                                    Ok(_) => {
+                                        conn.emit_close_event();
+                                    }
+                                    Err(err) => error!("Unable to receive uTP FIN packet: {err}"),
+                                }
                             }
                         } else {
                             warn!(
@@ -354,10 +377,16 @@ impl UtpListener {
                         }
                     }
                     PacketType::State => {
-                        if let Some(conn) = self
-                            .utp_connections
-                            .get_mut(&ConnectionKey::new(*node_id, connection_id))
-                        {
+                        let conn_key = ConnectionKey::new(*node_id, connection_id);
+                        let mut conn = self.utp_connections.get_mut(&conn_key);
+
+                        // To resolve bidirectional uTP packets, we also check for a key with connection_id - 1
+                        if conn.is_none() {
+                            let conn_key =
+                                ConnectionKey::new(*node_id, connection_id.wrapping_sub(1));
+                            conn = self.utp_connections.get_mut(&conn_key);
+                        }
+                        if let Some(conn) = conn {
                             if conn.discv5_tx.send(packet).is_err() {
                                 error!("Unable to send STATE packet to uTP stream handler");
                             }

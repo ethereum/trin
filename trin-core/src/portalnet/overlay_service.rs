@@ -940,13 +940,7 @@ where
                     // Listen for incoming uTP connection request on as part of uTP handshake and
                     // storing content data, so we can send it inside UtpListener right after we receive
                     // SYN packet from the requester
-                    let conn_id_recv = conn_id.wrapping_add(1);
-
-                    self.add_utp_connection(
-                        source,
-                        conn_id_recv,
-                        UtpStreamId::ContentStream(content),
-                    )?;
+                    self.add_utp_connection(source, conn_id, UtpStreamId::ContentStream(content))?;
 
                     // Connection id is send as BE because uTP header values are stored also as BE
                     Ok(Content::ConnectionId(conn_id.to_be()))
@@ -1353,7 +1347,7 @@ where
             Content::ConnectionId(id) => debug!(
                 protocol = %self.protocol,
                 "Skipping processing for content connection ID {}",
-                id
+                u16::from_be(id)
             ),
             Content::Content(content) => {
                 self.process_received_content(content.clone(), request);
