@@ -925,7 +925,6 @@ where
                 ))
             }
         };
-
         match self.store.read().get(&content_key) {
             Ok(Some(value)) => {
                 let content = ByteList::from(VariableList::from(value));

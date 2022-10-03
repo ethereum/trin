@@ -1,15 +1,18 @@
+use std::sync::Arc;
+
 use anyhow::anyhow;
 use serde_json::{json, Value};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, RwLock};
 
 use crate::{
     jsonrpc::{
         endpoints::HistoryEndpoint,
         handlers::proxy_query_to_history_subnet,
-        types::{GetBlockByHashParams, HistoryJsonRpcRequest, Params},
+        types::{GetBlockByHashParams, GetBlockByNumberParams, HistoryJsonRpcRequest, Params},
     },
     portalnet::types::content_key::{BlockHeader, HistoryContentKey},
     types::header::Header,
+    types::validation::{HeaderOracle, MERGE_BLOCK_NUMBER},
     utils::bytes::{hex_decode, hex_encode},
 };
 
@@ -18,7 +21,7 @@ pub async fn get_block_by_hash(
     params: Params,
     history_jsonrpc_tx: &Option<mpsc::UnboundedSender<HistoryJsonRpcRequest>>,
 ) -> anyhow::Result<Value> {
-    let params: GetBlockByHashParams = params.clone().try_into()?;
+    let params: GetBlockByHashParams = params.try_into()?;
     let content_key = HistoryContentKey::BlockHeader(BlockHeader {
         block_hash: params.block_hash,
     });
@@ -42,4 +45,32 @@ pub async fn get_block_by_hash(
         Ok(_) => Err(anyhow!("Invalid JSON value")),
         Err(err) => Err(err),
     }
+}
+
+/// eth_getBlockByNumber
+pub async fn get_block_by_number(
+    params: Params,
+    header_oracle: Arc<RwLock<HeaderOracle>>,
+) -> anyhow::Result<Value> {
+    let params: GetBlockByNumberParams = params.try_into()?;
+    if params.block_number > MERGE_BLOCK_NUMBER {
+        return Err(anyhow!(
+            "eth_getBlockByNumber not currently supported for blocks after the merge (#{:?})",
+            MERGE_BLOCK_NUMBER
+        ));
+    }
+    let block_hash = header_oracle
+        .read()
+        .await
+        .get_hash_at_height(params.block_number)
+        .await?;
+    let params = Params::Array(vec![
+        Value::String(format!("{:?}", block_hash)),
+        Value::Bool(false),
+    ]);
+    get_block_by_hash(
+        params,
+        &Some(header_oracle.read().await.history_jsonrpc_tx()?),
+    )
+    .await
 }

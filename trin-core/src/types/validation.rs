@@ -39,20 +39,11 @@ impl HeaderOracle {
         }
     }
 
-    // Currently falls back to trusted provider, to be updated to use canonical block indices network.
-    pub fn get_hash_at_height(&self, block_number: u64) -> anyhow::Result<H256> {
-        let hex_number = format!("0x{:02X}", block_number);
-        let method = "eth_getBlockByNumber".to_string();
-        let params = Params::Array(vec![json!(hex_number), json!(false)]);
-        let response: Value = self
-            .trusted_provider
-            .dispatch_http_request(method, params)?;
-        match response["result"]["hash"].as_str() {
-            Some(val) => Ok(H256::from_str(val)?),
-            None => Err(anyhow!(
-                "Unable to validate content received from trusted provider."
-            )),
-        }
+    // Only serves pre-block hashes aka. portal-network verified data only
+    pub async fn get_hash_at_height(&self, block_number: u64) -> anyhow::Result<H256> {
+        self.master_acc
+            .lookup_premerge_hash_by_number(block_number, self.history_jsonrpc_tx()?)
+            .await
     }
 
     pub fn get_header_by_hash(&self, block_hash: H256) -> anyhow::Result<Header> {
@@ -66,7 +57,9 @@ impl HeaderOracle {
         Ok(header)
     }
 
-    fn history_jsonrpc_tx(&self) -> anyhow::Result<mpsc::UnboundedSender<HistoryJsonRpcRequest>> {
+    pub fn history_jsonrpc_tx(
+        &self,
+    ) -> anyhow::Result<mpsc::UnboundedSender<HistoryJsonRpcRequest>> {
         match self.history_jsonrpc_tx.clone() {
             Some(val) => Ok(val),
             None => Err(anyhow!("History subnetwork is not available")),
@@ -90,7 +83,20 @@ impl HeaderOracle {
         }
         // either header is post-merge or there was an error trying to validate it via chain
         // history network, so we fallback to infura
-        let trusted_hash = self.get_hash_at_height(header.number)?;
+        let hex_number = format!("0x{:02X}", header.number);
+        let method = "eth_getBlockByNumber".to_string();
+        let params = Params::Array(vec![json!(hex_number), json!(false)]);
+        let response: Value = self
+            .trusted_provider
+            .dispatch_http_request(method, params)?;
+        let trusted_hash = match response["result"]["hash"].as_str() {
+            Some(val) => H256::from_str(val)?,
+            None => {
+                return Err(anyhow!(
+                    "Unable to validate content received from trusted provider."
+                ))
+            }
+        };
         if trusted_hash == header.hash() {
             Ok(())
         } else {

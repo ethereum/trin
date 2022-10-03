@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use ethereum_types::H256;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -381,10 +379,10 @@ impl TryFrom<Params> for GetBlockByHashParams {
     fn try_from(params: Params) -> Result<Self, Self::Error> {
         match params {
             Params::Array(val) => match val.len() {
-                2 => GetBlockByHashParams::try_from([&val[0], &val[1]]),
-                _ => Err(ValidationError::new("Expected 2 params")),
+                2 => Self::try_from([&val[0], &val[1]]),
+                _ => Err(Self::Error::new("Expected 2 params")),
             },
-            _ => Err(ValidationError::new("Expected array of params")),
+            _ => Err(Self::Error::new("Expected array of params")),
         }
     }
 }
@@ -393,20 +391,72 @@ impl TryFrom<[&Value; 2]> for GetBlockByHashParams {
     type Error = ValidationError;
 
     fn try_from(params: [&Value; 2]) -> Result<Self, Self::Error> {
-        let block_hash = match params[0].as_str() {
-            Some(val) => match H256::from_str(val) {
-                Ok(val) => val,
-                Err(_) => {
-                    return Err(ValidationError::new(
-                        "Invalid hexstring: Unable to convert to H256.",
-                    ))
-                }
-            },
-            None => return Err(ValidationError::new("Invalid hexstring: Not a String.")),
-        };
+        let block_hash = params[0]
+            .as_str()
+            .ok_or_else(|| Self::Error::new("Invalid hexstring: Not a String."))?;
+        let block_hash = hex_decode(block_hash)
+            .map_err(|_| Self::Error::new("Invalid hexstring: Unable to decode."))?;
+        let block_hash = H256::from_slice(&block_hash);
         let full_transactions = BoolParam::try_from(params[1])?;
+        if full_transactions.value {
+            return Err(Self::Error::new(
+                "Returning full transactions with a header is not yet supported.",
+            ));
+        }
         Ok(Self {
             block_hash: block_hash.into(),
+            full_transactions: full_transactions.value,
+        })
+    }
+}
+
+pub struct GetBlockByNumberParams {
+    pub block_number: u64,
+    // If full_transactions is True then the 'transactions' key will
+    // contain full transactions objects. Otherwise it will be an
+    // array of transaction hashes.
+    pub full_transactions: bool,
+}
+
+impl TryFrom<Params> for GetBlockByNumberParams {
+    type Error = ValidationError;
+
+    fn try_from(params: Params) -> Result<Self, Self::Error> {
+        match params {
+            Params::Array(val) => match val.len() {
+                2 => Self::try_from([&val[0], &val[1]]),
+                _ => Err(Self::Error::new("Expected 2 params")),
+            },
+            _ => Err(Self::Error::new("Expected array of params")),
+        }
+    }
+}
+
+impl TryFrom<[&Value; 2]> for GetBlockByNumberParams {
+    type Error = ValidationError;
+
+    fn try_from(params: [&Value; 2]) -> Result<Self, Self::Error> {
+        let block_number_param: String = match params[0].as_str() {
+            Some(val) => val.to_string(),
+            None => return Err(Self::Error::new("Invalid hexstring: Not a String.")),
+        };
+        let block_number = match block_number_param.strip_prefix("0x") {
+            Some(val) => u64::from_str_radix(val, 16).unwrap(),
+            None => match block_number_param.as_str() {
+                "latest" => return Err(Self::Error::new("'latest' arg is not yet supported.")),
+                "pending" => return Err(Self::Error::new("'pending' arg is not yet supported.")),
+                "earliest" => 0,
+                _ => return Err(Self::Error::new("Invalid block number arg.")),
+            },
+        };
+        let full_transactions = BoolParam::try_from(params[1])?;
+        if full_transactions.value {
+            return Err(Self::Error::new(
+                "Returning full transactions with a header is not yet supported.",
+            ));
+        }
+        Ok(Self {
+            block_number,
             full_transactions: full_transactions.value,
         })
     }
