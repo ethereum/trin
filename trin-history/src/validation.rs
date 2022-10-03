@@ -98,10 +98,6 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                 }
                 Ok(())
             }
-            HistoryContentKey::MasterAccumulator(_key) => {
-                warn!("Skipping content validation for master accumulator content.");
-                Ok(())
-            }
             HistoryContentKey::EpochAccumulator(_key) => {
                 warn!("Skipping content validation for epoch accumulator content.");
                 Ok(())
