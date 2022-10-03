@@ -1,4 +1,4 @@
-use std::{env, ffi::OsString, net::SocketAddr};
+use std::{env, ffi::OsString, net::SocketAddr, path::PathBuf};
 
 use structopt::StructOpt;
 use tracing::info;
@@ -6,6 +6,7 @@ use tracing::info;
 use crate::portalnet::types::messages::HexData;
 use crate::utils::provider::TrustedProviderType;
 
+pub const DEFAULT_MASTER_ACC_PATH: &str = "src/assets/merge_macc.bin";
 pub const DEFAULT_WEB3_IPC_PATH: &str = "/tmp/trin-jsonrpc.ipc";
 pub const DEFAULT_WEB3_HTTP_ADDRESS: &str = "127.0.0.1:8545";
 const DEFAULT_DISCOVERY_PORT: &str = "9000";
@@ -129,11 +130,14 @@ pub struct TrinConfig {
     )]
     pub geth_url: Option<String>,
 
+    // todo: support custom master accs
     #[structopt(
-        long = "bridge",
-        help = "Activate to run this node in bridge mode (experimental)."
+        long = "master-accumulator-path",
+        help = "Path to master accumulator for validation (not currently supported)",
+        default_value(DEFAULT_MASTER_ACC_PATH),
+        parse(from_os_str)
     )]
-    pub bridge: bool,
+    pub master_acc_path: PathBuf,
 }
 
 impl Default for TrinConfig {
@@ -157,7 +161,7 @@ impl Default for TrinConfig {
             ephemeral: false,
             trusted_provider: TrustedProviderType::Infura,
             geth_url: None,
-            bridge: false,
+            master_acc_path: PathBuf::from(DEFAULT_MASTER_ACC_PATH.to_string()),
         }
     }
 }
@@ -172,6 +176,10 @@ impl TrinConfig {
         T: Into<OsString> + Clone,
     {
         let config = Self::from_iter(args);
+
+        if config.master_acc_path != PathBuf::from(DEFAULT_MASTER_ACC_PATH.to_string()) {
+            panic!("Custom master accumulators are not yet supported.")
+        }
 
         match config.web3_transport.as_str() {
             "http" => match &config.web3_ipc_path[..] {

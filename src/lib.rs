@@ -14,7 +14,7 @@ use trin_core::{
         discovery::Discovery, events::PortalnetEvents, storage::PortalStorageConfig,
         types::messages::PortalnetConfig,
     },
-    types::validation::HeaderOracle,
+    types::{accumulator::MasterAccumulator, validation::HeaderOracle},
     utils::{bootnodes::parse_bootnodes, db::setup_temp_dir, provider::TrustedProvider},
     utp::stream::UtpListener,
 };
@@ -64,12 +64,9 @@ pub async fn run_trin(
         trin_config.enable_metrics_with_url.is_some(),
     );
 
-    // Header oracle requires a storage config. Currently metrics for this instance are turned off.
-    let mut oracle_storage_config = storage_config.clone();
-    oracle_storage_config.metrics_enabled = false;
-
     // Initialize validation oracle
-    let header_oracle = HeaderOracle::new(trusted_provider.clone(), oracle_storage_config);
+    let master_accumulator = MasterAccumulator::try_from_file(trin_config.master_acc_path.clone())?;
+    let header_oracle = HeaderOracle::new(trusted_provider.clone(), master_accumulator);
     let header_oracle = Arc::new(RwLock::new(header_oracle));
 
     debug!("Selected networks to spawn: {:?}", trin_config.networks);
@@ -169,15 +166,6 @@ pub async fn run_trin(
     if let Some(network) = state_network_task {
         tokio::spawn(async { network.await });
     }
-
-    // Spawn task to
-    // - bootstrap our header oracle's master accumulator
-    // - follow the head of the blockchain (via geth now / hg network later) & update macc
-    tokio::spawn(async move {
-        let mut lock = header_oracle.write().await;
-        lock.bootstrap().await;
-        // todo: lock.follow_head().await;
-    });
 
     let _ = live_server_rx.recv().await;
     live_server_rx.close();

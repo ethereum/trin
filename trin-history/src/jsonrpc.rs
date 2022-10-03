@@ -1,8 +1,6 @@
 use std::sync::Arc;
 
-use rand::seq::SliceRandom;
-use serde_json::{json, Value};
-use ssz::Decode;
+use serde_json::Value;
 use tokio::sync::mpsc;
 use tracing::error;
 
@@ -16,15 +14,7 @@ use trin_core::{
         },
         utils::bucket_entries_to_json,
     },
-    portalnet::{
-        storage::ContentStore,
-        types::{
-            content_key::{HistoryContentKey, MasterAccumulator as MasterAccumulatorKey, SszNone},
-            messages::Content,
-        },
-        Enr,
-    },
-    types::accumulator::MasterAccumulator,
+    portalnet::{storage::ContentStore, types::content_key::HistoryContentKey},
     utils::bytes::hex_encode,
 };
 
@@ -218,39 +208,6 @@ impl HistoryRequestHandler {
                         bucket_entries_to_json(self.network.overlay.bucket_entries());
 
                     let _ = request.resp.send(Ok(bucket_entries_json));
-                }
-                HistoryEndpoint::SampleLatestMasterAccumulator => {
-                    // Requests the "latest" master accumulator from 10 random peers
-                    let bucket_entries = self.network.overlay.table_entries_enr();
-                    let bucket_entries: Vec<Enr> = bucket_entries
-                        .choose_multiple(&mut rand::thread_rng(), 10)
-                        .cloned()
-                        .collect();
-                    let mut accumulators: Vec<MasterAccumulator> = vec![];
-                    let content_key: Vec<u8> = HistoryContentKey::MasterAccumulator(
-                        MasterAccumulatorKey::Latest(SszNone::new()),
-                    )
-                    .into();
-                    for enr in bucket_entries {
-                        if let Ok(Content::Content(content)) = self
-                            .network
-                            .overlay
-                            .send_find_content(enr, content_key.clone())
-                            .await
-                        {
-                            let content: Vec<u8> = content.into();
-                            if let Ok(acc) = MasterAccumulator::from_ssz_bytes(&content) {
-                                accumulators.push(acc)
-                            }
-                        }
-                    }
-                    let latest_accumulator: MasterAccumulator = accumulators
-                        .into_iter()
-                        .max_by_key(|acc| acc.latest_height())
-                        .unwrap_or_default();
-                    // todo: compare that master accumulators all contain matching validation data
-                    let response = Ok(json!(latest_accumulator));
-                    let _ = request.resp.send(response);
                 }
             }
         }

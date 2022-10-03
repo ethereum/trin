@@ -30,11 +30,6 @@ pub enum DistanceFunction {
     Xor,
 }
 
-const LATEST_MASTER_ACC_CONTENT_ID: [u8; 32] = [
-    192, 186, 138, 51, 172, 103, 244, 74, 191, 245, 152, 77, 251, 182, 245, 108, 70, 184, 128, 172,
-    43, 134, 225, 242, 62, 127, 169, 196, 2, 197, 58, 231,
-];
-
 /// An error from an operation on a `ContentStore`.
 #[derive(Debug)]
 pub enum ContentStoreError {
@@ -120,8 +115,6 @@ pub trait ContentStore {
 pub struct MemoryContentStore {
     /// The content store.
     store: std::collections::HashMap<Vec<u8>, Vec<u8>>,
-    /// The master accumulator.
-    accumulator: Option<Vec<u8>>,
     /// The `NodeId` of the local node.
     node_id: NodeId,
     /// The distance function used by the store to compute distances.
@@ -135,7 +128,6 @@ impl MemoryContentStore {
     pub fn new(node_id: NodeId, distance_fn: DistanceFunction) -> Self {
         Self {
             store: std::collections::HashMap::new(),
-            accumulator: None,
             node_id,
             distance_fn,
             radius: Distance::MAX,
@@ -156,11 +148,6 @@ impl MemoryContentStore {
 
     /// Returns `true` if the content store contains data for `key`.
     fn contains_key<K: OverlayContentKey>(&self, key: &K) -> bool {
-        // Perform separate check for master accumulator.
-        if key.content_id() == LATEST_MASTER_ACC_CONTENT_ID {
-            return self.accumulator.is_some();
-        }
-
         let key = key.content_id().to_vec();
         self.store.contains_key(&key)
     }
@@ -169,13 +156,6 @@ impl MemoryContentStore {
 impl ContentStore for MemoryContentStore {
     fn get<K: OverlayContentKey>(&self, key: &K) -> Result<Option<Vec<u8>>, ContentStoreError> {
         let key = key.content_id();
-
-        // If the key corresponds to the master accumulator, then we do not look up the key in the
-        // map.
-        if key == LATEST_MASTER_ACC_CONTENT_ID {
-            return Ok(self.accumulator.clone());
-        }
-
         let val = self.store.get(&key.to_vec()).map(|val| val.clone());
         Ok(val)
     }
@@ -186,13 +166,6 @@ impl ContentStore for MemoryContentStore {
         value: V,
     ) -> Result<(), ContentStoreError> {
         let content_id = key.content_id();
-
-        // If the key corresponds to the master accumulator, then set the field to the new value.
-        if content_id == LATEST_MASTER_ACC_CONTENT_ID {
-            self.accumulator = Some(value.as_ref().to_vec());
-            return Ok(());
-        }
-
         let value: &[u8] = value.as_ref();
         self.store.insert(content_id.to_vec(), value.to_vec());
 
@@ -203,10 +176,6 @@ impl ContentStore for MemoryContentStore {
         &self,
         key: &K,
     ) -> Result<bool, ContentStoreError> {
-        if key.content_id() == LATEST_MASTER_ACC_CONTENT_ID {
-            return Ok(self.accumulator.is_none());
-        }
-
         let distance = self.distance_to_key(key);
         if distance > self.radius {
             return Ok(false);
@@ -227,7 +196,6 @@ pub struct PortalStorageConfig {
     pub node_id: NodeId,
     pub distance_fn: DistanceFunction,
     pub db: Arc<rocksdb::DB>,
-    pub accumulator_db: Arc<rocksdb::DB>,
     pub sql_connection_pool: Pool<SqliteConnectionManager>,
     pub metrics_enabled: bool,
 }
@@ -235,14 +203,12 @@ pub struct PortalStorageConfig {
 impl PortalStorageConfig {
     pub fn new(storage_capacity_kb: u64, node_id: NodeId, metrics_enabled: bool) -> Self {
         let db = Arc::new(PortalStorage::setup_rocksdb(node_id).unwrap());
-        let accumulator_db = Arc::new(PortalStorage::setup_accumulatordb(node_id).unwrap());
         let sql_connection_pool = PortalStorage::setup_sql(node_id).unwrap();
         Self {
             storage_capacity_kb,
             node_id,
             distance_fn: DistanceFunction::Xor,
             db,
-            accumulator_db,
             sql_connection_pool,
             metrics_enabled,
         }
@@ -257,7 +223,6 @@ pub struct PortalStorage {
     radius: Distance,
     farthest_content_id: Option<[u8; 32]>,
     db: Arc<rocksdb::DB>,
-    accumulator_db: Arc<rocksdb::DB>,
     sql_connection_pool: Pool<SqliteConnectionManager>,
     distance_fn: DistanceFunction,
     metrics: Option<StorageMetrics>,
@@ -267,14 +232,7 @@ pub struct PortalStorage {
 impl ContentStore for PortalStorage {
     fn get<K: OverlayContentKey>(&self, key: &K) -> Result<Option<Vec<u8>>, ContentStoreError> {
         let content_id = key.content_id();
-
-        let value = if content_id == LATEST_MASTER_ACC_CONTENT_ID {
-            self.accumulator_db.get(content_id)?
-        } else {
-            self.db.get(content_id)?
-        };
-
-        Ok(value)
+        Ok(self.db.get(content_id)?)
     }
 
     fn put<K: OverlayContentKey, V: AsRef<[u8]>>(
@@ -317,7 +275,6 @@ impl PortalStorage {
             storage_capacity_in_bytes: config.storage_capacity_kb * 1000,
             radius: Distance::MAX,
             db: config.db,
-            accumulator_db: config.accumulator_db,
             farthest_content_id: None,
             sql_connection_pool: config.sql_connection_pool,
             distance_fn: config.distance_fn,
@@ -386,12 +343,8 @@ impl PortalStorage {
         let content_id = key.content_id();
         let distance_to_content_id = self.distance_to_content_id(&content_id);
 
-        // Always store master accumulators in accumulator db
-        // todo: add logic to accumulator_db to only overwrite if new macc is longer
-        if content_id == LATEST_MASTER_ACC_CONTENT_ID {
-            self.accumulator_db.put(&content_id, value)?;
-        } else if distance_to_content_id > self.radius {
-            // Return Err if non-macc content is outside radius
+        if distance_to_content_id > self.radius {
+            // Return Err if content is outside radius
             debug!("Not storing: {:02X?}", key.clone().into());
             return Err(ContentStoreError::InsufficientRadius {
                 radius: self.radius,
@@ -479,7 +432,6 @@ impl PortalStorage {
 
     /// Public method for determining how much actual disk space is being used to store this node's Portal Network data.
     /// Intended for analysis purposes. PortalStorage's capacity decision-making is not based off of this method.
-    /// Does not include accumulator database.
     pub fn get_total_storage_usage_in_bytes_on_disk(&self) -> Result<u64, ContentStoreError> {
         let storage_usage =
             self.get_total_size_of_directory_in_bytes(get_data_dir(self.node_id))?;
@@ -651,17 +603,6 @@ impl PortalStorage {
         }
 
         u32::from_be_bytes(array)
-    }
-
-    /// Helper function for opening a RocksDB connection for the accumulatordb.
-    pub fn setup_accumulatordb(node_id: NodeId) -> Result<rocksdb::DB, ContentStoreError> {
-        let mut data_path: PathBuf = get_data_dir(node_id);
-        data_path.push("accumulatordb");
-        debug!("Setting up accumulatordb at path: {:?}", data_path);
-
-        let mut db_opts = Options::default();
-        db_opts.create_if_missing(true);
-        Ok(DB::open(&db_opts, data_path)?)
     }
 
     /// Helper function for opening a RocksDB connection for the radius-constrained db.
@@ -856,45 +797,6 @@ pub mod test {
 
     #[test_log::test(tokio::test)]
     #[serial]
-    async fn get_master_accumulator_from_accumulator_db() -> Result<(), ContentStoreError> {
-        let temp_dir = setup_temp_dir();
-
-        let node_id = NodeId::random();
-        let storage_config = PortalStorageConfig::new(10, node_id, false);
-        let mut storage = PortalStorage::new(storage_config, ProtocolId::History)?;
-        let master_accumulator_content_key = IdentityContentKey::new(LATEST_MASTER_ACC_CONTENT_ID);
-        let master_accumulator_value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
-
-        storage.store(&master_accumulator_content_key, &master_accumulator_value)?;
-        let result = storage
-            .get(&master_accumulator_content_key)
-            .unwrap()
-            .unwrap();
-        assert_eq!(result, master_accumulator_value);
-
-        // fill up data storage until master accumulator is outside radius
-        while storage.distance_to_content_id(&master_accumulator_content_key.content_id())
-            <= storage.radius
-        {
-            let content_key = generate_random_content_key();
-            let value: Vec<u8> = "abcdefghijklmnopqrstuvwxyz1234567890".into();
-            let _ = storage.store(&content_key, &value);
-        }
-
-        // validate that master accumulator is still available
-        let result = storage
-            .get(&master_accumulator_content_key)
-            .unwrap()
-            .unwrap();
-        assert_eq!(result, master_accumulator_value);
-
-        std::mem::drop(storage);
-        temp_dir.close()?;
-        Ok(())
-    }
-
-    #[test_log::test(tokio::test)]
-    #[serial]
     async fn test_get_total_storage() -> Result<(), ContentStoreError> {
         let temp_dir = setup_temp_dir();
 
@@ -971,14 +873,6 @@ pub mod test {
 
         let val = vec![0xef];
 
-        // Master accumulator not available.
-        let acc_key = IdentityContentKey::new(LATEST_MASTER_ACC_CONTENT_ID);
-        assert!(!store.contains_key(&acc_key));
-
-        // Master accumulator available.
-        store.accumulator = Some(val.clone());
-        assert!(store.contains_key(&acc_key));
-
         // Arbitrary key not available.
         let arb_key = IdentityContentKey::new(node_id.raw());
         assert!(!store.contains_key(&arb_key));
@@ -994,14 +888,6 @@ pub mod test {
         let mut store = MemoryContentStore::new(node_id, DistanceFunction::Xor);
 
         let val = vec![0xef];
-
-        // Master accumulator not available.
-        let acc_key = IdentityContentKey::new(LATEST_MASTER_ACC_CONTENT_ID);
-        assert!(store.get(&acc_key).unwrap().is_none());
-
-        // Master accumulator available and equal to assigned value.
-        store.accumulator = Some(val.clone());
-        assert_eq!(store.get(&acc_key).unwrap(), Some(val.clone()));
 
         // Arbitrary key not available.
         let arb_key = IdentityContentKey::new(node_id.raw());
@@ -1019,12 +905,7 @@ pub mod test {
 
         let val = vec![0xef];
 
-        // Store master accumulator.
-        let acc_key = IdentityContentKey::new(LATEST_MASTER_ACC_CONTENT_ID);
-        let _ = store.put(acc_key, val.clone());
-        assert_eq!(store.accumulator, Some(val.clone()));
-
-        // Store non-accumulator.
+        // Store content
         let arb_key = IdentityContentKey::new(node_id.raw());
         let _ = store.put(arb_key.clone(), val.clone());
         assert_eq!(store.get(&arb_key).unwrap(), Some(val));
@@ -1036,19 +917,6 @@ pub mod test {
         let mut store = MemoryContentStore::new(node_id, DistanceFunction::Xor);
 
         let val = vec![0xef];
-
-        let acc_key = IdentityContentKey::new(LATEST_MASTER_ACC_CONTENT_ID);
-
-        // Master accumulator within radius and unavailable.
-        assert!(store
-            .is_key_within_radius_and_unavailable(&acc_key)
-            .unwrap());
-
-        // Master accumulator available.
-        store.accumulator = Some(val.clone());
-        assert!(!store
-            .is_key_within_radius_and_unavailable(&acc_key)
-            .unwrap());
 
         // Arbitrary key within radius and unavailable.
         let arb_key = IdentityContentKey::new(node_id.raw());
