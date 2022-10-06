@@ -22,8 +22,9 @@ rand = "0.8.4"
 rlp = "0.5.0"
 rocksdb = "0.18.0"
 serde_json = "1.0.59"
-tracing = "0.1.36"
 tokio = { version = "1.8.0", features = ["full"] }
+tracing = "0.1.36"
+tree_hash = "0.4.0"
 trin-core = { path = "../trin-core" }
 ureq = { version = "2.2.0", features = ["json"] }
 
