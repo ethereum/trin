@@ -60,9 +60,10 @@ pub async fn run_trin(
     // Initialize Storage config
     let data_dir = if trin_config.ephemeral {
         // If ephemeral, then use a temporary directory.
-        let path = db::temp_dir_path();
+        let temp_dir_path = db::temp_dir_path();
+        let path = db::data_dir(local_node_id, Some(temp_dir_path)).unwrap();
         tempfile::TempDir::new_in(&path)?;
-        db::data_dir(local_node_id, Some(path)).unwrap()
+        path
     } else {
         // If not ephemeral, then check the environment for a data directory.
         let env_data_path = std::env::var(TRIN_DATA_ENV_VAR).ok();
