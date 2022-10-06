@@ -143,9 +143,9 @@ impl Discovery {
 
     pub async fn start(&mut self) -> Result<mpsc::Receiver<TalkRequest>, String> {
         info!(
-            "Starting discv5 with local enr encoded={:?} decoded={}",
-            self.local_enr(),
-            self.local_enr()
+            enr.encoded = ?self.local_enr(),
+            enr.decoded = %self.local_enr(),
+            "Starting discv5",
         );
 
         let _ = self

@@ -54,7 +54,7 @@ use crate::{
         Enr,
     },
     types::validation::Validator,
-    utils::{node_id, portal_wire},
+    utils::{bytes::hex_encode_compact, node_id, portal_wire},
     utp::{
         stream::{UtpListenerRequest, UtpStream, BUF_SIZE},
         trin_helpers::UtpStreamId,
@@ -391,15 +391,16 @@ where
                 InsertResult::Failed(reason) => {
                     warn!(
                         protocol = %self.protocol,
-                        "Failed to insert bootnode into overlay routing table. Node: {}, Reason {:?}",
-                        node_id, reason
+                        bootnode = %node_id,
+                        error = ?reason,
+                        "Error inserting bootnode into routing table",
                     );
                 }
                 _ => {
                     debug!(
                         protocol = %self.protocol,
-                        "Inserted bootnode into overlay routing table, adding to ping queue. Node {}",
-                        node_id
+                        bootnode = %node_id,
+                        "Inserted bootnode into routing table",
                     );
 
                     // Queue the node in the ping queue.
@@ -447,8 +448,13 @@ where
                     match command {
                         OverlayCommand::Request(request) => self.process_request(request),
                         OverlayCommand::FindContentQuery { target, callback } => {
-                            if let Some(query_id) = self.init_find_content_query(target, Some(callback)) {
-                                debug!("Find content query {} initialized", query_id);
+                            if let Some(query_id) = self.init_find_content_query(target.clone(), Some(callback)) {
+                                trace!(
+                                    query.id = %query_id,
+                                    content.id = %hex_encode_compact(target.content_id()),
+                                    content.key = %target,
+                                    "FindContent query initialized"
+                                );
                             }
                         }
                     }
@@ -470,7 +476,7 @@ where
                         }
 
                     } else {
-                        warn!("No active request with id {} for response", response.request_id);
+                        warn!(request.id = %hex_encode_compact(response.request_id.to_be_bytes()), "No request found for response");
                     }
                 }
                 Some(Ok(node_id)) = self.peers_to_ping.next() => {
@@ -490,7 +496,7 @@ where
                 }
                 _ = OverlayService::<TContentKey, TMetric, TValidator, TStore>::bucket_maintenance_poll(self.protocol.clone(), &self.kbuckets) => {}
                 _ = bucket_refresh_interval.tick() => {
-                    info!(protocol = %self.protocol, "Overlay bucket refresh lookup");
+                    trace!(protocol = %self.protocol, "Routing table bucket refresh");
                     self.bucket_refresh_lookup();
                 }
             }
@@ -539,17 +545,17 @@ where
             let target_bucket = buckets.choose(&mut rand::thread_rng());
             let random_node_id_in_bucket = match target_bucket {
                 Some(bucket) => {
-                    debug!(protocol = %self.protocol, "Refreshing bucket {}", bucket.0);
+                    trace!(protocol = %self.protocol, bucket = %bucket.0, "Refreshing routing table bucket");
                     match u8::try_from(bucket.0) {
                         Ok(idx) => self.generate_random_node_id(idx),
                         Err(err) => {
-                            error!("Unable to downcast bucket index: {}", err);
+                            error!(error = %err, "Error downcasting bucket index");
                             return;
                         }
                     }
                 }
                 None => {
-                    error!("Failed to choose random bucket index");
+                    error!("Error choosing random bucket index for refresh");
                     return;
                 }
             };
@@ -583,9 +589,10 @@ where
             if let Some(entry) = kbuckets.write().take_applied_pending() {
                 debug!(
                     %protocol,
-                    "Node {:?} inserted and node {:?} evicted",
-                    entry.inserted.into_preimage(),
-                    entry.evicted.map(|n| n.key.into_preimage())
+                    inserted = %entry.inserted.into_preimage(),
+                    evicted = ?entry.evicted.map(|n| n.key.into_preimage()),
+                    "Pending node inserted",
+
                 );
                 return Poll::Ready(());
             }
@@ -606,7 +613,7 @@ where
                 Poll::Ready(QueryEvent::Finished(query_id, query_info, query))
             }
             QueryPoolState::Timeout(query_id, query_info, query) => {
-                warn!("Query id: {:?} timed out", query_id);
+                warn!(query.id = %query_id, "Query timed out");
                 Poll::Ready(QueryEvent::TimedOut(query_id, query_info, query))
             }
             QueryPoolState::Waiting(Some((query_id, query_info, query, return_peer))) => {
@@ -648,8 +655,9 @@ where
                 } else {
                     error!(
                         protocol = %self.protocol,
-                        "Unable to send FINDNODES to unknown ENR with node ID {}",
-                        node_id
+                        peer = %node_id,
+                        query.id = %query_id,
+                        "Cannot query peer with unknown ENR",
                     );
                     if let Some((_, query)) = self.find_node_query_pool.get_mut(query_id) {
                         query.on_failure(&node_id);
@@ -674,7 +682,10 @@ where
                         // look up from the routing table
                         found_enrs.push(enr);
                     } else {
-                        warn!("ENR not present in queries results.");
+                        warn!(
+                            query.id = %query_id,
+                            "ENR from FindNode query not present in query results"
+                        );
                     }
                 }
                 if let QueryType::FindNode {
@@ -682,18 +693,18 @@ where
                     ..
                 } = query_info.query_type
                 {
-                    if let Err(_) = callback.send(found_enrs.clone()) {
+                    if let Err(err) = callback.send(found_enrs.clone()) {
                         error!(
-                            "Failed to send FindNode query {} results to callback",
-                            query_id
+                            query.id = %query_id,
+                            error = ?err,
+                            "Error sending FindNode query result to callback",
                         );
                     }
                 }
-                debug!(
+                trace!(
                     protocol = %self.protocol,
-                    "Query {} complete, discovered {} ENRs",
-
-                    query_id,
+                    query.id = %query_id,
+                    "Discovered {} ENRs via FindNode query",
                     found_enrs.len()
                 );
             }
@@ -723,8 +734,9 @@ where
                     // node, so fail the query for this node.
                     error!(
                         protocol = %self.protocol,
-                        "Unable to send FINDCONTENT to unknown ENR with node ID {}",
-                        node_id
+                        peer = %node_id,
+                        query.id = %query_id,
+                        "Cannot query peer with unknown ENR"
                     );
                     if let Some((_, query)) = self.find_node_query_pool.get_mut(query_id) {
                         query.on_failure(&node_id);
@@ -748,10 +760,11 @@ where
                 } = query_info.query_type
                 {
                     // Send (possibly `None`) content on callback channel.
-                    if let Err(_) = callback.send(content.clone()) {
+                    if let Err(err) = callback.send(content.clone()) {
                         error!(
-                            "Failed to send FindContent query {} result to callback",
-                            query_id
+                            query.id = %query_id,
+                            error = ?err,
+                            "Error sending FindContent query result to callback",
                         );
                     }
 
@@ -800,7 +813,8 @@ where
                 if let Ok(..) = self.command_tx.send(OverlayCommand::Request(request)) {
                     trace!(
                         protocol = %self.protocol,
-                        content.id = ?content_id,
+                        content.id = %hex_encode_compact(content_id),
+                        content.key = %content_key,
                         peer.node_id = %node_id,
                         "Content poked"
                     );
@@ -858,16 +872,17 @@ where
         id: RequestId,
         source: &NodeId,
     ) -> Result<Response, OverlayRequestError> {
-        debug!(protocol = %self.protocol, "Handling request {}", id);
         match request {
-            Request::Ping(ping) => Ok(Response::Pong(self.handle_ping(ping, &source))),
-            Request::FindNodes(find_nodes) => {
-                Ok(Response::Nodes(self.handle_find_nodes(find_nodes)))
-            }
-            Request::FindContent(find_content) => Ok(Response::Content(
-                self.handle_find_content(find_content, &source)?,
+            Request::Ping(ping) => Ok(Response::Pong(self.handle_ping(ping, &source, id))),
+            Request::FindNodes(find_nodes) => Ok(Response::Nodes(
+                self.handle_find_nodes(find_nodes, &source, id),
             )),
-            Request::Offer(offer) => Ok(Response::Accept(self.handle_offer(offer, source)?)),
+            Request::FindContent(find_content) => Ok(Response::Content(self.handle_find_content(
+                find_content,
+                &source,
+                id,
+            )?)),
+            Request::Offer(offer) => Ok(Response::Accept(self.handle_offer(offer, source, id)?)),
             Request::PopulatedOffer(_) => Err(OverlayRequestError::InvalidRequest(
                 "An offer with content attached is not a valid network message to receive"
                     .to_owned(),
@@ -876,12 +891,15 @@ where
     }
 
     /// Builds a `Pong` response for a `Ping` request.
-    fn handle_ping(&self, request: Ping, source: &NodeId) -> Pong {
-        debug!(
+    fn handle_ping(&self, request: Ping, source: &NodeId, request_id: RequestId) -> Pong {
+        trace!(
             protocol = %self.protocol,
-            "Handling ping request from node={}. Ping={:?}",
-            source, request
+            request.source = %source,
+            request.discv5.id = %request_id,
+            "Handling Ping message {}",
+            request
         );
+
         self.metrics
             .as_ref()
             .and_then(|m| Some(m.report_inbound_ping()));
@@ -895,7 +913,19 @@ where
     }
 
     /// Builds a `Nodes` response for a `FindNodes` request.
-    fn handle_find_nodes(&self, request: FindNodes) -> Nodes {
+    fn handle_find_nodes(
+        &self,
+        request: FindNodes,
+        source: &NodeId,
+        request_id: RequestId,
+    ) -> Nodes {
+        trace!(
+            protocol = %self.protocol,
+            request.source = %source,
+            request.discv5.id = %request_id,
+            "Handling FindNodes message",
+        );
+
         self.metrics
             .as_ref()
             .and_then(|m| Some(m.report_inbound_find_nodes()));
@@ -913,7 +943,15 @@ where
         &self,
         request: FindContent,
         source: &NodeId,
+        request_id: RequestId,
     ) -> Result<Content, OverlayRequestError> {
+        trace!(
+            protocol = %self.protocol,
+            request.source = %source,
+            request.discv5.id = %request_id,
+            "Handling FindContent message",
+        );
+
         self.metrics
             .as_ref()
             .and_then(|m| Some(m.report_inbound_find_content()));
@@ -963,7 +1001,19 @@ where
     }
 
     /// Attempts to build an `Accept` response for an `Offer` request.
-    fn handle_offer(&self, request: Offer, source: &NodeId) -> Result<Accept, OverlayRequestError> {
+    fn handle_offer(
+        &self,
+        request: Offer,
+        source: &NodeId,
+        request_id: RequestId,
+    ) -> Result<Accept, OverlayRequestError> {
+        trace!(
+            protocol = %self.protocol,
+            request.source = %source,
+            request.discv5.id = %request_id,
+            "Handling Offer message",
+        );
+
         self.metrics
             .as_ref()
             .and_then(|m| Some(m.report_inbound_offer()));
@@ -1122,8 +1172,10 @@ where
     ) {
         debug!(
             protocol = %self.protocol,
-            "Request {} failed. Error: {}",
-            request_id, error
+            request.id = %hex_encode_compact(request_id.to_be_bytes()),
+            request.dest = %destination.node_id(),
+            error = %error,
+            "Request failed",
         );
 
         // Attempt to mark the node as disconnected.
@@ -1189,7 +1241,10 @@ where
                 let find_content_request = match request {
                     Request::FindContent(find_content) => find_content,
                     _ => {
-                        error!("Unable to process received content: Invalid request message.");
+                        error!(
+                            response.source = %source.node_id(),
+                            "Content response associated with non-FindContent request"
+                        );
                         return;
                     }
                 };
@@ -1197,7 +1252,7 @@ where
             }
             Response::Accept(accept) => {
                 if let Err(err) = self.process_accept(accept, source, request) {
-                    error!("Error processing ACCEPT response in overlay service: {err}")
+                    error!(response.error = %err, "Error processing ACCEPT message")
                 }
             }
         }
@@ -1224,7 +1279,7 @@ where
         let (tx, rx) = tokio::sync::oneshot::channel::<UtpStream>();
         let utp_request = UtpListenerRequest::Connect(
             conn_id,
-            enr,
+            enr.clone(),
             self.protocol.clone(),
             UtpStreamId::OfferStream,
             tx,
@@ -1263,7 +1318,11 @@ where
                     .map(|item| Bytes::from(item.to_vec()))
                     .collect(),
                 Err(err) => {
-                    warn!("Could not serve offered content to peer: {err}");
+                    error!(
+                        error = %err,
+                        peer = %enr.node_id(),
+                        "Error decoding previously offered content items"
+                    );
                     return;
                 }
             };
@@ -1273,11 +1332,21 @@ where
 
             // send the content to the acceptor over a uTP stream
             if let Err(err) = conn.send_to(&content_payload).await {
-                warn!("Error sending content {err}");
+                warn!(
+                    error = %err,
+                    utp.conn_id = %conn_id,
+                    utp.peer = %conn.connected_to,
+                    "Error sending content over uTP connection"
+                );
             };
             // Close uTP connection
             if let Err(err) = conn.close().await {
-                warn!("Unable to close uTP connection!: {err}")
+                warn!(
+                    error = %err,
+                    utp.conn_id = %conn_id,
+                    utp.peer = %conn.connected_to,
+                    "Error closing uTP connection"
+                );
             };
         });
         Ok(response)
@@ -1288,11 +1357,12 @@ where
     /// Refreshes the node if necessary. Attempts to mark the node as connected.
     fn process_pong(&mut self, pong: Pong, source: Enr) {
         let node_id = source.node_id();
-        debug!(
+        trace!(
             protocol = %self.protocol,
-            "Processing Pong response from node. Node: {}",
-            node_id
+            response.source = %node_id,
+            "Processing Pong message {}", pong
         );
+
         // If the ENR sequence number in pong is less than the ENR sequence number for the routing
         // table entry, then request the node.
         //
@@ -1312,10 +1382,11 @@ where
 
     /// Processes a Nodes response.
     fn process_nodes(&mut self, nodes: Nodes, source: Enr, query_id: Option<QueryId>) {
-        debug!(
+        trace!(
             protocol = %self.protocol,
-            "Processing Nodes response from node. Node: {}",
-            source.node_id()
+            response.source = %source.node_id(),
+            query.id = ?query_id,
+            "Processing Nodes message",
         );
 
         let enrs: Vec<Enr> = nodes
@@ -1338,10 +1409,10 @@ where
         request: FindContent,
         query_id: Option<QueryId>,
     ) {
-        debug!(
+        trace!(
             protocol = %self.protocol,
-            "Processing Content response from node. Node: {}",
-            source.node_id()
+            response.source = %source.node_id(),
+            "Processing Content message",
         );
         match content {
             Content::ConnectionId(id) => debug!(
@@ -1370,10 +1441,15 @@ where
         let content_key = match TContentKey::try_from(request.content_key) {
             Ok(val) => val,
             Err(msg) => {
-                error!("Unable to process received content: We sent a request with an invalid content key: {msg:?}");
+                error!(
+                    protocol = %self.protocol,
+                    error = ?msg,
+                    "Error decoding content key requested by local node"
+                );
                 return;
             }
         };
+        let content_id = content_key.content_id();
 
         match self
             .store
@@ -1390,20 +1466,39 @@ where
                         .validate_content(&content_key, &content.to_vec())
                         .await
                     {
-                        warn!("Unable to validate received content: {err:?}");
+                        warn!(
+                            error = ?err,
+                            content.id = %hex_encode_compact(content_id),
+                            content.key = %content_key,
+                            "Error validating content"
+                        );
                         return;
                     };
 
-                    if let Err(err) = store.write().put(content_key, content.to_vec()) {
-                        error!("Content received, but not stored: {err}")
+                    if let Err(err) = store.write().put(content_key.clone(), content.to_vec()) {
+                        error!(
+                            error = %err,
+                            content.id = %hex_encode_compact(content_id),
+                            content.key = %content_key,
+                            "Error storing content"
+                        );
                     }
                 });
             }
             Ok(false) => {
-                debug!("Content received, but not stored: key not within radius or already stored");
+                debug!(
+                    content.id = %hex_encode_compact(content_id),
+                    content.key = %content_key,
+                    "Content not stored (key outside radius or already stored)"
+                );
             }
             Err(err) => {
-                error!("Content received, but not stored: {}", err);
+                error!(
+                    error = %err,
+                    content.id = %hex_encode_compact(content_id),
+                    content.key = %content_key,
+                    "Error storing content"
+                );
             }
         }
     }
@@ -1450,8 +1545,9 @@ where
                     {
                         self.peers_to_ping.remove(&node_id);
                         debug!(
-                            "Failed to update discovered node. Node: {}, Reason: {:?}",
-                            node_id, reason
+                            peer = %node_id,
+                            error = ?reason,
+                            "Error updating entry for discovered node",
                         );
                     }
                 }
@@ -1463,7 +1559,7 @@ where
                 };
                 match kbuckets.insert_or_update(&key, node, status) {
                     InsertResult::Inserted => {
-                        debug!("Discovered node added to routing table. Node: {}", node_id);
+                        debug!(inserted = %node_id, "Inserted discovered node into routing table");
                         self.peers_to_ping.insert(node_id);
                     }
                     InsertResult::Pending { disconnected } => {
@@ -1479,10 +1575,11 @@ where
                             self.ping_node(&node_to_ping.value().enr());
                         }
                     }
-                    _ => {
+                    other => {
                         debug!(
-                            "Discovered node not added to routing table. Node: {}",
-                            node_id
+                            peer = %node_id,
+                            reason = ?other,
+                            "Discovered node not inserted into routing table"
                         );
                     }
                 }
@@ -1550,11 +1647,6 @@ where
                 &source.node_id(),
                 enrs.iter().map(|enr| enr.into()).collect(),
             );
-        } else {
-            debug!(
-                "Response returned for inactive find node query {:?}",
-                query_id
-            )
         }
     }
 
@@ -1610,10 +1702,10 @@ where
 
     /// Submits a request to ping a destination (target) node.
     fn ping_node(&self, destination: &Enr) {
-        debug!(
+        trace!(
             protocol = %self.protocol,
-            "Sending Ping request to node. Node: {}",
-            destination.node_id()
+            request.dest = %destination.node_id(),
+            "Sending Ping message",
         );
 
         let enr_seq = self.local_enr().seq();
@@ -1663,8 +1755,8 @@ where
                 // The node was inserted into the routing table. Add the node to the ping queue.
                 debug!(
                     protocol = %self.protocol,
-                    "New connected node added to routing table. Node: {}",
-                    node_id
+                    inserted = %node_id,
+                    "Node inserted into routing table",
                 );
 
                 self.peers_to_ping.insert(node_id);
@@ -1685,8 +1777,8 @@ where
                 if promoted_to_connected {
                     debug!(
                         protocol = %self.protocol,
-                        "Node promoted to connected. Node: {}",
-                        node_id
+                        promoted = %node_id,
+                        "Node promoted to connected",
                     );
                     self.peers_to_ping.insert(node_id);
                 }
@@ -1696,8 +1788,9 @@ where
                 self.peers_to_ping.remove(&node_id);
                 debug!(
                     protocol = %self.protocol,
-                    "Could not insert node. Node: {}, Reason: {:?}",
-                    node_id, reason
+                    peer = %node_id,
+                    error = ?reason,
+                    "Error inserting/updating node into routing table",
                 );
             }
         }
@@ -1724,18 +1817,20 @@ where
                 other => {
                     warn!(
                         protocol = %self.protocol,
-                        "Could not update node to {:?}. Node: {}, Reason: {:?}",
-                        state, node_id, other
+                        peer = %node_id,
+                        error = ?other,
+                        "Error updating node connection state",
                     );
 
                     Err(other)
                 }
             },
             _ => {
-                debug!(
+                trace!(
                     protocol = %self.protocol,
-                    "Node set to {:?}. Node: {}",
-                    state, node_id
+                    updated = %node_id,
+                    updated.conn_state = ?state,
+                    "Node connection state updated",
                 );
                 Ok(())
             }
@@ -1844,9 +1939,7 @@ where
             .collect();
 
         if known_closest_peers.is_empty() {
-            warn!(
-                "FindNodes query initiated but no closest peers in routing table. Aborting query."
-            );
+            warn!("Cannot initialize FindNode query (no known close peers)");
         } else {
             let find_nodes_query =
                 FindNodeQuery::with_config(query_config, query_info.key(), known_closest_peers);
@@ -1896,7 +1989,7 @@ where
         // If the initial set of peers is non-empty, then add the query to the query pool.
         // Otherwise, there is no way for the query to progress, so drop it.
         if closest_enrs.is_empty() {
-            warn!("Unable to initialize find content query without any known close peers");
+            warn!("Cannot initialize FindContent query (no known close peers)");
             None
         } else {
             let query = FindContentQuery::with_config(query_config, target_key, closest_enrs);

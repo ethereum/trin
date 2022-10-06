@@ -97,9 +97,10 @@ impl HistoryRequestHandler {
                                         Ok(None) => None,
                                         Err(err) => {
                                             error!(
-                                            "Error while checking local storage for content: {}",
-                                            err
-                                        );
+                                                error = %err,
+                                                content.key = %content_key,
+                                                "Error checking data store for content",
+                                            );
                                             None
                                         }
                                     };
