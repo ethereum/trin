@@ -1,5 +1,5 @@
 use std::net::{IpAddr, SocketAddr, UdpSocket};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 #[cfg(unix)]
 use interfaces::{self, Interface};
@@ -26,7 +26,7 @@ pub fn stun_for_external(local_socket_addr: &SocketAddr) -> Option<SocketAddr> {
             Some(addr)
         }
         Err(err) => {
-            debug!(error = %err, "Error setting up STUN traversal");
+            warn!(error = %err, "Error setting up STUN traversal");
             None
         }
     }
