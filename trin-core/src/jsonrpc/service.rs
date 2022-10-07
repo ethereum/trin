@@ -253,8 +253,10 @@ fn serve_ipc_client(
                     .to_string()
                     .into_bytes(),
                 };
-                tx.write_all(&formatted_response).unwrap();
-                tx.flush().unwrap();
+                match tx.write_all(&formatted_response) {
+                    Ok(_) => tx.flush().unwrap(),
+                    Err(msg) => warn!("Unable to write bytes to unix stream, the requestor has likely timed out: {:?}", msg),
+                }
             }
             Err(e) => {
                 debug!("An error occurred while parsing the JSON text. {}", e);
