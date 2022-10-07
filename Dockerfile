@@ -25,10 +25,14 @@ RUN cargo build --all --release
 # final base
 FROM rust:1.62
 
-# copy build artifact from build stage
-COPY --from=builder /trin/target/release/trin .
+# copy build artifacts from build stage
+# rename trin executable to enable mkdir /trin
+COPY --from=builder /trin/target/release/trin ./trin-main
 COPY --from=builder /trin/target/release/trin-cli .
 COPY --from=builder /trin/target/release/seed-database .
+# copy default merge master acc to expected location
+RUN mkdir -p /trin/trin-core/src/assets
+COPY --from=builder /trin/trin-core/src/assets/merge_macc.bin ./trin/trin-core/src/assets/merge_macc.bin
 
 # These steps copy the mainnet chain header seed data into container
 # This data is too large to be kept inside trin-source code
@@ -39,4 +43,4 @@ COPY --from=builder /trin/mainnetMM ./mainnetMM
 
 ENV RUST_LOG=debug
 
-ENTRYPOINT ["./trin"]
+ENTRYPOINT ["./trin-main"]
