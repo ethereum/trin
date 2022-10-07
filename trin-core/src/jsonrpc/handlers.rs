@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use anyhow::anyhow;
 use serde_json::Value;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, RwLock};
 use tracing::debug;
 
 use crate::{
@@ -14,6 +14,7 @@ use crate::{
         types::{HistoryJsonRpcRequest, Params, PortalJsonRpcRequest, StateJsonRpcRequest},
     },
     portalnet::discovery::Discovery,
+    types::validation::HeaderOracle,
     TRIN_VERSION,
 };
 
@@ -25,6 +26,7 @@ pub struct JsonRpcHandler {
     pub portal_jsonrpc_rx: mpsc::UnboundedReceiver<PortalJsonRpcRequest>,
     pub state_jsonrpc_tx: Option<mpsc::UnboundedSender<StateJsonRpcRequest>>,
     pub history_jsonrpc_tx: Option<mpsc::UnboundedSender<HistoryJsonRpcRequest>>,
+    pub header_oracle: Arc<RwLock<HeaderOracle>>,
 }
 
 impl JsonRpcHandler {
@@ -67,6 +69,9 @@ impl JsonRpcHandler {
             PortalEndpoint::ClientVersion => Ok(Value::String(format!("trin v{}", TRIN_VERSION))),
             PortalEndpoint::GetBlockByHash => {
                 eth::get_block_by_hash(params, &self.history_jsonrpc_tx).await
+            }
+            PortalEndpoint::GetBlockByNumber => {
+                eth::get_block_by_number(params, self.header_oracle.clone()).await
             }
         }
     }

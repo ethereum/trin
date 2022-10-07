@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::anyhow;
-use ethereum_types::U256;
+use ethereum_types::{H256, U256};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use ssz::{Decode, Encode};
@@ -91,6 +91,26 @@ impl MasterAccumulator {
         header.number / EPOCH_SIZE as u64
     }
 
+    pub async fn lookup_premerge_hash_by_number(
+        &self,
+        block_number: u64,
+        history_jsonrpc_tx: mpsc::UnboundedSender<HistoryJsonRpcRequest>,
+    ) -> anyhow::Result<H256> {
+        if block_number > MERGE_BLOCK_NUMBER {
+            return Err(anyhow!("Post-merge blocks are not supported."));
+        }
+        let rel_index = block_number % EPOCH_SIZE as u64;
+        if block_number > self.epoch_number() * EPOCH_SIZE as u64 {
+            return Ok(self.current_epoch.header_records[rel_index as usize].block_hash);
+        }
+        let epoch_index = block_number / EPOCH_SIZE as u64;
+        let epoch_hash = self.historical_epochs.epochs[epoch_index as usize];
+        let epoch_acc = self
+            .lookup_epoch_acc(epoch_hash, history_jsonrpc_tx)
+            .await?;
+        Ok(epoch_acc.header_records[rel_index as usize].block_hash)
+    }
+
     fn is_header_in_current_epoch(&self, header: &Header) -> bool {
         let current_epoch_block_min = match self.historical_epochs_header_count() {
             0 => match header.number {
@@ -125,39 +145,49 @@ impl MasterAccumulator {
         } else {
             let epoch_index = self.get_epoch_index_of_header(header);
             let epoch_hash = self.historical_epochs.epochs[epoch_index as usize];
-            let content_key: Vec<u8> =
-                HistoryContentKey::EpochAccumulator(EpochAccumulatorKey { epoch_hash }).into();
-            let content_key = hex_encode(content_key);
-            let endpoint = HistoryEndpoint::RecursiveFindContent;
-            let params = Params::Array(vec![json!(content_key)]);
-            let (resp_tx, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
-            let request = HistoryJsonRpcRequest {
-                endpoint,
-                resp: resp_tx,
-                params,
-            };
-            history_jsonrpc_tx.send(request).unwrap();
-
-            let epoch_acc_ssz = match resp_rx.recv().await {
-                Some(val) => {
-                    val.map_err(|msg| anyhow!("Chain history subnetwork request error: {:?}", msg))?
-                }
-                None => return Err(anyhow!("No response from chain history subnetwork")),
-            };
-            let epoch_acc_ssz = epoch_acc_ssz
-                .as_str()
-                .ok_or_else(|| anyhow!("Invalid epoch acc received from chain history network"))?;
-            let epoch_acc_ssz = hex_decode(epoch_acc_ssz)?;
-            let epoch_acc = EpochAccumulator::from_ssz_bytes(&epoch_acc_ssz).map_err(|msg| {
-                anyhow!(
-                    "Invalid epoch acc received from chain history network: {:?}",
-                    msg
-                )
-            })?;
+            let epoch_acc = self
+                .lookup_epoch_acc(epoch_hash, history_jsonrpc_tx)
+                .await?;
             let header_index = (header.number as u64) - epoch_index * (EPOCH_SIZE as u64);
             let header_record = epoch_acc.header_records[header_index as usize];
             Ok(header_record.block_hash == header.hash())
         }
+    }
+
+    pub async fn lookup_epoch_acc(
+        &self,
+        epoch_hash: H256,
+        history_jsonrpc_tx: mpsc::UnboundedSender<HistoryJsonRpcRequest>,
+    ) -> anyhow::Result<EpochAccumulator> {
+        let content_key: Vec<u8> =
+            HistoryContentKey::EpochAccumulator(EpochAccumulatorKey { epoch_hash }).into();
+        let content_key = hex_encode(content_key);
+        let endpoint = HistoryEndpoint::RecursiveFindContent;
+        let params = Params::Array(vec![json!(content_key)]);
+        let (resp_tx, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
+        let request = HistoryJsonRpcRequest {
+            endpoint,
+            resp: resp_tx,
+            params,
+        };
+        history_jsonrpc_tx.send(request).unwrap();
+
+        let epoch_acc_ssz = match resp_rx.recv().await {
+            Some(val) => {
+                val.map_err(|msg| anyhow!("Chain history subnetwork request error: {:?}", msg))?
+            }
+            None => return Err(anyhow!("No response from chain history subnetwork")),
+        };
+        let epoch_acc_ssz = epoch_acc_ssz
+            .as_str()
+            .ok_or_else(|| anyhow!("Invalid epoch acc received from chain history network"))?;
+        let epoch_acc_ssz = hex_decode(epoch_acc_ssz)?;
+        EpochAccumulator::from_ssz_bytes(&epoch_acc_ssz).map_err(|msg| {
+            anyhow!(
+                "Invalid epoch acc received from chain history network: {:?}",
+                msg
+            )
+        })
     }
 }
 

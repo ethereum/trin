@@ -133,6 +133,7 @@ pub async fn run_trin(
         portal_jsonrpc_rx,
         state_jsonrpc_tx,
         history_jsonrpc_tx,
+        header_oracle: header_oracle.clone(),
     };
 
     tokio::spawn(rpc_handler.process_jsonrpc_requests());
