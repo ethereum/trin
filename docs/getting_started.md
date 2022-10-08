@@ -63,10 +63,13 @@ cargo run -- --help
 
 ### Connect to the Portal Network testnet
 
-To establish a connection with a peer, pass in one or more bootnode ENRs.
+To immediately connect to the testnet, you can use the `--bootnodes default` argument to automatically connect with the default Trin bootnodes.
 
-Here, we connect to one of the designated Portal Network testnet bootnodes. Find a [testnet bootnode ENR](https://github.com/ethereum/portal-network-specs/blob/master/testnet.md). 
-Pass the ENR as the value for the `--bootnodes` CLI flag.
+```sh
+cargo run -- --bootnodes default
+```
+
+To establish a connection with a specific peer, pass in one or more bootnode ENRs. Pass the ENR as the value for the `--bootnodes` CLI flag.
 
 ```sh
 cargo run -- --bootnodes <bootnode-enr> 
@@ -104,7 +107,7 @@ To request a custom jsonrpc endpoint, provide the endpoint and array of params. 
   'dataRadius': '115792089237316195423570985008687907853269984665640564039457584007913129639935'}}
 ```
 
-See the [wiki](https://eth.wiki/json-rpc/API#json-rpc-methods) for other standard methods that are implemented. You can use the [web3.py](https://web3py.readthedocs.io/en/stable/web3.eth.html#module-web3.eth) API to access these. Note that currently most of them proxy to Infura rather than requesting the data from the Portal Network.
+See the [JSON-RPC API docs](/docs/jsonrpc_api.md) for other standard methods that are implemented. You can use the [web3.py](https://web3py.readthedocs.io/en/stable/web3.eth.html#module-web3.eth) API to access these.
 
 ### Connect over HTTP
 
