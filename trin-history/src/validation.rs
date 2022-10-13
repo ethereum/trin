@@ -101,11 +101,7 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                     ));
                 }
                 let master_acc = &self.header_oracle.read().await.master_acc;
-                if !master_acc
-                    .historical_epochs
-                    .epochs
-                    .contains(&tree_hash_root)
-                {
+                if !master_acc.historical_epochs.contains(&tree_hash_root) {
                     return Err(anyhow!(
                         "Content validation failed: Invalid epoch accumulator, missing from master accumulator."
                     ));

@@ -19,27 +19,27 @@ use crate::portalnet::types::content_key::{
 use crate::types::{header::Header, validation::MERGE_BLOCK_NUMBER};
 use crate::utils::bytes::{hex_decode, hex_encode};
 
-/// Number of blocks / epoch
+/// Max number of blocks / epoch = 2 ** 13
 pub const EPOCH_SIZE: usize = 8192;
 
-/// Max number of epochs - 2 ** 17
-const MAX_HISTORICAL_EPOCHS: usize = 131072;
+/// Max number of epochs = 2 ** 17
+/// const MAX_HISTORICAL_EPOCHS: usize = 131072;
 
 /// SSZ List[Hash256, max_length = MAX_HISTORICAL_EPOCHS]
 /// List of historical epoch accumulator merkle roots preceding current epoch.
-type HistoricalEpochsList = VariableList<tree_hash::Hash256, typenum::U8192>;
+type HistoricalEpochsList = VariableList<tree_hash::Hash256, typenum::U131072>;
 
 /// SSZ List[HeaderRecord, max_length = EPOCH_SIZE]
 /// List of (block_number, block_hash) for each header in the current epoch.
-type HeaderRecordList = VariableList<HeaderRecord, typenum::U131072>;
+type HeaderRecordList = VariableList<HeaderRecord, typenum::U8192>;
 
 /// SSZ Container
 /// Primary datatype used to maintain record of historical and current epoch.
 /// Verifies canonical-ness of a given header.
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq, Deserialize, Serialize, TreeHash)]
 pub struct MasterAccumulator {
-    pub historical_epochs: HistoricalEpochs,
-    current_epoch: EpochAccumulator,
+    pub historical_epochs: HistoricalEpochsList,
+    current_epoch: HeaderRecordList,
 }
 
 impl MasterAccumulator {
@@ -74,12 +74,12 @@ impl MasterAccumulator {
     }
 
     fn current_epoch_header_count(&self) -> u64 {
-        u64::try_from(self.current_epoch.header_records.len())
+        u64::try_from(self.current_epoch.len())
             .expect("Header Record count should not overflow u64")
     }
 
     fn epoch_number(&self) -> u64 {
-        u64::try_from(self.historical_epochs.epochs.len())
+        u64::try_from(self.historical_epochs.len())
             .expect("Historical Epoch count should not overflow u64")
     }
 
@@ -101,10 +101,10 @@ impl MasterAccumulator {
         }
         let rel_index = block_number % EPOCH_SIZE as u64;
         if block_number > self.epoch_number() * EPOCH_SIZE as u64 {
-            return Ok(self.current_epoch.header_records[rel_index as usize].block_hash);
+            return Ok(self.current_epoch[rel_index as usize].block_hash);
         }
         let epoch_index = block_number / EPOCH_SIZE as u64;
-        let epoch_hash = self.historical_epochs.epochs[epoch_index as usize];
+        let epoch_hash = self.historical_epochs[epoch_index as usize];
         let epoch_acc = self
             .lookup_epoch_acc(epoch_hash, history_jsonrpc_tx)
             .await?;
@@ -139,12 +139,11 @@ impl MasterAccumulator {
         }
         if self.is_header_in_current_epoch(header) {
             let rel_index = header.number - self.historical_epochs_header_count();
-            let verified_block_hash =
-                self.current_epoch.header_records[rel_index as usize].block_hash;
+            let verified_block_hash = self.current_epoch[rel_index as usize].block_hash;
             Ok(verified_block_hash == header.hash())
         } else {
             let epoch_index = self.get_epoch_index_of_header(header);
-            let epoch_hash = self.historical_epochs.epochs[epoch_index as usize];
+            let epoch_hash = self.historical_epochs[epoch_index as usize];
             let epoch_acc = self
                 .lookup_epoch_acc(epoch_hash, history_jsonrpc_tx)
                 .await?;
@@ -194,56 +193,9 @@ impl MasterAccumulator {
 impl Default for MasterAccumulator {
     fn default() -> Self {
         Self {
-            historical_epochs: HistoricalEpochs {
-                epochs: HistoricalEpochsList::empty(),
-            },
-            current_epoch: EpochAccumulator {
-                header_records: HeaderRecordList::empty(),
-            },
+            historical_epochs: HistoricalEpochsList::empty(),
+            current_epoch: HeaderRecordList::empty(),
         }
-    }
-}
-
-/// Datatype responsible for storing all of the merkle roots
-/// for epoch accumulators preceding the current epoch.
-#[derive(Clone, Debug, Eq, PartialEq, Decode, Encode, Deserialize, Serialize)]
-pub struct HistoricalEpochs {
-    pub epochs: HistoricalEpochsList,
-}
-
-impl TreeHash for HistoricalEpochs {
-    fn tree_hash_type() -> tree_hash::TreeHashType {
-        tree_hash::TreeHashType::List
-    }
-
-    fn tree_hash_packed_encoding(&self) -> Vec<u8> {
-        // in ssz merkleization spec, only basic types are packed
-        unreachable!("List should never be packed.")
-    }
-
-    fn tree_hash_packing_factor() -> usize {
-        // in ssz merkleization spec, only basic types are packed
-        unreachable!("List should never be packed.")
-    }
-
-    fn tree_hash_root(&self) -> tree_hash::Hash256 {
-        // When generating the hash root of a list of composite objects, the complete procedure is here:
-        // https://github.com/ethereum/py-ssz/blob/36f3406f814a5e5f4efb059a6928afc2d9d253b4/ssz/sedes/list.py#L113-L129
-        // Since we know each element is a composite object, we can simplify the python by removing some branches, to:
-        // mix_in_length(merkleize([hash_tree_root(element) for element in value], limit=chunk_count(type)), len(value))
-        let hash_tree_roots: Vec<tree_hash::Hash256> = self
-            .epochs
-            .iter()
-            .map(|epoch_root| epoch_root.tree_hash_root())
-            .collect();
-        let mut historical_epochs_hasher = MerkleHasher::with_leaves(MAX_HISTORICAL_EPOCHS);
-        for root in &hash_tree_roots {
-            historical_epochs_hasher
-                .write(root.as_bytes())
-                .expect("Invalid master accumulator state: Too many epochs.");
-        }
-        let historical_epochs_root = historical_epochs_hasher.finish().unwrap();
-        tree_hash::mix_in_length(&historical_epochs_root, hash_tree_roots.len())
     }
 }
 
@@ -635,7 +587,6 @@ mod test {
             0 => U256::zero(),
             _ => {
                 master_acc.current_epoch
-                    .header_records
                     .last()
                     .expect("Invalid master accumulator state: No header records for current epoch on non-genesis header.")
                     .total_difficulty
@@ -649,13 +600,10 @@ mod test {
             // append the hash for this epoch to the list of historical epochs
             master_acc
                 .historical_epochs
-                .epochs
                 .push(epoch_hash)
                 .expect("Invalid accumulator state, more historical epochs than allowed.");
             // initialize a new empty epoch
-            master_acc.current_epoch = EpochAccumulator {
-                header_records: HeaderRecordList::empty(),
-            };
+            master_acc.current_epoch = HeaderRecordList::empty();
         }
 
         // construct the concise record for the new header and add it to the current epoch
@@ -665,7 +613,6 @@ mod test {
         };
         master_acc
             .current_epoch
-            .header_records
             .push(header_record)
             .expect("Invalid accumulator state, more current epochs than allowed.");
         Ok(())
