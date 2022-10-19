@@ -87,31 +87,14 @@ pub fn launch_jsonrpc_server(
 }
 
 fn set_ipc_cleanup_handlers(ipc_path: &str) {
-    {
-        let ipc_path = ipc_path.to_string();
-        if let Err(err) = ctrlc::set_handler(move || {
-            if let Err(err) = fs::remove_file(&ipc_path) {
-                debug!("Ctrl-C: Skipped removing {} because: {}", ipc_path, err);
-            };
-            std::process::exit(1);
-        }) {
-            warn!(
-                "Could not set the Ctrl-C handler for removing the IPC socket: {}",
-                err
-            );
-        }
-    }
-
-    {
-        let ipc_path = ipc_path.to_string();
-        let original_panic = panic::take_hook();
-        panic::set_hook(Box::new(move |panic_info| {
-            if let Err(err) = fs::remove_file(&ipc_path) {
-                debug!("Panic hook: Skipped removing {} because: {}", ipc_path, err);
-            };
-            original_panic(panic_info);
-        }));
-    }
+    let ipc_path = ipc_path.to_string();
+    let original_panic = panic::take_hook();
+    panic::set_hook(Box::new(move |panic_info| {
+        if let Err(err) = fs::remove_file(&ipc_path) {
+            debug!("Panic hook: Skipped removing {} because: {}", ipc_path, err);
+        };
+        original_panic(panic_info);
+    }));
 }
 
 #[cfg(unix)]
@@ -182,11 +165,14 @@ fn launch_ipc_client(
             serve_ipc_client(&mut rx, &mut tx, trusted_provider, portal_tx);
         });
     }
+
     info!("IPC JSON-RPC server exited cleanly");
 
     if let Err(err) = fs::remove_file(ipc_path) {
         debug!("Clean Exit: Skipped removing {} because: {}", ipc_path, err);
     }
+
+    info!("IPC clean up complete");
 }
 
 fn launch_http_client(
@@ -196,11 +182,6 @@ fn launch_http_client(
     portal_tx: UnboundedSender<PortalJsonRpcRequest>,
     live_server_tx: tokio::sync::mpsc::Sender<bool>,
 ) {
-    ctrlc::set_handler(move || {
-        std::process::exit(1);
-    })
-    .expect("Error setting Ctrl-C handler.");
-
     let listener = TcpListener::bind(&trin_config.web3_http_address).unwrap();
 
     info!(url = %trin_config.web3_http_address, "HTTP JSON-RPC server listening for commands");
