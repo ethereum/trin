@@ -875,7 +875,7 @@ impl UtpStream {
 
     /// Handle uTP socket timeout
     async fn handle_receive_timeout(&mut self) -> anyhow::Result<()> {
-        self.congestion_timeout *= 2;
+        self.congestion_timeout = self.congestion_timeout.saturating_mul(2);
         self.cwnd = INIT_CWND * MAX_DISCV5_PACKET_SIZE;
 
         // There are four possible cases here:
