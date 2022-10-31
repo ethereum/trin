@@ -60,6 +60,8 @@ const MAX_BASE_DELAY_AGE: Delay = Delay(60_000_000);
 const DISCV5_SOCKET_TIMEOUT: u64 = 25;
 /// uTP receive timeout in milliseconds
 const UTP_RECEIVE_TIMEOUT: u64 = 1000;
+/// Maximum retries trying to receive acknowledgments for the send packets
+const MAX_RECV_ACKS_RETRIES: u8 = 5;
 
 /// uTP connection id
 type ConnId = u16;
@@ -875,7 +877,7 @@ impl UtpStream {
 
     /// Handle uTP socket timeout
     async fn handle_receive_timeout(&mut self) -> anyhow::Result<()> {
-        self.congestion_timeout *= 2;
+        self.congestion_timeout = self.congestion_timeout.saturating_mul(2);
         self.cwnd = INIT_CWND * MAX_DISCV5_PACKET_SIZE;
 
         // There are four possible cases here:
@@ -1644,10 +1646,15 @@ impl UtpStream {
     }
 
     /// Consumes acknowledgements for every pending packet.
+    /// Try to receive acknowledgements for up to MAX_RECV_ACKS_RETRIES.
     pub async fn flush(&mut self) -> anyhow::Result<()> {
         let mut buf = [0u8; BUF_SIZE];
-        while !self.send_window.is_empty() {
+
+        let mut flush_retries: u8 = 0;
+
+        while !self.send_window.is_empty() && flush_retries < MAX_RECV_ACKS_RETRIES {
             self.recv(&mut buf).await?;
+            flush_retries += 1;
         }
 
         Ok(())
