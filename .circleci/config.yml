@@ -2,7 +2,42 @@ version: 2.1
 orbs:
   rust: circleci/rust@1.6.0
   win: circleci/windows@2.2.0
+executors:
+  docker-publisher:
+    environment:
+      IMAGE_NAME: ogenev/trin
+    docker:
+      - image: cimg/rust:1.62.0
 jobs:
+  docker-build:
+    executor: docker-publisher
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run:
+          name: Build Docker image
+          command: docker build -t $IMAGE_NAME:latest .
+      - run:
+          name: Archive Docker image
+          command: docker save -o image.tar $IMAGE_NAME
+      - persist_to_workspace:
+          root: .
+          paths:
+            - ./image.tar
+  docker-publish:
+    executor: docker-publisher
+    steps:
+      - attach_workspace:
+          at: /tmp/workspace
+      - setup_remote_docker
+      - run:
+          name: Load archived Docker image
+          command: docker load -i /tmp/workspace/image.tar
+      - run:
+          name: Publish docker image to Docker Hub
+          command: |
+            echo "$DOCKERHUB_PASS" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+            docker push $IMAGE_NAME:latest
   lint-build-test:
         description: |
             Check linting with Clippy and rustfmt, build the crate, and run tests.
@@ -129,6 +164,16 @@ jobs:
 workflows:
   merge-test:
     jobs:
+      - docker-build:
+          filters:
+            branches:
+              only: master
+      - docker-publish:
+          requires:
+            - docker-build
+          filters:
+            branches:
+              only: master
       - lint-build-test
       - utp-test
       - win-build
