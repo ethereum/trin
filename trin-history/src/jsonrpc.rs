@@ -139,7 +139,7 @@ impl HistoryRequestHandler {
 
                     let response =
                         {
-                            match self.network.overlay.lookup_node_id(node_id).await
+                            match self.network.overlay.lookup_node_id(find_nodes_params.node_id).await
                             {
                                 Some(found_enrs) => {
                                     Ok(found_enrs)
