@@ -138,5 +138,5 @@ pub fn test_eth_get_block_by_number(_peertest_config: PeertestConfig, peertest: 
     };
 
     let result = make_ipc_request(&peertest.nodes[0].web3_ipc_path, &request).unwrap_err();
-    assert_eq!(result.to_string(), "JsonRpc response contains an error: String(\"Error while processing eth_getBlockByNumber: eth_getBlockByNumber not currently supported for blocks after the merge (#15537394)\")");
+    assert_eq!(result.to_string(), "JsonRpc response contains an error: String(\"Error while processing eth_getBlockByNumber: eth_getBlockByNumber not currently supported for blocks after the merge (#15537393)\")");
 }
