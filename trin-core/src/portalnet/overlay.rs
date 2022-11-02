@@ -693,6 +693,37 @@ where
         }
     }
 
+    /// Performs a recursive find nodes for `node_id`.
+    pub async fn lookup_node_id(&self, node_id: NodeId) -> Option<Vec<Enr>> {
+        let (tx, rx) = oneshot::channel();
+
+        if let Err(err) = self.command_tx.send(OverlayCommand::FindNodesQuery {
+            target,
+            callback: tx,
+        }) {
+            warn!(
+                protocol = %self.protocol,
+                error = %err,
+                content.id = %hex_encode(content_id),
+                "Error submitting FindContent query to service"
+            );
+            return None;
+        }
+
+        match rx.await {
+            Ok(result) => result,
+            Err(err) => {
+                warn!(
+                    protocol = %self.protocol,
+                    error = %err,
+                    content.id = %hex_encode(content_id),
+                    "Error receiving content from service",
+                );
+                None
+            }
+        }
+    }
+
     /// Sends a request through the overlay service.
     async fn send_overlay_request(
         &self,

@@ -32,6 +32,7 @@ pub enum HistoryEndpoint {
     SendOffer,
     Ping,
     RecursiveFindContent,
+    RecursiveFindNodes,
     Store,
     RoutingTableInfo,
 }

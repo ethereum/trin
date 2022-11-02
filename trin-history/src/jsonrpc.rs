@@ -10,7 +10,8 @@ use trin_core::{
         endpoints::HistoryEndpoint,
         types::{
             FindContentParams, FindNodesParams, HistoryJsonRpcRequest, LocalContentParams,
-            OfferParams, PingParams, RecursiveFindContentParams, SendOfferParams, StoreParams,
+            OfferParams, PingParams, RecursiveFindContentParams, RecursiveFindNodesParams,
+            SendOfferParams, StoreParams,
         },
         utils::bucket_entries_to_json,
     },
@@ -119,6 +120,32 @@ impl HistoryRequestHandler {
                                 }
                             }
                             Err(err) => Err(format!("Invalid content key requested: {}", err)),
+                        };
+
+                    let _ = request.resp.send(response);
+                }
+                HistoryEndpoint::RecursiveFindNodes => {
+                    let find_nodes_params =
+                        match RecursiveFindNodesParams::try_from(request.params) {
+                            Ok(params) => params,
+                            Err(msg) => {
+                                let _ = request.resp.send(Err(format!(
+                                    "Invalid RecursiveFindNodes params: {:?}",
+                                    msg.code
+                                )));
+                                return;
+                            }
+                        };
+
+                    let response =
+                        {
+                            match self.network.overlay.lookup_node_id(node_id).await
+                            {
+                                Some(found_enrs) => {
+                                    Ok(found_enrs)
+                                }
+                                None => Ok(Value::Null),
+                            }
                         };
 
                     let _ = request.resp.send(response);

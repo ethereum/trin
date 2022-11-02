@@ -365,6 +365,39 @@ impl TryFrom<&Value> for RecursiveFindContentParams {
     }
 }
 
+pub struct RecursiveFindNodesParams {
+    pub node_id: H256,
+}
+
+impl TryFrom<Params> for RecursiveFindNodesParams {
+    type Error = ValidationError;
+
+    fn try_from(params: Params) -> Result<Self, Self::Error> {
+        match params {
+            Params::Array(val) => match val.len() {
+                1 => Self::try_from(&val[0]),
+                _ => Err(ValidationError::new("Expected 1 param")),
+            },
+            _ => Err(ValidationError::new("Expected array of params")),
+        }
+    }
+}
+
+impl TryFrom<&Value> for RecursiveFindNodesParams {
+    type Error = ValidationError;
+
+    fn try_from(param: &Value) -> Result<Self, Self::Error> {
+        let encode_node_id = param
+            .as_str()
+            .ok_or_else(|| ValidationError::new("Empty node_id param"))?;
+        let node_id = match hex_decode(encode_node_id) {
+            Ok(val) => H256::from_str(encode_node_id),
+            Err(_) => return Err(ValidationError::new("Unable to decode node id")),
+        };
+        Ok(Self { node_id })
+    }
+}
+
 pub struct GetBlockByHashParams {
     pub block_hash: [u8; 32],
     // If full_transactions is True then the 'transactions' key will
