@@ -13,9 +13,9 @@ use crate::{
     utils::provider::TrustedProvider,
 };
 
-pub const MERGE_BLOCK_NUMBER: u64 = 15_537_394u64;
+pub const MERGE_BLOCK_NUMBER: u64 = 15_537_393u64;
 pub const DEFAULT_MASTER_ACC_HASH: &str =
-    "0x40d0ec5ce5b60d8f350a5c7651aac39d85a9e5ee52695a796f4c18496aa16a3d";
+    "0x1703fbb6d3310ff8582174239a665bc382aa0c83d6f1d00ee09b3036f95616f8";
 
 /// Responsible for dispatching cross-overlay-network requests
 /// for data to perform validation. Currently, it just proxies these requests
