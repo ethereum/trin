@@ -2,9 +2,8 @@ use super::{
     types::messages::{HexData, PortalnetConfig, ProtocolId},
     Enr,
 };
-use crate::socket;
 use crate::utils::bytes::hex_encode;
-
+use crate::{socket, TRIN_VERSION};
 use discv5::{
     enr::{CombinedKey, EnrBuilder, NodeId},
     Discv5, Discv5Config, Discv5ConfigBuilder, Discv5Event, RequestError, TalkRequest,
@@ -119,6 +118,11 @@ impl Discovery {
                 builder.ip(ip_address);
             }
             builder.udp4(config.listen_port);
+
+            // Use "t" as short-hand for "Trin" to save bytes in ENR.
+            let client_info = format!("t {}", TRIN_VERSION);
+            // Use "c" as short-hand for "client".
+            builder.add_value("c", client_info.as_bytes());
             builder.build(&enr_key).unwrap()
         };
 
