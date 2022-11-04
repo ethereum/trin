@@ -104,11 +104,11 @@ impl StateRequestHandler {
                                     None => {
                                         match self.network.overlay.lookup_content(content_key).await
                                         {
-                                            Some(content) => {
+                                            (Some(content), _) => {
                                                 let value = Value::String(hex_encode(content));
                                                 Ok(value)
                                             }
-                                            None => Ok(Value::Null),
+                                            (None, _) => Ok(Value::Null),
                                         }
                                     }
                                     Some(content) => Ok(Value::String(hex_encode(content))),
