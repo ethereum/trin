@@ -711,7 +711,7 @@ where
         }
 
         match rx.await {
-            Ok(result) => result,
+            Ok(result) => Some(result),
             Err(err) => {
                 warn!(
                     protocol = %self.protocol,

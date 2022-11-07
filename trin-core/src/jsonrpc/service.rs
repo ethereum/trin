@@ -18,7 +18,6 @@ use threadpool::ThreadPool;
 use tokio::sync::{mpsc, mpsc::UnboundedSender};
 use tracing::{debug, info, warn};
 use ureq::{self, Request};
-use validator::Validate;
 
 use crate::{
     cli::TrinConfig,

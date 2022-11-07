@@ -5,7 +5,7 @@ use ssz_types::VariableList;
 use tokio::sync::mpsc;
 use validator::{Validate, ValidationError};
 
-use std::str::FromStr
+use std::str::FromStr;
 
 use crate::{
     jsonrpc::{
@@ -393,7 +393,7 @@ impl TryFrom<&Value> for RecursiveFindNodesParams {
             .as_str()
             .ok_or_else(|| ValidationError::new("Empty node_id param"))?;
         let node_id = match hex_decode(encode_node_id) {
-            Ok(val) => H256::from_str(encode_node_id),
+            Ok(val) => H256::from_str(val),
             Err(_) => return Err(ValidationError::new("Unable to decode node id")),
         };
         Ok(Self { node_id })

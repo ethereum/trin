@@ -96,7 +96,7 @@ pub enum OverlayCommand<TContentKey> {
         /// The query target
         target: NodeId,
         /// A callback channel to transmit the result of the query.
-        callback: oneshot::Sender<Option<Vec<Enr>>>,
+        callback: oneshot::Sender<Vec<Enr>>,
     }
 }
 
@@ -463,11 +463,11 @@ where
                                 );
                             }
                         }
-                        OverlayCommand::FindNodeQuery { target, callback } => {
-                            if let Some(query_id) = self.init_find_nodes_query(target.clone(), Some(callback)) {
+                        OverlayCommand::FindNodesQuery { target, callback } => {
+                            if let Some(query_id) = self.init_find_nodes_query(&target, Some(callback)) {
                                 trace!(
                                     query.id = %query_id,
-                                    node.id = %hex_encode_compact(target.raw),
+                                    node.id = %hex_encode_compact(target.raw()),
                                     "FindNode query initialized"
                                 );
                             }
@@ -1919,7 +1919,7 @@ where
         &mut self,
         target: &NodeId,
         callback: Option<oneshot::Sender<Vec<Enr>>>,
-    ) {
+    ) -> Option<QueryId> {
         let target_key = Key::from(*target);
         let mut closest_enrs: Vec<Enr> = self
             .kbuckets
@@ -1959,11 +1959,11 @@ where
 
         if known_closest_peers.is_empty() {
             warn!("Cannot initialize FindNode query (no known close peers)");
+            None
         } else {
-            let find_nodes_query =
+            let query =
                 FindNodeQuery::with_config(query_config, query_info.key(), known_closest_peers);
-            self.find_node_query_pool
-                .add_query(query_info, find_nodes_query);
+            Some(self.find_node_query_pool.add_query(query_info, query))
         }
     }
 
