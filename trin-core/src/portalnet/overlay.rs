@@ -698,14 +698,14 @@ where
         let (tx, rx) = oneshot::channel();
 
         if let Err(err) = self.command_tx.send(OverlayCommand::FindNodesQuery {
-            target,
+            node_id,
             callback: tx,
         }) {
             warn!(
                 protocol = %self.protocol,
                 error = %err,
-                content.id = %hex_encode(content_id),
-                "Error submitting FindContent query to service"
+                node.id = %hex_encode(node_id),
+                "Error submitting FindNodes query to service"
             );
             return None;
         }
@@ -716,8 +716,8 @@ where
                 warn!(
                     protocol = %self.protocol,
                     error = %err,
-                    content.id = %hex_encode(content_id),
-                    "Error receiving content from service",
+                    node.id = %hex_encode(node_id),
+                    "Error receiving nodes from service",
                 );
                 None
             }

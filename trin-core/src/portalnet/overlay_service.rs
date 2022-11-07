@@ -92,6 +92,12 @@ pub enum OverlayCommand<TContentKey> {
         /// A callback channel to transmit the result of the query.
         callback: oneshot::Sender<Option<Vec<u8>>>,
     },
+    FindNodesQuery {
+        /// The query targe
+        target: TContentKey,
+        /// A callback channel to transmit the result of the query.
+        callback: oneshot::Sender<Option<Vec<Enr>>>,
+    }
 }
 
 /// An overlay request error.

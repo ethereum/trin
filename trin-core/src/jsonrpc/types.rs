@@ -5,6 +5,8 @@ use ssz_types::VariableList;
 use tokio::sync::mpsc;
 use validator::{Validate, ValidationError};
 
+use std::str::FromStr
+
 use crate::{
     jsonrpc::{
         endpoints::{HistoryEndpoint, StateEndpoint, TrinEndpoint},
