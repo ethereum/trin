@@ -261,7 +261,7 @@ pub struct OverlayService<TContentKey, TMetric, TValidator, TStore> {
     /// A map of active outgoing requests.
     active_outgoing_requests: Arc<RwLock<HashMap<OverlayRequestId, ActiveOutgoingRequest>>>,
     /// A query pool that manages find node queries.
-    find_node_query_pool: QueryPool<NodeId, FindNodeQuery<NodeId>, NodeId>,
+    find_node_query_pool: QueryPool<NodeId, FindNodeQuery<NodeId>, TContentKey>,
     /// A query pool that manages find content queries.
     find_content_query_pool: QueryPool<NodeId, FindContentQuery<NodeId>, TContentKey>,
     /// Timeout after which a peer in an ongoing query is marked unresponsive.
@@ -709,7 +709,7 @@ where
                     ..
                 } = query_info.query_type
                 {
-                    if let Err(err) = callback.send(Some(found_enrs.clone())) {
+                    if let Err(err) = callback.send(found_enrs.clone()) {
                         error!(
                             query.id = %query_id,
                             error = ?err,
@@ -1918,7 +1918,7 @@ where
     fn init_find_nodes_query(
         &mut self,
         target: &NodeId,
-        callback: Option<oneshot::Sender<Option<Vec<Enr>>>>,
+        callback: Option<oneshot::Sender<Vec<Enr>>>,
     ) {
         let target_key = Key::from(*target);
         let mut closest_enrs: Vec<Enr> = self
