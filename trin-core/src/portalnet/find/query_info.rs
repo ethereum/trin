@@ -25,10 +25,10 @@ pub enum QueryType<TContentKey> {
     /// The user requested a `FIND_NODE` query to be performed.
     FindNode {
         /// The target node.
-        target: NodeId,
+        target: TContentKey,
 
         /// A callback channel for the result of the query.
-        callback: Option<oneshot::Sender<Vec<Enr>>>,
+        callback: Option<oneshot::Sender<Option<Vec<Enr>>>>,
 
         /// The number of distances we request for each peer.
         distances_to_request: usize,

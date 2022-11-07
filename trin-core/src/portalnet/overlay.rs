@@ -693,18 +693,18 @@ where
         }
     }
 
-    /// Performs a recursive find nodes for `node_id`.
-    pub async fn lookup_node_id(&self, node_id: NodeId) -> Option<Vec<Enr>> {
+    /// Performs a recursive find nodes for `target` NodeId.
+    pub async fn lookup_node(&self, target: NodeId) -> Option<Vec<Enr>> {
         let (tx, rx) = oneshot::channel();
 
         if let Err(err) = self.command_tx.send(OverlayCommand::FindNodesQuery {
-            node_id,
+            target,
             callback: tx,
         }) {
             warn!(
                 protocol = %self.protocol,
                 error = %err,
-                node.id = %hex_encode(node_id),
+                node.id = %hex_encode(target.raw()),
                 "Error submitting FindNodes query to service"
             );
             return None;
@@ -716,7 +716,7 @@ where
                 warn!(
                     protocol = %self.protocol,
                     error = %err,
-                    node.id = %hex_encode(node_id),
+                    node.id = %hex_encode(target.raw()),
                     "Error receiving nodes from service",
                 );
                 None
