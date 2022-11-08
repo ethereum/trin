@@ -7,7 +7,7 @@ pub enum Discv5Endpoint {
     RoutingTableInfo,
 }
 
-/// State network JSON-RPC endpoints. Start with "portalState_" prefix
+/// State network JSON-RPC endpoints. Start with "portal_state" prefix
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum StateEndpoint {
     DataRadius,
@@ -21,7 +21,7 @@ pub enum StateEndpoint {
     RoutingTableInfo,
 }
 
-/// History network JSON-RPC endpoints. Start with "portalHistory_" prefix
+/// History network JSON-RPC endpoints. Start with "portal_history" prefix
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum HistoryEndpoint {
     DataRadius,
@@ -34,6 +34,8 @@ pub enum HistoryEndpoint {
     RecursiveFindContent,
     Store,
     RoutingTableInfo,
+    // This endpoint is not History network specific
+    PaginateLocalContentKeys,
 }
 
 /// Ethereum JSON-RPC endpoints not currently supported by portal network requests, proxied to
@@ -95,6 +97,9 @@ impl FromStr for TrinEndpoint {
             "portal_historyLocalContent" => {
                 Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::LocalContent))
             }
+            "portal_paginateLocalContentKeys" => Ok(TrinEndpoint::HistoryEndpoint(
+                HistoryEndpoint::PaginateLocalContentKeys,
+            )),
             "portal_historyOffer" => Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::Offer)),
             "portal_historySendOffer" => {
                 Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::SendOffer))

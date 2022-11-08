@@ -6,7 +6,6 @@ use std::{
 };
 
 use discv5::enr::NodeId;
-use hex;
 use prometheus_exporter::{
     self,
     prometheus::{register_gauge, Gauge},
@@ -15,13 +14,17 @@ use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rocksdb::{Options, DB};
 use rusqlite::params;
+use serde::Serialize;
 use tracing::{debug, error, info};
 
 use super::types::{
     content_key::OverlayContentKey,
     distance::{Distance, Metric, XorMetric},
 };
-use crate::{portalnet::types::messages::ProtocolId, utils::db::get_data_dir};
+use crate::{
+    portalnet::types::messages::ProtocolId,
+    utils::{bytes::hex_encode, db::get_data_dir},
+};
 
 // TODO: Replace enum with generic type parameter. This will require that we have a way to
 // associate a "find farthest" query with the generic Metric.
@@ -327,6 +330,40 @@ impl PortalStorage {
         Ok(storage)
     }
 
+    /// Returns a paginated list of all available content keys from local storage (from any
+    /// subnetwork) according to the provided offset and limit.
+    pub fn paginate(&self, offset: &u64, limit: &u64) -> anyhow::Result<PaginateResult> {
+        let conn = self.sql_connection_pool.get()?;
+        let mut query = conn.prepare(PAGINATE_QUERY)?;
+
+        let content_keys = query
+            .query_map(
+                &[
+                    (":offset", offset.to_string().as_str()),
+                    (":limit", limit.to_string().as_str()),
+                ],
+                |row| Ok(ContentKey { key: row.get(0)? }),
+            )?
+            .into_iter()
+            .map(|row| row.unwrap().key)
+            .collect();
+
+        let mut query = conn.prepare(TOTAL_ENTRY_COUNT_QUERY)?;
+        let result: Vec<u64> = query
+            .query_map([], |row| Ok(EntryCount { total: row.get(0)? }))?
+            .into_iter()
+            .map(|row| row.unwrap().total)
+            .collect();
+        let total_entries = result
+            .first()
+            .expect("Invalid total entries count returned from sql query.");
+
+        Ok(PaginateResult {
+            content_keys,
+            total_entries: *total_entries,
+        })
+    }
+
     /// Returns the distance to `key` from the local `NodeId` according to the distance function.
     fn distance_to_key<K: OverlayContentKey>(&self, key: &K) -> Distance {
         match self.distance_fn {
@@ -383,7 +420,7 @@ impl PortalStorage {
 
             debug!(
                 "Capacity reached, deleting farthest: {}",
-                hex::encode(&id_to_remove)
+                hex_encode(&id_to_remove)
             );
 
             let deleted_value = self.db.get(&id_to_remove)?;
@@ -410,7 +447,7 @@ impl PortalStorage {
                     break;
                 }
                 Some(farthest) => {
-                    debug!("Found new farthest: {}", hex::encode(&farthest));
+                    debug!("Found new farthest: {}", hex_encode(&farthest));
                     self.farthest_content_id = Some(farthest.clone());
                     self.radius = self.distance_to_content_id(&farthest);
                 }
@@ -456,7 +493,7 @@ impl PortalStorage {
     ) -> Result<(), ContentStoreError> {
         let content_id_as_u32: u32 = Self::byte_vector_to_u32(content_id.to_vec());
         let value_size = value.len();
-        let content_key = hex::encode(content_key);
+        let content_key = hex_encode(content_key);
         match self.sql_connection_pool.get()?.execute(
             INSERT_QUERY,
             params![
@@ -693,6 +730,11 @@ const XOR_FIND_FARTHEST_QUERY: &str = "SELECT
 
 const TOTAL_DATA_SIZE_QUERY: &str = "SELECT TOTAL(content_size) FROM content_metadata";
 
+const TOTAL_ENTRY_COUNT_QUERY: &str = "SELECT COUNT(content_id_long) FROM content_metadata";
+
+const PAGINATE_QUERY: &str =
+    "SELECT content_key FROM content_metadata ORDER BY content_key LIMIT :limit OFFSET :offset";
+
 // SQLite Result Containers
 struct ContentId {
     id_long: Vec<u8>,
@@ -700,6 +742,20 @@ struct ContentId {
 
 struct DataSizeSum {
     sum: f64,
+}
+
+struct EntryCount {
+    total: u64,
+}
+
+struct ContentKey {
+    key: String,
+}
+
+#[derive(Serialize)]
+pub struct PaginateResult {
+    content_keys: Vec<String>,
+    total_entries: u64,
 }
 
 #[cfg(test)]

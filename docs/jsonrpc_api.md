@@ -37,6 +37,7 @@ The specification for these endpoints can be found [here](https://eth.wiki/json-
 - [`portal_historyLocalContent`](#portal_historyLocalContent) 
 - [`portal_stateLocalContent`](#portal_stateLocalContent)
 - [`portal_historyRecursiveFindContent`](#portal_historyRecursiveFindContent)
+- [`portal_paginateLocalContentKeys`](#portal_paginateLocalContentKeys)
 
 # History Overlay Network
 
@@ -149,6 +150,31 @@ Attempts to look up content key in Trin node's local db.
   "jsonrpc": "2.0",
   "result": {
 	  "content": "0x0217a06ebc43f644f96bf5ab00a93aa4be499360a01dcc4de8dec75d0a142fd40d49347942a65aca4d5fc5b5c859090a6c34d164135398226a05ae233f6377f0671c612ec2a8bd15c20e428094f2fafc79bead9c55a989294dda064183d9f805f4aecbf532de75e6ad276dc281ba90947ff706beeaecc14eec6f5a059cf53b2f956a914b8360ea6fe271ebe7b10461c736eb16eb1a4121ba3abbb85b90110895564a08309a92a832fefd882520884565fc3be98d783010302844765746887676f312e352e31856c696e7578a0c5e99c6e90fbdee5650ff9b6dd41198655872ba32f810de58acb193a954e15898840f1ce50d18d7fdc"
+  }
+}
+```
+
+# General
+
+## `portal_paginateLocalContentKeys`
+Return a paginated list of all of the content keys (from every subnetwork) currently available in local storage.
+
+### Parameters
+- `offset`: The number of records that need to be skipped.
+- `limit`: Number of entries to return.
+
+### Returns
+- `content_keys`: List of content keys.
+- `total_entries`: Total number of content keys in local storage.
+
+#### Example
+```json
+{
+  "id": 1,
+  "jsonrpc": "2.0",
+  "result": {
+    "content_keys": ["0x0055b11b918355b1ef9c5db810302ebad0bf2544255b530cdce90674d5887bb286"],
+    "total_entries": 1
   }
 }
 ```
