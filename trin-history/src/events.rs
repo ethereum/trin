@@ -43,9 +43,10 @@ impl HistoryEvents {
                     error!(
                         error = %error,
                         request.discv5.id = %talk_request_id,
-                        "Error processing portal history request"
+                        "Error processing portal history request, responding with empty TALKRESP"
                     );
-                    error.to_string().into_bytes()
+                    // Return an empty TALKRESP if there was an error executing the request
+                    "".into()
                 }
             };
             if let Err(error) = talk_request.respond(reply) {
