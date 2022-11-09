@@ -987,7 +987,7 @@ where
                 let enrs = self.find_nodes_close_to_content(content_key);
                 match enrs {
                     Ok(mut val) => {
-                        pop_while_ssz_bytes_len_gt(&mut val, MAX_NODES_SIZE);
+                        pop_while_ssz_bytes_len_gt(&mut val, MAX_CONTENT_NODES_SIZE);
                         Ok(Content::Enrs(val))
                     }
                     Err(msg) => Err(OverlayRequestError::InvalidRequest(msg.to_string())),
@@ -2055,8 +2055,13 @@ const TALK_REQ_PACKET_OVERHEAD: usize = 16 + // IV
     16; // RLP HMAC
 const NODES_PACKET_OVERHEAD: usize = 1 + // Selector byte
     1; // `total` field
+const CONTENT_PACKET_OVERHEAD: usize = 1 + // Selector byte
+    4; // Union type index
 const MAX_NODES_SIZE: usize =
     MAX_DISCV5_PACKET_SIZE - TALK_REQ_PACKET_OVERHEAD - NODES_PACKET_OVERHEAD;
+const MAX_CONTENT_NODES_SIZE: usize =
+    MAX_DISCV5_PACKET_SIZE - TALK_REQ_PACKET_OVERHEAD - CONTENT_PACKET_OVERHEAD;
+
 /// Limits a to a maximum packet size, including the discv5 header overhead.
 fn pop_while_ssz_bytes_len_gt(enrs: &mut Vec<SszEnr>, max_size: usize) {
     while enrs.ssz_bytes_len() > max_size {
