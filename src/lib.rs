@@ -66,6 +66,10 @@ pub async fn run_trin(
 
     // Initialize validation oracle
     let master_accumulator = MasterAccumulator::try_from_file(trin_config.master_acc_path.clone())?;
+    info!(
+        "Loaded master accumulator from: {:?}",
+        trin_config.master_acc_path
+    );
     let header_oracle = HeaderOracle::new(trusted_provider.clone(), master_accumulator);
     let header_oracle = Arc::new(RwLock::new(header_oracle));
 

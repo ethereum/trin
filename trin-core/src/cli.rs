@@ -129,10 +129,9 @@ pub struct TrinConfig {
     )]
     pub geth_url: Option<String>,
 
-    // todo: support custom master accs
     #[structopt(
         long = "master-accumulator-path",
-        help = "Path to master accumulator for validation (not currently supported)",
+        help = "Path to master accumulator for validation",
         default_value(DEFAULT_MASTER_ACC_PATH),
         parse(from_os_str)
     )]
@@ -175,10 +174,6 @@ impl TrinConfig {
         T: Into<OsString> + Clone,
     {
         let config = Self::from_iter(args);
-
-        if config.master_acc_path != PathBuf::from(DEFAULT_MASTER_ACC_PATH.to_string()) {
-            panic!("Custom master accumulators are not yet supported.")
-        }
 
         match config.web3_transport.as_str() {
             "http" => match &config.web3_ipc_path[..] {
