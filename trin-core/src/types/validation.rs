@@ -7,10 +7,20 @@ use serde_json::{json, Value};
 use tokio::sync::mpsc;
 
 use crate::{
-    jsonrpc::types::{HistoryJsonRpcRequest, Params, StateJsonRpcRequest},
-    portalnet::types::content_key::IdentityContentKey,
+    jsonrpc::{
+        endpoints::{EthEndpoint, HistoryEndpoint},
+        handlers::proxy_query_to_history_subnet,
+        types::{
+            GetBlockByHashParams, GetBlockByNumberParams, HistoryJsonRpcRequest, Params,
+            StateJsonRpcRequest,
+        },
+    },
+    portalnet::types::content_key::{BlockHeader, HistoryContentKey, IdentityContentKey},
     types::{accumulator::MasterAccumulator, header::Header},
-    utils::provider::TrustedProvider,
+    utils::{
+        bytes::{hex_decode, hex_encode},
+        provider::TrustedProvider,
+    },
 };
 
 pub const MERGE_BLOCK_NUMBER: u64 = 15_537_393u64;
@@ -38,6 +48,59 @@ impl HeaderOracle {
             history_jsonrpc_tx: None,
             state_jsonrpc_tx: None,
             master_acc,
+        }
+    }
+
+    pub async fn process_eth_endpoint(
+        &self,
+        endpoint: EthEndpoint,
+        params: Params,
+    ) -> anyhow::Result<Value> {
+        match endpoint {
+            EthEndpoint::GetBlockByHash => self.get_block_by_hash(params).await,
+            EthEndpoint::GetBlockByNumber => self.get_block_by_number(params).await,
+        }
+    }
+
+    async fn get_block_by_number(&self, params: Params) -> anyhow::Result<Value> {
+        let params: GetBlockByNumberParams = params.try_into()?;
+        if params.block_number > MERGE_BLOCK_NUMBER {
+            return Err(anyhow!(
+                "eth_getBlockByNumber not currently supported for blocks after the merge (#{:?})",
+                MERGE_BLOCK_NUMBER
+            ));
+        }
+        let block_hash = self.get_hash_at_height(params.block_number).await?;
+        let params = Params::Array(vec![
+            Value::String(format!("{:?}", block_hash)),
+            Value::Bool(false),
+        ]);
+        self.get_block_by_hash(params).await
+    }
+
+    async fn get_block_by_hash(&self, params: Params) -> anyhow::Result<Value> {
+        let params: GetBlockByHashParams = params.try_into()?;
+        let content_key = HistoryContentKey::BlockHeader(BlockHeader {
+            block_hash: params.block_hash,
+        });
+        let endpoint = HistoryEndpoint::RecursiveFindContent;
+        let bytes_content_key: Vec<u8> = content_key.into();
+        let hex_content_key = hex_encode(bytes_content_key);
+        let overlay_params = Params::Array(vec![Value::String(hex_content_key)]);
+        let history_jsonrpc_tx = self.history_jsonrpc_tx()?;
+
+        let resp =
+            proxy_query_to_history_subnet(&history_jsonrpc_tx, endpoint, overlay_params).await;
+
+        match resp {
+            Ok(Value::String(val)) => hex_decode(val.as_str())
+                .and_then(|bytes| {
+                    rlp::decode::<Header>(bytes.as_ref()).map_err(|_| anyhow!("Invalid RLP"))
+                })
+                .map(|header| json!(header)),
+            Ok(Value::Null) => Ok(Value::Null),
+            Ok(_) => Err(anyhow!("Invalid JSON value")),
+            Err(err) => Err(err),
         }
     }
 

@@ -10,7 +10,6 @@ use tracing::debug;
 use crate::{
     jsonrpc::{
         endpoints::{Discv5Endpoint, HistoryEndpoint, PortalEndpoint, StateEndpoint, TrinEndpoint},
-        eth,
         types::{HistoryJsonRpcRequest, Params, PortalJsonRpcRequest, StateJsonRpcRequest},
     },
     portalnet::discovery::Discovery,
@@ -50,8 +49,17 @@ impl JsonRpcHandler {
                         Err(_) => Err(anyhow!("State subnetwork unavailable.")),
                     }
                 }
-                TrinEndpoint::PortalEndpoint(endpoint) => {
-                    self.eth_handler(endpoint, request.params).await
+                TrinEndpoint::PortalEndpoint(endpoint) => match endpoint {
+                    PortalEndpoint::ClientVersion => {
+                        Ok(Value::String(format!("trin v{}", TRIN_VERSION)))
+                    }
+                },
+                TrinEndpoint::EthEndpoint(endpoint) => {
+                    self.header_oracle
+                        .read()
+                        .await
+                        .process_eth_endpoint(endpoint, request.params)
+                        .await
                 }
                 _ => Err(anyhow!(
                     "Can't process portal network endpoint {:?}",
@@ -59,24 +67,6 @@ impl JsonRpcHandler {
                 )),
             };
             let _ = request.resp.send(response);
-        }
-    }
-
-    /// Forward requests onto their respective composer function along with any relevant
-    /// transport channels to required overlay networks
-    async fn eth_handler(
-        &mut self,
-        endpoint: PortalEndpoint,
-        params: Params,
-    ) -> anyhow::Result<Value> {
-        match endpoint {
-            PortalEndpoint::ClientVersion => Ok(Value::String(format!("trin v{}", TRIN_VERSION))),
-            PortalEndpoint::GetBlockByHash => {
-                eth::get_block_by_hash(params, self.header_oracle.clone()).await
-            }
-            PortalEndpoint::GetBlockByNumber => {
-                eth::get_block_by_number(params, self.header_oracle.clone()).await
-            }
         }
     }
 }

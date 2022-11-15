@@ -45,10 +45,16 @@ pub enum TrustedProviderEndpoint {
 
 /// Ethereum JSON-RPC endpoints supported by portal network requests
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum PortalEndpoint {
-    ClientVersion, // Doesn't actually rely on portal network data, but it makes sense to live here
+pub enum EthEndpoint {
     GetBlockByHash,
     GetBlockByNumber,
+}
+
+// general portal network client infra endpoints
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum PortalEndpoint {
+    ClientVersion, // Doesn't actually rely on portal network data, but it makes sense to live here
+                   // paginate
 }
 
 /// Global portal network endpoints supported by trin, including trusted providers, Discv5, Ethereum and all overlay network endpoints supported by portal network requests
@@ -62,6 +68,7 @@ pub enum TrinEndpoint {
     StateEndpoint(StateEndpoint),
     TrustedProviderEndpoint(TrustedProviderEndpoint),
     PortalEndpoint(PortalEndpoint),
+    EthEndpoint(EthEndpoint),
 }
 
 impl FromStr for TrinEndpoint {
@@ -77,12 +84,8 @@ impl FromStr for TrinEndpoint {
             "eth_blockNumber" => Ok(TrinEndpoint::TrustedProviderEndpoint(
                 TrustedProviderEndpoint::BlockNumber,
             )),
-            "eth_getBlockByHash" => {
-                Ok(TrinEndpoint::PortalEndpoint(PortalEndpoint::GetBlockByHash))
-            }
-            "eth_getBlockByNumber" => Ok(TrinEndpoint::PortalEndpoint(
-                PortalEndpoint::GetBlockByNumber,
-            )),
+            "eth_getBlockByHash" => Ok(TrinEndpoint::EthEndpoint(EthEndpoint::GetBlockByHash)),
+            "eth_getBlockByNumber" => Ok(TrinEndpoint::EthEndpoint(EthEndpoint::GetBlockByNumber)),
             "portal_historyFindContent" => {
                 Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::FindContent))
             }
