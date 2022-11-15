@@ -14,7 +14,7 @@ pub const INFURA_BASE_HTTP_URL: &str = "https://mainnet.infura.io:443/v3/";
 pub const INFURA_BASE_WS_URL: &str = "wss://mainnet.infura.io:443/ws/v3/";
 
 // Type used for parsing cli args
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TrustedProviderType {
     Infura,
     Geth,
@@ -84,12 +84,10 @@ impl TrustedProvider {
         };
         match dispatch_trusted_http_request(request, self.http.clone()) {
             Ok(val) => Ok(serde_json::from_str(&val)?),
-            Err(msg) => {
-                return Err(anyhow!(
-                    "Unable to request validation data from trusted provider: {:?}",
-                    msg
-                ))
-            }
+            Err(msg) => Err(anyhow!(
+                "Unable to request validation data from trusted provider: {:?}",
+                msg
+            )),
         }
     }
 }

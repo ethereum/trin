@@ -38,7 +38,11 @@ pub async fn initialize_state_network(
     header_oracle: Arc<RwLock<HeaderOracle>>,
 ) -> (StateHandler, StateNetworkTask, StateEventTx, StateUtpTx) {
     let (state_jsonrpc_tx, state_jsonrpc_rx) = mpsc::unbounded_channel::<StateJsonRpcRequest>();
-    header_oracle.write().await.state_jsonrpc_tx = Some(state_jsonrpc_tx.clone());
+    let _ = header_oracle
+        .write()
+        .await
+        .network_bus
+        .set_state_tx(state_jsonrpc_tx.clone());
     let (state_event_tx, state_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
     let (utp_state_tx, utp_state_rx) = mpsc::unbounded_channel::<UtpListenerEvent>();
     let state_network = StateNetwork::new(

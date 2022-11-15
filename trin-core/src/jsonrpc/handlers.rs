@@ -36,7 +36,7 @@ impl JsonRpcHandler {
                     Discv5Endpoint::RoutingTableInfo => Ok(self.discovery.routing_table_info()),
                 },
                 TrinEndpoint::HistoryEndpoint(endpoint) => {
-                    match self.header_oracle.read().await.history_jsonrpc_tx() {
+                    match self.header_oracle.read().await.network_bus.get_history_tx() {
                         Ok(tx) => {
                             proxy_query_to_history_subnet(&tx, endpoint, request.params).await
                         }
@@ -44,7 +44,7 @@ impl JsonRpcHandler {
                     }
                 }
                 TrinEndpoint::StateEndpoint(endpoint) => {
-                    match self.header_oracle.read().await.state_jsonrpc_tx() {
+                    match self.header_oracle.read().await.network_bus.get_state_tx() {
                         Ok(tx) => proxy_query_to_state_subnet(&tx, endpoint, request.params).await,
                         Err(_) => Err(anyhow!("State subnetwork unavailable.")),
                     }

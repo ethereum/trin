@@ -42,7 +42,11 @@ pub async fn initialize_history_network(
 ) {
     let (history_jsonrpc_tx, history_jsonrpc_rx) =
         mpsc::unbounded_channel::<HistoryJsonRpcRequest>();
-    header_oracle.write().await.history_jsonrpc_tx = Some(history_jsonrpc_tx.clone());
+    let _ = header_oracle
+        .write()
+        .await
+        .network_bus
+        .set_history_tx(history_jsonrpc_tx.clone());
     let (history_event_tx, history_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
     let (utp_history_tx, utp_history_rx) = mpsc::unbounded_channel::<UtpListenerEvent>();
     let history_network = HistoryNetwork::new(

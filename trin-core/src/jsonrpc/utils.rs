@@ -97,12 +97,9 @@ fn expand_client_name(client_shorthand: &str) -> Option<String> {
         Some(client_name) => {
             let mut expanded_string: String = client_name.to_owned();
 
-            match client_shorthand_words.next() {
-                Some(version_string) => {
-                    expanded_string.push(' ');
-                    expanded_string.push_str(version_string);
-                }
-                None => {}
+            if let Some(version_string) = client_shorthand_words.next() {
+                expanded_string.push(' ');
+                expanded_string.push_str(version_string);
             }
             Some(expanded_string)
         }

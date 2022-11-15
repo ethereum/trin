@@ -3,19 +3,15 @@ use std::str::FromStr;
 use anyhow::anyhow;
 use ethereum_types::H256;
 use serde_json::{json, Value};
-use tokio::sync::mpsc;
 
 use crate::{
     jsonrpc::{
         endpoints::{EthEndpoint, HistoryEndpoint},
         handlers::proxy_query_to_history_subnet,
-        types::{
-            GetBlockByHashParams, GetBlockByNumberParams, HistoryJsonRpcRequest, Params,
-            StateJsonRpcRequest,
-        },
+        types::{GetBlockByHashParams, GetBlockByNumberParams, Params},
     },
     portalnet::types::content_key::{BlockHeader, HistoryContentKey},
-    types::{accumulator::MasterAccumulator, header::Header},
+    types::{accumulator::MasterAccumulator, bus::NetworkBus, header::Header},
     utils::{
         bytes::{hex_decode, hex_encode},
         provider::TrustedProvider,
@@ -26,14 +22,11 @@ pub const MERGE_BLOCK_NUMBER: u64 = 15_537_393u64;
 pub const DEFAULT_MASTER_ACC_HASH: &str =
     "0x1703fbb6d3310ff8582174239a665bc382aa0c83d6f1d00ee09b3036f95616f8";
 
-/// Responsible for dispatching cross-overlay-network requests
-/// for data to perform validation. Currently, it just proxies these requests
-/// on to the trusted provider.
+/// Responsible for dispatching cross-overlay-network data requests, validating data and composing responses.
 #[derive(Clone, Debug)]
 pub struct HeaderOracle {
     pub trusted_provider: TrustedProvider,
-    pub history_jsonrpc_tx: Option<mpsc::UnboundedSender<HistoryJsonRpcRequest>>,
-    pub state_jsonrpc_tx: Option<mpsc::UnboundedSender<StateJsonRpcRequest>>,
+    pub network_bus: NetworkBus,
     pub master_acc: MasterAccumulator,
 }
 
@@ -41,8 +34,7 @@ impl HeaderOracle {
     pub fn new(trusted_provider: TrustedProvider, master_acc: MasterAccumulator) -> Self {
         Self {
             trusted_provider,
-            history_jsonrpc_tx: None,
-            state_jsonrpc_tx: None,
+            network_bus: NetworkBus::default(),
             master_acc,
         }
     }
@@ -58,6 +50,7 @@ impl HeaderOracle {
         }
     }
 
+    /// eth_getBlockByNumber
     async fn get_block_by_number(&self, params: Params) -> anyhow::Result<Value> {
         let params: GetBlockByNumberParams = params.try_into()?;
         if params.block_number > MERGE_BLOCK_NUMBER {
@@ -74,6 +67,7 @@ impl HeaderOracle {
         self.get_block_by_hash(params).await
     }
 
+    /// eth_getBlockByHash
     async fn get_block_by_hash(&self, params: Params) -> anyhow::Result<Value> {
         let params: GetBlockByHashParams = params.try_into()?;
         let content_key = HistoryContentKey::BlockHeader(BlockHeader {
@@ -83,7 +77,7 @@ impl HeaderOracle {
         let bytes_content_key: Vec<u8> = content_key.into();
         let hex_content_key = hex_encode(bytes_content_key);
         let overlay_params = Params::Array(vec![Value::String(hex_content_key)]);
-        let history_jsonrpc_tx = self.history_jsonrpc_tx()?;
+        let history_jsonrpc_tx = self.network_bus.get_history_tx()?;
 
         let resp =
             proxy_query_to_history_subnet(&history_jsonrpc_tx, endpoint, overlay_params).await;
@@ -102,8 +96,9 @@ impl HeaderOracle {
 
     // Only serves pre-block hashes aka. portal-network verified data only
     pub async fn get_hash_at_height(&self, block_number: u64) -> anyhow::Result<H256> {
+        let history_tx = self.network_bus.get_history_tx()?;
         self.master_acc
-            .lookup_premerge_hash_by_number(block_number, self.history_jsonrpc_tx()?)
+            .lookup_premerge_hash_by_number(block_number, history_tx)
             .await
     }
 
@@ -118,25 +113,9 @@ impl HeaderOracle {
         Ok(header)
     }
 
-    pub fn history_jsonrpc_tx(
-        &self,
-    ) -> anyhow::Result<mpsc::UnboundedSender<HistoryJsonRpcRequest>> {
-        match self.history_jsonrpc_tx.clone() {
-            Some(val) => Ok(val),
-            None => Err(anyhow!("History subnetwork is not available")),
-        }
-    }
-
-    pub fn state_jsonrpc_tx(&self) -> anyhow::Result<mpsc::UnboundedSender<StateJsonRpcRequest>> {
-        match self.state_jsonrpc_tx.clone() {
-            Some(val) => Ok(val),
-            None => Err(anyhow!("State subnetwork is not available")),
-        }
-    }
-
     pub async fn validate_header_is_canonical(&self, header: Header) -> anyhow::Result<()> {
         if header.number <= MERGE_BLOCK_NUMBER {
-            if let Ok(history_jsonrpc_tx) = self.history_jsonrpc_tx() {
+            if let Ok(history_jsonrpc_tx) = self.network_bus.get_history_tx() {
                 if let Ok(val) = &self
                     .master_acc
                     .validate_pre_merge_header(&header, history_jsonrpc_tx)

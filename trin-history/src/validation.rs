@@ -217,7 +217,7 @@ mod tests {
         let header_bytelist = ByteList::try_from(header_rlp.clone()).unwrap();
 
         let header: Header = rlp::decode(&header_rlp).expect("error decoding header");
-        let header_oracle = default_header_oracle(server.url("/get_header"));
+        let header_oracle = default_header_oracle(server.url("/get_header")).await;
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = HistoryContentKey::BlockHeader(BlockHeader {
             block_hash: header.hash().0,
@@ -240,7 +240,7 @@ mod tests {
         header.number = 669052;
 
         let header_bytelist = ByteList::from(rlp::encode(&header).to_vec());
-        let header_oracle = default_header_oracle(server.url("/get_header"));
+        let header_oracle = default_header_oracle(server.url("/get_header")).await;
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = HistoryContentKey::BlockHeader(BlockHeader {
             block_hash: header.hash().0,
@@ -264,7 +264,7 @@ mod tests {
         header.gas_limit = U256::from(3141591);
 
         let header_bytelist = ByteList::from(rlp::encode(&header).to_vec());
-        let header_oracle = default_header_oracle(server.url("/get_header"));
+        let header_oracle = default_header_oracle(server.url("/get_header")).await;
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = HistoryContentKey::BlockHeader(BlockHeader {
             block_hash: header.hash().0,
@@ -284,7 +284,7 @@ mod tests {
         let block_body_bytelist: VariableList<_, typenum::U16384> =
             VariableList::from(ssz_block_body);
 
-        let header_oracle = default_header_oracle(server.url("/14764013"));
+        let header_oracle = default_header_oracle(server.url("/14764013")).await;
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = block_14764013_body_key();
 
@@ -313,7 +313,7 @@ mod tests {
         let invalid_content: VariableList<_, typenum::U16384> =
             VariableList::from(invalid_ssz_block_body);
 
-        let header_oracle = default_header_oracle(server.url("/14764013"));
+        let header_oracle = default_header_oracle(server.url("/14764013")).await;
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = block_14764013_body_key();
 
@@ -330,7 +330,7 @@ mod tests {
             std::fs::read("../trin-core/src/types/assets/receipts_14764013.bin").unwrap();
         let content: VariableList<_, typenum::U16384> = VariableList::from(ssz_receipts);
 
-        let header_oracle = default_header_oracle(server.url("/14764013"));
+        let header_oracle = default_header_oracle(server.url("/14764013")).await;
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = block_14764013_receipts_key();
 
@@ -357,7 +357,7 @@ mod tests {
         let invalid_content: VariableList<_, typenum::U16384> =
             VariableList::from(invalid_ssz_receipts);
 
-        let header_oracle = default_header_oracle(server.url("/14764013"));
+        let header_oracle = default_header_oracle(server.url("/14764013")).await;
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = block_14764013_receipts_key();
 
@@ -374,7 +374,7 @@ mod tests {
         let server = setup_mock_infura_server();
         let epoch_acc = std::fs::read("./../trin-core/src/assets/0x5ec1…4218.bin").unwrap();
         let epoch_acc = EpochAccumulator::from_ssz_bytes(&epoch_acc).unwrap();
-        let header_oracle = default_header_oracle(server.url("/14764013"));
+        let header_oracle = default_header_oracle(server.url("/14764013")).await;
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = HistoryContentKey::EpochAccumulator(EpochAccumulatorKey {
             epoch_hash: epoch_acc.tree_hash_root(),
@@ -392,7 +392,7 @@ mod tests {
         let server = setup_mock_infura_server();
         let epoch_acc = std::fs::read("./../trin-core/src/assets/0x5ec1…4218.bin").unwrap();
         let mut epoch_acc = EpochAccumulator::from_ssz_bytes(&epoch_acc).unwrap();
-        let header_oracle = default_header_oracle(server.url("/14764013"));
+        let header_oracle = default_header_oracle(server.url("/14764013")).await;
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = HistoryContentKey::EpochAccumulator(EpochAccumulatorKey {
             epoch_hash: epoch_acc.tree_hash_root(),
@@ -416,7 +416,7 @@ mod tests {
         let server = setup_mock_infura_server();
         let epoch_acc = std::fs::read("./../trin-core/src/assets/0x5ec1…4218.bin").unwrap();
         let mut epoch_acc = EpochAccumulator::from_ssz_bytes(&epoch_acc).unwrap();
-        let header_oracle = default_header_oracle(server.url("/14764013"));
+        let header_oracle = default_header_oracle(server.url("/14764013")).await;
         let chain_history_validator = ChainHistoryValidator { header_oracle };
 
         epoch_acc.header_records[0] = HeaderRecord {
@@ -434,7 +434,7 @@ mod tests {
             .unwrap();
     }
 
-    fn default_header_oracle(infura_url: String) -> Arc<RwLock<HeaderOracle>> {
+    async fn default_header_oracle(infura_url: String) -> Arc<RwLock<HeaderOracle>> {
         let trusted_provider = TrustedProvider {
             http: ureq::post(&infura_url),
             ws: None,

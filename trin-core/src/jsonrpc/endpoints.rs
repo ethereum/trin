@@ -43,18 +43,17 @@ pub enum TrustedProviderEndpoint {
     BlockNumber,
 }
 
-/// Ethereum JSON-RPC endpoints supported by portal network requests
+/// Ethereum JSON-RPC endpoints supported by portal network requests (eg. `eth_*`)
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum EthEndpoint {
     GetBlockByHash,
     GetBlockByNumber,
 }
 
-// general portal network client infra endpoints
+/// General Trin endpoints that don't rely on fetching portal network data
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum PortalEndpoint {
-    ClientVersion, // Doesn't actually rely on portal network data, but it makes sense to live here
-                   // paginate
+    ClientVersion,
 }
 
 /// Global portal network endpoints supported by trin, including trusted providers, Discv5, Ethereum and all overlay network endpoints supported by portal network requests

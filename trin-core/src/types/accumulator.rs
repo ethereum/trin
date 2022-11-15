@@ -263,7 +263,7 @@ mod test {
     use rstest::*;
 
     use crate::jsonrpc::types::RecursiveFindContentParams;
-    use crate::types::validation::DEFAULT_MASTER_ACC_HASH;
+    use crate::types::oracle::DEFAULT_MASTER_ACC_HASH;
 
     #[test]
     fn master_accumulator_update() {
