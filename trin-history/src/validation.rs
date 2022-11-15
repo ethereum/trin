@@ -10,11 +10,8 @@ use tree_hash::TreeHash;
 use trin_core::{
     portalnet::types::content_key::HistoryContentKey,
     types::{
-        accumulator::EpochAccumulator,
-        block_body::BlockBody,
-        header::Header,
-        receipts::Receipts,
-        validation::{HeaderOracle, Validator},
+        accumulator::EpochAccumulator, block_body::BlockBody, header::Header, oracle::HeaderOracle,
+        receipts::Receipts, validation::Validator,
     },
 };
 

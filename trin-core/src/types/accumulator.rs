@@ -16,7 +16,7 @@ use crate::jsonrpc::types::{HistoryJsonRpcRequest, Params};
 use crate::portalnet::types::content_key::{
     EpochAccumulator as EpochAccumulatorKey, HistoryContentKey,
 };
-use crate::types::{header::Header, validation::MERGE_BLOCK_NUMBER};
+use crate::types::{header::Header, oracle::MERGE_BLOCK_NUMBER};
 use crate::utils::bytes::{hex_decode, hex_encode};
 
 /// Max number of blocks / epoch = 2 ** 13

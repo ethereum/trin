@@ -19,7 +19,7 @@ use trin_core::{
     portalnet::{
         discovery::Discovery, storage::PortalStorageConfig, types::messages::PortalnetConfig,
     },
-    types::validation::HeaderOracle,
+    types::oracle::HeaderOracle,
     utp::stream::{UtpListenerEvent, UtpListenerRequest},
 };
 

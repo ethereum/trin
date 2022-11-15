@@ -14,7 +14,7 @@ use trin_core::{
         discovery::Discovery, events::PortalnetEvents, storage::PortalStorageConfig,
         types::messages::PortalnetConfig,
     },
-    types::{accumulator::MasterAccumulator, validation::HeaderOracle},
+    types::{accumulator::MasterAccumulator, oracle::HeaderOracle},
     utils::{bootnodes::parse_bootnodes, db::setup_temp_dir, provider::TrustedProvider},
     utp::stream::UtpListener,
 };

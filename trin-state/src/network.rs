@@ -16,7 +16,7 @@ use trin_core::{
             messages::{PortalnetConfig, ProtocolId},
         },
     },
-    types::validation::HeaderOracle,
+    types::oracle::HeaderOracle,
     utp::stream::UtpListenerRequest,
 };
 

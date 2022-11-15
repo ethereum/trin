@@ -13,7 +13,7 @@ use crate::{
         types::{HistoryJsonRpcRequest, Params, PortalJsonRpcRequest, StateJsonRpcRequest},
     },
     portalnet::discovery::Discovery,
-    types::validation::HeaderOracle,
+    types::oracle::HeaderOracle,
     TRIN_VERSION,
 };
 
