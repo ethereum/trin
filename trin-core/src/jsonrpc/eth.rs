@@ -2,13 +2,13 @@ use std::sync::Arc;
 
 use anyhow::anyhow;
 use serde_json::{json, Value};
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::RwLock;
 
 use crate::{
     jsonrpc::{
         endpoints::HistoryEndpoint,
         handlers::proxy_query_to_history_subnet,
-        types::{GetBlockByHashParams, GetBlockByNumberParams, HistoryJsonRpcRequest, Params},
+        types::{GetBlockByHashParams, GetBlockByNumberParams, Params},
     },
     portalnet::types::content_key::{BlockHeader, HistoryContentKey},
     types::header::Header,
@@ -19,7 +19,7 @@ use crate::{
 /// eth_getBlockByHash
 pub async fn get_block_by_hash(
     params: Params,
-    history_jsonrpc_tx: &Option<mpsc::UnboundedSender<HistoryJsonRpcRequest>>,
+    header_oracle: Arc<RwLock<HeaderOracle>>,
 ) -> anyhow::Result<Value> {
     let params: GetBlockByHashParams = params.try_into()?;
     let content_key = HistoryContentKey::BlockHeader(BlockHeader {
@@ -29,11 +29,9 @@ pub async fn get_block_by_hash(
     let bytes_content_key: Vec<u8> = content_key.into();
     let hex_content_key = hex_encode(bytes_content_key);
     let overlay_params = Params::Array(vec![Value::String(hex_content_key)]);
+    let history_jsonrpc_tx = header_oracle.read().await.history_jsonrpc_tx()?;
 
-    let resp = match history_jsonrpc_tx.as_ref() {
-        Some(tx) => proxy_query_to_history_subnet(tx, endpoint, overlay_params).await,
-        None => Err(anyhow!("Chain history subnetwork unavailable.")),
-    };
+    let resp = proxy_query_to_history_subnet(&history_jsonrpc_tx, endpoint, overlay_params).await;
 
     match resp {
         Ok(Value::String(val)) => hex_decode(val.as_str())
@@ -68,9 +66,5 @@ pub async fn get_block_by_number(
         Value::String(format!("{:?}", block_hash)),
         Value::Bool(false),
     ]);
-    get_block_by_hash(
-        params,
-        &Some(header_oracle.read().await.history_jsonrpc_tx()?),
-    )
-    .await
+    get_block_by_hash(params, header_oracle.clone()).await
 }

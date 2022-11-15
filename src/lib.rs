@@ -70,7 +70,7 @@ pub async fn run_trin(
     let header_oracle = Arc::new(RwLock::new(header_oracle));
 
     // Initialize state sub-network service and event handlers, if selected
-    let (state_handler, state_network_task, state_event_tx, state_utp_tx, state_jsonrpc_tx) =
+    let (state_handler, state_network_task, state_event_tx, state_utp_tx) =
         if trin_config.networks.iter().any(|val| val == STATE_NETWORK) {
             initialize_state_network(
                 &discovery,
@@ -81,17 +81,11 @@ pub async fn run_trin(
             )
             .await
         } else {
-            (None, None, None, None, None)
+            (None, None, None, None)
         };
 
     // Initialize chain history sub-network service and event handlers, if selected
-    let (
-        history_handler,
-        history_network_task,
-        history_event_tx,
-        history_utp_tx,
-        history_jsonrpc_tx,
-    ) = if trin_config
+    let (history_handler, history_network_task, history_event_tx, history_utp_tx) = if trin_config
         .networks
         .iter()
         .any(|val| val == HISTORY_NETWORK)
@@ -105,7 +99,7 @@ pub async fn run_trin(
         )
         .await
     } else {
-        (None, None, None, None, None)
+        (None, None, None, None)
     };
 
     // Initialize json-rpc server
@@ -131,8 +125,6 @@ pub async fn run_trin(
     let rpc_handler = JsonRpcHandler {
         discovery: jsonrpc_discovery,
         portal_jsonrpc_rx,
-        state_jsonrpc_tx,
-        history_jsonrpc_tx,
         header_oracle: header_oracle.clone(),
     };
 

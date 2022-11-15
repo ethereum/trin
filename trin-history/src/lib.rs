@@ -27,7 +27,6 @@ type HistoryHandler = Option<HistoryRequestHandler>;
 type HistoryNetworkTask = Option<JoinHandle<()>>;
 type HistoryEventTx = Option<mpsc::UnboundedSender<TalkRequest>>;
 type HistoryUtpTx = Option<mpsc::UnboundedSender<UtpListenerEvent>>;
-type HistoryJsonRpcTx = Option<mpsc::UnboundedSender<HistoryJsonRpcRequest>>;
 
 pub async fn initialize_history_network(
     discovery: &Arc<Discovery>,
@@ -40,7 +39,6 @@ pub async fn initialize_history_network(
     HistoryNetworkTask,
     HistoryEventTx,
     HistoryUtpTx,
-    HistoryJsonRpcTx,
 ) {
     let (history_jsonrpc_tx, history_jsonrpc_rx) =
         mpsc::unbounded_channel::<HistoryJsonRpcRequest>();
@@ -71,7 +69,6 @@ pub async fn initialize_history_network(
         Some(history_network_task),
         Some(history_event_tx),
         Some(utp_history_tx),
-        Some(history_jsonrpc_tx),
     )
 }
 

@@ -24,8 +24,6 @@ type Responder<T, E> = mpsc::UnboundedSender<Result<T, E>>;
 pub struct JsonRpcHandler {
     pub discovery: Arc<Discovery>,
     pub portal_jsonrpc_rx: mpsc::UnboundedReceiver<PortalJsonRpcRequest>,
-    pub state_jsonrpc_tx: Option<mpsc::UnboundedSender<StateJsonRpcRequest>>,
-    pub history_jsonrpc_tx: Option<mpsc::UnboundedSender<HistoryJsonRpcRequest>>,
     pub header_oracle: Arc<RwLock<HeaderOracle>>,
 }
 
@@ -38,14 +36,20 @@ impl JsonRpcHandler {
                     Discv5Endpoint::NodeInfo => Ok(self.discovery.node_info()),
                     Discv5Endpoint::RoutingTableInfo => Ok(self.discovery.routing_table_info()),
                 },
-                TrinEndpoint::HistoryEndpoint(endpoint) => match self.history_jsonrpc_tx.as_ref() {
-                    Some(tx) => proxy_query_to_history_subnet(tx, endpoint, request.params).await,
-                    None => Err(anyhow!("Chain history subnetwork unavailable.")),
-                },
-                TrinEndpoint::StateEndpoint(endpoint) => match self.state_jsonrpc_tx.as_ref() {
-                    Some(tx) => proxy_query_to_state_subnet(tx, endpoint, request.params).await,
-                    None => Err(anyhow!("State subnetwork unavailable.")),
-                },
+                TrinEndpoint::HistoryEndpoint(endpoint) => {
+                    match self.header_oracle.read().await.history_jsonrpc_tx() {
+                        Ok(tx) => {
+                            proxy_query_to_history_subnet(&tx, endpoint, request.params).await
+                        }
+                        Err(_) => Err(anyhow!("Chain history subnetwork unavailable.")),
+                    }
+                }
+                TrinEndpoint::StateEndpoint(endpoint) => {
+                    match self.header_oracle.read().await.state_jsonrpc_tx() {
+                        Ok(tx) => proxy_query_to_state_subnet(&tx, endpoint, request.params).await,
+                        Err(_) => Err(anyhow!("State subnetwork unavailable.")),
+                    }
+                }
                 TrinEndpoint::PortalEndpoint(endpoint) => {
                     self.eth_handler(endpoint, request.params).await
                 }
@@ -68,7 +72,7 @@ impl JsonRpcHandler {
         match endpoint {
             PortalEndpoint::ClientVersion => Ok(Value::String(format!("trin v{}", TRIN_VERSION))),
             PortalEndpoint::GetBlockByHash => {
-                eth::get_block_by_hash(params, &self.history_jsonrpc_tx).await
+                eth::get_block_by_hash(params, self.header_oracle.clone()).await
             }
             PortalEndpoint::GetBlockByNumber => {
                 eth::get_block_by_number(params, self.header_oracle.clone()).await

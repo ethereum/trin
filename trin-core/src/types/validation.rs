@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 use tokio::sync::mpsc;
 
 use crate::{
-    jsonrpc::types::{HistoryJsonRpcRequest, Params},
+    jsonrpc::types::{HistoryJsonRpcRequest, Params, StateJsonRpcRequest},
     portalnet::types::content_key::IdentityContentKey,
     types::{accumulator::MasterAccumulator, header::Header},
     utils::provider::TrustedProvider,
@@ -27,6 +27,7 @@ pub struct HeaderOracle {
     // individual channel. But my sense is that this will be more useful in terms of
     // determining which subnetworks are actually available.
     pub history_jsonrpc_tx: Option<mpsc::UnboundedSender<HistoryJsonRpcRequest>>,
+    pub state_jsonrpc_tx: Option<mpsc::UnboundedSender<StateJsonRpcRequest>>,
     pub master_acc: MasterAccumulator,
 }
 
@@ -35,6 +36,7 @@ impl HeaderOracle {
         Self {
             trusted_provider,
             history_jsonrpc_tx: None,
+            state_jsonrpc_tx: None,
             master_acc,
         }
     }
@@ -63,6 +65,13 @@ impl HeaderOracle {
         match self.history_jsonrpc_tx.clone() {
             Some(val) => Ok(val),
             None => Err(anyhow!("History subnetwork is not available")),
+        }
+    }
+
+    pub fn state_jsonrpc_tx(&self) -> anyhow::Result<mpsc::UnboundedSender<StateJsonRpcRequest>> {
+        match self.state_jsonrpc_tx.clone() {
+            Some(val) => Ok(val),
+            None => Err(anyhow!("State subnetwork is not available")),
         }
     }
 
