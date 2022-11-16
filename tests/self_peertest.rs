@@ -48,11 +48,21 @@ mod test {
         };
         let test_client_exiter = trin::run_trin(trin_config, trusted_provider).await.unwrap();
 
+        peertest::scenarios::paginate::test_paginate_local_storage(
+            peertest_config.clone(),
+            &peertest,
+        );
         peertest::jsonrpc::test_jsonrpc_endpoints_over_ipc(peertest_config.clone(), &peertest)
             .await;
-        peertest::scenarios::test_offer_accept(peertest_config.clone(), &peertest);
-        peertest::scenarios::test_eth_get_block_by_hash(peertest_config.clone(), &peertest);
-        peertest::scenarios::test_eth_get_block_by_number(peertest_config.clone(), &peertest);
+        peertest::scenarios::offer_accept::test_offer_accept(peertest_config.clone(), &peertest);
+        peertest::scenarios::eth_rpc::test_eth_get_block_by_hash(
+            peertest_config.clone(),
+            &peertest,
+        );
+        peertest::scenarios::eth_rpc::test_eth_get_block_by_number(
+            peertest_config.clone(),
+            &peertest,
+        );
 
         peertest.exit_all_nodes();
         test_client_exiter.exit();

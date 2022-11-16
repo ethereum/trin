@@ -521,6 +521,33 @@ impl<TContentKey: OverlayContentKey> TryFrom<&Value> for LocalContentParams<TCon
     }
 }
 
+pub struct PaginateLocalContentKeysParams {
+    pub offset: u64,
+    pub limit: u64,
+}
+
+impl TryFrom<Params> for PaginateLocalContentKeysParams {
+    type Error = ValidationError;
+
+    fn try_from(params: Params) -> Result<Self, Self::Error> {
+        match params {
+            Params::Array(val) => match val.len() {
+                2 => {
+                    let offset = val[0]
+                        .as_u64()
+                        .expect("Invalid param: expected offset to be u64");
+                    let limit = val[1]
+                        .as_u64()
+                        .expect("Invalid param: expected limit to be u64");
+                    Ok(Self { offset, limit })
+                }
+                _ => Err(ValidationError::new("Expected 2 params")),
+            },
+            _ => Err(ValidationError::new("Expected array of params")),
+        }
+    }
+}
+
 pub struct StoreParams<TContentKey> {
     pub content_key: TContentKey,
     pub content: Vec<u8>,

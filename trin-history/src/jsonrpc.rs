@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use serde_json::Value;
+use serde_json::{json, Value};
 use tokio::sync::mpsc;
 use tracing::error;
 
@@ -10,7 +10,8 @@ use trin_core::{
         endpoints::HistoryEndpoint,
         types::{
             FindContentParams, FindNodesParams, HistoryJsonRpcRequest, LocalContentParams,
-            OfferParams, PingParams, RecursiveFindContentParams, SendOfferParams, StoreParams,
+            OfferParams, PaginateLocalContentKeysParams, PingParams, RecursiveFindContentParams,
+            SendOfferParams, StoreParams,
         },
         utils::bucket_entries_to_json,
     },
@@ -49,6 +50,24 @@ impl HistoryRequestHandler {
                                 }
                         }
                         Err(msg) => Err(format!("Invalid LocalContent params: {msg:?}")),
+                    };
+                    let _ = request.resp.send(response);
+                }
+                HistoryEndpoint::PaginateLocalContentKeys => {
+                    let response = match PaginateLocalContentKeysParams::try_from(request.params) {
+                        Ok(params) => {
+                            match &self.network.overlay.store.read().paginate(&params.offset, &params.limit)
+                                {
+                                    Ok(val) => Ok(json!(val)),
+                                    Err(err) => Err(format!(
+                                        "Database error while paginating local content keys with offset: {:?}, limit: {:?}. Error message: {}",
+                                        params.offset, params.limit, err
+                                    )),
+                                }
+                        }
+                        Err(msg) => {
+                            Err(format!("Invalid PaginateLocalContentKeys params: {msg:?}"))
+                        }
                     };
                     let _ = request.resp.send(response);
                 }
