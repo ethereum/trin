@@ -51,9 +51,10 @@ impl MasterAccumulator {
     pub fn try_from_file(master_acc_path: PathBuf) -> anyhow::Result<MasterAccumulator> {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push(master_acc_path);
-        let raw = std::fs::read(path)?;
+        let raw = std::fs::read(&path)
+            .map_err(|_| anyhow!("Unable to find master accumulator at path: {:?}", path))?;
         MasterAccumulator::from_ssz_bytes(&raw)
-            .map_err(|msg| anyhow!("Unable to decode master accumulator: {:?}", msg))
+            .map_err(|err| anyhow!("Unable to decode master accumulator: {err:?}"))
     }
 
     /// Number of the last block to be included in the accumulator
