@@ -27,7 +27,7 @@ jobs:
             - run:
                 name: Install rustfmt
                 command: rustup component add rustfmt
-            - run: 
+            - run:
                 name: Validate release notes entry
                 command: ./newsfragments/validate_files.py
             - run:
