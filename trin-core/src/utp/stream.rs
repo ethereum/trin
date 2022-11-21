@@ -1465,7 +1465,7 @@ impl UtpStream {
         // Insert data packet into the incoming buffer if it isn't a duplicate of a previously
         // discarded packet
         if packet.get_type() == PacketType::Data
-            && packet.seq_nr().wrapping_sub(self.last_dropped) > 0
+            && packet.seq_nr().saturating_sub(self.last_dropped) > 0
         {
             self.insert_into_buffer(packet.clone());
         }
