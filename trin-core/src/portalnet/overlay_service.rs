@@ -930,10 +930,10 @@ where
             .as_ref()
             .and_then(|m| Some(m.report_inbound_find_nodes()));
         let distances64: Vec<u64> = request.distances.iter().map(|x| (*x).into()).collect();
-        let enrs = self.nodes_by_distance(distances64);
+        let mut enrs = self.nodes_by_distance(distances64);
 
         // Limit the ENRs so that their summed sizes do not surpass the max TALKREQ packet size.
-        let enrs = limit_enr_list_to_max_bytes(enrs, MAX_NODES_SIZE);
+        pop_while_ssz_bytes_len_gt(&mut enrs, MAX_NODES_SIZE);
 
         Nodes { total: 1, enrs }
     }
@@ -986,9 +986,9 @@ where
             Ok(None) => {
                 let enrs = self.find_nodes_close_to_content(content_key);
                 match enrs {
-                    Ok(val) => {
-                        let enrs = limit_enr_list_to_max_bytes(val, MAX_NODES_SIZE);
-                        Ok(Content::Enrs(enrs))
+                    Ok(mut val) => {
+                        pop_while_ssz_bytes_len_gt(&mut val, MAX_CONTENT_NODES_SIZE);
+                        Ok(Content::Enrs(val))
                     }
                     Err(msg) => Err(OverlayRequestError::InvalidRequest(msg.to_string())),
                 }
@@ -2045,7 +2045,6 @@ pub enum QueryEvent<TQuery, TContentKey> {
     Finished(QueryId, QueryInfo<TContentKey>, TQuery),
 }
 
-const MAX_ENR_SIZE: usize = 300;
 const MAX_DISCV5_PACKET_SIZE: usize = 1280;
 const TALK_REQ_PACKET_OVERHEAD: usize = 16 + // IV
     55 + // Header
@@ -2054,26 +2053,20 @@ const TALK_REQ_PACKET_OVERHEAD: usize = 16 + // IV
     9 + // Request ID, max 8 bytes + 1 for RLP encoding
     3 + // RLP Encoding of inner response
     16; // RLP HMAC
-        // ENR SSZ overhead empirically observed to be double.
-        // Todo: determine why this is. It seems too high.
-const MAX_NODES_SIZE: usize = MAX_DISCV5_PACKET_SIZE - TALK_REQ_PACKET_OVERHEAD;
-const NUM_MAX_SIZE_ENRS_IN_MAX_SIZE_PACKET: usize = MAX_NODES_SIZE / MAX_ENR_SIZE;
+const NODES_PACKET_OVERHEAD: usize = 1 + // Selector byte
+    1; // `total` field
+const CONTENT_PACKET_OVERHEAD: usize = 1 + // Selector byte
+    4; // Union type index
+const MAX_NODES_SIZE: usize =
+    MAX_DISCV5_PACKET_SIZE - TALK_REQ_PACKET_OVERHEAD - NODES_PACKET_OVERHEAD;
+const MAX_CONTENT_NODES_SIZE: usize =
+    MAX_DISCV5_PACKET_SIZE - TALK_REQ_PACKET_OVERHEAD - CONTENT_PACKET_OVERHEAD;
 
 /// Limits a to a maximum packet size, including the discv5 header overhead.
-fn limit_enr_list_to_max_bytes(enrs: Vec<SszEnr>, max_size: usize) -> Vec<SszEnr> {
-    // If all ENRs would fit at max size, don't check individual sizes.
-    if enrs.len() < NUM_MAX_SIZE_ENRS_IN_MAX_SIZE_PACKET {
-        return enrs;
+fn pop_while_ssz_bytes_len_gt(enrs: &mut Vec<SszEnr>, max_size: usize) {
+    while enrs.ssz_bytes_len() > max_size {
+        enrs.pop();
     }
-
-    let mut total_size: usize = 0;
-    enrs.into_iter()
-        .take_while(|enr| {
-            let enr_size = enr.ssz_bytes_len();
-            total_size = total_size + enr_size;
-            total_size < max_size
-        })
-        .collect()
 }
 
 #[cfg(test)]
@@ -2826,9 +2819,9 @@ mod tests {
             enrs.push(SszEnr::new(enr));
         }
 
-        let enrs_limited = limit_enr_list_to_max_bytes(enrs, MAX_NODES_SIZE);
+        pop_while_ssz_bytes_len_gt(&mut enrs, MAX_NODES_SIZE);
 
-        assert_eq!(enrs_limited.len(), correct_limited_size);
+        assert_eq!(enrs.len(), correct_limited_size);
     }
 
     #[test_log::test(tokio::test)]
