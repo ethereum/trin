@@ -3,7 +3,7 @@
 //! `ethportal_api` is a collection of Portal Network APIs and types.
 #![warn(clippy::unwrap_used)]
 
-mod discv5;
+pub mod discv5;
 mod history;
 pub mod types;
 mod web3;
@@ -26,3 +26,6 @@ pub use trin_types::execution::receipts::*;
 
 // Re-exports jsonrpsee crate
 pub use jsonrpsee;
+
+pub use trin_types::discv5::*;
+pub use trin_types::node_id::*;

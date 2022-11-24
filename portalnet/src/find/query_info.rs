@@ -7,6 +7,7 @@ use crate::{
     types::messages::{FindContent, FindNodes, Request},
 };
 use trin_types::content_key::OverlayContentKey;
+use trin_types::query_trace::QueryTrace;
 
 /// Information about a query.
 #[derive(Debug)]
@@ -16,9 +17,11 @@ pub struct QueryInfo<TContentKey> {
 
     /// Temporary ENRs used when trying to reach nodes.
     pub untrusted_enrs: SmallVec<[Enr; 16]>,
+
+    pub trace: Option<QueryTrace>,
 }
 
-pub type FindContentResult = (Option<Vec<u8>>, Vec<NodeId>);
+pub type FindContentResult = (Option<Vec<u8>>, Option<QueryTrace>);
 
 /// Additional information about the query.
 #[derive(Debug)]

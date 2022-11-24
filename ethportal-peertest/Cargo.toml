@@ -19,6 +19,7 @@ ethereum-types = "0.12.1"
 ethportal-api = { path="../ethportal-api"}
 futures = "0.3.21"
 httpmock = "0.6.6"
+hex = "0.4.3"
 hyper = { version = "0.14", features = ["full"] }
 jsonrpsee = {version="0.16.2", features = ["async-client", "client", "macros", "server"]}
 rand = "0.8.4"

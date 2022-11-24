@@ -41,6 +41,8 @@ use trin_types::enr::Enr;
 use trin_utils::bytes::hex_encode;
 use trin_validation::validator::Validator;
 
+use trin_types::query_trace::QueryTrace;
+
 /// Configuration parameters for the overlay network.
 #[derive(Clone)]
 pub struct OverlayConfig {
@@ -493,13 +495,18 @@ where
 
     /// Performs a content lookup for `target`.
     /// Returns the target content along with the peers traversed during content lookup.
-    pub async fn lookup_content(&self, target: TContentKey) -> (Option<Vec<u8>>, Vec<NodeId>) {
+    pub async fn lookup_content(
+        &self,
+        target: TContentKey,
+        is_trace: bool,
+    ) -> (Option<Vec<u8>>, Option<QueryTrace>) {
         let (tx, rx) = oneshot::channel();
         let content_id = target.content_id();
 
         if let Err(err) = self.command_tx.send(OverlayCommand::FindContentQuery {
             target,
             callback: tx,
+            is_trace,
         }) {
             warn!(
                 protocol = %self.protocol,
@@ -507,7 +514,7 @@ where
                 content.id = %hex_encode(content_id),
                 "Error submitting FindContent query to service"
             );
-            return (None, vec![]);
+            return (None, None);
         }
 
         rx.await.unwrap_or_else(|err| {
@@ -517,7 +524,7 @@ where
                 content.id = %hex_encode(content_id),
                 "Error receiving content from service",
             );
-            (None, vec![])
+            (None, None)
         })
     }
 

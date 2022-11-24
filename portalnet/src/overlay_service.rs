@@ -54,16 +54,16 @@ use crate::{
         },
         node::Node,
     },
-    utils::{node_id, portal_wire},
+    utils::portal_wire,
 };
 use ethportal_api::OverlayContentKey;
 use trin_types::content_key::RawContentKey;
 use trin_types::distance::{Distance, Metric, XorMetric};
 use trin_types::enr::{Enr, SszEnr};
+use trin_types::query_trace::QueryTrace;
 use trin_utils::bytes::{hex_encode, hex_encode_compact};
 use trin_validation::validator::Validator;
 
-/// Maximum number of ENRs in response to FindNodes.
 pub const FIND_NODES_MAX_NODES: usize = 32;
 
 /// Maximum number of ENRs in response to FindContent.
@@ -105,7 +105,9 @@ pub enum OverlayCommand<TContentKey> {
         /// The query target.
         target: TContentKey,
         /// A callback channel to transmit the result of the query.
-        callback: oneshot::Sender<(Option<Vec<u8>>, Vec<NodeId>)>,
+        callback: oneshot::Sender<(Option<Vec<u8>>, Option<QueryTrace>)>,
+        /// Whether or not a trace for the content query should be kept and returned.
+        is_trace: bool,
     },
     FindNodeQuery {
         /// The query target.
@@ -434,9 +436,11 @@ where
         self.init_find_nodes_query(&local_node_id, None);
 
         for bucket_index in (255 - EXPECTED_NON_EMPTY_BUCKETS as u8)..255 {
-            let target_node_id =
-                node_id::generate_random_node_id(bucket_index, self.local_enr().node_id());
-            self.init_find_nodes_query(&target_node_id, None);
+            let target_node_id = trin_types::node_id::NodeId::generate_random_node_id(
+                bucket_index,
+                self.local_enr().into(),
+            );
+            self.init_find_nodes_query(&target_node_id.into(), None);
         }
     }
 
@@ -463,8 +467,8 @@ where
                 Some(command) = self.command_rx.recv() => {
                     match command {
                         OverlayCommand::Request(request) => self.process_request(request),
-                        OverlayCommand::FindContentQuery { target, callback } => {
-                            if let Some(query_id) = self.init_find_content_query(target.clone(), Some(callback)) {
+                        OverlayCommand::FindContentQuery { target, callback, is_trace } => {
+                            if let Some(query_id) = self.init_find_content_query(target.clone(), Some(callback), is_trace) {
                                 trace!(
                                     query.id = %query_id,
                                     content.id = %hex_encode_compact(target.content_id()),
@@ -547,9 +551,10 @@ where
                 Some(bucket) => {
                     trace!(protocol = %self.protocol, bucket = %bucket.0, "Refreshing routing table bucket");
                     match u8::try_from(bucket.0) {
-                        Ok(idx) => {
-                            node_id::generate_random_node_id(idx, self.local_enr().node_id())
-                        }
+                        Ok(idx) => trin_types::node_id::NodeId::generate_random_node_id(
+                            idx,
+                            self.local_enr().into(),
+                        ),
                         Err(err) => {
                             error!(error = %err, "Error downcasting bucket index");
                             return;
@@ -563,7 +568,7 @@ where
             }
         };
 
-        self.init_find_nodes_query(&target_node_id, None);
+        self.init_find_nodes_query(&target_node_id.into(), None);
     }
 
     /// Returns the local ENR of the node.
@@ -747,15 +752,12 @@ where
             QueryEvent::Finished(query_id, query_info, query)
             | QueryEvent::TimedOut(query_id, query_info, query) => {
                 let result = query.into_result();
-                let (content, closest_nodes, content_provider) = match result {
-                    FindContentQueryResult::ClosestNodes(closest_nodes) => {
-                        (None, closest_nodes, None)
-                    }
+                let (content, closest_nodes) = match result {
+                    FindContentQueryResult::ClosestNodes(closest_nodes) => (None, closest_nodes),
                     FindContentQueryResult::Content {
                         content,
                         closest_nodes,
-                        content_provider,
-                    } => (Some(content), closest_nodes, Some(content_provider)),
+                    } => (Some(content), closest_nodes),
                 };
 
                 if let QueryType::FindContent {
@@ -763,11 +765,7 @@ where
                     target: content_key,
                 } = query_info.query_type
                 {
-                    let mut all_closest_nodes = closest_nodes.clone();
-                    if let Some(val) = content_provider {
-                        all_closest_nodes.push(val);
-                    }
-                    let response = (content.clone(), all_closest_nodes);
+                    let response = (content.clone(), query_info.trace);
                     // Send (possibly `None`) content on callback channel.
                     if let Err(err) = callback.send(response) {
                         error!(
@@ -1878,6 +1876,7 @@ where
         if let Some((query_info, query)) = self.find_content_query_pool.get_mut(*query_id) {
             // If an ENR is not present in the query's untrusted ENRs, then add the ENR.
             // Ignore the local node's ENR.
+            let mut new_enrs: Vec<&Enr> = vec![];
             for enr_ref in enrs.iter().filter(|enr| enr.node_id() != local_node_id) {
                 if !query_info
                     .untrusted_enrs
@@ -1885,7 +1884,12 @@ where
                     .any(|enr| enr.node_id() == enr_ref.node_id())
                 {
                     query_info.untrusted_enrs.push(enr_ref.clone());
+
+                    new_enrs.push(enr_ref);
                 }
+            }
+            if let Some(trace) = &mut query_info.trace {
+                trace.node_responded_with(&source, new_enrs);
             }
             let closest_nodes: Vec<NodeId> = enrs
                 .iter()
@@ -1908,7 +1912,10 @@ where
         source: Enr,
         content: Vec<u8>,
     ) {
-        if let Some((_, query)) = self.find_content_query_pool.get_mut(*query_id) {
+        if let Some((query_info, query)) = self.find_content_query_pool.get_mut(*query_id) {
+            if let Some(trace) = &mut query_info.trace {
+                trace.node_responded_with_content(&source);
+            }
             // Mark the query successful for the source of the response with the content.
             query.on_success(
                 &source.node_id(),
@@ -2151,6 +2158,7 @@ where
                 callback,
             },
             untrusted_enrs: SmallVec::from_vec(closest_enrs),
+            trace: None,
         };
 
         let known_closest_peers: Vec<Key<NodeId>> = query_info
@@ -2177,7 +2185,10 @@ where
         &mut self,
         target: TContentKey,
         callback: Option<oneshot::Sender<FindContentResult>>,
+        is_trace: bool,
     ) -> Option<QueryId> {
+        info!("Starting query for content key: {}", target);
+
         // Represent the target content ID with a node ID.
         let target_node_id = NodeId::new(&target.content_id());
         let target_key = Key::from(target_node_id);
@@ -2190,7 +2201,7 @@ where
 
         // Look up the closest ENRs to the target.
         // Limit the number of ENRs according to the query config.
-        let closest_enrs = self
+        let closest_enrs: Vec<Enr> = self
             .kbuckets
             .write()
             .closest_values(&target_key)
@@ -2198,9 +2209,21 @@ where
             .take(query_config.num_results)
             .collect();
 
+        let trace: Option<QueryTrace> = {
+            if is_trace {
+                let mut trace = QueryTrace::new(&self.local_enr(), target_node_id.into());
+                let local_enr = self.local_enr();
+                trace.node_responded_with(&local_enr, closest_enrs.iter().collect());
+                Some(trace)
+            } else {
+                None
+            }
+        };
+
         let query_info = QueryInfo {
             query_type: QueryType::FindContent { target, callback },
             untrusted_enrs: SmallVec::from_vec(closest_enrs),
+            trace,
         };
 
         // Convert ENRs into k-bucket keys.
@@ -2417,10 +2440,11 @@ mod tests {
         overlay::OverlayConfig,
         storage::{DistanceFunction, MemoryContentStore},
         types::messages::PortalnetConfig,
-        utils::node_id::generate_random_remote_enr,
     };
+
     use trin_types::content_key::IdentityContentKey;
     use trin_types::distance::XorMetric;
+    use trin_types::enr::generate_random_remote_enr;
     use trin_validation::validator::MockValidator;
 
     use discv5::kbucket::Entry;
@@ -3373,7 +3397,7 @@ mod tests {
         let target_content = NodeId::random();
         let target_content_key = IdentityContentKey::new(target_content.raw());
 
-        let query_id = service.init_find_content_query(target_content_key.clone(), None);
+        let query_id = service.init_find_content_query(target_content_key.clone(), None, false);
         let query_id = query_id.expect("Query ID for new find content query is `None`");
 
         let (query_info, query) = service
@@ -3427,7 +3451,7 @@ mod tests {
         let target_content = NodeId::random();
         let target_content_key = IdentityContentKey::new(target_content.raw());
 
-        let query_id = service.init_find_content_query(target_content_key, None);
+        let query_id = service.init_find_content_query(target_content_key, None, false);
         let query_id = query_id.expect("Query ID for new find content query is `None`");
 
         let (_, query) = service
@@ -3492,7 +3516,7 @@ mod tests {
         let target_content = NodeId::random();
         let target_content_key = IdentityContentKey::new(target_content.raw());
 
-        let query_id = service.init_find_content_query(target_content_key, None);
+        let query_id = service.init_find_content_query(target_content_key, None, false);
         let query_id = query_id.expect("Query ID for new find content query is `None`");
 
         let (_, query) = service
@@ -3555,7 +3579,7 @@ mod tests {
 
         let (callback_tx, callback_rx) = oneshot::channel();
         let query_id =
-            service.init_find_content_query(target_content_key.clone(), Some(callback_tx));
+            service.init_find_content_query(target_content_key.clone(), Some(callback_tx), false);
         let query_id = query_id.expect("Query ID for new find content query is `None`");
 
         let query_event =
