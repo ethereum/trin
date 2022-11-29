@@ -231,10 +231,10 @@ async fn overlay() {
         .put(content_key.clone(), &content)
         .expect("Unable to store content");
     match overlay_one.lookup_content(content_key).await {
-        Some(found_content) => {
+        (Some(found_content), _) => {
             assert_eq!(found_content, content);
         }
-        None => {
+        (None, _) => {
             panic!("Unable to find content stored with peer");
         }
     }

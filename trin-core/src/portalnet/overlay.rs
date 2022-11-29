@@ -678,7 +678,8 @@ where
     }
 
     /// Performs a content lookup for `target`.
-    pub async fn lookup_content(&self, target: TContentKey) -> Option<Vec<u8>> {
+    /// Returns the target content along with the peers traversed during content lookup.
+    pub async fn lookup_content(&self, target: TContentKey) -> (Option<Vec<u8>>, Vec<NodeId>) {
         let (tx, rx) = oneshot::channel();
         let content_id = target.content_id();
 
@@ -692,7 +693,7 @@ where
                 content.id = %hex_encode(content_id),
                 "Error submitting FindContent query to service"
             );
-            return None;
+            return (None, vec![]);
         }
 
         match rx.await {
@@ -704,7 +705,7 @@ where
                     content.id = %hex_encode(content_id),
                     "Error receiving content from service",
                 );
-                None
+                (None, vec![])
             }
         }
     }

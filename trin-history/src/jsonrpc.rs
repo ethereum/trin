@@ -15,7 +15,13 @@ use trin_core::{
         },
         utils::bucket_entries_to_json,
     },
-    portalnet::{storage::ContentStore, types::content_key::HistoryContentKey},
+    portalnet::{
+        storage::ContentStore,
+        types::{
+            content_key::{HistoryContentKey, OverlayContentKey},
+            distance::{Metric, XorMetric},
+        },
+    },
     utils::bytes::hex_encode,
 };
 
@@ -92,54 +98,87 @@ impl HistoryRequestHandler {
                     };
                     let _ = request.resp.send(response);
                 }
-                HistoryEndpoint::RecursiveFindContent => {
-                    let find_content_params =
-                        match RecursiveFindContentParams::try_from(request.params) {
-                            Ok(params) => params,
-                            Err(msg) => {
-                                let _ = request.resp.send(Err(format!(
-                                    "Invalid RecursiveFindContent params: {:?}",
-                                    msg.code
-                                )));
-                                return;
+                HistoryEndpoint::RecursiveFindContent
+                | HistoryEndpoint::TraceRecursiveFindContent => {
+                    let params = match RecursiveFindContentParams::try_from(request.params) {
+                        Ok(val) => val,
+                        Err(err) => {
+                            let response = Err(format!(
+                                "Invalid RecursiveFindContent params: {:?}",
+                                err.code
+                            ));
+                            let _ = request.resp.send(response);
+                            continue;
+                        }
+                    };
+                    let content_key = match HistoryContentKey::try_from(params.content_key.to_vec())
+                    {
+                        Ok(val) => val,
+                        Err(err) => {
+                            let response = Err(format!("Invalid content key requested: {err}"));
+                            let _ = request.resp.send(response);
+                            continue;
+                        }
+                    };
+                    let is_trace = match request.endpoint {
+                        HistoryEndpoint::RecursiveFindContent => false,
+                        HistoryEndpoint::TraceRecursiveFindContent => true,
+                        _ => panic!("Invalid state reached, error decoding jsonrpc endpoint."),
+                    };
+                    // Check whether we have the data locally.
+                    let local_content: Option<Vec<u8>> =
+                        match self.network.overlay.store.read().get(&content_key) {
+                            Ok(Some(data)) => Some(data),
+                            Ok(None) => None,
+                            Err(err) => {
+                                error!(
+                                    error = %err,
+                                    content.key = %content_key,
+                                    "Error checking data store for content",
+                                );
+                                None
                             }
                         };
-
-                    let response =
-                        match HistoryContentKey::try_from(find_content_params.content_key.to_vec())
-                        {
-                            Ok(content_key) => {
-                                // Check whether we have the data locally.
-                                let local_content: Option<Vec<u8>> =
-                                    match self.network.overlay.store.read().get(&content_key) {
-                                        Ok(Some(data)) => Some(data),
-                                        Ok(None) => None,
-                                        Err(err) => {
-                                            error!(
-                                                error = %err,
-                                                content.key = %content_key,
-                                                "Error checking data store for content",
-                                            );
-                                            None
+                    let (content, closest_nodes) = match local_content {
+                        Some(val) => (Some(val), vec![]),
+                        None => {
+                            self.network
+                                .overlay
+                                .lookup_content(content_key.clone())
+                                .await
+                        }
+                    };
+                    let content = content.unwrap_or_default();
+                    let response = match is_trace {
+                        true => {
+                            let closest_nodes: Vec<Value> = closest_nodes
+                                .iter()
+                                // Skip over enrs that are unable to be looked up
+                                .filter_map(|node_id| {
+                                    let content_id = content_key.content_id();
+                                    // Return None for enrs that cannot be looked up
+                                    match self.network.overlay.discovery.find_enr(node_id) {
+                                        Some(enr) => {
+                                            XorMetric::distance(&content_id, &enr.node_id().raw())
+                                                .log2()
+                                                .map(|distance| {
+                                                    json!({
+                                                        "enr": enr,
+                                                        "distance": distance
+                                                    })
+                                                })
                                         }
-                                    };
-                                match local_content {
-                                    None => {
-                                        match self.network.overlay.lookup_content(content_key).await
-                                        {
-                                            Some(content) => {
-                                                let value = Value::String(hex_encode(content));
-                                                Ok(value)
-                                            }
-                                            None => Ok(Value::Null),
-                                        }
+                                        None => None,
                                     }
-                                    Some(content) => Ok(Value::String(hex_encode(content))),
-                                }
-                            }
-                            Err(err) => Err(format!("Invalid content key requested: {}", err)),
-                        };
-
+                                })
+                                .collect();
+                            Ok(json!({
+                                "content": hex_encode(content),
+                                "route": closest_nodes,
+                            }))
+                        }
+                        false => Ok(Value::String(hex_encode(content))),
+                    };
                     let _ = request.resp.send(response);
                 }
                 HistoryEndpoint::DataRadius => {

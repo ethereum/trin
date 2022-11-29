@@ -90,7 +90,7 @@ pub enum OverlayCommand<TContentKey> {
         /// The query target.
         target: TContentKey,
         /// A callback channel to transmit the result of the query.
-        callback: oneshot::Sender<Option<Vec<u8>>>,
+        callback: oneshot::Sender<(Option<Vec<u8>>, Vec<NodeId>)>,
     },
 }
 
@@ -746,12 +746,15 @@ where
             QueryEvent::Finished(query_id, query_info, query)
             | QueryEvent::TimedOut(query_id, query_info, query) => {
                 let result = query.into_result();
-                let (content, closest_nodes) = match result {
-                    FindContentQueryResult::ClosestNodes(closest_nodes) => (None, closest_nodes),
+                let (content, closest_nodes, content_provider) = match result {
+                    FindContentQueryResult::ClosestNodes(closest_nodes) => {
+                        (None, closest_nodes, None)
+                    }
                     FindContentQueryResult::Content {
                         content,
                         closest_nodes,
-                    } => (Some(content), closest_nodes),
+                        content_provider,
+                    } => (Some(content), closest_nodes, Some(content_provider)),
                 };
 
                 if let QueryType::FindContent {
@@ -759,8 +762,13 @@ where
                     target: content_key,
                 } = query_info.query_type
                 {
+                    let mut all_closest_nodes = closest_nodes.clone();
+                    if let Some(val) = content_provider {
+                        all_closest_nodes.push(val);
+                    }
+                    let response = (content.clone(), all_closest_nodes);
                     // Send (possibly `None`) content on callback channel.
-                    if let Err(err) = callback.send(content.clone()) {
+                    if let Err(err) = callback.send(response) {
                         error!(
                             query.id = %query_id,
                             error = ?err,
@@ -1951,7 +1959,7 @@ where
     fn init_find_content_query(
         &mut self,
         target: TContentKey,
-        callback: Option<oneshot::Sender<Option<Vec<u8>>>>,
+        callback: Option<oneshot::Sender<(Option<Vec<u8>>, Vec<NodeId>)>>,
     ) -> Option<QueryId> {
         // Represent the target content ID with a node ID.
         let target_node_id = NodeId::new(&target.content_id());
@@ -3072,7 +3080,7 @@ mod tests {
             &query_info.query_type,
             QueryType::FindContent {
                 target: _target_content_key,
-                callback: None
+                callback: None,
             }
         ));
 
@@ -3302,7 +3310,7 @@ mod tests {
             .await
             .expect("Expected result on callback channel receiver")
         {
-            Some(result_content) => {
+            (Some(result_content), _) => {
                 assert_eq!(result_content, content);
             }
             _ => panic!("Unexpected find content query result type"),

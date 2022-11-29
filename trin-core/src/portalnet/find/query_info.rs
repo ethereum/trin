@@ -1,3 +1,7 @@
+use discv5::{enr::NodeId, kbucket::Key, Enr};
+use futures::channel::oneshot;
+use smallvec::SmallVec;
+
 use crate::portalnet::{
     find::query_pool::TargetKey,
     types::{
@@ -5,9 +9,6 @@ use crate::portalnet::{
         messages::{FindContent, FindNodes, Request},
     },
 };
-use discv5::{enr::NodeId, kbucket::Key, Enr};
-use futures::channel::oneshot;
-use smallvec::SmallVec;
 
 /// Information about a query.
 #[derive(Debug)]
@@ -39,7 +40,7 @@ pub enum QueryType<TContentKey> {
         target: TContentKey,
 
         /// A callback channel for the result of the query.
-        callback: Option<oneshot::Sender<Option<Vec<u8>>>>,
+        callback: Option<oneshot::Sender<(Option<Vec<u8>>, Vec<NodeId>)>>,
     },
 }
 

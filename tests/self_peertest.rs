@@ -63,6 +63,18 @@ mod test {
             peertest_config.clone(),
             &peertest,
         );
+        peertest::scenarios::find::test_trace_recursive_find_content(
+            peertest_config.clone(),
+            &peertest,
+        );
+        peertest::scenarios::find::test_recursive_find_content_invalid_params(
+            peertest_config.clone(),
+            &peertest,
+        );
+        peertest::scenarios::find::test_trace_recursive_find_content_local_db(
+            peertest_config.clone(),
+            &peertest,
+        );
 
         peertest.exit_all_nodes();
         test_client_exiter.exit();

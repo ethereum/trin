@@ -32,6 +32,7 @@ pub enum HistoryEndpoint {
     SendOffer,
     Ping,
     RecursiveFindContent,
+    TraceRecursiveFindContent,
     Store,
     RoutingTableInfo,
     // This endpoint is not History network specific
@@ -90,6 +91,9 @@ impl FromStr for TrinEndpoint {
             }
             "portal_historyRecursiveFindContent" => Ok(TrinEndpoint::HistoryEndpoint(
                 HistoryEndpoint::RecursiveFindContent,
+            )),
+            "portal_historyTraceRecursiveFindContent" => Ok(TrinEndpoint::HistoryEndpoint(
+                HistoryEndpoint::TraceRecursiveFindContent,
             )),
             "portal_historyFindNodes" => {
                 Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::FindNodes))
