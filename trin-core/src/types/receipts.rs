@@ -426,7 +426,8 @@ mod tests {
         };
         let encoded = receipts.as_ssz_bytes();
 
-        let expected: Vec<u8> = std::fs::read("./src/types/assets/receipts_14764013.bin").unwrap();
+        let expected: Vec<u8> =
+            std::fs::read("./src/assets/test/trin/receipts_14764013.bin").unwrap();
         assert_eq!(hex::encode(&encoded), hex::encode(expected));
 
         let decoded = Receipts::from_ssz_bytes(&encoded).unwrap();

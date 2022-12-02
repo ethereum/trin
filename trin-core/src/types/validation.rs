@@ -9,7 +9,10 @@ use tokio::sync::mpsc;
 use crate::{
     jsonrpc::types::{HistoryJsonRpcRequest, Params},
     portalnet::types::content_key::IdentityContentKey,
-    types::{accumulator::MasterAccumulator, header::Header},
+    types::{
+        accumulator::MasterAccumulator,
+        header::{BlockHeaderProof, Header, HeaderWithProof},
+    },
     utils::provider::TrustedProvider,
 };
 
@@ -64,6 +67,18 @@ impl HeaderOracle {
             Some(val) => Ok(val),
             None => Err(anyhow!("History subnetwork is not available")),
         }
+    }
+
+    pub fn validate_header_with_proof(&self, hwp: HeaderWithProof) -> anyhow::Result<()> {
+        if hwp.header.number <= MERGE_BLOCK_NUMBER {
+            return Err(anyhow!("Unable to validate proof for post-merge header"));
+        }
+        let proof = match hwp.proof {
+            BlockHeaderProof::AccumulatorProof(val) => val,
+            BlockHeaderProof::None(_) => return Err(anyhow!("Unable to validate, missing proof.")),
+        };
+        self.master_acc
+            .validate_pre_merge_header_with_proof(&hwp.header, proof.proof)
     }
 
     pub async fn validate_header_is_canonical(&self, header: Header) -> anyhow::Result<()> {
