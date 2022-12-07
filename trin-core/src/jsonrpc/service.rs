@@ -276,45 +276,53 @@ fn serve_http_client(
     trusted_provider: TrustedProvider,
     portal_tx: UnboundedSender<PortalJsonRpcRequest>,
 ) {
-    let mut reader = io::BufReader::new(&mut stream);
-    let received: Vec<u8> = reader.fill_buf().unwrap().to_vec();
-    // Mark the bytes read as consumed so the buffer will not return them in a subsequent read
-    reader.consume(received.len());
-
-    let http_body = match parse_http_body(received) {
-        Ok(val) => val,
-        Err(msg) => {
-            respond_with_parsing_error(stream, msg.to_string());
-            return;
+    loop {
+        let mut reader = io::BufReader::new(&mut stream);
+        let received: Vec<u8> = reader.fill_buf().unwrap().to_vec();
+        // If stream reached EOF, exit loop and drop the TCP stream
+        if received.is_empty() {
+            break;
         }
-    };
-    let deser = serde_json::Deserializer::from_str(&http_body);
-    let mut json_objects = deser.into_iter::<JsonRequest>();
+        // Mark the bytes read as consumed so the buffer will not return them in a subsequent read
+        reader.consume(received.len());
 
-    // Currently we assume a single JSON-RPC object within each received request.
-    // Other valid JSON objects contained within the request will currently be ignored.
-    let obj = json_objects.next();
-    match obj {
-        None => respond_with_parsing_error(stream, "No valid JSON object in request.".to_string()),
-        Some(obj) => {
-            let obj = match obj {
-                Ok(val) => val,
-                Err(msg) => {
-                    respond_with_parsing_error(stream, msg.to_string());
-                    return;
-                }
-            };
-            let formatted_response = match obj.validate() {
-                Ok(_) => process_http_request(obj, trusted_provider, portal_tx),
-                Err(e) => format!("HTTP/1.1 400 BAD REQUEST\r\n\r\n{}", e).into_bytes(),
-            };
-            stream.write_all(&formatted_response).unwrap();
-            stream.flush().unwrap();
+        let http_body = match parse_http_body(received) {
+            Ok(val) => val,
+            Err(msg) => {
+                respond_with_parsing_error(&stream, msg.to_string());
+                continue;
+            }
+        };
+        let deser = serde_json::Deserializer::from_str(&http_body);
+        let mut json_objects = deser.into_iter::<JsonRequest>();
+
+        // Currently we assume a single JSON-RPC object within each received request.
+        // Other valid JSON objects contained within the request will currently be ignored.
+        let obj = json_objects.next();
+        match obj {
+            None => {
+                respond_with_parsing_error(&stream, "No valid JSON object in request.".to_string())
+            }
+            Some(obj) => {
+                let obj = match obj {
+                    Ok(val) => val,
+                    Err(msg) => {
+                        respond_with_parsing_error(&stream, msg.to_string());
+                        continue;
+                    }
+                };
+                let formatted_response = match obj.validate() {
+                    Ok(_) => process_http_request(obj, trusted_provider.clone(), portal_tx.clone()),
+                    Err(e) => format!("HTTP/1.1 400 BAD REQUEST\r\n\r\n{}", e).into_bytes(),
+                };
+                stream.write_all(&formatted_response).unwrap();
+                stream.flush().unwrap();
+            }
         }
     }
 }
 
-fn respond_with_parsing_error(mut stream: TcpStream, msg: String) {
+fn respond_with_parsing_error(mut stream: &TcpStream, msg: String) {
     warn!("Error parsing http request: {:?}", msg);
     let resp = format!("HTTP/1.1 400 BAD REQUEST\r\n\r\n{}", msg).into_bytes();
     stream.write_all(&resp).unwrap();
