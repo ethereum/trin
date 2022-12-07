@@ -7,7 +7,7 @@ use hyper::{self, Body, Client, Method, Request};
 use serde_json::{self, json, Value};
 use tracing::{error, info};
 
-use crate::{cli::PeertestConfig, Peertest};
+use crate::{cli::PeertestConfig, Peertest, Web3Transport};
 use trin_core::{
     jsonrpc::types::{NodesParams, Params},
     portalnet::types::{
@@ -379,6 +379,16 @@ fn get_ipc_stream(ipc_path: &str) -> uds_windows::UnixStream {
     uds_windows::UnixStream::connect(ipc_path).unwrap()
 }
 
+pub async fn make_jsonrpc_request(
+    web3_transport: &Web3Transport,
+    request: &JsonRpcRequest,
+) -> anyhow::Result<Value> {
+    match web3_transport {
+        Web3Transport::IPC(val) => make_ipc_request(&val.ipc_path, request),
+        Web3Transport::HTTP(val) => make_http_request(&val.address, request).await,
+    }
+}
+
 pub fn make_ipc_request(ipc_path: &str, request: &JsonRpcRequest) -> anyhow::Result<Value> {
     let mut stream = get_ipc_stream(ipc_path);
     stream
@@ -391,14 +401,16 @@ pub fn make_ipc_request(ipc_path: &str, request: &JsonRpcRequest) -> anyhow::Res
     stream.flush().unwrap();
     let deser = serde_json::Deserializer::from_reader(stream);
     let next_obj = deser.into_iter::<Value>().next();
-    let response_obj = next_obj.ok_or_else(|| anyhow!("Empty JsonRpc response"))?;
+    let response_obj = next_obj
+        .ok_or_else(|| anyhow!("Empty JsonRpc response"))?
+        .map_err(|err| anyhow!("{err}"));
     get_response_result(response_obj)
 }
 
 pub async fn make_http_request(
     http_address: &str,
     request: &JsonRpcRequest,
-) -> Result<Value, serde_json::Error> {
+) -> anyhow::Result<Value> {
     let client = Client::new();
     let req = Request::builder()
         .method(Method::POST)
@@ -408,20 +420,34 @@ pub async fn make_http_request(
         .unwrap();
     let resp = client.request(req).await.unwrap();
     let body = hyper::body::to_bytes(resp.into_body()).await.unwrap();
-    serde_json::from_slice(&body)
+    let response = serde_json::from_slice(&body).map_err(|err| anyhow!("{err}"));
+    get_response_result(response)
 }
 
-pub fn get_enode(ipc_path: &str) -> anyhow::Result<SszEnr> {
+pub async fn get_enode(web3_transport: Web3Transport) -> anyhow::Result<SszEnr> {
     let info_request = JsonRpcRequest {
         method: "discv5_nodeInfo".to_string(),
         id: 1,
         params: Params::None,
     };
-    let result = make_ipc_request(ipc_path, &info_request).map_err(|jsonerr| {
-        anyhow!(
-            "Error while trying to get enode for client at ipc_path {ipc_path:?} endpoint: {jsonerr:?}"
-        )
-    })?;
+    let result = match web3_transport {
+        Web3Transport::IPC(val) => {
+            make_ipc_request(&val.ipc_path, &info_request).map_err(|jsonerr| {
+                anyhow!(
+                    "Error while trying to get enode for client at ipc_path {} endpoint: {:?}",
+                    val.ipc_path,
+                    jsonerr
+                )
+            })?
+        }
+        Web3Transport::HTTP(val) => {
+            make_http_request(&val.address, &info_request).await.map_err(|jsonerr| {
+                anyhow!(
+                    "Error while trying to get enode for client at http address {:?} endpoint: {:?}", val.address, jsonerr
+                )
+            })?
+        }
+    };
     match result.get("enr") {
         Some(val) => match SszEnr::try_from(val) {
             Ok(enr) => Ok(enr),
@@ -450,7 +476,7 @@ pub async fn test_jsonrpc_endpoints_over_ipc(peertest_config: PeertestConfig, pe
     }
 }
 
-fn get_response_result(response: Result<Value, serde_json::Error>) -> anyhow::Result<Value> {
+fn get_response_result(response: anyhow::Result<Value>) -> anyhow::Result<Value> {
     let response =
         response.map_err(|err| anyhow!("Deserialize failed on JsonRpc response: {err:?}"))?;
     match response.get("result") {
@@ -469,7 +495,7 @@ pub async fn test_jsonrpc_endpoints_over_http(
     for test in all_tests(peertest) {
         info!("Testing over HTTP: {:?}", test.request.method);
         let response = make_http_request(&peertest_config.target_http_address, &test.request).await;
-        match get_response_result(response) {
+        match response {
             Ok(result) => test.validate(&result, peertest),
             Err(msg) => panic!(
                 "Jsonrpc error for {:?} endpoint: {:?}",

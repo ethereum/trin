@@ -31,6 +31,7 @@ ureq = { version = "2.2.0", features = ["json"] }
 
 [dev-dependencies]
 ethportal-peertest = { path = "ethportal-peertest" }
+serial_test = "0.5.1"
 
 [workspace]
 members = [

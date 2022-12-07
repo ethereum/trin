@@ -5,14 +5,14 @@ use tracing::{error, info};
 
 use crate::{
     jsonrpc::{
-        make_ipc_request, validate_portal_offer, JsonRpcRequest, HISTORY_CONTENT_KEY,
+        make_jsonrpc_request, validate_portal_offer, JsonRpcRequest, HISTORY_CONTENT_KEY,
         HISTORY_CONTENT_VALUE,
     },
     Peertest, PeertestConfig,
 };
 use trin_core::jsonrpc::types::Params;
 
-pub fn test_offer_accept(peertest_config: PeertestConfig, peertest: &Peertest) {
+pub async fn test_offer_accept(_peertest_config: PeertestConfig, peertest: &Peertest) {
     info!("Testing OFFER/ACCEPT flow");
 
     // Store content to offer in the testnode db
@@ -25,7 +25,9 @@ pub fn test_offer_accept(peertest_config: PeertestConfig, peertest: &Peertest) {
         ]),
     };
 
-    let store_result = make_ipc_request(&peertest_config.target_ipc_path, &store_request).unwrap();
+    let store_result = make_jsonrpc_request(&peertest.nodes[0].transport, &store_request)
+        .await
+        .unwrap();
     assert_eq!(store_result.as_str().unwrap(), "true");
 
     // Send offer request from testnode to bootnode
@@ -38,7 +40,9 @@ pub fn test_offer_accept(peertest_config: PeertestConfig, peertest: &Peertest) {
         ]),
     };
 
-    let accept = make_ipc_request(&peertest_config.target_ipc_path, &offer_request).unwrap();
+    let accept = make_jsonrpc_request(&peertest.nodes[0].transport, &offer_request)
+        .await
+        .unwrap();
 
     // Check that ACCEPT response sent by bootnode accepted the offered content
     validate_portal_offer(&accept, peertest);
@@ -50,12 +54,12 @@ pub fn test_offer_accept(peertest_config: PeertestConfig, peertest: &Peertest) {
         params: Params::Array(vec![Value::String(HISTORY_CONTENT_KEY.to_string())]),
     };
     let mut received_content_value =
-        make_ipc_request(&peertest.bootnode.web3_ipc_path, &local_content_request);
+        make_jsonrpc_request(&peertest.bootnode.transport, &local_content_request).await;
     while let Err(err) = received_content_value {
         error!("Retrying after 0.5sec, because content should have been present: {err}");
         thread::sleep(time::Duration::from_millis(500));
         received_content_value =
-            make_ipc_request(&peertest.bootnode.web3_ipc_path, &local_content_request);
+            make_jsonrpc_request(&peertest.bootnode.transport, &local_content_request).await;
     }
 
     let received_content_value = match received_content_value {

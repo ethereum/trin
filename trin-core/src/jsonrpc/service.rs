@@ -81,6 +81,7 @@ pub fn launch_jsonrpc_server(
             trin_config,
             portal_tx,
             live_server_tx,
+            json_rpc_exiter,
         ),
         val => panic!("Unsupported web3 transport: {}", val),
     }
@@ -195,11 +196,16 @@ fn launch_http_client(
     trin_config: TrinConfig,
     portal_tx: UnboundedSender<PortalJsonRpcRequest>,
     live_server_tx: tokio::sync::mpsc::Sender<bool>,
+    json_rpc_exiter: Arc<JsonRpcExiter>,
 ) {
-    ctrlc::set_handler(move || {
+    if let Err(err) = ctrlc::set_handler(move || {
         std::process::exit(1);
-    })
-    .expect("Error setting Ctrl-C handler.");
+    }) {
+        warn!(
+            "Could not set the Ctrl-C handler for closing the HTTP client: {}",
+            err
+        );
+    }
 
     let listener = TcpListener::bind(&trin_config.web3_http_address).unwrap();
 
@@ -208,19 +214,21 @@ fn launch_http_client(
         live_server_tx.blocking_send(true).unwrap();
     });
 
-    for stream in listener.incoming() {
-        match stream {
-            Ok(stream) => {
-                let trusted_provider = trusted_provider.clone();
-                let portal_tx = portal_tx.clone();
-                pool.execute(move || {
-                    serve_http_client(stream, trusted_provider, portal_tx);
-                });
-            }
-            Err(e) => {
-                panic!("HTTP connection failed: {}", e)
-            }
-        };
+    let mut tcp_iter = listener.incoming();
+
+    loop {
+        if json_rpc_exiter.is_exiting() {
+            break;
+        }
+
+        if let Some(Ok(stream)) = tcp_iter.next() {
+            let trusted_provider = trusted_provider.clone();
+            let portal_tx = portal_tx.clone();
+            pool.execute(move || {
+                serve_http_client(stream, trusted_provider, portal_tx);
+            });
+        }
+        pool.join();
     }
     info!("HTTP JSON-RPC server exited cleanly");
 }

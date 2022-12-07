@@ -16,6 +16,7 @@ use trin_core::{
     cli::TrinConfig, jsonrpc::service::JsonRpcExiter, portalnet::types::messages::SszEnr,
     utils::provider::TrustedProvider,
 };
+
 pub fn setup_mock_trusted_http_server() -> MockServer {
     let server = MockServer::start();
     server.mock(|when, then| {
@@ -57,9 +58,31 @@ pub fn setup_mock_trusted_http_server() -> MockServer {
     server
 }
 
+#[derive(Clone, Debug)]
+pub enum TransportProtocol {
+    IPC,
+    HTTP,
+}
+
+#[derive(Clone, Debug)]
+pub enum Web3Transport {
+    IPC(IpcTransport),
+    HTTP(HttpTransport),
+}
+
+#[derive(Clone, Debug)]
+pub struct IpcTransport {
+    pub ipc_path: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct HttpTransport {
+    pub address: String,
+}
+
 pub struct PeertestNode {
     pub enr: SszEnr,
-    pub web3_ipc_path: String,
+    pub transport: Web3Transport,
     pub exiter: Arc<JsonRpcExiter>,
 }
 
@@ -75,36 +98,59 @@ impl Peertest {
     }
 }
 
-pub async fn launch_node(trin_config: TrinConfig) -> anyhow::Result<PeertestNode> {
-    let web3_ipc_path = trin_config.web3_ipc_path.clone();
+pub async fn launch_node(
+    trin_config: TrinConfig,
+    transport_protocol: TransportProtocol,
+) -> anyhow::Result<PeertestNode> {
     let server = setup_mock_trusted_http_server();
     let mock_trusted_provider = TrustedProvider {
         http: ureq::post(&server.url("/")),
         ws: None,
     };
+    let transport = match transport_protocol {
+        TransportProtocol::IPC => Web3Transport::IPC(IpcTransport {
+            ipc_path: trin_config.web3_ipc_path.to_string(),
+        }),
+        TransportProtocol::HTTP => Web3Transport::HTTP(HttpTransport {
+            address: trin_config.web3_http_address.to_string(),
+        }),
+    };
     let exiter = trin::run_trin(trin_config, mock_trusted_provider)
         .await
         .unwrap();
-    let enr = get_enode(&web3_ipc_path)?;
+    let enr = get_enode(transport.clone()).await?;
 
     // Short sleep to make sure all peertest nodes can connect
     thread::sleep(time::Duration::from_secs(2));
     Ok(PeertestNode {
         enr,
-        web3_ipc_path,
+        transport,
         exiter,
     })
 }
 
-fn generate_trin_config(id: u16, bootnode_enr: Option<&SszEnr>) -> TrinConfig {
+fn generate_trin_config(
+    id: u16,
+    bootnode_enr: Option<&SszEnr>,
+    transport_protocol: TransportProtocol,
+) -> TrinConfig {
     let discovery_port: u16 = 9000 + id;
     let discovery_port: String = discovery_port.to_string();
-    let web3_ipc_path = format!("/tmp/ethportal-peertest-buddy-{id}.ipc");
     // This specific private key scheme is chosen to enforce that the first peer node will be in
     // the 256 kbucket of the bootnode, to ensure consistent `FindNodes` tests.
     let mut private_key = vec![id as u8; 3];
     private_key.append(&mut vec![0u8; 29]);
     let private_key = hex::encode(private_key);
+    let mut trin_config_args: Vec<String> = vec![
+        "trin".to_owned(),
+        "--networks".to_owned(),
+        "history,state".to_owned(),
+        "--discovery-port".to_owned(),
+        discovery_port.to_owned(),
+        "--unsafe-private-key".to_owned(),
+        private_key,
+        "--ephemeral".to_owned(),
+    ];
     match bootnode_enr {
         Some(enr) => {
             let external_addr = format!(
@@ -113,55 +159,49 @@ fn generate_trin_config(id: u16, bootnode_enr: Option<&SszEnr>) -> TrinConfig {
                 discovery_port
             );
             let enr_base64 = enr.to_base64();
-            let trin_config_args = vec![
-                "trin",
-                "--networks",
-                "history,state",
-                "--external-address",
-                external_addr.as_str(),
-                "--bootnodes",
-                enr_base64.as_str(),
-                "--discovery-port",
-                discovery_port.as_str(),
-                "--web3-ipc-path",
-                web3_ipc_path.as_str(),
-                "--unsafe-private-key",
-                private_key.as_str(),
-                "--ephemeral",
-            ];
-            TrinConfig::new_from(trin_config_args.iter()).unwrap()
+            trin_config_args.push("--external-address".to_owned());
+            trin_config_args.push(external_addr);
+            trin_config_args.push("--bootnodes".to_owned());
+            trin_config_args.push(enr_base64);
         }
         None => {
             let ip_addr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
             let external_addr = format!("{}:{}", ip_addr, discovery_port);
-            let trin_config_args = vec![
-                "trin",
-                "--networks",
-                "history,state",
-                "--external-address",
-                external_addr.as_str(),
-                "--discovery-port",
-                discovery_port.as_str(),
-                "--web3-ipc-path",
-                web3_ipc_path.as_str(),
-                "--unsafe-private-key",
-                private_key.as_str(),
-                "--ephemeral",
-            ];
-            TrinConfig::new_from(trin_config_args.iter()).unwrap()
+            trin_config_args.push("--external-address".to_owned());
+            trin_config_args.push(external_addr);
+        }
+    };
+
+    match transport_protocol {
+        TransportProtocol::IPC => {
+            let web3_ipc_path = format!("/tmp/ethportal-peertest-buddy-{id}.ipc");
+            trin_config_args.push("--web3-ipc-path".to_owned());
+            trin_config_args.push(web3_ipc_path);
+        }
+        TransportProtocol::HTTP => {
+            trin_config_args.push("--web3-transport".to_owned());
+            trin_config_args.push("http".to_owned());
+            // 8545 is reserved for test node, so we start @ 8546 & increment
+            let http_port = 8545 + id;
+            let web3_http_address = format!("127.0.0.1:{http_port}");
+            trin_config_args.push("--web3-http-address".to_owned());
+            trin_config_args.push(web3_http_address);
         }
     }
+    TrinConfig::new_from(trin_config_args.iter()).unwrap()
 }
 
-pub async fn launch_peertest_nodes(count: u16) -> Peertest {
+pub async fn launch_peertest_nodes(count: u16, transport_protocol: TransportProtocol) -> Peertest {
     // Bootnode uses a peertest id of 1
-    let bootnode_config = generate_trin_config(1, None);
-    let bootnode = launch_node(bootnode_config).await.unwrap();
+    let bootnode_config = generate_trin_config(1, None, transport_protocol.clone());
+    let bootnode = launch_node(bootnode_config, transport_protocol.clone())
+        .await
+        .unwrap();
     let bootnode_enr = &bootnode.enr;
     // All other peertest node ids begin at 2, and increment from there
     let nodes = future::try_join_all((2..count + 1).into_iter().map(|id| {
-        let node_config = generate_trin_config(id, Some(bootnode_enr));
-        launch_node(node_config)
+        let node_config = generate_trin_config(id, Some(bootnode_enr), transport_protocol.clone());
+        launch_node(node_config, transport_protocol.clone())
     }))
     .await
     .unwrap();

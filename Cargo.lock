@@ -4577,6 +4577,7 @@ dependencies = [
  "rand 0.8.5",
  "rlp 0.5.1",
  "serde_json",
+ "serial_test",
  "sha3",
  "structopt",
  "tokio",
