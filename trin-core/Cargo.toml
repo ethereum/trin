@@ -17,6 +17,7 @@ directories = "3.0"
 discv5 = { git = "https://github.com/sigp/discv5.git", branch = "master" }
 enr = { version = "=0.6.0", features = ["k256", "ed25519"] }
 eth_trie = "0.1.0"
+eth2_hashing = "0.2.0"
 eth2_ssz = "0.4.0"
 eth2_ssz_derive = "0.3.0"
 eth2_ssz_types = "0.2.1"
@@ -72,6 +73,7 @@ features = ["bundled"]
 env_logger = "0.9.0"
 ntest = "0.8.0"
 quickcheck = "1.0.3"
+quickcheck_macros = "1.0.0"
 test-log = { version = "0.2.11", features = ["trace"] }
 rstest = "0.11.0"
 serial_test = "0.5.1"

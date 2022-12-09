@@ -93,6 +93,8 @@ pub enum HistoryContentKey {
     BlockReceipts(BlockReceipts),
     /// An epoch header accumulator.
     EpochAccumulator(EpochAccumulator),
+    /// A block header with accumulator proof.
+    BlockHeaderWithProof(BlockHeader),
 }
 
 /// A key for a block header.
@@ -167,6 +169,10 @@ impl fmt::Display for HistoryContentKey {
                     bytes::hex_encode_compact(acc.epoch_hash.as_fixed_bytes())
                 )
             }
+            Self::BlockHeaderWithProof(header) => format!(
+                "BlockHeaderWithProof {{ block_hash: {} }}",
+                bytes::hex_encode_compact(header.block_hash)
+            ),
         };
 
         write!(f, "{}", s)

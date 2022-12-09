@@ -12,7 +12,7 @@ use trin_core::{
     types::{
         accumulator::EpochAccumulator,
         block_body::BlockBody,
-        header::Header,
+        header::{Header, HeaderWithProof},
         receipts::Receipts,
         validation::{HeaderOracle, Validator},
     },
@@ -33,6 +33,16 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
         HistoryContentKey: 'async_trait,
     {
         match content_key {
+            HistoryContentKey::BlockHeaderWithProof(_key) => {
+                let header_with_proof =
+                    HeaderWithProof::from_ssz_bytes(content).map_err(|err| {
+                        anyhow!("Header with proof content has invalid encoding: {err:?}")
+                    })?;
+                self.header_oracle
+                    .write()
+                    .await
+                    .validate_header_with_proof(header_with_proof)
+            }
             HistoryContentKey::BlockHeader(_key) => {
                 let header: Header = rlp::decode(content)?;
                 self.header_oracle
@@ -115,12 +125,12 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use std::path::PathBuf;
 
     use ethereum_types::U256;
-    use hex;
     use httpmock::prelude::*;
-    use serde_json::json;
+    use serde_json::{json, Value};
     use ssz::Encode;
     use ssz_types::{typenum, VariableList};
 
@@ -138,8 +148,11 @@ mod tests {
     };
 
     fn get_header_rlp() -> Vec<u8> {
-        // RLP encoded block header #669051
-        hex::decode("f90217a092bccf7a38604c5441dffc5eb5a5ca295b3fbb7ff01cc92fb3b48f0d456e732ea01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794f8b483dba2c3b7176a3da549ad41a48bb3121069a08a779b9d52800c3f0fc2ec4f8388dd56e1fcf4685126466bc1a9832ab2ddf612a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421b9010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000860717d1b1cd0e830a357b832fefd88084566930a39ad983010203844765746887676f312e342e328777696e646f7773a0daa40d4b72000209b43526ada798b90b98f9cd6e4cdc5bebbad690208aa1728788e6b9441a5df2f6ad").unwrap()
+        let file = fs::read_to_string("../trin-core/src/assets/test/header_rlps.json").unwrap();
+        let json: Value = serde_json::from_str(&file).unwrap();
+        let json = json.as_object().unwrap();
+        let raw_header = json.get("669051").unwrap().as_str().unwrap();
+        hex_decode(raw_header).unwrap()
     }
 
     fn setup_mock_infura_server() -> MockServer {
@@ -283,7 +296,7 @@ mod tests {
         let server = setup_mock_infura_server();
 
         let ssz_block_body: Vec<u8> =
-            std::fs::read("../trin-core/src/types/assets/block_body_14764013.bin").unwrap();
+            std::fs::read("../trin-core/src/assets/test/trin/block_body_14764013.bin").unwrap();
         let block_body_bytelist: VariableList<_, typenum::U16384> =
             VariableList::from(ssz_block_body);
 
@@ -303,7 +316,7 @@ mod tests {
         let server = setup_mock_infura_server();
 
         let ssz_block_body: Vec<u8> =
-            std::fs::read("../trin-core/src/types/assets/block_body_14764013.bin").unwrap();
+            std::fs::read("../trin-core/src/assets/test/trin/block_body_14764013.bin").unwrap();
         let mut valid_block = BlockBody::from_ssz_bytes(&ssz_block_body).unwrap();
 
         // construct invalid ssz encoded block body
@@ -330,7 +343,7 @@ mod tests {
     async fn validate_receipts() {
         let server = setup_mock_infura_server();
         let ssz_receipts: Vec<u8> =
-            std::fs::read("../trin-core/src/types/assets/receipts_14764013.bin").unwrap();
+            std::fs::read("../trin-core/src/assets/test/trin/receipts_14764013.bin").unwrap();
         let content: VariableList<_, typenum::U16384> = VariableList::from(ssz_receipts);
 
         let header_oracle = default_header_oracle(server.url("/14764013"));
@@ -348,7 +361,7 @@ mod tests {
     async fn invalidate_receipts() {
         let server = setup_mock_infura_server();
         let ssz_receipts: Vec<u8> =
-            std::fs::read("../trin-core/src/types/assets/receipts_14764013.bin").unwrap();
+            std::fs::read("../trin-core/src/assets/test/trin/receipts_14764013.bin").unwrap();
         let mut valid_receipts = Receipts::from_ssz_bytes(&ssz_receipts).unwrap();
 
         // construct invalid ssz encoded receipts
@@ -375,7 +388,8 @@ mod tests {
     #[tokio::test]
     async fn validate_epoch_acc() {
         let server = setup_mock_infura_server();
-        let epoch_acc = std::fs::read("./../trin-core/src/assets/0x5ec1…4218.bin").unwrap();
+        let epoch_acc =
+            std::fs::read("./../trin-core/src/assets/test/epoch_accs/0x5ec1…4218.bin").unwrap();
         let epoch_acc = EpochAccumulator::from_ssz_bytes(&epoch_acc).unwrap();
         let header_oracle = default_header_oracle(server.url("/14764013"));
         let chain_history_validator = ChainHistoryValidator { header_oracle };
@@ -393,7 +407,8 @@ mod tests {
     #[should_panic(expected = "Invalid epoch accumulator tree hash root.")]
     async fn invalidate_epoch_acc_with_invalid_root_hash() {
         let server = setup_mock_infura_server();
-        let epoch_acc = std::fs::read("./../trin-core/src/assets/0x5ec1…4218.bin").unwrap();
+        let epoch_acc =
+            std::fs::read("./../trin-core/src/assets/test/epoch_accs/0x5ec1…4218.bin").unwrap();
         let mut epoch_acc = EpochAccumulator::from_ssz_bytes(&epoch_acc).unwrap();
         let header_oracle = default_header_oracle(server.url("/14764013"));
         let chain_history_validator = ChainHistoryValidator { header_oracle };
@@ -401,7 +416,7 @@ mod tests {
             epoch_hash: epoch_acc.tree_hash_root(),
         });
 
-        epoch_acc.header_records[0] = HeaderRecord {
+        epoch_acc[0] = HeaderRecord {
             block_hash: H256::random(),
             total_difficulty: U256::from_dec_str("0").unwrap(),
         };
@@ -417,12 +432,13 @@ mod tests {
     #[should_panic(expected = "Invalid epoch accumulator, missing from master accumulator.")]
     async fn invalidate_epoch_acc_missing_from_master_acc() {
         let server = setup_mock_infura_server();
-        let epoch_acc = std::fs::read("./../trin-core/src/assets/0x5ec1…4218.bin").unwrap();
+        let epoch_acc =
+            std::fs::read("./../trin-core/src/assets/test/epoch_accs/0x5ec1…4218.bin").unwrap();
         let mut epoch_acc = EpochAccumulator::from_ssz_bytes(&epoch_acc).unwrap();
         let header_oracle = default_header_oracle(server.url("/14764013"));
         let chain_history_validator = ChainHistoryValidator { header_oracle };
 
-        epoch_acc.header_records[0] = HeaderRecord {
+        epoch_acc[0] = HeaderRecord {
             block_hash: H256::random(),
             total_difficulty: U256::from_dec_str("0").unwrap(),
         };
