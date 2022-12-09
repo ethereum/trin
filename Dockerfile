@@ -28,9 +28,9 @@ FROM ubuntu:22.04
 RUN mkdir -p /trin/trin-core/src/assets
 COPY --from=builder /trin/trin-core/src/assets/merge_macc.bin ./trin/trin-core/src/assets/merge_macc.bin
 # copy build artifacts from build stage
-COPY --from=builder /trin/target/release/trin .
-COPY --from=builder /trin/target/release/trin-cli .
+COPY --from=builder /trin/target/release/trin /usr/bin/
+COPY --from=builder /trin/target/release/trin-cli /usr/bin/
 
 ENV RUST_LOG=debug
 
-ENTRYPOINT ["./trin"]
+ENTRYPOINT ["/usr/bin/trin"]
