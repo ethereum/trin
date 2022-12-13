@@ -85,7 +85,7 @@ jobs:
     description: |
       Run uTP network simulator
     machine:
-      image: ubuntu-2004:current
+      image: ubuntu-2204:current
     resource_class: xlarge
     environment:
       RUSTFLAGS: '-D warnings'

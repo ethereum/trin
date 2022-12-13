@@ -214,6 +214,31 @@ impl TryFrom<Value> for FullHeader {
     }
 }
 
+/// Helper type to deserialize a response from a batched Header request.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FullHeaderBatch {
+    pub headers: Vec<FullHeader>,
+}
+
+impl<'de> Deserialize<'de> for FullHeaderBatch {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let obj: Vec<Value> = Deserialize::deserialize(deserializer)?;
+        let results: Result<Vec<FullHeader>, _> = obj
+            .into_iter()
+            .map(|mut val| {
+                let result = val["result"].take();
+                FullHeader::try_from(result)
+            })
+            .collect();
+        Ok(Self {
+            headers: results.map_err(serde::de::Error::custom)?,
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TxHashes {
     pub hashes: Vec<H256>,
@@ -305,6 +330,18 @@ impl ssz::Decode for HeaderWithProof {
     }
 }
 
+impl ssz::Encode for HeaderWithProof {
+    fn is_ssz_fixed_len() -> bool {
+        false
+    }
+
+    fn ssz_append(&self, _buf: &mut Vec<u8>) {}
+
+    fn ssz_bytes_len(&self) -> usize {
+        0
+    }
+}
+
 impl ssz::Decode for AccumulatorProof {
     fn is_ssz_fixed_len() -> bool {
         true
@@ -387,6 +424,9 @@ mod tests {
     use serde_json::{json, Value};
     use ssz::Decode;
     use test_log::test;
+
+    use crate::types::block_body::{BlockBody, EncodableHeaderList};
+    use crate::utils::bytes::hex_decode;
 
     #[test]
     fn decode_and_encode_header() {
@@ -497,5 +537,32 @@ mod tests {
         assert_eq!(full_header.tx_hashes.hashes.len(), 19);
         assert_eq!(full_header.uncles.len(), 1);
         assert_eq!(full_header.header, header);
+    }
+
+    #[test_log::test]
+    fn full_header_batch() {
+        // this block (15573637) was chosen since it contains all tx types (legacy, access list, eip1559)
+        // as well as contract creation txs
+        let expected: String =
+            std::fs::read_to_string("./src/assets/test/trin/geth_batch/headers.json").unwrap();
+        let full_headers: FullHeaderBatch = serde_json::from_str(&expected).unwrap();
+        for full_header in full_headers.headers {
+            let block_body = BlockBody {
+                txs: full_header.txs,
+                uncles: EncodableHeaderList { list: vec![] },
+            };
+            // test that txs are properly deserialized if tx root is properly calculated
+            assert_eq!(
+                block_body.transactions_root().unwrap(),
+                full_header.header.transactions_root
+            );
+            // this block has no uncles, aka an empty uncles root is calculated.
+            // there's no need to validate deserialization of uncles, since they're just a
+            // vector of Header, which are already tested above
+            assert_eq!(
+                block_body.uncles_root().unwrap(),
+                full_header.header.uncles_hash
+            );
+        }
     }
 }

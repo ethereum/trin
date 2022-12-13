@@ -6,7 +6,7 @@ use ethportal_api::jsonrpsee::server::ServerHandle;
 use rpc::JsonRpcServer;
 use tokio::sync::mpsc;
 use tokio::sync::RwLock;
-use tracing::info;
+use tracing::{info, warn};
 use utp_rs::socket::UtpSocket;
 
 use trin_core::{
@@ -16,6 +16,7 @@ use trin_core::{
         storage::PortalStorageConfig,
         types::messages::PortalnetConfig,
     },
+    types::bridge::Bridge,
     utils::{bootnodes::parse_bootnodes, db::setup_temp_dir},
 };
 use trin_history::initialize_history_network;
@@ -145,6 +146,20 @@ pub async fn run_trin(
     }
     if let Some(network) = state_network_task {
         tokio::spawn(async { network.await });
+    }
+    if let Some(mode) = trin_config.bridge {
+        if trin_config.kb > 0 {
+            warn!("It's strongly recommended that you run a bridge node with kb=0 flag.");
+        }
+        if trin_config.epoch_acc_path.is_none() {
+            warn!("it's highly recommended that you provide a path to the epoch acc repo to run a bridge node, avoiding uncessary network traffic");
+        }
+        let bridge = Bridge {
+            header_oracle: header_oracle.clone(),
+            mode,
+            epoch_acc_path: trin_config.epoch_acc_path,
+        };
+        tokio::spawn(async move { bridge.launch().await });
     }
 
     Ok(rpc_handle?)

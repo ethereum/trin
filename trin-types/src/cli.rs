@@ -4,7 +4,9 @@ use ethereum_types::H256;
 use structopt::StructOpt;
 use url::Url;
 
+use crate::portalnet::types::messages::HexData;
 use crate::provider::TrustedProviderType;
+use crate::types::bridge::BridgeMode;
 
 pub const DEFAULT_MASTER_ACC_PATH: &str = "src/assets/merge_macc.bin";
 pub const DEFAULT_WEB3_IPC_PATH: &str = "/tmp/trin-jsonrpc.ipc";
@@ -170,6 +172,16 @@ pub struct TrinConfig {
         parse(from_os_str)
     )]
     pub master_acc_path: PathBuf,
+
+    #[structopt(long = "bridge", help = "bridge mode")]
+    pub bridge: Option<BridgeMode>,
+
+    #[structopt(
+        long = "epoch-accumulator-path",
+        help = "Path to epoch accumulator repo for bridge mode",
+        parse(from_os_str)
+    )]
+    pub epoch_acc_path: Option<PathBuf>,
 }
 
 impl Default for TrinConfig {
@@ -199,6 +211,8 @@ impl Default for TrinConfig {
             trusted_provider: TrustedProviderType::Infura,
             trusted_provider_url: None,
             master_acc_path: PathBuf::from(DEFAULT_MASTER_ACC_PATH.to_string()),
+            bridge: None,
+            epoch_acc_path: None,
         }
     }
 }
