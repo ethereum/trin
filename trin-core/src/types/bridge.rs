@@ -25,6 +25,7 @@ use crate::types::header::{
 use crate::types::receipts::Receipts;
 use crate::types::validation::HeaderOracle;
 use crate::types::validation::MERGE_BLOCK_NUMBER;
+use crate::utils::bytes::hex_encode;
 use crate::utils::bytes::{hex_decode, hex_encode};
 use ethportal_api::types::content_key::{
     BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, HistoryContentKey,
@@ -272,6 +273,7 @@ impl Bridge {
             let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
                 block_hash: full_header.header.hash().to_fixed_bytes(),
             });
+            // is this the right value? i don't think so
             let content_value = rlp::encode(&full_header.header);
             let tx = self.history_tx().await;
             debug!("Offer: Block #{:?} Header", full_header.header.number);
