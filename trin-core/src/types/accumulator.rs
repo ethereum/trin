@@ -217,7 +217,13 @@ impl MasterAccumulator {
                 "Epoch acc hash sourced from network doesn't match historical hash in master acc."
             ));
         }
+        MasterAccumulator::construct_proof(header, &epoch_acc)
+    }
 
+    pub fn construct_proof(
+        header: &Header,
+        epoch_acc: &EpochAccumulator,
+    ) -> anyhow::Result<[H256; 15]> {
         // Validate header hash matches historical hash from epoch accumulator
         let hr_index = (header.number % EPOCH_SIZE as u64) as usize;
         let header_record = epoch_acc[hr_index];

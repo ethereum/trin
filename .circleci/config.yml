@@ -156,6 +156,12 @@ jobs:
           name: Check containers
           command: docker ps -a
       - run:
+          name: log containers
+          command: docker logs client
+      - run:
+          name: log containers
+          command: docker logs server
+      - run:
           name: Run test suite
           command: RUST_LOG=debug ./target/release/utp-test-suite
       - run:
