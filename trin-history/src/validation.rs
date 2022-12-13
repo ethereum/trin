@@ -132,7 +132,7 @@ mod tests {
             BlockBody as BlockBodyKey, BlockHeader, BlockReceipts,
             EpochAccumulator as EpochAccumulatorKey,
         },
-        types::accumulator::MasterAccumulator,
+        types::accumulator::{HeaderRecord, MasterAccumulator},
         utils::{bytes::hex_decode, provider::TrustedProvider},
     };
 
@@ -148,6 +148,10 @@ mod tests {
     }
 
     fn setup_mock_infura_server() -> MockServer {
+        let value_146764013 =
+            std::fs::read_to_string("../trin-core/src/assets/test/trin/block_14764013_value.json")
+                .unwrap();
+        let value_146764013: Value = serde_json::from_str(&value_146764013).unwrap();
         let server = MockServer::start();
         server.mock(|when, then| {
             when.method(POST)
@@ -182,38 +186,10 @@ mod tests {
                 }));
         });
         server.mock(|when, then| {
-            when.method(POST)
-                .path("/14764013");
+            when.method(POST).path("/14764013");
             then.status(200)
                 .header("content-type", "application/json")
-                .json_body(json!({
-                    "jsonrpc":"2.0",
-                    "id":1,
-                    "result": {
-                        "baseFeePerGas": "0x1aae1651b6",
-                        "difficulty": "0x327bd7ad3116ce",
-                        "extraData": "0x457468657265756d50504c4e532f326d696e6572735f55534133",
-                        "gasLimit": "0x1c9c364",
-                        "gasUsed": "0x140db1",
-                        "hash": "0x720704f3aa11c53cf344ea069db95cecb81ad7453c8f276b2a1062979611f09c",
-                        // Using an empty bloom that doesn't match the real logs, because it is easy and isn't validated
-                        "logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
-                        "miner": "0x00192fb10df37c9fb26829eb2cc623cd1bf599e8",
-                        "mixHash": "0xf1a32e24eb62f01ec3f2b3b5893f7be9062fbf5482bc0d490a54352240350e26",
-                        "nonce": "0x2087fbb243327696",
-                        "number": "0xe147ed",
-                        "parentHash": "0x2c58e3212c085178dbb1277e2f3c24b3f451267a75a234945c1581af639f4a7a",
-                        "receiptsRoot": "0x168a3827607627e781941dc777737fc4b6beb69a8b139240b881992b35b854ea",
-                        "sha3Uncles": "0x58a694212e0416353a4d3865ccf475496b55af3a3d3b002057000741af973191",
-                        "size": "0x1f96",
-                        "stateRoot": "0x67a9fb631f4579f9015ef3c6f1f3830dfa2dc08afe156f750e90022134b9ebf6",
-                        "timestamp": "0x627d9afa",
-                        "totalDifficulty": "0xa55e1baf12dfa3fc50c",
-                        "transactions": [],
-                        "transactionsRoot": "0x18a2978fc62cd1a23e90de920af68c0c3af3330327927cda4c005faccefb5ce7",
-                        "uncles": ["0x817d4158df626cd8e9a20da9552c51a0d43f22b25de0b4dc5a089d81af899c70"]
-                    }
-                }));
+                .json_body(value_146764013);
         });
         server
     }
@@ -370,8 +346,6 @@ mod tests {
             .await
             .unwrap();
     }
-
-    use trin_core::types::accumulator::HeaderRecord;
 
     #[tokio::test]
     async fn validate_epoch_acc() {
