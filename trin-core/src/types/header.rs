@@ -1,25 +1,25 @@
-use anyhow::anyhow;
-use bytes::Bytes;
-use ethereum_types::{Bloom, H160, H256, U256};
+use ethereum_types::{Bloom, H160, H256, H64, U256};
 use rlp::{Decodable, DecoderError, Encodable, Rlp, RlpStream};
-use serde::{Serialize, Serializer};
-use serde_json::Value;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use ssz::SszDecoderBuilder;
 use ssz_derive::Decode;
 
 use crate::portalnet::types::messages::ByteList;
-use crate::utils::bytes::hex_decode;
+use crate::utils::bytes::{hex_decode, hex_encode};
 
 const LONDON_BLOCK_NUMBER: u64 = 12965000;
 
 /// A block header.
-#[derive(Debug, Clone, Eq, Serialize)]
+#[derive(Debug, Clone, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Header {
     /// Block parent hash.
     pub parent_hash: H256,
     /// Block uncles hash.
+    #[serde(rename(deserialize = "sha3Uncles"))]
     pub uncles_hash: H256,
     /// Block author.
+    #[serde(rename(deserialize = "miner"))]
     pub author: H160,
     /// Block state root.
     pub state_root: H256,
@@ -28,42 +28,53 @@ pub struct Header {
     /// Block receipts root.
     pub receipts_root: H256,
     /// Block bloom filter.
-    pub log_bloom: Bloom,
+    pub logs_bloom: Bloom,
     /// Block difficulty.
     pub difficulty: U256,
     /// Block number.
+    #[serde(deserialize_with = "de_hex_to_u64")]
     pub number: u64,
     /// Block gas limit.
     pub gas_limit: U256,
     /// Block gas used.
     pub gas_used: U256,
     /// Block timestamp.
+    #[serde(deserialize_with = "de_hex_to_u64")]
     pub timestamp: u64,
     /// Block extra data.
-    #[serde(serialize_with = "as_hex")]
+    #[serde(serialize_with = "se_hex")]
+    #[serde(deserialize_with = "de_hex_to_vec_u8")]
     pub extra_data: Vec<u8>,
     /// Block PoW mix hash.
     pub mix_hash: Option<H256>,
     /// Block PoW nonce.
-    #[serde(serialize_with = "raw_bytes")]
-    pub nonce: Option<Bytes>,
+    pub nonce: Option<H64>,
     /// Block base fee per gas. Introduced by EIP-1559.
     pub base_fee_per_gas: Option<U256>,
 }
 
-fn raw_bytes<S>(value: &Option<Bytes>, serializer: S) -> Result<S::Ok, S::Error>
+fn se_hex<S>(value: &[u8], serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
-    let value = value.clone().unwrap();
-    serializer.serialize_str(format!("0x{}", hex::encode(&value)).as_str())
+    serializer.serialize_str(&hex_encode(value))
 }
 
-fn as_hex<S>(value: &[u8], serializer: S) -> Result<S::Ok, S::Error>
+fn de_hex_to_vec_u8<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
 where
-    S: Serializer,
+    D: Deserializer<'de>,
 {
-    serializer.serialize_str(format!("0x{}", hex::encode(value)).as_str())
+    let result: String = Deserialize::deserialize(deserializer)?;
+    hex_decode(&result).map_err(serde::de::Error::custom)
+}
+
+fn de_hex_to_u64<'de, D>(deserializer: D) -> Result<u64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let result: String = Deserialize::deserialize(deserializer)?;
+    let result = result.trim_start_matches("0x");
+    u64::from_str_radix(result, 16).map_err(serde::de::Error::custom)
 }
 
 // Based on https://github.com/openethereum/openethereum/blob/main/crates/ethcore/types/src/header.rs
@@ -93,7 +104,7 @@ impl Header {
             .append(&self.state_root)
             .append(&self.transactions_root)
             .append(&self.receipts_root)
-            .append(&self.log_bloom)
+            .append(&self.logs_bloom)
             .append(&self.difficulty)
             .append(&self.number)
             .append(&self.gas_limit)
@@ -110,96 +121,6 @@ impl Header {
             s.append(&self.base_fee_per_gas.unwrap());
         }
     }
-
-    pub fn from_get_block_jsonrpc_response(response: Value) -> anyhow::Result<Self> {
-        if !response.is_object() {
-            return Err(anyhow!("Invalid jsonrpc response: Expected an object."));
-        }
-        let result = response["result"]
-            .as_object()
-            .ok_or_else(|| anyhow!("Invalid jsonrpc response. Missing 'result'."))?;
-
-        let mut header = Self {
-            parent_hash: try_value_into_h256(&result["parentHash"])?,
-            uncles_hash: try_value_into_h256(&result["sha3Uncles"])?,
-            author: try_value_into_h160(&result["miner"])?,
-            state_root: try_value_into_h256(&result["stateRoot"])?,
-            transactions_root: try_value_into_h256(&result["transactionsRoot"])?,
-            receipts_root: try_value_into_h256(&result["receiptsRoot"])?,
-            log_bloom: try_value_into_bloom(&result["logsBloom"])?,
-            difficulty: try_value_into_u256(&result["difficulty"])?,
-            number: try_value_into_u64(&result["number"])?,
-            gas_limit: try_value_into_u256(&result["gasLimit"])?,
-            gas_used: try_value_into_u256(&result["gasUsed"])?,
-            timestamp: try_value_into_u64(&result["timestamp"])?,
-            extra_data: try_value_into_bytes(&result["extraData"])?,
-            mix_hash: Some(try_value_into_h256(&result["mixHash"])?),
-            nonce: Some(try_value_into_u64_be_bytes(&result["nonce"])?),
-            base_fee_per_gas: None,
-        };
-
-        if result.get("baseFeePerGas").is_some() {
-            let fee = result.get("baseFeePerGas").unwrap();
-            header.base_fee_per_gas = Some(try_value_into_u256(fee)?)
-        }
-        Ok(header)
-    }
-}
-
-//
-// Custom util fns for 0x-prefixed hexstrings returned by jsonrpc
-//
-fn try_value_into_h256(val: &Value) -> anyhow::Result<H256> {
-    let result = val
-        .as_str()
-        .ok_or_else(|| anyhow!("Value is not a string."))?;
-    let result = hex_decode(result)?;
-    Ok(H256::from_slice(&result))
-}
-
-fn try_value_into_h160(val: &Value) -> anyhow::Result<H160> {
-    let result = val
-        .as_str()
-        .ok_or_else(|| anyhow!("Value is not a string."))?;
-    let result = hex_decode(result)?;
-    Ok(H160::from_slice(&result))
-}
-
-fn try_value_into_bloom(val: &Value) -> anyhow::Result<Bloom> {
-    let result = val
-        .as_str()
-        .ok_or_else(|| anyhow!("Value is not a string."))?;
-    let result = hex_decode(result)?;
-    Ok(Bloom::from_slice(&result))
-}
-
-fn try_value_into_bytes(val: &Value) -> anyhow::Result<Vec<u8>> {
-    let result = val
-        .as_str()
-        .ok_or_else(|| anyhow!("Value is not a string."))?;
-    let result = hex_decode(result)?;
-    Ok(result)
-}
-
-fn try_value_into_u256(val: &Value) -> anyhow::Result<U256> {
-    let result = val
-        .as_str()
-        .ok_or_else(|| anyhow!("Value is not a string."))?;
-    let result = result.trim_start_matches("0x");
-    Ok(U256::from_str_radix(result, 16)?)
-}
-
-fn try_value_into_u64(val: &Value) -> anyhow::Result<u64> {
-    let result = val
-        .as_str()
-        .ok_or_else(|| anyhow!("Value is not a string."))?;
-    let result = result.trim_start_matches("0x");
-    Ok(u64::from_str_radix(result, 16)?)
-}
-
-fn try_value_into_u64_be_bytes(val: &Value) -> anyhow::Result<Bytes> {
-    let result = try_value_into_u64(val)?;
-    Ok(Bytes::copy_from_slice(&result.to_be_bytes()))
 }
 
 impl Decodable for Header {
@@ -212,7 +133,7 @@ impl Decodable for Header {
             state_root: rlp.val_at(3)?,
             transactions_root: rlp.val_at(4)?,
             receipts_root: rlp.val_at(5)?,
-            log_bloom: rlp.val_at(6)?,
+            logs_bloom: rlp.val_at(6)?,
             difficulty: rlp.val_at(7)?,
             number: rlp.val_at(8)?,
             gas_limit: rlp.val_at(9)?,
@@ -246,7 +167,7 @@ impl PartialEq for Header {
             && self.state_root == other.state_root
             && self.transactions_root == other.transactions_root
             && self.receipts_root == other.receipts_root
-            && self.log_bloom == other.log_bloom
+            && self.logs_bloom == other.logs_bloom
             && self.difficulty == other.difficulty
             && self.number == other.number
             && self.gas_limit == other.gas_limit
@@ -364,9 +285,11 @@ mod tests {
     use std::fs;
 
     use hex;
-    use serde_json::json;
+    use serde_json::{json, Value};
     use ssz::Decode;
     use test_log::test;
+
+    use crate::utils::bytes::hex_decode;
 
     #[test]
     fn decode_and_encode_header() {
@@ -442,8 +365,9 @@ mod tests {
                 ]
             }
         });
-        let header = Header::from_get_block_jsonrpc_response(val).unwrap();
+        let header: Header = serde_json::from_value(val["result"].clone()).unwrap();
         assert_eq!(header.difficulty, U256::from(3371913793060314u64));
+        assert_eq!(header.base_fee_per_gas, None);
     }
 
     #[test]

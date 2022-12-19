@@ -664,7 +664,7 @@ mod test {
             state_root: H256::random(),
             transactions_root: H256::random(),
             receipts_root: H256::random(),
-            log_bloom: Bloom::zero(),
+            logs_bloom: Bloom::zero(),
             difficulty: U256::from_dec_str("1").unwrap(),
             number: *height,
             gas_limit: U256::from_dec_str("1").unwrap(),
