@@ -56,7 +56,7 @@ impl HeaderOracle {
         let response: Value = self
             .trusted_provider
             .dispatch_http_request(method, params)?;
-        let header = Header::from_get_block_jsonrpc_response(response)?;
+        let header: Header = serde_json::from_value(response["result"].clone())?;
         Ok(header)
     }
 
