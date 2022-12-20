@@ -7,6 +7,11 @@ use eth_trie::{EthTrie, MemoryDB, Trie};
 use ethereum_types::{Address, Bloom, BloomInput, H256, U256};
 use rlp::{self, Decodable, DecoderError, Encodable, Rlp, RlpStream};
 use rlp_derive::{RlpDecodable, RlpEncodable};
+use serde::{Deserialize, Deserializer};
+use serde_json::Value;
+
+use crate::types::block_body::JsonBytes;
+use crate::utils::bytes::hex_decode;
 
 // 2 ^ 14
 const MAX_TRANSACTION_COUNT: usize = 16384;
@@ -131,6 +136,27 @@ pub struct LogEntry {
     pub data: Bytes,
 }
 
+/// A record of execution for a `LOG` operation.
+#[derive(Default, Debug, Clone, PartialEq, Eq, Deserialize, RlpEncodable, RlpDecodable)]
+pub struct LogEntryHelper {
+    /// The address of the contract executing at the point of the `LOG` operation.
+    pub address: Address,
+    /// The topics associated with the `LOG` operation.
+    pub topics: Vec<H256>,
+    /// The data associated with the `LOG` operation.
+    pub data: JsonBytes,
+}
+
+impl From<LogEntryHelper> for LogEntry {
+    fn from(v: LogEntryHelper) -> LogEntry {
+        LogEntry {
+            address: v.address,
+            topics: v.topics,
+            data: v.data.into(),
+        }
+    }
+}
+
 impl LogEntry {
     /// Calculates the bloom of this log entry.
     pub fn bloom(&self) -> Bloom {
@@ -152,12 +178,64 @@ pub enum TransactionOutcome {
     StatusCode(u8),
 }
 
+impl<'de> Deserialize<'de> for TransactionOutcome {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s: String = Deserialize::deserialize(deserializer)?;
+        let s = s.trim_start_matches("0x");
+        match s.len() {
+            1 => Ok(Self::StatusCode(
+                s.parse::<u8>().map_err(serde::de::Error::custom)?,
+            )),
+            64 => Ok(Self::StateRoot(H256::from_slice(
+                &hex_decode(s).map_err(serde::de::Error::custom)?,
+            ))),
+            _ => Err(serde::de::Error::custom("Invalid transaction outcome")),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LegacyReceipt {
     pub cumulative_gas_used: U256,
     pub log_bloom: Bloom,
     pub logs: Vec<LogEntry>,
     pub outcome: TransactionOutcome,
+}
+
+impl<'de> Deserialize<'de> for LegacyReceipt {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = LegacyReceiptHelper::deserialize(deserializer)?;
+        Ok(s.into())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LegacyReceiptHelper {
+    pub cumulative_gas_used: U256,
+    pub logs_bloom: Bloom,
+    pub logs: Vec<LogEntryHelper>,
+    #[serde(rename(deserialize = "status"))]
+    pub outcome: TransactionOutcome,
+}
+
+#[allow(clippy::from_over_into)]
+impl Into<LegacyReceipt> for LegacyReceiptHelper {
+    fn into(self) -> LegacyReceipt {
+        let logs = self.logs.into_iter().map(|v| v.into()).collect();
+        LegacyReceipt {
+            cumulative_gas_used: self.cumulative_gas_used,
+            log_bloom: self.logs_bloom,
+            logs,
+            outcome: self.outcome,
+        }
+    }
 }
 
 impl LegacyReceipt {
@@ -233,10 +311,24 @@ impl TryFrom<u8> for TransactionId {
             id if id == TransactionId::EIP1559 as u8 => Ok(Self::EIP1559),
             id if id == TransactionId::AccessList as u8 => Ok(Self::AccessList),
             id if (id & 0x80) != 0x00 => Ok(Self::Legacy),
+            id if id == TransactionId::Legacy as u8 => Ok(Self::Legacy),
             _ => Err(DecoderError::Custom(
                 "Invalid byte selector for transaction type.",
             )),
         }
+    }
+}
+
+impl TryFrom<Value> for TransactionId {
+    type Error = DecoderError;
+
+    fn try_from(val: Value) -> Result<Self, Self::Error> {
+        let id = val.as_str().ok_or(DecoderError::Custom("Invalid tx id."))?;
+        let id = id.trim_start_matches("0x");
+        let id = id
+            .parse::<u8>()
+            .map_err(|_| DecoderError::Custom("Invalid tx id."))?;
+        Self::try_from(id)
     }
 }
 
@@ -308,6 +400,29 @@ impl Receipt {
     }
 }
 
+impl<'de> Deserialize<'de> for Receipt {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let obj: Value = Deserialize::deserialize(deserializer)?;
+        let tx_id =
+            TransactionId::try_from(obj["type"].clone()).map_err(serde::de::Error::custom)?;
+        match tx_id {
+            // todo support other receipts
+            TransactionId::Legacy => Ok(Receipt::Legacy(
+                LegacyReceipt::deserialize(obj).map_err(serde::de::Error::custom)?,
+            )),
+            TransactionId::AccessList => Ok(Receipt::AccessList(
+                LegacyReceipt::deserialize(obj).map_err(serde::de::Error::custom)?,
+            )),
+            TransactionId::EIP1559 => Ok(Receipt::EIP1559(
+                LegacyReceipt::deserialize(obj).map_err(serde::de::Error::custom)?,
+            )),
+        }
+    }
+}
+
 impl Deref for Receipt {
     type Target = LegacyReceipt;
 
@@ -328,6 +443,7 @@ mod tests {
     use std::str::FromStr;
 
     use ethereum_types::H160;
+    use serde_json::json;
     use ssz::{Decode, Encode};
     use test_log::test;
 
@@ -561,6 +677,32 @@ mod tests {
         assert_eq!(&encoded[..], &expected[..]);
         let decoded = Receipt::decode(&encoded).expect("decoding receipt failed");
         assert_eq!(decoded, receipt);
+    }
+
+    #[test]
+    fn from_json_legacy() {
+        // 0x147c84ddb366ae572ce5aa4d815e62de3a151133479fbb414e25d32bd7db9aa5
+        let response = json!({"blockHash": "0x720704f3aa11c53cf344ea069db95cecb81ad7453c8f276b2a1062979611f09c", "blockNumber": "0xe147ed", "contractAddress": null, "cumulativeGasUsed": "0x8d727", "effectiveGasPrice": "0x2aa7599fe2", "from": "0xeb6c4be4b92a52e969f4bf405025d997703d5383", "gasUsed": "0x5208", "logs": [], "logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000", "status": "0x1", "to": "0x4c875e8bd31969f4b753b3ab1611e29f270ba47e", "transactionHash": "0x147c84ddb366ae572ce5aa4d815e62de3a151133479fbb414e25d32bd7db9aa5", "transactionIndex": "0x6", "type": "0x0"});
+        let receipt: Receipt = serde_json::from_value(response).unwrap();
+        let receipt = match receipt {
+            Receipt::Legacy(val) => val,
+            _ => panic!("invalid test"),
+        };
+        assert_eq!(
+            receipt.cumulative_gas_used,
+            U256::from_dec_str("579367").unwrap()
+        );
+    }
+
+    #[test]
+    fn from_json_typed() {
+        //0x163dae461ab32787eaecdad0748c9cf5fe0a22b443bc694efae9b80e319d9559
+        let response = json!({"blockHash": "0x720704f3aa11c53cf344ea069db95cecb81ad7453c8f276b2a1062979611f09c", "blockNumber": "0xe147ed", "contractAddress": null, "cumulativeGasUsed": "0x2e56f", "effectiveGasPrice": "0x1b05c3919a", "from": "0xdd19b32a084be0a318f11edb3f7034889c03c51f", "gasUsed": "0x2e56f", "logs": [{"address": "0xdac17f958d2ee523a2206206994597c13d831ec7", "topics": ["0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef", "0x000000000000000000000000dd19b32a084be0a318f11edb3f7034889c03c51f", "0x00000000000000000000000074de5d4fcbf63e00296fd95d33236b9794016631"], "data": "0x00000000000000000000000000000000000000000000000000000000979aedeb", "blockNumber": "0xe147ed", "transactionHash": "0x163dae461ab32787eaecdad0748c9cf5fe0a22b443bc694efae9b80e319d9559", "transactionIndex": "0x0", "blockHash": "0x720704f3aa11c53cf344ea069db95cecb81ad7453c8f276b2a1062979611f09c", "logIndex": "0x0", "removed": false}, {"address": "0xdac17f958d2ee523a2206206994597c13d831ec7", "topics": ["0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef", "0x00000000000000000000000074de5d4fcbf63e00296fd95d33236b9794016631", "0x00000000000000000000000074c99f3f5331676f6aec2756e1f39b4fc029a83e"], "data": "0x00000000000000000000000000000000000000000000000000000000979aedeb", "blockNumber": "0xe147ed", "transactionHash": "0x163dae461ab32787eaecdad0748c9cf5fe0a22b443bc694efae9b80e319d9559", "transactionIndex": "0x0", "blockHash": "0x720704f3aa11c53cf344ea069db95cecb81ad7453c8f276b2a1062979611f09c", "logIndex": "0x1", "removed": false}, {"address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", "topics": ["0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef", "0x00000000000000000000000074c99f3f5331676f6aec2756e1f39b4fc029a83e", "0x0000000000000000000000001111111254fb6c44bac0bed2854e76f90643097d"], "data": "0x00000000000000000000000000000000000000000000000011f8b9803bc57124", "blockNumber": "0xe147ed", "transactionHash": "0x163dae461ab32787eaecdad0748c9cf5fe0a22b443bc694efae9b80e319d9559", "transactionIndex": "0x0", "blockHash": "0x720704f3aa11c53cf344ea069db95cecb81ad7453c8f276b2a1062979611f09c", "logIndex": "0x2", "removed": false}, {"address": "0x74c99f3f5331676f6aec2756e1f39b4fc029a83e", "topics": ["0x1c411e9a96e071241c2f21f7726b17ae89e3cab4c78be50e062b03a9fffbbad1"], "data": "0x0000000000000000000000000000000000000000000000657acd23da825d7df70000000000000000000000000000000000000000000000000000035616e4172a", "blockNumber": "0xe147ed", "transactionHash": "0x163dae461ab32787eaecdad0748c9cf5fe0a22b443bc694efae9b80e319d9559", "transactionIndex": "0x0", "blockHash": "0x720704f3aa11c53cf344ea069db95cecb81ad7453c8f276b2a1062979611f09c", "logIndex": "0x3", "removed": false}, {"address": "0x74c99f3f5331676f6aec2756e1f39b4fc029a83e", "topics": ["0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822", "0x0000000000000000000000001111111254fb6c44bac0bed2854e76f90643097d", "0x0000000000000000000000001111111254fb6c44bac0bed2854e76f90643097d"], "data": "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000979aedeb00000000000000000000000000000000000000000000000011f8b9803bc571240000000000000000000000000000000000000000000000000000000000000000", "blockNumber": "0xe147ed", "transactionHash": "0x163dae461ab32787eaecdad0748c9cf5fe0a22b443bc694efae9b80e319d9559", "transactionIndex": "0x0", "blockHash": "0x720704f3aa11c53cf344ea069db95cecb81ad7453c8f276b2a1062979611f09c", "logIndex": "0x4", "removed": false}, {"address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", "topics": ["0x7fcf532c15f0a6db0bd6d0e038bea71d30d808c7d98cb3bf7268a95bf5081b65", "0x0000000000000000000000001111111254fb6c44bac0bed2854e76f90643097d"], "data": "0x00000000000000000000000000000000000000000000000011f8b9803bc57124", "blockNumber": "0xe147ed", "transactionHash": "0x163dae461ab32787eaecdad0748c9cf5fe0a22b443bc694efae9b80e319d9559", "transactionIndex": "0x0", "blockHash": "0x720704f3aa11c53cf344ea069db95cecb81ad7453c8f276b2a1062979611f09c", "logIndex": "0x5", "removed": false}, {"address": "0x881d40237659c251811cec9c364ef91dc08d300c", "topics": ["0xbeee1e6e7fe307ddcf84b0a16137a4430ad5e2480fc4f4a8e250ab56ccd7630d", "0xbd5c436f8c83379009c1962310b8347e561d1900906d3fe4075b1596f8955f88", "0x000000000000000000000000dd19b32a084be0a318f11edb3f7034889c03c51f"], "data": "0x", "blockNumber": "0xe147ed", "transactionHash": "0x163dae461ab32787eaecdad0748c9cf5fe0a22b443bc694efae9b80e319d9559", "transactionIndex": "0x0", "blockHash": "0x720704f3aa11c53cf344ea069db95cecb81ad7453c8f276b2a1062979611f09c", "logIndex": "0x6", "removed": false}], "logsBloom": "0x00200000000000001000000080000000000000000000010000000000000000000000010000000000000090000001010002000000080008000000000000000000000000000000000000020008000000200000000000400000000004000000400000000000000000000000000000000000000000000000040000000010000000000000010000001100000000000000008000000000000000080020004000100000000000000000000000000080000000000000000000000000000000000000000001000002000000100004000000000000000000000000001000000002000000000024200000000000000000000000000000000000004000000000000000001000", "status": "0x1", "to": "0x881d40237659c251811cec9c364ef91dc08d300c", "transactionHash": "0x163dae461ab32787eaecdad0748c9cf5fe0a22b443bc694efae9b80e319d9559", "transactionIndex": "0x0", "type": "0x2"});
+        let receipt: Receipt = serde_json::from_value(response).unwrap();
+        assert_eq!(
+            receipt.cumulative_gas_used,
+            U256::from_dec_str("189807").unwrap()
+        );
     }
 
     const EXPECTED_RECEIPTS_ROOT: &str =

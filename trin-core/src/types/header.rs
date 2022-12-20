@@ -1,10 +1,12 @@
 use ethereum_types::{Bloom, H160, H256, H64, U256};
 use rlp::{Decodable, DecoderError, Encodable, Rlp, RlpStream};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_json::Value;
 use ssz::SszDecoderBuilder;
 use ssz_derive::Decode;
 
 use crate::portalnet::types::messages::ByteList;
+use crate::types::block_body::Transaction;
 use crate::utils::bytes::{hex_decode, hex_encode};
 
 const LONDON_BLOCK_NUMBER: u64 = 12965000;
@@ -180,6 +182,59 @@ impl PartialEq for Header {
     }
 }
 
+/// Datatype for use in bridge functionality. The purpose is a single datatype that can be created
+/// from a header and contains all the information necessary to build history network content
+/// values for BlockBodies (txs, uncles) and Receipts (tx_hashes) through subsequnt jsonrpc
+/// requests.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FullHeader {
+    pub header: Header,
+    pub txs: Vec<Transaction>,
+    pub tx_hashes: TxHashes,
+    pub uncles: Vec<H256>,
+}
+
+// Prefer TryFrom<Value> over implementing Deserialize trait, since it's much simpler when
+// deserialize multiple types from a single json object.
+impl TryFrom<Value> for FullHeader {
+    type Error = anyhow::Error;
+
+    fn try_from(val: Value) -> anyhow::Result<Self> {
+        let header: Header = serde_json::from_value(val.clone())?;
+        let uncles: Vec<H256> = serde_json::from_value(val["uncles"].clone())?;
+        let tx_hashes: TxHashes = serde_json::from_value(val["transactions"].clone())?;
+        let txs: Vec<Transaction> = serde_json::from_value(val["transactions"].clone())?;
+        Ok(Self {
+            header,
+            txs,
+            tx_hashes,
+            uncles,
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TxHashes {
+    pub hashes: Vec<H256>,
+}
+
+// type used to pluck "hash" value from tx object
+#[derive(Serialize, Deserialize)]
+struct TxHashesHelper {
+    pub hash: H256,
+}
+
+impl<'de> Deserialize<'de> for TxHashes {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let h: Vec<TxHashesHelper> = Deserialize::deserialize(deserializer)?;
+        let hashes = h.iter().map(|v| v.hash).collect();
+        Ok(Self { hashes })
+    }
+}
+
 /// A block header with accumulator proof.
 /// Type definition:
 /// https://github.com/status-im/nimbus-eth1/blob/master/fluffy/network/history/history_content.nim#L136
@@ -191,7 +246,7 @@ pub struct HeaderWithProof {
 
 #[derive(Debug, Clone, PartialEq, Eq, Decode)]
 #[ssz(enum_behaviour = "union")]
-// Ignore clippy herre, since "box"-ing the accumulator proof breaks the Decode trait
+// Ignore clippy here, since "box"-ing the accumulator proof breaks the Decode trait
 #[allow(clippy::large_enum_variant)]
 pub enum BlockHeaderProof {
     None(SszNone),
@@ -382,5 +437,18 @@ mod tests {
             let header = HeaderWithProof::from_ssz_bytes(&hex_decode(proof).unwrap()).unwrap();
             assert_eq!(block_number, header.header.number);
         }
+    }
+
+    #[test]
+    fn full_header_from_get_block_response() {
+        let body =
+            std::fs::read_to_string("./src/assets/test/trin/block_14764013_value.json").unwrap();
+        let body: Value = serde_json::from_str(&body).unwrap();
+        let full_header = FullHeader::try_from(body["result"].clone()).unwrap();
+        let header: Header = serde_json::from_value(body["result"].clone()).unwrap();
+        assert_eq!(full_header.txs.len(), 19);
+        assert_eq!(full_header.tx_hashes.hashes.len(), 19);
+        assert_eq!(full_header.uncles.len(), 1);
+        assert_eq!(full_header.header, header);
     }
 }
