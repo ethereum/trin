@@ -73,7 +73,7 @@ impl GrafanaAPI {
         let template_string = fs::read_to_string(TEMPLATE_FILENAME)?;
         let populated_template = template(
             &template_string[..],
-            &[
+            [
                 ("json_rpc_uid", &json_rpc_uid[..]),
                 ("prometheus_uid", &prometheus_uid[..]),
                 ("", "{}"), // The templating library picks up an empty json object as a placeholder,

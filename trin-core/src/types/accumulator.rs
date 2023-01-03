@@ -152,7 +152,7 @@ impl MasterAccumulator {
             let epoch_acc = self
                 .lookup_epoch_acc(epoch_hash, history_jsonrpc_tx)
                 .await?;
-            let header_index = (header.number as u64) - epoch_index * (EPOCH_SIZE as u64);
+            let header_index = header.number - epoch_index * (EPOCH_SIZE as u64);
             let header_record = epoch_acc[header_index as usize];
             Ok(header_record.block_hash == header.hash())
         }
