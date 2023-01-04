@@ -17,9 +17,10 @@ COPY ./trin-history ./trin-history
 COPY ./trin-state ./trin-state 
 COPY ./ethportal-peertest ./ethportal-peertest 
 COPY ./utp-testing ./utp-testing
+COPY ./ethportal-api ./ethportal-api
 
 # build for release
-RUN cargo build --all --release
+RUN cargo build -p trin -p trin-cli --release
 
 # final base
 FROM ubuntu:22.04
