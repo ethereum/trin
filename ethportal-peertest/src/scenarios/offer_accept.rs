@@ -26,7 +26,7 @@ pub fn test_offer_accept(peertest_config: PeertestConfig, peertest: &Peertest) {
     };
 
     let store_result = make_ipc_request(&peertest_config.target_ipc_path, &store_request).unwrap();
-    assert_eq!(store_result.as_str().unwrap(), "true");
+    assert!(store_result.as_bool().unwrap());
 
     // Send offer request from testnode to bootnode
     let offer_request = JsonRpcRequest {

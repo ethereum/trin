@@ -35,7 +35,7 @@ pub fn test_paginate_local_storage(peertest_config: PeertestConfig, _peertest: &
 
         let store_result =
             make_ipc_request(&peertest_config.target_ipc_path, &store_request).unwrap();
-        assert_eq!(store_result.as_str().unwrap(), "true");
+        assert!(store_result.as_bool().unwrap());
     }
     // Sort content keys to use for testing
     content_keys.sort();
