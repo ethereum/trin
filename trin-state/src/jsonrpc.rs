@@ -35,10 +35,7 @@ impl StateRequestHandler {
                                 match &self.network.overlay.store.read().get(&params.content_key) {
                                     Ok(val) => match val {
                                         Some(val) => Ok(Value::String(hex_encode(val.clone()))),
-                                        None => Err(format!(
-                                            "Unable to find content key in local storage: {:?}",
-                                            params.content_key
-                                        )),
+                                        None => Ok(Value::String("0x0".to_string())),
                                     },
                                     Err(_) => Err(format!(
                                         "Unable to find content key in local storage: {:?}",

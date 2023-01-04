@@ -44,10 +44,7 @@ impl HistoryRequestHandler {
                                 {
                                     Ok(val) => match val {
                                         Some(val) => Ok(Value::String(hex_encode(val.clone()))),
-                                        None => Err(format!(
-                                            "Content key is not in local storage: {:?}",
-                                            params.content_key
-                                        )),
+                                        None => Ok(Value::String("0x0".to_string())),
                                     },
                                     Err(err) => Err(format!(
                                         "Database error while looking for content key in local storage: {:?}, with error: {}",

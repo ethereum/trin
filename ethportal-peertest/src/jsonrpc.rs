@@ -280,6 +280,22 @@ fn all_tests(peertest: &Peertest) -> Vec<Test<impl Fn(&Value, &Peertest)>> {
             },
             validate_portal_routing_table_info,
         ),
+        Test::new(
+            JsonRpcRequest {
+                method: "portal_historyLocalContent".to_string(),
+                id: 15,
+                params: Params::Array(vec![Value::String("0x00cb5cab7266694daa0d28cbf40496c08dd30bf732c41e0455e7ad389c10d79f4f".to_string())]),
+            },
+            validate_portal_local_content,
+        ),
+        Test::new(
+            JsonRpcRequest {
+                method: "portal_stateLocalContent".to_string(),
+                id: 16,
+                params: Params::Array(vec![Value::String("0x02829bd824b016326a401d083b33d092293333a830d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d".to_string())]),
+            },
+            validate_portal_local_content,
+        ),
     ]
 }
 
@@ -367,6 +383,10 @@ pub fn validate_portal_offer(result: &Value, _peertest: &Peertest) {
     assert!(connection_id.parse::<u64>().is_ok());
     // Should accept the requested content
     assert_eq!(result.get("content_keys").unwrap().as_str(), Some("0x03"))
+}
+
+pub fn validate_portal_local_content(result: &Value, _peertest: &Peertest) {
+    assert_eq!(result.as_str().unwrap(), "0x0");
 }
 
 #[cfg(unix)]
