@@ -10,12 +10,14 @@ executors:
       - image: cimg/rust:1.66.1
 jobs:
   docker-build:
+    resource_class: xlarge
     executor: docker-publisher
     steps:
       - checkout
       - setup_remote_docker
       - run:
           name: Build Docker image
+          no_output_timeout: 30m
           command: docker build -t $IMAGE_NAME:latest .
       - run:
           name: Archive Docker image
