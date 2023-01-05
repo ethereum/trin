@@ -11,7 +11,7 @@ repository = "https://github.com/ethereum/trin"
 
 [dependencies]
 discv5 = { git = "https://github.com/sigp/discv5.git", branch = "master" }
-enr = { version = "=0.6.0", features = ["k256", "ed25519"] }
+enr = { version = "=0.7.0", features = ["k256", "ed25519"] }
 ethereum-types = "0.12.1"
 hex = "0.4.3"
 parking_lot = "0.11.2"
@@ -38,6 +38,7 @@ members = [
     "trin-state",
     "trin-core",
     "trin-cli",
+    "ethportal-api",
     "ethportal-peertest",
     "utp-testing",
 ]

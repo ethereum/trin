@@ -736,7 +736,7 @@ impl UtpStream {
 
         // Wait until enough in-flight packets are acknowledged for rate control purposes, but don't
         // wait more than 500 ms (PRE_SEND_TIMEOUT) before sending the packet
-        while self.cur_window + packet.as_ref().len() as u32 > max_inflight as u32
+        while self.cur_window + packet.as_ref().len() as u32 > max_inflight
             && now_microseconds() - now < PRE_SEND_TIMEOUT.into()
         {
             let mut buf = [0; BUF_SIZE];

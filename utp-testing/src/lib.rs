@@ -49,7 +49,7 @@ impl RpcServer for TestApp {
     }
 
     async fn prepare_to_recv(&self, enr: String, conn_id: u16) -> RpcResult<String> {
-        let enr = Enr::from_str(&*enr).unwrap();
+        let enr = Enr::from_str(&enr).unwrap();
         self.prepare_to_receive(enr, conn_id).await;
         Ok("true".to_string())
     }
@@ -60,7 +60,7 @@ impl RpcServer for TestApp {
         conn_id: u16,
         payload: Vec<u8>,
     ) -> RpcResult<String> {
-        let enr = Enr::from_str(&*enr).unwrap();
+        let enr = Enr::from_str(&enr).unwrap();
         self.send_utp_request(conn_id, payload, enr).await;
         Ok("true".to_string())
     }
