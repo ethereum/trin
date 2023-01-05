@@ -360,7 +360,7 @@ fn validate_portal_find_nodes_zero_distance(result: &Value, peertest: &Peertest)
 }
 
 fn validate_portal_store(result: &Value, _peertest: &Peertest) {
-    assert_eq!(result.as_str().unwrap(), "true");
+    assert!(result.as_bool().unwrap());
 }
 
 fn validate_portal_store_with_invalid_content_key(result: &Value, _peertest: &Peertest) {

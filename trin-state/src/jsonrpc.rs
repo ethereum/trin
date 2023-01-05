@@ -59,7 +59,7 @@ impl StateRequestHandler {
                                 .write()
                                 .put(content_key, &content)
                             {
-                                Ok(_) => Ok(Value::String("true".to_string())),
+                                Ok(_) => Ok(Value::Bool(true)),
                                 Err(msg) => Ok(Value::String(msg.to_string())),
                             }
                         }

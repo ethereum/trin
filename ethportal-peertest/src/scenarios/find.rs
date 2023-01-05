@@ -19,7 +19,7 @@ pub fn test_trace_recursive_find_content(_peertest_config: PeertestConfig, peert
     };
 
     let store_result = make_ipc_request(&peertest.bootnode.web3_ipc_path, &store_request).unwrap();
-    assert_eq!(store_result.as_str().unwrap(), "true");
+    assert!(store_result.as_bool().unwrap());
 
     // Send trace recursive find content request
     let request = JsonRpcRequest {
@@ -70,7 +70,7 @@ pub fn test_trace_recursive_find_content_local_db(
     };
 
     let store_result = make_ipc_request(&peertest.bootnode.web3_ipc_path, &store_request).unwrap();
-    assert_eq!(store_result.as_str().unwrap(), "true");
+    assert!(store_result.as_bool().unwrap());
 
     // Send trace recursive find content request
     let request = JsonRpcRequest {

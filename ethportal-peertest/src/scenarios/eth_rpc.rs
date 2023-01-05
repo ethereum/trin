@@ -18,7 +18,7 @@ pub fn test_eth_get_block_by_hash(_peertest_config: PeertestConfig, peertest: &P
     };
 
     let store_result = make_ipc_request(&peertest.bootnode.web3_ipc_path, &store_request).unwrap();
-    assert_eq!(store_result.as_str().unwrap(), "true");
+    assert!(store_result.as_bool().unwrap());
 
     // Send eth_getBlockByHash request
     let request = JsonRpcRequest {
@@ -46,7 +46,7 @@ pub fn test_eth_get_block_by_number(_peertest_config: PeertestConfig, peertest: 
     };
 
     let store_result = make_ipc_request(&peertest.bootnode.web3_ipc_path, &store_request).unwrap();
-    assert_eq!(store_result.as_str().unwrap(), "true");
+    assert!(store_result.as_bool().unwrap());
 
     // Send supported eth_getBlockByNumber request (pre-merge)
     let request = JsonRpcRequest {
