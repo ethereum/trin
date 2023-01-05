@@ -6,12 +6,14 @@ use eth_trie::{EthTrie, MemoryDB, Trie};
 use ethereum_types::{Address, H160, H256, U256, U64};
 use rlp::{Decodable, DecoderError, Encodable, Rlp, RlpStream};
 use rlp_derive::{RlpDecodable, RlpEncodable};
+use serde::{Deserialize, Deserializer};
+use serde_json::{json, Value};
+use sha3::{Digest, Keccak256};
 use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, VariableList};
 
-use sha3::{Digest, Keccak256};
-
 use super::{header::Header, receipts::TransactionId};
+use crate::utils::bytes::hex_decode;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BlockBody {
@@ -178,6 +180,42 @@ impl Transaction {
     }
 }
 
+impl<'de> Deserialize<'de> for Transaction {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let mut obj: Value = Deserialize::deserialize(deserializer)?;
+        let tx_id =
+            TransactionId::try_from(obj["type"].clone()).map_err(serde::de::Error::custom)?;
+        // Inject chain id into json response, since it's not included
+        match obj {
+            Value::Object(mut val) => {
+                val.extend([("chain_id".to_string(), json!("0x1"))]);
+                obj = Value::Object(val);
+            }
+            _ => return Err(serde::de::Error::custom("Invalid transaction id")),
+        }
+        match tx_id {
+            TransactionId::Legacy => {
+                let helper =
+                    LegacyTransactionHelper::deserialize(obj).map_err(serde::de::Error::custom)?;
+                Ok(Self::Legacy(helper.into()))
+            }
+            TransactionId::AccessList => {
+                let helper = AccessListTransactionHelper::deserialize(obj)
+                    .map_err(serde::de::Error::custom)?;
+                Ok(Self::AccessList(helper.into()))
+            }
+            TransactionId::EIP1559 => {
+                let helper =
+                    EIP1559TransactionHelper::deserialize(obj).map_err(serde::de::Error::custom)?;
+                Ok(Self::EIP1559(helper.into()))
+            }
+        }
+    }
+}
+
 #[derive(Default, Debug, Clone, PartialEq, Eq, RlpEncodable, RlpDecodable)]
 pub struct LegacyTransaction {
     pub nonce: U256,
@@ -189,6 +227,39 @@ pub struct LegacyTransaction {
     pub v: U64,
     pub r: U256,
     pub s: U256,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LegacyTransactionHelper {
+    pub nonce: U256,
+    pub gas_price: U256,
+    pub gas: U256,
+    pub to: Option<H160>,
+    pub value: U256,
+    #[serde(rename(deserialize = "input"))]
+    pub data: JsonBytes,
+    pub v: U64,
+    pub r: U256,
+    pub s: U256,
+}
+
+#[allow(clippy::from_over_into)]
+impl Into<LegacyTransaction> for LegacyTransactionHelper {
+    fn into(self) -> LegacyTransaction {
+        LegacyTransaction {
+            nonce: self.nonce,
+            gas_price: self.gas_price,
+            gas: self.gas,
+            // Zero address if none b/c contract creation
+            to: self.to.unwrap_or_default(),
+            value: self.value,
+            data: self.data.0,
+            v: self.v,
+            r: self.r,
+            s: self.s,
+        }
+    }
 }
 
 #[derive(Eq, Debug, Clone, PartialEq, RlpDecodable, RlpEncodable)]
@@ -206,6 +277,47 @@ pub struct AccessListTransaction {
     pub s: U256,
 }
 
+#[derive(Eq, Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AccessListTransactionHelper {
+    pub chain_id: U256,
+    pub nonce: U256,
+    pub gas_price: U256,
+    #[serde(rename(deserialize = "gas"))]
+    pub gas_limit: U256,
+    pub to: Option<H160>,
+    pub value: U256,
+    #[serde(rename(deserialize = "input"))]
+    pub data: JsonBytes,
+    pub access_list: Vec<AccessListItem>,
+    #[serde(rename(deserialize = "v"))]
+    pub y_parity: U64,
+    pub r: U256,
+    pub s: U256,
+}
+
+#[allow(clippy::from_over_into)]
+impl Into<AccessListTransaction> for AccessListTransactionHelper {
+    fn into(self) -> AccessListTransaction {
+        AccessListTransaction {
+            chain_id: self.chain_id,
+            nonce: self.nonce,
+            gas_price: self.gas_price,
+            gas_limit: self.gas_limit,
+            // Zero address if none b/c contract creation
+            to: self.to.unwrap_or_default(),
+            value: self.value,
+            data: self.data.0,
+            access_list: AccessList {
+                list: self.access_list,
+            },
+            y_parity: self.y_parity,
+            r: self.r,
+            s: self.s,
+        }
+    }
+}
+
 #[derive(Eq, Debug, Clone, PartialEq, RlpDecodable, RlpEncodable)]
 pub struct EIP1559Transaction {
     pub chain_id: U256,
@@ -220,6 +332,75 @@ pub struct EIP1559Transaction {
     pub y_parity: U64,
     pub r: U256,
     pub s: U256,
+}
+
+#[derive(Eq, Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct EIP1559TransactionHelper {
+    pub chain_id: U256,
+    pub nonce: U256,
+    pub max_priority_fee_per_gas: U256,
+    pub max_fee_per_gas: U256,
+    #[serde(rename(deserialize = "gas"))]
+    pub gas_limit: U256,
+    pub to: H160,
+    pub value: U256,
+    #[serde(rename(deserialize = "input"))]
+    pub data: JsonBytes,
+    pub access_list: Vec<AccessListItem>,
+    #[serde(rename(deserialize = "v"))]
+    pub y_parity: U64,
+    pub r: U256,
+    pub s: U256,
+}
+
+#[allow(clippy::from_over_into)]
+impl Into<EIP1559Transaction> for EIP1559TransactionHelper {
+    fn into(self) -> EIP1559Transaction {
+        EIP1559Transaction {
+            chain_id: self.chain_id,
+            nonce: self.nonce,
+            max_priority_fee_per_gas: self.max_priority_fee_per_gas,
+            max_fee_per_gas: self.max_fee_per_gas,
+            gas_limit: self.gas_limit,
+            to: self.to,
+            value: self.value,
+            data: self.data.0,
+            access_list: AccessList {
+                list: self.access_list,
+            },
+            y_parity: self.y_parity,
+            r: self.r,
+            s: self.s,
+        }
+    }
+}
+
+#[derive(Eq, Debug, Default, Clone, PartialEq, RlpDecodable, RlpEncodable)]
+pub struct JsonBytes(Bytes);
+
+impl<'de> Deserialize<'de> for JsonBytes {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        let bytes = hex_decode(&s).map_err(serde::de::Error::custom)?;
+        Ok(Self(Bytes::copy_from_slice(&bytes)))
+    }
+}
+
+impl From<Bytes> for JsonBytes {
+    fn from(val: Bytes) -> Self {
+        Self(val)
+    }
+}
+
+#[allow(clippy::from_over_into)]
+impl Into<Bytes> for JsonBytes {
+    fn into(self) -> Bytes {
+        self.0
+    }
 }
 
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
@@ -243,37 +424,11 @@ impl Encodable for AccessList {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Eq)]
+#[derive(Debug, PartialEq, Clone, Eq, Deserialize, RlpDecodable, RlpEncodable)]
+#[serde(rename_all = "camelCase")]
 pub struct AccessListItem {
-    pub addr: H160,
-    pub storage: StorageKeys,
-}
-
-impl Decodable for AccessListItem {
-    fn decode(rlp: &Rlp) -> Result<Self, DecoderError> {
-        let addr = rlp.val_at(0)?;
-        let keys: Vec<H256> = rlp.list_at(1)?;
-        Ok(Self {
-            addr,
-            storage: StorageKeys { keys },
-        })
-    }
-}
-
-impl Encodable for AccessListItem {
-    fn rlp_append(&self, stream: &mut RlpStream) {
-        stream.begin_list(2);
-        stream.append(&self.addr);
-        stream.begin_list(self.storage.keys.len());
-        for location in &self.storage.keys {
-            stream.append(location);
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, RlpEncodable, RlpDecodable)]
-pub struct StorageKeys {
-    pub keys: Vec<H256>,
+    pub address: H160,
+    pub storage_keys: Vec<H256>,
 }
 
 #[cfg(test)]
