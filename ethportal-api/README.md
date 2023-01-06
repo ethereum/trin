@@ -40,7 +40,7 @@ async fn main() {
         .unwrap();
     assert!(result);
 
-    // Call portal_historyLocalContent endpoint and deserialize to HistoryContentItem::AccumulatoProof type
+    // Call portal_historyLocalContent endpoint and deserialize to `HistoryContentItem::BlockHeaderWithProof` type
     let result: HistoryContentItem = client.local_content(content_key).await.unwrap();
     assert_eq!(result, content_item);
 }
