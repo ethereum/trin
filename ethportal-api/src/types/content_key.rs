@@ -116,11 +116,15 @@ pub struct EpochAccumulatorKey {
     pub epoch_hash: H256,
 }
 
-// Silence clippy to avoid implementing newtype pattern on imported type.
-#[allow(clippy::from_over_into)]
-impl Into<Vec<u8>> for HistoryContentKey {
-    fn into(self) -> Vec<u8> {
-        self.as_ssz_bytes()
+impl From<&HistoryContentKey> for Vec<u8> {
+    fn from(val: &HistoryContentKey) -> Self {
+        val.as_ssz_bytes()
+    }
+}
+
+impl From<HistoryContentKey> for Vec<u8> {
+    fn from(val: HistoryContentKey) -> Self {
+        val.as_ssz_bytes()
     }
 }
 
