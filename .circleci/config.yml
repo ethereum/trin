@@ -111,7 +111,7 @@ jobs:
     description: |
       Run uTP network simulator
     machine:
-      image: ubuntu-2004:current
+      image: ubuntu-2204:current
     resource_class: xlarge
     environment:
       RUSTFLAGS: '-D warnings'
@@ -155,6 +155,12 @@ jobs:
       - run:
           name: Check containers
           command: docker ps -a
+      - run:
+          name: log containers
+          command: docker logs client
+      - run:
+          name: log containers
+          command: docker logs server
       - run:
           name: Run test suite
           command: RUST_LOG=debug ./target/release/utp-test-suite
