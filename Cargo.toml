@@ -44,5 +44,6 @@ members = [
     "trin-cli",
     "ethportal-api",
     "ethportal-peertest",
+    "rpc",
     "utp-testing",
 ]
