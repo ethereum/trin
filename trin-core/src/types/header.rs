@@ -213,6 +213,31 @@ impl TryFrom<Value> for FullHeader {
     }
 }
 
+/// Helper type to deserialize a response from a batched Header request.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FullHeaderBatch {
+    pub headers: Vec<FullHeader>,
+}
+
+impl<'de> Deserialize<'de> for FullHeaderBatch {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let obj: Vec<Value> = Deserialize::deserialize(deserializer)?;
+        let results: Result<Vec<FullHeader>, _> = obj
+            .into_iter()
+            .map(|mut val| {
+                let result = val["result"].take();
+                FullHeader::try_from(result)
+            })
+            .collect();
+        Ok(Self {
+            headers: results.map_err(serde::de::Error::custom)?,
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TxHashes {
     pub hashes: Vec<H256>,
@@ -278,6 +303,18 @@ impl ssz::Decode for HeaderWithProof {
         })?;
 
         Ok(Self { header, proof })
+    }
+}
+
+impl ssz::Encode for HeaderWithProof {
+    fn is_ssz_fixed_len() -> bool {
+        false
+    }
+
+    fn ssz_append(&self, _buf: &mut Vec<u8>) {}
+
+    fn ssz_bytes_len(&self) -> usize {
+        0
     }
 }
 
