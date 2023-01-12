@@ -10,6 +10,7 @@ use anyhow::anyhow;
 use ethereum_types::H256;
 use serde_json::{json, Value};
 use ssz::{Decode, Encode};
+use surf::post;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::{mpsc, RwLock};
 use tokio::task::JoinHandle;
@@ -633,22 +634,21 @@ impl OfferGroup {
 /// Used the "surf" library here instead of "ureq" since "surf" is much more capable of handling
 /// multiple async requests. Using "ureq" consistently resulted in errors as soon as the number of
 /// concurrent tasks increased significantly.
-async fn geth_batch_request(_obj: Vec<JsonRequest>) -> anyhow::Result<String> {
-    let _client_id =
+async fn geth_batch_request(obj: Vec<JsonRequest>) -> anyhow::Result<String> {
+    let client_id =
         env::var("GETH_CLIENT_ID").map_err(|_| anyhow!("GETH_CLIENT_ID env var not set."))?;
-    let _client_secret = env::var("GETH_CLIENT_SECRET")
+    let client_secret = env::var("GETH_CLIENT_SECRET")
         .map_err(|_| anyhow!("GETH_CLIENT_SECRET env var not set."))?;
 
-    /*let result = surf::post("https://geth-lighthouse.mainnet.ethpandaops.io/")*/
-    /*.body_json(&json!(obj))*/
-    /*.unwrap()*/
-    /*.header("Content-Type", "application/json".to_string())*/
-    /*.header("CF-Access-Client-Id", client_id)*/
-    /*.header("CF-Access-Client-Secret", client_secret)*/
-    /*.recv_string()*/
-    /*.await;*/
-    /*result.map_err(|_| anyhow!("xx"))*/
-    Err(anyhow!("xx"))
+    let result = post("https://geth-lighthouse.mainnet.ethpandaops.io/")
+        .body_json(&json!(obj))
+        .unwrap()
+        .header("Content-Type", "application/json".to_string())
+        .header("CF-Access-Client-Id", client_id)
+        .header("CF-Access-Client-Secret", client_secret)
+        .recv_string()
+        .await;
+    result.map_err(|_| anyhow!("xx"))
 }
 
 fn json_request(method: String, params: Params, id: u32) -> JsonRequest {

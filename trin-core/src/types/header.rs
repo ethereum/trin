@@ -311,6 +311,7 @@ impl ssz::Encode for HeaderWithProof {
         false
     }
 
+    // WAIT WUT?
     fn ssz_append(&self, _buf: &mut Vec<u8>) {}
 
     fn ssz_bytes_len(&self) -> usize {

@@ -46,7 +46,7 @@ stunclient = "0.1.2"
 structopt = "0.3"
 sha3 = "0.9.1"
 smallvec = "1.8.0"
-surf = "2.3.2"
+surf = { version = "2.3.2", features = ["hyper-client"] }
 tempfile = "3.3.0"
 thiserror = "1.0.29"
 threadpool = "1.8.1"
