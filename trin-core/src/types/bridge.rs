@@ -8,9 +8,14 @@ use std::{thread, time};
 
 use anyhow::anyhow;
 use ethereum_types::H256;
+//use hyper::{Body, Client, Method, Request, Uri};
 use serde_json::{json, Value};
 use ssz::{Decode, Encode};
-use surf::post;
+//use std::convert::TryInto;
+//use std::time::Duration;
+//use surf::Url;
+//use surf::{Client, Config};
+
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::{mpsc, RwLock};
 use tokio::task::JoinHandle;
@@ -139,14 +144,14 @@ impl Bridge {
                 }
             };
             let mut offer_group = OfferGroup::new(blocks_to_serve.clone(), epoch_index);
-            if let Err(msg) = self.offer_headers(&full_headers, &mut offer_group).await {
-                warn!(
-                    "Error offering headers in range: {:?} - {:?}",
-                    blocks_to_serve, msg
-                );
-                epoch_index += 1;
-                continue;
-            };
+            /*        if let Err(msg) = self.offer_headers(&full_headers, &mut offer_group).await {*/
+            /*warn!(*/
+            /*"Error offering headers in range: {:?} - {:?}",*/
+            /*blocks_to_serve, msg*/
+            /*);*/
+            /*epoch_index += 1;*/
+            /*continue;*/
+            /*};*/
             self.serve_bodies(&full_headers, &mut offer_group).await;
             self.serve_receipts(&full_headers, &mut offer_group).await;
             offer_group.display_stats();
@@ -640,15 +645,55 @@ async fn geth_batch_request(obj: Vec<JsonRequest>) -> anyhow::Result<String> {
     let client_secret = env::var("GETH_CLIENT_SECRET")
         .map_err(|_| anyhow!("GETH_CLIENT_SECRET env var not set."))?;
 
-    let result = post("https://geth-lighthouse.mainnet.ethpandaops.io/")
-        .body_json(&json!(obj))
-        .unwrap()
+    // surf
+    //
+    /*let client: Client = Config::new()*/
+    /*.set_base_url(Url::parse(*/
+    /*"https://geth-lighthouse.mainnet.ethpandaops.io",*/
+    /*)?)*/
+    /*.set_timeout(Some(Duration::from_secs(5)))*/
+    /*.try_into()?;*/
+    /*let result = client*/
+    /*.post("/")*/
+    /*.body_json(&json!(obj))*/
+    /*.unwrap()*/
+    /*.header("Content-Type", "application/json".to_string())*/
+    /*.header("CF-Access-Client-Id", client_id)*/
+    /*.header("CF-Access-Client-Secret", client_secret)*/
+    /*.recv_string()*/
+    /*.await;*/
+    //result.map_err(|_| anyhow!("xx"))
+    //
+    // hyper
+    /*    let sss = json!(obj);*/
+    /*let req = Request::builder()*/
+    /*.method(Method::POST)*/
+    /*.uri("https://geth-lighthouse.mainnet.ethpandaops.io/")*/
+    /*.header("Content-Type", "application/json".to_string())*/
+    /*.header("CF-Access-Client-Id", client_id)*/
+    /*.header("CF-Access-Client-Secret", client_secret)*/
+    /*.body(Body::from(sss.to_string()))?;*/
+
+    /*let client = Client::new();*/
+    /*// POST it...*/
+    /*let resp = client.request(req).await?;*/
+    /*let x = hyper::body::to_bytes(resp.into_body()).await.unwrap();*/
+    /*let x = std::str::from_utf8(&x).unwrap();*/
+    //Ok(x.to_string())
+    //
+    // reqwest
+    let client = reqwest::Client::new();
+    let resp = client
+        .post("https://geth-lighthouse.mainnet.ethpandaops.io/")
         .header("Content-Type", "application/json".to_string())
         .header("CF-Access-Client-Id", client_id)
         .header("CF-Access-Client-Secret", client_secret)
-        .recv_string()
-        .await;
-    result.map_err(|_| anyhow!("xx"))
+        .body(json!(obj).to_string())
+        .send()
+        .await?
+        .text()
+        .await?;
+    Ok(resp)
 }
 
 fn json_request(method: String, params: Params, id: u32) -> JsonRequest {
