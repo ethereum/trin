@@ -270,29 +270,6 @@ pub struct HeaderWithProof {
     pub proof: BlockHeaderProof,
 }
 
-impl ssz::Encode for HeaderWithProof {
-    fn is_ssz_fixed_len() -> bool {
-        false
-    }
-
-    fn ssz_append(&self, buf: &mut Vec<u8>) {
-        let header = rlp::encode(&self.header).to_vec();
-        let header: ByteList = ByteList::from(header);
-        let offset =
-            <ByteList as Encode>::ssz_fixed_len() + <AccumulatorProof as Encode>::ssz_fixed_len();
-        let mut encoder = SszEncoder::container(buf, offset);
-        encoder.append(&header);
-        encoder.append(&self.proof);
-        encoder.finalize();
-    }
-
-    fn ssz_bytes_len(&self) -> usize {
-        let header = rlp::encode(&self.header).to_vec();
-        let header: ByteList = ByteList::from(header);
-        header.len() + self.proof.ssz_bytes_len()
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Decode, Encode)]
 #[ssz(enum_behaviour = "union")]
 // Ignore clippy here, since "box"-ing the accumulator proof breaks the Decode trait
@@ -307,6 +284,44 @@ pub struct AccumulatorProof {
     pub proof: [H256; 15],
 }
 
+impl ssz::Encode for AccumulatorProof {
+    fn is_ssz_fixed_len() -> bool {
+        true
+    }
+
+    fn ssz_append(&self, buf: &mut Vec<u8>) {
+        let offset = <AccumulatorProof as Encode>::ssz_fixed_len();
+
+        let mut encoder = SszEncoder::container(buf, offset);
+        for l in self.proof {
+            encoder.append(&l);
+        }
+
+        encoder.finalize();
+    }
+
+    fn ssz_bytes_len(&self) -> usize {
+        <H256 as Encode>::ssz_fixed_len() * 15
+    }
+}
+
+impl ssz::Decode for AccumulatorProof {
+    fn is_ssz_fixed_len() -> bool {
+        true
+    }
+
+    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
+        let vec: Vec<[u8; 32]> = Vec::from_ssz_bytes(bytes)?;
+        let mut proof: [H256; 15] = [H256::zero(); 15];
+        let raw_proof: [[u8; 32]; 15] = vec
+            .try_into()
+            .map_err(|_| ssz::DecodeError::BytesInvalid("Invalid proof length".to_string()))?;
+        for (idx, val) in raw_proof.iter().enumerate() {
+            proof[idx] = H256::from_slice(val);
+        }
+        Ok(Self { proof })
+    }
+}
 impl ssz::Decode for HeaderWithProof {
     fn is_ssz_fixed_len() -> bool {
         false
@@ -335,48 +350,21 @@ impl ssz::Encode for HeaderWithProof {
         false
     }
 
-    fn ssz_append(&self, _buf: &mut Vec<u8>) {}
-
-    fn ssz_bytes_len(&self) -> usize {
-        0
-    }
-}
-
-impl ssz::Decode for AccumulatorProof {
-    fn is_ssz_fixed_len() -> bool {
-        true
-    }
-
-    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
-        let vec: Vec<[u8; 32]> = Vec::from_ssz_bytes(bytes)?;
-        let mut proof: [H256; 15] = [H256::zero(); 15];
-        let raw_proof: [[u8; 32]; 15] = vec
-            .try_into()
-            .map_err(|_| ssz::DecodeError::BytesInvalid("Invalid proof length".to_string()))?;
-        for (idx, val) in raw_proof.iter().enumerate() {
-            proof[idx] = H256::from_slice(val);
-        }
-        Ok(Self { proof })
-    }
-}
-
-impl ssz::Encode for AccumulatorProof {
-    fn is_ssz_fixed_len() -> bool {
-        true
-    }
-
     fn ssz_append(&self, buf: &mut Vec<u8>) {
-        let offset = self.ssz_bytes_len();
+        let header = rlp::encode(&self.header).to_vec();
+        let header: ByteList = ByteList::from(header);
+        let offset =
+            <ByteList as Encode>::ssz_fixed_len() + <AccumulatorProof as Encode>::ssz_fixed_len();
         let mut encoder = SszEncoder::container(buf, offset);
-
-        for proof in self.proof {
-            encoder.append(&proof);
-        }
+        encoder.append(&header);
+        encoder.append(&self.proof);
         encoder.finalize();
     }
 
     fn ssz_bytes_len(&self) -> usize {
-        <H256 as Encode>::ssz_fixed_len() * 15
+        let header = rlp::encode(&self.header).to_vec();
+        let header: ByteList = ByteList::from(header);
+        header.len() + self.proof.ssz_bytes_len()
     }
 }
 
@@ -423,7 +411,7 @@ mod tests {
 
     use hex;
     use serde_json::{json, Value};
-    use ssz::Decode;
+    use ssz::{Decode, Encode};
     use test_log::test;
 
     use crate::types::block_body::{BlockBody, EncodableHeaderList};
