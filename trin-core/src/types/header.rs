@@ -269,6 +269,29 @@ pub struct HeaderWithProof {
     pub proof: BlockHeaderProof,
 }
 
+impl ssz::Decode for HeaderWithProof {
+    fn is_ssz_fixed_len() -> bool {
+        false
+    }
+
+    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
+        let mut builder = SszDecoderBuilder::new(bytes);
+
+        builder.register_type::<ByteList>()?;
+        builder.register_type::<BlockHeaderProof>()?;
+
+        let mut decoder = builder.build()?;
+
+        let header_rlp: Vec<u8> = decoder.decode_next()?;
+        let proof = decoder.decode_next()?;
+        let header: Header = rlp::decode(&header_rlp).map_err(|_| {
+            ssz::DecodeError::BytesInvalid("Unable to decode bytes into header.".to_string())
+        })?;
+
+        Ok(Self { header, proof })
+    }
+}
+
 impl ssz::Encode for HeaderWithProof {
     fn is_ssz_fixed_len() -> bool {
         false
@@ -304,41 +327,6 @@ pub enum BlockHeaderProof {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct AccumulatorProof {
     pub proof: [H256; 15],
-}
-
-impl ssz::Decode for HeaderWithProof {
-    fn is_ssz_fixed_len() -> bool {
-        false
-    }
-
-    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
-        let mut builder = SszDecoderBuilder::new(bytes);
-
-        builder.register_type::<ByteList>()?;
-        builder.register_type::<BlockHeaderProof>()?;
-
-        let mut decoder = builder.build()?;
-
-        let header_rlp: Vec<u8> = decoder.decode_next()?;
-        let proof = decoder.decode_next()?;
-        let header: Header = rlp::decode(&header_rlp).map_err(|_| {
-            ssz::DecodeError::BytesInvalid("Unable to decode bytes into header.".to_string())
-        })?;
-
-        Ok(Self { header, proof })
-    }
-}
-
-impl ssz::Encode for HeaderWithProof {
-    fn is_ssz_fixed_len() -> bool {
-        false
-    }
-
-    fn ssz_append(&self, _buf: &mut Vec<u8>) {}
-
-    fn ssz_bytes_len(&self) -> usize {
-        0
-    }
 }
 
 impl ssz::Decode for AccumulatorProof {
@@ -421,7 +409,7 @@ mod tests {
 
     use hex;
     use serde_json::{json, Value};
-    use ssz::Decode;
+    use ssz::{Decode, Encode};
     use test_log::test;
 
     use crate::types::block_body::{BlockBody, EncodableHeaderList};

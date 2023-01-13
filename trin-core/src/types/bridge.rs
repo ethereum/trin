@@ -17,9 +17,6 @@ use tracing::{debug, info, warn};
 
 use crate::jsonrpc::endpoints::HistoryEndpoint;
 use crate::jsonrpc::types::{HistoryJsonRpcRequest, JsonRequest, Params};
-use crate::portalnet::types::content_key::{
-    BlockBody as BlockBodyContentKey, BlockHeader, BlockReceipts, HistoryContentKey,
-};
 use crate::types::accumulator::{EpochAccumulator, MasterAccumulator, EPOCH_SIZE};
 use crate::types::block_body::{BlockBody, EncodableHeaderList};
 use crate::types::header::{
@@ -28,7 +25,10 @@ use crate::types::header::{
 use crate::types::receipts::Receipts;
 use crate::types::validation::HeaderOracle;
 use crate::types::validation::MERGE_BLOCK_NUMBER;
-use crate::utils::bytes::hex_encode;
+use crate::utils::bytes::{hex_decode, hex_encode};
+use ethportal_api::types::content_key::{
+    BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, HistoryContentKey,
+};
 
 const BATCH_SIZE: u64 = 128;
 const LATEST_BLOCK_POLL_RATE: u64 = 5;
@@ -216,15 +216,13 @@ impl Bridge {
         let epoch_index = offer_group.epoch_index;
         let epoch_acc = self.get_epoch_acc(epoch_index).await?;
         for full_header in full_headers {
-            let content_key = HistoryContentKey::BlockHeader(BlockHeader {
+            let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
                 block_hash: full_header.header.hash().to_fixed_bytes(),
             });
-            let content_key: Vec<u8> = content_key.into();
             let content_value = rlp::encode(&full_header.header);
 
             // Fetch HeaderRecord from EpochAccumulator for validation
-            let header_index =
-                (full_header.header.number as u64) - epoch_index * (EPOCH_SIZE as u64);
+            let header_index = full_header.header.number - epoch_index * (EPOCH_SIZE as u64);
             let header_record = &epoch_acc[header_index as usize];
 
             // Validate Header
@@ -238,13 +236,9 @@ impl Bridge {
 
             // Offer Header
             debug!("Offer: Block #{:?} Header", full_header.header.number);
-            if Bridge::offer_content(
-                tx.clone(),
-                hex_encode(content_key),
-                hex_encode(content_value),
-            )
-            .await
-            .is_ok()
+            if Bridge::offer_content(tx.clone(), content_key, hex_encode(content_value))
+                .await
+                .is_ok()
             {
                 offer_group.header_count += 1;
             }
@@ -253,20 +247,15 @@ impl Bridge {
             let (content_key, hwp) = self
                 .construct_proof(&full_header.header, &epoch_acc)
                 .await?;
-            let content_key: Vec<u8> = content_key.into();
             debug!(
                 "Offer: Block #{:?} HeaderWithProof",
                 full_header.header.number
             );
 
             // Offer HeaderWithProof
-            if Bridge::offer_content(
-                tx.clone(),
-                hex_encode(content_key),
-                hex_encode(hwp.as_ssz_bytes()),
-            )
-            .await
-            .is_ok()
+            if Bridge::offer_content(tx.clone(), content_key, hex_encode(hwp.as_ssz_bytes()))
+                .await
+                .is_ok()
             {
                 offer_group.hwp_count += 1;
             }
@@ -280,14 +269,13 @@ impl Bridge {
         offer_group: &mut OfferGroup,
     ) -> anyhow::Result<()> {
         for full_header in full_headers {
-            let content_key = HistoryContentKey::BlockHeader(BlockHeader {
+            let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
                 block_hash: full_header.header.hash().to_fixed_bytes(),
             });
-            let content_key: Vec<u8> = content_key.into();
             let content_value = rlp::encode(&full_header.header);
             let tx = self.history_tx().await;
             debug!("Offer: Block #{:?} Header", full_header.header.number);
-            if Bridge::offer_content(tx, hex_encode(content_key), hex_encode(content_value))
+            if Bridge::offer_content(tx, content_key, hex_encode(content_value))
                 .await
                 .is_ok()
             {
@@ -418,21 +406,15 @@ impl Bridge {
             ));
         }
 
-        let content_key = HistoryContentKey::BlockReceipts(BlockReceipts {
+        let content_key = HistoryContentKey::BlockReceipts(BlockReceiptsKey {
             block_hash: full_header.header.hash().to_fixed_bytes(),
         });
-        let content_key: Vec<u8> = content_key.into();
         debug!(
             "Offer: Block #{:?} Receipts: len: {:?}",
             full_header.header.number,
             receipts.receipt_list.len()
         );
-        Bridge::offer_content(
-            tx,
-            hex_encode(content_key),
-            hex_encode(receipts.as_ssz_bytes()),
-        )
-        .await
+        Bridge::offer_content(tx, content_key, hex_encode(receipts.as_ssz_bytes())).await
     }
 
     async fn get_receipts_batch(tx_hashes: Vec<H256>) -> anyhow::Result<Receipts> {
@@ -484,17 +466,11 @@ impl Bridge {
             ));
         }
 
-        let content_key = HistoryContentKey::BlockBody(BlockBodyContentKey {
+        let content_key = HistoryContentKey::BlockBody(BlockBodyKey {
             block_hash: full_header.header.hash().to_fixed_bytes(),
         });
-        let content_key: Vec<u8> = content_key.into();
         debug!("Offer: Block #{:?} BlockBody", full_header.header.number);
-        Bridge::offer_content(
-            tx,
-            hex_encode(content_key),
-            hex_encode(block_body.as_ssz_bytes()),
-        )
-        .await
+        Bridge::offer_content(tx, content_key, hex_encode(block_body.as_ssz_bytes())).await
     }
 
     async fn get_uncles_batch(hashes: Vec<H256>) -> anyhow::Result<Vec<Header>> {
@@ -534,7 +510,7 @@ impl Bridge {
             header: header.clone(),
             proof,
         };
-        let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeader {
+        let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
             block_hash: header.hash().to_fixed_bytes(),
         });
         Ok((content_key, hwp))
@@ -543,14 +519,15 @@ impl Bridge {
     /// Offer any given content key / value to the history network.
     async fn offer_content(
         tx: UnboundedSender<HistoryJsonRpcRequest>,
-        content_key: String,
+        content_key: HistoryContentKey,
         content_value: String,
     ) -> anyhow::Result<()> {
-        let params = Params::Array(vec![json!(content_key), json!(content_value)]);
         let (resp_tx, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
+        let content_value = hex_decode(&content_value).unwrap();
+        // is it possible to gossip a content key with wrong content value?
+        let endpoint = HistoryEndpoint::Gossip(content_key, content_value.into());
         let json_request = HistoryJsonRpcRequest {
-            endpoint: HistoryEndpoint::Offer,
-            params,
+            endpoint,
             resp: resp_tx,
         };
         let _ = tx.send(json_request);
