@@ -97,10 +97,10 @@ jobs:
           command: sudo apt update
       - run:
           name: Install libssl-dev for openssl-sys
-          command: sudo apt install -y libssl-dev
+          command: sudo NEEDRESTART_MODE=a apt install -y libssl-dev
       - run:
           name: Install libclang for rocksdb
-          command: sudo apt install clang
+          command: sudo NEEDRESTART_MODE=a apt install clang
       - run:
           name: Install modprobe
           command: sudo apt install -y kmod
