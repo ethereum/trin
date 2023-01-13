@@ -3,7 +3,7 @@ use std::sync::Arc;
 use ethportal_api::jsonrpsee::server::ServerHandle;
 use rpc::JsonRpcServer;
 use tokio::sync::mpsc::UnboundedSender;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::RwLock;
 use tracing::{info, warn};
 
 use trin_core::jsonrpc::types::HistoryJsonRpcRequest;
@@ -147,10 +147,13 @@ pub async fn run_trin(
     }
     if let Some(mode) = trin_config.bridge {
         if trin_config.kb > 0 {
-            warn!("It's strongly recommended that you run a bridge node with kb=0 flag.");
+            warn!("It's strongly recommended to run bridge node with kb=0 flag.");
         }
         if trin_config.epoch_acc_path.is_none() {
-            warn!("it's highly recommended that you provide a path to the epoch acc repo to run a bridge node, avoiding uncessary network traffic");
+            warn!(
+                "It's strongly recommended to run bridg node with a local epoch acc repo,
+                avoiding uncessary network traffic"
+            );
         }
         let bridge = Bridge {
             header_oracle: header_oracle.clone(),
