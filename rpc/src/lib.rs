@@ -1,14 +1,9 @@
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
-}
+mod discv5;
+mod history;
+mod server;
+mod web3;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub use discv5::Discv5RpcServerImpl;
+pub use ethportal_api::jsonrpsee;
+pub use history::HistoryNetworkRpcServerImpl;
+pub use web3::Web3RpcServerImpl;
