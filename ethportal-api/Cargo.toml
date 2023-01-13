@@ -1,6 +1,6 @@
 [package]
 name = "ethportal-api"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2021"
 description = "Definitions for various Ethereum Portal Network JSONRPC APIs"
 license = "GPL-3.0"
