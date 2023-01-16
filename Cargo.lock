@@ -1338,18 +1338,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "eth2_serde_utils"
-version = "0.1.1"
-source = "git+https://github.com/sigp/lighthouse.git#38514c07f222ff7783834c48cf5c0a6ee7f346d0"
-dependencies = [
- "ethereum-types 0.14.1",
- "hex",
- "serde",
- "serde_derive",
- "serde_json",
-]
-
-[[package]]
 name = "eth2_ssz"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1377,7 +1365,7 @@ version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a9423ac7fb37037f828a32b724cdfa65ea62290055811731402a90fb8a5bcbb1"
 dependencies = [
- "eth2_serde_utils 0.1.0",
+ "eth2_serde_utils",
  "eth2_ssz",
  "serde",
  "serde_derive",
@@ -5687,7 +5675,6 @@ version = "0.1.0"
 dependencies = [
  "discv5",
  "enr 0.7.0",
- "eth2_serde_utils 0.1.1",
  "ethereum-types 0.12.1",
  "ethportal-peertest",
  "hex",
@@ -5810,9 +5797,7 @@ dependencies = [
  "bytes 1.3.0",
  "discv5",
  "env_logger 0.9.3",
- "eth2_serde_utils 0.1.1",
  "eth2_ssz",
- "eth2_ssz_derive",
  "eth2_ssz_types",
  "ethereum-types 0.12.1",
  "hex",
