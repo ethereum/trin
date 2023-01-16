@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::anyhow;
 use ethereum_types::{H256, U256};
+use reth_primitives::SealedHeader;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use ssz::Decode;
@@ -17,7 +18,6 @@ use crate::portalnet::types::content_key::{
     EpochAccumulator as EpochAccumulatorKey, HistoryContentKey,
 };
 use crate::types::{
-    header::Header,
     merkle::proof::{verify_merkle_proof, MerkleTree},
     validation::MERGE_BLOCK_NUMBER,
 };
@@ -92,8 +92,8 @@ impl MasterAccumulator {
         self.epoch_number() * EPOCH_SIZE as u64
     }
 
-    fn get_epoch_index_of_header(&self, header: &Header) -> u64 {
-        header.number / EPOCH_SIZE as u64
+    fn get_epoch_index_of_header(&self, num: u64) -> u64 {
+        num / EPOCH_SIZE as u64
     }
 
     pub async fn lookup_premerge_hash_by_number(
@@ -116,15 +116,15 @@ impl MasterAccumulator {
         Ok(epoch_acc[rel_index as usize].block_hash)
     }
 
-    fn is_header_in_current_epoch(&self, header: &Header) -> bool {
+    fn is_header_in_current_epoch(&self, num: u64) -> bool {
         let current_epoch_block_min = match self.historical_epochs_header_count() {
-            0 => match header.number {
+            0 => match num {
                 0u64 => return true,
                 _ => 0,
             },
             _ => self.historical_epochs_header_count() - 1,
         };
-        header.number > current_epoch_block_min && header.number < self.next_header_height()
+        num > current_epoch_block_min && num < self.next_header_height()
     }
 
     /// Validation function for pre merge headers that will use the master accumulator to validate
@@ -133,7 +133,7 @@ impl MasterAccumulator {
     /// accumulator.
     pub async fn validate_pre_merge_header(
         &self,
-        header: &Header,
+        header: &SealedHeader,
         history_jsonrpc_tx: mpsc::UnboundedSender<HistoryJsonRpcRequest>,
     ) -> anyhow::Result<bool> {
         if header.number > MERGE_BLOCK_NUMBER {
@@ -142,19 +142,20 @@ impl MasterAccumulator {
         if header.number >= self.next_header_height() {
             return Err(anyhow!("Unable to validate future header."));
         }
-        if self.is_header_in_current_epoch(header) {
+
+        if self.is_header_in_current_epoch(header.number) {
             let rel_index = header.number - self.historical_epochs_header_count();
             let verified_block_hash = self.current_epoch[rel_index as usize].block_hash;
-            Ok(verified_block_hash == header.hash())
+            Ok(verified_block_hash.as_bytes() == header.hash().as_slice())
         } else {
-            let epoch_index = self.get_epoch_index_of_header(header);
+            let epoch_index = self.get_epoch_index_of_header(header.number);
             let epoch_hash = self.historical_epochs[epoch_index as usize];
             let epoch_acc = self
                 .lookup_epoch_acc(epoch_hash, history_jsonrpc_tx)
                 .await?;
             let header_index = header.number - epoch_index * (EPOCH_SIZE as u64);
             let header_record = epoch_acc[header_index as usize];
-            Ok(header_record.block_hash == header.hash())
+            Ok(header_record.block_hash.as_bytes() == header.hash().as_slice())
         }
     }
 
@@ -196,21 +197,21 @@ impl MasterAccumulator {
 
     pub async fn generate_proof(
         &self,
-        header: &Header,
+        header: &SealedHeader,
         history_jsonrpc_tx: mpsc::UnboundedSender<HistoryJsonRpcRequest>,
     ) -> anyhow::Result<[H256; 15]> {
         if header.number > MERGE_BLOCK_NUMBER {
             return Err(anyhow!("Unable to generate proof for post-merge header."));
         }
         // Fetch epoch accumulator for header
-        let epoch_index = self.get_epoch_index_of_header(header);
+        let epoch_index = self.get_epoch_index_of_header(header.number);
         let epoch_hash = self.historical_epochs[epoch_index as usize];
         let epoch_acc = self
             .lookup_epoch_acc(epoch_hash, history_jsonrpc_tx)
             .await?;
 
         // Validate epoch accumulator hash matches historical hash from master accumulator
-        let epoch_index = self.get_epoch_index_of_header(header);
+        let epoch_index = self.get_epoch_index_of_header(header.number);
         let epoch_hash = self.historical_epochs[epoch_index as usize];
         if epoch_acc.tree_hash_root() != epoch_hash {
             return Err(anyhow!(
@@ -221,7 +222,7 @@ impl MasterAccumulator {
         // Validate header hash matches historical hash from epoch accumulator
         let hr_index = (header.number % EPOCH_SIZE as u64) as usize;
         let header_record = epoch_acc[hr_index];
-        if header_record.block_hash != header.hash() {
+        if header_record.block_hash.as_bytes() != header.hash().as_slice() {
             return Err(anyhow!(
                 "Block hash doesn't match historical header hash found in epoch acc."
             ));
@@ -254,7 +255,7 @@ impl MasterAccumulator {
             .generate_proof(hr_index, 14)
             .map_err(|err| anyhow!("Unable to generate proof for given index: {err:?}"))?;
         // Validate that the value the proof is for (leaf) is the header hash
-        assert_eq!(leaf, header.hash());
+        assert_eq!(leaf.as_bytes(), header.hash().as_slice());
 
         // Add the be encoded EPOCH_SIZE to proof to comply with ssz merkleization spec
         // https://github.com/ethereum/consensus-specs/blob/dev/ssz/merkle-proofs.md#ssz-object-to-index
@@ -269,7 +270,7 @@ impl MasterAccumulator {
 
     pub fn validate_pre_merge_header_with_proof(
         &self,
-        header: &Header,
+        header: &SealedHeader,
         proof: [H256; 15],
     ) -> anyhow::Result<()> {
         if header.number > MERGE_BLOCK_NUMBER {
@@ -280,9 +281,15 @@ impl MasterAccumulator {
         let gen_index = (EPOCH_SIZE * 2 * 2) + (hr_index * 2);
 
         // Look up historical epoch hash for header from master accumulator
-        let epoch_index = self.get_epoch_index_of_header(header) as usize;
+        let epoch_index = self.get_epoch_index_of_header(header.number) as usize;
         let epoch_hash = self.historical_epochs[epoch_index];
-        match verify_merkle_proof(header.hash(), &proof, 15, gen_index, epoch_hash) {
+        match verify_merkle_proof(
+            H256::from_slice(header.hash().as_slice()),
+            &proof,
+            15,
+            gen_index,
+            epoch_hash,
+        ) {
             true => Ok(()),
             false => Err(anyhow!("Merkle proof validation failed")),
         }
@@ -319,7 +326,6 @@ mod test {
     use ssz::Decode;
 
     use crate::jsonrpc::types::RecursiveFindContentParams;
-    use crate::types::header::{BlockHeaderProof, HeaderWithProof};
     use crate::types::validation::DEFAULT_MASTER_ACC_HASH;
 
     #[test]
@@ -461,15 +467,15 @@ mod test {
             let _ = update_accumulator(&mut master_acc, header);
         }
         let historical_header = &headers[0];
-        assert!(!master_acc.is_header_in_current_epoch(historical_header));
+        assert!(!master_acc.is_header_in_current_epoch(historical_header.number));
 
         // first header in current epoch
         let current_header = &headers[EPOCH_SIZE];
-        assert!(master_acc.is_header_in_current_epoch(current_header));
+        assert!(master_acc.is_header_in_current_epoch(current_header.number));
 
         // generate next block in the chain, which has not yet been added to the accumulator
         let future_header = generate_random_header(&test_height);
-        assert!(!master_acc.is_header_in_current_epoch(&future_header));
+        assert!(!master_acc.is_header_in_current_epoch(future_header.number));
 
         let (tx, _rx) = mpsc::unbounded_channel::<HistoryJsonRpcRequest>();
         master_acc
@@ -482,7 +488,7 @@ mod test {
     async fn mainnet_master_accumulator_validates_current_epoch_header() {
         let master_acc = get_mainnet_master_acc();
         let header = get_header(MERGE_BLOCK_NUMBER);
-        assert!(master_acc.is_header_in_current_epoch(&header));
+        assert!(master_acc.is_header_in_current_epoch(header.number));
         let (tx, _) = mpsc::unbounded_channel::<HistoryJsonRpcRequest>();
         assert!(master_acc
             .validate_pre_merge_header(&header, tx.clone())
@@ -633,12 +639,16 @@ mod test {
         master_acc
     }
 
-    fn get_header(number: u64) -> Header {
+    fn get_header(number: u64) -> SealedHeader {
+        use reth_rlp::Decodable;
+
         let file = fs::read_to_string("./src/assets/test/header_rlps.json").unwrap();
         let json: Value = serde_json::from_str(&file).unwrap();
         let json = json.as_object().unwrap();
         let raw_header = json.get(&number.to_string()).unwrap().as_str().unwrap();
-        rlp::decode(&hex_decode(raw_header).unwrap()).unwrap()
+        let header: SealedHeader =
+            Decodable::decode(hex_decode(raw_header).unwrap().as_mut_slice()).unwrap();
+        header
     }
 
     pub fn add_blocks_to_master_acc(master_acc: &mut MasterAccumulator, count: u64) {
@@ -648,7 +658,7 @@ mod test {
         }
     }
 
-    pub fn generate_random_headers(height: u64, count: u64) -> Vec<Header> {
+    pub fn generate_random_headers(height: u64, count: u64) -> Vec<SealedHeader> {
         (height..height + count)
             .collect::<Vec<u64>>()
             .iter()
@@ -656,25 +666,27 @@ mod test {
             .collect()
     }
 
-    fn generate_random_header(height: &u64) -> Header {
-        Header {
+    fn generate_random_header(height: &u64) -> SealedHeader {
+        use reth_primitives::{Bloom, Header, H160, H256, U256};
+        let header = Header {
             parent_hash: H256::random(),
-            uncles_hash: H256::random(),
-            author: H160::random(),
+            ommers_hash: H256::random(),
+            beneficiary: H160::random(),
             state_root: H256::random(),
             transactions_root: H256::random(),
             receipts_root: H256::random(),
             logs_bloom: Bloom::zero(),
-            difficulty: U256::from_dec_str("1").unwrap(),
+            difficulty: U256::from(1),
             number: *height,
-            gas_limit: U256::from_dec_str("1").unwrap(),
-            gas_used: U256::from_dec_str("1").unwrap(),
+            gas_limit: 1,
+            gas_used: 1,
             timestamp: 1,
-            extra_data: vec![],
-            mix_hash: None,
-            nonce: None,
+            extra_data: Default::default(),
+            mix_hash: Default::default(),
+            nonce: 0,
             base_fee_per_gas: None,
-        }
+        };
+        header.seal()
     }
 
     /// Update the master accumulator state with a new header.
@@ -685,7 +697,7 @@ mod test {
     // https://github.com/ethereum/portal-network-specs/blob/e807eb09d2859016e25b976f082735d3aceceb8e/history-network.md#the-header-accumulator
     fn update_accumulator(
         master_acc: &mut MasterAccumulator,
-        new_header: &Header,
+        new_header: &SealedHeader,
     ) -> anyhow::Result<()> {
         if new_header.number > MERGE_BLOCK_NUMBER {
             return Err(anyhow!("Invalid master acc update: Header is post-merge."));
@@ -723,7 +735,7 @@ mod test {
 
         // construct the concise record for the new header and add it to the current epoch
         let header_record = HeaderRecord {
-            block_hash: new_header.hash(),
+            block_hash: H256::from_slice(new_header.hash().as_slice()),
             total_difficulty: last_total_difficulty + new_header.difficulty,
         };
         master_acc

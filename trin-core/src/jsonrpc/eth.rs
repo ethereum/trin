@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::anyhow;
+use reth_primitives::SealedHeader;
 use serde_json::{json, Value};
 use tokio::sync::{mpsc, RwLock};
 
@@ -11,7 +12,6 @@ use crate::{
         types::{GetBlockByHashParams, GetBlockByNumberParams, HistoryJsonRpcRequest, Params},
     },
     portalnet::types::content_key::{BlockHeader, HistoryContentKey},
-    types::header::Header,
     types::validation::{HeaderOracle, MERGE_BLOCK_NUMBER},
     utils::bytes::{hex_decode, hex_encode},
 };
@@ -38,9 +38,41 @@ pub async fn get_block_by_hash(
     match resp {
         Ok(Value::String(val)) => hex_decode(val.as_str())
             .and_then(|bytes| {
-                rlp::decode::<Header>(bytes.as_ref()).map_err(|_| anyhow!("Invalid RLP"))
+                reth_rlp::Decodable::decode(&mut bytes.as_slice())
+                    .map_err(|_| anyhow!("Invalid RLP"))
             })
-            .map(|header| json!(header)),
+            .map(|header: SealedHeader| {
+                let block = reth_rpc_types::RichBlock {
+                    inner: reth_rpc_types::Block {
+                        header: reth_rpc_types::Header {
+                            hash: Some(header.hash()),
+                            parent_hash: header.parent_hash,
+                            uncles_hash: header.ommers_hash,
+                            author: header.beneficiary,
+                            miner: header.beneficiary,
+                            state_root: header.state_root,
+                            transactions_root: header.transactions_root,
+                            receipts_root: header.receipts_root,
+                            number: Some(reth_primitives::U256::from(header.number)),
+                            gas_used: reth_primitives::U256::from(header.gas_used),
+                            gas_limit: reth_primitives::U256::from(header.gas_limit),
+                            extra_data: header.extra_data.clone(),
+                            logs_bloom: header.logs_bloom,
+                            timestamp: reth_primitives::U256::from(header.timestamp),
+                            difficulty: header.difficulty,
+                            nonce: Some(reth_primitives::H64::from_low_u64_le(header.nonce)),
+                            size: None,
+                        },
+                        total_difficulty: Default::default(),
+                        uncles: Default::default(),
+                        transactions: reth_rpc_types::BlockTransactions::Hashes(Default::default()),
+                        size: None,
+                        base_fee_per_gas: header.base_fee_per_gas.map(reth_primitives::U256::from),
+                    },
+                    extra_info: Default::default(),
+                };
+                json!(block)
+            }),
         Ok(Value::Null) => Ok(Value::Null),
         Ok(_) => Err(anyhow!("Invalid JSON value")),
         Err(err) => Err(err),

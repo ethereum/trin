@@ -3,16 +3,14 @@ use std::str::FromStr;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use ethereum_types::H256;
+use reth_primitives::SealedHeader;
 use serde_json::{json, Value};
 use tokio::sync::mpsc;
 
 use crate::{
     jsonrpc::types::{HistoryJsonRpcRequest, Params},
     portalnet::types::content_key::IdentityContentKey,
-    types::{
-        accumulator::MasterAccumulator,
-        header::{BlockHeaderProof, Header, HeaderWithProof},
-    },
+    types::accumulator::MasterAccumulator,
     utils::provider::TrustedProvider,
 };
 
@@ -49,15 +47,36 @@ impl HeaderOracle {
             .await
     }
 
-    pub fn get_header_by_hash(&self, block_hash: H256) -> anyhow::Result<Header> {
+    pub fn get_header_by_hash(&self, block_hash: H256) -> anyhow::Result<SealedHeader> {
+        use reth_primitives::{H64, U256};
+
         let block_hash = format!("0x{:02X}", block_hash);
         let method = "eth_getBlockByHash".to_string();
         let params = Params::Array(vec![json!(block_hash), json!(false)]);
         let response: Value = self
             .trusted_provider
             .dispatch_http_request(method, params)?;
-        let header: Header = serde_json::from_value(response["result"].clone())?;
-        Ok(header)
+        let block: reth_rpc_types::RichBlock = serde_json::from_value(response["result"].clone())?;
+        let header = reth_primitives::Header {
+            parent_hash: block.header.parent_hash,
+            ommers_hash: block.header.uncles_hash,
+            beneficiary: block.header.miner,
+            state_root: block.header.state_root,
+            transactions_root: block.header.transactions_root,
+            receipts_root: block.header.receipts_root,
+            logs_bloom: block.header.logs_bloom,
+            difficulty: block.header.difficulty,
+            number: block.header.number.unwrap_or(U256::ZERO).to::<u64>(),
+            gas_limit: block.header.gas_limit.to::<u64>(),
+            gas_used: block.header.gas_used.to::<u64>(),
+            timestamp: block.header.timestamp.to::<u64>(),
+            mix_hash: serde_json::from_value(block.extra_info.get("mixHash").unwrap().clone())
+                .unwrap(),
+            nonce: block.header.nonce.unwrap_or(H64::default()).to_low_u64_le(),
+            base_fee_per_gas: block.base_fee_per_gas.map(|fee| fee.to::<u64>()),
+            extra_data: block.header.extra_data.clone(),
+        };
+        Ok(header.seal())
     }
 
     pub fn history_jsonrpc_tx(
@@ -69,19 +88,19 @@ impl HeaderOracle {
         }
     }
 
-    pub fn validate_header_with_proof(&self, hwp: HeaderWithProof) -> anyhow::Result<()> {
-        if hwp.header.number <= MERGE_BLOCK_NUMBER {
+    pub fn validate_header_with_proof(
+        &self,
+        header: &SealedHeader,
+        proof: [H256; 15],
+    ) -> anyhow::Result<()> {
+        if header.number <= MERGE_BLOCK_NUMBER {
             return Err(anyhow!("Unable to validate proof for post-merge header"));
         }
-        let proof = match hwp.proof {
-            BlockHeaderProof::AccumulatorProof(val) => val,
-            BlockHeaderProof::None(_) => return Err(anyhow!("Unable to validate, missing proof.")),
-        };
         self.master_acc
-            .validate_pre_merge_header_with_proof(&hwp.header, proof.proof)
+            .validate_pre_merge_header_with_proof(header, proof)
     }
 
-    pub async fn validate_header_is_canonical(&self, header: Header) -> anyhow::Result<()> {
+    pub async fn validate_header_is_canonical(&self, header: &SealedHeader) -> anyhow::Result<()> {
         if header.number <= MERGE_BLOCK_NUMBER {
             if let Ok(history_jsonrpc_tx) = self.history_jsonrpc_tx() {
                 if let Ok(val) = &self
@@ -112,7 +131,7 @@ impl HeaderOracle {
                 ))
             }
         };
-        if trusted_hash == header.hash() {
+        if trusted_hash.as_bytes() == header.hash().as_slice() {
             Ok(())
         } else {
             Err(anyhow!(
