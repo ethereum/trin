@@ -23,7 +23,7 @@ use parking_lot::RwLock;
 use rand::seq::SliceRandom;
 use smallvec::SmallVec;
 use ssz::Encode;
-use ssz_types::{BitList, VariableList};
+use ssz_types::BitList;
 use thiserror::Error;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tracing::{debug, error, info, trace, warn};
@@ -46,8 +46,8 @@ use crate::{
             content_key::{OverlayContentKey, RawContentKey},
             distance::{Distance, Metric},
             messages::{
-                Accept, ByteList, Content, CustomPayload, FindContent, FindNodes, Message, Nodes,
-                Offer, Ping, Pong, PopulatedOffer, ProtocolId, Request, Response, SszEnr,
+                Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer,
+                Ping, Pong, PopulatedOffer, ProtocolId, Request, Response, SszEnr,
             },
             node::Node,
         },
@@ -972,9 +972,7 @@ where
             }
         };
         match self.store.read().get(&content_key) {
-            Ok(Some(value)) => {
-                let content = ByteList::from(VariableList::from(value));
-
+            Ok(Some(content)) => {
                 // Check content size and initiate uTP connection if the size is over the threshold
                 // TODO: Properly calculate max content size
                 if content.len() < 1000 {
@@ -1444,7 +1442,7 @@ where
         }
     }
 
-    fn process_received_content(&mut self, content: ByteList, request: FindContent) {
+    fn process_received_content(&mut self, content: Vec<u8>, request: FindContent) {
         let content_key = match TContentKey::try_from(request.content_key) {
             Ok(val) => val,
             Err(msg) => {
@@ -1469,10 +1467,7 @@ where
                 // Spawn task that validates content before storing.
                 // Allows for non-blocking requests to this/other overlay services.
                 tokio::spawn(async move {
-                    if let Err(err) = validator
-                        .validate_content(&content_key, &content.to_vec())
-                        .await
-                    {
+                    if let Err(err) = validator.validate_content(&content_key, &content).await {
                         warn!(
                             error = ?err,
                             content.id = %hex_encode_compact(content_id),
@@ -1599,7 +1594,7 @@ where
         store: Arc<RwLock<TStore>>,
         accept_message: &Accept,
         content_keys_offered: Vec<RawContentKey>,
-    ) -> anyhow::Result<Vec<ByteList>> {
+    ) -> anyhow::Result<Vec<Vec<u8>>> {
         let content_keys_offered: Result<Vec<TContentKey>, TContentKey::Error> =
             content_keys_offered
                 .into_iter()
@@ -1609,7 +1604,7 @@ where
         let content_keys_offered: Vec<TContentKey> = content_keys_offered
             .map_err(|_| anyhow!("Unable to decode our own offered content keys"))?;
 
-        let mut content_items: Vec<ByteList> = Vec::new();
+        let mut content_items: Vec<Vec<u8>> = Vec::new();
 
         for (i, key) in accept_message
             .content_keys

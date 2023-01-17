@@ -500,7 +500,7 @@ pub struct FindContent {
 #[ssz(enum_behaviour = "union")]
 pub enum Content {
     ConnectionId(u16),
-    Content(ByteList),
+    Content(Vec<u8>),
     Enrs(Vec<SszEnr>),
 }
 
@@ -531,7 +531,7 @@ pub struct Offer {
 #[derive(Debug, Clone)]
 pub struct PopulatedOffer {
     /// All the offered content, pairing the keys and values
-    pub content_items: Vec<(RawContentKey, ByteList)>,
+    pub content_items: Vec<(RawContentKey, Vec<u8>)>,
 }
 
 impl Into<Offer> for PopulatedOffer {
@@ -781,7 +781,6 @@ mod test {
     #[test]
     fn message_encoding_content_content() {
         let content_val = hex::decode("7468652063616b652069732061206c6965").unwrap();
-        let content_val = ByteList::from(VariableList::from(content_val));
         let content = Content::Content(content_val);
         let content = Message::Content(content);
 
