@@ -3,7 +3,7 @@ use std::sync::Arc;
 use ethportal_api::jsonrpsee::server::ServerHandle;
 use rpc::JsonRpcServer;
 use tokio::sync::mpsc::UnboundedSender;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::RwLock;
 use tracing::{info, warn};
 
 use trin_core::jsonrpc::types::HistoryJsonRpcRequest;
@@ -151,11 +151,7 @@ pub async fn run_trin(
         }
         if trin_config.epoch_acc_path.is_none() {
             warn!(
-<<<<<<< HEAD
                 "It's strongly recommended to run bridge node with a local epoch acc repo,
-=======
-                "It's strongly recommended to run bridg node with a local epoch acc repo,
->>>>>>> d22e8c5 (Add ssz encoding for headerwithproof)
                 avoiding uncessary network traffic"
             );
         }

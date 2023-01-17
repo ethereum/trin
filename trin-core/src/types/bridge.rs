@@ -21,11 +21,11 @@ use crate::types::accumulator::{EpochAccumulator, MasterAccumulator, EPOCH_SIZE}
 use crate::types::block_body::{BlockBody, EncodableHeaderList};
 use crate::types::header::{
     AccumulatorProof, BlockHeaderProof, FullHeader, FullHeaderBatch, Header, HeaderWithProof,
+    SszNone,
 };
 use crate::types::receipts::Receipts;
 use crate::types::validation::HeaderOracle;
 use crate::types::validation::MERGE_BLOCK_NUMBER;
-use crate::utils::bytes::hex_encode;
 use crate::utils::bytes::{hex_decode, hex_encode};
 use ethportal_api::types::content_key::{
     BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, HistoryContentKey,
@@ -44,13 +44,11 @@ const BACKFILL_THREAD_COUNT: usize = 8;
 /// Portal network.
 /// https://github.com/carver/eth-portal
 // todos / possible improvements
-// - create docker image w/ epoch accs
 // - offer epoch accumulators if available locally
 // - latest xxx: cli arg to specify backfill of latest xxx blocks from head, then repeat
 // - range xx-xxx: cli arg to specify specific range of blocks to backfill
 // - backfill xx: cli arg to specifcy an epoch index from where to begin backfill
-// - test against archive nodes...
-// - test time / epoch against ethportal-bridge
+// - use archive nodes...
 pub struct Bridge {
     pub header_oracle: Arc<RwLock<HeaderOracle>>,
     pub epoch_acc_path: Option<PathBuf>,
@@ -217,11 +215,6 @@ impl Bridge {
         let epoch_index = offer_group.epoch_index;
         let epoch_acc = self.get_epoch_acc(epoch_index).await?;
         for full_header in full_headers {
-            let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
-                block_hash: full_header.header.hash().to_fixed_bytes(),
-            });
-            let content_value = rlp::encode(&full_header.header);
-
             // Fetch HeaderRecord from EpochAccumulator for validation
             let header_index = full_header.header.number - epoch_index * (EPOCH_SIZE as u64);
             let header_record = &epoch_acc[header_index as usize];
@@ -233,15 +226,6 @@ impl Bridge {
                     full_header.header.hash(),
                     header_record.block_hash
                 ));
-            }
-
-            // Offer Header
-            debug!("Offer: Block #{:?} Header", full_header.header.number);
-            if Bridge::offer_content(tx.clone(), content_key, hex_encode(content_value))
-                .await
-                .is_ok()
-            {
-                offer_group.header_count += 1;
             }
 
             // Construct HeaderWithProof
@@ -273,15 +257,21 @@ impl Bridge {
             let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
                 block_hash: full_header.header.hash().to_fixed_bytes(),
             });
-            // is this the right value? i don't think so
-            let content_value = rlp::encode(&full_header.header);
+            let content_value = HeaderWithProof {
+                header: full_header.header.clone(),
+                proof: BlockHeaderProof::None(SszNone { value: None }),
+            };
+            let content_value = content_value.as_ssz_bytes();
             let tx = self.history_tx().await;
-            debug!("Offer: Block #{:?} Header", full_header.header.number);
+            debug!(
+                "Offer: Block #{:?} HeaderWithProof",
+                full_header.header.number
+            );
             if Bridge::offer_content(tx, content_key, hex_encode(content_value))
                 .await
                 .is_ok()
             {
-                offer_group.header_count += 1;
+                offer_group.hwp_count += 1;
             }
         }
         Ok(())
@@ -580,7 +570,6 @@ impl FromStr for BridgeMode {
 struct OfferGroup {
     range: Range<u64>,
     epoch_index: u64,
-    header_count: u64,
     hwp_count: u64,
     bodies_count: u64,
     receipts_count: u64,
@@ -592,7 +581,6 @@ impl OfferGroup {
         Self {
             range,
             epoch_index,
-            header_count: 0,
             hwp_count: 0,
             bodies_count: 0,
             receipts_count: 0,
@@ -602,8 +590,8 @@ impl OfferGroup {
 
     fn display_stats(&self) {
         info!(
-            "Header Group: Range {:?} - Headers: {:?} - HWP: {:?} - Bodies: {:?} - Receipts: {:?}",
-            self.range, self.header_count, self.hwp_count, self.bodies_count, self.receipts_count
+            "Header Group: Range {:?} - HWP: {:?} - Bodies: {:?} - Receipts: {:?}",
+            self.range, self.hwp_count, self.bodies_count, self.receipts_count
         );
         info!("Group took: {:?}", time::Instant::now() - self.start_time);
     }
