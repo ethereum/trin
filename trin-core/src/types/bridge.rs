@@ -6,7 +6,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::{thread, time};
 
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use ethereum_types::H256;
 use serde_json::{json, Value};
 use ssz::{Decode, Encode};
@@ -21,15 +21,16 @@ use crate::types::accumulator::{EpochAccumulator, MasterAccumulator, EPOCH_SIZE}
 use crate::types::block_body::{BlockBody, EncodableHeaderList};
 use crate::types::header::{
     AccumulatorProof, BlockHeaderProof, FullHeader, FullHeaderBatch, Header, HeaderWithProof,
+    SszNone,
 };
 use crate::types::receipts::Receipts;
 use crate::types::validation::HeaderOracle;
 use crate::types::validation::MERGE_BLOCK_NUMBER;
-use crate::utils::bytes::hex_encode;
 use crate::utils::bytes::{hex_decode, hex_encode};
 use ethportal_api::types::content_key::{
     BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, HistoryContentKey,
 };
+use ethportal_api::{ContentItem, HistoryContentItem};
 
 const BATCH_SIZE: u64 = 128;
 const LATEST_BLOCK_POLL_RATE: u64 = 5;
@@ -44,13 +45,11 @@ const BACKFILL_THREAD_COUNT: usize = 8;
 /// Portal network.
 /// https://github.com/carver/eth-portal
 // todos / possible improvements
-// - create docker image w/ epoch accs
 // - offer epoch accumulators if available locally
 // - latest xxx: cli arg to specify backfill of latest xxx blocks from head, then repeat
 // - range xx-xxx: cli arg to specify specific range of blocks to backfill
 // - backfill xx: cli arg to specifcy an epoch index from where to begin backfill
-// - test against archive nodes...
-// - test time / epoch against ethportal-bridge
+// - use archive nodes...
 pub struct Bridge {
     pub header_oracle: Arc<RwLock<HeaderOracle>>,
     pub epoch_acc_path: Option<PathBuf>,
@@ -183,7 +182,7 @@ impl Bridge {
                 .into_iter()
                 .map(|i| {
                     // Geth requires block numbers to be formatted using the following padding.
-                    let block_param = format!("0x{:01X}", i);
+                    let block_param = format!("0x{i:01X}");
                     let params = Params::Array(vec![json!(block_param), json!(true)]);
                     json_request("eth_getBlockByNumber".to_string(), params, i as u32)
                 })
@@ -217,31 +216,17 @@ impl Bridge {
         let epoch_index = offer_group.epoch_index;
         let epoch_acc = self.get_epoch_acc(epoch_index).await?;
         for full_header in full_headers {
-            let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
-                block_hash: full_header.header.hash().to_fixed_bytes(),
-            });
-            let content_value = rlp::encode(&full_header.header);
-
             // Fetch HeaderRecord from EpochAccumulator for validation
             let header_index = full_header.header.number - epoch_index * (EPOCH_SIZE as u64);
             let header_record = &epoch_acc[header_index as usize];
 
             // Validate Header
             if header_record.block_hash != full_header.header.hash() {
-                return Err(anyhow!(
+                bail!(
                     "Header hash doesn't match record in local accumulator: {:?} - {:?}",
                     full_header.header.hash(),
                     header_record.block_hash
-                ));
-            }
-
-            // Offer Header
-            debug!("Offer: Block #{:?} Header", full_header.header.number);
-            if Bridge::offer_content(tx.clone(), content_key, hex_encode(content_value))
-                .await
-                .is_ok()
-            {
-                offer_group.header_count += 1;
+                );
             }
 
             // Construct HeaderWithProof
@@ -273,15 +258,21 @@ impl Bridge {
             let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
                 block_hash: full_header.header.hash().to_fixed_bytes(),
             });
-            // is this the right value? i don't think so
-            let content_value = rlp::encode(&full_header.header);
+            let content_value = HeaderWithProof {
+                header: full_header.header.clone(),
+                proof: BlockHeaderProof::None(SszNone { value: None }),
+            };
+            let content_value = content_value.as_ssz_bytes();
             let tx = self.history_tx().await;
-            debug!("Offer: Block #{:?} Header", full_header.header.number);
+            debug!(
+                "Offer: Block #{:?} HeaderWithProof",
+                full_header.header.number
+            );
             if Bridge::offer_content(tx, content_key, hex_encode(content_value))
                 .await
                 .is_ok()
             {
-                offer_group.header_count += 1;
+                offer_group.hwp_count += 1;
             }
         }
         Ok(())
@@ -401,11 +392,11 @@ impl Bridge {
         // Validate Receipts
         let receipts_root = receipts.root()?;
         if receipts_root != full_header.header.receipts_root {
-            return Err(anyhow!(
+            bail!(
                 "Receipts root doesn't match header receipts root: {:?} - {:?}",
                 receipts_root,
                 full_header.header.receipts_root
-            ));
+            );
         }
 
         let content_key = HistoryContentKey::BlockReceipts(BlockReceiptsKey {
@@ -452,20 +443,20 @@ impl Bridge {
         // Validate uncles root
         let uncles_root = block_body.uncles_root()?;
         if uncles_root != full_header.header.uncles_hash {
-            return Err(anyhow!(
+            bail!(
                 "Block body uncles root doesn't match header uncles root: {:?} - {:?}",
                 uncles_root,
                 full_header.header.uncles_hash
-            ));
+            );
         }
         // Validate txs root
         let txs_root = block_body.transactions_root()?;
         if txs_root != full_header.header.transactions_root {
-            return Err(anyhow!(
+            bail!(
                 "Block body txs root doesn't match header txs root: {:?} - {:?}",
                 txs_root,
                 full_header.header.transactions_root
-            ));
+            );
         }
 
         let content_key = HistoryContentKey::BlockBody(BlockBodyKey {
@@ -492,7 +483,7 @@ impl Bridge {
         let mut headers = vec![];
         for res in response {
             if res["result"].as_object().is_none() {
-                return Err(anyhow!("unable to find uncle header"));
+                bail!("unable to find uncle header");
             }
             let header: Header = serde_json::from_value(res.clone())?;
             headers.push(header)
@@ -526,8 +517,9 @@ impl Bridge {
     ) -> anyhow::Result<()> {
         let (resp_tx, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
         let content_value = hex_decode(&content_value).unwrap();
+        let content_item = HistoryContentItem::decode(&content_value)?;
         // is it possible to gossip a content key with wrong content value?
-        let endpoint = HistoryEndpoint::Gossip(content_key, content_value.into());
+        let endpoint = HistoryEndpoint::Gossip(content_key, content_item);
         let json_request = HistoryJsonRpcRequest {
             endpoint,
             resp: resp_tx,
@@ -580,7 +572,6 @@ impl FromStr for BridgeMode {
 struct OfferGroup {
     range: Range<u64>,
     epoch_index: u64,
-    header_count: u64,
     hwp_count: u64,
     bodies_count: u64,
     receipts_count: u64,
@@ -592,7 +583,6 @@ impl OfferGroup {
         Self {
             range,
             epoch_index,
-            header_count: 0,
             hwp_count: 0,
             bodies_count: 0,
             receipts_count: 0,
@@ -602,8 +592,8 @@ impl OfferGroup {
 
     fn display_stats(&self) {
         info!(
-            "Header Group: Range {:?} - Headers: {:?} - HWP: {:?} - Bodies: {:?} - Receipts: {:?}",
-            self.range, self.header_count, self.hwp_count, self.bodies_count, self.receipts_count
+            "Header Group: Range {:?} - HWP: {:?} - Bodies: {:?} - Receipts: {:?}",
+            self.range, self.hwp_count, self.bodies_count, self.receipts_count
         );
         info!("Group took: {:?}", time::Instant::now() - self.start_time);
     }

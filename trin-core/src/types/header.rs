@@ -269,58 +269,6 @@ pub struct HeaderWithProof {
     pub proof: BlockHeaderProof,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Decode, Encode)]
-#[ssz(enum_behaviour = "union")]
-// Ignore clippy here, since "box"-ing the accumulator proof breaks the Decode trait
-#[allow(clippy::large_enum_variant)]
-pub enum BlockHeaderProof {
-    None(SszNone),
-    AccumulatorProof(AccumulatorProof),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct AccumulatorProof {
-    pub proof: [H256; 15],
-}
-
-impl ssz::Encode for AccumulatorProof {
-    fn is_ssz_fixed_len() -> bool {
-        true
-    }
-
-    fn ssz_append(&self, buf: &mut Vec<u8>) {
-        let offset = <AccumulatorProof as Encode>::ssz_fixed_len();
-
-        let mut encoder = SszEncoder::container(buf, offset);
-        for l in self.proof {
-            encoder.append(&l);
-        }
-
-        encoder.finalize();
-    }
-
-    fn ssz_bytes_len(&self) -> usize {
-        <H256 as Encode>::ssz_fixed_len() * 15
-    }
-}
-
-impl ssz::Decode for AccumulatorProof {
-    fn is_ssz_fixed_len() -> bool {
-        true
-    }
-
-    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
-        let vec: Vec<[u8; 32]> = Vec::from_ssz_bytes(bytes)?;
-        let mut proof: [H256; 15] = [H256::zero(); 15];
-        let raw_proof: [[u8; 32]; 15] = vec
-            .try_into()
-            .map_err(|_| ssz::DecodeError::BytesInvalid("Invalid proof length".to_string()))?;
-        for (idx, val) in raw_proof.iter().enumerate() {
-            proof[idx] = H256::from_slice(val);
-        }
-        Ok(Self { proof })
-    }
-}
 impl ssz::Decode for HeaderWithProof {
     fn is_ssz_fixed_len() -> bool {
         false
@@ -367,12 +315,65 @@ impl ssz::Encode for HeaderWithProof {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Decode, Encode)]
+#[ssz(enum_behaviour = "union")]
+// Ignore clippy here, since "box"-ing the accumulator proof breaks the Decode trait
+#[allow(clippy::large_enum_variant)]
+pub enum BlockHeaderProof {
+    None(SszNone),
+    AccumulatorProof(AccumulatorProof),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct AccumulatorProof {
+    pub proof: [H256; 15],
+}
+
+impl ssz::Decode for AccumulatorProof {
+    fn is_ssz_fixed_len() -> bool {
+        true
+    }
+
+    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
+        let vec: Vec<[u8; 32]> = Vec::from_ssz_bytes(bytes)?;
+        let mut proof: [H256; 15] = [H256::zero(); 15];
+        let raw_proof: [[u8; 32]; 15] = vec
+            .try_into()
+            .map_err(|_| ssz::DecodeError::BytesInvalid("Invalid proof length".to_string()))?;
+        for (idx, val) in raw_proof.iter().enumerate() {
+            proof[idx] = H256::from_slice(val);
+        }
+        Ok(Self { proof })
+    }
+}
+
+impl ssz::Encode for AccumulatorProof {
+    fn is_ssz_fixed_len() -> bool {
+        true
+    }
+
+    fn ssz_append(&self, buf: &mut Vec<u8>) {
+        let offset = <AccumulatorProof as Encode>::ssz_fixed_len();
+
+        let mut encoder = SszEncoder::container(buf, offset);
+        for l in self.proof {
+            encoder.append(&l);
+        }
+
+        encoder.finalize();
+    }
+
+    fn ssz_bytes_len(&self) -> usize {
+        <H256 as Encode>::ssz_fixed_len() * 15
+    }
+}
+
 /// Struct to represent encodable/decodable None value for an SSZ enum
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SszNone {
     // In rust, None is a variant not a type,
     // so we must use Option here to represent a None value
-    value: Option<()>,
+    pub value: Option<()>,
 }
 
 impl ssz::Decode for SszNone {
