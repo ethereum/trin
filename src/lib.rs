@@ -153,11 +153,7 @@ pub async fn run_trin(
         }
         if trin_config.epoch_acc_path.is_none() {
             warn!(
-<<<<<<< HEAD
                 "It's strongly recommended to run bridge node with a local epoch acc repo,
-=======
-                "It's strongly recommended to run bridg node with a local epoch acc repo,
->>>>>>> d22e8c5 (Add ssz encoding for headerwithproof)
                 avoiding uncessary network traffic"
             );
         }

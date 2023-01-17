@@ -16,6 +16,18 @@ pub enum ContentItemDecodeError {
     Ssz(ssz::DecodeError),
 }
 
+impl std::error::Error for ContentItemDecodeError {}
+
+impl std::fmt::Display for ContentItemDecodeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        //  Calling write! on self tries to recursively call fmt in a recursive loop forever.
+        match self {
+            Self::Rlp(err) => write!(f, "RLP decode error: {:?}", err),
+            Self::Ssz(err) => write!(f, "SSZ decode error: {:?}", err),
+        }
+    }
+}
+
 impl From<reth_rlp::DecodeError> for ContentItemDecodeError {
     fn from(err: reth_rlp::DecodeError) -> Self {
         Self::Rlp(err)
