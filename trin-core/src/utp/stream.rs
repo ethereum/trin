@@ -256,7 +256,7 @@ impl UtpListener {
                             if let UtpStreamId::ContentStream(content_data) = conn.stream_id.clone()
                             // TODO: Change this `clone` to borrow after rust 1.62
                             {
-                                // We want to send uTP data only if the content is Content(ByteList)
+                                // We want to send uTP data only if the content is Content(Vec<u8>)
                                 debug!(
                                     "Sending content data via uTP with len: {}",
                                     content_data.len()
