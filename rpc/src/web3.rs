@@ -9,3 +9,9 @@ impl Web3ApiServer for Web3Api {
         todo!()
     }
 }
+
+impl std::fmt::Debug for Web3Api {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Web3Api").finish_non_exhaustive()
+    }
+}

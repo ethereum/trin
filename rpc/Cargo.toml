@@ -8,4 +8,5 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.68"
 ethportal-api = { path = "../ethportal-api", features=["server"]}
+trin-core = { path = "../trin-core"}
 tokio = { version = "1.8.0", features = ["full"] }

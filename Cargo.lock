@@ -3848,6 +3848,7 @@ dependencies = [
  "anyhow",
  "ethportal-api",
  "tokio",
+ "trin-core",
 ]
 
 [[package]]

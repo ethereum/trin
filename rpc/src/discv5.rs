@@ -1,8 +1,18 @@
 use crate::jsonrpsee::core::{async_trait, RpcResult};
 use ethportal_api::types::discv5::{Enr, NodeId, NodeInfo, RoutingTableInfo};
 use ethportal_api::Discv5ApiServer;
+use std::sync::Arc;
+use trin_core::portalnet::discovery::Discovery;
 
-pub struct Discv5Api;
+pub struct Discv5Api {
+    discv5: Arc<Discovery>,
+}
+
+impl Discv5Api {
+    pub fn new(discv5: Arc<Discovery>) -> Self {
+        Self { discv5 }
+    }
+}
 
 #[async_trait]
 impl Discv5ApiServer for Discv5Api {
@@ -43,5 +53,11 @@ impl Discv5ApiServer for Discv5Api {
     /// Fetch the ENR representation associated with the given Node ID and optional sequence number.
     async fn lookup_enr(&self, _node_id: NodeId, _enr_seq: Option<u32>) -> RpcResult<Enr> {
         todo!()
+    }
+}
+
+impl std::fmt::Debug for Discv5Api {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Discv5Api").finish_non_exhaustive()
     }
 }

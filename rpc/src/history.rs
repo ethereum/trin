@@ -6,7 +6,18 @@ use ethportal_api::types::portal::{
 use ethportal_api::HistoryNetworkApiServer;
 use ethportal_api::{HistoryContentItem, HistoryContentKey};
 
-pub struct HistoryNetworkApi;
+use tokio::sync::mpsc;
+use trin_core::jsonrpc::types::HistoryJsonRpcRequest;
+
+pub struct HistoryNetworkApi {
+    network: mpsc::UnboundedSender<HistoryJsonRpcRequest>,
+}
+
+impl HistoryNetworkApi {
+    pub fn new(network: mpsc::UnboundedSender<HistoryJsonRpcRequest>) -> Self {
+        Self { network }
+    }
+}
 
 #[async_trait]
 impl HistoryNetworkApiServer for HistoryNetworkApi {
@@ -120,5 +131,11 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
         _content_key: HistoryContentKey,
     ) -> RpcResult<HistoryContentItem> {
         todo!()
+    }
+}
+
+impl std::fmt::Debug for HistoryNetworkApi {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HistoryNetworkApi").finish_non_exhaustive()
     }
 }

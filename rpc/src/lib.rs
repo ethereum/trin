@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 mod discv5;
 mod history;
 mod server;
