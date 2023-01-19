@@ -2,16 +2,13 @@
 use std::os::unix;
 use std::{
     fs,
-    io::{self, BufRead, Read, Write},
-    net::{TcpListener, TcpStream},
+    io::{self, Read, Write},
     panic,
-    str::FromStr,
     sync::{Arc, RwLock},
     thread,
     time::Duration,
 };
 
-use httparse;
 use serde_json::{json, Value};
 use thiserror::Error;
 use threadpool::ThreadPool;
@@ -162,51 +159,6 @@ pub fn launch_ipc_client(
     }
 }
 
-fn launch_http_client(
-    pool: ThreadPool,
-    trusted_provider: TrustedProvider,
-    trin_config: TrinConfig,
-    portal_tx: UnboundedSender<PortalJsonRpcRequest>,
-    live_server_tx: tokio::sync::mpsc::Sender<bool>,
-) {
-    ctrlc::set_handler(move || {
-        std::process::exit(1);
-    })
-    .expect("Error setting Ctrl-C handler.");
-    let addr = &trin_config.web3_http_address;
-    let host = match addr.host() {
-        Some(h) => h,
-        None => panic!("Expected web3 address '{addr}' to have host."),
-    };
-    let port = match addr.port() {
-        Some(p) => p,
-        None => panic!("Expected web3 address '{addr}' to have port."),
-    };
-    let socket = format!("{host}:{port}");
-    let listener = TcpListener::bind(socket).unwrap();
-
-    info!(url = %trin_config.web3_http_address, "HTTP JSON-RPC server listening for commands");
-    std::thread::spawn(move || {
-        live_server_tx.blocking_send(true).unwrap();
-    });
-
-    for stream in listener.incoming() {
-        match stream {
-            Ok(stream) => {
-                let trusted_provider = trusted_provider.clone();
-                let portal_tx = portal_tx.clone();
-                pool.execute(move || {
-                    serve_http_client(stream, trusted_provider, portal_tx);
-                });
-            }
-            Err(e) => {
-                panic!("HTTP connection failed: {}", e)
-            }
-        };
-    }
-    info!("HTTP JSON-RPC server exited cleanly");
-}
-
 fn serve_ipc_client(
     rx: &mut impl Read,
     tx: &mut impl Write,
@@ -253,111 +205,10 @@ fn serve_ipc_client(
     }
 }
 
-fn serve_http_client(
-    mut stream: TcpStream,
-    trusted_provider: TrustedProvider,
-    portal_tx: UnboundedSender<PortalJsonRpcRequest>,
-) {
-    loop {
-        let mut reader = io::BufReader::new(&mut stream);
-        let received: Vec<u8> = reader.fill_buf().unwrap().to_vec();
-        // If stream reached EOF, exit loop and drop the TCP stream
-        if received.is_empty() {
-            break;
-        }
-        // Mark the bytes read as consumed so the buffer will not return them in a subsequent read
-        reader.consume(received.len());
-
-        let http_body = match parse_http_body(received) {
-            Ok(val) => val,
-            Err(msg) => {
-                respond_with_parsing_error(&stream, msg.to_string());
-                continue;
-            }
-        };
-        let deser = serde_json::Deserializer::from_str(&http_body);
-        let mut json_objects = deser.into_iter::<JsonRequest>();
-
-        // Currently we assume a single JSON-RPC object within each received request.
-        // Other valid JSON objects contained within the request will currently be ignored.
-        let obj = json_objects.next();
-        match obj {
-            None => {
-                respond_with_parsing_error(&stream, "No valid JSON object in request.".to_string())
-            }
-            Some(obj) => {
-                let obj = match obj {
-                    Ok(val) => val,
-                    Err(msg) => {
-                        respond_with_parsing_error(&stream, msg.to_string());
-                        continue;
-                    }
-                };
-                let formatted_response = match obj.validate() {
-                    Ok(_) => process_http_request(obj, trusted_provider.clone(), portal_tx.clone()),
-                    Err(e) => format!("HTTP/1.1 400 BAD REQUEST\r\n\r\n{}", e).into_bytes(),
-                };
-                stream.write_all(&formatted_response).unwrap();
-                stream.flush().unwrap();
-            }
-        }
-    }
-}
-
-fn respond_with_parsing_error(mut stream: &TcpStream, msg: String) {
-    warn!("Error parsing http request: {:?}", msg);
-    let resp = format!("HTTP/1.1 400 BAD REQUEST\r\n\r\n{}", msg).into_bytes();
-    stream.write_all(&resp).unwrap();
-    stream.flush().unwrap();
-}
-
 #[derive(Error, Debug)]
 pub enum HttpParseError {
     #[error("Unable to parse http request: {0}")]
     InvalidRequest(String),
-}
-
-fn parse_http_body(buf: Vec<u8>) -> Result<String, HttpParseError> {
-    let mut headers = [httparse::EMPTY_HEADER; 16];
-    let mut req = httparse::Request::new(&mut headers);
-    let body_offset = match req.parse(&buf) {
-        Ok(val) => match val {
-            httparse::Status::Complete(offset) => offset,
-            httparse::Status::Partial => {
-                return Err(HttpParseError::InvalidRequest(
-                    "Http buffer parse incomplete".to_owned(),
-                ))
-            }
-        },
-        Err(msg) => return Err(HttpParseError::InvalidRequest(msg.to_string())),
-    };
-    let body = buf[body_offset..buf.len()].to_vec();
-    match String::from_utf8(body) {
-        Ok(val) => Ok(val),
-        Err(msg) => Err(HttpParseError::InvalidRequest(msg.to_string())),
-    }
-}
-
-fn process_http_request(
-    obj: JsonRequest,
-    trusted_provider: TrustedProvider,
-    portal_tx: UnboundedSender<PortalJsonRpcRequest>,
-) -> Vec<u8> {
-    let result = handle_request(obj, trusted_provider, portal_tx);
-    match result {
-        Ok(contents) => format!(
-            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}",
-            contents.len(),
-            contents,
-        )
-        .into_bytes(),
-        Err(contents) => format!(
-            "HTTP/1.1 502 BAD GATEWAY\r\nContent-Length: {}\r\n\r\n{}",
-            contents.len(),
-            contents,
-        )
-        .into_bytes(),
-    }
 }
 
 // Match json-rpc requests by "method" and forwards request onto respective dispatcher

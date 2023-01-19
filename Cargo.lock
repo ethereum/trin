@@ -5069,7 +5069,6 @@ dependencies = [
  "fnv",
  "futures 0.3.25",
  "hex",
- "httparse",
  "interfaces",
  "ipconfig",
  "keccak-hash 0.8.0",

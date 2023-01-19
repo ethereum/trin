@@ -3,10 +3,8 @@ use crate::{Discv5Api, HistoryNetworkApi, Web3Api};
 use ethportal_api::{Discv5ApiServer, HistoryNetworkApiServer, Web3ApiServer};
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use trin_core::cli::TrinConfig;
-use trin_core::jsonrpc::types::{HistoryJsonRpcRequest, PortalJsonRpcRequest};
+use trin_core::jsonrpc::types::HistoryJsonRpcRequest;
 use trin_core::portalnet::discovery::Discovery;
-use trin_core::utils::provider::TrustedProvider;
 
 pub struct JsonRpcServer;
 
