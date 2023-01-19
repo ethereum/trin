@@ -16,7 +16,7 @@ use serde_json::{json, Value};
 use thiserror::Error;
 use threadpool::ThreadPool;
 use tokio::sync::{mpsc, mpsc::UnboundedSender};
-use tracing::{debug, info, warn};
+use tracing::{debug, info, log::error, warn};
 use ureq::{self, Request};
 use validator::Validate;
 
@@ -200,8 +200,17 @@ fn launch_http_client(
         std::process::exit(1);
     })
     .expect("Error setting Ctrl-C handler.");
-
-    let listener = TcpListener::bind(&trin_config.web3_http_address).unwrap();
+    let addr = &trin_config.web3_http_address;
+    let host = match addr.host() {
+        Some(h) => h,
+        None => panic!("Expected web3 address '{addr}' to have host."),
+    };
+    let port = match addr.port() {
+        Some(p) => p,
+        None => panic!("Expected web3 address '{addr}' to have port."),
+    };
+    let socket = format!("{host}:{port}");
+    let listener = TcpListener::bind(socket).unwrap();
 
     info!(url = %trin_config.web3_http_address, "HTTP JSON-RPC server listening for commands");
     std::thread::spawn(move || {

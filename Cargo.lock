@@ -5091,6 +5091,7 @@ dependencies = [
  "uds_windows",
  "uint 0.8.5",
  "ureq",
+ "url",
  "validator",
 ]
 
