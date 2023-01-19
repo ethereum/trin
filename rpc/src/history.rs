@@ -6,10 +6,10 @@ use ethportal_api::types::portal::{
 use ethportal_api::HistoryNetworkApiServer;
 use ethportal_api::{HistoryContentItem, HistoryContentKey};
 
-pub struct HistoryNetworkRpcServerImpl;
+pub struct HistoryNetworkApi;
 
 #[async_trait]
-impl HistoryNetworkApiServer for HistoryNetworkRpcServerImpl {
+impl HistoryNetworkApiServer for HistoryNetworkApi {
     /// Returns meta information about overlay routing table.
     async fn routing_table_info(&self) -> RpcResult<RoutingTableInfo> {
         todo!()

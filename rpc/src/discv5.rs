@@ -2,10 +2,10 @@ use crate::jsonrpsee::core::{async_trait, RpcResult};
 use ethportal_api::types::discv5::{Enr, NodeId, NodeInfo, RoutingTableInfo};
 use ethportal_api::Discv5ApiServer;
 
-pub struct Discv5RpcServerImpl;
+pub struct Discv5Api;
 
 #[async_trait]
-impl Discv5ApiServer for Discv5RpcServerImpl {
+impl Discv5ApiServer for Discv5Api {
     /// Returns ENR and Node ID information of the local discv5 node.
     async fn node_info(&self) -> RpcResult<NodeInfo> {
         todo!()
