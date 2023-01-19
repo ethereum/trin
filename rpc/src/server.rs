@@ -8,11 +8,7 @@ use trin_core::jsonrpc::types::{HistoryJsonRpcRequest, PortalJsonRpcRequest};
 use trin_core::portalnet::discovery::Discovery;
 use trin_core::utils::provider::TrustedProvider;
 
-pub struct JsonRpcServer {
-    trusted_provider: TrustedProvider,
-    trin_config: TrinConfig,
-    portal_tx: PortalJsonRpcRequest,
-}
+pub struct JsonRpcServer;
 
 impl JsonRpcServer {
     pub async fn run_http(
@@ -28,13 +24,5 @@ impl JsonRpcServer {
         all_methods.merge(Web3Api.into_rpc())?;
         let handle = server.start(all_methods)?;
         Ok(handle)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        todo!()
     }
 }

@@ -5011,6 +5011,7 @@ dependencies = [
  "rand 0.8.5",
  "rlp 0.5.2",
  "rocksdb",
+ "rpc",
  "serde_json",
  "sha3 0.9.1",
  "structopt",

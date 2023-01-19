@@ -57,35 +57,6 @@ impl Default for JsonRpcExiter {
     }
 }
 
-pub fn launch_jsonrpc_server(
-    trin_config: TrinConfig,
-    trusted_provider: TrustedProvider,
-    portal_tx: UnboundedSender<PortalJsonRpcRequest>,
-    live_server_tx: tokio::sync::mpsc::Sender<bool>,
-    json_rpc_exiter: Arc<JsonRpcExiter>,
-) {
-    let pool = ThreadPool::new(trin_config.pool_size as usize);
-
-    match trin_config.web3_transport.as_str() {
-        "ipc" => launch_ipc_client(
-            pool,
-            trusted_provider,
-            &trin_config.web3_ipc_path,
-            portal_tx,
-            live_server_tx,
-            json_rpc_exiter,
-        ),
-        "http" => launch_http_client(
-            pool,
-            trusted_provider,
-            trin_config,
-            portal_tx,
-            live_server_tx,
-        ),
-        val => panic!("Unsupported web3 transport: {}", val),
-    }
-}
-
 fn set_ipc_cleanup_handlers(ipc_path: &str) {
     {
         let ipc_path = ipc_path.to_string();
@@ -124,14 +95,16 @@ fn get_listener_result(ipc_path: &str) -> tokio::io::Result<uds_windows::UnixLis
     uds_windows::UnixListener::bind(ipc_path)
 }
 
-fn launch_ipc_client(
-    pool: ThreadPool,
+pub fn launch_ipc_client(
     trusted_provider: TrustedProvider,
     ipc_path: &str,
     portal_tx: UnboundedSender<PortalJsonRpcRequest>,
     live_server_tx: tokio::sync::mpsc::Sender<bool>,
     json_rpc_exiter: Arc<JsonRpcExiter>,
+    trin_config: TrinConfig,
 ) {
+    let pool = ThreadPool::new(trin_config.pool_size as usize);
+
     let listener_result = get_listener_result(ipc_path);
     let listener = match listener_result {
         Ok(listener) => {

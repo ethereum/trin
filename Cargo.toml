@@ -31,6 +31,7 @@ tracing-subscriber = "0.3.15"
 trin-core = { path = "trin-core" }
 trin-history = { path = "trin-history" }
 trin-state = { path = "trin-state" }
+rpc = { path = "rpc"}
 ureq = { version = "2.2.0", features = ["json"] }
 
 [dev-dependencies]
