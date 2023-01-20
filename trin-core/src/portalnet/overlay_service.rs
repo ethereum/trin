@@ -975,7 +975,7 @@ where
             Ok(Some(content)) => {
                 // Check content size and initiate uTP connection if the size is over the threshold
                 // TODO: Properly calculate max content size
-                if content.len() < 1000 {
+                if content.len() <= 1028 {
                     Ok(Content::Content(content))
                 } else {
                     let conn_id: u16 = crate::utp::stream::rand();

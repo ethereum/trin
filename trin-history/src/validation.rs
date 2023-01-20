@@ -43,14 +43,6 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                     .await
                     .validate_header_with_proof(header_with_proof)
             }
-            HistoryContentKey::BlockHeader(_key) => {
-                let header: Header = rlp::decode(content)?;
-                self.header_oracle
-                    .write()
-                    .await
-                    .validate_header_is_canonical(header)
-                    .await
-            }
             HistoryContentKey::BlockBody(key) => {
                 let block_body = BlockBody::from_ssz_bytes(content)
                     .map_err(|msg| anyhow!("Block Body content has invalid encoding: {:?}", msg))?;
@@ -144,11 +136,14 @@ mod tests {
         utils::{bytes::hex_decode, provider::TrustedProvider},
     };
 
-    fn get_header_rlp() -> Vec<u8> {
-        let file = fs::read_to_string("../trin-core/src/assets/test/header_rlps.json").unwrap();
+    fn get_hwp_ssz() -> Vec<u8> {
+        let file =
+            fs::read_to_string("../trin-core/src/assets/test/fluffy/header_with_proofs.json")
+                .unwrap();
         let json: Value = serde_json::from_str(&file).unwrap();
         let json = json.as_object().unwrap();
-        let raw_header = json.get("669051").unwrap().as_str().unwrap();
+        let raw_header = json.get("1000001").unwrap().as_object().unwrap();
+        let raw_header = raw_header.get("value").unwrap().as_str().unwrap();
         hex_decode(raw_header).unwrap()
     }
 
@@ -226,59 +221,57 @@ mod tests {
     #[test_log::test(tokio::test)]
     async fn validate_header() {
         let server = setup_mock_infura_server();
-        let header_rlp = get_header_rlp();
-        let header: Header = rlp::decode(&header_rlp).expect("error decoding header");
+        let hwp_ssz = get_hwp_ssz();
+        let hwp = HeaderWithProof::from_ssz_bytes(&hwp_ssz).expect("error decoding header");
         let header_oracle = default_header_oracle(server.url("/get_header"));
         let chain_history_validator = ChainHistoryValidator { header_oracle };
-        let content_key = HistoryContentKey::BlockHeader(BlockHeader {
-            block_hash: header.hash().0,
+        let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeader {
+            block_hash: hwp.header.hash().0,
         });
         chain_history_validator
-            .validate_content(&content_key, &header_rlp)
+            .validate_content(&content_key, &hwp_ssz)
             .await
             .unwrap();
     }
 
     #[test_log::test(tokio::test)]
-    #[should_panic]
+    #[should_panic(expected = "Merkle proof validation failed for pre-merge header")]
     async fn invalidate_header_with_invalid_number() {
         let server = setup_mock_infura_server();
-        // RLP encoded block header #669051
-        let header_rlp = get_header_rlp();
-        let mut header: Header = rlp::decode(&header_rlp).expect("error decoding header");
+        let hwp_ssz = get_hwp_ssz();
+        let mut header = HeaderWithProof::from_ssz_bytes(&hwp_ssz).expect("error decoding header");
 
         // set invalid block height
-        header.number = 669052;
+        header.header.number = 669052;
 
-        let header_rlp = rlp::encode(&header).to_vec();
+        let content_value = header.as_ssz_bytes();
         let header_oracle = default_header_oracle(server.url("/get_header"));
         let chain_history_validator = ChainHistoryValidator { header_oracle };
-        let content_key = HistoryContentKey::BlockHeader(BlockHeader {
-            block_hash: header.hash().0,
+        let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeader {
+            block_hash: header.header.hash().0,
         });
         chain_history_validator
-            .validate_content(&content_key, &header_rlp)
+            .validate_content(&content_key, &content_value)
             .await
             .unwrap();
     }
 
     #[test_log::test(tokio::test)]
-    #[should_panic]
+    #[should_panic(expected = "Merkle proof validation failed for pre-merge header")]
     async fn invalidate_header_with_invalid_gaslimit() {
         let server = setup_mock_infura_server();
-        // RLP encoded block header #669051
-        let header_rlp = get_header_rlp();
-        let mut header: Header = rlp::decode(&header_rlp).expect("error decoding header");
+        let hwp_ssz = get_hwp_ssz();
+        let mut header = HeaderWithProof::from_ssz_bytes(&hwp_ssz).expect("error decoding header");
 
         // set invalid block gaslimit
         // valid gaslimit = 3141592
-        header.gas_limit = U256::from(3141591);
+        header.header.gas_limit = U256::from(3141591);
 
-        let content_value = rlp::encode(&header).to_vec();
+        let content_value = header.as_ssz_bytes();
         let header_oracle = default_header_oracle(server.url("/get_header"));
         let chain_history_validator = ChainHistoryValidator { header_oracle };
-        let content_key = HistoryContentKey::BlockHeader(BlockHeader {
-            block_hash: header.hash().0,
+        let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeader {
+            block_hash: header.header.hash().0,
         });
         chain_history_validator
             .validate_content(&content_key, &content_value)

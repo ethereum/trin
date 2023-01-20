@@ -76,25 +76,18 @@ impl OverlayContentKey for IdentityContentKey {
     }
 }
 
-// *TODO*
-// Relocate the overlay content key types to their respective overlay crate post architecture
-// discussion at Devconnect - April 2022.
-//
-
 /// A content key in the history overlay network.
 #[derive(Clone, Debug, Decode, Encode, PartialEq)]
 #[ssz(enum_behaviour = "union")]
 pub enum HistoryContentKey {
-    /// A block header.
-    BlockHeader(BlockHeader),
+    /// A block header with proof.
+    BlockHeaderWithProof(BlockHeader),
     /// A block body.
     BlockBody(BlockBody),
     /// The transaction receipts for a block.
     BlockReceipts(BlockReceipts),
     /// An epoch header accumulator.
     EpochAccumulator(EpochAccumulator),
-    /// A block header with accumulator proof.
-    BlockHeaderWithProof(BlockHeader),
 }
 
 /// A key for a block header.
@@ -149,8 +142,8 @@ impl TryFrom<Vec<u8>> for HistoryContentKey {
 impl fmt::Display for HistoryContentKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
-            Self::BlockHeader(header) => format!(
-                "BlockHeader {{ block_hash: {} }}",
+            Self::BlockHeaderWithProof(header) => format!(
+                "BlockHeaderWithProof {{ block_hash: {} }}",
                 bytes::hex_encode_compact(header.block_hash)
             ),
             Self::BlockBody(body) => format!(
@@ -169,12 +162,7 @@ impl fmt::Display for HistoryContentKey {
                     bytes::hex_encode_compact(acc.epoch_hash.as_fixed_bytes())
                 )
             }
-            Self::BlockHeaderWithProof(header) => format!(
-                "BlockHeaderWithProof {{ block_hash: {} }}",
-                bytes::hex_encode_compact(header.block_hash)
-            ),
         };
-
         write!(f, "{}", s)
     }
 }
@@ -425,7 +413,7 @@ mod test {
             block_hash: BLOCK_HASH,
         };
 
-        let key = HistoryContentKey::BlockHeader(header);
+        let key = HistoryContentKey::BlockHeaderWithProof(header);
         let encoded: Vec<u8> = key.clone().into();
 
         assert_eq!(encoded, expected_content_key);

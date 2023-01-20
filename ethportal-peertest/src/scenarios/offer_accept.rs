@@ -70,6 +70,6 @@ pub fn test_offer_accept(peertest_config: PeertestConfig, peertest: &Peertest) {
     assert_eq!(
         HISTORY_CONTENT_VALUE, received_content_str,
         "The received content {}, must match the expected {}",
-        HISTORY_CONTENT_VALUE, received_content_str,
+        received_content_str, HISTORY_CONTENT_VALUE
     );
 }
