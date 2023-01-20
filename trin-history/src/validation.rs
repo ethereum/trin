@@ -3,7 +3,6 @@ use std::sync::Arc;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use ethereum_types::H256;
-use reth_primitives::SealedHeader;
 use ssz::Decode;
 use tokio::sync::RwLock;
 use tree_hash::TreeHash;
@@ -12,7 +11,9 @@ use trin_core::{
     portalnet::types::content_key::HistoryContentKey,
     types::{
         accumulator::EpochAccumulator,
-        header::BlockHeaderWithProof,
+        block_body::BlockBody,
+        header::{Header, HeaderWithProof},
+        receipts::Receipts,
         validation::{HeaderOracle, Validator},
     },
 };
@@ -34,38 +35,36 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
         match content_key {
             HistoryContentKey::BlockHeaderWithProof(_key) => {
                 let header_with_proof =
-                    BlockHeaderWithProof::from_ssz_bytes(content).map_err(|err| {
+                    HeaderWithProof::from_ssz_bytes(content).map_err(|err| {
                         anyhow!("Header with proof content has invalid encoding: {err:?}")
                     })?;
-                let header: SealedHeader =
-                    reth_rlp::Decodable::decode(&mut &header_with_proof.rlp[..]).unwrap();
                 self.header_oracle
                     .write()
                     .await
-                    .validate_header_with_proof(&header.seal(), header_with_proof.proof.unwrap())
+                    .validate_header_with_proof(header_with_proof)
             }
             HistoryContentKey::BlockHeader(_key) => {
-                let header: SealedHeader = reth_rlp::Decodable::decode(&mut &content[..])?;
+                let header: Header = rlp::decode(content)?;
                 self.header_oracle
                     .write()
                     .await
-                    .validate_header_is_canonical(&header)
+                    .validate_header_is_canonical(header)
                     .await
             }
             HistoryContentKey::BlockBody(key) => {
                 let block_body = BlockBody::from_ssz_bytes(content)
                     .map_err(|msg| anyhow!("Block Body content has invalid encoding: {:?}", msg))?;
-                let trusted_header: SealedHeader = self
+                let trusted_header: Header = self
                     .header_oracle
                     .write()
                     .await
                     .get_header_by_hash(H256::from(key.block_hash))?;
                 let actual_uncles_root = block_body.uncles_root()?;
-                if actual_uncles_root != trusted_header.ommers_hash {
+                if actual_uncles_root != trusted_header.uncles_hash {
                     return Err(anyhow!(
                         "Content validation failed: Invalid uncles root. Found: {:?} - Expected: {:?}",
                         actual_uncles_root,
-                        trusted_header.ommers_hash
+                        trusted_header.uncles_hash
                     ));
                 }
                 let actual_txs_root = block_body.transactions_root()?;
@@ -82,7 +81,7 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                 let receipts = Receipts::from_ssz_bytes(content).map_err(|msg| {
                     anyhow!("Block Receipts content has invalid encoding: {:?}", msg)
                 })?;
-                let trusted_header: SealedHeader = self
+                let trusted_header: Header = self
                     .header_oracle
                     .write()
                     .await

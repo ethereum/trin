@@ -11,7 +11,7 @@ rust-version = "1.62.0"
 anyhow = "1.0.57"
 async-trait = "0.1.53"
 discv5 = { git = "https://github.com/sigp/discv5.git", branch = "master" }
-ethereum-types = "0.12.1"
+ethereum-types = "0.12.0"
 eth_trie = "0.1.0"
 hex = "0.4.3"
 num = "0.4.0"
