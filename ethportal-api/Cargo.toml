@@ -20,7 +20,6 @@ hex-literal = "0.3.4"
 jsonrpsee = {version="0.16.2", features = ["macros"]}
 reth-primitives = { version = "0.1.0", git = "https://github.com/paradigmxyz/reth.git" }
 reth-rlp = { version = "0.1.2", git = "https://github.com/paradigmxyz/reth.git" }
-reth-rpc-types = { version = "0.1.0", git = "https://github.com/paradigmxyz/reth.git" }
 
 keccak-hash = "0.10.0"
 serde = { version = "1.0.150", features = ["derive"] }

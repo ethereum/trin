@@ -35,8 +35,8 @@ impl ContentItem for Vec<Receipt> {
         let receipts: Vec<VariableList<u8, typenum::U134217728>> = self
             .into_iter()
             .map(|receipt| {
-                let rlp = bytes::BytesMut::new();
-                Encodable::encode(&self, &mut rlp);
+                let mut rlp = bytes::BytesMut::new();
+                Encodable::encode(&receipt, &mut rlp);
                 let ssz: VariableList<u8, typenum::U134217728> = VariableList::from(rlp.to_vec());
                 ssz
             })
@@ -60,11 +60,11 @@ impl ContentItem for Vec<Receipt> {
 
 impl ContentItem for Header {
     fn encode(&self, buf: &mut [u8]) {
-        Encodable::encode(&self, &mut buf);
+        Encodable::encode(&self, &mut &mut *buf);
     }
 
     fn decode(buf: &[u8]) -> Result<Self, ContentItemDecodeError> {
-        let header: Header = Decodable::decode(&mut buf)?;
+        let header: Header = Decodable::decode(&mut &*buf)?;
         Ok(header)
     }
 }
@@ -83,7 +83,7 @@ struct HeaderWithProofSszContainer {
 
 impl ContentItem for HeaderWithProof {
     fn encode(&self, buf: &mut [u8]) {
-        let header = bytes::BytesMut::new();
+        let mut header = bytes::BytesMut::new();
         Encodable::encode(&self.header, &mut header);
         let header: VariableList<u8, typenum::U2048> = VariableList::from(header.to_vec());
         let proof = match self.proof {
@@ -101,7 +101,7 @@ impl ContentItem for HeaderWithProof {
         let header: Header = Decodable::decode(&mut &*container.header)?;
         let proof = match container.proof.0 {
             Some(proof) => {
-                let mut arr: [H256; 15];
+                let mut arr: [H256; 15] = [H256::zero(); 15];
                 arr.copy_from_slice(&proof);
                 Some(arr)
             }
@@ -126,16 +126,16 @@ struct BlockBodySszContainer {
 
 impl ContentItem for BlockBody {
     fn encode(&self, buf: &mut [u8]) {
-        let transactions: Vec<VariableList<u8, typenum::U16777216>> = Vec::new();
-        for transaction in self.transactions {
-            let rlp = bytes::BytesMut::new();
+        let mut transactions: Vec<VariableList<u8, typenum::U16777216>> = Vec::new();
+        for transaction in self.transactions.iter() {
+            let mut rlp = bytes::BytesMut::new();
             Encodable::encode(&transaction, &mut rlp);
             transactions.push(VariableList::from(rlp.to_vec()));
         }
         let transactions: VariableList<VariableList<u8, typenum::U16777216>, typenum::U16384> =
             VariableList::from(transactions);
 
-        let uncles_rlp = bytes::BytesMut::new();
+        let mut uncles_rlp = bytes::BytesMut::new();
         Encodable::encode(&self.uncles, &mut uncles_rlp);
         let uncles: VariableList<u8, typenum::U131072> = VariableList::from(uncles_rlp.to_vec());
 
@@ -168,7 +168,7 @@ pub struct HeaderRecord {
     total_difficulty: U256,
 }
 
-pub type EpochAccumulator = FixedVector<HeaderRecord, typenum::U8192>;
+pub type EpochAccumulator = VariableList<HeaderRecord, typenum::U8192>;
 
 impl ContentItem for EpochAccumulator {
     fn encode(&self, buf: &mut [u8]) {
@@ -184,7 +184,6 @@ impl ContentItem for EpochAccumulator {
 /// Portal History content items.
 /// Supports both BlockHeaderWithProof and the depreciated BlockHeader content types
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[serde(untagged)]
 pub enum HistoryContentItem {
     BlockHeaderWithProof(HeaderWithProof),
     BlockHeader(Header),
@@ -204,7 +203,7 @@ impl Serialize for HistoryContentItem {
             Self::BlockHeader(item) => ContentItem::encode(item, &mut encoded),
             Self::BlockBody(item) => item.encode(&mut encoded),
             Self::Receipts(item) => ContentItem::encode(item, &mut encoded),
-            Self::EpochAccumulator(item) => encoded.copy_from_slice(&ssz::ssz_encode(item)),
+            Self::EpochAccumulator(item) => ContentItem::encode(item, &mut encoded),
         }
         serializer.serialize_str(&format!("0x{}", hex::encode(encoded)))
     }
@@ -296,5 +295,47 @@ impl<T: ssz::Encode> ssz::Encode for SszOption<T> {
                 .checked_add(1)
                 .expect("encoded length must be less than usize::max_value"),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use ssz::{Decode, Encode};
+    use std::fs;
+
+    /// Max number of blocks / epoch = 2 ** 13
+    pub const EPOCH_SIZE: usize = 8192;
+
+    #[test]
+    fn header_with_proof_encode_decode() {
+        const TEST_VEC_ONE: &str = "0x0800000022020000f90217a08e38b4dbf6b11fcc3b9dee84fb7986e29ca0a02cecd8977c161ff7333329681ea01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347942a65aca4d5fc5b5c859090a6c34d164135398226a07dd4aabb93795feba9866821c0c7d6a992eda7fbdd412ea0f715059f9654ef23a0c61c50a0a2800ddc5e9984af4e6668de96aee1584179b3141f458ffa7d4ecec6a0b873ddefdb56d448343d13b188241a4919b2de10cccea2ea573acf8dbc839befb9010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000860b6b4bbd735f830f4241832fefd88252088456bfb41a98d783010303844765746887676f312e352e31856c696e7578a0d5332614a151dd917b84fc5ff62580d7099edb7c37e0ac843d873de978d50352889112b8c2b377fbe801c971eaaa41600563000000000000000000000000000000000000000000000000629f9dbe275316ef21073133b8ecec062a44e20201be7b24a22c56db91df336f0c71aaaec1b3526027a54b15387ef014fcd18bb46e90e05657b46418fd326e785392c40ec6d38f000042798fee52ed833ff376b1d5a95dc7c2356dc8d8d02e30b704e9ee8e4d712920a18fd4e8833a7979a14e5b972d4b27958dcfa5187e3aa14d61c29c3fda0fb425078a0479c5ea375ff95ad7780d0cdc87012009fd4a3dd003b06c7a28d6188e6be50ac544548cc7e3ee6cd07a8129f5c6d4d494b62ee8d96d26d0875bc87b56be0bf3e45846c0e3773abfccc239fdab29640b4e2aef297efcc6cb89b00a2566221cb4197ece3f66c24ea89969bd16265a74910aaf08d775116191117416b8799d0984f452a6fba19623442a7f199ef1627f1ae7295963a67db5534a292f98edbfb419ed85756abe76cd2d2bff8eb9b848b1e7b80b8274bbc469a36dce58b48ae57be6312bca843463ac45c54122a9f3fa9dca124b0fd50bce300708549c77b81b031278b9d193464f5e4b14769f6018055a457a577c508e811bcf55b297df3509f3db7e66ec68451e25acfbf935200e246f71e3c48240d00020000000000000000000000000000000000000000000000000000000000000";
+
+        const TEST_VEC_TWO: &str = "0x0800000022020000f90217a0cb5cab7266694daa0d28cbf40496c08dd30bf732c41e0455e7ad389c10d79f4fa01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d493479495581ea0c5b362933f3523138f54d51eae817211a0643430d1afc3f02ce5249e4ba5979fb8601b1907a5923a4a74d36d66321a27e5a0dbdf7457111e50e435853974d5412c2151fde6e3c2e3f5aecc253aa4cb21fce2a097097902b6b4d6b695ef16b923e33b8780d95cf4bd54540ac450deb019d07647b9010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000860b69de53fcb1830f4242832fefd882f6188456bfb42e98d783010303844765746887676f312e352e31856c696e7578a0a01f9d00ac510a726f883459834e30cfe085f47b04e22f72207f5a9e9d652ca6881c080c4ec6f2553b017a6e3e89ab6b056300000000000000000000000000000000000000000000000030a7f33265c53f74e978e394ce395aaf1247e8d878ad7924c730beedf21f997ef4cb3507d87cf63a4e94fd8d559a5aa29598a0fbc997b3d7abb68cb9239d83c35392c40ec6d38f000042798fee52ed833ff376b1d5a95dc7c2356dc8d8d02e30b704e9ee8e4d712920a18fd4e8833a7979a14e5b972d4b27958dcfa5187e3aa14d61c29c3fda0fb425078a0479c5ea375ff95ad7780d0cdc87012009fd4a3dd003b06c7a28d6188e6be50ac544548cc7e3ee6cd07a8129f5c6d4d494b62ee8d96d26d0875bc87b56be0bf3e45846c0e3773abfccc239fdab29640b4e2aef297efcc6cb89b00a2566221cb4197ece3f66c24ea89969bd16265a74910aaf08d775116191117416b8799d0984f452a6fba19623442a7f199ef1627f1ae7295963a67db5534a292f98edbfb419ed85756abe76cd2d2bff8eb9b848b1e7b80b8274bbc469a36dce58b48ae57be6312bca843463ac45c54122a9f3fa9dca124b0fd50bce300708549c77b81b031278b9d193464f5e4b14769f6018055a457a577c508e811bcf55b297df3509f3db7e66ec68451e25acfbf935200e246f71e3c48240d00020000000000000000000000000000000000000000000000000000000000000";
+
+        let bytes = &hex::decode(TEST_VEC_ONE.strip_prefix("0x").unwrap()).unwrap();
+        let _ = HeaderWithProof::decode(bytes).unwrap();
+
+        let bytes = &hex::decode(TEST_VEC_TWO.strip_prefix("0x").unwrap()).unwrap();
+        let _ = HeaderWithProof::decode(bytes).unwrap();
+    }
+
+    #[test]
+    fn ssz_serde_encode_decode_fluffy_epoch_accumulator() {
+        // values sourced from: https://github.com/status-im/portal-spec-tests
+        let epoch_acc_ssz = fs::read("./src/assets/test/fluffy_epoch_acc.bin").unwrap();
+        let epoch_acc = EpochAccumulator::from_ssz_bytes(&epoch_acc_ssz).unwrap();
+        assert_eq!(epoch_acc.len(), EPOCH_SIZE);
+        assert_eq!(epoch_acc.as_ssz_bytes(), epoch_acc_ssz);
+    }
+
+    #[test]
+    fn ssz_serde_encode_decode_ultralight_epoch_accumulator() {
+        let epoch_acc_hex =
+            fs::read_to_string("./src/assets/test/ultralight_testEpoch.hex").unwrap();
+        let epoch_acc_ssz = hex::decode(epoch_acc_hex.strip_prefix("0x").unwrap()).unwrap();
+        let epoch_acc = EpochAccumulator::from_ssz_bytes(&epoch_acc_ssz).unwrap();
+        assert_eq!(epoch_acc.len(), EPOCH_SIZE);
+        assert_eq!(epoch_acc.as_ssz_bytes(), epoch_acc_ssz);
     }
 }

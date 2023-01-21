@@ -1,4 +1,3 @@
-pub mod accumulator;
 pub mod content_item;
 pub mod content_key;
 pub mod discv5;

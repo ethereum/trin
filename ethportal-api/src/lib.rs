@@ -10,14 +10,14 @@ mod web3;
 pub use discv5::*;
 pub use history::*;
 pub use types::{
-    accumulator::EpochAccumulator,
-    block_body::BlockBody,
-    block_header::{BlockHeader, BlockHeaderWithProof},
-    content_item::HistoryContentItem,
+    content_item::{
+        ContentItem, EpochAccumulator, HeaderRecord, HeaderWithProof, HistoryContentItem,
+    },
     content_key::HistoryContentKey,
-    receipts::BlockReceipts,
 };
 pub use web3::*;
 
 // Re-exports jsonrpsee crate
 pub use jsonrpsee;
+
+pub use reth_primitives::{Header, Receipt, TransactionSigned};
