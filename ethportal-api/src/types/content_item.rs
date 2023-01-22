@@ -29,25 +29,25 @@ pub trait ContentItem: Sized {
     fn decode(buf: &[u8]) -> Result<Self, ContentItemDecodeError>;
 }
 
+type SszReceipt = VariableList<u8, typenum::U134217728>;
+type SszReceiptList = VariableList<SszReceipt, typenum::U16384>;
+
 impl ContentItem for Vec<Receipt> {
     fn encode(&self, buf: &mut [u8]) {
-        let ssz: VariableList<VariableList<u8, typenum::U134217728>, typenum::U16384>;
-        let receipts: Vec<VariableList<u8, typenum::U134217728>> = self
+        let receipts: Vec<SszReceipt> = self
             .into_iter()
             .map(|receipt| {
                 let mut rlp = bytes::BytesMut::new();
                 Encodable::encode(&receipt, &mut rlp);
-                let ssz: VariableList<u8, typenum::U134217728> = VariableList::from(rlp.to_vec());
-                ssz
+                VariableList::from(rlp.to_vec())
             })
             .collect();
-        ssz = VariableList::from(receipts);
+        let ssz: SszReceiptList = VariableList::from(receipts);
         buf.copy_from_slice(&ssz::ssz_encode(&ssz));
     }
 
     fn decode(buf: &[u8]) -> Result<Self, ContentItemDecodeError> {
-        let ssz: VariableList<VariableList<u8, typenum::U134217728>, typenum::U16384> =
-            VariableList::from_ssz_bytes(buf)?;
+        let ssz: SszReceiptList = VariableList::from_ssz_bytes(buf)?;
         let receipts: Result<Self, ContentItemDecodeError> = ssz
             .into_iter()
             .map(|ssz| {
@@ -69,23 +69,28 @@ impl ContentItem for Header {
     }
 }
 
+pub const EPOCH_ACC_PROOF_LEN: usize = 15;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HeaderWithProof {
-    header: Header,
-    proof: Option<[H256; 15]>,
+    pub header: Header,
+    pub proof: Option<[H256; EPOCH_ACC_PROOF_LEN]>,
 }
+
+type SszEncodedHeader = VariableList<u8, typenum::U2048>;
+type SszHeaderProof = FixedVector<H256, typenum::U15>;
 
 #[derive(Decode, Encode)]
 struct HeaderWithProofSszContainer {
-    header: VariableList<u8, typenum::U2048>,
-    proof: SszOption<FixedVector<H256, typenum::U15>>,
+    header: SszEncodedHeader,
+    proof: SszOption<SszHeaderProof>,
 }
 
 impl ContentItem for HeaderWithProof {
     fn encode(&self, buf: &mut [u8]) {
         let mut header = bytes::BytesMut::new();
         Encodable::encode(&self.header, &mut header);
-        let header: VariableList<u8, typenum::U2048> = VariableList::from(header.to_vec());
+        let header: SszEncodedHeader = VariableList::from(header.to_vec());
         let proof = match self.proof {
             Some(proof) => SszOption(Some(FixedVector::from(proof.to_vec()))),
             None => SszOption(None),
@@ -101,7 +106,7 @@ impl ContentItem for HeaderWithProof {
         let header: Header = Decodable::decode(&mut &*container.header)?;
         let proof = match container.proof.0 {
             Some(proof) => {
-                let mut arr: [H256; 15] = [H256::zero(); 15];
+                let mut arr: [H256; EPOCH_ACC_PROOF_LEN] = [H256::zero(); EPOCH_ACC_PROOF_LEN];
                 arr.copy_from_slice(&proof);
                 Some(arr)
             }
@@ -114,30 +119,33 @@ impl ContentItem for HeaderWithProof {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BlockBody {
-    transactions: Vec<TransactionSigned>,
-    uncles: Vec<Header>,
+    pub transactions: Vec<TransactionSigned>,
+    pub uncles: Vec<Header>,
 }
+
+type SszTransaction = VariableList<u8, typenum::U16777216>;
+type SszTransactionList = VariableList<SszTransaction, typenum::U16384>;
+type SszUncles = VariableList<u8, typenum::U131072>;
 
 #[derive(Decode, Encode)]
 struct BlockBodySszContainer {
-    transactions: VariableList<VariableList<u8, typenum::U16777216>, typenum::U16384>,
-    uncles: VariableList<u8, typenum::U131072>,
+    transactions: SszTransactionList,
+    uncles: SszUncles,
 }
 
 impl ContentItem for BlockBody {
     fn encode(&self, buf: &mut [u8]) {
-        let mut transactions: Vec<VariableList<u8, typenum::U16777216>> = Vec::new();
+        let mut transactions: Vec<SszTransaction> = Vec::new();
         for transaction in self.transactions.iter() {
             let mut rlp = bytes::BytesMut::new();
             Encodable::encode(&transaction, &mut rlp);
             transactions.push(VariableList::from(rlp.to_vec()));
         }
-        let transactions: VariableList<VariableList<u8, typenum::U16777216>, typenum::U16384> =
-            VariableList::from(transactions);
+        let transactions: SszTransactionList = VariableList::from(transactions);
 
         let mut uncles_rlp = bytes::BytesMut::new();
         Encodable::encode(&self.uncles, &mut uncles_rlp);
-        let uncles: VariableList<u8, typenum::U131072> = VariableList::from(uncles_rlp.to_vec());
+        let uncles: SszUncles = VariableList::from(uncles_rlp.to_vec());
 
         let container = BlockBodySszContainer {
             transactions,
@@ -164,8 +172,8 @@ impl ContentItem for BlockBody {
 
 #[derive(Clone, Debug, PartialEq, Eq, Decode, Encode)]
 pub struct HeaderRecord {
-    hash: H256,
-    total_difficulty: U256,
+    pub hash: H256,
+    pub total_difficulty: U256,
 }
 
 pub type EpochAccumulator = VariableList<HeaderRecord, typenum::U8192>;
