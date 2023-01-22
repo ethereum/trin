@@ -11,7 +11,7 @@ pub use discv5::*;
 pub use history::*;
 pub use types::{
     content_item::{
-        ContentItem, EpochAccumulator, HeaderRecord, HeaderWithProof, HistoryContentItem,
+        BlockBody, ContentItem, EpochAccumulator, HeaderRecord, HeaderWithProof, HistoryContentItem,
     },
     content_key::HistoryContentKey,
 };

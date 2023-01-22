@@ -1547,7 +1547,7 @@ checksum = "0198b9d0078e0f30dedc7acbb21c974e838fc8fae3ee170128658a98cb2c1c04"
 
 [[package]]
 name = "ethportal-api"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "bytes 1.3.0",
  "enr 0.7.0",
