@@ -5,7 +5,6 @@ use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::{mpsc, RwLock};
 use tracing::info;
 
-use trin_core::jsonrpc::service::launch_ipc_client;
 use trin_core::jsonrpc::types::HistoryJsonRpcRequest;
 use trin_core::{
     cli::{TrinConfig, HISTORY_NETWORK, STATE_NETWORK},
@@ -115,19 +114,13 @@ pub async fn run_trin(
     // Initialize json-rpc server
     let (portal_jsonrpc_tx, portal_jsonrpc_rx) = mpsc::unbounded_channel::<PortalJsonRpcRequest>();
     let jsonrpc_trin_config = trin_config.clone();
-    let (live_server_tx, mut live_server_rx) = tokio::sync::mpsc::channel::<bool>(1);
     let json_exiter = Arc::new(JsonRpcExiter::new());
     {
         let jsonrpc_discovery = Arc::clone(&discovery);
         let history_jsonrpc_tx_clone = history_jsonrpc_tx.clone();
-        let json_exiter_clone = Arc::clone(&json_exiter);
         tokio::spawn(async {
             launch_jsonrpc_server(
                 jsonrpc_trin_config,
-                trusted_provider,
-                portal_jsonrpc_tx,
-                live_server_tx,
-                json_exiter_clone,
                 jsonrpc_discovery,
                 history_jsonrpc_tx_clone,
             )
@@ -176,33 +169,27 @@ pub async fn run_trin(
         tokio::spawn(async { network.await });
     }
 
-    let _ = live_server_rx.recv().await;
-    live_server_rx.close();
-
     Ok(json_exiter)
 }
 
+// FIXME: Handle those unwraps in this method
 async fn launch_jsonrpc_server(
     trin_config: TrinConfig,
-    trusted_provider: TrustedProvider,
-    portal_tx: UnboundedSender<PortalJsonRpcRequest>,
-    live_server_tx: mpsc::Sender<bool>,
-    json_rpc_exiter: Arc<JsonRpcExiter>,
     discv5: Arc<Discovery>,
     history_handler: Option<UnboundedSender<HistoryJsonRpcRequest>>,
 ) {
     match trin_config.web3_transport.as_str() {
-        "ipc" => launch_ipc_client(
-            trusted_provider,
-            &trin_config.web3_ipc_path,
-            portal_tx,
-            live_server_tx,
-            json_rpc_exiter,
-            trin_config.clone(),
-        ),
+        "ipc" => {
+            // Launch jsonrpsee server with http and WS transport
+            let handle =
+                JsonRpcServer::run_ipc(trin_config.web3_ipc_path, discv5, history_handler.unwrap())
+                    .await
+                    .unwrap();
+            tokio::spawn(handle.stopped()); //FIXME: This runs the server forever
+            info!("IPC JSON-RPC server launched.");
+        }
         "http" => {
             // Launch jsonrpsee server with http and WS transport
-            // FIXME: Handle those unwraps
             let handle = JsonRpcServer::run_http(
                 trin_config.web3_http_address,
                 discv5,
@@ -211,7 +198,7 @@ async fn launch_jsonrpc_server(
             .await
             .unwrap();
             tokio::spawn(handle.stopped()); //FIXME: This runs the server forever
-            info!("Jsonrpsee HTTP server launched.");
+            info!("HTTP JSON-RPC server launched.");
         }
         val => panic!("Unsupported web3 transport: {}", val),
     }
