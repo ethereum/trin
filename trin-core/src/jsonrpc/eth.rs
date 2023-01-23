@@ -11,11 +11,13 @@ use crate::{
         handlers::proxy_query_to_history_subnet,
         types::{GetBlockByHashParams, GetBlockByNumberParams, HistoryJsonRpcRequest, Params},
     },
-    portalnet::types::content_key::{BlockHeader, HistoryContentKey},
     types::header::HeaderWithProof,
     types::validation::{HeaderOracle, MERGE_BLOCK_NUMBER},
-    utils::bytes::{hex_decode, hex_encode},
+    utils::bytes::hex_decode,
 };
+
+use ethportal_api::types::content_key::BlockHeaderKey;
+use ethportal_api::HistoryContentKey;
 
 /// eth_getBlockByHash
 pub async fn get_block_by_hash(
@@ -23,16 +25,13 @@ pub async fn get_block_by_hash(
     history_jsonrpc_tx: &Option<mpsc::UnboundedSender<HistoryJsonRpcRequest>>,
 ) -> anyhow::Result<Value> {
     let params: GetBlockByHashParams = params.try_into()?;
-    let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeader {
+    let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
         block_hash: params.block_hash,
     });
-    let endpoint = HistoryEndpoint::RecursiveFindContent;
-    let bytes_content_key: Vec<u8> = content_key.into();
-    let hex_content_key = hex_encode(bytes_content_key);
-    let overlay_params = Params::Array(vec![Value::String(hex_content_key)]);
+    let endpoint = HistoryEndpoint::RecursiveFindContent(content_key);
 
     let resp = match history_jsonrpc_tx.as_ref() {
-        Some(tx) => proxy_query_to_history_subnet(tx, endpoint, overlay_params).await,
+        Some(tx) => proxy_query_to_history_subnet(tx, endpoint).await,
         None => Err(anyhow!("Chain history subnetwork unavailable.")),
     };
 

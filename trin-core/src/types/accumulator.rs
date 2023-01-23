@@ -2,8 +2,10 @@ use std::path::PathBuf;
 
 use anyhow::anyhow;
 use ethereum_types::{H256, U256};
+use ethportal_api::types::content_key::EpochAccumulatorKey;
+use ethportal_api::HistoryContentKey;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 use ssz::Decode;
 use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, VariableList};
@@ -12,16 +14,13 @@ use tree_hash::TreeHash;
 use tree_hash_derive::TreeHash;
 
 use crate::jsonrpc::endpoints::HistoryEndpoint;
-use crate::jsonrpc::types::{HistoryJsonRpcRequest, Params};
-use crate::portalnet::types::content_key::{
-    EpochAccumulator as EpochAccumulatorKey, HistoryContentKey,
-};
+use crate::jsonrpc::types::HistoryJsonRpcRequest;
 use crate::types::{
     header::{BlockHeaderProof, Header, HeaderWithProof},
     merkle::proof::{verify_merkle_proof, MerkleTree},
     validation::MERGE_BLOCK_NUMBER,
 };
-use crate::utils::bytes::{hex_decode, hex_encode};
+use crate::utils::bytes::hex_decode;
 
 /// Max number of blocks / epoch = 2 ** 13
 pub const EPOCH_SIZE: usize = 8192;
@@ -117,16 +116,12 @@ impl MasterAccumulator {
         epoch_hash: H256,
         history_jsonrpc_tx: mpsc::UnboundedSender<HistoryJsonRpcRequest>,
     ) -> anyhow::Result<EpochAccumulator> {
-        let content_key: Vec<u8> =
-            HistoryContentKey::EpochAccumulator(EpochAccumulatorKey { epoch_hash }).into();
-        let content_key = hex_encode(content_key);
-        let endpoint = HistoryEndpoint::RecursiveFindContent;
-        let params = Params::Array(vec![json!(content_key)]);
+        let content_key = HistoryContentKey::EpochAccumulator(EpochAccumulatorKey { epoch_hash });
+        let endpoint = HistoryEndpoint::RecursiveFindContent(content_key);
         let (resp_tx, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
         let request = HistoryJsonRpcRequest {
             endpoint,
             resp: resp_tx,
-            params,
         };
         history_jsonrpc_tx.send(request).unwrap();
 
@@ -249,9 +244,10 @@ mod test {
     use rstest::*;
     use ssz::Decode;
 
-    use crate::jsonrpc::types::RecursiveFindContentParams;
     use crate::types::header::{AccumulatorProof, BlockHeaderProof, HeaderWithProof, SszNone};
     use crate::types::validation::DEFAULT_MASTER_ACC_HASH;
+    use crate::utils::bytes::hex_encode;
+    use serde_json::json;
 
     #[rstest]
     #[case(1_000_001)]
@@ -407,17 +403,20 @@ mod test {
 
     async fn spawn_mock_epoch_acc_lookup(rx: &mut mpsc::UnboundedReceiver<HistoryJsonRpcRequest>) {
         match rx.recv().await {
-            Some(request) => {
-                let response = RecursiveFindContentParams::try_from(request.params).unwrap();
-                let response = hex_encode(response.content_key.to_vec());
-                let epoch_acc_hash = response.trim_start_matches("0x03");
-                let epoch_acc_hash = H256::from_str(epoch_acc_hash).unwrap();
-                let epoch_acc_path = format!("./src/assets/test/epoch_accs/{epoch_acc_hash}.bin");
-                let epoch_acc = fs::read(epoch_acc_path).unwrap();
-                let epoch_acc = hex_encode(epoch_acc);
-                let content: Value = json!(epoch_acc);
-                let _ = request.resp.send(Ok(content));
-            }
+            Some(request) => match request.endpoint {
+                HistoryEndpoint::RecursiveFindContent(content_key) => {
+                    let response = serde_json::to_string(&content_key).unwrap();
+                    let epoch_acc_hash = response.trim_start_matches("0x03");
+                    let epoch_acc_hash = H256::from_str(epoch_acc_hash).unwrap();
+                    let epoch_acc_path =
+                        format!("./src/assets/test/epoch_accs/{epoch_acc_hash}.bin");
+                    let epoch_acc = fs::read(epoch_acc_path).unwrap();
+                    let epoch_acc = hex_encode(epoch_acc);
+                    let content: Value = json!(epoch_acc);
+                    let _ = request.resp.send(Ok(content));
+                }
+                _ => panic!("Unexpected request endpoint"),
+            },
             None => {
                 panic!("Test run failed: Unable to get response from master_acc validation.")
             }

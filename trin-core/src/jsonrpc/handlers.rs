@@ -39,7 +39,7 @@ impl JsonRpcHandler {
                     Discv5Endpoint::RoutingTableInfo => Ok(self.discovery.routing_table_info()),
                 },
                 TrinEndpoint::HistoryEndpoint(endpoint) => match self.history_jsonrpc_tx.as_ref() {
-                    Some(tx) => proxy_query_to_history_subnet(tx, endpoint, request.params).await,
+                    Some(tx) => proxy_query_to_history_subnet(tx, endpoint).await,
                     None => Err(anyhow!("Chain history subnetwork unavailable.")),
                 },
                 TrinEndpoint::StateEndpoint(endpoint) => match self.state_jsonrpc_tx.as_ref() {
@@ -80,13 +80,11 @@ impl JsonRpcHandler {
 pub async fn proxy_query_to_history_subnet(
     subnet_tx: &mpsc::UnboundedSender<HistoryJsonRpcRequest>,
     endpoint: HistoryEndpoint,
-    params: Params,
 ) -> anyhow::Result<Value> {
     let (resp_tx, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
     let message = HistoryJsonRpcRequest {
         endpoint,
         resp: resp_tx,
-        params,
     };
     let _ = subnet_tx.send(message);
     match resp_rx.recv().await {

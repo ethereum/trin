@@ -64,7 +64,6 @@ pub struct PortalJsonRpcRequest {
 pub struct HistoryJsonRpcRequest {
     pub endpoint: HistoryEndpoint,
     pub resp: Responder<Value, String>,
-    pub params: Params,
 }
 
 /// State network JSON-RPC request
