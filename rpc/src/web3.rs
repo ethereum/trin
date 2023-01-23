@@ -1,12 +1,13 @@
 use crate::jsonrpsee::core::{async_trait, RpcResult};
 use ethportal_api::Web3ApiServer;
+use trin_core::TRIN_VERSION;
 
 pub struct Web3Api;
 
 #[async_trait]
 impl Web3ApiServer for Web3Api {
     async fn client_version(&self) -> RpcResult<String> {
-        todo!()
+        Ok(format!("trin v{}", TRIN_VERSION.to_owned()))
     }
 }
 

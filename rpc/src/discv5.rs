@@ -1,4 +1,5 @@
 use crate::jsonrpsee::core::{async_trait, RpcResult};
+use ethportal_api::jsonrpsee::core::Error;
 use ethportal_api::types::discv5::{Enr, NodeId, NodeInfo, RoutingTableInfo};
 use ethportal_api::Discv5ApiServer;
 use std::sync::Arc;
@@ -18,7 +19,7 @@ impl Discv5Api {
 impl Discv5ApiServer for Discv5Api {
     /// Returns ENR and Node ID information of the local discv5 node.
     async fn node_info(&self) -> RpcResult<NodeInfo> {
-        todo!()
+        Ok(self.discv5.node_info()?)
     }
 
     /// Update the socket address of the local node record.
@@ -27,32 +28,32 @@ impl Discv5ApiServer for Discv5Api {
         _socket_addr: String,
         _is_tcp: Option<bool>,
     ) -> RpcResult<NodeInfo> {
-        todo!()
+        Err(Error::MethodNotFound("update_node_info".to_owned()))
     }
 
     /// Returns meta information about discv5 routing table.
     async fn routing_table_info(&self) -> RpcResult<RoutingTableInfo> {
-        todo!()
+        Err(Error::MethodNotFound("routing_table_info".to_owned()))
     }
 
     /// Write an Ethereum Node Record to the routing table.
     async fn add_enr(&self, _enr: Enr) -> RpcResult<bool> {
-        todo!()
+        Err(Error::MethodNotFound("add_enr".to_owned()))
     }
 
     /// Fetch the latest ENR associated with the given node ID.
     async fn get_enr(&self, _node_id: NodeId) -> RpcResult<Enr> {
-        todo!()
+        Err(Error::MethodNotFound("get_enr".to_owned()))
     }
 
     /// Delete Node ID from the routing table.
     async fn delete_enr(&self, _node_id: NodeId) -> RpcResult<bool> {
-        todo!()
+        Err(Error::MethodNotFound("delete_enr".to_owned()))
     }
 
     /// Fetch the ENR representation associated with the given Node ID and optional sequence number.
     async fn lookup_enr(&self, _node_id: NodeId, _enr_seq: Option<u32>) -> RpcResult<Enr> {
-        todo!()
+        Err(Error::MethodNotFound("lookup_enr".to_owned()))
     }
 }
 
