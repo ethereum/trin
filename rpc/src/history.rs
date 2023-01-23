@@ -1,4 +1,5 @@
 use crate::jsonrpsee::core::{async_trait, RpcResult};
+use anyhow::anyhow;
 use ethportal_api::types::discv5::{Enr, NodeId, RoutingTableInfo};
 use ethportal_api::types::portal::{
     AcceptInfo, ContentInfo, DataRadius, PaginateLocalContentInfo, PongInfo, TraceContentInfo,
@@ -6,7 +7,10 @@ use ethportal_api::types::portal::{
 use ethportal_api::HistoryNetworkApiServer;
 use ethportal_api::{HistoryContentItem, HistoryContentKey};
 
+use ethportal_api::jsonrpsee::core::__reexports::serde_json::from_value;
+use ethportal_api::jsonrpsee::core::__reexports::serde_json::Value;
 use tokio::sync::mpsc;
+use trin_core::jsonrpc::endpoints::HistoryEndpoint;
 use trin_core::jsonrpc::types::HistoryJsonRpcRequest;
 
 pub struct HistoryNetworkApi {
@@ -16,6 +20,29 @@ pub struct HistoryNetworkApi {
 impl HistoryNetworkApi {
     pub fn new(network: mpsc::UnboundedSender<HistoryJsonRpcRequest>) -> Self {
         Self { network }
+    }
+
+    pub async fn proxy_query_to_history_subnet(
+        &self,
+        endpoint: HistoryEndpoint,
+    ) -> anyhow::Result<Value> {
+        let (resp_tx, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
+        let message = HistoryJsonRpcRequest {
+            endpoint,
+            resp: resp_tx,
+        };
+        let _ = self.network.send(message);
+
+        match resp_rx.recv().await {
+            Some(val) => match val {
+                Ok(result) => Ok(result),
+                Err(msg) => Err(anyhow!(
+                    "Error returned from chain history subnetwork: {:?}",
+                    msg
+                )),
+            },
+            None => Err(anyhow!("No response from chain history subnetwork")),
+        }
     }
 }
 
@@ -47,8 +74,11 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
     }
 
     /// Send a PING message to the designated node and wait for a PONG response
-    async fn ping(&self, _enr: Enr, _data_radius: Option<DataRadius>) -> RpcResult<PongInfo> {
-        todo!()
+    async fn ping(&self, enr: Enr, data_radius: Option<DataRadius>) -> RpcResult<PongInfo> {
+        let endpoint = HistoryEndpoint::Ping(enr, data_radius);
+        let result = self.proxy_query_to_history_subnet(endpoint).await?;
+        let result: PongInfo = from_value(result)?;
+        Ok(result)
     }
 
     /// Send a FINDNODES request for nodes that fall within the given set of distances, to the designated
