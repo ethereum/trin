@@ -7,7 +7,7 @@ executors:
     environment:
       IMAGE_NAME: ogenev/trin
     docker:
-      - image: cimg/rust:1.66.0
+      - image: cimg/rust:1.66.1
 jobs:
   docker-build:
     executor: docker-publisher
@@ -44,7 +44,7 @@ jobs:
         resource_class: xlarge
         executor:
             name: rust/default
-            tag: 1.66.0
+            tag: 1.66.1
         environment:
             RUSTFLAGS: '-D warnings'
             RUST_LOG: 'debug'
