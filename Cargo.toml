@@ -3,7 +3,7 @@ name = "trin"
 version = "0.1.0"
 authors = ["Jacob Kaufmann <jacobkaufmann18@gmail.com>", "Jason Carver <ut96caarrs@snkmail.com>"]
 edition = "2021"
-rust-version = "1.62.0"
+rust-version = "1.66.0"
 default-run = "trin"
 repository = "https://github.com/ethereum/trin"
 
