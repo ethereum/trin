@@ -2,13 +2,13 @@ use std::sync::Arc;
 
 use rpc::JsonRpcServer;
 use tokio::sync::mpsc::UnboundedSender;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::RwLock;
 use tracing::info;
 
 use trin_core::jsonrpc::types::HistoryJsonRpcRequest;
 use trin_core::{
     cli::{TrinConfig, HISTORY_NETWORK, STATE_NETWORK},
-    jsonrpc::{handlers::JsonRpcHandler, service::JsonRpcExiter, types::PortalJsonRpcRequest},
+    jsonrpc::service::JsonRpcExiter,
     portalnet::{
         discovery::Discovery, events::PortalnetEvents, storage::PortalStorageConfig,
         types::messages::PortalnetConfig,
@@ -73,7 +73,7 @@ pub async fn run_trin(
     let header_oracle = Arc::new(RwLock::new(header_oracle));
 
     // Initialize state sub-network service and event handlers, if selected
-    let (state_handler, state_network_task, state_event_tx, state_utp_tx, state_jsonrpc_tx) =
+    let (state_handler, state_network_task, state_event_tx, state_utp_tx, _state_jsonrpc_tx) =
         if trin_config.networks.iter().any(|val| val == STATE_NETWORK) {
             initialize_state_network(
                 &discovery,
@@ -111,34 +111,11 @@ pub async fn run_trin(
         (None, None, None, None, None)
     };
 
-    // Initialize json-rpc server
-    let (portal_jsonrpc_tx, portal_jsonrpc_rx) = mpsc::unbounded_channel::<PortalJsonRpcRequest>();
+    // Launch JSON-RPC server
     let jsonrpc_trin_config = trin_config.clone();
     let json_exiter = Arc::new(JsonRpcExiter::new());
-    {
-        let jsonrpc_discovery = Arc::clone(&discovery);
-        let history_jsonrpc_tx_clone = history_jsonrpc_tx.clone();
-        tokio::spawn(async {
-            launch_jsonrpc_server(
-                jsonrpc_trin_config,
-                jsonrpc_discovery,
-                history_jsonrpc_tx_clone,
-            )
-            .await
-        });
-    }
-
-    // Spawn main JsonRpc Handler
     let jsonrpc_discovery = Arc::clone(&discovery);
-    let rpc_handler = JsonRpcHandler {
-        discovery: jsonrpc_discovery,
-        portal_jsonrpc_rx,
-        state_jsonrpc_tx,
-        history_jsonrpc_tx,
-        header_oracle: header_oracle.clone(),
-    };
-
-    tokio::spawn(rpc_handler.process_jsonrpc_requests());
+    launch_jsonrpc_server(jsonrpc_trin_config, jsonrpc_discovery, history_jsonrpc_tx).await;
 
     if let Some(handler) = state_handler {
         tokio::spawn(handler.handle_client_queries());
