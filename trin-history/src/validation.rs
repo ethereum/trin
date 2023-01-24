@@ -136,12 +136,9 @@ mod tests {
 
     use trin_core::{
         cli::DEFAULT_MASTER_ACC_PATH,
-        portalnet::types::{
-            content_key::{
-                BlockBody as BlockBodyKey, BlockHeader, BlockReceipts,
-                EpochAccumulator as EpochAccumulatorKey,
-            },
-            messages::ByteList,
+        portalnet::types::content_key::{
+            BlockBody as BlockBodyKey, BlockHeader, BlockReceipts,
+            EpochAccumulator as EpochAccumulatorKey,
         },
         types::accumulator::MasterAccumulator,
         utils::{bytes::hex_decode, provider::TrustedProvider},
@@ -230,8 +227,6 @@ mod tests {
     async fn validate_header() {
         let server = setup_mock_infura_server();
         let header_rlp = get_header_rlp();
-        let header_bytelist = ByteList::try_from(header_rlp.clone()).unwrap();
-
         let header: Header = rlp::decode(&header_rlp).expect("error decoding header");
         let header_oracle = default_header_oracle(server.url("/get_header"));
         let chain_history_validator = ChainHistoryValidator { header_oracle };
@@ -239,7 +234,7 @@ mod tests {
             block_hash: header.hash().0,
         });
         chain_history_validator
-            .validate_content(&content_key, &header_bytelist)
+            .validate_content(&content_key, &header_rlp)
             .await
             .unwrap();
     }
@@ -255,14 +250,14 @@ mod tests {
         // set invalid block height
         header.number = 669052;
 
-        let header_bytelist = ByteList::from(rlp::encode(&header).to_vec());
+        let header_rlp = rlp::encode(&header).to_vec();
         let header_oracle = default_header_oracle(server.url("/get_header"));
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = HistoryContentKey::BlockHeader(BlockHeader {
             block_hash: header.hash().0,
         });
         chain_history_validator
-            .validate_content(&content_key, &header_bytelist)
+            .validate_content(&content_key, &header_rlp)
             .await
             .unwrap();
     }
@@ -279,14 +274,14 @@ mod tests {
         // valid gaslimit = 3141592
         header.gas_limit = U256::from(3141591);
 
-        let header_bytelist = ByteList::from(rlp::encode(&header).to_vec());
+        let content_value = rlp::encode(&header).to_vec();
         let header_oracle = default_header_oracle(server.url("/get_header"));
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = HistoryContentKey::BlockHeader(BlockHeader {
             block_hash: header.hash().0,
         });
         chain_history_validator
-            .validate_content(&content_key, &header_bytelist)
+            .validate_content(&content_key, &content_value)
             .await
             .unwrap();
     }

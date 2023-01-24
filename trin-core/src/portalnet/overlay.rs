@@ -18,7 +18,6 @@ use futures::{channel::oneshot, future::join_all};
 use parking_lot::RwLock;
 use rand::seq::IteratorRandom;
 use ssz::Encode;
-use ssz_types::VariableList;
 use tokio::{sync::mpsc::UnboundedSender, task::JoinHandle};
 use tracing::{debug, error, info, warn};
 
@@ -33,8 +32,8 @@ use crate::{
             content_key::{OverlayContentKey, RawContentKey},
             distance::{Distance, Metric, XorMetric},
             messages::{
-                Accept, ByteList, Content, CustomPayload, FindContent, FindNodes, Message, Nodes,
-                Offer, Ping, Pong, PopulatedOffer, ProtocolId, Request, Response,
+                Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer,
+                Ping, Pong, PopulatedOffer, ProtocolId, Request, Response,
             },
             node::Node,
         },
@@ -319,7 +318,6 @@ where
                                 );
                             }
                         }
-
                         Some((key, content_value))
                     })
                 })
@@ -337,7 +335,7 @@ where
     }
 
     /// Propagate gossip accepted content via OFFER/ACCEPT, return number of peers propagated
-    pub fn propagate_gossip(&self, content: Vec<(TContentKey, ByteList)>) -> usize {
+    pub fn propagate_gossip(&self, content: Vec<(TContentKey, Vec<u8>)>) -> usize {
         let kbuckets = Arc::clone(&self.kbuckets);
         let command_tx = self.command_tx.clone();
         Self::propagate_gossip_cross_thread(content, kbuckets, command_tx)
@@ -345,7 +343,7 @@ where
 
     // Propagate gossip in a way that can be used across threads, without &self
     fn propagate_gossip_cross_thread(
-        content: Vec<(TContentKey, ByteList)>,
+        content: Vec<(TContentKey, Vec<u8>)>,
         kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
         command_tx: UnboundedSender<OverlayCommand<TContentKey>>,
     ) -> usize {
@@ -363,7 +361,7 @@ where
 
         // HashMap to temporarily store all interested ENRs and the content.
         // Key is base64 string of node's ENR.
-        let mut enrs_and_content: HashMap<String, Vec<(RawContentKey, ByteList)>> = HashMap::new();
+        let mut enrs_and_content: HashMap<String, Vec<(RawContentKey, Vec<u8>)>> = HashMap::new();
 
         // Filter all nodes from overlay routing table where XOR_distance(content_id, nodeId) < node radius
         for (content_key, content_value) in content {
@@ -582,7 +580,7 @@ where
                             .validate_content(&content_key, &content)
                             .await
                         {
-                            Ok(_) => Ok(Content::Content(VariableList::from(content))),
+                            Ok(_) => Ok(Content::Content(content)),
                             Err(msg) => Err(OverlayRequestError::FailedValidation(format!(
                                 "Network: {:?}, Reason: {:?}",
                                 self.protocol, msg
@@ -596,7 +594,7 @@ where
         }
     }
 
-    /// Initialize FIndContent uTP stream with remote node
+    /// Initialize FindContent uTP stream with remote node
     async fn init_find_content_stream(
         &self,
         enr: Enr,

@@ -220,8 +220,7 @@ impl HistoryRequestHandler {
                     {
                         Ok(params) => {
                             let content_key = params.content_key.clone();
-                            let content = params.content.into();
-                            let content_items = vec![(content_key, content)];
+                            let content_items = vec![(content_key, params.content)];
                             let num_peers = self.network.overlay.propagate_gossip(content_items);
                             Ok(num_peers.into())
                         }
