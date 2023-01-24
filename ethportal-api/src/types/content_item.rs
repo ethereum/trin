@@ -361,20 +361,14 @@ mod test {
         tx_three.hash = tx_three.recalculate_hash();
 
         let transactions = vec![tx_one.clone(), tx_two.clone(), tx_three.clone()];
-        let transactions_one = vec![tx_one.clone()];
-        let transactions_two = vec![tx_two.clone(), tx_three.clone()];
 
-        let transactions_root_one =
-            reth_primitives::proofs::calculate_transaction_root(&transactions_one);
         let header_one = Header {
-            transactions_root: transactions_root_one,
+            number: 1,
             ..Default::default()
         };
 
-        let transactions_root_two =
-            reth_primitives::proofs::calculate_transaction_root(&transactions_two);
         let header_two = Header {
-            transactions_root: transactions_root_two,
+            number: 2,
             ..Default::default()
         };
 
