@@ -41,7 +41,7 @@ type SszReceiptList = VariableList<SszReceipt, typenum::U16384>;
 impl ContentItem for Vec<Receipt> {
     fn encode(&self, buf: &mut Vec<u8>) {
         let receipts: Vec<SszReceipt> = self
-            .into_iter()
+            .iter()
             .map(|receipt| {
                 let mut rlp = bytes::BytesMut::new();
                 Encodable::encode(&receipt, &mut rlp);
@@ -49,18 +49,20 @@ impl ContentItem for Vec<Receipt> {
             })
             .collect();
         let ssz: SszReceiptList = VariableList::from(receipts);
-        buf.copy_from_slice(&ssz::ssz_encode(&ssz));
+        buf.append(&mut ssz::ssz_encode(&ssz));
     }
 
     fn decode(buf: &[u8]) -> Result<Self, ContentItemDecodeError> {
         let ssz: SszReceiptList = VariableList::from_ssz_bytes(buf)?;
         let receipts: Result<Self, ContentItemDecodeError> = ssz
             .into_iter()
-            .map(|ssz| {
-                Decodable::decode(&mut &**ssz).map_err(|err| ContentItemDecodeError::from(err))
-            })
+            .map(|ssz| Decodable::decode(&mut &**ssz).map_err(ContentItemDecodeError::from))
             .collect();
-        Ok(receipts?)
+
+        // clippy complains if we try to return `Ok(receipts?)` directly.
+        let receipts = receipts?;
+
+        Ok(receipts)
     }
 }
 
@@ -160,16 +162,16 @@ impl ContentItem for BlockBody {
     }
 
     fn decode(buf: &[u8]) -> Result<Self, ContentItemDecodeError> {
-        let container = BlockBodySszContainer::from_ssz_bytes(&buf).unwrap();
-        let transactions: Vec<TransactionSigned> = container
+        let container = BlockBodySszContainer::from_ssz_bytes(buf)?;
+        let transactions: Result<Vec<TransactionSigned>, _> = container
             .transactions
             .into_iter()
-            .map(|tx| Decodable::decode(&mut &**tx).unwrap())
+            .map(|tx| Decodable::decode(&mut &**tx))
             .collect();
-        let uncles: Vec<Header> = Decodable::decode(&mut &*container.uncles).unwrap();
+        let uncles: Vec<Header> = Decodable::decode(&mut &*container.uncles)?;
 
         Ok(Self {
-            transactions,
+            transactions: transactions?,
             uncles,
         })
     }
@@ -293,7 +295,7 @@ impl<T: ssz::Encode> ssz::Encode for SszOption<T> {
                 let union_selector: u8 = 0u8;
                 buf.push(union_selector);
             }
-            Option::Some(ref inner) => {
+            Option::Some(inner) => {
                 let union_selector: u8 = 1u8;
                 buf.push(union_selector);
                 inner.ssz_append(buf);
@@ -303,7 +305,7 @@ impl<T: ssz::Encode> ssz::Encode for SszOption<T> {
     fn ssz_bytes_len(&self) -> usize {
         match self.as_ref() {
             Option::None => 1usize,
-            Option::Some(ref inner) => inner
+            Option::Some(inner) => inner
                 .ssz_bytes_len()
                 .checked_add(1)
                 .expect("encoded length must be less than usize::max_value"),
@@ -315,6 +317,7 @@ impl<T: ssz::Encode> ssz::Encode for SszOption<T> {
 mod test {
     use super::*;
 
+    use reth_primitives::{Transaction, TxEip1559, TxEip2930, TxLegacy, TxType};
     use serde_json::Value;
     use ssz::Encode;
 
@@ -340,6 +343,122 @@ mod test {
             let mut encoded = Vec::new();
             header_with_proof.encode(&mut encoded);
             assert_eq!(encoded, header_with_proof_encoded);
+        }
+    }
+
+    #[test]
+    fn block_body_encode_decode() {
+        let mut tx_one: TransactionSigned = Default::default();
+        tx_one.transaction = Transaction::Legacy(TxLegacy::default());
+        tx_one.hash = tx_one.recalculate_hash();
+
+        let mut tx_two: TransactionSigned = Default::default();
+        tx_two.transaction = Transaction::Eip1559(TxEip1559::default());
+        tx_two.hash = tx_two.recalculate_hash();
+
+        let mut tx_three: TransactionSigned = Default::default();
+        tx_three.transaction = Transaction::Eip2930(TxEip2930::default());
+        tx_three.hash = tx_three.recalculate_hash();
+
+        let transactions = vec![tx_one.clone(), tx_two.clone(), tx_three.clone()];
+        let transactions_one = vec![tx_one.clone()];
+        let transactions_two = vec![tx_two.clone(), tx_three.clone()];
+
+        let transactions_root_one =
+            reth_primitives::proofs::calculate_transaction_root(&transactions_one);
+        let header_one = Header {
+            transactions_root: transactions_root_one,
+            ..Default::default()
+        };
+
+        let transactions_root_two =
+            reth_primitives::proofs::calculate_transaction_root(&transactions_two);
+        let header_two = Header {
+            transactions_root: transactions_root_two,
+            ..Default::default()
+        };
+
+        let uncles = vec![header_one.clone(), header_two.clone()];
+
+        let body = BlockBody {
+            transactions,
+            uncles,
+        };
+
+        let mut portal_encoded = Vec::new();
+        ContentItem::encode(&body, &mut portal_encoded);
+        let portal_decoded: BlockBody = ContentItem::decode(&portal_encoded).unwrap();
+        assert_eq!(portal_decoded.transactions.len(), 3);
+        assert_eq!(portal_decoded.transactions[0], tx_one);
+        assert_eq!(portal_decoded.transactions[1], tx_two);
+        assert_eq!(portal_decoded.transactions[2], tx_three);
+        assert_eq!(portal_decoded.uncles.len(), 2);
+        assert_eq!(portal_decoded.uncles[0], header_one);
+        assert_eq!(portal_decoded.uncles[1], header_two);
+
+        let serde_encoded = serde_json::to_string(&HistoryContentItem::BlockBody(body)).unwrap();
+        let serde_decoded: HistoryContentItem = serde_json::from_str(&serde_encoded).unwrap();
+
+        if let HistoryContentItem::BlockBody(decoded) = serde_decoded {
+            assert_eq!(decoded.transactions.len(), 3);
+            assert_eq!(decoded.transactions[0], tx_one);
+            assert_eq!(decoded.transactions[1], tx_two);
+            assert_eq!(decoded.transactions[2], tx_three);
+            assert_eq!(portal_decoded.uncles.len(), 2);
+            assert_eq!(portal_decoded.uncles[0], header_one);
+            assert_eq!(portal_decoded.uncles[1], header_two);
+        } else {
+            panic!("incorrect content item");
+        }
+    }
+
+    #[test]
+    fn receipts_encode_decode() {
+        let receipt_one = Receipt {
+            tx_type: TxType::Legacy,
+            success: true,
+            cumulative_gas_used: 100,
+            ..Default::default()
+        };
+
+        let receipt_two = Receipt {
+            tx_type: TxType::EIP1559,
+            success: false,
+            cumulative_gas_used: 1000,
+            ..Default::default()
+        };
+
+        let receipt_three = Receipt {
+            tx_type: TxType::EIP2930,
+            success: false,
+            cumulative_gas_used: 10000,
+            ..Default::default()
+        };
+
+        let receipts = vec![
+            receipt_one.clone(),
+            receipt_two.clone(),
+            receipt_three.clone(),
+        ];
+
+        let mut portal_encoded = Vec::new();
+        ContentItem::encode(&receipts, &mut portal_encoded);
+        let portal_decoded: Vec<Receipt> = ContentItem::decode(&portal_encoded).unwrap();
+        assert_eq!(portal_decoded.len(), 3);
+        assert_eq!(portal_decoded[0], receipt_one);
+        assert_eq!(portal_decoded[1], receipt_two);
+        assert_eq!(portal_decoded[2], receipt_three);
+
+        let serde_encoded = serde_json::to_string(&HistoryContentItem::Receipts(receipts)).unwrap();
+        let serde_decoded: HistoryContentItem = serde_json::from_str(&serde_encoded).unwrap();
+
+        if let HistoryContentItem::Receipts(decoded) = serde_decoded {
+            assert_eq!(decoded.len(), 3);
+            assert_eq!(decoded[0], receipt_one);
+            assert_eq!(decoded[1], receipt_two);
+            assert_eq!(decoded[2], receipt_three);
+        } else {
+            panic!("incorrect content item");
         }
     }
 
