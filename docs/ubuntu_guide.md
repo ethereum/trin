@@ -41,7 +41,7 @@ Example response:
 > trin 0.0.1
 ```
 ## Configuration
-Before setting up the service, look at the flags can be set when starting Trin:
+Before setting up the service, look at the flags that can be set when starting Trin:
 ```
 $ /usr/local/bin/trin --help
 ```
