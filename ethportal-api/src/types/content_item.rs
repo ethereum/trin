@@ -17,6 +17,7 @@ pub enum HistoryContentItem {
     BlockBody(BlockBody),
     Receipts(BlockReceipts),
     EpochAccumulator(EpochAccumulator),
+    Unknown(String),
 }
 
 impl From<HistoryContentItem> for Vec<u8> {
@@ -31,6 +32,7 @@ impl From<HistoryContentItem> for Vec<u8> {
             HistoryContentItem::EpochAccumulator(epoch_accumulator) => {
                 epoch_accumulator.as_ssz_bytes()
             }
+            HistoryContentItem::Unknown(hex_value) => hex_value.into_bytes(),
         }
     }
 }

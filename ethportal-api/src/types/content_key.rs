@@ -29,6 +29,8 @@ pub enum HistoryContentKey {
     BlockReceipts(BlockReceiptsKey),
     /// An epoch header accumulator.
     EpochAccumulator(EpochAccumulatorKey),
+    /// Unknown content key value
+    Unknown(H256),
 }
 
 impl Serialize for HistoryContentKey {
@@ -61,6 +63,10 @@ impl Serialize for HistoryContentKey {
                 let selector = "03";
                 serializer.serialize_str(&format!("0x{selector}{hex_bytes}"))
             }
+            HistoryContentKey::Unknown(value) => {
+                let hex_bytes = hex::encode(value.as_ssz_bytes());
+                serializer.serialize_str(&format!("0x{hex_bytes}"))
+            }
         }
     }
 }
@@ -85,6 +91,15 @@ impl<'de> Deserialize<'de> for HistoryContentKey {
             Ok(content_key) => Ok(content_key),
             Err(_) => Err(de::Error::custom("Unable to deserialize from ssz bytes!")),
         }
+    }
+}
+
+impl HistoryContentKey {
+    /// Generates random histor content key block header
+    pub fn random_header() -> Self {
+        HistoryContentKey::BlockHeader(BlockHeaderKey {
+            block_hash: rand::random(),
+        })
     }
 }
 
@@ -163,6 +178,9 @@ impl fmt::Display for HistoryContentKey {
                     "EpochAccumulator {{ epoch_hash: {} }}",
                     hex_encode_compact(acc.epoch_hash.as_fixed_bytes())
                 )
+            }
+            Self::Unknown(value) => {
+                format!("Unknown {{ {} }}", hex_encode_compact(value))
             }
         };
 

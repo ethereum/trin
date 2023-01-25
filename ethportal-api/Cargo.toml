@@ -18,6 +18,7 @@ eth2_ssz_types = "0.2.1"
 hex = "0.4.3"
 hex-literal = "0.3.4"
 jsonrpsee = {version="0.16.2", features = ["macros"]}
+rand = "0.8.1"
 rlp = "0.5.1"
 rlp-derive = "0.1.0"
 
