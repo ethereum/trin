@@ -68,7 +68,7 @@ pub trait HistoryNetworkApi {
     ) -> RpcResult<TraceContentInfo>;
 
     /// Pagination of local content keys
-    #[method(name = "historyPaginateLocalContentKeys")]
+    #[method(name = "paginateLocalContentKeys")]
     async fn paginate_local_content_keys(
         &self,
         offset: u64,

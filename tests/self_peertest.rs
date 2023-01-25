@@ -51,7 +51,8 @@ mod test {
         peertest::scenarios::paginate::test_paginate_local_storage(
             peertest_config.clone(),
             &peertest,
-        );
+        )
+        .await;
         peertest::jsonrpc::test_jsonrpc_endpoints_over_ipc(peertest_config.clone(), &peertest)
             .await;
         peertest::scenarios::offer_accept::test_offer_accept(peertest_config.clone(), &peertest);
