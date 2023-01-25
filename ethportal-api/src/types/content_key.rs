@@ -89,7 +89,9 @@ impl<'de> Deserialize<'de> for HistoryContentKey {
 
         match HistoryContentKey::from_ssz_bytes(&ssz_bytes) {
             Ok(content_key) => Ok(content_key),
-            Err(_) => Err(de::Error::custom("Unable to deserialize from ssz bytes!")),
+            Err(_) => Err(de::Error::custom(
+                "Invalid content key provided: Unable to deserialize from ssz bytes!",
+            )),
         }
     }
 }

@@ -51,7 +51,7 @@ pub fn test_recursive_find_content_invalid_params(
     };
 
     let error = make_ipc_request(&peertest.nodes[0].web3_ipc_path, &request).unwrap_err();
-    assert!(error.to_string().contains("Invalid content key requested"));
+    assert!(error.to_string().contains("Invalid content key provided"));
 }
 
 pub fn test_trace_recursive_find_content_local_db(

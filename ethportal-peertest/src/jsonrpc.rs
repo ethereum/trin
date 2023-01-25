@@ -274,7 +274,6 @@ pub fn validate_portal_local_content(result: &Value, _peertest: &Peertest) {
 
 #[cfg(unix)]
 fn get_ipc_stream(ipc_path: &str) -> unix::net::UnixStream {
-    println!("Ipc path: {ipc_path}");
     unix::net::UnixStream::connect(ipc_path).unwrap()
 }
 
