@@ -5,9 +5,11 @@ use std::{io::prelude::*, panic, time::Duration};
 use anyhow::anyhow;
 use hyper::{self, Body, Client, Method, Request};
 use serde_json::{self, json, Value};
+use ssz::Encode;
 use tracing::{error, info};
 
 use crate::{cli::PeertestConfig, Peertest};
+use trin_core::utils::bytes::hex_encode;
 use trin_core::{
     jsonrpc::types::{NodesParams, Params},
     portalnet::types::{distance::Distance, messages::SszEnr},
@@ -123,7 +125,7 @@ fn all_tests(peertest: &Peertest) -> Vec<Test<impl Fn(&Value, &Peertest)>> {
                 id: 6,
                 params: Params::Array(vec![
                     Value::String(peertest.bootnode.enr.to_base64()),
-                    Value::String(DATA_RADIUS.to_string()),
+                    json!(*DATA_RADIUS),
                 ]),
             },
             validate_portal_history_ping,
@@ -210,10 +212,10 @@ fn validate_portal_history_radius(result: &Value, _peertest: &Peertest) {
 fn validate_portal_history_ping(result: &Value, _peertest: &Peertest) {
     assert_eq!(
         result.get("dataRadius").unwrap().as_str().unwrap(),
-        DATA_RADIUS.to_string()
+        hex_encode(DATA_RADIUS.as_ssz_bytes())
     );
     assert_eq!(
-        result.get("enrSeq").unwrap().as_str().unwrap(),
+        result.get("enrSeq").unwrap().as_u64().unwrap().to_string(),
         ENR_SEQ.to_string()
     );
 }

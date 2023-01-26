@@ -199,7 +199,10 @@ impl HistoryRequestHandler {
                 HistoryEndpoint::Ping(enr, _) => {
                     let enr = convert_enr(enr);
                     let response = match self.network.overlay.send_ping(enr).await {
-                        Ok(pong) => Ok(pong.into()),
+                        Ok(pong) => Ok(json!({
+                            "enrSeq": pong.enr_seq,
+                            "dataRadius": *self.network.overlay.data_radius()
+                        })),
                         Err(msg) => Err(format!("Ping request timeout: {:?}", msg)),
                     };
 
