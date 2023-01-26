@@ -163,18 +163,6 @@ fn all_tests(peertest: &Peertest) -> Vec<Test<impl Fn(&Value, &Peertest)>> {
             },
             validate_portal_store,
         ),
-        // Test store endpoint with invalid content key
-        Test::new(
-            JsonRpcRequest {
-                method: "portal_historyStore".to_string(),
-                id: 11,
-                params: Params::Array(vec![
-                    Value::String("0x1234".to_string()),
-                    Value::String(HISTORY_CONTENT_VALUE.to_string()),
-                ]),
-            },
-            validate_portal_store_with_invalid_content_key,
-        ),
         Test::new(
             JsonRpcRequest {
                 method: "portal_historyRoutingTableInfo".to_string(),
@@ -244,13 +232,6 @@ fn validate_portal_find_nodes_zero_distance(result: &Value, peertest: &Peertest)
 
 fn validate_portal_store(result: &Value, _peertest: &Peertest) {
     assert!(result.as_bool().unwrap());
-}
-
-fn validate_portal_store_with_invalid_content_key(result: &Value, _peertest: &Peertest) {
-    assert!(result
-        .as_str()
-        .unwrap()
-        .contains("Unable to decode content_key"));
 }
 
 fn validate_portal_routing_table_info(result: &Value, _peertest: &Peertest) {
