@@ -209,7 +209,7 @@ fn validate_discv5_node_info(val: &Value, _peertest: &Peertest) {
 }
 
 fn validate_discv5_routing_table_info(val: &Value, _peertest: &Peertest) {
-    let local_key = val.get("localKey").unwrap();
+    let local_key = val.get("localNodeId").unwrap();
     assert!(local_key.is_string());
     assert!(local_key.as_str().unwrap().contains("0x"));
     assert!(val.get("buckets").unwrap().is_array());

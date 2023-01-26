@@ -33,7 +33,7 @@ impl Discv5ApiServer for Discv5Api {
 
     /// Returns meta information about discv5 routing table.
     async fn routing_table_info(&self) -> RpcResult<RoutingTableInfo> {
-        Err(Error::MethodNotFound("routing_table_info".to_owned()))
+        Ok(self.discv5.routing_table_info())
     }
 
     /// Write an Ethereum Node Record to the routing table.

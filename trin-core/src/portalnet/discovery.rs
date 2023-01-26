@@ -230,7 +230,7 @@ impl Discovery {
 
         json!(
             {
-                "localKey": hex_encode(self.discv5.local_enr().node_id().raw()),
+                "localNodeId": hex_encode(self.discv5.local_enr().node_id().raw()),
                 "buckets": buckets
             }
         )
