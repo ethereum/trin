@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use serde_hex::{SerHex, StrictPfx};
 use std::ops::Deref;
+use serde_json::Value;
+
 type RawNodeId = [u8; 32];
 
 /// Discv5 NodeId
@@ -49,13 +51,7 @@ pub struct NodeInfo {
     pub ip: Option<String>,
 }
 
-/// Node routing table info
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RoutingTableInfo {
-    pub local_node_id: NodeId,
-    pub buckets: KBucketsTable,
-}
+pub type RoutingTableInfo = Value;
 
 #[cfg(test)]
 mod test {
