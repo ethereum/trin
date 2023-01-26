@@ -149,7 +149,10 @@ impl HistoryRequestHandler {
                             content_keys.iter().map(|key| key.as_ssz_bytes()).collect();
 
                         match self.network.overlay.send_offer(content_keys, enr).await {
-                            Ok(accept) => Ok(accept.into()),
+                            Ok(accept) => Ok(json!({
+                                "connectionId": accept.connection_id,
+                                "contentKeys": accept.content_keys
+                            })),
                             Err(msg) => Err(format!("SendOffer request timeout: {:?}", msg)),
                         }
                     };
