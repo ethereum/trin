@@ -30,7 +30,7 @@ pub enum HistoryContentKey {
     /// An epoch header accumulator.
     EpochAccumulator(EpochAccumulatorKey),
     /// Unknown content key value
-    Unknown(H256),
+    Unknown(Vec<u8>),
 }
 
 impl Serialize for HistoryContentKey {
@@ -89,9 +89,7 @@ impl<'de> Deserialize<'de> for HistoryContentKey {
 
         match HistoryContentKey::from_ssz_bytes(&ssz_bytes) {
             Ok(content_key) => Ok(content_key),
-            Err(_) => Err(de::Error::custom(
-                "Invalid content key provided: Unable to deserialize from ssz bytes!",
-            )),
+            Err(_) => Ok(HistoryContentKey::Unknown(ssz_bytes)),
         }
     }
 }
@@ -147,13 +145,11 @@ impl From<HistoryContentKey> for Vec<u8> {
     }
 }
 
-impl TryFrom<Vec<u8>> for HistoryContentKey {
-    type Error = &'static str;
-
-    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+impl From<Vec<u8>> for HistoryContentKey {
+    fn from(value: Vec<u8>) -> Self {
         match HistoryContentKey::from_ssz_bytes(&value) {
-            Ok(key) => Ok(key),
-            Err(_err) => Err("Unable to decode SSZ"),
+            Ok(key) => key,
+            Err(_) => HistoryContentKey::Unknown(value),
         }
     }
 }

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_hex::{SerHex, StrictPfx};
-use std::ops::Deref;
 use serde_json::Value;
+use std::ops::Deref;
 
 type RawNodeId = [u8; 32];
 
