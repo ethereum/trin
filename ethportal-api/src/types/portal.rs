@@ -1,10 +1,9 @@
 use crate::types::{content_item::HistoryContentItem, content_key::HistoryContentKey, discv5::Enr};
 use serde::{Deserialize, Serialize};
+use ssz_types::{typenum, BitList};
 
 pub type DataRadius = ethereum_types::U256;
 pub type Distance = ethereum_types::U256;
-
-pub type BitList = String;
 
 /// Part of a TraceRecursiveFindContent response
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -35,11 +34,11 @@ pub enum ContentInfo {
 }
 
 /// Response for Offer endpoint
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AcceptInfo {
     pub connection_id: u16,
-    pub content_keys: BitList,
+    pub content_keys: BitList<typenum::U8>,
 }
 
 /// Response for TraceRecursiveFindContent endpoint
