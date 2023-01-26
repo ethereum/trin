@@ -20,6 +20,7 @@ use trin_core::{
 
 use discv5::Enr;
 use ethportal_api::types::discv5::Enr as EthEnr;
+use ethportal_api::types::portal::Distance;
 use ethportal_api::HistoryContentKey as EthHistoryContentKey;
 use ssz::Encode;
 use trin_core::jsonrpc::endpoints::HistoryEndpoint;
@@ -214,6 +215,7 @@ impl HistoryRequestHandler {
                             Some(enr) => XorMetric::distance(&content_id, &enr.node_id().raw())
                                 .log2()
                                 .map(|distance| {
+                                    let distance = Distance::from(distance);
                                     json!({
                                         "enr": enr,
                                         "distance": distance
