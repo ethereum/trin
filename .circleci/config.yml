@@ -112,7 +112,7 @@ jobs:
           command: curl https://sh.rustup.rs -sSf | sh -s -- -y
       - run:
           name: Build utp-testing package
-          command: cargo build -p utp-testing --release
+          command: cargo build --workspace --release
       - run:
           name: Move docker artifacts
           command: mv -t utp-testing/docker/circleci/ target/release/utp-test-app utp-testing/docker/run_endpoint.sh utp-testing/docker/setup.sh
