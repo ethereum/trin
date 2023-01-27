@@ -2,7 +2,8 @@ use crate::jsonrpsee::core::{async_trait, Error, RpcResult};
 use anyhow::anyhow;
 use ethportal_api::types::discv5::{Enr, NodeId, RoutingTableInfo};
 use ethportal_api::types::portal::{
-    AcceptInfo, ContentInfo, DataRadius, PaginateLocalContentInfo, PongInfo, TraceContentInfo,
+    AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
+    TraceContentInfo,
 };
 use ethportal_api::HistoryNetworkApiServer;
 use ethportal_api::{HistoryContentItem, HistoryContentKey};
@@ -85,10 +86,10 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
 
     /// Send a FINDNODES request for nodes that fall within the given set of distances, to the designated
     /// peer and wait for a response
-    async fn find_nodes(&self, enr: Enr, distances: Vec<u16>) -> RpcResult<Vec<Enr>> {
+    async fn find_nodes(&self, enr: Enr, distances: Vec<u16>) -> RpcResult<FindNodesInfo> {
         let endpoint = HistoryEndpoint::FindNodes(enr, distances);
         let result = self.proxy_query_to_history_subnet(endpoint).await?;
-        let result: Vec<Enr> = from_value(result)?;
+        let result: FindNodesInfo = from_value(result)?;
         Ok(result)
     }
 

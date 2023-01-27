@@ -156,7 +156,10 @@ impl HistoryRequestHandler {
 
                     let response = match self.network.overlay.send_find_nodes(enr, distances).await
                     {
-                        Ok(nodes) => Ok(nodes.into()),
+                        Ok(nodes) => Ok(json!({
+                            "total": nodes.total,
+                            "enrs":  nodes.enrs.into_iter().map(|enr| EthEnr::from_str(&enr.to_base64()).unwrap()).collect::<Vec<EthEnr>>()
+                        })),
                         Err(msg) => Err(format!("FindNodes request timeout: {:?}", msg)),
                     };
                     let _ = request.resp.send(response);
