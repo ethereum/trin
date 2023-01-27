@@ -405,7 +405,8 @@ mod test {
         match rx.recv().await {
             Some(request) => match request.endpoint {
                 HistoryEndpoint::RecursiveFindContent(content_key) => {
-                    let response = serde_json::to_string(&content_key).unwrap();
+                    let json_value = serde_json::to_value(content_key).unwrap();
+                    let response = json_value.as_str().unwrap();
                     let epoch_acc_hash = response.trim_start_matches("0x03");
                     let epoch_acc_hash = H256::from_str(epoch_acc_hash).unwrap();
                     let epoch_acc_path =
