@@ -17,6 +17,10 @@ pub trait HistoryNetworkApi {
     #[method(name = "historyRoutingTableInfo")]
     async fn routing_table_info(&self) -> RpcResult<RoutingTableInfo>;
 
+    /// Returns meta information about overlay routing table.
+    #[method(name = "historyRadius")]
+    async fn radius(&self) -> RpcResult<DataRadius>;
+
     /// Write an Ethereum Node Record to the overlay routing table.
     #[method(name = "historyAddEnr")]
     async fn add_enr(&self, enr: Enr) -> RpcResult<bool>;

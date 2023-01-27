@@ -98,6 +98,14 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
         Err(Error::MethodNotFound("recursive_find_nodes".to_owned()))
     }
 
+    /// Lookup a target node within in the network
+    async fn radius(&self) -> RpcResult<DataRadius> {
+        let endpoint = HistoryEndpoint::DataRadius;
+        let result = self.proxy_query_to_history_subnet(endpoint).await?;
+        let result: DataRadius = from_value(result)?;
+        Ok(result)
+    }
+
     /// Send FINDCONTENT message to get the content with a content key.
     async fn find_content(
         &self,

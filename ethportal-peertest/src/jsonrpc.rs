@@ -206,7 +206,10 @@ fn validate_discv5_routing_table_info(val: &Value, _peertest: &Peertest) {
 }
 
 fn validate_portal_history_radius(result: &Value, _peertest: &Peertest) {
-    assert_eq!(result.as_str().unwrap(), DATA_RADIUS.to_string());
+    assert_eq!(
+        result.as_str().unwrap(),
+        hex_encode(DATA_RADIUS.as_ssz_bytes())
+    );
 }
 
 fn validate_portal_history_ping(result: &Value, _peertest: &Peertest) {

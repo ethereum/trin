@@ -131,8 +131,8 @@ impl HistoryRequestHandler {
                     }
                 }
                 HistoryEndpoint::DataRadius => {
-                    let radius = &self.network.overlay.data_radius;
-                    let _ = request.resp.send(Ok(Value::String(radius.to_string())));
+                    let radius = &self.network.overlay.data_radius();
+                    let _ = request.resp.send(Ok(json!(**radius)));
                 }
                 HistoryEndpoint::FindContent(enr, content_key) => {
                     let enr = convert_enr(enr);
