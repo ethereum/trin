@@ -1,3 +1,4 @@
+use crate::types::portal::FindNodesInfo;
 use crate::types::{
     content_item::HistoryContentItem,
     content_key::HistoryContentKey,
@@ -39,7 +40,7 @@ pub trait HistoryNetworkApi {
     /// Send a FINDNODES request for nodes that fall within the given set of distances, to the designated
     /// peer and wait for a response
     #[method(name = "historyFindNodes")]
-    async fn find_nodes(&self, enr: Enr, distances: Vec<u16>) -> RpcResult<Vec<Enr>>;
+    async fn find_nodes(&self, enr: Enr, distances: Vec<u16>) -> RpcResult<FindNodesInfo>;
 
     /// Lookup a target node within in the network
     #[method(name = "historyRecursiveFindNodes")]
