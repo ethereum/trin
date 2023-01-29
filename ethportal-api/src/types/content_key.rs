@@ -13,6 +13,8 @@ pub trait OverlayContentKey:
     /// Returns the identifier for the content referred to by the key.
     /// The identifier locates the content in the overlay.
     fn content_id(&self) -> [u8; 32];
+    /// Returns the bytes of the content key.
+    fn bytes(&self) -> [u8; 33];
 }
 
 /// A content key in the history overlay network.
@@ -174,6 +176,22 @@ impl OverlayContentKey for HistoryContentKey {
         sha256.update(self.as_ssz_bytes());
         sha256.finalize().into()
     }
+
+    fn bytes(&self) -> [u8; 33] {
+        let mut bytes = [0u8; 33];
+        let (selector, hash) = match self {
+            HistoryContentKey::BlockHeader(k) => (0x00, k.block_hash),
+            HistoryContentKey::BlockBody(k) => (0x01, k.block_hash),
+            HistoryContentKey::BlockReceipts(k) => (0x02, k.block_hash),
+            HistoryContentKey::EpochAccumulator(k) => (0x03, k.epoch_hash.0),
+        };
+        for (i, byte) in hash.into_iter().enumerate() {
+            bytes[i] = byte
+        }
+        bytes.rotate_right(1);
+        bytes[0] = selector;
+        bytes
+    }
 }
 
 /// Returns a compact hex-encoded `String` representation of `data`.
@@ -218,9 +236,8 @@ mod test {
         };
 
         let key = HistoryContentKey::BlockHeader(header);
-        let encoded: Vec<u8> = key.clone().into();
 
-        assert_eq!(encoded, expected_content_key);
+        assert_eq!(key.bytes(), expected_content_key.as_ref());
         assert_eq!(key.content_id(), expected_content_id);
     }
 
@@ -240,9 +257,8 @@ mod test {
         };
 
         let key = HistoryContentKey::BlockBody(body);
-        let encoded: Vec<u8> = key.clone().into();
 
-        assert_eq!(encoded, expected_content_key);
+        assert_eq!(key.bytes(), expected_content_key.as_ref());
         assert_eq!(key.content_id(), expected_content_id);
     }
 
@@ -262,9 +278,8 @@ mod test {
         };
 
         let key = HistoryContentKey::BlockReceipts(receipts);
-        let encoded: Vec<u8> = key.clone().into();
 
-        assert_eq!(encoded, expected_content_key);
+        assert_eq!(key.bytes(), expected_content_key.as_ref());
         assert_eq!(key.content_id(), expected_content_id);
     }
 
