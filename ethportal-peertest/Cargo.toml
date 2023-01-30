@@ -16,7 +16,7 @@ futures = "0.3.21"
 hex = "0.4.3"
 httpmock = "0.6.6"
 hyper = { version = "0.14", features = ["full"] }
-reth-ipc = { git = "https://github.com/paradigmxyz/reth.git"}
+reth-ipc = { version = "0.1.0", git = "https://github.com/paradigmxyz/reth.git"}
 rocksdb = "0.18.0"
 serde_json = "1.0.59"
 structopt = "0.3"
