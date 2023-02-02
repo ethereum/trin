@@ -97,7 +97,7 @@ impl<'de> Deserialize<'de> for HistoryContentKey {
 impl HistoryContentKey {
     /// Generates random histor content key block header
     pub fn random_header() -> Self {
-        HistoryContentKey::BlockHeader(BlockHeaderKey {
+        HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
             block_hash: rand::random(),
         })
     }
@@ -197,7 +197,7 @@ impl OverlayContentKey for HistoryContentKey {
         let mut bytes: Vec<u8> = Vec::new();
 
         match self {
-            HistoryContentKey::BlockHeader(k) => {
+            HistoryContentKey::BlockHeaderWithProof(k) => {
                 bytes.push(0x00);
                 bytes.extend_from_slice(&k.block_hash);
             }
