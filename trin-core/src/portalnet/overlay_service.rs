@@ -1383,6 +1383,13 @@ where
                 self.request_node(&node.enr());
             }
         }
+
+        let data_radius: Distance = pong.custom_payload.into();
+        let updated_node = Node {
+            enr: source,
+            data_radius: data_radius,
+        };
+        self.kbuckets.write().update_node(&key, updated_node, None);
     }
 
     /// Processes a Nodes response.
