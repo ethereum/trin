@@ -5,6 +5,7 @@ use std::{
     sync::Arc,
 };
 
+use anyhow::anyhow;
 use discv5::enr::NodeId;
 use prometheus_exporter::{
     self,
@@ -23,7 +24,10 @@ use super::types::{
 };
 use crate::{
     portalnet::types::messages::ProtocolId,
-    utils::{bytes::hex_encode, db::get_data_dir},
+    utils::{
+        bytes::{hex_decode, hex_encode},
+        db::get_data_dir,
+    },
 };
 
 // TODO: Replace enum with generic type parameter. This will require that we have a way to
@@ -282,7 +286,7 @@ impl PortalStorage {
             sql_connection_pool: config.sql_connection_pool,
             distance_fn: config.distance_fn,
             metrics: None,
-            protocol: protocol,
+            protocol,
         };
 
         // Check whether we already have data, and if so
@@ -423,20 +427,11 @@ impl PortalStorage {
                 hex_encode(&id_to_remove)
             );
 
-            let deleted_value = self.db.get(&id_to_remove)?;
-            self.db.delete(&id_to_remove)?;
-            // Revert rocksdb action if there's an error with writing to metadata db
-            if let Err(err) = self.meta_db_remove(&id_to_remove) {
+            if let Err(err) = self.evict(id_to_remove) {
                 debug!(
-                    "Error writing content ID {:?} to meta db. Reverting: {:?}",
-                    content_id, err
+                    "Error writing content ID {:?} to meta db. Reverted: {:?}",
+                    id_to_remove, err
                 );
-                if let Some(value) = deleted_value {
-                    self.db_insert(&content_id, &value)?;
-                }
-
-                let err = format!("failed deletion {}", err);
-                return Err(ContentStoreError::Database(err));
             }
 
             match self.find_farthest_content_id()? {
@@ -460,6 +455,33 @@ impl PortalStorage {
         }
 
         Ok(())
+    }
+
+    /// Public method for evicting a certain content id. Will revert RocksDB deletion if meta_db
+    /// deletion fails.
+    pub fn evict(&self, id: [u8; 32]) -> anyhow::Result<()> {
+        let deleted_value = self.db.get(&id)?;
+        self.db.delete(&id)?;
+        // Revert rocksdb action if there's an error with writing to metadata db
+        if let Err(err) = self.meta_db_remove(&id) {
+            if let Some(value) = deleted_value {
+                self.db_insert(&id, &value)?;
+            }
+            return Err(anyhow!("failed deletion {err}"));
+        }
+        Ok(())
+    }
+
+    /// Public method for looking up a content key by its content id
+    pub fn lookup_content_key(&self, id: [u8; 32]) -> anyhow::Result<Option<Vec<u8>>> {
+        let conn = self.sql_connection_pool.get()?;
+        let mut query = conn.prepare(CONTENT_KEY_LOOKUP_QUERY)?;
+        let id = id.to_vec();
+        let mut result = query.query_map([id], |row| Ok(ContentKey { key: row.get(0)? }))?;
+        match result.next() {
+            Some(val) => Ok(Some(hex_decode(&val?.key)?)),
+            None => Ok(None),
+        }
     }
 
     /// Public method for retrieving the node's current radius.
@@ -727,6 +749,9 @@ const XOR_FIND_FARTHEST_QUERY: &str = "SELECT
                                     content_id_long
                                     FROM content_metadata
                                     ORDER BY ((?1 | content_id_short) - (?1 & content_id_short)) DESC";
+
+const CONTENT_KEY_LOOKUP_QUERY: &str =
+    "SELECT content_key FROM content_metadata WHERE content_id_long = (?1)";
 
 const TOTAL_DATA_SIZE_QUERY: &str = "SELECT TOTAL(content_size) FROM content_metadata";
 

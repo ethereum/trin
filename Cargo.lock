@@ -4982,15 +4982,19 @@ dependencies = [
 name = "trin"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "discv5",
  "enr 0.7.0",
+ "eth2_ssz",
  "ethereum-types 0.12.1",
+ "ethportal-api",
  "ethportal-peertest",
  "hex",
  "parking_lot 0.11.2",
  "prometheus_exporter",
  "rand 0.8.5",
  "rlp 0.5.2",
+ "rocksdb",
  "serde_json",
  "sha3 0.9.1",
  "structopt",
