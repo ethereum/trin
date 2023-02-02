@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use anyhow::anyhow;
 use serde_json::{json, Value};
+use ssz::Decode;
 use tokio::sync::{mpsc, RwLock};
 
 use crate::{
@@ -11,7 +12,7 @@ use crate::{
         types::{GetBlockByHashParams, GetBlockByNumberParams, HistoryJsonRpcRequest, Params},
     },
     portalnet::types::content_key::{BlockHeader, HistoryContentKey},
-    types::header::Header,
+    types::header::HeaderWithProof,
     types::validation::{HeaderOracle, MERGE_BLOCK_NUMBER},
     utils::bytes::{hex_decode, hex_encode},
 };
@@ -22,7 +23,7 @@ pub async fn get_block_by_hash(
     history_jsonrpc_tx: &Option<mpsc::UnboundedSender<HistoryJsonRpcRequest>>,
 ) -> anyhow::Result<Value> {
     let params: GetBlockByHashParams = params.try_into()?;
-    let content_key = HistoryContentKey::BlockHeader(BlockHeader {
+    let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeader {
         block_hash: params.block_hash,
     });
     let endpoint = HistoryEndpoint::RecursiveFindContent;
@@ -38,9 +39,9 @@ pub async fn get_block_by_hash(
     match resp {
         Ok(Value::String(val)) => hex_decode(val.as_str())
             .and_then(|bytes| {
-                rlp::decode::<Header>(bytes.as_ref()).map_err(|_| anyhow!("Invalid RLP"))
+                HeaderWithProof::from_ssz_bytes(&bytes).map_err(|_| anyhow!("Invalid Ssz encoding"))
             })
-            .map(|header| json!(header)),
+            .map(|hwp| json!(hwp.header)),
         Ok(Value::Null) => Ok(Value::Null),
         Ok(_) => Err(anyhow!("Invalid JSON value")),
         Err(err) => Err(err),

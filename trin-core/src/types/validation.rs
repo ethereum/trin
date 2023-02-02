@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use anyhow::anyhow;
 use async_trait::async_trait;
 use ethereum_types::H256;
@@ -11,14 +9,14 @@ use crate::{
     portalnet::types::content_key::IdentityContentKey,
     types::{
         accumulator::MasterAccumulator,
-        header::{BlockHeaderProof, Header, HeaderWithProof},
+        header::{Header, HeaderWithProof},
     },
     utils::provider::TrustedProvider,
 };
 
 pub const MERGE_BLOCK_NUMBER: u64 = 15_537_393u64;
 pub const DEFAULT_MASTER_ACC_HASH: &str =
-    "0x1703fbb6d3310ff8582174239a665bc382aa0c83d6f1d00ee09b3036f95616f8";
+    "0x8eac399e24480dce3cfe06f4bdecba51c6e5d0c46200e3e8611a0b44a3a69ff9";
 
 /// Responsible for dispatching cross-overlay-network requests
 /// for data to perform validation. Currently, it just proxies these requests
@@ -70,57 +68,7 @@ impl HeaderOracle {
     }
 
     pub fn validate_header_with_proof(&self, hwp: HeaderWithProof) -> anyhow::Result<()> {
-        if hwp.header.number <= MERGE_BLOCK_NUMBER {
-            return Err(anyhow!("Unable to validate proof for post-merge header"));
-        }
-        let proof = match hwp.proof {
-            BlockHeaderProof::AccumulatorProof(val) => val,
-            BlockHeaderProof::None(_) => return Err(anyhow!("Unable to validate, missing proof.")),
-        };
-        self.master_acc
-            .validate_pre_merge_header_with_proof(&hwp.header, proof.proof)
-    }
-
-    pub async fn validate_header_is_canonical(&self, header: Header) -> anyhow::Result<()> {
-        if header.number <= MERGE_BLOCK_NUMBER {
-            if let Ok(history_jsonrpc_tx) = self.history_jsonrpc_tx() {
-                if let Ok(val) = &self
-                    .master_acc
-                    .validate_pre_merge_header(&header, history_jsonrpc_tx)
-                    .await
-                {
-                    match val {
-                        true => return Ok(()),
-                        false => return Err(anyhow!("hash is invalid")),
-                    }
-                }
-            }
-        }
-        // either header is post-merge or there was an error trying to validate it via chain
-        // history network, so we fallback to infura
-        let hex_number = format!("0x{:02X}", header.number);
-        let method = "eth_getBlockByNumber".to_string();
-        let params = Params::Array(vec![json!(hex_number), json!(false)]);
-        let response: Value = self
-            .trusted_provider
-            .dispatch_http_request(method, params)?;
-        let trusted_hash = match response["result"]["hash"].as_str() {
-            Some(val) => H256::from_str(val)?,
-            None => {
-                return Err(anyhow!(
-                    "Unable to validate content received from trusted provider."
-                ))
-            }
-        };
-        if trusted_hash == header.hash() {
-            Ok(())
-        } else {
-            Err(anyhow!(
-                "Content validation failed. Found: {:?} - Expected: {:?}",
-                header.hash(),
-                trusted_hash
-            ))
-        }
+        self.master_acc.validate_header_with_proof(&hwp)
     }
 }
 

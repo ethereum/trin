@@ -22,7 +22,7 @@ pub trait OverlayContentKey:
 #[ssz(enum_behaviour = "union")]
 pub enum HistoryContentKey {
     /// A block header with accumulator proof.
-    BlockHeader(BlockHeaderKey),
+    BlockHeaderWithProof(BlockHeaderKey),
     /// A block body.
     BlockBody(BlockBodyKey),
     /// The transaction receipts for a block.
@@ -37,7 +37,7 @@ impl Serialize for HistoryContentKey {
         S: Serializer,
     {
         match self {
-            HistoryContentKey::BlockHeader(block_header) => {
+            HistoryContentKey::BlockHeaderWithProof(block_header) => {
                 let ssz_bytes = block_header.as_ssz_bytes();
                 let hex_bytes = hex::encode(ssz_bytes);
                 let selector = "00";
@@ -144,8 +144,8 @@ impl TryFrom<Vec<u8>> for HistoryContentKey {
 impl fmt::Display for HistoryContentKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
-            Self::BlockHeader(header) => format!(
-                "BlockHeader {{ block_hash: {} }}",
+            Self::BlockHeaderWithProof(header) => format!(
+                "BlockHeaderWithProof {{ block_hash: {} }}",
                 hex_encode_compact(header.block_hash)
             ),
             Self::BlockBody(body) => format!(
@@ -180,7 +180,7 @@ impl OverlayContentKey for HistoryContentKey {
     fn bytes(&self) -> [u8; 33] {
         let mut bytes = [0u8; 33];
         let (selector, hash) = match self {
-            HistoryContentKey::BlockHeader(k) => (0x00, k.block_hash),
+            HistoryContentKey::BlockHeaderWithProof(k) => (0x00, k.block_hash),
             HistoryContentKey::BlockBody(k) => (0x01, k.block_hash),
             HistoryContentKey::BlockReceipts(k) => (0x02, k.block_hash),
             HistoryContentKey::EpochAccumulator(k) => (0x03, k.epoch_hash.0),
@@ -235,7 +235,7 @@ mod test {
             block_hash: BLOCK_HASH,
         };
 
-        let key = HistoryContentKey::BlockHeader(header);
+        let key = HistoryContentKey::BlockHeaderWithProof(header);
 
         assert_eq!(key.bytes(), expected_content_key.as_ref());
         assert_eq!(key.content_id(), expected_content_id);
@@ -313,7 +313,7 @@ mod test {
     fn ser_de_block_header() {
         let content_key_json =
             "\"0x00d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d\"";
-        let expected_content_key = HistoryContentKey::BlockHeader(BlockHeaderKey {
+        let expected_content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
             block_hash: BLOCK_HASH,
         });
 
