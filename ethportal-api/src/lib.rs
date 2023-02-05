@@ -26,12 +26,8 @@ pub use web3::Web3ApiClient;
 pub use web3::Web3ApiServer;
 
 pub use types::{
-    accumulator::EpochAccumulator,
-    block_body::BlockBody,
-    block_header::{BlockHeader, BlockHeaderWithProof},
-    content_item::HistoryContentItem,
-    content_key::HistoryContentKey,
-    receipts::BlockReceipts,
+    accumulator::EpochAccumulator, block_body::BlockBody, block_header::BlockHeaderWithProof,
+    content_item::HistoryContentItem, content_key::HistoryContentKey, receipts::BlockReceipts,
 };
 
 // Re-exports jsonrpsee crate

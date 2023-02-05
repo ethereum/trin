@@ -47,7 +47,6 @@ pub struct KBucketsTable {
 pub struct NodeInfo {
     pub enr: Enr,
     pub node_id: NodeId,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ip: Option<String>,
 }
 

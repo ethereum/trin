@@ -132,7 +132,8 @@ impl HistoryRequestHandler {
                 }
                 HistoryEndpoint::DataRadius => {
                     let radius = &self.network.overlay.data_radius();
-                    let _ = request.resp.send(Ok(json!(**radius)));
+                    let response = Ok(json!(**radius));
+                    let _ = request.resp.send(response);
                 }
                 HistoryEndpoint::FindContent(enr, content_key) => {
                     let enr = convert_enr(enr);
@@ -176,9 +177,8 @@ impl HistoryRequestHandler {
                             let _ = request.resp.send(response);
                         }
                         Err(_) => {
-                            let _ = request
-                                .resp
-                                .send(Err("Invalid content key provided".to_owned()));
+                            let response = Err("Invalid content key provided".to_owned());
+                            let _ = request.resp.send(response);
                         }
                     }
                 }
@@ -212,10 +212,11 @@ impl HistoryRequestHandler {
                     let _ = request.resp.send(response);
                 }
                 HistoryEndpoint::RoutingTableInfo => {
-                    let bucket_entries_json =
-                        bucket_entries_to_json(self.network.overlay.bucket_entries());
+                    let response = Ok(bucket_entries_to_json(
+                        self.network.overlay.bucket_entries(),
+                    ));
 
-                    let _ = request.resp.send(Ok(bucket_entries_json));
+                    let _ = request.resp.send(response);
                 }
             }
         }

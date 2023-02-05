@@ -38,7 +38,7 @@ pub enum HistoryEndpoint {
     Offer(HistoryContentKey, HistoryContentItem),
     /// params: [enr, content_keys]
     SendOffer(Enr, Vec<HistoryContentKey>),
-    /// params: [enr, data_radiu]
+    /// params: [enr, data_radius]
     Ping(Enr, Option<DataRadius>),
     /// params: content_key
     RecursiveFindContent(HistoryContentKey),

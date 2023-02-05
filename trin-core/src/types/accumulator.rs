@@ -242,12 +242,12 @@ mod test {
 
     use ethereum_types::{Bloom, H160, H256};
     use rstest::*;
+    use serde_json::json;
     use ssz::Decode;
 
     use crate::types::header::{AccumulatorProof, BlockHeaderProof, HeaderWithProof, SszNone};
     use crate::types::validation::DEFAULT_MASTER_ACC_HASH;
     use crate::utils::bytes::hex_encode;
-    use serde_json::json;
 
     #[rstest]
     #[case(1_000_001)]

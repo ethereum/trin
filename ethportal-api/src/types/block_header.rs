@@ -5,7 +5,6 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use ssz::{Decode, Encode, SszDecoderBuilder, SszEncoder};
 use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, VariableList};
-use std::ops::Deref;
 
 pub type ByteList = VariableList<u8, typenum::U2048>;
 
@@ -177,49 +176,6 @@ impl ssz::Decode for AccumulatorProof {
     }
 }
 
-/// Depreciated history network block header content.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct BlockHeader(pub Header);
-
-impl From<BlockHeader> for Header {
-    fn from(v: BlockHeader) -> Self {
-        v.0
-    }
-}
-
-impl Deref for BlockHeader {
-    type Target = Header;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl Serialize for BlockHeader {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let rlp_header = rlp::encode(&self.0);
-        serializer.serialize_str(&format!("0x{}", hex::encode(&rlp_header)))
-    }
-}
-
-impl<'de> Deserialize<'de> for BlockHeader {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        let header: Header = rlp::decode(
-            &hex::decode(s.strip_prefix("0x").unwrap_or(&s)).map_err(serde::de::Error::custom)?,
-        )
-        .map_err(serde::de::Error::custom)?;
-
-        Ok(Self(header))
-    }
-}
-
 /// A block header
 #[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -388,17 +344,6 @@ mod tests {
         );
         let encoded_header = rlp::encode(&header);
         assert_eq!(header_rlp, encoded_header);
-    }
-
-    #[test]
-    fn block_header_ser_de() {
-        let block_header_json = "\"0xf90214a02320c9ca606618919c2a4cf5c6012cfac99399446c60a07f084334dea25f69eca01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794ea674fdde714fd979de3edf0f56aa9716b898ec8a0604a0ab7fe0d434943fbf2c525c4086818b8305349d91d6f4b205aca0759a2b8a0fdfe28e250fb15f7cb360d36ebb7dafa6da4f74543ce593baa96c27891ccac83a0cb9f9e60fb971068b76a8dece4202dde6b4075ebd90e7b2cd21c7fd8e121bba1b9010082e01d13f40116b1e1a0244090289b6920c51418685a0855031b988aef1b494313054c4002584928380267bc11cec18b0b30c456ca30651d9b06c931ea78aa0c40849859c7e0432df944341b489322b0450ce12026cafa1ba590f20af8051024fb8722a43610800381a531aa92042dd02448b1549052d6f06e4005b1000e063035c0220402a09c0124daab9028836209c446240d652c927bc7e4004b849256db5ba8d08b4a2321fd1e25c4d1dc480d18465d8600a41e864001cae44f38609d1c7414a8d62b5869d5a8001180d87228d788e852119c8a03df162471a317832622153da12fc21d828710062c7103534eb119714280201341ce6889ae926e025067872b68048d94e1ed83d6326b8401caa84183b062808461e859a88c617369612d65617374322d32a03472320df4ea70d29b89afdf195c3aa2289560a453957eea5058b57b80b908bf88d6450793e6dcec1c8532ff3f048d\"";
-        let block_header: BlockHeader = serde_json::from_str(block_header_json).unwrap();
-
-        assert_eq!(
-            block_header_json,
-            serde_json::to_string(&block_header).unwrap()
-        )
     }
 
     #[test]
