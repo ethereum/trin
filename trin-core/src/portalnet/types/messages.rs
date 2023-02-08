@@ -59,6 +59,13 @@ impl From<Vec<u8>> for CustomPayload {
     }
 }
 
+impl Into<Distance> for CustomPayload {
+    fn into(self) -> Distance {
+        let bytes = self.payload;
+        U256::from_little_endian(bytes.deref()).into()
+    }
+}
+
 impl ssz::Decode for CustomPayload {
     fn is_ssz_fixed_len() -> bool {
         false
