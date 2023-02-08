@@ -1563,10 +1563,12 @@ dependencies = [
  "jsonrpsee 0.16.2",
  "reth-primitives",
  "reth-rlp",
+ "rstest 0.16.0",
  "serde",
  "serde-hex",
  "serde_json",
  "sha2 0.10.6",
+ "thiserror",
 ]
 
 [[package]]
@@ -4443,6 +4445,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "rstest"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b07f2d176c472198ec1e6551dc7da28f1c089652f66a7b722676c2238ebc0edf"
+dependencies = [
+ "futures 0.3.26",
+ "futures-timer",
+ "rstest_macros",
+ "rustc_version 0.4.0",
+]
+
+[[package]]
+name = "rstest_macros"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7229b505ae0706e64f37ffc54a9c163e11022a6636d58fe1f3f52018257ff9f7"
+dependencies = [
+ "cfg-if 1.0.0",
+ "proc-macro2",
+ "quote",
+ "rustc_version 0.4.0",
+ "syn",
+ "unicode-ident",
+]
+
+[[package]]
 name = "ruint"
 version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5787,7 +5815,7 @@ dependencies = [
  "rlp 0.5.2",
  "rlp-derive",
  "rocksdb",
- "rstest",
+ "rstest 0.11.0",
  "rusqlite",
  "serde",
  "serde_json",
