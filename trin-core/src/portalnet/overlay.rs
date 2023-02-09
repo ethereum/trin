@@ -347,13 +347,14 @@ where
         kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
         command_tx: UnboundedSender<OverlayCommand<TContentKey>>,
     ) -> usize {
-        // Get all nodes from overlay routing table
+        // Get all connected nodes from overlay routing table
         let kbuckets = kbuckets.read();
         let all_nodes: Vec<&kbucket::Node<NodeId, Node>> = kbuckets
             .buckets_iter()
             .map(|kbucket| {
                 kbucket
                     .iter()
+                    .filter(|node| node.status.is_connected())
                     .collect::<Vec<&kbucket::Node<NodeId, Node>>>()
             })
             .flatten()
