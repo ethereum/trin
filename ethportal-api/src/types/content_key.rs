@@ -14,7 +14,7 @@ pub trait OverlayContentKey:
     /// The identifier locates the content in the overlay.
     fn content_id(&self) -> [u8; 32];
     /// Returns the bytes of the content key.
-    fn bytes(&self) -> [u8; 33];
+    fn to_bytes(&self) -> [u8; 33];
 }
 
 /// A content key in the history overlay network.
@@ -177,7 +177,7 @@ impl OverlayContentKey for HistoryContentKey {
         sha256.finalize().into()
     }
 
-    fn bytes(&self) -> [u8; 33] {
+    fn to_bytes(&self) -> [u8; 33] {
         let mut bytes = [0u8; 33];
         let (selector, hash) = match self {
             HistoryContentKey::BlockHeaderWithProof(k) => (0x00, k.block_hash),
@@ -237,7 +237,7 @@ mod test {
 
         let key = HistoryContentKey::BlockHeaderWithProof(header);
 
-        assert_eq!(key.bytes(), expected_content_key.as_ref());
+        assert_eq!(key.to_bytes(), expected_content_key.as_ref());
         assert_eq!(key.content_id(), expected_content_id);
     }
 
@@ -258,7 +258,7 @@ mod test {
 
         let key = HistoryContentKey::BlockBody(body);
 
-        assert_eq!(key.bytes(), expected_content_key.as_ref());
+        assert_eq!(key.to_bytes(), expected_content_key.as_ref());
         assert_eq!(key.content_id(), expected_content_id);
     }
 
@@ -279,7 +279,7 @@ mod test {
 
         let key = HistoryContentKey::BlockReceipts(receipts);
 
-        assert_eq!(key.bytes(), expected_content_key.as_ref());
+        assert_eq!(key.to_bytes(), expected_content_key.as_ref());
         assert_eq!(key.content_id(), expected_content_id);
     }
 
