@@ -21,7 +21,9 @@ use trin_core::{
 
 use discv5::Enr;
 use ethportal_api::types::discv5::Enr as EthEnr;
-use ethportal_api::types::portal::Distance;
+use ethportal_api::types::portal::{
+    AcceptInfo, Distance, FindNodesInfo, NodeInfo, PongInfo, TraceContentInfo,
+};
 use ethportal_api::HistoryContentKey as EthHistoryContentKey;
 use ssz::Encode;
 use trin_core::jsonrpc::endpoints::HistoryEndpoint;
@@ -77,19 +79,15 @@ impl HistoryRequestHandler {
                 HistoryEndpoint::Store(content_key, content_item) => {
                     match convert_content_key(&content_key) {
                         Ok(content_key) => {
-                            let response = {
-                                match self
-                                    .network
-                                    .overlay
-                                    .store
-                                    .write()
-                                    .put::<HistoryContentKey, Vec<u8>>(
-                                        content_key,
-                                        content_item.into(),
-                                    ) {
-                                    Ok(_) => Ok(Value::Bool(true)),
-                                    Err(msg) => Ok(Value::String(msg.to_string())),
-                                }
+                            let response = match self
+                                .network
+                                .overlay
+                                .store
+                                .write()
+                                .put::<HistoryContentKey, Vec<u8>>(content_key, content_item.into())
+                            {
+                                Ok(_) => Ok(Value::Bool(true)),
+                                Err(msg) => Ok(Value::String(msg.to_string())),
                             };
                             let _ = request.resp.send(response);
                         }
@@ -103,9 +101,7 @@ impl HistoryRequestHandler {
                 HistoryEndpoint::RecursiveFindContent(content_key) => {
                     match convert_content_key(&content_key) {
                         Ok(content_key) => {
-                            let is_trace = false;
-
-                            let response = self.recursive_find_content(content_key, is_trace).await;
+                            let response = self.recursive_find_content(content_key, false).await;
                             let _ = request.resp.send(response);
                         }
                         Err(_) => {
@@ -118,9 +114,7 @@ impl HistoryRequestHandler {
                 HistoryEndpoint::TraceRecursiveFindContent(content_key) => {
                     match convert_content_key(&content_key) {
                         Ok(content_key) => {
-                            let is_trace = true;
-
-                            let response = self.recursive_find_content(content_key, is_trace).await;
+                            let response = self.recursive_find_content(content_key, true).await;
                             let _ = request.resp.send(response);
                         }
                         Err(_) => {
@@ -157,9 +151,13 @@ impl HistoryRequestHandler {
 
                     let response = match self.network.overlay.send_find_nodes(enr, distances).await
                     {
-                        Ok(nodes) => Ok(json!({
-                            "total": nodes.total,
-                            "enrs":  nodes.enrs.into_iter().map(|enr| EthEnr::from_str(&enr.to_base64()).unwrap()).collect::<Vec<EthEnr>>()
+                        Ok(nodes) => Ok(json!(FindNodesInfo {
+                            total: nodes.total,
+                            enrs: nodes
+                                .enrs
+                                .into_iter()
+                                .map(|enr| EthEnr::from_str(&enr.to_base64()).unwrap())
+                                .collect::<Vec<EthEnr>>(),
                         })),
                         Err(msg) => Err(format!("FindNodes request timeout: {:?}", msg)),
                     };
@@ -168,12 +166,9 @@ impl HistoryRequestHandler {
                 HistoryEndpoint::Offer(content_key, content_item) => {
                     match convert_content_key(&content_key) {
                         Ok(content_key) => {
-                            let response = {
-                                let content_items = vec![(content_key, content_item.into())];
-                                let num_peers =
-                                    self.network.overlay.propagate_gossip(content_items);
-                                Ok(num_peers.into())
-                            };
+                            let content_items = vec![(content_key, content_item.into())];
+                            let num_peers = self.network.overlay.propagate_gossip(content_items);
+                            let response = Ok(num_peers.into());
                             let _ = request.resp.send(response);
                         }
                         Err(_) => {
@@ -185,26 +180,22 @@ impl HistoryRequestHandler {
                 HistoryEndpoint::SendOffer(enr, content_keys) => {
                     let enr = convert_enr(enr);
 
-                    let response = {
-                        let content_keys =
-                            content_keys.iter().map(|key| key.as_ssz_bytes()).collect();
-
-                        match self.network.overlay.send_offer(content_keys, enr).await {
-                            Ok(accept) => Ok(json!({
-                                "connectionId": accept.connection_id,
-                                "contentKeys": accept.content_keys
-                            })),
-                            Err(msg) => Err(format!("SendOffer request timeout: {:?}", msg)),
-                        }
+                    let content_keys = content_keys.iter().map(|key| key.as_ssz_bytes()).collect();
+                    let response = match self.network.overlay.send_offer(content_keys, enr).await {
+                        Ok(accept) => Ok(json!(AcceptInfo {
+                            connection_id: accept.connection_id,
+                            content_keys: accept.content_keys,
+                        })),
+                        Err(msg) => Err(format!("SendOffer request timeout: {:?}", msg)),
                     };
                     let _ = request.resp.send(response);
                 }
                 HistoryEndpoint::Ping(enr, _) => {
                     let enr = convert_enr(enr);
                     let response = match self.network.overlay.send_ping(enr).await {
-                        Ok(pong) => Ok(json!({
-                            "enrSeq": pong.enr_seq,
-                            "dataRadius": *self.network.overlay.data_radius()
+                        Ok(pong) => Ok(json!(PongInfo {
+                            enr_seq: pong.enr_seq as u32,
+                            data_radius: *self.network.overlay.data_radius(),
                         })),
                         Err(msg) => Err(format!("Ping request timeout: {:?}", msg)),
                     };
@@ -251,36 +242,37 @@ impl HistoryRequestHandler {
             }
         };
         let content = content.unwrap_or_default();
-        let response = match is_trace {
-            true => {
-                let closest_nodes: Vec<Value> = closest_nodes
-                    .iter()
-                    // Skip over enrs that are unable to be looked up
-                    .filter_map(|node_id| {
-                        let content_id = content_key.content_id();
-                        // Return None for enrs that cannot be looked up
-                        match self.network.overlay.discovery.find_enr(node_id) {
-                            Some(enr) => XorMetric::distance(&content_id, &enr.node_id().raw())
-                                .log2()
-                                .map(|distance| {
-                                    let distance = Distance::from(distance);
-                                    json!({
-                                        "enr": enr,
-                                        "distance": distance
-                                    })
-                                }),
-                            None => None,
-                        }
-                    })
-                    .collect();
-                Ok(json!({
-                    "content": hex_encode(content),
-                    "route": closest_nodes,
-                }))
-            }
-            false => Ok(Value::String(hex_encode(content))),
-        };
-        response
+
+        if !is_trace {
+            return Ok(Value::String(hex::encode(content)));
+        }
+
+        // Construct trace response
+        let closest_nodes: Vec<NodeInfo> = closest_nodes
+            .iter()
+            // Skip over enrs that are unable to be looked up
+            .filter_map(|node_id| {
+                let content_id = content_key.content_id();
+                // Return None for enrs that cannot be looked up
+                match self.network.overlay.discovery.find_enr(node_id) {
+                    Some(enr) => XorMetric::distance(&content_id, &enr.node_id().raw())
+                        .log2()
+                        .map(|distance| {
+                            let distance = Distance::from(distance);
+                            NodeInfo {
+                                enr: EthEnr::from_str(&enr.to_base64()).unwrap(),
+                                distance,
+                            }
+                        }),
+                    None => None,
+                }
+            })
+            .collect();
+
+        Ok(json!(TraceContentInfo {
+            content: content.into(),
+            route: closest_nodes,
+        }))
     }
 }
 

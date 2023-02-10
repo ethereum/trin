@@ -20,10 +20,10 @@ impl JsonRpcServer {
             .await?;
         let discv5_api = Discv5Api::new(discv5);
         let history_network_api = HistoryNetworkApi::new(history_handler);
-        let mut all_methods = discv5_api.into_rpc();
-        all_methods.merge(history_network_api.into_rpc())?;
-        all_methods.merge(Web3Api.into_rpc())?;
-        let handle = server.start(all_methods)?;
+        let mut api = discv5_api.into_rpc();
+        api.merge(history_network_api.into_rpc())?;
+        api.merge(Web3Api.into_rpc())?;
+        let handle = server.start(api)?;
         Ok(handle)
     }
 
@@ -35,10 +35,10 @@ impl JsonRpcServer {
         let server = IpcServerBuilder::default().build(ipc_path)?;
         let discv5_api = Discv5Api::new(discv5);
         let history_network_api = HistoryNetworkApi::new(history_handler);
-        let mut all_methods = discv5_api.into_rpc();
-        all_methods.merge(history_network_api.into_rpc())?;
-        all_methods.merge(Web3Api.into_rpc())?;
-        let handle = server.start(all_methods).await?;
+        let mut api = discv5_api.into_rpc();
+        api.merge(history_network_api.into_rpc())?;
+        api.merge(Web3Api.into_rpc())?;
+        let handle = server.start(api).await?;
         Ok(handle)
     }
 }

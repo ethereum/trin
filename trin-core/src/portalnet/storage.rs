@@ -353,6 +353,8 @@ impl PortalStorage {
                         let row: String = row.get(0)?;
                         let content_key: HistoryContentKey = serde_json::from_value(json!(row))
                             .map_err(|err| {
+                                // TODO: This is a hack to get around the fact that rusqlite doesn't
+                                // support returning a custom error type. We should fix this.
                                 rusqlite::Error::InvalidParameterName(err.to_string())
                             })?;
                         content_key

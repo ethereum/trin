@@ -1310,6 +1310,7 @@ dependencies = [
  "hex",
  "httpmock",
  "hyper",
+ "rand 0.8.5",
  "reth-ipc",
  "rocksdb",
  "serde_json",

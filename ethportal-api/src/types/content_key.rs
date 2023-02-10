@@ -94,15 +94,6 @@ impl<'de> Deserialize<'de> for HistoryContentKey {
     }
 }
 
-impl HistoryContentKey {
-    /// Generates random histor content key block header
-    pub fn random_header() -> Self {
-        HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
-            block_hash: rand::random(),
-        })
-    }
-}
-
 /// A key for a block header.
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct BlockHeaderKey {

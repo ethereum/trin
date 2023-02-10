@@ -54,7 +54,7 @@ pub fn test_offer_accept(peertest_config: PeertestConfig, peertest: &Peertest) {
             .expect("Could not get local content");
 
     let mut counter = 0;
-    while received_content_value == Value::String("0x0".to_owned()) || counter == 5 {
+    while received_content_value == Value::String("0x0".to_owned()) && counter < 5 {
         error!("Retrying after 0.5sec, because content should have been present");
         thread::sleep(time::Duration::from_millis(500));
         received_content_value =

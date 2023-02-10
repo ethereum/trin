@@ -1,3 +1,4 @@
+use ethportal_api::types::content_key::BlockHeaderKey;
 use ethportal_api::HistoryNetworkApiClient;
 use ethportal_api::{HistoryContentItem, HistoryContentKey};
 
@@ -14,7 +15,12 @@ pub async fn test_paginate_local_storage(peertest_config: PeertestConfig, _peert
     assert_eq!(result.content_keys.len(), 0);
 
     let mut content_keys: Vec<String> = (0..20_u8)
-        .map(|_| serde_json::to_string(&HistoryContentKey::random_header()).unwrap())
+        .map(|_| {
+            serde_json::to_string(&HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
+                block_hash: rand::random(),
+            }))
+            .unwrap()
+        })
         .collect();
 
     for content_key in content_keys.clone().into_iter() {
@@ -72,10 +78,10 @@ pub async fn test_paginate_local_storage(peertest_config: PeertestConfig, _peert
         .await
         .unwrap();
     assert_eq!(result.total_entries, 20);
-    let paginated_content_keys: Vec<String> = result
+    assert!(result
         .content_keys
         .iter()
         .map(|v| serde_json::to_string(v).unwrap())
-        .collect();
-    assert_eq!(paginated_content_keys, &content_keys[0..0]);
+        .next()
+        .is_none());
 }
