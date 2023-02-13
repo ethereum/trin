@@ -14,6 +14,9 @@ use serde_json::{json, Value};
 use tokio::sync::mpsc;
 use tracing::info;
 
+use anyhow::anyhow;
+use ethportal_api::types::discv5::{Enr as EthportalEnr, NodeId as EthportalNodeId, NodeInfo};
+use std::str::FromStr;
 use std::{
     convert::TryFrom,
     fmt,
@@ -197,11 +200,16 @@ impl Discovery {
     }
 
     /// Returns ENR and nodeId information of the local Discv5 node.
-    pub fn node_info(&self) -> Value {
-        json!({
-            "enr":  self.discv5.local_enr().to_base64(),
-            "nodeId":  hex_encode(self.discv5.local_enr().node_id().raw()),
-            "ip":  self.discv5.local_enr().ip4().map_or("None".to_owned(), |ip| ip.to_string())
+    pub fn node_info(&self) -> anyhow::Result<NodeInfo> {
+        Ok(NodeInfo {
+            enr: EthportalEnr::from_str(&self.discv5.local_enr().to_base64())
+                .map_err(|err| anyhow!("{err}"))?,
+            node_id: EthportalNodeId::from(self.discv5.local_enr().node_id().raw()),
+            ip: self
+                .discv5
+                .local_enr()
+                .ip4()
+                .map_or(Some("None".to_owned()), |ip| Some(ip.to_string())),
         })
     }
 
@@ -222,7 +230,7 @@ impl Discovery {
 
         json!(
             {
-                "localKey": hex_encode(self.discv5.local_enr().node_id().raw()),
+                "localNodeId": hex_encode(self.discv5.local_enr().node_id().raw()),
                 "buckets": buckets
             }
         )

@@ -18,6 +18,7 @@ COPY ./trin-state ./trin-state
 COPY ./ethportal-peertest ./ethportal-peertest 
 COPY ./utp-testing ./utp-testing
 COPY ./ethportal-api ./ethportal-api
+COPY ./rpc ./rpc
 
 # build for release
 RUN cargo build -p trin -p trin-cli --release

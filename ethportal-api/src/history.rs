@@ -1,3 +1,4 @@
+use crate::types::portal::FindNodesInfo;
 use crate::types::{
     content_item::HistoryContentItem,
     content_key::HistoryContentKey,
@@ -10,12 +11,15 @@ use jsonrpsee::{core::RpcResult, proc_macros::rpc};
 
 /// Portal History JSON-RPC endpoints
 #[cfg(any(feature = "client", feature = "server"))]
-#[cfg_attr(feature = "client", rpc(client, namespace = "portal"))]
-#[cfg_attr(feature = "server", rpc(server, namespace = "portal"))]
+#[rpc(client, server, namespace = "portal")]
 pub trait HistoryNetworkApi {
     /// Returns meta information about overlay routing table.
     #[method(name = "historyRoutingTableInfo")]
     async fn routing_table_info(&self) -> RpcResult<RoutingTableInfo>;
+
+    /// Returns meta information about overlay routing table.
+    #[method(name = "historyRadius")]
+    async fn radius(&self) -> RpcResult<DataRadius>;
 
     /// Write an Ethereum Node Record to the overlay routing table.
     #[method(name = "historyAddEnr")]
@@ -40,7 +44,7 @@ pub trait HistoryNetworkApi {
     /// Send a FINDNODES request for nodes that fall within the given set of distances, to the designated
     /// peer and wait for a response
     #[method(name = "historyFindNodes")]
-    async fn find_nodes(&self, enr: Enr, distances: Vec<u16>) -> RpcResult<Vec<Enr>>;
+    async fn find_nodes(&self, enr: Enr, distances: Vec<u16>) -> RpcResult<FindNodesInfo>;
 
     /// Lookup a target node within in the network
     #[method(name = "historyRecursiveFindNodes")]
@@ -69,7 +73,7 @@ pub trait HistoryNetworkApi {
     ) -> RpcResult<TraceContentInfo>;
 
     /// Pagination of local content keys
-    #[method(name = "historyPaginateLocalContentKeys")]
+    #[method(name = "paginateLocalContentKeys")]
     async fn paginate_local_content_keys(
         &self,
         offset: u64,

@@ -7,6 +7,8 @@ use std::{
 
 use anyhow::anyhow;
 use discv5::enr::NodeId;
+use ethportal_api::types::portal::PaginateLocalContentInfo;
+use ethportal_api::HistoryContentKey;
 use prometheus_exporter::{
     self,
     prometheus::{register_gauge, Gauge},
@@ -15,7 +17,7 @@ use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rocksdb::{Options, DB};
 use rusqlite::params;
-use serde::Serialize;
+use serde_json::json;
 use tracing::{debug, error, info};
 
 use super::types::{
@@ -24,10 +26,7 @@ use super::types::{
 };
 use crate::{
     portalnet::types::messages::ProtocolId,
-    utils::{
-        bytes::{hex_decode, hex_encode},
-        db::get_data_dir,
-    },
+    utils::{bytes::hex_encode, db::get_data_dir},
 };
 
 // TODO: Replace enum with generic type parameter. This will require that we have a way to
@@ -336,7 +335,7 @@ impl PortalStorage {
 
     /// Returns a paginated list of all available content keys from local storage (from any
     /// subnetwork) according to the provided offset and limit.
-    pub fn paginate(&self, offset: &u64, limit: &u64) -> anyhow::Result<PaginateResult> {
+    pub fn paginate(&self, offset: &u64, limit: &u64) -> anyhow::Result<PaginateLocalContentInfo> {
         let conn = self.sql_connection_pool.get()?;
         let mut query = conn.prepare(PAGINATE_QUERY)?;
 
@@ -346,10 +345,21 @@ impl PortalStorage {
                     (":offset", offset.to_string().as_str()),
                     (":limit", limit.to_string().as_str()),
                 ],
-                |row| Ok(ContentKey { key: row.get(0)? }),
+                |row| {
+                    Ok({
+                        let row: String = row.get(0)?;
+                        let content_key: HistoryContentKey = serde_json::from_value(json!(row))
+                            .map_err(|err| {
+                                // TODO: This is a hack to get around the fact that rusqlite doesn't
+                                // support returning a custom error type. We should fix this.
+                                rusqlite::Error::InvalidParameterName(err.to_string())
+                            })?;
+                        content_key
+                    })
+                },
             )?
             .into_iter()
-            .map(|row| row.unwrap().key)
+            .map(|row| row.unwrap())
             .collect();
 
         let mut query = conn.prepare(TOTAL_ENTRY_COUNT_QUERY)?;
@@ -362,7 +372,7 @@ impl PortalStorage {
             .first()
             .expect("Invalid total entries count returned from sql query.");
 
-        Ok(PaginateResult {
+        Ok(PaginateLocalContentInfo {
             content_keys,
             total_entries: *total_entries,
         })
@@ -477,9 +487,19 @@ impl PortalStorage {
         let conn = self.sql_connection_pool.get()?;
         let mut query = conn.prepare(CONTENT_KEY_LOOKUP_QUERY)?;
         let id = id.to_vec();
-        let mut result = query.query_map([id], |row| Ok(ContentKey { key: row.get(0)? }))?;
+        let mut result = query.query_map([id], |row| {
+            let row: String = row.get(0)?;
+            let content_key: HistoryContentKey =
+                serde_json::from_value(json!(row)).map_err(|err| {
+                    // TODO: This is a hack to get around the fact that rusqlite doesn't
+                    // support returning a custom error type. We should fix this.
+                    rusqlite::Error::InvalidParameterName(err.to_string())
+                })?;
+            Ok(content_key)
+        })?;
+
         match result.next() {
-            Some(val) => Ok(Some(hex_decode(&val?.key)?)),
+            Some(val) => Ok(Some(val?.into())),
             None => Ok(None),
         }
     }
@@ -771,16 +791,6 @@ struct DataSizeSum {
 
 struct EntryCount {
     total: u64,
-}
-
-struct ContentKey {
-    key: String,
-}
-
-#[derive(Serialize)]
-pub struct PaginateResult {
-    content_keys: Vec<String>,
-    total_entries: u64,
 }
 
 #[cfg(test)]

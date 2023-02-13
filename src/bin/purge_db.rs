@@ -5,7 +5,7 @@ use discv5::enr::{CombinedKey, EnrBuilder};
 use rocksdb::IteratorMode;
 use ssz::Decode;
 use structopt::StructOpt;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use ethportal_api::types::accumulator::EpochAccumulator;
 use ethportal_api::types::block_body::BlockBody;
@@ -94,6 +94,10 @@ fn is_content_valid(content_key: &HistoryContentKey, value: &[u8]) -> bool {
         HistoryContentKey::BlockBody(_) => BlockBody::from_ssz_bytes(value).is_ok(),
         HistoryContentKey::BlockReceipts(_) => BlockReceipts::from_ssz_bytes(value).is_ok(),
         HistoryContentKey::EpochAccumulator(_) => EpochAccumulator::from_ssz_bytes(value).is_ok(),
+        HistoryContentKey::Unknown(_) => {
+            debug!("Found invalid content key: {content_key}");
+            false
+        }
     }
 }
 
