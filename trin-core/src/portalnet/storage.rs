@@ -26,10 +26,7 @@ use super::types::{
 };
 use crate::{
     portalnet::types::messages::ProtocolId,
-    utils::{
-        bytes::{hex_decode, hex_encode},
-        db::get_data_dir,
-    },
+    utils::{bytes::hex_encode, db::get_data_dir},
 };
 
 // TODO: Replace enum with generic type parameter. This will require that we have a way to
@@ -490,9 +487,19 @@ impl PortalStorage {
         let conn = self.sql_connection_pool.get()?;
         let mut query = conn.prepare(CONTENT_KEY_LOOKUP_QUERY)?;
         let id = id.to_vec();
-        let mut result = query.query_map([id], |row| Ok(ContentKey { key: row.get(0)? }))?;
+        let mut result = query.query_map([id], |row| {
+            let row: String = row.get(0)?;
+            let content_key: HistoryContentKey =
+                serde_json::from_value(json!(row)).map_err(|err| {
+                    // TODO: This is a hack to get around the fact that rusqlite doesn't
+                    // support returning a custom error type. We should fix this.
+                    rusqlite::Error::InvalidParameterName(err.to_string())
+                })?;
+            Ok(content_key)
+        })?;
+
         match result.next() {
-            Some(val) => Ok(Some(hex_decode(&val?.key)?)),
+            Some(val) => Ok(Some(val?.into())),
             None => Ok(None),
         }
     }

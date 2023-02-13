@@ -168,7 +168,7 @@ async fn launch_jsonrpc_server(
         "http" => {
             // Launch jsonrpsee server with http and WS transport
             let handle = JsonRpcServer::run_http(
-                trin_config.web3_http_address.to_string(),
+                trin_config.web3_http_address,
                 discv5,
                 history_handler.unwrap(),
             )
