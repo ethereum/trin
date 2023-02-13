@@ -12,7 +12,7 @@ Trin currently only runs on Unix-based platforms (Linux, macOS). We plan to even
 
 ## How to use Trin
 
-Check out the [Getting Started](/docs/getting_started.md) guide to quickly get up and running with Trin.
+Check out the [Trin book](https://ethereum.github.io/trin) to quickly get up and running with Trin.
 
 ## Experimental Status
 
@@ -23,7 +23,7 @@ In this stage of development, Trin relies on a separate execution node (local no
 ## Want to help?
 
 Want to file a bug, contribute some code, or improve documentation? Excellent! Read up on our
-guidelines for [contributing](/docs/contributing.md),
+guidelines for contributing in the [Trin book](https://ethereum.github.io/trin),
 then check out issues that are labeled
 [Good First Issue](https://github.com/ethereum/trin/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22).
 
