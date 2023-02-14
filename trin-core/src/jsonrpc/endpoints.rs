@@ -34,10 +34,10 @@ pub enum HistoryEndpoint {
     FindNodes(Enr, Vec<u16>),
     /// params: content_key
     LocalContent(HistoryContentKey),
-    /// params: [content-key, content_value]
-    Offer(HistoryContentKey, HistoryContentItem),
-    /// params: [enr, content_keys]
-    SendOffer(Enr, Vec<HistoryContentKey>),
+    /// params: [content_key, content_value]
+    Gossip(HistoryContentKey, HistoryContentItem),
+    /// params: [enr, content_key]
+    Offer(Enr, HistoryContentKey),
     /// params: [enr, data_radius]
     Ping(Enr, Option<DataRadius>),
     /// params: content_key

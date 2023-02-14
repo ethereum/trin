@@ -247,14 +247,6 @@ fn validate_portal_routing_table_info(result: &Value, _peertest: &Peertest) {
 }
 
 pub fn validate_portal_offer(result: &Value, _peertest: &Peertest) {
-    // Expect u64 connection id
-    let connection_id = result
-        .get("connectionId")
-        .unwrap()
-        .as_u64()
-        .unwrap()
-        .to_string();
-    assert!(connection_id.parse::<u64>().is_ok());
     // Should accept the requested content
     assert_eq!(result.get("contentKeys").unwrap().as_str(), Some("0x03"))
 }
