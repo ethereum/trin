@@ -133,7 +133,7 @@ fn generate_trin_config(id: u16, bootnode_enr: Option<&SszEnr>) -> TrinConfig {
         }
         None => {
             let ip_addr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
-            let external_addr = format!("{}:{}", ip_addr, discovery_port);
+            let external_addr = format!("{ip_addr}:{discovery_port}");
             let trin_config_args = vec![
                 "trin",
                 "--networks",

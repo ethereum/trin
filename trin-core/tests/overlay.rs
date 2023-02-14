@@ -79,10 +79,10 @@ async fn spawn_overlay(
         while let Some(talk_req) = overlay_rx.recv().await {
             let talk_resp = match overlay.process_one_request(&talk_req).await {
                 Ok(response) => Message::from(response).into(),
-                Err(err) => panic!("Error processing request: {}", err),
+                Err(err) => panic!("Error processing request: {err}"),
             };
             if let Err(err) = talk_req.respond(talk_resp) {
-                panic!("Unable to respond to talk request: {}", err);
+                panic!("Unable to respond to talk request: {err}");
             }
         }
     });
@@ -149,7 +149,7 @@ async fn overlay() {
         Ok(pong) => {
             assert_eq!(1, pong.enr_seq);
         }
-        Err(err) => panic!("Unable to respond to ping: {}", err),
+        Err(err) => panic!("Unable to respond to ping: {err}"),
     }
     time::sleep(sleep_duration).await;
     let overlay_one_peers = overlay_one.table_entries_enr();
@@ -167,7 +167,7 @@ async fn overlay() {
             assert_eq!(1, nodes.enrs.len());
             assert!(nodes.enrs.contains(&SszEnr::new(overlay_three.local_enr())));
         }
-        Err(err) => panic!("Unable to respond to find nodes: {}", err),
+        Err(err) => panic!("Unable to respond to find nodes: {err}"),
     }
     time::sleep(sleep_duration).await;
     let overlay_one_peers = overlay_one.table_entries_enr();
@@ -189,7 +189,7 @@ async fn overlay() {
             assert!(nodes.enrs.contains(&SszEnr::new(overlay_two.local_enr())));
             assert!(nodes.enrs.contains(&SszEnr::new(overlay_three.local_enr())));
         }
-        Err(err) => panic!("Unable to respond to find nodes: {}", err),
+        Err(err) => panic!("Unable to respond to find nodes: {err}"),
     }
     time::sleep(sleep_duration).await;
     let overlay_three_peers = overlay_three.table_entries_enr();
@@ -208,9 +208,9 @@ async fn overlay() {
     {
         Ok(content) => match content {
             Content::Enrs(enrs) => enrs,
-            other => panic!("Unexpected response to find content: {:?}", other),
+            other => panic!("Unexpected response to find content: {other:?}"),
         },
-        Err(err) => panic!("Unable to respond to find content: {}", err),
+        Err(err) => panic!("Unable to respond to find content: {err}"),
     };
     time::sleep(sleep_duration).await;
     let overlay_two_peers = overlay_two.table_entries_enr();

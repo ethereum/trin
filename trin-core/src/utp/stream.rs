@@ -2262,7 +2262,7 @@ mod tests {
             match server.recv_from(&mut buf).await {
                 Ok((0, _src)) => break,
                 Ok((len, _src)) => received.extend(buf[..len].to_vec()),
-                Err(e) => panic!("{:?}", e),
+                Err(e) => panic!("{e:?}"),
             }
         }
 

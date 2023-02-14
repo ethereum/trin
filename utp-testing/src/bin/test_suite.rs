@@ -19,11 +19,11 @@ async fn main() -> anyhow::Result<()> {
 /// Send 10k bytes payload from client to server
 async fn send_10k_bytes() -> anyhow::Result<()> {
     println!("Sending 10k bytes uTP payload from client to server...");
-    let client_url = format!("http://{}", CLIENT_ADDR);
+    let client_url = format!("http://{CLIENT_ADDR}");
     let client_rpc = HttpClientBuilder::default().build(client_url)?;
     let client_enr: String = client_rpc.request("local_enr", None).await.unwrap();
 
-    let server_url = format!("http://{}", SERVER_ADDR);
+    let server_url = format!("http://{SERVER_ADDR}");
     let server_rpc = HttpClientBuilder::default().build(server_url)?;
     let server_enr: String = server_rpc.request("local_enr", None).await.unwrap();
 
