@@ -163,7 +163,7 @@ fn create_dashboard(dashboard_config: DashboardConfig) -> Result<(), Box<dyn std
 
     let dashboard_url = grafana.create_dashboard(json_rpc_uid, prometheus_uid)?;
 
-    println!("Dashboard successfully created: {}", dashboard_url);
+    println!("Dashboard successfully created: {dashboard_url}");
     Ok(())
 }
 

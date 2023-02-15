@@ -51,9 +51,7 @@ impl HistoryRequestHandler {
                                         None => Ok(Value::String("0x0".to_string())),
                                     },
                                     Err(err) => Err(format!(
-                                        "Database error while looking for content key in local storage: {:?}, with error: {}",
-
-                                        content_key, err
+                                        "Database error while looking for content key in local storage: {content_key:?}, with error: {err}",
                                     )),
                                 };
                             let _ = request.resp.send(response);
@@ -71,8 +69,7 @@ impl HistoryRequestHandler {
                                 {
                                     Ok(val) => Ok(json!(val)),
                                     Err(err) => Err(format!(
-                                        "Database error while paginating local content keys with offset: {:?}, limit: {:?}. Error message: {}",
-                                        offset, limit, err
+                                        "Database error while paginating local content keys with offset: {offset:?}, limit: {limit:?}. Error message: {err}"
                                     )),
                                 };
                     let _ = request.resp.send(response);
@@ -143,7 +140,7 @@ impl HistoryRequestHandler {
                             Ok(val) => Ok(val),
                             Err(_) => Err("Content response decoding error".to_string()),
                         },
-                        Err(msg) => Err(format!("FindContent request timeout: {:?}", msg)),
+                        Err(msg) => Err(format!("FindContent request timeout: {msg:?}")),
                     };
                     let _ = request.resp.send(response);
                 }
@@ -160,7 +157,7 @@ impl HistoryRequestHandler {
                                 .map(|enr| EthEnr::from_str(&enr.to_base64()).unwrap())
                                 .collect::<Vec<EthEnr>>(),
                         })),
-                        Err(msg) => Err(format!("FindNodes request timeout: {:?}", msg)),
+                        Err(msg) => Err(format!("FindNodes request timeout: {msg:?}")),
                     };
                     let _ = request.resp.send(response);
                 }
@@ -186,7 +183,7 @@ impl HistoryRequestHandler {
                         Ok(accept) => Ok(json!(AcceptInfo {
                             content_keys: accept.content_keys,
                         })),
-                        Err(msg) => Err(format!("SendOffer request timeout: {:?}", msg)),
+                        Err(msg) => Err(format!("SendOffer request timeout: {msg:?}")),
                     };
                     let _ = request.resp.send(response);
                 }
@@ -197,7 +194,7 @@ impl HistoryRequestHandler {
                             enr_seq: pong.enr_seq as u32,
                             data_radius: *self.network.overlay.data_radius(),
                         })),
-                        Err(msg) => Err(format!("Ping request timeout: {:?}", msg)),
+                        Err(msg) => Err(format!("Ping request timeout: {msg:?}")),
                     };
 
                     let _ = request.resp.send(response);

@@ -48,7 +48,7 @@ impl HeaderOracle {
     }
 
     pub fn get_header_by_hash(&self, block_hash: H256) -> anyhow::Result<Header> {
-        let block_hash = format!("0x{:02X}", block_hash);
+        let block_hash = format!("0x{block_hash:02X}");
         let method = "eth_getBlockByHash".to_string();
         let params = Params::Array(vec![json!(block_hash), json!(false)]);
         let response: Value = self

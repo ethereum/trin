@@ -288,7 +288,7 @@ pub async fn make_http_request(
     let client = Client::new();
     let req = Request::builder()
         .method(Method::POST)
-        .uri(format!("http://{}", http_address))
+        .uri(format!("http://{http_address}"))
         .header("content-type", "application/json")
         .body(Body::from(request.to_jsonrpc()))
         .unwrap();

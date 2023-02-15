@@ -65,7 +65,6 @@ pub fn test_offer_accept(peertest_config: PeertestConfig, peertest: &Peertest) {
     let received_content_str = received_content_value.as_str().unwrap();
     assert_eq!(
         HISTORY_CONTENT_VALUE, received_content_str,
-        "The received content {}, must match the expected {}",
-        received_content_str, HISTORY_CONTENT_VALUE
+        "The received content {received_content_str}, must match the expected {HISTORY_CONTENT_VALUE}",
     );
 }

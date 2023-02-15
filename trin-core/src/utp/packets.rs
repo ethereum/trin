@@ -834,7 +834,7 @@ mod tests {
         packet.set_seq_nr(11884);
         packet.set_ack_nr(0);
 
-        println!("packet: {:?}", packet);
+        println!("packet: {packet:?}");
         println!("packet raw: {:?}", packet.as_ref());
 
         assert_eq!(

@@ -332,13 +332,13 @@ impl MerkleTree {
         const SPACES: u32 = 10;
         space += SPACES;
         let (pair, text) = match self {
-            MerkleTree::Node(hash, left, right) => (Some((left, right)), format!("Node({})", hash)),
-            MerkleTree::Leaf(hash) => (None, format!("Leaf({})", hash)),
+            MerkleTree::Node(hash, left, right) => (Some((left, right)), format!("Node({hash})")),
+            MerkleTree::Leaf(hash) => (None, format!("Leaf({hash})")),
             MerkleTree::Zero(depth) => (
                 None,
                 format!("Z[{}]({})", depth, H256::from_slice(&ZERO_HASHES[*depth])),
             ),
-            MerkleTree::Finalized(hash) => (None, format!("Finl({})", hash)),
+            MerkleTree::Finalized(hash) => (None, format!("Final({hash})")),
         };
         if let Some((_, right)) = pair {
             right.print_node(space);
@@ -347,7 +347,7 @@ impl MerkleTree {
         for _i in SPACES..space {
             print!(" ");
         }
-        println!("{}", text);
+        println!("{text}");
         if let Some((left, _)) = pair {
             left.print_node(space);
         }

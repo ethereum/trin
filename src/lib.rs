@@ -177,6 +177,6 @@ async fn launch_jsonrpc_server(
             tokio::spawn(handle.stopped()); //FIXME: This runs the server forever
             info!("HTTP JSON-RPC server launched.");
         }
-        val => panic!("Unsupported web3 transport: {}", val),
+        val => panic!("Unsupported web3 transport: {val}"),
     }
 }

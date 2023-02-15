@@ -53,7 +53,7 @@ pub fn dispatch_trusted_http_request(
         Err(err) => Err(json!({
             "jsonrpc": "2.0",
             "id": obj.id,
-            "error": format!("Infura failure: {}", err),
+            "error": format!("Infura failure: {err}"),
         })
         .to_string()),
     }
@@ -65,16 +65,16 @@ fn proxy_to_url(request: &JsonRequest, trusted_http_client: Request) -> io::Resu
             Ok(val) => Ok(val.as_bytes().to_vec()),
             Err(msg) => Err(io::Error::new(
                 io::ErrorKind::Other,
-                format!("Error decoding response: {:?}", msg),
+                format!("Error decoding response: {msg:?}"),
             )),
         },
         Err(ureq::Error::Status(code, _response)) => Err(io::Error::new(
             io::ErrorKind::Other,
-            format!("Responded with status code: {:?}", code),
+            format!("Responded with status code: {code:?}"),
         )),
         Err(err) => Err(io::Error::new(
             io::ErrorKind::Other,
-            format!("Request failure: {:?}", err),
+            format!("Request failure: {err:?}"),
         )),
     }
 }

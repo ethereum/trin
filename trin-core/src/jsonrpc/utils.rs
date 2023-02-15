@@ -35,7 +35,7 @@ pub fn bucket_entries_to_json(bucket_entries: BTreeMap<usize, Vec<NodeTuple>>) -
                         );
                         map.insert("enr".to_owned(), enr.to_base64());
                         map.insert("status".to_owned(), format!("{:?}", node_status.state));
-                        map.insert("radius".to_owned(), format!("{}", data_radius));
+                        map.insert("radius".to_owned(), format!("{data_radius}"));
                         if let Some(client_info) = client_info {
                             // Expand client name if possible, otherwise leave as-is.
                             match expand_client_name(client_info) {
@@ -50,7 +50,7 @@ pub fn bucket_entries_to_json(bucket_entries: BTreeMap<usize, Vec<NodeTuple>>) -
                             // Include address (IP:port) for convenience.
                             // TODO: Can be removed once a portal dashboard does UI-side ENR decoding.
                             let port = match enr.udp4_socket() {
-                                Some(port) => format!("{}", port),
+                                Some(port) => format!("{port}"),
                                 None => "None".to_string(),
                             };
                             map.insert("address".to_owned(), port);
