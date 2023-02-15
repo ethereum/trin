@@ -1,3 +1,4 @@
+use tracing::error;
 use trin_core::{cli::TrinConfig, utils::provider::TrustedProvider};
 
 use trin::run_trin;
@@ -10,13 +11,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let trin_config = TrinConfig::from_cli();
     let trusted_provider = TrustedProvider::from_trin_config(&trin_config);
-    let exiter = run_trin(trin_config, trusted_provider).await?;
+    let rpc_handle = run_trin(trin_config, trusted_provider).await?;
 
     tokio::signal::ctrl_c()
         .await
         .expect("failed to pause until ctrl-c");
 
-    exiter.exit();
+    if let Err(err) = rpc_handle.stop() {
+        error!(err = %err, "Failed to close RPC server")
+    }
 
     Ok(())
 }

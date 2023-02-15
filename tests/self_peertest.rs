@@ -46,7 +46,7 @@ mod test {
             http: ureq::post(&server.url("/")),
             ws: None,
         };
-        let test_client_exiter = trin::run_trin(trin_config, trusted_provider).await.unwrap();
+        let test_client_rpc_handle = trin::run_trin(trin_config, trusted_provider).await.unwrap();
 
         peertest::scenarios::paginate::test_paginate_local_storage(
             peertest_config.clone(),
@@ -70,6 +70,6 @@ mod test {
         );
 
         peertest.exit_all_nodes();
-        test_client_exiter.exit();
+        test_client_rpc_handle.stop().unwrap();
     }
 }
