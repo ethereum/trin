@@ -11,7 +11,7 @@ repository = "https://github.com/ethereum/trin"
 
 [dependencies]
 anyhow = "1.0.57"
-discv5 = { git = "https://github.com/sigp/discv5.git", branch = "master" }
+discv5 = "0.1.0"
 enr = { version = "=0.7.0", features = ["k256", "ed25519"] }
 eth2_ssz = "0.4.0"
 ethereum-types = "0.12.1"
