@@ -1,6 +1,6 @@
 use std::{thread, time};
 
-use serde_json::{json, Value};
+use serde_json::Value;
 use tracing::{error, info};
 
 use crate::{
@@ -30,11 +30,11 @@ pub fn test_offer_accept(peertest_config: PeertestConfig, peertest: &Peertest) {
 
     // Send offer request from testnode to bootnode
     let offer_request = JsonRpcRequest {
-        method: "portal_historySendOffer".to_string(),
+        method: "portal_historyOffer".to_string(),
         id: 11,
         params: Params::Array(vec![
             Value::String(peertest.bootnode.enr.to_base64()),
-            Value::Array(vec![json!(HISTORY_CONTENT_KEY)]),
+            Value::String(HISTORY_CONTENT_KEY.to_string()),
         ]),
     };
 

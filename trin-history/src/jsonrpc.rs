@@ -28,6 +28,7 @@ use ethportal_api::HistoryContentKey as EthHistoryContentKey;
 use ssz::Encode;
 use trin_core::jsonrpc::endpoints::HistoryEndpoint;
 use trin_core::jsonrpc::types::HistoryJsonRpcRequest;
+use trin_core::portalnet::types::content_key::RawContentKey;
 
 /// Handles History network JSON-RPC requests
 pub struct HistoryRequestHandler {
@@ -163,7 +164,7 @@ impl HistoryRequestHandler {
                     };
                     let _ = request.resp.send(response);
                 }
-                HistoryEndpoint::Offer(content_key, content_item) => {
+                HistoryEndpoint::Gossip(content_key, content_item) => {
                     match convert_content_key(&content_key) {
                         Ok(content_key) => {
                             let content_items = vec![(content_key, content_item.into())];
@@ -177,13 +178,12 @@ impl HistoryRequestHandler {
                         }
                     }
                 }
-                HistoryEndpoint::SendOffer(enr, content_keys) => {
+                HistoryEndpoint::Offer(enr, content_key) => {
                     let enr = convert_enr(enr);
 
-                    let content_keys = content_keys.iter().map(|key| key.as_ssz_bytes()).collect();
-                    let response = match self.network.overlay.send_offer(content_keys, enr).await {
+                    let content_key: Vec<RawContentKey> = vec![content_key.as_ssz_bytes()];
+                    let response = match self.network.overlay.send_offer(content_key, enr).await {
                         Ok(accept) => Ok(json!(AcceptInfo {
-                            connection_id: accept.connection_id,
                             content_keys: accept.content_keys,
                         })),
                         Err(msg) => Err(format!("SendOffer request timeout: {:?}", msg)),

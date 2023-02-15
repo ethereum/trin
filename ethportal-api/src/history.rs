@@ -82,21 +82,17 @@ pub trait HistoryNetworkApi {
 
     /// Send the provided content item to interested peers. Clients may choose to send to some or all peers.
     /// Return the number of peers that the content was gossiped to.
-    #[method(name = "historyOffer")]
-    async fn offer(
+    #[method(name = "historyGossip")]
+    async fn gossip(
         &self,
         content_key: HistoryContentKey,
         content_value: HistoryContentItem,
     ) -> RpcResult<u32>;
 
-    /// Send OFFER with a set og content keys that this node has content available for.
-    /// Return the ACCEPT response.
-    #[method(name = "historySendOffer")]
-    async fn send_offer(
-        &self,
-        enr: Enr,
-        content_keys: Vec<HistoryContentKey>,
-    ) -> RpcResult<AcceptInfo>;
+    /// Send an OFFER request with given ContentKey, to the designated peer and wait for a response.
+    /// Returns the content keys bitlist upon successful content transmission or empty bitlist receive.
+    #[method(name = "historyOffer")]
+    async fn offer(&self, enr: Enr, content_key: HistoryContentKey) -> RpcResult<AcceptInfo>;
 
     /// Store content key with a content data to the local database.
     #[method(name = "historyStore")]

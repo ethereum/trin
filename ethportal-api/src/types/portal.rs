@@ -45,7 +45,6 @@ pub enum ContentInfo {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AcceptInfo {
-    pub connection_id: u16,
     pub content_keys: BitList<typenum::U8>,
 }
 

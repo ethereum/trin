@@ -154,25 +154,21 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
 
     /// Send the provided content item to interested peers. Clients may choose to send to some or all peers.
     /// Return the number of peers that the content was gossiped to.
-    async fn offer(
+    async fn gossip(
         &self,
         content_key: HistoryContentKey,
         content_value: HistoryContentItem,
     ) -> RpcResult<u32> {
-        let endpoint = HistoryEndpoint::Offer(content_key, content_value);
+        let endpoint = HistoryEndpoint::Gossip(content_key, content_value);
         let result = self.proxy_query_to_history_subnet(endpoint).await?;
         let result: u32 = from_value(result)?;
         Ok(result)
     }
 
-    /// Send OFFER with a set og content keys that this node has content available for.
-    /// Return the ACCEPT response.
-    async fn send_offer(
-        &self,
-        enr: Enr,
-        content_keys: Vec<HistoryContentKey>,
-    ) -> RpcResult<AcceptInfo> {
-        let endpoint = HistoryEndpoint::SendOffer(enr, content_keys);
+    /// Send an OFFER request with given ContentKey, to the designated peer and wait for a response.
+    /// Returns the content keys bitlist upon successful content transmission or empty bitlist receive.
+    async fn offer(&self, enr: Enr, content_key: HistoryContentKey) -> RpcResult<AcceptInfo> {
+        let endpoint = HistoryEndpoint::Offer(enr, content_key);
         let result = self.proxy_query_to_history_subnet(endpoint).await?;
         let result: AcceptInfo = from_value(result)?;
         Ok(result)
