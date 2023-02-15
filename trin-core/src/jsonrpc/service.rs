@@ -1,41 +1,10 @@
-use std::{
-    io::{self},
-    sync::{Arc, RwLock},
-};
+use std::io::{self};
 
 use serde_json::json;
 use thiserror::Error;
 use ureq::{self, Request};
 
 use crate::jsonrpc::types::JsonRequest;
-
-pub struct JsonRpcExiter {
-    should_exit: Arc<RwLock<bool>>,
-}
-
-impl JsonRpcExiter {
-    pub fn new() -> Self {
-        JsonRpcExiter {
-            should_exit: Arc::new(RwLock::new(false)),
-        }
-    }
-
-    pub fn exit(&self) {
-        let mut flag = self.should_exit.write().unwrap();
-        *flag = true;
-    }
-
-    pub fn is_exiting(&self) -> bool {
-        let flag = self.should_exit.read().unwrap();
-        *flag
-    }
-}
-
-impl Default for JsonRpcExiter {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
 #[derive(Error, Debug)]
 pub enum HttpParseError {

@@ -6,15 +6,15 @@ pub use cli::PeertestConfig;
 pub use jsonrpc::get_enode;
 
 use std::net::{IpAddr, Ipv4Addr};
-use std::{sync::Arc, thread, time};
+use std::{thread, time};
 
+use ethportal_api::jsonrpsee::server::ServerHandle;
 use futures::future;
 use httpmock::prelude::{MockServer, POST};
 use serde_json::json;
 
 use trin_core::{
-    cli::TrinConfig, jsonrpc::service::JsonRpcExiter, portalnet::types::messages::SszEnr,
-    utils::provider::TrustedProvider,
+    cli::TrinConfig, portalnet::types::messages::SszEnr, utils::provider::TrustedProvider,
 };
 pub fn setup_mock_trusted_http_server() -> MockServer {
     let server = MockServer::start();
@@ -60,7 +60,7 @@ pub fn setup_mock_trusted_http_server() -> MockServer {
 pub struct PeertestNode {
     pub enr: SszEnr,
     pub web3_ipc_path: String,
-    pub exiter: Arc<JsonRpcExiter>,
+    pub rpc_handle: ServerHandle,
 }
 
 pub struct Peertest {
@@ -70,8 +70,10 @@ pub struct Peertest {
 
 impl Peertest {
     pub fn exit_all_nodes(&self) {
-        self.bootnode.exiter.exit();
-        self.nodes.iter().for_each(|node| node.exiter.exit());
+        self.bootnode.rpc_handle.stop().unwrap();
+        self.nodes
+            .iter()
+            .for_each(|node| node.rpc_handle.stop().unwrap());
     }
 }
 
@@ -82,9 +84,10 @@ pub async fn launch_node(trin_config: TrinConfig) -> anyhow::Result<PeertestNode
         http: ureq::post(&server.url("/")),
         ws: None,
     };
-    let exiter = trin::run_trin(trin_config, mock_trusted_provider)
+    let rpc_handle = trin::run_trin(trin_config, mock_trusted_provider)
         .await
         .unwrap();
+
     let enr = get_enode(&web3_ipc_path)?;
 
     // Short sleep to make sure all peertest nodes can connect
@@ -92,7 +95,7 @@ pub async fn launch_node(trin_config: TrinConfig) -> anyhow::Result<PeertestNode
     Ok(PeertestNode {
         enr,
         web3_ipc_path,
-        exiter,
+        rpc_handle,
     })
 }
 
