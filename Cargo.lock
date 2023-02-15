@@ -959,7 +959,8 @@ dependencies = [
 [[package]]
 name = "discv5"
 version = "0.1.0"
-source = "git+https://github.com/sigp/discv5.git?branch=master#97a806ccf7817a420b5f43efa23e6127b475d839"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d767c0e59b3e8d65222d95df723cc2ea1da92bb0f27c563607e6f0bde064f255"
 dependencies = [
  "aes",
  "aes-gcm",

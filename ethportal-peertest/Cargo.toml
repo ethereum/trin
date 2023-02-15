@@ -9,7 +9,7 @@ rust-version = "1.62.0"
 [dependencies]
 anyhow = "1.0.57"
 clap = "2.33.3"
-discv5 = { git = "https://github.com/sigp/discv5.git", branch = "master" }
+discv5 = "0.1.0"
 eth2_ssz = "0.4.0"
 ethportal-api = { path="../ethportal-api"}
 futures = "0.3.21"
