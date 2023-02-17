@@ -3,12 +3,11 @@ use discv5::TalkRequest;
 use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tracing::{error, warn, Instrument};
-use trin_core::{portalnet::types::messages::Message, utp::stream::UtpListenerEvent};
+use trin_core::portalnet::types::messages::Message;
 
 pub struct HistoryEvents {
     pub network: Arc<HistoryNetwork>,
     pub event_rx: UnboundedReceiver<TalkRequest>,
-    pub utp_listener_rx: UnboundedReceiver<UtpListenerEvent>,
 }
 
 impl HistoryEvents {
@@ -17,11 +16,6 @@ impl HistoryEvents {
             tokio::select! {
                 Some(talk_request) = self.event_rx.recv() => {
                     self.handle_history_talk_request(talk_request);
-                }
-                Some(event) = self.utp_listener_rx.recv() => {
-                    if let Err(err) = self.network.overlay.process_utp_event(event) {
-                        warn!(error = %err, "Error processing uTP payload");
-                    }
                 }
             }
         }

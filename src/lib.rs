@@ -16,7 +16,6 @@ use trin_core::{
     },
     types::{accumulator::MasterAccumulator, validation::HeaderOracle},
     utils::{bootnodes::parse_bootnodes, db::setup_temp_dir, provider::TrustedProvider},
-    utp::stream::UtpListener,
 };
 use trin_history::initialize_history_network;
 use trin_state::initialize_state_network;
@@ -48,10 +47,14 @@ pub async fn run_trin(
         prometheus_exporter::start(addr).unwrap();
     }
 
-    // Initialize and spawn UTP listener
-    let (utp_events_tx, utp_listener_tx, utp_listener_rx, mut utp_listener) =
-        UtpListener::new(Arc::clone(&discovery));
-    tokio::spawn(async move { utp_listener.start().await });
+    // Initialize and spawn uTP socket
+    let (utp_talk_reqs_tx, utp_talk_reqs_rx) = mpsc::unbounded_channel();
+    let discv5_utp_socket = trin_core::portalnet::discovery::Discv5UdpSocket::new(
+        Arc::clone(&discovery),
+        utp_talk_reqs_rx,
+    );
+    let utp_socket = utp::socket::UtpSocket::with_socket(discv5_utp_socket);
+    let utp_socket = Arc::new(utp_socket);
 
     // Initialize Storage config
     if trin_config.ephemeral {
@@ -74,43 +77,38 @@ pub async fn run_trin(
     let header_oracle = Arc::new(RwLock::new(header_oracle));
 
     // Initialize state sub-network service and event handlers, if selected
-    let (state_handler, state_network_task, state_event_tx, state_utp_tx, state_jsonrpc_tx) =
+    let (state_handler, state_network_task, state_event_tx, state_jsonrpc_tx) =
         if trin_config.networks.iter().any(|val| val == STATE_NETWORK) {
             initialize_state_network(
                 &discovery,
-                utp_listener_tx.clone(),
+                Arc::clone(&utp_socket),
                 portalnet_config.clone(),
                 storage_config.clone(),
                 header_oracle.clone(),
             )
             .await
         } else {
-            (None, None, None, None, None)
+            (None, None, None, None)
         };
 
     // Initialize chain history sub-network service and event handlers, if selected
-    let (
-        history_handler,
-        history_network_task,
-        history_event_tx,
-        history_utp_tx,
-        history_jsonrpc_tx,
-    ) = if trin_config
-        .networks
-        .iter()
-        .any(|val| val == HISTORY_NETWORK)
-    {
-        initialize_history_network(
-            &discovery,
-            utp_listener_tx,
-            portalnet_config.clone(),
-            storage_config.clone(),
-            header_oracle.clone(),
-        )
-        .await
-    } else {
-        (None, None, None, None, None)
-    };
+    let (history_handler, history_network_task, history_event_tx, history_jsonrpc_tx) =
+        if trin_config
+            .networks
+            .iter()
+            .any(|val| val == HISTORY_NETWORK)
+        {
+            initialize_history_network(
+                &discovery,
+                Arc::clone(&utp_socket),
+                portalnet_config.clone(),
+                storage_config.clone(),
+                header_oracle.clone(),
+            )
+            .await
+        } else {
+            (None, None, None, None)
+        };
 
     // Initialize json-rpc server
     let (portal_jsonrpc_tx, portal_jsonrpc_rx) = mpsc::unbounded_channel::<PortalJsonRpcRequest>();
@@ -153,12 +151,9 @@ pub async fn run_trin(
     tokio::spawn(async move {
         let events = PortalnetEvents::new(
             talk_req_rx,
-            utp_listener_rx,
             history_event_tx,
-            history_utp_tx,
             state_event_tx,
-            state_utp_tx,
-            utp_events_tx,
+            utp_talk_reqs_tx,
         )
         .await;
         events.start().await;

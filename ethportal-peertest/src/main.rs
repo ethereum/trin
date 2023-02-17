@@ -7,7 +7,7 @@ use ethportal_peertest::{
     launch_peertest_nodes,
 };
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 

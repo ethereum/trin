@@ -1,24 +1,20 @@
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, HashSet},
     fmt::{Debug, Display},
     marker::{PhantomData, Sync},
-    str::FromStr,
     sync::Arc,
     time::Duration,
 };
 
-use anyhow::anyhow;
 use discv5::{
     enr::NodeId,
-    kbucket,
     kbucket::{Filter, KBucketsTable, NodeStatus, MAX_NODES_PER_BUCKET},
     TalkRequest,
 };
-use futures::{channel::oneshot, future::join_all};
+use futures::channel::oneshot;
 use parking_lot::RwLock;
-use rand::seq::IteratorRandom;
 use ssz::Encode;
-use tokio::{sync::mpsc::UnboundedSender, task::JoinHandle};
+use tokio::sync::mpsc::UnboundedSender;
 use tracing::{debug, error, info, warn};
 
 use crate::{
@@ -30,21 +26,17 @@ use crate::{
         storage::ContentStore,
         types::{
             content_key::{OverlayContentKey, RawContentKey},
-            distance::{Distance, Metric, XorMetric},
+            distance::{Distance, Metric},
             messages::{
                 Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer,
-                Ping, Pong, PopulatedOffer, ProtocolId, Request, Response,
+                Ping, Pong, ProtocolId, Request, Response,
             },
             node::Node,
         },
         Enr,
     },
     types::validation::Validator,
-    utils::{bytes::hex_encode, portal_wire},
-    utp::{
-        stream::{UtpListenerEvent, UtpListenerRequest, UtpPayload, UtpStream, BUF_SIZE},
-        trin_helpers::UtpStreamId,
-    },
+    utils::bytes::hex_encode,
 };
 
 /// Configuration parameters for the overlay network.
@@ -101,8 +93,8 @@ pub struct OverlayProtocol<TContentKey, TMetric, TValidator, TStore> {
     protocol: ProtocolId,
     /// A sender to send commands to the OverlayService.
     command_tx: UnboundedSender<OverlayCommand<TContentKey>>,
-    /// A sender to send request to UtpListener
-    utp_listener_tx: UnboundedSender<UtpListenerRequest>,
+    /// uTP socket.
+    utp_socket: Arc<utp::socket::UtpSocket<crate::portalnet::discovery::UtpEnr>>,
     /// Declare the allowed content key types for a given overlay network.
     /// Use a phantom, because we don't store any keys in this struct.
     /// For example, this type is used when decoding a content key received over the network.
@@ -126,7 +118,7 @@ where
     pub async fn new(
         config: OverlayConfig,
         discovery: Arc<Discovery>,
-        utp_listener_tx: UnboundedSender<UtpListenerRequest>,
+        utp_socket: Arc<utp::socket::UtpSocket<crate::portalnet::discovery::UtpEnr>>,
         store: Arc<RwLock<TStore>>,
         data_radius: Distance,
         protocol: ProtocolId,
@@ -149,7 +141,7 @@ where
             config.ping_queue_interval,
             Arc::clone(&data_radius),
             protocol.clone(),
-            utp_listener_tx.clone(),
+            Arc::clone(&utp_socket),
             config.enable_metrics,
             Arc::clone(&validator),
             config.query_timeout,
@@ -168,7 +160,7 @@ where
             store,
             protocol,
             command_tx,
-            utp_listener_tx,
+            utp_socket,
             phantom_content_key: PhantomData,
             phantom_metric: PhantomData,
             validator,
@@ -211,229 +203,14 @@ where
         self.send_overlay_request(request, direction).await
     }
 
-    /// Process overlay uTP listener event
-    pub fn process_utp_event(&self, event: UtpListenerEvent) -> anyhow::Result<()> {
-        match event {
-            UtpListenerEvent::ClosedStream(utp_payload, _, stream_id) => {
-                // Handle all closed uTP streams, currently we process only AcceptStream here.
-                // FindContent payload is processed explicitly when we send FindContent request.
-                // We don't expect to process a payload for ContentStream and OfferStream.
-                match stream_id {
-                    UtpStreamId::AcceptStream(content_keys) => {
-                        self.process_accept_utp_payload(content_keys, utp_payload)?
-                    }
-                    UtpStreamId::ContentStream(_) => {}
-                    UtpStreamId::FindContentStream => {}
-                    UtpStreamId::OfferStream => {}
-                }
-            }
-            UtpListenerEvent::ResetStream(..) => {}
-        }
-        Ok(())
-    }
-
-    /// Process accepted uTP payload of the OFFER/ACCEPT stream
-    fn process_accept_utp_payload(
-        &self,
-        content_keys: Vec<RawContentKey>,
-        payload: UtpPayload,
-    ) -> anyhow::Result<()> {
-        let content_values = portal_wire::decode_content_payload(payload)?;
-
-        // Accepted content keys len should match content value len
-        if content_keys.len() != content_values.len() {
-            return Err(anyhow!(
-                "Content keys len doesn't match content values len."
-            ));
-        }
-
-        let validator = Arc::clone(&self.validator);
-        let store = Arc::clone(&self.store);
-        let kbuckets = Arc::clone(&self.kbuckets);
-        let command_tx = self.command_tx.clone();
-
-        // Spawn a task that spawns a validation task for each piece of content,
-        // collects validated content and propagates it via gossip.
-        tokio::spawn(async move {
-            let handles: Vec<JoinHandle<_>> = content_keys
-                .into_iter()
-                .zip(content_values.to_vec())
-                .filter_map(
-                    |(raw_key, content_value)| match TContentKey::try_from(raw_key) {
-                        Ok(content_key) => Some((content_key, content_value)),
-                        Err(err) => {
-                            warn!(error = %err, "Error decoding overlay content key");
-                            None
-                        }
-                    },
-                )
-                .map(|(key, content_value)| {
-                    // Spawn a task that...
-                    // - Validates accepted content (this step requires a dedicated task since it
-                    // might require non-blocking requests to this/other overlay networks)
-                    // - Checks if validated content should be stored, and stores it if true
-                    // - Propagate all validated content
-                    let validator = Arc::clone(&validator);
-                    let store = Arc::clone(&store);
-                    tokio::spawn(async move {
-                        // Validated received content
-                        if let Err(err) = validator
-                            .validate_content(&key, &content_value.to_vec())
-                            .await
-                        {
-                            // Skip storing & propagating content if it's not valid
-                            warn!(
-                                error = %err,
-                                content.id = %hex_encode(key.content_id()),
-                                "Error validating accepted content"
-                            );
-                            return None;
-                        }
-
-                        // Check if data should be stored, and store if true.
-                        let key_desired = store.read().is_key_within_radius_and_unavailable(&key);
-                        match key_desired {
-                            Ok(true) => {
-                                if let Err(err) =
-                                    store.write().put(key.clone(), &content_value.to_vec())
-                                {
-                                    warn!(
-                                        error = %err,
-                                        content.id = %hex_encode(key.content_id()),
-                                        "Error storing accepted content"
-                                    );
-                                }
-                            }
-                            Ok(false) => {
-                                warn!(
-                                    content.id = %hex_encode(key.content_id()),
-                                    "Accepted content outside radius or already stored"
-                                );
-                            }
-                            Err(err) => {
-                                warn!(
-                                    error = %err,
-                                    content.id = %hex_encode(key.content_id()),
-                                    "Error checking data store for content key"
-                                );
-                            }
-                        }
-                        Some((key, content_value))
-                    })
-                })
-                .collect();
-            let validated_content = join_all(handles)
-                .await
-                .into_iter()
-                // Whether the spawn fails or the content fails validation, we don't want it:
-                .filter_map(|content| content.unwrap_or(None))
-                .collect();
-            // Propagate all validated content, whether or not it was stored.
-            Self::propagate_gossip_cross_thread(validated_content, kbuckets, command_tx);
-        });
-        Ok(())
-    }
-
     /// Propagate gossip accepted content via OFFER/ACCEPT, return number of peers propagated
     pub fn propagate_gossip(&self, content: Vec<(TContentKey, Vec<u8>)>) -> usize {
         let kbuckets = Arc::clone(&self.kbuckets);
-        let command_tx = self.command_tx.clone();
-        Self::propagate_gossip_cross_thread(content, kbuckets, command_tx)
-    }
-
-    // Propagate gossip in a way that can be used across threads, without &self
-    fn propagate_gossip_cross_thread(
-        content: Vec<(TContentKey, Vec<u8>)>,
-        kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
-        command_tx: UnboundedSender<OverlayCommand<TContentKey>>,
-    ) -> usize {
-        // Get all connected nodes from overlay routing table
-        let kbuckets = kbuckets.read();
-        let all_nodes: Vec<&kbucket::Node<NodeId, Node>> = kbuckets
-            .buckets_iter()
-            .map(|kbucket| {
-                kbucket
-                    .iter()
-                    .filter(|node| node.status.is_connected())
-                    .collect::<Vec<&kbucket::Node<NodeId, Node>>>()
-            })
-            .flatten()
-            .collect();
-
-        // HashMap to temporarily store all interested ENRs and the content.
-        // Key is base64 string of node's ENR.
-        let mut enrs_and_content: HashMap<String, Vec<(RawContentKey, Vec<u8>)>> = HashMap::new();
-
-        // Filter all nodes from overlay routing table where XOR_distance(content_id, nodeId) < node radius
-        for (content_key, content_value) in content {
-            let interested_enrs: Vec<Enr> = all_nodes
-                .clone()
-                .into_iter()
-                .filter(|node| {
-                    XorMetric::distance(&content_key.content_id(), &node.key.preimage().raw())
-                        < node.value.data_radius()
-                })
-                .map(|node| node.value.enr())
-                .collect();
-
-            // Continue if no nodes are interested in the content
-            if interested_enrs.is_empty() {
-                debug!(
-                    content.id = %hex_encode(content_key.content_id()),
-                    kbuckets.len = all_nodes.len(),
-                    "No peers eligible for neighborhood gossip"
-                );
-                continue;
-            }
-
-            // Get log2 random ENRs to gossip
-            let random_enrs = match log2_random_enrs(interested_enrs) {
-                Ok(val) => val,
-                Err(msg) => {
-                    warn!(error = %msg, "Error producing ENRs for gossip");
-                    return 0;
-                }
-            };
-
-            // Temporarily store all randomly selected nodes with the content of interest.
-            // We want this so we can offer all the content to interested node in one request.
-            let raw_item = (content_key.into(), content_value);
-            for enr in random_enrs {
-                enrs_and_content
-                    .entry(enr.to_base64())
-                    .or_default()
-                    .push(raw_item.clone());
-            }
-        }
-
-        let num_propagated_peers = enrs_and_content.len();
-        // Create and send OFFER overlay request to the interested nodes
-        for (enr_string, interested_content) in enrs_and_content.into_iter() {
-            let enr = match Enr::from_str(&enr_string) {
-                Ok(enr) => enr,
-                Err(err) => {
-                    error!(error = %err, enr.base64 = %enr_string, "Error decoding ENR from base-64");
-                    continue;
-                }
-            };
-
-            let offer_request = Request::PopulatedOffer(PopulatedOffer {
-                content_items: interested_content,
-            });
-
-            let overlay_request = OverlayRequest::new(
-                offer_request,
-                RequestDirection::Outgoing { destination: enr },
-                None,
-                None,
-            );
-
-            if let Err(err) = command_tx.send(OverlayCommand::Request(overlay_request)) {
-                error!(error = %err, "Error sending OFFER message to service")
-            }
-        }
-
-        num_propagated_peers
+        crate::portalnet::overlay_service::propagate_gossip_cross_thread(
+            content,
+            kbuckets,
+            self.command_tx.clone(),
+        )
     }
 
     /// Returns a vector of all ENR node IDs of nodes currently contained in the routing table.
@@ -601,53 +378,23 @@ where
         enr: Enr,
         conn_id: u16,
     ) -> Result<Vec<u8>, OverlayRequestError> {
-        // initiate the connection to the acceptor
-        let (tx, rx) = tokio::sync::oneshot::channel::<UtpStream>();
-        let utp_request = UtpListenerRequest::Connect(
-            conn_id,
-            enr,
-            self.protocol.clone(),
-            UtpStreamId::FindContentStream,
-            tx,
-        );
+        let cid = utp::cid::ConnectionId {
+            recv: conn_id,
+            send: conn_id.wrapping_add(1),
+            peer: crate::portalnet::discovery::UtpEnr(enr),
+        };
+        let mut stream = self
+            .utp_socket
+            .connect_with_cid(cid)
+            .await
+            .map_err(|err| OverlayRequestError::UtpError(format!("{err:?}")))?;
+        let mut data = vec![];
+        let n = stream
+            .read_to_eof(&mut data)
+            .await
+            .map_err(|err| OverlayRequestError::UtpError(format!("{:?}", err)))?;
 
-        self.utp_listener_tx.send(utp_request).map_err(|err| {
-            OverlayRequestError::UtpError(format!(
-                "Unable to send Connect request with FindContent stream to UtpListener: {err}"
-            ))
-        })?;
-
-        match rx.await {
-            Ok(mut conn) => {
-                let mut result = Vec::new();
-                // Loop and receive all DATA packets, similar to `read_to_end`
-                loop {
-                    let mut buf = [0; BUF_SIZE];
-                    match conn.recv_from(&mut buf).await {
-                        Ok((0, _)) => {
-                            break;
-                        }
-                        Ok((bytes, _)) => {
-                            result.extend_from_slice(&mut buf[..bytes]);
-                        }
-                        Err(err) => {
-                            warn!(
-                                error = %err,
-                                utp.conn_id = %conn_id,
-                                utp.peer = %conn.connected_to,
-                                "Error receiving content from uTP conn"
-                            );
-                            return Err(OverlayRequestError::UtpError(err.to_string()));
-                        }
-                    }
-                }
-                Ok(result)
-            }
-            Err(err) => {
-                warn!(error = %err, "Error receiving content from uTP listener");
-                Err(OverlayRequestError::UtpError(err.to_string()))
-            }
-        }
+        Ok(data[..n].to_vec())
     }
 
     /// Offer is sent in order to store content to k nodes with radii that contain content-id
@@ -777,25 +524,6 @@ where
     }
 }
 
-/// Randomly select log2 nodes. log2() is stable only for floats, that's why we cast it first to f32
-fn log2_random_enrs(enrs: Vec<Enr>) -> anyhow::Result<Vec<Enr>> {
-    if enrs.is_empty() {
-        return Err(anyhow!("Expected non-empty vector of ENRs"));
-    }
-    // log2(1) is zero but we want to propagate to at least one node
-    if enrs.len() == 1 {
-        return Ok(enrs);
-    }
-
-    // Greedy gossip by ceiling the log2 value
-    let log2_value = (enrs.len() as f32).log2().ceil();
-
-    let random_enrs: Vec<Enr> = enrs
-        .into_iter()
-        .choose_multiple(&mut rand::thread_rng(), log2_value as usize);
-    Ok(random_enrs)
-}
-
 fn validate_find_nodes_distances(distances: &Vec<u16>) -> Result<(), OverlayRequestError> {
     if distances.len() == 0 {
         return Err(OverlayRequestError::InvalidRequest(
@@ -826,7 +554,6 @@ fn validate_find_nodes_distances(distances: &Vec<u16>) -> Result<(), OverlayRequ
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::utils::node_id::generate_random_remote_enr;
     use rstest::rstest;
 
     #[rstest]
@@ -852,21 +579,5 @@ mod test {
             Ok(_) => panic!("Invalid test case passed"),
             Err(err) => assert!(err.to_string().contains(&msg)),
         }
-    }
-
-    #[rstest]
-    #[case(vec![generate_random_remote_enr().1; 8], 3)]
-    #[case(vec![generate_random_remote_enr().1; 1], 1)]
-    #[case(vec![generate_random_remote_enr().1; 9], 4)]
-    fn test_log2_random_enrs(#[case] all_nodes: Vec<Enr>, #[case] expected_log2: usize) {
-        let log2_random_nodes = log2_random_enrs(all_nodes).unwrap();
-        assert_eq!(log2_random_nodes.len(), expected_log2);
-    }
-
-    #[test_log::test]
-    #[should_panic]
-    fn test_log2_random_enrs_empty_input() {
-        let all_nodes = vec![];
-        log2_random_enrs(all_nodes).unwrap();
     }
 }

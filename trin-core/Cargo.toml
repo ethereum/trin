@@ -15,7 +15,7 @@ ctrlc = "3.1.8"
 delay_map = "0.1.1"
 directories = "3.0"
 discv5 = { git = "https://github.com/sigp/discv5.git", branch = "master" }
-enr = { version = "=0.7.0", features = ["k256", "ed25519"] }
+enr = { version = "0.7.0", features = ["k256", "ed25519"] }
 eth_trie = "0.1.0"
 eth2_hashing = "0.2.0"
 eth2_ssz = "0.4.0"
@@ -58,6 +58,7 @@ uint = { version = "0.8.5", default-features = false }
 ureq = { version = "2.2.0", features = ["json"] }
 validator = { version = "0.13.0", features = ["derive"] }
 url = "2.3.1"
+utp = { version = "0.1.0-alpha", git = "https://github.com/jacobkaufmann/utp.git", branch = "x" }
 
 [target.'cfg(windows)'.dependencies]
 ipconfig = "0.2.2"

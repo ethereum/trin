@@ -3,7 +3,7 @@ use std::sync::Arc;
 use discv5::enr::NodeId;
 use eth_trie::EthTrie;
 use parking_lot::RwLock as PLRwLock;
-use tokio::sync::{mpsc::UnboundedSender, RwLock};
+use tokio::sync::RwLock;
 
 use trin_core::{
     portalnet::{
@@ -17,7 +17,6 @@ use trin_core::{
         },
     },
     types::validation::HeaderOracle,
-    utp::stream::UtpListenerRequest,
 };
 
 use crate::{trie::TrieDB, validation::StateValidator};
@@ -32,7 +31,7 @@ pub struct StateNetwork {
 impl StateNetwork {
     pub async fn new(
         discovery: Arc<Discovery>,
-        utp_listener_tx: UnboundedSender<UtpListenerRequest>,
+        utp_socket: Arc<utp::socket::UtpSocket<trin_core::portalnet::discovery::UtpEnr>>,
         storage_config: PortalStorageConfig,
         portal_config: PortalnetConfig,
         header_oracle: Arc<RwLock<HeaderOracle>>,
@@ -54,7 +53,7 @@ impl StateNetwork {
         let overlay = OverlayProtocol::new(
             config,
             discovery,
-            utp_listener_tx,
+            utp_socket,
             storage,
             portal_config.data_radius,
             ProtocolId::State,

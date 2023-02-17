@@ -12,7 +12,7 @@ repository = "https://github.com/ethereum/trin"
 [dependencies]
 anyhow = "1.0.57"
 discv5 = { git = "https://github.com/sigp/discv5.git", branch = "master" }
-enr = { version = "=0.7.0", features = ["k256", "ed25519"] }
+enr = { version = "0.7.0", features = ["k256", "ed25519"] }
 eth2_ssz = "0.4.0"
 ethereum-types = "0.12.1"
 ethportal-api = { path = "ethportal-api" }
@@ -32,6 +32,7 @@ trin-core = { path = "trin-core" }
 trin-history = { path = "trin-history" }
 trin-state = { path = "trin-state" }
 ureq = { version = "2.2.0", features = ["json"] }
+utp = { version = "0.1.0-alpha", git = "https://github.com/jacobkaufmann/utp.git", branch = "x" }
 
 [dev-dependencies]
 ethportal-peertest = { path = "ethportal-peertest" }
@@ -44,5 +45,4 @@ members = [
     "trin-cli",
     "ethportal-api",
     "ethportal-peertest",
-    "utp-testing",
 ]

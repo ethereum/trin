@@ -20,6 +20,7 @@ serde_json = "1.0.59"
 tracing = "0.1.36"
 tokio = {version = "1.8.0", features = ["full"]}
 trin-core = { path = "../trin-core" }
+utp = { version = "0.1.0-alpha", git = "https://github.com/jacobkaufmann/utp.git", branch = "x" }
 rocksdb = "0.18.0"
 
 [dev-dependencies]

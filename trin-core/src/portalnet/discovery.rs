@@ -4,6 +4,8 @@ use super::{
 };
 use crate::utils::bytes::hex_encode;
 use crate::{socket, TRIN_VERSION};
+
+use async_trait::async_trait;
 use discv5::{
     enr::{CombinedKey, EnrBuilder, NodeId},
     Discv5, Discv5Config, Discv5ConfigBuilder, Discv5Event, RequestError, TalkRequest,
@@ -263,5 +265,86 @@ impl Discovery {
 
         let response = self.discv5.talk_req(enr, protocol, request).await?;
         Ok(response)
+    }
+}
+
+pub struct Discv5UdpSocket {
+    // `RwLock` for interior mutability.
+    // TODO: Figure out a better mechanism here.
+    talk_reqs: tokio::sync::RwLock<mpsc::UnboundedReceiver<TalkRequest>>,
+    discv5: Arc<Discovery>,
+}
+
+impl Discv5UdpSocket {
+    pub fn new(discv5: Arc<Discovery>, talk_reqs: mpsc::UnboundedReceiver<TalkRequest>) -> Self {
+        Self {
+            discv5,
+            talk_reqs: tokio::sync::RwLock::new(talk_reqs),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UtpEnr(pub Enr);
+
+impl UtpEnr {
+    fn client(&self) -> Option<String> {
+        self.0
+            .get("c")
+            .and_then(|c| String::from_utf8(c.to_vec()).ok())
+    }
+}
+
+impl std::hash::Hash for UtpEnr {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.seq().hash(state);
+        self.0.node_id().hash(state);
+        // since the struct should always have a valid signature, we can hash the signature
+        // directly, rather than hashing the content.
+        self.0.signature().hash(state);
+    }
+}
+
+impl utp::cid::ConnectionPeer for UtpEnr {
+    fn addr(&self) -> SocketAddr {
+        self.0.udp4_socket().unwrap().into()
+    }
+}
+
+#[async_trait]
+impl utp::udp::AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
+    async fn send_to(&self, buf: &[u8], target: &UtpEnr) -> std::io::Result<usize> {
+        match self
+            .discv5
+            .send_talk_req(target.0.clone(), ProtocolId::Utp, buf.to_vec())
+            .await
+        {
+            // We drop the talk response because it is ignored in the uTP protocol.
+            Ok(..) => Ok(buf.len()),
+            Err(err) => {
+                tracing::error!("error sending talk request {err:?}");
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("{err}"),
+                ))
+            }
+        }
+    }
+
+    async fn recv_from(&self, buf: &mut [u8]) -> std::io::Result<(usize, UtpEnr)> {
+        let mut talk_reqs = self.talk_reqs.write().await;
+        match talk_reqs.recv().await {
+            Some(talk_req) => {
+                let node_addr = self.discv5.cached_node_addr(talk_req.node_id()).unwrap();
+                let enr = UtpEnr(node_addr.enr);
+                let packet = talk_req.body();
+                let n = std::cmp::min(buf.len(), packet.len());
+                buf[..n].copy_from_slice(&packet[..n]);
+
+                tracing::info!(client = ?enr.client(), "received talk req");
+                Ok((n, enr))
+            }
+            None => Err(std::io::Error::from(std::io::ErrorKind::NotConnected)),
+        }
     }
 }
