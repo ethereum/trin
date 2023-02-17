@@ -17,7 +17,6 @@ use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rocksdb::{Options, DB};
 use rusqlite::params;
-use serde_json::json;
 use tracing::{debug, error, info};
 
 use super::types::{
@@ -339,7 +338,7 @@ impl PortalStorage {
         let conn = self.sql_connection_pool.get()?;
         let mut query = conn.prepare(PAGINATE_QUERY)?;
 
-        let content_keys = query
+        let content_keys: Result<Vec<HistoryContentKey>, rusqlite::Error> = query
             .query_map(
                 &[
                     (":offset", offset.to_string().as_str()),
@@ -348,34 +347,30 @@ impl PortalStorage {
                 |row| {
                     Ok({
                         let row: String = row.get(0)?;
-                        let content_key: HistoryContentKey = serde_json::from_value(json!(row))
-                            .map_err(|err| {
-                                // TODO: This is a hack to get around the fact that rusqlite doesn't
-                                // support returning a custom error type. We should fix this.
-                                rusqlite::Error::InvalidParameterName(err.to_string())
-                            })?;
-                        content_key
+                        // use hex::decode here since value is stored without 0x prefix
+                        let bytes: Vec<u8> = hex::decode(&row).map_err(|err|
+                            // TODO: This is a hack to get around the fact that rusqlite doesn't
+                            // support returning a custom error type. We should fix this.
+                            rusqlite::Error::InvalidParameterName(err.to_string()))?;
+                        HistoryContentKey::from(bytes)
                     })
                 },
             )?
-            .into_iter()
-            .map(|row| row.unwrap())
             .collect();
 
         let mut query = conn.prepare(TOTAL_ENTRY_COUNT_QUERY)?;
-        let result: Vec<u64> = query
-            .query_map([], |row| Ok(EntryCount { total: row.get(0)? }))?
-            .into_iter()
-            .map(|row| row.unwrap().total)
+        let result: Result<Vec<EntryCount>, rusqlite::Error> = query
+            .query_map([], |row| Ok(EntryCount(row.get(0)?)))?
             .collect();
-        let total_entries = result
-            .first()
-            .expect("Invalid total entries count returned from sql query.");
-
-        Ok(PaginateLocalContentInfo {
-            content_keys,
-            total_entries: *total_entries,
-        })
+        match result?.first() {
+            Some(val) => Ok(PaginateLocalContentInfo {
+                content_keys: content_keys?,
+                total_entries: val.0,
+            }),
+            None => Err(anyhow!(
+                "Invalid total entries count returned from sql query."
+            )),
+        }
     }
 
     /// Returns the distance to `key` from the local `NodeId` according to the distance function.
@@ -405,8 +400,11 @@ impl PortalStorage {
 
         // Store the data in radius db
         self.db_insert(&content_id, value)?;
+        let content_key: Vec<u8> = key.clone().into();
+        // use hex crate to store content key w/o the 0x prefix
+        let content_key = hex::encode(content_key);
         // Revert rocks db action if there's an error with writing to metadata db
-        if let Err(err) = self.meta_db_insert(&content_id, &key.clone().into(), value) {
+        if let Err(err) = self.meta_db_insert(&content_id, &content_key, value) {
             debug!(
                 "Error writing content ID {:?} to meta db. Reverting: {:?}",
                 content_id, err
@@ -487,19 +485,20 @@ impl PortalStorage {
         let conn = self.sql_connection_pool.get()?;
         let mut query = conn.prepare(CONTENT_KEY_LOOKUP_QUERY)?;
         let id = id.to_vec();
-        let mut result = query.query_map([id], |row| {
-            let row: String = row.get(0)?;
-            let content_key: HistoryContentKey =
-                serde_json::from_value(json!(row)).map_err(|err| {
+        let result: Result<Vec<HistoryContentKey>, rusqlite::Error> = query
+            .query_map([id], |row| {
+                let row: String = row.get(0)?;
+                // use hex::decode here since value is stored without 0x prefix
+                let bytes: Vec<u8> = hex::decode(&row).map_err(|err|
                     // TODO: This is a hack to get around the fact that rusqlite doesn't
                     // support returning a custom error type. We should fix this.
-                    rusqlite::Error::InvalidParameterName(err.to_string())
-                })?;
-            Ok(content_key)
-        })?;
+                    rusqlite::Error::InvalidParameterName(err.to_string()))?;
+                Ok(HistoryContentKey::from(bytes))
+            })?
+            .collect();
 
-        match result.next() {
-            Some(val) => Ok(Some(val?.into())),
+        match result?.first() {
+            Some(val) => Ok(Some(val.into())),
             None => Ok(None),
         }
     }
@@ -530,12 +529,16 @@ impl PortalStorage {
     fn meta_db_insert(
         &self,
         content_id: &[u8; 32],
-        content_key: &Vec<u8>,
+        content_key: &String,
         value: &Vec<u8>,
     ) -> Result<(), ContentStoreError> {
         let content_id_as_u32: u32 = Self::byte_vector_to_u32(content_id.to_vec());
         let value_size = value.len();
-        let content_key = hex_encode(content_key);
+        if content_key.starts_with("0x") {
+            return Err(ContentStoreError::InvalidData(
+                "Content key should not start with 0x".to_string(),
+            ));
+        }
         match self.sql_connection_pool.get()?.execute(
             INSERT_QUERY,
             params![
@@ -572,7 +575,7 @@ impl PortalStorage {
         let result = query.query_map([], |row| Ok(DataSizeSum { sum: row.get(0)? }));
 
         let sum = match result?.next() {
-            Some(x) => x,
+            Some(total) => total,
             None => {
                 let err = format!("unable to compute sum over content item sizes");
                 return Err(ContentStoreError::Database(err));
@@ -789,9 +792,7 @@ struct DataSizeSum {
     sum: f64,
 }
 
-struct EntryCount {
-    total: u64,
-}
+struct EntryCount(u64);
 
 #[cfg(test)]
 pub mod test {
