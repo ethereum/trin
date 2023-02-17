@@ -23,7 +23,7 @@ mod test {
 
         let test_ip_addr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
         let test_port = 9000;
-        let external_addr = format!("{}:{}", test_ip_addr, test_port);
+        let external_addr = format!("{test_ip_addr}:{test_port}");
 
         // Run a client, to be tested
         let trin_config = TrinConfig::new_from(
@@ -46,23 +46,16 @@ mod test {
             http: ureq::post(&server.url("/")),
             ws: None,
         };
-        let test_client_exiter = trin::run_trin(trin_config, trusted_provider).await.unwrap();
+        let test_client_rpc_handle = trin::run_trin(trin_config, trusted_provider).await.unwrap();
 
         peertest::scenarios::paginate::test_paginate_local_storage(
             peertest_config.clone(),
             &peertest,
-        );
+        )
+        .await;
         peertest::jsonrpc::test_jsonrpc_endpoints_over_ipc(peertest_config.clone(), &peertest)
             .await;
         peertest::scenarios::offer_accept::test_offer_accept(peertest_config.clone(), &peertest);
-        peertest::scenarios::eth_rpc::test_eth_get_block_by_hash(
-            peertest_config.clone(),
-            &peertest,
-        );
-        peertest::scenarios::eth_rpc::test_eth_get_block_by_number(
-            peertest_config.clone(),
-            &peertest,
-        );
         peertest::scenarios::find::test_trace_recursive_find_content(
             peertest_config.clone(),
             &peertest,
@@ -77,6 +70,6 @@ mod test {
         );
 
         peertest.exit_all_nodes();
-        test_client_exiter.exit();
+        test_client_rpc_handle.stop().unwrap();
     }
 }

@@ -41,7 +41,7 @@ Example response:
 > trin 0.0.1
 ```
 ## Configuration
-Before setting up the service, look at the flags can be set when starting Trin:
+Before setting up the service, look at the flags that can be set when starting Trin:
 ```
 $ /usr/local/bin/trin --help
 ```
@@ -126,7 +126,7 @@ Paste the following, replace the Infura ID with your own.
 > Tip: The 'info' level of logs is a good starting value.
 ```sh
 [Service]
-# (required)
+# (required unless the '--trusted-provider' is set to 'local')
 Environment="TRIN_INFURA_PROJECT_ID=<infura-project-id>"
 # (optional) Rust log level: <error/warn/info/debug/trace>
 Environment="RUST_LOG=info"

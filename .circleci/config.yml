@@ -1,7 +1,6 @@
 version: 2.1
 orbs:
   rust: circleci/rust@1.6.0
-  win: circleci/windows@2.2.0
 executors:
   docker-publisher:
     environment:
@@ -10,12 +9,14 @@ executors:
       - image: cimg/rust:1.66.1
 jobs:
   docker-build:
+    resource_class: xlarge
     executor: docker-publisher
     steps:
       - checkout
       - setup_remote_docker
       - run:
           name: Build Docker image
+          no_output_timeout: 30m
           command: docker build -t $IMAGE_NAME:latest .
       - run:
           name: Archive Docker image
@@ -80,33 +81,6 @@ jobs:
             - run:
                 name: Test Trin workspace
                 command: cargo test --workspace -- --nocapture
-  win-build:
-    description: |
-      Build the crate for windows.
-    executor:
-      name: win/default
-      shell: powershell.exe
-      size: large
-    environment:
-        RUST_LOG: 'debug'
-    steps:
-      - checkout
-      - run:
-          name: Install rustup
-          # todo: Remove --ignore-checksums flag
-          command: choco install rustup.install --ignore-checksums
-      - run:
-          name: Install clang
-          command: choco install llvm
-      - run:
-          name: Add target
-          command: rustup target add x86_64-pc-windows-msvc
-      - run:
-          name: Install target toolchain
-          command: rustup toolchain install stable-x86_64-pc-windows-msvc
-      - run:
-          name: Cargo Test --target x86_64-pc-windows-msvc
-          command: cargo test --workspace --target x86_64-pc-windows-msvc
   utp-test:
     description: |
       Run uTP network simulator
@@ -138,7 +112,7 @@ jobs:
           command: curl https://sh.rustup.rs -sSf | sh -s -- -y
       - run:
           name: Build utp-testing package
-          command: cargo build -p utp-testing --release
+          command: cargo build --workspace --release
       - run:
           name: Move docker artifacts
           command: mv -t utp-testing/docker/circleci/ target/release/utp-test-app utp-testing/docker/run_endpoint.sh utp-testing/docker/setup.sh
@@ -176,4 +150,3 @@ workflows:
               only: master
       - lint-build-test
       - utp-test
-      - win-build

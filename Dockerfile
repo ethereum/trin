@@ -1,5 +1,5 @@
 # select build image
-FROM rust:1.62 AS builder
+FROM rust:1.66.1 AS builder
 
 # create a new empty shell project
 RUN USER=root cargo new --bin trin
@@ -18,6 +18,7 @@ COPY ./trin-state ./trin-state
 COPY ./ethportal-peertest ./ethportal-peertest 
 COPY ./utp-testing ./utp-testing
 COPY ./ethportal-api ./ethportal-api
+COPY ./rpc ./rpc
 
 # build for release
 RUN cargo build -p trin -p trin-cli --release
@@ -31,6 +32,7 @@ COPY --from=builder /trin/trin-core/src/assets/merge_macc.bin ./trin/trin-core/s
 # copy build artifacts from build stage
 COPY --from=builder /trin/target/release/trin /usr/bin/
 COPY --from=builder /trin/target/release/trin-cli /usr/bin/
+COPY --from=builder /trin/target/release/purge_db /usr/bin/
 
 ENV RUST_LOG=debug
 

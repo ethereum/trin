@@ -2,8 +2,10 @@ use std::path::PathBuf;
 
 use anyhow::anyhow;
 use ethereum_types::{H256, U256};
+use ethportal_api::types::content_key::EpochAccumulatorKey;
+use ethportal_api::HistoryContentKey;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 use ssz::Decode;
 use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, VariableList};
@@ -12,16 +14,13 @@ use tree_hash::TreeHash;
 use tree_hash_derive::TreeHash;
 
 use crate::jsonrpc::endpoints::HistoryEndpoint;
-use crate::jsonrpc::types::{HistoryJsonRpcRequest, Params};
-use crate::portalnet::types::content_key::{
-    EpochAccumulator as EpochAccumulatorKey, HistoryContentKey,
-};
+use crate::jsonrpc::types::HistoryJsonRpcRequest;
 use crate::types::{
-    header::Header,
+    header::{BlockHeaderProof, Header, HeaderWithProof},
     merkle::proof::{verify_merkle_proof, MerkleTree},
     validation::MERGE_BLOCK_NUMBER,
 };
-use crate::utils::bytes::{hex_decode, hex_encode};
+use crate::utils::bytes::hex_decode;
 
 /// Max number of blocks / epoch = 2 ** 13
 pub const EPOCH_SIZE: usize = 8192;
@@ -43,14 +42,9 @@ pub type EpochAccumulator = VariableList<HeaderRecord, typenum::U8192>;
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq, Deserialize, Serialize, TreeHash)]
 pub struct MasterAccumulator {
     pub historical_epochs: HistoricalEpochRoots,
-    current_epoch: EpochAccumulator,
 }
 
 impl MasterAccumulator {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     /// Load default trusted master acc
     pub fn try_from_file(master_acc_path: PathBuf) -> anyhow::Result<MasterAccumulator> {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -62,34 +56,8 @@ impl MasterAccumulator {
     }
 
     /// Number of the last block to be included in the accumulator
-    pub fn height(&self) -> Option<u64> {
-        let count = self.historical_epochs_header_count() + self.current_epoch_header_count();
-        match count {
-            0 => None,
-            _ => Some(count - 1),
-        }
-    }
-
-    /// Number of the next block to be included in the accumulator
-    pub fn next_header_height(&self) -> u64 {
-        match self.height() {
-            Some(val) => val + 1,
-            None => 0,
-        }
-    }
-
-    fn current_epoch_header_count(&self) -> u64 {
-        u64::try_from(self.current_epoch.len())
-            .expect("Header Record count should not overflow u64")
-    }
-
-    fn epoch_number(&self) -> u64 {
-        u64::try_from(self.historical_epochs.len())
-            .expect("Historical Epoch count should not overflow u64")
-    }
-
-    fn historical_epochs_header_count(&self) -> u64 {
-        self.epoch_number() * EPOCH_SIZE as u64
+    pub fn height(&self) -> u64 {
+        MERGE_BLOCK_NUMBER
     }
 
     fn get_epoch_index_of_header(&self, header: &Header) -> u64 {
@@ -105,9 +73,6 @@ impl MasterAccumulator {
             return Err(anyhow!("Post-merge blocks are not supported."));
         }
         let rel_index = block_number % EPOCH_SIZE as u64;
-        if block_number > self.epoch_number() * EPOCH_SIZE as u64 {
-            return Ok(self.current_epoch[rel_index as usize].block_hash);
-        }
         let epoch_index = block_number / EPOCH_SIZE as u64;
         let epoch_hash = self.historical_epochs[epoch_index as usize];
         let epoch_acc = self
@@ -116,45 +81,33 @@ impl MasterAccumulator {
         Ok(epoch_acc[rel_index as usize].block_hash)
     }
 
-    fn is_header_in_current_epoch(&self, header: &Header) -> bool {
-        let current_epoch_block_min = match self.historical_epochs_header_count() {
-            0 => match header.number {
-                0u64 => return true,
-                _ => 0,
-            },
-            _ => self.historical_epochs_header_count() - 1,
+    pub fn validate_header_with_proof(&self, hwp: &HeaderWithProof) -> anyhow::Result<()> {
+        let proof = match &hwp.proof {
+            BlockHeaderProof::AccumulatorProof(val) => {
+                if hwp.header.number > MERGE_BLOCK_NUMBER {
+                    return Err(anyhow!("Invalid proof type found for post-merge header."));
+                }
+                val
+            }
+            BlockHeaderProof::None(_) => {
+                if hwp.header.number <= MERGE_BLOCK_NUMBER {
+                    return Err(anyhow!("Missing accumulator proof for pre-merge header."));
+                } else {
+                    // Skip validation for post-merge headers until proof format is finalized
+                    return Ok(());
+                }
+            }
         };
-        header.number > current_epoch_block_min && header.number < self.next_header_height()
-    }
 
-    /// Validation function for pre merge headers that will use the master accumulator to validate
-    /// whether or not the given header is canonical. Returns true if header is validated, false if
-    /// header is invalidated, or an err if it is unable to validate the header using the master
-    /// accumulator.
-    pub async fn validate_pre_merge_header(
-        &self,
-        header: &Header,
-        history_jsonrpc_tx: mpsc::UnboundedSender<HistoryJsonRpcRequest>,
-    ) -> anyhow::Result<bool> {
-        if header.number > MERGE_BLOCK_NUMBER {
-            return Err(anyhow!("Unable to validate post-merge block."));
-        }
-        if header.number >= self.next_header_height() {
-            return Err(anyhow!("Unable to validate future header."));
-        }
-        if self.is_header_in_current_epoch(header) {
-            let rel_index = header.number - self.historical_epochs_header_count();
-            let verified_block_hash = self.current_epoch[rel_index as usize].block_hash;
-            Ok(verified_block_hash == header.hash())
-        } else {
-            let epoch_index = self.get_epoch_index_of_header(header);
-            let epoch_hash = self.historical_epochs[epoch_index as usize];
-            let epoch_acc = self
-                .lookup_epoch_acc(epoch_hash, history_jsonrpc_tx)
-                .await?;
-            let header_index = header.number - epoch_index * (EPOCH_SIZE as u64);
-            let header_record = epoch_acc[header_index as usize];
-            Ok(header_record.block_hash == header.hash())
+        // Look up historical epoch hash for header from master accumulator
+        let gen_index = calculate_generalized_index(&hwp.header);
+        let epoch_index = self.get_epoch_index_of_header(&hwp.header) as usize;
+        let epoch_hash = self.historical_epochs[epoch_index];
+        match verify_merkle_proof(hwp.header.hash(), &proof.proof, 15, gen_index, epoch_hash) {
+            true => Ok(()),
+            false => Err(anyhow!(
+                "Merkle proof validation failed for pre-merge header"
+            )),
         }
     }
 
@@ -163,16 +116,12 @@ impl MasterAccumulator {
         epoch_hash: H256,
         history_jsonrpc_tx: mpsc::UnboundedSender<HistoryJsonRpcRequest>,
     ) -> anyhow::Result<EpochAccumulator> {
-        let content_key: Vec<u8> =
-            HistoryContentKey::EpochAccumulator(EpochAccumulatorKey { epoch_hash }).into();
-        let content_key = hex_encode(content_key);
-        let endpoint = HistoryEndpoint::RecursiveFindContent;
-        let params = Params::Array(vec![json!(content_key)]);
+        let content_key = HistoryContentKey::EpochAccumulator(EpochAccumulatorKey { epoch_hash });
+        let endpoint = HistoryEndpoint::RecursiveFindContent(content_key);
         let (resp_tx, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
         let request = HistoryJsonRpcRequest {
             endpoint,
             resp: resp_tx,
-            params,
         };
         history_jsonrpc_tx.send(request).unwrap();
 
@@ -266,36 +215,6 @@ impl MasterAccumulator {
             .map_err(|_| anyhow!("Invalid proof length."))?;
         Ok(final_proof)
     }
-
-    pub fn validate_pre_merge_header_with_proof(
-        &self,
-        header: &Header,
-        proof: [H256; 15],
-    ) -> anyhow::Result<()> {
-        if header.number > MERGE_BLOCK_NUMBER {
-            return Err(anyhow!("Unable to validate proof for post-merge header."));
-        }
-        // Calculate generalized index for header
-        let hr_index = header.number as usize % EPOCH_SIZE;
-        let gen_index = (EPOCH_SIZE * 2 * 2) + (hr_index * 2);
-
-        // Look up historical epoch hash for header from master accumulator
-        let epoch_index = self.get_epoch_index_of_header(header) as usize;
-        let epoch_hash = self.historical_epochs[epoch_index];
-        match verify_merkle_proof(header.hash(), &proof, 15, gen_index, epoch_hash) {
-            true => Ok(()),
-            false => Err(anyhow!("Merkle proof validation failed")),
-        }
-    }
-}
-
-impl Default for MasterAccumulator {
-    fn default() -> Self {
-        Self {
-            historical_epochs: HistoricalEpochRoots::empty(),
-            current_epoch: EpochAccumulator::empty(),
-        }
-    }
 }
 
 /// Individual record for a historical header.
@@ -308,6 +227,13 @@ pub struct HeaderRecord {
     pub total_difficulty: U256,
 }
 
+fn calculate_generalized_index(header: &Header) -> usize {
+    // Calculate generalized index for header
+    // https://github.com/ethereum/consensus-specs/blob/v0.11.1/ssz/merkle-proofs.md#generalized-merkle-tree-index
+    let hr_index = header.number as usize % EPOCH_SIZE;
+    (EPOCH_SIZE * 2 * 2) + (hr_index * 2)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -316,253 +242,12 @@ mod test {
 
     use ethereum_types::{Bloom, H160, H256};
     use rstest::*;
+    use serde_json::json;
     use ssz::Decode;
 
-    use crate::jsonrpc::types::RecursiveFindContentParams;
-    use crate::types::header::{BlockHeaderProof, HeaderWithProof};
+    use crate::types::header::{AccumulatorProof, BlockHeaderProof, HeaderWithProof, SszNone};
     use crate::types::validation::DEFAULT_MASTER_ACC_HASH;
-
-    #[test]
-    fn master_accumulator_update() {
-        let headers = vec![get_header(0), get_header(1), get_header(2)];
-
-        // test values sourced from:
-        // https://github.com/status-im/nimbus-eth1/blob/d4d4e8c28fec8aab4a4c8e919ff31a6a4970c580/fluffy/tests/test_accumulator.nim
-        let hash_tree_roots = vec![
-            hex::decode("b629833240bb2f5eabfb5245be63d730ca4ed30d6a418340ca476e7c1f1d98c0")
-                .unwrap(),
-            hex::decode("00cbebed829e1babb93f2300bebe7905a98cb86993c7fc09bb5b04626fd91ae5")
-                .unwrap(),
-            hex::decode("88cce8439ebc0c1d007177ffb6831c15c07b4361984cc52235b6fd728434f0c7")
-                .unwrap(),
-        ];
-        let mut master_accumulator = MasterAccumulator::default();
-        headers
-            .iter()
-            .zip(hash_tree_roots)
-            .for_each(|(header, expected_root)| {
-                let _ = update_accumulator(&mut master_accumulator, header);
-                assert_eq!(
-                    master_accumulator.tree_hash_root(),
-                    H256::from_slice(&expected_root)
-                );
-            });
-    }
-
-    #[test]
-    fn test_macc_attrs() {
-        let mut master_acc = MasterAccumulator::default();
-        let epoch_size = EPOCH_SIZE as u64;
-        // start off with an empty macc
-        assert!(master_acc.height().is_none());
-        assert_eq!(master_acc.current_epoch_header_count(), 0);
-        assert_eq!(master_acc.historical_epochs_header_count(), 0);
-        assert_eq!(master_acc.epoch_number(), 0);
-        // add genesis block to macc
-        add_blocks_to_master_acc(&mut master_acc, 1);
-        assert_eq!(master_acc.height().unwrap(), 0);
-        assert_eq!(master_acc.current_epoch_header_count(), 1);
-        assert_eq!(master_acc.historical_epochs_header_count(), 0);
-        assert_eq!(master_acc.epoch_number(), 0);
-        // add block to macc
-        add_blocks_to_master_acc(&mut master_acc, 1);
-        assert_eq!(master_acc.height().unwrap(), 1);
-        assert_eq!(master_acc.current_epoch_header_count(), 2);
-        assert_eq!(master_acc.historical_epochs_header_count(), 0);
-        assert_eq!(master_acc.epoch_number(), 0);
-        // ff to next epoch boundary
-        add_blocks_to_master_acc(&mut master_acc, epoch_size - 2);
-        assert_eq!(master_acc.height().unwrap(), epoch_size - 1);
-        assert_eq!(master_acc.current_epoch_header_count(), epoch_size);
-        assert_eq!(master_acc.historical_epochs_header_count(), 0);
-        assert_eq!(master_acc.epoch_number(), 0);
-        // add block to macc
-        add_blocks_to_master_acc(&mut master_acc, 1);
-        assert_eq!(master_acc.height().unwrap(), epoch_size);
-        assert_eq!(master_acc.current_epoch_header_count(), 1);
-        assert_eq!(master_acc.historical_epochs_header_count(), epoch_size);
-        assert_eq!(master_acc.epoch_number(), 1);
-        // add block to macc
-        add_blocks_to_master_acc(&mut master_acc, 1);
-        assert_eq!(master_acc.height().unwrap(), epoch_size + 1);
-        assert_eq!(master_acc.current_epoch_header_count(), 2);
-        assert_eq!(master_acc.historical_epochs_header_count(), epoch_size);
-        assert_eq!(master_acc.epoch_number(), 1);
-        // ff to next epoch boundary
-        add_blocks_to_master_acc(&mut master_acc, epoch_size - 2);
-        assert_eq!(master_acc.height().unwrap(), 2 * epoch_size - 1);
-        assert_eq!(master_acc.current_epoch_header_count(), epoch_size);
-        assert_eq!(master_acc.historical_epochs_header_count(), epoch_size);
-        assert_eq!(master_acc.epoch_number(), 1);
-        // add block to macc
-        add_blocks_to_master_acc(&mut master_acc, 1);
-        assert_eq!(master_acc.height().unwrap(), 2 * epoch_size);
-        assert_eq!(master_acc.current_epoch_header_count(), 1);
-        assert_eq!(master_acc.historical_epochs_header_count(), 2 * epoch_size);
-        assert_eq!(master_acc.epoch_number(), 2);
-        // add block to macc
-        add_blocks_to_master_acc(&mut master_acc, 1);
-        assert_eq!(master_acc.height().unwrap(), 2 * epoch_size + 1);
-        assert_eq!(master_acc.current_epoch_header_count(), 2);
-        assert_eq!(master_acc.historical_epochs_header_count(), 2 * epoch_size);
-        assert_eq!(master_acc.epoch_number(), 2);
-    }
-
-    #[tokio::test]
-    async fn master_accumulator_validates_current_epoch_header() {
-        let mut master_acc = MasterAccumulator::default();
-        let headers = generate_random_headers(0, 10000);
-        for header in &headers {
-            let _ = update_accumulator(&mut master_acc, header);
-        }
-        let random_header = &headers[9999];
-        let (tx, _) = mpsc::unbounded_channel::<HistoryJsonRpcRequest>();
-        assert!(master_acc
-            .validate_pre_merge_header(random_header, tx.clone())
-            .await
-            .unwrap());
-        // test first header in epoch
-        let random_header = &headers[8192];
-        assert!(master_acc
-            .validate_pre_merge_header(random_header, tx)
-            .await
-            .unwrap());
-    }
-
-    #[tokio::test]
-    async fn master_accumulator_invalidates_invalid_current_epoch_header() {
-        let mut master_acc = MasterAccumulator::default();
-        let headers = generate_random_headers(0, 10000);
-        for header in &headers {
-            let _ = update_accumulator(&mut master_acc, header);
-        }
-        // get header from current epoch
-        let mut last_header = headers[9999].clone();
-        // invalidate header by changing timestamp
-        last_header.timestamp = 100;
-        let (tx, _rx) = mpsc::unbounded_channel::<HistoryJsonRpcRequest>();
-        assert!(!master_acc
-            .validate_pre_merge_header(&last_header, tx)
-            .await
-            .unwrap());
-    }
-
-    #[rstest]
-    // next block in chain
-    #[case(10_000)]
-    // distant block in chain
-    #[case(10_000_000)]
-    #[tokio::test]
-    #[should_panic(expected = "Unable to validate future header.")]
-    async fn master_accumulator_cannot_validate_future_header(#[case] test_height: u64) {
-        let mut master_acc = MasterAccumulator::default();
-        let headers = generate_random_headers(0, 10000);
-        for header in &headers {
-            let _ = update_accumulator(&mut master_acc, header);
-        }
-        let historical_header = &headers[0];
-        assert!(!master_acc.is_header_in_current_epoch(historical_header));
-
-        // first header in current epoch
-        let current_header = &headers[EPOCH_SIZE];
-        assert!(master_acc.is_header_in_current_epoch(current_header));
-
-        // generate next block in the chain, which has not yet been added to the accumulator
-        let future_header = generate_random_header(&test_height);
-        assert!(!master_acc.is_header_in_current_epoch(&future_header));
-
-        let (tx, _rx) = mpsc::unbounded_channel::<HistoryJsonRpcRequest>();
-        master_acc
-            .validate_pre_merge_header(&future_header, tx.clone())
-            .await
-            .unwrap();
-    }
-
-    #[tokio::test]
-    async fn mainnet_master_accumulator_validates_current_epoch_header() {
-        let master_acc = get_mainnet_master_acc();
-        let header = get_header(MERGE_BLOCK_NUMBER);
-        assert!(master_acc.is_header_in_current_epoch(&header));
-        let (tx, _) = mpsc::unbounded_channel::<HistoryJsonRpcRequest>();
-        assert!(master_acc
-            .validate_pre_merge_header(&header, tx.clone())
-            .await
-            .unwrap());
-    }
-
-    #[rstest]
-    #[case(0)]
-    #[case(1)]
-    #[case(2)]
-    #[case(200_000)]
-    #[tokio::test]
-    async fn mainnet_master_accumulator_validates_historical_epoch_headers(
-        #[case] block_number: u64,
-    ) {
-        let master_acc = get_mainnet_master_acc();
-        let header = get_header(block_number);
-        let (tx, mut rx) = mpsc::unbounded_channel::<HistoryJsonRpcRequest>();
-        tokio::spawn(async move {
-            spawn_mock_epoch_acc_lookup(&mut rx).await;
-        });
-        assert!(master_acc
-            .validate_pre_merge_header(&header, tx)
-            .await
-            .unwrap());
-    }
-
-    #[tokio::test]
-    async fn mainnet_master_accumulator_invalidates_invalid_historical_headers() {
-        let master_acc = get_mainnet_master_acc();
-        let mut invalid_header = get_header(200_000);
-        invalid_header.timestamp = 1000;
-        let (tx, mut rx) = mpsc::unbounded_channel::<HistoryJsonRpcRequest>();
-        tokio::spawn(async move {
-            spawn_mock_epoch_acc_lookup(&mut rx).await;
-        });
-        assert!(!master_acc
-            .validate_pre_merge_header(&invalid_header, tx)
-            .await
-            .unwrap());
-    }
-
-    #[test]
-    fn decode_fluffy_accumulators() {
-        // values sourced from: https://github.com/status-im/portal-spec-tests
-        let epoch_acc = fs::read("./src/assets/test/fluffy/epoch_acc.bin").unwrap();
-        let epoch_acc = EpochAccumulator::from_ssz_bytes(&epoch_acc).unwrap();
-        assert_eq!(epoch_acc.len(), EPOCH_SIZE);
-        let master_acc = fs::read("./src/assets/test/fluffy/finalized_macc.bin").unwrap();
-        // Fluffy currently uses a slightly different format for their local master accumulator,
-        // which requires a custom type to decode their accumulator properly. They hash the
-        // final "current_epoch" and include it as the final value in their "historical_epochs".
-        let fluffy = FluffyMasterAccumulator::from_ssz_bytes(&master_acc).unwrap();
-        assert_eq!(fluffy.historical_epochs.len(), 1897);
-        let trin = get_mainnet_master_acc();
-        assert_eq!(trin.historical_epochs[0], fluffy.historical_epochs[0]);
-        assert_eq!(trin.historical_epochs[1], fluffy.historical_epochs[1]);
-        assert_eq!(trin.historical_epochs[2], fluffy.historical_epochs[2]);
-        assert_eq!(trin.historical_epochs[3], fluffy.historical_epochs[3]);
-        assert_eq!(trin.historical_epochs[100], fluffy.historical_epochs[100]);
-        assert_eq!(trin.historical_epochs[1000], fluffy.historical_epochs[1000]);
-        assert_eq!(trin.historical_epochs[1895], fluffy.historical_epochs[1895]);
-    }
-
-    #[test]
-    fn decode_ultralight_accumulators() {
-        // values sourced from:
-        // https://github.com/ethereumjs/ultralight/tree/master/packages/portalnetwork/test/integration
-        let master_acc =
-            fs::read_to_string("./src/assets/test/ultralight/testAccumulator.hex").unwrap();
-        let master_acc = hex_decode(&master_acc).unwrap();
-        let master_acc = MasterAccumulator::from_ssz_bytes(&master_acc).unwrap();
-        // ultralight doesn't publish a finalized macc, just a test version
-        assert_eq!(master_acc.height().unwrap(), 8999);
-        let epoch_acc = fs::read_to_string("./src/assets/test/ultralight/testEpoch.hex").unwrap();
-        let epoch_acc = hex_decode(&epoch_acc).unwrap();
-        let epoch_acc = EpochAccumulator::from_ssz_bytes(&epoch_acc).unwrap();
-        assert_eq!(epoch_acc.len(), EPOCH_SIZE);
-    }
+    use crate::utils::bytes::hex_encode;
 
     #[rstest]
     #[case(1_000_001)]
@@ -576,7 +261,10 @@ mod test {
     #[case(1_000_009)]
     #[case(1_000_010)]
     #[tokio::test]
-    async fn generate_and_verify_fluffy_header_with_proofs(#[case] block_number: u64) {
+    async fn generate_and_verify_header_with_proofs(#[case] block_number: u64) {
+        // Use fluffy's proofs as test data to validate that trin
+        // - generates proofs which match fluffy's
+        // - validates hwps
         let file = fs::read_to_string("./src/assets/test/fluffy/header_with_proofs.json").unwrap();
         let json: Value = serde_json::from_str(&file).unwrap();
         let hwps = json.as_object().unwrap();
@@ -586,6 +274,14 @@ mod test {
             spawn_mock_epoch_acc_lookup(&mut rx).await;
         });
         let obj = hwps.get(&block_number.to_string()).unwrap();
+        // Validate content_key decodes
+        let raw_ck = obj.get("content_key").unwrap().as_str().unwrap();
+        let raw_ck = hex_decode(raw_ck).unwrap();
+        let ck = HistoryContentKey::from_ssz_bytes(&raw_ck).unwrap();
+        match ck {
+            HistoryContentKey::BlockHeaderWithProof(_) => (),
+            _ => panic!("Invalid test, content key decoded improperly"),
+        }
         let raw_fluffy_hwp = obj.get("value").unwrap().as_str().unwrap();
         let fluffy_hwp =
             HeaderWithProof::from_ssz_bytes(&hex_decode(raw_fluffy_hwp).unwrap()).unwrap();
@@ -596,9 +292,11 @@ mod test {
             _ => panic!("test reached invalid state"),
         };
         assert_eq!(trin_proof, fluffy_proof.proof);
-        trin_macc
-            .validate_pre_merge_header_with_proof(&header, trin_proof)
-            .unwrap();
+        let hwp = HeaderWithProof {
+            header,
+            proof: BlockHeaderProof::AccumulatorProof(AccumulatorProof { proof: trin_proof }),
+        };
+        trin_macc.validate_header_with_proof(&hwp).unwrap();
     }
 
     #[tokio::test]
@@ -609,23 +307,64 @@ mod test {
             spawn_mock_epoch_acc_lookup(&mut rx).await;
         });
         let header = get_header(1_000_001);
-        let mut trin_proof = trin_macc.generate_proof(&header, tx).await.unwrap();
-        trin_proof.swap(0, 1);
+        let mut proof = trin_macc.generate_proof(&header, tx).await.unwrap();
+        proof.swap(0, 1);
+        let hwp = HeaderWithProof {
+            header,
+            proof: BlockHeaderProof::AccumulatorProof(AccumulatorProof { proof }),
+        };
         assert!(trin_macc
-            .validate_pre_merge_header_with_proof(&header, trin_proof)
+            .validate_header_with_proof(&hwp)
             .unwrap_err()
             .to_string()
             .contains("Merkle proof validation failed"));
     }
 
+    #[tokio::test]
+    #[should_panic(expected = "Missing accumulator proof for pre-merge header.")]
+    async fn master_accumulator_cannot_validate_pre_merge_header_missing_proof() {
+        let master_acc = get_mainnet_master_acc();
+        let header = get_header(1_000_001);
+        let hwp = HeaderWithProof {
+            header,
+            proof: BlockHeaderProof::None(SszNone::default()),
+        };
+        master_acc.validate_header_with_proof(&hwp).unwrap();
+    }
+
+    #[tokio::test]
+    async fn master_accumulator_validates_post_merge_header_without_proof() {
+        let master_acc = get_mainnet_master_acc();
+        let future_height = MERGE_BLOCK_NUMBER + 1;
+        let future_header = generate_random_header(&future_height);
+        let future_hwp = HeaderWithProof {
+            header: future_header,
+            proof: BlockHeaderProof::None(SszNone::default()),
+        };
+        master_acc.validate_header_with_proof(&future_hwp).unwrap();
+    }
+
+    #[tokio::test]
+    #[should_panic(expected = "Invalid proof type found for post-merge header.")]
+    async fn master_accumulator_invalidates_post_merge_header_with_accumulator_proof() {
+        let master_acc = get_mainnet_master_acc();
+        let future_height = MERGE_BLOCK_NUMBER + 1;
+        let future_header = generate_random_header(&future_height);
+        let future_hwp = HeaderWithProof {
+            header: future_header,
+            proof: BlockHeaderProof::AccumulatorProof(AccumulatorProof {
+                proof: [H256::zero(); 15],
+            }),
+        };
+        master_acc.validate_header_with_proof(&future_hwp).unwrap();
+    }
+
     //
     // Testing utils
     //
-
     fn get_mainnet_master_acc() -> MasterAccumulator {
         let master_acc = fs::read("./src/assets/merge_macc.bin").unwrap();
         let master_acc = MasterAccumulator::from_ssz_bytes(&master_acc).unwrap();
-        assert_eq!(master_acc.height().unwrap(), MERGE_BLOCK_NUMBER);
         assert_eq!(
             master_acc.tree_hash_root(),
             H256::from_str(DEFAULT_MASTER_ACC_HASH).unwrap()
@@ -639,21 +378,6 @@ mod test {
         let json = json.as_object().unwrap();
         let raw_header = json.get(&number.to_string()).unwrap().as_str().unwrap();
         rlp::decode(&hex_decode(raw_header).unwrap()).unwrap()
-    }
-
-    pub fn add_blocks_to_master_acc(master_acc: &mut MasterAccumulator, count: u64) {
-        let headers = generate_random_headers(master_acc.next_header_height(), count);
-        for header in headers {
-            let _ = update_accumulator(master_acc, &header);
-        }
-    }
-
-    pub fn generate_random_headers(height: u64, count: u64) -> Vec<Header> {
-        (height..height + count)
-            .collect::<Vec<u64>>()
-            .iter()
-            .map(generate_random_header)
-            .collect()
     }
 
     fn generate_random_header(height: &u64) -> Header {
@@ -677,84 +401,26 @@ mod test {
         }
     }
 
-    /// Update the master accumulator state with a new header.
-    /// Adds new HeaderRecord to current epoch.
-    /// If current epoch fills up, it will refresh the epoch and add the
-    /// preceding epoch's merkle root to historical epochs.
-    // as defined in:
-    // https://github.com/ethereum/portal-network-specs/blob/e807eb09d2859016e25b976f082735d3aceceb8e/history-network.md#the-header-accumulator
-    fn update_accumulator(
-        master_acc: &mut MasterAccumulator,
-        new_header: &Header,
-    ) -> anyhow::Result<()> {
-        if new_header.number > MERGE_BLOCK_NUMBER {
-            return Err(anyhow!("Invalid master acc update: Header is post-merge."));
-        }
-        if new_header.number != master_acc.next_header_height() {
-            return Err(anyhow!(
-                "Invalid master acc update: Header is not at the expected height."
-            ));
-        }
-
-        // get the previous total difficulty
-        let last_total_difficulty = match master_acc.current_epoch_header_count() {
-            // genesis
-            0 => U256::zero(),
-            _ => {
-                master_acc.current_epoch
-                    .last()
-                    .expect("Invalid master accumulator state: No header records for current epoch on non-genesis header.")
-                    .total_difficulty
-            }
-        };
-
-        // check if the epoch accumulator is full
-        if master_acc.current_epoch_header_count() == EPOCH_SIZE as u64 {
-            // compute the final hash for this epoch
-            let epoch_hash = master_acc.current_epoch.tree_hash_root();
-            // append the hash for this epoch to the list of historical epochs
-            master_acc
-                .historical_epochs
-                .push(epoch_hash)
-                .expect("Invalid accumulator state, more historical epochs than allowed.");
-            // initialize a new empty epoch
-            master_acc.current_epoch = EpochAccumulator::empty();
-        }
-
-        // construct the concise record for the new header and add it to the current epoch
-        let header_record = HeaderRecord {
-            block_hash: new_header.hash(),
-            total_difficulty: last_total_difficulty + new_header.difficulty,
-        };
-        master_acc
-            .current_epoch
-            .push(header_record)
-            .expect("Invalid accumulator state, more current epochs than allowed.");
-        Ok(())
-    }
-
     async fn spawn_mock_epoch_acc_lookup(rx: &mut mpsc::UnboundedReceiver<HistoryJsonRpcRequest>) {
         match rx.recv().await {
-            Some(request) => {
-                let response = RecursiveFindContentParams::try_from(request.params).unwrap();
-                let response = hex_encode(response.content_key.to_vec());
-                let epoch_acc_hash = response.trim_start_matches("0x03");
-                let epoch_acc_hash = H256::from_str(epoch_acc_hash).unwrap();
-                let epoch_acc_path = format!("./src/assets/test/epoch_accs/{epoch_acc_hash}.bin");
-                let epoch_acc = fs::read(epoch_acc_path).unwrap();
-                let epoch_acc = hex_encode(epoch_acc);
-                let content: Value = json!(epoch_acc);
-                let _ = request.resp.send(Ok(content));
-            }
+            Some(request) => match request.endpoint {
+                HistoryEndpoint::RecursiveFindContent(content_key) => {
+                    let json_value = serde_json::to_value(content_key).unwrap();
+                    let response = json_value.as_str().unwrap();
+                    let epoch_acc_hash = response.trim_start_matches("0x03");
+                    let epoch_acc_hash = H256::from_str(epoch_acc_hash).unwrap();
+                    let epoch_acc_path =
+                        format!("./src/assets/test/epoch_accs/{epoch_acc_hash}.bin");
+                    let epoch_acc = fs::read(epoch_acc_path).unwrap();
+                    let epoch_acc = hex_encode(epoch_acc);
+                    let content: Value = json!(epoch_acc);
+                    let _ = request.resp.send(Ok(content));
+                }
+                _ => panic!("Unexpected request endpoint"),
+            },
             None => {
                 panic!("Test run failed: Unable to get response from master_acc validation.")
             }
         }
-    }
-
-    /// Datatype to represent the encoding fluffy uses for their local master accumulator
-    #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq, Deserialize, Serialize, TreeHash)]
-    pub struct FluffyMasterAccumulator {
-        pub historical_epochs: HistoricalEpochRoots,
     }
 }

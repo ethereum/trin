@@ -121,9 +121,11 @@ fn json_rpc(rpc: JsonRpc) -> Result<(), Box<dyn std::error::Error>> {
 
 fn encode_content_key(content_key: EncodeKey) -> Result<(), Box<dyn std::error::Error>> {
     let key = match content_key {
-        EncodeKey::BlockHeader { block_hash } => HistoryContentKey::BlockHeader(BlockHeader {
-            block_hash: block_hash.into(),
-        }),
+        EncodeKey::BlockHeader { block_hash } => {
+            HistoryContentKey::BlockHeaderWithProof(BlockHeader {
+                block_hash: block_hash.into(),
+            })
+        }
         EncodeKey::BlockBody { block_hash } => HistoryContentKey::BlockBody(BlockBody {
             block_hash: block_hash.into(),
         }),
@@ -161,7 +163,7 @@ fn create_dashboard(dashboard_config: DashboardConfig) -> Result<(), Box<dyn std
 
     let dashboard_url = grafana.create_dashboard(json_rpc_uid, prometheus_uid)?;
 
-    println!("Dashboard successfully created: {}", dashboard_url);
+    println!("Dashboard successfully created: {dashboard_url}");
     Ok(())
 }
 

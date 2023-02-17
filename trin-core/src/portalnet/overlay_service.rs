@@ -975,7 +975,7 @@ where
             Ok(Some(content)) => {
                 // Check content size and initiate uTP connection if the size is over the threshold
                 // TODO: Properly calculate max content size
-                if content.len() < 1000 {
+                if content.len() <= 1028 {
                     Ok(Content::Content(content))
                 } else {
                     let conn_id: u16 = crate::utp::stream::rand();
@@ -1145,7 +1145,7 @@ where
     }
 
     /// Processes a ping request from some source node.
-    fn process_ping(&mut self, ping: Ping, source: NodeId) {
+    fn process_ping(&self, ping: Ping, source: NodeId) {
         // Look up the node in the routing table.
         let key = kbucket::Key::from(source);
         let optional_node = match self.kbuckets.write().entry(&key) {
@@ -1164,6 +1164,11 @@ where
             // table entry, then request the node.
             if node.enr().seq() < ping.enr_seq {
                 self.request_node(&node.enr());
+            }
+
+            let data_radius: Distance = ping.custom_payload.into();
+            if node.data_radius != data_radius {
+                self.update_node_radius(node.enr(), data_radius);
             }
         }
     }
@@ -1360,7 +1365,7 @@ where
     /// Processes a Pong response.
     ///
     /// Refreshes the node if necessary. Attempts to mark the node as connected.
-    fn process_pong(&mut self, pong: Pong, source: Enr) {
+    fn process_pong(&self, pong: Pong, source: Enr) {
         let node_id = source.node_id();
         trace!(
             protocol = %self.protocol,
@@ -1382,7 +1387,28 @@ where
             if node.enr().seq() < pong.enr_seq {
                 self.request_node(&node.enr());
             }
+
+            let data_radius: Distance = pong.custom_payload.into();
+            if node.data_radius != data_radius {
+                self.update_node_radius(source, data_radius);
+            }
         }
+    }
+
+    /// Update the recorded radius of a node in our routing table.
+    fn update_node_radius(&self, enr: Enr, data_radius: Distance) {
+        let node_id = enr.node_id();
+        let key = kbucket::Key::from(node_id);
+
+        let updated_node = Node { enr, data_radius };
+
+        if let UpdateResult::Failed(_) = self.kbuckets.write().update_node(&key, updated_node, None)
+        {
+            error!(
+                "Failed to update radius of node {}",
+                hex_encode_compact(node_id.raw())
+            );
+        };
     }
 
     /// Processes a Nodes response.
@@ -1815,7 +1841,7 @@ where
 
         match self.kbuckets.write().update_node_status(&key, state, None) {
             UpdateResult::Failed(reason) => match reason {
-                FailureReason::KeyNonExistent => Err(FailureReason::KeyNonExistent),
+                FailureReason::KeyNonExistant => Err(FailureReason::KeyNonExistant),
                 other => {
                     warn!(
                         protocol = %self.protocol,

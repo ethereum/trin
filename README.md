@@ -6,15 +6,19 @@ The Portal Network is still in the research phase, and this client is experiment
 
 **Do not rely on Trin in a production setting.**
 
+**NOTE: Unix-only**
+
+Trin currently only runs on Unix-based platforms (Linux, macOS). We plan to eventually implement support for Windows, but until then do not expect any support for issues on Windows.
+
 ## How to use Trin
 
 Check out the [Getting Started](/docs/getting_started.md) guide to quickly get up and running with Trin.
 
 ## Experimental Status
 
-Trin is a prototype Portal Network client. This implementation and the Portal Network specificiation will continue to co-evolve.
+Trin is a prototype Portal Network client. This implementation and the Portal Network specifications will continue to co-evolve.
 
-In this stage of development, Trin relies on Infura to respond to some requests that it cannot fulfill itself. Additionally, Trin lacks comprehensive data validation.
+In this stage of development, Trin relies on a separate execution node (local node or Infura) to respond to some requests that it cannot fulfill itself. Additionally, Trin lacks comprehensive data validation.
 
 ## Want to help?
 

@@ -13,6 +13,8 @@ pub trait OverlayContentKey:
     /// Returns the identifier for the content referred to by the key.
     /// The identifier locates the content in the overlay.
     fn content_id(&self) -> [u8; 32];
+    /// Returns the bytes of the content key.
+    fn to_bytes(&self) -> Vec<u8>;
 }
 
 /// A content key in the history overlay network.
@@ -20,13 +22,15 @@ pub trait OverlayContentKey:
 #[ssz(enum_behaviour = "union")]
 pub enum HistoryContentKey {
     /// A block header with accumulator proof.
-    BlockHeader(BlockHeaderKey),
+    BlockHeaderWithProof(BlockHeaderKey),
     /// A block body.
     BlockBody(BlockBodyKey),
     /// The transaction receipts for a block.
     BlockReceipts(BlockReceiptsKey),
     /// An epoch header accumulator.
     EpochAccumulator(EpochAccumulatorKey),
+    /// Unknown content key value
+    Unknown(Vec<u8>),
 }
 
 impl Serialize for HistoryContentKey {
@@ -35,7 +39,7 @@ impl Serialize for HistoryContentKey {
         S: Serializer,
     {
         match self {
-            HistoryContentKey::BlockHeader(block_header) => {
+            HistoryContentKey::BlockHeaderWithProof(block_header) => {
                 let ssz_bytes = block_header.as_ssz_bytes();
                 let hex_bytes = hex::encode(ssz_bytes);
                 let selector = "00";
@@ -59,6 +63,10 @@ impl Serialize for HistoryContentKey {
                 let selector = "03";
                 serializer.serialize_str(&format!("0x{selector}{hex_bytes}"))
             }
+            HistoryContentKey::Unknown(value) => {
+                let hex_bytes = hex::encode(value.as_ssz_bytes());
+                serializer.serialize_str(&format!("0x{hex_bytes}"))
+            }
         }
     }
 }
@@ -81,7 +89,7 @@ impl<'de> Deserialize<'de> for HistoryContentKey {
 
         match HistoryContentKey::from_ssz_bytes(&ssz_bytes) {
             Ok(content_key) => Ok(content_key),
-            Err(_) => Err(de::Error::custom("Unable to deserialize from ssz bytes!")),
+            Err(_) => Ok(HistoryContentKey::Unknown(ssz_bytes)),
         }
     }
 }
@@ -128,13 +136,11 @@ impl From<HistoryContentKey> for Vec<u8> {
     }
 }
 
-impl TryFrom<Vec<u8>> for HistoryContentKey {
-    type Error = &'static str;
-
-    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+impl From<Vec<u8>> for HistoryContentKey {
+    fn from(value: Vec<u8>) -> Self {
         match HistoryContentKey::from_ssz_bytes(&value) {
-            Ok(key) => Ok(key),
-            Err(_err) => Err("Unable to decode SSZ"),
+            Ok(key) => key,
+            Err(_) => HistoryContentKey::Unknown(value),
         }
     }
 }
@@ -142,8 +148,8 @@ impl TryFrom<Vec<u8>> for HistoryContentKey {
 impl fmt::Display for HistoryContentKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
-            Self::BlockHeader(header) => format!(
-                "BlockHeader {{ block_hash: {} }}",
+            Self::BlockHeaderWithProof(header) => format!(
+                "BlockHeaderWithProof {{ block_hash: {} }}",
                 hex_encode_compact(header.block_hash)
             ),
             Self::BlockBody(body) => format!(
@@ -162,6 +168,9 @@ impl fmt::Display for HistoryContentKey {
                     hex_encode_compact(acc.epoch_hash.as_fixed_bytes())
                 )
             }
+            Self::Unknown(value) => {
+                format!("Unknown {{ {} }}", hex_encode_compact(value))
+            }
         };
 
         write!(f, "{s}")
@@ -173,6 +182,32 @@ impl OverlayContentKey for HistoryContentKey {
         let mut sha256 = Sha256::new();
         sha256.update(self.as_ssz_bytes());
         sha256.finalize().into()
+    }
+
+    fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes: Vec<u8> = Vec::new();
+
+        match self {
+            HistoryContentKey::BlockHeaderWithProof(k) => {
+                bytes.push(0x00);
+                bytes.extend_from_slice(&k.block_hash);
+            }
+            HistoryContentKey::BlockBody(k) => {
+                bytes.push(0x01);
+                bytes.extend_from_slice(&k.block_hash);
+            }
+            HistoryContentKey::BlockReceipts(k) => {
+                bytes.push(0x02);
+                bytes.extend_from_slice(&k.block_hash);
+            }
+            HistoryContentKey::EpochAccumulator(k) => {
+                bytes.push(0x03);
+                bytes.extend_from_slice(&k.epoch_hash.0);
+            }
+            HistoryContentKey::Unknown(k) => bytes.extend_from_slice(k),
+        }
+
+        bytes
     }
 }
 
@@ -217,10 +252,9 @@ mod test {
             block_hash: BLOCK_HASH,
         };
 
-        let key = HistoryContentKey::BlockHeader(header);
-        let encoded: Vec<u8> = key.clone().into();
+        let key = HistoryContentKey::BlockHeaderWithProof(header);
 
-        assert_eq!(encoded, expected_content_key);
+        assert_eq!(key.to_bytes(), expected_content_key);
         assert_eq!(key.content_id(), expected_content_id);
     }
 
@@ -240,9 +274,8 @@ mod test {
         };
 
         let key = HistoryContentKey::BlockBody(body);
-        let encoded: Vec<u8> = key.clone().into();
 
-        assert_eq!(encoded, expected_content_key);
+        assert_eq!(key.to_bytes(), expected_content_key);
         assert_eq!(key.content_id(), expected_content_id);
     }
 
@@ -262,9 +295,8 @@ mod test {
         };
 
         let key = HistoryContentKey::BlockReceipts(receipts);
-        let encoded: Vec<u8> = key.clone().into();
 
-        assert_eq!(encoded, expected_content_key);
+        assert_eq!(key.to_bytes(), expected_content_key);
         assert_eq!(key.content_id(), expected_content_id);
     }
 
@@ -298,7 +330,7 @@ mod test {
     fn ser_de_block_header() {
         let content_key_json =
             "\"0x00d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d\"";
-        let expected_content_key = HistoryContentKey::BlockHeader(BlockHeaderKey {
+        let expected_content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
             block_hash: BLOCK_HASH,
         });
 

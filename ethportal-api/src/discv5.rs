@@ -3,8 +3,7 @@ use jsonrpsee::{core::RpcResult, proc_macros::rpc};
 
 /// Discv5 JSON-RPC endpoints
 #[cfg(any(feature = "client", feature = "server"))]
-#[cfg_attr(feature = "client", rpc(client, namespace = "discv5"))]
-#[cfg_attr(feature = "server", rpc(server, namespace = "discv5"))]
+#[rpc(client, server, namespace = "discv5")]
 pub trait Discv5Api {
     /// Returns ENR and Node ID information of the local discv5 node.
     #[method(name = "nodeInfo")]

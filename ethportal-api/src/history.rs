@@ -1,3 +1,4 @@
+use crate::types::portal::FindNodesInfo;
 use crate::types::{
     content_item::HistoryContentItem,
     content_key::HistoryContentKey,
@@ -10,12 +11,15 @@ use jsonrpsee::{core::RpcResult, proc_macros::rpc};
 
 /// Portal History JSON-RPC endpoints
 #[cfg(any(feature = "client", feature = "server"))]
-#[cfg_attr(feature = "client", rpc(client, namespace = "portal"))]
-#[cfg_attr(feature = "server", rpc(server, namespace = "portal"))]
+#[rpc(client, server, namespace = "portal")]
 pub trait HistoryNetworkApi {
     /// Returns meta information about overlay routing table.
     #[method(name = "historyRoutingTableInfo")]
     async fn routing_table_info(&self) -> RpcResult<RoutingTableInfo>;
+
+    /// Returns meta information about overlay routing table.
+    #[method(name = "historyRadius")]
+    async fn radius(&self) -> RpcResult<DataRadius>;
 
     /// Write an Ethereum Node Record to the overlay routing table.
     #[method(name = "historyAddEnr")]
@@ -40,7 +44,7 @@ pub trait HistoryNetworkApi {
     /// Send a FINDNODES request for nodes that fall within the given set of distances, to the designated
     /// peer and wait for a response
     #[method(name = "historyFindNodes")]
-    async fn find_nodes(&self, enr: Enr, distances: Vec<u16>) -> RpcResult<Vec<Enr>>;
+    async fn find_nodes(&self, enr: Enr, distances: Vec<u16>) -> RpcResult<FindNodesInfo>;
 
     /// Lookup a target node within in the network
     #[method(name = "historyRecursiveFindNodes")]
@@ -69,7 +73,7 @@ pub trait HistoryNetworkApi {
     ) -> RpcResult<TraceContentInfo>;
 
     /// Pagination of local content keys
-    #[method(name = "historyPaginateLocalContentKeys")]
+    #[method(name = "paginateLocalContentKeys")]
     async fn paginate_local_content_keys(
         &self,
         offset: u64,
@@ -78,21 +82,17 @@ pub trait HistoryNetworkApi {
 
     /// Send the provided content item to interested peers. Clients may choose to send to some or all peers.
     /// Return the number of peers that the content was gossiped to.
-    #[method(name = "historyOffer")]
-    async fn offer(
+    #[method(name = "historyGossip")]
+    async fn gossip(
         &self,
         content_key: HistoryContentKey,
         content_value: HistoryContentItem,
     ) -> RpcResult<u32>;
 
-    /// Send OFFER with a set og content keys that this node has content available for.
-    /// Return the ACCEPT response.
-    #[method(name = "historySendOffer")]
-    async fn send_offer(
-        &self,
-        enr: Enr,
-        content_keys: Vec<HistoryContentKey>,
-    ) -> RpcResult<AcceptInfo>;
+    /// Send an OFFER request with given ContentKey, to the designated peer and wait for a response.
+    /// Returns the content keys bitlist upon successful content transmission or empty bitlist receive.
+    #[method(name = "historyOffer")]
+    async fn offer(&self, enr: Enr, content_key: HistoryContentKey) -> RpcResult<AcceptInfo>;
 
     /// Store content key with a content data to the local database.
     #[method(name = "historyStore")]

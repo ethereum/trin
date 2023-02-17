@@ -32,7 +32,7 @@ pub fn test_trace_recursive_find_content(_peertest_config: PeertestConfig, peert
     assert_eq!(result["content"], json!(HISTORY_CONTENT_VALUE.to_string()));
     assert_eq!(
         result["route"],
-        json!([{"enr": &peertest.bootnode.enr.to_base64(), "distance": 256}])
+        json!([{"enr": &peertest.bootnode.enr.to_base64(), "distance": "0x100"}])
     );
 }
 
@@ -51,7 +51,7 @@ pub fn test_recursive_find_content_invalid_params(
     };
 
     let error = make_ipc_request(&peertest.nodes[0].web3_ipc_path, &request).unwrap_err();
-    assert!(error.to_string().contains("Invalid content key requested"));
+    assert!(error.to_string().contains("Invalid content key provided"));
 }
 
 pub fn test_trace_recursive_find_content_local_db(

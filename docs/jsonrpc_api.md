@@ -24,7 +24,7 @@ The specification for these endpoints can be found [here](https://playground.ope
 The specification for these endpoints can be found [here](https://eth.wiki/json-rpc/API#json-rpc-methods).
 
 - [`eth_blockNumber`](https://eth.wiki/json-rpc/API#eth_blocknumber)
-	- This endpoint is currently proxied to Infura, and not served by the Portal Network.
+	- This endpoint is currently proxied to a trusted provider (local node or Infura), and not served by the Portal Network.
 - [`eth_getBlockByHash`](https://eth.wiki/json-rpc/API#eth_getblockbyhash)
 	- This endpoint relies on fetching block headers from the Portal Network, so all blocks may not be available until the Portal Network stabilizes.
 - [`eth_getBlockByNumber`](https://eth.wiki/json-rpc/API#eth_getblockbynumber)
@@ -34,7 +34,7 @@ The specification for these endpoints can be found [here](https://eth.wiki/json-
 ### Custom Trin JSON-RPC endpoints
 - [`portal_historyRadius`](#portal_historyRadius)
 - [`portal_stateRadius`](#portal_stateRadius)
-- [`portal_historyLocalContent`](#portal_historyLocalContent) 
+- [`portal_historyLocalContent`](#portal_historyLocalContent)
 - [`portal_stateLocalContent`](#portal_stateLocalContent)
 - [`portal_historyRecursiveFindContent`](#portal_historyRecursiveFindContent)
 - [`portal_historyTraceRecursiveFindContent`](#portal_historyTraceRecursiveFindContent)

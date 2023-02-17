@@ -5,7 +5,10 @@ use std::{
     sync::Arc,
 };
 
+use anyhow::anyhow;
 use discv5::enr::NodeId;
+use ethportal_api::types::portal::PaginateLocalContentInfo;
+use ethportal_api::HistoryContentKey;
 use prometheus_exporter::{
     self,
     prometheus::{register_gauge, Gauge},
@@ -14,7 +17,7 @@ use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rocksdb::{Options, DB};
 use rusqlite::params;
-use serde::Serialize;
+use serde_json::json;
 use tracing::{debug, error, info};
 
 use super::types::{
@@ -282,7 +285,7 @@ impl PortalStorage {
             sql_connection_pool: config.sql_connection_pool,
             distance_fn: config.distance_fn,
             metrics: None,
-            protocol: protocol,
+            protocol,
         };
 
         // Check whether we already have data, and if so
@@ -332,7 +335,7 @@ impl PortalStorage {
 
     /// Returns a paginated list of all available content keys from local storage (from any
     /// subnetwork) according to the provided offset and limit.
-    pub fn paginate(&self, offset: &u64, limit: &u64) -> anyhow::Result<PaginateResult> {
+    pub fn paginate(&self, offset: &u64, limit: &u64) -> anyhow::Result<PaginateLocalContentInfo> {
         let conn = self.sql_connection_pool.get()?;
         let mut query = conn.prepare(PAGINATE_QUERY)?;
 
@@ -342,10 +345,21 @@ impl PortalStorage {
                     (":offset", offset.to_string().as_str()),
                     (":limit", limit.to_string().as_str()),
                 ],
-                |row| Ok(ContentKey { key: row.get(0)? }),
+                |row| {
+                    Ok({
+                        let row: String = row.get(0)?;
+                        let content_key: HistoryContentKey = serde_json::from_value(json!(row))
+                            .map_err(|err| {
+                                // TODO: This is a hack to get around the fact that rusqlite doesn't
+                                // support returning a custom error type. We should fix this.
+                                rusqlite::Error::InvalidParameterName(err.to_string())
+                            })?;
+                        content_key
+                    })
+                },
             )?
             .into_iter()
-            .map(|row| row.unwrap().key)
+            .map(|row| row.unwrap())
             .collect();
 
         let mut query = conn.prepare(TOTAL_ENTRY_COUNT_QUERY)?;
@@ -358,7 +372,7 @@ impl PortalStorage {
             .first()
             .expect("Invalid total entries count returned from sql query.");
 
-        Ok(PaginateResult {
+        Ok(PaginateLocalContentInfo {
             content_keys,
             total_entries: *total_entries,
         })
@@ -423,20 +437,11 @@ impl PortalStorage {
                 hex_encode(&id_to_remove)
             );
 
-            let deleted_value = self.db.get(&id_to_remove)?;
-            self.db.delete(&id_to_remove)?;
-            // Revert rocksdb action if there's an error with writing to metadata db
-            if let Err(err) = self.meta_db_remove(&id_to_remove) {
+            if let Err(err) = self.evict(id_to_remove) {
                 debug!(
-                    "Error writing content ID {:?} to meta db. Reverting: {:?}",
-                    content_id, err
+                    "Error writing content ID {:?} to meta db. Reverted: {:?}",
+                    id_to_remove, err
                 );
-                if let Some(value) = deleted_value {
-                    self.db_insert(&content_id, &value)?;
-                }
-
-                let err = format!("failed deletion {}", err);
-                return Err(ContentStoreError::Database(err));
             }
 
             match self.find_farthest_content_id()? {
@@ -460,6 +465,43 @@ impl PortalStorage {
         }
 
         Ok(())
+    }
+
+    /// Public method for evicting a certain content id. Will revert RocksDB deletion if meta_db
+    /// deletion fails.
+    pub fn evict(&self, id: [u8; 32]) -> anyhow::Result<()> {
+        let deleted_value = self.db.get(&id)?;
+        self.db.delete(&id)?;
+        // Revert rocksdb action if there's an error with writing to metadata db
+        if let Err(err) = self.meta_db_remove(&id) {
+            if let Some(value) = deleted_value {
+                self.db_insert(&id, &value)?;
+            }
+            return Err(anyhow!("failed deletion {err}"));
+        }
+        Ok(())
+    }
+
+    /// Public method for looking up a content key by its content id
+    pub fn lookup_content_key(&self, id: [u8; 32]) -> anyhow::Result<Option<Vec<u8>>> {
+        let conn = self.sql_connection_pool.get()?;
+        let mut query = conn.prepare(CONTENT_KEY_LOOKUP_QUERY)?;
+        let id = id.to_vec();
+        let mut result = query.query_map([id], |row| {
+            let row: String = row.get(0)?;
+            let content_key: HistoryContentKey =
+                serde_json::from_value(json!(row)).map_err(|err| {
+                    // TODO: This is a hack to get around the fact that rusqlite doesn't
+                    // support returning a custom error type. We should fix this.
+                    rusqlite::Error::InvalidParameterName(err.to_string())
+                })?;
+            Ok(content_key)
+        })?;
+
+        match result.next() {
+            Some(val) => Ok(Some(val?.into())),
+            None => Ok(None),
+        }
     }
 
     /// Public method for retrieving the node's current radius.
@@ -728,6 +770,9 @@ const XOR_FIND_FARTHEST_QUERY: &str = "SELECT
                                     FROM content_metadata
                                     ORDER BY ((?1 | content_id_short) - (?1 & content_id_short)) DESC";
 
+const CONTENT_KEY_LOOKUP_QUERY: &str =
+    "SELECT content_key FROM content_metadata WHERE content_id_long = (?1)";
+
 const TOTAL_DATA_SIZE_QUERY: &str = "SELECT TOTAL(content_size) FROM content_metadata";
 
 const TOTAL_ENTRY_COUNT_QUERY: &str = "SELECT COUNT(content_id_long) FROM content_metadata";
@@ -746,16 +791,6 @@ struct DataSizeSum {
 
 struct EntryCount {
     total: u64,
-}
-
-struct ContentKey {
-    key: String,
-}
-
-#[derive(Serialize)]
-pub struct PaginateResult {
-    content_keys: Vec<String>,
-    total_entries: u64,
 }
 
 #[cfg(test)]

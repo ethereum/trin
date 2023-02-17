@@ -11,10 +11,11 @@ rust-version = "1.62.0"
 anyhow = "1.0.57"
 async-trait = "0.1.53"
 bytes = "1.1.0"
-discv5 = { git = "https://github.com/sigp/discv5.git", branch = "master" }
+discv5 = "0.1.0"
 eth2_ssz = "0.4.0"
 eth2_ssz_types = "0.2.1"
 ethereum-types = "0.12.1"
+ethportal-api = {path = "../ethportal-api"}
 hex = "0.4.3"
 keccak-hash = "0.8.0"
 parking_lot = "0.11.2"
@@ -26,6 +27,7 @@ tokio = { version = "1.8.0", features = ["full"] }
 tracing = "0.1.36"
 tree_hash = "0.4.0"
 trin-core = { path = "../trin-core" }
+rpc = { path = "../rpc" }
 ureq = { version = "2.2.0", features = ["json"] }
 
 [dev-dependencies]

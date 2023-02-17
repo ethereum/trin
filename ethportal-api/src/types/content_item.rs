@@ -77,11 +77,18 @@ impl ContentItem for Header {
     }
 }
 
+/// The length of the Merkle proof for the inclusion of a block header in a particular epoch
+/// accumulator.
 pub const EPOCH_ACC_PROOF_LEN: usize = 15;
 
+/// A block header with its corresponding proof against an epoch accumulator.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HeaderWithProof {
+    /// The block header.
     pub header: Header,
+    /// An optional epoch accumulator proof for the block header.
+    ///
+    /// Note: `proof` should only be `None` if `header` corresponds to a post-merge block.
     pub proof: Option<[H256; EPOCH_ACC_PROOF_LEN]>,
 }
 
@@ -124,9 +131,12 @@ impl ContentItem for HeaderWithProof {
     }
 }
 
+/// A block body.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BlockBody {
+    /// The list of transactions within the block.
     pub transactions: Vec<TransactionSigned>,
+    /// The list of block headers for the "uncles" of the block.
     pub uncles: Vec<Header>,
 }
 
@@ -177,9 +187,12 @@ impl ContentItem for BlockBody {
     }
 }
 
+/// A header element of an epoch accumulator.
 #[derive(Clone, Debug, PartialEq, Eq, Decode, Encode)]
 pub struct HeaderRecord {
+    /// The hash of the block.
     pub hash: H256,
+    /// The cumulative total difficulty from genesis up to and including this block.
     pub total_difficulty: U256,
 }
 
@@ -196,15 +209,47 @@ impl ContentItem for EpochAccumulator {
     }
 }
 
-/// Portal History content items.
-/// Supports both BlockHeaderWithProof and the depreciated BlockHeader content types
+/// A Portal History content item.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum HistoryContentItem {
     BlockHeaderWithProof(HeaderWithProof),
-    BlockHeader(Header),
     BlockBody(BlockBody),
     Receipts(Vec<Receipt>),
     EpochAccumulator(EpochAccumulator),
+    /// A placeholder for data that could not be interpreted as any of the valid content types.
+    Unknown(String),
+}
+
+impl ContentItem for HistoryContentItem {
+    fn encode(&self, buf: &mut Vec<u8>) {
+        match self {
+            Self::BlockHeaderWithProof(item) => item.encode(buf),
+            Self::BlockBody(item) => item.encode(buf),
+            Self::Receipts(item) => ContentItem::encode(item, buf),
+            Self::EpochAccumulator(item) => item.encode(buf),
+            Self::Unknown(item) => buf.append(&mut item.clone().into_bytes()),
+        }
+    }
+
+    fn decode(buf: &[u8]) -> Result<Self, ContentItemDecodeError> {
+        if let Ok(item) = HeaderWithProof::decode(buf) {
+            return Ok(Self::BlockHeaderWithProof(item));
+        }
+
+        if let Ok(item) = BlockBody::decode(buf) {
+            return Ok(Self::BlockBody(item));
+        }
+
+        if let Ok(item) = ContentItem::decode(buf) {
+            return Ok(Self::Receipts(item));
+        }
+
+        if let Ok(item) = EpochAccumulator::decode(buf) {
+            return Ok(Self::EpochAccumulator(item));
+        }
+
+        Ok(Self::Unknown(hex::encode(buf)))
+    }
 }
 
 impl Serialize for HistoryContentItem {
@@ -215,10 +260,15 @@ impl Serialize for HistoryContentItem {
         let mut encoded = Vec::new();
         match self {
             Self::BlockHeaderWithProof(item) => item.encode(&mut encoded),
-            Self::BlockHeader(item) => ContentItem::encode(item, &mut encoded),
             Self::BlockBody(item) => item.encode(&mut encoded),
             Self::Receipts(item) => ContentItem::encode(item, &mut encoded),
             Self::EpochAccumulator(item) => ContentItem::encode(item, &mut encoded),
+            Self::Unknown(item) => {
+                if item.is_empty() {
+                    return serializer.serialize_str("0x0");
+                }
+                encoded.append(&mut item.clone().into_bytes());
+            }
         }
         serializer.serialize_str(&format!("0x{}", hex::encode(encoded)))
     }
@@ -230,15 +280,15 @@ impl<'de> Deserialize<'de> for HistoryContentItem {
         D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
+        if s.as_str() == "0x0" {
+            return Ok(Self::Unknown(String::from("")));
+        }
+
         let content_bytes =
             hex::decode(s.strip_prefix("0x").unwrap_or(&s)).map_err(serde::de::Error::custom)?;
 
         if let Ok(item) = HeaderWithProof::decode(&content_bytes) {
             return Ok(Self::BlockHeaderWithProof(item));
-        }
-
-        if let Ok(item) = <Header as ContentItem>::decode(&content_bytes) {
-            return Ok(Self::BlockHeader(item));
         }
 
         if let Ok(item) = BlockBody::decode(&content_bytes) {
@@ -253,12 +303,11 @@ impl<'de> Deserialize<'de> for HistoryContentItem {
             return Ok(Self::EpochAccumulator(item));
         }
 
-        Err(serde::de::Error::custom(
-            "unable to deserialize to any history content item",
-        ))
+        Ok(Self::Unknown(hex::encode(content_bytes)))
     }
 }
 
+/// A wrapper struct for an optional SSZ value.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SszOption<T>(Option<T>);
 

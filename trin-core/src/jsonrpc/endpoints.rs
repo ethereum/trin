@@ -1,4 +1,6 @@
-use std::str::FromStr;
+use ethportal_api::types::discv5::Enr;
+use ethportal_api::types::portal::DataRadius;
+use ethportal_api::{HistoryContentItem, HistoryContentKey};
 
 /// Discv5 JSON-RPC endpoints. Start with "discv5_" prefix
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -24,19 +26,31 @@ pub enum StateEndpoint {
 /// History network JSON-RPC endpoints. Start with "portal_history" prefix
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum HistoryEndpoint {
+    /// params: None
     DataRadius,
-    FindContent,
-    FindNodes,
-    LocalContent,
-    Offer,
-    SendOffer,
-    Ping,
-    RecursiveFindContent,
-    TraceRecursiveFindContent,
-    Store,
+    /// params: [enr, content_key]
+    FindContent(Enr, HistoryContentKey),
+    /// params: [enr, distances]
+    FindNodes(Enr, Vec<u16>),
+    /// params: content_key
+    LocalContent(HistoryContentKey),
+    /// params: [content_key, content_value]
+    Gossip(HistoryContentKey, HistoryContentItem),
+    /// params: [enr, content_key]
+    Offer(Enr, HistoryContentKey),
+    /// params: [enr, data_radius]
+    Ping(Enr, Option<DataRadius>),
+    /// params: content_key
+    RecursiveFindContent(HistoryContentKey),
+    /// params: content_key
+    TraceRecursiveFindContent(HistoryContentKey),
+    /// params: [content_key, content_value]
+    Store(HistoryContentKey, HistoryContentItem),
+    /// params: None
     RoutingTableInfo,
     // This endpoint is not History network specific
-    PaginateLocalContentKeys,
+    /// params: [offset, limit]
+    PaginateLocalContentKeys(u64, u64),
 }
 
 /// Ethereum JSON-RPC endpoints not currently supported by portal network requests, proxied to
@@ -65,75 +79,4 @@ pub enum TrinEndpoint {
     StateEndpoint(StateEndpoint),
     TrustedProviderEndpoint(TrustedProviderEndpoint),
     PortalEndpoint(PortalEndpoint),
-}
-
-impl FromStr for TrinEndpoint {
-    type Err = ();
-
-    fn from_str(input: &str) -> Result<TrinEndpoint, Self::Err> {
-        match input {
-            "web3_clientVersion" => Ok(TrinEndpoint::PortalEndpoint(PortalEndpoint::ClientVersion)),
-            "discv5_nodeInfo" => Ok(TrinEndpoint::Discv5Endpoint(Discv5Endpoint::NodeInfo)),
-            "discv5_routingTableInfo" => Ok(TrinEndpoint::Discv5Endpoint(
-                Discv5Endpoint::RoutingTableInfo,
-            )),
-            "eth_blockNumber" => Ok(TrinEndpoint::TrustedProviderEndpoint(
-                TrustedProviderEndpoint::BlockNumber,
-            )),
-            "eth_getBlockByHash" => {
-                Ok(TrinEndpoint::PortalEndpoint(PortalEndpoint::GetBlockByHash))
-            }
-            "eth_getBlockByNumber" => Ok(TrinEndpoint::PortalEndpoint(
-                PortalEndpoint::GetBlockByNumber,
-            )),
-            "portal_historyFindContent" => {
-                Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::FindContent))
-            }
-            "portal_historyRecursiveFindContent" => Ok(TrinEndpoint::HistoryEndpoint(
-                HistoryEndpoint::RecursiveFindContent,
-            )),
-            "portal_historyTraceRecursiveFindContent" => Ok(TrinEndpoint::HistoryEndpoint(
-                HistoryEndpoint::TraceRecursiveFindContent,
-            )),
-            "portal_historyFindNodes" => {
-                Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::FindNodes))
-            }
-            "portal_historyLocalContent" => {
-                Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::LocalContent))
-            }
-            "portal_paginateLocalContentKeys" => Ok(TrinEndpoint::HistoryEndpoint(
-                HistoryEndpoint::PaginateLocalContentKeys,
-            )),
-            "portal_historyOffer" => Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::Offer)),
-            "portal_historySendOffer" => {
-                Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::SendOffer))
-            }
-            "portal_historyPing" => Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::Ping)),
-            "portal_historyRadius" => {
-                Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::DataRadius))
-            }
-            "portal_historyRoutingTableInfo" => Ok(TrinEndpoint::HistoryEndpoint(
-                HistoryEndpoint::RoutingTableInfo,
-            )),
-            "portal_historyStore" => Ok(TrinEndpoint::HistoryEndpoint(HistoryEndpoint::Store)),
-            "portal_stateFindContent" => {
-                Ok(TrinEndpoint::StateEndpoint(StateEndpoint::FindContent))
-            }
-            "portal_stateFindNodes" => Ok(TrinEndpoint::StateEndpoint(StateEndpoint::FindNodes)),
-            "portal_stateLocalContent" => {
-                Ok(TrinEndpoint::StateEndpoint(StateEndpoint::LocalContent))
-            }
-            "portal_stateSendOffer" => Ok(TrinEndpoint::StateEndpoint(StateEndpoint::SendOffer)),
-            "portal_stateStore" => Ok(TrinEndpoint::StateEndpoint(StateEndpoint::Store)),
-            "portal_statePing" => Ok(TrinEndpoint::StateEndpoint(StateEndpoint::Ping)),
-            "portal_stateRadius" => Ok(TrinEndpoint::StateEndpoint(StateEndpoint::DataRadius)),
-            "portal_stateRecursiveFindContent" => Ok(TrinEndpoint::StateEndpoint(
-                StateEndpoint::RecursiveFindContent,
-            )),
-            "portal_stateRoutingTableInfo" => {
-                Ok(TrinEndpoint::StateEndpoint(StateEndpoint::RoutingTableInfo))
-            }
-            _ => Err(()),
-        }
-    }
 }
