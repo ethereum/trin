@@ -1543,6 +1543,11 @@ where
         for enr in enrs {
             let node_id = enr.node_id();
 
+            if !enr.verify() {
+                warn!("Received ENR with invalid signature: {}", enr);
+                continue;
+            }
+
             // Ignore ourself.
             if node_id == local_node_id {
                 continue;
