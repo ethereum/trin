@@ -365,7 +365,7 @@ where
 
         // Filter all nodes from overlay routing table where XOR_distance(content_id, nodeId) < node radius
         for (content_key, content_value) in content {
-            let interested_enrs: Vec<Enr> = all_nodes
+            let mut interested_enrs: Vec<Enr> = all_nodes
                 .clone()
                 .into_iter()
                 .filter(|node| {
@@ -374,6 +374,14 @@ where
                 })
                 .map(|node| node.value.enr())
                 .collect();
+
+            // Sort all eligible nodes by proximity to the content and take the closest k.
+            interested_enrs.sort_by(|a, b| {
+                let distance_a = XorMetric::distance(&content_key.content_id(), &a.node_id().raw());
+                let distance_b = XorMetric::distance(&content_key.content_id(), &b.node_id().raw());
+                distance_a.partial_cmp(&distance_b).unwrap()
+            });
+            let interested_enrs = interested_enrs[0..MAX_NODES_PER_BUCKET].to_vec();
 
             // Continue if no nodes are interested in the content
             if interested_enrs.is_empty() {
