@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.68"
-ethportal-api = { path = "../ethportal-api", features=["server"]}
+ethportal-api = { path = "../ethportal-api"}
 trin-core = { path = "../trin-core"}
 tokio = { version = "1.8.0", features = ["full"] }
 reth-ipc = { version = "0.1.0", git = "https://github.com/paradigmxyz/reth.git"}
