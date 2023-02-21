@@ -10,7 +10,6 @@ use crate::types::{
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
 
 /// Portal History JSON-RPC endpoints
-#[cfg(any(feature = "client", feature = "server"))]
 #[rpc(client, server, namespace = "portal")]
 pub trait HistoryNetworkApi {
     /// Returns meta information about overlay routing table.
