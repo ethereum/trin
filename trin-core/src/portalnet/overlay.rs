@@ -676,6 +676,30 @@ where
         }
     }
 
+    /// Send Offer request without storing the content into db
+    pub async fn send_populated_offer(
+        &self,
+        enr: Enr,
+        content_key: RawContentKey,
+        content_value: Vec<u8>,
+    ) -> Result<Accept, OverlayRequestError> {
+        // Construct the request.
+        let request = Request::PopulatedOffer(PopulatedOffer {
+            content_items: vec![(content_key, content_value)],
+        });
+
+        let direction = RequestDirection::Outgoing {
+            destination: enr.clone(),
+        };
+
+        // Send the request and wait on the response.
+        match self.send_overlay_request(request, direction).await {
+            Ok(Response::Accept(accept)) => Ok(accept),
+            Ok(_) => Err(OverlayRequestError::InvalidResponse),
+            Err(error) => Err(error),
+        }
+    }
+
     /// Performs a content lookup for `target`.
     /// Returns the target content along with the peers traversed during content lookup.
     pub async fn lookup_content(&self, target: TContentKey) -> (Option<Vec<u8>>, Vec<NodeId>) {
