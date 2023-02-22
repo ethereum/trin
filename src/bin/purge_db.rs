@@ -4,7 +4,7 @@ use anyhow::anyhow;
 use discv5::enr::{CombinedKey, EnrBuilder};
 use rocksdb::IteratorMode;
 use structopt::StructOpt;
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 
 use ethportal_api::types::content_item::{
     BlockBody, ContentItem, EpochAccumulator, HeaderWithProof,
@@ -23,6 +23,7 @@ use trin_core::utils::db::get_data_dir;
 /// need to be updated to avoid panicking.
 ///
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tracing_subscriber::fmt::init();
     let purge_config = PurgeConfig::from_args();
 
     let mut encoded = hex::decode(&purge_config.private_key).unwrap();
@@ -96,7 +97,7 @@ fn is_content_valid(content_key: &HistoryContentKey, value: &[u8]) -> bool {
         }
         HistoryContentKey::EpochAccumulator(_) => EpochAccumulator::decode(value).is_ok(),
         HistoryContentKey::Unknown(_) => {
-            debug!("Found invalid content key: {content_key}");
+            warn!("Found invalid content key: {content_key}");
             false
         }
     }
