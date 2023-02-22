@@ -983,7 +983,7 @@ where
                             .read_to_eof(&mut data)
                             .await
                             .expect("error reading data from uTP stream");
-                        info!("read {n} bytes of data from uTP stream");
+                        info!(len = %n, "read data from uTP stream");
                     });
 
                     // Connection id is send as BE because uTP header values are stored also as BE
@@ -1086,19 +1086,20 @@ where
         let utp = Arc::clone(&self.utp_socket);
 
         tokio::spawn(async move {
-            let mut stream = utp
-                .accept_with_cid(cid)
-                .await
-                .expect("did not receive connection for CID");
+            let mut stream = match utp.accept_with_cid(cid.clone()).await {
+                Ok(stream) => stream,
+                Err(err) => {
+                    error!(error = ?err, cid.send, cid.recv, peer = %cid.peer.node_id(), "Unable to accept uTP stream");
+                    return;
+                }
+            };
 
             let mut data = vec![];
-            let n = stream
-                .read_to_eof(&mut data)
-                .await
-                .expect("error reading data from uTP stream");
-            info!("read {n} bytes of data from uTP stream");
+            if let Err(err) = stream.read_to_eof(&mut data).await {
+                error!(error = ?err, "error reading data from uTP stream");
+            }
 
-            Self::process_accept_utp_payload(
+            if let Err(err) = Self::process_accept_utp_payload(
                 validator,
                 store,
                 kbuckets,
@@ -1107,7 +1108,9 @@ where
                 data,
             )
             .await
-            .expect("unable to process uTP payload");
+            {
+                error!(error = %err, "error processing uTP payload");
+            }
         });
 
         let accept = Accept {
@@ -1346,12 +1349,15 @@ where
 
         let utp = Arc::clone(&self.utp_socket);
         tokio::spawn(async move {
-            let mut conn = match utp.connect_with_cid(cid.clone()).await {
-                Ok(conn) => conn,
+            let mut stream = match utp.connect_with_cid(cid.clone()).await {
+                Ok(stream) => stream,
                 Err(err) => {
                     error!(
-                        "error connecting with CID (send: {}, recv: {}) {err:?}",
-                        cid.send, cid.recv
+                        error = ?err,
+                        cid.send,
+                        cid.recv,
+                        peer = %cid.peer.node_id(),
+                        "Unable to establish uTP conn based on Accept",
                     );
                     return;
                 }
@@ -1390,22 +1396,29 @@ where
             let content_payload = portal_wire::encode_content_payload(&content_items)
                 .expect("Unable to build content payload: {msg:?}");
 
+            info!(
+                len = %content_payload.len(),
+                "writing data to uTP stream"
+            );
+
             // send the content to the acceptor over a uTP stream
-            if let Err(err) = conn.write(&content_payload).await {
+            if let Err(err) = stream.write(&content_payload).await {
                 warn!(
                     error = %err,
-                    utp.conn_id = %conn_id,
-                    utp.peer = %conn.cid().peer.0,
+                    cid.send,
+                    cid.recv,
+                    peer = %cid.peer.node_id(),
                     "Error sending content over uTP connection"
                 );
             }
 
             // close uTP connection
-            if let Err(err) = conn.shutdown() {
+            if let Err(err) = stream.shutdown() {
                 warn!(
                     error = %err,
-                    utp.conn_id = %conn_id,
-                    utp.peer = %conn.cid().peer.0,
+                    cid.send,
+                    cid.recv,
+                    peer = %cid.peer.node_id(),
                     "Error closing uTP connection"
                 );
             };

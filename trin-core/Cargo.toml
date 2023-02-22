@@ -58,7 +58,7 @@ uint = { version = "0.8.5", default-features = false }
 ureq = { version = "2.2.0", features = ["json"] }
 validator = { version = "0.13.0", features = ["derive"] }
 url = "2.3.1"
-utp = { version = "0.1.0-alpha", git = "https://github.com/jacobkaufmann/utp.git", branch = "x" }
+utp = { version = "0.1.0-alpha", git = "https://github.com/jacobkaufmann/utp.git", branch = "conn-x" }
 
 [target.'cfg(windows)'.dependencies]
 ipconfig = "0.2.2"

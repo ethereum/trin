@@ -65,7 +65,7 @@ impl PortalnetEvents {
                 }
                 ProtocolId::Utp => {
                     if let Err(err) = self.utp_talk_reqs.send(request) {
-                        warn! {"Error sending uTP request to uTP listener: {err}"};
+                        warn!(error = %err, "Error forwarding uTP message to uTP socket");
                     }
                 }
                 _ => {

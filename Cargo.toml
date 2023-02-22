@@ -32,7 +32,7 @@ trin-core = { path = "trin-core" }
 trin-history = { path = "trin-history" }
 trin-state = { path = "trin-state" }
 ureq = { version = "2.2.0", features = ["json"] }
-utp = { version = "0.1.0-alpha", git = "https://github.com/jacobkaufmann/utp.git", branch = "x" }
+utp = { version = "0.1.0-alpha", git = "https://github.com/jacobkaufmann/utp.git", branch = "conn-x" }
 
 [dev-dependencies]
 ethportal-peertest = { path = "ethportal-peertest" }

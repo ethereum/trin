@@ -50,21 +50,16 @@ pub fn test_offer_accept(peertest_config: PeertestConfig, peertest: &Peertest) {
         params: Params::Array(vec![Value::String(HISTORY_CONTENT_KEY.to_string())]),
     };
     let mut received_content_value =
-        make_ipc_request(&peertest.bootnode.web3_ipc_path, &local_content_request);
-    while let Err(err) = received_content_value {
-        error!("Retrying after 0.5sec, because content should have been present: {err}");
-        thread::sleep(time::Duration::from_millis(500));
-        received_content_value =
-            make_ipc_request(&peertest.bootnode.web3_ipc_path, &local_content_request);
-    }
+        make_ipc_request(&peertest.bootnode.web3_ipc_path, &local_content_request).unwrap();
 
-    let received_content_value = match received_content_value {
-        Ok(val) => val,
-        Err(err) => {
-            error!("Failed to find content that should be present: {err}");
-            panic!("Could not get local content");
-        }
-    };
+    let mut counter = 0;
+    while counter < 5 && received_content_value.as_str().unwrap() == "0x0" {
+        error!("Retrying after 1s, because content should have been present");
+        thread::sleep(time::Duration::from_secs(1));
+        received_content_value =
+            make_ipc_request(&peertest.bootnode.web3_ipc_path, &local_content_request).unwrap();
+        counter += 1
+    }
 
     let received_content_str = received_content_value.as_str().unwrap();
     assert_eq!(

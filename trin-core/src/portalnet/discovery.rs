@@ -270,7 +270,7 @@ impl Discovery {
 
 pub struct Discv5UdpSocket {
     // `RwLock` for interior mutability.
-    // TODO: Figure out a better mechanism here.
+    // TODO: Figure out a better mechanism here. The socket is the only holder of the lock.
     talk_reqs: tokio::sync::RwLock<mpsc::UnboundedReceiver<TalkRequest>>,
     discv5: Arc<Discovery>,
 }
@@ -288,10 +288,8 @@ impl Discv5UdpSocket {
 pub struct UtpEnr(pub Enr);
 
 impl UtpEnr {
-    fn client(&self) -> Option<String> {
-        self.0
-            .get("c")
-            .and_then(|c| String::from_utf8(c.to_vec()).ok())
+    pub fn node_id(&self) -> NodeId {
+        self.0.node_id()
     }
 }
 
@@ -305,11 +303,7 @@ impl std::hash::Hash for UtpEnr {
     }
 }
 
-impl utp::cid::ConnectionPeer for UtpEnr {
-    fn addr(&self) -> SocketAddr {
-        self.0.udp4_socket().unwrap().into()
-    }
-}
+impl utp::cid::ConnectionPeer for UtpEnr {}
 
 #[async_trait]
 impl utp::udp::AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
@@ -322,7 +316,7 @@ impl utp::udp::AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
             // We drop the talk response because it is ignored in the uTP protocol.
             Ok(..) => Ok(buf.len()),
             Err(err) => {
-                tracing::error!("error sending talk request {err:?}");
+                tracing::error!(error = ?err, "error sending talk request");
                 Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
                     format!("{err}"),
@@ -341,7 +335,9 @@ impl utp::udp::AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
                 let n = std::cmp::min(buf.len(), packet.len());
                 buf[..n].copy_from_slice(&packet[..n]);
 
-                tracing::info!(client = ?enr.client(), "received talk req");
+                // when the talk request is dropped, an empty response is sent via the `Drop`
+                // implementation for `TalkRequest`
+
                 Ok((n, enr))
             }
             None => Err(std::io::Error::from(std::io::ErrorKind::NotConnected)),

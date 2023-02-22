@@ -100,7 +100,7 @@ pub async fn run_trin(
         {
             initialize_history_network(
                 &discovery,
-                Arc::clone(&utp_socket),
+                utp_socket,
                 portalnet_config.clone(),
                 storage_config.clone(),
                 header_oracle.clone(),
