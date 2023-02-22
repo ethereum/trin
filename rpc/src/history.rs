@@ -167,8 +167,13 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
 
     /// Send an OFFER request with given ContentKey, to the designated peer and wait for a response.
     /// Returns the content keys bitlist upon successful content transmission or empty bitlist receive.
-    async fn offer(&self, enr: Enr, content_key: HistoryContentKey) -> RpcResult<AcceptInfo> {
-        let endpoint = HistoryEndpoint::Offer(enr, content_key);
+    async fn offer(
+        &self,
+        enr: Enr,
+        content_key: HistoryContentKey,
+        content_value: Option<HistoryContentItem>,
+    ) -> RpcResult<AcceptInfo> {
+        let endpoint = HistoryEndpoint::Offer(enr, content_key, content_value);
         let result = self.proxy_query_to_history_subnet(endpoint).await?;
         let result: AcceptInfo = from_value(result)?;
         Ok(result)
