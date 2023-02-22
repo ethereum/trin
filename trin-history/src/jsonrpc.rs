@@ -184,16 +184,32 @@ impl HistoryRequestHandler {
                         }
                     }
                 }
-                HistoryEndpoint::Offer(enr, content_key) => {
+                HistoryEndpoint::Offer(enr, content_key, content_value) => {
                     let enr = convert_enr(enr);
 
-                    let content_key: Vec<RawContentKey> = vec![content_key.as_ssz_bytes()];
-                    let response = match self.network.overlay.send_offer(content_key, enr).await {
-                        Ok(accept) => Ok(json!(AcceptInfo {
-                            content_keys: accept.content_keys,
-                        })),
-                        Err(msg) => Err(format!("SendOffer request timeout: {msg:?}")),
+                    let response = if let Some(content_value) = content_value {
+                        match self
+                            .network
+                            .overlay
+                            .send_populated_offer(enr, content_key.into(), content_value.into())
+                            .await
+                        {
+                            Ok(accept) => Ok(json!(AcceptInfo {
+                                content_keys: accept.content_keys,
+                            })),
+                            Err(msg) => Err(format!("Populated Offer request timeout: {msg:?}")),
+                        }
+                    } else {
+                        let content_key: Vec<RawContentKey> = vec![content_key.as_ssz_bytes()];
+
+                        match self.network.overlay.send_offer(content_key, enr).await {
+                            Ok(accept) => Ok(json!(AcceptInfo {
+                                content_keys: accept.content_keys,
+                            })),
+                            Err(msg) => Err(format!("Offer request timeout: {msg:?}")),
+                        }
                     };
+
                     let _ = request.resp.send(response);
                 }
                 HistoryEndpoint::Ping(enr, _) => {
