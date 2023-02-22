@@ -25,6 +25,7 @@ use ethportal_api::types::portal::{
     AcceptInfo, Distance, FindNodesInfo, NodeInfo, PongInfo, TraceContentInfo,
 };
 use ethportal_api::HistoryContentKey as EthHistoryContentKey;
+use ethportal_api::{ContentItem, HistoryContentItem};
 use ssz::Encode;
 use trin_core::jsonrpc::endpoints::HistoryEndpoint;
 use trin_core::jsonrpc::types::HistoryJsonRpcRequest;
@@ -47,8 +48,12 @@ impl HistoryRequestHandler {
                                 match &self.network.overlay.store.read().get(&content_key)
                                 {
                                     Ok(val) => match val {
-                                        Some(val) => Ok(Value::String(hex_encode(val.clone()))),
-                                        None => Ok(Value::String("0x0".to_string())),
+                                        Some(val) => {
+                                            Ok(Value::String(hex_encode(val.clone())))
+                                        }
+                                        None => {
+                                            Ok(Value::Null)
+                                        }
                                     },
                                     Err(err) => Err(format!(
                                         "Database error while looking for content key in local storage: {content_key:?}, with error: {err}",
@@ -77,12 +82,14 @@ impl HistoryRequestHandler {
                 HistoryEndpoint::Store(content_key, content_item) => {
                     match convert_content_key(&content_key) {
                         Ok(content_key) => {
+                            let mut data = vec![];
+                            content_item.encode(&mut data);
                             let response = match self
                                 .network
                                 .overlay
                                 .store
                                 .write()
-                                .put::<HistoryContentKey, Vec<u8>>(content_key, content_item.into())
+                                .put::<HistoryContentKey, Vec<u8>>(content_key, data)
                             {
                                 Ok(_) => Ok(Value::Bool(true)),
                                 Err(msg) => Ok(Value::String(msg.to_string())),
@@ -164,7 +171,9 @@ impl HistoryRequestHandler {
                 HistoryEndpoint::Gossip(content_key, content_item) => {
                     match convert_content_key(&content_key) {
                         Ok(content_key) => {
-                            let content_items = vec![(content_key, content_item.into())];
+                            let mut data = vec![];
+                            content_item.encode(&mut data);
+                            let content_items = vec![(content_key, data)];
                             let num_peers = self.network.overlay.propagate_gossip(content_items);
                             let response = Ok(num_peers.into());
                             let _ = request.resp.send(response);
@@ -267,7 +276,7 @@ impl HistoryRequestHandler {
             .collect();
 
         Ok(json!(TraceContentInfo {
-            content: content.into(),
+            content: HistoryContentItem::decode(&content).unwrap(),
             route: closest_nodes,
         }))
     }

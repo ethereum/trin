@@ -190,7 +190,10 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
     async fn local_content(&self, content_key: HistoryContentKey) -> RpcResult<HistoryContentItem> {
         let endpoint = HistoryEndpoint::LocalContent(content_key);
         let result = self.proxy_query_to_history_subnet(endpoint).await?;
-        let result: HistoryContentItem = from_value(result)?;
+        let result: HistoryContentItem = match result {
+            Value::Null => HistoryContentItem::Unknown(String::from("")),
+            other => from_value(other)?,
+        };
         Ok(result)
     }
 }
