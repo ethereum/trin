@@ -7,30 +7,15 @@ mod history;
 pub mod types;
 mod web3;
 
-#[cfg(feature = "client")]
-pub use discv5::Discv5ApiClient;
-
-#[cfg(feature = "server")]
-pub use discv5::Discv5ApiServer;
-
-#[cfg(feature = "client")]
-pub use history::HistoryNetworkApiClient;
-
-#[cfg(feature = "server")]
-pub use history::HistoryNetworkApiServer;
-
-#[cfg(feature = "client")]
-pub use web3::Web3ApiClient;
-
-#[cfg(feature = "server")]
-pub use web3::Web3ApiServer;
-
+pub use discv5::{Discv5ApiClient, Discv5ApiServer};
+pub use history::{HistoryNetworkApiClient, HistoryNetworkApiServer};
 pub use types::{
     content_item::{
         BlockBody, ContentItem, EpochAccumulator, HeaderRecord, HeaderWithProof, HistoryContentItem,
     },
     content_key::HistoryContentKey,
 };
+pub use web3::{Web3ApiClient, Web3ApiServer};
 
 // Re-exports jsonrpsee crate
 pub use jsonrpsee;

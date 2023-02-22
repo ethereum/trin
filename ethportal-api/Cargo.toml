@@ -17,7 +17,7 @@ eth2_ssz_derive = "0.3.0"
 eth2_ssz_types = "0.2.1"
 hex = "0.4.3"
 hex-literal = "0.3.4"
-jsonrpsee = {version="0.16.2", features = ["macros"]}
+jsonrpsee = {version="0.16.2", features = ["async-client", "client", "macros", "server"]}
 reth-primitives = { version = "0.1.0", git = "https://github.com/paradigmxyz/reth.git" }
 reth-rlp = { version = "0.1.2", git = "https://github.com/paradigmxyz/reth.git" }
 rand = "0.8.1"
@@ -29,8 +29,3 @@ sha2 = "0.10.1"
 
 [dev-dependencies]
 rstest = "0.16.0"
-
-[features]
-default = ["client", "server"]
-client = ["jsonrpsee/client", "jsonrpsee/async-client"]
-server = ["jsonrpsee/server"]
