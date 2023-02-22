@@ -375,14 +375,6 @@ where
                 .map(|node| node.value.enr())
                 .collect();
 
-            // Sort all eligible nodes by proximity to the content and take the closest k.
-            interested_enrs.sort_by(|a, b| {
-                let distance_a = XorMetric::distance(&content_key.content_id(), &a.node_id().raw());
-                let distance_b = XorMetric::distance(&content_key.content_id(), &b.node_id().raw());
-                distance_a.partial_cmp(&distance_b).unwrap()
-            });
-            let interested_enrs = interested_enrs[0..MAX_NODES_PER_BUCKET].to_vec();
-
             // Continue if no nodes are interested in the content
             if interested_enrs.is_empty() {
                 debug!(
@@ -393,8 +385,19 @@ where
                 continue;
             }
 
+            // Sort all eligible nodes by proximity to the content and take the closest k.
+            interested_enrs.sort_by(|a, b| {
+                let distance_a = XorMetric::distance(&content_key.content_id(), &a.node_id().raw());
+                let distance_b = XorMetric::distance(&content_key.content_id(), &b.node_id().raw());
+                distance_a.partial_cmp(&distance_b).unwrap_or_else(|| {
+                    warn!(a = %distance_a, b = %distance_b, "Error comparing two distances");
+                    std::cmp::Ordering::Less
+                })
+            });
+            let closest_k_enrs = interested_enrs[0..MAX_NODES_PER_BUCKET].to_vec();
+
             // Get log2 random ENRs to gossip
-            let random_enrs = match log2_random_enrs(interested_enrs) {
+            let random_enrs = match log2_random_enrs(closest_k_enrs) {
                 Ok(val) => val,
                 Err(msg) => {
                     warn!(error = %msg, "Error producing ENRs for gossip");
