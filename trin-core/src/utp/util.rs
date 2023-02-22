@@ -4,6 +4,7 @@ use std::ops::Sub;
 
 /// Calculate the exponential weighted moving average for a vector of numbers, with a smoothing
 /// factor `alpha` between 0 and 1. A higher `alpha` discounts older observations faster.
+#[allow(clippy::unwrap_used)]
 pub fn ewma<'a, T, I>(mut samples: I, alpha: f64) -> f64
 where
     T: ToPrimitive + 'a,

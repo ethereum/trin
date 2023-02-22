@@ -144,10 +144,13 @@ impl Default for TrinConfig {
     fn default() -> Self {
         TrinConfig {
             web3_transport: "ipc".to_string(),
-            web3_http_address: Url::parse(DEFAULT_WEB3_HTTP_ADDRESS).unwrap(),
+            web3_http_address: Url::parse(DEFAULT_WEB3_HTTP_ADDRESS)
+                .expect("Parsing static DEFAULT_WEB3_HTTP_ADDRESS to work"),
             web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
             pool_size: 5,
-            discovery_port: DEFAULT_DISCOVERY_PORT.parse().unwrap(),
+            discovery_port: DEFAULT_DISCOVERY_PORT
+                .parse()
+                .expect("Parsing static DEFAULT_DISCOVERY_PORT to work"),
             bootnodes: vec![],
             external_addr: None,
             no_stun: false,
@@ -156,7 +159,9 @@ impl Default for TrinConfig {
                 .split(',')
                 .map(|n| n.to_string())
                 .collect(),
-            kb: DEFAULT_STORAGE_CAPACITY.parse().unwrap(),
+            kb: DEFAULT_STORAGE_CAPACITY
+                .parse()
+                .expect("Parsing static DEFAULT_STORAGE_CAPACITY to work"),
             enable_metrics_with_url: None,
             ephemeral: false,
             trusted_provider: TrustedProviderType::Infura,
@@ -256,6 +261,7 @@ impl fmt::Display for TrinConfig {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod test {
     use super::*;
     use crate::utils::provider::TrustedProvider;

@@ -28,6 +28,7 @@ pub fn generate_random_node_id(target_bucket_idx: u8, local_node_id: NodeId) -> 
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 pub fn generate_random_remote_enr() -> (CombinedKey, Enr) {
     let key = CombinedKey::generate_secp256k1();
 

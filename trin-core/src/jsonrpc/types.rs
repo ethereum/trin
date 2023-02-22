@@ -103,6 +103,7 @@ impl TryFrom<&Value> for NodesParams {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod test {
     use super::*;
     use rstest::rstest;

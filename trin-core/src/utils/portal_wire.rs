@@ -69,6 +69,7 @@ pub fn read_varint(buf: &[u8]) -> anyhow::Result<(usize, u32)> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod test {
     use super::*;
     use rstest::rstest;

@@ -281,8 +281,16 @@ impl HistoryRequestHandler {
             })
             .collect();
 
+        let content = match HistoryContentItem::decode(&content) {
+            Ok(val) => val,
+            Err(err) => {
+                return Err(format!(
+                    "Error decoding content item: {content:?} with error: {err:?}"
+                ))
+            }
+        };
         Ok(json!(TraceContentInfo {
-            content: HistoryContentItem::decode(&content).unwrap(),
+            content,
             route: closest_nodes,
         }))
     }

@@ -53,6 +53,7 @@ pub struct NodeInfo {
 pub type RoutingTableInfo = Value;
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod test {
     use crate::types::discv5::{Enr, NodeId};
     use std::net::Ipv4Addr;

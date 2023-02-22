@@ -54,14 +54,14 @@ pub async fn run_trin(
 
     // Initialize Storage config
     if trin_config.ephemeral {
-        setup_temp_dir();
+        setup_temp_dir()?;
     }
 
     let storage_config = PortalStorageConfig::new(
         trin_config.kb.into(),
         discovery.local_enr().node_id(),
         trin_config.enable_metrics_with_url.is_some(),
-    );
+    )?;
 
     // Initialize validation oracle
     let master_accumulator = MasterAccumulator::try_from_file(trin_config.master_acc_path.clone())?;
@@ -82,7 +82,7 @@ pub async fn run_trin(
                 storage_config.clone(),
                 header_oracle.clone(),
             )
-            .await
+            .await?
         } else {
             (None, None, None, None, None)
         };
@@ -106,7 +106,7 @@ pub async fn run_trin(
             storage_config.clone(),
             header_oracle.clone(),
         )
-        .await
+        .await?
     } else {
         (None, None, None, None, None)
     };

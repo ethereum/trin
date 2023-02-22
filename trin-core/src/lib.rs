@@ -1,3 +1,5 @@
+#![warn(clippy::unwrap_used)]
+
 pub mod cli;
 pub mod jsonrpc;
 pub mod locks;

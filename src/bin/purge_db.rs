@@ -37,7 +37,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Capacity is 0 since it (eg. for data radius calculation) is irrelevant when only removing data.
     let capacity = 0;
     let protocol = ProtocolId::History;
-    let config = PortalStorageConfig::new(capacity, node_id, false);
+    let config = PortalStorageConfig::new(capacity, node_id, false)?;
     let storage =
         PortalStorage::new(config.clone(), protocol).expect("Failed to create portal storage");
     let iter = config.db.iterator(IteratorMode::Start);

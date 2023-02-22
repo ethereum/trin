@@ -158,8 +158,7 @@ where
             config.query_num_results,
             config.findnodes_query_distances_per_peer,
         )
-        .await
-        .unwrap();
+        .await;
 
         Self {
             discovery,
@@ -848,6 +847,7 @@ fn validate_find_nodes_distances(distances: &Vec<u16>) -> Result<(), OverlayRequ
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod test {
     use super::*;
     use crate::utils::node_id::generate_random_remote_enr;
