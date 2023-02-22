@@ -37,7 +37,7 @@ pub enum HistoryEndpoint {
     /// params: [content_key, content_value]
     Gossip(HistoryContentKey, HistoryContentItem),
     /// params: [enr, content_key]
-    Offer(Enr, HistoryContentKey),
+    Offer(Enr, HistoryContentKey, Option<HistoryContentItem>),
     /// params: [enr, data_radius]
     Ping(Enr, Option<DataRadius>),
     /// params: content_key
