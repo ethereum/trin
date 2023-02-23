@@ -291,6 +291,7 @@ impl PortalStorage {
                 if storage.storage_capacity_in_bytes == 0 {
                     storage.radius = Distance::ZERO;
                 }
+                storage.farthest_content_id = Some(content_id);
             }
             // Only prunes data when at capacity. (eg. user changed it via kb flag)
             _ => storage.prune_db()?,
