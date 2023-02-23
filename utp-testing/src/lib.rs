@@ -81,20 +81,21 @@ impl RpcServer for TestApp {
             recv: cid_recv,
             peer: UtpEnr(dst_enr),
         };
-        self.send_utp_data(cid, payload).await;
+
+        let utp = Arc::clone(&self.utp_socket);
+        tokio::spawn(async move {
+            let mut conn = utp.connect_with_cid(cid).await.unwrap();
+
+            conn.write(&payload).await.unwrap();
+
+            conn.shutdown().unwrap();
+        });
+
         Ok("true".to_string())
     }
 }
 
 impl TestApp {
-    pub async fn send_utp_data(&self, cid: utp::cid::ConnectionId<UtpEnr>, payload: Vec<u8>) {
-        let mut conn = self.utp_socket.connect_with_cid(cid).await.unwrap();
-
-        conn.write(&payload).await.unwrap();
-
-        conn.shutdown().unwrap();
-    }
-
     pub async fn start(&self, mut talk_req_rx: mpsc::Receiver<TalkRequest>) {
         let utp_talk_reqs_tx = self.utp_talk_req_tx.clone();
 
