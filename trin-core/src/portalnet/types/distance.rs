@@ -16,6 +16,8 @@ impl fmt::Display for Distance {
 impl Distance {
     /// The maximum value.
     pub const MAX: Self = Self(U256::MAX);
+    /// The minimum value.
+    pub const ZERO: Self = Self(U256::zero());
 
     /// Returns the integer base-2 logarithm of `self`.
     ///
