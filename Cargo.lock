@@ -10,8 +10,6 @@ checksum = "f26201604c87b1e01bd3d98f8d5d9a8fcbb815e8cedb41ffccbeb4bf593a35fe"
 
 [[package]]
 name = "aead"
-<<<<<<< HEAD
-=======
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7fc95d1bdb8e6666b2b217308eeeb09f2d6728d104be3e31916cc74d15420331"
@@ -21,7 +19,6 @@ dependencies = [
 
 [[package]]
 name = "aead"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b613b8e1e3cf911a086f53f03bf286f52fd7a7258e4fa606f0ef220d39d8877"
@@ -31,8 +28,6 @@ dependencies = [
 
 [[package]]
 name = "aes"
-<<<<<<< HEAD
-=======
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "884391ef1066acaa41e766ba8f596341b96e93ce34f9a43e7d24bf0a0eaf0561"
@@ -44,28 +39,19 @@ dependencies = [
 
 [[package]]
 name = "aes"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 version = "0.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e8b47f52ea9bae42228d07ec09eb676433d7c4ed1ebdf0f1d1c29ed446f1ab8"
 dependencies = [
  "cfg-if 1.0.0",
-<<<<<<< HEAD
- "cipher",
- "cpufeatures 0.2.5",
- "ctr",
-=======
  "cipher 0.3.0",
  "cpufeatures 0.2.5",
  "ctr 0.8.0",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
  "opaque-debug",
 ]
 
 [[package]]
 name = "aes-gcm"
-<<<<<<< HEAD
-=======
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5278b5fabbb9bd46e24aa69b2fdea62c99088e0a950a9be40e3e0101298f88da"
@@ -80,30 +66,19 @@ dependencies = [
 
 [[package]]
 name = "aes-gcm"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df5f85a83a7d8b0442b6aa7b504b8212c1733da07b98aae43d4bc21b2cb3cdf6"
 dependencies = [
-<<<<<<< HEAD
- "aead",
- "aes",
- "cipher",
- "ctr",
- "ghash",
-=======
  "aead 0.4.3",
  "aes 0.7.5",
  "cipher 0.3.0",
  "ctr 0.8.0",
  "ghash 0.4.4",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
  "subtle",
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
 name = "aes-soft"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -124,7 +99,6 @@ dependencies = [
 ]
 
 [[package]]
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 name = "ahash"
 version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -136,18 +110,10 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-name = "ahash"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf6ccdb167abbf410dcb915cabd428929d7f6a04980b54a11f26a39f1c7f7107"
-=======
 name = "ahash"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2c99f64d1e06488f620f932677e24bc6e2897582980441ae90a671415bd7ec2f"
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 dependencies = [
  "cfg-if 1.0.0",
  "once_cell",
@@ -155,11 +121,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "aho-corasick"
 version = "0.6.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -178,10 +139,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "android_system_properties"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -191,11 +148,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "ansi_term"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -206,15 +158,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-<<<<<<< HEAD
-version = "1.0.68"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2cb2f989d18dd141ab8ae82f64d1a8cdd37e0840f73a406896cf5e99502fab61"
-=======
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "224afbd727c3d6e4b90103ece64b8d1b67fbb1973b1046c2281eed3f3803f800"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 
 [[package]]
 name = "array-init"
@@ -313,11 +259,7 @@ dependencies = [
  "slab",
  "socket2 0.4.7",
  "waker-fn",
-<<<<<<< HEAD
- "windows-sys",
-=======
  "windows-sys 0.42.0",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 ]
 
 [[package]]
@@ -354,24 +296,14 @@ dependencies = [
  "futures-lite",
  "libc",
  "signal-hook",
-<<<<<<< HEAD
- "windows-sys",
-=======
  "windows-sys 0.42.0",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 ]
 
 [[package]]
 name = "async-recursion"
-<<<<<<< HEAD
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2cda8f4bcc10624c4e85bc66b3f452cca98cfa5ca002dc83a16aad2367641bea"
-=======
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3b015a331cc64ebd1774ba119538573603427eaace0a1950c423ab971f903796"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "proc-macro2",
  "quote",
@@ -407,14 +339,6 @@ dependencies = [
 
 [[package]]
 name = "async-stream"
-<<<<<<< HEAD
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dad5c83079eae9969be7fadefe640a1c566901f05ff91ab221de4b6f68d9507e"
-dependencies = [
- "async-stream-impl",
- "futures-core",
-=======
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ad445822218ce64be7a341abfb0b1ea43b5c23aa83902542a4542e78309d8e5e"
@@ -422,20 +346,13 @@ dependencies = [
  "async-stream-impl",
  "futures-core",
  "pin-project-lite",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 ]
 
 [[package]]
 name = "async-stream-impl"
-<<<<<<< HEAD
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "10f203db73a71dfa2fb6dd22763990fa26f3d2625a6da2da900d23b87d26be27"
-=======
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e4655ae1a7b0cdf149156f780c5bf3f1352bc53cbd9e0a361a7ef7b22947e965"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "proc-macro2",
  "quote",
@@ -450,15 +367,9 @@ checksum = "7a40729d2133846d9ed0ea60a8b9541bccddab49cd30f0715a1da672fe9a2524"
 
 [[package]]
 name = "async-trait"
-<<<<<<< HEAD
-version = "0.1.61"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "705339e0e4a9690e2908d2b3d049d85682cf19fbd5782494498fbf7003a6a282"
-=======
 version = "0.1.64"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1cd7fce9ba8c3c042128ce72d8b2ddbf3a05747efb67ea0313c635e10bda47a2"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "proc-macro2",
  "quote",
@@ -467,15 +378,9 @@ dependencies = [
 
 [[package]]
 name = "atomic-waker"
-<<<<<<< HEAD
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "065374052e7df7ee4047b1160cca5e1467a12351a40b3da123c870ba0b8eda2a"
-=======
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "debc29dde2e69f9e47506b525f639ed42300fc014a3e007832592448fa8e4599"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 
 [[package]]
 name = "atty"
@@ -489,10 +394,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "auto_impl"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -505,11 +406,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "autocfg"
 version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -525,15 +421,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 
 [[package]]
-<<<<<<< HEAD
-=======
 name = "base-x"
 version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4cbbc9d0964165b47557570cce6c952866c2678457aca742aafc9fb771d30270"
 
 [[package]]
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 name = "base16ct"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -632,8 +525,6 @@ version = "0.20.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7774144344a4faa177370406a7ff5f1da24303817368584c6206c8303eb07848"
 dependencies = [
-<<<<<<< HEAD
-<<<<<<< HEAD
  "funty 1.1.0",
  "radium 0.6.2",
  "tap",
@@ -650,30 +541,6 @@ dependencies = [
  "radium 0.7.0",
  "tap",
  "wyz 0.5.1",
-=======
- "funty",
- "radium",
- "tap",
- "wyz",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
- "funty 1.1.0",
- "radium 0.6.2",
- "tap",
- "wyz 0.2.0",
-]
-
-[[package]]
-name = "bitvec"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1bc2832c24239b0141d5674bb9174f9d68a8b5b3f2753311927c172ca46f7e9c"
-dependencies = [
- "funty 2.0.0",
- "radium 0.7.0",
- "tap",
- "wyz 0.5.1",
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 ]
 
 [[package]]
@@ -723,15 +590,9 @@ checksum = "771fe0050b883fcc3ea2359b1a96bcfbc090b7116eae7c3c512c7a083fdf23d3"
 
 [[package]]
 name = "bstr"
-<<<<<<< HEAD
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b45ea9b00a7b3f2988e9a65ad3917e62123c38dba709b666506207be96d1790b"
-=======
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5ffdb39cb703212f3c11973452c2861b972f757b021158f3516ba10f2fa8b2c1"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "memchr",
  "serde",
@@ -745,15 +606,9 @@ checksum = "b4ae4235e6dac0694637c763029ecea1a2ec9e4e06ec2729bd21ba4d9c863eb7"
 
 [[package]]
 name = "bumpalo"
-<<<<<<< HEAD
-version = "3.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "572f695136211188308f16ad2ca5c851a712c464060ae6974944458eb83880ba"
-=======
 version = "3.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0d261e256854913907f67ed06efbc3338dfe6179796deefc1ff763fc1aee5535"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 
 [[package]]
 name = "byte-slice-cast"
@@ -789,14 +644,6 @@ dependencies = [
 
 [[package]]
 name = "bytes"
-<<<<<<< HEAD
-version = "1.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89b2fd2a0dcf38d7971e2194b6b6eebab45ae01067456a7fd93d5547a61b70be"
-dependencies = [
- "serde",
-]
-=======
 version = "0.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0e4cec68f03f32e44924783795810fa50a7035d8c8ebe78580ad7e6c703fba38"
@@ -806,13 +653,9 @@ name = "bytes"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "89b2fd2a0dcf38d7971e2194b6b6eebab45ae01067456a7fd93d5547a61b70be"
-<<<<<<< HEAD
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
 dependencies = [
  "serde",
 ]
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 
 [[package]]
 name = "bzip2-sys"
@@ -833,15 +676,9 @@ checksum = "a2698f953def977c68f935bb0dfa959375ad4638570e969e2f1e9f433cbf1af6"
 
 [[package]]
 name = "cc"
-<<<<<<< HEAD
-version = "1.0.78"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a20104e2335ce8a659d6dd92a51a767a0c062599c73b343fd152cb401e828c3d"
-=======
 version = "1.0.79"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "50d30906286121d95be3d479533b458f87493b30a4b5f79a607db8f5d11aa91f"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "jobserver",
 ]
@@ -868,10 +705,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "chrono"
 version = "0.4.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -885,11 +718,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "chunked_transfer"
 version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -897,8 +725,6 @@ checksum = "cca491388666e04d7248af3f60f0c40cfb0991c72205595d7c396e3510207d1a"
 
 [[package]]
 name = "cipher"
-<<<<<<< HEAD
-=======
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "12f8e7987cbd042a63249497f41aed09f8e65add917ea6566effbc56578d6801"
@@ -908,7 +734,6 @@ dependencies = [
 
 [[package]]
 name = "cipher"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ee52072ec15386f770805afd189a01c8841be8696bed250fa2f13c4c0d6dfb7"
@@ -918,15 +743,9 @@ dependencies = [
 
 [[package]]
 name = "clang-sys"
-<<<<<<< HEAD
-version = "1.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa2e27ae6ab525c3d369ded447057bca5438d86dc3a68f6faafb8269ba82ebf3"
-=======
 version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77ed9a53e5d4d9c573ae844bfac6872b159cb1d1585a83b29e7a64b7eef7332a"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "glob",
  "libc",
@@ -958,22 +777,12 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
 name = "codecs-derive"
 version = "0.1.0"
-source = "git+https://github.com/paradigmxyz/reth.git#26b606fda5cff55facae240725f52ddea8bc1a26"
-dependencies = [
- "convert_case 0.6.0",
- "parity-scale-codec 3.2.2",
-=======
-name = "codecs-derive"
-version = "0.1.0"
-source = "git+https://github.com/paradigmxyz/reth.git#8299ca6fd662e5be3655696776f504753b9e6d03"
+source = "git+https://github.com/paradigmxyz/reth.git#a0c82c55b2b775c50242ab7b7d3761ba17d62039"
 dependencies = [
  "convert_case 0.6.0",
  "parity-scale-codec 3.4.0",
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
  "proc-macro2",
  "quote",
  "serde",
@@ -991,19 +800,10 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-name = "concurrent-queue"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd7bef69dc86e3c610e4e7aed41035e2a7ed12e72dd7530f61327a6579a4390b"
-=======
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "concurrent-queue"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c278839b831783b70278b14df4d45e1beb1aad306c07bb796637de9a0e323e8e"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "crossbeam-utils 0.8.14",
 ]
@@ -1015,20 +815,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cec318a675afcb6a1ea1d4340e2d377e56e47c266f28043ceccbf4412ddfdd3b"
 
 [[package]]
-<<<<<<< HEAD
-name = "convert_case"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6245d59a3e82a7fc217c5828a6692dbc6dfb63a0c8c90495621f7b9d79704a0e"
-
-[[package]]
-name = "convert_case"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec182b0ca2f35d8fc196cf3404988fd8b8c739a4d270ff118a398feb0cbec1ca"
-dependencies = [
- "unicode-segmentation",
-=======
 name = "const_fn"
 version = "0.4.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1064,7 +850,6 @@ dependencies = [
  "sha2 0.9.9",
  "time 0.2.27",
  "version_check",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 ]
 
 [[package]]
@@ -1102,15 +887,12 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
 name = "cpuid-bool"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dcb25d077389e53838a8158c8e99174c5a9d902dee4904320db714f3c653ffba"
 
 [[package]]
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 name = "crc"
 version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1120,18 +902,10 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-name = "crc"
-version = "3.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "53757d12b596c16c78b83458d732a5d1a17ab3f53f2f7412f6fb57cc8a140ab3"
-=======
 name = "crc"
 version = "3.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "86ec7a15cbe22e59248fc7eadb1907dab5ba09372595da4d73dd805ed4417dfe"
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 dependencies = [
  "crc-catalog",
 ]
@@ -1143,11 +917,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9cace84e55f07e7301bae1c519df89cdad8cc3cd868413d3fdbdeca9ff3db484"
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "crc32fast"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1211,8 +980,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
 name = "crypto-mac"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1223,7 +990,6 @@ dependencies = [
 ]
 
 [[package]]
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 name = "ctor"
 version = "0.1.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1235,8 +1001,6 @@ dependencies = [
 
 [[package]]
 name = "ctr"
-<<<<<<< HEAD
-=======
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fb4a30d54f7443bf3d6191dcd486aca19e67cb3c49fa7a06a319966346707e7f"
@@ -1246,35 +1010,21 @@ dependencies = [
 
 [[package]]
 name = "ctr"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "049bb91fb4aaf0e3c7efa6cd5ef877dbbbd15b39dad06d9948de4ec8a75761ea"
 dependencies = [
-<<<<<<< HEAD
- "cipher",
-=======
  "cipher 0.3.0",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 ]
 
 [[package]]
 name = "ctrlc"
-<<<<<<< HEAD
-version = "3.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1631ca6e3c59112501a9d87fd86f21591ff77acd31331e8a73f8d80a65bbdd71"
-dependencies = [
- "nix 0.26.1",
- "windows-sys",
-=======
 version = "3.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbcf33c2a618cbe41ee43ae6e9f2e48368cd9f9db2896f10167d8d762679f639"
 dependencies = [
  "nix 0.26.2",
  "windows-sys 0.45.0",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 ]
 
 [[package]]
@@ -1294,15 +1044,9 @@ dependencies = [
 
 [[package]]
 name = "curl-sys"
-<<<<<<< HEAD
-version = "0.4.59+curl-7.86.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6cfce34829f448b08f55b7db6d0009e23e2e86a34e8c2b366269bf5799b4a407"
-=======
 version = "0.4.60+curl-7.88.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "717abe2cb465a5da6ce06617388a3980c9a2844196734bec8ccb8e575250f13f"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "cc",
  "libc",
@@ -1328,18 +1072,10 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-name = "cxx"
-version = "1.0.87"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b61a7545f753a88bcbe0a70de1fcc0221e10bfc752f576754fa91e663db1622e"
-=======
 name = "cxx"
 version = "1.0.91"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "86d3488e7665a7a483b57e25bdd90d0aeb2bc7608c8d0346acf2ad3f1caf1d62"
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 dependencies = [
  "cc",
  "cxxbridge-flags",
@@ -1349,15 +1085,9 @@ dependencies = [
 
 [[package]]
 name = "cxx-build"
-<<<<<<< HEAD
-version = "1.0.87"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f464457d494b5ed6905c63b0c4704842aba319084a0a3561cdc1359536b53200"
-=======
 version = "1.0.91"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "48fcaf066a053a41a81dfb14d57d99738b767febb8b735c3016e469fac5da690"
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 dependencies = [
  "cc",
  "codespan-reporting",
@@ -1370,17 +1100,6 @@ dependencies = [
 
 [[package]]
 name = "cxxbridge-flags"
-<<<<<<< HEAD
-version = "1.0.87"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43c7119ce3a3701ed81aca8410b9acf6fc399d2629d057b87e2efa4e63a3aaea"
-
-[[package]]
-name = "cxxbridge-macro"
-version = "1.0.87"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "65e07508b90551e610910fa648a1878991d367064997a596135b86df30daf07e"
-=======
 version = "1.0.91"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2ef98b8b717a829ca5603af80e1f9e2e48013ab227b68ef37872ef84ee479bf"
@@ -1390,7 +1109,6 @@ name = "cxxbridge-macro"
 version = "1.0.91"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "086c685979a698443656e5cf7856c95c642295a38599f12fb1ff76fb28d19892"
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1398,45 +1116,23 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "darling"
 version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a01d95850c592940db9b8194bc39f4bc0e89dee5c4265e4b1807c34a9aba453c"
 dependencies = [
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
  "darling_core 0.13.4",
  "darling_macro 0.13.4",
 ]
 
 [[package]]
 name = "darling"
-<<<<<<< HEAD
-version = "0.14.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0dd3cd20dc6b5a876612a6e5accfe7f3dd883db6d07acfbf14c128f61550dfa"
-dependencies = [
- "darling_core 0.14.2",
- "darling_macro 0.14.2",
-=======
- "darling_core",
- "darling_macro",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
 version = "0.14.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c0808e1bd8671fb44a113a14e13497557533369847788fa2ae912b6ebfce9fa8"
 dependencies = [
  "darling_core 0.14.3",
  "darling_macro 0.14.3",
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 ]
 
 [[package]]
@@ -1454,18 +1150,10 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-name = "darling_core"
-version = "0.14.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a784d2ccaf7c98501746bf0be29b2022ba41fd62a2e622af997a03e9f972859f"
-=======
 name = "darling_core"
 version = "0.14.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "001d80444f28e193f30c2f293455da62dcf9a6b29918a4253152ae2b1de592cb"
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 dependencies = [
  "fnv",
  "ident_case",
@@ -1476,20 +1164,11 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "darling_macro"
 version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9c972679f83bdf9c42bd905396b6c3588a843a17f0f16dfcfa3e2c5d57441835"
 dependencies = [
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
  "darling_core 0.13.4",
  "quote",
  "syn",
@@ -1497,22 +1176,11 @@ dependencies = [
 
 [[package]]
 name = "darling_macro"
-<<<<<<< HEAD
-version = "0.14.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7618812407e9402654622dd402b0a89dff9ba93badd6540781526117b92aab7e"
-dependencies = [
- "darling_core 0.14.2",
-=======
- "darling_core",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
 version = "0.14.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b36230598a2d5de7ec1c6f51f72d8a99a9208daff41de2084d06e3fd3ea56685"
 dependencies = [
  "darling_core 0.14.3",
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
  "quote",
  "syn",
 ]
@@ -1523,11 +1191,7 @@ version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9c4d75d3abfe4830dcbf9bcb1b926954e121669f74dd1ca7aa0183b1755d83f6"
 dependencies = [
-<<<<<<< HEAD
- "futures 0.3.25",
-=======
  "futures 0.3.26",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
  "tokio-util 0.6.10",
 ]
 
@@ -1542,10 +1206,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "derive_more"
 version = "0.99.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1559,11 +1219,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "diff"
 version = "0.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1631,23 +1286,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-name = "discv5"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd6a75aea509976bc055eba0c57c53dfcb468729710b26eb039eb4400431cfad"
-dependencies = [
- "aes",
- "aes-gcm",
- "arrayvec",
- "delay_map",
- "enr",
- "fnv",
- "futures 0.3.25",
- "hashlink",
- "hex",
- "hkdf",
-=======
 name = "discard"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1655,21 +1293,20 @@ checksum = "212d0f5754cb6769937f4501cc0e67f4f4483c8d2c3e1e922ee9edbe4ab4c7c0"
 
 [[package]]
 name = "discv5"
-version = "0.1.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d767c0e59b3e8d65222d95df723cc2ea1da92bb0f27c563607e6f0bde064f255"
+checksum = "cd6a75aea509976bc055eba0c57c53dfcb468729710b26eb039eb4400431cfad"
 dependencies = [
  "aes 0.7.5",
  "aes-gcm 0.9.4",
  "arrayvec",
  "delay_map",
- "enr 0.6.2",
+ "enr",
  "fnv",
  "futures 0.3.26",
  "hashlink",
  "hex",
  "hkdf 0.12.3",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
  "lazy_static 1.4.0",
  "lru",
  "more-asserts",
@@ -1701,15 +1338,9 @@ dependencies = [
 
 [[package]]
 name = "ed25519"
-<<<<<<< HEAD
-version = "1.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e9c280362032ea4203659fc489832d0204ef09f247a0506f170dafcac08c369"
-=======
 version = "1.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "91cff35c70bba8a626e3185d8cd48cc11b5437e1a5bcd15b9b5fa3c64b6dfee7"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "signature",
 ]
@@ -1730,15 +1361,9 @@ dependencies = [
 
 [[package]]
 name = "either"
-<<<<<<< HEAD
-version = "1.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "90e5c1c8368803113bf0c9584fc495a58b86dc8a29edbf8fe877d21d9507e797"
-=======
 version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7fcaabb2fef8c910e7f4c7ce9f67a1283a1715879a7c230ca9d6d1ae31f16d91"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 
 [[package]]
 name = "elliptic-curve"
@@ -1762,53 +1387,24 @@ dependencies = [
 
 [[package]]
 name = "ena"
-version = "0.14.0"
+version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7402b94a93c24e742487327a7cd839dc9d36fec9de9fb25b09f2dae459f36c3"
+checksum = "b2e5d13ca2353ab7d0230988629def93914a8c4015f621f9b13ed2955614731d"
 dependencies = [
  "log 0.4.17",
 ]
 
 [[package]]
 name = "encoding_rs"
-<<<<<<< HEAD
-version = "0.8.31"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9852635589dc9f9ea1b6fe9f05b50ef208c85c834a562f0c6abb1c475736ec2b"
-=======
 version = "0.8.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "071a31f4ee85403370b58aca746f01041ede6f0da2730960ad001edc2b71b394"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "cfg-if 1.0.0",
 ]
 
 [[package]]
 name = "enr"
-<<<<<<< HEAD
-=======
-version = "0.6.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26fa0a0be8915790626d5759eb51fe47435a8eac92c2f212bd2da9aa7f30ea56"
-dependencies = [
- "base64 0.13.1",
- "bs58",
- "bytes 1.4.0",
- "ed25519-dalek",
- "hex",
- "k256",
- "log 0.4.17",
- "rand 0.8.5",
- "rlp 0.5.2",
- "serde",
- "sha3 0.10.6",
- "zeroize",
-]
-
-[[package]]
-name = "enr"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "492a7e5fc2504d5fdce8e124d3e263b244a68b283cac67a69eda0cd43e0aebad"
@@ -1828,10 +1424,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "enumn"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1843,11 +1435,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "env_logger"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1909,15 +1496,7 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "635b86d2c941bb71e7419a571e1763d65c93e51a1bafc400352e3bef6ff59fc9"
 dependencies = [
-<<<<<<< HEAD
-<<<<<<< HEAD
  "darling 0.13.4",
-=======
- "darling",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
- "darling 0.13.4",
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
  "proc-macro2",
  "quote",
  "syn",
@@ -1951,10 +1530,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "ethabi"
 version = "18.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1972,11 +1547,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "ethbloom"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1998,10 +1568,6 @@ dependencies = [
  "crunchy 0.2.2",
  "fixed-hash 0.7.0",
  "impl-rlp",
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
  "impl-serde 0.3.2",
  "tiny-keccak 2.0.2",
 ]
@@ -2018,12 +1584,6 @@ dependencies = [
  "impl-rlp",
  "impl-serde 0.4.0",
  "scale-info",
-<<<<<<< HEAD
-=======
- "impl-serde",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
  "tiny-keccak 2.0.2",
 ]
 
@@ -2050,24 +1610,12 @@ dependencies = [
  "ethbloom 0.11.1",
  "fixed-hash 0.7.0",
  "impl-rlp",
-<<<<<<< HEAD
-<<<<<<< HEAD
  "impl-serde 0.3.2",
-=======
- "impl-serde",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
- "impl-serde 0.3.2",
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
  "primitive-types 0.10.1",
  "uint 0.9.5",
 ]
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "ethereum-types"
 version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2084,11 +1632,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "ethereum-types-serialize"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2098,16 +1641,9 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
 name = "ethers-core"
 version = "1.0.2"
-source = "git+https://github.com/gakonst/ethers-rs#0116130b879760e63a3b571cbbd5d7a65992aa18"
-=======
-name = "ethers-core"
-version = "1.0.2"
-source = "git+https://github.com/gakonst/ethers-rs#2090bf560e43c133f68cc37918da8470af3f76ae"
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
+source = "git+https://github.com/gakonst/ethers-rs#7e12f3ba363158a2d0e2598523e92ead7beb9386"
 dependencies = [
  "arrayvec",
  "bytes 1.4.0",
@@ -2115,10 +1651,7 @@ dependencies = [
  "elliptic-curve",
  "ethabi",
  "generic-array",
-<<<<<<< HEAD
-=======
  "getrandom 0.2.8",
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
  "hex",
  "k256",
  "num_enum",
@@ -2136,11 +1669,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "ethnum"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2148,21 +1676,10 @@ checksum = "0198b9d0078e0f30dedc7acbb21c974e838fc8fae3ee170128658a98cb2c1c04"
 
 [[package]]
 name = "ethportal-api"
-<<<<<<< HEAD
-<<<<<<< HEAD
 version = "0.2.0"
 dependencies = [
  "bytes 1.4.0",
  "enr",
-=======
-version = "0.1.6"
-=======
-version = "0.2.0"
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
-dependencies = [
- "bytes 1.4.0",
- "enr 0.7.0",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
  "eth2_ssz",
  "eth2_ssz_derive",
  "eth2_ssz_types",
@@ -2174,18 +1691,8 @@ dependencies = [
  "jsonrpsee 0.16.2",
  "keccak-hash 0.10.0",
  "rand 0.8.5",
-<<<<<<< HEAD
-<<<<<<< HEAD
  "reth-primitives",
  "reth-rlp",
-=======
- "rlp 0.5.2",
- "rlp-derive",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
- "reth-primitives",
- "reth-rlp",
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
  "rstest 0.16.0",
  "serde",
  "serde-hex",
@@ -2202,11 +1709,7 @@ dependencies = [
  "discv5",
  "eth2_ssz",
  "ethportal-api",
-<<<<<<< HEAD
- "futures 0.3.25",
-=======
  "futures 0.3.26",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
  "hex",
  "httpmock",
  "hyper",
@@ -2247,15 +1750,9 @@ checksum = "7360491ce676a36bf9bb3c56c1aa791658183a54d2744120f27285738d90465a"
 
 [[package]]
 name = "fastrand"
-<<<<<<< HEAD
-version = "1.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7a407cfaa3385c4ae6b23e84623d48c2798d06e3e6a1878f7f59f17b3f86499"
-=======
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e51093e27b0797c359783294ca4f0a911c270184cb10f85783b118614a1501be"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "instant",
 ]
@@ -2299,18 +1796,9 @@ version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "835c052cb0c08c1acf6ffd71c022172e18723949c8282f2b9f27efbc51e64534"
 dependencies = [
-<<<<<<< HEAD
-<<<<<<< HEAD
  "byteorder",
  "rand 0.8.5",
  "rustc-hex",
-=======
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
- "byteorder",
- "rand 0.8.5",
- "rustc-hex",
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
  "static_assertions",
 ]
 
@@ -2331,8 +1819,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
 name = "flume"
 version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2344,7 +1830,6 @@ dependencies = [
 ]
 
 [[package]]
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2388,21 +1873,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fed34cd105917e91daa4da6b3728c47b068749d6a62c59811f06ed2ac71d9da7"
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "funty"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6d5a32815ae3f33302d95fdcb2ce17862f8c65363dcfd29360480ba1001fc9c"
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "futures"
 version = "0.1.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2410,15 +1886,9 @@ checksum = "3a471a38ef8ed83cd6e40aa59c1ffe17db6855c18e3604d9c4ed8c08ebc28678"
 
 [[package]]
 name = "futures"
-<<<<<<< HEAD
-version = "0.3.25"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38390104763dc37a5145a53c29c63c1290b5d316d6086ec32c293f6736051bb0"
-=======
 version = "0.3.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13e2792b0ff0340399d58445b88fd9770e3489eff258a4cbc1523418f12abf84"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "futures-channel",
  "futures-core",
@@ -2431,15 +1901,9 @@ dependencies = [
 
 [[package]]
 name = "futures-channel"
-<<<<<<< HEAD
-version = "0.3.25"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52ba265a92256105f45b719605a571ffe2d1f0fea3807304b522c1d778f79eed"
-=======
 version = "0.3.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2e5317663a9089767a1ec00a487df42e0ca174b61b4483213ac24448e4664df5"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "futures-core",
  "futures-sink",
@@ -2447,17 +1911,6 @@ dependencies = [
 
 [[package]]
 name = "futures-core"
-<<<<<<< HEAD
-version = "0.3.25"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04909a7a7e4633ae6c4a9ab280aeb86da1236243a77b694a49eacd659a4bd3ac"
-
-[[package]]
-name = "futures-executor"
-version = "0.3.25"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7acc85df6714c176ab5edf386123fafe217be88c0840ec11f199441134a074e2"
-=======
 version = "0.3.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec90ff4d0fe1f57d600049061dc6bb68ed03c7d2fbd697274c41805dcb3f8608"
@@ -2467,7 +1920,6 @@ name = "futures-executor"
 version = "0.3.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e8de0a35a6ab97ec8869e32a2473f4b1324459e14c29275d14b10cb1fd19b50e"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "futures-core",
  "futures-task",
@@ -2476,15 +1928,9 @@ dependencies = [
 
 [[package]]
 name = "futures-io"
-<<<<<<< HEAD
-version = "0.3.25"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00f5fb52a06bdcadeb54e8d3671f8888a39697dcb0b81b23b55174030427f4eb"
-=======
 version = "0.3.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bfb8371b6fb2aeb2d280374607aeabfc99d95c72edfe51692e42d3d7f0d08531"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 
 [[package]]
 name = "futures-lite"
@@ -2503,15 +1949,9 @@ dependencies = [
 
 [[package]]
 name = "futures-macro"
-<<<<<<< HEAD
-version = "0.3.25"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bdfb8ce053d86b91919aad980c220b1fb8401a9394410e1c289ed7e66b61835d"
-=======
 version = "0.3.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95a73af87da33b5acf53acfebdc339fe592ecf5357ac7c0a7734ab9d8c876a70"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2520,17 +1960,6 @@ dependencies = [
 
 [[package]]
 name = "futures-sink"
-<<<<<<< HEAD
-version = "0.3.25"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "39c15cf1a4aa79df40f1bb462fb39676d0ad9e366c2a33b590d7c66f4f81fcf9"
-
-[[package]]
-name = "futures-task"
-version = "0.3.25"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ffb393ac5d9a6eaa9d3fdf37ae2776656b706e200c8e16b1bdb227f5198e6ea"
-=======
 version = "0.3.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f310820bb3e8cfd46c80db4d7fb8353e15dfff853a127158425f31e0be6c8364"
@@ -2540,7 +1969,6 @@ name = "futures-task"
 version = "0.3.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dcf79a1bf610b10f42aea489289c5a2c478a786509693b80cd39c44ccd936366"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 
 [[package]]
 name = "futures-timer"
@@ -2554,15 +1982,9 @@ dependencies = [
 
 [[package]]
 name = "futures-util"
-<<<<<<< HEAD
-version = "0.3.25"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "197676987abd2f9cadff84926f410af1c183608d36641465df73ae8211dc65d6"
-=======
 version = "0.3.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9c1d6de3acfef38d2be4b1f543f553131788603495be83da675e180c8d6b7bd1"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "futures-channel",
  "futures-core",
@@ -2612,8 +2034,6 @@ dependencies = [
 
 [[package]]
 name = "ghash"
-<<<<<<< HEAD
-=======
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97304e4cd182c3846f7575ced3890c53012ce534ad9114046b0a9e00bb30a375"
@@ -2624,17 +2044,12 @@ dependencies = [
 
 [[package]]
 name = "ghash"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1583cc1656d7839fd3732b80cf4f38850336cdb9b8ded1cd399ca62958de3c99"
 dependencies = [
  "opaque-debug",
-<<<<<<< HEAD
- "polyval",
-=======
  "polyval 0.5.3",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 ]
 
 [[package]]
@@ -2658,15 +2073,9 @@ dependencies = [
 
 [[package]]
 name = "gloo-net"
-<<<<<<< HEAD
-version = "0.2.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9050ff8617e950288d7bf7f300707639fdeda5ca0d0ecf380cff448cfd52f4a6"
-=======
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9902a044653b26b99f7e3693a42f171312d9be8b26b5697bd1e43ad1f8a35e10"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "futures-channel",
  "futures-core",
@@ -2684,15 +2093,9 @@ dependencies = [
 
 [[package]]
 name = "gloo-timers"
-<<<<<<< HEAD
-version = "0.2.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98c4a8d6391675c6b2ee1a6c8d06e8e2d03605c44cec1270675985a4c2a5500b"
-=======
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b995a66bb87bebce9a0f4a95aed01daca4872c050bfcb21653361c03bc35e5c"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "futures-channel",
  "futures-core",
@@ -2739,11 +2142,7 @@ dependencies = [
  "indexmap",
  "slab",
  "tokio",
-<<<<<<< HEAD
- "tokio-util 0.7.4",
-=======
  "tokio-util 0.7.7",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
  "tracing",
 ]
 
@@ -2763,21 +2162,12 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "hash-db"
 version = "0.15.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d23bd4e7b5eda0d0f3a307e8b381fdc8ba9000f26fbe912250c0a4cc3956364a"
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "hashbrown"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2789,15 +2179,7 @@ version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab5ef0d4909ef3724cc8cce6ccc8572c5c817592e9285f5464f8e86f8bd3726e"
 dependencies = [
-<<<<<<< HEAD
-<<<<<<< HEAD
  "ahash 0.7.6",
-=======
- "ahash",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
- "ahash 0.7.6",
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 ]
 
 [[package]]
@@ -2806,10 +2188,6 @@ version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
 dependencies = [
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
  "ahash 0.7.6",
 ]
 
@@ -2819,16 +2197,8 @@ version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "43a3c133739dddd0d2990f9a4bdf8eb4b21ef50e4851ca85ab661199821d510e"
 dependencies = [
-<<<<<<< HEAD
- "ahash 0.8.2",
- "serde",
-=======
- "ahash",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
  "ahash 0.8.3",
  "serde",
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 ]
 
 [[package]]
@@ -2860,15 +2230,9 @@ dependencies = [
 
 [[package]]
 name = "heck"
-<<<<<<< HEAD
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2540771e65fc8cb83cd6e8a237f70c319bd5c29f78ed1084ba5d50eeac86f7f9"
-=======
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95505c38b4572b2d910cecb0281560f54b440a19336cbbcb27bf6ce6adc6f5a8"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 
 [[package]]
 name = "hermit-abi"
@@ -2893,18 +2257,9 @@ name = "hex"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
-<<<<<<< HEAD
-<<<<<<< HEAD
 dependencies = [
  "serde",
 ]
-=======
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
-dependencies = [
- "serde",
-]
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 
 [[package]]
 name = "hex-literal"
@@ -2914,8 +2269,6 @@ checksum = "7ebdb29d2ea9ed0083cd8cece49bbd968021bd99b0849edb4a9a7ee0fdf6a4e0"
 
 [[package]]
 name = "hkdf"
-<<<<<<< HEAD
-=======
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "51ab2f639c231793c5f6114bdb9bbe50a7dbbfcd7c7c6bd8475dec2d991e964f"
@@ -2926,14 +2279,10 @@ dependencies = [
 
 [[package]]
 name = "hkdf"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "791a029f6b9fc27657f6f188ec6e5e43f6911f6f878e0dc5501396e09809d437"
 dependencies = [
-<<<<<<< HEAD
- "hmac",
-=======
  "hmac 0.12.1",
 ]
 
@@ -2945,7 +2294,6 @@ checksum = "c1441c6b1e930e2817404b5046f1f989899143a12bf92de603b69f4e0aee1e15"
 dependencies = [
  "crypto-mac",
  "digest 0.9.0",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 ]
 
 [[package]]
@@ -2963,24 +2311,14 @@ version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e1333fad8d94b82cab989da428b0b36a3435db3870d85e971a1d6dc0a8576722"
 dependencies = [
-<<<<<<< HEAD
- "sha1",
-=======
  "sha1 0.2.0",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 ]
 
 [[package]]
 name = "http"
-<<<<<<< HEAD
-version = "0.2.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75f43d41e26995c17e71ee126451dd3941010b0514a81a9d11f3b341debc2399"
-=======
 version = "0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bd6effc99afb63425aff9b05836f029929e345a6148a14b7ecd5ab67af944482"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "bytes 1.4.0",
  "fnv",
@@ -2999,8 +2337,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
 name = "http-client"
 version = "6.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3037,7 +2373,6 @@ dependencies = [
 ]
 
 [[package]]
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 name = "httparse"
 version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3064,11 +2399,7 @@ dependencies = [
  "form_urlencoded",
  "futures-util",
  "hyper",
-<<<<<<< HEAD
- "isahc",
-=======
  "isahc 1.7.2",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
  "lazy_static 1.4.0",
  "levenshtein",
  "log 0.4.17",
@@ -3089,15 +2420,9 @@ checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 
 [[package]]
 name = "hyper"
-<<<<<<< HEAD
-version = "0.14.23"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "034711faac9d2166cb1baf1a2fb0b60b1f277f8492fd72176c17f3515e1abd3c"
-=======
 version = "0.14.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e011372fa0b68db8350aa7a248930ecc7839bf46d8485577d69f117a75f164c"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "bytes 1.4.0",
  "futures-channel",
@@ -3134,10 +2459,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "iana-time-zone"
 version = "0.1.53"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3162,11 +2483,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "ident_case"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3205,10 +2521,6 @@ version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "161ebdfec3c8e3b52bf61c4f3550a1eea4f9579d10dc1b936f3171ebdcd6c443"
 dependencies = [
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
  "parity-scale-codec 2.3.1",
 ]
 
@@ -3218,14 +2530,7 @@ version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba6a270039626615617f3f36d15fc827041df3b78c439da2cadfa47455a77f2f"
 dependencies = [
-<<<<<<< HEAD
- "parity-scale-codec 3.2.2",
-=======
- "parity-scale-codec",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
  "parity-scale-codec 3.4.0",
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 ]
 
 [[package]]
@@ -3247,10 +2552,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "impl-serde"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3260,11 +2561,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "impl-trait-for-tuples"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3283,16 +2579,7 @@ checksum = "1885e79c1fc4b10f0e172c475f458b7f7b93061064d98c3293e98c5ba0c8b399"
 dependencies = [
  "autocfg 1.1.0",
  "hashbrown 0.12.3",
-<<<<<<< HEAD
-<<<<<<< HEAD
  "serde",
-]
-
-[[package]]
-=======
-=======
- "serde",
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 ]
 
 [[package]]
@@ -3302,7 +2589,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "64e9829a50b42bb782c1df523f78d332fe371b10c661e78b7a3c34b0198e9fac"
 
 [[package]]
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 name = "instant"
 version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3350,8 +2636,6 @@ dependencies = [
 
 [[package]]
 name = "isahc"
-<<<<<<< HEAD
-=======
 version = "0.9.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2948a0ce43e2c2ef11d7edf6816508998d99e13badd1150be0914205df9388a"
@@ -3375,7 +2659,6 @@ dependencies = [
 
 [[package]]
 name = "isahc"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 version = "1.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "334e04b4d781f436dc315cb1e7515bd96826426345d498149e4bde36b67f8ee9"
@@ -3427,15 +2710,9 @@ dependencies = [
 
 [[package]]
 name = "js-sys"
-<<<<<<< HEAD
-version = "0.3.60"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "49409df3e3bf0856b916e2ceaca09ee28e6871cf7d9ce97a692cacfdb2a25a47"
-=======
 version = "0.3.61"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "445dde2150c55e483f3d8416706b97ec8e8237c307e5b7b4b8dd15e6af2a0730"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "wasm-bindgen",
 ]
@@ -3507,11 +2784,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-rustls",
-<<<<<<< HEAD
- "tokio-util 0.7.4",
-=======
  "tokio-util 0.7.7",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
  "tracing",
  "webpki-roots",
 ]
@@ -3536,11 +2809,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-rustls",
-<<<<<<< HEAD
- "tokio-util 0.7.4",
-=======
  "tokio-util 0.7.7",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
  "tracing",
  "webpki-roots",
 ]
@@ -3682,11 +2951,7 @@ version = "0.16.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baa6da1e4199c10d7b1d0a6e5e8bd8e55f351163b6f4b3cbb044672a69bd4c1c"
 dependencies = [
-<<<<<<< HEAD
- "heck 0.4.0",
-=======
  "heck 0.4.1",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
  "proc-macro-crate",
  "proc-macro2",
  "quote",
@@ -3710,11 +2975,7 @@ dependencies = [
  "soketto",
  "tokio",
  "tokio-stream",
-<<<<<<< HEAD
- "tokio-util 0.7.4",
-=======
  "tokio-util 0.7.7",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
  "tower",
  "tracing",
 ]
@@ -3808,11 +3069,7 @@ dependencies = [
  "soketto",
  "tokio",
  "tokio-stream",
-<<<<<<< HEAD
- "tokio-util 0.7.4",
-=======
  "tokio-util 0.7.7",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
  "tracing",
  "tracing-futures",
 ]
@@ -3827,14 +3084,7 @@ dependencies = [
  "ecdsa",
  "elliptic-curve",
  "sha2 0.10.6",
-<<<<<<< HEAD
-<<<<<<< HEAD
  "sha3 0.10.6",
-=======
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
- "sha3 0.10.6",
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 ]
 
 [[package]]
@@ -4012,10 +3262,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "link-cplusplus"
 version = "1.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4025,11 +3271,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "lock_api"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4096,15 +3337,9 @@ dependencies = [
 
 [[package]]
 name = "matches"
-<<<<<<< HEAD
-version = "0.1.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a3e378b66a060d48947b590737b30a1be76706c8dd7b8ba0f2fe3989c68a853f"
-=======
 version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2532096657941c2fea9c289d370a250971c689d4f143798ff67113ec042024a5"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 
 [[package]]
 name = "maybe-uninit"
@@ -4131,8 +3366,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2a60c7ce501c71e03a9c9c0d35b861413ae925bd979cc7a4e30d060069aaac8d"
 
 [[package]]
-<<<<<<< HEAD
-=======
 name = "mime_guess"
 version = "2.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4143,7 +3376,6 @@ dependencies = [
 ]
 
 [[package]]
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 name = "minimal-lexical"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4179,24 +3411,14 @@ dependencies = [
 
 [[package]]
 name = "mio"
-<<<<<<< HEAD
-version = "0.8.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e5d732bc30207a6423068df043e3d02e0735b155ad7ce1a6f76fe2baa5b158de"
-=======
 version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b9d9a46eff5b4ff64b45a9e316a6d1e0bc719ef429cbec4dc630684212bfdf9"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "libc",
  "log 0.4.17",
  "wasi 0.11.0+wasi-snapshot-preview1",
-<<<<<<< HEAD
- "windows-sys",
-=======
  "windows-sys 0.45.0",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 ]
 
 [[package]]
@@ -4212,10 +3434,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "modular-bitfield"
 version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4237,11 +3455,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "more-asserts"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4284,15 +3497,9 @@ dependencies = [
 
 [[package]]
 name = "nix"
-<<<<<<< HEAD
-version = "0.26.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46a58d1d356c6597d08cde02c2f09d785b09e28711837b1ed667dc652c08a694"
-=======
 version = "0.26.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bfdda3d196821d6af13126e40375cdf7da646a96114af134d5f417a9a1dc8e1a"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "bitflags",
  "cfg-if 1.0.0",
@@ -4308,23 +3515,15 @@ checksum = "72ef4a56884ca558e5ddb05a1d1e7e1bfd9a68d9ed024c21704cc98872dae1bb"
 
 [[package]]
 name = "nom"
-<<<<<<< HEAD
-version = "7.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e5507769c4919c998e69e49c839d9dc6e693ede4cc4290d6ad8b41d4f09c548c"
-=======
 version = "7.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d273983c5a657a70a3e8f2a01329822f3b8c8172b73826411a55751e404a0a4a"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "memchr",
  "minimal-lexical",
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
 name = "nom8"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4334,7 +3533,6 @@ dependencies = [
 ]
 
 [[package]]
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 name = "ntest"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4412,15 +3610,9 @@ dependencies = [
 
 [[package]]
 name = "num-complex"
-<<<<<<< HEAD
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ae39348c8bc5fbd7f40c727a9925f03517afd2ab27d46702108b6a7e5414c19"
-=======
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "02e0d21255c828d6f128a1e41534206671e8c3ea0c62f32291e808dc82cff17d"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "num-traits",
 ]
@@ -4478,33 +3670,19 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
 name = "num_enum"
-version = "0.5.7"
+version = "0.5.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf5395665662ef45796a4ff5486c5d41d29e0c09640af4c5f17fd94ee2c119c9"
-=======
-name = "num_enum"
-version = "0.5.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e0072973714303aa6e3631c7e8e777970cf4bdd25dc4932e41031027b8bcc4e"
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
+checksum = "1f646caf906c20226733ed5b1374287eb97e3c2a5c227ce668c1f2ce20ae57c9"
 dependencies = [
  "num_enum_derive",
 ]
 
 [[package]]
 name = "num_enum_derive"
-<<<<<<< HEAD
-version = "0.5.7"
+version = "0.5.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b0498641e53dd6ac1a4f22547548caa6864cc4933784319cd1775271c5a46ce"
-=======
-version = "0.5.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0629cbd6b897944899b1f10496d9c4a7ac5878d45fd61bc22e9e79bfbbc29597"
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
+checksum = "dcbff9bc912032c62bf65ef1d5aea88983b420f4f839db1e9b0c281a25c9c799"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -4513,19 +3691,10 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-name = "once_cell"
-version = "1.17.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6f61fba1741ea2b3d6a1e3178721804bb716a68a6aeba1149b5d52e3d464ea66"
-=======
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "once_cell"
 version = "1.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b7e5500299e16ebb147ae15a00a942af264cf3688f47923b8fc2cd5858f23ad3"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 
 [[package]]
 name = "opaque-debug"
@@ -4534,10 +3703,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "open-fastrlp"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4563,11 +3728,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "openssl-probe"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4599,34 +3759,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "373b1a4c1338d9cd3d1fa53b3a11bdab5ab6bd80a20f7f7becd76953ae2be909"
 dependencies = [
  "arrayvec",
-<<<<<<< HEAD
-<<<<<<< HEAD
- "bitvec 0.20.4",
- "byte-slice-cast",
- "impl-trait-for-tuples",
- "parity-scale-codec-derive 2.3.1",
- "serde",
-]
-
-[[package]]
-name = "parity-scale-codec"
-version = "3.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e7ab01d0f889e957861bc65888d5ccbe82c158d0270136ba46820d43837cdf72"
-dependencies = [
- "arrayvec",
- "bitvec 1.0.1",
- "byte-slice-cast",
- "bytes 1.4.0",
- "impl-trait-for-tuples",
- "parity-scale-codec-derive 3.1.4",
-=======
- "bitvec",
- "byte-slice-cast",
- "impl-trait-for-tuples",
- "parity-scale-codec-derive",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
  "bitvec 0.20.4",
  "byte-slice-cast",
  "impl-trait-for-tuples",
@@ -4646,7 +3778,6 @@ dependencies = [
  "bytes 1.4.0",
  "impl-trait-for-tuples",
  "parity-scale-codec-derive 3.1.4",
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
  "serde",
 ]
 
@@ -4663,10 +3794,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "parity-scale-codec-derive"
 version = "3.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4679,21 +3806,12 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "parity-tokio-ipc"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9981e32fb75e004cc148f5fb70342f393830e0a4aa62e3cc93b50976218d42b6"
 dependencies = [
-<<<<<<< HEAD
- "futures 0.3.25",
-=======
  "futures 0.3.26",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
  "libc",
  "log 0.4.17",
  "rand 0.7.3",
@@ -4747,11 +3865,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3742b2c103b9f06bc9fff0a37ff4912935851bee6d36f3c02bcc755bcfec228f"
 dependencies = [
  "lock_api 0.4.9",
-<<<<<<< HEAD
- "parking_lot_core 0.9.6",
-=======
  "parking_lot_core 0.9.7",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 ]
 
 [[package]]
@@ -4801,25 +3915,15 @@ dependencies = [
 
 [[package]]
 name = "parking_lot_core"
-<<<<<<< HEAD
-version = "0.9.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba1ef8814b5c993410bb3adfad7a5ed269563e4a2f90c41f5d85be7fb47133bf"
-=======
 version = "0.9.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9069cbb9f99e3a5083476ccb29ceb1de18b9118cafa53e90c9551235de2b9521"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "cfg-if 1.0.0",
  "libc",
  "redox_syscall 0.2.16",
  "smallvec 1.10.0",
-<<<<<<< HEAD
- "windows-sys",
-=======
  "windows-sys 0.45.0",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 ]
 
 [[package]]
@@ -4842,15 +3946,9 @@ checksum = "0a6dda33d67c26f0aac90d324ab2eb7239c819fc7b2552fe9faa4fe88441edc8"
 
 [[package]]
 name = "petgraph"
-<<<<<<< HEAD
-version = "0.6.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6d5014253a1331579ce62aa67443b4a658c5e7dd03d4bc6d302b94474888143"
-=======
 version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4dd7d28ee937e54fe3080c91faa1c3a46c06de6252988a7f4592ba2310ef22a4"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "fixedbitset",
  "indexmap",
@@ -4920,10 +4018,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ac9a59f73473f1b8d852421e59e64809f025994837ef743615c6d0c5b305160"
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "plain_hasher"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4933,11 +4027,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "polling"
 version = "2.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4948,9 +4037,6 @@ dependencies = [
  "libc",
  "log 0.4.17",
  "wepoll-ffi",
-<<<<<<< HEAD
- "windows-sys",
-=======
  "windows-sys 0.42.0",
 ]
 
@@ -4963,7 +4049,6 @@ dependencies = [
  "cpuid-bool",
  "opaque-debug",
  "universal-hash",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 ]
 
 [[package]]
@@ -4997,21 +4082,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "05e4722c697a58a99d5d06a08c30821d7c082a4632198de1eaa5a6c22ef42373"
 dependencies = [
  "fixed-hash 0.7.0",
-<<<<<<< HEAD
-<<<<<<< HEAD
  "impl-codec 0.5.1",
  "impl-rlp",
  "impl-serde 0.3.2",
-=======
- "impl-codec",
- "impl-rlp",
- "impl-serde",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
- "impl-codec 0.5.1",
- "impl-rlp",
- "impl-serde 0.3.2",
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
  "uint 0.9.5",
 ]
 
@@ -5022,40 +4095,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f3486ccba82358b11a77516035647c34ba167dfa53312630de83b12bd4f3d66"
 dependencies = [
  "fixed-hash 0.8.0",
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
  "impl-codec 0.6.0",
  "impl-rlp",
  "impl-serde 0.4.0",
  "scale-info",
-<<<<<<< HEAD
-=======
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
  "uint 0.9.5",
 ]
 
 [[package]]
 name = "proc-macro-crate"
-<<<<<<< HEAD
-version = "1.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eda0fc3b0fb7c975631757e14d9049da17374063edb6ebbcbc54d880d4fe94e9"
-dependencies = [
- "once_cell",
- "thiserror",
- "toml",
-=======
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "66618389e4ec1c7afe67d51a9bf34ff9236480f8d51e7489b7d5ab0303c13f34"
 dependencies = [
  "once_cell",
  "toml_edit",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 ]
 
 [[package]]
@@ -5083,12 +4137,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-name = "proc-macro2"
-version = "1.0.49"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57a8eca9f9c4ffde41714334dee777596264c7825420f521abc92b5b5deb63a5"
-=======
 name = "proc-macro-hack"
 version = "0.5.20+deprecated"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5099,7 +4147,6 @@ name = "proc-macro2"
 version = "1.0.51"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5d727cae5b39d21da60fa540906919ad737832fe0b1c165da3a34d6548c849d6"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "unicode-ident",
 ]
@@ -5197,21 +4244,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "643f8f41a8ebc4c5dc4515c82bb8abd397b527fc20fd681b7c011c2aee5d44fb"
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "radium"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc33ff2d4973d518d823d61aa239014831e521c75da58e3df4840d3f47749d09"
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "rand"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5494,16 +4532,9 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
 name = "reth-codecs"
 version = "0.1.0"
-source = "git+https://github.com/paradigmxyz/reth.git#26b606fda5cff55facae240725f52ddea8bc1a26"
-=======
-name = "reth-codecs"
-version = "0.1.0"
-source = "git+https://github.com/paradigmxyz/reth.git#8299ca6fd662e5be3655696776f504753b9e6d03"
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
+source = "git+https://github.com/paradigmxyz/reth.git#a0c82c55b2b775c50242ab7b7d3761ba17d62039"
 dependencies = [
  "bytes 1.4.0",
  "codecs-derive",
@@ -5511,58 +4542,32 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
 name = "reth-ipc"
 version = "0.1.0"
-source = "git+https://github.com/paradigmxyz/reth.git#26b606fda5cff55facae240725f52ddea8bc1a26"
-dependencies = [
- "async-trait",
- "bytes 1.4.0",
- "futures 0.3.25",
-=======
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
-name = "reth-ipc"
-version = "0.1.0"
-source = "git+https://github.com/paradigmxyz/reth.git#8299ca6fd662e5be3655696776f504753b9e6d03"
+source = "git+https://github.com/paradigmxyz/reth.git#a0c82c55b2b775c50242ab7b7d3761ba17d62039"
 dependencies = [
  "async-trait",
  "bytes 1.4.0",
  "futures 0.3.26",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
  "jsonrpsee 0.16.2",
  "parity-tokio-ipc",
  "pin-project",
  "serde_json",
  "thiserror",
  "tokio",
-<<<<<<< HEAD
- "tokio-util 0.7.4",
-=======
  "tokio-util 0.7.7",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
  "tower",
  "tracing",
 ]
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
 name = "reth-primitives"
 version = "0.1.0"
-source = "git+https://github.com/paradigmxyz/reth.git#26b606fda5cff55facae240725f52ddea8bc1a26"
-dependencies = [
- "bytes 1.4.0",
- "crc 3.0.0",
-=======
-name = "reth-primitives"
-version = "0.1.0"
-source = "git+https://github.com/paradigmxyz/reth.git#8299ca6fd662e5be3655696776f504753b9e6d03"
+source = "git+https://github.com/paradigmxyz/reth.git#a0c82c55b2b775c50242ab7b7d3761ba17d62039"
 dependencies = [
  "bytes 1.4.0",
  "crc 3.0.1",
  "crunchy 0.2.2",
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
  "derive_more",
  "ethers-core",
  "fixed-hash 0.8.0",
@@ -5572,11 +4577,7 @@ dependencies = [
  "impl-serde 0.4.0",
  "modular-bitfield",
  "once_cell",
-<<<<<<< HEAD
- "parity-scale-codec 3.2.2",
-=======
  "parity-scale-codec 3.4.0",
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
  "plain_hasher",
  "reth-codecs",
  "reth-rlp",
@@ -5597,11 +4598,7 @@ dependencies = [
 [[package]]
 name = "reth-rlp"
 version = "0.1.2"
-<<<<<<< HEAD
-source = "git+https://github.com/paradigmxyz/reth.git#26b606fda5cff55facae240725f52ddea8bc1a26"
-=======
-source = "git+https://github.com/paradigmxyz/reth.git#8299ca6fd662e5be3655696776f504753b9e6d03"
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
+source = "git+https://github.com/paradigmxyz/reth.git#a0c82c55b2b775c50242ab7b7d3761ba17d62039"
 dependencies = [
  "arrayvec",
  "auto_impl",
@@ -5614,11 +4611,7 @@ dependencies = [
 [[package]]
 name = "reth-rlp-derive"
 version = "0.1.1"
-<<<<<<< HEAD
-source = "git+https://github.com/paradigmxyz/reth.git#26b606fda5cff55facae240725f52ddea8bc1a26"
-=======
-source = "git+https://github.com/paradigmxyz/reth.git#8299ca6fd662e5be3655696776f504753b9e6d03"
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
+source = "git+https://github.com/paradigmxyz/reth.git#a0c82c55b2b775c50242ab7b7d3761ba17d62039"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5646,22 +4639,13 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "rfc6979"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7743f17af12fa0b03b803ba12cd6a8d9483a587e89c69445e3909655c0b9fabb"
 dependencies = [
  "crypto-bigint",
-<<<<<<< HEAD
- "hmac",
-=======
  "hmac 0.12.1",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
  "zeroize",
 ]
 
@@ -5753,11 +4737,7 @@ version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b07f2d176c472198ec1e6551dc7da28f1c089652f66a7b722676c2238ebc0edf"
 dependencies = [
-<<<<<<< HEAD
- "futures 0.3.25",
-=======
  "futures 0.3.26",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
  "futures-timer",
  "rstest_macros",
  "rustc_version 0.4.0",
@@ -5778,10 +4758,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "ruint"
 version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5803,11 +4779,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "62cc5760263ea229d367e7dff3c0cbf09e4797a125bd87059a6c095804f3b2d1"
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "rusqlite"
 version = "0.26.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5854,15 +4825,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-<<<<<<< HEAD
-version = "0.20.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "539a2bfe908f471bfa933876bd1eb6a19cf2176d375f82ef7f99530a40e48c2c"
-=======
 version = "0.20.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fff78fc74d175294f4e83b28343315ffcfb114b156f0185e9741cb5570f50e2f"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "log 0.4.17",
  "ring",
@@ -5904,10 +4869,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7b4b9743ed687d4b4bcedf9ff5eaa7398495ae14e61cba0a295704edbc7decde"
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "scale-info"
 version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5915,11 +4876,7 @@ checksum = "001cf62ece89779fd16105b5f515ad0e5cedcd5440d3dd806bb067978e7c3608"
 dependencies = [
  "cfg-if 1.0.0",
  "derive_more",
-<<<<<<< HEAD
- "parity-scale-codec 3.2.2",
-=======
  "parity-scale-codec 3.4.0",
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
  "scale-info-derive",
 ]
 
@@ -5936,21 +4893,12 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "schannel"
 version = "0.1.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "713cfb06c7059f3588fb8044c0fad1d09e3c01d225e25b9220dbfdcf16dbb1b3"
 dependencies = [
-<<<<<<< HEAD
- "windows-sys",
-=======
  "windows-sys 0.42.0",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 ]
 
 [[package]]
@@ -5969,21 +4917,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d29ab0c6d3fc0ee92fe66e2d99f700eab17a8d57d1c1d3b748380fb20baa78cd"
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "scratch"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ddccb15bcce173023b3fedd9436f882a0739b8dfb45e4f6b6002bee5929f61b2"
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "sct"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6008,10 +4947,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "secp256k1"
 version = "0.24.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6030,19 +4965,10 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-name = "security-framework"
-version = "2.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2bc1bb97804af6631813c55739f771071e0f2ed33ee20b68c86ec505d906356c"
-=======
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "security-framework"
 version = "2.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a332be01508d814fed64bf28f798a146d73792121129962fdf335bb3c49a4254"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "bitflags",
  "core-foundation",
@@ -6053,15 +4979,9 @@ dependencies = [
 
 [[package]]
 name = "security-framework-sys"
-<<<<<<< HEAD
-version = "2.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0160a13a177a45bfb43ce71c01580998474f556ad854dcbca936dd2841a5c556"
-=======
 version = "2.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "31c9bb296072e961fcbd8853511dd39c2d8be2deb1e17c6860b1d30732b323b4"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "core-foundation-sys",
  "libc",
@@ -6127,15 +5047,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-<<<<<<< HEAD
-version = "1.0.91"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "877c235533714907a8c2464236f5c4b2a17262ef1bd71f38f35ea592c8da6883"
-=======
 version = "1.0.93"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cad406b69c91885b5107daf2c29572f6c8cdb3c66826821e286c533490c0bc76"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "indexmap",
  "itoa",
@@ -6144,8 +5058,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
 name = "serde_qs"
 version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6157,7 +5069,6 @@ dependencies = [
 ]
 
 [[package]]
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 name = "serde_regex"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6168,33 +5079,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-name = "serde_with"
-version = "2.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "30d904179146de381af4c93d3af6ca4984b3152db687dacb9c3c35e86f39809c"
-dependencies = [
- "base64 0.13.1",
- "chrono",
- "hex",
- "indexmap",
- "serde",
- "serde_json",
- "serde_with_macros",
- "time",
-]
-
-[[package]]
-name = "serde_with_macros"
-version = "2.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1966009f3c05f095697c537312f5415d1e3ed31ce0a56942bac4c771c5c335e"
-dependencies = [
- "darling 0.14.2",
- "proc-macro2",
- "quote",
- "syn",
-=======
 name = "serde_urlencoded"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6204,7 +5088,6 @@ dependencies = [
  "itoa",
  "ryu",
  "serde",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 ]
 
 [[package]]
@@ -6277,8 +5160,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cc30b1e1e8c40c121ca33b86c23308a090d19974ef001b4bf6e61fd1a0fb095c"
 
 [[package]]
-<<<<<<< HEAD
-=======
 name = "sha1"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6294,7 +5175,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ae1a47186c03a32177042e55dbc5fd5aee900b8e0069a8d70fba96a9375cd012"
 
 [[package]]
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 name = "sha2"
 version = "0.9.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6357,15 +5237,9 @@ checksum = "43b2853a4d09f215c24cc5489c992ce46052d359b5109343cbafbf26bc62f8a3"
 
 [[package]]
 name = "signal-hook"
-<<<<<<< HEAD
-version = "0.3.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a253b5e89e2698464fc26b545c9edceb338e18a89effeeecfea192c3025be29d"
-=======
 version = "0.3.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "732768f1176d21d09e076c23a93123d40bba92d50c4058da34d45c8de8e682b9"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "libc",
  "signal-hook-registry",
@@ -6373,15 +5247,9 @@ dependencies = [
 
 [[package]]
 name = "signal-hook-registry"
-<<<<<<< HEAD
-version = "1.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e51e73328dc4ac0c7ccbda3a494dfa03df1de2f46018127f60c693f2648455b0"
-=======
 version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8229b473baa5980ac72ef434c4415e70c4b5e71b423043adb4ba059f89c99a1"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "libc",
 ]
@@ -6410,15 +5278,9 @@ checksum = "7bd3e3206899af3f8b12af284fafc038cc1dc2b41d1b89dd17297221c5d225de"
 
 [[package]]
 name = "slab"
-<<<<<<< HEAD
-version = "0.4.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4614a76b2a8be0058caa9dbbaf66d988527d86d003c11a94fbd335d7661edcef"
-=======
 version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6528351c9bc8ab22353f9d776db39a20288e8d6c37ef8cfe3317cf875eecfc2d"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "autocfg 1.1.0",
 ]
@@ -6478,11 +5340,7 @@ checksum = "41d1c5305e39e09653383c2c7244f2f78b3bcae37cf50c64cb4789c9f5096ec2"
 dependencies = [
  "base64 0.13.1",
  "bytes 1.4.0",
-<<<<<<< HEAD
- "futures 0.3.25",
-=======
  "futures 0.3.26",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
  "http",
  "httparse",
  "log 0.4.17",
@@ -6497,18 +5355,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6e63cff320ae2c57904679ba7cb63280a3dc4613885beafb148ee7bf9aa9042d"
 
 [[package]]
-<<<<<<< HEAD
-=======
 name = "spinning_top"
-version = "0.2.4"
+version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75adad84ee84b521fb2cca2d4fd0f1dab1d8d026bda3c5bea4ca63b5f9f9293c"
+checksum = "5b9eb1a2f4c41445a3a0ff9abc5221c5fcd28e1f13cd7c0397706f9ac938ddb0"
 dependencies = [
  "lock_api 0.4.9",
 ]
 
 [[package]]
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 name = "spki"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6519,8 +5374,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
 name = "standback"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6530,15 +5383,12 @@ dependencies = [
 ]
 
 [[package]]
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
-<<<<<<< HEAD
-=======
 name = "stdweb"
 version = "0.4.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6588,7 +5438,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "213701ba3370744dcd1a12960caa4843b3d68b4d1c0a5d575e0d65b2ee9d16c0"
 
 [[package]]
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 name = "string_cache"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6638,10 +5487,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "strum"
 version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6656,11 +5501,7 @@ version = "0.24.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e385be0d24f186b4ce2f9982191e7101bb737312ad61c1f2f984f34bcf85d59"
 dependencies = [
-<<<<<<< HEAD
- "heck 0.4.0",
-=======
  "heck 0.4.1",
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
  "proc-macro2",
  "quote",
  "rustversion",
@@ -6668,11 +5509,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "stun_codec"
 version = "0.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6680,15 +5516,7 @@ checksum = "00241c5479b10c738408a263970fa46ea10924c8851bf45e8c24b306083b5a60"
 dependencies = [
  "bytecodec",
  "byteorder",
-<<<<<<< HEAD
-<<<<<<< HEAD
  "crc 1.8.1",
-=======
- "crc",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
- "crc 1.8.1",
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
  "hmac-sha1",
  "md5",
  "trackable 0.2.24",
@@ -6715,23 +5543,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6bdef32e8150c2a081110b42772ffe7d7c9032b606bc226c8260fd97e0976601"
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "sucds"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c1c7f814471a34d2355f9eb25ef3517ec491ac243612b1c83137739998c5444"
 dependencies = [
  "anyhow",
-<<<<<<< HEAD
-=======
-=======
 ]
 
 [[package]]
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "surf"
 version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6752,14 +5572,13 @@ dependencies = [
  "serde",
  "serde_json",
  "web-sys",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 ]
 
 [[package]]
 name = "syn"
-version = "1.0.108"
+version = "1.0.109"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d56e159d99e6c2b93995d171050271edb50ecc5288fbc7cc17de8fdce4e58c14"
+checksum = "72b64191b275b66ffe2469e8af2c1cfe3bafa67b529ead792a6d0160888b4237"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -6811,15 +5630,9 @@ dependencies = [
 
 [[package]]
 name = "termcolor"
-<<<<<<< HEAD
-version = "1.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bab24d30b911b2376f3a13cc2cd443142f0c81dda04c118693e35b3835757755"
-=======
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be55cf8942feac5c765c2c993422806843c9a9a45d4d5c407ad6dd2ea95eb9b6"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "winapi-util",
 ]
@@ -6875,18 +5688,11 @@ dependencies = [
 
 [[package]]
 name = "thread_local"
-<<<<<<< HEAD
-version = "1.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5516c27b78311c50bf42c071425c560ac799b11c30b31f87e3081965fe5e0180"
-dependencies = [
-=======
 version = "1.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3fdd6f064ccff2d6567adcb3873ca630700f00b5ad3f060c25b5dcfd9a4ce152"
 dependencies = [
  "cfg-if 1.0.0",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
  "once_cell",
 ]
 
@@ -6901,11 +5707,6 @@ dependencies = [
 
 [[package]]
 name = "time"
-<<<<<<< HEAD
-version = "0.3.17"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a561bf4617eebd33bca6434b988f39ed798e527f51a1e797d0ee4f61c0a38376"
-=======
 version = "0.2.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4752a97f8eebd6854ff91f1c1824cd6160626ac4bd44287f7f4ea2035a02a242"
@@ -6924,16 +5725,11 @@ name = "time"
 version = "0.3.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "53250a3b3fed8ff8fd988587d8925d26a83ac3845d9e03b220b37f34c2b8d6c2"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "itoa",
  "serde",
  "time-core",
-<<<<<<< HEAD
- "time-macros",
-=======
  "time-macros 0.2.7",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 ]
 
 [[package]]
@@ -6944,11 +5740,6 @@ checksum = "2e153e1f1acaef8acc537e68b44906d2db6436e2b35ac2c6b42640fff91f00fd"
 
 [[package]]
 name = "time-macros"
-<<<<<<< HEAD
-version = "0.2.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d967f99f534ca7e495c575c62638eebc2898a8c84c119b89e250477bc4ba16b2"
-=======
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "957e9c6e26f12cb6d0dd7fc776bb67a706312e7299aed74c8dd5b17ebb27e2f1"
@@ -6962,14 +5753,11 @@ name = "time-macros"
 version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a460aeb8de6dcb0f381e1ee05f1cd56fcf5a5f6eb8187ff3d8f0b11078d38b7c"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "time-core",
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
 name = "time-macros-impl"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6983,7 +5771,6 @@ dependencies = [
 ]
 
 [[package]]
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 name = "tiny-keccak"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7010,11 +5797,7 @@ dependencies = [
  "ascii",
  "chunked_transfer",
  "log 0.4.17",
-<<<<<<< HEAD
- "time",
-=======
  "time 0.3.19",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
  "url",
 ]
 
@@ -7029,17 +5812,6 @@ dependencies = [
 
 [[package]]
 name = "tinyvec_macros"
-<<<<<<< HEAD
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cda74da7e1a664f795bb1f8a87ec406fb89a02522cf6e50620d016add6dbbf5c"
-
-[[package]]
-name = "tokio"
-version = "1.24.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d9f76183f91ecfb55e1d7d5602bd1d979e38a3a522fe900241cf195624d67ae"
-=======
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
@@ -7049,28 +5821,19 @@ name = "tokio"
 version = "1.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c8e00990ebabbe4c14c08aca901caed183ecd5c09562a12c824bb53d3c3fd3af"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "autocfg 1.1.0",
  "bytes 1.4.0",
  "libc",
  "memchr",
-<<<<<<< HEAD
- "mio 0.8.5",
-=======
  "mio 0.8.6",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
  "num_cpus",
  "parking_lot 0.12.1",
  "pin-project-lite",
  "signal-hook-registry",
  "socket2 0.4.7",
  "tokio-macros",
-<<<<<<< HEAD
- "windows-sys",
-=======
  "windows-sys 0.42.0",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 ]
 
 [[package]]
@@ -7148,15 +5911,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-stream"
-<<<<<<< HEAD
-version = "0.1.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d660770404473ccd7bc9f8b28494a811bc18542b915c0855c51e8f419d5223ce"
-=======
 version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8fb52b74f05dbf495a8fba459fdc331812b96aa086d9eb78101fa0d4569c3313"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "futures-core",
  "pin-project-lite",
@@ -7230,15 +5987,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-util"
-<<<<<<< HEAD
-version = "0.7.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0bb2e075f03b3d66d8d8785356224ba688d2906a371015e225beeb65ca92c740"
-=======
 version = "0.7.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5427d89453009325de0d8f342c9490009f76e999cb7672d77e46267448f7e6b2"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "bytes 1.4.0",
  "futures-core",
@@ -7250,14 +6001,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-name = "toml"
-version = "0.5.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1333c76748e868a4d9d1017b5ab53171dfd095f70c712fdb4653a406547f598f"
-dependencies = [
- "serde",
-=======
 name = "toml_datetime"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7272,7 +6015,6 @@ dependencies = [
  "indexmap",
  "nom8",
  "toml_datetime",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 ]
 
 [[package]]
@@ -7365,11 +6107,7 @@ dependencies = [
  "regex 1.7.1",
  "sharded-slab",
  "smallvec 1.10.0",
-<<<<<<< HEAD
- "thread_local 1.1.4",
-=======
  "thread_local 1.1.7",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
  "tracing",
  "tracing-core",
  "tracing-log",
@@ -7421,24 +6159,12 @@ version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3cd22d128157837a4434bb51119aef11103f17bfe8c402ce688cf25aa1e608ad"
 dependencies = [
-<<<<<<< HEAD
-<<<<<<< HEAD
  "darling 0.13.4",
-=======
- "darling",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
- "darling 0.13.4",
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
  "quote",
  "syn",
 ]
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "triehash"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7449,21 +6175,12 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "trin"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "discv5",
-<<<<<<< HEAD
  "enr",
-=======
- "enr 0.7.0",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
  "eth2_ssz",
  "ethereum-types 0.12.1",
  "ethportal-api",
@@ -7521,11 +6238,7 @@ dependencies = [
  "delay_map",
  "directories",
  "discv5",
-<<<<<<< HEAD
  "enr",
-=======
- "enr 0.7.0",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
  "env_logger 0.9.3",
  "eth2_hashing",
  "eth2_ssz",
@@ -7535,11 +6248,7 @@ dependencies = [
  "ethereum-types 0.12.1",
  "ethportal-api",
  "fnv",
-<<<<<<< HEAD
- "futures 0.3.25",
-=======
  "futures 0.3.26",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
  "hex",
  "interfaces",
  "ipconfig",
@@ -7569,10 +6278,7 @@ dependencies = [
  "smallvec 1.10.0",
  "structopt",
  "stunclient",
-<<<<<<< HEAD
-=======
  "surf",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
  "tempfile",
  "test-log",
  "thiserror",
@@ -7658,15 +6364,9 @@ checksum = "497961ef93d974e23eb6f433eb5fe1b7930b659f06d12dec6fc44a8f554c0bba"
 
 [[package]]
 name = "ucd-util"
-<<<<<<< HEAD
-version = "0.1.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "65bfcbf611b122f2c10eb1bb6172fbc4c2e25df9970330e4d75ce2b5201c9bfc"
-=======
 version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "abd2fc5d32b590614af8b0a20d837f32eca055edd0bbead59a9cfe80858be003"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 
 [[package]]
 name = "uds_windows"
@@ -7725,15 +6425,9 @@ dependencies = [
 
 [[package]]
 name = "unicode-bidi"
-<<<<<<< HEAD
-version = "0.3.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "099b7128301d285f79ddd55b9a83d5e6b9e97c92e0ea0daebee7263e932de992"
-=======
 version = "0.3.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d54675592c1dbefd78cbd98db9bacd89886e1ca50692a0692baefffdeb92dd58"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 
 [[package]]
 name = "unicode-ident"
@@ -7752,15 +6446,9 @@ dependencies = [
 
 [[package]]
 name = "unicode-segmentation"
-<<<<<<< HEAD
-version = "1.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0fdbf052a0783de01e944a6ce7a8cb939e295b1e7be835a1112c3b9a7f047a5a"
-=======
 version = "1.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1dd624098567895118886609431a7c3b8f516e41d30e0643f03d94592a147e36"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 
 [[package]]
 name = "unicode-width"
@@ -7792,15 +6480,9 @@ checksum = "a156c684c91ea7d62626509bce3cb4e1d9ed5c4d978f7b4352658f96a4c26b4a"
 
 [[package]]
 name = "ureq"
-<<<<<<< HEAD
-version = "2.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "733b5ad78377302af52c0dbcb2623d78fe50e4b3bf215948ff29e9ee031d8566"
-=======
 version = "2.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "338b31dd1314f68f3aabf3ed57ab922df95ffcd902476ca7ba3c4ce7b908c46d"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "base64 0.13.1",
  "flate2",
@@ -7823,10 +6505,7 @@ dependencies = [
  "form_urlencoded",
  "idna 0.3.0",
  "percent-encoding",
-<<<<<<< HEAD
-=======
  "serde",
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 ]
 
 [[package]]
@@ -7954,15 +6633,9 @@ checksum = "9c8d87e72b64a3b4db28d11ce29237c246188f4f51057d65a7eab63b7987e423"
 
 [[package]]
 name = "wasm-bindgen"
-<<<<<<< HEAD
-version = "0.2.83"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eaf9f5aceeec8be17c128b2e93e031fb8a4d469bb9c4ae2d7dc1888b26887268"
-=======
 version = "0.2.84"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "31f8dcbc21f30d9b8f2ea926ecb58f6b91192c17e9d33594b3df58b2007ca53b"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "cfg-if 1.0.0",
  "wasm-bindgen-macro",
@@ -7970,15 +6643,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-backend"
-<<<<<<< HEAD
-version = "0.2.83"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c8ffb332579b0557b52d268b91feab8df3615f265d5270fec2a8c95b17c1142"
-=======
 version = "0.2.84"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95ce90fd5bcc06af55a641a86428ee4229e44e07033963a2290a8e241607ccb9"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "bumpalo",
  "log 0.4.17",
@@ -7991,15 +6658,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-futures"
-<<<<<<< HEAD
-version = "0.4.33"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "23639446165ca5a5de86ae1d8896b737ae80319560fbaa4c2887b7da6e7ebd7d"
-=======
 version = "0.4.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f219e0d211ba40266969f6dbdd90636da12f75bee4fc9d6c23d1260dadb51454"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "cfg-if 1.0.0",
  "js-sys",
@@ -8009,15 +6670,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro"
-<<<<<<< HEAD
-version = "0.2.83"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "052be0f94026e6cbc75cdefc9bae13fd6052cdcaf532fa6c45e7ae33a1e6c810"
-=======
 version = "0.2.84"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4c21f77c0bedc37fd5dc21f897894a5ca01e7bb159884559461862ae90c0b4c5"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "quote",
  "wasm-bindgen-macro-support",
@@ -8025,15 +6680,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro-support"
-<<<<<<< HEAD
-version = "0.2.83"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "07bc0c051dc5f23e307b13285f9d75df86bfdf816c5721e573dec1f9b8aa193c"
-=======
 version = "0.2.84"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2aff81306fcac3c7515ad4e177f521b5c9a15f2b08f4e32d823066102f35a5f6"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "proc-macro2",
  "quote",
@@ -8044,17 +6693,6 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-shared"
-<<<<<<< HEAD
-version = "0.2.83"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c38c045535d93ec4f0b4defec448e4291638ee608530863b1e2ba115d4fff7f"
-
-[[package]]
-name = "web-sys"
-version = "0.3.60"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bcda906d8be16e728fd5adc5b729afad4e444e106ab28cd1c7256e54fa61510f"
-=======
 version = "0.2.84"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0046fef7e28c3804e5e38bfa31ea2a0f73905319b677e57ebe37e49358989b5d"
@@ -8064,7 +6702,6 @@ name = "web-sys"
 version = "0.3.61"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e33b99f4b23ba3eec1a53ac264e35a755f00e966e0065077d6027c0f575b0b97"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 dependencies = [
  "js-sys",
  "wasm-bindgen",
@@ -8163,48 +6800,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-name = "windows_aarch64_gnullvm"
-version = "0.42.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41d2aa71f6f0cbe00ae5167d90ef3cfe66527d6f613ca78ac8024c3ccab9a19e"
-
-[[package]]
-name = "windows_aarch64_msvc"
-version = "0.42.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd0f252f5a35cac83d6311b2e795981f5ee6e67eb1f9a7f64eb4500fbc4dcdb4"
-
-[[package]]
-name = "windows_i686_gnu"
-version = "0.42.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fbeae19f6716841636c28d695375df17562ca208b2b7d0dc47635a50ae6c5de7"
-
-[[package]]
-name = "windows_i686_msvc"
-version = "0.42.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "84c12f65daa39dd2babe6e442988fc329d6243fdce47d7d2d155b8d874862246"
-
-[[package]]
-name = "windows_x86_64_gnu"
-version = "0.42.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf7b1b21b5362cbc318f686150e5bcea75ecedc74dd157d874d754a2ca44b0ed"
-
-[[package]]
-name = "windows_x86_64_gnullvm"
-version = "0.42.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09d525d2ba30eeb3297665bd434a54297e4170c7f1a44cad4ef58095b4cd2028"
-
-[[package]]
-name = "windows_x86_64_msvc"
-version = "0.42.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f40009d85759725a34da6d89a94e63d7bdc50a862acf0dbc7c8e488f1edcb6f5"
-=======
 name = "windows-sys"
 version = "0.45.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8269,7 +6864,6 @@ name = "windows_x86_64_msvc"
 version = "0.42.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "447660ad36a13288b1db4d4248e857b510e8c3a225c822ba4fb748c0aafecffd"
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
 
 [[package]]
 name = "winreg"
@@ -8297,10 +6891,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85e60b0d1b5f99db2556934e21937020776a5d31520bf169e851ac44e6420214"
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "wyz"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8310,11 +6900,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> 002a8e3 (Add ssz encoding for headerwithproof)
-=======
->>>>>>> 57e0ef4 (Add dockerfile for bridge node)
 name = "zeroize"
 version = "1.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
