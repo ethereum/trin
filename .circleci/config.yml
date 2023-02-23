@@ -81,6 +81,60 @@ jobs:
             - run:
                 name: Test Trin workspace
                 command: cargo test --workspace -- --nocapture
+  utp-test:
+    description: |
+      Run uTP network simulator
+    machine:
+      image: ubuntu-2004:current
+    resource_class: xlarge
+    environment:
+      RUSTFLAGS: '-D warnings'
+      RUST_LOG: 'debug'
+    steps:
+      - checkout
+      - run:
+          name: Update package sources
+          command: sudo apt update
+      - run:
+          name: Install libssl-dev for openssl-sys
+          command: sudo apt install -y libssl-dev
+      - run:
+          name: Install libclang for rocksdb
+          command: sudo apt install clang
+      - run:
+          name: Install modprobe
+          command: sudo apt install -y kmod
+      - run:
+          name: Load iptables6 kernel modules
+          command: sudo modprobe ip6table_filter
+      - run:
+          name: Install Rust
+          command: curl https://sh.rustup.rs -sSf | sh -s -- -y
+      - run:
+          name: Build utp-testing package
+          command: cargo build --workspace --release
+      - run:
+          name: Move docker artifacts
+          command: mv -t utp-testing/docker/circleci/ target/release/utp-test-app utp-testing/docker/run_endpoint.sh utp-testing/docker/setup.sh
+      - run:
+          name: Build uTP Test App container
+          command: docker build -t test-utp --no-cache utp-testing/docker/circleci/
+      - run:
+          name: Run Test App with network simulator
+          # Dropping packets from both sides of the stream to test dealing with lost packets
+          command: SCENARIO="droplist --delay=15ms --bandwidth=10Mbps --queue=25 --drops_to_server=2,5,7 --drops_to_client=6,8" docker-compose -f utp-testing/docker/docker-compose.yml up -d
+      - run:
+          name: Wait all containers to start
+          command: sleep 5
+      - run:
+          name: Check containers
+          command: docker ps -a
+      - run:
+          name: Run test suite
+          command: RUST_LOG=debug ./target/release/utp-test-suite
+      - run:
+          name: Stop containers
+          command: docker-compose -f utp-testing/docker/docker-compose.yml down
 workflows:
   merge-test:
     jobs:
@@ -95,3 +149,4 @@ workflows:
             branches:
               only: master
       - lint-build-test
+      - utp-test

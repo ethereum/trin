@@ -47,4 +47,5 @@ members = [
     "ethportal-api",
     "ethportal-peertest",
     "rpc",
+    "utp-testing",
 ]
