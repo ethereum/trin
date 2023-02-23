@@ -188,10 +188,12 @@ impl HistoryRequestHandler {
                     let enr = convert_enr(enr);
 
                     let response = if let Some(content_value) = content_value {
+                        let mut content_item = vec![];
+                        content_value.encode(&mut content_item);
                         match self
                             .network
                             .overlay
-                            .send_populated_offer(enr, content_key.into(), content_value.into())
+                            .send_populated_offer(enr, content_key.into(), content_item)
                             .await
                         {
                             Ok(accept) => Ok(json!(AcceptInfo {

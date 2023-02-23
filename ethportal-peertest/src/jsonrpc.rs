@@ -3,6 +3,7 @@ use std::os::unix;
 use std::{io::prelude::*, panic, time::Duration};
 
 use anyhow::anyhow;
+use ethportal_api::types::portal::AcceptInfo;
 use hyper::{self, Body, Client, Method, Request};
 use serde_json::{self, json, Value};
 use ssz::Encode;
@@ -246,9 +247,9 @@ fn validate_portal_routing_table_info(result: &Value, _peertest: &Peertest) {
     assert!(result.get("numConnected").unwrap().is_u64());
 }
 
-pub fn validate_portal_offer(result: &Value, _peertest: &Peertest) {
+pub fn validate_portal_offer(result: AcceptInfo, _peertest: &Peertest) {
     // Should accept the requested content
-    assert_eq!(result.get("contentKeys").unwrap().as_str(), Some("0x03"))
+    assert_eq!(hex_encode(result.content_keys.into_bytes()), "0x03")
 }
 
 pub fn validate_portal_local_content(result: &Value, _peertest: &Peertest) {
