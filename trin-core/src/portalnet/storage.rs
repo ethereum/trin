@@ -295,13 +295,18 @@ impl PortalStorage {
         // use it to set the farthest_key and data_radius fields
         match storage.find_farthest_content_id()? {
             Some(content_id) => {
-                storage.farthest_content_id = Some(content_id.clone());
                 if storage.capacity_reached()? {
                     storage.radius = storage.distance_to_content_id(&content_id);
                 }
+                storage.farthest_content_id = Some(content_id);
             }
             // No farthest key found, carry on with blank slate settings
-            None => (),
+            None => {
+                // Unless user selected 0kb capacity for storage
+                if storage.storage_capacity_in_bytes == 0 {
+                    storage.radius = Distance::ZERO;
+                }
+            }
         }
 
         if config.metrics_enabled {
@@ -447,6 +452,8 @@ impl PortalStorage {
 
             match self.find_farthest_content_id()? {
                 None => {
+                    error!("xxx radius: {:?}", self.radius);
+                    error!("xxx capacity: {:?}", self.storage_capacity_in_bytes);
                     error!("Database is over-capacity, but could not find find entry to delete!");
                     self.farthest_content_id = None;
                     // stop attempting to delete to avoid infinite loop
