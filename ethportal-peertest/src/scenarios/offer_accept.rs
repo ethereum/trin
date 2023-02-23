@@ -1,70 +1,116 @@
+use std::str::FromStr;
 use std::{thread, time};
 
-use serde_json::Value;
+use serde_json::json;
 use tracing::{error, info};
 
+use ethportal_api::jsonrpsee::async_client::Client;
+use ethportal_api::types::discv5::Enr;
+use ethportal_api::{HistoryContentItem, HistoryContentKey, HistoryNetworkApiClient};
+
 use crate::{
-    jsonrpc::{
-        make_ipc_request, validate_portal_offer, JsonRpcRequest, HISTORY_CONTENT_KEY,
-        HISTORY_CONTENT_VALUE,
-    },
+    jsonrpc::{validate_portal_offer, HISTORY_CONTENT_KEY, HISTORY_CONTENT_VALUE},
     Peertest, PeertestConfig,
 };
-use trin_core::jsonrpc::types::Params;
 
-pub fn test_offer_accept(peertest_config: PeertestConfig, peertest: &Peertest) {
-    info!("Testing OFFER/ACCEPT flow");
+pub async fn test_unpopulated_offer(peertest_config: PeertestConfig, peertest: &Peertest) {
+    info!("Testing Unpopulated OFFER/ACCEPT flow");
+
+    let ipc_client = reth_ipc::client::IpcClientBuilder::default()
+        .build(&peertest_config.target_ipc_path)
+        .await
+        .unwrap();
+
+    let content_key: HistoryContentKey =
+        serde_json::from_value(json!(HISTORY_CONTENT_KEY)).unwrap();
+    let content_value: HistoryContentItem =
+        serde_json::from_value(json!(HISTORY_CONTENT_VALUE)).unwrap();
 
     // Store content to offer in the testnode db
-    let store_request = JsonRpcRequest {
-        method: "portal_historyStore".to_string(),
-        id: 11,
-        params: Params::Array(vec![
-            Value::String(HISTORY_CONTENT_KEY.to_string()),
-            Value::String(HISTORY_CONTENT_VALUE.to_string()),
-        ]),
-    };
+    let store_result = ipc_client
+        .store(content_key.clone(), content_value.clone())
+        .await
+        .unwrap();
 
-    let store_result = make_ipc_request(&peertest_config.target_ipc_path, &store_request).unwrap();
-    assert!(store_result.as_bool().unwrap());
+    assert!(store_result);
 
-    // Send offer request from testnode to bootnode
-    let offer_request = JsonRpcRequest {
-        method: "portal_historyOffer".to_string(),
-        id: 11,
-        params: Params::Array(vec![
-            Value::String(peertest.bootnode.enr.to_base64()),
-            Value::String(HISTORY_CONTENT_KEY.to_string()),
-        ]),
-    };
-
-    let accept = make_ipc_request(&peertest_config.target_ipc_path, &offer_request).unwrap();
+    // Send unpopulated offer request from testnode to bootnode
+    let result = ipc_client
+        .offer(
+            Enr::from_str(&peertest.bootnode.enr.to_base64()).unwrap(),
+            content_key.clone(),
+            None,
+        )
+        .await
+        .unwrap();
 
     // Check that ACCEPT response sent by bootnode accepted the offered content
-    validate_portal_offer(&accept, peertest);
+    validate_portal_offer(result, peertest);
 
     // Check if the stored content item in bootnode's DB matches the offered
-    let local_content_request = JsonRpcRequest {
-        method: "portal_historyLocalContent".to_string(),
-        id: 16,
-        params: Params::Array(vec![Value::String(HISTORY_CONTENT_KEY.to_string())]),
-    };
-    let mut received_content_value =
-        make_ipc_request(&peertest.bootnode.web3_ipc_path, &local_content_request)
-            .expect("Could not get local content");
+    let received_content_value = wait_for_content(ipc_client, content_key).await;
+
+    assert_eq!(
+        content_value, received_content_value,
+        "The received content {received_content_value:?}, must match the expected {content_value:?}",
+    );
+}
+
+pub async fn test_populated_offer(peertest_config: PeertestConfig, peertest: &Peertest) {
+    info!("Testing Populated Offer/ACCEPT flow");
+
+    let ipc_client = reth_ipc::client::IpcClientBuilder::default()
+        .build(&peertest_config.target_ipc_path)
+        .await
+        .unwrap();
+
+    // Offer unique content key to bootnode
+    let content_key: HistoryContentKey = serde_json::from_value(json!(
+        "0x00cb5cab7266694daa0d28cbf40496c08dd30bf732c41e0455e7ad389c10d79f4f"
+    ))
+    .unwrap();
+    let content_value: HistoryContentItem =
+        serde_json::from_value(json!(HISTORY_CONTENT_VALUE)).unwrap();
+
+    let result = ipc_client
+        .offer(
+            Enr::from_str(&peertest.bootnode.enr.to_base64()).unwrap(),
+            content_key.clone(),
+            Some(content_value.clone()),
+        )
+        .await
+        .unwrap();
+
+    // Check that ACCEPT response sent by bootnode accepted the offered content
+    validate_portal_offer(result, peertest);
+
+    // Check if the stored content item in bootnode's DB matches the offered
+    let received_content_value = wait_for_content(ipc_client, content_key).await;
+
+    assert_eq!(
+        content_value, received_content_value,
+        "The received content {received_content_value:?}, must match the expected {content_value:?}",
+    );
+}
+
+/// Wait for the content to be transferred
+async fn wait_for_content(
+    ipc_client: Client,
+    content_key: HistoryContentKey,
+) -> HistoryContentItem {
+    let mut received_content_value = ipc_client.local_content(content_key).await.unwrap();
 
     let mut counter = 0;
-    while received_content_value == Value::String("0x0".to_owned()) && counter < 5 {
+    while received_content_value == HistoryContentItem::Unknown("".to_owned()) && counter < 5 {
         error!("Retrying after 0.5sec, because content should have been present");
         thread::sleep(time::Duration::from_millis(500));
-        received_content_value =
-            make_ipc_request(&peertest.bootnode.web3_ipc_path, &local_content_request).unwrap();
+        received_content_value = ipc_client
+            .local_content(serde_json::from_value(json!(HISTORY_CONTENT_KEY)).unwrap())
+            .await
+            .unwrap();
+
         counter += 1;
     }
 
-    let received_content_str = received_content_value.as_str().unwrap();
-    assert_eq!(
-        HISTORY_CONTENT_VALUE, received_content_str,
-        "The received content {received_content_str}, must match the expected {HISTORY_CONTENT_VALUE}",
-    );
+    received_content_value
 }
