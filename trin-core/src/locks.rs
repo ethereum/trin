@@ -62,8 +62,8 @@ impl<T> DerefMut for TimedGuard<T> {
 impl<T> Drop for TimedGuard<T> {
     fn drop(&mut self) {
         self.sleep_task.abort();
-        let held_for = self.acquisition_time.elapsed().as_millis();
-        if held_for > HOLD_TIMEOUT_MS.into() {
+        let held_for: u128 = self.acquisition_time.elapsed().as_millis();
+        if held_for > u128::from(HOLD_TIMEOUT_MS) {
             warn!(
                 "[{}:{}] lock held for too long: {}ms",
                 self.acquisition_file, self.acquisition_line, held_for,

@@ -17,6 +17,7 @@ COPY ./trin-history ./trin-history
 COPY ./trin-state ./trin-state 
 COPY ./ethportal-peertest ./ethportal-peertest 
 COPY ./ethportal-api ./ethportal-api
+COPY ./rpc ./rpc
 
 # build for release
 RUN cargo build -p trin -p trin-cli --release

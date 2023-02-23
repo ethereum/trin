@@ -186,7 +186,7 @@ impl TrinConfig {
                 DEFAULT_WEB3_HTTP_ADDRESS => {}
                 p => panic!("Must not supply an http address when using ipc protocol for json-rpc (received: {p})"),
             },
-            val => panic!("Unsupported json-rpc protocol: {}", val),
+            val => panic!("Unsupported json-rpc protocol: {val}"),
         }
 
         match config.trusted_provider_url {

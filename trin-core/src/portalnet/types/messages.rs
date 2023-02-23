@@ -10,6 +10,7 @@ use base64;
 use ethereum_types::U256;
 use hex::FromHexError;
 use rlp::Encodable;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use ssz::{Decode, DecodeError, Encode};
 use ssz_derive::{Decode, Encode};
@@ -552,7 +553,7 @@ impl Into<Offer> for PopulatedOffer {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Encode, Decode)]
+#[derive(Debug, PartialEq, Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct Accept {
     pub connection_id: u16,
     pub content_keys: BitList<typenum::U8>,

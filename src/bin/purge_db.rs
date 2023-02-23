@@ -3,15 +3,14 @@ use std::str::FromStr;
 use anyhow::anyhow;
 use discv5::enr::{CombinedKey, EnrBuilder};
 use rocksdb::IteratorMode;
-use ssz::Decode;
 use structopt::StructOpt;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
-use ethportal_api::types::accumulator::EpochAccumulator;
-use ethportal_api::types::block_body::BlockBody;
-use ethportal_api::types::block_header::BlockHeaderWithProof;
+use ethportal_api::types::content_item::{
+    BlockBody, ContentItem, EpochAccumulator, HeaderWithProof,
+};
 use ethportal_api::types::content_key::HistoryContentKey;
-use ethportal_api::types::receipts::BlockReceipts;
+use ethportal_api::Receipt;
 use trin_core::portalnet::storage::{PortalStorage, PortalStorageConfig};
 use trin_core::portalnet::types::messages::ProtocolId;
 use trin_core::utils::db::get_data_dir;
@@ -38,7 +37,8 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let capacity = 0;
     let protocol = ProtocolId::History;
     let config = PortalStorageConfig::new(capacity, node_id, false);
-    let storage = PortalStorage::new(config.clone(), protocol).unwrap();
+    let storage =
+        PortalStorage::new(config.clone(), protocol).expect("Failed to create portal storage");
     let iter = config.db.iterator(IteratorMode::Start);
     let mut item_count = 0;
     let mut remove_count = 0;
@@ -88,12 +88,17 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn is_content_valid(content_key: &HistoryContentKey, value: &[u8]) -> bool {
     match content_key {
-        HistoryContentKey::BlockHeaderWithProof(_) => {
-            BlockHeaderWithProof::from_ssz_bytes(value).is_ok()
+        HistoryContentKey::BlockHeaderWithProof(_) => HeaderWithProof::decode(value).is_ok(),
+        HistoryContentKey::BlockBody(_) => BlockBody::decode(value).is_ok(),
+        HistoryContentKey::BlockReceipts(_) => {
+            let receipts: Result<Vec<Receipt>, _> = ContentItem::decode(value);
+            receipts.is_ok()
         }
-        HistoryContentKey::BlockBody(_) => BlockBody::from_ssz_bytes(value).is_ok(),
-        HistoryContentKey::BlockReceipts(_) => BlockReceipts::from_ssz_bytes(value).is_ok(),
-        HistoryContentKey::EpochAccumulator(_) => EpochAccumulator::from_ssz_bytes(value).is_ok(),
+        HistoryContentKey::EpochAccumulator(_) => EpochAccumulator::decode(value).is_ok(),
+        HistoryContentKey::Unknown(_) => {
+            debug!("Found invalid content key: {content_key}");
+            false
+        }
     }
 }
 

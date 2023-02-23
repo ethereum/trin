@@ -1,15 +1,14 @@
 use std::sync::Arc;
 
-use tokio::sync::{mpsc, RwLock};
+use ethportal_api::jsonrpsee::server::ServerHandle;
+use rpc::JsonRpcServer;
+use tokio::sync::mpsc;
+use tokio::sync::RwLock;
 use tracing::info;
 
+use trin_core::jsonrpc::types::HistoryJsonRpcRequest;
 use trin_core::{
     cli::{TrinConfig, HISTORY_NETWORK, STATE_NETWORK},
-    jsonrpc::{
-        handlers::JsonRpcHandler,
-        service::{launch_jsonrpc_server, JsonRpcExiter},
-        types::PortalJsonRpcRequest,
-    },
     portalnet::{
         discovery::Discovery, events::PortalnetEvents, storage::PortalStorageConfig,
         types::messages::PortalnetConfig,
@@ -23,7 +22,7 @@ use trin_state::initialize_state_network;
 pub async fn run_trin(
     trin_config: TrinConfig,
     trusted_provider: TrustedProvider,
-) -> Result<Arc<JsonRpcExiter>, Box<dyn std::error::Error>> {
+) -> Result<ServerHandle, Box<dyn std::error::Error>> {
     info!(config = %trin_config, "Launching trin");
 
     let bootnode_enrs = parse_bootnodes(&trin_config.bootnodes)?;
@@ -77,7 +76,7 @@ pub async fn run_trin(
     let header_oracle = Arc::new(RwLock::new(header_oracle));
 
     // Initialize state sub-network service and event handlers, if selected
-    let (state_handler, state_network_task, state_event_tx, state_jsonrpc_tx) =
+    let (state_handler, state_network_task, state_event_tx, _state_jsonrpc_tx) =
         if trin_config.networks.iter().any(|val| val == STATE_NETWORK) {
             initialize_state_network(
                 &discovery,
@@ -110,35 +109,11 @@ pub async fn run_trin(
             (None, None, None, None)
         };
 
-    // Initialize json-rpc server
-    let (portal_jsonrpc_tx, portal_jsonrpc_rx) = mpsc::unbounded_channel::<PortalJsonRpcRequest>();
+    // Launch JSON-RPC server
     let jsonrpc_trin_config = trin_config.clone();
-    let (live_server_tx, mut live_server_rx) = tokio::sync::mpsc::channel::<bool>(1);
-    let json_exiter = Arc::new(JsonRpcExiter::new());
-    {
-        let json_exiter_clone = Arc::clone(&json_exiter);
-        tokio::task::spawn_blocking(|| {
-            launch_jsonrpc_server(
-                jsonrpc_trin_config,
-                trusted_provider,
-                portal_jsonrpc_tx,
-                live_server_tx,
-                json_exiter_clone,
-            );
-        });
-    }
-
-    // Spawn main JsonRpc Handler
     let jsonrpc_discovery = Arc::clone(&discovery);
-    let rpc_handler = JsonRpcHandler {
-        discovery: jsonrpc_discovery,
-        portal_jsonrpc_rx,
-        state_jsonrpc_tx,
-        history_jsonrpc_tx,
-        header_oracle: header_oracle.clone(),
-    };
-
-    tokio::spawn(rpc_handler.process_jsonrpc_requests());
+    let rpc_handle =
+        launch_jsonrpc_server(jsonrpc_trin_config, jsonrpc_discovery, history_jsonrpc_tx).await;
 
     if let Some(handler) = state_handler {
         tokio::spawn(handler.handle_client_queries());
@@ -166,8 +141,37 @@ pub async fn run_trin(
         tokio::spawn(async { network.await });
     }
 
-    let _ = live_server_rx.recv().await;
-    live_server_rx.close();
+    Ok(rpc_handle)
+}
 
-    Ok(json_exiter)
+// FIXME: Handle those unwraps in this method
+async fn launch_jsonrpc_server(
+    trin_config: TrinConfig,
+    discv5: Arc<Discovery>,
+    history_handler: Option<mpsc::UnboundedSender<HistoryJsonRpcRequest>>,
+) -> ServerHandle {
+    match trin_config.web3_transport.as_str() {
+        "ipc" => {
+            // Launch jsonrpsee server with http and WS transport
+            let rpc_handle =
+                JsonRpcServer::run_ipc(trin_config.web3_ipc_path, discv5, history_handler.unwrap())
+                    .await
+                    .unwrap();
+            info!("IPC JSON-RPC server launched.");
+            rpc_handle
+        }
+        "http" => {
+            // Launch jsonrpsee server with http and WS transport
+            let rpc_handle = JsonRpcServer::run_http(
+                trin_config.web3_http_address,
+                discv5,
+                history_handler.unwrap(),
+            )
+            .await
+            .unwrap();
+            info!("HTTP JSON-RPC server launched.");
+            rpc_handle
+        }
+        val => panic!("Unsupported web3 transport: {val}"),
+    }
 }

@@ -14,7 +14,7 @@ pub trait OverlayContentKey:
     /// The identifier locates the content in the overlay.
     fn content_id(&self) -> [u8; 32];
     /// Returns the bytes of the content key.
-    fn to_bytes(&self) -> [u8; 33];
+    fn to_bytes(&self) -> Vec<u8>;
 }
 
 /// A content key in the history overlay network.
@@ -29,6 +29,8 @@ pub enum HistoryContentKey {
     BlockReceipts(BlockReceiptsKey),
     /// An epoch header accumulator.
     EpochAccumulator(EpochAccumulatorKey),
+    /// Unknown content key value
+    Unknown(Vec<u8>),
 }
 
 impl Serialize for HistoryContentKey {
@@ -61,6 +63,10 @@ impl Serialize for HistoryContentKey {
                 let selector = "03";
                 serializer.serialize_str(&format!("0x{selector}{hex_bytes}"))
             }
+            HistoryContentKey::Unknown(value) => {
+                let hex_bytes = hex::encode(value.as_ssz_bytes());
+                serializer.serialize_str(&format!("0x{hex_bytes}"))
+            }
         }
     }
 }
@@ -83,7 +89,7 @@ impl<'de> Deserialize<'de> for HistoryContentKey {
 
         match HistoryContentKey::from_ssz_bytes(&ssz_bytes) {
             Ok(content_key) => Ok(content_key),
-            Err(_) => Err(de::Error::custom("Unable to deserialize from ssz bytes!")),
+            Err(_) => Ok(HistoryContentKey::Unknown(ssz_bytes)),
         }
     }
 }
@@ -130,13 +136,11 @@ impl From<HistoryContentKey> for Vec<u8> {
     }
 }
 
-impl TryFrom<Vec<u8>> for HistoryContentKey {
-    type Error = &'static str;
-
-    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+impl From<Vec<u8>> for HistoryContentKey {
+    fn from(value: Vec<u8>) -> Self {
         match HistoryContentKey::from_ssz_bytes(&value) {
-            Ok(key) => Ok(key),
-            Err(_err) => Err("Unable to decode SSZ"),
+            Ok(key) => key,
+            Err(_) => HistoryContentKey::Unknown(value),
         }
     }
 }
@@ -164,6 +168,9 @@ impl fmt::Display for HistoryContentKey {
                     hex_encode_compact(acc.epoch_hash.as_fixed_bytes())
                 )
             }
+            Self::Unknown(value) => {
+                format!("Unknown {{ {} }}", hex_encode_compact(value))
+            }
         };
 
         write!(f, "{s}")
@@ -177,19 +184,29 @@ impl OverlayContentKey for HistoryContentKey {
         sha256.finalize().into()
     }
 
-    fn to_bytes(&self) -> [u8; 33] {
-        let mut bytes = [0u8; 33];
-        let (selector, hash) = match self {
-            HistoryContentKey::BlockHeaderWithProof(k) => (0x00, k.block_hash),
-            HistoryContentKey::BlockBody(k) => (0x01, k.block_hash),
-            HistoryContentKey::BlockReceipts(k) => (0x02, k.block_hash),
-            HistoryContentKey::EpochAccumulator(k) => (0x03, k.epoch_hash.0),
-        };
-        for (i, byte) in hash.into_iter().enumerate() {
-            bytes[i] = byte
+    fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes: Vec<u8> = Vec::new();
+
+        match self {
+            HistoryContentKey::BlockHeaderWithProof(k) => {
+                bytes.push(0x00);
+                bytes.extend_from_slice(&k.block_hash);
+            }
+            HistoryContentKey::BlockBody(k) => {
+                bytes.push(0x01);
+                bytes.extend_from_slice(&k.block_hash);
+            }
+            HistoryContentKey::BlockReceipts(k) => {
+                bytes.push(0x02);
+                bytes.extend_from_slice(&k.block_hash);
+            }
+            HistoryContentKey::EpochAccumulator(k) => {
+                bytes.push(0x03);
+                bytes.extend_from_slice(&k.epoch_hash.0);
+            }
+            HistoryContentKey::Unknown(k) => bytes.extend_from_slice(k),
         }
-        bytes.rotate_right(1);
-        bytes[0] = selector;
+
         bytes
     }
 }
@@ -237,7 +254,7 @@ mod test {
 
         let key = HistoryContentKey::BlockHeaderWithProof(header);
 
-        assert_eq!(key.to_bytes(), expected_content_key.as_ref());
+        assert_eq!(key.to_bytes(), expected_content_key);
         assert_eq!(key.content_id(), expected_content_id);
     }
 
@@ -258,7 +275,7 @@ mod test {
 
         let key = HistoryContentKey::BlockBody(body);
 
-        assert_eq!(key.to_bytes(), expected_content_key.as_ref());
+        assert_eq!(key.to_bytes(), expected_content_key);
         assert_eq!(key.content_id(), expected_content_id);
     }
 
@@ -279,7 +296,7 @@ mod test {
 
         let key = HistoryContentKey::BlockReceipts(receipts);
 
-        assert_eq!(key.to_bytes(), expected_content_key.as_ref());
+        assert_eq!(key.to_bytes(), expected_content_key);
         assert_eq!(key.content_id(), expected_content_id);
     }
 
