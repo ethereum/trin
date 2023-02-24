@@ -1841,7 +1841,7 @@ where
 
         match self.kbuckets.write().update_node_status(&key, state, None) {
             UpdateResult::Failed(reason) => match reason {
-                FailureReason::KeyNonExistant => Err(FailureReason::KeyNonExistant),
+                FailureReason::KeyNonExistent => Err(FailureReason::KeyNonExistent),
                 other => {
                     warn!(
                         protocol = %self.protocol,

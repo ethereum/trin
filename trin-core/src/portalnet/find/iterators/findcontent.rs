@@ -709,7 +709,7 @@ mod tests {
                 // no effect.
                 match closest {
                     FindContentQueryResult::ClosestNodes(closest) => {
-                        assert_eq!(closest, vec![]);
+                        assert!(closest.is_empty());
                     }
                     FindContentQueryResult::Content { .. } => {
                         panic!("Unexpected query result variant")

@@ -1,5 +1,4 @@
 use anyhow::anyhow;
-use std::str::FromStr;
 use std::sync::Arc;
 
 use serde_json::{json, Value};
@@ -19,8 +18,7 @@ use trin_core::{
     utils::bytes::hex_encode,
 };
 
-use discv5::Enr;
-use ethportal_api::types::discv5::Enr as EthEnr;
+use ethportal_api::types::discv5::Enr;
 use ethportal_api::types::portal::{
     AcceptInfo, Distance, FindNodesInfo, NodeInfo, PongInfo, TraceContentInfo,
 };
@@ -135,8 +133,6 @@ impl HistoryRequestHandler {
                     let _ = request.resp.send(response);
                 }
                 HistoryEndpoint::FindContent(enr, content_key) => {
-                    let enr = convert_enr(enr);
-
                     let response = match self
                         .network
                         .overlay
@@ -152,8 +148,6 @@ impl HistoryRequestHandler {
                     let _ = request.resp.send(response);
                 }
                 HistoryEndpoint::FindNodes(enr, distances) => {
-                    let enr = convert_enr(enr);
-
                     let response = match self.network.overlay.send_find_nodes(enr, distances).await
                     {
                         Ok(nodes) => Ok(json!(FindNodesInfo {
@@ -161,8 +155,8 @@ impl HistoryRequestHandler {
                             enrs: nodes
                                 .enrs
                                 .into_iter()
-                                .map(|enr| EthEnr::from_str(&enr.to_base64()).unwrap())
-                                .collect::<Vec<EthEnr>>(),
+                                .map(|enr| enr.into())
+                                .collect::<Vec<Enr>>(),
                         })),
                         Err(msg) => Err(format!("FindNodes request timeout: {msg:?}")),
                     };
@@ -185,8 +179,6 @@ impl HistoryRequestHandler {
                     }
                 }
                 HistoryEndpoint::Offer(enr, content_key, content_value) => {
-                    let enr = convert_enr(enr);
-
                     let response = if let Some(content_value) = content_value {
                         let mut content_item = vec![];
                         content_value.encode(&mut content_item);
@@ -215,7 +207,6 @@ impl HistoryRequestHandler {
                     let _ = request.resp.send(response);
                 }
                 HistoryEndpoint::Ping(enr, _) => {
-                    let enr = convert_enr(enr);
                     let response = match self.network.overlay.send_ping(enr).await {
                         Ok(pong) => Ok(json!(PongInfo {
                             enr_seq: pong.enr_seq as u32,
@@ -283,10 +274,7 @@ impl HistoryRequestHandler {
                         .log2()
                         .map(|distance| {
                             let distance = Distance::from(distance);
-                            NodeInfo {
-                                enr: EthEnr::from_str(&enr.to_base64()).unwrap(),
-                                distance,
-                            }
+                            NodeInfo { enr, distance }
                         }),
                     None => None,
                 }
@@ -304,11 +292,4 @@ impl HistoryRequestHandler {
 // Helper method to convert ethportal-api content keys to trin content keys.
 fn convert_content_key(content_key: &EthHistoryContentKey) -> anyhow::Result<HistoryContentKey> {
     HistoryContentKey::try_from(content_key.as_ssz_bytes()).map_err(|err| anyhow!(err))
-}
-
-// TODO: Remove this helper method when replacing content key and enr type with ethportal-api.
-// Helper method to convert ethportal-api content keys to trin content keys.
-fn convert_enr(enr: EthEnr) -> Enr {
-    let enr = enr.to_base64();
-    Enr::from_str(&enr).unwrap()
 }
