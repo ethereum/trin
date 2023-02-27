@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 // These are just some Trin helper functions
 
 use crate::portalnet::types::content_key::RawContentKey;
@@ -42,10 +41,6 @@ impl UtpMessage {
             }
         }
         Err("Invalid message".to_owned())
-    }
-
-    pub(crate) fn len(self) -> usize {
-        4 + self.payload.len()
     }
 }
 
