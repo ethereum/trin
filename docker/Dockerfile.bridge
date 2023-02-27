@@ -24,6 +24,8 @@ COPY ./rpc ./rpc
 # build for release
 RUN cargo build -p trin -p trin-cli --release
 
+# todo: once bridge is available in trin, build from trin image
+
 # final base
 FROM ubuntu:22.04
 
