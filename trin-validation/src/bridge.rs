@@ -17,7 +17,9 @@ use tracing::{debug, info, warn};
 
 use crate::jsonrpc::endpoints::HistoryEndpoint;
 use crate::jsonrpc::types::{HistoryJsonRpcRequest, JsonRequest, Params};
-use crate::types::accumulator::{EpochAccumulator, MasterAccumulator, EPOCH_SIZE};
+use crate::types::accumulator::{
+    EpochAccumulator, MasterAccumulator, EPOCH_SIZE as EPOCH_SIZE_USIZE,
+};
 use crate::types::block_body::{BlockBody, EncodableHeaderList};
 use crate::types::header::{
     AccumulatorProof, BlockHeaderProof, FullHeader, FullHeaderBatch, Header, HeaderWithProof,
@@ -28,13 +30,14 @@ use crate::types::validation::HeaderOracle;
 use crate::types::validation::MERGE_BLOCK_NUMBER;
 use crate::utils::bytes::{hex_decode, hex_encode};
 use ethportal_api::types::content_key::{
-    BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, HistoryContentKey,
+    BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey, HistoryContentKey,
 };
 use ethportal_api::{ContentItem, HistoryContentItem};
 
 const BATCH_SIZE: u64 = 128;
 const LATEST_BLOCK_POLL_RATE: u64 = 5;
 const BACKFILL_THREAD_COUNT: usize = 8;
+const EPOCH_SIZE: u64 = EPOCH_SIZE_USIZE as u64;
 
 /// Bridge datatype is used to source history / state data from a geth node and offer it to other
 /// nodes in the Portal network. Using bridge mode relies upon a separate provider than the
@@ -45,10 +48,9 @@ const BACKFILL_THREAD_COUNT: usize = 8;
 /// Portal network.
 /// https://github.com/carver/eth-portal
 // todos / possible improvements
-// - offer epoch accumulators if available locally
 // - latest xxx: cli arg to specify backfill of latest xxx blocks from head, then repeat
 // - range xx-xxx: cli arg to specify specific range of blocks to backfill
-// - backfill xx: cli arg to specifcy an epoch index from where to begin backfill
+// - backfill xx: cli arg to specify an epoch index from where to begin backfill
 // - use archive nodes...
 pub struct Bridge {
     pub header_oracle: Arc<RwLock<HeaderOracle>>,
@@ -58,6 +60,7 @@ pub struct Bridge {
 
 impl Bridge {
     pub async fn launch(&self) {
+        info!("Launching bridge mode: {:?}", self.mode);
         match self.mode {
             BridgeMode::Latest => self.launch_latest().await,
             BridgeMode::Backfill => self.launch_backfill().await,
@@ -68,14 +71,15 @@ impl Bridge {
     // Instead we loop on a short interval and fetch the latest blocks not yet served.
     // We only need one thread for this process
     async fn launch_latest(&self) {
-        info!("Launching bridge mode: latest");
-        let mut block_index = get_latest_block().await.unwrap();
+        let mut block_index = get_latest_block().await.expect(
+            "Error launching bridge in latest mode. Unable to get latest block from provider.",
+        );
         let sleep_duration = time::Duration::from_secs(LATEST_BLOCK_POLL_RATE);
         loop {
             let latest_block = match get_latest_block().await {
                 Ok(val) => val,
                 Err(msg) => {
-                    warn!("error getting latest block, skipping iteration: {:?}", msg);
+                    warn!("error getting latest block, skipping iteration: {msg:?}");
                     thread::sleep(sleep_duration);
                     continue;
                 }
@@ -85,11 +89,11 @@ impl Bridge {
                     start: block_index,
                     end: latest_block + 1,
                 };
-                info!("Discovered new blocks to offer: {:?}", blocks_to_serve);
+                info!("Discovered new blocks to offer: {blocks_to_serve:?}");
                 let full_headers = match Bridge::get_headers(&blocks_to_serve).await {
                     Ok(val) => val,
                     Err(msg) => {
-                        warn!("error getting headers: {:?}", msg);
+                        warn!("error getting headers, skipping iteration: {msg:?}");
                         block_index = latest_block + 1;
                         thread::sleep(sleep_duration);
                         continue;
@@ -98,13 +102,17 @@ impl Bridge {
                 // epoch index is 0 here bc it's irrelevant for post-merge headers
                 let mut offer_group = OfferGroup::new(blocks_to_serve, 0);
                 if let Err(msg) = self.offer_headers(&full_headers, &mut offer_group).await {
-                    warn!("error offering blocks: {:?}", msg);
+                    warn!("error offering headers, skipping iteration: {msg:?}");
                     block_index = latest_block + 1;
                     thread::sleep(sleep_duration);
                     continue;
                 };
-                self.serve_bodies(&full_headers, &mut offer_group).await;
-                self.serve_receipts(&full_headers, &mut offer_group).await;
+                if let Err(err) = self.serve_bodies(&full_headers, &mut offer_group).await {
+                    warn!("error offering bodies: {err:?}");
+                };
+                if let Err(err) = self.serve_receipts(&full_headers, &mut offer_group).await {
+                    warn!("error offering receipts: {err:?}");
+                };
                 offer_group.display_stats();
                 block_index = offer_group.range.end;
             }
@@ -113,41 +121,38 @@ impl Bridge {
     }
 
     async fn launch_backfill(&self) {
-        info!("Launching bridge mode: backfill");
         let mut epoch_index = 0;
-        let latest_block = get_latest_block().await.unwrap();
-        let current_epoch = latest_block / EPOCH_SIZE as u64;
+        let latest_block = get_latest_block().await.expect(
+            "Error launching bridge in backfill mode. Unable to get latest block from provider.",
+        );
+        let current_epoch = latest_block / EPOCH_SIZE;
         while epoch_index < current_epoch {
-            let start_block = epoch_index * EPOCH_SIZE as u64;
+            let start = epoch_index * EPOCH_SIZE;
+            let end = start + EPOCH_SIZE;
             // Using epoch_size chunks & epoch boundaries ensures that every
             // "chunk" shares an epoch accumulator avoiding the need to
             // look up the epoch acc on a header by header basis
-            let blocks_to_serve = Range {
-                start: start_block,
-                end: start_block + EPOCH_SIZE as u64,
-            };
+            let blocks_to_serve = Range { start, end };
             let full_headers = match Bridge::get_headers(&blocks_to_serve).await {
                 Ok(val) => val,
                 Err(msg) => {
-                    warn!(
-                        "Error fetching headers in range: {:?} - {:?}",
-                        blocks_to_serve, msg
-                    );
+                    warn!("Error fetching headers in range: {blocks_to_serve:?} - {msg:?}. Skipping iteration.");
                     epoch_index += 1;
                     continue;
                 }
             };
             let mut offer_group = OfferGroup::new(blocks_to_serve.clone(), epoch_index);
             if let Err(msg) = self.offer_headers(&full_headers, &mut offer_group).await {
-                warn!(
-                    "Error offering headers in range: {:?} - {:?}",
-                    blocks_to_serve, msg
-                );
+                warn!("Error offering headers in range: {blocks_to_serve:?} - {msg:?}. Skipping iteration.");
                 epoch_index += 1;
                 continue;
             };
-            self.serve_bodies(&full_headers, &mut offer_group).await;
-            self.serve_receipts(&full_headers, &mut offer_group).await;
+            if let Err(err) = self.serve_bodies(&full_headers, &mut offer_group).await {
+                warn!("error offering bodies: {err:?}");
+            };
+            if let Err(err) = self.serve_receipts(&full_headers, &mut offer_group).await {
+                warn!("error offering receipts: {err:?}");
+            };
             offer_group.display_stats();
             epoch_index += 1;
         }
@@ -177,7 +182,7 @@ impl Bridge {
 
     fn get_header_future(block_range: Range<u64>) -> JoinHandle<anyhow::Result<Vec<FullHeader>>> {
         tokio::spawn(async move {
-            debug!("Fetching headers: {:?}", block_range);
+            debug!("Fetching headers: {block_range:?}");
             let request_batch: Vec<JsonRequest> = block_range
                 .into_iter()
                 .map(|i| {
@@ -212,12 +217,12 @@ impl Bridge {
         full_headers: &Vec<FullHeader>,
         offer_group: &mut OfferGroup,
     ) -> anyhow::Result<()> {
-        let tx = self.history_tx().await;
+        let tx = self.history_tx().await?;
         let epoch_index = offer_group.epoch_index;
         let epoch_acc = self.get_epoch_acc(epoch_index).await?;
         for full_header in full_headers {
             // Fetch HeaderRecord from EpochAccumulator for validation
-            let header_index = full_header.header.number - epoch_index * (EPOCH_SIZE as u64);
+            let header_index = full_header.header.number - epoch_index * EPOCH_SIZE;
             let header_record = &epoch_acc[header_index as usize];
 
             // Validate Header
@@ -263,7 +268,7 @@ impl Bridge {
                 proof: BlockHeaderProof::None(SszNone { value: None }),
             };
             let content_value = content_value.as_ssz_bytes();
-            let tx = self.history_tx().await;
+            let tx = self.history_tx().await?;
             debug!(
                 "Offer: Block #{:?} HeaderWithProof",
                 full_header.header.number
@@ -294,18 +299,24 @@ impl Bridge {
                 );
                 match fs::read(epoch_acc_path) {
                     Ok(val) => Some(
-                        EpochAccumulator::from_ssz_bytes(&val)
-                            .map_err(|err| anyhow!("{:?}", err))?,
+                        EpochAccumulator::from_ssz_bytes(&val).map_err(|err| anyhow!("{err:?}"))?,
                     ),
                     Err(_) => None,
                 }
             }
             None => None,
         };
+        let tx = self.history_tx().await?;
         match local_epoch_acc {
-            Some(val) => Ok(val),
+            Some(val) => {
+                // Offer epoch acc to network if found locally
+                let content_key =
+                    HistoryContentKey::EpochAccumulator(EpochAccumulatorKey { epoch_hash });
+                let _ =
+                    Bridge::offer_content(tx, content_key, hex_encode(&val.as_ssz_bytes())).await;
+                Ok(val)
+            }
             None => {
-                let tx = self.history_tx().await;
                 self.header_oracle
                     .read()
                     .await
@@ -318,9 +329,13 @@ impl Bridge {
 
     /// Fetch batch of BlockBodies from provider & offer them to the network
     /// Spawns the futures in groups of size - BACKFILL_THREAD_COUNT
-    async fn serve_bodies(&self, full_headers: &Vec<FullHeader>, offer_group: &mut OfferGroup) {
+    async fn serve_bodies(
+        &self,
+        full_headers: &Vec<FullHeader>,
+        offer_group: &mut OfferGroup,
+    ) -> anyhow::Result<()> {
         info!("Serving bodies in range: {:?}", offer_group.range);
-        let tx = self.history_tx().await;
+        let tx = self.history_tx().await?;
         let mut header_index = 0;
         while header_index < full_headers.len() {
             let num_of_tasks =
@@ -338,6 +353,7 @@ impl Bridge {
             }
             header_index += num_of_tasks;
         }
+        Ok(())
     }
 
     fn spawn_body_task(
@@ -349,9 +365,13 @@ impl Bridge {
 
     /// Fetch batch of Receipts from provider & offer them to the network
     /// Spawns the futures in groups of size - BACKFILL_THREAD_COUNT
-    async fn serve_receipts(&self, full_headers: &Vec<FullHeader>, offer_group: &mut OfferGroup) {
+    async fn serve_receipts(
+        &self,
+        full_headers: &Vec<FullHeader>,
+        offer_group: &mut OfferGroup,
+    ) -> anyhow::Result<()> {
         info!("Serving receipts in range: {:?}", offer_group.range);
-        let tx = self.history_tx().await;
+        let tx = self.history_tx().await?;
         let mut header_index = 0;
         while header_index < full_headers.len() {
             let num_of_tasks =
@@ -369,6 +389,7 @@ impl Bridge {
             }
             header_index += num_of_tasks;
         }
+        Ok(())
     }
 
     fn spawn_receipt_task(
@@ -516,7 +537,7 @@ impl Bridge {
         content_value: String,
     ) -> anyhow::Result<()> {
         let (resp_tx, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
-        let content_value = hex_decode(&content_value).unwrap();
+        let content_value = hex_decode(&content_value)?;
         let content_item = HistoryContentItem::decode(&content_value)?;
         // is it possible to gossip a content key with wrong content value?
         let endpoint = HistoryEndpoint::Gossip(content_key, content_item);
@@ -536,12 +557,8 @@ impl Bridge {
     }
 
     /// Fetch a cloned tx channel to history subnetwork
-    async fn history_tx(&self) -> UnboundedSender<HistoryJsonRpcRequest> {
-        self.header_oracle
-            .read()
-            .await
-            .history_jsonrpc_tx()
-            .unwrap()
+    async fn history_tx(&self) -> anyhow::Result<UnboundedSender<HistoryJsonRpcRequest>> {
+        self.header_oracle.read().await.history_jsonrpc_tx()
     }
 }
 
@@ -610,13 +627,13 @@ async fn geth_batch_request(obj: Vec<JsonRequest>) -> anyhow::Result<String> {
 
     let result = surf::post("https://geth-lighthouse.mainnet.ethpandaops.io/")
         .body_json(&json!(obj))
-        .unwrap()
+        .map_err(|e| anyhow!("Unable to construct json post request: {:?}", e))?
         .header("Content-Type", "application/json".to_string())
         .header("CF-Access-Client-Id", client_id)
         .header("CF-Access-Client-Secret", client_secret)
         .recv_string()
         .await;
-    result.map_err(|_| anyhow!("xx"))
+    result.map_err(|_| anyhow!("Unable to request batch from geth"))
 }
 
 fn json_request(method: String, params: Params, id: u32) -> JsonRequest {
