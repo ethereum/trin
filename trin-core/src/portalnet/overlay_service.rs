@@ -312,7 +312,7 @@ where
         query_parallelism: usize,
         query_num_results: usize,
         findnodes_query_distances_per_peer: usize,
-    ) -> Result<UnboundedSender<OverlayCommand<TContentKey>>, String>
+    ) -> UnboundedSender<OverlayCommand<TContentKey>>
     where
         <TContentKey as TryFrom<Vec<u8>>>::Error: Send,
     {
@@ -363,7 +363,7 @@ where
             service.start().await;
         });
 
-        Ok(command_tx)
+        command_tx
     }
 
     fn add_bootnodes(&mut self, bootnode_enrs: Vec<Enr>) {
@@ -1302,10 +1302,19 @@ where
         let response_clone = response.clone();
 
         tokio::spawn(async move {
-            let mut conn = rx.await.unwrap();
+            let mut conn = match rx.await {
+                Ok(conn) => conn,
+                Err(err) => {
+                    error!(error = %err, "Error receiving UTP stream from UtpListener");
+                    return;
+                }
+            };
             // Handle STATE packet for SYN
             let mut buf = [0; BUF_SIZE];
-            conn.recv(&mut buf).await.unwrap();
+            if let Err(err) = conn.recv(&mut buf).await {
+                error!(error = %err, "Error receiving STATE packet from UtpListener");
+                return;
+            }
 
             let content_items = match offer {
                 Request::Offer(offer) => {
@@ -2099,6 +2108,7 @@ fn pop_while_ssz_bytes_len_gt(enrs: &mut Vec<SszEnr>, max_size: usize) {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

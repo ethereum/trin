@@ -1,6 +1,7 @@
 //! # ethportal-api
 //!
 //! `ethportal_api` is a collection of Portal Network APIs and types.
+#![warn(clippy::unwrap_used)]
 
 mod discv5;
 mod history;

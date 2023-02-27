@@ -1662,6 +1662,7 @@ impl UtpStream {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use crate::utp::packets::PacketType::State;
     use crate::{

@@ -36,15 +36,16 @@ impl StateNetwork {
         storage_config: PortalStorageConfig,
         portal_config: PortalnetConfig,
         header_oracle: Arc<RwLock<HeaderOracle>>,
-    ) -> Self {
+    ) -> anyhow::Result<Self> {
         // todo: revisit triedb location
-        let db = PortalStorage::setup_rocksdb(NodeId::random()).unwrap();
+        let db = PortalStorage::setup_rocksdb(NodeId::random())?;
         let triedb = TrieDB::new(Arc::new(db));
         let trie = EthTrie::new(Arc::new(triedb));
 
-        let storage = Arc::new(PLRwLock::new(
-            PortalStorage::new(storage_config, ProtocolId::State).unwrap(),
-        ));
+        let storage = Arc::new(PLRwLock::new(PortalStorage::new(
+            storage_config,
+            ProtocolId::State,
+        )?));
         let validator = Arc::new(StateValidator { header_oracle });
         let config = OverlayConfig {
             bootnode_enrs: portal_config.bootnode_enrs.clone(),
@@ -62,9 +63,9 @@ impl StateNetwork {
         )
         .await;
 
-        Self {
+        Ok(Self {
             overlay: Arc::new(overlay),
             trie: Arc::new(trie),
-        }
+        })
     }
 }

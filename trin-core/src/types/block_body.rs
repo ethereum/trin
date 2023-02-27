@@ -410,11 +410,9 @@ pub struct AccessList {
 
 impl Decodable for AccessList {
     fn decode(rlp_obj: &Rlp) -> Result<Self, DecoderError> {
-        let list = rlp_obj
-            .iter()
-            .map(|v| rlp::decode(v.as_raw()).unwrap())
-            .collect();
-        Ok(Self { list })
+        let list: Result<Vec<AccessListItem>, DecoderError> =
+            rlp_obj.iter().map(|v| rlp::decode(v.as_raw())).collect();
+        Ok(Self { list: list? })
     }
 }
 
@@ -432,6 +430,7 @@ pub struct AccessListItem {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use rstest::rstest;

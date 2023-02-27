@@ -85,7 +85,12 @@ impl fmt::Debug for Discovery {
 
 impl Discovery {
     pub fn new(portal_config: PortalnetConfig) -> Result<Self, String> {
-        let listen_all_ips = SocketAddr::new("0.0.0.0".parse().unwrap(), portal_config.listen_port);
+        let listen_all_ips = SocketAddr::new(
+            "0.0.0.0"
+                .parse()
+                .expect("Parsing static socket address to work"),
+            portal_config.listen_port,
+        );
 
         let (ip_addr, ip_port) = if portal_config.no_stun {
             (None, portal_config.listen_port)
@@ -111,7 +116,8 @@ impl Discovery {
         };
 
         let enr_key = match config.private_key {
-            Some(val) => CombinedKey::secp256k1_from_bytes(val.0.clone().as_mut_slice()).unwrap(),
+            Some(val) => CombinedKey::secp256k1_from_bytes(val.0.clone().as_mut_slice())
+                .map_err(|e| format!("When building servers key pair: {e:?}"))?,
             None => CombinedKey::generate_secp256k1(),
         };
 
@@ -126,16 +132,18 @@ impl Discovery {
             let client_info = format!("t {}", TRIN_VERSION);
             // Use "c" as short-hand for "client".
             builder.add_value("c", client_info.as_bytes());
-            builder.build(&enr_key).unwrap()
+            builder
+                .build(&enr_key)
+                .map_err(|e| format!("When adding key to servers ENR: {e:?}"))?
         };
 
         let discv5 = Discv5::new(enr, enr_key, config.discv5_config)
-            .map_err(|e| format!("Failed to create discv5 instance: {}", e))?;
+            .map_err(|e| format!("Failed to create discv5 instance: {e}"))?;
 
         for enr in config.bootnode_enrs {
             discv5
                 .add_enr(enr)
-                .map_err(|e| format!("Failed to add bootnode enr: {}", e))?;
+                .map_err(|e| format!("Failed to add bootnode enr: {e}"))?;
         }
 
         let node_addr_cache = LruCache::new(portal_config.node_addr_cache_capacity);
@@ -160,10 +168,14 @@ impl Discovery {
             .discv5
             .start(self.listen_socket)
             .await
-            .map_err(|e| format!("Failed to start discv5 server: {:?}", e))?;
+            .map_err(|e| format!("Failed to start discv5 server: {e:?}"))?;
         self.started = true;
 
-        let mut event_rx = self.discv5.event_stream().await.unwrap();
+        let mut event_rx = self
+            .discv5
+            .event_stream()
+            .await
+            .map_err(|e| format!("When launching event stream in new discv5: {e:?}"))?;
 
         let (talk_req_tx, talk_req_rx) = mpsc::channel(TALKREQ_CHANNEL_BUFFER);
 

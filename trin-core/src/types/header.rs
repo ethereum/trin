@@ -114,13 +114,14 @@ impl Header {
             .append(&self.timestamp)
             .append(&self.extra_data);
 
+        // naked unwraps ok since we validate that properties exist before unwrapping
+        #[allow(clippy::unwrap_used)]
         if with_seal && self.mix_hash.is_some() && self.nonce.is_some() {
             s.append(&self.mix_hash.unwrap())
                 .append(self.nonce.as_ref().unwrap());
         }
-
-        if self.base_fee_per_gas.is_some() {
-            s.append(&self.base_fee_per_gas.unwrap());
+        if let Some(val) = self.base_fee_per_gas {
+            s.append(&val);
         }
     }
 }
@@ -378,6 +379,7 @@ impl ssz::Encode for SszNone {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use std::fs;

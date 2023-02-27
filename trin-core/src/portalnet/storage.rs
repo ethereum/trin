@@ -206,17 +206,21 @@ pub struct PortalStorageConfig {
 }
 
 impl PortalStorageConfig {
-    pub fn new(storage_capacity_kb: u64, node_id: NodeId, metrics_enabled: bool) -> Self {
-        let db = Arc::new(PortalStorage::setup_rocksdb(node_id).unwrap());
-        let sql_connection_pool = PortalStorage::setup_sql(node_id).unwrap();
-        Self {
+    pub fn new(
+        storage_capacity_kb: u64,
+        node_id: NodeId,
+        metrics_enabled: bool,
+    ) -> anyhow::Result<Self> {
+        let db = Arc::new(PortalStorage::setup_rocksdb(node_id)?);
+        let sql_connection_pool = PortalStorage::setup_sql(node_id)?;
+        Ok(Self {
             storage_capacity_kb,
             node_id,
             distance_fn: DistanceFunction::Xor,
             db,
             sql_connection_pool,
             metrics_enabled,
-        }
+        })
     }
 }
 
@@ -427,8 +431,10 @@ impl PortalStorage {
 
         // Delete furthest data until our data usage is less than capacity.
         while self.capacity_reached()? {
-            // Unwrap because this was set in the block before this loop.
-            let id_to_remove = self.farthest_content_id.clone().unwrap();
+            let id_to_remove = self
+                .farthest_content_id
+                .clone()
+                .expect("farthest_content_id is always set immediately before this block");
 
             debug!(
                 "Capacity reached, deleting farthest: {}",
@@ -436,10 +442,7 @@ impl PortalStorage {
             );
 
             if let Err(err) = self.evict(id_to_remove) {
-                debug!(
-                    "Error writing content ID {:?} to meta db. Reverted: {:?}",
-                    id_to_remove, err
-                );
+                debug!("Error writing content ID {id_to_remove:?} to meta db. Reverted: {err:?}",);
             }
 
             match self.find_farthest_content_id()? {
@@ -511,8 +514,12 @@ impl PortalStorage {
     /// Public method for determining how much actual disk space is being used to store this node's Portal Network data.
     /// Intended for analysis purposes. PortalStorage's capacity decision-making is not based off of this method.
     pub fn get_total_storage_usage_in_bytes_on_disk(&self) -> Result<u64, ContentStoreError> {
-        let storage_usage =
-            self.get_total_size_of_directory_in_bytes(get_data_dir(self.node_id))?;
+        let data_dir: PathBuf = get_data_dir(self.node_id).map_err(|err| {
+            ContentStoreError::Database(format!(
+                "Unable to get data dir when calculating total storage usage: {err:?}"
+            ))
+        })?;
+        let storage_usage = self.get_total_size_of_directory_in_bytes(data_dir)?;
         self.metrics.as_ref().and_then(|metrics| {
             Some(metrics.report_total_storage_usage(storage_usage as f64 / 1000.0))
         });
@@ -577,7 +584,7 @@ impl PortalStorage {
         let sum = match result?.next() {
             Some(total) => total,
             None => {
-                let err = format!("unable to compute sum over content item sizes");
+                let err = format!("Unable to compute sum over content item sizes");
                 return Err(ContentStoreError::Database(err));
             }
         }?
@@ -651,7 +658,7 @@ impl PortalStorage {
                     Ok(path_string) => path_string,
                     Err(err) => {
                         let err = format!(
-                            "unable to convert path {:?} into string {:?}",
+                            "Unable to convert path {:?} into string {:?}",
                             path.as_ref(),
                             err
                         );
@@ -689,7 +696,9 @@ impl PortalStorage {
 
     /// Helper function for opening a RocksDB connection for the radius-constrained db.
     pub fn setup_rocksdb(node_id: NodeId) -> Result<rocksdb::DB, ContentStoreError> {
-        let mut data_path: PathBuf = get_data_dir(node_id);
+        let mut data_path: PathBuf = get_data_dir(node_id).map_err(|err| {
+            ContentStoreError::Database(format!("Unable to get data dir for rocksdb: {err:?}"))
+        })?;
         data_path.push("rocksdb");
         info!(path = %data_path.display(), "Setting up RocksDB");
 
@@ -700,7 +709,9 @@ impl PortalStorage {
 
     /// Helper function for opening a SQLite connection.
     pub fn setup_sql(node_id: NodeId) -> Result<Pool<SqliteConnectionManager>, ContentStoreError> {
-        let mut data_path: PathBuf = get_data_dir(node_id);
+        let mut data_path: PathBuf = get_data_dir(node_id).map_err(|err| {
+            ContentStoreError::Database(format!("Unable to get data dir for sql: {err:?}"))
+        })?;
         data_path.push("trin.sqlite");
         info!(path = %data_path.display(), "Setting up SqliteDB");
 
@@ -795,6 +806,7 @@ struct DataSizeSum {
 struct EntryCount(u64);
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 pub mod test {
 
     use super::*;
@@ -826,11 +838,11 @@ pub mod test {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn test_new() -> Result<(), ContentStoreError> {
-        let temp_dir = setup_temp_dir();
+        let temp_dir = setup_temp_dir().unwrap();
 
         let node_id = NodeId::random();
 
-        let storage_config = PortalStorageConfig::new(CAPACITY, node_id, false);
+        let storage_config = PortalStorageConfig::new(CAPACITY, node_id, false).unwrap();
         let storage = PortalStorage::new(storage_config, ProtocolId::History)?;
 
         // Assert that configs match the storage object's fields
@@ -846,10 +858,10 @@ pub mod test {
     #[serial]
     async fn test_store() {
         fn test_store_random_bytes() -> TestResult {
-            let temp_dir = setup_temp_dir();
+            let temp_dir = setup_temp_dir().unwrap();
 
             let node_id = NodeId::random();
-            let storage_config = PortalStorageConfig::new(CAPACITY, node_id, false);
+            let storage_config = PortalStorageConfig::new(CAPACITY, node_id, false).unwrap();
             let mut storage = PortalStorage::new(storage_config, ProtocolId::History).unwrap();
             let content_key = generate_random_content_key();
             let mut value = [0u8; 32];
@@ -869,10 +881,10 @@ pub mod test {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn test_get_data() -> Result<(), ContentStoreError> {
-        let temp_dir = setup_temp_dir();
+        let temp_dir = setup_temp_dir().unwrap();
 
         let node_id = NodeId::random();
-        let storage_config = PortalStorageConfig::new(CAPACITY, node_id, false);
+        let storage_config = PortalStorageConfig::new(CAPACITY, node_id, false).unwrap();
         let mut storage = PortalStorage::new(storage_config, ProtocolId::History)?;
         let content_key = generate_random_content_key();
         let value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
@@ -890,10 +902,10 @@ pub mod test {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn test_get_total_storage() -> Result<(), ContentStoreError> {
-        let temp_dir = setup_temp_dir();
+        let temp_dir = setup_temp_dir().unwrap();
 
         let node_id = NodeId::random();
-        let storage_config = PortalStorageConfig::new(CAPACITY, node_id, false);
+        let storage_config = PortalStorageConfig::new(CAPACITY, node_id, false).unwrap();
         let mut storage = PortalStorage::new(storage_config, ProtocolId::History)?;
 
         let content_key = generate_random_content_key();
@@ -912,10 +924,10 @@ pub mod test {
     #[test_log::test(tokio::test)]
     #[serial]
     async fn test_find_farthest_empty_db() -> Result<(), ContentStoreError> {
-        let temp_dir = setup_temp_dir();
+        let temp_dir = setup_temp_dir().unwrap();
 
         let node_id = NodeId::random();
-        let storage_config = PortalStorageConfig::new(CAPACITY, node_id, false);
+        let storage_config = PortalStorageConfig::new(CAPACITY, node_id, false).unwrap();
         let storage = PortalStorage::new(storage_config, ProtocolId::History)?;
 
         let result = storage.find_farthest_content_id()?;
@@ -930,11 +942,11 @@ pub mod test {
     #[serial]
     async fn test_find_farthest() {
         fn prop(x: IdentityContentKey, y: IdentityContentKey) -> TestResult {
-            let temp_dir = setup_temp_dir();
+            let temp_dir = setup_temp_dir().unwrap();
 
             let node_id = NodeId::random();
             let val = vec![0x00, 0x01, 0x02, 0x03, 0x04];
-            let storage_config = PortalStorageConfig::new(CAPACITY, node_id, false);
+            let storage_config = PortalStorageConfig::new(CAPACITY, node_id, false).unwrap();
             let mut storage = PortalStorage::new(storage_config, ProtocolId::History).unwrap();
             storage.store(&x, &val).unwrap();
             storage.store(&y, &val).unwrap();

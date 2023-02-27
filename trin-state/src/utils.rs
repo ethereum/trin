@@ -53,11 +53,11 @@ impl ToU256 for BigInt {
 pub fn distance(node_id: U256, content_id: U256) -> Result<U256, String> {
     let node_id_int = BigInt::from_u256(node_id);
     let content_id_int = BigInt::from_u256(content_id);
-    let modulo = BigInt::parse_bytes(&MODULO, 10).unwrap();
-    let mid = BigInt::parse_bytes(&MID, 10).unwrap();
+    let modulo = BigInt::parse_bytes(&MODULO, 10).expect("Parse static MODULO always works");
+    let mid = BigInt::parse_bytes(&MID, 10).expect("Parse static MID always works");
     let negative_mid = mid
         .checked_mul(&BigInt::from_bytes_le(Sign::Minus, &[1u8]))
-        .unwrap();
+        .expect("Static multiplication always works");
 
     let first_phrase = node_id_int - content_id_int + &mid;
     // % returns the remainder, we want to return the modulus
@@ -70,6 +70,7 @@ pub fn distance(node_id: U256, content_id: U256) -> Result<U256, String> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod test {
     use super::*;
     use test_log::test;

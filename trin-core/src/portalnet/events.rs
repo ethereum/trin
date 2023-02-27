@@ -4,7 +4,7 @@ use crate::utp::stream::UtpListenerEvent;
 use discv5::TalkRequest;
 use hex;
 use tokio::sync::mpsc;
-use tracing::warn;
+use tracing::{error, warn};
 
 use std::str::FromStr;
 
@@ -67,19 +67,29 @@ impl PortalnetEvents {
             Ok(protocol) => match protocol {
                 ProtocolId::History => {
                     match &self.history_overlay_sender {
-                        Some(tx) => tx.send(request).unwrap(),
+                        Some(tx) => {
+                            if let Err(err) = tx.send(request) {
+                                error!(
+                                    "Error sending discv5 talk request to history network: {err}"
+                                );
+                            }
+                        }
                         None => warn!("History event handler not initialized!"),
                     };
                 }
                 ProtocolId::State => {
                     match &self.state_overlay_sender {
-                        Some(tx) => tx.send(request).unwrap(),
+                        Some(tx) => {
+                            if let Err(err) = tx.send(request) {
+                                error!("Error sending discv5 talk request to state network: {err}");
+                            }
+                        }
                         None => warn!("State event handler not initialized!"),
                     };
                 }
                 ProtocolId::Utp => {
                     if let Err(err) = self.utp_listener_sender.send(request) {
-                        warn! {"Error sending uTP request to uTP listener: {err}"};
+                        warn!("Error sending uTP request to uTP listener: {err}");
                     }
                 }
                 _ => {
@@ -114,13 +124,21 @@ impl PortalnetEvents {
         match protocol_id {
             ProtocolId::History => {
                 match &self.history_utp_sender {
-                    Some(tx) => tx.send(event).unwrap(),
+                    Some(tx) => {
+                        if let Err(err) = tx.send(event) {
+                            error!("Error sending utp listener event to history network: {err}");
+                        }
+                    }
                     None => warn!("History uTP event handler not initialized!"),
                 };
             }
             ProtocolId::State => {
                 match &self.state_utp_sender {
-                    Some(tx) => tx.send(event).unwrap(),
+                    Some(tx) => {
+                        if let Err(err) = tx.send(event) {
+                            error!("Error sending utp listener event to state network: {err}");
+                        }
+                    }
                     None => warn!("State uTP event handler not initialized!"),
                 };
             }

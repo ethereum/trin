@@ -27,7 +27,10 @@ impl UtpMessage {
 
     pub fn decode(bytes: &[u8]) -> Result<UtpMessage, String> {
         if bytes.len() >= 4 {
-            let len = u32::from_be_bytes(bytes[0..4].try_into().unwrap());
+            let len: Result<[u8; 4], std::array::TryFromSliceError> = bytes[0..4].try_into();
+            let len = u32::from_be_bytes(
+                len.map_err(|e| format!("Unable to parse utp message length: {e:?}"))?,
+            );
             if len + 4 <= bytes.len() as u32 {
                 let mut payload_vec: Vec<u8> = vec![];
                 payload_vec.extend_from_slice(&bytes[4..(len as usize + 4)]);
@@ -65,6 +68,7 @@ pub enum UtpStreamId {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use crate::utp::trin_helpers::UtpMessage;
     use test_log::test;

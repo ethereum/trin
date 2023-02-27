@@ -1,3 +1,5 @@
+#![warn(clippy::unwrap_used)]
+
 use std::{thread, time};
 use tracing::info;
 
@@ -30,8 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         peertest.exit_all_nodes();
     })
-    .await
-    .unwrap();
+    .await?;
 
     Ok(())
 }
