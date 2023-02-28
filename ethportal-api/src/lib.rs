@@ -12,7 +12,8 @@ pub use discv5::{Discv5ApiClient, Discv5ApiServer};
 pub use history::{HistoryNetworkApiClient, HistoryNetworkApiServer};
 pub use types::{
     content_item::{
-        BlockBody, ContentItem, EpochAccumulator, HeaderRecord, HeaderWithProof, HistoryContentItem,
+        BlockBody, ContentItem, EpochAccumulator, HeaderRecord, HeaderWithProof,
+        HistoryContentItem, Receipts,
     },
     content_key::HistoryContentKey,
 };

@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
 use anyhow::anyhow;
-use ethereum_types::{H256, U256};
+use ethereum_types::H256;
 use ethportal_api::types::content_key::EpochAccumulatorKey;
-use ethportal_api::HistoryContentKey;
+use ethportal_api::{EpochAccumulator, Header, HeaderWithProof, HistoryContentKey};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use ssz::Decode;
@@ -16,7 +16,6 @@ use tree_hash_derive::TreeHash;
 use crate::jsonrpc::endpoints::HistoryEndpoint;
 use crate::jsonrpc::types::HistoryJsonRpcRequest;
 use crate::types::{
-    header::{BlockHeaderProof, Header, HeaderWithProof},
     merkle::proof::{verify_merkle_proof, MerkleTree},
     validation::MERGE_BLOCK_NUMBER,
 };
@@ -31,10 +30,6 @@ pub const EPOCH_SIZE: usize = 8192;
 /// SSZ List[Hash256, max_length = MAX_HISTORICAL_EPOCHS]
 /// List of historical epoch accumulator merkle roots preceding current epoch.
 pub type HistoricalEpochRoots = VariableList<tree_hash::Hash256, typenum::U131072>;
-
-/// SSZ List[HeaderRecord, max_length = EPOCH_SIZE]
-/// List of (block_number, block_hash) for each header in the current epoch.
-pub type EpochAccumulator = VariableList<HeaderRecord, typenum::U8192>;
 
 /// SSZ Container
 /// Primary datatype used to maintain record of historical and current epoch.
@@ -78,18 +73,18 @@ impl MasterAccumulator {
         let epoch_acc = self
             .lookup_epoch_acc(epoch_hash, history_jsonrpc_tx)
             .await?;
-        Ok(epoch_acc[rel_index as usize].block_hash)
+        Ok(epoch_acc[rel_index as usize].hash)
     }
 
     pub fn validate_header_with_proof(&self, hwp: &HeaderWithProof) -> anyhow::Result<()> {
         let proof = match &hwp.proof {
-            BlockHeaderProof::AccumulatorProof(val) => {
+            Some(val) => {
                 if hwp.header.number > MERGE_BLOCK_NUMBER {
                     return Err(anyhow!("Invalid proof type found for post-merge header."));
                 }
                 val
             }
-            BlockHeaderProof::None(_) => {
+            None => {
                 if hwp.header.number <= MERGE_BLOCK_NUMBER {
                     return Err(anyhow!("Missing accumulator proof for pre-merge header."));
                 } else {
@@ -103,7 +98,8 @@ impl MasterAccumulator {
         let gen_index = calculate_generalized_index(&hwp.header);
         let epoch_index = self.get_epoch_index_of_header(&hwp.header) as usize;
         let epoch_hash = self.historical_epochs[epoch_index];
-        match verify_merkle_proof(hwp.header.hash(), &proof.proof, 15, gen_index, epoch_hash) {
+        let header_hash = H256::from_slice(&hwp.header.hash_slow().0);
+        match verify_merkle_proof(header_hash, proof, 15, gen_index, epoch_hash) {
             true => Ok(()),
             false => Err(anyhow!(
                 "Merkle proof validation failed for pre-merge header"
@@ -170,7 +166,8 @@ impl MasterAccumulator {
         // Validate header hash matches historical hash from epoch accumulator
         let hr_index = (header.number % EPOCH_SIZE as u64) as usize;
         let header_record = epoch_acc[hr_index];
-        if header_record.block_hash != header.hash() {
+        let header_hash = H256::from_slice(&header.hash_slow().0);
+        if header_record.hash != header_hash {
             return Err(anyhow!(
                 "Block hash doesn't match historical header hash found in epoch acc."
             ));
@@ -184,7 +181,7 @@ impl MasterAccumulator {
         // iterate over every header record in the epoch acc
         for record in epoch_acc.into_iter() {
             // add the block hash as a leaf
-            leaves.push(record.block_hash);
+            leaves.push(record.hash);
             // convert total difficulty to H256
             let mut slice = [0u8; 32];
             record.total_difficulty.to_little_endian(&mut slice);
@@ -203,7 +200,8 @@ impl MasterAccumulator {
             .generate_proof(hr_index, 14)
             .map_err(|err| anyhow!("Unable to generate proof for given index: {err:?}"))?;
         // Validate that the value the proof is for (leaf) is the header hash
-        assert_eq!(leaf, header.hash());
+        let header_hash = H256::from_slice(&header.hash_slow().0);
+        assert_eq!(leaf, header_hash);
 
         // Add the be encoded EPOCH_SIZE to proof to comply with ssz merkleization spec
         // https://github.com/ethereum/consensus-specs/blob/dev/ssz/merkle-proofs.md#ssz-object-to-index
@@ -215,16 +213,6 @@ impl MasterAccumulator {
             .map_err(|_| anyhow!("Invalid proof length."))?;
         Ok(final_proof)
     }
-}
-
-/// Individual record for a historical header.
-/// Block hash and total difficulty are used to validate whether
-/// a header is canonical or not.
-/// Every HeaderRecord is 64bytes.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Decode, Encode, Deserialize, Serialize, TreeHash)]
-pub struct HeaderRecord {
-    pub block_hash: tree_hash::Hash256,
-    pub total_difficulty: U256,
 }
 
 fn calculate_generalized_index(header: &Header) -> usize {
@@ -241,14 +229,15 @@ mod test {
     use std::fs;
     use std::str::FromStr;
 
-    use ethereum_types::{Bloom, H160, H256};
+    use ethereum_types::H256;
     use rstest::*;
     use serde_json::json;
     use ssz::Decode;
 
-    use crate::types::header::{AccumulatorProof, BlockHeaderProof, HeaderWithProof, SszNone};
     use crate::types::validation::DEFAULT_MASTER_ACC_HASH;
     use crate::utils::bytes::hex_encode;
+    use ethportal_api::ContentItem;
+    use reth_primitives::{Bloom as RethBloom, H160 as RethH160, H256 as RethH256, U256};
 
     #[rstest]
     #[case(1_000_001)]
@@ -284,18 +273,17 @@ mod test {
             _ => panic!("Invalid test, content key decoded improperly"),
         }
         let raw_fluffy_hwp = obj.get("value").unwrap().as_str().unwrap();
-        let fluffy_hwp =
-            HeaderWithProof::from_ssz_bytes(&hex_decode(raw_fluffy_hwp).unwrap()).unwrap();
+        let fluffy_hwp = HeaderWithProof::decode(&hex_decode(raw_fluffy_hwp).unwrap()).unwrap();
         let header = get_header(block_number);
         let trin_proof = trin_macc.generate_proof(&header, tx).await.unwrap();
         let fluffy_proof = match fluffy_hwp.proof {
-            BlockHeaderProof::AccumulatorProof(val) => val,
-            _ => panic!("test reached invalid state"),
+            Some(val) => val,
+            None => panic!("test reached invalid state"),
         };
-        assert_eq!(trin_proof, fluffy_proof.proof);
+        assert_eq!(trin_proof, fluffy_proof);
         let hwp = HeaderWithProof {
             header,
-            proof: BlockHeaderProof::AccumulatorProof(AccumulatorProof { proof: trin_proof }),
+            proof: Some(trin_proof),
         };
         trin_macc.validate_header_with_proof(&hwp).unwrap();
     }
@@ -312,7 +300,7 @@ mod test {
         proof.swap(0, 1);
         let hwp = HeaderWithProof {
             header,
-            proof: BlockHeaderProof::AccumulatorProof(AccumulatorProof { proof }),
+            proof: Some(proof),
         };
         assert!(trin_macc
             .validate_header_with_proof(&hwp)
@@ -328,7 +316,7 @@ mod test {
         let header = get_header(1_000_001);
         let hwp = HeaderWithProof {
             header,
-            proof: BlockHeaderProof::None(SszNone::default()),
+            proof: None,
         };
         master_acc.validate_header_with_proof(&hwp).unwrap();
     }
@@ -340,7 +328,7 @@ mod test {
         let future_header = generate_random_header(&future_height);
         let future_hwp = HeaderWithProof {
             header: future_header,
-            proof: BlockHeaderProof::None(SszNone::default()),
+            proof: None,
         };
         master_acc.validate_header_with_proof(&future_hwp).unwrap();
     }
@@ -353,9 +341,7 @@ mod test {
         let future_header = generate_random_header(&future_height);
         let future_hwp = HeaderWithProof {
             header: future_header,
-            proof: BlockHeaderProof::AccumulatorProof(AccumulatorProof {
-                proof: [H256::zero(); 15],
-            }),
+            proof: Some([H256::zero(); 15]),
         };
         master_acc.validate_header_with_proof(&future_hwp).unwrap();
     }
@@ -378,27 +364,28 @@ mod test {
         let json: Value = serde_json::from_str(&file).unwrap();
         let json = json.as_object().unwrap();
         let raw_header = json.get(&number.to_string()).unwrap().as_str().unwrap();
-        rlp::decode(&hex_decode(raw_header).unwrap()).unwrap()
+        Header::decode(&hex_decode(raw_header).unwrap()).unwrap()
     }
 
     fn generate_random_header(height: &u64) -> Header {
         Header {
-            parent_hash: H256::random(),
-            uncles_hash: H256::random(),
-            author: H160::random(),
-            state_root: H256::random(),
-            transactions_root: H256::random(),
-            receipts_root: H256::random(),
-            logs_bloom: Bloom::zero(),
-            difficulty: U256::from_dec_str("1").unwrap(),
+            parent_hash: RethH256::random(),
+            ommers_hash: RethH256::random(),
+            beneficiary: RethH160::random(),
+            state_root: RethH256::random(),
+            transactions_root: RethH256::random(),
+            receipts_root: RethH256::random(),
+            logs_bloom: RethBloom::zero(),
+            difficulty: U256::from_str_radix("1", 10).unwrap(),
             number: *height,
-            gas_limit: U256::from_dec_str("1").unwrap(),
-            gas_used: U256::from_dec_str("1").unwrap(),
+            gas_limit: 1u64,
+            gas_used: 1u64,
             timestamp: 1,
-            extra_data: vec![],
-            mix_hash: None,
-            nonce: None,
+            extra_data: reth_primitives::Bytes::from(vec![0u8]),
+            mix_hash: RethH256::random(),
+            nonce: 0u64,
             base_fee_per_gas: None,
+            withdrawals_root: None,
         }
     }
 

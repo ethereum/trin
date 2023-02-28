@@ -7,15 +7,11 @@ use ssz::Decode;
 use tokio::sync::RwLock;
 use tree_hash::TreeHash;
 
+use ethportal_api::types::content_item::Receipts;
+use ethportal_api::{BlockBody, ContentItem, EpochAccumulator, Header, HeaderWithProof};
 use trin_core::{
     portalnet::types::content_key::HistoryContentKey,
-    types::{
-        accumulator::EpochAccumulator,
-        block_body::BlockBody,
-        header::{Header, HeaderWithProof},
-        receipts::Receipts,
-        validation::{HeaderOracle, Validator},
-    },
+    types::validation::{HeaderOracle, Validator},
 };
 
 pub struct ChainHistoryValidator {
@@ -34,43 +30,44 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
     {
         match content_key {
             HistoryContentKey::BlockHeaderWithProof(_key) => {
-                let header_with_proof =
-                    HeaderWithProof::from_ssz_bytes(content).map_err(|err| {
-                        anyhow!("Header with proof content has invalid encoding: {err:?}")
-                    })?;
+                let header_with_proof = HeaderWithProof::decode(content).map_err(|err| {
+                    anyhow!("Header with proof content has invalid encoding: {err:?}")
+                })?;
                 self.header_oracle
                     .write()
                     .await
                     .validate_header_with_proof(header_with_proof)
             }
             HistoryContentKey::BlockBody(key) => {
-                let block_body = BlockBody::from_ssz_bytes(content)
+                let block_body = BlockBody::decode(content)
                     .map_err(|msg| anyhow!("Block Body content has invalid encoding: {:?}", msg))?;
                 let trusted_header: Header = self
                     .header_oracle
                     .write()
                     .await
                     .get_header_by_hash(H256::from(key.block_hash))?;
-                let actual_uncles_root = block_body.uncles_root()?;
-                if actual_uncles_root != trusted_header.uncles_hash {
+                let actual_uncles_root = block_body.uncles_root();
+                let ommers_hash = H256::from_slice(&trusted_header.ommers_hash.0);
+                if actual_uncles_root != ommers_hash {
                     return Err(anyhow!(
                         "Content validation failed: Invalid uncles root. Found: {:?} - Expected: {:?}",
                         actual_uncles_root,
-                        trusted_header.uncles_hash
+                        ommers_hash
                     ));
                 }
-                let actual_txs_root = block_body.transactions_root()?;
-                if actual_txs_root != trusted_header.transactions_root {
+                let actual_txs_root = block_body.transactions_root();
+                let txs_root = H256::from_slice(&trusted_header.transactions_root.0);
+                if actual_txs_root != txs_root {
                     return Err(anyhow!(
                         "Content validation failed: Invalid transactions root. Found: {:?} - Expected: {:?}",
                         actual_txs_root,
-                        trusted_header.transactions_root
+                        txs_root
                     ));
                 }
                 Ok(())
             }
             HistoryContentKey::BlockReceipts(key) => {
-                let receipts = Receipts::from_ssz_bytes(content).map_err(|msg| {
+                let receipts = Receipts::decode(content).map_err(|msg| {
                     anyhow!("Block Receipts content has invalid encoding: {:?}", msg)
                 })?;
                 let trusted_header: Header = self
@@ -78,19 +75,20 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                     .write()
                     .await
                     .get_header_by_hash(H256::from(key.block_hash))?;
-                let actual_receipts_root = receipts.root()?;
-                if actual_receipts_root != trusted_header.receipts_root {
+                let actual_receipts_root = receipts.root();
+                let receipts_root = H256::from_slice(&trusted_header.receipts_root.0);
+                if actual_receipts_root != receipts_root {
                     return Err(anyhow!(
                         "Content validation failed: Invalid receipts root. Found: {:?} - Expected: {:?}",
                         actual_receipts_root,
-                        trusted_header.receipts_root
+                        receipts_root
                     ));
                 }
                 Ok(())
             }
             HistoryContentKey::EpochAccumulator(key) => {
                 let epoch_acc = EpochAccumulator::from_ssz_bytes(content).map_err(|msg| {
-                    anyhow!("Epoch Accumulator content has invalid encoding: {:?}", msg)
+                    anyhow!("Epoch Accumulator content has invalid encoding: {msg:?}")
                 })?;
 
                 let tree_hash_root = epoch_acc.tree_hash_root();
@@ -127,6 +125,7 @@ mod tests {
     use ssz::Encode;
     use ssz_types::{typenum, VariableList};
 
+    use ethportal_api::types::content_item::HeaderRecord;
     use trin_core::{
         cli::DEFAULT_MASTER_ACC_PATH,
         portalnet::types::content_key::{
@@ -223,11 +222,11 @@ mod tests {
     async fn validate_header() {
         let server = setup_mock_infura_server();
         let hwp_ssz = get_hwp_ssz();
-        let hwp = HeaderWithProof::from_ssz_bytes(&hwp_ssz).expect("error decoding header");
+        let hwp = HeaderWithProof::decode(&hwp_ssz).expect("error decoding header");
         let header_oracle = default_header_oracle(server.url("/get_header"));
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeader {
-            block_hash: hwp.header.hash().0,
+            block_hash: hwp.header.hash_slow().0,
         });
         chain_history_validator
             .validate_content(&content_key, &hwp_ssz)
@@ -240,16 +239,17 @@ mod tests {
     async fn invalidate_header_with_invalid_number() {
         let server = setup_mock_infura_server();
         let hwp_ssz = get_hwp_ssz();
-        let mut header = HeaderWithProof::from_ssz_bytes(&hwp_ssz).expect("error decoding header");
+        let mut header = HeaderWithProof::decode(&hwp_ssz).expect("error decoding header");
 
         // set invalid block height
         header.header.number = 669052;
 
-        let content_value = header.as_ssz_bytes();
+        let mut content_value = vec![];
+        header.encode(&mut content_value);
         let header_oracle = default_header_oracle(server.url("/get_header"));
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeader {
-            block_hash: header.header.hash().0,
+            block_hash: header.header.hash_slow().0,
         });
         chain_history_validator
             .validate_content(&content_key, &content_value)
@@ -262,17 +262,18 @@ mod tests {
     async fn invalidate_header_with_invalid_gaslimit() {
         let server = setup_mock_infura_server();
         let hwp_ssz = get_hwp_ssz();
-        let mut header = HeaderWithProof::from_ssz_bytes(&hwp_ssz).expect("error decoding header");
+        let mut header = HeaderWithProof::decode(&hwp_ssz).expect("error decoding header");
 
         // set invalid block gaslimit
         // valid gaslimit = 3141592
-        header.header.gas_limit = U256::from(3141591);
+        header.header.gas_limit = 3141591;
 
-        let content_value = header.as_ssz_bytes();
+        let mut content_value = vec![];
+        header.encode(&mut content_value);
         let header_oracle = default_header_oracle(server.url("/get_header"));
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeader {
-            block_hash: header.header.hash().0,
+            block_hash: header.header.hash_slow().0,
         });
         chain_history_validator
             .validate_content(&content_key, &content_value)
@@ -306,15 +307,16 @@ mod tests {
 
         let ssz_block_body: Vec<u8> =
             std::fs::read("../trin-core/src/assets/test/trin/block_body_14764013.bin").unwrap();
-        let mut valid_block = BlockBody::from_ssz_bytes(&ssz_block_body).unwrap();
+        let mut valid_block = BlockBody::decode(&ssz_block_body).unwrap();
 
         // construct invalid ssz encoded block body
-        valid_block.txs.truncate(1);
+        valid_block.transactions.truncate(1);
         let invalid_block = BlockBody {
-            txs: valid_block.txs,
+            transactions: valid_block.transactions,
             uncles: valid_block.uncles,
         };
-        let invalid_ssz_block_body = invalid_block.as_ssz_bytes();
+        let mut invalid_ssz_block_body = vec![];
+        invalid_block.encode(&mut invalid_ssz_block_body);
         let invalid_content: VariableList<_, typenum::U16384> =
             VariableList::from(invalid_ssz_block_body);
 
@@ -351,14 +353,13 @@ mod tests {
         let server = setup_mock_infura_server();
         let ssz_receipts: Vec<u8> =
             std::fs::read("../trin-core/src/assets/test/trin/receipts_14764013.bin").unwrap();
-        let mut valid_receipts = Receipts::from_ssz_bytes(&ssz_receipts).unwrap();
+        let mut valid_receipts = Receipts::decode(&ssz_receipts).unwrap();
 
         // construct invalid ssz encoded receipts
-        valid_receipts.receipt_list.truncate(1);
-        let invalid_receipts = Receipts {
-            receipt_list: valid_receipts.receipt_list,
-        };
-        let invalid_ssz_receipts = invalid_receipts.as_ssz_bytes();
+        valid_receipts.0.truncate(1);
+        let invalid_receipts = Receipts(valid_receipts.0);
+        let mut invalid_ssz_receipts = vec![];
+        invalid_receipts.encode(&mut invalid_ssz_receipts);
         let invalid_content: VariableList<_, typenum::U16384> =
             VariableList::from(invalid_ssz_receipts);
 
@@ -371,8 +372,6 @@ mod tests {
             .await
             .unwrap();
     }
-
-    use trin_core::types::accumulator::HeaderRecord;
 
     #[tokio::test]
     async fn validate_epoch_acc() {
@@ -406,7 +405,7 @@ mod tests {
         });
 
         epoch_acc[0] = HeaderRecord {
-            block_hash: H256::random(),
+            hash: H256::random(),
             total_difficulty: U256::from_dec_str("0").unwrap(),
         };
         let invalid_content = epoch_acc.as_ssz_bytes();
@@ -428,7 +427,7 @@ mod tests {
         let chain_history_validator = ChainHistoryValidator { header_oracle };
 
         epoch_acc[0] = HeaderRecord {
-            block_hash: H256::random(),
+            hash: H256::random(),
             total_difficulty: U256::from_dec_str("0").unwrap(),
         };
         let content_key = HistoryContentKey::EpochAccumulator(EpochAccumulatorKey {

@@ -1,10 +1,14 @@
 use ethereum_types::{H256, U256};
+use reth_primitives::proofs::{
+    calculate_ommers_root, calculate_receipt_root, calculate_transaction_root,
+};
 use reth_primitives::{Header, Receipt, TransactionSigned};
 use reth_rlp::{Decodable, Encodable};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use ssz::Decode;
 use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, FixedVector, VariableList};
+use tree_hash_derive::TreeHash;
 
 /// An error decoding a portal network content item.
 #[derive(Clone, Debug)]
@@ -38,9 +42,10 @@ pub trait ContentItem: Sized {
 type SszReceipt = VariableList<u8, typenum::U134217728>;
 type SszReceiptList = VariableList<SszReceipt, typenum::U16384>;
 
-impl ContentItem for Vec<Receipt> {
+impl ContentItem for Receipts {
     fn encode(&self, buf: &mut Vec<u8>) {
         let receipts: Vec<SszReceipt> = self
+            .0
             .iter()
             .map(|receipt| {
                 let mut rlp = bytes::BytesMut::new();
@@ -54,14 +59,11 @@ impl ContentItem for Vec<Receipt> {
 
     fn decode(buf: &[u8]) -> Result<Self, ContentItemDecodeError> {
         let ssz: SszReceiptList = VariableList::from_ssz_bytes(buf)?;
-        let receipts: Result<Self, ContentItemDecodeError> = ssz
+        let receipts: Result<Vec<Receipt>, ContentItemDecodeError> = ssz
             .into_iter()
             .map(|ssz| Decodable::decode(&mut &**ssz).map_err(ContentItemDecodeError::from))
             .collect();
-
-        // clippy complains if we try to return `Ok(receipts?)` directly.
-        let receipts = receipts?;
-
+        let receipts = Self(receipts?);
         Ok(receipts)
     }
 }
@@ -89,6 +91,8 @@ pub struct HeaderWithProof {
     /// An optional epoch accumulator proof for the block header.
     ///
     /// Note: `proof` should only be `None` if `header` corresponds to a post-merge block.
+    ///
+    /// XXX: at some point we will need to support another type of proof
     pub proof: Option<[H256; EPOCH_ACC_PROOF_LEN]>,
 }
 
@@ -131,6 +135,17 @@ impl ContentItem for HeaderWithProof {
     }
 }
 
+/// Receipts
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Receipts(pub Vec<Receipt>);
+
+impl Receipts {
+    pub fn root(&self) -> H256 {
+        let reth_h256 = calculate_receipt_root(self.0.iter());
+        H256::from_slice(&reth_h256[..])
+    }
+}
+
 /// A block body.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BlockBody {
@@ -143,6 +158,18 @@ pub struct BlockBody {
 type SszTransaction = VariableList<u8, typenum::U16777216>;
 type SszTransactionList = VariableList<SszTransaction, typenum::U16384>;
 type SszUncles = VariableList<u8, typenum::U131072>;
+
+impl BlockBody {
+    pub fn uncles_root(&self) -> H256 {
+        let reth_h256 = calculate_ommers_root(self.uncles.iter());
+        H256::from_slice(&reth_h256[..])
+    }
+
+    pub fn transactions_root(&self) -> H256 {
+        let reth_h256 = calculate_transaction_root(self.transactions.iter());
+        H256::from_slice(&reth_h256[..])
+    }
+}
 
 #[derive(Decode, Encode)]
 struct BlockBodySszContainer {
@@ -188,10 +215,10 @@ impl ContentItem for BlockBody {
 }
 
 /// A header element of an epoch accumulator.
-#[derive(Clone, Debug, PartialEq, Eq, Decode, Encode)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Decode, Encode, TreeHash)]
 pub struct HeaderRecord {
     /// The hash of the block.
-    pub hash: H256,
+    pub hash: tree_hash::Hash256,
     /// The cumulative total difficulty from genesis up to and including this block.
     pub total_difficulty: U256,
 }
@@ -214,7 +241,7 @@ impl ContentItem for EpochAccumulator {
 pub enum HistoryContentItem {
     BlockHeaderWithProof(HeaderWithProof),
     BlockBody(BlockBody),
-    Receipts(Vec<Receipt>),
+    Receipts(Receipts),
     EpochAccumulator(EpochAccumulator),
     /// A placeholder for data that could not be interpreted as any of the valid content types.
     Unknown(String),
@@ -295,7 +322,7 @@ impl<'de> Deserialize<'de> for HistoryContentItem {
             return Ok(Self::BlockBody(item));
         }
 
-        if let Ok(item) = <Vec<Receipt> as ContentItem>::decode(&content_bytes) {
+        if let Ok(item) = <Receipts as ContentItem>::decode(&content_bytes) {
             return Ok(Self::Receipts(item));
         }
 
@@ -478,28 +505,28 @@ mod test {
             ..Default::default()
         };
 
-        let receipts = vec![
+        let receipts = Receipts(vec![
             receipt_one.clone(),
             receipt_two.clone(),
             receipt_three.clone(),
-        ];
+        ]);
 
         let mut portal_encoded = Vec::new();
         ContentItem::encode(&receipts, &mut portal_encoded);
-        let portal_decoded: Vec<Receipt> = ContentItem::decode(&portal_encoded).unwrap();
-        assert_eq!(portal_decoded.len(), 3);
-        assert_eq!(portal_decoded[0], receipt_one);
-        assert_eq!(portal_decoded[1], receipt_two);
-        assert_eq!(portal_decoded[2], receipt_three);
+        let portal_decoded: Receipts = ContentItem::decode(&portal_encoded).unwrap();
+        assert_eq!(portal_decoded.0.len(), 3);
+        assert_eq!(portal_decoded.0[0], receipt_one);
+        assert_eq!(portal_decoded.0[1], receipt_two);
+        assert_eq!(portal_decoded.0[2], receipt_three);
 
         let serde_encoded = serde_json::to_string(&HistoryContentItem::Receipts(receipts)).unwrap();
         let serde_decoded: HistoryContentItem = serde_json::from_str(&serde_encoded).unwrap();
 
         if let HistoryContentItem::Receipts(decoded) = serde_decoded {
-            assert_eq!(decoded.len(), 3);
-            assert_eq!(decoded[0], receipt_one);
-            assert_eq!(decoded[1], receipt_two);
-            assert_eq!(decoded[2], receipt_three);
+            assert_eq!(decoded.0.len(), 3);
+            assert_eq!(decoded.0[0], receipt_one);
+            assert_eq!(decoded.0[1], receipt_two);
+            assert_eq!(decoded.0[2], receipt_three);
         } else {
             panic!("incorrect content item");
         }

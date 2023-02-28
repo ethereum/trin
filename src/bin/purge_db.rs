@@ -7,10 +7,9 @@ use structopt::StructOpt;
 use tracing::{info, warn};
 
 use ethportal_api::types::content_item::{
-    BlockBody, ContentItem, EpochAccumulator, HeaderWithProof,
+    BlockBody, ContentItem, EpochAccumulator, HeaderWithProof, Receipts,
 };
 use ethportal_api::types::content_key::HistoryContentKey;
-use ethportal_api::Receipt;
 use trin_core::portalnet::storage::{PortalStorage, PortalStorageConfig};
 use trin_core::portalnet::types::messages::ProtocolId;
 use trin_core::utils::db::get_data_dir;
@@ -92,7 +91,7 @@ fn is_content_valid(content_key: &HistoryContentKey, value: &[u8]) -> bool {
         HistoryContentKey::BlockHeaderWithProof(_) => HeaderWithProof::decode(value).is_ok(),
         HistoryContentKey::BlockBody(_) => BlockBody::decode(value).is_ok(),
         HistoryContentKey::BlockReceipts(_) => {
-            let receipts: Result<Vec<Receipt>, _> = ContentItem::decode(value);
+            let receipts: Result<Receipts, _> = ContentItem::decode(value);
             receipts.is_ok()
         }
         HistoryContentKey::EpochAccumulator(_) => EpochAccumulator::decode(value).is_ok(),

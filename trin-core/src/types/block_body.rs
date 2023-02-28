@@ -1,440 +1,10 @@
-use std::sync::Arc;
-
-use anyhow::anyhow;
-use bytes::Bytes;
-use eth_trie::{EthTrie, MemoryDB, Trie};
-use ethereum_types::{Address, H160, H256, U256, U64};
-use rlp::{Decodable, DecoderError, Encodable, Rlp, RlpStream};
-use rlp_derive::{RlpDecodable, RlpEncodable};
-use serde::{Deserialize, Deserializer};
-use serde_json::{json, Value};
-use sha3::{Digest, Keccak256};
-use ssz_derive::{Decode, Encode};
-use ssz_types::{typenum, VariableList};
-
-use super::{header::Header, receipts::TransactionId};
-use crate::utils::bytes::hex_decode;
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct BlockBody {
-    pub txs: Vec<Transaction>,
-    pub uncles: EncodableHeaderList,
-}
-
-impl BlockBody {
-    pub fn transactions_root(&self) -> anyhow::Result<H256> {
-        let memdb = Arc::new(MemoryDB::new(true));
-        let mut trie = EthTrie::new(memdb);
-
-        // Insert txs into tx tree
-        for (index, tx) in self.txs.iter().enumerate() {
-            let path = rlp::encode(&index).freeze().to_vec();
-            let encoded_tx = tx.encode();
-            trie.insert(&path, &encoded_tx)
-                .map_err(|err| anyhow!("Error calculating transactions root: {err:?}"))?;
-        }
-
-        trie.root_hash()
-            .map_err(|err| anyhow!("Error calculating transactions root: {err:?}"))
-    }
-
-    pub fn uncles_root(&self) -> anyhow::Result<H256> {
-        // generate rlp encoded list of uncles
-        let mut stream = RlpStream::new();
-        stream.append_list(&self.uncles.list);
-        let uncles_rlp = stream.out().freeze();
-
-        // hash rlp uncles
-        let hash = Keccak256::digest(&uncles_rlp);
-        Ok(H256::from_slice(&hash))
-    }
-}
-
-impl TryFrom<EncodedBlockBodyParts> for BlockBody {
-    type Error = DecoderError;
-
-    fn try_from(block_body_parts: EncodedBlockBodyParts) -> Result<Self, Self::Error> {
-        let txs: Vec<Transaction> = block_body_parts
-            .encoded_txs
-            .iter()
-            .map(|bytes| Transaction::decode(bytes))
-            .collect::<Result<Vec<Transaction>, _>>()?;
-
-        // MAX_ENCODED_UNCLES_LENGTH = 131072
-        let uncles: VariableList<u8, typenum::U131072> =
-            VariableList::from(block_body_parts.rlp_uncles);
-        let uncles = rlp::decode(&uncles)?;
-        Ok(Self { txs, uncles })
-    }
-}
-
-impl ssz::Encode for BlockBody {
-    // note: MAX_LENGTH attributes (defined in portal history spec) are not currently enforced
-    fn is_ssz_fixed_len() -> bool {
-        false
-    }
-
-    fn ssz_append(&self, buf: &mut Vec<u8>) {
-        EncodedBlockBodyParts::from(self).ssz_append(buf);
-    }
-
-    fn ssz_bytes_len(&self) -> usize {
-        self.as_ssz_bytes().len()
-    }
-}
-
-impl ssz::Decode for BlockBody {
-    fn is_ssz_fixed_len() -> bool {
-        false
-    }
-
-    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
-        EncodedBlockBodyParts::from_ssz_bytes(bytes)?
-            .try_into()
-            .map_err(|msg: DecoderError| ssz::DecodeError::BytesInvalid(msg.to_string()))
-    }
-}
-
-#[derive(Debug, Decode, Encode)]
-struct EncodedBlockBodyParts {
-    // list of ( binary-encoded txs )
-    encoded_txs: Vec<Vec<u8>>,
-    // ssz encode (rlp encode (list of uncles) )
-    rlp_uncles: Vec<u8>,
-}
-
-impl From<&BlockBody> for EncodedBlockBodyParts {
-    fn from(block_body: &BlockBody) -> Self {
-        let encoded_txs: Vec<Vec<u8>> = block_body
-            .txs
-            .iter()
-            .map(|tx| tx.encode().to_vec())
-            .collect();
-        let rlp_uncles: Vec<u8> = rlp::encode(&block_body.uncles).to_vec();
-        Self {
-            encoded_txs,
-            rlp_uncles,
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct EncodableHeaderList {
-    list: Vec<Header>,
-}
-
-impl Decodable for EncodableHeaderList {
-    fn decode(rlp: &Rlp) -> Result<Self, DecoderError> {
-        let list = rlp
-            .into_iter()
-            .map(|header| rlp::decode(header.as_raw()))
-            .collect::<Result<Vec<Header>, _>>()?;
-        Ok(Self { list })
-    }
-}
-
-impl Encodable for EncodableHeaderList {
-    fn rlp_append(&self, s: &mut RlpStream) {
-        s.append_list(&self.list);
-    }
-}
-
-#[derive(Eq, Debug, Clone, PartialEq)]
-pub enum Transaction {
-    Legacy(LegacyTransaction),
-    AccessList(AccessListTransaction),
-    EIP1559(EIP1559Transaction),
-}
-
-impl Transaction {
-    fn decode(tx: &[u8]) -> Result<Self, DecoderError> {
-        // at least one byte needs to be present
-        if tx.is_empty() {
-            return Err(DecoderError::RlpIncorrectListLen);
-        }
-        let id = TransactionId::try_from(tx[0])
-            .map_err(|_| DecoderError::Custom("Unknown transaction id"))?;
-        match id {
-            TransactionId::EIP1559 => Ok(Self::EIP1559(rlp::decode(&tx[1..])?)),
-            TransactionId::AccessList => Ok(Self::AccessList(rlp::decode(&tx[1..])?)),
-            TransactionId::Legacy => Ok(Self::Legacy(rlp::decode(tx)?)),
-        }
-    }
-
-    fn encode(&self) -> Vec<u8> {
-        let mut stream = RlpStream::new();
-        match self {
-            Self::Legacy(tx) => {
-                tx.rlp_append(&mut stream);
-                stream.out().freeze().to_vec()
-            }
-            Self::AccessList(tx) => {
-                tx.rlp_append(&mut stream);
-                [&[TransactionId::AccessList as u8], stream.as_raw()].concat()
-            }
-            Self::EIP1559(tx) => {
-                tx.rlp_append(&mut stream);
-                [&[TransactionId::EIP1559 as u8], stream.as_raw()].concat()
-            }
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for Transaction {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let mut obj: Value = Deserialize::deserialize(deserializer)?;
-        let tx_id =
-            TransactionId::try_from(obj["type"].clone()).map_err(serde::de::Error::custom)?;
-        // Inject chain id into json response, since it's not included
-        match obj {
-            Value::Object(mut val) => {
-                val.extend([("chain_id".to_string(), json!("0x1"))]);
-                obj = Value::Object(val);
-            }
-            _ => return Err(serde::de::Error::custom("Invalid transaction id")),
-        }
-        match tx_id {
-            TransactionId::Legacy => {
-                let helper =
-                    LegacyTransactionHelper::deserialize(obj).map_err(serde::de::Error::custom)?;
-                Ok(Self::Legacy(helper.into()))
-            }
-            TransactionId::AccessList => {
-                let helper = AccessListTransactionHelper::deserialize(obj)
-                    .map_err(serde::de::Error::custom)?;
-                Ok(Self::AccessList(helper.into()))
-            }
-            TransactionId::EIP1559 => {
-                let helper =
-                    EIP1559TransactionHelper::deserialize(obj).map_err(serde::de::Error::custom)?;
-                Ok(Self::EIP1559(helper.into()))
-            }
-        }
-    }
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Eq, RlpEncodable, RlpDecodable)]
-pub struct LegacyTransaction {
-    pub nonce: U256,
-    pub gas_price: U256,
-    pub gas: U256,
-    pub to: Address,
-    pub value: U256,
-    pub data: Bytes,
-    pub v: U64,
-    pub r: U256,
-    pub s: U256,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct LegacyTransactionHelper {
-    pub nonce: U256,
-    pub gas_price: U256,
-    pub gas: U256,
-    pub to: Option<H160>,
-    pub value: U256,
-    #[serde(rename(deserialize = "input"))]
-    pub data: JsonBytes,
-    pub v: U64,
-    pub r: U256,
-    pub s: U256,
-}
-
-#[allow(clippy::from_over_into)]
-impl Into<LegacyTransaction> for LegacyTransactionHelper {
-    fn into(self) -> LegacyTransaction {
-        LegacyTransaction {
-            nonce: self.nonce,
-            gas_price: self.gas_price,
-            gas: self.gas,
-            // Zero address if none b/c contract creation
-            to: self.to.unwrap_or_default(),
-            value: self.value,
-            data: self.data.0,
-            v: self.v,
-            r: self.r,
-            s: self.s,
-        }
-    }
-}
-
-#[derive(Eq, Debug, Clone, PartialEq, RlpDecodable, RlpEncodable)]
-pub struct AccessListTransaction {
-    pub chain_id: U256,
-    pub nonce: U256,
-    pub gas_price: U256,
-    pub gas_limit: U256,
-    pub to: H160,
-    pub value: U256,
-    pub data: Bytes,
-    pub access_list: AccessList,
-    pub y_parity: U64,
-    pub r: U256,
-    pub s: U256,
-}
-
-#[derive(Eq, Debug, Clone, PartialEq, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct AccessListTransactionHelper {
-    pub chain_id: U256,
-    pub nonce: U256,
-    pub gas_price: U256,
-    #[serde(rename(deserialize = "gas"))]
-    pub gas_limit: U256,
-    pub to: Option<H160>,
-    pub value: U256,
-    #[serde(rename(deserialize = "input"))]
-    pub data: JsonBytes,
-    pub access_list: Vec<AccessListItem>,
-    #[serde(rename(deserialize = "v"))]
-    pub y_parity: U64,
-    pub r: U256,
-    pub s: U256,
-}
-
-#[allow(clippy::from_over_into)]
-impl Into<AccessListTransaction> for AccessListTransactionHelper {
-    fn into(self) -> AccessListTransaction {
-        AccessListTransaction {
-            chain_id: self.chain_id,
-            nonce: self.nonce,
-            gas_price: self.gas_price,
-            gas_limit: self.gas_limit,
-            // Zero address if none b/c contract creation
-            to: self.to.unwrap_or_default(),
-            value: self.value,
-            data: self.data.0,
-            access_list: AccessList {
-                list: self.access_list,
-            },
-            y_parity: self.y_parity,
-            r: self.r,
-            s: self.s,
-        }
-    }
-}
-
-#[derive(Eq, Debug, Clone, PartialEq, RlpDecodable, RlpEncodable)]
-pub struct EIP1559Transaction {
-    pub chain_id: U256,
-    pub nonce: U256,
-    pub max_priority_fee_per_gas: U256,
-    pub max_fee_per_gas: U256,
-    pub gas_limit: U256,
-    pub to: H160,
-    pub value: U256,
-    pub data: Bytes,
-    pub access_list: AccessList,
-    pub y_parity: U64,
-    pub r: U256,
-    pub s: U256,
-}
-
-#[derive(Eq, Debug, Clone, PartialEq, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct EIP1559TransactionHelper {
-    pub chain_id: U256,
-    pub nonce: U256,
-    pub max_priority_fee_per_gas: U256,
-    pub max_fee_per_gas: U256,
-    #[serde(rename(deserialize = "gas"))]
-    pub gas_limit: U256,
-    pub to: H160,
-    pub value: U256,
-    #[serde(rename(deserialize = "input"))]
-    pub data: JsonBytes,
-    pub access_list: Vec<AccessListItem>,
-    #[serde(rename(deserialize = "v"))]
-    pub y_parity: U64,
-    pub r: U256,
-    pub s: U256,
-}
-
-#[allow(clippy::from_over_into)]
-impl Into<EIP1559Transaction> for EIP1559TransactionHelper {
-    fn into(self) -> EIP1559Transaction {
-        EIP1559Transaction {
-            chain_id: self.chain_id,
-            nonce: self.nonce,
-            max_priority_fee_per_gas: self.max_priority_fee_per_gas,
-            max_fee_per_gas: self.max_fee_per_gas,
-            gas_limit: self.gas_limit,
-            to: self.to,
-            value: self.value,
-            data: self.data.0,
-            access_list: AccessList {
-                list: self.access_list,
-            },
-            y_parity: self.y_parity,
-            r: self.r,
-            s: self.s,
-        }
-    }
-}
-
-#[derive(Eq, Debug, Default, Clone, PartialEq, RlpDecodable, RlpEncodable)]
-pub struct JsonBytes(Bytes);
-
-impl<'de> Deserialize<'de> for JsonBytes {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        let bytes = hex_decode(&s).map_err(serde::de::Error::custom)?;
-        Ok(Self(Bytes::copy_from_slice(&bytes)))
-    }
-}
-
-impl From<Bytes> for JsonBytes {
-    fn from(val: Bytes) -> Self {
-        Self(val)
-    }
-}
-
-#[allow(clippy::from_over_into)]
-impl Into<Bytes> for JsonBytes {
-    fn into(self) -> Bytes {
-        self.0
-    }
-}
-
-#[derive(Default, Debug, PartialEq, Eq, Clone)]
-pub struct AccessList {
-    pub list: Vec<AccessListItem>,
-}
-
-impl Decodable for AccessList {
-    fn decode(rlp_obj: &Rlp) -> Result<Self, DecoderError> {
-        let list: Result<Vec<AccessListItem>, DecoderError> =
-            rlp_obj.iter().map(|v| rlp::decode(v.as_raw())).collect();
-        Ok(Self { list: list? })
-    }
-}
-
-impl Encodable for AccessList {
-    fn rlp_append(&self, stream: &mut RlpStream) {
-        stream.append_list(&self.list);
-    }
-}
-
-#[derive(Debug, PartialEq, Clone, Eq, Deserialize, RlpDecodable, RlpEncodable)]
-#[serde(rename_all = "camelCase")]
-pub struct AccessListItem {
-    pub address: H160,
-    pub storage_keys: Vec<H256>,
-}
-
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use super::*;
+    use ethportal_api::{BlockBody, ContentItem, Header, TransactionSigned};
+
+    use reth_rlp::{Decodable, Encodable};
     use rstest::rstest;
-    use ssz::{Decode, Encode};
 
     // tx data from: https://etherscan.io/txs?block=14764013
     #[rstest]
@@ -448,17 +18,13 @@ mod tests {
     #[case(TX17, 1544975)]
     // EIP1559 w/ populated access list
     #[case(TX6, 41942)]
-    fn encode_and_decode_txs(#[case] tx: &str, #[case] expected_nonce: u32) {
+    fn encode_and_decode_txs(#[case] tx: &str, #[case] expected_nonce: u64) {
         let tx_rlp = hex::decode(tx).unwrap();
-        let tx = Transaction::decode(&tx_rlp).expect("error decoding tx");
-        let expected_nonce = U256::from(expected_nonce);
-        match &tx {
-            Transaction::Legacy(tx) => assert_eq!(tx.nonce, expected_nonce),
-            Transaction::AccessList(tx) => assert_eq!(tx.nonce, expected_nonce),
-            Transaction::EIP1559(tx) => assert_eq!(tx.nonce, expected_nonce),
-        }
-        let encoded_tx = tx.encode();
-        assert_eq!(hex::encode(tx_rlp), hex::encode(encoded_tx));
+        let tx = TransactionSigned::decode(&mut tx_rlp.as_slice()).expect("error decoding tx");
+        assert_eq!(tx.nonce(), expected_nonce);
+        let mut encoded_tx = vec![];
+        tx.encode(&mut encoded_tx);
+        assert_eq!(tx_rlp, encoded_tx);
     }
 
     #[test_log::test]
@@ -467,7 +33,7 @@ mod tests {
         let expected_tx_root =
             "18a2978fc62cd1a23e90de920af68c0c3af3330327927cda4c005faccefb5ce7".to_owned();
         assert_eq!(
-            hex::encode(block_body.transactions_root().unwrap()),
+            hex::encode(block_body.transactions_root()),
             expected_tx_root
         );
     }
@@ -477,19 +43,16 @@ mod tests {
         let block_body = get_14764013_block_body();
         let expected_uncles_root =
             "58a694212e0416353a4d3865ccf475496b55af3a3d3b002057000741af973191".to_owned();
-        assert_eq!(
-            hex::encode(block_body.uncles_root().unwrap()),
-            expected_uncles_root
-        );
+        assert_eq!(hex::encode(block_body.uncles_root()), expected_uncles_root);
     }
 
     #[test_log::test]
     fn block_body_roots_invalidates_transactions_root() {
         let mut block_body = get_14764013_block_body();
         // invalid txs
-        block_body.txs.truncate(1);
+        block_body.transactions.truncate(1);
         let invalid_block_body = BlockBody {
-            txs: block_body.txs,
+            transactions: block_body.transactions,
             uncles: block_body.uncles,
         };
 
@@ -497,7 +60,7 @@ mod tests {
             "18a2978fc62cd1a23e90de920af68c0c3af3330327927cda4c005faccefb5ce7".to_owned();
         assert_ne!(
             expected_tx_root,
-            hex::encode(invalid_block_body.transactions_root().unwrap())
+            hex::encode(invalid_block_body.transactions_root())
         );
     }
 
@@ -505,14 +68,9 @@ mod tests {
     fn block_body_roots_invalidates_uncles_root() {
         let mut block_body = get_14764013_block_body();
         // invalid uncles
-        block_body.uncles = EncodableHeaderList {
-            list: vec![
-                block_body.uncles.list[0].clone(),
-                block_body.uncles.list[0].clone(),
-            ],
-        };
+        block_body.uncles = vec![block_body.uncles[0].clone(), block_body.uncles[0].clone()];
         let invalid_block_body = BlockBody {
-            txs: block_body.txs,
+            transactions: block_body.transactions,
             uncles: block_body.uncles,
         };
 
@@ -520,50 +78,50 @@ mod tests {
             "58a694212e0416353a4d3865ccf475496b55af3a3d3b002057000741af973191".to_owned();
         assert_ne!(
             expected_uncles_root,
-            hex::encode(invalid_block_body.uncles_root().unwrap())
+            hex::encode(invalid_block_body.uncles_root())
         );
     }
 
     #[test_log::test]
     fn block_body_ssz_encoding_decoding_round_trip() {
         let block_body = get_14764013_block_body();
-        let encoded = block_body.as_ssz_bytes();
-
+        let mut encoded = vec![];
+        <BlockBody as ContentItem>::encode(&block_body, &mut encoded);
         let expected: Vec<u8> =
             std::fs::read("./src/assets/test/trin/block_body_14764013.bin").unwrap();
-        assert_eq!(hex::encode(&encoded), hex::encode(expected));
-
-        let decoded = BlockBody::from_ssz_bytes(&encoded).unwrap();
+        assert_eq!(encoded, expected);
+        let decoded = <BlockBody as ContentItem>::decode(&encoded).unwrap();
         assert_eq!(block_body, decoded);
     }
 
     fn get_14764013_block_body() -> BlockBody {
-        let txs: Vec<Transaction> = vec![
-            Transaction::decode(&hex::decode(TX1).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX2).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX3).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX4).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX5).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX6).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX7).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX8).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX9).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX10).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX11).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX12).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX13).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX14).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX15).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX16).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX17).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX18).unwrap()).unwrap(),
-            Transaction::decode(&hex::decode(TX19).unwrap()).unwrap(),
+        let transactions: Vec<TransactionSigned> = vec![
+            TransactionSigned::decode(&mut hex::decode(TX1).unwrap().as_slice()).unwrap(),
+            TransactionSigned::decode(&mut hex::decode(TX2).unwrap().as_slice()).unwrap(),
+            TransactionSigned::decode(&mut hex::decode(TX3).unwrap().as_slice()).unwrap(),
+            TransactionSigned::decode(&mut hex::decode(TX4).unwrap().as_slice()).unwrap(),
+            TransactionSigned::decode(&mut hex::decode(TX5).unwrap().as_slice()).unwrap(),
+            TransactionSigned::decode(&mut hex::decode(TX6).unwrap().as_slice()).unwrap(),
+            TransactionSigned::decode(&mut hex::decode(TX7).unwrap().as_slice()).unwrap(),
+            TransactionSigned::decode(&mut hex::decode(TX8).unwrap().as_slice()).unwrap(),
+            TransactionSigned::decode(&mut hex::decode(TX9).unwrap().as_slice()).unwrap(),
+            TransactionSigned::decode(&mut hex::decode(TX10).unwrap().as_slice()).unwrap(),
+            TransactionSigned::decode(&mut hex::decode(TX11).unwrap().as_slice()).unwrap(),
+            TransactionSigned::decode(&mut hex::decode(TX12).unwrap().as_slice()).unwrap(),
+            TransactionSigned::decode(&mut hex::decode(TX13).unwrap().as_slice()).unwrap(),
+            TransactionSigned::decode(&mut hex::decode(TX14).unwrap().as_slice()).unwrap(),
+            TransactionSigned::decode(&mut hex::decode(TX15).unwrap().as_slice()).unwrap(),
+            TransactionSigned::decode(&mut hex::decode(TX16).unwrap().as_slice()).unwrap(),
+            TransactionSigned::decode(&mut hex::decode(TX17).unwrap().as_slice()).unwrap(),
+            TransactionSigned::decode(&mut hex::decode(TX18).unwrap().as_slice()).unwrap(),
+            TransactionSigned::decode(&mut hex::decode(TX19).unwrap().as_slice()).unwrap(),
         ];
         let uncles_rlp = &hex::decode(UNCLE).unwrap();
-        let uncles: Vec<Header> = rlp::decode_list(uncles_rlp);
+        let uncles: Vec<Header> =
+            <Vec<Header> as reth_rlp::Decodable>::decode(&mut uncles_rlp.as_slice()).unwrap();
         BlockBody {
-            txs,
-            uncles: EncodableHeaderList { list: uncles },
+            transactions,
+            uncles,
         }
     }
 

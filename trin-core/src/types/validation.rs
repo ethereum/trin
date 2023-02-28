@@ -7,12 +7,10 @@ use tokio::sync::mpsc;
 use crate::{
     jsonrpc::types::{HistoryJsonRpcRequest, Params},
     portalnet::types::content_key::IdentityContentKey,
-    types::{
-        accumulator::MasterAccumulator,
-        header::{Header, HeaderWithProof},
-    },
+    types::accumulator::MasterAccumulator,
     utils::provider::TrustedProvider,
 };
+use ethportal_api::{Header, HeaderWithProof};
 
 pub const MERGE_BLOCK_NUMBER: u64 = 15_537_393u64;
 pub const DEFAULT_MASTER_ACC_HASH: &str =

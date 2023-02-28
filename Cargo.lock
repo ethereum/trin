@@ -1562,11 +1562,15 @@ dependencies = [
  "rand 0.8.5",
  "reth-primitives",
  "reth-rlp",
+ "rlp 0.5.2",
  "rstest 0.16.0",
  "serde",
  "serde-hex",
  "serde_json",
  "sha2 0.10.6",
+ "sha3 0.9.1",
+ "tree_hash",
+ "tree_hash_derive",
 ]
 
 [[package]]
@@ -5815,6 +5819,8 @@ dependencies = [
  "r2d2",
  "r2d2_sqlite",
  "rand 0.8.5",
+ "reth-primitives",
+ "reth-rlp",
  "rlp 0.5.2",
  "rlp-derive",
  "rocksdb",

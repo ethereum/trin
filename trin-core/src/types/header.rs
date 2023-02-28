@@ -1,187 +1,8 @@
-use ethereum_types::{Bloom, H160, H256, H64, U256};
-use rlp::{Decodable, DecoderError, Encodable, Rlp, RlpStream};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use ethereum_types::H256;
+use ethportal_api::Header;
+use reth_primitives::Transaction;
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
-use ssz::{Encode, SszDecoderBuilder, SszEncoder};
-use ssz_derive::{Decode, Encode};
-
-use crate::portalnet::types::messages::ByteList;
-use crate::types::block_body::Transaction;
-use crate::utils::bytes::{hex_decode, hex_encode};
-
-const LONDON_BLOCK_NUMBER: u64 = 12965000;
-
-/// A block header.
-#[derive(Debug, Clone, Eq, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Header {
-    /// Block parent hash.
-    pub parent_hash: H256,
-    /// Block uncles hash.
-    #[serde(rename(deserialize = "sha3Uncles"))]
-    pub uncles_hash: H256,
-    /// Block author.
-    #[serde(rename(deserialize = "miner"))]
-    pub author: H160,
-    /// Block state root.
-    pub state_root: H256,
-    /// Block transactions root.
-    pub transactions_root: H256,
-    /// Block receipts root.
-    pub receipts_root: H256,
-    /// Block bloom filter.
-    pub logs_bloom: Bloom,
-    /// Block difficulty.
-    pub difficulty: U256,
-    /// Block number.
-    #[serde(deserialize_with = "de_hex_to_u64")]
-    pub number: u64,
-    /// Block gas limit.
-    pub gas_limit: U256,
-    /// Block gas used.
-    pub gas_used: U256,
-    /// Block timestamp.
-    #[serde(deserialize_with = "de_hex_to_u64")]
-    pub timestamp: u64,
-    /// Block extra data.
-    #[serde(serialize_with = "se_hex")]
-    #[serde(deserialize_with = "de_hex_to_vec_u8")]
-    pub extra_data: Vec<u8>,
-    /// Block PoW mix hash.
-    pub mix_hash: Option<H256>,
-    /// Block PoW nonce.
-    pub nonce: Option<H64>,
-    /// Block base fee per gas. Introduced by EIP-1559.
-    pub base_fee_per_gas: Option<U256>,
-}
-
-fn se_hex<S>(value: &[u8], serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    serializer.serialize_str(&hex_encode(value))
-}
-
-fn de_hex_to_vec_u8<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let result: String = Deserialize::deserialize(deserializer)?;
-    hex_decode(&result).map_err(serde::de::Error::custom)
-}
-
-fn de_hex_to_u64<'de, D>(deserializer: D) -> Result<u64, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let result: String = Deserialize::deserialize(deserializer)?;
-    let result = result.trim_start_matches("0x");
-    u64::from_str_radix(result, 16).map_err(serde::de::Error::custom)
-}
-
-// Based on https://github.com/openethereum/openethereum/blob/main/crates/ethcore/types/src/header.rs
-impl Header {
-    /// Returns the Keccak-256 hash of the header.
-    pub fn hash(&self) -> H256 {
-        keccak_hash::keccak(rlp::encode(self))
-    }
-
-    /// Append header to RLP stream `s`, optionally `with_seal`.
-    fn stream_rlp(&self, s: &mut RlpStream, with_seal: bool) {
-        let stream_length_without_seal = if self.base_fee_per_gas.is_some() {
-            14
-        } else {
-            13
-        };
-
-        if with_seal && self.mix_hash.is_some() && self.nonce.is_some() {
-            s.begin_list(stream_length_without_seal + 2);
-        } else {
-            s.begin_list(stream_length_without_seal);
-        }
-
-        s.append(&self.parent_hash)
-            .append(&self.uncles_hash)
-            .append(&self.author)
-            .append(&self.state_root)
-            .append(&self.transactions_root)
-            .append(&self.receipts_root)
-            .append(&self.logs_bloom)
-            .append(&self.difficulty)
-            .append(&self.number)
-            .append(&self.gas_limit)
-            .append(&self.gas_used)
-            .append(&self.timestamp)
-            .append(&self.extra_data);
-
-        // naked unwraps ok since we validate that properties exist before unwrapping
-        #[allow(clippy::unwrap_used)]
-        if with_seal && self.mix_hash.is_some() && self.nonce.is_some() {
-            s.append(&self.mix_hash.unwrap())
-                .append(self.nonce.as_ref().unwrap());
-        }
-        if let Some(val) = self.base_fee_per_gas {
-            s.append(&val);
-        }
-    }
-}
-
-impl Decodable for Header {
-    /// Attempt to decode a header from RLP bytes.
-    fn decode(rlp: &Rlp) -> Result<Self, DecoderError> {
-        let mut header = Header {
-            parent_hash: rlp.val_at(0)?,
-            uncles_hash: rlp.val_at(1)?,
-            author: rlp.val_at(2)?,
-            state_root: rlp.val_at(3)?,
-            transactions_root: rlp.val_at(4)?,
-            receipts_root: rlp.val_at(5)?,
-            logs_bloom: rlp.val_at(6)?,
-            difficulty: rlp.val_at(7)?,
-            number: rlp.val_at(8)?,
-            gas_limit: rlp.val_at(9)?,
-            gas_used: rlp.val_at(10)?,
-            timestamp: rlp.val_at(11)?,
-            extra_data: rlp.val_at(12)?,
-            mix_hash: Some(rlp.val_at(13)?),
-            nonce: Some(rlp.val_at(14)?),
-            base_fee_per_gas: None,
-        };
-
-        if header.number >= LONDON_BLOCK_NUMBER {
-            header.base_fee_per_gas = Some(rlp.val_at(15)?);
-        }
-
-        Ok(header)
-    }
-}
-
-impl Encodable for Header {
-    fn rlp_append(&self, s: &mut RlpStream) {
-        self.stream_rlp(s, true);
-    }
-}
-
-impl PartialEq for Header {
-    fn eq(&self, other: &Self) -> bool {
-        self.parent_hash == other.parent_hash
-            && self.uncles_hash == other.uncles_hash
-            && self.author == other.author
-            && self.state_root == other.state_root
-            && self.transactions_root == other.transactions_root
-            && self.receipts_root == other.receipts_root
-            && self.logs_bloom == other.logs_bloom
-            && self.difficulty == other.difficulty
-            && self.number == other.number
-            && self.gas_limit == other.gas_limit
-            && self.gas_used == other.gas_used
-            && self.timestamp == other.timestamp
-            && self.extra_data == other.extra_data
-            && self.mix_hash == other.mix_hash
-            && self.nonce == other.nonce
-            && self.base_fee_per_gas == other.base_fee_per_gas
-    }
-}
 
 /// Datatype for use in bridge functionality. The purpose is a single datatype that can be created
 /// from a header and contains all the information necessary to build history network content
@@ -236,160 +57,16 @@ impl<'de> Deserialize<'de> for TxHashes {
     }
 }
 
-/// A block header with accumulator proof.
-/// Type definition:
-/// https://github.com/status-im/nimbus-eth1/blob/master/fluffy/network/history/history_content.nim#L136
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct HeaderWithProof {
-    pub header: Header,
-    pub proof: BlockHeaderProof,
-}
-
-impl ssz::Encode for HeaderWithProof {
-    fn is_ssz_fixed_len() -> bool {
-        false
-    }
-
-    fn ssz_append(&self, buf: &mut Vec<u8>) {
-        let header = rlp::encode(&self.header).to_vec();
-        let header: ByteList = ByteList::from(header);
-        let offset =
-            <ByteList as Encode>::ssz_fixed_len() + <AccumulatorProof as Encode>::ssz_fixed_len();
-        let mut encoder = SszEncoder::container(buf, offset);
-        encoder.append(&header);
-        encoder.append(&self.proof);
-        encoder.finalize();
-    }
-
-    fn ssz_bytes_len(&self) -> usize {
-        let header = rlp::encode(&self.header).to_vec();
-        let header: ByteList = ByteList::from(header);
-        header.len() + self.proof.ssz_bytes_len()
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Decode, Encode)]
-#[ssz(enum_behaviour = "union")]
-// Ignore clippy here, since "box"-ing the accumulator proof breaks the Decode trait
-#[allow(clippy::large_enum_variant)]
-pub enum BlockHeaderProof {
-    None(SszNone),
-    AccumulatorProof(AccumulatorProof),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct AccumulatorProof {
-    pub proof: [H256; 15],
-}
-
-impl ssz::Decode for HeaderWithProof {
-    fn is_ssz_fixed_len() -> bool {
-        false
-    }
-
-    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
-        let mut builder = SszDecoderBuilder::new(bytes);
-
-        builder.register_type::<ByteList>()?;
-        builder.register_type::<BlockHeaderProof>()?;
-
-        let mut decoder = builder.build()?;
-
-        let header_rlp: Vec<u8> = decoder.decode_next()?;
-        let proof = decoder.decode_next()?;
-        let header: Header = rlp::decode(&header_rlp).map_err(|_| {
-            ssz::DecodeError::BytesInvalid("Unable to decode bytes into header.".to_string())
-        })?;
-
-        Ok(Self { header, proof })
-    }
-}
-
-impl ssz::Decode for AccumulatorProof {
-    fn is_ssz_fixed_len() -> bool {
-        true
-    }
-
-    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
-        let vec: Vec<[u8; 32]> = Vec::from_ssz_bytes(bytes)?;
-        let mut proof: [H256; 15] = [H256::zero(); 15];
-        let raw_proof: [[u8; 32]; 15] = vec
-            .try_into()
-            .map_err(|_| ssz::DecodeError::BytesInvalid("Invalid proof length".to_string()))?;
-        for (idx, val) in raw_proof.iter().enumerate() {
-            proof[idx] = H256::from_slice(val);
-        }
-        Ok(Self { proof })
-    }
-}
-
-impl ssz::Encode for AccumulatorProof {
-    fn is_ssz_fixed_len() -> bool {
-        true
-    }
-
-    fn ssz_append(&self, buf: &mut Vec<u8>) {
-        let offset = self.ssz_bytes_len();
-        let mut encoder = SszEncoder::container(buf, offset);
-
-        for proof in self.proof {
-            encoder.append(&proof);
-        }
-        encoder.finalize();
-    }
-
-    fn ssz_bytes_len(&self) -> usize {
-        <H256 as Encode>::ssz_fixed_len() * 15
-    }
-}
-
-/// Struct to represent encodable/decodable None value for an SSZ enum
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct SszNone {
-    // In rust, None is a variant not a type,
-    // so we must use Option here to represent a None value
-    value: Option<()>,
-}
-
-impl ssz::Decode for SszNone {
-    fn is_ssz_fixed_len() -> bool {
-        true
-    }
-
-    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
-        match bytes.len() {
-            0 => Ok(Self { value: None }),
-            _ => Err(ssz::DecodeError::BytesInvalid(
-                "Expected None value to be empty, found bytes.".to_string(),
-            )),
-        }
-    }
-}
-
-impl ssz::Encode for SszNone {
-    fn is_ssz_fixed_len() -> bool {
-        true
-    }
-
-    fn ssz_append(&self, _buf: &mut Vec<u8>) {}
-
-    fn ssz_bytes_len(&self) -> usize {
-        0
-    }
-}
-
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use std::fs;
 
-    use hex;
+    use reth_rlp::{Decodable, Encodable};
     use serde_json::{json, Value};
-    use ssz::Decode;
     use test_log::test;
 
-    use crate::utils::bytes::hex_decode;
+    use ethportal_api::Header;
 
     #[test]
     fn decode_and_encode_header() {
@@ -398,10 +75,10 @@ mod tests {
         // https://www.dropbox.com/s/y5n36ztppltgs7x/mainnetMM.zip?dl=0
         let header_rlp = hex::decode("f90211a0d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d493479405a56e2d52c817161883f50c441c3228cfe54d9fa0d67e4d450343046425ae4271474353857ab860dbc0a1dde64b41b5cd3a532bf3a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421b90100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008503ff80000001821388808455ba422499476574682f76312e302e302f6c696e75782f676f312e342e32a0969b900de27b6ac6a67742365dd65f55a0526c41fd18e1b16f1a1215c2e66f5988539bd4979fef1ec4").unwrap();
 
-        let header: Header = rlp::decode(&header_rlp).expect("error decoding header");
+        let header: Header = <Header as Decodable>::decode(&mut header_rlp.as_slice()).unwrap();
         assert_eq!(header.number, 1);
         assert_eq!(
-            header.hash(),
+            H256::from_slice(&header.hash_slow().0),
             H256::from_slice(
                 // https://etherscan.io/block/1
                 &hex::decode("88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6")
@@ -409,7 +86,8 @@ mod tests {
             )
         );
 
-        let encoded_header = rlp::encode(&header);
+        let mut encoded_header = vec![];
+        Encodable::encode(&header, &mut encoded_header);
         assert_eq!(header_rlp, encoded_header);
     }
 
@@ -418,18 +96,19 @@ mod tests {
         // RLP encoded block header #14037611
         let header_rlp = hex::decode("f90214a02320c9ca606618919c2a4cf5c6012cfac99399446c60a07f084334dea25f69eca01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794ea674fdde714fd979de3edf0f56aa9716b898ec8a0604a0ab7fe0d434943fbf2c525c4086818b8305349d91d6f4b205aca0759a2b8a0fdfe28e250fb15f7cb360d36ebb7dafa6da4f74543ce593baa96c27891ccac83a0cb9f9e60fb971068b76a8dece4202dde6b4075ebd90e7b2cd21c7fd8e121bba1b9010082e01d13f40116b1e1a0244090289b6920c51418685a0855031b988aef1b494313054c4002584928380267bc11cec18b0b30c456ca30651d9b06c931ea78aa0c40849859c7e0432df944341b489322b0450ce12026cafa1ba590f20af8051024fb8722a43610800381a531aa92042dd02448b1549052d6f06e4005b1000e063035c0220402a09c0124daab9028836209c446240d652c927bc7e4004b849256db5ba8d08b4a2321fd1e25c4d1dc480d18465d8600a41e864001cae44f38609d1c7414a8d62b5869d5a8001180d87228d788e852119c8a03df162471a317832622153da12fc21d828710062c7103534eb119714280201341ce6889ae926e025067872b68048d94e1ed83d6326b8401caa84183b062808461e859a88c617369612d65617374322d32a03472320df4ea70d29b89afdf195c3aa2289560a453957eea5058b57b80b908bf88d6450793e6dcec1c8532ff3f048d").unwrap();
 
-        let header: Header = rlp::decode(&header_rlp).unwrap();
+        let header: Header = <Header as Decodable>::decode(&mut header_rlp.as_slice()).unwrap();
 
         assert_eq!(header.number, 14037611);
         assert_eq!(
-            header.hash(),
+            H256::from_slice(&header.hash_slow().0),
             H256::from_slice(
                 // https://etherscan.io/block/14037611
                 &hex::decode("a8227474afb7372058aceb724e44fd32bcebf3d39bc2e5e00dcdda2e442eebde")
                     .unwrap()
             )
         );
-        let encoded_header = rlp::encode(&header);
+        let mut encoded_header = vec![];
+        Encodable::encode(&header, &mut encoded_header);
         assert_eq!(header_rlp, encoded_header);
     }
 
@@ -466,24 +145,9 @@ mod tests {
             }
         });
         let header: Header = serde_json::from_value(val["result"].clone()).unwrap();
-        assert_eq!(header.difficulty, U256::from(3371913793060314u64));
+        let diff: u64 = header.difficulty.try_into().unwrap();
+        assert_eq!(diff, 3371913793060314u64);
         assert_eq!(header.base_fee_per_gas, None);
-    }
-
-    #[test]
-    fn decode_encode_header_with_proofs() {
-        let file = fs::read_to_string("./src/assets/test/fluffy/header_with_proofs.json").unwrap();
-        let json: Value = serde_json::from_str(&file).unwrap();
-        let hwps = json.as_object().unwrap();
-        for (block_number, obj) in hwps {
-            let _content_key = obj.get("content_key").unwrap();
-            let block_number: u64 = block_number.parse().unwrap();
-            let proof = obj.get("value").unwrap().as_str().unwrap();
-            let hwp = HeaderWithProof::from_ssz_bytes(&hex_decode(proof).unwrap()).unwrap();
-            assert_eq!(block_number, hwp.header.number);
-            let encoded = hex_encode(hwp.as_ssz_bytes());
-            assert_eq!(encoded, proof);
-        }
     }
 
     #[test]
