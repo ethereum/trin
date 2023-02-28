@@ -55,7 +55,13 @@ mod test {
         .await;
         peertest::jsonrpc::test_jsonrpc_endpoints_over_ipc(peertest_config.clone(), &peertest)
             .await;
-        peertest::scenarios::offer_accept::test_offer_accept(peertest_config.clone(), &peertest);
+        peertest::scenarios::offer_accept::test_unpopulated_offer(
+            peertest_config.clone(),
+            &peertest,
+        )
+        .await;
+        peertest::scenarios::offer_accept::test_populated_offer(peertest_config.clone(), &peertest)
+            .await;
         peertest::scenarios::find::test_trace_recursive_find_content(
             peertest_config.clone(),
             &peertest,

@@ -123,7 +123,7 @@ impl MasterAccumulator {
             endpoint,
             resp: resp_tx,
         };
-        history_jsonrpc_tx.send(request).unwrap();
+        history_jsonrpc_tx.send(request)?;
 
         let epoch_acc_ssz = match resp_rx.recv().await {
             Some(val) => {
@@ -235,6 +235,7 @@ fn calculate_generalized_index(header: &Header) -> usize {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod test {
     use super::*;
     use std::fs;

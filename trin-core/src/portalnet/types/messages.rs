@@ -615,7 +615,9 @@ impl ssz::Decode for SszEnr {
 
     fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
         let string = base64::encode_config(&bytes, base64::URL_SAFE);
-        Ok(SszEnr(Enr::from_str(&string).unwrap()))
+        Ok(SszEnr(
+            Enr::from_str(&string).map_err(|e| DecodeError::BytesInvalid(e))?,
+        ))
     }
 }
 
@@ -645,6 +647,7 @@ impl FromStr for HexData {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod test {
     use super::*;
     use test_log::test;

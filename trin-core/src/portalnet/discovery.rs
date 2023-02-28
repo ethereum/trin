@@ -21,7 +21,7 @@ use ethportal_api::types::discv5::{Enr as EthportalEnr, NodeId as EthportalNodeI
 use std::str::FromStr;
 use std::{
     convert::TryFrom,
-    fmt,
+    fmt, io,
     net::{IpAddr, SocketAddr},
     sync::Arc,
 };
@@ -87,7 +87,12 @@ impl fmt::Debug for Discovery {
 
 impl Discovery {
     pub fn new(portal_config: PortalnetConfig) -> Result<Self, String> {
-        let listen_all_ips = SocketAddr::new("0.0.0.0".parse().unwrap(), portal_config.listen_port);
+        let listen_all_ips = SocketAddr::new(
+            "0.0.0.0"
+                .parse()
+                .expect("Parsing static socket address to work"),
+            portal_config.listen_port,
+        );
 
         let (ip_addr, ip_port) = if portal_config.no_stun {
             (None, portal_config.listen_port)
@@ -113,7 +118,8 @@ impl Discovery {
         };
 
         let enr_key = match config.private_key {
-            Some(val) => CombinedKey::secp256k1_from_bytes(val.0.clone().as_mut_slice()).unwrap(),
+            Some(val) => CombinedKey::secp256k1_from_bytes(val.0.clone().as_mut_slice())
+                .map_err(|e| format!("When building servers key pair: {e:?}"))?,
             None => CombinedKey::generate_secp256k1(),
         };
 
@@ -128,16 +134,18 @@ impl Discovery {
             let client_info = format!("t {}", TRIN_VERSION);
             // Use "c" as short-hand for "client".
             builder.add_value("c", client_info.as_bytes());
-            builder.build(&enr_key).unwrap()
+            builder
+                .build(&enr_key)
+                .map_err(|e| format!("When adding key to servers ENR: {e:?}"))?
         };
 
         let discv5 = Discv5::new(enr, enr_key, config.discv5_config)
-            .map_err(|e| format!("Failed to create discv5 instance: {}", e))?;
+            .map_err(|e| format!("Failed to create discv5 instance: {e}"))?;
 
         for enr in config.bootnode_enrs {
             discv5
                 .add_enr(enr)
-                .map_err(|e| format!("Failed to add bootnode enr: {}", e))?;
+                .map_err(|e| format!("Failed to add bootnode enr: {e}"))?;
         }
 
         let node_addr_cache = LruCache::new(portal_config.node_addr_cache_capacity);
@@ -162,10 +170,14 @@ impl Discovery {
             .discv5
             .start(self.listen_socket)
             .await
-            .map_err(|e| format!("Failed to start discv5 server: {:?}", e))?;
+            .map_err(|e| format!("Failed to start discv5 server: {e:?}"))?;
         self.started = true;
 
-        let mut event_rx = self.discv5.event_stream().await.unwrap();
+        let mut event_rx = self
+            .discv5
+            .event_stream()
+            .await
+            .map_err(|e| format!("When launching event stream in new discv5: {e:?}"))?;
 
         let (talk_req_tx, talk_req_rx) = mpsc::channel(TALKREQ_CHANNEL_BUFFER);
 
@@ -315,7 +327,7 @@ impl utp::cid::ConnectionPeer for UtpEnr {}
 
 #[async_trait]
 impl utp::udp::AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
-    async fn send_to(&self, buf: &[u8], target: &UtpEnr) -> std::io::Result<usize> {
+    async fn send_to(&self, buf: &[u8], target: &UtpEnr) -> io::Result<usize> {
         match self
             .discv5
             .send_talk_req(target.0.clone(), ProtocolId::Utp, buf.to_vec())
@@ -323,18 +335,21 @@ impl utp::udp::AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
         {
             // We drop the talk response because it is ignored in the uTP protocol.
             Ok(..) => Ok(buf.len()),
-            Err(err) => Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("{err}"),
-            )),
+            Err(err) => Err(io::Error::new(io::ErrorKind::Other, format!("{err}"))),
         }
     }
 
-    async fn recv_from(&self, buf: &mut [u8]) -> std::io::Result<(usize, UtpEnr)> {
+    async fn recv_from(&self, buf: &mut [u8]) -> io::Result<(usize, UtpEnr)> {
         let mut talk_reqs = self.talk_reqs.write().await;
         match talk_reqs.recv().await {
             Some(talk_req) => {
-                let node_addr = self.discv5.cached_node_addr(talk_req.node_id()).unwrap();
+                let node_addr =
+                    self.discv5
+                        .cached_node_addr(talk_req.node_id())
+                        .ok_or(io::Error::new(
+                            io::ErrorKind::Other,
+                            "ENR not found for talk req destination",
+                        ))?;
                 let enr = UtpEnr(node_addr.enr);
                 let packet = talk_req.body();
                 let n = std::cmp::min(buf.len(), packet.len());
@@ -347,7 +362,7 @@ impl utp::udp::AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
 
                 Ok((n, enr))
             }
-            None => Err(std::io::Error::from(std::io::ErrorKind::NotConnected)),
+            None => Err(io::Error::from(io::ErrorKind::NotConnected)),
         }
     }
 }

@@ -33,15 +33,16 @@ impl HistoryNetwork {
         storage_config: PortalStorageConfig,
         portal_config: PortalnetConfig,
         header_oracle: Arc<RwLock<HeaderOracle>>,
-    ) -> Self {
+    ) -> anyhow::Result<Self> {
         let config = OverlayConfig {
             bootnode_enrs: portal_config.bootnode_enrs.clone(),
             enable_metrics: portal_config.enable_metrics,
             ..Default::default()
         };
-        let storage = Arc::new(PLRwLock::new(
-            PortalStorage::new(storage_config, ProtocolId::History).unwrap(),
-        ));
+        let storage = Arc::new(PLRwLock::new(PortalStorage::new(
+            storage_config,
+            ProtocolId::History,
+        )?));
         let validator = Arc::new(ChainHistoryValidator { header_oracle });
         let overlay = OverlayProtocol::new(
             config,
@@ -54,8 +55,8 @@ impl HistoryNetwork {
         )
         .await;
 
-        Self {
+        Ok(Self {
             overlay: Arc::new(overlay),
-        }
+        })
     }
 }

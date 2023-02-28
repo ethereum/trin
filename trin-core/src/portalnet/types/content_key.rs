@@ -380,6 +380,7 @@ impl OverlayContentKey for StateContentKey {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod test {
     use super::*;
 

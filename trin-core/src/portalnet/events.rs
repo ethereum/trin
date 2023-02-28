@@ -3,7 +3,7 @@ use super::types::messages::ProtocolId;
 use discv5::TalkRequest;
 use hex;
 use tokio::sync::mpsc;
-use tracing::warn;
+use tracing::{error, warn};
 
 use std::str::FromStr;
 
@@ -53,13 +53,23 @@ impl PortalnetEvents {
             Ok(protocol) => match protocol {
                 ProtocolId::History => {
                     match &self.history_overlay_sender {
-                        Some(tx) => tx.send(request).unwrap(),
+                        Some(tx) => {
+                            if let Err(err) = tx.send(request) {
+                                error!(
+                                    "Error sending discv5 talk request to history network: {err}"
+                                );
+                            }
+                        }
                         None => warn!("History event handler not initialized!"),
                     };
                 }
                 ProtocolId::State => {
                     match &self.state_overlay_sender {
-                        Some(tx) => tx.send(request).unwrap(),
+                        Some(tx) => {
+                            if let Err(err) = tx.send(request) {
+                                error!("Error sending discv5 talk request to state network: {err}");
+                            }
+                        }
                         None => warn!("State event handler not initialized!"),
                     };
                 }

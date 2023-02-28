@@ -1,3 +1,4 @@
+#![warn(clippy::unwrap_used)]
 #![allow(dead_code)]
 
 mod discv5;

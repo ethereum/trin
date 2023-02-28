@@ -1163,15 +1163,15 @@ dependencies = [
 
 [[package]]
 name = "discv5"
-version = "0.1.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d767c0e59b3e8d65222d95df723cc2ea1da92bb0f27c563607e6f0bde064f255"
+checksum = "cd6a75aea509976bc055eba0c57c53dfcb468729710b26eb039eb4400431cfad"
 dependencies = [
  "aes",
  "aes-gcm",
  "arrayvec",
  "delay_map",
- "enr 0.6.2",
+ "enr",
  "fnv",
  "futures 0.3.26",
  "hashlink",
@@ -1271,26 +1271,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9852635589dc9f9ea1b6fe9f05b50ef208c85c834a562f0c6abb1c475736ec2b"
 dependencies = [
  "cfg-if 1.0.0",
-]
-
-[[package]]
-name = "enr"
-version = "0.6.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26fa0a0be8915790626d5759eb51fe47435a8eac92c2f212bd2da9aa7f30ea56"
-dependencies = [
- "base64 0.13.1",
- "bs58",
- "bytes 1.4.0",
- "ed25519-dalek",
- "hex",
- "k256",
- "log 0.4.17",
- "rand 0.8.5",
- "rlp 0.5.2",
- "serde",
- "sha3 0.10.6",
- "zeroize",
 ]
 
 [[package]]
@@ -1568,7 +1548,7 @@ name = "ethportal-api"
 version = "0.2.0"
 dependencies = [
  "bytes 1.4.0",
- "enr 0.7.0",
+ "enr",
  "eth2_ssz",
  "eth2_ssz_derive",
  "eth2_ssz_types",
@@ -5750,7 +5730,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "discv5",
- "enr 0.7.0",
+ "enr",
  "eth2_ssz",
  "ethereum-types 0.12.1",
  "ethportal-api",
@@ -5809,7 +5789,7 @@ dependencies = [
  "delay_map",
  "directories",
  "discv5",
- "enr 0.7.0",
+ "enr",
  "env_logger 0.9.3",
  "eth2_hashing",
  "eth2_ssz",

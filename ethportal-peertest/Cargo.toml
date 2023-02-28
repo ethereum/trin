@@ -9,7 +9,7 @@ rust-version = "1.62.0"
 [dependencies]
 anyhow = "1.0.57"
 clap = "2.33.3"
-discv5 = "0.1.0"
+discv5 = { version = "0.2.1", features = ["serde"]}
 eth2_ssz = "0.4.0"
 ethportal-api = { path="../ethportal-api"}
 futures = "0.3.21"

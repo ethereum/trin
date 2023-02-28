@@ -18,7 +18,9 @@ pub fn dispatch_trusted_http_request(
     trusted_http_client: Request,
 ) -> Result<String, String> {
     match proxy_to_url(&obj, trusted_http_client) {
-        Ok(result_body) => Ok(std::str::from_utf8(&result_body).unwrap().to_owned()),
+        Ok(result_body) => Ok(std::str::from_utf8(&result_body)
+            .map_err(|e| format!("When decoding utf8 from proxied provider: {e:?}"))?
+            .to_owned()),
         Err(err) => Err(json!({
             "jsonrpc": "2.0",
             "id": obj.id,

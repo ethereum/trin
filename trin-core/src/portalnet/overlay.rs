@@ -29,7 +29,7 @@ use crate::{
             distance::{Distance, Metric},
             messages::{
                 Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer,
-                Ping, Pong, ProtocolId, Request, Response,
+                Ping, Pong, PopulatedOffer, ProtocolId, Request, Response,
             },
             node::Node,
         },
@@ -150,8 +150,7 @@ where
             config.query_num_results,
             config.findnodes_query_distances_per_peer,
         )
-        .await
-        .unwrap();
+        .await;
 
         Self {
             discovery,
@@ -423,6 +422,30 @@ where
         }
     }
 
+    /// Send Offer request without storing the content into db
+    pub async fn send_populated_offer(
+        &self,
+        enr: Enr,
+        content_key: RawContentKey,
+        content_value: Vec<u8>,
+    ) -> Result<Accept, OverlayRequestError> {
+        // Construct the request.
+        let request = Request::PopulatedOffer(PopulatedOffer {
+            content_items: vec![(content_key, content_value)],
+        });
+
+        let direction = RequestDirection::Outgoing {
+            destination: enr.clone(),
+        };
+
+        // Send the request and wait on the response.
+        match self.send_overlay_request(request, direction).await {
+            Ok(Response::Accept(accept)) => Ok(accept),
+            Ok(_) => Err(OverlayRequestError::InvalidResponse),
+            Err(error) => Err(error),
+        }
+    }
+
     /// Performs a content lookup for `target`.
     /// Returns the target content along with the peers traversed during content lookup.
     pub async fn lookup_content(&self, target: TContentKey) -> (Option<Vec<u8>>, Vec<NodeId>) {
@@ -552,6 +575,7 @@ fn validate_find_nodes_distances(distances: &Vec<u16>) -> Result<(), OverlayRequ
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod test {
     use super::*;
     use rstest::rstest;

@@ -113,6 +113,7 @@ fn findnode_log2distance(target: NodeId, peer: NodeId, size: usize) -> Option<Ve
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use test_log::test;

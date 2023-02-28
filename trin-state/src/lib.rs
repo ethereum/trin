@@ -1,3 +1,5 @@
+#![warn(clippy::unwrap_used)]
+
 use std::sync::Arc;
 
 use discv5::TalkRequest;
@@ -35,7 +37,7 @@ pub async fn initialize_state_network(
     portalnet_config: PortalnetConfig,
     storage_config: PortalStorageConfig,
     header_oracle: Arc<RwLock<HeaderOracle>>,
-) -> (StateHandler, StateNetworkTask, StateEventTx, StateJsonRpcTx) {
+) -> anyhow::Result<(StateHandler, StateNetworkTask, StateEventTx, StateJsonRpcTx)> {
     let (state_jsonrpc_tx, state_jsonrpc_rx) = mpsc::unbounded_channel::<StateJsonRpcRequest>();
     let (state_event_tx, state_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
     let state_network = StateNetwork::new(
@@ -45,7 +47,7 @@ pub async fn initialize_state_network(
         portalnet_config.clone(),
         header_oracle,
     )
-    .await;
+    .await?;
     let state_network = Arc::new(state_network);
     let state_handler = StateRequestHandler {
         network: Arc::clone(&state_network),
@@ -53,12 +55,12 @@ pub async fn initialize_state_network(
     };
     let state_network_task =
         spawn_state_network(Arc::clone(&state_network), portalnet_config, state_event_rx);
-    (
+    Ok((
         Some(state_handler),
         Some(state_network_task),
         Some(state_event_tx),
         Some(state_jsonrpc_tx),
-    )
+    ))
 }
 
 pub fn spawn_state_network(

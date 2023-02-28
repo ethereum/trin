@@ -91,7 +91,12 @@ pub trait HistoryNetworkApi {
     /// Send an OFFER request with given ContentKey, to the designated peer and wait for a response.
     /// Returns the content keys bitlist upon successful content transmission or empty bitlist receive.
     #[method(name = "historyOffer")]
-    async fn offer(&self, enr: Enr, content_key: HistoryContentKey) -> RpcResult<AcceptInfo>;
+    async fn offer(
+        &self,
+        enr: Enr,
+        content_key: HistoryContentKey,
+        content_value: Option<HistoryContentItem>,
+    ) -> RpcResult<AcceptInfo>;
 
     /// Store content key with a content data to the local database.
     #[method(name = "historyStore")]

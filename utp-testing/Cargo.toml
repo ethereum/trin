@@ -13,7 +13,7 @@ tracing = "0.1.36"
 tracing-subscriber = "0.3.15"
 trin-core = { path = "../trin-core" }
 tokio = {version = "1.8.0", features = ["full"]}
-discv5 = "0.1.0"
+discv5 = { version = "0.2.1", features = ["serde"]}
 hex = "0.4.3"
 
 [[bin]]

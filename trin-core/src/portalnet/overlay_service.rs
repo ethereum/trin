@@ -316,7 +316,7 @@ where
         query_parallelism: usize,
         query_num_results: usize,
         findnodes_query_distances_per_peer: usize,
-    ) -> Result<UnboundedSender<OverlayCommand<TContentKey>>, String>
+    ) -> UnboundedSender<OverlayCommand<TContentKey>>
     where
         <TContentKey as TryFrom<Vec<u8>>>::Error: Send,
     {
@@ -367,7 +367,7 @@ where
             service.start().await;
         });
 
-        Ok(command_tx)
+        command_tx
     }
 
     fn add_bootnodes(&mut self, bootnode_enrs: Vec<Enr>) {
@@ -960,13 +960,10 @@ where
                     // Listen for incoming uTP connection request on as part of uTP handshake and
                     // storing content data, so we can send it inside UtpListener right after we receive
                     // SYN packet from the requester
-                    let node_addr = self.discovery.cached_node_addr(&source);
-                    if node_addr.is_none() {
-                        return Err(OverlayRequestError::AcceptError(format!(
-                            "unable to find ENR for NodeId"
-                        )));
-                    }
-                    let enr = crate::portalnet::discovery::UtpEnr(node_addr.unwrap().enr);
+                    let node_addr = self.discovery.cached_node_addr(&source).ok_or(
+                        OverlayRequestError::AcceptError(format!("unable to find ENR for NodeId")),
+                    )?;
+                    let enr = crate::portalnet::discovery::UtpEnr(node_addr.enr);
                     let cid = self.utp_socket.cid(enr, false);
                     let cid_send = cid.send;
 
@@ -982,7 +979,6 @@ where
                         match stream.read_to_eof(&mut data).await {
                             Ok(n) => {
                                 info!(len = %n, "read data from uTP stream");
-                                data.truncate(n);
                             }
                             Err(err) => {
                                 error!(error = ?err, "error reading data from uTP stream");
@@ -1035,17 +1031,16 @@ where
                 )
             })?;
 
-        let content_keys: Result<Vec<TContentKey>, _> = request
+        let content_keys: Vec<TContentKey> = request
             .content_keys
             .into_iter()
             .map(|k| (TContentKey::try_from)(k))
-            .collect();
-        if content_keys.is_err() {
-            return Err(OverlayRequestError::AcceptError(format!(
-                "Unable to build content key from OFFER request."
-            )));
-        }
-        let content_keys = content_keys.unwrap();
+            .collect::<Result<Vec<TContentKey>, _>>()
+            .map_err(|_| {
+                OverlayRequestError::AcceptError(
+                    "Unable to build content key from OFFER request".to_owned(),
+                )
+            })?;
 
         for (i, key) in content_keys.iter().enumerate() {
             // Accept content if within radius and not already present in the data store.
@@ -1065,7 +1060,6 @@ where
             })?;
         }
 
-        // Listen for incoming connection request on conn_id, as part of utp handshake
         if requested_keys.is_zero() {
             return Ok(Accept {
                 connection_id: 0,
@@ -1073,13 +1067,14 @@ where
             });
         }
 
-        let node_addr = self.discovery.cached_node_addr(&source);
-        if node_addr.is_none() {
-            return Err(OverlayRequestError::AcceptError(format!(
-                "unable to find ENR for NodeId"
-            )));
-        }
-        let enr = crate::portalnet::discovery::UtpEnr(node_addr.unwrap().enr);
+        // Listen for incoming connection request on conn_id, as part of utp handshake
+        let node_addr =
+            self.discovery
+                .cached_node_addr(&source)
+                .ok_or(OverlayRequestError::AcceptError(format!(
+                    "unable to find ENR for NodeId"
+                )))?;
+        let enr = crate::portalnet::discovery::UtpEnr(node_addr.enr);
         let cid = self.utp_socket.cid(enr, false);
         let cid_send = cid.send;
 
@@ -1102,7 +1097,6 @@ where
             match stream.read_to_eof(&mut data).await {
                 Ok(n) => {
                     info!(len = %n, "read data from uTP stream");
-                    data.truncate(n);
                 }
                 Err(err) => {
                     error!(?err, "error reading data from uTP stream");
@@ -2004,7 +1998,7 @@ where
 
         match self.kbuckets.write().update_node_status(&key, state, None) {
             UpdateResult::Failed(reason) => match reason {
-                FailureReason::KeyNonExistant => Err(FailureReason::KeyNonExistant),
+                FailureReason::KeyNonExistent => Err(FailureReason::KeyNonExistent),
                 other => {
                     warn!(
                         protocol = %self.protocol,
@@ -2372,6 +2366,7 @@ fn pop_while_ssz_bytes_len_gt(enrs: &mut Vec<SszEnr>, max_size: usize) {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

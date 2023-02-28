@@ -1,3 +1,5 @@
+#![warn(clippy::unwrap_used)]
+
 pub mod events;
 mod jsonrpc;
 pub mod network;
@@ -34,12 +36,12 @@ pub async fn initialize_history_network(
     portalnet_config: PortalnetConfig,
     storage_config: PortalStorageConfig,
     header_oracle: Arc<RwLock<HeaderOracle>>,
-) -> (
+) -> anyhow::Result<(
     HistoryHandler,
     HistoryNetworkTask,
     HistoryEventTx,
     HistoryJsonRpcTx,
-) {
+)> {
     let (history_jsonrpc_tx, history_jsonrpc_rx) =
         mpsc::unbounded_channel::<HistoryJsonRpcRequest>();
     header_oracle.write().await.history_jsonrpc_tx = Some(history_jsonrpc_tx.clone());
@@ -51,7 +53,7 @@ pub async fn initialize_history_network(
         portalnet_config.clone(),
         header_oracle,
     )
-    .await;
+    .await?;
     let history_network = Arc::new(history_network);
     let history_handler = HistoryRequestHandler {
         network: Arc::clone(&history_network),
@@ -62,12 +64,12 @@ pub async fn initialize_history_network(
         portalnet_config,
         history_event_rx,
     );
-    (
+    Ok((
         Some(history_handler),
         Some(history_network_task),
         Some(history_event_tx),
         Some(history_jsonrpc_tx),
-    )
+    ))
 }
 
 pub fn spawn_history_network(

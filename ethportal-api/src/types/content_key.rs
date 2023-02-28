@@ -222,6 +222,7 @@ pub fn hex_encode_compact<T: AsRef<[u8]>>(data: T) -> String {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod test {
     use super::*;
 

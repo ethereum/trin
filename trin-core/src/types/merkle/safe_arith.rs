@@ -134,6 +134,7 @@ impl_safe_arith!(i64);
 impl_safe_arith!(isize);
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod test {
     use super::*;
 

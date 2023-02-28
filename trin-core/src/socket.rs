@@ -15,10 +15,20 @@ const STUN_SERVER: &str = "159.223.0.83:3478";
 /// - Creates an externally-addressable UDP port, if you are behind a NAT
 /// - Returns the public IP and port that corresponds to your local port
 pub fn stun_for_external(local_socket_addr: &SocketAddr) -> Option<SocketAddr> {
-    let socket = UdpSocket::bind(local_socket_addr).unwrap();
+    let socket = match UdpSocket::bind(local_socket_addr) {
+        Ok(val) => val,
+        Err(err) => {
+            warn!(error = %err, "Error binding to local UDP socket.");
+            return None;
+        }
+    };
     info!("Connecting to STUN server to find public network endpoint");
-    let external_addr =
-        stunclient::StunClient::new(STUN_SERVER.parse().unwrap()).query_external_address(&socket);
+    let external_addr = stunclient::StunClient::new(
+        STUN_SERVER
+            .parse()
+            .expect("Parsing static STUN_SERVER to work"),
+    )
+    .query_external_address(&socket);
 
     match external_addr {
         Ok(addr) => {

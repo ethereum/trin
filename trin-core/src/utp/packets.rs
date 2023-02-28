@@ -106,7 +106,7 @@ pub(crate) fn check_extensions(data: &[u8]) -> anyhow::Result<()> {
 
     // Check for pending extensions (early exit of previous loop)
     if extension_type != ExtensionType::None {
-        return Err(anyhow!("Invalid packet length"));
+        return Err(anyhow!("Invalid packet length for extension type"));
     }
 
     Ok(())
@@ -142,7 +142,7 @@ impl PacketHeader {
 
     /// Returns the packet's type.
     pub fn get_type(&self) -> PacketType {
-        PacketType::try_from(self.type_ver >> 4).unwrap()
+        PacketType::try_from(self.type_ver >> 4).expect("Can't parse packet type")
     }
 
     /// Returns the type of the first extension
@@ -501,6 +501,7 @@ impl fmt::Debug for Packet {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use crate::utp::{
         packets::{
