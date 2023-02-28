@@ -385,7 +385,7 @@ where
                 continue;
             }
 
-            // Sort all eligible nodes by proximity to the content and take the closest k.
+            // Sort all eligible nodes by proximity to the content.
             interested_enrs.sort_by(|a, b| {
                 let distance_a = XorMetric::distance(&content_key.content_id(), &a.node_id().raw());
                 let distance_b = XorMetric::distance(&content_key.content_id(), &b.node_id().raw());
@@ -394,21 +394,13 @@ where
                     std::cmp::Ordering::Less
                 })
             });
-            let closest_k_enrs = interested_enrs[0..MAX_NODES_PER_BUCKET].to_vec();
 
-            // Get log2 random ENRs to gossip
-            let random_enrs = match log2_random_enrs(closest_k_enrs) {
-                Ok(val) => val,
-                Err(msg) => {
-                    warn!(error = %msg, "Error producing ENRs for gossip");
-                    return 0;
-                }
-            };
+            let gossip_recipients = select_gossip_recipients(interested_enrs);
 
             // Temporarily store all randomly selected nodes with the content of interest.
             // We want this so we can offer all the content to interested node in one request.
             let raw_item = (content_key.into(), content_value);
-            for enr in random_enrs {
+            for enr in gossip_recipients {
                 enrs_and_content
                     .entry(enr.to_base64())
                     .or_default()
@@ -811,23 +803,37 @@ where
     }
 }
 
-/// Randomly select log2 nodes. log2() is stable only for floats, that's why we cast it first to f32
-fn log2_random_enrs(enrs: Vec<Enr>) -> anyhow::Result<Vec<Enr>> {
-    if enrs.is_empty() {
-        return Err(anyhow!("Expected non-empty vector of ENRs"));
-    }
-    // log2(1) is zero but we want to propagate to at least one node
-    if enrs.len() == 1 {
-        return Ok(enrs);
-    }
-
-    // Greedy gossip by ceiling the log2 value
-    let log2_value = (enrs.len() as f32).log2().ceil();
-
+/// Randomly select `num_enrs` nodes from `enrs`.
+fn select_random_enrs(num_enrs: usize, enrs: Vec<Enr>) -> Vec<Enr> {
     let random_enrs: Vec<Enr> = enrs
         .into_iter()
-        .choose_multiple(&mut rand::thread_rng(), log2_value as usize);
-    Ok(random_enrs)
+        .choose_multiple(&mut rand::thread_rng(), num_enrs);
+    random_enrs
+}
+
+const NUM_CLOSEST_NODES: usize = 4;
+const NUM_FARTHER_NODES: usize = 4;
+/// Selects gossip recipients from a vec of sorted interested ENRs.
+/// Returned vec is a concatenation of, at most:
+/// 1. First `NUM_CLOSEST_NODES` elements of `interested_sorted_enrs`.
+/// 2. `NUM_FARTHER_NODES` elements randomly selected from `interested_sorted_enrs[NUM_CLOSEST_NODES..]`
+fn select_gossip_recipients(interested_sorted_enrs: Vec<Enr>) -> Vec<Enr> {
+    let mut gossip_recipients: Vec<Enr> = vec![];
+
+    // Get first n closest nodes
+    gossip_recipients.extend(
+        interested_sorted_enrs
+            .clone()
+            .into_iter()
+            .take(NUM_CLOSEST_NODES),
+    );
+    if interested_sorted_enrs.len() > NUM_CLOSEST_NODES {
+        let farther_enrs = interested_sorted_enrs[NUM_CLOSEST_NODES..].to_vec();
+        // Get random non-close ENRs to gossip to.
+        let random_farther_enrs = select_random_enrs(NUM_FARTHER_NODES, farther_enrs);
+        gossip_recipients.extend(random_farther_enrs);
+    }
+    gossip_recipients
 }
 
 fn validate_find_nodes_distances(distances: &Vec<u16>) -> Result<(), OverlayRequestError> {
@@ -890,18 +896,17 @@ mod test {
     }
 
     #[rstest]
-    #[case(vec![generate_random_remote_enr().1; 8], 3)]
-    #[case(vec![generate_random_remote_enr().1; 1], 1)]
-    #[case(vec![generate_random_remote_enr().1; 9], 4)]
-    fn test_log2_random_enrs(#[case] all_nodes: Vec<Enr>, #[case] expected_log2: usize) {
-        let log2_random_nodes = log2_random_enrs(all_nodes).unwrap();
-        assert_eq!(log2_random_nodes.len(), expected_log2);
-    }
-
-    #[test_log::test]
-    #[should_panic]
-    fn test_log2_random_enrs_empty_input() {
-        let all_nodes = vec![];
-        log2_random_enrs(all_nodes).unwrap();
+    #[case(vec![generate_random_remote_enr().1; 0], 0)]
+    #[case(vec![generate_random_remote_enr().1; NUM_CLOSEST_NODES - 1], NUM_CLOSEST_NODES - 1)]
+    #[case(vec![generate_random_remote_enr().1; NUM_CLOSEST_NODES], NUM_CLOSEST_NODES)]
+    #[case(vec![generate_random_remote_enr().1; NUM_CLOSEST_NODES + 1], NUM_CLOSEST_NODES + 1)]
+    #[case(vec![generate_random_remote_enr().1; NUM_CLOSEST_NODES + NUM_FARTHER_NODES], NUM_CLOSEST_NODES + NUM_FARTHER_NODES)]
+    #[case(vec![generate_random_remote_enr().1; 256], NUM_CLOSEST_NODES + NUM_FARTHER_NODES)]
+    fn test_select_gossip_recipients_no_panic(
+        #[case] all_nodes: Vec<Enr>,
+        #[case] expected_size: usize,
+    ) {
+        let gossip_recipients = select_gossip_recipients(all_nodes);
+        assert_eq!(gossip_recipients.len(), expected_size);
     }
 }
