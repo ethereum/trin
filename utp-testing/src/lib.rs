@@ -59,10 +59,14 @@ impl RpcServer for TestApp {
         let payload_store = Arc::clone(&self.utp_payload);
         tokio::spawn(async move {
             let mut conn = utp.accept_with_cid(cid).await.unwrap();
-            let mut data = vec![0; 4096 * 2 * 2];
+            let mut data = vec![];
             let n = conn.read_to_eof(&mut data).await.unwrap();
 
-            payload_store.write().await.push(data[..n].to_vec());
+            tracing::info!("read {n} bytes from uTP stream");
+
+            conn.shutdown().unwrap();
+
+            payload_store.write().await.push(data);
         });
 
         Ok("true".to_string())

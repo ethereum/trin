@@ -323,13 +323,10 @@ impl utp::udp::AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
         {
             // We drop the talk response because it is ignored in the uTP protocol.
             Ok(..) => Ok(buf.len()),
-            Err(err) => {
-                tracing::error!(error = ?err, "error sending talk request");
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("{err}"),
-                ))
-            }
+            Err(err) => Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("{err}"),
+            )),
         }
     }
 
@@ -343,8 +340,10 @@ impl utp::udp::AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
                 let n = std::cmp::min(buf.len(), packet.len());
                 buf[..n].copy_from_slice(&packet[..n]);
 
-                // when the talk request is dropped, an empty response is sent via the `Drop`
-                // implementation for `TalkRequest`
+                // respond with empty talk response
+                if let Err(err) = talk_req.respond(vec![]) {
+                    tracing::warn!(%err, "failed to respond to uTP talk request");
+                }
 
                 Ok((n, enr))
             }

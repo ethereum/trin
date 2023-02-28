@@ -6089,7 +6089,7 @@ checksum = "7fcfc827f90e53a02eaef5e535ee14266c1d569214c6aa70133a624d8a3164ba"
 [[package]]
 name = "utp"
 version = "0.1.0-alpha"
-source = "git+https://github.com/jacobkaufmann/utp.git?branch=conn-x#efb091cbadb359d6d6699a91cdd9b2554a3af18c"
+source = "git+https://github.com/jacobkaufmann/utp.git?branch=conn-x#f2ad549e2351b0b3f422b01bffc14fc488a54168"
 dependencies = [
  "async-trait",
  "delay_map",

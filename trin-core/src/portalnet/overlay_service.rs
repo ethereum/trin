@@ -979,11 +979,15 @@ where
 
                         // TODO: do something with data.
                         let mut data = vec![];
-                        let n = stream
-                            .read_to_eof(&mut data)
-                            .await
-                            .expect("error reading data from uTP stream");
-                        info!(len = %n, "read data from uTP stream");
+                        match stream.read_to_eof(&mut data).await {
+                            Ok(n) => {
+                                info!(len = %n, "read data from uTP stream");
+                                data.truncate(n);
+                            }
+                            Err(err) => {
+                                error!(error = ?err, "error reading data from uTP stream");
+                            }
+                        }
                     });
 
                     // Connection id is send as BE because uTP header values are stored also as BE
@@ -1089,14 +1093,20 @@ where
             let mut stream = match utp.accept_with_cid(cid.clone()).await {
                 Ok(stream) => stream,
                 Err(err) => {
-                    error!(error = ?err, cid.send, cid.recv, peer = %cid.peer.node_id(), "Unable to accept uTP stream");
+                    error!(?err, cid.send, cid.recv, peer = %cid.peer.node_id(), "unable to accept uTP stream");
                     return;
                 }
             };
 
             let mut data = vec![];
-            if let Err(err) = stream.read_to_eof(&mut data).await {
-                error!(error = ?err, "error reading data from uTP stream");
+            match stream.read_to_eof(&mut data).await {
+                Ok(n) => {
+                    info!(len = %n, "read data from uTP stream");
+                    data.truncate(n);
+                }
+                Err(err) => {
+                    error!(?err, "error reading data from uTP stream");
+                }
             }
 
             if let Err(err) = Self::process_accept_utp_payload(
@@ -1109,7 +1119,7 @@ where
             )
             .await
             {
-                error!(error = %err, "error processing uTP payload");
+                error!(%err, "unable to process uTP payload");
             }
         });
 
