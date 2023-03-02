@@ -46,7 +46,6 @@ pub enum QueryType<TContentKey> {
 
 impl<TContentKey: OverlayContentKey> QueryInfo<TContentKey> {
     /// Builds an RPC Request, given the QueryInfo
-    #[allow(dead_code)]
     pub(crate) fn rpc_request(&self, peer: NodeId) -> Result<Request, &'static str> {
         let request = match self.query_type {
             QueryType::FindNode {
