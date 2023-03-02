@@ -1,5 +1,4 @@
-use std::str::FromStr;
-use std::{thread, time};
+use std::{str::FromStr, thread, time};
 
 use serde_json::json;
 use tracing::{error, info};
@@ -49,7 +48,6 @@ pub async fn test_unpopulated_offer(peertest_config: PeertestConfig, peertest: &
 
     // Check if the stored content item in bootnode's DB matches the offered
     let received_content_value = wait_for_content(ipc_client, content_key).await;
-
     assert_eq!(
         content_value, received_content_value,
         "The received content {received_content_value:?}, must match the expected {content_value:?}",
@@ -86,7 +84,6 @@ pub async fn test_populated_offer(peertest_config: PeertestConfig, peertest: &Pe
 
     // Check if the stored content item in bootnode's DB matches the offered
     let received_content_value = wait_for_content(ipc_client, content_key).await;
-
     assert_eq!(
         content_value, received_content_value,
         "The received content {received_content_value:?}, must match the expected {content_value:?}",

@@ -108,7 +108,7 @@ impl Discovery {
         };
 
         let config = Config {
-            discv5_config: Discv5ConfigBuilder::default().build(),
+            discv5_config: Discv5ConfigBuilder::default().request_retries(2).build(),
             // This is for defining the ENR:
             enr_address: ip_addr,
             listen_port: ip_port,
@@ -191,9 +191,15 @@ impl Discovery {
                         let _ = talk_req_tx.send(talk_req).await;
                     }
                     Discv5Event::SessionEstablished(enr, socket_addr) => {
-                        node_addr_cache
-                            .write()
-                            .put(enr.node_id(), NodeAddress { enr, socket_addr });
+                        if let Some(old) = node_addr_cache.write().put(
+                            enr.node_id(),
+                            NodeAddress {
+                                enr: enr.clone(),
+                                socket_addr,
+                            },
+                        ) {
+                            tracing::debug!(old = ?old.enr, new = ?enr, "node addr updated");
+                        }
                     }
                     _ => continue,
                 }
@@ -291,7 +297,7 @@ impl Discovery {
 pub struct Discv5UdpSocket {
     // `RwLock` for interior mutability.
     // TODO: Figure out a better mechanism here. The socket is the only holder of the lock.
-    talk_reqs: tokio::sync::RwLock<mpsc::UnboundedReceiver<TalkRequest>>,
+    talk_reqs: tokio::sync::Mutex<mpsc::UnboundedReceiver<TalkRequest>>,
     discv5: Arc<Discovery>,
 }
 
@@ -299,12 +305,12 @@ impl Discv5UdpSocket {
     pub fn new(discv5: Arc<Discovery>, talk_reqs: mpsc::UnboundedReceiver<TalkRequest>) -> Self {
         Self {
             discv5,
-            talk_reqs: tokio::sync::RwLock::new(talk_reqs),
+            talk_reqs: tokio::sync::Mutex::new(talk_reqs),
         }
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct UtpEnr(pub Enr);
 
 impl UtpEnr {
@@ -313,34 +319,29 @@ impl UtpEnr {
     }
 }
 
-impl std::hash::Hash for UtpEnr {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.0.seq().hash(state);
-        self.0.node_id().hash(state);
-        // since the struct should always have a valid signature, we can hash the signature
-        // directly, rather than hashing the content.
-        self.0.signature().hash(state);
-    }
-}
-
 impl utp::cid::ConnectionPeer for UtpEnr {}
 
 #[async_trait]
 impl utp::udp::AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
     async fn send_to(&self, buf: &[u8], target: &UtpEnr) -> io::Result<usize> {
-        match self
-            .discv5
-            .send_talk_req(target.0.clone(), ProtocolId::Utp, buf.to_vec())
-            .await
-        {
-            // We drop the talk response because it is ignored in the uTP protocol.
-            Ok(..) => Ok(buf.len()),
-            Err(err) => Err(io::Error::new(io::ErrorKind::Other, format!("{err}"))),
-        }
+        let discv5 = Arc::clone(&self.discv5);
+        let target = target.0.clone();
+        let data = buf.to_vec();
+        tokio::spawn(async move {
+            match discv5.send_talk_req(target, ProtocolId::Utp, data).await {
+                // We drop the talk response because it is ignored in the uTP protocol.
+                Ok(..) => {}
+                Err(err) => {
+                    tracing::error!(%err, "unable to send uTP talk request");
+                }
+            }
+        });
+
+        Ok(buf.len())
     }
 
     async fn recv_from(&self, buf: &mut [u8]) -> io::Result<(usize, UtpEnr)> {
-        let mut talk_reqs = self.talk_reqs.write().await;
+        let mut talk_reqs = self.talk_reqs.lock().await;
         match talk_reqs.recv().await {
             Some(talk_req) => {
                 let node_addr =

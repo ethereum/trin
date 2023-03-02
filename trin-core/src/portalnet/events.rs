@@ -34,18 +34,14 @@ impl PortalnetEvents {
         }
     }
 
-    /// Main loop to dispatch `Discv5` and `UtpListener` events to overlay networks
+    /// Main loop to dispatch `Discv5` and uTP events
     pub async fn start(mut self) {
-        loop {
-            tokio::select! {
-                Some(talk_req) = self.talk_req_receiver.recv() => {
-                    self.dispatch_discv5_talk_req(talk_req);
-                },
-            }
+        while let Some(talk_req) = self.talk_req_receiver.recv().await {
+            self.dispatch_discv5_talk_req(talk_req);
         }
     }
 
-    /// Dispatch Discv5 TalkRequest event to overlay networks or uTP listener
+    /// Dispatch Discv5 TalkRequest event to overlay networks or uTP socket
     fn dispatch_discv5_talk_req(&self, request: TalkRequest) {
         let protocol_id = ProtocolId::from_str(&hex::encode_upper(request.protocol()));
 
@@ -75,7 +71,7 @@ impl PortalnetEvents {
                 }
                 ProtocolId::Utp => {
                     if let Err(err) = self.utp_talk_reqs.send(request) {
-                        warn!(error = %err, "Error forwarding uTP message to uTP socket");
+                        warn!(%err, "Error forwarding talk request to uTP socket");
                     }
                 }
                 _ => {

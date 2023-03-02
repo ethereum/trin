@@ -392,8 +392,9 @@ where
             .read_to_eof(&mut data)
             .await
             .map_err(|err| OverlayRequestError::UtpError(format!("{:?}", err)))?;
+        tracing::debug!("read {n} bytes of data from uTP stream for FindContent");
 
-        Ok(data[..n].to_vec())
+        Ok(data)
     }
 
     /// Offer is sent in order to store content to k nodes with radii that contain content-id

@@ -969,10 +969,13 @@ where
 
                     let utp = Arc::clone(&self.utp_socket);
                     tokio::spawn(async move {
-                        let mut stream = utp
-                            .accept_with_cid(cid)
-                            .await
-                            .expect("did not receive connection for CID");
+                        let mut stream = match utp.accept_with_cid(cid.clone()).await {
+                            Ok(stream) => stream,
+                            Err(err) => {
+                                error!(%err, %cid.send, %cid.recv, "unable to accept uTP stream for CID");
+                                return;
+                            }
+                        };
 
                         // TODO: do something with data.
                         let mut data = vec![];
@@ -1088,18 +1091,16 @@ where
             let mut stream = match utp.accept_with_cid(cid.clone()).await {
                 Ok(stream) => stream,
                 Err(err) => {
-                    error!(?err, cid.send, cid.recv, peer = %cid.peer.node_id(), "unable to accept uTP stream");
+                    warn!(?err, cid.send, cid.recv, peer = %cid.peer.node_id(), "unable to accept uTP stream");
                     return;
                 }
             };
 
             let mut data = vec![];
             match stream.read_to_eof(&mut data).await {
-                Ok(n) => {
-                    info!(len = %n, "read data from uTP stream");
-                }
+                Ok(..) => {}
                 Err(err) => {
-                    error!(?err, "error reading data from uTP stream");
+                    warn!(?err, "error reading data from uTP stream");
                 }
             }
 
