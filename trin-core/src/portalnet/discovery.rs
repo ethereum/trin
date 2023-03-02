@@ -344,14 +344,18 @@ impl utp::udp::AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
         let mut talk_reqs = self.talk_reqs.lock().await;
         match talk_reqs.recv().await {
             Some(talk_req) => {
-                let node_addr =
-                    self.discv5
-                        .cached_node_addr(talk_req.node_id())
-                        .ok_or(io::Error::new(
-                            io::ErrorKind::Other,
-                            "ENR not found for talk req destination",
-                        ))?;
-                let enr = UtpEnr(node_addr.enr);
+                let enr = match self.discv5.find_enr(talk_req.node_id()) {
+                    Some(enr) => UtpEnr(enr),
+                    None => {
+                        let node_addr = self.discv5.cached_node_addr(talk_req.node_id()).ok_or(
+                            io::Error::new(
+                                io::ErrorKind::Other,
+                                "ENR not found for talk req destination",
+                            ),
+                        )?;
+                        UtpEnr(node_addr.enr)
+                    }
+                };
                 let packet = talk_req.body();
                 let n = std::cmp::min(buf.len(), packet.len());
                 buf[..n].copy_from_slice(&packet[..n]);

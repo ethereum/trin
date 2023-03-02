@@ -27,7 +27,7 @@ RUN apt-get update \
 
 COPY --from=builder /bin/utp-test-app /bin/utp-test-app
 
-ENV RUST_LOG=debug
+ENV RUST_LOG=TRACE
 
 COPY setup.sh .
 RUN chmod +x setup.sh
