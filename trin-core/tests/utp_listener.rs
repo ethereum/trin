@@ -1,9 +1,10 @@
-use ntest::timeout;
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
     str::FromStr,
     sync::Arc,
 };
+
+use ntest::timeout;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use trin_core::{
     portalnet::{

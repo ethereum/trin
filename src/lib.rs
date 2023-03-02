@@ -16,6 +16,7 @@ use trin_core::{
     types::{accumulator::MasterAccumulator, validation::HeaderOracle},
     utils::{bootnodes::parse_bootnodes, db::setup_temp_dir, provider::TrustedProvider},
     utp::stream::UtpListener,
+    TRIN_VERSION,
 };
 use trin_history::initialize_history_network;
 use trin_state::initialize_state_network;
@@ -24,7 +25,8 @@ pub async fn run_trin(
     trin_config: TrinConfig,
     trusted_provider: TrustedProvider,
 ) -> Result<ServerHandle, Box<dyn std::error::Error>> {
-    info!(config = %trin_config, "Launching trin");
+    info!("Launching Trin: v{TRIN_VERSION}");
+    info!(config = %trin_config, "With:");
 
     let bootnode_enrs = parse_bootnodes(&trin_config.bootnodes)?;
     let portalnet_config = PortalnetConfig {
