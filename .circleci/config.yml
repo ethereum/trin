@@ -122,7 +122,7 @@ jobs:
       - run:
           name: Run Test App with network simulator
           # Dropping packets from both sides of the stream to test dealing with lost packets
-          command: SCENARIO="droplist --delay=15ms --bandwidth=10Mbps --queue=25 --drops_to_server=2,5,7 --drops_to_client=6,8" docker-compose -f utp-testing/docker/docker-compose.yml up -d
+          command: SCENARIO="droplist --delay=15ms --bandwidth=10Mbps --queue=25 --drops_to_server=3,5,7 --drops_to_client=6,8" docker-compose -f utp-testing/docker/docker-compose.yml up -d
       - run:
           name: Wait all containers to start
           command: sleep 5
