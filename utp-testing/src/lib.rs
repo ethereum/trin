@@ -52,8 +52,9 @@ impl RpcServer for TestApp {
         let cid = utp::cid::ConnectionId {
             send: cid_send,
             recv: cid_recv,
-            peer: UtpEnr(src_enr),
+            peer: UtpEnr(src_enr.clone()),
         };
+        self.discovery.add_enr(src_enr).unwrap();
 
         let utp = Arc::clone(&self.utp_socket);
         let payload_store = Arc::clone(&self.utp_payload);
@@ -83,8 +84,9 @@ impl RpcServer for TestApp {
         let cid = utp::cid::ConnectionId {
             send: cid_send,
             recv: cid_recv,
-            peer: UtpEnr(dst_enr),
+            peer: UtpEnr(dst_enr.clone()),
         };
+        self.discovery.add_enr(dst_enr).unwrap();
 
         let utp = Arc::clone(&self.utp_socket);
         tokio::spawn(async move {

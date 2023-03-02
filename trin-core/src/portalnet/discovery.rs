@@ -198,7 +198,13 @@ impl Discovery {
                                 socket_addr,
                             },
                         ) {
-                            tracing::debug!(old = ?old.enr, new = ?enr, "node addr updated");
+                            tracing::debug!(
+                                old = ?(old.enr, old.socket_addr),
+                                new = ?(enr, socket_addr),
+                                "cached node address updated"
+                            );
+                        } else {
+                            tracing::debug!(addr = ?(enr, socket_addr), "node address cached");
                         }
                     }
                     _ => continue,
@@ -269,6 +275,11 @@ impl Discovery {
     /// Looks up the ENR for `node_id`.
     pub fn find_enr(&self, node_id: &NodeId) -> Option<Enr> {
         self.discv5.find_enr(node_id)
+    }
+
+    /// Adds `enr` to the discv5 routing table.
+    pub fn add_enr(&self, enr: Enr) -> Result<(), &'static str> {
+        self.discv5.add_enr(enr)
     }
 
     /// Returns the cached `NodeAddress` or `None` if not cached.
@@ -344,16 +355,21 @@ impl utp::udp::AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
         let mut talk_reqs = self.talk_reqs.lock().await;
         match talk_reqs.recv().await {
             Some(talk_req) => {
-                let enr = match self.discv5.find_enr(talk_req.node_id()) {
+                let src_node_id = talk_req.node_id();
+                let enr = match self.discv5.find_enr(src_node_id) {
                     Some(enr) => UtpEnr(enr),
                     None => {
-                        let node_addr = self.discv5.cached_node_addr(talk_req.node_id()).ok_or(
-                            io::Error::new(
-                                io::ErrorKind::Other,
-                                "ENR not found for talk req destination",
-                            ),
-                        )?;
-                        UtpEnr(node_addr.enr)
+                        let enr = match self.discv5.cached_node_addr(src_node_id) {
+                            Some(node_addr) => Ok(node_addr.enr),
+                            None => {
+                                tracing::warn!(node_id = %src_node_id, "uTP packet from unknown source");
+                                Err(io::Error::new(
+                                    io::ErrorKind::Other,
+                                    "ENR not found for talk req destination",
+                                ))
+                            }
+                        }?;
+                        UtpEnr(enr)
                     }
                 };
                 let packet = talk_req.body();
