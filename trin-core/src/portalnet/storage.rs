@@ -2,7 +2,7 @@ use std::{
     convert::TryInto,
     fmt, fs,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, Mutex, MutexGuard},
 };
 
 use anyhow::anyhow;
@@ -13,10 +13,8 @@ use prometheus_exporter::{
     self,
     prometheus::{register_gauge, Gauge},
 };
-use r2d2::Pool;
-use r2d2_sqlite::SqliteConnectionManager;
 use rocksdb::{Options, DB};
-use rusqlite::params;
+use rusqlite::{params, Connection};
 use tracing::{debug, error, info};
 
 use super::types::{
@@ -78,12 +76,6 @@ impl From<rocksdb::Error> for ContentStoreError {
 impl From<rusqlite::Error> for ContentStoreError {
     fn from(err: rusqlite::Error) -> Self {
         Self::Database(format!("(sqlite) {}", err.to_string()))
-    }
-}
-
-impl From<r2d2::Error> for ContentStoreError {
-    fn from(err: r2d2::Error) -> Self {
-        Self::Database(format!("(r2d2) {}", err.to_string()))
     }
 }
 
@@ -201,7 +193,7 @@ pub struct PortalStorageConfig {
     pub node_id: NodeId,
     pub distance_fn: DistanceFunction,
     pub db: Arc<rocksdb::DB>,
-    pub sql_connection_pool: Pool<SqliteConnectionManager>,
+    pub sql_connection: Arc<Mutex<Connection>>,
     pub metrics_enabled: bool,
 }
 
@@ -212,13 +204,13 @@ impl PortalStorageConfig {
         metrics_enabled: bool,
     ) -> anyhow::Result<Self> {
         let db = Arc::new(PortalStorage::setup_rocksdb(node_id)?);
-        let sql_connection_pool = PortalStorage::setup_sql(node_id)?;
+        let sql_connection = Arc::new(Mutex::new(PortalStorage::setup_sql(node_id)?));
         Ok(Self {
             storage_capacity_kb,
             node_id,
             distance_fn: DistanceFunction::Xor,
             db,
-            sql_connection_pool,
+            sql_connection,
             metrics_enabled,
         })
     }
@@ -232,7 +224,7 @@ pub struct PortalStorage {
     radius: Distance,
     farthest_content_id: Option<[u8; 32]>,
     db: Arc<rocksdb::DB>,
-    sql_connection_pool: Pool<SqliteConnectionManager>,
+    sql_connection: Arc<Mutex<Connection>>,
     distance_fn: DistanceFunction,
     metrics: Option<StorageMetrics>,
     protocol: ProtocolId,
@@ -285,7 +277,7 @@ impl PortalStorage {
             radius: Distance::MAX,
             db: config.db,
             farthest_content_id: None,
-            sql_connection_pool: config.sql_connection_pool,
+            sql_connection: config.sql_connection,
             distance_fn: config.distance_fn,
             metrics: None,
             protocol,
@@ -336,10 +328,17 @@ impl PortalStorage {
         Ok(storage)
     }
 
+    /// Returns a lock to the underlying SQL connection.
+    fn get_sql_connection(&self) -> Result<MutexGuard<Connection>, ContentStoreError> {
+        self.sql_connection.lock().map_err(|_| {
+            ContentStoreError::Database("Failed to acquire lock on SQL connection".to_string())
+        })
+    }
+
     /// Returns a paginated list of all available content keys from local storage (from any
     /// subnetwork) according to the provided offset and limit.
     pub fn paginate(&self, offset: &u64, limit: &u64) -> anyhow::Result<PaginateLocalContentInfo> {
-        let conn = self.sql_connection_pool.get()?;
+        let conn = self.get_sql_connection()?;
         let mut query = conn.prepare(PAGINATE_QUERY)?;
 
         let content_keys: Result<Vec<HistoryContentKey>, rusqlite::Error> = query
@@ -485,7 +484,7 @@ impl PortalStorage {
 
     /// Public method for looking up a content key by its content id
     pub fn lookup_content_key(&self, id: [u8; 32]) -> anyhow::Result<Option<Vec<u8>>> {
-        let conn = self.sql_connection_pool.get()?;
+        let conn = self.get_sql_connection()?;
         let mut query = conn.prepare(CONTENT_KEY_LOOKUP_QUERY)?;
         let id = id.to_vec();
         let result: Result<Vec<HistoryContentKey>, rusqlite::Error> = query
@@ -546,7 +545,8 @@ impl PortalStorage {
                 "Content key should not start with 0x".to_string(),
             ));
         }
-        match self.sql_connection_pool.get()?.execute(
+        let conn = self.get_sql_connection()?;
+        match conn.execute(
             INSERT_QUERY,
             params![
                 content_id.to_vec(),
@@ -562,9 +562,8 @@ impl PortalStorage {
 
     /// Internal method for removing a given content-id from the meta db.
     fn meta_db_remove(&self, content_id: &[u8; 32]) -> Result<(), ContentStoreError> {
-        self.sql_connection_pool
-            .get()?
-            .execute(DELETE_QUERY, [content_id.to_vec()])?;
+        let conn = self.get_sql_connection()?;
+        conn.execute(DELETE_QUERY, [content_id.to_vec()])?;
         Ok(())
     }
 
@@ -576,7 +575,7 @@ impl PortalStorage {
 
     /// Internal method for measuring the total amount of requestable data that the node is storing.
     fn get_total_storage_usage_in_bytes_from_network(&self) -> Result<u64, ContentStoreError> {
-        let conn = self.sql_connection_pool.get()?;
+        let conn = self.get_sql_connection()?;
         let mut query = conn.prepare(TOTAL_DATA_SIZE_QUERY)?;
 
         let result = query.query_map([], |row| Ok(DataSizeSum { sum: row.get(0)? }));
@@ -603,8 +602,7 @@ impl PortalStorage {
         let result = match self.distance_fn {
             DistanceFunction::Xor => {
                 let node_id_u32 = Self::byte_vector_to_u32(self.node_id.raw().to_vec());
-
-                let conn = self.sql_connection_pool.get()?;
+                let conn = self.get_sql_connection()?;
                 let mut query = conn.prepare(XOR_FIND_FARTHEST_QUERY)?;
 
                 let mut result = query.query_map([node_id_u32], |row| {
@@ -708,17 +706,16 @@ impl PortalStorage {
     }
 
     /// Helper function for opening a SQLite connection.
-    pub fn setup_sql(node_id: NodeId) -> Result<Pool<SqliteConnectionManager>, ContentStoreError> {
+    pub fn setup_sql(node_id: NodeId) -> Result<Connection, ContentStoreError> {
         let mut data_path: PathBuf = get_data_dir(node_id).map_err(|err| {
             ContentStoreError::Database(format!("Unable to get data dir for sql: {err:?}"))
         })?;
         data_path.push("trin.sqlite");
         info!(path = %data_path.display(), "Setting up SqliteDB");
 
-        let manager = SqliteConnectionManager::file(data_path);
-        let pool = Pool::new(manager)?;
-        pool.get()?.execute(CREATE_QUERY, params![])?;
-        Ok(pool)
+        let conn = rusqlite::Connection::open(data_path)?;
+        conn.execute(CREATE_QUERY, params![])?;
+        Ok(conn)
     }
 }
 
