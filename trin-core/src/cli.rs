@@ -47,13 +47,6 @@ pub struct TrinConfig {
     pub web3_ipc_path: String, // TODO: Change to PathBuf
 
     #[structopt(
-        default_value = "5",
-        long = "pool-size",
-        help = "max size of threadpool"
-    )]
-    pub pool_size: u32,
-
-    #[structopt(
         default_value(DEFAULT_DISCOVERY_PORT),
         long = "discovery-port",
         help = "The UDP port to listen on."
@@ -147,7 +140,6 @@ impl Default for TrinConfig {
             web3_http_address: Url::parse(DEFAULT_WEB3_HTTP_ADDRESS)
                 .expect("Parsing static DEFAULT_WEB3_HTTP_ADDRESS to work"),
             web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
-            pool_size: 5,
             discovery_port: DEFAULT_DISCOVERY_PORT
                 .parse()
                 .expect("Parsing static DEFAULT_DISCOVERY_PORT to work"),
@@ -254,8 +246,8 @@ impl fmt::Display for TrinConfig {
 
         write!(
             f,
-            "TrinConfig {{ networks: {:?}, capacity_kb: {}, ephemeral: {}, json_rpc_url: {}, pool_size: {}, metrics_enabled: {} }}",
-            self.networks, self.kb, self.ephemeral, json_rpc_url, self.pool_size, self.enable_metrics_with_url.is_some()
+            "TrinConfig {{ networks: {:?}, capacity_kb: {}, ephemeral: {}, json_rpc_url: {}, metrics_enabled: {} }}",
+            self.networks, self.kb, self.ephemeral, json_rpc_url, self.enable_metrics_with_url.is_some()
         )
     }
 }
@@ -290,7 +282,6 @@ mod test {
             actual_config.web3_http_address,
             expected_config.web3_http_address
         );
-        assert_eq!(actual_config.pool_size, expected_config.pool_size);
         assert_eq!(actual_config.external_addr, expected_config.external_addr);
         assert_eq!(actual_config.no_stun, expected_config.no_stun);
         assert_eq!(actual_config.ephemeral, expected_config.ephemeral);
@@ -300,7 +291,6 @@ mod test {
     fn test_custom_http_args() {
         let expected_config = TrinConfig {
             web3_http_address: Url::parse("http://0.0.0.0:8080/").unwrap(),
-            pool_size: 3,
             web3_transport: "http".to_string(),
             ..Default::default()
         };
@@ -311,8 +301,6 @@ mod test {
                 "http",
                 "--web3-http-address",
                 "http://0.0.0.0:8080/",
-                "--pool-size",
-                "3",
             ]
             .iter(),
         )
@@ -323,7 +311,6 @@ mod test {
             actual_config.web3_http_address,
             expected_config.web3_http_address
         );
-        assert_eq!(actual_config.pool_size, expected_config.pool_size);
     }
 
     #[test]
@@ -341,7 +328,6 @@ mod test {
             actual_config.web3_http_address,
             expected_config.web3_http_address
         );
-        assert_eq!(actual_config.pool_size, expected_config.pool_size);
     }
 
     #[test]
@@ -369,7 +355,6 @@ mod test {
             actual_config.web3_http_address,
             expected_config.web3_http_address
         );
-        assert_eq!(actual_config.pool_size, expected_config.pool_size);
         assert_eq!(actual_config.web3_ipc_path, expected_config.web3_ipc_path);
     }
 
