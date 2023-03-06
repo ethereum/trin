@@ -1,3 +1,5 @@
+#![warn(clippy::unwrap_used)]
+
 use std::sync::Arc;
 
 use ethportal_api::jsonrpsee::server::ServerHandle;
@@ -38,13 +40,13 @@ pub async fn run_trin(
     };
 
     // Initialize base discovery protocol
-    let mut discovery = Discovery::new(portalnet_config.clone()).unwrap();
-    let talk_req_rx = discovery.start().await.unwrap();
+    let mut discovery = Discovery::new(portalnet_config.clone())?;
+    let talk_req_rx = discovery.start().await?;
     let discovery = Arc::new(discovery);
 
     // Initialize prometheus metrics
     if let Some(addr) = trin_config.enable_metrics_with_url {
-        prometheus_exporter::start(addr).unwrap();
+        prometheus_exporter::start(addr)?;
     }
 
     // Initialize and spawn UTP listener
@@ -146,36 +148,35 @@ pub async fn run_trin(
         tokio::spawn(async { network.await });
     }
 
-    Ok(rpc_handle)
+    Ok(rpc_handle?)
 }
 
-// FIXME: Handle those unwraps in this method
 async fn launch_jsonrpc_server(
     trin_config: TrinConfig,
     discv5: Arc<Discovery>,
     history_handler: Option<UnboundedSender<HistoryJsonRpcRequest>>,
-) -> ServerHandle {
+) -> Result<ServerHandle, String> {
+    let history_handler = history_handler.ok_or_else(|| {
+        "History network must be available to use IPC transport for JSON-RPC server".to_string()
+    })?;
     match trin_config.web3_transport.as_str() {
         "ipc" => {
-            // Launch jsonrpsee server with http and WS transport
+            // Launch jsonrpsee server with IPC transport
             let rpc_handle =
-                JsonRpcServer::run_ipc(trin_config.web3_ipc_path, discv5, history_handler.unwrap())
+                JsonRpcServer::run_ipc(trin_config.web3_ipc_path, discv5, history_handler)
                     .await
-                    .unwrap();
+                    .map_err(|e| format!("Launching IPC JSON-RPC server failed: {e:?}"))?;
             info!("IPC JSON-RPC server launched.");
-            rpc_handle
+            Ok(rpc_handle)
         }
         "http" => {
             // Launch jsonrpsee server with http and WS transport
-            let rpc_handle = JsonRpcServer::run_http(
-                trin_config.web3_http_address,
-                discv5,
-                history_handler.unwrap(),
-            )
-            .await
-            .unwrap();
+            let rpc_handle =
+                JsonRpcServer::run_http(trin_config.web3_http_address, discv5, history_handler)
+                    .await
+                    .map_err(|e| format!("Launching HTTP JSON-RPC server failed: {e:?}"))?;
             info!("HTTP JSON-RPC server launched.");
-            rpc_handle
+            Ok(rpc_handle)
         }
         val => panic!("Unsupported web3 transport: {val}"),
     }
