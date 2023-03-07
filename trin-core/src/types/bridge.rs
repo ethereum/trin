@@ -620,14 +620,14 @@ impl OfferGroup {
 /// multiple async requests. Using "ureq" consistently resulted in errors as soon as the number of
 /// concurrent tasks increased significantly.
 async fn geth_batch_request(obj: Vec<JsonRequest>) -> anyhow::Result<String> {
-    let client_id =
-        env::var("GETH_CLIENT_ID").map_err(|_| anyhow!("GETH_CLIENT_ID env var not set."))?;
-    let client_secret = env::var("GETH_CLIENT_SECRET")
-        .map_err(|_| anyhow!("GETH_CLIENT_SECRET env var not set."))?;
+    let client_id = env::var("PANDAOPS_CLIENT_ID")
+        .map_err(|_| anyhow!("PANDAOPS_CLIENT_ID env var not set."))?;
+    let client_secret = env::var("PANDAOPS_CLIENT_SECRET")
+        .map_err(|_| anyhow!("PANDAOPS_CLIENT_SECRET env var not set."))?;
 
     let result = surf::post("https://geth-lighthouse.mainnet.ethpandaops.io/")
         .body_json(&json!(obj))
-        .map_err(|e| anyhow!("Unable to construct json post request: {:?}", e))?
+        .map_err(|e| anyhow!("Unable to construct json post request: {e:?}"))?
         .header("Content-Type", "application/json".to_string())
         .header("CF-Access-Client-Id", client_id)
         .header("CF-Access-Client-Secret", client_secret)
