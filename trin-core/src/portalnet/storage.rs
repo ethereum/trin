@@ -17,7 +17,7 @@ use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rocksdb::{Options, DB};
 use rusqlite::params;
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 
 use super::types::{
     content_key::OverlayContentKey,
@@ -230,7 +230,6 @@ pub struct PortalStorage {
     node_id: NodeId,
     storage_capacity_in_bytes: u64,
     radius: Distance,
-    farthest_content_id: Option<[u8; 32]>,
     db: Arc<rocksdb::DB>,
     sql_connection_pool: Pool<SqliteConnectionManager>,
     distance_fn: DistanceFunction,
@@ -284,24 +283,22 @@ impl PortalStorage {
             storage_capacity_in_bytes: config.storage_capacity_kb * 1000,
             radius: Distance::MAX,
             db: config.db,
-            farthest_content_id: None,
             sql_connection_pool: config.sql_connection_pool,
             distance_fn: config.distance_fn,
             metrics: None,
             protocol,
         };
 
-        // Check whether we already have data, and if so
-        // use it to set the farthest_key and data_radius fields
-        match storage.find_farthest_content_id()? {
-            Some(content_id) => {
-                storage.farthest_content_id = Some(content_id.clone());
-                if storage.capacity_reached()? {
-                    storage.radius = storage.distance_to_content_id(&content_id);
+        // Check whether we already have data, and use it to set radius
+        match storage.total_entry_count()? {
+            0 => {
+                // Default radius is left in place, unless user selected 0kb capacity
+                if storage.storage_capacity_in_bytes == 0 {
+                    storage.radius = Distance::ZERO;
                 }
             }
-            // No farthest key found, carry on with blank slate settings
-            None => (),
+            // Only prunes data when at capacity. (eg. user changed it via kb flag)
+            _ => storage.prune_db()?,
         }
 
         if config.metrics_enabled {
@@ -361,18 +358,22 @@ impl PortalStorage {
                 },
             )?
             .collect();
+        Ok(PaginateLocalContentInfo {
+            content_keys: content_keys?,
+            total_entries: self.total_entry_count()?,
+        })
+    }
 
+    fn total_entry_count(&self) -> Result<u64, ContentStoreError> {
+        let conn = self.sql_connection_pool.get()?;
         let mut query = conn.prepare(TOTAL_ENTRY_COUNT_QUERY)?;
         let result: Result<Vec<EntryCount>, rusqlite::Error> = query
             .query_map([], |row| Ok(EntryCount(row.get(0)?)))?
             .collect();
         match result?.first() {
-            Some(val) => Ok(PaginateLocalContentInfo {
-                content_keys: content_keys?,
-                total_entries: val.0,
-            }),
-            None => Err(anyhow!(
-                "Invalid total entries count returned from sql query."
+            Some(val) => Ok(val.0),
+            None => Err(ContentStoreError::InvalidData(
+                "Invalid total entries count returned from sql query.".to_string(),
             )),
         }
     }
@@ -416,55 +417,45 @@ impl PortalStorage {
             self.db.delete(&content_id)?;
             return Err(err.into());
         }
-
-        // Update the farthest key if this key is either 1.) the first key ever or 2.) farther than the current farthest.
-        match self.farthest_content_id.as_ref() {
-            None => {
-                self.farthest_content_id = Some(content_id);
-            }
-            Some(farthest) => {
-                if distance_to_content_id > self.distance_to_content_id(&farthest) {
-                    self.farthest_content_id = Some(content_id.clone());
-                }
-            }
-        }
-
-        // Delete furthest data until our data usage is less than capacity.
-        while self.capacity_reached()? {
-            let id_to_remove = self
-                .farthest_content_id
-                .clone()
-                .expect("farthest_content_id is always set immediately before this block");
-
-            debug!(
-                "Capacity reached, deleting farthest: {}",
-                hex_encode(&id_to_remove)
-            );
-
-            if let Err(err) = self.evict(id_to_remove) {
-                debug!("Error writing content ID {id_to_remove:?} to meta db. Reverted: {err:?}",);
-            }
-
-            match self.find_farthest_content_id()? {
-                None => {
-                    error!("Database is over-capacity, but could not find find entry to delete!");
-                    self.farthest_content_id = None;
-                    // stop attempting to delete to avoid infinite loop
-                    break;
-                }
-                Some(farthest) => {
-                    debug!("Found new farthest: {}", hex_encode(&farthest));
-                    self.farthest_content_id = Some(farthest.clone());
-                    self.radius = self.distance_to_content_id(&farthest);
-                }
-            }
-        }
-
+        self.prune_db()?;
         if let Some(metrics) = &self.metrics {
             let total_bytes_on_disk = self.get_total_storage_usage_in_bytes_on_disk()?;
             metrics.report_total_storage_usage(total_bytes_on_disk as f64 / 1000.0)
         }
 
+        Ok(())
+    }
+
+    /// Internal method for pruning any data that falls outside of the radius of the store.
+    /// Resets the data radius if it prunes any data. Does nothing if the store is empty.
+    fn prune_db(&mut self) -> Result<(), ContentStoreError> {
+        let mut farthest_content_id: Option<[u8; 32]> = self.find_farthest_content_id()?;
+        // Delete furthest data until our data usage is less than capacity.
+        while self.capacity_reached()? {
+            let id_to_remove =
+                // Always expect a content id if capacity_reached(), even at 0kb capacity
+                farthest_content_id.expect("Capacity reached, but no farthest id found!");
+            debug!(
+                "Capacity reached, deleting farthest: {}",
+                hex_encode(&id_to_remove)
+            );
+            if let Err(err) = self.evict(id_to_remove) {
+                debug!("Error writing content ID {id_to_remove:?} to meta db. Reverted: {err:?}",);
+            }
+            // Calculate new farthest_content_id and reset radius
+            match self.find_farthest_content_id()? {
+                None => {
+                    // We get here if the entire db has been pruned,
+                    // eg. user selected 0kb capacity for storage
+                    self.radius = Distance::ZERO;
+                }
+                Some(farthest) => {
+                    debug!("Found new farthest: {}", hex_encode(&farthest));
+                    self.radius = self.distance_to_content_id(&farthest);
+                    farthest_content_id = Some(farthest);
+                }
+            }
+        }
         Ok(())
     }
 
@@ -810,12 +801,13 @@ struct EntryCount(u64);
 pub mod test {
 
     use super::*;
-    use crate::portalnet::types::content_key::IdentityContentKey;
 
-    use crate::utils::db::setup_temp_dir;
     use quickcheck::{quickcheck, Arbitrary, Gen, QuickCheck, TestResult};
     use rand::RngCore;
     use serial_test::serial;
+
+    use crate::portalnet::types::content_key::IdentityContentKey;
+    use crate::utils::db::setup_temp_dir;
 
     const CAPACITY: u64 = 100;
 
@@ -848,6 +840,7 @@ pub mod test {
         // Assert that configs match the storage object's fields
         assert_eq!(storage.node_id, node_id);
         assert_eq!(storage.storage_capacity_in_bytes, CAPACITY * 1000);
+        assert_eq!(storage.radius, Distance::MAX);
 
         std::mem::drop(storage);
         temp_dir.close()?;
@@ -915,6 +908,76 @@ pub mod test {
         let bytes = storage.get_total_storage_usage_in_bytes_from_network()?;
 
         assert_eq!(32, bytes);
+
+        std::mem::drop(storage);
+        temp_dir.close()?;
+        Ok(())
+    }
+
+    #[test_log::test(tokio::test)]
+    #[serial]
+    async fn test_restarting_storage_with_decreased_capacity() -> Result<(), ContentStoreError> {
+        let temp_dir = setup_temp_dir().unwrap();
+
+        let node_id = NodeId::random();
+        let storage_config = PortalStorageConfig::new(CAPACITY, node_id, false).unwrap();
+        let mut storage = PortalStorage::new(storage_config, ProtocolId::History)?;
+
+        for _ in 0..50 {
+            let content_key = generate_random_content_key();
+            let value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
+            storage.store(&content_key, &value)?;
+        }
+
+        let bytes = storage.get_total_storage_usage_in_bytes_from_network()?;
+        assert_eq!(1600, bytes); // 32bytes * 50
+        assert_eq!(storage.radius, Distance::MAX);
+        std::mem::drop(storage);
+
+        // test with 1kb capacity
+        let new_storage_config = PortalStorageConfig::new(1, node_id, false).unwrap();
+        let new_storage = PortalStorage::new(new_storage_config, ProtocolId::History)?;
+
+        // test that previously set value has been pruned
+        let bytes = new_storage.get_total_storage_usage_in_bytes_from_network()?;
+        assert_eq!(992, bytes);
+        assert_eq!(31, new_storage.total_entry_count().unwrap());
+        assert_eq!(new_storage.storage_capacity_in_bytes, 1000);
+        // test that radius has decreased now that we're at capacity
+        assert!(new_storage.radius < Distance::MAX);
+        std::mem::drop(new_storage);
+
+        // test with 0kb capacity
+        let new_storage_config = PortalStorageConfig::new(0, node_id, false).unwrap();
+        let new_storage = PortalStorage::new(new_storage_config, ProtocolId::History)?;
+
+        // test that previously set value has been pruned
+        assert_eq!(new_storage.storage_capacity_in_bytes, 0);
+        assert_eq!(new_storage.radius, Distance::ZERO);
+        //assert_eq!(31, new_storage.total_entry_count().unwrap());
+        std::mem::drop(new_storage);
+
+        temp_dir.close()?;
+        Ok(())
+    }
+
+    #[test_log::test(tokio::test)]
+    #[serial]
+    async fn test_new_storage_with_zero_capacity() -> Result<(), ContentStoreError> {
+        let temp_dir = setup_temp_dir().unwrap();
+
+        let node_id = NodeId::random();
+        let storage_config = PortalStorageConfig::new(0, node_id, false).unwrap();
+        let mut storage = PortalStorage::new(storage_config, ProtocolId::History)?;
+
+        let content_key = generate_random_content_key();
+        let value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
+        assert!(storage.store(&content_key, &value).is_err());
+
+        let bytes = storage.get_total_storage_usage_in_bytes_from_network()?;
+
+        assert_eq!(0, bytes);
+        assert_eq!(storage.radius, Distance::ZERO);
 
         std::mem::drop(storage);
         temp_dir.close()?;

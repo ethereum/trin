@@ -2,19 +2,26 @@
 name = "utp-testing"
 version = "0.1.0"
 edition = "2021"
+repository = "https://github.com/ethereum/trin/tree/master/utp-testing"
+license = "GPL-3.0"
+readme = "README.md"
+keywords = ["ethereum", "portal-network"]
+categories = ["cryptography::cryptocurrencies"]
+description = "A testing suite for the UTP protocol."
+authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 [dependencies]
-anyhow = "1.0.52"
+anyhow = "1.0.68"
+discv5 = { version = "0.2.1", features = ["serde"]}
+hex = "0.4.3"
 jsonrpsee = {version = "0.15.1", features = ["full"]}
-rand = "0.8.5"
+rand = "0.8.4"
 structopt = "0.3.26"
 utp-rs = { version = "0.1.0-alpha" }
 tracing = "0.1.36"
 tracing-subscriber = "0.3.15"
 trin-core = { path = "../trin-core" }
-tokio = {version = "1.8.0", features = ["full"]}
-discv5 = { version = "0.2.1", features = ["serde"]}
-hex = "0.4.3"
+tokio = {version = "1.14.0", features = ["full"]}
 
 [[bin]]
 name = "utp-test-app"

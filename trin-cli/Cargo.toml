@@ -2,25 +2,27 @@
 name = "trin-cli"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+repository = "https://github.com/ethereum/trin/tree/master/trin-cli"
+license = "GPL-3.0"
+readme = "README.md"
+keywords = ["ethereum", "portal-network"]
+categories = ["cryptography::cryptocurrencies"]
+description = "A CLI tool for interacting with a Trin client."
+authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 [dependencies]
-anyhow = "1.0.57"
+anyhow = "1.0.68"
 base64 = "0.13.0"
 ethereum-types = "0.12.1"
 hex = "0.4.3"
 jsonrpc = "0.12.0"
 nanotemplate = "0.3.0"
-serde = "1.0.117"
-serde_json = { version = "1.0.68", features = ["raw_value"] }
-structopt="0.3.25"
+serde = "1.0.150"
+serde_json = { version = "1.0.89", features = ["raw_value"] }
+structopt="0.3.26"
 thiserror = "1.0.29"
-tracing = "0.1.26"
 trin-core = { path = "../trin-core" }
-uds_windows = "1.0.2"
 ureq = { version = "2.5.0", features = ["json"] }
-
 
 [[bin]]
 name="trin-cli"
