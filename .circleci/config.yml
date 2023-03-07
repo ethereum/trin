@@ -4,7 +4,7 @@ orbs:
 executors:
   docker-publisher:
     environment:
-      IMAGE_NAME: ogenev/trin
+      IMAGE_NAME: portalnetwork/trin
     docker:
       - image: cimg/rust:1.66.1
 jobs:
