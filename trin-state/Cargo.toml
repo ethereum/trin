@@ -1,24 +1,25 @@
 [package]
 name = "trin-state"
 version = "0.1.0"
-authors = ["Jason Carver <ut96caarrs@snkmail.com>"]
 edition = "2021"
-rust-version = "1.62.0"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+repository = "https://github.com/ethereum/trin/tree/master/trin-state"
+license = "GPL-3.0"
+readme = "README.md"
+keywords = ["ethereum", "portal-network"]
+categories = ["cryptography::cryptocurrencies"]
+description = "State network subprotocol for Trin."
+authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 [dependencies]
-anyhow = "1.0.57"
+anyhow = "1.0.68"
 async-trait = "0.1.53"
 discv5 = { version = "0.2.1", features = ["serde"]}
-ethereum-types = "0.12.0"
+ethereum-types = "0.12.1"
 eth_trie = "0.1.0"
-hex = "0.4.3"
 num = "0.4.0"
 parking_lot = "0.11.2"
-serde_json = "1.0.59"
 tracing = "0.1.36"
-tokio = {version = "1.8.0", features = ["full"]}
+tokio = {version = "1.14.0", features = ["full"]}
 trin-core = { path = "../trin-core" }
 rocksdb = "0.18.0"
 
