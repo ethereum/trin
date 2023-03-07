@@ -22,6 +22,7 @@ use tokio::{
     sync::{mpsc, mpsc::unbounded_channel},
     time::{self, Duration},
 };
+use utp_rs::socket::UtpSocket;
 
 async fn init_overlay(
     discovery: Arc<Discovery>,
@@ -35,7 +36,7 @@ async fn init_overlay(
 
     let (_utp_talk_req_tx, utp_talk_req_rx) = unbounded_channel();
     let discv5_utp = Discv5UdpSocket::new(Arc::clone(&discovery), utp_talk_req_rx);
-    let utp_socket = utp::socket::UtpSocket::with_socket(discv5_utp);
+    let utp_socket = UtpSocket::with_socket(discv5_utp);
     let utp_socket = Arc::new(utp_socket);
 
     let validator = Arc::new(MockValidator {});

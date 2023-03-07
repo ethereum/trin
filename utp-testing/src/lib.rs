@@ -17,11 +17,12 @@ use trin_core::portalnet::discovery::{Discovery, UtpEnr};
 use trin_core::portalnet::types::messages::{PortalnetConfig, ProtocolId};
 use trin_core::portalnet::Enr;
 use trin_core::utils::bytes::hex_encode;
+use utp_rs::socket::UtpSocket;
 
 /// uTP test app
 pub struct TestApp {
     pub discovery: Arc<Discovery>,
-    pub utp_socket: Arc<utp::socket::UtpSocket<UtpEnr>>,
+    pub utp_socket: Arc<UtpSocket<UtpEnr>>,
     pub utp_talk_req_tx: mpsc::UnboundedSender<TalkRequest>,
     pub utp_payload: Arc<RwLock<Vec<Vec<u8>>>>,
 }
@@ -49,7 +50,7 @@ impl RpcServer for TestApp {
         cid_recv: u16,
     ) -> RpcResult<String> {
         let src_enr = Enr::from_str(&src_enr).unwrap();
-        let cid = utp::cid::ConnectionId {
+        let cid = utp_rs::cid::ConnectionId {
             send: cid_send,
             recv: cid_recv,
             peer: UtpEnr(src_enr.clone()),
@@ -81,7 +82,7 @@ impl RpcServer for TestApp {
         payload: Vec<u8>,
     ) -> RpcResult<String> {
         let dst_enr = Enr::from_str(&dst_enr).unwrap();
-        let cid = utp::cid::ConnectionId {
+        let cid = utp_rs::cid::ConnectionId {
             send: cid_send,
             recv: cid_recv,
             peer: UtpEnr(dst_enr.clone()),
@@ -142,7 +143,7 @@ pub async fn run_test_app(
         Arc::clone(&discovery),
         utp_talk_req_rx,
     );
-    let utp_socket = utp::socket::UtpSocket::with_socket(discv5_utp_socket);
+    let utp_socket = utp_rs::socket::UtpSocket::with_socket(discv5_utp_socket);
     let utp_socket = Arc::new(utp_socket);
 
     let test_app = TestApp {

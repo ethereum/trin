@@ -5,12 +5,15 @@ use rpc::JsonRpcServer;
 use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 use tracing::info;
+use utp_rs::socket::UtpSocket;
 
 use trin_core::jsonrpc::types::HistoryJsonRpcRequest;
 use trin_core::{
     cli::{TrinConfig, HISTORY_NETWORK, STATE_NETWORK},
     portalnet::{
-        discovery::Discovery, events::PortalnetEvents, storage::PortalStorageConfig,
+        discovery::{Discovery, Discv5UdpSocket},
+        events::PortalnetEvents,
+        storage::PortalStorageConfig,
         types::messages::PortalnetConfig,
     },
     types::{accumulator::MasterAccumulator, validation::HeaderOracle},
@@ -48,11 +51,8 @@ pub async fn run_trin(
 
     // Initialize and spawn uTP socket
     let (utp_talk_reqs_tx, utp_talk_reqs_rx) = mpsc::unbounded_channel();
-    let discv5_utp_socket = trin_core::portalnet::discovery::Discv5UdpSocket::new(
-        Arc::clone(&discovery),
-        utp_talk_reqs_rx,
-    );
-    let utp_socket = utp::socket::UtpSocket::with_socket(discv5_utp_socket);
+    let discv5_utp_socket = Discv5UdpSocket::new(Arc::clone(&discovery), utp_talk_reqs_rx);
+    let utp_socket = UtpSocket::with_socket(discv5_utp_socket);
     let utp_socket = Arc::new(utp_socket);
 
     // Initialize Storage config

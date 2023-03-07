@@ -31,7 +31,7 @@ use tokio::{
     task::JoinHandle,
 };
 use tracing::{debug, error, info, trace, warn};
-use utp::socket::UtpSocket;
+use utp_rs::socket::UtpSocket;
 
 use crate::{
     portalnet::{
@@ -1343,7 +1343,7 @@ where
 
         // initiate the connection to the acceptor
         let conn_id = u16::from_be(response.connection_id);
-        let cid = utp::cid::ConnectionId {
+        let cid = utp_rs::cid::ConnectionId {
             recv: conn_id,
             send: conn_id.wrapping_add(1),
             peer: crate::portalnet::discovery::UtpEnr(enr.clone()),
@@ -2430,7 +2430,7 @@ mod tests {
             Arc::clone(&discovery),
             utp_talk_req_rx,
         );
-        let utp_socket = utp::socket::UtpSocket::with_socket(discv5_utp);
+        let utp_socket = utp_rs::socket::UtpSocket::with_socket(discv5_utp);
         let utp_socket = Arc::new(utp_socket);
 
         let node_id = discovery.local_enr().node_id();

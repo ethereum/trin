@@ -16,10 +16,11 @@ use parking_lot::RwLock;
 use ssz::Encode;
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::{debug, error, info, warn};
+use utp_rs::socket::UtpSocket;
 
 use crate::{
     portalnet::{
-        discovery::Discovery,
+        discovery::{Discovery, UtpEnr},
         overlay_service::{
             OverlayCommand, OverlayRequest, OverlayRequestError, OverlayService, RequestDirection,
         },
@@ -94,7 +95,7 @@ pub struct OverlayProtocol<TContentKey, TMetric, TValidator, TStore> {
     /// A sender to send commands to the OverlayService.
     command_tx: UnboundedSender<OverlayCommand<TContentKey>>,
     /// uTP socket.
-    utp_socket: Arc<utp::socket::UtpSocket<crate::portalnet::discovery::UtpEnr>>,
+    utp_socket: Arc<UtpSocket<UtpEnr>>,
     /// Declare the allowed content key types for a given overlay network.
     /// Use a phantom, because we don't store any keys in this struct.
     /// For example, this type is used when decoding a content key received over the network.
@@ -118,7 +119,7 @@ where
     pub async fn new(
         config: OverlayConfig,
         discovery: Arc<Discovery>,
-        utp_socket: Arc<utp::socket::UtpSocket<crate::portalnet::discovery::UtpEnr>>,
+        utp_socket: Arc<UtpSocket<UtpEnr>>,
         store: Arc<RwLock<TStore>>,
         data_radius: Distance,
         protocol: ProtocolId,
@@ -377,7 +378,7 @@ where
         enr: Enr,
         conn_id: u16,
     ) -> Result<Vec<u8>, OverlayRequestError> {
-        let cid = utp::cid::ConnectionId {
+        let cid = utp_rs::cid::ConnectionId {
             recv: conn_id,
             send: conn_id.wrapping_add(1),
             peer: crate::portalnet::discovery::UtpEnr(enr),

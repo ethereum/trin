@@ -4,10 +4,11 @@ use discv5::enr::NodeId;
 use eth_trie::EthTrie;
 use parking_lot::RwLock as PLRwLock;
 use tokio::sync::RwLock;
+use utp_rs::socket::UtpSocket;
 
 use trin_core::{
     portalnet::{
-        discovery::Discovery,
+        discovery::{Discovery, UtpEnr},
         overlay::{OverlayConfig, OverlayProtocol},
         storage::{PortalStorage, PortalStorageConfig},
         types::{
@@ -31,7 +32,7 @@ pub struct StateNetwork {
 impl StateNetwork {
     pub async fn new(
         discovery: Arc<Discovery>,
-        utp_socket: Arc<utp::socket::UtpSocket<trin_core::portalnet::discovery::UtpEnr>>,
+        utp_socket: Arc<UtpSocket<UtpEnr>>,
         storage_config: PortalStorageConfig,
         portal_config: PortalnetConfig,
         header_oracle: Arc<RwLock<HeaderOracle>>,

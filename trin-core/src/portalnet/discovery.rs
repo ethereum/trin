@@ -330,10 +330,10 @@ impl UtpEnr {
     }
 }
 
-impl utp::cid::ConnectionPeer for UtpEnr {}
+impl utp_rs::cid::ConnectionPeer for UtpEnr {}
 
 #[async_trait]
-impl utp::udp::AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
+impl utp_rs::udp::AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
     async fn send_to(&self, buf: &[u8], target: &UtpEnr) -> io::Result<usize> {
         let discv5 = Arc::clone(&self.discv5);
         let target = target.0.clone();

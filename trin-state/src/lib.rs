@@ -9,12 +9,15 @@ use tokio::{
     task::JoinHandle,
 };
 use tracing::info;
+use utp_rs::socket::UtpSocket;
 
 use crate::{events::StateEvents, jsonrpc::StateRequestHandler};
 use trin_core::{
     jsonrpc::types::StateJsonRpcRequest,
     portalnet::{
-        discovery::Discovery, storage::PortalStorageConfig, types::messages::PortalnetConfig,
+        discovery::{Discovery, UtpEnr},
+        storage::PortalStorageConfig,
+        types::messages::PortalnetConfig,
     },
     types::validation::HeaderOracle,
 };
@@ -33,7 +36,7 @@ type StateJsonRpcTx = Option<mpsc::UnboundedSender<StateJsonRpcRequest>>;
 
 pub async fn initialize_state_network(
     discovery: &Arc<Discovery>,
-    utp_socket: Arc<utp::socket::UtpSocket<trin_core::portalnet::discovery::UtpEnr>>,
+    utp_socket: Arc<UtpSocket<UtpEnr>>,
     portalnet_config: PortalnetConfig,
     storage_config: PortalStorageConfig,
     header_oracle: Arc<RwLock<HeaderOracle>>,

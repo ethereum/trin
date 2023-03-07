@@ -14,12 +14,15 @@ use tokio::{
     task::JoinHandle,
 };
 use tracing::info;
+use utp_rs::socket::UtpSocket;
 
 use crate::{events::HistoryEvents, jsonrpc::HistoryRequestHandler};
 use trin_core::{
     jsonrpc::types::HistoryJsonRpcRequest,
     portalnet::{
-        discovery::Discovery, storage::PortalStorageConfig, types::messages::PortalnetConfig,
+        discovery::{Discovery, UtpEnr},
+        storage::PortalStorageConfig,
+        types::messages::PortalnetConfig,
     },
     types::validation::HeaderOracle,
 };
@@ -31,7 +34,7 @@ type HistoryJsonRpcTx = Option<mpsc::UnboundedSender<HistoryJsonRpcRequest>>;
 
 pub async fn initialize_history_network(
     discovery: &Arc<Discovery>,
-    utp_socket: Arc<utp::socket::UtpSocket<trin_core::portalnet::discovery::UtpEnr>>,
+    utp_socket: Arc<UtpSocket<UtpEnr>>,
 
     portalnet_config: PortalnetConfig,
     storage_config: PortalStorageConfig,
