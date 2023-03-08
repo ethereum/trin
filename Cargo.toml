@@ -51,7 +51,3 @@ members = [
     "rpc",
     "utp-testing",
 ]
-
-[[bin]]
-name = "purge-db"
-path = "src/bin/purge_db.rs"
