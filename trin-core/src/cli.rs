@@ -140,7 +140,10 @@ pub struct TrinConfig {
     )]
     pub master_acc_path: PathBuf,
 
-    #[structopt(long = "bridge", help = "bridge mode")]
+    #[structopt(
+        long = "bridge",
+        help = "Runs trin in bridge mode: ['latest', 'backfill', <u64> to provide the starting epoch]"
+    )]
     pub bridge: Option<BridgeMode>,
 
     #[structopt(

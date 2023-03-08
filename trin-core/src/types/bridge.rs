@@ -63,7 +63,10 @@ impl Bridge {
         info!("Launching bridge mode: {:?}", self.mode);
         match self.mode {
             BridgeMode::Latest => self.launch_latest().await,
-            BridgeMode::Backfill => self.launch_backfill().await,
+            BridgeMode::Backfill => self.launch_backfill(None).await,
+            BridgeMode::StartFromEpoch(epoch_number) => {
+                self.launch_backfill(Some(epoch_number)).await
+            }
         }
     }
 
@@ -120,11 +123,22 @@ impl Bridge {
         }
     }
 
-    async fn launch_backfill(&self) {
-        let mut epoch_index = 0;
+    async fn launch_backfill(&self, starting_epoch: Option<u64>) {
         let latest_block = get_latest_block().await.expect(
             "Error launching bridge in backfill mode. Unable to get latest block from provider.",
         );
+        let mut epoch_index = match starting_epoch {
+            Some(val) => {
+                if val * EPOCH_SIZE > latest_block {
+                    panic!(
+                        "Starting epoch is greater than current epoch. 
+                        Please specify a starting epoch that begins before the current block."
+                    );
+                }
+                val
+            }
+            None => 0,
+        };
         let current_epoch = latest_block / EPOCH_SIZE;
         while epoch_index < current_epoch {
             let start = epoch_index * EPOCH_SIZE;
@@ -565,10 +579,12 @@ impl Bridge {
 /// Used to help decode cli args identifying the desired bridge mode.
 /// - Latest: tracks the latest header
 /// - Backfill: starts at block 0
+/// - StartFromEpoch: starts at the given epoch
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BridgeMode {
     Latest,
     Backfill,
+    StartFromEpoch(u64),
 }
 
 type ParseError = &'static str;
@@ -580,7 +596,9 @@ impl FromStr for BridgeMode {
         match s {
             "latest" => Ok(BridgeMode::Latest),
             "backfill" => Ok(BridgeMode::Backfill),
-            _ => panic!("Invalid bridge mode arg: {s} is not an option."),
+            val => u64::from_str(val)
+                .map(BridgeMode::StartFromEpoch)
+                .map_err(|_| "Invalid bridge mode arg"),
         }
     }
 }
