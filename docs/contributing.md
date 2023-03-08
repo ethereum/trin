@@ -17,9 +17,9 @@ These guidelines are heavily influenced by the [Snake-Charmer Tactical Manual](h
 - All logging should be done with the `log` library and not `println!()` statements.
 - Appropriate log levels (`debug`, `warn`, `info`, etc.) should be used with respect to their content.
 - Log statements should be declarative, useful, succinct and formatted for readability.
-	- BAD: `Oct 25 23:42:11.079 DEBUG trin_core::portalnet::events: Got discv5 event TalkRequest(TalkRequest { id: RequestId([226, 151, 109, 239, 115, 223, 116, 109]), node_address: NodeAddress { socket_addr: 127.0.0.1:4568, node_id: NodeId { raw: [5, 208, 240, 167, 153, 116, 216, 224, 160, 101, 80, 229, 154, 206, 113, 239, 182, 109, 181, 137, 16, 96, 251, 63, 85, 223, 235, 208, 3, 242, 175, 11] } }, protocol: [115, 116, 97, 116, 101], body: [1, 1, 0, 0, 0, 0, 0, 0, 0, 12, 0, 0, 0, 1, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 36, 0, 0, 0, 0, 0, 0, 0], sender: Some(UnboundedSender { chan: Tx { inner: Chan { tx: Tx { block_tail: 0x55c4fe611290, tail_position: 1 }, semaphore: 0, rx_waker: AtomicWaker, tx_count: 2, rx_fields: "..." } } }) })    
+	- BAD: `Oct 25 23:42:11.079 DEBUG trin_core::portalnet::events: Got discv5 event TalkRequest(TalkRequest { id: RequestId([226, 151, 109, 239, 115, 223, 116, 109]), node_address: NodeAddress { socket_addr: 127.0.0.1:4568, node_id: NodeId { raw: [5, 208, 240, 167, 153, 116, 216, 224, 160, 101, 80, 229, 154, 206, 113, 239, 182, 109, 181, 137, 16, 96, 251, 63, 85, 223, 235, 208, 3, 242, 175, 11] } }, protocol: [115, 116, 97, 116, 101], body: [1, 1, 0, 0, 0, 0, 0, 0, 0, 12, 0, 0, 0, 1, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 36, 0, 0, 0, 0, 0, 0, 0], sender: Some(UnboundedSender { chan: Tx { inner: Chan { tx: Tx { block_tail: 0x55c4fe611290, tail_position: 1 }, semaphore: 0, rx_waker: AtomicWaker, tx_count: 2, rx_fields: "..." } } }) })
 `
-	- GOOD: `Oct 25 23:43:02.373 DEBUG trin_core::portalnet::overlay: Received Ping(enr_seq=1, radius=18446744073709551615)    
+	- GOOD: `Oct 25 23:43:02.373 DEBUG trin_core::portalnet::overlay: Received Ping(enr_seq=1, radius=18446744073709551615)
 `
 
 ## Pull Requests
@@ -112,7 +112,7 @@ Every team member is responsible for reviewing code. The designations :speech_ba
   - a specific concern, without a satisfactory solution in mind
   - a specific concern with a satisfactory solution provided, but *alternative* solutions **may** be unacceptable
   - any concern with significant subtleties
-  
+
 Contributors **should** react to reviews as follows:
 - :x: if *any* review is marked as "Request changes":
   - make changes and/or request clarification
@@ -183,7 +183,7 @@ still need to add their remote explicitly.
 
 
 ## Releases
-- When cutting a new release, the versions of every crate in this repo should be updated simultaneously to the new version. 
+- When cutting a new release, the versions of every crate in this repo should be updated simultaneously to the new version.
 
 ### Versioning
 
@@ -257,3 +257,4 @@ Any datatype of significance **should** have an accompanying comment briefly des
 - Minimize the amount of `.clone()`s used. Cloning can be a useful mechanism, but should be used with discretion. When leaned upon excessively to [satisfy the borrow checker](https://rust-unofficial.github.io/patterns/anti_patterns/borrow_clone.html) it can lead to unintended consequences.
 - Use interpolated string formatting when possible.
   - Do `format!("words: {var:?}")` not `format!("words: {:?}", var)`
+

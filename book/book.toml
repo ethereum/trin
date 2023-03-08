@@ -1,0 +1,17 @@
+[book]
+language = "en"
+multilingual = false
+src = "src"
+title = "Trin"
+
+[output.html]
+additional-js = ["mermaid.min.js", "mermaid-init.js"]
+
+[output.html.fold]
+enable = true
+
+[preprocessor]
+
+[preprocessor.mermaid]
+command = "mdbook-mermaid"
+
