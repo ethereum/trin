@@ -1,3 +1,4 @@
+pub mod bridge;
 pub mod bytes;
 pub mod cli;
 pub mod consensus;

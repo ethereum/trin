@@ -2,7 +2,6 @@ use std::env;
 use std::fs;
 use std::ops::Range;
 use std::path::PathBuf;
-use std::str::FromStr;
 use std::sync::Arc;
 use std::{thread, time};
 
@@ -15,24 +14,24 @@ use tokio::sync::{mpsc, RwLock};
 use tokio::task::JoinHandle;
 use tracing::{debug, info, warn};
 
-use crate::jsonrpc::endpoints::HistoryEndpoint;
-use crate::jsonrpc::types::{HistoryJsonRpcRequest, JsonRequest, Params};
-use crate::types::accumulator::{
-    EpochAccumulator, MasterAccumulator, EPOCH_SIZE as EPOCH_SIZE_USIZE,
-};
-use crate::types::block_body::{BlockBody, EncodableHeaderList};
-use crate::types::header::{
-    AccumulatorProof, BlockHeaderProof, FullHeader, FullHeaderBatch, Header, HeaderWithProof,
-    SszNone,
-};
-use crate::types::receipts::Receipts;
-use crate::types::validation::HeaderOracle;
-use crate::types::validation::MERGE_BLOCK_NUMBER;
-use crate::utils::bytes::{hex_decode, hex_encode};
+use crate::accumulator::{EpochAccumulator, MasterAccumulator};
+use crate::constants::{EPOCH_SIZE as EPOCH_SIZE_USIZE, MERGE_BLOCK_NUMBER};
+use crate::oracle::HeaderOracle;
 use ethportal_api::types::content_key::{
     BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey, HistoryContentKey,
 };
 use ethportal_api::{ContentItem, HistoryContentItem};
+use trin_types::bridge::BridgeMode;
+use trin_types::execution::block_body::{BlockBody, EncodableHeaderList};
+use trin_types::execution::header::{
+    AccumulatorProof, BlockHeaderProof, FullHeader, FullHeaderBatch, Header, HeaderWithProof,
+    SszNone,
+};
+use trin_types::execution::receipts::Receipts;
+use trin_types::jsonrpc::endpoints::HistoryEndpoint;
+use trin_types::jsonrpc::params::Params;
+use trin_types::jsonrpc::request::{HistoryJsonRpcRequest, JsonRequest};
+use trin_utils::bytes::{hex_decode, hex_encode};
 
 const BATCH_SIZE: u64 = 128;
 const LATEST_BLOCK_POLL_RATE: u64 = 5;
@@ -63,7 +62,10 @@ impl Bridge {
         info!("Launching bridge mode: {:?}", self.mode);
         match self.mode {
             BridgeMode::Latest => self.launch_latest().await,
-            BridgeMode::Backfill => self.launch_backfill().await,
+            BridgeMode::Backfill => self.launch_backfill(None).await,
+            BridgeMode::StartFromEpoch(epoch_number) => {
+                self.launch_backfill(Some(epoch_number)).await
+            }
         }
     }
 
@@ -120,11 +122,22 @@ impl Bridge {
         }
     }
 
-    async fn launch_backfill(&self) {
-        let mut epoch_index = 0;
+    async fn launch_backfill(&self, starting_epoch: Option<u64>) {
         let latest_block = get_latest_block().await.expect(
             "Error launching bridge in backfill mode. Unable to get latest block from provider.",
         );
+        let mut epoch_index = match starting_epoch {
+            Some(val) => {
+                if val * EPOCH_SIZE > latest_block {
+                    panic!(
+                        "Starting epoch is greater than current epoch. 
+                        Please specify a starting epoch that begins before the current block."
+                    );
+                }
+                val
+            }
+            None => 0,
+        };
         let current_epoch = latest_block / EPOCH_SIZE;
         while epoch_index < current_epoch {
             let start = epoch_index * EPOCH_SIZE;
@@ -164,7 +177,6 @@ impl Bridge {
         let ranges = get_ranges(range);
         for range_set in ranges.chunks(BACKFILL_THREAD_COUNT) {
             let futures: Vec<JoinHandle<anyhow::Result<Vec<FullHeader>>>> = (0..range_set.len())
-                .into_iter()
                 .map(|t| Bridge::get_header_future(range_set[t].clone()))
                 .collect();
             let mut results = Vec::with_capacity(futures.len());
@@ -341,7 +353,6 @@ impl Bridge {
             let num_of_tasks =
                 std::cmp::min(BACKFILL_THREAD_COUNT, full_headers.len() - header_index);
             let futures: Vec<JoinHandle<anyhow::Result<()>>> = (0..num_of_tasks)
-                .into_iter()
                 .map(|t| {
                     Bridge::spawn_body_task(tx.clone(), full_headers[header_index + t].clone())
                 })
@@ -377,7 +388,6 @@ impl Bridge {
             let num_of_tasks =
                 std::cmp::min(BACKFILL_THREAD_COUNT, full_headers.len() - header_index);
             let futures: Vec<JoinHandle<anyhow::Result<()>>> = (0..num_of_tasks)
-                .into_iter()
                 .map(|t| {
                     Bridge::spawn_receipt_task(tx.clone(), full_headers[header_index + t].clone())
                 })
@@ -559,29 +569,6 @@ impl Bridge {
     /// Fetch a cloned tx channel to history subnetwork
     async fn history_tx(&self) -> anyhow::Result<UnboundedSender<HistoryJsonRpcRequest>> {
         self.header_oracle.read().await.history_jsonrpc_tx()
-    }
-}
-
-/// Used to help decode cli args identifying the desired bridge mode.
-/// - Latest: tracks the latest header
-/// - Backfill: starts at block 0
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum BridgeMode {
-    Latest,
-    Backfill,
-}
-
-type ParseError = &'static str;
-
-impl FromStr for BridgeMode {
-    type Err = ParseError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "latest" => Ok(BridgeMode::Latest),
-            "backfill" => Ok(BridgeMode::Backfill),
-            _ => panic!("Invalid bridge mode arg: {s} is not an option."),
-        }
     }
 }
 

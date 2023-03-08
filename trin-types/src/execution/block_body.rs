@@ -235,7 +235,7 @@ struct LegacyTransactionHelper {
     pub nonce: U256,
     pub gas_price: U256,
     pub gas: U256,
-    pub to: Option<H160>,
+    pub to: ToAddress,
     pub value: U256,
     #[serde(rename(deserialize = "input"))]
     pub data: JsonBytes,

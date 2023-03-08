@@ -16,7 +16,6 @@ use trin_core::{
         storage::PortalStorageConfig,
         types::messages::PortalnetConfig,
     },
-    types::bridge::Bridge,
     utils::{bootnodes::parse_bootnodes, db::setup_temp_dir},
 };
 use trin_history::initialize_history_network;
@@ -25,6 +24,7 @@ use trin_types::cli::{TrinConfig, Web3TransportType, HISTORY_NETWORK, STATE_NETW
 use trin_types::jsonrpc::request::HistoryJsonRpcRequest;
 use trin_types::provider::TrustedProvider;
 use trin_utils::version::get_trin_version;
+use trin_validation::bridge::Bridge;
 use trin_validation::{accumulator::MasterAccumulator, oracle::HeaderOracle};
 
 pub async fn run_trin(

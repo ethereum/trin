@@ -704,7 +704,8 @@ mod tests {
     fn from_geth_batch() {
         // this block (15573637) was chosen since it contains all receipt types (legacy, access list, eip1559)
         let expected: String =
-            std::fs::read_to_string("./src/assets/test/trin/geth_batch/receipts.json").unwrap();
+            std::fs::read_to_string("../trin-types/src/assets/trin/geth_batch/receipts.json")
+                .unwrap();
         let receipts: Receipts = serde_json::from_str(&expected).unwrap();
         // test that receipts are properly deserialized if receipts root is properly calculated
         assert_eq!(

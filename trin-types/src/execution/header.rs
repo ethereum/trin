@@ -414,8 +414,8 @@ mod tests {
     use ssz::{Decode, Encode};
     use test_log::test;
 
-    use crate::types::block_body::{BlockBody, EncodableHeaderList};
-    use crate::utils::bytes::hex_decode;
+    use crate::execution::block_body::{BlockBody, EncodableHeaderList};
+    use trin_utils::bytes::hex_decode;
 
     #[test]
     fn decode_and_encode_header() {
@@ -533,7 +533,8 @@ mod tests {
         // this block (15573637) was chosen since it contains all tx types (legacy, access list, eip1559)
         // as well as contract creation txs
         let expected: String =
-            std::fs::read_to_string("./src/assets/test/trin/geth_batch/headers.json").unwrap();
+            std::fs::read_to_string("../trin-types/src/assets/trin/geth_batch/headers.json")
+                .unwrap();
         let full_headers: FullHeaderBatch = serde_json::from_str(&expected).unwrap();
         for full_header in full_headers.headers {
             let block_body = BlockBody {

@@ -147,7 +147,7 @@ mod tests {
 
     fn setup_mock_infura_server() -> MockServer {
         let value_146764013 =
-            std::fs::read_to_string("../trin-core/src/assets/test/trin/block_14764013_value.json")
+            std::fs::read_to_string("../trin-types/src/assets/trin/block_14764013_value.json")
                 .unwrap();
         let value_146764013: Value = serde_json::from_str(&value_146764013).unwrap();
         let server = MockServer::start();
