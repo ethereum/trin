@@ -48,9 +48,11 @@ To run integration testing scenarios with different network conditions
 1. cd trin/
 2. docker build -t test-utp --build-arg REPO_URL={repo-url} --build-arg BRANCH_NAME={branch-name} utp-testing/docker
 3. SCENARIO="scenario_details" docker-compose -f utp_testing/docker/docker-compose.yml up
+
 For example:
 SCENARIO="drop-rate --delay=15ms --bandwidth=10Mbps --queue=25 --rate_to_client=0 --rate_to_server=0" docker-compose -f utp-testing/docker/docker-compose.yml up
 would start `drop-rate` scenario with specified delay, bandwith, and different drop rates
+
 4. cargo build -p utp-testing --release
 5. ./target/release/utp-test-suite
 ```

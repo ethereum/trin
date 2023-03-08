@@ -389,11 +389,10 @@ where
             .await
             .map_err(|err| OverlayRequestError::UtpError(format!("{err:?}")))?;
         let mut data = vec![];
-        let n = stream
+        stream
             .read_to_eof(&mut data)
             .await
             .map_err(|err| OverlayRequestError::UtpError(format!("{:?}", err)))?;
-        tracing::debug!("read {n} bytes of data from uTP stream for FindContent");
 
         Ok(data)
     }

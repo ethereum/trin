@@ -957,9 +957,7 @@ where
                 if content.len() <= 1028 {
                     Ok(Content::Content(content))
                 } else {
-                    // Listen for incoming uTP connection request on as part of uTP handshake and
-                    // storing content data, so we can send it inside UtpListener right after we receive
-                    // SYN packet from the requester
+                    // Generate a connection ID for the uTP connection.
                     let node_addr = self.discovery.cached_node_addr(&source).ok_or(
                         OverlayRequestError::AcceptError(format!("unable to find ENR for NodeId")),
                     )?;
@@ -967,6 +965,8 @@ where
                     let cid = self.utp_socket.cid(enr, false);
                     let cid_send = cid.send;
 
+                    // Wait for an incoming connection with the given CID. Then, write the data
+                    // over the uTP stream.
                     let utp = Arc::clone(&self.utp_socket);
                     tokio::spawn(async move {
                         let mut stream = match utp.accept_with_cid(cid.clone()).await {
@@ -977,14 +977,15 @@ where
                             }
                         };
 
-                        // TODO: do something with data.
-                        let mut data = vec![];
-                        match stream.read_to_eof(&mut data).await {
-                            Ok(n) => {
-                                info!(len = %n, "read data from uTP stream");
+                        match stream.write(&content).await {
+                            Ok(..) => {
+                                debug!(
+                                    content_id = %hex_encode(content_key.content_id()),
+                                    "wrote content to uTP stream"
+                                );
                             }
                             Err(err) => {
-                                error!(error = ?err, "error reading data from uTP stream");
+                                error!(%err, "error writing content to uTP stream");
                             }
                         }
                     });
@@ -1063,6 +1064,8 @@ where
             })?;
         }
 
+        // If no content keys were accepted, then return an Accept with a connection ID value of
+        // zero.
         if requested_keys.is_zero() {
             return Ok(Accept {
                 connection_id: 0,
@@ -1070,7 +1073,8 @@ where
             });
         }
 
-        // Listen for incoming connection request on conn_id, as part of utp handshake
+        // Generate a connection ID for the uTP connection if there is data we would like to
+        // accept.
         let node_addr =
             self.discovery
                 .cached_node_addr(&source)
@@ -1088,10 +1092,12 @@ where
         let utp = Arc::clone(&self.utp_socket);
 
         tokio::spawn(async move {
+            // Wait for an incoming connection with the given CID. Then, read the data from the uTP
+            // stream.
             let mut stream = match utp.accept_with_cid(cid.clone()).await {
                 Ok(stream) => stream,
                 Err(err) => {
-                    warn!(?err, cid.send, cid.recv, peer = %cid.peer.node_id(), "unable to accept uTP stream");
+                    warn!(%err, cid.send, cid.recv, peer = %cid.peer.node_id(), "unable to accept uTP stream");
                     return;
                 }
             };
@@ -1100,7 +1106,7 @@ where
             match stream.read_to_eof(&mut data).await {
                 Ok(..) => {}
                 Err(err) => {
-                    warn!(?err, "error reading data from uTP stream");
+                    warn!(%err, "error reading data from uTP stream");
                 }
             }
 
@@ -1341,7 +1347,7 @@ where
             return Ok(response);
         }
 
-        // initiate the connection to the acceptor
+        // Build a connection ID based on the response.
         let conn_id = u16::from_be(response.connection_id);
         let cid = utp_rs::cid::ConnectionId {
             recv: conn_id,
@@ -1398,13 +1404,13 @@ where
                 }
             };
 
-            let content_payload = portal_wire::encode_content_payload(&content_items)
-                .expect("Unable to build content payload: {msg:?}");
-
-            info!(
-                len = %content_payload.len(),
-                "writing data to uTP stream"
-            );
+            let content_payload = match portal_wire::encode_content_payload(&content_items) {
+                Ok(payload) => payload,
+                Err(err) => {
+                    warn!(%err, "Unable to build content payload");
+                    return;
+                }
+            };
 
             // send the content to the acceptor over a uTP stream
             if let Err(err) = stream.write(&content_payload).await {
