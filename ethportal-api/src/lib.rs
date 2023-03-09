@@ -6,6 +6,7 @@
 mod discv5;
 mod history;
 pub mod types;
+pub mod utils;
 mod web3;
 
 pub use discv5::{Discv5ApiClient, Discv5ApiServer};
