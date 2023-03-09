@@ -5,7 +5,7 @@ use ssz::{self, Decode, Encode};
 use ssz_derive::{Decode, Encode};
 use std::fmt;
 
-use crate::utils::bytes::{hex_decode, hex_encode, hex_encode_compact};
+use trin_utils::bytes::{hex_decode, hex_encode, hex_encode_compact};
 
 /// Types whose values represent keys to lookup content items in an overlay network.
 /// Keys are serializable.
@@ -192,7 +192,6 @@ impl OverlayContentKey for HistoryContentKey {
 #[allow(clippy::unwrap_used)]
 mod test {
     use super::*;
-    use crate::utils::bytes::hex_decode;
 
     //
     // History Network Content Key Tests

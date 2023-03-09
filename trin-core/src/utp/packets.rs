@@ -513,6 +513,7 @@ mod tests {
     use quickcheck::{QuickCheck, TestResult};
     use std::convert::TryFrom;
     use test_log::test;
+    use trin_utils::bytes::hex_encode;
 
     #[test]
     fn test_decode_packet() {
@@ -839,8 +840,8 @@ mod tests {
         println!("packet raw: {:?}", packet.as_ref());
 
         assert_eq!(
-            hex::encode(packet.as_ref()),
-            "41002741c9b699ba00000000001000002e6c0000"
+            hex_encode(packet.as_ref()),
+            "0x41002741c9b699ba00000000001000002e6c0000"
         );
     }
 
@@ -856,8 +857,8 @@ mod tests {
         packet.set_ack_nr(11885);
 
         assert_eq!(
-            hex::encode(packet.as_ref()),
-            "21002741005e885e36a7e8830010000041a72e6d"
+            hex_encode(packet.as_ref()),
+            "0x21002741005e885e36a7e8830010000041a72e6d"
         );
     }
 
@@ -875,8 +876,8 @@ mod tests {
         packet.set_selective_ack(vec![1, 0, 0, 128]);
 
         assert_eq!(
-            hex::encode(packet.as_ref()),
-            "21012741005e885e36a7e8830010000041a72e6d000401000080"
+            hex_encode(packet.as_ref()),
+            "0x21012741005e885e36a7e8830010000041a72e6d000401000080"
         );
     }
 
@@ -892,8 +893,8 @@ mod tests {
         packet.set_ack_nr(16806);
 
         assert_eq!(
-            hex::encode(packet.as_ref()),
-            "0100667d0f0cbacf0e710cbf00100000208e41a600010203040506070809"
+            hex_encode(packet.as_ref()),
+            "0x0100667d0f0cbacf0e710cbf00100000208e41a600010203040506070809"
         );
     }
 
@@ -909,8 +910,8 @@ mod tests {
         packet.set_ack_nr(16806);
 
         assert_eq!(
-            hex::encode(packet.as_ref()),
-            "11004a3b1eb5be8f1e7c94d100100000a05a41a6"
+            hex_encode(packet.as_ref()),
+            "0x11004a3b1eb5be8f1e7c94d100100000a05a41a6"
         );
     }
 
@@ -926,8 +927,8 @@ mod tests {
         packet.set_ack_nr(16807);
 
         assert_eq!(
-            hex::encode(packet.as_ref()),
-            "3100f34d2cc6cfbb0000000000000000d87541a7"
+            hex_encode(packet.as_ref()),
+            "0x3100f34d2cc6cfbb0000000000000000d87541a7"
         );
     }
 }

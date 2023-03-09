@@ -17,11 +17,11 @@ use tracing::debug;
 use trin_core::portalnet::discovery::Discovery;
 use trin_core::portalnet::types::messages::{PortalnetConfig, ProtocolId};
 use trin_core::portalnet::Enr;
-use trin_core::utils::bytes::hex_encode;
 use trin_core::utp::stream::{
     UtpListener, UtpListenerEvent, UtpListenerRequest, UtpPayload, UtpStream,
 };
 use trin_core::utp::trin_helpers::UtpStreamId;
+use trin_utils::bytes::{hex_encode, hex_encode_upper};
 
 /// uTP test app
 pub struct TestApp {
@@ -97,7 +97,7 @@ impl TestApp {
         tokio::spawn(async move {
             while let Some(request) = talk_req_rx.recv().await {
                 let protocol_id =
-                    ProtocolId::from_str(&hex::encode_upper(request.protocol())).unwrap();
+                    ProtocolId::from_str(&hex_encode_upper(request.protocol())).unwrap();
 
                 if let ProtocolId::Utp = protocol_id {
                     utp_sender.send(request).unwrap();

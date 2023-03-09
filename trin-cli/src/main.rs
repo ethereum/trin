@@ -17,6 +17,7 @@ use trin_core::cli::DEFAULT_WEB3_IPC_PATH;
 use trin_core::portalnet::types::content_key::{
     BlockBody, BlockHeader, BlockReceipts, HistoryContentKey,
 };
+use trin_utils::bytes::hex_encode;
 
 #[derive(StructOpt)]
 #[structopt(
@@ -136,7 +137,7 @@ fn encode_content_key(content_key: EncodeKey) -> Result<(), Box<dyn std::error::
         }
     };
 
-    println!("{}", hex::encode(Into::<Vec<u8>>::into(key)));
+    println!("{}", hex_encode(Into::<Vec<u8>>::into(key)));
 
     Ok(())
 }

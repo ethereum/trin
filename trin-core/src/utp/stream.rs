@@ -1680,6 +1680,7 @@ mod tests {
             trin_helpers::UtpStreamId,
         },
     };
+    use trin_utils::bytes::{hex_encode, hex_encode_upper};
 
     use discv5::TalkRequest;
     use tokio::sync::mpsc;
@@ -1756,7 +1757,7 @@ mod tests {
         tokio::spawn(async move {
             while let Some(request) = talk_req_rx.recv().await {
                 let protocol_id =
-                    ProtocolId::from_str(&hex::encode_upper(request.protocol())).unwrap();
+                    ProtocolId::from_str(&hex_encode_upper(request.protocol())).unwrap();
 
                 match protocol_id {
                     ProtocolId::Utp => {
@@ -1768,8 +1769,8 @@ mod tests {
                         panic!(
                             "Received TalkRequest on unknown protocol from={} protocol={} body={}",
                             request.node_id(),
-                            hex::encode_upper(request.protocol()),
-                            hex::encode(request.body()),
+                            hex_encode_upper(request.protocol()),
+                            hex_encode(request.body()),
                         );
                     }
                 }

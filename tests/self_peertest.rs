@@ -20,7 +20,6 @@ mod test {
         thread::sleep(time::Duration::from_secs(1));
 
         let peertest_config = peertest::PeertestConfig::default();
-
         let test_ip_addr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
         let test_port = 9000;
         let external_addr = format!("{test_ip_addr}:{test_port}");

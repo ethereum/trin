@@ -17,6 +17,7 @@ use trin_core::{
         trin_helpers::UtpStreamId::{AcceptStream, OfferStream},
     },
 };
+use trin_utils::bytes::hex_encode_upper;
 
 fn next_test_port() -> u16 {
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -50,7 +51,7 @@ async fn spawn_utp_listener() -> (
 
     tokio::spawn(async move {
         while let Some(request) = talk_req_rx.recv().await {
-            let protocol_id = ProtocolId::from_str(&hex::encode_upper(request.protocol())).unwrap();
+            let protocol_id = ProtocolId::from_str(&hex_encode_upper(request.protocol())).unwrap();
 
             match protocol_id {
                 ProtocolId::Utp => utp_event_tx.send(request).unwrap(),

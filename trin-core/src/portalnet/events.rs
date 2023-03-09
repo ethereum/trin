@@ -1,12 +1,12 @@
-use super::types::messages::ProtocolId;
-use crate::utp::stream::UtpListenerEvent;
+use std::str::FromStr;
 
 use discv5::TalkRequest;
-use hex;
 use tokio::sync::mpsc;
 use tracing::{error, warn};
 
-use std::str::FromStr;
+use super::types::messages::ProtocolId;
+use crate::utp::stream::UtpListenerEvent;
+use trin_utils::bytes::{hex_encode, hex_encode_upper};
 
 /// Main handler for portal network events
 pub struct PortalnetEvents {
@@ -61,7 +61,7 @@ impl PortalnetEvents {
 
     /// Dispatch Discv5 TalkRequest event to overlay networks or uTP listener
     fn dispatch_discv5_talk_req(&self, request: TalkRequest) {
-        let protocol_id = ProtocolId::from_str(&hex::encode_upper(request.protocol()));
+        let protocol_id = ProtocolId::from_str(&hex_encode_upper(request.protocol()));
 
         match protocol_id {
             Ok(protocol) => match protocol {
@@ -96,8 +96,8 @@ impl PortalnetEvents {
                     warn!(
                         "Received TalkRequest on unknown protocol from={} protocol={} body={}",
                         request.node_id(),
-                        hex::encode_upper(request.protocol()),
-                        hex::encode(request.body()),
+                        hex_encode_upper(request.protocol()),
+                        hex_encode(request.body()),
                     );
                 }
             },

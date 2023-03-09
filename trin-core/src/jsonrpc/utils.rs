@@ -1,4 +1,3 @@
-use crate::portalnet::{types::distance::Distance, Enr};
 use discv5::{
     enr::NodeId,
     kbucket::{ConnectionState, NodeStatus},
@@ -7,7 +6,9 @@ use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use validator::ValidationError;
 
-use crate::{portalnet::types::content_key::OverlayContentKey, utils::bytes::hex_decode};
+use crate::portalnet::types::{content_key::OverlayContentKey, distance::Distance};
+use crate::portalnet::Enr;
+use trin_utils::bytes::{hex_decode, hex_encode};
 
 type NodeMap = BTreeMap<String, String>;
 type NodeTuple = (NodeId, Enr, NodeStatus, Distance, Option<String>);
@@ -29,10 +30,7 @@ pub fn bucket_entries_to_json(bucket_entries: BTreeMap<usize, Vec<NodeTuple>>) -
                             connected_count += 1
                         }
                         let mut map = BTreeMap::new();
-                        map.insert(
-                            "node_id".to_owned(),
-                            format!("0x{}", hex::encode(node_id.raw())),
-                        );
+                        map.insert("node_id".to_owned(), hex_encode(node_id.raw()));
                         map.insert("enr".to_owned(), enr.to_base64());
                         map.insert("status".to_owned(), format!("{:?}", node_status.state));
                         map.insert("radius".to_owned(), format!("{data_radius}"));

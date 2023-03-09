@@ -15,8 +15,8 @@ use trin_core::{
             distance::{Metric, XorMetric},
         },
     },
-    utils::bytes::hex_encode,
 };
+use trin_utils::bytes::hex_encode;
 
 use ethportal_api::types::discv5::Enr;
 use ethportal_api::types::portal::{
@@ -259,7 +259,7 @@ impl HistoryRequestHandler {
         let content = content.unwrap_or_default();
 
         if !is_trace {
-            return Ok(Value::String(hex::encode(content)));
+            return Ok(Value::String(hex_encode(content)));
         }
 
         // Construct trace response

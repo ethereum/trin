@@ -1,16 +1,4 @@
-use thiserror::Error;
-
-/// A error related to hexadecimal string encoding and decoding.
-#[derive(Error, Debug)]
-pub enum HexError {
-    /// A failure to convert a string into a byte vector.
-    #[error("Could not decode hex")]
-    DecodeError(#[from] hex::FromHexError),
-    /// A failure to adhere to the convention that a hex-encoded
-    /// string must include the "0x" prefix.
-    #[error("Hex strings must start with 0x, but found {0}")]
-    PrefixError(String),
-}
+use anyhow::anyhow;
 
 /// Encode hex with 0x prefix
 pub fn hex_encode<T: AsRef<[u8]>>(data: T) -> String {
@@ -18,11 +6,13 @@ pub fn hex_encode<T: AsRef<[u8]>>(data: T) -> String {
 }
 
 /// Decode hex with 0x prefix
-pub fn hex_decode(data: &str) -> Result<Vec<u8>, HexError> {
+pub fn hex_decode(data: &str) -> anyhow::Result<Vec<u8>> {
     let first_two = &data[..2];
     match first_two {
         "0x" => hex::decode(&data[2..]).map_err(|e| e.into()),
-        _ => Err(HexError::PrefixError(first_two.to_owned())),
+        _ => Err(anyhow!(
+            "Hex strings must start with 0x, but found {first_two}"
+        )),
     }
 }
 
@@ -36,7 +26,13 @@ pub fn hex_encode_compact<T: AsRef<[u8]>>(data: T) -> String {
     }
 }
 
+/// Returns a upper-case, 0x-prefixed, hex-encoded `String` representation of `data`.
+pub fn hex_encode_upper<T: AsRef<[u8]>>(data: T) -> String {
+    format!("0x{}", hex::encode_upper(data))
+}
+
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod test {
     use super::*;
 

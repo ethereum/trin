@@ -10,11 +10,11 @@ use ssz::Encode;
 use tracing::{error, info};
 
 use crate::{cli::PeertestConfig, Peertest};
-use trin_core::utils::bytes::hex_encode;
 use trin_core::{
     jsonrpc::types::{NodesParams, Params},
     portalnet::types::{distance::Distance, messages::SszEnr},
 };
+use trin_utils::bytes::hex_encode;
 
 /// Default data radius value
 const DATA_RADIUS: Distance = Distance::MAX;

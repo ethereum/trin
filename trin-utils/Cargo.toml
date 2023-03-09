@@ -1,0 +1,15 @@
+[package]
+name = "trin-utils"
+version = "0.1.0"
+edition = "2021"
+repository = "https://github.com/ethereum/trin/tree/main/trin-utils"
+license = "GPL-3.0"
+readme = "README.md"
+keywords = ["ethereum", "portal-network"]
+categories = ["cryptography::cryptocurrencies"]
+description = "Utils library for Trin."
+authors = ["https://github.com/ethereum/trin/graphs/contributors"]
+
+[dependencies]
+anyhow = "1.0.68"
+hex = "0.4.3"

@@ -134,8 +134,9 @@ mod tests {
             EpochAccumulator as EpochAccumulatorKey,
         },
         types::accumulator::MasterAccumulator,
-        utils::{bytes::hex_decode, provider::TrustedProvider},
+        utils::provider::TrustedProvider,
     };
+    use trin_utils::bytes::hex_decode;
 
     fn get_hwp_ssz() -> Vec<u8> {
         let file =

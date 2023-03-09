@@ -15,6 +15,7 @@ COPY ./trin-cli ./trin-cli
 COPY ./trin-core ./trin-core 
 COPY ./trin-history ./trin-history 
 COPY ./trin-state ./trin-state 
+COPY ./trin-utils ./trin-utils 
 COPY ./ethportal-peertest ./ethportal-peertest 
 COPY ./utp-testing ./utp-testing
 COPY ./ethportal-api ./ethportal-api
