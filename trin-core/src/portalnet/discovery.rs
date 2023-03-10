@@ -14,7 +14,8 @@ use lru::LruCache;
 use parking_lot::RwLock;
 use serde_json::{json, Value};
 use tokio::sync::mpsc;
-use tracing::info;
+use tracing::{error, info, warn};
+use utp_rs::{cid::ConnectionPeer, udp::AsyncUdpSocket};
 
 use anyhow::anyhow;
 use ethportal_api::types::discv5::{Enr as EthportalEnr, NodeId as EthportalNodeId, NodeInfo};
@@ -306,7 +307,7 @@ impl Discovery {
 }
 
 pub struct Discv5UdpSocket {
-    // `RwLock` for interior mutability.
+    // `Mutex` for interior mutability.
     // TODO: Figure out a better mechanism here. The socket is the only holder of the lock.
     talk_reqs: tokio::sync::Mutex<mpsc::UnboundedReceiver<TalkRequest>>,
     discv5: Arc<Discovery>,
@@ -321,6 +322,7 @@ impl Discv5UdpSocket {
     }
 }
 
+/// A wrapper around `Enr` that implements `ConnectionPeer`.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct UtpEnr(pub Enr);
 
@@ -330,10 +332,10 @@ impl UtpEnr {
     }
 }
 
-impl utp_rs::cid::ConnectionPeer for UtpEnr {}
+impl ConnectionPeer for UtpEnr {}
 
 #[async_trait]
-impl utp_rs::udp::AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
+impl AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
     async fn send_to(&self, buf: &[u8], target: &UtpEnr) -> io::Result<usize> {
         let discv5 = Arc::clone(&self.discv5);
         let target = target.0.clone();
@@ -343,7 +345,7 @@ impl utp_rs::udp::AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
                 // We drop the talk response because it is ignored in the uTP protocol.
                 Ok(..) => {}
                 Err(err) => {
-                    tracing::error!(%err, "unable to send uTP talk request");
+                    error!(%err, "unable to send uTP talk request");
                 }
             }
         });
@@ -362,7 +364,7 @@ impl utp_rs::udp::AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
                         let enr = match self.discv5.cached_node_addr(src_node_id) {
                             Some(node_addr) => Ok(node_addr.enr),
                             None => {
-                                tracing::warn!(node_id = %src_node_id, "uTP packet from unknown source");
+                                warn!(node_id = %src_node_id, "uTP packet from unknown source");
                                 Err(io::Error::new(
                                     io::ErrorKind::Other,
                                     "ENR not found for talk req destination",
@@ -378,7 +380,7 @@ impl utp_rs::udp::AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
 
                 // respond with empty talk response
                 if let Err(err) = talk_req.respond(vec![]) {
-                    tracing::warn!(%err, "failed to respond to uTP talk request");
+                    warn!(%err, "failed to respond to uTP talk request");
                 }
 
                 Ok((n, enr))

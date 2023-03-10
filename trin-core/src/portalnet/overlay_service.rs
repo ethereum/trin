@@ -1103,11 +1103,8 @@ where
             };
 
             let mut data = vec![];
-            match stream.read_to_eof(&mut data).await {
-                Ok(..) => {}
-                Err(err) => {
-                    warn!(%err, "error reading data from uTP stream");
-                }
+            if let Err(err) = stream.read_to_eof(&mut data).await {
+                warn!(%err, "error reading data from uTP stream");
             }
 
             if let Err(err) = Self::process_accept_utp_payload(
