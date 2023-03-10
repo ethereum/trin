@@ -8,11 +8,11 @@ use ethportal_api::types::portal::{
 use ethportal_api::HistoryNetworkApiServer;
 use ethportal_api::{HistoryContentItem, HistoryContentKey};
 
+use ethportal_api::endpoints::HistoryEndpoint;
 use ethportal_api::jsonrpsee::core::__reexports::serde_json::from_value;
 use ethportal_api::jsonrpsee::core::__reexports::serde_json::Value;
+use ethportal_api::types::request::HistoryJsonRpcRequest;
 use tokio::sync::mpsc;
-use trin_core::jsonrpc::endpoints::HistoryEndpoint;
-use trin_core::jsonrpc::types::HistoryJsonRpcRequest;
 
 pub struct HistoryNetworkApi {
     network: mpsc::UnboundedSender<HistoryJsonRpcRequest>,

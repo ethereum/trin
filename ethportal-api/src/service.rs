@@ -4,7 +4,7 @@ use serde_json::json;
 use thiserror::Error;
 use ureq::{self, Request};
 
-use crate::jsonrpc::types::JsonRequest;
+use crate::types::request::JsonRequest;
 
 #[derive(Error, Debug)]
 pub enum HttpParseError {

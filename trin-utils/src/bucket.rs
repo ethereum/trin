@@ -4,11 +4,10 @@ use discv5::{
 };
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
-use validator::ValidationError;
 
-use crate::portalnet::types::{content_key::OverlayContentKey, distance::Distance};
-use crate::portalnet::Enr;
-use trin_utils::bytes::{hex_decode, hex_encode};
+use crate::bytes::hex_encode;
+use trin_types::distance::Distance;
+use trin_types::enr::Enr;
 
 type NodeMap = BTreeMap<String, String>;
 type NodeTuple = (NodeId, Enr, NodeStatus, Distance, Option<String>);
@@ -103,37 +102,6 @@ fn expand_client_name(client_shorthand: &str) -> Option<String> {
         }
         None => None,
     }
-}
-
-/// Parse out a (content_key, content_value) pair from the given json parameter list
-pub fn parse_content_item<TContentKey: OverlayContentKey>(
-    params: [&Value; 2],
-) -> Result<(TContentKey, Vec<u8>), ValidationError> {
-    let content_key = params[0]
-        .as_str()
-        .ok_or_else(|| ValidationError::new("Empty content key param"))?;
-    let content_key = match hex_decode(content_key) {
-        Ok(val) => match TContentKey::try_from(val) {
-            Ok(val) => val,
-            Err(_) => return Err(ValidationError::new("Unable to decode content_key")),
-        },
-        Err(err) => {
-            let mut ve = ValidationError::new("Cannot convert content_key hex to bytes");
-            ve.add_param(
-                std::borrow::Cow::Borrowed("hex_decode_exception"),
-                &err.to_string(),
-            );
-            return Err(ve);
-        }
-    };
-    let content = params[1]
-        .as_str()
-        .ok_or_else(|| ValidationError::new("Empty content param"))?;
-    let content = match hex_decode(content) {
-        Ok(val) => val,
-        Err(_) => return Err(ValidationError::new("Unable to decode content")),
-    };
-    Ok((content_key, content))
 }
 
 #[cfg(test)]

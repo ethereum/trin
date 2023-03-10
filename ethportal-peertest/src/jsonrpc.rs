@@ -10,10 +10,9 @@ use ssz::Encode;
 use tracing::{error, info};
 
 use crate::{cli::PeertestConfig, Peertest};
-use trin_core::{
-    jsonrpc::types::{NodesParams, Params},
-    portalnet::types::{distance::Distance, messages::SszEnr},
-};
+use ethportal_api::types::params::{NodesParams, Params};
+use trin_types::distance::Distance;
+use trin_types::enr::SszEnr;
 use trin_utils::bytes::hex_encode;
 
 /// Default data radius value

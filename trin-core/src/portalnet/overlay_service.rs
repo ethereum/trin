@@ -44,14 +44,12 @@ use crate::{
         storage::ContentStore,
         types::{
             content_key::{OverlayContentKey, RawContentKey},
-            distance::{Distance, Metric},
             messages::{
                 Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer,
-                Ping, Pong, PopulatedOffer, ProtocolId, Request, Response, SszEnr,
+                Ping, Pong, PopulatedOffer, ProtocolId, Request, Response,
             },
             node::Node,
         },
-        Enr,
     },
     types::validation::Validator,
     utils::{node_id, portal_wire},
@@ -60,6 +58,8 @@ use crate::{
         trin_helpers::UtpStreamId,
     },
 };
+use trin_types::distance::{Distance, Metric};
+use trin_types::enr::{Enr, SszEnr};
 use trin_utils::bytes::hex_encode_compact;
 
 /// Maximum number of ENRs in response to FindNodes.
@@ -2122,13 +2122,12 @@ mod tests {
             discovery::Discovery,
             overlay::OverlayConfig,
             storage::{DistanceFunction, MemoryContentStore},
-            types::{
-                content_key::IdentityContentKey, distance::XorMetric, messages::PortalnetConfig,
-            },
+            types::{content_key::IdentityContentKey, messages::PortalnetConfig},
         },
         types::validation::MockValidator,
         utils::node_id::generate_random_remote_enr,
     };
+    use trin_types::distance::XorMetric;
 
     use discv5::kbucket::Entry;
     use ethereum_types::U256;

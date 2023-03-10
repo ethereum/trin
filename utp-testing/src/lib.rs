@@ -16,11 +16,11 @@ use tokio::sync::RwLock;
 use tracing::debug;
 use trin_core::portalnet::discovery::Discovery;
 use trin_core::portalnet::types::messages::{PortalnetConfig, ProtocolId};
-use trin_core::portalnet::Enr;
 use trin_core::utp::stream::{
     UtpListener, UtpListenerEvent, UtpListenerRequest, UtpPayload, UtpStream,
 };
 use trin_core::utp::trin_helpers::UtpStreamId;
+use trin_types::enr::Enr;
 use trin_utils::bytes::{hex_encode, hex_encode_upper};
 
 /// uTP test app

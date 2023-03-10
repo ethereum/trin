@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use anyhow::anyhow;
 
-use crate::portalnet::Enr;
+use trin_types::enr::Enr;
 
 lazy_static! {
     pub static ref DEFAULT_BOOTNODES: Vec<Enr> = vec![

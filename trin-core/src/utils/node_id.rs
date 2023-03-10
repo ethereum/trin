@@ -1,18 +1,16 @@
-use crate::{
-    portalnet::types::distance::{Metric, XorMetric},
-    utils::bytes,
-};
+use crate::utils::bytes;
+use trin_types::distance::{Metric, XorMetric};
 
 use discv5::enr::NodeId;
 
-#[cfg(test)]
-use crate::portalnet::Enr;
 #[cfg(test)]
 use discv5::enr::{CombinedKey, EnrBuilder};
 #[cfg(test)]
 use rand::Rng;
 #[cfg(test)]
 use std::net::Ipv4Addr;
+#[cfg(test)]
+use trin_types::enr::Enr;
 
 /// Generate random NodeId based on bucket index target and a local node id.
 /// First we generate a random distance metric with leading zeroes based on the target bucket.

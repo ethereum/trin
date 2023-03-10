@@ -1669,7 +1669,6 @@ mod tests {
         portalnet::{
             discovery::Discovery,
             types::messages::{PortalnetConfig, ProtocolId},
-            Enr,
         },
         socket,
         utils::node_id::generate_random_remote_enr,
@@ -1680,6 +1679,7 @@ mod tests {
             trin_helpers::UtpStreamId,
         },
     };
+    use trin_types::enr::Enr;
     use trin_utils::bytes::{hex_encode, hex_encode_upper};
 
     use discv5::TalkRequest;

@@ -6,8 +6,6 @@ use ssz::Decode;
 use tokio::sync::mpsc;
 
 use crate::{
-    jsonrpc::endpoints::HistoryEndpoint,
-    jsonrpc::types::{HistoryJsonRpcRequest, Params},
     portalnet::types::content_key::IdentityContentKey,
     types::{
         accumulator::MasterAccumulator,
@@ -15,6 +13,9 @@ use crate::{
     },
     utils::provider::TrustedProvider,
 };
+use ethportal_api::endpoints::HistoryEndpoint;
+use ethportal_api::types::params::Params;
+use ethportal_api::types::request::HistoryJsonRpcRequest;
 use ethportal_api::{types::content_key::BlockHeaderKey, HistoryContentKey};
 use trin_utils::bytes::hex_decode;
 

@@ -4,7 +4,7 @@ use tokio::sync::mpsc;
 use tracing::error;
 
 use crate::network::StateNetwork;
-use trin_core::jsonrpc::types::StateJsonRpcRequest;
+use ethportal_api::types::request::StateJsonRpcRequest;
 
 /// Handles State network JSON-RPC requests
 pub struct StateRequestHandler {

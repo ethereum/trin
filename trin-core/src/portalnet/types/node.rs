@@ -1,6 +1,7 @@
 use std::fmt;
 
-use crate::portalnet::{types::distance::Distance, Enr};
+use trin_types::distance::Distance;
+use trin_types::enr::Enr;
 
 /// A node in the overlay network routing table.
 #[derive(Clone, Debug, Eq, PartialEq)]

@@ -8,7 +8,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::RwLock;
 use tracing::info;
 
-use trin_core::jsonrpc::types::HistoryJsonRpcRequest;
+use ethportal_api::types::request::HistoryJsonRpcRequest;
 use trin_core::{
     cli::{TrinConfig, Web3TransportType, HISTORY_NETWORK, STATE_NETWORK},
     portalnet::{
