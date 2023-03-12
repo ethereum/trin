@@ -10,7 +10,7 @@ use tracing::info;
 
 use trin_core::jsonrpc::types::HistoryJsonRpcRequest;
 use trin_core::{
-    cli::{TrinConfig, HISTORY_NETWORK, STATE_NETWORK},
+    cli::{TrinConfig, Web3TransportType, HISTORY_NETWORK, STATE_NETWORK},
     portalnet::{
         discovery::Discovery, events::PortalnetEvents, storage::PortalStorageConfig,
         types::messages::PortalnetConfig,
@@ -161,8 +161,8 @@ async fn launch_jsonrpc_server(
     let history_handler = history_handler.ok_or_else(|| {
         "History network must be available to use IPC transport for JSON-RPC server".to_string()
     })?;
-    match trin_config.web3_transport.as_str() {
-        "ipc" => {
+    match trin_config.web3_transport {
+        Web3TransportType::IPC => {
             // Launch jsonrpsee server with IPC transport
             let rpc_handle =
                 JsonRpcServer::run_ipc(trin_config.web3_ipc_path, discv5, history_handler)
@@ -171,7 +171,7 @@ async fn launch_jsonrpc_server(
             info!("IPC JSON-RPC server launched.");
             Ok(rpc_handle)
         }
-        "http" => {
+        Web3TransportType::HTTP => {
             // Launch jsonrpsee server with http and WS transport
             let rpc_handle =
                 JsonRpcServer::run_http(trin_config.web3_http_address, discv5, history_handler)
@@ -180,6 +180,5 @@ async fn launch_jsonrpc_server(
             info!("HTTP JSON-RPC server launched.");
             Ok(rpc_handle)
         }
-        val => panic!("Unsupported web3 transport: {val}"),
     }
 }
