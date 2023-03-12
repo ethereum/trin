@@ -1,4 +1,4 @@
-use std::{env, ffi::OsString, fmt, net::SocketAddr, path::PathBuf};
+use std::{env, ffi::OsString, fmt, net::SocketAddr, path::PathBuf, str::FromStr};
 
 use structopt::StructOpt;
 use url::Url;
@@ -15,6 +15,46 @@ pub const STATE_NETWORK: &str = "state";
 const DEFAULT_SUBNETWORKS: &str = "history";
 pub const DEFAULT_STORAGE_CAPACITY: &str = "100000"; // 100mb
 pub const DEFAULT_TRUSTED_PROVIDER: &str = "infura";
+pub const DEFAULT_WEB3_TRANSPORT: &str = "ipc";
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum Web3TransportType {
+    HTTP,
+    IPC,
+}
+
+impl fmt::Display for Web3TransportType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::HTTP => write!(f, "http"),
+            Self::IPC => write!(f, "ipc"),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct ParseWeb3TransportError;
+
+impl fmt::Display for ParseWeb3TransportError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Invalid web3-transport arg. Expected either 'http' or 'ipc'"
+        )
+    }
+}
+
+impl FromStr for Web3TransportType {
+    type Err = ParseWeb3TransportError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "http" => Ok(Web3TransportType::HTTP),
+            "ipc" => Ok(Web3TransportType::IPC),
+            _ => Err(ParseWeb3TransportError),
+        }
+    }
+}
 
 #[derive(StructOpt, Debug, PartialEq, Clone)]
 #[structopt(
@@ -25,12 +65,11 @@ pub const DEFAULT_TRUSTED_PROVIDER: &str = "infura";
 )]
 pub struct TrinConfig {
     #[structopt(
-        default_value = "ipc",
-        possible_values(&["http", "ipc"]),
+        default_value(DEFAULT_WEB3_TRANSPORT),
         long = "web3-transport",
         help = "select transport protocol to serve json-rpc endpoint"
     )]
-    pub web3_transport: String,
+    pub web3_transport: Web3TransportType,
 
     #[structopt(
         default_value(DEFAULT_WEB3_HTTP_ADDRESS),
@@ -136,7 +175,8 @@ pub struct TrinConfig {
 impl Default for TrinConfig {
     fn default() -> Self {
         TrinConfig {
-            web3_transport: "ipc".to_string(),
+            web3_transport: Web3TransportType::from_str(DEFAULT_WEB3_TRANSPORT)
+                .expect("Parsing static DEFAULT_WEB3_TRANSPORT to work"),
             web3_http_address: Url::parse(DEFAULT_WEB3_HTTP_ADDRESS)
                 .expect("Parsing static DEFAULT_WEB3_HTTP_ADDRESS to work"),
             web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
@@ -172,18 +212,17 @@ impl TrinConfig {
         I: Iterator<Item = T>,
         T: Into<OsString> + Clone,
     {
-        let config = Self::from_iter(args);
+        let config = Self::from_iter_safe(args).unwrap_or_else(|e| panic!("{e}"));
 
-        match config.web3_transport.as_str() {
-            "http" => match &config.web3_ipc_path[..] {
+        match config.web3_transport {
+            Web3TransportType::HTTP => match &config.web3_ipc_path[..] {
                 DEFAULT_WEB3_IPC_PATH => {}
                 _ => panic!("Must not supply an ipc path when using http protocol for json-rpc"),
             },
-            "ipc" => match config.web3_http_address.as_str() {
+            Web3TransportType::IPC => match config.web3_http_address.as_str() {
                 DEFAULT_WEB3_HTTP_ADDRESS => {}
                 p => panic!("Must not supply an http address when using ipc protocol for json-rpc (received: {p})"),
-            },
-            val => panic!("Unsupported json-rpc protocol: {val}"),
+            }
         }
 
         match config.trusted_provider_url {
@@ -203,7 +242,7 @@ impl TrinConfig {
             },
         }
         // Should not serve http over same port as localhost provider.
-        if config.web3_transport.as_str() == "http"
+        if config.web3_transport == Web3TransportType::HTTP
             && config.trusted_provider == TrustedProviderType::Custom
         {
             if let Some(url) = &config.trusted_provider_url {
@@ -238,10 +277,9 @@ fn check_private_key_length(private_key: String) -> Result<(), String> {
 
 impl fmt::Display for TrinConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let json_rpc_url = match self.web3_transport.as_str() {
-            "http" => self.web3_http_address.as_str(),
-            "ipc" => &self.web3_ipc_path,
-            _ => "",
+        let json_rpc_url = match &self.web3_transport {
+            Web3TransportType::HTTP => self.web3_http_address.as_str(),
+            Web3TransportType::IPC => &self.web3_ipc_path,
         };
 
         write!(
@@ -291,7 +329,7 @@ mod test {
     fn test_custom_http_args() {
         let expected_config = TrinConfig {
             web3_http_address: Url::parse("http://0.0.0.0:8080/").unwrap(),
-            web3_transport: "http".to_string(),
+            web3_transport: Web3TransportType::HTTP,
             ..Default::default()
         };
         let actual_config = TrinConfig::new_from(
@@ -315,12 +353,11 @@ mod test {
 
     #[test]
     fn test_ipc_protocol() {
-        let actual_config =
-            TrinConfig::new_from(["trin", "--web3-transport", "ipc"].iter()).unwrap();
+        let actual_config = Default::default();
         assert!(env_is_set(&actual_config));
         let expected_config = TrinConfig {
             web3_http_address: Url::parse(DEFAULT_WEB3_HTTP_ADDRESS).unwrap(),
-            web3_transport: "ipc".to_string(),
+            web3_transport: Web3TransportType::IPC,
             ..Default::default()
         };
         assert_eq!(actual_config.web3_transport, expected_config.web3_transport);
@@ -332,22 +369,13 @@ mod test {
 
     #[test]
     fn test_ipc_with_custom_path() {
-        let actual_config = TrinConfig::new_from(
-            [
-                "trin",
-                "--web3-transport",
-                "ipc",
-                "--web3-ipc-path",
-                "/path/test.ipc",
-            ]
-            .iter(),
-        )
-        .unwrap();
+        let actual_config =
+            TrinConfig::new_from(["trin", "--web3-ipc-path", "/path/test.ipc"].iter()).unwrap();
         assert!(env_is_set(&actual_config));
         let expected_config = TrinConfig {
             web3_http_address: Url::parse(DEFAULT_WEB3_HTTP_ADDRESS).unwrap(),
             web3_ipc_path: "/path/test.ipc".to_string(),
-            web3_transport: "ipc".to_string(),
+            web3_transport: Web3TransportType::IPC,
             ..Default::default()
         };
         assert_eq!(actual_config.web3_transport, expected_config.web3_transport);
@@ -377,17 +405,8 @@ mod test {
     #[test]
     #[should_panic(expected = "Must not supply an http address when using ipc")]
     fn test_ipc_protocol_rejects_custom_web3_http_address() {
-        TrinConfig::new_from(
-            [
-                "trin",
-                "--web3-transport",
-                "ipc",
-                "--web3-http-address",
-                "http://127.0.0.1:1234/",
-            ]
-            .iter(),
-        )
-        .unwrap_err();
+        TrinConfig::new_from(["trin", "--web3-http-address", "http://127.0.0.1:1234/"].iter())
+            .unwrap_err();
     }
 
     #[test]
@@ -652,5 +671,11 @@ mod test {
             .iter(),
         )
         .unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "Invalid web3-transport arg. Expected either 'http' or 'ipc'")]
+    fn test_invalid_web3_transport_argument() {
+        TrinConfig::new_from(["trin", "--web3-transport", "invalid"].iter()).unwrap();
     }
 }
