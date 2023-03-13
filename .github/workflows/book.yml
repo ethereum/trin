@@ -1,61 +1,74 @@
 name: book
 on:
   push:
-    branches: [main]
+    branches: 
+      - master
     paths:
       - 'book/**'
       - 'book.toml'
+      - '.github/workflows/book.yml'
   pull_request:
-    branches: [main]
+    branches: 
+      - master
     paths:
       - 'book/**'
       - 'book.toml'
+      - '.github/workflows/book.yml'
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    name: test
-
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install Rust
+        run: |
+          rustup set profile minimal
+          rustup toolchain install stable
+          rustup default stable
 
       - name: Install mdbook
         run: |
-          mkdir mdbook
-          curl -sSL https://github.com/rust-lang/mdBook/releases/download/v0.4.14/mdbook-v0.4.14-x86_64-unknown-linux-gnu.tar.gz | tar -xz --directory=./mdbook
-          echo `pwd`/mdbook >> $GITHUB_PATH
+          mkdir bin
+          curl -sSL https://github.com/rust-lang/mdBook/releases/download/v0.4.14/mdbook-v0.4.14-x86_64-unknown-linux-gnu.tar.gz | tar -xz --directory=bin
+          echo "$(pwd)/bin" >> $GITHUB_PATH
 
       - name: Run tests
+        working-directory: book
         run: mdbook test
 
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-
-      - name: Install mdbook
+      - name: Checkout
+        uses: actions/checkout@v3
+      
+      - name: Install dependencies
+        run: cargo install mdbook
+      
+      - name: Install mdbook-mermaid
+        working-directory: book
         run: |
-          mkdir mdbook
-          curl -sSL https://github.com/rust-lang/mdBook/releases/download/v0.4.14/mdbook-v0.4.14-x86_64-unknown-linux-gnu.tar.gz | tar -xz --directory=./mdbook
-          echo `pwd`/mdbook >> $GITHUB_PATH
+          cargo install mdbook-mermaid
+          mdbook-mermaid install
 
       - name: Build
+        working-directory: book
         run: mdbook build
 
-      - name: Save pages artifact
+      - name: Upload pages artifact
         uses: actions/upload-pages-artifact@v1
         with:
-          path: target/book
+          path: ./book/book
 
   deploy:
-    # Only deploy if a push to main
-    if: github.ref_name == 'main' && github.event_name == 'push'
+    if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
-    needs: [test, build]
+    needs:
+      - test
+      - build
 
-    # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
     permissions:
       pages: write
       id-token: write
