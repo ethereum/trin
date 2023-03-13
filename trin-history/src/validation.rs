@@ -50,7 +50,8 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                     .header_oracle
                     .write()
                     .await
-                    .get_header_by_hash(H256::from(key.block_hash))?;
+                    .get_header_by_hash(H256::from(key.block_hash))
+                    .await?;
                 let actual_uncles_root = block_body.uncles_root()?;
                 if actual_uncles_root != trusted_header.uncles_hash {
                     return Err(anyhow!(
@@ -77,7 +78,8 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                     .header_oracle
                     .write()
                     .await
-                    .get_header_by_hash(H256::from(key.block_hash))?;
+                    .get_header_by_hash(H256::from(key.block_hash))
+                    .await?;
                 let actual_receipts_root = receipts.root()?;
                 if actual_receipts_root != trusted_header.receipts_root {
                     return Err(anyhow!(
