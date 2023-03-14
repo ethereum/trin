@@ -8,7 +8,7 @@ use ssz_types::{typenum, FixedVector, VariableList};
 
 use std::fmt;
 
-use crate::utils::bytes;
+use trin_utils::bytes::hex_encode_compact;
 
 /// SSZ encoded overlay content key as bytes
 pub type RawContentKey = Vec<u8>;
@@ -59,7 +59,7 @@ impl fmt::Display for IdentityContentKey {
         write!(
             f,
             "Identity {{ value: {} }}",
-            bytes::hex_encode_compact(&self.value)
+            hex_encode_compact(&self.value)
         )
     }
 }
@@ -144,22 +144,22 @@ impl fmt::Display for HistoryContentKey {
         let s = match self {
             Self::BlockHeaderWithProof(header) => format!(
                 "BlockHeaderWithProof {{ block_hash: {} }}",
-                bytes::hex_encode_compact(header.block_hash)
+                hex_encode_compact(header.block_hash)
             ),
             Self::BlockBody(body) => format!(
                 "BlockBody {{ block_hash: {} }}",
-                bytes::hex_encode_compact(body.block_hash)
+                hex_encode_compact(body.block_hash)
             ),
             Self::BlockReceipts(receipts) => {
                 format!(
                     "BlockReceipts {{ block_hash: {} }}",
-                    bytes::hex_encode_compact(receipts.block_hash)
+                    hex_encode_compact(receipts.block_hash)
                 )
             }
             Self::EpochAccumulator(acc) => {
                 format!(
                     "EpochAccumulator {{ epoch_hash: {} }}",
-                    bytes::hex_encode_compact(acc.epoch_hash.as_fixed_bytes())
+                    hex_encode_compact(acc.epoch_hash.as_fixed_bytes())
                 )
             }
         };
@@ -272,37 +272,37 @@ impl fmt::Display for StateContentKey {
         let s = match self {
             Self::AccountTrieNode(node) => format!(
                 "AccountTrieNode {{ node_hash: {}, state_root: {} }}",
-                bytes::hex_encode_compact(node.node_hash),
-                bytes::hex_encode_compact(node.state_root)
+                hex_encode_compact(node.node_hash),
+                hex_encode_compact(node.state_root)
             ),
             Self::ContractStorageTrieNode(node) => {
                 format!(
                     "ContractStorageTrieNode {{ address: {}, node_hash: {}, state_root: {} }}",
-                    bytes::hex_encode_compact(node.address.to_vec().as_slice()),
-                    bytes::hex_encode_compact(node.node_hash),
-                    bytes::hex_encode_compact(node.state_root)
+                    hex_encode_compact(node.address.to_vec().as_slice()),
+                    hex_encode_compact(node.node_hash),
+                    hex_encode_compact(node.state_root)
                 )
             }
             Self::AccountTrieProof(proof) => {
                 format!(
                     "AccountTrieProof {{ address: {}, state_root: {} }}",
-                    bytes::hex_encode_compact(proof.address.to_vec().as_slice()),
-                    bytes::hex_encode_compact(&proof.state_root)
+                    hex_encode_compact(proof.address.to_vec().as_slice()),
+                    hex_encode_compact(&proof.state_root)
                 )
             }
             Self::ContractStorageTrieProof(proof) => {
                 format!(
                     "ContractStorageTrieProof {{ address: {}, slot: {}, state_root: {} }}",
-                    bytes::hex_encode_compact(proof.address.to_vec().as_slice()),
-                    bytes::hex_encode_compact(Into::<[u8; 32]>::into(proof.slot)),
-                    bytes::hex_encode_compact(proof.state_root)
+                    hex_encode_compact(proof.address.to_vec().as_slice()),
+                    hex_encode_compact(Into::<[u8; 32]>::into(proof.slot)),
+                    hex_encode_compact(proof.state_root)
                 )
             }
             Self::ContractBytecode(bytecode) => {
                 format!(
                     "ContractBytecode {{ address: {}, code_hash: {} }}",
-                    bytes::hex_encode_compact(bytecode.address.to_vec().as_slice()),
-                    bytes::hex_encode_compact(bytecode.code_hash)
+                    hex_encode_compact(bytecode.address.to_vec().as_slice()),
+                    hex_encode_compact(bytecode.code_hash)
                 )
             }
         };
@@ -387,7 +387,7 @@ mod test {
     use ethereum_types::U256;
     use test_log::test;
 
-    use hex;
+    use trin_utils::bytes::hex_decode;
 
     //
     // History Network Content Key Tests
@@ -402,7 +402,7 @@ mod test {
     #[test]
     fn block_header() {
         let expected_content_key =
-            hex::decode("00d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d")
+            hex_decode("0x00d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d")
                 .unwrap();
         let expected_content_id: [u8; 32] = [
             0x3e, 0x86, 0xb3, 0x76, 0x7b, 0x57, 0x40, 0x2e, 0xa7, 0x2e, 0x36, 0x9a, 0xe0, 0x49,
@@ -424,7 +424,7 @@ mod test {
     #[test]
     fn block_body() {
         let expected_content_key =
-            hex::decode("01d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d")
+            hex_decode("0x01d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d")
                 .unwrap();
         let expected_content_id: [u8; 32] = [
             0xeb, 0xe4, 0x14, 0x85, 0x46, 0x29, 0xd6, 0x0c, 0x58, 0xdd, 0xd5, 0xbf, 0x60, 0xfd,
@@ -446,7 +446,7 @@ mod test {
     #[test]
     fn block_receipts() {
         let expected_content_key =
-            hex::decode("02d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d")
+            hex_decode("0x02d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d")
                 .unwrap();
         let expected_content_id: [u8; 32] = [
             0xa8, 0x88, 0xf4, 0xaa, 0xfe, 0x91, 0x09, 0xd4, 0x95, 0xac, 0x4d, 0x47, 0x74, 0xa6,
@@ -488,7 +488,7 @@ mod test {
 
     #[test]
     fn account_trie_node() {
-        let expected_content_key = "0044000000b8be7903aee73b8f6a59cd44a1f52c62148e1f376c0dfa1f5f773a98666efc2bd1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d01020001";
+        let expected_content_key = "0x0044000000b8be7903aee73b8f6a59cd44a1f52c62148e1f376c0dfa1f5f773a98666efc2bd1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d01020001";
         let expected_content_id: [u8; 32] = [
             0x5b, 0x2b, 0x5e, 0xa9, 0xa7, 0x38, 0x44, 0x91, 0x01, 0x0c, 0x1a, 0xa4, 0x59, 0xa0,
             0xf9, 0x67, 0xdc, 0xf8, 0xb6, 0x99, 0x88, 0xad, 0xbf, 0xe7, 0xe0, 0xbe, 0xd5, 0x13,
@@ -510,13 +510,13 @@ mod test {
         let key = StateContentKey::AccountTrieNode(node);
         let encoded: Vec<u8> = key.clone().into();
 
-        assert_eq!(hex::decode(expected_content_key).unwrap(), encoded);
+        assert_eq!(hex_decode(expected_content_key).unwrap(), encoded);
         assert_eq!(expected_content_id, key.content_id());
     }
 
     #[test]
     fn contract_storage_trie_node() {
-        let expected_content_key = "01829bd824b016326a401d083b33d092293333a830580000003e190b68719aecbcb28ed2271014dd25f2aa633184988eb414189ce0899cade5d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d01000f0e0c00";
+        let expected_content_key = "0x01829bd824b016326a401d083b33d092293333a830580000003e190b68719aecbcb28ed2271014dd25f2aa633184988eb414189ce0899cade5d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d01000f0e0c00";
         let expected_content_id: [u8; 32] = [
             0x60, 0x3c, 0xbe, 0x79, 0x02, 0x92, 0x5c, 0xe3, 0x59, 0x82, 0x23, 0x78, 0xa4, 0xcb,
             0x1b, 0x4b, 0x53, 0xe1, 0xbf, 0x19, 0xd0, 0x03, 0xde, 0x2c, 0x26, 0xe5, 0x58, 0x12,
@@ -539,13 +539,13 @@ mod test {
         let key = StateContentKey::ContractStorageTrieNode(node);
         let encoded: Vec<u8> = key.clone().into();
 
-        assert_eq!(hex::decode(expected_content_key).unwrap(), encoded);
+        assert_eq!(hex_decode(expected_content_key).unwrap(), encoded);
         assert_eq!(expected_content_id, key.content_id());
     }
 
     #[test]
     fn account_trie_proof() {
-        let expected_content_key = "02829bd824b016326a401d083b33d092293333a830d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d";
+        let expected_content_key = "0x02829bd824b016326a401d083b33d092293333a830d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d";
         let expected_content_id: [u8; 32] = [
             0x64, 0x27, 0xc4, 0xc8, 0xd4, 0x2d, 0xb1, 0x5c, 0x2a, 0xca, 0x8d, 0xfc, 0x7d, 0xff,
             0x7c, 0xe2, 0xc8, 0xc8, 0x35, 0x44, 0x1b, 0x56, 0x64, 0x24, 0xfa, 0x33, 0x77, 0xdd,
@@ -560,13 +560,13 @@ mod test {
         let key = StateContentKey::AccountTrieProof(proof);
         let encoded: Vec<u8> = key.clone().into();
 
-        assert_eq!(hex::decode(expected_content_key).unwrap(), encoded);
+        assert_eq!(hex_decode(expected_content_key).unwrap(), encoded);
         assert_eq!(expected_content_id, key.content_id());
     }
 
     #[test]
     fn contract_storage_trie_proof() {
-        let expected_content_key = "03829bd824b016326a401d083b33d092293333a830c8a6030000000000000000000000000000000000000000000000000000000000d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d";
+        let expected_content_key = "0x03829bd824b016326a401d083b33d092293333a830c8a6030000000000000000000000000000000000000000000000000000000000d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d";
         let expected_content_id: [u8; 32] = [
             0xb1, 0xc8, 0x99, 0x84, 0x80, 0x3c, 0xeb, 0xd3, 0x25, 0x30, 0x3b, 0xa0, 0x35, 0xf9,
             0xc4, 0xca, 0x0d, 0x0d, 0x91, 0xb2, 0xcb, 0xfe, 0xf8, 0x4d, 0x45, 0x5e, 0x7a, 0x84,
@@ -583,13 +583,13 @@ mod test {
         let key = StateContentKey::ContractStorageTrieProof(proof);
         let encoded: Vec<u8> = key.clone().into();
 
-        assert_eq!(hex::decode(expected_content_key).unwrap(), encoded);
+        assert_eq!(hex_decode(expected_content_key).unwrap(), encoded);
         assert_eq!(expected_content_id, key.content_id());
     }
 
     #[test]
     fn contract_bytecode() {
-        let expected_content_key = "04829bd824b016326a401d083b33d092293333a830d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d";
+        let expected_content_key = "0x04829bd824b016326a401d083b33d092293333a830d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d";
         let expected_content_id: [u8; 32] = [
             0x14, 0x6f, 0xb9, 0x37, 0xaf, 0xe4, 0x2b, 0xcf, 0x11, 0xd2, 0x5a, 0xd5, 0x7d, 0x67,
             0x73, 0x4b, 0x9a, 0x71, 0x38, 0x67, 0x7d, 0x59, 0xee, 0xec, 0x3f, 0x40, 0x29, 0x08,
@@ -604,7 +604,7 @@ mod test {
         let key = StateContentKey::ContractBytecode(bytecode);
         let encoded: Vec<u8> = key.clone().into();
 
-        assert_eq!(hex::decode(expected_content_key).unwrap(), encoded);
+        assert_eq!(hex_decode(expected_content_key).unwrap(), encoded);
         assert_eq!(expected_content_id, key.content_id());
     }
 
@@ -612,13 +612,13 @@ mod test {
     #[test]
     fn epoch_accumulator_key() {
         let epoch_hash =
-            hex::decode("e242814b90ed3950e13aac7e56ce116540c71b41d1516605aada26c6c07cc491")
+            hex_decode("0xe242814b90ed3950e13aac7e56ce116540c71b41d1516605aada26c6c07cc491")
                 .unwrap();
         let expected_content_key_encoding =
-            hex::decode("03e242814b90ed3950e13aac7e56ce116540c71b41d1516605aada26c6c07cc491")
+            hex_decode("0x03e242814b90ed3950e13aac7e56ce116540c71b41d1516605aada26c6c07cc491")
                 .unwrap();
         let expected_content_id =
-            &hex::decode("9fb2175e76c6989e0fdac3ee10c40d2a81eb176af32e1c16193e3904fe56896e")
+            &hex_decode("0x9fb2175e76c6989e0fdac3ee10c40d2a81eb176af32e1c16193e3904fe56896e")
                 .unwrap();
 
         let content_key = HistoryContentKey::EpochAccumulator(EpochAccumulator {

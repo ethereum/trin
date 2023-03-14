@@ -40,12 +40,13 @@ use crate::{
         Enr,
     },
     types::validation::Validator,
-    utils::{bytes::hex_encode, portal_wire},
+    utils::portal_wire,
     utp::{
         stream::{UtpListenerEvent, UtpListenerRequest, UtpPayload, UtpStream, BUF_SIZE},
         trin_helpers::UtpStreamId,
     },
 };
+use trin_utils::bytes::hex_encode;
 
 /// Configuration parameters for the overlay network.
 #[derive(Clone)]

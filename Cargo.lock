@@ -1559,7 +1559,6 @@ dependencies = [
  "eth2_ssz_derive",
  "eth2_ssz_types",
  "ethereum-types 0.12.1",
- "hex",
  "jsonrpsee 0.16.2",
  "reth-primitives",
  "reth-rlp",
@@ -1569,6 +1568,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.6",
  "thiserror",
+ "trin-utils",
 ]
 
 [[package]]
@@ -1581,7 +1581,6 @@ dependencies = [
  "eth2_ssz",
  "ethportal-api",
  "futures 0.3.26",
- "hex",
  "httpmock",
  "hyper",
  "rand 0.8.5",
@@ -1597,6 +1596,7 @@ dependencies = [
  "trin-core",
  "trin-history",
  "trin-state",
+ "trin-utils",
  "uds_windows",
  "ureq",
 ]
@@ -5736,7 +5736,6 @@ dependencies = [
  "ethereum-types 0.12.1",
  "ethportal-api",
  "ethportal-peertest",
- "hex",
  "parking_lot 0.11.2",
  "prometheus_exporter",
  "rand 0.8.5",
@@ -5752,6 +5751,7 @@ dependencies = [
  "trin-core",
  "trin-history",
  "trin-state",
+ "trin-utils",
  "ureq",
 ]
 
@@ -5762,7 +5762,6 @@ dependencies = [
  "anyhow",
  "base64 0.13.1",
  "ethereum-types 0.12.1",
- "hex",
  "jsonrpc",
  "nanotemplate",
  "serde",
@@ -5770,6 +5769,7 @@ dependencies = [
  "structopt",
  "thiserror",
  "trin-core",
+ "trin-utils",
  "ureq",
 ]
 
@@ -5796,7 +5796,6 @@ dependencies = [
  "ethportal-api",
  "fnv",
  "futures 0.3.26",
- "hex",
  "interfaces",
  "ipconfig",
  "keccak-hash",
@@ -5834,6 +5833,7 @@ dependencies = [
  "tracing-subscriber",
  "tree_hash",
  "tree_hash_derive",
+ "trin-utils",
  "uds_windows",
  "ureq",
  "url",
@@ -5852,7 +5852,6 @@ dependencies = [
  "eth2_ssz_types",
  "ethereum-types 0.12.1",
  "ethportal-api",
- "hex",
  "httpmock",
  "parking_lot 0.11.2",
  "serde_json",
@@ -5862,6 +5861,7 @@ dependencies = [
  "tracing-subscriber",
  "tree_hash",
  "trin-core",
+ "trin-utils",
  "ureq",
 ]
 
@@ -5883,6 +5883,14 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "trin-core",
+]
+
+[[package]]
+name = "trin-utils"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "hex",
 ]
 
 [[package]]
@@ -6042,7 +6050,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "discv5",
- "hex",
  "jsonrpsee 0.15.1",
  "rand 0.8.5",
  "structopt",
@@ -6050,6 +6057,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "trin-core",
+ "trin-utils",
 ]
 
 [[package]]

@@ -73,6 +73,7 @@ pub fn read_varint(buf: &[u8]) -> anyhow::Result<(usize, u32)> {
 mod test {
     use super::*;
     use rstest::rstest;
+    use trin_utils::bytes::hex_decode;
 
     #[rstest]
     #[case(u8::MIN as u32)]
@@ -118,8 +119,8 @@ mod test {
     #[test]
     #[should_panic(expected = "Error reading content item: failed to fill whole buffer")]
     fn test_decode_content_payload_corrupted() {
-        let hex_payload = "030101010201";
-        let payload = hex::decode(hex_payload).unwrap();
+        let hex_payload = "0x030101010201";
+        let payload = hex_decode(hex_payload).unwrap();
         decode_content_payload(payload).unwrap();
     }
 

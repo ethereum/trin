@@ -29,7 +29,6 @@ ethereum-types = "0.12.1"
 ethportal-api = { path="../ethportal-api" }
 fnv = "1.0.7"
 futures = "0.3.21"
-hex = "0.4.3"
 keccak-hash = "0.8.0"
 lazy_static = "1.4.0"
 leb128 = "0.2.1"
@@ -56,6 +55,7 @@ tokio = { version = "1.14.0", features = ["full"] }
 tracing = "0.1.36"
 tree_hash = "0.4.0"
 tree_hash_derive = "0.4.0"
+trin-utils = { path="../trin-utils" }
 ureq = { version = "2.5.0", features = ["json"] }
 validator = { version = "0.13.0", features = ["derive"] }
 url = "2.3.1"

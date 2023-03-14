@@ -1,9 +1,9 @@
 use std::{env, ffi::OsString, fmt, net::SocketAddr, path::PathBuf, str::FromStr};
 
+use ethereum_types::H256;
 use structopt::StructOpt;
 use url::Url;
 
-use crate::portalnet::types::messages::HexData;
 use crate::utils::provider::TrustedProviderType;
 
 pub const DEFAULT_MASTER_ACC_PATH: &str = "src/assets/merge_macc.bin";
@@ -116,9 +116,9 @@ pub struct TrinConfig {
     #[structopt(
         validator(check_private_key_length),
         long = "unsafe-private-key",
-        help = "Hex encoded 32 byte private key (considered unsafe as it's stored in terminal history - keyfile support coming soon)"
+        help = "Hex encoded 32 byte private key (with 0x prefix) (considered unsafe as it's stored in terminal history - keyfile support coming soon)"
     )]
-    pub private_key: Option<HexData>,
+    pub private_key: Option<H256>,
 
     #[structopt(
         long = "networks",
@@ -266,11 +266,11 @@ fn check_url_format(url: String) -> Result<(), String> {
 }
 
 fn check_private_key_length(private_key: String) -> Result<(), String> {
-    if private_key.len() == 64 {
+    if private_key.len() == 66 {
         return Ok(());
     }
     panic!(
-        "Invalid private key length: {}, expected 64 (32 byte hexstring)",
+        "Invalid private key length: {}, expected 66 (0x-prefixed 32 byte hexstring)",
         private_key.len()
     )
 }
@@ -458,14 +458,14 @@ mod test {
     #[test]
     fn test_custom_private_key() {
         let expected_config = TrinConfig {
-            private_key: Some(HexData(vec![1; 32])),
+            private_key: Some(H256::from_slice(&[1; 32])),
             ..Default::default()
         };
         let actual_config = TrinConfig::new_from(
             [
                 "trin",
                 "--unsafe-private-key",
-                "0101010101010101010101010101010101010101010101010101010101010101",
+                "0x0101010101010101010101010101010101010101010101010101010101010101",
             ]
             .iter(),
         )
@@ -505,13 +505,15 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "Invalid private key length: 63, expected 64 (32 byte hexstring)")]
+    #[should_panic(
+        expected = "Invalid private key length: 65, expected 66 (0x-prefixed 32 byte hexstring)"
+    )]
     fn test_custom_private_key_odd_length() {
         TrinConfig::new_from(
             [
                 "trin",
                 "--unsafe-private-key",
-                "010101010101010101010101010101010101010101010101010101010101010",
+                "0x010101010101010101010101010101010101010101010101010101010101010",
             ]
             .iter(),
         )
@@ -519,13 +521,15 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "Invalid private key length: 62, expected 64 (32 byte hexstring)")]
+    #[should_panic(
+        expected = "Invalid private key length: 64, expected 66 (0x-prefixed 32 byte hexstring)"
+    )]
     fn test_custom_private_key_requires_32_bytes() {
         TrinConfig::new_from(
             [
                 "trin",
                 "--unsafe-private-key",
-                "01010101010101010101010101010101010101010101010101010101010101",
+                "0x01010101010101010101010101010101010101010101010101010101010101",
             ]
             .iter(),
         )

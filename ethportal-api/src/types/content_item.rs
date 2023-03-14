@@ -5,6 +5,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use ssz::Decode;
 use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, FixedVector, VariableList};
+use trin_utils::bytes::{hex_decode, hex_encode};
 
 /// An error decoding a portal network content item.
 #[derive(Clone, Debug)]
@@ -248,7 +249,7 @@ impl ContentItem for HistoryContentItem {
             return Ok(Self::EpochAccumulator(item));
         }
 
-        Ok(Self::Unknown(hex::encode(buf)))
+        Ok(Self::Unknown(hex_encode(buf)))
     }
 }
 
@@ -270,7 +271,7 @@ impl Serialize for HistoryContentItem {
                 encoded.append(&mut item.clone().into_bytes());
             }
         }
-        serializer.serialize_str(&format!("0x{}", hex::encode(encoded)))
+        serializer.serialize_str(&hex_encode(encoded))
     }
 }
 
@@ -284,8 +285,7 @@ impl<'de> Deserialize<'de> for HistoryContentItem {
             return Ok(Self::Unknown(String::from("")));
         }
 
-        let content_bytes =
-            hex::decode(s.strip_prefix("0x").unwrap_or(&s)).map_err(serde::de::Error::custom)?;
+        let content_bytes = hex_decode(&s).map_err(serde::de::Error::custom)?;
 
         if let Ok(item) = HeaderWithProof::decode(&content_bytes) {
             return Ok(Self::BlockHeaderWithProof(item));
@@ -303,7 +303,7 @@ impl<'de> Deserialize<'de> for HistoryContentItem {
             return Ok(Self::EpochAccumulator(item));
         }
 
-        Ok(Self::Unknown(hex::encode(content_bytes)))
+        Ok(Self::Unknown(hex_encode(content_bytes)))
     }
 }
 
@@ -383,8 +383,7 @@ mod test {
         for (block_num, obj) in json {
             let block_num: u64 = block_num.parse().unwrap();
             let header_with_proof = obj.get("value").unwrap().as_str().unwrap();
-            let header_with_proof_encoded =
-                hex::decode(header_with_proof.strip_prefix("0x").unwrap()).unwrap();
+            let header_with_proof_encoded = hex_decode(header_with_proof).unwrap();
             let header_with_proof = HeaderWithProof::decode(&header_with_proof_encoded).unwrap();
 
             assert_eq!(header_with_proof.header.number, block_num);
@@ -518,7 +517,7 @@ mod test {
     fn ssz_serde_encode_decode_ultralight_epoch_accumulator() {
         let epoch_acc_hex =
             fs::read_to_string("./src/assets/test/ultralight_testEpoch.hex").unwrap();
-        let epoch_acc_ssz = hex::decode(epoch_acc_hex.strip_prefix("0x").unwrap()).unwrap();
+        let epoch_acc_ssz = hex_decode(&epoch_acc_hex).unwrap();
         let epoch_acc = EpochAccumulator::decode(&epoch_acc_ssz).unwrap();
         assert_eq!(epoch_acc.len(), EPOCH_SIZE);
         assert_eq!(epoch_acc.as_ssz_bytes(), epoch_acc_ssz);

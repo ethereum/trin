@@ -20,7 +20,7 @@ use crate::types::{
     merkle::proof::{verify_merkle_proof, MerkleTree},
     validation::MERGE_BLOCK_NUMBER,
 };
-use crate::utils::bytes::hex_decode;
+use trin_utils::bytes::hex_decode;
 
 /// Max number of blocks / epoch = 2 ** 13
 pub const EPOCH_SIZE: usize = 8192;
@@ -248,7 +248,7 @@ mod test {
 
     use crate::types::header::{AccumulatorProof, BlockHeaderProof, HeaderWithProof, SszNone};
     use crate::types::validation::DEFAULT_MASTER_ACC_HASH;
-    use crate::utils::bytes::hex_encode;
+    use trin_utils::bytes::hex_encode;
 
     #[rstest]
     #[case(1_000_001)]

@@ -16,6 +16,8 @@ use serde_json::json;
 use trin_core::{
     cli::TrinConfig, portalnet::types::messages::SszEnr, utils::provider::TrustedProvider,
 };
+use trin_utils::bytes::hex_encode;
+
 pub fn setup_mock_trusted_http_server() -> MockServer {
     let server = MockServer::start();
     server.mock(|when, then| {
@@ -107,7 +109,7 @@ fn generate_trin_config(id: u16, bootnode_enr: Option<&SszEnr>) -> TrinConfig {
     // the 256 kbucket of the bootnode, to ensure consistent `FindNodes` tests.
     let mut private_key = vec![id as u8; 3];
     private_key.append(&mut vec![0u8; 29]);
-    let private_key = hex::encode(private_key);
+    let private_key = hex_encode(private_key);
     match bootnode_enr {
         Some(enr) => {
             let external_addr = format!(

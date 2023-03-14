@@ -33,7 +33,7 @@ pub async fn run_trin(
     let bootnode_enrs = parse_bootnodes(&trin_config.bootnodes)?;
     let portalnet_config = PortalnetConfig {
         external_addr: trin_config.external_addr,
-        private_key: trin_config.private_key.clone(),
+        private_key: trin_config.private_key,
         listen_port: trin_config.discovery_port,
         no_stun: trin_config.no_stun,
         enable_metrics: trin_config.enable_metrics_with_url.is_some(),

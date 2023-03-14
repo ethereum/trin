@@ -7,6 +7,8 @@ use discv5::enr::NodeId;
 use tempfile::TempDir;
 use tracing::debug;
 
+use trin_utils::bytes::hex_encode;
+
 const TRIN_DATA_ENV_VAR: &str = "TRIN_DATA_PATH";
 
 /// Creates a directory on the file system that is deleted once it goes out of scope
@@ -26,7 +28,7 @@ pub fn get_data_dir(node_id: NodeId) -> anyhow::Result<PathBuf> {
 
     // Append first 8 characters of Node ID
     let mut application_string = "trin_".to_owned();
-    let node_id_string = hex::encode(node_id.raw());
+    let node_id_string = hex_encode(node_id.raw());
     let suffix = &node_id_string[..8];
     application_string.push_str(suffix);
 

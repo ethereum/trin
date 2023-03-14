@@ -24,6 +24,7 @@ use tokio::{
 };
 
 use trin_core::utp::stream::UtpListenerRequest;
+use trin_utils::bytes::hex_encode_upper;
 
 async fn init_overlay(
     discovery: Arc<Discovery>,
@@ -61,7 +62,7 @@ async fn spawn_overlay(
     let overlay_protocol = overlay.protocol().clone();
     tokio::spawn(async move {
         while let Some(talk_req) = talk_req_rx.recv().await {
-            let req_protocol = ProtocolId::from_str(&hex::encode_upper(talk_req.protocol()));
+            let req_protocol = ProtocolId::from_str(&hex_encode_upper(talk_req.protocol()));
 
             if let Ok(req_protocol) = req_protocol {
                 match (req_protocol, overlay_protocol.clone()) {

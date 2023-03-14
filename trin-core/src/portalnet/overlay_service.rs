@@ -54,12 +54,13 @@ use crate::{
         Enr,
     },
     types::validation::Validator,
-    utils::{bytes::hex_encode_compact, node_id, portal_wire},
+    utils::{node_id, portal_wire},
     utp::{
         stream::{UtpListenerRequest, UtpStream, BUF_SIZE},
         trin_helpers::UtpStreamId,
     },
 };
+use trin_utils::bytes::hex_encode_compact;
 
 /// Maximum number of ENRs in response to FindNodes.
 pub const FIND_NODES_MAX_NODES: usize = 32;

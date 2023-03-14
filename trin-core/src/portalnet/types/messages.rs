@@ -7,8 +7,7 @@ use std::{
 };
 
 use base64;
-use ethereum_types::U256;
-use hex::FromHexError;
+use ethereum_types::{H256, U256};
 use rlp::Encodable;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -22,7 +21,7 @@ use crate::portalnet::{
     types::{content_key::RawContentKey, distance::Distance},
     Enr,
 };
-use crate::utils::bytes::hex_encode;
+use trin_utils::bytes::{hex_decode, hex_encode};
 
 pub type ByteList = VariableList<u8, typenum::U2048>;
 
@@ -39,7 +38,7 @@ impl TryFrom<&Value> for CustomPayload {
         let value = value
             .as_str()
             .ok_or_else(|| ValidationError::new("Custom payload value is not a string!"))?;
-        let payload = match hex::decode(value) {
+        let payload = match hex_decode(value) {
             Ok(payload) => payload,
             Err(_) => Err(ValidationError::new(
                 "Unable to decode hex payload into bytes",
@@ -128,7 +127,7 @@ const NODE_ADDR_CACHE_CAPACITY: usize = discv5::kbucket::MAX_NODES_PER_BUCKET * 
 #[derive(Clone)]
 pub struct PortalnetConfig {
     pub external_addr: Option<SocketAddr>,
-    pub private_key: Option<HexData>,
+    pub private_key: Option<H256>,
     pub listen_port: u16,
     pub bootnode_enrs: Vec<Enr>,
     pub data_radius: Distance,
@@ -157,7 +156,7 @@ impl Default for PortalnetConfig {
 #[derive(Error, Debug)]
 pub enum ProtocolIdError {
     #[error("Unable to decode protocol id to bytes: {0}")]
-    Decode(FromHexError),
+    Decode(anyhow::Error),
 
     #[error("invalid protocol id")]
     Invalid,
@@ -180,12 +179,12 @@ impl FromStr for ProtocolId {
 
     fn from_str(input: &str) -> Result<ProtocolId, Self::Err> {
         match input {
-            "500A" => Ok(ProtocolId::State),
-            "500B" => Ok(ProtocolId::History),
-            "500C" => Ok(ProtocolId::TransactionGossip),
-            "500D" => Ok(ProtocolId::HeaderGossip),
-            "500E" => Ok(ProtocolId::CanonicalIndices),
-            "757470" => Ok(ProtocolId::Utp),
+            "0x500A" => Ok(ProtocolId::State),
+            "0x500B" => Ok(ProtocolId::History),
+            "0x500C" => Ok(ProtocolId::TransactionGossip),
+            "0x500D" => Ok(ProtocolId::HeaderGossip),
+            "0x500E" => Ok(ProtocolId::CanonicalIndices),
+            "0x757470" => Ok(ProtocolId::Utp),
             _ => Err(ProtocolIdError::Invalid),
         }
     }
@@ -211,12 +210,12 @@ impl TryFrom<ProtocolId> for Vec<u8> {
 
     fn try_from(protocol_id: ProtocolId) -> Result<Self, Self::Error> {
         let bytes = match protocol_id {
-            ProtocolId::State => hex::decode("500A"),
-            ProtocolId::History => hex::decode("500B"),
-            ProtocolId::TransactionGossip => hex::decode("500C"),
-            ProtocolId::HeaderGossip => hex::decode("500D"),
-            ProtocolId::CanonicalIndices => hex::decode("500E"),
-            ProtocolId::Utp => hex::decode("757470"),
+            ProtocolId::State => hex_decode("0x500A"),
+            ProtocolId::History => hex_decode("0x500B"),
+            ProtocolId::TransactionGossip => hex_decode("0x500C"),
+            ProtocolId::HeaderGossip => hex_decode("0x500D"),
+            ProtocolId::CanonicalIndices => hex_decode("0x500E"),
+            ProtocolId::Utp => hex_decode("0x757470"),
         };
 
         match bytes {
@@ -360,7 +359,7 @@ impl fmt::Display for Ping {
             f,
             "Ping(enr_seq={}, radius={})",
             self.enr_seq,
-            hex::encode(self.custom_payload.as_ssz_bytes())
+            hex_encode(self.custom_payload.as_ssz_bytes())
         )
     }
 }
@@ -377,7 +376,7 @@ impl fmt::Display for Pong {
             f,
             "Pong(enr_seq={}, radius={})",
             self.enr_seq,
-            hex::encode(self.custom_payload.as_ssz_bytes())
+            hex_encode(self.custom_payload.as_ssz_bytes())
         )
     }
 }
@@ -635,35 +634,25 @@ impl ssz::Encode for SszEnr {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct HexData(pub Vec<u8>);
-
-impl FromStr for HexData {
-    type Err = hex::FromHexError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        hex::decode(s).map(HexData)
-    }
-}
-
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
     use super::*;
     use test_log::test;
+    use trin_utils::bytes::hex_encode_upper;
 
     #[test]
     #[should_panic]
     fn protocol_id_invalid() {
-        let hex = "500F";
+        let hex = "0x500F";
         ProtocolId::from_str(hex).unwrap();
     }
 
     #[test]
     fn protocol_id_encoding() {
-        let hex = "500A";
+        let hex = "0x500A";
         let protocol_id = ProtocolId::from_str(hex).unwrap();
-        let expected_hex = hex::encode_upper(Vec::try_from(protocol_id).unwrap());
+        let expected_hex = hex_encode_upper(Vec::try_from(protocol_id).unwrap());
         assert_eq!(hex, expected_hex);
     }
 
@@ -681,11 +670,11 @@ mod test {
         let ping = Message::Ping(ping);
 
         let encoded: Vec<u8> = ping.clone().into();
-        let encoded = hex::encode(encoded);
-        let expected_encoded = "0001000000000000000c000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+        let encoded = hex_encode(encoded);
+        let expected_encoded = "0x0001000000000000000c000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
         assert_eq!(encoded, expected_encoded);
 
-        let decoded = Message::try_from(hex::decode(encoded).unwrap()).unwrap();
+        let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
         assert_eq!(decoded, ping);
     }
 
@@ -700,11 +689,11 @@ mod test {
         let pong = Message::Pong(pong);
 
         let encoded: Vec<u8> = pong.clone().into();
-        let encoded = hex::encode(encoded);
-        let expected_encoded = "0101000000000000000c000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f";
+        let encoded = hex_encode(encoded);
+        let expected_encoded = "0x0101000000000000000c000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f";
         assert_eq!(encoded, expected_encoded);
 
-        let decoded = Message::try_from(hex::decode(encoded).unwrap()).unwrap();
+        let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
         assert_eq!(decoded, pong);
     }
 
@@ -715,11 +704,11 @@ mod test {
         let find_nodes = Message::FindNodes(find_nodes);
 
         let encoded: Vec<u8> = find_nodes.clone().into();
-        let encoded = hex::encode(encoded);
-        let expected_encoded = "02040000000001ff00";
+        let encoded = hex_encode(encoded);
+        let expected_encoded = "0x02040000000001ff00";
         assert_eq!(encoded, expected_encoded);
 
-        let decoded = Message::try_from(hex::decode(encoded).unwrap()).unwrap();
+        let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
         assert_eq!(decoded, find_nodes);
     }
 
@@ -732,11 +721,11 @@ mod test {
         let nodes = Message::Nodes(nodes);
 
         let encoded: Vec<u8> = nodes.clone().into();
-        let encoded = hex::encode(encoded);
-        let expected_encoded = "030105000000";
+        let encoded = hex_encode(encoded);
+        let expected_encoded = "0x030105000000";
         assert_eq!(encoded, expected_encoded);
 
-        let decoded = Message::try_from(hex::decode(encoded).unwrap()).unwrap();
+        let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
         assert_eq!(decoded, nodes);
     }
 
@@ -751,26 +740,26 @@ mod test {
         let nodes = Message::Nodes(nodes);
 
         let encoded: Vec<u8> = nodes.clone().into();
-        let encoded = hex::encode(encoded);
-        let expected_encoded = "030105000000080000007f000000f875b8401ce2991c64993d7c84c29a00bdc871917551c7d330fca2dd0d69c706596dc655448f030b98a77d4001fd46ae0112ce26d613c5a6a02a81a6223cd0c4edaa53280182696482763489736563703235366b31a103ca634cae0d49acb401d8a4c6b6fe8c55b70d115bf400769cc1400f3258cd3138f875b840d7f1c39e376297f81d7297758c64cb37dcc5c3beea9f57f7ce9695d7d5a67553417d719539d6ae4b445946de4d99e680eb8063f29485b555d45b7df16a1850130182696482763489736563703235366b31a1030e2cb74241c0c4fc8e8166f1a79a05d5b0dd95813a74b094529f317d5c39d235";
+        let encoded = hex_encode(encoded);
+        let expected_encoded = "0x030105000000080000007f000000f875b8401ce2991c64993d7c84c29a00bdc871917551c7d330fca2dd0d69c706596dc655448f030b98a77d4001fd46ae0112ce26d613c5a6a02a81a6223cd0c4edaa53280182696482763489736563703235366b31a103ca634cae0d49acb401d8a4c6b6fe8c55b70d115bf400769cc1400f3258cd3138f875b840d7f1c39e376297f81d7297758c64cb37dcc5c3beea9f57f7ce9695d7d5a67553417d719539d6ae4b445946de4d99e680eb8063f29485b555d45b7df16a1850130182696482763489736563703235366b31a1030e2cb74241c0c4fc8e8166f1a79a05d5b0dd95813a74b094529f317d5c39d235";
         assert_eq!(encoded, expected_encoded);
 
-        let decoded = Message::try_from(hex::decode(encoded).unwrap()).unwrap();
+        let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
         assert_eq!(decoded, nodes);
     }
 
     #[test]
     fn message_encoding_find_content() {
-        let content_key = hex::decode("706f7274616c").unwrap();
+        let content_key = hex_decode("0x706f7274616c").unwrap();
         let find_content = FindContent { content_key };
         let find_content = Message::FindContent(find_content);
 
         let encoded: Vec<u8> = find_content.clone().into();
-        let encoded = hex::encode(encoded);
-        let expected_encoded = "0404000000706f7274616c";
+        let encoded = hex_encode(encoded);
+        let expected_encoded = "0x0404000000706f7274616c";
         assert_eq!(encoded, expected_encoded);
 
-        let decoded = Message::try_from(hex::decode(encoded).unwrap()).unwrap();
+        let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
         assert_eq!(decoded, find_content);
     }
 
@@ -781,26 +770,26 @@ mod test {
         let content = Message::Content(content);
 
         let encoded: Vec<u8> = content.clone().into();
-        let encoded = hex::encode(encoded);
-        let expected_encoded = "05000102";
+        let encoded = hex_encode(encoded);
+        let expected_encoded = "0x05000102";
         assert_eq!(encoded, expected_encoded);
 
-        let decoded = Message::try_from(hex::decode(encoded).unwrap()).unwrap();
+        let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
         assert_eq!(decoded, content);
     }
 
     #[test]
     fn message_encoding_content_content() {
-        let content_val = hex::decode("7468652063616b652069732061206c6965").unwrap();
+        let content_val = hex_decode("0x7468652063616b652069732061206c6965").unwrap();
         let content = Content::Content(content_val);
         let content = Message::Content(content);
 
         let encoded: Vec<u8> = content.clone().into();
-        let encoded = hex::encode(encoded);
-        let expected_encoded = "05017468652063616b652069732061206c6965";
+        let encoded = hex_encode(encoded);
+        let expected_encoded = "0x05017468652063616b652069732061206c6965";
         assert_eq!(encoded, expected_encoded);
 
-        let decoded = Message::try_from(hex::decode(encoded).unwrap()).unwrap();
+        let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
         assert_eq!(decoded, content);
     }
 
@@ -812,26 +801,26 @@ mod test {
         let content = Message::Content(content);
 
         let encoded: Vec<u8> = content.clone().into();
-        let encoded = hex::encode(encoded);
-        let expected_encoded = "0502080000007f000000f875b8401ce2991c64993d7c84c29a00bdc871917551c7d330fca2dd0d69c706596dc655448f030b98a77d4001fd46ae0112ce26d613c5a6a02a81a6223cd0c4edaa53280182696482763489736563703235366b31a103ca634cae0d49acb401d8a4c6b6fe8c55b70d115bf400769cc1400f3258cd3138f875b840d7f1c39e376297f81d7297758c64cb37dcc5c3beea9f57f7ce9695d7d5a67553417d719539d6ae4b445946de4d99e680eb8063f29485b555d45b7df16a1850130182696482763489736563703235366b31a1030e2cb74241c0c4fc8e8166f1a79a05d5b0dd95813a74b094529f317d5c39d235";
+        let encoded = hex_encode(encoded);
+        let expected_encoded = "0x0502080000007f000000f875b8401ce2991c64993d7c84c29a00bdc871917551c7d330fca2dd0d69c706596dc655448f030b98a77d4001fd46ae0112ce26d613c5a6a02a81a6223cd0c4edaa53280182696482763489736563703235366b31a103ca634cae0d49acb401d8a4c6b6fe8c55b70d115bf400769cc1400f3258cd3138f875b840d7f1c39e376297f81d7297758c64cb37dcc5c3beea9f57f7ce9695d7d5a67553417d719539d6ae4b445946de4d99e680eb8063f29485b555d45b7df16a1850130182696482763489736563703235366b31a1030e2cb74241c0c4fc8e8166f1a79a05d5b0dd95813a74b094529f317d5c39d235";
         assert_eq!(encoded, expected_encoded);
 
-        let decoded = Message::try_from(hex::decode(encoded).unwrap()).unwrap();
+        let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
         assert_eq!(decoded, content);
     }
 
     #[test]
     fn message_encoding_offer() {
-        let content_keys = vec![hex::decode("010203").unwrap()];
+        let content_keys = vec![hex_decode("0x010203").unwrap()];
         let offer = Offer { content_keys };
         let offer = Message::Offer(offer);
 
         let encoded: Vec<u8> = offer.clone().into();
-        let encoded = hex::encode(encoded);
-        let expected_encoded = "060400000004000000010203";
+        let encoded = hex_encode(encoded);
+        let expected_encoded = "0x060400000004000000010203";
         assert_eq!(encoded, expected_encoded);
 
-        let decoded = Message::try_from(hex::decode(encoded).unwrap()).unwrap();
+        let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
         assert_eq!(decoded, offer);
     }
 
@@ -847,11 +836,11 @@ mod test {
         let accept = Message::Accept(accept);
 
         let encoded: Vec<u8> = accept.clone().into();
-        let encoded = hex::encode(encoded);
-        let expected_encoded = "070102060000000101";
+        let encoded = hex_encode(encoded);
+        let expected_encoded = "0x070102060000000101";
         assert_eq!(encoded, expected_encoded);
 
-        let decoded = Message::try_from(hex::decode(encoded).unwrap()).unwrap();
+        let decoded = Message::try_from(hex_decode(&encoded).unwrap()).unwrap();
         assert_eq!(decoded, accept);
     }
 }

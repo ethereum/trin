@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 use anyhow::anyhow;
 use discv5::enr::{CombinedKey, EnrBuilder};
+use ethereum_types::H256;
 use rocksdb::IteratorMode;
 use structopt::StructOpt;
 use tracing::{info, warn};
@@ -26,8 +27,8 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
     let purge_config = PurgeConfig::from_args();
 
-    let mut encoded = hex::decode(&purge_config.private_key).unwrap();
-    let enr_key = CombinedKey::secp256k1_from_bytes(&mut encoded).unwrap();
+    let enr_key =
+        CombinedKey::secp256k1_from_bytes(&mut purge_config.private_key.to_fixed_bytes()).unwrap();
     let enr = EnrBuilder::new("v4").build(&enr_key).unwrap();
     let node_id = enr.node_id();
     let data_dir_path = get_data_dir(node_id);
@@ -112,9 +113,9 @@ fn is_content_valid(content_key: &HistoryContentKey, value: &[u8]) -> bool {
 pub struct PurgeConfig {
     #[structopt(
         long,
-        help = "(unsafe) Hex private key to generate node id for database namespace"
+        help = "(unsafe) Hex private key to generate node id for database namespace (with 0x prefix)"
     )]
-    pub private_key: String,
+    pub private_key: H256,
 
     #[structopt(
         default_value = "all",
