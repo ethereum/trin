@@ -13,10 +13,10 @@ use crate::{
         accumulator::MasterAccumulator,
         header::{Header, HeaderWithProof},
     },
-    utils::bytes::hex_decode,
     utils::provider::TrustedProvider,
 };
 use ethportal_api::{types::content_key::BlockHeaderKey, HistoryContentKey};
+use trin_utils::bytes::hex_decode;
 
 pub const MERGE_BLOCK_NUMBER: u64 = 15_537_393u64;
 pub const DEFAULT_MASTER_ACC_HASH: &str =
