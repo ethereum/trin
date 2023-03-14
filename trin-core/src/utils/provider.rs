@@ -12,7 +12,6 @@ use crate::jsonrpc::service::dispatch_trusted_http_request;
 use crate::jsonrpc::types::{JsonRequest, Params};
 
 pub const INFURA_BASE_HTTP_URL: &str = "https://mainnet.infura.io:443/v3/";
-pub const INFURA_BASE_WS_URL: &str = "wss://mainnet.infura.io:443/ws/v3/";
 pub const DEFAULT_LOCAL_PROVIDER: &str = "http://127.0.0.1:8545";
 
 // Type used for parsing cli args
@@ -54,7 +53,6 @@ impl FromStr for TrustedProviderType {
 #[derive(Clone, Debug)]
 pub struct TrustedProvider {
     pub http: Request,
-    pub ws: Option<String>,
 }
 
 impl TrustedProvider {
@@ -75,16 +73,8 @@ impl TrustedProvider {
                 ),
             },
         };
-        let trusted_ws_url = match trin_config.trusted_provider {
-            TrustedProviderType::Infura => Some(build_infura_ws_url_from_env()),
-            TrustedProviderType::Pandaops => {
-                panic!("Pandaops connection is not currently supported over websockets.")
-            }
-            TrustedProviderType::Custom => None,
-        };
         Self {
             http: trusted_http_client,
-            ws: trusted_ws_url,
         }
     }
 
@@ -118,11 +108,6 @@ fn build_infura_http_client_from_env() -> ureq::Request {
     let infura_project_id = get_infura_project_id_from_env();
     let infura_url = format!("{INFURA_BASE_HTTP_URL}{infura_project_id}");
     ureq::post(&infura_url)
-}
-
-fn build_infura_ws_url_from_env() -> String {
-    let infura_project_id = get_infura_project_id_from_env();
-    format!("{INFURA_BASE_WS_URL}{infura_project_id}")
 }
 
 fn get_pandaops_client_id_from_env() -> String {
