@@ -36,6 +36,7 @@ trin-history = { path = "trin-history" }
 trin-state = { path = "trin-state" }
 trin-types = { path = "trin-types" }
 trin-utils = { path = "trin-utils" }
+trin-validation = { path = "trin-validation" }
 
 [dev-dependencies]
 ethportal-peertest = { path = "ethportal-peertest" }

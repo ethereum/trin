@@ -11,22 +11,15 @@ use tokio::sync::mpsc;
 use tree_hash::TreeHash;
 use tree_hash_derive::TreeHash;
 
-use crate::types::{
+use crate::{
+    constants::{EPOCH_SIZE, MERGE_BLOCK_NUMBER},
     merkle::proof::{verify_merkle_proof, MerkleTree},
-    validation::MERGE_BLOCK_NUMBER,
 };
-use ethportal_api::endpoints::HistoryEndpoint;
-use ethportal_api::types::content_key::EpochAccumulatorKey;
-use ethportal_api::types::request::HistoryJsonRpcRequest;
-use ethportal_api::HistoryContentKey;
+use ethportal_api::types::content_key::{EpochAccumulatorKey, HistoryContentKey};
 use trin_types::execution::header::{BlockHeaderProof, Header, HeaderWithProof};
+use trin_types::jsonrpc::endpoints::HistoryEndpoint;
+use trin_types::jsonrpc::request::HistoryJsonRpcRequest;
 use trin_utils::bytes::hex_decode;
-
-/// Max number of blocks / epoch = 2 ** 13
-pub const EPOCH_SIZE: usize = 8192;
-
-/// Max number of epochs = 2 ** 17
-/// const MAX_HISTORICAL_EPOCHS: usize = 131072;
 
 /// SSZ List[Hash256, max_length = MAX_HISTORICAL_EPOCHS]
 /// List of historical epoch accumulator merkle roots preceding current epoch.
@@ -246,7 +239,7 @@ mod test {
     use serde_json::json;
     use ssz::Decode;
 
-    use crate::types::validation::DEFAULT_MASTER_ACC_HASH;
+    use crate::constants::DEFAULT_MASTER_ACC_HASH;
     use trin_types::execution::header::{
         AccumulatorProof, BlockHeaderProof, HeaderWithProof, SszNone,
     };
@@ -268,7 +261,7 @@ mod test {
         // Use fluffy's proofs as test data to validate that trin
         // - generates proofs which match fluffy's
         // - validates hwps
-        let file = fs::read_to_string("./src/assets/test/fluffy/header_with_proofs.json").unwrap();
+        let file = fs::read_to_string("./src/assets/fluffy/header_with_proofs.json").unwrap();
         let json: Value = serde_json::from_str(&file).unwrap();
         let hwps = json.as_object().unwrap();
         let trin_macc = get_mainnet_master_acc();
@@ -376,7 +369,7 @@ mod test {
     }
 
     fn get_header(number: u64) -> Header {
-        let file = fs::read_to_string("./src/assets/test/header_rlps.json").unwrap();
+        let file = fs::read_to_string("./src/assets/header_rlps.json").unwrap();
         let json: Value = serde_json::from_str(&file).unwrap();
         let json = json.as_object().unwrap();
         let raw_header = json.get(&number.to_string()).unwrap().as_str().unwrap();
@@ -412,8 +405,7 @@ mod test {
                     let response = json_value.as_str().unwrap();
                     let epoch_acc_hash = response.trim_start_matches("0x03");
                     let epoch_acc_hash = H256::from_str(epoch_acc_hash).unwrap();
-                    let epoch_acc_path =
-                        format!("./src/assets/test/epoch_accs/{epoch_acc_hash}.bin");
+                    let epoch_acc_path = format!("./src/assets/epoch_accs/{epoch_acc_hash}.bin");
                     let epoch_acc = fs::read(epoch_acc_path).unwrap();
                     let epoch_acc = hex_encode(epoch_acc);
                     let content: Value = json!(epoch_acc);

@@ -1,4 +1,5 @@
-use crate::types::discv5::{Enr, NodeId, NodeInfo, RoutingTableInfo};
+use crate::types::discv5::{NodeId, NodeInfo, RoutingTableInfo};
+use crate::types::enr::Enr;
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
 
 /// Discv5 JSON-RPC endpoints

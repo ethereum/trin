@@ -1,4 +1,3 @@
-use anyhow::anyhow;
 use std::sync::Arc;
 
 use serde_json::{json, Value};
@@ -7,21 +6,20 @@ use tracing::error;
 
 use crate::network::HistoryNetwork;
 use trin_core::portalnet::storage::ContentStore;
-use trin_core::portalnet::types::content_key::{HistoryContentKey, OverlayContentKey};
 use trin_utils::bytes::hex_encode;
 
 use crate::utils::bucket_entries_to_json;
-use ethportal_api::endpoints::HistoryEndpoint;
-use ethportal_api::types::discv5::Enr;
 use ethportal_api::types::portal::{
     AcceptInfo, Distance, FindNodesInfo, NodeInfo, PongInfo, TraceContentInfo,
 };
-use ethportal_api::types::request::HistoryJsonRpcRequest;
-use ethportal_api::HistoryContentKey as EthHistoryContentKey;
 use ethportal_api::{ContentItem, HistoryContentItem};
+use ethportal_api::{HistoryContentKey, OverlayContentKey};
 use ssz::Encode;
-use trin_core::portalnet::types::content_key::RawContentKey;
+use trin_types::content_key::RawContentKey;
 use trin_types::distance::{Metric, XorMetric};
+use trin_types::enr::Enr;
+use trin_types::jsonrpc::endpoints::HistoryEndpoint;
+use trin_types::jsonrpc::request::HistoryJsonRpcRequest;
 
 /// Handles History network JSON-RPC requests
 pub struct HistoryRequestHandler {
@@ -34,9 +32,7 @@ impl HistoryRequestHandler {
         while let Some(request) = self.history_rx.recv().await {
             match request.endpoint {
                 HistoryEndpoint::LocalContent(content_key) => {
-                    match convert_content_key(&content_key) {
-                        Ok(content_key) => {
-                            let response =
+                    let response =
                                 match &self.network.overlay.store.read().get(&content_key)
                                 {
                                     Ok(val) => match val {
@@ -51,14 +47,7 @@ impl HistoryRequestHandler {
                                         "Database error while looking for content key in local storage: {content_key:?}, with error: {err}",
                                     )),
                                 };
-                            let _ = request.resp.send(response);
-                        }
-                        Err(_) => {
-                            let _ = request
-                                .resp
-                                .send(Err("Invalid content key provided".to_owned()));
-                        }
-                    }
+                    let _ = request.resp.send(response);
                 }
                 HistoryEndpoint::PaginateLocalContentKeys(offset, limit) => {
                     let response =
@@ -72,54 +61,27 @@ impl HistoryRequestHandler {
                     let _ = request.resp.send(response);
                 }
                 HistoryEndpoint::Store(content_key, content_item) => {
-                    match convert_content_key(&content_key) {
-                        Ok(content_key) => {
-                            let mut data = vec![];
-                            content_item.encode(&mut data);
-                            let response = match self
-                                .network
-                                .overlay
-                                .store
-                                .write()
-                                .put::<HistoryContentKey, Vec<u8>>(content_key, data)
-                            {
-                                Ok(_) => Ok(Value::Bool(true)),
-                                Err(msg) => Ok(Value::String(msg.to_string())),
-                            };
-                            let _ = request.resp.send(response);
-                        }
-                        Err(_) => {
-                            let _ = request
-                                .resp
-                                .send(Err("Invalid content key provided".to_owned()));
-                        }
-                    }
+                    let mut data = vec![];
+                    content_item.encode(&mut data);
+                    let response = match self
+                        .network
+                        .overlay
+                        .store
+                        .write()
+                        .put::<HistoryContentKey, Vec<u8>>(content_key, data)
+                    {
+                        Ok(_) => Ok(Value::Bool(true)),
+                        Err(msg) => Ok(Value::String(msg.to_string())),
+                    };
+                    let _ = request.resp.send(response);
                 }
                 HistoryEndpoint::RecursiveFindContent(content_key) => {
-                    match convert_content_key(&content_key) {
-                        Ok(content_key) => {
-                            let response = self.recursive_find_content(content_key, false).await;
-                            let _ = request.resp.send(response);
-                        }
-                        Err(_) => {
-                            let _ = request
-                                .resp
-                                .send(Err("Invalid content key provided".to_owned()));
-                        }
-                    }
+                    let response = self.recursive_find_content(content_key, false).await;
+                    let _ = request.resp.send(response);
                 }
                 HistoryEndpoint::TraceRecursiveFindContent(content_key) => {
-                    match convert_content_key(&content_key) {
-                        Ok(content_key) => {
-                            let response = self.recursive_find_content(content_key, true).await;
-                            let _ = request.resp.send(response);
-                        }
-                        Err(_) => {
-                            let _ = request
-                                .resp
-                                .send(Err("Invalid content key provided".to_owned()));
-                        }
-                    }
+                    let response = self.recursive_find_content(content_key, true).await;
+                    let _ = request.resp.send(response);
                 }
                 HistoryEndpoint::DataRadius => {
                     let radius = &self.network.overlay.data_radius();
@@ -157,20 +119,12 @@ impl HistoryRequestHandler {
                     let _ = request.resp.send(response);
                 }
                 HistoryEndpoint::Gossip(content_key, content_item) => {
-                    match convert_content_key(&content_key) {
-                        Ok(content_key) => {
-                            let mut data = vec![];
-                            content_item.encode(&mut data);
-                            let content_items = vec![(content_key, data)];
-                            let num_peers = self.network.overlay.propagate_gossip(content_items);
-                            let response = Ok(num_peers.into());
-                            let _ = request.resp.send(response);
-                        }
-                        Err(_) => {
-                            let response = Err("Invalid content key provided".to_owned());
-                            let _ = request.resp.send(response);
-                        }
-                    }
+                    let mut data = vec![];
+                    content_item.encode(&mut data);
+                    let content_items = vec![(content_key, data)];
+                    let num_peers = self.network.overlay.propagate_gossip(content_items);
+                    let response = Ok(num_peers.into());
+                    let _ = request.resp.send(response);
                 }
                 HistoryEndpoint::Offer(enr, content_key, content_value) => {
                     let response = if let Some(content_value) = content_value {
@@ -288,10 +242,4 @@ impl HistoryRequestHandler {
             route: closest_nodes,
         }))
     }
-}
-
-// TODO: Remove this helper method when replacing content key and enr type with ethportal-api.
-// Helper method to convert ethportal-api content keys to trin content keys.
-fn convert_content_key(content_key: &EthHistoryContentKey) -> anyhow::Result<HistoryContentKey> {
-    HistoryContentKey::try_from(content_key.as_ssz_bytes()).map_err(|err| anyhow!(err))
 }

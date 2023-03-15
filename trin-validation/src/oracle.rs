@@ -1,24 +1,17 @@
 use anyhow::anyhow;
-use async_trait::async_trait;
 use ethereum_types::H256;
 use serde_json::{json, Value};
 use ssz::Decode;
 use tokio::sync::mpsc;
 
-use crate::{
-    portalnet::types::content_key::IdentityContentKey, types::accumulator::MasterAccumulator,
-};
-use ethportal_api::endpoints::HistoryEndpoint;
-use ethportal_api::types::request::HistoryJsonRpcRequest;
-use ethportal_api::{types::content_key::BlockHeaderKey, HistoryContentKey};
+use crate::accumulator::MasterAccumulator;
+use ethportal_api::types::content_key::{BlockHeaderKey, HistoryContentKey};
 use trin_types::execution::header::{Header, HeaderWithProof};
+use trin_types::jsonrpc::endpoints::HistoryEndpoint;
 use trin_types::jsonrpc::params::Params;
+use trin_types::jsonrpc::request::HistoryJsonRpcRequest;
 use trin_types::provider::TrustedProvider;
 use trin_utils::bytes::hex_decode;
-
-pub const MERGE_BLOCK_NUMBER: u64 = 15_537_393u64;
-pub const DEFAULT_MASTER_ACC_HASH: &str =
-    "0x8eac399e24480dce3cfe06f4bdecba51c6e5d0c46200e3e8611a0b44a3a69ff9";
 
 /// Responsible for dispatching cross-overlay-network requests
 /// for data to perform validation. Currently, it just proxies these requests
@@ -105,35 +98,6 @@ impl HeaderOracle {
     }
 }
 
-/// Used by all overlay-network Validators to validate content in the overlay service.
-#[async_trait]
-pub trait Validator<TContentKey> {
-    async fn validate_content(
-        &self,
-        content_key: &TContentKey,
-        content: &[u8],
-    ) -> anyhow::Result<()>
-    where
-        TContentKey: 'async_trait;
-}
-
-/// For use in tests where no validation needs to be performed.
-pub struct MockValidator {}
-
-#[async_trait]
-impl Validator<IdentityContentKey> for MockValidator {
-    async fn validate_content(
-        &self,
-        _content_key: &IdentityContentKey,
-        _content: &[u8],
-    ) -> anyhow::Result<()>
-    where
-        IdentityContentKey: 'async_trait,
-    {
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
@@ -142,6 +106,7 @@ mod test {
 
     use tree_hash::TreeHash;
 
+    use crate::constants::DEFAULT_MASTER_ACC_HASH;
     use trin_types::cli::TrinConfig;
 
     #[tokio::test]

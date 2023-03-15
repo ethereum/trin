@@ -1,18 +1,19 @@
 use crate::jsonrpsee::core::{async_trait, Error, RpcResult};
 use anyhow::anyhow;
-use ethportal_api::types::discv5::{Enr, NodeId, RoutingTableInfo};
+use ethportal_api::jsonrpsee::core::__reexports::serde_json::from_value;
+use ethportal_api::jsonrpsee::core::__reexports::serde_json::Value;
+use ethportal_api::types::discv5::{NodeId, RoutingTableInfo};
 use ethportal_api::types::portal::{
     AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
     TraceContentInfo,
 };
+use ethportal_api::HistoryContentItem;
+use ethportal_api::HistoryContentKey;
 use ethportal_api::HistoryNetworkApiServer;
-use ethportal_api::{HistoryContentItem, HistoryContentKey};
-
-use ethportal_api::endpoints::HistoryEndpoint;
-use ethportal_api::jsonrpsee::core::__reexports::serde_json::from_value;
-use ethportal_api::jsonrpsee::core::__reexports::serde_json::Value;
-use ethportal_api::types::request::HistoryJsonRpcRequest;
 use tokio::sync::mpsc;
+use trin_types::enr::Enr;
+use trin_types::jsonrpc::endpoints::HistoryEndpoint;
+use trin_types::jsonrpc::request::HistoryJsonRpcRequest;
 
 pub struct HistoryNetworkApi {
     network: mpsc::UnboundedSender<HistoryJsonRpcRequest>,

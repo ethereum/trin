@@ -10,7 +10,7 @@ use tracing::{info, warn};
 use ethportal_api::types::content_item::{
     BlockBody, ContentItem, EpochAccumulator, HeaderWithProof,
 };
-use ethportal_api::types::content_key::HistoryContentKey;
+use ethportal_api::HistoryContentKey;
 use ethportal_api::Receipt;
 use trin_core::portalnet::storage::{PortalStorage, PortalStorageConfig};
 use trin_core::portalnet::types::messages::ProtocolId;
