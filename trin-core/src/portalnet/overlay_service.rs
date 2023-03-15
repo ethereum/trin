@@ -1511,13 +1511,18 @@ where
                 })
             })
             .collect();
-        let validated_content = join_all(handles)
+        let validated_content: Vec<(TContentKey, Vec<u8>)> = join_all(handles)
             .await
             .into_iter()
             // Whether the spawn fails or the content fails validation, we don't want it:
             .filter_map(|content| content.unwrap_or(None))
             .collect();
         // Propagate all validated content, whether or not it was stored.
+        let validated_ids: Vec<String> = validated_content
+            .iter()
+            .map(|(k, _)| hex_encode_compact(k.content_id()))
+            .collect();
+        debug!(ids = ?validated_ids, "propagating validated content");
         propagate_gossip_cross_thread(validated_content, kbuckets, command_tx.clone());
 
         Ok(())
