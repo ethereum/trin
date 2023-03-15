@@ -5,16 +5,14 @@ use trin_core::{
         discovery::Discovery,
         overlay::{OverlayConfig, OverlayProtocol},
         storage::{ContentStore, DistanceFunction, MemoryContentStore},
-        types::{
-            content_key::IdentityContentKey,
-            messages::{Content, Message, PortalnetConfig, ProtocolId},
-        },
+        types::messages::{Content, Message, PortalnetConfig, ProtocolId},
     },
     socket,
-    types::validation::MockValidator,
 };
+use trin_types::content_key::IdentityContentKey;
 use trin_types::distance::{Distance, XorMetric};
 use trin_types::enr::{Enr, SszEnr};
+use trin_validation::validator::MockValidator;
 
 use discv5::TalkRequest;
 use parking_lot::RwLock;

@@ -51,6 +51,7 @@ tree_hash = "0.4.0"
 tree_hash_derive = "0.4.0"
 trin-types = { path="../trin-types" }
 trin-utils = { path="../trin-utils" }
+trin-validation = { path="../trin-validation" }
 validator = { version = "0.13.0", features = ["derive"] }
 
 [target.'cfg(windows)'.dependencies]

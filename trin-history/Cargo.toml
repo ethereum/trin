@@ -25,6 +25,7 @@ tree_hash = "0.4.0"
 trin-core = { path = "../trin-core" }
 trin-types = { path = "../trin-types" }
 trin-utils = { path = "../trin-utils" }
+trin-validation = { path = "../trin-validation" }
 
 [dev-dependencies]
 env_logger = "0.9.0"

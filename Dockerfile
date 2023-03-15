@@ -17,6 +17,7 @@ COPY ./trin-history ./trin-history
 COPY ./trin-state ./trin-state 
 COPY ./trin-types ./trin-types
 COPY ./trin-utils ./trin-utils 
+COPY ./trin-validation ./trin-validation 
 COPY ./ethportal-peertest ./ethportal-peertest 
 COPY ./utp-testing ./utp-testing
 COPY ./ethportal-api ./ethportal-api
@@ -29,8 +30,8 @@ RUN cargo build -p trin -p trin-cli --release
 FROM ubuntu:22.04
 
 # copy default merge master acc to expected location
-RUN mkdir -p /trin/trin-core/src/assets
-COPY --from=builder /trin/trin-core/src/assets/merge_macc.bin ./trin/trin-core/src/assets/merge_macc.bin
+RUN mkdir -p /trin/trin-validation/src/assets
+COPY --from=builder /trin/trin-validation/src/assets/merge_macc.bin ./trin/trin-validation/src/assets/merge_macc.bin
 # copy build artifacts from build stage
 COPY --from=builder /trin/target/release/trin /usr/bin/
 COPY --from=builder /trin/target/release/trin-cli /usr/bin/

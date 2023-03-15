@@ -1,8 +1,9 @@
+use crate::types::content_key::HistoryContentKey;
+use crate::types::enr::Enr;
 use crate::types::portal::FindNodesInfo;
 use crate::types::{
     content_item::HistoryContentItem,
-    content_key::HistoryContentKey,
-    discv5::{Enr, NodeId, RoutingTableInfo},
+    discv5::{NodeId, RoutingTableInfo},
     portal::{
         AcceptInfo, ContentInfo, DataRadius, PaginateLocalContentInfo, PongInfo, TraceContentInfo,
     },
