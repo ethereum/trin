@@ -29,7 +29,6 @@ use crate::{
         },
         storage::ContentStore,
         types::{
-            content_key::{OverlayContentKey, RawContentKey},
             messages::{
                 Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer,
                 Ping, Pong, PopulatedOffer, ProtocolId, Request, Response,
@@ -37,16 +36,17 @@ use crate::{
             node::Node,
         },
     },
-    types::validation::Validator,
     utils::portal_wire,
     utp::{
         stream::{UtpListenerEvent, UtpListenerRequest, UtpPayload, UtpStream, BUF_SIZE},
         trin_helpers::UtpStreamId,
     },
 };
+use trin_types::content_key::{OverlayContentKey, RawContentKey};
 use trin_types::distance::{Distance, Metric, XorMetric};
 use trin_types::enr::Enr;
 use trin_utils::bytes::hex_encode;
+use trin_validation::validator::Validator;
 
 /// Configuration parameters for the overlay network.
 #[derive(Clone)]

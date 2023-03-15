@@ -13,10 +13,8 @@ use structopt::StructOpt;
 use thiserror::Error;
 
 use dashboard::grafana::GrafanaAPI;
-use trin_core::portalnet::types::content_key::{
-    BlockBody, BlockHeader, BlockReceipts, HistoryContentKey,
-};
 use trin_types::cli::DEFAULT_WEB3_IPC_PATH;
+use trin_types::content_key::{BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, HistoryContentKey};
 use trin_utils::bytes::hex_encode;
 
 #[derive(StructOpt)]
@@ -123,15 +121,15 @@ fn json_rpc(rpc: JsonRpc) -> Result<(), Box<dyn std::error::Error>> {
 fn encode_content_key(content_key: EncodeKey) -> Result<(), Box<dyn std::error::Error>> {
     let key = match content_key {
         EncodeKey::BlockHeader { block_hash } => {
-            HistoryContentKey::BlockHeaderWithProof(BlockHeader {
+            HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
                 block_hash: block_hash.into(),
             })
         }
-        EncodeKey::BlockBody { block_hash } => HistoryContentKey::BlockBody(BlockBody {
+        EncodeKey::BlockBody { block_hash } => HistoryContentKey::BlockBody(BlockBodyKey {
             block_hash: block_hash.into(),
         }),
         EncodeKey::BlockReceipts { block_hash } => {
-            HistoryContentKey::BlockReceipts(BlockReceipts {
+            HistoryContentKey::BlockReceipts(BlockReceiptsKey {
                 block_hash: block_hash.into(),
             })
         }

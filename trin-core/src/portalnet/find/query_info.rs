@@ -4,11 +4,9 @@ use smallvec::SmallVec;
 
 use crate::portalnet::{
     find::query_pool::TargetKey,
-    types::{
-        content_key::OverlayContentKey,
-        messages::{FindContent, FindNodes, Request},
-    },
+    types::messages::{FindContent, FindNodes, Request},
 };
+use trin_types::content_key::OverlayContentKey;
 
 /// Information about a query.
 #[derive(Debug)]

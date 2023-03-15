@@ -3,10 +3,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tokio::sync::RwLock;
 
-use trin_core::{
-    portalnet::types::content_key::StateContentKey,
-    types::validation::{HeaderOracle, Validator},
-};
+use trin_types::content_key::StateContentKey;
+use trin_validation::{oracle::HeaderOracle, validator::Validator};
 
 pub struct StateValidator {
     pub header_oracle: Arc<RwLock<HeaderOracle>>,

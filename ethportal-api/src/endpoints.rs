@@ -1,6 +1,9 @@
+// todo replace with trin types
 use crate::types::discv5::Enr;
+// todo replace with trin types
 use crate::types::portal::DataRadius;
-use crate::{HistoryContentItem, HistoryContentKey};
+use crate::HistoryContentItem;
+use trin_types::content_key::HistoryContentKey;
 
 /// Discv5 JSON-RPC endpoints. Start with "discv5_" prefix
 #[derive(Debug, PartialEq, Eq, Clone)]

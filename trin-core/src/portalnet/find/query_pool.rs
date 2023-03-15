@@ -22,7 +22,7 @@
 // https://github.com/libp2p/rust-libp2p
 
 use super::{iterators::query::Query, query_info::QueryInfo};
-use crate::portalnet::types::content_key::OverlayContentKey;
+use trin_types::content_key::OverlayContentKey;
 
 use discv5::kbucket::Key;
 use fnv::FnvHashMap;

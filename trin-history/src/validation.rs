@@ -7,18 +7,13 @@ use ssz::Decode;
 use tokio::sync::RwLock;
 use tree_hash::TreeHash;
 
-use trin_core::{
-    portalnet::types::content_key::HistoryContentKey,
-    types::{
-        accumulator::EpochAccumulator,
-        validation::{HeaderOracle, Validator},
-    },
-};
+use trin_types::content_key::HistoryContentKey;
 use trin_types::execution::{
     block_body::BlockBody,
     header::{Header, HeaderWithProof},
     receipts::Receipts,
 };
+use trin_validation::{accumulator::EpochAccumulator, oracle::HeaderOracle, validator::Validator};
 
 pub struct ChainHistoryValidator {
     pub header_oracle: Arc<RwLock<HeaderOracle>>,
@@ -114,6 +109,7 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                 }
                 Ok(())
             }
+            &trin_types::content_key::HistoryContentKey::Unknown(_) => todo!(),
         }
     }
 }
@@ -131,16 +127,14 @@ mod tests {
     use ssz::Encode;
     use ssz_types::{typenum, VariableList};
 
-    use trin_core::{
-        portalnet::types::content_key::{
-            BlockBody as BlockBodyKey, BlockHeader, BlockReceipts,
-            EpochAccumulator as EpochAccumulatorKey,
-        },
-        types::accumulator::MasterAccumulator,
-    };
     use trin_types::cli::DEFAULT_MASTER_ACC_PATH;
+    use trin_types::content_key::{
+        BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey,
+    };
     use trin_types::provider::TrustedProvider;
     use trin_utils::bytes::hex_decode;
+    use trin_validation::accumulator::HeaderRecord;
+    use trin_validation::accumulator::MasterAccumulator;
 
     fn get_hwp_ssz() -> Vec<u8> {
         let file =
@@ -231,7 +225,7 @@ mod tests {
         let hwp = HeaderWithProof::from_ssz_bytes(&hwp_ssz).expect("error decoding header");
         let header_oracle = default_header_oracle(server.url("/get_header"));
         let chain_history_validator = ChainHistoryValidator { header_oracle };
-        let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeader {
+        let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
             block_hash: hwp.header.hash().0,
         });
         chain_history_validator
@@ -253,7 +247,7 @@ mod tests {
         let content_value = header.as_ssz_bytes();
         let header_oracle = default_header_oracle(server.url("/get_header"));
         let chain_history_validator = ChainHistoryValidator { header_oracle };
-        let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeader {
+        let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
             block_hash: header.header.hash().0,
         });
         chain_history_validator
@@ -276,7 +270,7 @@ mod tests {
         let content_value = header.as_ssz_bytes();
         let header_oracle = default_header_oracle(server.url("/get_header"));
         let chain_history_validator = ChainHistoryValidator { header_oracle };
-        let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeader {
+        let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
             block_hash: header.header.hash().0,
         });
         chain_history_validator
@@ -377,8 +371,6 @@ mod tests {
             .unwrap();
     }
 
-    use trin_core::types::accumulator::HeaderRecord;
-
     #[tokio::test]
     async fn validate_epoch_acc() {
         let server = setup_mock_infura_server();
@@ -473,7 +465,7 @@ mod tests {
 
     fn block_14764013_receipts_key() -> HistoryContentKey {
         let block_hash = block_14764013_hash();
-        HistoryContentKey::BlockReceipts(BlockReceipts {
+        HistoryContentKey::BlockReceipts(BlockReceiptsKey {
             block_hash: block_hash.0,
         })
     }

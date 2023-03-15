@@ -16,9 +16,9 @@ use trin_core::{
     portalnet::{
         discovery::Discovery, storage::PortalStorageConfig, types::messages::PortalnetConfig,
     },
-    types::validation::HeaderOracle,
     utp::stream::{UtpListenerEvent, UtpListenerRequest},
 };
+use trin_validation::oracle::HeaderOracle;
 
 pub mod events;
 mod jsonrpc;

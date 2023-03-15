@@ -8,15 +8,13 @@ use trin_core::{
         discovery::Discovery,
         overlay::{OverlayConfig, OverlayProtocol},
         storage::{PortalStorage, PortalStorageConfig},
-        types::{
-            content_key::HistoryContentKey,
-            messages::{PortalnetConfig, ProtocolId},
-        },
+        types::messages::{PortalnetConfig, ProtocolId},
     },
-    types::validation::HeaderOracle,
     utp::stream::UtpListenerRequest,
 };
+use trin_types::content_key::HistoryContentKey;
 use trin_types::distance::XorMetric;
+use trin_validation::oracle::HeaderOracle;
 
 use crate::validation::ChainHistoryValidator;
 

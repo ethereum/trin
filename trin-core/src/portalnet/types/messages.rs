@@ -16,8 +16,8 @@ use ssz_types::{typenum, BitList};
 use thiserror::Error;
 use validator::ValidationError;
 
-use crate::portalnet::types::content_key::RawContentKey;
 use trin_types::bytes::ByteList;
+use trin_types::content_key::RawContentKey;
 use trin_types::distance::Distance;
 use trin_types::enr::{Enr, SszEnr};
 use trin_utils::bytes::{hex_decode, hex_encode};
