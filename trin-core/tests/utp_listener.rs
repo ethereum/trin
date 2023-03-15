@@ -10,13 +10,13 @@ use trin_core::{
     portalnet::{
         discovery::Discovery,
         types::messages::{PortalnetConfig, ProtocolId},
-        Enr,
     },
     utp::{
         stream::{UtpListener, UtpListenerEvent, UtpListenerRequest, UtpStream, BUF_SIZE},
         trin_helpers::UtpStreamId::{AcceptStream, OfferStream},
     },
 };
+use trin_types::enr::Enr;
 use trin_utils::bytes::hex_encode_upper;
 
 fn next_test_port() -> u16 {

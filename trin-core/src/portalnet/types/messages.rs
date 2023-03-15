@@ -2,11 +2,10 @@ use std::{
     convert::{TryFrom, TryInto},
     fmt,
     net::SocketAddr,
-    ops::{Deref, DerefMut},
+    ops::Deref,
     str::FromStr,
 };
 
-use base64;
 use ethereum_types::{H256, U256};
 use rlp::Encodable;
 use serde::{Deserialize, Serialize};
@@ -17,10 +16,9 @@ use ssz_types::{typenum, BitList, VariableList};
 use thiserror::Error;
 use validator::ValidationError;
 
-use crate::portalnet::{
-    types::{content_key::RawContentKey, distance::Distance},
-    Enr,
-};
+use crate::portalnet::types::content_key::RawContentKey;
+use trin_types::distance::Distance;
+use trin_types::enr::{Enr, SszEnr};
 use trin_utils::bytes::{hex_decode, hex_encode};
 
 pub type ByteList = VariableList<u8, typenum::U2048>;
@@ -561,76 +559,6 @@ pub struct Accept {
 impl Into<Value> for Accept {
     fn into(self) -> Value {
         serde_json::json!({ "connection_id": format!("{:?}", self.connection_id.to_be()) , "content_keys": self.content_keys})
-    }
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct SszEnr(Enr);
-
-impl SszEnr {
-    pub fn new(enr: Enr) -> SszEnr {
-        SszEnr(enr)
-    }
-}
-
-impl Into<Enr> for SszEnr {
-    fn into(self) -> Enr {
-        Enr::from(self.0)
-    }
-}
-
-impl TryFrom<&Value> for SszEnr {
-    type Error = ValidationError;
-
-    fn try_from(value: &Value) -> Result<Self, Self::Error> {
-        let enr = value
-            .as_str()
-            .ok_or_else(|| ValidationError::new("Enr value is not a string!"))?;
-        match Enr::from_str(enr) {
-            Ok(enr) => Ok(Self(enr)),
-            Err(_) => Err(ValidationError::new("Invalid enr value")),
-        }
-    }
-}
-
-impl Deref for SszEnr {
-    type Target = Enr;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for SszEnr {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-impl ssz::Decode for SszEnr {
-    fn is_ssz_fixed_len() -> bool {
-        false
-    }
-
-    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
-        let string = base64::encode_config(&bytes, base64::URL_SAFE);
-        Ok(SszEnr(
-            Enr::from_str(&string).map_err(|e| DecodeError::BytesInvalid(e))?,
-        ))
-    }
-}
-
-impl ssz::Encode for SszEnr {
-    fn is_ssz_fixed_len() -> bool {
-        false
-    }
-
-    fn ssz_append(&self, buf: &mut Vec<u8>) {
-        buf.append(&mut self.rlp_bytes().to_vec());
-    }
-
-    fn ssz_bytes_len(&self) -> usize {
-        self.rlp_bytes().to_vec().ssz_bytes_len()
     }
 }
 

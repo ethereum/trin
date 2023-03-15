@@ -16,8 +16,8 @@ use tokio::{
 use tracing::info;
 
 use crate::{events::HistoryEvents, jsonrpc::HistoryRequestHandler};
+use ethportal_api::types::request::HistoryJsonRpcRequest;
 use trin_core::{
-    jsonrpc::types::HistoryJsonRpcRequest,
     portalnet::{
         discovery::Discovery, storage::PortalStorageConfig, types::messages::PortalnetConfig,
     },

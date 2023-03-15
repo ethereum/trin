@@ -49,6 +49,7 @@ members = [
     "trin-core",
     "trin-history",
     "trin-state",
+    "trin-types",
     "trin-utils",
     "utp-testing",
 ]

@@ -19,11 +19,9 @@ use rocksdb::{Options, DB};
 use rusqlite::params;
 use tracing::{debug, info};
 
-use super::types::{
-    content_key::OverlayContentKey,
-    distance::{Distance, Metric, XorMetric},
-};
+use super::types::content_key::OverlayContentKey;
 use crate::{portalnet::types::messages::ProtocolId, utils::db::get_data_dir};
+use trin_types::distance::{Distance, Metric, XorMetric};
 use trin_utils::bytes::{hex_decode, hex_encode};
 
 // TODO: Replace enum with generic type parameter. This will require that we have a way to

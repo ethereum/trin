@@ -13,9 +13,8 @@ use futures::future;
 use httpmock::prelude::{MockServer, POST};
 use serde_json::json;
 
-use trin_core::{
-    cli::TrinConfig, portalnet::types::messages::SszEnr, utils::provider::TrustedProvider,
-};
+use trin_core::{cli::TrinConfig, utils::provider::TrustedProvider};
+use trin_types::enr::SszEnr;
 use trin_utils::bytes::hex_encode;
 
 pub fn setup_mock_trusted_http_server() -> MockServer {
@@ -164,7 +163,7 @@ pub async fn launch_peertest_nodes(count: u16) -> Peertest {
     let bootnode = launch_node(bootnode_config).await.unwrap();
     let bootnode_enr = &bootnode.enr;
     // All other peertest node ids begin at 2, and increment from there
-    let nodes = future::try_join_all((2..count + 1).into_iter().map(|id| {
+    let nodes = future::try_join_all((2..count + 1).map(|id| {
         let node_config = generate_trin_config(id, Some(bootnode_enr));
         launch_node(node_config)
     }))

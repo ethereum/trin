@@ -2,8 +2,6 @@ use std::path::PathBuf;
 
 use anyhow::anyhow;
 use ethereum_types::{H256, U256};
-use ethportal_api::types::content_key::EpochAccumulatorKey;
-use ethportal_api::HistoryContentKey;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use ssz::Decode;
@@ -13,13 +11,15 @@ use tokio::sync::mpsc;
 use tree_hash::TreeHash;
 use tree_hash_derive::TreeHash;
 
-use crate::jsonrpc::endpoints::HistoryEndpoint;
-use crate::jsonrpc::types::HistoryJsonRpcRequest;
 use crate::types::{
     header::{BlockHeaderProof, Header, HeaderWithProof},
     merkle::proof::{verify_merkle_proof, MerkleTree},
     validation::MERGE_BLOCK_NUMBER,
 };
+use ethportal_api::endpoints::HistoryEndpoint;
+use ethportal_api::types::content_key::EpochAccumulatorKey;
+use ethportal_api::types::request::HistoryJsonRpcRequest;
+use ethportal_api::HistoryContentKey;
 use trin_utils::bytes::hex_decode;
 
 /// Max number of blocks / epoch = 2 ** 13

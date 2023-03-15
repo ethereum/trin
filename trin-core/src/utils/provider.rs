@@ -8,8 +8,9 @@ use ureq::Request;
 use url::Url;
 
 use crate::cli::TrinConfig;
-use crate::jsonrpc::service::dispatch_trusted_http_request;
-use crate::jsonrpc::types::{JsonRequest, Params};
+use ethportal_api::service::dispatch_trusted_http_request;
+use ethportal_api::types::params::Params;
+use ethportal_api::types::request::JsonRequest;
 
 pub const INFURA_BASE_HTTP_URL: &str = "https://mainnet.infura.io:443/v3/";
 pub const INFURA_BASE_WS_URL: &str = "wss://mainnet.infura.io:443/ws/v3/";

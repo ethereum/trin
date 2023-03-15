@@ -7,14 +7,14 @@ use trin_core::{
         storage::{ContentStore, DistanceFunction, MemoryContentStore},
         types::{
             content_key::IdentityContentKey,
-            distance::{Distance, XorMetric},
-            messages::{Content, Message, PortalnetConfig, ProtocolId, SszEnr},
+            messages::{Content, Message, PortalnetConfig, ProtocolId},
         },
-        Enr,
     },
     socket,
     types::validation::MockValidator,
 };
+use trin_types::distance::{Distance, XorMetric};
+use trin_types::enr::{Enr, SszEnr};
 
 use discv5::TalkRequest;
 use parking_lot::RwLock;

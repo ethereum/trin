@@ -10,10 +10,7 @@ use serde_json::{json, Value};
 use tokio::sync::mpsc;
 use tracing::info;
 
-use super::{
-    types::messages::{PortalnetConfig, ProtocolId},
-    Enr,
-};
+use super::types::messages::{PortalnetConfig, ProtocolId};
 use crate::{socket, TRIN_VERSION};
 use ethportal_api::types::discv5::{Enr as EthportalEnr, NodeId as EthportalNodeId, NodeInfo};
 use std::str::FromStr;
@@ -23,6 +20,7 @@ use std::{
     net::{IpAddr, SocketAddr},
     sync::Arc,
 };
+use trin_types::enr::Enr;
 use trin_utils::bytes::hex_encode;
 
 /// Size of the buffer of the Discv5 TALKREQ channel.
