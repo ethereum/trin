@@ -5,9 +5,9 @@ use discv5::{
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
-use crate::bytes::hex_encode;
 use trin_types::distance::Distance;
 use trin_types::enr::Enr;
+use trin_utils::bytes::hex_encode;
 
 type NodeMap = BTreeMap<String, String>;
 type NodeTuple = (NodeId, Enr, NodeStatus, Distance, Option<String>);

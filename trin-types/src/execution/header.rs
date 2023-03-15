@@ -5,8 +5,8 @@ use serde_json::Value;
 use ssz::{Encode, SszDecoderBuilder, SszEncoder};
 use ssz_derive::{Decode, Encode};
 
-use crate::portalnet::types::messages::ByteList;
-use crate::types::block_body::Transaction;
+use crate::bytes::ByteList;
+use crate::execution::block_body::Transaction;
 use trin_utils::bytes::{hex_decode, hex_encode};
 
 const LONDON_BLOCK_NUMBER: u64 = 12965000;
@@ -469,7 +469,9 @@ mod tests {
 
     #[test]
     fn decode_encode_header_with_proofs() {
-        let file = fs::read_to_string("./src/assets/test/fluffy/header_with_proofs.json").unwrap();
+        let file =
+            fs::read_to_string("../trin-core/src/assets/test/fluffy/header_with_proofs.json")
+                .unwrap();
         let json: Value = serde_json::from_str(&file).unwrap();
         let hwps = json.as_object().unwrap();
         for (block_number, obj) in hwps {
@@ -486,7 +488,8 @@ mod tests {
     #[test]
     fn full_header_from_get_block_response() {
         let body =
-            std::fs::read_to_string("./src/assets/test/trin/block_14764013_value.json").unwrap();
+            std::fs::read_to_string("../trin-core/src/assets/test/trin/block_14764013_value.json")
+                .unwrap();
         let body: Value = serde_json::from_str(&body).unwrap();
         let full_header = FullHeader::try_from(body["result"].clone()).unwrap();
         let header: Header = serde_json::from_value(body["result"].clone()).unwrap();

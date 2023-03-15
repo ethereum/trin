@@ -13,8 +13,8 @@ use futures::future;
 use httpmock::prelude::{MockServer, POST};
 use serde_json::json;
 
-use trin_core::{cli::TrinConfig, utils::provider::TrustedProvider};
 use trin_types::enr::SszEnr;
+use trin_types::{cli::TrinConfig, provider::TrustedProvider};
 use trin_utils::bytes::hex_encode;
 
 pub fn setup_mock_trusted_http_server() -> MockServer {

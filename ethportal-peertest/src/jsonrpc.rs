@@ -10,9 +10,9 @@ use ssz::Encode;
 use tracing::{error, info};
 
 use crate::{cli::PeertestConfig, Peertest};
-use ethportal_api::types::params::{NodesParams, Params};
 use trin_types::distance::Distance;
 use trin_types::enr::SszEnr;
+use trin_types::jsonrpc::params::{NodesParams, Params};
 use trin_utils::bytes::hex_encode;
 use trin_utils::version::get_trin_version;
 

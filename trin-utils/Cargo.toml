@@ -16,7 +16,6 @@ anyhow = "1.0.68"
 discv5 = { version = "0.2.1", features = ["serde"] }
 hex = "0.4.3"
 serde_json = {version = "1.0.89", features = ["preserve_order"]}
-trin-types = { path = "../trin-types" }
 
 [dev-dependencies]
 rstest = "0.11.0"

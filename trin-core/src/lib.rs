@@ -1,7 +1,6 @@
 #![warn(clippy::unwrap_used)]
 #![warn(clippy::cargo)]
 
-pub mod cli;
 pub mod locks;
 pub mod portalnet;
 pub mod socket;

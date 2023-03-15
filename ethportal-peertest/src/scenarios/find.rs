@@ -4,7 +4,7 @@ use crate::{
     jsonrpc::{make_ipc_request, JsonRpcRequest, HISTORY_CONTENT_VALUE},
     Peertest, PeertestConfig,
 };
-use ethportal_api::types::params::Params;
+use trin_types::jsonrpc::params::Params;
 
 pub fn test_trace_recursive_find_content(_peertest_config: PeertestConfig, peertest: &Peertest) {
     let uniq_content_key = "0x0015b11b918355b1ef9c5db810302ebad0bf2544255b530cdce90674d5887bb286";
