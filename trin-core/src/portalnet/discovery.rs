@@ -11,7 +11,7 @@ use tokio::sync::mpsc;
 use tracing::info;
 
 use super::types::messages::{PortalnetConfig, ProtocolId};
-use crate::{socket, TRIN_VERSION};
+use crate::socket;
 use ethportal_api::types::discv5::{Enr as EthportalEnr, NodeId as EthportalNodeId, NodeInfo};
 use std::str::FromStr;
 use std::{
@@ -22,6 +22,7 @@ use std::{
 };
 use trin_types::enr::Enr;
 use trin_utils::bytes::hex_encode;
+use trin_utils::version::get_trin_version;
 
 /// Size of the buffer of the Discv5 TALKREQ channel.
 const TALKREQ_CHANNEL_BUFFER: usize = 100;
@@ -127,8 +128,9 @@ impl Discovery {
             }
             builder.udp4(config.listen_port);
 
+            let trin_version = get_trin_version();
             // Use "t" as short-hand for "Trin" to save bytes in ENR.
-            let client_info = format!("t {}", TRIN_VERSION);
+            let client_info = format!("t {trin_version}");
             // Use "c" as short-hand for "client".
             builder.add_value("c", client_info.as_bytes());
             builder

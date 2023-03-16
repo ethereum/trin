@@ -11,5 +11,3 @@ pub mod utp;
 
 #[macro_use]
 extern crate lazy_static;
-
-pub const TRIN_VERSION: &str = env!("CARGO_PKG_VERSION");
