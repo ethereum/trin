@@ -10,7 +10,6 @@ use trin_utils::bytes::hex_encode;
 
 use crate::utils::bucket_entries_to_json;
 use ethportal_api::endpoints::HistoryEndpoint;
-use ethportal_api::types::discv5::Enr;
 use ethportal_api::types::portal::{
     AcceptInfo, Distance, FindNodesInfo, NodeInfo, PongInfo, TraceContentInfo,
 };
@@ -19,6 +18,7 @@ use ethportal_api::{ContentItem, HistoryContentItem};
 use ssz::Encode;
 use trin_types::content_key::{HistoryContentKey, OverlayContentKey, RawContentKey};
 use trin_types::distance::{Metric, XorMetric};
+use trin_types::enr::Enr;
 
 /// Handles History network JSON-RPC requests
 pub struct HistoryRequestHandler {

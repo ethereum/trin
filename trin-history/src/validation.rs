@@ -138,7 +138,7 @@ mod tests {
 
     fn get_hwp_ssz() -> Vec<u8> {
         let file =
-            fs::read_to_string("../trin-core/src/assets/test/fluffy/header_with_proofs.json")
+            fs::read_to_string("../trin-validation/src/assets/fluffy/header_with_proofs.json")
                 .unwrap();
         let json: Value = serde_json::from_str(&file).unwrap();
         let json = json.as_object().unwrap();
@@ -284,7 +284,7 @@ mod tests {
         let server = setup_mock_infura_server();
 
         let ssz_block_body: Vec<u8> =
-            std::fs::read("../trin-core/src/assets/test/trin/block_body_14764013.bin").unwrap();
+            std::fs::read("../trin-types/src/assets/trin/block_body_14764013.bin").unwrap();
         let block_body_bytelist: VariableList<_, typenum::U16384> =
             VariableList::from(ssz_block_body);
 
@@ -304,7 +304,7 @@ mod tests {
         let server = setup_mock_infura_server();
 
         let ssz_block_body: Vec<u8> =
-            std::fs::read("../trin-core/src/assets/test/trin/block_body_14764013.bin").unwrap();
+            std::fs::read("../trin-types/src/assets/trin/block_body_14764013.bin").unwrap();
         let mut valid_block = BlockBody::from_ssz_bytes(&ssz_block_body).unwrap();
 
         // construct invalid ssz encoded block body
@@ -331,7 +331,7 @@ mod tests {
     async fn validate_receipts() {
         let server = setup_mock_infura_server();
         let ssz_receipts: Vec<u8> =
-            std::fs::read("../trin-core/src/assets/test/trin/receipts_14764013.bin").unwrap();
+            std::fs::read("../trin-types/src/assets/trin/receipts_14764013.bin").unwrap();
         let content: VariableList<_, typenum::U16384> = VariableList::from(ssz_receipts);
 
         let header_oracle = default_header_oracle(server.url("/14764013"));
@@ -349,7 +349,7 @@ mod tests {
     async fn invalidate_receipts() {
         let server = setup_mock_infura_server();
         let ssz_receipts: Vec<u8> =
-            std::fs::read("../trin-core/src/assets/test/trin/receipts_14764013.bin").unwrap();
+            std::fs::read("../trin-types/src/assets/trin/receipts_14764013.bin").unwrap();
         let mut valid_receipts = Receipts::from_ssz_bytes(&ssz_receipts).unwrap();
 
         // construct invalid ssz encoded receipts
@@ -375,7 +375,7 @@ mod tests {
     async fn validate_epoch_acc() {
         let server = setup_mock_infura_server();
         let epoch_acc =
-            std::fs::read("./../trin-core/src/assets/test/epoch_accs/0x5ec1…4218.bin").unwrap();
+            std::fs::read("./../trin-validation/src/assets/epoch_accs/0x5ec1…4218.bin").unwrap();
         let epoch_acc = EpochAccumulator::from_ssz_bytes(&epoch_acc).unwrap();
         let header_oracle = default_header_oracle(server.url("/14764013"));
         let chain_history_validator = ChainHistoryValidator { header_oracle };
@@ -394,7 +394,7 @@ mod tests {
     async fn invalidate_epoch_acc_with_invalid_root_hash() {
         let server = setup_mock_infura_server();
         let epoch_acc =
-            std::fs::read("./../trin-core/src/assets/test/epoch_accs/0x5ec1…4218.bin").unwrap();
+            std::fs::read("./../trin-validation/src/assets/epoch_accs/0x5ec1…4218.bin").unwrap();
         let mut epoch_acc = EpochAccumulator::from_ssz_bytes(&epoch_acc).unwrap();
         let header_oracle = default_header_oracle(server.url("/14764013"));
         let chain_history_validator = ChainHistoryValidator { header_oracle };
@@ -419,7 +419,7 @@ mod tests {
     async fn invalidate_epoch_acc_missing_from_master_acc() {
         let server = setup_mock_infura_server();
         let epoch_acc =
-            std::fs::read("./../trin-core/src/assets/test/epoch_accs/0x5ec1…4218.bin").unwrap();
+            std::fs::read("./../trin-validation/src/assets/epoch_accs/0x5ec1…4218.bin").unwrap();
         let mut epoch_acc = EpochAccumulator::from_ssz_bytes(&epoch_acc).unwrap();
         let header_oracle = default_header_oracle(server.url("/14764013"));
         let chain_history_validator = ChainHistoryValidator { header_oracle };

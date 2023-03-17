@@ -1,7 +1,8 @@
-use crate::types::{content_item::HistoryContentItem, discv5::Enr};
+use crate::types::content_item::HistoryContentItem;
 use serde::{Deserialize, Serialize};
 use ssz_types::{typenum, BitList};
 use trin_types::content_key::HistoryContentKey;
+use trin_types::enr::Enr;
 
 pub type DataRadius = ethereum_types::U256;
 pub type Distance = ethereum_types::U256;

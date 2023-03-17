@@ -3,7 +3,7 @@ use anyhow::anyhow;
 use ethportal_api::endpoints::HistoryEndpoint;
 use ethportal_api::jsonrpsee::core::__reexports::serde_json::from_value;
 use ethportal_api::jsonrpsee::core::__reexports::serde_json::Value;
-use ethportal_api::types::discv5::{Enr, NodeId, RoutingTableInfo};
+use ethportal_api::types::discv5::{NodeId, RoutingTableInfo};
 use ethportal_api::types::portal::{
     AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
     TraceContentInfo,
@@ -13,6 +13,7 @@ use ethportal_api::HistoryContentItem;
 use ethportal_api::HistoryNetworkApiServer;
 use tokio::sync::mpsc;
 use trin_types::content_key::HistoryContentKey;
+use trin_types::enr::Enr;
 
 pub struct HistoryNetworkApi {
     network: mpsc::UnboundedSender<HistoryJsonRpcRequest>,
