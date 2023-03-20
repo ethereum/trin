@@ -6,7 +6,6 @@
 mod discv5;
 pub mod endpoints;
 mod history;
-pub mod service;
 pub mod types;
 mod web3;
 

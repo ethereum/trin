@@ -10,7 +10,7 @@ use rlp_derive::{RlpDecodable, RlpEncodable};
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 
-use crate::types::block_body::JsonBytes;
+use crate::execution::block_body::JsonBytes;
 use trin_utils::bytes::hex_decode;
 
 // 2 ^ 14
@@ -546,7 +546,7 @@ mod tests {
         let encoded = receipts.as_ssz_bytes();
 
         let expected: Vec<u8> =
-            std::fs::read("./src/assets/test/trin/receipts_14764013.bin").unwrap();
+            std::fs::read("../trin-core/src/assets/test/trin/receipts_14764013.bin").unwrap();
         assert_eq!(hex_encode(&encoded), hex_encode(expected));
 
         let decoded = Receipts::from_ssz_bytes(&encoded).unwrap();

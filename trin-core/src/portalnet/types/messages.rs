@@ -12,16 +12,15 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use ssz::{Decode, DecodeError, Encode};
 use ssz_derive::{Decode, Encode};
-use ssz_types::{typenum, BitList, VariableList};
+use ssz_types::{typenum, BitList};
 use thiserror::Error;
 use validator::ValidationError;
 
 use crate::portalnet::types::content_key::RawContentKey;
+use trin_types::bytes::ByteList;
 use trin_types::distance::Distance;
 use trin_types::enr::{Enr, SszEnr};
 use trin_utils::bytes::{hex_decode, hex_encode};
-
-pub type ByteList = VariableList<u8, typenum::U2048>;
 
 /// Custom payload element of Ping and Pong overlay messages
 #[derive(Debug, PartialEq, Clone)]

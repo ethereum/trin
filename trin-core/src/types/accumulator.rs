@@ -12,7 +12,6 @@ use tree_hash::TreeHash;
 use tree_hash_derive::TreeHash;
 
 use crate::types::{
-    header::{BlockHeaderProof, Header, HeaderWithProof},
     merkle::proof::{verify_merkle_proof, MerkleTree},
     validation::MERGE_BLOCK_NUMBER,
 };
@@ -20,6 +19,7 @@ use ethportal_api::endpoints::HistoryEndpoint;
 use ethportal_api::types::content_key::EpochAccumulatorKey;
 use ethportal_api::types::request::HistoryJsonRpcRequest;
 use ethportal_api::HistoryContentKey;
+use trin_types::execution::header::{BlockHeaderProof, Header, HeaderWithProof};
 use trin_utils::bytes::hex_decode;
 
 /// Max number of blocks / epoch = 2 ** 13
@@ -246,8 +246,10 @@ mod test {
     use serde_json::json;
     use ssz::Decode;
 
-    use crate::types::header::{AccumulatorProof, BlockHeaderProof, HeaderWithProof, SszNone};
     use crate::types::validation::DEFAULT_MASTER_ACC_HASH;
+    use trin_types::execution::header::{
+        AccumulatorProof, BlockHeaderProof, HeaderWithProof, SszNone,
+    };
     use trin_utils::bytes::hex_encode;
 
     #[rstest]

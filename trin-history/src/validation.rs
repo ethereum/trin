@@ -11,11 +11,13 @@ use trin_core::{
     portalnet::types::content_key::HistoryContentKey,
     types::{
         accumulator::EpochAccumulator,
-        block_body::BlockBody,
-        header::{Header, HeaderWithProof},
-        receipts::Receipts,
         validation::{HeaderOracle, Validator},
     },
+};
+use trin_types::execution::{
+    block_body::BlockBody,
+    header::{Header, HeaderWithProof},
+    receipts::Receipts,
 };
 
 pub struct ChainHistoryValidator {
@@ -130,14 +132,14 @@ mod tests {
     use ssz_types::{typenum, VariableList};
 
     use trin_core::{
-        cli::DEFAULT_MASTER_ACC_PATH,
         portalnet::types::content_key::{
             BlockBody as BlockBodyKey, BlockHeader, BlockReceipts,
             EpochAccumulator as EpochAccumulatorKey,
         },
         types::accumulator::MasterAccumulator,
-        utils::provider::TrustedProvider,
     };
+    use trin_types::cli::DEFAULT_MASTER_ACC_PATH;
+    use trin_types::provider::TrustedProvider;
     use trin_utils::bytes::hex_decode;
 
     fn get_hwp_ssz() -> Vec<u8> {

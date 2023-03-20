@@ -4,13 +4,15 @@ use std::str::FromStr;
 
 use anyhow::anyhow;
 use serde_json::Value;
-use ureq::Request;
 use url::Url;
 
+use std::io;
+
+use serde_json::json;
+use ureq::{self, Request};
+
 use crate::cli::TrinConfig;
-use ethportal_api::service::dispatch_trusted_http_request;
-use ethportal_api::types::params::Params;
-use ethportal_api::types::request::JsonRequest;
+use crate::jsonrpc::params::Params;
 
 pub const INFURA_BASE_HTTP_URL: &str = "https://mainnet.infura.io:443/v3/";
 pub const DEFAULT_LOCAL_PROVIDER: &str = "http://127.0.0.1:8545";
@@ -80,18 +82,57 @@ impl TrustedProvider {
     }
 
     pub fn dispatch_http_request(&self, method: String, params: Params) -> anyhow::Result<Value> {
-        let request = JsonRequest {
-            jsonrpc: "2.0".to_string(),
-            params,
-            method,
-            id: 1,
-        };
+        let request = ureq::json!({
+            "jsonrpc": "2.0".to_string(),
+            "params": params,
+            "method": method,
+            "id": 1,
+        });
+
         match dispatch_trusted_http_request(request, self.http.clone()) {
             Ok(val) => Ok(serde_json::from_str(&val)?),
             Err(err) => Err(anyhow!(
                 "Unable to request validation data from trusted provider: {err:?}",
             )),
         }
+    }
+}
+
+// Handle all http requests served by the trusted provider
+fn dispatch_trusted_http_request(
+    obj: Value,
+    trusted_http_client: Request,
+) -> Result<String, String> {
+    match proxy_to_url(&obj, trusted_http_client) {
+        Ok(result_body) => Ok(std::str::from_utf8(&result_body)
+            .map_err(|e| format!("When decoding utf8 from proxied provider: {e:?}"))?
+            .to_owned()),
+        Err(err) => Err(json!({
+            "jsonrpc": "2.0",
+            "id": obj.get("id"),
+            "error": format!("Infura failure: {err}"),
+        })
+        .to_string()),
+    }
+}
+
+fn proxy_to_url(request: &Value, trusted_http_client: Request) -> io::Result<Vec<u8>> {
+    match trusted_http_client.send_json(ureq::json!(request)) {
+        Ok(response) => match response.into_string() {
+            Ok(val) => Ok(val.as_bytes().to_vec()),
+            Err(msg) => Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("Error decoding response: {msg:?}"),
+            )),
+        },
+        Err(ureq::Error::Status(code, _response)) => Err(io::Error::new(
+            io::ErrorKind::Other,
+            format!("Responded with status code: {code:?}"),
+        )),
+        Err(err) => Err(io::Error::new(
+            io::ErrorKind::Other,
+            format!("Request failure: {err:?}"),
+        )),
     }
 }
 

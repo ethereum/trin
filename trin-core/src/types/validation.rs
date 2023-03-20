@@ -6,17 +6,14 @@ use ssz::Decode;
 use tokio::sync::mpsc;
 
 use crate::{
-    portalnet::types::content_key::IdentityContentKey,
-    types::{
-        accumulator::MasterAccumulator,
-        header::{Header, HeaderWithProof},
-    },
-    utils::provider::TrustedProvider,
+    portalnet::types::content_key::IdentityContentKey, types::accumulator::MasterAccumulator,
 };
 use ethportal_api::endpoints::HistoryEndpoint;
-use ethportal_api::types::params::Params;
 use ethportal_api::types::request::HistoryJsonRpcRequest;
 use ethportal_api::{types::content_key::BlockHeaderKey, HistoryContentKey};
+use trin_types::execution::header::{Header, HeaderWithProof};
+use trin_types::jsonrpc::params::Params;
+use trin_types::provider::TrustedProvider;
 use trin_utils::bytes::hex_decode;
 
 pub const MERGE_BLOCK_NUMBER: u64 = 15_537_393u64;
@@ -145,7 +142,7 @@ mod test {
 
     use tree_hash::TreeHash;
 
-    use crate::cli::TrinConfig;
+    use trin_types::cli::TrinConfig;
 
     #[tokio::test]
     async fn header_oracle_bootstraps_with_default_merge_master_acc() {

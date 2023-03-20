@@ -6,8 +6,8 @@ mod test {
     };
 
     use ethportal_peertest as peertest;
-    use trin_core::cli::TrinConfig;
-    use trin_core::utils::provider::TrustedProvider;
+    use trin_types::cli::TrinConfig;
+    use trin_types::provider::TrustedProvider;
 
     // Logs don't show up when trying to use test_log here, maybe because of multi_thread
     #[tokio::test(flavor = "multi_thread")]
