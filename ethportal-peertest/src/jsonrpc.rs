@@ -14,6 +14,7 @@ use ethportal_api::types::params::{NodesParams, Params};
 use trin_types::distance::Distance;
 use trin_types::enr::SszEnr;
 use trin_utils::bytes::hex_encode;
+use trin_utils::version::get_trin_version;
 
 /// Default data radius value
 const DATA_RADIUS: Distance = Distance::MAX;
@@ -188,7 +189,8 @@ fn all_tests(peertest: &Peertest) -> Vec<Test<impl Fn(&Value, &Peertest)>> {
 }
 
 fn validate_web3_client_version(val: &Value, _peertest: &Peertest) {
-    assert_eq!(val.as_str().unwrap(), "trin v0.1.0");
+    let expected_version = format!("trin v{}", get_trin_version());
+    assert_eq!(val.as_str().unwrap(), expected_version);
 }
 
 fn validate_discv5_node_info(val: &Value, _peertest: &Peertest) {

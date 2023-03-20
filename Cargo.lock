@@ -4554,6 +4554,7 @@ dependencies = [
  "reth-ipc",
  "tokio",
  "trin-core",
+ "trin-utils",
  "url",
 ]
 

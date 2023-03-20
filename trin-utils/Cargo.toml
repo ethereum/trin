@@ -9,6 +9,7 @@ keywords = ["ethereum", "portal-network"]
 categories = ["cryptography::cryptocurrencies"]
 description = "Utils library for Trin."
 authors = ["https://github.com/ethereum/trin/graphs/contributors"]
+build = "build.rs"
 
 [dependencies]
 anyhow = "1.0.68"
