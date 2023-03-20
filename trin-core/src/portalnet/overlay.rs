@@ -23,6 +23,7 @@ use crate::{
         discovery::{Discovery, UtpEnr},
         overlay_service::{
             OverlayCommand, OverlayRequest, OverlayRequestError, OverlayService, RequestDirection,
+            UTP_CONN_CFG,
         },
         storage::ContentStore,
         types::{
@@ -385,7 +386,7 @@ where
         };
         let mut stream = self
             .utp_socket
-            .connect_with_cid(cid)
+            .connect_with_cid(cid, UTP_CONN_CFG)
             .await
             .map_err(|err| OverlayRequestError::UtpError(format!("{err:?}")))?;
         let mut data = vec![];

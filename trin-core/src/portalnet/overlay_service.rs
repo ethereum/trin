@@ -31,7 +31,7 @@ use tokio::{
     task::JoinHandle,
 };
 use tracing::{debug, error, info, trace, warn};
-use utp_rs::socket::UtpSocket;
+use utp_rs::{conn::ConnectionConfig, socket::UtpSocket};
 
 use crate::{
     portalnet::{
@@ -74,6 +74,14 @@ pub const FIND_CONTENT_MAX_NODES: usize = 32;
 const EXPECTED_NON_EMPTY_BUCKETS: usize = 17;
 /// Bucket refresh lookup interval in seconds
 const BUCKET_REFRESH_INTERVAL_SECS: u64 = 60;
+
+/// The default configuration to use for uTP connections.
+pub const UTP_CONN_CFG: ConnectionConfig = ConnectionConfig {
+    max_packet_size: 1024,
+    max_conn_attempts: 3,
+    max_idle_timeout: Duration::from_secs(16),
+    initial_timeout: Duration::from_secs(3),
+};
 
 /// A network-based action that the overlay may perform.
 ///
@@ -969,10 +977,17 @@ where
                     // over the uTP stream.
                     let utp = Arc::clone(&self.utp_socket);
                     tokio::spawn(async move {
-                        let mut stream = match utp.accept_with_cid(cid.clone()).await {
+                        let mut stream = match utp.accept_with_cid(cid.clone(), UTP_CONN_CFG).await
+                        {
                             Ok(stream) => stream,
                             Err(err) => {
-                                error!(%err, %cid.send, %cid.recv, "unable to accept uTP stream for CID");
+                                error!(
+                                    %err,
+                                    %cid.send,
+                                    %cid.recv,
+                                    peer = ?cid.peer.client(),
+                                    "unable to accept uTP stream for CID"
+                                );
                                 return;
                             }
                         };
@@ -980,12 +995,21 @@ where
                         match stream.write(&content).await {
                             Ok(..) => {
                                 debug!(
+                                    %cid.send,
+                                    %cid.recv,
+                                    peer = ?cid.peer.client(),
                                     content_id = %hex_encode(content_key.content_id()),
                                     "wrote content to uTP stream"
                                 );
                             }
                             Err(err) => {
-                                error!(%err, "error writing content to uTP stream");
+                                error!(
+                                    %cid.send,
+                                    %cid.recv,
+                                    peer = ?cid.peer.client(),
+                                    %err,
+                                    "error writing content to uTP stream"
+                                );
                             }
                         }
                     });
@@ -1094,17 +1118,17 @@ where
         tokio::spawn(async move {
             // Wait for an incoming connection with the given CID. Then, read the data from the uTP
             // stream.
-            let mut stream = match utp.accept_with_cid(cid.clone()).await {
+            let mut stream = match utp.accept_with_cid(cid.clone(), UTP_CONN_CFG).await {
                 Ok(stream) => stream,
                 Err(err) => {
-                    warn!(%err, cid.send, cid.recv, peer = %cid.peer.node_id(), "unable to accept uTP stream");
+                    warn!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), "unable to accept uTP stream");
                     return;
                 }
             };
 
             let mut data = vec![];
             if let Err(err) = stream.read_to_eof(&mut data).await {
-                warn!(%err, "error reading data from uTP stream");
+                warn!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), "error reading data from uTP stream");
             }
 
             if let Err(err) = Self::process_accept_utp_payload(
@@ -1117,7 +1141,7 @@ where
             )
             .await
             {
-                error!(%err, "unable to process uTP payload");
+                error!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), "unable to process uTP payload");
             }
         });
 
@@ -1357,14 +1381,14 @@ where
 
         let utp = Arc::clone(&self.utp_socket);
         tokio::spawn(async move {
-            let mut stream = match utp.connect_with_cid(cid.clone()).await {
+            let mut stream = match utp.connect_with_cid(cid.clone(), UTP_CONN_CFG).await {
                 Ok(stream) => stream,
                 Err(err) => {
-                    error!(
-                        error = ?err,
+                    warn!(
+                        %err,
                         cid.send,
                         cid.recv,
-                        peer = %cid.peer.node_id(),
+                        peer = ?cid.peer.client(),
                         "Unable to establish uTP conn based on Accept",
                     );
                     return;
@@ -1393,8 +1417,10 @@ where
                     .collect(),
                 Err(err) => {
                     error!(
-                        error = %err,
-                        peer = %enr.node_id(),
+                        %err,
+                        cid.send,
+                        cid.recv,
+                        peer = ?cid.peer.client(),
                         "Error decoding previously offered content items"
                     );
                     return;
@@ -1412,10 +1438,10 @@ where
             // send the content to the acceptor over a uTP stream
             if let Err(err) = stream.write(&content_payload).await {
                 warn!(
-                    error = %err,
+                    %err,
                     cid.send,
                     cid.recv,
-                    peer = %cid.peer.node_id(),
+                    peer = ?cid.peer.client(),
                     "Error sending content over uTP connection"
                 );
             }
@@ -1423,10 +1449,10 @@ where
             // close uTP connection
             if let Err(err) = stream.shutdown() {
                 warn!(
-                    error = %err,
+                    %err,
                     cid.send,
                     cid.recv,
-                    peer = %cid.peer.node_id(),
+                    peer = ?cid.peer.client(),
                     "Error closing uTP connection"
                 );
             };

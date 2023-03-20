@@ -17,7 +17,7 @@ use trin_core::portalnet::discovery::{Discovery, UtpEnr};
 use trin_core::portalnet::types::messages::{PortalnetConfig, ProtocolId};
 use trin_core::portalnet::Enr;
 use trin_core::utils::bytes::hex_encode;
-use utp_rs::socket::UtpSocket;
+use utp_rs::{conn::ConnectionConfig, socket::UtpSocket};
 
 /// uTP test app
 pub struct TestApp {
@@ -60,7 +60,10 @@ impl RpcServer for TestApp {
         let utp = Arc::clone(&self.utp_socket);
         let payload_store = Arc::clone(&self.utp_payload);
         tokio::spawn(async move {
-            let mut conn = utp.accept_with_cid(cid).await.unwrap();
+            let mut conn = utp
+                .accept_with_cid(cid, ConnectionConfig::default())
+                .await
+                .unwrap();
             let mut data = vec![];
             let n = conn.read_to_eof(&mut data).await.unwrap();
 
@@ -91,7 +94,10 @@ impl RpcServer for TestApp {
 
         let utp = Arc::clone(&self.utp_socket);
         tokio::spawn(async move {
-            let mut conn = utp.connect_with_cid(cid).await.unwrap();
+            let mut conn = utp
+                .connect_with_cid(cid, ConnectionConfig::default())
+                .await
+                .unwrap();
 
             conn.write(&payload).await.unwrap();
 

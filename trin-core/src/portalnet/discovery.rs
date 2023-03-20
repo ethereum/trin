@@ -14,7 +14,7 @@ use lru::LruCache;
 use parking_lot::RwLock;
 use serde_json::{json, Value};
 use tokio::sync::mpsc;
-use tracing::{error, info, warn};
+use tracing::{debug, info, warn};
 use utp_rs::{cid::ConnectionPeer, udp::AsyncUdpSocket};
 
 use anyhow::anyhow;
@@ -29,6 +29,9 @@ use std::{
 
 /// Size of the buffer of the Discv5 TALKREQ channel.
 const TALKREQ_CHANNEL_BUFFER: usize = 100;
+
+/// ENR key for portal network client version.
+const ENR_PORTAL_CLIENT_KEY: &'static str = "c";
 
 #[derive(Clone)]
 pub struct Config {
@@ -109,7 +112,7 @@ impl Discovery {
         };
 
         let config = Config {
-            discv5_config: Discv5ConfigBuilder::default().request_retries(2).build(),
+            discv5_config: Discv5ConfigBuilder::default().build(),
             // This is for defining the ENR:
             enr_address: ip_addr,
             listen_port: ip_port,
@@ -134,7 +137,7 @@ impl Discovery {
             // Use "t" as short-hand for "Trin" to save bytes in ENR.
             let client_info = format!("t {}", TRIN_VERSION);
             // Use "c" as short-hand for "client".
-            builder.add_value("c", client_info.as_bytes());
+            builder.add_value(ENR_PORTAL_CLIENT_KEY, client_info.as_bytes());
             builder
                 .build(&enr_key)
                 .map_err(|e| format!("When adding key to servers ENR: {e:?}"))?
@@ -330,6 +333,12 @@ impl UtpEnr {
     pub fn node_id(&self) -> NodeId {
         self.0.node_id()
     }
+
+    pub fn client(&self) -> Option<String> {
+        self.0
+            .get(ENR_PORTAL_CLIENT_KEY)
+            .and_then(|v| String::from_utf8(v.to_vec()).ok())
+    }
 }
 
 impl ConnectionPeer for UtpEnr {}
@@ -344,9 +353,10 @@ impl AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
             match discv5.send_talk_req(target, ProtocolId::Utp, data).await {
                 // We drop the talk response because it is ignored in the uTP protocol.
                 Ok(..) => {}
-                Err(err) => {
-                    error!(%err, "unable to send uTP talk request");
-                }
+                Err(err) => match err {
+                    RequestError::Timeout => debug!("uTP talk request timed out"),
+                    err => warn!(%err, "unable to send uTP talk request"),
+                },
             }
         });
 
