@@ -9,9 +9,8 @@ use tokio::sync::RwLock;
 use tracing::info;
 use utp_rs::socket::UtpSocket;
 
-use trin_core::jsonrpc::types::HistoryJsonRpcRequest;
+use ethportal_api::types::request::HistoryJsonRpcRequest;
 use trin_core::{
-    cli::{TrinConfig, HISTORY_NETWORK, STATE_NETWORK},
     portalnet::{
         discovery::{Discovery, Discv5UdpSocket},
         events::PortalnetEvents,
@@ -19,23 +18,26 @@ use trin_core::{
         types::messages::PortalnetConfig,
     },
     types::{accumulator::MasterAccumulator, validation::HeaderOracle},
-    utils::{bootnodes::parse_bootnodes, db::setup_temp_dir, provider::TrustedProvider},
-    TRIN_VERSION,
+    utils::{bootnodes::parse_bootnodes, db::setup_temp_dir},
 };
 use trin_history::initialize_history_network;
 use trin_state::initialize_state_network;
+use trin_types::cli::{TrinConfig, Web3TransportType, HISTORY_NETWORK, STATE_NETWORK};
+use trin_types::provider::TrustedProvider;
+use trin_utils::version::get_trin_version;
 
 pub async fn run_trin(
     trin_config: TrinConfig,
     trusted_provider: TrustedProvider,
 ) -> Result<ServerHandle, Box<dyn std::error::Error>> {
-    info!("Launching Trin: v{TRIN_VERSION}");
+    let trin_version = get_trin_version();
+    info!("Launching Trin: v{trin_version}");
     info!(config = %trin_config, "With:");
 
     let bootnode_enrs = parse_bootnodes(&trin_config.bootnodes)?;
     let portalnet_config = PortalnetConfig {
         external_addr: trin_config.external_addr,
-        private_key: trin_config.private_key.clone(),
+        private_key: trin_config.private_key,
         listen_port: trin_config.discovery_port,
         no_stun: trin_config.no_stun,
         enable_metrics: trin_config.enable_metrics_with_url.is_some(),
@@ -156,8 +158,8 @@ async fn launch_jsonrpc_server(
     let history_handler = history_handler.ok_or_else(|| {
         "History network must be available to use IPC transport for JSON-RPC server".to_string()
     })?;
-    match trin_config.web3_transport.as_str() {
-        "ipc" => {
+    match trin_config.web3_transport {
+        Web3TransportType::IPC => {
             // Launch jsonrpsee server with IPC transport
             let rpc_handle =
                 JsonRpcServer::run_ipc(trin_config.web3_ipc_path, discv5, history_handler)
@@ -166,7 +168,7 @@ async fn launch_jsonrpc_server(
             info!("IPC JSON-RPC server launched.");
             Ok(rpc_handle)
         }
-        "http" => {
+        Web3TransportType::HTTP => {
             // Launch jsonrpsee server with http and WS transport
             let rpc_handle =
                 JsonRpcServer::run_http(trin_config.web3_http_address, discv5, history_handler)
@@ -175,6 +177,5 @@ async fn launch_jsonrpc_server(
             info!("HTTP JSON-RPC server launched.");
             Ok(rpc_handle)
         }
-        val => panic!("Unsupported web3 transport: {val}"),
     }
 }

@@ -13,9 +13,10 @@ use futures::future;
 use httpmock::prelude::{MockServer, POST};
 use serde_json::json;
 
-use trin_core::{
-    cli::TrinConfig, portalnet::types::messages::SszEnr, utils::provider::TrustedProvider,
-};
+use trin_types::enr::SszEnr;
+use trin_types::{cli::TrinConfig, provider::TrustedProvider};
+use trin_utils::bytes::hex_encode;
+
 pub fn setup_mock_trusted_http_server() -> MockServer {
     let server = MockServer::start();
     server.mock(|when, then| {
@@ -82,7 +83,6 @@ pub async fn launch_node(trin_config: TrinConfig) -> anyhow::Result<PeertestNode
     let server = setup_mock_trusted_http_server();
     let mock_trusted_provider = TrustedProvider {
         http: ureq::post(&server.url("/")),
-        ws: None,
     };
     let rpc_handle = trin::run_trin(trin_config, mock_trusted_provider)
         .await
@@ -107,7 +107,7 @@ fn generate_trin_config(id: u16, bootnode_enr: Option<&SszEnr>) -> TrinConfig {
     // the 256 kbucket of the bootnode, to ensure consistent `FindNodes` tests.
     let mut private_key = vec![id as u8; 3];
     private_key.append(&mut vec![0u8; 29]);
-    let private_key = hex::encode(private_key);
+    let private_key = hex_encode(private_key);
     match bootnode_enr {
         Some(enr) => {
             let external_addr = format!(
@@ -162,7 +162,7 @@ pub async fn launch_peertest_nodes(count: u16) -> Peertest {
     let bootnode = launch_node(bootnode_config).await.unwrap();
     let bootnode_enr = &bootnode.enr;
     // All other peertest node ids begin at 2, and increment from there
-    let nodes = future::try_join_all((2..count + 1).into_iter().map(|id| {
+    let nodes = future::try_join_all((2..count + 1).map(|id| {
         let node_config = generate_trin_config(id, Some(bootnode_enr));
         launch_node(node_config)
     }))

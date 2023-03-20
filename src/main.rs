@@ -1,7 +1,7 @@
 #![warn(clippy::unwrap_used)]
 
 use tracing::error;
-use trin_core::{cli::TrinConfig, utils::provider::TrustedProvider};
+use trin_types::{cli::TrinConfig, provider::TrustedProvider};
 
 use trin::run_trin;
 

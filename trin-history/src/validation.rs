@@ -11,11 +11,13 @@ use trin_core::{
     portalnet::types::content_key::HistoryContentKey,
     types::{
         accumulator::EpochAccumulator,
-        block_body::BlockBody,
-        header::{Header, HeaderWithProof},
-        receipts::Receipts,
         validation::{HeaderOracle, Validator},
     },
+};
+use trin_types::execution::{
+    block_body::BlockBody,
+    header::{Header, HeaderWithProof},
+    receipts::Receipts,
 };
 
 pub struct ChainHistoryValidator {
@@ -50,7 +52,8 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                     .header_oracle
                     .write()
                     .await
-                    .get_header_by_hash(H256::from(key.block_hash))?;
+                    .get_header_by_hash(H256::from(key.block_hash))
+                    .await?;
                 let actual_uncles_root = block_body.uncles_root()?;
                 if actual_uncles_root != trusted_header.uncles_hash {
                     return Err(anyhow!(
@@ -77,7 +80,8 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                     .header_oracle
                     .write()
                     .await
-                    .get_header_by_hash(H256::from(key.block_hash))?;
+                    .get_header_by_hash(H256::from(key.block_hash))
+                    .await?;
                 let actual_receipts_root = receipts.root()?;
                 if actual_receipts_root != trusted_header.receipts_root {
                     return Err(anyhow!(
@@ -128,14 +132,15 @@ mod tests {
     use ssz_types::{typenum, VariableList};
 
     use trin_core::{
-        cli::DEFAULT_MASTER_ACC_PATH,
         portalnet::types::content_key::{
             BlockBody as BlockBodyKey, BlockHeader, BlockReceipts,
             EpochAccumulator as EpochAccumulatorKey,
         },
         types::accumulator::MasterAccumulator,
-        utils::{bytes::hex_decode, provider::TrustedProvider},
     };
+    use trin_types::cli::DEFAULT_MASTER_ACC_PATH;
+    use trin_types::provider::TrustedProvider;
+    use trin_utils::bytes::hex_decode;
 
     fn get_hwp_ssz() -> Vec<u8> {
         let file =
@@ -445,7 +450,6 @@ mod tests {
     fn default_header_oracle(infura_url: String) -> Arc<RwLock<HeaderOracle>> {
         let trusted_provider = TrustedProvider {
             http: ureq::post(&infura_url),
-            ws: None,
         };
         let master_acc =
             MasterAccumulator::try_from_file(PathBuf::from(DEFAULT_MASTER_ACC_PATH.to_string()))

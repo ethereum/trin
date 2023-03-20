@@ -11,12 +11,12 @@ use trin_core::{
         storage::{PortalStorage, PortalStorageConfig},
         types::{
             content_key::HistoryContentKey,
-            distance::XorMetric,
             messages::{PortalnetConfig, ProtocolId},
         },
     },
     types::validation::HeaderOracle,
 };
+use trin_types::distance::XorMetric;
 
 use crate::validation::ChainHistoryValidator;
 

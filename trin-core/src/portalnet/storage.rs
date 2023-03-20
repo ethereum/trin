@@ -19,14 +19,10 @@ use rocksdb::{Options, DB};
 use rusqlite::params;
 use tracing::{debug, info};
 
-use super::types::{
-    content_key::OverlayContentKey,
-    distance::{Distance, Metric, XorMetric},
-};
-use crate::{
-    portalnet::types::messages::ProtocolId,
-    utils::{bytes::hex_encode, db::get_data_dir},
-};
+use super::types::content_key::OverlayContentKey;
+use crate::{portalnet::types::messages::ProtocolId, utils::db::get_data_dir};
+use trin_types::distance::{Distance, Metric, XorMetric};
+use trin_utils::bytes::{hex_decode, hex_encode};
 
 // TODO: Replace enum with generic type parameter. This will require that we have a way to
 // associate a "find farthest" query with the generic Metric.
@@ -348,8 +344,9 @@ impl PortalStorage {
                 |row| {
                     Ok({
                         let row: String = row.get(0)?;
-                        // use hex::decode here since value is stored without 0x prefix
-                        let bytes: Vec<u8> = hex::decode(&row).map_err(|err|
+                        // value is stored without 0x prefix, so we must add it
+                        let row = format!("0x{}", row);
+                        let bytes: Vec<u8> = hex_decode(&row).map_err(|err|
                             // TODO: This is a hack to get around the fact that rusqlite doesn't
                             // support returning a custom error type. We should fix this.
                             rusqlite::Error::InvalidParameterName(err.to_string()))?;
@@ -406,8 +403,8 @@ impl PortalStorage {
         // Store the data in radius db
         self.db_insert(&content_id, value)?;
         let content_key: Vec<u8> = key.clone().into();
-        // use hex crate to store content key w/o the 0x prefix
-        let content_key = hex::encode(content_key);
+        // store content key w/o the 0x prefix
+        let content_key = hex_encode(content_key).trim_start_matches("0x").to_string();
         // Revert rocks db action if there's an error with writing to metadata db
         if let Err(err) = self.meta_db_insert(&content_id, &content_key, value) {
             debug!(
@@ -482,8 +479,9 @@ impl PortalStorage {
         let result: Result<Vec<HistoryContentKey>, rusqlite::Error> = query
             .query_map([id], |row| {
                 let row: String = row.get(0)?;
-                // use hex::decode here since value is stored without 0x prefix
-                let bytes: Vec<u8> = hex::decode(&row).map_err(|err|
+                // value is stored without 0x prefix, so we must add it
+                let row = format!("0x{}", row);
+                let bytes: Vec<u8> = hex_decode(&row).map_err(|err|
                     // TODO: This is a hack to get around the fact that rusqlite doesn't
                     // support returning a custom error type. We should fix this.
                     rusqlite::Error::InvalidParameterName(err.to_string()))?;

@@ -49,21 +49,19 @@ use crate::{
         storage::ContentStore,
         types::{
             content_key::{OverlayContentKey, RawContentKey},
-            distance::{Distance, Metric, XorMetric},
             messages::{
                 Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer,
-                Ping, Pong, PopulatedOffer, ProtocolId, Request, Response, SszEnr,
+                Ping, Pong, PopulatedOffer, ProtocolId, Request, Response,
             },
             node::Node,
         },
-        Enr,
     },
     types::validation::Validator,
-    utils::{
-        bytes::{hex_encode, hex_encode_compact},
-        node_id, portal_wire,
-    },
+    utils::{node_id, portal_wire},
 };
+use trin_types::distance::{Distance, Metric, XorMetric};
+use trin_types::enr::{Enr, SszEnr};
+use trin_utils::bytes::{hex_encode, hex_encode_compact};
 
 /// Maximum number of ENRs in response to FindNodes.
 pub const FIND_NODES_MAX_NODES: usize = 32;
@@ -2431,13 +2429,12 @@ mod tests {
             discovery::Discovery,
             overlay::OverlayConfig,
             storage::{DistanceFunction, MemoryContentStore},
-            types::{
-                content_key::IdentityContentKey, distance::XorMetric, messages::PortalnetConfig,
-            },
+            types::{content_key::IdentityContentKey, messages::PortalnetConfig},
         },
         types::validation::MockValidator,
         utils::node_id::generate_random_remote_enr,
     };
+    use trin_types::distance::XorMetric;
 
     use discv5::kbucket::Entry;
     use ethereum_types::U256;

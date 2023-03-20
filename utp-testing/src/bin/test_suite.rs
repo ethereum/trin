@@ -5,7 +5,7 @@ use rand::{thread_rng, Rng};
 
 use std::time::Duration;
 
-use trin_core::utils::bytes::hex_encode;
+use trin_utils::bytes::hex_encode;
 
 const SERVER_ADDR: &str = "193.167.100.100:9041";
 const CLIENT_ADDR: &str = "193.167.0.100:9042";

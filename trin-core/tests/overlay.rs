@@ -7,14 +7,14 @@ use trin_core::{
         storage::{ContentStore, DistanceFunction, MemoryContentStore},
         types::{
             content_key::IdentityContentKey,
-            distance::{Distance, XorMetric},
-            messages::{Content, Message, PortalnetConfig, ProtocolId, SszEnr},
+            messages::{Content, Message, PortalnetConfig, ProtocolId},
         },
-        Enr,
     },
     socket,
     types::validation::MockValidator,
 };
+use trin_types::distance::{Distance, XorMetric};
+use trin_types::enr::{Enr, SszEnr};
 
 use discv5::TalkRequest;
 use parking_lot::RwLock;
@@ -23,6 +23,8 @@ use tokio::{
     time::{self, Duration},
 };
 use utp_rs::socket::UtpSocket;
+
+use trin_utils::bytes::hex_encode_upper;
 
 async fn init_overlay(
     discovery: Arc<Discovery>,
@@ -62,7 +64,7 @@ async fn spawn_overlay(
     let overlay_protocol = overlay.protocol().clone();
     tokio::spawn(async move {
         while let Some(talk_req) = talk_req_rx.recv().await {
-            let req_protocol = ProtocolId::from_str(&hex::encode_upper(talk_req.protocol()));
+            let req_protocol = ProtocolId::from_str(&hex_encode_upper(talk_req.protocol()));
 
             if let Ok(req_protocol) = req_protocol {
                 match (req_protocol, overlay_protocol.clone()) {

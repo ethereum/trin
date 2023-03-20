@@ -13,12 +13,12 @@ use trin_core::{
         storage::{PortalStorage, PortalStorageConfig},
         types::{
             content_key::StateContentKey,
-            distance::XorMetric,
             messages::{PortalnetConfig, ProtocolId},
         },
     },
     types::validation::HeaderOracle,
 };
+use trin_types::distance::XorMetric;
 
 use crate::{trie::TrieDB, validation::StateValidator};
 

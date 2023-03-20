@@ -1,15 +1,10 @@
-use super::{
-    types::messages::{HexData, PortalnetConfig, ProtocolId},
-    Enr,
-};
-use crate::utils::bytes::hex_encode;
-use crate::{socket, TRIN_VERSION};
-
+use anyhow::anyhow;
 use async_trait::async_trait;
 use discv5::{
     enr::{CombinedKey, EnrBuilder, NodeId},
     Discv5, Discv5Config, Discv5ConfigBuilder, Discv5Event, RequestError, TalkRequest,
 };
+use ethereum_types::H256;
 use lru::LruCache;
 use parking_lot::RwLock;
 use serde_json::{json, Value};
@@ -17,7 +12,8 @@ use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 use utp_rs::{cid::ConnectionPeer, udp::AsyncUdpSocket};
 
-use anyhow::anyhow;
+use super::types::messages::{PortalnetConfig, ProtocolId};
+use crate::socket;
 use ethportal_api::types::discv5::{Enr as EthportalEnr, NodeId as EthportalNodeId, NodeInfo};
 use std::str::FromStr;
 use std::{
@@ -26,6 +22,9 @@ use std::{
     net::{IpAddr, SocketAddr},
     sync::Arc,
 };
+use trin_types::enr::Enr;
+use trin_utils::bytes::hex_encode;
+use trin_utils::version::get_trin_version;
 
 /// Size of the buffer of the Discv5 TALKREQ channel.
 const TALKREQ_CHANNEL_BUFFER: usize = 100;
@@ -39,7 +38,7 @@ pub struct Config {
     pub listen_port: u16,
     pub discv5_config: Discv5Config,
     pub bootnode_enrs: Vec<Enr>,
-    pub private_key: Option<HexData>,
+    pub private_key: Option<H256>,
 }
 
 impl Default for Config {
@@ -134,8 +133,9 @@ impl Discovery {
             }
             builder.udp4(config.listen_port);
 
+            let trin_version = get_trin_version();
             // Use "t" as short-hand for "Trin" to save bytes in ENR.
-            let client_info = format!("t {}", TRIN_VERSION);
+            let client_info = format!("t {trin_version}");
             // Use "c" as short-hand for "client".
             builder.add_value(ENR_PORTAL_CLIENT_KEY, client_info.as_bytes());
             builder

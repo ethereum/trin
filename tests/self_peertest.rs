@@ -6,8 +6,8 @@ mod test {
     };
 
     use ethportal_peertest as peertest;
-    use trin_core::cli::TrinConfig;
-    use trin_core::utils::provider::TrustedProvider;
+    use trin_types::cli::TrinConfig;
+    use trin_types::provider::TrustedProvider;
 
     // Logs don't show up when trying to use test_log here, maybe because of multi_thread
     #[tokio::test(flavor = "multi_thread")]
@@ -20,7 +20,6 @@ mod test {
         thread::sleep(time::Duration::from_secs(1));
 
         let peertest_config = peertest::PeertestConfig::default();
-
         let test_ip_addr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
         let test_port = 9000;
         let external_addr = format!("{test_ip_addr}:{test_port}");
@@ -44,7 +43,6 @@ mod test {
         let server = peertest::setup_mock_trusted_http_server();
         let trusted_provider = TrustedProvider {
             http: ureq::post(&server.url("/")),
-            ws: None,
         };
         let test_client_rpc_handle = trin::run_trin(trin_config, trusted_provider).await.unwrap();
 

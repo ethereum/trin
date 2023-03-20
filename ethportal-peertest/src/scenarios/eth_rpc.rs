@@ -5,7 +5,7 @@ use crate::{
     jsonrpc::{make_ipc_request, JsonRpcRequest, HISTORY_CONTENT_KEY, HISTORY_CONTENT_VALUE},
     Peertest, PeertestConfig,
 };
-use trin_core::jsonrpc::types::Params;
+use trin_types::jsonrpc::params::Params;
 
 pub fn test_eth_get_block_by_hash(_peertest_config: PeertestConfig, peertest: &Peertest) {
     info!("Testing eth_getBlockByHash");

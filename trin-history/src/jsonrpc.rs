@@ -6,28 +6,22 @@ use tokio::sync::mpsc;
 use tracing::error;
 
 use crate::network::HistoryNetwork;
-use trin_core::{
-    jsonrpc::utils::bucket_entries_to_json,
-    portalnet::{
-        storage::ContentStore,
-        types::{
-            content_key::{HistoryContentKey, OverlayContentKey},
-            distance::{Metric, XorMetric},
-        },
-    },
-    utils::bytes::hex_encode,
-};
+use trin_core::portalnet::storage::ContentStore;
+use trin_core::portalnet::types::content_key::{HistoryContentKey, OverlayContentKey};
+use trin_utils::bytes::hex_encode;
 
+use crate::utils::bucket_entries_to_json;
+use ethportal_api::endpoints::HistoryEndpoint;
 use ethportal_api::types::discv5::Enr;
 use ethportal_api::types::portal::{
     AcceptInfo, Distance, FindNodesInfo, NodeInfo, PongInfo, TraceContentInfo,
 };
+use ethportal_api::types::request::HistoryJsonRpcRequest;
 use ethportal_api::HistoryContentKey as EthHistoryContentKey;
 use ethportal_api::{ContentItem, HistoryContentItem};
 use ssz::Encode;
-use trin_core::jsonrpc::endpoints::HistoryEndpoint;
-use trin_core::jsonrpc::types::HistoryJsonRpcRequest;
 use trin_core::portalnet::types::content_key::RawContentKey;
+use trin_types::distance::{Metric, XorMetric};
 
 /// Handles History network JSON-RPC requests
 pub struct HistoryRequestHandler {
@@ -259,7 +253,7 @@ impl HistoryRequestHandler {
         let content = content.unwrap_or_default();
 
         if !is_trace {
-            return Ok(Value::String(hex::encode(content)));
+            return Ok(Value::String(hex_encode(content)));
         }
 
         // Construct trace response

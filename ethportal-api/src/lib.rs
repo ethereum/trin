@@ -4,11 +4,12 @@
 #![warn(clippy::unwrap_used)]
 
 mod discv5;
+pub mod endpoints;
 mod history;
 pub mod types;
 mod web3;
 
-pub use discv5::{Discv5ApiClient, Discv5ApiServer};
+pub use crate::discv5::{Discv5ApiClient, Discv5ApiServer};
 pub use history::{HistoryNetworkApiClient, HistoryNetworkApiServer};
 pub use types::{
     content_item::{

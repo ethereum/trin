@@ -1,0 +1,83 @@
+name: book
+on:
+  push:
+    branches: 
+      - master
+    paths:
+      - 'book/**'
+      - 'book.toml'
+      - '.github/workflows/book.yml'
+  pull_request:
+    branches: 
+      - master
+    paths:
+      - 'book/**'
+      - 'book.toml'
+      - '.github/workflows/book.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install Rust
+        run: |
+          rustup set profile minimal
+          rustup toolchain install stable
+          rustup default stable
+
+      - name: Install mdbook
+        run: |
+          mkdir bin
+          curl -sSL https://github.com/rust-lang/mdBook/releases/download/v0.4.14/mdbook-v0.4.14-x86_64-unknown-linux-gnu.tar.gz | tar -xz --directory=bin
+          echo "$(pwd)/bin" >> $GITHUB_PATH
+
+      - name: Run tests
+        working-directory: book
+        run: mdbook test
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      
+      - name: Install dependencies
+        run: cargo install mdbook
+      
+      - name: Install mdbook-mermaid
+        working-directory: book
+        run: |
+          cargo install mdbook-mermaid
+          mdbook-mermaid install
+
+      - name: Build
+        working-directory: book
+        run: mdbook build
+
+      - name: Upload pages artifact
+        uses: actions/upload-pages-artifact@v1
+        with:
+          path: ./book/book
+
+  deploy:
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    needs:
+      - test
+      - build
+
+    permissions:
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v1

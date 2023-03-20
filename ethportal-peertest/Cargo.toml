@@ -17,7 +17,6 @@ discv5 = { version = "0.2.1", features = ["serde"]}
 eth2_ssz = "0.4.0"
 ethportal-api = { path="../ethportal-api"}
 futures = "0.3.21"
-hex = "0.4.3"
 httpmock = "0.6.6"
 hyper = { version = "0.14", features = ["full"] }
 rand = "0.8.4"
@@ -33,6 +32,8 @@ trin = { path = ".." }
 trin-core = { path = "../trin-core" }
 trin-history = { path = "../trin-history" }
 trin-state = { path = "../trin-state" }
+trin-types = { path = "../trin-types" }
+trin-utils = { path = "../trin-utils" }
 ureq = { version = "2.5.0", features = ["json"] }
 
 [target.'cfg(windows)'.dependencies]

@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use anyhow::anyhow;
 
-use crate::portalnet::Enr;
+use trin_types::enr::Enr;
 
 lazy_static! {
     pub static ref DEFAULT_BOOTNODES: Vec<Enr> = vec![
@@ -35,8 +35,8 @@ pub fn parse_bootnodes(bootnodes: &[String]) -> anyhow::Result<Vec<Enr>> {
 #[allow(clippy::unwrap_used)]
 mod test {
     use super::*;
-    use crate::cli::TrinConfig;
     use rstest::rstest;
+    use trin_types::cli::TrinConfig;
 
     #[test_log::test]
     fn test_parse_bootnodes_default_flag() {

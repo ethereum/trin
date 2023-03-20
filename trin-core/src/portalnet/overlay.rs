@@ -28,18 +28,18 @@ use crate::{
         storage::ContentStore,
         types::{
             content_key::{OverlayContentKey, RawContentKey},
-            distance::{Distance, Metric},
             messages::{
                 Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer,
                 Ping, Pong, PopulatedOffer, ProtocolId, Request, Response,
             },
             node::Node,
         },
-        Enr,
     },
     types::validation::Validator,
-    utils::bytes::hex_encode,
 };
+use trin_types::distance::{Distance, Metric};
+use trin_types::enr::Enr;
+use trin_utils::bytes::hex_encode;
 
 /// Configuration parameters for the overlay network.
 #[derive(Clone)]

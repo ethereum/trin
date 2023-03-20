@@ -3,6 +3,7 @@
 pub mod events;
 mod jsonrpc;
 pub mod network;
+pub mod utils;
 pub mod validation;
 
 use std::sync::Arc;
@@ -17,8 +18,8 @@ use tracing::info;
 use utp_rs::socket::UtpSocket;
 
 use crate::{events::HistoryEvents, jsonrpc::HistoryRequestHandler};
+use ethportal_api::types::request::HistoryJsonRpcRequest;
 use trin_core::{
-    jsonrpc::types::HistoryJsonRpcRequest,
     portalnet::{
         discovery::{Discovery, UtpEnr},
         storage::PortalStorageConfig,

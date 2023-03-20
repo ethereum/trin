@@ -12,8 +12,8 @@ use tracing::info;
 use utp_rs::socket::UtpSocket;
 
 use crate::{events::StateEvents, jsonrpc::StateRequestHandler};
+use ethportal_api::types::request::StateJsonRpcRequest;
 use trin_core::{
-    jsonrpc::types::StateJsonRpcRequest,
     portalnet::{
         discovery::{Discovery, UtpEnr},
         storage::PortalStorageConfig,

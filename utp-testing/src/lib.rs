@@ -15,8 +15,8 @@ use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 use trin_core::portalnet::discovery::{Discovery, UtpEnr};
 use trin_core::portalnet::types::messages::{PortalnetConfig, ProtocolId};
-use trin_core::portalnet::Enr;
-use trin_core::utils::bytes::hex_encode;
+use trin_types::enr::Enr;
+use trin_utils::bytes::{hex_encode, hex_encode_upper};
 use utp_rs::{conn::ConnectionConfig, socket::UtpSocket};
 
 /// uTP test app
@@ -116,7 +116,7 @@ impl TestApp {
         tokio::spawn(async move {
             while let Some(request) = talk_req_rx.recv().await {
                 let protocol_id =
-                    ProtocolId::from_str(&hex::encode_upper(request.protocol())).unwrap();
+                    ProtocolId::from_str(&hex_encode_upper(request.protocol())).unwrap();
 
                 if let ProtocolId::Utp = protocol_id {
                     utp_talk_reqs_tx.send(request).unwrap();
