@@ -448,7 +448,6 @@ mod tests {
     fn default_header_oracle(infura_url: String) -> Arc<RwLock<HeaderOracle>> {
         let trusted_provider = TrustedProvider {
             http: ureq::post(&infura_url),
-            ws: None,
         };
         let master_acc =
             MasterAccumulator::try_from_file(PathBuf::from(DEFAULT_MASTER_ACC_PATH.to_string()))
