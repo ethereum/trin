@@ -5,8 +5,8 @@ use serde_json::json;
 use tracing::{error, info};
 
 use ethportal_api::jsonrpsee::async_client::Client;
+use ethportal_api::HistoryContentKey;
 use ethportal_api::{HistoryContentItem, HistoryNetworkApiClient};
-use trin_types::content_key::HistoryContentKey;
 use trin_types::enr::Enr;
 
 use crate::{

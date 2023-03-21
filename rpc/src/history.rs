@@ -8,12 +8,12 @@ use ethportal_api::types::portal::{
     AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
     TraceContentInfo,
 };
-use ethportal_api::types::request::HistoryJsonRpcRequest;
 use ethportal_api::HistoryContentItem;
+use ethportal_api::HistoryContentKey;
 use ethportal_api::HistoryNetworkApiServer;
 use tokio::sync::mpsc;
-use trin_types::content_key::HistoryContentKey;
 use trin_types::enr::Enr;
+use trin_types::request::HistoryJsonRpcRequest;
 
 pub struct HistoryNetworkApi {
     network: mpsc::UnboundedSender<HistoryJsonRpcRequest>,

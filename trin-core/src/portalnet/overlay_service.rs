@@ -56,7 +56,7 @@ use crate::{
         trin_helpers::UtpStreamId,
     },
 };
-use trin_types::content_key::{OverlayContentKey, RawContentKey};
+use ethportal_api::types::content_key::{OverlayContentKey, RawContentKey};
 use trin_types::distance::{Distance, Metric};
 use trin_types::enr::{Enr, SszEnr};
 use trin_utils::bytes::hex_encode_compact;
@@ -2126,7 +2126,7 @@ mod tests {
         },
         utils::node_id::generate_random_remote_enr,
     };
-    use trin_types::content_key::IdentityContentKey;
+    use ethportal_api::types::content_key::IdentityContentKey;
     use trin_types::distance::XorMetric;
     use trin_validation::validator::MockValidator;
 

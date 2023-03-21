@@ -7,7 +7,7 @@ use ssz::Decode;
 use tokio::sync::RwLock;
 use tree_hash::TreeHash;
 
-use trin_types::content_key::HistoryContentKey;
+use ethportal_api::HistoryContentKey;
 use trin_types::execution::{
     block_body::BlockBody,
     header::{Header, HeaderWithProof},
@@ -109,7 +109,7 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                 }
                 Ok(())
             }
-            &trin_types::content_key::HistoryContentKey::Unknown(_) => todo!(),
+            &ethportal_api::HistoryContentKey::Unknown(_) => todo!(),
         }
     }
 }
@@ -127,10 +127,8 @@ mod tests {
     use ssz::Encode;
     use ssz_types::{typenum, VariableList};
 
+    use ethportal_api::{BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey};
     use trin_types::cli::DEFAULT_MASTER_ACC_PATH;
-    use trin_types::content_key::{
-        BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey,
-    };
     use trin_types::provider::TrustedProvider;
     use trin_utils::bytes::hex_decode;
     use trin_validation::accumulator::HeaderRecord;

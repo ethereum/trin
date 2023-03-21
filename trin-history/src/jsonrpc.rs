@@ -13,12 +13,12 @@ use ethportal_api::endpoints::HistoryEndpoint;
 use ethportal_api::types::portal::{
     AcceptInfo, Distance, FindNodesInfo, NodeInfo, PongInfo, TraceContentInfo,
 };
-use ethportal_api::types::request::HistoryJsonRpcRequest;
 use ethportal_api::{ContentItem, HistoryContentItem};
+use ethportal_api::{HistoryContentKey, OverlayContentKey, RawContentKey};
 use ssz::Encode;
-use trin_types::content_key::{HistoryContentKey, OverlayContentKey, RawContentKey};
 use trin_types::distance::{Metric, XorMetric};
 use trin_types::enr::Enr;
+use trin_types::request::HistoryJsonRpcRequest;
 
 /// Handles History network JSON-RPC requests
 pub struct HistoryRequestHandler {

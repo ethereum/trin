@@ -1,6 +1,6 @@
 use ethportal_api::HistoryContentItem;
 use ethportal_api::HistoryNetworkApiClient;
-use trin_types::content_key::{BlockHeaderKey, HistoryContentKey};
+use ethportal_api::{BlockHeaderKey, HistoryContentKey};
 
 use crate::{Peertest, PeertestConfig};
 

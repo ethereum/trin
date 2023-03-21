@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 
-use trin_types::content_key::IdentityContentKey;
+use ethportal_api::types::content_key::IdentityContentKey;
 
 /// Used by all overlay-network Validators to validate content in the overlay service.
 #[async_trait]

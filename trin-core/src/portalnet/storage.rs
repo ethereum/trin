@@ -19,7 +19,7 @@ use rusqlite::params;
 use tracing::{debug, info};
 
 use crate::{portalnet::types::messages::ProtocolId, utils::db::get_data_dir};
-use trin_types::content_key::{HistoryContentKey, OverlayContentKey};
+use ethportal_api::types::content_key::{HistoryContentKey, OverlayContentKey};
 use trin_types::distance::{Distance, Metric, XorMetric};
 use trin_utils::bytes::{hex_decode, hex_encode};
 
@@ -804,7 +804,7 @@ pub mod test {
     use serial_test::serial;
 
     use crate::utils::db::setup_temp_dir;
-    use trin_types::content_key::IdentityContentKey;
+    use ethportal_api::types::content_key::IdentityContentKey;
 
     const CAPACITY: u64 = 100;
 

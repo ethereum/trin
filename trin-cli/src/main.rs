@@ -13,8 +13,8 @@ use structopt::StructOpt;
 use thiserror::Error;
 
 use dashboard::grafana::GrafanaAPI;
+use ethportal_api::{BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, HistoryContentKey};
 use trin_types::cli::DEFAULT_WEB3_IPC_PATH;
-use trin_types::content_key::{BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, HistoryContentKey};
 use trin_utils::bytes::hex_encode;
 
 #[derive(StructOpt)]

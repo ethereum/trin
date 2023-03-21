@@ -17,13 +17,13 @@ use tokio::{
 use tracing::info;
 
 use crate::{events::HistoryEvents, jsonrpc::HistoryRequestHandler};
-use ethportal_api::types::request::HistoryJsonRpcRequest;
 use trin_core::{
     portalnet::{
         discovery::Discovery, storage::PortalStorageConfig, types::messages::PortalnetConfig,
     },
     utp::stream::{UtpListenerEvent, UtpListenerRequest},
 };
+use trin_types::request::HistoryJsonRpcRequest;
 use trin_validation::oracle::HeaderOracle;
 
 type HistoryHandler = Option<HistoryRequestHandler>;

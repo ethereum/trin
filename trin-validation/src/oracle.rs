@@ -6,11 +6,11 @@ use tokio::sync::mpsc;
 
 use crate::accumulator::MasterAccumulator;
 use ethportal_api::endpoints::HistoryEndpoint;
-use ethportal_api::types::request::HistoryJsonRpcRequest;
-use trin_types::content_key::{BlockHeaderKey, HistoryContentKey};
+use ethportal_api::types::content_key::{BlockHeaderKey, HistoryContentKey};
 use trin_types::execution::header::{Header, HeaderWithProof};
 use trin_types::jsonrpc::params::Params;
 use trin_types::provider::TrustedProvider;
+use trin_types::request::HistoryJsonRpcRequest;
 use trin_utils::bytes::hex_decode;
 
 /// Responsible for dispatching cross-overlay-network requests

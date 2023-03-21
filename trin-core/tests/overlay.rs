@@ -1,5 +1,6 @@
 use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
+use ethportal_api::IdentityContentKey;
 use trin_core::{
     portalnet::{
         discovery::Discovery,
@@ -9,7 +10,6 @@ use trin_core::{
     },
     socket,
 };
-use trin_types::content_key::IdentityContentKey;
 use trin_types::distance::{Distance, XorMetric};
 use trin_types::enr::{Enr, SszEnr};
 use trin_validation::validator::MockValidator;

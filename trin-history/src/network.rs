@@ -3,6 +3,7 @@ use std::sync::Arc;
 use parking_lot::RwLock as PLRwLock;
 use tokio::sync::{mpsc::UnboundedSender, RwLock};
 
+use ethportal_api::HistoryContentKey;
 use trin_core::{
     portalnet::{
         discovery::Discovery,
@@ -12,7 +13,6 @@ use trin_core::{
     },
     utp::stream::UtpListenerRequest,
 };
-use trin_types::content_key::HistoryContentKey;
 use trin_types::distance::XorMetric;
 use trin_validation::oracle::HeaderOracle;
 

@@ -1,7 +1,7 @@
+use crate::types::content_key::HistoryContentKey;
+use crate::types::enr::Enr;
 use crate::types::portal::DataRadius;
 use crate::HistoryContentItem;
-use trin_types::content_key::HistoryContentKey;
-use trin_types::enr::Enr;
 
 /// Discv5 JSON-RPC endpoints. Start with "discv5_" prefix
 #[derive(Debug, PartialEq, Eq, Clone)]

@@ -1,7 +1,7 @@
 // These are just some Trin helper functions
 
+use ethportal_api::types::content_key::RawContentKey;
 use ssz_derive::{Decode, Encode};
-use trin_types::content_key::RawContentKey;
 
 // These Utp impl are related to sending messages over uTP not the implementation itself or stream
 pub struct UtpMessage {

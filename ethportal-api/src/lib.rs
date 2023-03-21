@@ -14,6 +14,10 @@ pub use history::{HistoryNetworkApiClient, HistoryNetworkApiServer};
 pub use types::content_item::{
     BlockBody, ContentItem, EpochAccumulator, HeaderRecord, HeaderWithProof, HistoryContentItem,
 };
+pub use types::content_key::{
+    BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey, HistoryContentKey,
+    IdentityContentKey, OverlayContentKey, RawContentKey, StateContentKey,
+};
 pub use web3::{Web3ApiClient, Web3ApiServer};
 
 // Re-exports jsonrpsee crate

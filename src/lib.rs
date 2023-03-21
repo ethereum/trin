@@ -8,7 +8,6 @@ use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::RwLock;
 use tracing::info;
 
-use ethportal_api::types::request::HistoryJsonRpcRequest;
 use trin_core::{
     portalnet::{
         discovery::Discovery, events::PortalnetEvents, storage::PortalStorageConfig,
@@ -21,6 +20,7 @@ use trin_history::initialize_history_network;
 use trin_state::initialize_state_network;
 use trin_types::cli::{TrinConfig, Web3TransportType, HISTORY_NETWORK, STATE_NETWORK};
 use trin_types::provider::TrustedProvider;
+use trin_types::request::HistoryJsonRpcRequest;
 use trin_utils::version::get_trin_version;
 use trin_validation::{accumulator::MasterAccumulator, oracle::HeaderOracle};
 

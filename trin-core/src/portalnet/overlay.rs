@@ -42,7 +42,7 @@ use crate::{
         trin_helpers::UtpStreamId,
     },
 };
-use trin_types::content_key::{OverlayContentKey, RawContentKey};
+use ethportal_api::types::content_key::{OverlayContentKey, RawContentKey};
 use trin_types::distance::{Distance, Metric, XorMetric};
 use trin_types::enr::Enr;
 use trin_utils::bytes::hex_encode;

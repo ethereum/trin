@@ -1,8 +1,8 @@
+use crate::types::enr::Enr;
 use serde::{Deserialize, Serialize};
 use serde_hex::{SerHex, StrictPfx};
 use serde_json::Value;
 use std::ops::Deref;
-use trin_types::enr::Enr;
 
 type RawNodeId = [u8; 32];
 
