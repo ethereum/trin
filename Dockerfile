@@ -5,6 +5,11 @@ FROM rust:1.66.1 AS builder
 RUN USER=root cargo new --bin trin
 WORKDIR /trin
 
+# Docker build command *SHOULD* include --build-arg GIT_HASH=...
+# eg. --build-arg GIT_HASH=$(git rev-parse HEAD)
+ARG GIT_HASH=unknown
+ENV GIT_HASH=$GIT_HASH
+
 RUN apt-get update && apt-get install clang -y
 
 # copy over manifests and source to build image
