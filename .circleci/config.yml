@@ -17,7 +17,7 @@ jobs:
       - run:
           name: Build Docker image
           no_output_timeout: 30m
-          command: docker build -t $IMAGE_NAME:latest .
+          command: docker build -t $IMAGE_NAME:latest --build-arg GIT_HASH=$CIRCLE_SHA1 .
       - run:
           name: Archive Docker image
           command: docker save -o image.tar $IMAGE_NAME
