@@ -79,6 +79,8 @@ pub const UTP_CONN_CFG: ConnectionConfig = ConnectionConfig {
     max_conn_attempts: 3,
     max_idle_timeout: Duration::from_secs(16),
     initial_timeout: Duration::from_secs(3),
+    min_timeout: Duration::from_secs(1),
+    target_delay: Duration::from_millis(250),
 };
 
 /// A network-based action that the overlay may perform.

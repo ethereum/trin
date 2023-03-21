@@ -54,7 +54,7 @@ trin-types = { path="../trin-types" }
 trin-utils = { path="../trin-utils" }
 validator = { version = "0.13.0", features = ["derive"] }
 url = "2.3.1"
-utp-rs = "0.1.0-alpha.1"
+utp-rs = "0.1.0-alpha.2"
 
 [target.'cfg(windows)'.dependencies]
 ipconfig = "0.2.2"

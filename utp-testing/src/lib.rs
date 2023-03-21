@@ -11,6 +11,7 @@ use jsonrpsee::proc_macros::rpc;
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 use trin_core::portalnet::discovery::{Discovery, UtpEnr};
@@ -60,10 +61,14 @@ impl RpcServer for TestApp {
         let utp = Arc::clone(&self.utp_socket);
         let payload_store = Arc::clone(&self.utp_payload);
         tokio::spawn(async move {
-            let mut conn = utp
-                .accept_with_cid(cid, ConnectionConfig::default())
-                .await
-                .unwrap();
+            let utp_config = ConnectionConfig {
+                max_packet_size: 1024,
+                max_conn_attempts: 4,
+                max_idle_timeout: Duration::from_secs(10),
+                initial_timeout: Duration::from_millis(200),
+                ..Default::default()
+            };
+            let mut conn = utp.accept_with_cid(cid, utp_config).await.unwrap();
             let mut data = vec![];
             let n = conn.read_to_eof(&mut data).await.unwrap();
 
@@ -93,11 +98,15 @@ impl RpcServer for TestApp {
         self.discovery.add_enr(dst_enr).unwrap();
 
         let utp = Arc::clone(&self.utp_socket);
+        let utp_config = ConnectionConfig {
+            max_packet_size: 1024,
+            max_conn_attempts: 4,
+            max_idle_timeout: Duration::from_secs(10),
+            initial_timeout: Duration::from_millis(200),
+            ..Default::default()
+        };
         tokio::spawn(async move {
-            let mut conn = utp
-                .connect_with_cid(cid, ConnectionConfig::default())
-                .await
-                .unwrap();
+            let mut conn = utp.connect_with_cid(cid, utp_config).await.unwrap();
 
             conn.write(&payload).await.unwrap();
 

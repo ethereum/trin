@@ -36,7 +36,7 @@ trin-history = { path = "trin-history" }
 trin-state = { path = "trin-state" }
 trin-types = { path = "trin-types" }
 trin-utils = { path = "trin-utils" }
-utp-rs = "0.1.0-alpha.1"
+utp-rs = "0.1.0-alpha.2"
 
 [dev-dependencies]
 ethportal-peertest = { path = "ethportal-peertest" }
