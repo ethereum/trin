@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::anyhow;
 use bytes::Bytes;
 use eth_trie::{EthTrie, MemoryDB, Trie};
-use ethereum_types::{Address, H160, H256, U256, U64};
+use ethereum_types::{H160, H256, U256, U64};
 use rlp::{Decodable, DecoderError, Encodable, Rlp, RlpStream};
 use rlp_derive::{RlpDecodable, RlpEncodable};
 use serde::{Deserialize, Deserializer};
@@ -120,7 +120,7 @@ impl From<&BlockBody> for EncodedBlockBodyParts {
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct EncodableHeaderList {
-    list: Vec<Header>,
+    pub list: Vec<Header>,
 }
 
 impl Decodable for EncodableHeaderList {
@@ -221,7 +221,7 @@ pub struct LegacyTransaction {
     pub nonce: U256,
     pub gas_price: U256,
     pub gas: U256,
-    pub to: Address,
+    pub to: ToAddress,
     pub value: U256,
     pub data: Bytes,
     pub v: U64,
@@ -235,7 +235,7 @@ struct LegacyTransactionHelper {
     pub nonce: U256,
     pub gas_price: U256,
     pub gas: U256,
-    pub to: Option<H160>,
+    pub to: ToAddress,
     pub value: U256,
     #[serde(rename(deserialize = "input"))]
     pub data: JsonBytes,
@@ -251,8 +251,7 @@ impl Into<LegacyTransaction> for LegacyTransactionHelper {
             nonce: self.nonce,
             gas_price: self.gas_price,
             gas: self.gas,
-            // Zero address if none b/c contract creation
-            to: self.to.unwrap_or_default(),
+            to: self.to,
             value: self.value,
             data: self.data.0,
             v: self.v,
@@ -268,7 +267,7 @@ pub struct AccessListTransaction {
     pub nonce: U256,
     pub gas_price: U256,
     pub gas_limit: U256,
-    pub to: H160,
+    pub to: ToAddress,
     pub value: U256,
     pub data: Bytes,
     pub access_list: AccessList,
@@ -285,7 +284,7 @@ struct AccessListTransactionHelper {
     pub gas_price: U256,
     #[serde(rename(deserialize = "gas"))]
     pub gas_limit: U256,
-    pub to: Option<H160>,
+    pub to: ToAddress,
     pub value: U256,
     #[serde(rename(deserialize = "input"))]
     pub data: JsonBytes,
@@ -304,8 +303,7 @@ impl Into<AccessListTransaction> for AccessListTransactionHelper {
             nonce: self.nonce,
             gas_price: self.gas_price,
             gas_limit: self.gas_limit,
-            // Zero address if none b/c contract creation
-            to: self.to.unwrap_or_default(),
+            to: self.to,
             value: self.value,
             data: self.data.0,
             access_list: AccessList {
@@ -325,7 +323,7 @@ pub struct EIP1559Transaction {
     pub max_priority_fee_per_gas: U256,
     pub max_fee_per_gas: U256,
     pub gas_limit: U256,
-    pub to: H160,
+    pub to: ToAddress,
     pub value: U256,
     pub data: Bytes,
     pub access_list: AccessList,
@@ -343,7 +341,7 @@ struct EIP1559TransactionHelper {
     pub max_fee_per_gas: U256,
     #[serde(rename(deserialize = "gas"))]
     pub gas_limit: U256,
-    pub to: H160,
+    pub to: ToAddress,
     pub value: U256,
     #[serde(rename(deserialize = "input"))]
     pub data: JsonBytes,
@@ -372,6 +370,52 @@ impl Into<EIP1559Transaction> for EIP1559TransactionHelper {
             y_parity: self.y_parity,
             r: self.r,
             s: self.s,
+        }
+    }
+}
+
+/// Enum to represent the "to" field in a tx. Which can be an address, or Null if a contract is
+/// created.
+#[derive(Default, Eq, Debug, Clone, PartialEq)]
+pub enum ToAddress {
+    #[default]
+    Empty,
+    Exists(H160),
+}
+
+impl<'de> Deserialize<'de> for ToAddress {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s: Option<String> = Deserialize::deserialize(deserializer)?;
+        match s {
+            None => Ok(Self::Empty),
+            Some(val) => Ok(Self::Exists(H160::from_slice(
+                &hex_decode(&val).map_err(serde::de::Error::custom)?,
+            ))),
+        }
+    }
+}
+
+impl Encodable for ToAddress {
+    fn rlp_append(&self, s: &mut RlpStream) {
+        match self {
+            ToAddress::Empty => {
+                s.append_internal(&"");
+            }
+            ToAddress::Exists(addr) => {
+                s.append_internal(addr);
+            }
+        }
+    }
+}
+
+impl Decodable for ToAddress {
+    fn decode(rlp: &Rlp<'_>) -> Result<Self, DecoderError> {
+        match rlp.is_empty() {
+            true => Ok(ToAddress::Empty),
+            false => Ok(ToAddress::Exists(rlp::decode(rlp.as_raw())?)),
         }
     }
 }

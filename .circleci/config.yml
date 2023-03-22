@@ -17,7 +17,7 @@ jobs:
       - run:
           name: Build Docker image
           no_output_timeout: 30m
-          command: docker build -t $IMAGE_NAME:latest --build-arg GIT_HASH=$CIRCLE_SHA1 .
+          command: docker build -f ./docker/Dockerfile -t $IMAGE_NAME:latest --build-arg GIT_HASH=$CIRCLE_SHA1 .
       - run:
           name: Archive Docker image
           command: docker save -o image.tar $IMAGE_NAME
@@ -85,7 +85,7 @@ jobs:
     description: |
       Run uTP network simulator
     machine:
-      image: ubuntu-2004:current
+      image: ubuntu-2204:current
     resource_class: xlarge
     environment:
       RUSTFLAGS: '-D warnings'
@@ -97,10 +97,10 @@ jobs:
           command: sudo apt update
       - run:
           name: Install libssl-dev for openssl-sys
-          command: sudo apt install -y libssl-dev
+          command: sudo NEEDRESTART_MODE=a apt install -y libssl-dev
       - run:
           name: Install libclang for rocksdb
-          command: sudo apt install clang
+          command: sudo NEEDRESTART_MODE=a apt install clang
       - run:
           name: Install modprobe
           command: sudo apt install -y kmod
