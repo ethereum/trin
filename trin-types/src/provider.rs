@@ -172,7 +172,7 @@ fn get_pandaops_client_secret_from_env() -> String {
     }
 }
 
-fn build_pandaops_http_client_from_env(pandaops_url: String) -> ureq::Request {
+pub fn build_pandaops_http_client_from_env(pandaops_url: String) -> ureq::Request {
     let client_id = get_pandaops_client_id_from_env();
     let client_secret = get_pandaops_client_secret_from_env();
     ureq::post(&pandaops_url)

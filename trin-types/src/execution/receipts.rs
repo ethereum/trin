@@ -67,6 +67,25 @@ impl ssz::Decode for Receipts {
     }
 }
 
+impl<'de> Deserialize<'de> for Receipts {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let obj: Vec<Value> = Deserialize::deserialize(deserializer)?;
+        let results: Result<Vec<Receipt>, _> = obj
+            .into_iter()
+            .map(|mut val| {
+                let result = val["result"].take();
+                serde_json::from_value(result)
+            })
+            .collect();
+        Ok(Self {
+            receipt_list: results.map_err(serde::de::Error::custom)?,
+        })
+    }
+}
+
 #[derive(Debug)]
 struct EncodedReceiptList {
     // list ( rlp receipts )

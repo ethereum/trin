@@ -120,7 +120,7 @@ impl From<&BlockBody> for EncodedBlockBodyParts {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EncodableHeaderList {
-    list: Vec<Header>,
+    pub list: Vec<Header>,
 }
 
 impl Decodable for EncodableHeaderList {

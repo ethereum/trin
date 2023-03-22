@@ -28,6 +28,18 @@ impl From<ssz::DecodeError> for ContentItemDecodeError {
     }
 }
 
+impl std::error::Error for ContentItemDecodeError {}
+
+impl std::fmt::Display for ContentItemDecodeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        //  Calling write! on self tries to recursively call fmt in a recursive loop forever.
+        match self {
+            Self::Rlp(err) => write!(f, "RLP decode error: {err:?}"),
+            Self::Ssz(err) => write!(f, "SSZ decode error: {err:?}"),
+        }
+    }
+}
+
 /// An encodable portal network content item.
 pub trait ContentItem: Sized {
     /// Encodes the content item, appending the encoded bytes to `buf`.

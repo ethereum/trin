@@ -183,6 +183,31 @@ impl PartialEq for Header {
     }
 }
 
+/// Helper type to deserialize a response from a batched Header request.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FullHeaderBatch {
+    pub headers: Vec<FullHeader>,
+}
+
+impl<'de> Deserialize<'de> for FullHeaderBatch {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let obj: Vec<Value> = Deserialize::deserialize(deserializer)?;
+        let results: Result<Vec<FullHeader>, _> = obj
+            .into_iter()
+            .map(|mut val| {
+                let result = val["result"].take();
+                FullHeader::try_from(result)
+            })
+            .collect();
+        Ok(Self {
+            headers: results.map_err(serde::de::Error::custom)?,
+        })
+    }
+}
+
 /// Datatype for use in bridge functionality. The purpose is a single datatype that can be created
 /// from a header and contains all the information necessary to build history network content
 /// values for BlockBodies (txs, uncles) and Receipts (tx_hashes) through subsequnt jsonrpc
@@ -348,7 +373,7 @@ impl ssz::Encode for AccumulatorProof {
 pub struct SszNone {
     // In rust, None is a variant not a type,
     // so we must use Option here to represent a None value
-    value: Option<()>,
+    pub value: Option<()>,
 }
 
 impl ssz::Decode for SszNone {
