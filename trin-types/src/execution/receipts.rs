@@ -17,7 +17,7 @@ use trin_utils::bytes::hex_decode;
 const MAX_TRANSACTION_COUNT: usize = 16384;
 
 /// Represents the `Receipts` datatype used by the chain history wire protocol
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Receipts {
     pub receipt_list: Vec<Receipt>,
 }
@@ -64,6 +64,27 @@ impl ssz::Decode for Receipts {
         EncodedReceiptList::from_ssz_bytes(bytes)?
             .try_into()
             .map_err(|msg: DecoderError| ssz::DecodeError::BytesInvalid(msg.to_string()))
+    }
+}
+
+// Deserialize is currently only implemented for BATCHED responses from an execution client
+// Used inside trin-bridge
+impl<'de> Deserialize<'de> for Receipts {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let obj: Vec<Value> = Deserialize::deserialize(deserializer)?;
+        let results: Result<Vec<Receipt>, _> = obj
+            .into_iter()
+            .map(|mut val| {
+                let result = val["result"].take();
+                serde_json::from_value(result)
+            })
+            .collect();
+        Ok(Self {
+            receipt_list: results.map_err(serde::de::Error::custom)?,
+        })
     }
 }
 
@@ -706,6 +727,21 @@ mod tests {
             receipt.cumulative_gas_used,
             U256::from_dec_str("189807").unwrap()
         );
+    }
+
+    #[test_log::test]
+    fn receipts_batch() {
+        // this block (15573637) was chosen since it contains all tx types (legacy, access list, eip1559)
+        // as well as contract creation txs
+        let expected: String =
+            std::fs::read_to_string("../trin-types/src/assets/test/geth_batch/receipts.json")
+                .unwrap();
+        let receipts: Receipts = serde_json::from_str(&expected).unwrap();
+        let expected_receipts_root: H256 = H256::from_slice(
+            &hex_decode("0xc9e543effd8c9708acc53249157c54b0c6aecd69285044bcb9df91cedc6437ad")
+                .unwrap(),
+        );
+        assert_eq!(receipts.root().unwrap(), expected_receipts_root);
     }
 
     const EXPECTED_RECEIPTS_ROOT: &str =
