@@ -13,6 +13,7 @@ use network::HistoryNetwork;
 use tokio::{
     sync::{mpsc, RwLock},
     task::JoinHandle,
+    time::{interval, Duration},
 };
 use tracing::info;
 use utp_rs::socket::UtpSocket;
@@ -66,6 +67,7 @@ pub async fn initialize_history_network(
         portalnet_config,
         history_event_rx,
     );
+    spawn_history_heartbeat(Arc::clone(&history_network));
     Ok((
         Some(history_handler),
         Some(history_network_task),
@@ -106,4 +108,18 @@ pub fn spawn_history_network(
             .await
             .expect("failed to pause until ctrl-c");
     })
+}
+
+pub fn spawn_history_heartbeat(network: Arc<HistoryNetwork>) {
+    tokio::spawn(async move {
+        let mut heart_interval = interval(Duration::from_millis(30000));
+
+        loop {
+            let radius = network.overlay.store.read().radius();
+            // calculate the percentage of the whole data ring covered by the data radius
+            let coverage_percent = radius.byte(31) as f32 * 100.0 / 255.0;
+            info!("report: radius={coverage_percent:.1}%");
+            heart_interval.tick().await;
+        }
+    });
 }
