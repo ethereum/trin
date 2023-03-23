@@ -6019,6 +6019,7 @@ dependencies = [
  "trin-utils",
  "trin-validation",
  "ureq",
+ "utp-rs",
 ]
 
 [[package]]
@@ -6048,6 +6049,7 @@ dependencies = [
  "anyhow",
  "async-recursion",
  "async-trait",
+ "base64 0.13.1",
  "bytes 1.4.0",
  "delay_map 0.1.2",
  "directories",
@@ -6099,6 +6101,8 @@ dependencies = [
  "trin-utils",
  "trin-validation",
  "uds_windows",
+ "url",
+ "utp-rs",
  "validator",
 ]
 
@@ -6116,6 +6120,7 @@ dependencies = [
  "ethportal-api",
  "httpmock",
  "parking_lot 0.11.2",
+ "rpc",
  "rstest 0.11.0",
  "serde_json",
  "test-log",
@@ -6128,6 +6133,7 @@ dependencies = [
  "trin-utils",
  "trin-validation",
  "ureq",
+ "utp-rs",
 ]
 
 [[package]]
@@ -6151,6 +6157,7 @@ dependencies = [
  "trin-core",
  "trin-types",
  "trin-validation",
+ "utp-rs",
 ]
 
 [[package]]
@@ -6387,6 +6394,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7fcfc827f90e53a02eaef5e535ee14266c1d569214c6aa70133a624d8a3164ba"
 
 [[package]]
+name = "utp-rs"
+version = "0.1.0-alpha.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2189fee3a270a59241c510089f98a6e6c25e3e0e7d36db7344ff0526806c7df4"
+dependencies = [
+ "async-trait",
+ "delay_map 0.1.2",
+ "futures 0.3.27",
+ "rand 0.8.5",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "utp-testing"
 version = "0.1.0"
 dependencies = [
@@ -6401,6 +6422,7 @@ dependencies = [
  "trin-core",
  "trin-types",
  "trin-utils",
+ "utp-rs",
 ]
 
 [[package]]

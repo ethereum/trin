@@ -1,5 +1,4 @@
-use std::str::FromStr;
-use std::{thread, time};
+use std::{str::FromStr, thread, time};
 
 use serde_json::json;
 use tracing::{error, info};
@@ -50,7 +49,6 @@ pub async fn test_unpopulated_offer(peertest_config: PeertestConfig, peertest: &
 
     // Check if the stored content item in bootnode's DB matches the offered
     let received_content_value = wait_for_content(ipc_client, content_key).await;
-
     assert_eq!(
         content_value, received_content_value,
         "The received content {received_content_value:?}, must match the expected {content_value:?}",
@@ -87,7 +85,6 @@ pub async fn test_populated_offer(peertest_config: PeertestConfig, peertest: &Pe
 
     // Check if the stored content item in bootnode's DB matches the offered
     let received_content_value = wait_for_content(ipc_client, content_key).await;
-
     assert_eq!(
         content_value, received_content_value,
         "The received content {received_content_value:?}, must match the expected {content_value:?}",
@@ -103,7 +100,7 @@ async fn wait_for_content(
 
     let mut counter = 0;
     while received_content_value == HistoryContentItem::Unknown("".to_owned()) && counter < 5 {
-        error!("Retrying after 0.5sec, because content should have been present");
+        error!("Retrying after 0.5s, because content should have been present");
         thread::sleep(time::Duration::from_millis(500));
         received_content_value = ipc_client
             .local_content(serde_json::from_value(json!(HISTORY_CONTENT_KEY)).unwrap())

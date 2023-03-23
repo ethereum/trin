@@ -5,17 +5,17 @@ use std::sync::Arc;
 use discv5::TalkRequest;
 use network::StateNetwork;
 use tokio::{
-    sync::{mpsc, mpsc::UnboundedSender, RwLock},
+    sync::{mpsc, RwLock},
     task::JoinHandle,
 };
 use tracing::info;
+use utp_rs::socket::UtpSocket;
 
 use crate::{events::StateEvents, jsonrpc::StateRequestHandler};
-use trin_core::{
-    portalnet::{
-        discovery::Discovery, storage::PortalStorageConfig, types::messages::PortalnetConfig,
-    },
-    utp::stream::{UtpListenerEvent, UtpListenerRequest},
+use trin_core::portalnet::{
+    discovery::{Discovery, UtpEnr},
+    storage::PortalStorageConfig,
+    types::messages::PortalnetConfig,
 };
 use trin_types::jsonrpc::request::StateJsonRpcRequest;
 use trin_validation::oracle::HeaderOracle;
@@ -30,28 +30,20 @@ pub mod validation;
 type StateHandler = Option<StateRequestHandler>;
 type StateNetworkTask = Option<JoinHandle<()>>;
 type StateEventTx = Option<mpsc::UnboundedSender<TalkRequest>>;
-type StateUtpTx = Option<mpsc::UnboundedSender<UtpListenerEvent>>;
 type StateJsonRpcTx = Option<mpsc::UnboundedSender<StateJsonRpcRequest>>;
 
 pub async fn initialize_state_network(
     discovery: &Arc<Discovery>,
-    utp_listener_tx: UnboundedSender<UtpListenerRequest>,
+    utp_socket: Arc<UtpSocket<UtpEnr>>,
     portalnet_config: PortalnetConfig,
     storage_config: PortalStorageConfig,
     header_oracle: Arc<RwLock<HeaderOracle>>,
-) -> anyhow::Result<(
-    StateHandler,
-    StateNetworkTask,
-    StateEventTx,
-    StateUtpTx,
-    StateJsonRpcTx,
-)> {
+) -> anyhow::Result<(StateHandler, StateNetworkTask, StateEventTx, StateJsonRpcTx)> {
     let (state_jsonrpc_tx, state_jsonrpc_rx) = mpsc::unbounded_channel::<StateJsonRpcRequest>();
     let (state_event_tx, state_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
-    let (utp_state_tx, utp_state_rx) = mpsc::unbounded_channel::<UtpListenerEvent>();
     let state_network = StateNetwork::new(
         Arc::clone(discovery),
-        utp_listener_tx,
+        utp_socket,
         storage_config,
         portalnet_config.clone(),
         header_oracle,
@@ -62,17 +54,12 @@ pub async fn initialize_state_network(
         network: Arc::clone(&state_network),
         state_rx: state_jsonrpc_rx,
     };
-    let state_network_task = spawn_state_network(
-        Arc::clone(&state_network),
-        portalnet_config,
-        utp_state_rx,
-        state_event_rx,
-    );
+    let state_network_task =
+        spawn_state_network(Arc::clone(&state_network), portalnet_config, state_event_rx);
     Ok((
         Some(state_handler),
         Some(state_network_task),
         Some(state_event_tx),
-        Some(utp_state_tx),
         Some(state_jsonrpc_tx),
     ))
 }
@@ -80,7 +67,6 @@ pub async fn initialize_state_network(
 pub fn spawn_state_network(
     network: Arc<StateNetwork>,
     portalnet_config: PortalnetConfig,
-    utp_listener_rx: mpsc::UnboundedReceiver<UtpListenerEvent>,
     state_event_rx: mpsc::UnboundedReceiver<TalkRequest>,
 ) -> JoinHandle<()> {
     let bootnodes: Vec<String> = portalnet_config
@@ -98,7 +84,6 @@ pub fn spawn_state_network(
         let state_events = StateEvents {
             network: Arc::clone(&network),
             event_rx: state_event_rx,
-            utp_listener_rx,
         };
 
         // Spawn state event handler

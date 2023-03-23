@@ -3,17 +3,15 @@ use std::sync::Arc;
 use discv5::enr::NodeId;
 use eth_trie::EthTrie;
 use parking_lot::RwLock as PLRwLock;
-use tokio::sync::{mpsc::UnboundedSender, RwLock};
+use tokio::sync::RwLock;
+use utp_rs::socket::UtpSocket;
 
 use ethportal_api::StateContentKey;
-use trin_core::{
-    portalnet::{
-        discovery::Discovery,
-        overlay::{OverlayConfig, OverlayProtocol},
-        storage::{PortalStorage, PortalStorageConfig},
-        types::messages::{PortalnetConfig, ProtocolId},
-    },
-    utp::stream::UtpListenerRequest,
+use trin_core::portalnet::{
+    discovery::{Discovery, UtpEnr},
+    overlay::{OverlayConfig, OverlayProtocol},
+    storage::{PortalStorage, PortalStorageConfig},
+    types::messages::{PortalnetConfig, ProtocolId},
 };
 use trin_types::distance::XorMetric;
 use trin_validation::oracle::HeaderOracle;
@@ -30,7 +28,7 @@ pub struct StateNetwork {
 impl StateNetwork {
     pub async fn new(
         discovery: Arc<Discovery>,
-        utp_listener_tx: UnboundedSender<UtpListenerRequest>,
+        utp_socket: Arc<UtpSocket<UtpEnr>>,
         storage_config: PortalStorageConfig,
         portal_config: PortalnetConfig,
         header_oracle: Arc<RwLock<HeaderOracle>>,
@@ -53,7 +51,7 @@ impl StateNetwork {
         let overlay = OverlayProtocol::new(
             config,
             discovery,
-            utp_listener_tx,
+            utp_socket,
             storage,
             portal_config.data_radius,
             ProtocolId::State,

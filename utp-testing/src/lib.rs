@@ -11,25 +11,21 @@ use jsonrpsee::proc_macros::rpc;
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::sync::RwLock;
-use tracing::debug;
-use trin_core::portalnet::discovery::Discovery;
+use trin_core::portalnet::discovery::{Discovery, UtpEnr};
 use trin_core::portalnet::types::messages::{PortalnetConfig, ProtocolId};
-use trin_core::utp::stream::{
-    UtpListener, UtpListenerEvent, UtpListenerRequest, UtpPayload, UtpStream,
-};
-use trin_core::utp::trin_helpers::UtpStreamId;
 use trin_types::enr::Enr;
 use trin_utils::bytes::{hex_encode, hex_encode_upper};
+use utp_rs::{conn::ConnectionConfig, socket::UtpSocket};
 
 /// uTP test app
 pub struct TestApp {
     pub discovery: Arc<Discovery>,
-    pub utp_listener_tx: mpsc::UnboundedSender<UtpListenerRequest>,
-    pub utp_listener_rx: Arc<RwLock<mpsc::UnboundedReceiver<UtpListenerEvent>>>,
-    pub utp_event_tx: mpsc::UnboundedSender<TalkRequest>,
-    pub utp_payload: Arc<RwLock<Vec<UtpPayload>>>,
+    pub utp_socket: Arc<UtpSocket<UtpEnr>>,
+    pub utp_talk_req_tx: mpsc::UnboundedSender<TalkRequest>,
+    pub utp_payload: Arc<RwLock<Vec<Vec<u8>>>>,
 }
 
 #[async_trait]
@@ -48,50 +44,82 @@ impl RpcServer for TestApp {
         }
     }
 
-    async fn prepare_to_recv(&self, enr: String, conn_id: u16) -> RpcResult<String> {
-        let enr = Enr::from_str(&enr).unwrap();
-        self.prepare_to_receive(enr, conn_id).await;
+    async fn prepare_to_recv(
+        &self,
+        src_enr: String,
+        cid_send: u16,
+        cid_recv: u16,
+    ) -> RpcResult<String> {
+        let src_enr = Enr::from_str(&src_enr).unwrap();
+        let cid = utp_rs::cid::ConnectionId {
+            send: cid_send,
+            recv: cid_recv,
+            peer: UtpEnr(src_enr.clone()),
+        };
+        self.discovery.add_enr(src_enr).unwrap();
+
+        let utp = Arc::clone(&self.utp_socket);
+        let payload_store = Arc::clone(&self.utp_payload);
+        tokio::spawn(async move {
+            let utp_config = ConnectionConfig {
+                max_packet_size: 1024,
+                max_conn_attempts: 3,
+                max_idle_timeout: Duration::from_secs(16),
+                initial_timeout: Duration::from_millis(1250),
+                ..Default::default()
+            };
+            let mut conn = utp.accept_with_cid(cid, utp_config).await.unwrap();
+            let mut data = vec![];
+            let n = conn.read_to_eof(&mut data).await.unwrap();
+
+            tracing::info!("read {n} bytes from uTP stream");
+
+            conn.shutdown().unwrap();
+
+            payload_store.write().await.push(data);
+        });
+
         Ok("true".to_string())
     }
 
     async fn send_utp_payload(
         &self,
-        enr: String,
-        conn_id: u16,
+        dst_enr: String,
+        cid_send: u16,
+        cid_recv: u16,
         payload: Vec<u8>,
     ) -> RpcResult<String> {
-        let enr = Enr::from_str(&enr).unwrap();
-        self.send_utp_request(conn_id, payload, enr).await;
+        let dst_enr = Enr::from_str(&dst_enr).unwrap();
+        let cid = utp_rs::cid::ConnectionId {
+            send: cid_send,
+            recv: cid_recv,
+            peer: UtpEnr(dst_enr.clone()),
+        };
+        self.discovery.add_enr(dst_enr).unwrap();
+
+        let utp = Arc::clone(&self.utp_socket);
+        let utp_config = ConnectionConfig {
+            max_packet_size: 1024,
+            max_conn_attempts: 3,
+            max_idle_timeout: Duration::from_secs(16),
+            initial_timeout: Duration::from_millis(1250),
+            ..Default::default()
+        };
+        tokio::spawn(async move {
+            let mut conn = utp.connect_with_cid(cid, utp_config).await.unwrap();
+
+            conn.write(&payload).await.unwrap();
+
+            conn.shutdown().unwrap();
+        });
+
         Ok("true".to_string())
     }
 }
 
 impl TestApp {
-    pub async fn send_utp_request(&self, conn_id: u16, payload: Vec<u8>, enr: Enr) {
-        let (tx, rx) = tokio::sync::oneshot::channel::<UtpStream>();
-        let _ = self.utp_listener_tx.send(UtpListenerRequest::Connect(
-            conn_id,
-            enr,
-            ProtocolId::History,
-            UtpStreamId::OfferStream,
-            tx,
-        ));
-
-        let mut conn = rx.await.unwrap();
-
-        let mut buf = [0; 1500];
-        conn.recv(&mut buf).await.unwrap();
-
-        conn.send_to(&payload).await.unwrap();
-
-        tokio::spawn(async move {
-            let _ = conn.close().await;
-            debug!("Connection state: {:?}", conn.state)
-        });
-    }
-
     pub async fn start(&self, mut talk_req_rx: mpsc::Receiver<TalkRequest>) {
-        let utp_sender = self.utp_event_tx.clone();
+        let utp_talk_reqs_tx = self.utp_talk_req_tx.clone();
 
         // Forward discv5 uTP packets to uTP socket
         tokio::spawn(async move {
@@ -100,34 +128,10 @@ impl TestApp {
                     ProtocolId::from_str(&hex_encode_upper(request.protocol())).unwrap();
 
                 if let ProtocolId::Utp = protocol_id {
-                    utp_sender.send(request).unwrap();
+                    utp_talk_reqs_tx.send(request).unwrap();
                 };
             }
         });
-
-        // Listen for uTP listener closed streams
-        let utp_listener_rx = self.utp_listener_rx.clone();
-        let utp_payload_store = self.utp_payload.clone();
-
-        tokio::spawn(async move {
-            while let Some(event) = utp_listener_rx.write().await.recv().await {
-                if let UtpListenerEvent::ClosedStream(utp_payload, _, _) = event {
-                    utp_payload_store.write().await.push(utp_payload)
-                }
-            }
-        });
-    }
-
-    pub async fn prepare_to_receive(&self, source: Enr, conn_id: u16) {
-        // Listen for incoming connection request on conn_id, as part of uTP handshake
-        let _ = self
-            .utp_listener_tx
-            .send(UtpListenerRequest::InitiateConnection(
-                source,
-                ProtocolId::History,
-                UtpStreamId::AcceptStream(vec![vec![]]),
-                conn_id,
-            ));
     }
 }
 
@@ -149,15 +153,18 @@ pub async fn run_test_app(
     let enr = discovery.local_enr();
     let discovery = Arc::new(discovery);
 
-    let (utp_event_sender, utp_listener_tx, utp_listener_rx, mut utp_listener) =
-        UtpListener::new(Arc::clone(&discovery));
-    tokio::spawn(async move { utp_listener.start().await });
+    let (utp_talk_req_tx, utp_talk_req_rx) = mpsc::unbounded_channel();
+    let discv5_utp_socket = trin_core::portalnet::discovery::Discv5UdpSocket::new(
+        Arc::clone(&discovery),
+        utp_talk_req_rx,
+    );
+    let utp_socket = utp_rs::socket::UtpSocket::with_socket(discv5_utp_socket);
+    let utp_socket = Arc::new(utp_socket);
 
     let test_app = TestApp {
         discovery,
-        utp_listener_tx,
-        utp_listener_rx: Arc::new(RwLock::new(utp_listener_rx)),
-        utp_event_tx: utp_event_sender,
+        utp_socket,
+        utp_talk_req_tx,
         utp_payload: Arc::new(RwLock::new(Vec::new())),
     };
 

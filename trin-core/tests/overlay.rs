@@ -2,7 +2,7 @@ use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
 use trin_core::{
     portalnet::{
-        discovery::Discovery,
+        discovery::{Discovery, Discv5UdpSocket},
         overlay::{OverlayConfig, OverlayProtocol},
         storage::{ContentStore, DistanceFunction, MemoryContentStore},
         types::messages::{Content, Message, PortalnetConfig, ProtocolId},
@@ -20,8 +20,8 @@ use tokio::{
     sync::{mpsc, mpsc::unbounded_channel},
     time::{self, Duration},
 };
+use utp_rs::socket::UtpSocket;
 
-use trin_core::utp::stream::UtpListenerRequest;
 use trin_utils::bytes::hex_encode_upper;
 
 async fn init_overlay(
@@ -34,15 +34,17 @@ async fn init_overlay(
     let store = MemoryContentStore::new(node_id, DistanceFunction::Xor);
     let store = Arc::new(RwLock::new(store));
 
-    // Ignore all uTP events
-    let (utp_listener_tx, _) = unbounded_channel::<UtpListenerRequest>();
+    let (_utp_talk_req_tx, utp_talk_req_rx) = unbounded_channel();
+    let discv5_utp = Discv5UdpSocket::new(Arc::clone(&discovery), utp_talk_req_rx);
+    let utp_socket = UtpSocket::with_socket(discv5_utp);
+    let utp_socket = Arc::new(utp_socket);
 
     let validator = Arc::new(MockValidator {});
 
     OverlayProtocol::new(
         overlay_config,
         discovery,
-        utp_listener_tx,
+        utp_socket,
         store,
         Distance::MAX,
         protocol,

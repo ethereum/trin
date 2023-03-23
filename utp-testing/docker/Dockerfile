@@ -1,4 +1,4 @@
-FROM rust:1.62.1-bullseye AS builder
+FROM rust:1.66.1-bullseye AS builder
 
 RUN apt-get update \
  && apt-get install clang -y \
@@ -27,7 +27,7 @@ RUN apt-get update \
 
 COPY --from=builder /bin/utp-test-app /bin/utp-test-app
 
-ENV RUST_LOG=debug
+ENV RUST_LOG=TRACE
 
 COPY setup.sh .
 RUN chmod +x setup.sh

@@ -2,7 +2,9 @@ use jsonrpsee::core::client::ClientT;
 use jsonrpsee::http_client::HttpClientBuilder;
 use jsonrpsee::rpc_params;
 use rand::{thread_rng, Rng};
+
 use std::time::Duration;
+
 use trin_utils::bytes::hex_encode;
 
 const SERVER_ADDR: &str = "193.167.100.100:9041";
@@ -27,17 +29,27 @@ async fn send_10k_bytes() -> anyhow::Result<()> {
     let server_rpc = HttpClientBuilder::default().build(server_url)?;
     let server_enr: String = server_rpc.request("local_enr", None).await.unwrap();
 
-    let connection_id: u16 = thread_rng().gen();
+    let client_cid_recv: u16 = thread_rng().gen();
+    let client_cid_send = client_cid_recv.wrapping_add(1);
+
+    // The server connection ID is the flipped client connection ID.
+    let server_cid_recv = client_cid_send;
+    let server_cid_send = client_cid_recv;
 
     // Add client enr to allowed server uTP connections
-    let params = rpc_params!(client_enr, connection_id);
+    let params = rpc_params!(client_enr, server_cid_send, server_cid_recv);
     let response: String = server_rpc.request("prepare_to_recv", params).await.unwrap();
     assert_eq!(response, "true");
 
     // Send uTP payload from client to server
     let payload: Vec<u8> = vec![thread_rng().gen(); 10_000];
 
-    let params = rpc_params!(server_enr, connection_id, payload.clone());
+    let params = rpc_params!(
+        server_enr,
+        client_cid_send,
+        client_cid_recv,
+        payload.clone()
+    );
     let response: String = client_rpc
         .request("send_utp_payload", params)
         .await
@@ -46,7 +58,7 @@ async fn send_10k_bytes() -> anyhow::Result<()> {
     assert_eq!(response, "true");
 
     // Sleep to allow time for uTP transmission
-    tokio::time::sleep(Duration::from_secs(4)).await;
+    tokio::time::sleep(Duration::from_secs(16)).await;
 
     // Verify received uTP payload
     let utp_payload: String = server_rpc.request("get_utp_payload", None).await.unwrap();
