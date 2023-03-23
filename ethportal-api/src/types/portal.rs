@@ -1,8 +1,8 @@
-use crate::types::content_item::HistoryContentItem;
-use crate::types::content_key::HistoryContentKey;
 use crate::types::enr::Enr;
 use serde::{Deserialize, Serialize};
 use ssz_types::{typenum, BitList};
+use trin_types::content_key::HistoryContentKey;
+use trin_types::content_value::HistoryContentValue;
 
 pub type DataRadius = ethereum_types::U256;
 pub type Distance = ethereum_types::U256;
@@ -38,7 +38,7 @@ pub enum ContentInfo {
     #[serde(rename_all = "camelCase")]
     ConnectionId { connection_id: u16 },
     #[serde(rename_all = "camelCase")]
-    Content { content: HistoryContentItem },
+    Content { content: HistoryContentValue },
     #[serde(rename_all = "camelCase")]
     Enrs { enrs: Vec<Enr> },
 }
@@ -54,7 +54,7 @@ pub struct AcceptInfo {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TraceContentInfo {
-    pub content: HistoryContentItem,
+    pub content: HistoryContentValue,
     pub route: Vec<NodeInfo>,
 }
 

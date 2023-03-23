@@ -10,16 +10,17 @@ mod web3;
 
 pub use crate::discv5::{Discv5ApiClient, Discv5ApiServer};
 pub use history::{HistoryNetworkApiClient, HistoryNetworkApiServer};
-pub use types::content_item::{
-    BlockBody, ContentItem, EpochAccumulator, HeaderRecord, HeaderWithProof, HistoryContentItem,
-};
-pub use types::content_key::{
+pub use web3::{Web3ApiClient, Web3ApiServer};
+
+// Re-exports trin-types
+pub use trin_types::content_key::{
     BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey, HistoryContentKey,
     OverlayContentKey, StateContentKey,
 };
-pub use web3::{Web3ApiClient, Web3ApiServer};
+pub use trin_types::content_value::{ContentValue, HistoryContentValue};
+pub use trin_types::execution::block_body::*;
+pub use trin_types::execution::header::*;
+pub use trin_types::execution::receipts::*;
 
 // Re-exports jsonrpsee crate
 pub use jsonrpsee;
-
-pub use reth_primitives::{Header, Receipt, TransactionSigned};

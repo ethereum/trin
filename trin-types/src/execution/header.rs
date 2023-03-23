@@ -239,7 +239,7 @@ impl<'de> Deserialize<'de> for TxHashes {
 /// A block header with accumulator proof.
 /// Type definition:
 /// https://github.com/status-im/nimbus-eth1/blob/master/fluffy/network/history/history_content.nim#L136
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct HeaderWithProof {
     pub header: Header,
     pub proof: BlockHeaderProof,
@@ -268,7 +268,7 @@ impl ssz::Encode for HeaderWithProof {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Decode, Encode)]
+#[derive(Debug, Clone, PartialEq, Eq, Decode, Encode, Deserialize)]
 #[ssz(enum_behaviour = "union")]
 // Ignore clippy here, since "box"-ing the accumulator proof breaks the Decode trait
 #[allow(clippy::large_enum_variant)]
@@ -277,7 +277,7 @@ pub enum BlockHeaderProof {
     AccumulatorProof(AccumulatorProof),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AccumulatorProof {
     pub proof: [H256; 15],
 }
@@ -344,7 +344,7 @@ impl ssz::Encode for AccumulatorProof {
 }
 
 /// Struct to represent encodable/decodable None value for an SSZ enum
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
 pub struct SszNone {
     // In rust, None is a variant not a type,
     // so we must use Option here to represent a None value

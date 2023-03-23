@@ -5,7 +5,7 @@ use tracing::{error, info};
 
 use ethportal_api::jsonrpsee::async_client::Client;
 use ethportal_api::HistoryContentKey;
-use ethportal_api::{HistoryContentItem, HistoryNetworkApiClient};
+use ethportal_api::{HistoryContentValue, HistoryNetworkApiClient};
 use trin_types::enr::Enr;
 
 use crate::{
@@ -23,7 +23,7 @@ pub async fn test_unpopulated_offer(peertest_config: PeertestConfig, peertest: &
 
     let content_key: HistoryContentKey =
         serde_json::from_value(json!(HISTORY_CONTENT_KEY)).unwrap();
-    let content_value: HistoryContentItem =
+    let content_value: HistoryContentValue =
         serde_json::from_value(json!(HISTORY_CONTENT_VALUE)).unwrap();
 
     // Store content to offer in the testnode db
@@ -47,7 +47,7 @@ pub async fn test_unpopulated_offer(peertest_config: PeertestConfig, peertest: &
     // Check that ACCEPT response sent by bootnode accepted the offered content
     validate_portal_offer(result, peertest);
 
-    // Check if the stored content item in bootnode's DB matches the offered
+    // Check if the stored content value in bootnode's DB matches the offered
     let received_content_value = wait_for_content(ipc_client, content_key).await;
     assert_eq!(
         content_value, received_content_value,
@@ -68,7 +68,7 @@ pub async fn test_populated_offer(peertest_config: PeertestConfig, peertest: &Pe
         "0x00cb5cab7266694daa0d28cbf40496c08dd30bf732c41e0455e7ad389c10d79f4f"
     ))
     .unwrap();
-    let content_value: HistoryContentItem =
+    let content_value: HistoryContentValue =
         serde_json::from_value(json!(HISTORY_CONTENT_VALUE)).unwrap();
 
     let result = ipc_client
@@ -83,7 +83,7 @@ pub async fn test_populated_offer(peertest_config: PeertestConfig, peertest: &Pe
     // Check that ACCEPT response sent by bootnode accepted the offered content
     validate_portal_offer(result, peertest);
 
-    // Check if the stored content item in bootnode's DB matches the offered
+    // Check if the stored content value in bootnode's DB matches the offered
     let received_content_value = wait_for_content(ipc_client, content_key).await;
     assert_eq!(
         content_value, received_content_value,
@@ -95,15 +95,15 @@ pub async fn test_populated_offer(peertest_config: PeertestConfig, peertest: &Pe
 async fn wait_for_content(
     ipc_client: Client,
     content_key: HistoryContentKey,
-) -> HistoryContentItem {
-    let mut received_content_value = ipc_client.local_content(content_key).await.unwrap();
+) -> HistoryContentValue {
+    let mut received_content_value = ipc_client.local_content(content_key.clone()).await.unwrap();
 
     let mut counter = 0;
-    while received_content_value == HistoryContentItem::Unknown("".to_owned()) && counter < 5 {
-        error!("Retrying after 0.5s, because content should have been present");
+    while received_content_value == HistoryContentValue::Unknown("".to_owned()) && counter < 5 {
+        error!("Retrying after 0.5sec, because content should have been present");
         thread::sleep(time::Duration::from_millis(500));
         received_content_value = ipc_client
-            .local_content(serde_json::from_value(json!(HISTORY_CONTENT_KEY)).unwrap())
+            .local_content(serde_json::from_value(json!(content_key)).unwrap())
             .await
             .unwrap();
 

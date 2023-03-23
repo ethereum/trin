@@ -1,14 +1,14 @@
-use crate::types::content_key::HistoryContentKey;
 use crate::types::enr::Enr;
 use crate::types::portal::FindNodesInfo;
 use crate::types::{
-    content_item::HistoryContentItem,
     discv5::{NodeId, RoutingTableInfo},
     portal::{
         AcceptInfo, ContentInfo, DataRadius, PaginateLocalContentInfo, PongInfo, TraceContentInfo,
     },
 };
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
+use trin_types::content_key::HistoryContentKey;
+use trin_types::content_value::HistoryContentValue;
 
 /// Portal History JSON-RPC endpoints
 #[rpc(client, server, namespace = "portal")]
@@ -63,7 +63,7 @@ pub trait HistoryNetworkApi {
     async fn recursive_find_content(
         &self,
         content_key: HistoryContentKey,
-    ) -> RpcResult<HistoryContentItem>;
+    ) -> RpcResult<HistoryContentValue>;
 
     /// Lookup a target content key in the network. Return tracing info.
     #[method(name = "historyTraceRecursiveFindContent")]
@@ -80,13 +80,13 @@ pub trait HistoryNetworkApi {
         limit: u64,
     ) -> RpcResult<PaginateLocalContentInfo>;
 
-    /// Send the provided content item to interested peers. Clients may choose to send to some or all peers.
+    /// Send the provided content value to interested peers. Clients may choose to send to some or all peers.
     /// Return the number of peers that the content was gossiped to.
     #[method(name = "historyGossip")]
     async fn gossip(
         &self,
         content_key: HistoryContentKey,
-        content_value: HistoryContentItem,
+        content_value: HistoryContentValue,
     ) -> RpcResult<u32>;
 
     /// Send an OFFER request with given ContentKey, to the designated peer and wait for a response.
@@ -96,7 +96,7 @@ pub trait HistoryNetworkApi {
         &self,
         enr: Enr,
         content_key: HistoryContentKey,
-        content_value: Option<HistoryContentItem>,
+        content_value: Option<HistoryContentValue>,
     ) -> RpcResult<AcceptInfo>;
 
     /// Store content key with a content data to the local database.
@@ -104,10 +104,11 @@ pub trait HistoryNetworkApi {
     async fn store(
         &self,
         content_key: HistoryContentKey,
-        content_value: HistoryContentItem,
+        content_value: HistoryContentValue,
     ) -> RpcResult<bool>;
 
     /// Get a content from the local database
     #[method(name = "historyLocalContent")]
-    async fn local_content(&self, content_key: HistoryContentKey) -> RpcResult<HistoryContentItem>;
+    async fn local_content(&self, content_key: HistoryContentKey)
+        -> RpcResult<HistoryContentValue>;
 }

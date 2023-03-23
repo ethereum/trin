@@ -12,7 +12,7 @@ use crate::utils::bucket_entries_to_json;
 use ethportal_api::types::portal::{
     AcceptInfo, Distance, FindNodesInfo, NodeInfo, PongInfo, TraceContentInfo,
 };
-use ethportal_api::{ContentItem, HistoryContentItem};
+use ethportal_api::{ContentValue, HistoryContentValue};
 use ethportal_api::{HistoryContentKey, OverlayContentKey};
 use ssz::Encode;
 use trin_types::content_key::RawContentKey;
@@ -60,9 +60,8 @@ impl HistoryRequestHandler {
                                 };
                     let _ = request.resp.send(response);
                 }
-                HistoryEndpoint::Store(content_key, content_item) => {
-                    let mut data = vec![];
-                    content_item.encode(&mut data);
+                HistoryEndpoint::Store(content_key, content_value) => {
+                    let data = content_value.encode();
                     let response = match self
                         .network
                         .overlay
@@ -118,22 +117,20 @@ impl HistoryRequestHandler {
                     };
                     let _ = request.resp.send(response);
                 }
-                HistoryEndpoint::Gossip(content_key, content_item) => {
-                    let mut data = vec![];
-                    content_item.encode(&mut data);
-                    let content_items = vec![(content_key, data)];
-                    let num_peers = self.network.overlay.propagate_gossip(content_items);
+                HistoryEndpoint::Gossip(content_key, content_value) => {
+                    let data = content_value.encode();
+                    let content_values = vec![(content_key, data)];
+                    let num_peers = self.network.overlay.propagate_gossip(content_values);
                     let response = Ok(num_peers.into());
                     let _ = request.resp.send(response);
                 }
                 HistoryEndpoint::Offer(enr, content_key, content_value) => {
                     let response = if let Some(content_value) = content_value {
-                        let mut content_item = vec![];
-                        content_value.encode(&mut content_item);
+                        let content_value = content_value.encode();
                         match self
                             .network
                             .overlay
-                            .send_populated_offer(enr, content_key.into(), content_item)
+                            .send_populated_offer(enr, content_key.into(), content_value)
                             .await
                         {
                             Ok(accept) => Ok(json!(AcceptInfo {
@@ -229,11 +226,11 @@ impl HistoryRequestHandler {
             })
             .collect();
 
-        let content = match HistoryContentItem::decode(&content) {
+        let content = match HistoryContentValue::decode(&content) {
             Ok(val) => val,
             Err(err) => {
                 return Err(format!(
-                    "Error decoding content item: {content:?} with error: {err:?}"
+                    "Error decoding content value: {content:?} with error: {err:?}"
                 ))
             }
         };

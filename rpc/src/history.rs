@@ -7,8 +7,8 @@ use ethportal_api::types::portal::{
     AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
     TraceContentInfo,
 };
-use ethportal_api::HistoryContentItem;
 use ethportal_api::HistoryContentKey;
+use ethportal_api::HistoryContentValue;
 use ethportal_api::HistoryNetworkApiServer;
 use tokio::sync::mpsc;
 use trin_types::enr::Enr;
@@ -123,10 +123,10 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
     async fn recursive_find_content(
         &self,
         content_key: HistoryContentKey,
-    ) -> RpcResult<HistoryContentItem> {
+    ) -> RpcResult<HistoryContentValue> {
         let endpoint = HistoryEndpoint::RecursiveFindContent(content_key);
         let result = self.proxy_query_to_history_subnet(endpoint).await?;
-        let result: HistoryContentItem = from_value(result)?;
+        let result: HistoryContentValue = from_value(result)?;
         Ok(result)
     }
 
@@ -153,12 +153,12 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
         Ok(result)
     }
 
-    /// Send the provided content item to interested peers. Clients may choose to send to some or all peers.
+    /// Send the provided content to interested peers. Clients may choose to send to some or all peers.
     /// Return the number of peers that the content was gossiped to.
     async fn gossip(
         &self,
         content_key: HistoryContentKey,
-        content_value: HistoryContentItem,
+        content_value: HistoryContentValue,
     ) -> RpcResult<u32> {
         let endpoint = HistoryEndpoint::Gossip(content_key, content_value);
         let result = self.proxy_query_to_history_subnet(endpoint).await?;
@@ -172,7 +172,7 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
         &self,
         enr: Enr,
         content_key: HistoryContentKey,
-        content_value: Option<HistoryContentItem>,
+        content_value: Option<HistoryContentValue>,
     ) -> RpcResult<AcceptInfo> {
         let endpoint = HistoryEndpoint::Offer(enr, content_key, content_value);
         let result = self.proxy_query_to_history_subnet(endpoint).await?;
@@ -184,7 +184,7 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
     async fn store(
         &self,
         content_key: HistoryContentKey,
-        content_value: HistoryContentItem,
+        content_value: HistoryContentValue,
     ) -> RpcResult<bool> {
         let endpoint = HistoryEndpoint::Store(content_key, content_value);
         let result = self.proxy_query_to_history_subnet(endpoint).await?;
@@ -193,11 +193,14 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
     }
 
     /// Get a content from the local database
-    async fn local_content(&self, content_key: HistoryContentKey) -> RpcResult<HistoryContentItem> {
+    async fn local_content(
+        &self,
+        content_key: HistoryContentKey,
+    ) -> RpcResult<HistoryContentValue> {
         let endpoint = HistoryEndpoint::LocalContent(content_key);
         let result = self.proxy_query_to_history_subnet(endpoint).await?;
-        let result: HistoryContentItem = match result {
-            Value::Null => HistoryContentItem::Unknown(String::from("")),
+        let result: HistoryContentValue = match result {
+            Value::Null => HistoryContentValue::Unknown(String::from("")),
             other => from_value(other)?,
         };
         Ok(result)

@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::anyhow;
-use ethereum_types::{H256, U256};
+use ethereum_types::H256;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use ssz::Decode;
@@ -15,7 +15,8 @@ use crate::{
     constants::{EPOCH_SIZE, MERGE_BLOCK_NUMBER},
     merkle::proof::{verify_merkle_proof, MerkleTree},
 };
-use ethportal_api::types::content_key::{EpochAccumulatorKey, HistoryContentKey};
+use trin_types::content_key::{EpochAccumulatorKey, HistoryContentKey};
+use trin_types::execution::accumulator::EpochAccumulator;
 use trin_types::execution::header::{BlockHeaderProof, Header, HeaderWithProof};
 use trin_types::jsonrpc::endpoints::HistoryEndpoint;
 use trin_types::jsonrpc::request::HistoryJsonRpcRequest;
@@ -24,10 +25,6 @@ use trin_utils::bytes::hex_decode;
 /// SSZ List[Hash256, max_length = MAX_HISTORICAL_EPOCHS]
 /// List of historical epoch accumulator merkle roots preceding current epoch.
 pub type HistoricalEpochRoots = VariableList<tree_hash::Hash256, typenum::U131072>;
-
-/// SSZ List[HeaderRecord, max_length = EPOCH_SIZE]
-/// List of (block_number, block_hash) for each header in the current epoch.
-pub type EpochAccumulator = VariableList<HeaderRecord, typenum::U8192>;
 
 /// SSZ Container
 /// Primary datatype used to maintain record of historical and current epoch.
@@ -210,16 +207,6 @@ impl MasterAccumulator {
     }
 }
 
-/// Individual record for a historical header.
-/// Block hash and total difficulty are used to validate whether
-/// a header is canonical or not.
-/// Every HeaderRecord is 64bytes.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Decode, Encode, Deserialize, Serialize, TreeHash)]
-pub struct HeaderRecord {
-    pub block_hash: tree_hash::Hash256,
-    pub total_difficulty: U256,
-}
-
 fn calculate_generalized_index(header: &Header) -> usize {
     // Calculate generalized index for header
     // https://github.com/ethereum/consensus-specs/blob/v0.11.1/ssz/merkle-proofs.md#generalized-merkle-tree-index
@@ -234,7 +221,7 @@ mod test {
     use std::fs;
     use std::str::FromStr;
 
-    use ethereum_types::{Bloom, H160, H256};
+    use ethereum_types::{Bloom, H160, U256};
     use rstest::*;
     use serde_json::json;
     use ssz::Decode;

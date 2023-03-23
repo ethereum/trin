@@ -1,4 +1,4 @@
-use ethportal_api::HistoryContentItem;
+use ethportal_api::HistoryContentValue;
 use ethportal_api::HistoryNetworkApiClient;
 use ethportal_api::{BlockHeaderKey, HistoryContentKey};
 
@@ -28,7 +28,7 @@ pub async fn test_paginate_local_storage(peertest_config: PeertestConfig, _peert
         let store_result = ipc_client
             .store(
                 serde_json::from_str(&content_key).unwrap(),
-                HistoryContentItem::Unknown("0x00".to_owned()),
+                HistoryContentValue::Unknown("0x00".to_owned()),
             )
             .await
             .unwrap();

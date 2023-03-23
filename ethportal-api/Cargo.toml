@@ -18,14 +18,13 @@ eth2_ssz = "0.4.0"
 eth2_ssz_derive = "0.3.0"
 eth2_ssz_types = "0.2.1"
 jsonrpsee = {version="0.16.2", features = ["async-client", "client", "macros", "server"]}
-reth-primitives = {git = "https://github.com/paradigmxyz/reth.git", rev = "161795945b21969faa06cd1234a0b5e3bf62f530"}
-reth-rlp = {git = "https://github.com/paradigmxyz/reth.git", rev = "161795945b21969faa06cd1234a0b5e3bf62f530"}
 serde = { version = "1.0.150", features = ["derive"] }
 serde_json = "1.0.89"
 serde-hex = "0.1.0"
 sha2 = "0.10.1"
 thiserror = "1.0.38"
 sha3 = "0.9.1"
+trin-types = { path = "../trin-types" }
 trin-utils = { path = "../trin-utils" }
 
 [dev-dependencies]

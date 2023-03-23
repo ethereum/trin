@@ -15,7 +15,7 @@ use ssz_types::{typenum, VariableList};
 use super::{header::Header, receipts::TransactionId};
 use trin_utils::bytes::hex_decode;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct BlockBody {
     pub txs: Vec<Transaction>,
     pub uncles: EncodableHeaderList,
@@ -118,7 +118,7 @@ impl From<&BlockBody> for EncodedBlockBodyParts {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct EncodableHeaderList {
     list: Vec<Header>,
 }

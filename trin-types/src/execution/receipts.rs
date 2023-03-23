@@ -17,7 +17,7 @@ use trin_utils::bytes::hex_decode;
 const MAX_TRANSACTION_COUNT: usize = 16384;
 
 /// Represents the `Receipts` datatype used by the chain history wire protocol
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct Receipts {
     pub receipt_list: Vec<Receipt>,
 }
