@@ -4,17 +4,18 @@ use anyhow::anyhow;
 use discv5::enr::{CombinedKey, EnrBuilder};
 use ethereum_types::H256;
 use rocksdb::IteratorMode;
+use ssz::Decode;
 use structopt::StructOpt;
 use tracing::{info, warn};
 
-use ethportal_api::types::content_item::{
-    BlockBody, ContentItem, EpochAccumulator, HeaderWithProof,
-};
 use ethportal_api::HistoryContentKey;
-use ethportal_api::Receipt;
 use portalnet::storage::{PortalStorage, PortalStorageConfig};
 use portalnet::types::messages::ProtocolId;
 use portalnet::utils::db::get_data_dir;
+use trin_types::execution::accumulator::EpochAccumulator;
+use trin_types::execution::block_body::BlockBody;
+use trin_types::execution::header::HeaderWithProof;
+use trin_types::execution::receipts::Receipts;
 
 ///
 /// This script will iterate through all content id / key pairs in rocksd & meta db.
@@ -90,13 +91,12 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn is_content_valid(content_key: &HistoryContentKey, value: &[u8]) -> bool {
     match content_key {
-        HistoryContentKey::BlockHeaderWithProof(_) => HeaderWithProof::decode(value).is_ok(),
-        HistoryContentKey::BlockBody(_) => BlockBody::decode(value).is_ok(),
-        HistoryContentKey::BlockReceipts(_) => {
-            let receipts: Result<Vec<Receipt>, _> = ContentItem::decode(value);
-            receipts.is_ok()
+        HistoryContentKey::BlockHeaderWithProof(_) => {
+            HeaderWithProof::from_ssz_bytes(value).is_ok()
         }
-        HistoryContentKey::EpochAccumulator(_) => EpochAccumulator::decode(value).is_ok(),
+        HistoryContentKey::BlockBody(_) => BlockBody::from_ssz_bytes(value).is_ok(),
+        HistoryContentKey::BlockReceipts(_) => Receipts::from_ssz_bytes(value).is_ok(),
+        HistoryContentKey::EpochAccumulator(_) => EpochAccumulator::from_ssz_bytes(value).is_ok(),
         HistoryContentKey::Unknown(_) => {
             warn!("Found invalid content key: {content_key}");
             false

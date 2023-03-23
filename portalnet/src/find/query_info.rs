@@ -6,7 +6,7 @@ use crate::{
     find::query_pool::TargetKey,
     types::messages::{FindContent, FindNodes, Request},
 };
-use ethportal_api::types::content_key::OverlayContentKey;
+use trin_types::content_key::OverlayContentKey;
 
 /// Information about a query.
 #[derive(Debug)]

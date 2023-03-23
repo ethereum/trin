@@ -1,6 +1,7 @@
+use crate::content_key::HistoryContentKey;
+use crate::content_value::HistoryContentValue;
+use crate::distance::DataRadius;
 use crate::enr::Enr;
-use ethportal_api::types::portal::DataRadius;
-use ethportal_api::{HistoryContentItem, HistoryContentKey};
 
 /// Discv5 JSON-RPC endpoints. Start with "discv5_" prefix
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -35,9 +36,9 @@ pub enum HistoryEndpoint {
     /// params: content_key
     LocalContent(HistoryContentKey),
     /// params: [content_key, content_value]
-    Gossip(HistoryContentKey, HistoryContentItem),
+    Gossip(HistoryContentKey, HistoryContentValue),
     /// params: [enr, content_key]
-    Offer(Enr, HistoryContentKey, Option<HistoryContentItem>),
+    Offer(Enr, HistoryContentKey, Option<HistoryContentValue>),
     /// params: [enr, data_radius]
     Ping(Enr, Option<DataRadius>),
     /// params: content_key
@@ -45,7 +46,7 @@ pub enum HistoryEndpoint {
     /// params: content_key
     TraceRecursiveFindContent(HistoryContentKey),
     /// params: [content_key, content_value]
-    Store(HistoryContentKey, HistoryContentItem),
+    Store(HistoryContentKey, HistoryContentValue),
     /// params: None
     RoutingTableInfo,
     // This endpoint is not History network specific

@@ -5,7 +5,7 @@ use ssz::Decode;
 use tokio::sync::mpsc;
 
 use crate::accumulator::MasterAccumulator;
-use ethportal_api::types::content_key::{BlockHeaderKey, HistoryContentKey};
+use trin_types::content_key::{BlockHeaderKey, HistoryContentKey};
 use trin_types::execution::header::{Header, HeaderWithProof};
 use trin_types::jsonrpc::endpoints::HistoryEndpoint;
 use trin_types::jsonrpc::params::Params;

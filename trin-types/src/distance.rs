@@ -3,6 +3,8 @@ use std::ops::Deref;
 
 use ethereum_types::U256;
 
+pub type DataRadius = ethereum_types::U256;
+
 /// Represents a distance between two keys in the DHT key space.
 #[derive(Copy, Clone, PartialEq, Eq, Default, PartialOrd, Ord, Debug)]
 pub struct Distance(U256);

@@ -9,11 +9,12 @@ use tree_hash::TreeHash;
 
 use ethportal_api::HistoryContentKey;
 use trin_types::execution::{
+    accumulator::EpochAccumulator,
     block_body::BlockBody,
     header::{Header, HeaderWithProof},
     receipts::Receipts,
 };
-use trin_validation::{accumulator::EpochAccumulator, oracle::HeaderOracle, validator::Validator};
+use trin_validation::{oracle::HeaderOracle, validator::Validator};
 
 pub struct ChainHistoryValidator {
     pub header_oracle: Arc<RwLock<HeaderOracle>>,
@@ -129,9 +130,9 @@ mod tests {
 
     use ethportal_api::{BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey};
     use trin_types::cli::DEFAULT_MASTER_ACC_PATH;
+    use trin_types::execution::accumulator::HeaderRecord;
     use trin_types::provider::TrustedProvider;
     use trin_utils::bytes::hex_decode;
-    use trin_validation::accumulator::HeaderRecord;
     use trin_validation::accumulator::MasterAccumulator;
 
     fn get_hwp_ssz() -> Vec<u8> {
