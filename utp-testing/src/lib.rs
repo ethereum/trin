@@ -63,9 +63,9 @@ impl RpcServer for TestApp {
         tokio::spawn(async move {
             let utp_config = ConnectionConfig {
                 max_packet_size: 1024,
-                max_conn_attempts: 4,
-                max_idle_timeout: Duration::from_secs(10),
-                initial_timeout: Duration::from_millis(200),
+                max_conn_attempts: 3,
+                max_idle_timeout: Duration::from_secs(16),
+                initial_timeout: Duration::from_secs(1),
                 ..Default::default()
             };
             let mut conn = utp.accept_with_cid(cid, utp_config).await.unwrap();
@@ -100,9 +100,9 @@ impl RpcServer for TestApp {
         let utp = Arc::clone(&self.utp_socket);
         let utp_config = ConnectionConfig {
             max_packet_size: 1024,
-            max_conn_attempts: 4,
-            max_idle_timeout: Duration::from_secs(10),
-            initial_timeout: Duration::from_millis(200),
+            max_conn_attempts: 3,
+            max_idle_timeout: Duration::from_secs(16),
+            initial_timeout: Duration::from_secs(1),
             ..Default::default()
         };
         tokio::spawn(async move {

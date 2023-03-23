@@ -99,8 +99,8 @@ async fn wait_for_content(
 
     let mut counter = 0;
     while received_content_value == HistoryContentItem::Unknown("".to_owned()) && counter < 5 {
-        error!("Retrying after 1s, because content should have been present");
-        thread::sleep(time::Duration::from_millis(1000));
+        error!("Retrying after 0.5s, because content should have been present");
+        thread::sleep(time::Duration::from_millis(500));
         received_content_value = ipc_client
             .local_content(serde_json::from_value(json!(HISTORY_CONTENT_KEY)).unwrap())
             .await
