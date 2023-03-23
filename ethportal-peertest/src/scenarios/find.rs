@@ -50,8 +50,9 @@ pub fn test_recursive_find_content_invalid_params(
         params: Params::Array(vec![json!(invalid_content_key)]),
     };
 
-    let error = make_ipc_request(&peertest.nodes[0].web3_ipc_path, &request).unwrap_err();
-    assert!(error.to_string().contains("Invalid content key provided"));
+    // Expect '0x' response for invalid request
+    let response = make_ipc_request(&peertest.nodes[0].web3_ipc_path, &request).unwrap();
+    assert_eq!(response, json!("0x"));
 }
 
 pub fn test_trace_recursive_find_content_local_db(

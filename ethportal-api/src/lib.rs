@@ -4,18 +4,18 @@
 #![warn(clippy::unwrap_used)]
 
 mod discv5;
-pub mod endpoints;
 mod history;
 pub mod types;
 mod web3;
 
 pub use crate::discv5::{Discv5ApiClient, Discv5ApiServer};
 pub use history::{HistoryNetworkApiClient, HistoryNetworkApiServer};
-pub use types::{
-    content_item::{
-        BlockBody, ContentItem, EpochAccumulator, HeaderRecord, HeaderWithProof, HistoryContentItem,
-    },
-    content_key::HistoryContentKey,
+pub use types::content_item::{
+    BlockBody, ContentItem, EpochAccumulator, HeaderRecord, HeaderWithProof, HistoryContentItem,
+};
+pub use types::content_key::{
+    BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey, HistoryContentKey,
+    OverlayContentKey, StateContentKey,
 };
 pub use web3::{Web3ApiClient, Web3ApiServer};
 

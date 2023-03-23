@@ -1,6 +1,6 @@
-use crate::types::discv5::Enr;
-use crate::types::portal::DataRadius;
-use crate::{HistoryContentItem, HistoryContentKey};
+use crate::enr::Enr;
+use ethportal_api::types::portal::DataRadius;
+use ethportal_api::{HistoryContentItem, HistoryContentKey};
 
 /// Discv5 JSON-RPC endpoints. Start with "discv5_" prefix
 #[derive(Debug, PartialEq, Eq, Clone)]

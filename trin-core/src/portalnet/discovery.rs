@@ -14,7 +14,7 @@ use utp_rs::{cid::ConnectionPeer, udp::AsyncUdpSocket};
 
 use super::types::messages::{PortalnetConfig, ProtocolId};
 use crate::socket;
-use ethportal_api::types::discv5::{Enr as EthportalEnr, NodeId as EthportalNodeId, NodeInfo};
+use ethportal_api::types::discv5::{NodeId as EthportalNodeId, NodeInfo};
 use std::str::FromStr;
 use std::{
     convert::TryFrom,
@@ -232,7 +232,7 @@ impl Discovery {
     /// Returns ENR and nodeId information of the local Discv5 node.
     pub fn node_info(&self) -> anyhow::Result<NodeInfo> {
         Ok(NodeInfo {
-            enr: EthportalEnr::from_str(&self.discv5.local_enr().to_base64())
+            enr: Enr::from_str(&self.discv5.local_enr().to_base64())
                 .map_err(|err| anyhow!("{err}"))?,
             node_id: EthportalNodeId::from(self.discv5.local_enr().node_id().raw()),
             ip: self

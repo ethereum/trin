@@ -12,15 +12,13 @@ use tracing::info;
 use utp_rs::socket::UtpSocket;
 
 use crate::{events::StateEvents, jsonrpc::StateRequestHandler};
-use ethportal_api::types::request::StateJsonRpcRequest;
-use trin_core::{
-    portalnet::{
-        discovery::{Discovery, UtpEnr},
-        storage::PortalStorageConfig,
-        types::messages::PortalnetConfig,
-    },
-    types::validation::HeaderOracle,
+use trin_core::portalnet::{
+    discovery::{Discovery, UtpEnr},
+    storage::PortalStorageConfig,
+    types::messages::PortalnetConfig,
 };
+use trin_types::jsonrpc::request::StateJsonRpcRequest;
+use trin_validation::oracle::HeaderOracle;
 
 pub mod events;
 mod jsonrpc;

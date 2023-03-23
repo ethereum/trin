@@ -18,28 +18,27 @@ use tokio::sync::mpsc::UnboundedSender;
 use tracing::{debug, error, info, warn};
 use utp_rs::socket::UtpSocket;
 
-use crate::{
-    portalnet::{
-        discovery::{Discovery, UtpEnr},
-        overlay_service::{
-            OverlayCommand, OverlayRequest, OverlayRequestError, OverlayService, RequestDirection,
-            UTP_CONN_CFG,
-        },
-        storage::ContentStore,
-        types::{
-            content_key::{OverlayContentKey, RawContentKey},
-            messages::{
-                Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer,
-                Ping, Pong, PopulatedOffer, ProtocolId, Request, Response,
-            },
-            node::Node,
-        },
+use crate::portalnet::{
+    discovery::{Discovery, UtpEnr},
+    overlay_service::{
+        OverlayCommand, OverlayRequest, OverlayRequestError, OverlayService, RequestDirection,
+        UTP_CONN_CFG,
     },
-    types::validation::Validator,
+    storage::ContentStore,
+    types::{
+        messages::{
+            Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer, Ping,
+            Pong, PopulatedOffer, ProtocolId, Request, Response,
+        },
+        node::Node,
+    },
 };
+use ethportal_api::OverlayContentKey;
+use trin_types::content_key::RawContentKey;
 use trin_types::distance::{Distance, Metric};
 use trin_types::enr::Enr;
 use trin_utils::bytes::hex_encode;
+use trin_validation::validator::Validator;
 
 /// Configuration parameters for the overlay network.
 #[derive(Clone)]

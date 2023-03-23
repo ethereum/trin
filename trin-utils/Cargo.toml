@@ -15,7 +15,6 @@ build = "build.rs"
 anyhow = "1.0.68"
 discv5 = { version = "0.2.1", features = ["serde"] }
 hex = "0.4.3"
-serde_json = {version = "1.0.89", features = ["preserve_order"]}
 
 [dev-dependencies]
 rstest = "0.11.0"

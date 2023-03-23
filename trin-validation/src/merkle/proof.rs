@@ -2,7 +2,7 @@
 /// Code sourced from:
 /// https://github.com/sigp/lighthouse/blob/bf533c8e42/consensus/merkle_proof/src/lib.rs
 ///
-use crate::types::merkle::safe_arith::ArithError;
+use crate::merkle::safe_arith::ArithError;
 use eth2_hashing::{hash, hash32_concat, ZERO_HASHES};
 use ethereum_types::H256;
 use lazy_static::lazy_static;

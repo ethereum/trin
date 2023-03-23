@@ -8,7 +8,6 @@ use std::{
 use anyhow::anyhow;
 use discv5::enr::NodeId;
 use ethportal_api::types::portal::PaginateLocalContentInfo;
-use ethportal_api::HistoryContentKey;
 use prometheus_exporter::{
     self,
     prometheus::{register_gauge, Gauge},
@@ -19,8 +18,8 @@ use rocksdb::{Options, DB};
 use rusqlite::params;
 use tracing::{debug, info};
 
-use super::types::content_key::OverlayContentKey;
 use crate::{portalnet::types::messages::ProtocolId, utils::db::get_data_dir};
+use ethportal_api::types::content_key::{HistoryContentKey, OverlayContentKey};
 use trin_types::distance::{Distance, Metric, XorMetric};
 use trin_utils::bytes::{hex_decode, hex_encode};
 
@@ -800,12 +799,12 @@ pub mod test {
 
     use super::*;
 
-    use quickcheck::{quickcheck, Arbitrary, Gen, QuickCheck, TestResult};
+    use quickcheck::{quickcheck, QuickCheck, TestResult};
     use rand::RngCore;
     use serial_test::serial;
 
-    use crate::portalnet::types::content_key::IdentityContentKey;
     use crate::utils::db::setup_temp_dir;
+    use trin_types::content_key::IdentityContentKey;
 
     const CAPACITY: u64 = 100;
 
@@ -813,16 +812,6 @@ pub mod test {
         let mut key = [0u8; 32];
         rand::thread_rng().fill_bytes(&mut key);
         IdentityContentKey::new(key)
-    }
-
-    impl Arbitrary for IdentityContentKey {
-        fn arbitrary(g: &mut Gen) -> Self {
-            let mut value = [0; 32];
-            for byte in value.iter_mut() {
-                *byte = u8::arbitrary(g);
-            }
-            Self::new(value)
-        }
     }
 
     #[test_log::test(tokio::test)]

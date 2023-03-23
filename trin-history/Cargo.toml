@@ -26,7 +26,7 @@ tree_hash = "0.4.0"
 trin-core = { path = "../trin-core" }
 trin-types = { path = "../trin-types" }
 trin-utils = { path = "../trin-utils" }
-ureq = { version = "2.2.0", features = ["json"] }
+trin-validation = { path = "../trin-validation" }
 utp-rs = "0.1.0-alpha.2"
 
 [dev-dependencies]

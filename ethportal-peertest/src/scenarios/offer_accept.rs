@@ -4,8 +4,9 @@ use serde_json::json;
 use tracing::{error, info};
 
 use ethportal_api::jsonrpsee::async_client::Client;
-use ethportal_api::types::discv5::Enr;
-use ethportal_api::{HistoryContentItem, HistoryContentKey, HistoryNetworkApiClient};
+use ethportal_api::HistoryContentKey;
+use ethportal_api::{HistoryContentItem, HistoryNetworkApiClient};
+use trin_types::enr::Enr;
 
 use crate::{
     jsonrpc::{validate_portal_offer, HISTORY_CONTENT_KEY, HISTORY_CONTENT_VALUE},

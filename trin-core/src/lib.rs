@@ -4,7 +4,6 @@
 pub mod locks;
 pub mod portalnet;
 pub mod socket;
-pub mod types;
 pub mod utils;
 
 #[macro_use]

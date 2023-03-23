@@ -1,3 +1,4 @@
+use crate::types::enr::Enr;
 use serde::{Deserialize, Serialize};
 use serde_hex::{SerHex, StrictPfx};
 use serde_json::Value;
@@ -23,9 +24,6 @@ impl Deref for NodeId {
         &self.0
     }
 }
-
-/// Node ENR
-pub type Enr = enr::Enr<enr::CombinedKey>;
 
 /// Discv5 bucket
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
