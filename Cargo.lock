@@ -6339,7 +6339,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2189fee3a270a59241c510089f98a6e6c25e3e0e7d36db7344ff0526806c7df4"
 dependencies = [
  "async-trait",
- "delay_map",
+ "delay_map 0.1.2",
  "futures 0.3.27",
  "rand 0.8.5",
  "tokio",

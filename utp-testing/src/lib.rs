@@ -65,7 +65,7 @@ impl RpcServer for TestApp {
                 max_packet_size: 1024,
                 max_conn_attempts: 3,
                 max_idle_timeout: Duration::from_secs(16),
-                initial_timeout: Duration::from_secs(1),
+                initial_timeout: Duration::from_millis(1250),
                 ..Default::default()
             };
             let mut conn = utp.accept_with_cid(cid, utp_config).await.unwrap();
@@ -102,7 +102,7 @@ impl RpcServer for TestApp {
             max_packet_size: 1024,
             max_conn_attempts: 3,
             max_idle_timeout: Duration::from_secs(16),
-            initial_timeout: Duration::from_secs(1),
+            initial_timeout: Duration::from_millis(1250),
             ..Default::default()
         };
         tokio::spawn(async move {
