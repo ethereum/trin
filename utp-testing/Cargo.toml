@@ -22,7 +22,7 @@ trin-core = { path = "../trin-core" }
 trin-types = { path = "../trin-types" }
 trin-utils = { path = "../trin-utils" }
 tokio = {version = "1.14.0", features = ["full"]}
-utp-rs = "0.1.0-alpha.2"
+utp-rs = "0.1.0-alpha.3"
 
 [[bin]]
 name = "utp-test-app"

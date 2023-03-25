@@ -27,7 +27,7 @@ trin-core = { path = "../trin-core" }
 trin-types = { path = "../trin-types" }
 trin-utils = { path = "../trin-utils" }
 trin-validation = { path = "../trin-validation" }
-utp-rs = "0.1.0-alpha.2"
+utp-rs = "0.1.0-alpha.3"
 
 [dev-dependencies]
 env_logger = "0.9.0"
