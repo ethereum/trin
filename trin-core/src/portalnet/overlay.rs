@@ -86,7 +86,7 @@ pub struct OverlayProtocol<TContentKey, TMetric, TValidator, TStore> {
     pub discovery: Arc<Discovery>,
     /// The data store.
     pub store: Arc<RwLock<TStore>>,
-    /// The data radius of the local node.
+    /// The user-defined data radius of the local node. This value is not updated as storage fills.
     pub data_radius: Arc<Distance>,
     /// The overlay routing table of the local node.
     kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
