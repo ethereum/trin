@@ -1,7 +1,9 @@
 use ethportal_api::HistoryContentValue;
 use ethportal_api::HistoryNetworkApiClient;
 use ethportal_api::{BlockHeaderKey, HistoryContentKey};
+use serde_json::json;
 
+use crate::jsonrpc::HISTORY_CONTENT_VALUE;
 use crate::{Peertest, PeertestConfig};
 
 pub async fn test_paginate_local_storage(peertest_config: PeertestConfig, _peertest: &Peertest) {
@@ -25,10 +27,12 @@ pub async fn test_paginate_local_storage(peertest_config: PeertestConfig, _peert
 
     for content_key in content_keys.clone().into_iter() {
         // Store content to offer in the testnode db
+        let dummy_content_value: HistoryContentValue =
+            serde_json::from_value(json!(HISTORY_CONTENT_VALUE)).unwrap();
         let store_result = ipc_client
             .store(
                 serde_json::from_str(&content_key).unwrap(),
-                HistoryContentValue::Unknown("0x00".to_owned()),
+                dummy_content_value,
             )
             .await
             .unwrap();

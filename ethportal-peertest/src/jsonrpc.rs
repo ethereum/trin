@@ -8,6 +8,7 @@ use hyper::{self, Body, Client, Method, Request};
 use serde_json::{self, json, Value};
 use ssz::Encode;
 use tracing::{error, info};
+use trin_types::constants::CONTENT_ABSENT;
 
 use crate::{cli::PeertestConfig, Peertest};
 use trin_types::distance::Distance;
@@ -203,7 +204,7 @@ fn validate_discv5_node_info(val: &Value, _peertest: &Peertest) {
 fn validate_discv5_routing_table_info(val: &Value, _peertest: &Peertest) {
     let local_key = val.get("localNodeId").unwrap();
     assert!(local_key.is_string());
-    assert!(local_key.as_str().unwrap().contains("0x"));
+    assert!(local_key.as_str().unwrap().starts_with("0x"));
     assert!(val.get("buckets").unwrap().is_array());
 }
 
@@ -254,7 +255,7 @@ pub fn validate_portal_offer(result: AcceptInfo, _peertest: &Peertest) {
 }
 
 pub fn validate_portal_local_content(result: &Value, _peertest: &Peertest) {
-    assert_eq!(result.as_str().unwrap(), "0x0");
+    assert_eq!(result.as_str().unwrap(), CONTENT_ABSENT);
 }
 
 #[cfg(unix)]

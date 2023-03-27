@@ -12,5 +12,5 @@ authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 build = "build.rs"
 
 [dependencies]
-anyhow = "1.0.68"
 hex = "0.4.3"
+thiserror = "1.0.40"

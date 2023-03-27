@@ -1,4 +1,18 @@
-use anyhow::anyhow;
+use hex::FromHexError;
+use thiserror::Error;
+
+/// An error from a byte utils operation.
+#[derive(Clone, Debug, Error, PartialEq)]
+pub enum ByteUtilsError {
+    #[error("Hex string starts with {first_two}, expected 0x")]
+    WrongPrefix { first_two: String },
+
+    #[error("Unable to decode hex string {data} due to {source}")]
+    HexDecode { source: FromHexError, data: String },
+
+    #[error("Hex string is '{data}', expected to start with 0x")]
+    NoPrefix { data: String },
+}
 
 /// Encode hex with 0x prefix
 pub fn hex_encode<T: AsRef<[u8]>>(data: T) -> String {
@@ -6,14 +20,23 @@ pub fn hex_encode<T: AsRef<[u8]>>(data: T) -> String {
 }
 
 /// Decode hex with 0x prefix
-pub fn hex_decode(data: &str) -> anyhow::Result<Vec<u8>> {
-    let first_two = &data[..2];
-    match first_two {
-        "0x" => hex::decode(&data[2..]).map_err(|e| e.into()),
-        _ => Err(anyhow!(
-            "Hex strings must start with 0x, but found {first_two}"
-        )),
+pub fn hex_decode(data: &str) -> Result<Vec<u8>, ByteUtilsError> {
+    let first_two = data.get(..2).ok_or_else(|| ByteUtilsError::NoPrefix {
+        data: data.to_string(),
+    })?;
+
+    if first_two != "0x" {
+        return Err(ByteUtilsError::WrongPrefix {
+            first_two: first_two.to_string(),
+        });
     }
+
+    let post_prefix = data.get(2..).unwrap_or("");
+
+    hex::decode(post_prefix).map_err(|e| ByteUtilsError::HexDecode {
+        source: e,
+        data: data.to_string(),
+    })
 }
 
 /// Returns a compact hex-encoded `String` representation of `data`.
@@ -55,6 +78,17 @@ mod test {
         let to_decode = "b00f";
         let result = hex_decode(to_decode);
         assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "Hex string starts with b0, expected 0x".to_string()
+        );
+        assert_eq!(
+            error,
+            ByteUtilsError::WrongPrefix {
+                first_two: "b0".to_string()
+            }
+        );
     }
 
     #[test]
@@ -62,5 +96,82 @@ mod test {
         let to_decode = "0xb00g";
         let result = hex_decode(to_decode);
         assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "Unable to decode hex string 0xb00g due to Invalid character 'g' at position 3"
+                .to_string()
+        );
+        assert_eq!(
+            error,
+            ByteUtilsError::HexDecode {
+                source: FromHexError::InvalidHexCharacter { c: 'g', index: 3 },
+                data: "0xb00g".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn test_hex_decode_empty_string() {
+        let to_decode = "";
+        let result = hex_decode(to_decode);
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "Hex string is '', expected to start with 0x".to_string()
+        );
+        assert_eq!(
+            error,
+            ByteUtilsError::NoPrefix {
+                data: "".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn test_hex_decode_no_prefix() {
+        let to_decode = "0";
+        let result = hex_decode(to_decode);
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "Hex string is '0', expected to start with 0x".to_string()
+        );
+        assert_eq!(
+            error,
+            ByteUtilsError::NoPrefix {
+                data: "0".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn test_hex_decode_prefix_only_returns_empty_byte_vector() {
+        let to_decode = "0x";
+        let result = hex_decode(to_decode).unwrap();
+        assert_eq!(result, vec![]);
+        // Confirm this matches behaviour of hex crate.
+        assert_eq!(hex::decode("").unwrap(), vec![])
+    }
+
+    #[test]
+    fn test_hex_decode_odd_count() {
+        let to_decode = "0x0";
+        let result = hex_decode(to_decode);
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "Unable to decode hex string 0x0 due to Odd number of digits".to_string()
+        );
+        assert_eq!(
+            error,
+            ByteUtilsError::HexDecode {
+                source: FromHexError::OddLength,
+                data: "0x0".to_string()
+            }
+        );
     }
 }

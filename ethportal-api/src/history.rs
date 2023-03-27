@@ -8,7 +8,7 @@ use crate::types::{
 };
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
 use trin_types::content_key::HistoryContentKey;
-use trin_types::content_value::HistoryContentValue;
+use trin_types::content_value::{HistoryContentValue, PossibleHistoryContentValue};
 
 /// Portal History JSON-RPC endpoints
 #[rpc(client, server, namespace = "portal")]
@@ -63,7 +63,7 @@ pub trait HistoryNetworkApi {
     async fn recursive_find_content(
         &self,
         content_key: HistoryContentKey,
-    ) -> RpcResult<HistoryContentValue>;
+    ) -> RpcResult<PossibleHistoryContentValue>;
 
     /// Lookup a target content key in the network. Return tracing info.
     #[method(name = "historyTraceRecursiveFindContent")]
@@ -109,6 +109,8 @@ pub trait HistoryNetworkApi {
 
     /// Get a content from the local database
     #[method(name = "historyLocalContent")]
-    async fn local_content(&self, content_key: HistoryContentKey)
-        -> RpcResult<HistoryContentValue>;
+    async fn local_content(
+        &self,
+        content_key: HistoryContentKey,
+    ) -> RpcResult<PossibleHistoryContentValue>;
 }

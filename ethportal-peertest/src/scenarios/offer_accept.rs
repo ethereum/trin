@@ -1,12 +1,13 @@
-use std::{str::FromStr, thread, time};
+use std::str::FromStr;
 
 use serde_json::json;
 use tracing::{error, info};
 
-use ethportal_api::jsonrpsee::async_client::Client;
-use ethportal_api::HistoryContentKey;
-use ethportal_api::{HistoryContentValue, HistoryNetworkApiClient};
-use trin_types::enr::Enr;
+use ethportal_api::{
+    jsonrpsee::async_client::Client, HistoryContentKey, HistoryContentValue,
+    HistoryNetworkApiClient,
+};
+use trin_types::{content_value::PossibleHistoryContentValue, enr::Enr};
 
 use crate::{
     jsonrpc::{validate_portal_offer, HISTORY_CONTENT_KEY, HISTORY_CONTENT_VALUE},
@@ -48,7 +49,11 @@ pub async fn test_unpopulated_offer(peertest_config: PeertestConfig, peertest: &
     validate_portal_offer(result, peertest);
 
     // Check if the stored content value in bootnode's DB matches the offered
-    let received_content_value = wait_for_content(ipc_client, content_key).await;
+    let response = wait_for_content(ipc_client, content_key).await;
+    let received_content_value = match response {
+        PossibleHistoryContentValue::ContentPresent(c) => c,
+        PossibleHistoryContentValue::ContentAbsent => panic!("Expected content to be found"),
+    };
     assert_eq!(
         content_value, received_content_value,
         "The received content {received_content_value:?}, must match the expected {content_value:?}",
@@ -84,7 +89,11 @@ pub async fn test_populated_offer(peertest_config: PeertestConfig, peertest: &Pe
     validate_portal_offer(result, peertest);
 
     // Check if the stored content value in bootnode's DB matches the offered
-    let received_content_value = wait_for_content(ipc_client, content_key).await;
+    let response = wait_for_content(ipc_client, content_key).await;
+    let received_content_value = match response {
+        PossibleHistoryContentValue::ContentPresent(c) => c,
+        PossibleHistoryContentValue::ContentAbsent => panic!("Expected content to be found"),
+    };
     assert_eq!(
         content_value, received_content_value,
         "The received content {received_content_value:?}, must match the expected {content_value:?}",
@@ -95,20 +104,25 @@ pub async fn test_populated_offer(peertest_config: PeertestConfig, peertest: &Pe
 async fn wait_for_content(
     ipc_client: Client,
     content_key: HistoryContentKey,
-) -> HistoryContentValue {
-    let mut received_content_value = ipc_client.local_content(content_key.clone()).await.unwrap();
+) -> PossibleHistoryContentValue {
+    let mut received_content_value = ipc_client.local_content(content_key.clone()).await;
 
     let mut counter = 0;
-    while received_content_value == HistoryContentValue::Unknown("".to_owned()) && counter < 5 {
-        error!("Retrying after 0.5sec, because content should have been present");
-        thread::sleep(time::Duration::from_millis(500));
-        received_content_value = ipc_client
-            .local_content(serde_json::from_value(json!(content_key)).unwrap())
-            .await
-            .unwrap();
 
+    // If content is absent an error will be returned.
+    while counter < 5 {
+        let message = match received_content_value {
+            x @ Ok(PossibleHistoryContentValue::ContentPresent(_)) => return x.unwrap(),
+            Ok(PossibleHistoryContentValue::ContentAbsent) => {
+                "absent content response received".to_string()
+            }
+            Err(e) => format!("received an error {e}"),
+        };
+        error!("Retrying after 0.5s, because {message}");
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        received_content_value = ipc_client.local_content(content_key.clone()).await;
         counter += 1;
     }
 
-    received_content_value
+    received_content_value.unwrap()
 }

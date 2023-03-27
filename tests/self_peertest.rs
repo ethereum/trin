@@ -21,8 +21,9 @@ mod test {
 
         let peertest_config = peertest::PeertestConfig::default();
         let test_ip_addr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
-        let test_port = 9000;
-        let external_addr = format!("{test_ip_addr}:{test_port}");
+        // Use an uncommon port for the peertest to avoid clashes.
+        let test_discovery_port = 8999;
+        let external_addr = format!("{test_ip_addr}:{test_discovery_port}");
 
         // Run a client, to be tested
         let trin_config = TrinConfig::new_from(
@@ -35,6 +36,8 @@ mod test {
                 "--web3-ipc-path",
                 &peertest_config.target_ipc_path,
                 "--ephemeral",
+                "--discovery-port",
+                test_discovery_port.to_string().as_ref(),
             ]
             .iter(),
         )
@@ -61,6 +64,10 @@ mod test {
         peertest::scenarios::offer_accept::test_populated_offer(peertest_config.clone(), &peertest)
             .await;
         peertest::scenarios::find::test_trace_recursive_find_content(
+            peertest_config.clone(),
+            &peertest,
+        );
+        peertest::scenarios::find::test_trace_recursive_find_content_for_absent_content(
             peertest_config.clone(),
             &peertest,
         );

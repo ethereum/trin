@@ -6,8 +6,8 @@ use ssz::{self, Decode, Encode};
 use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, FixedVector, VariableList};
 use std::fmt;
+use thiserror::Error;
 
-use anyhow::anyhow;
 use quickcheck::{Arbitrary, Gen};
 use trin_utils::bytes::{hex_decode, hex_encode, hex_encode_compact};
 
@@ -39,12 +39,15 @@ impl Arbitrary for IdentityContentKey {
 }
 
 impl TryFrom<Vec<u8>> for IdentityContentKey {
-    type Error = anyhow::Error;
+    type Error = ContentKeyError;
 
     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
         // Require that length of input is equal to 32.
         if value.len() != 32 {
-            return Err(anyhow!("Input Vec has invalid length"));
+            return Err(ContentKeyError::InvalidLength {
+                received: value.len(),
+                expected: 32,
+            });
         }
 
         // The following will not panic because of the length check above.
@@ -109,8 +112,6 @@ pub enum HistoryContentKey {
     BlockReceipts(BlockReceiptsKey),
     /// An epoch header accumulator.
     EpochAccumulator(EpochAccumulatorKey),
-    /// Unknown content key value
-    Unknown(Vec<u8>),
 }
 
 impl Serialize for HistoryContentKey {
@@ -138,11 +139,26 @@ impl<'de> Deserialize<'de> for HistoryContentKey {
 
         let ssz_bytes = hex_decode(&data).map_err(de::Error::custom)?;
 
-        match HistoryContentKey::from_ssz_bytes(&ssz_bytes) {
-            Ok(content_key) => Ok(content_key),
-            Err(_) => Ok(HistoryContentKey::Unknown(ssz_bytes)),
-        }
+        HistoryContentKey::from_ssz_bytes(&ssz_bytes)
+            .map_err(|e| ContentKeyError::DecodeSsz {
+                decode_error: e,
+                input: hex_encode(ssz_bytes),
+            })
+            .map_err(serde::de::Error::custom)
     }
+}
+
+/// An error decoding a portal network content key.
+#[derive(Clone, Debug, Error, PartialEq)]
+pub enum ContentKeyError {
+    #[error("unable to decode key SSZ bytes {input} due to {decode_error:?}")]
+    DecodeSsz {
+        decode_error: ssz::DecodeError,
+        input: String,
+    },
+
+    #[error("Input Vec has length {received}, expected {expected})")]
+    InvalidLength { received: usize, expected: usize },
 }
 
 /// A key for a block header.
@@ -187,12 +203,14 @@ impl From<HistoryContentKey> for Vec<u8> {
     }
 }
 
-impl From<Vec<u8>> for HistoryContentKey {
-    fn from(value: Vec<u8>) -> Self {
-        match HistoryContentKey::from_ssz_bytes(&value) {
-            Ok(key) => key,
-            Err(_) => HistoryContentKey::Unknown(value),
-        }
+impl TryFrom<Vec<u8>> for HistoryContentKey {
+    type Error = ContentKeyError;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        HistoryContentKey::from_ssz_bytes(&value).map_err(|e| ContentKeyError::DecodeSsz {
+            decode_error: e,
+            input: hex_encode(value),
+        })
     }
 }
 
@@ -218,9 +236,6 @@ impl fmt::Display for HistoryContentKey {
                     "EpochAccumulator {{ epoch_hash: {} }}",
                     hex_encode_compact(acc.epoch_hash.as_fixed_bytes())
                 )
-            }
-            Self::Unknown(value) => {
-                format!("Unknown {{ {} }}", hex_encode_compact(value))
             }
         };
 
@@ -255,7 +270,6 @@ impl OverlayContentKey for HistoryContentKey {
                 bytes.push(0x03);
                 bytes.extend_from_slice(&k.epoch_hash.0);
             }
-            HistoryContentKey::Unknown(k) => bytes.extend_from_slice(k),
         }
 
         bytes
@@ -604,6 +618,17 @@ mod test {
         assert_eq!(
             serde_json::to_string(&content_key).unwrap(),
             content_key_json
+        );
+    }
+
+    #[test]
+    fn ser_de_block_body_failure_prints_debuggable_data() {
+        let content_key_json = "\"0x0123456789\"";
+        let content_key_result = serde_json::from_str::<HistoryContentKey>(content_key_json);
+        // Test the error Display representation
+        assert_eq!(
+            content_key_result.as_ref().unwrap_err().to_string(),
+            "unable to decode key SSZ bytes 0x0123456789 due to InvalidByteLength { len: 4, expected: 32 }"
         );
     }
 

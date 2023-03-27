@@ -3882,6 +3882,7 @@ dependencies = [
  "ethportal-api",
  "portalnet",
  "reth-ipc",
+ "serde_json",
  "tokio",
  "trin-types",
  "trin-utils",
@@ -5196,6 +5197,7 @@ dependencies = [
  "snap",
  "structopt",
  "test-log",
+ "thiserror",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -5211,8 +5213,8 @@ dependencies = [
 name = "trin-utils"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "hex",
+ "thiserror",
 ]
 
 [[package]]
