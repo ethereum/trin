@@ -522,4 +522,25 @@ mod test {
         assert_eq!(epoch_acc.len(), EPOCH_SIZE);
         assert_eq!(epoch_acc.as_ssz_bytes(), epoch_acc_ssz);
     }
+
+    #[test]
+    fn body_round_trip() {
+        let body_ssz = fs::read("../trin-types/src/assets/trin/block_body_14764013.bin").unwrap();
+        let body = BlockBody::decode(&body_ssz).unwrap();
+        assert_eq!(body.uncles.len(), 1);
+        assert_eq!(body.transactions.len(), 19);
+        let mut encoded = vec![];
+        body.encode(&mut encoded);
+        assert_eq!(encoded, body_ssz);
+    }
+
+    #[test]
+    fn receipts_round_trip() {
+        let receipts_ssz = fs::read("../trin-types/src/assets/trin/receipts_14764013.bin").unwrap();
+        let receipts: Vec<Receipt> = ContentItem::decode(&receipts_ssz).unwrap();
+        assert_eq!(receipts.len(), 19);
+        let mut encoded = vec![];
+        ContentItem::encode(&receipts, &mut encoded);
+        assert_eq!(encoded, receipts_ssz);
+    }
 }
