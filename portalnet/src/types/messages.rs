@@ -20,7 +20,7 @@ use trin_types::bytes::ByteList;
 use trin_types::content_key::RawContentKey;
 use trin_types::distance::Distance;
 use trin_types::enr::{Enr, SszEnr};
-use trin_utils::bytes::{hex_decode, hex_encode};
+use trin_utils::bytes::{hex_decode, hex_encode, ByteUtilsError};
 
 /// Custom payload element of Ping and Pong overlay messages
 #[derive(Debug, PartialEq, Clone)]
@@ -92,7 +92,7 @@ impl ssz::Encode for CustomPayload {
 #[derive(Error, Debug)]
 pub enum MessageDecodeError {
     #[error("Failed to decode message from SSZ bytes")]
-    Ssz,
+    Ssz { decode_err: DecodeError },
 
     #[error("Unknown message id")]
     MessageId,
@@ -102,12 +102,6 @@ pub enum MessageDecodeError {
 
     #[error("Invalid message type")]
     Type,
-}
-
-impl From<DecodeError> for MessageDecodeError {
-    fn from(_err: DecodeError) -> Self {
-        Self::Ssz
-    }
 }
 
 #[derive(Error, Debug)]
@@ -152,8 +146,8 @@ impl Default for PortalnetConfig {
 
 #[derive(Error, Debug)]
 pub enum ProtocolIdError {
-    #[error("Unable to decode protocol id to bytes: {0}")]
-    Decode(anyhow::Error),
+    #[error("Unable to decode protocol id to bytes")]
+    Decode(ByteUtilsError),
 
     #[error("invalid protocol id")]
     Invalid,
@@ -214,11 +208,7 @@ impl TryFrom<ProtocolId> for Vec<u8> {
             ProtocolId::CanonicalIndices => hex_decode("0x500E"),
             ProtocolId::Utp => hex_decode("0x757470"),
         };
-
-        match bytes {
-            Ok(bytes) => Ok(bytes),
-            Err(e) => Err(ProtocolIdError::Decode(e)),
-        }
+        bytes.map_err(ProtocolIdError::Decode)
     }
 }
 
@@ -248,10 +238,7 @@ impl TryFrom<Vec<u8>> for Message {
     type Error = MessageDecodeError;
 
     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-        match Message::from_ssz_bytes(&value) {
-            Ok(key) => Ok(key),
-            Err(err) => Err(MessageDecodeError::from(err)),
-        }
+        Message::from_ssz_bytes(&value).map_err(|e| MessageDecodeError::Ssz { decode_err: e })
     }
 }
 

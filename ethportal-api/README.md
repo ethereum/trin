@@ -11,7 +11,7 @@ Enable `client` feature of `ethportal-api` crate.
 ```rust,no_run
 use ethportal_api::jsonrpsee::http_client::HttpClientBuilder;
 use ethportal_api::{
-    HistoryContentItem, HistoryContentKey, HistoryNetworkApiClient, Web3ApiClient,
+    HistoryContentValue, HistoryContentKey, HistoryNetworkApiClient, Web3ApiClient,
 };
 
 #[tokio::main]
@@ -31,7 +31,7 @@ async fn main() {
 
     // Deserialise to a portal history content key type from a hex string
     let content_key: HistoryContentKey = serde_json::from_str(content_key_json).unwrap();
-    let content_item: HistoryContentItem = serde_json::from_str(content_item_json).unwrap();
+    let content_item: HistoryContentValue = serde_json::from_str(content_item_json).unwrap();
 
     // Store content to remote node, call portal_historyStore endpoint
     let result: bool = client
@@ -40,8 +40,8 @@ async fn main() {
         .unwrap();
     assert!(result);
 
-    // Call portal_historyLocalContent endpoint and deserialize to `HistoryContentItem::BlockHeaderWithProof` type
-    let result: HistoryContentItem = client.local_content(content_key).await.unwrap();
+    // Call portal_historyLocalContent endpoint and deserialize to `HistoryContentValue::BlockHeaderWithProof` type
+    let result: HistoryContentValue = client.local_content(content_key).await.unwrap();
     assert_eq!(result, content_item);
 }
 ```

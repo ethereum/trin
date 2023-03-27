@@ -3,6 +3,7 @@ use std::sync::Arc;
 use serde_json::{json, Value};
 use tokio::sync::mpsc;
 use tracing::error;
+use trin_types::constants::CONTENT_ABSENT;
 
 use crate::network::HistoryNetwork;
 use portalnet::storage::ContentStore;
@@ -12,7 +13,7 @@ use crate::utils::bucket_entries_to_json;
 use ethportal_api::types::portal::{
     AcceptInfo, Distance, FindNodesInfo, NodeInfo, PongInfo, TraceContentInfo,
 };
-use ethportal_api::{ContentValue, HistoryContentValue};
+use ethportal_api::ContentValue;
 use ethportal_api::{HistoryContentKey, OverlayContentKey};
 use ssz::Encode;
 use trin_types::content_key::RawContentKey;
@@ -33,20 +34,20 @@ impl HistoryRequestHandler {
             match request.endpoint {
                 HistoryEndpoint::LocalContent(content_key) => {
                     let response =
-                                match &self.network.overlay.store.read().get(&content_key)
-                                {
-                                    Ok(val) => match val {
-                                        Some(val) => {
-                                            Ok(Value::String(hex_encode(val.clone())))
-                                        }
-                                        None => {
-                                            Ok(Value::Null)
-                                        }
-                                    },
-                                    Err(err) => Err(format!(
-                                        "Database error while looking for content key in local storage: {content_key:?}, with error: {err}",
-                                    )),
-                                };
+                        match &self.network.overlay.store.read().get(&content_key)
+                        {
+                            Ok(val) => match val {
+                                Some(val) => {
+                                    Ok(Value::String(hex_encode(val.clone())))
+                                }
+                                None => {
+                                    Ok(Value::String(CONTENT_ABSENT.to_string()))
+                                }
+                            },
+                            Err(err) => Err(format!(
+                                "Database error while looking for content key in local storage: {content_key:?}, with error: {err}",
+                            )),
+                        };
                     let _ = request.resp.send(response);
                 }
                 HistoryEndpoint::PaginateLocalContentKeys(offset, limit) => {
@@ -192,7 +193,8 @@ impl HistoryRequestHandler {
                     None
                 }
             };
-        let (content, closest_nodes) = match local_content {
+        // Get data from peer
+        let (possible_content_bytes, closest_nodes) = match local_content {
             Some(val) => (Some(val), vec![]),
             None => {
                 self.network
@@ -201,10 +203,16 @@ impl HistoryRequestHandler {
                     .await
             }
         };
-        let content = content.unwrap_or_default();
 
+        // Format as string.
+        let content_response_string = match possible_content_bytes {
+            Some(bytes) => Value::String(hex_encode(bytes)),
+            None => Value::String(CONTENT_ABSENT.to_string()), // "0x"
+        };
+
+        // If tracing is not required, return content.
         if !is_trace {
-            return Ok(Value::String(hex_encode(content)));
+            return Ok(content_response_string);
         }
 
         // Construct trace response
@@ -226,16 +234,8 @@ impl HistoryRequestHandler {
             })
             .collect();
 
-        let content = match HistoryContentValue::decode(&content) {
-            Ok(val) => val,
-            Err(err) => {
-                return Err(format!(
-                    "Error decoding content value: {content:?} with error: {err:?}"
-                ))
-            }
-        };
         Ok(json!(TraceContentInfo {
-            content,
+            content: serde_json::from_value(content_response_string).map_err(|e| e.to_string())?,
             route: closest_nodes,
         }))
     }

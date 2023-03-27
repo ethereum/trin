@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Result};
 use discv5::enr::{CombinedKey, EnrBuilder};
 use ethereum_types::H256;
 use rocksdb::IteratorMode;
@@ -16,6 +16,7 @@ use trin_types::execution::accumulator::EpochAccumulator;
 use trin_types::execution::block_body::BlockBody;
 use trin_types::execution::header::HeaderWithProof;
 use trin_types::execution::receipts::Receipts;
+use trin_utils::bytes::hex_encode;
 
 ///
 /// This script will iterate through all content id / key pairs in rocksd & meta db.
@@ -24,7 +25,7 @@ use trin_types::execution::receipts::Receipts;
 /// shouldn't be a problem, but as we add support for more sub-networks this script will
 /// need to be updated to avoid panicking.
 ///
-pub fn main() -> Result<(), Box<dyn std::error::Error>> {
+pub fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
     let purge_config = PurgeConfig::from_args();
 
@@ -59,23 +60,41 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             },
             PurgeMode::Invalid => {
                 // naked unwrap since we shouldn't be storing any invalid content keys
-                let key = match storage.lookup_content_key(content_id).unwrap() {
-                    Some(val) => val,
-                    None => {
+                let key_bytes = match storage.lookup_content_key(content_id) {
+                    Ok(Some(k)) => k,
+                    Ok(None) => {
                         warn!(
-                            "Couldn't find corresponding content key in meta db for content id: {:?}",
-                            content_id
+                            content.id = hex_encode(content_id),
+                            "Couldn't find corresponding content key in meta db",
+                        );
+                        continue;
+                    }
+                    Err(e) => {
+                        warn!(
+                            content.id = hex_encode(content_id),
+                            "Error during lookup of content key in meta db {e}",
                         );
                         continue;
                     }
                 };
-                let content_key = HistoryContentKey::try_from(key).unwrap();
+                let key_hex = hex_encode(&key_bytes);
+                let content_key = match HistoryContentKey::try_from(key_bytes) {
+                    Ok(key) => key,
+                    Err(e) => {
+                        warn!(
+                            content.key = key_hex,
+                            "Could not convert bytes into content key {e}"
+                        );
+                        continue;
+                    }
+                };
+
                 if !is_content_valid(&content_key, &value.into_vec()) {
                     match storage.evict(content_id) {
                         Ok(_) => remove_count += 1,
                         Err(err) => warn!(
                             "Error occurred while evicting content key: {:?} - {:?}",
-                            content_key, err
+                            key_hex, err
                         ),
                     }
                 }
@@ -97,10 +116,6 @@ fn is_content_valid(content_key: &HistoryContentKey, value: &[u8]) -> bool {
         HistoryContentKey::BlockBody(_) => BlockBody::from_ssz_bytes(value).is_ok(),
         HistoryContentKey::BlockReceipts(_) => Receipts::from_ssz_bytes(value).is_ok(),
         HistoryContentKey::EpochAccumulator(_) => EpochAccumulator::from_ssz_bytes(value).is_ok(),
-        HistoryContentKey::Unknown(_) => {
-            warn!("Found invalid content key: {content_key}");
-            false
-        }
     }
 }
 

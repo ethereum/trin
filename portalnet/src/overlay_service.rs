@@ -1471,9 +1471,11 @@ where
         let content_values = portal_wire::decode_content_payload(payload)?;
 
         // Accepted content keys len should match content value len
-        if content_keys.len() != content_values.len() {
+        let keys_len = content_keys.len();
+        let vals_len = content_values.len();
+        if keys_len != vals_len {
             return Err(anyhow!(
-                "Content keys len doesn't match content values len."
+                "Content keys len {keys_len} doesn't match content values len {vals_len}."
             ));
         }
 

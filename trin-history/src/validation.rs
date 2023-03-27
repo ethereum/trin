@@ -110,7 +110,6 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                 }
                 Ok(())
             }
-            &ethportal_api::HistoryContentKey::Unknown(_) => todo!(),
         }
     }
 }

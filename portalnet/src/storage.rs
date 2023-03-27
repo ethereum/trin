@@ -1,6 +1,6 @@
 use std::{
     convert::TryInto,
-    fmt, fs,
+    fs,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -16,12 +16,13 @@ use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rocksdb::{Options, DB};
 use rusqlite::params;
+use thiserror::Error;
 use tracing::{debug, error, info};
 
 use crate::{types::messages::ProtocolId, utils::db::get_data_dir};
-use trin_types::content_key::{HistoryContentKey, OverlayContentKey};
+use trin_types::content_key::{ContentKeyError, HistoryContentKey, OverlayContentKey};
 use trin_types::distance::{Distance, Metric, XorMetric};
-use trin_utils::bytes::{hex_decode, hex_encode};
+use trin_utils::bytes::{hex_decode, hex_encode, ByteUtilsError};
 
 // TODO: Replace enum with generic type parameter. This will require that we have a way to
 // associate a "find farthest" query with the generic Metric.
@@ -31,61 +32,36 @@ pub enum DistanceFunction {
 }
 
 /// An error from an operation on a `ContentStore`.
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ContentStoreError {
-    /// An error from the underlying database.
+    #[error("An error from the underlying database.")]
     Database(String),
-    /// An IO error.
-    Io(std::io::Error),
+    #[error("IO error")]
+    Io(#[from] std::io::Error),
     /// Unable to store content because it does not fall within the store's radius.
+    #[error("radius {radius} insufficient to store content at distance {distance}")]
     InsufficientRadius {
         radius: Distance,
         distance: Distance,
     },
     /// Unable to store or retrieve data because it is invalid.
-    InvalidData(String),
-}
+    #[error("data invalid {message}")]
+    InvalidData { message: String },
 
-impl fmt::Display for ContentStoreError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let message = match self {
-            Self::Database(err) => format!("database error {}", err),
-            Self::Io(err) => format!("IO error {}", err),
-            Self::InsufficientRadius { radius, distance } => format!(
-                "radius {} insufficient to store content at distance {}",
-                radius, distance
-            ),
-            Self::InvalidData(err) => format!("data invalid {}", err),
-        };
+    #[error("rocksdb error {0}")]
+    Rocksdb(#[from] rocksdb::Error),
 
-        write!(f, "{}", message)
-    }
-}
+    #[error("rusqlite error {0}")]
+    Rusqlite(#[from] rusqlite::Error),
 
-impl std::error::Error for ContentStoreError {}
+    #[error("r2d2 error {0}")]
+    R2D2(#[from] r2d2::Error),
 
-impl From<rocksdb::Error> for ContentStoreError {
-    fn from(err: rocksdb::Error) -> Self {
-        Self::Database(format!("(rocksdb) {err}"))
-    }
-}
+    #[error("unable to use byte utils {0}")]
+    ByteUtilsError(#[from] ByteUtilsError),
 
-impl From<rusqlite::Error> for ContentStoreError {
-    fn from(err: rusqlite::Error) -> Self {
-        Self::Database(format!("(sqlite) {err}"))
-    }
-}
-
-impl From<r2d2::Error> for ContentStoreError {
-    fn from(err: r2d2::Error) -> Self {
-        Self::Database(format!("(r2d2) {err}"))
-    }
-}
-
-impl From<std::io::Error> for ContentStoreError {
-    fn from(err: std::io::Error) -> Self {
-        Self::Io(err)
-    }
+    #[error("unable to use content key {0}")]
+    ContentKey(#[from] ContentKeyError),
 }
 
 /// A data store for Portal Network content (data).
@@ -334,29 +310,31 @@ impl PortalStorage {
 
     /// Returns a paginated list of all available content keys from local storage (from any
     /// subnetwork) according to the provided offset and limit.
-    pub fn paginate(&self, offset: &u64, limit: &u64) -> anyhow::Result<PaginateLocalContentInfo> {
+    pub fn paginate(
+        &self,
+        offset: &u64,
+        limit: &u64,
+    ) -> Result<PaginateLocalContentInfo, ContentStoreError> {
         let conn = self.sql_connection_pool.get()?;
         let mut query = conn.prepare(PAGINATE_QUERY)?;
 
-        let content_keys: Result<Vec<HistoryContentKey>, rusqlite::Error> = query
+        let content_keys: Result<Vec<HistoryContentKey>, ContentStoreError> = query
             .query_map(
                 &[
                     (":offset", offset.to_string().as_str()),
                     (":limit", limit.to_string().as_str()),
                 ],
                 |row| {
-                    Ok({
-                        let row: String = row.get(0)?;
-                        // value is stored without 0x prefix, so we must add it
-                        let row = format!("0x{}", row);
-                        let bytes: Vec<u8> = hex_decode(&row).map_err(|err|
-                            // TODO: This is a hack to get around the fact that rusqlite doesn't
-                            // support returning a custom error type. We should fix this.
-                            rusqlite::Error::InvalidParameterName(err.to_string()))?;
-                        HistoryContentKey::from(bytes)
-                    })
+                    let row: String = row.get(0)?;
+                    Ok(row)
                 },
             )?
+            .map(|row| {
+                // value is stored without 0x prefix, so we must add it
+                let bytes: Vec<u8> = hex_decode(&format!("0x{}", row?))
+                    .map_err(ContentStoreError::ByteUtilsError)?;
+                HistoryContentKey::try_from(bytes).map_err(ContentStoreError::ContentKey)
+            })
             .collect();
         Ok(PaginateLocalContentInfo {
             content_keys: content_keys?,
@@ -372,9 +350,9 @@ impl PortalStorage {
             .collect();
         match result?.first() {
             Some(val) => Ok(val.0),
-            None => Err(ContentStoreError::InvalidData(
-                "Invalid total entries count returned from sql query.".to_string(),
-            )),
+            None => Err(ContentStoreError::InvalidData {
+                message: "Invalid total entries count returned from sql query.".to_string(),
+            }),
         }
     }
 
@@ -482,17 +460,16 @@ impl PortalStorage {
         let conn = self.sql_connection_pool.get()?;
         let mut query = conn.prepare(CONTENT_KEY_LOOKUP_QUERY)?;
         let id = id.to_vec();
-        let result: Result<Vec<HistoryContentKey>, rusqlite::Error> = query
+        let result: Result<Vec<HistoryContentKey>, ContentStoreError> = query
             .query_map([id], |row| {
                 let row: String = row.get(0)?;
-                // value is stored without 0x prefix, so we must add it
-                let row = format!("0x{}", row);
-                let bytes: Vec<u8> = hex_decode(&row).map_err(|err|
-                    // TODO: This is a hack to get around the fact that rusqlite doesn't
-                    // support returning a custom error type. We should fix this.
-                    rusqlite::Error::InvalidParameterName(err.to_string()))?;
-                Ok(HistoryContentKey::from(bytes))
+                Ok(row)
             })?
+            .map(|row| {
+                // value is stored without 0x prefix, so we must add it
+                let bytes: Vec<u8> = hex_decode(&format!("0x{}", row?))?;
+                HistoryContentKey::try_from(bytes).map_err(ContentStoreError::ContentKey)
+            })
             .collect();
 
         match result?.first() {
@@ -536,9 +513,9 @@ impl PortalStorage {
         let content_id_as_u32: u32 = Self::byte_vector_to_u32(content_id.to_vec());
         let value_size = value.len();
         if content_key.starts_with("0x") {
-            return Err(ContentStoreError::InvalidData(
-                "Content key should not start with 0x".to_string(),
-            ));
+            return Err(ContentStoreError::InvalidData {
+                message: "Content key should not start with 0x".to_string(),
+            });
         }
         match self.sql_connection_pool.get()?.execute(
             INSERT_QUERY,
@@ -620,7 +597,7 @@ impl PortalStorage {
                     // Received data of size other than 32 bytes.
                     length => {
                         let err = format!("content ID of length {} != 32", length);
-                        return Err(ContentStoreError::InvalidData(err));
+                        return Err(ContentStoreError::InvalidData { message: err });
                     }
                 };
                 result_vec

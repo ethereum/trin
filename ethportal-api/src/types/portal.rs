@@ -2,7 +2,7 @@ use crate::types::enr::Enr;
 use serde::{Deserialize, Serialize};
 use ssz_types::{typenum, BitList};
 use trin_types::content_key::HistoryContentKey;
-use trin_types::content_value::HistoryContentValue;
+use trin_types::content_value::{HistoryContentValue, PossibleHistoryContentValue};
 
 pub type DataRadius = ethereum_types::U256;
 pub type Distance = ethereum_types::U256;
@@ -50,11 +50,14 @@ pub struct AcceptInfo {
     pub content_keys: BitList<typenum::U8>,
 }
 
-/// Response for TraceRecursiveFindContent endpoint
+/// Parsed response for TraceRecursiveFindContent endpoint
+///
+/// The RPC response encodes absent content as "0x". This struct
+/// represents the content info, using None for absent content.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TraceContentInfo {
-    pub content: HistoryContentValue,
+    pub content: PossibleHistoryContentValue,
     pub route: Vec<NodeInfo>,
 }
 

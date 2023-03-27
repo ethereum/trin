@@ -1,7 +1,5 @@
 use crate::jsonrpsee::core::{async_trait, Error, RpcResult};
 use anyhow::anyhow;
-use ethportal_api::jsonrpsee::core::__reexports::serde_json::from_value;
-use ethportal_api::jsonrpsee::core::__reexports::serde_json::Value;
 use ethportal_api::types::discv5::{NodeId, RoutingTableInfo};
 use ethportal_api::types::portal::{
     AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
@@ -10,7 +8,10 @@ use ethportal_api::types::portal::{
 use ethportal_api::HistoryContentKey;
 use ethportal_api::HistoryContentValue;
 use ethportal_api::HistoryNetworkApiServer;
+use serde_json::{from_value, Value};
 use tokio::sync::mpsc;
+use trin_types::constants::CONTENT_ABSENT;
+use trin_types::content_value::PossibleHistoryContentValue;
 use trin_types::enr::Enr;
 use trin_types::jsonrpc::endpoints::HistoryEndpoint;
 use trin_types::jsonrpc::request::HistoryJsonRpcRequest;
@@ -123,11 +124,14 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
     async fn recursive_find_content(
         &self,
         content_key: HistoryContentKey,
-    ) -> RpcResult<HistoryContentValue> {
+    ) -> RpcResult<PossibleHistoryContentValue> {
         let endpoint = HistoryEndpoint::RecursiveFindContent(content_key);
         let result = self.proxy_query_to_history_subnet(endpoint).await?;
+        if result == serde_json::Value::String(CONTENT_ABSENT.to_string()) {
+            return Ok(PossibleHistoryContentValue::ContentAbsent);
+        };
         let result: HistoryContentValue = from_value(result)?;
-        Ok(result)
+        Ok(PossibleHistoryContentValue::ContentPresent(result))
     }
 
     /// Lookup a target content key in the network. Return tracing info.
@@ -137,8 +141,8 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
     ) -> RpcResult<TraceContentInfo> {
         let endpoint = HistoryEndpoint::TraceRecursiveFindContent(content_key);
         let result = self.proxy_query_to_history_subnet(endpoint).await?;
-        let result: TraceContentInfo = from_value(result)?;
-        Ok(result)
+        let info: TraceContentInfo = from_value(result)?;
+        Ok(info)
     }
 
     /// Pagination of local content keys
@@ -192,18 +196,18 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
         Ok(result)
     }
 
-    /// Get a content from the local database
+    /// Get a content from the local database.
     async fn local_content(
         &self,
         content_key: HistoryContentKey,
-    ) -> RpcResult<HistoryContentValue> {
+    ) -> RpcResult<PossibleHistoryContentValue> {
         let endpoint = HistoryEndpoint::LocalContent(content_key);
         let result = self.proxy_query_to_history_subnet(endpoint).await?;
-        let result: HistoryContentValue = match result {
-            Value::Null => HistoryContentValue::Unknown(String::from("")),
-            other => from_value(other)?,
+        if result == serde_json::Value::String(CONTENT_ABSENT.to_string()) {
+            return Ok(PossibleHistoryContentValue::ContentAbsent);
         };
-        Ok(result)
+        let content: HistoryContentValue = from_value(result)?;
+        Ok(PossibleHistoryContentValue::ContentPresent(content))
     }
 }
 
