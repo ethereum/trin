@@ -228,8 +228,7 @@ pub struct PortalStorage {
     db: Arc<rocksdb::DB>,
     sql_connection_pool: Pool<SqliteConnectionManager>,
     distance_fn: DistanceFunction,
-    metrics: Option<StorageMetrics>,
-    protocol: ProtocolId,
+    metrics: StorageMetrics,
 }
 
 impl ContentStore for PortalStorage {
@@ -280,8 +279,7 @@ impl PortalStorage {
             db: config.db,
             sql_connection_pool: config.sql_connection_pool,
             distance_fn: config.distance_fn,
-            metrics: None,
-            protocol,
+            metrics: StorageMetrics::new(&protocol),
         };
 
         // Check whether we already have data, and use it to set radius
@@ -296,34 +294,23 @@ impl PortalStorage {
             _ => storage.prune_db()?,
         }
 
-        if config.metrics_enabled {
-            let metrics = StorageMetrics::new(&storage.protocol);
-            storage.metrics = Some(metrics);
+        // Report current storage capacity.
+        storage
+            .metrics
+            .report_storage_capacity(storage.storage_capacity_in_bytes as f64 / 1000.0);
 
-            // Report current storage capacity.
-            storage.metrics.as_ref().and_then(|metrics| {
-                Some(
-                    metrics
-                        .report_storage_capacity(storage.storage_capacity_in_bytes as f64 / 1000.0),
-                )
-            });
+        // Report current total storage usage.
+        let total_storage_usage = storage.get_total_storage_usage_in_bytes_on_disk()?;
+        storage
+            .metrics
+            .report_total_storage_usage(total_storage_usage as f64 / 1000.0);
 
-            // Report current total storage usage.
-            let total_storage_usage = storage.get_total_storage_usage_in_bytes_on_disk()?;
-            storage.metrics.as_ref().and_then(|metrics| {
-                Some(metrics.report_total_storage_usage(total_storage_usage as f64 / 1000.0))
-            });
-
-            // Report total storage used by network content.
-            let network_content_storage_usage =
-                storage.get_total_storage_usage_in_bytes_from_network()?;
-            storage.metrics.as_ref().and_then(|metrics| {
-                Some(
-                    metrics
-                        .report_content_data_storage(network_content_storage_usage as f64 / 1000.0),
-                )
-            });
-        }
+        // Report total storage used by network content.
+        let network_content_storage_usage =
+            storage.get_total_storage_usage_in_bytes_from_network()?;
+        storage
+            .metrics
+            .report_content_data_storage(network_content_storage_usage as f64 / 1000.0);
 
         Ok(storage)
     }
@@ -414,10 +401,9 @@ impl PortalStorage {
             return Err(err.into());
         }
         self.prune_db()?;
-        if let Some(metrics) = &self.metrics {
-            let total_bytes_on_disk = self.get_total_storage_usage_in_bytes_on_disk()?;
-            metrics.report_total_storage_usage(total_bytes_on_disk as f64 / 1000.0)
-        }
+        let total_bytes_on_disk = self.get_total_storage_usage_in_bytes_on_disk()?;
+        self.metrics
+            .report_total_storage_usage(total_bytes_on_disk as f64 / 1000.0);
 
         Ok(())
     }
@@ -508,9 +494,8 @@ impl PortalStorage {
             ))
         })?;
         let storage_usage = self.get_total_size_of_directory_in_bytes(data_dir)?;
-        self.metrics.as_ref().and_then(|metrics| {
-            Some(metrics.report_total_storage_usage(storage_usage as f64 / 1000.0))
-        });
+        self.metrics
+            .report_total_storage_usage(storage_usage as f64 / 1000.0);
         Ok(storage_usage)
     }
 
@@ -579,8 +564,7 @@ impl PortalStorage {
         .sum;
 
         self.metrics
-            .as_ref()
-            .and_then(|metrics| Some(metrics.report_content_data_storage(sum as f64 / 1000.0)));
+            .report_content_data_storage(sum as f64 / 1000.0);
 
         Ok(sum as u64)
     }
