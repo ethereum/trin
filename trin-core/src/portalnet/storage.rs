@@ -282,12 +282,15 @@ impl PortalStorage {
             metrics: StorageMetrics::new(&protocol),
         };
 
+        // Set the metrics to the default radius, to start
+        storage.metrics.report_radius(storage.radius);
+
         // Check whether we already have data, and use it to set radius
         match storage.total_entry_count()? {
             0 => {
                 // Default radius is left in place, unless user selected 0kb capacity
                 if storage.storage_capacity_in_bytes == 0 {
-                    storage.radius = Distance::ZERO;
+                    storage.set_radius(Distance::ZERO);
                 }
             }
             // Only prunes data when at capacity. (eg. user changed it via kb flag)
@@ -313,6 +316,12 @@ impl PortalStorage {
             .report_content_data_storage(network_content_storage_usage as f64 / 1000.0);
 
         Ok(storage)
+    }
+
+    /// Sets the radius of the store to `radius`.
+    pub fn set_radius(&mut self, radius: Distance) {
+        self.radius = radius;
+        self.metrics.report_radius(radius);
     }
 
     /// Returns a paginated list of all available content keys from local storage (from any
@@ -429,11 +438,11 @@ impl PortalStorage {
                 None => {
                     // We get here if the entire db has been pruned,
                     // eg. user selected 0kb capacity for storage
-                    self.radius = Distance::ZERO;
+                    self.set_radius(Distance::ZERO);
                 }
                 Some(farthest) => {
                     debug!("Found new farthest: {}", hex_encode(&farthest));
-                    self.radius = self.distance_to_content_id(&farthest);
+                    self.set_radius(self.distance_to_content_id(&farthest));
                     farthest_content_id = Some(farthest);
                 }
             }
@@ -692,6 +701,11 @@ impl PortalStorage {
         pool.get()?.execute(CREATE_QUERY, params![])?;
         Ok(pool)
     }
+
+    /// Get a summary of the current state of storage
+    pub fn get_summary_info(&self) -> String {
+        self.metrics.get_summary()
+    }
 }
 
 #[derive(Debug)]
@@ -699,27 +713,31 @@ struct StorageMetrics {
     content_storage_usage_kb: Gauge,
     total_storage_usage_kb: Gauge,
     storage_capacity_kb: Gauge,
+    radius_percent: Gauge,
 }
 
 impl StorageMetrics {
     pub fn new(protocol: &ProtocolId) -> Self {
         let content_storage_usage_kb = register_gauge!(
-            format!("trin_content_storage_usage_kb_{:?}", protocol),
+            format!("trin_content_storage_usage_kb_{protocol:?}"),
             "help"
         )
         .unwrap();
-        let total_storage_usage_kb = register_gauge!(
-            format!("trin_total_storage_usage_kb_{:?}", protocol),
-            "help"
-        )
-        .unwrap();
+        let total_storage_usage_kb =
+            register_gauge!(format!("trin_total_storage_usage_kb_{protocol:?}"), "help").unwrap();
         let storage_capacity_kb =
-            register_gauge!(format!("trin_storage_capacity_kb_{:?}", protocol), "help").unwrap();
+            register_gauge!(format!("trin_storage_capacity_kb_{protocol:?}"), "help").unwrap();
+        let radius_percent = register_gauge!(
+            format!("trin_radius_percent_{:?}", protocol),
+            "the percentage of the whole data ring covered by the data radius"
+        )
+        .unwrap();
 
         Self {
             content_storage_usage_kb,
             total_storage_usage_kb,
             storage_capacity_kb,
+            radius_percent,
         }
     }
 
@@ -733,6 +751,21 @@ impl StorageMetrics {
 
     pub fn report_storage_capacity(&self, kb: f64) {
         self.storage_capacity_kb.set(kb);
+    }
+
+    pub fn report_radius(&self, radius: Distance) {
+        let coverage_percent = radius.byte(31) as f64 * 100.0 / 255.0;
+        self.radius_percent.set(coverage_percent);
+    }
+
+    pub fn get_summary(&self) -> String {
+        format!(
+            "radius={:.1}% content={:.1}/{}kb disk={:.1}kb",
+            self.radius_percent.get(),
+            self.content_storage_usage_kb.get(),
+            self.storage_capacity_kb.get(),
+            self.total_storage_usage_kb.get(),
+        )
     }
 }
 

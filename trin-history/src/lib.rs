@@ -115,10 +115,8 @@ pub fn spawn_history_heartbeat(network: Arc<HistoryNetwork>) {
         let mut heart_interval = interval(Duration::from_millis(30000));
 
         loop {
-            let radius = network.overlay.store.read().radius();
-            // calculate the percentage of the whole data ring covered by the data radius
-            let coverage_percent = radius.byte(31) as f32 * 100.0 / 255.0;
-            info!("report: radius={coverage_percent:.1}%");
+            let storage_log = network.overlay.store.read().get_summary_info();
+            info!("storage-report: {storage_log}");
             heart_interval.tick().await;
         }
     });
