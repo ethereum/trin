@@ -732,7 +732,7 @@ impl StorageMetrics {
     pub fn new(protocol: &ProtocolId) -> Self {
         let content_storage_usage_kb_options = opts!(
             format!("trin_content_storage_usage_kb_{protocol:?}"),
-            "help"
+            "sum of size of individual content stored, in kb"
         );
         let (content_storage_usage_kb, registry) = match register_gauge!(
             content_storage_usage_kb_options.clone()
@@ -753,13 +753,13 @@ impl StorageMetrics {
 
         let total_storage_usage_kb = register_gauge_with_registry!(
             format!("trin_total_storage_usage_kb_{protocol:?}"),
-            "help",
+            "full on-disk database size, in kb",
             registry,
         )
         .unwrap();
         let storage_capacity_kb = register_gauge_with_registry!(
             format!("trin_storage_capacity_kb_{protocol:?}"),
-            "help",
+            "user-defined limit on storage usage, in kb",
             registry
         )
         .unwrap();
