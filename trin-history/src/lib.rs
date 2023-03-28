@@ -115,9 +115,12 @@ pub fn spawn_history_heartbeat(network: Arc<HistoryNetwork>) {
         let mut heart_interval = interval(Duration::from_millis(30000));
 
         loop {
+            // Don't want to wait to display 1st log, but a bug seems to skip the first wait, so put
+            // this wait at the top. Otherwise, we get two log lines immediately on startup.
+            heart_interval.tick().await;
+
             let storage_log = network.overlay.store.read().get_summary_info();
             info!("storage-report: {storage_log}");
-            heart_interval.tick().await;
         }
     });
 }
