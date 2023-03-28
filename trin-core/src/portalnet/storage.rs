@@ -294,7 +294,15 @@ impl PortalStorage {
                 }
             }
             // Only prunes data when at capacity. (eg. user changed it via kb flag)
-            _ => storage.prune_db()?,
+            _ => {
+                if storage.prune_db()? == 0 {
+                    // No items were pruned, so the radius was never calculated.
+                    // Calculate current radius now, rather than waiting for the next overfill.
+                    if let Some(farthest) = storage.find_farthest_content_id()? {
+                        storage.set_radius(storage.distance_to_content_id(&farthest));
+                    }
+                }
+            }
         }
 
         // Report current storage capacity.
@@ -419,8 +427,10 @@ impl PortalStorage {
 
     /// Internal method for pruning any data that falls outside of the radius of the store.
     /// Resets the data radius if it prunes any data. Does nothing if the store is empty.
-    fn prune_db(&mut self) -> Result<(), ContentStoreError> {
+    /// Returns the number of items removed during pruning
+    fn prune_db(&mut self) -> Result<usize, ContentStoreError> {
         let mut farthest_content_id: Option<[u8; 32]> = self.find_farthest_content_id()?;
+        let mut num_removed_items = 0;
         // Delete furthest data until our data usage is less than capacity.
         while self.capacity_reached()? {
             let id_to_remove =
@@ -432,6 +442,8 @@ impl PortalStorage {
             );
             if let Err(err) = self.evict(id_to_remove) {
                 debug!("Error writing content ID {id_to_remove:?} to meta db. Reverted: {err:?}",);
+            } else {
+                num_removed_items += 1;
             }
             // Calculate new farthest_content_id and reset radius
             match self.find_farthest_content_id()? {
@@ -447,7 +459,7 @@ impl PortalStorage {
                 }
             }
         }
-        Ok(())
+        Ok(num_removed_items)
     }
 
     /// Public method for evicting a certain content id. Will revert RocksDB deletion if meta_db
