@@ -10,13 +10,13 @@ use discv5::enr::NodeId;
 use ethportal_api::types::portal::PaginateLocalContentInfo;
 use prometheus_exporter::{
     self,
-    prometheus::{register_gauge, Gauge},
+    prometheus::{opts, register_gauge, register_gauge_with_registry, Gauge, Registry},
 };
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rocksdb::{Options, DB};
 use rusqlite::params;
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 
 use crate::{portalnet::types::messages::ProtocolId, utils::db::get_data_dir};
 use ethportal_api::types::content_key::{HistoryContentKey, OverlayContentKey};
@@ -730,18 +730,43 @@ struct StorageMetrics {
 
 impl StorageMetrics {
     pub fn new(protocol: &ProtocolId) -> Self {
-        let content_storage_usage_kb = register_gauge!(
+        let content_storage_usage_kb_options = opts!(
             format!("trin_content_storage_usage_kb_{protocol:?}"),
             "help"
+        );
+        let (content_storage_usage_kb, registry) = match register_gauge!(
+            content_storage_usage_kb_options.clone()
+        ) {
+            Ok(gauge) => (gauge, Registry::default()),
+            Err(_) => {
+                error!("Failed to register prometheus gauge with default registry, creating new");
+                let custom_registry = Registry::new_custom(None, None)
+                    .expect("Prometheus docs don't explain when it might fail to create a custom registry, so... hopefully never");
+                let gauge = register_gauge_with_registry!(
+                    content_storage_usage_kb_options,
+                    custom_registry
+                )
+                .expect("a gauge can always be added to a new custom registry, without conflict");
+                (gauge, custom_registry)
+            }
+        };
+
+        let total_storage_usage_kb = register_gauge_with_registry!(
+            format!("trin_total_storage_usage_kb_{protocol:?}"),
+            "help",
+            registry,
         )
         .unwrap();
-        let total_storage_usage_kb =
-            register_gauge!(format!("trin_total_storage_usage_kb_{protocol:?}"), "help").unwrap();
-        let storage_capacity_kb =
-            register_gauge!(format!("trin_storage_capacity_kb_{protocol:?}"), "help").unwrap();
-        let radius_percent = register_gauge!(
-            format!("trin_radius_percent_{:?}", protocol),
-            "the percentage of the whole data ring covered by the data radius"
+        let storage_capacity_kb = register_gauge_with_registry!(
+            format!("trin_storage_capacity_kb_{protocol:?}"),
+            "help",
+            registry
+        )
+        .unwrap();
+        let radius_percent = register_gauge_with_registry!(
+            format!("trin_radius_percent_{protocol:?}"),
+            "the percentage of the whole data ring covered by the data radius",
+            registry,
         )
         .unwrap();
 
