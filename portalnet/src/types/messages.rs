@@ -56,9 +56,9 @@ impl From<Vec<u8>> for CustomPayload {
     }
 }
 
-impl Into<Distance> for CustomPayload {
-    fn into(self) -> Distance {
-        let bytes = self.payload;
+impl From<CustomPayload> for Distance {
+    fn from(val: CustomPayload) -> Self {
+        let bytes = val.payload;
         U256::from_little_endian(bytes.deref()).into()
     }
 }
@@ -379,12 +379,12 @@ impl fmt::Display for Pong {
 }
 
 /// Convert to JSON Value from Pong ssz bytes
-impl Into<Value> for Pong {
-    fn into(self) -> Value {
-        match U256::from_ssz_bytes(&self.custom_payload.payload.as_ssz_bytes()) {
+impl From<Pong> for Value {
+    fn from(val: Pong) -> Self {
+        match U256::from_ssz_bytes(&val.custom_payload.payload.as_ssz_bytes()) {
             Ok(data_radius) => {
                 let mut result = Map::new();
-                result.insert("enrSeq".to_owned(), Value::String(self.enr_seq.to_string()));
+                result.insert("enrSeq".to_owned(), Value::String(val.enr_seq.to_string()));
                 result.insert(
                     "dataRadius".to_owned(),
                     Value::String(data_radius.to_string()),
@@ -480,17 +480,14 @@ impl ssz::Decode for Nodes {
     }
 }
 
-impl Into<Value> for Nodes {
-    fn into(self) -> Value {
-        let enrs: Vec<Value> = self
+impl From<Nodes> for Value {
+    fn from(val: Nodes) -> Self {
+        let enrs: Vec<Value> = val
             .enrs
             .iter()
-            .map(|enr| {
-                let enr = Enr::from(enr.clone().0);
-                serde_json::json!(enr.to_base64())
-            })
+            .map(|enr| serde_json::json!(enr.to_base64()))
             .collect();
-        serde_json::json!({ "enrs":  enrs, "total": self.total})
+        serde_json::json!({ "enrs":  enrs, "total": val.total})
     }
 }
 
@@ -515,9 +512,7 @@ impl TryInto<Value> for Content {
         if let Content::ConnectionId(val) = self {
             Ok(serde_json::json!({ "connection_id": val }))
         } else if let Content::Content(val) = self {
-            Ok(serde_json::json!({
-                "content": hex_encode(val.to_vec())
-            }))
+            Ok(serde_json::json!({ "content": hex_encode(val) }))
         } else if let Content::Enrs(val) = self {
             Ok(serde_json::json!({ "enrs": format!("{:?}", val) }))
         } else {
@@ -538,14 +533,14 @@ pub struct PopulatedOffer {
     pub content_items: Vec<(RawContentKey, Vec<u8>)>,
 }
 
-impl Into<Offer> for PopulatedOffer {
-    fn into(self) -> Offer {
-        let content_keys = self
+impl From<PopulatedOffer> for Offer {
+    fn from(val: PopulatedOffer) -> Self {
+        let content_keys = val
             .content_items
             .into_iter()
             .map(|(key, _val)| key)
             .collect();
-        Offer { content_keys }
+        Self { content_keys }
     }
 }
 
@@ -555,9 +550,9 @@ pub struct Accept {
     pub content_keys: BitList<typenum::U8>,
 }
 
-impl Into<Value> for Accept {
-    fn into(self) -> Value {
-        serde_json::json!({ "connection_id": format!("{:?}", self.connection_id.to_be()) , "content_keys": self.content_keys})
+impl From<Accept> for Value {
+    fn from(val: Accept) -> Self {
+        serde_json::json!({ "connection_id": format!("{:?}", val.connection_id.to_be()) , "content_keys": val.content_keys})
     }
 }
 

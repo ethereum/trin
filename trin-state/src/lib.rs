@@ -12,7 +12,7 @@ use tracing::info;
 use utp_rs::socket::UtpSocket;
 
 use crate::{events::StateEvents, jsonrpc::StateRequestHandler};
-use trin_core::portalnet::{
+use portalnet::{
     discovery::{Discovery, UtpEnr},
     storage::PortalStorageConfig,
     types::messages::PortalnetConfig,

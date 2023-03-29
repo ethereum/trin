@@ -19,7 +19,7 @@ use tracing::info;
 use utp_rs::socket::UtpSocket;
 
 use crate::{events::HistoryEvents, jsonrpc::HistoryRequestHandler};
-use trin_core::portalnet::{
+use portalnet::{
     discovery::{Discovery, UtpEnr},
     storage::PortalStorageConfig,
     types::messages::PortalnetConfig,

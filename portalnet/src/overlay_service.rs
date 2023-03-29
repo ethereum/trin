@@ -34,26 +34,24 @@ use tracing::{debug, error, info, trace, warn};
 use utp_rs::{conn::ConnectionConfig, socket::UtpSocket};
 
 use crate::{
-    portalnet::{
-        discovery::Discovery,
-        find::{
-            iterators::{
-                findcontent::{FindContentQuery, FindContentQueryResponse, FindContentQueryResult},
-                findnodes::FindNodeQuery,
-                query::{Query, QueryConfig},
-            },
-            query_info::{QueryInfo, QueryType},
-            query_pool::{QueryId, QueryPool, QueryPoolState, TargetKey},
+    discovery::Discovery,
+    find::{
+        iterators::{
+            findcontent::{FindContentQuery, FindContentQueryResponse, FindContentQueryResult},
+            findnodes::FindNodeQuery,
+            query::{Query, QueryConfig},
         },
-        metrics::OverlayMetrics,
-        storage::ContentStore,
-        types::{
-            messages::{
-                Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer,
-                Ping, Pong, PopulatedOffer, ProtocolId, Request, Response,
-            },
-            node::Node,
+        query_info::{FindContentResult, QueryInfo, QueryType},
+        query_pool::{QueryId, QueryPool, QueryPoolState, TargetKey},
+    },
+    metrics::OverlayMetrics,
+    storage::ContentStore,
+    types::{
+        messages::{
+            Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer, Ping,
+            Pong, PopulatedOffer, ProtocolId, Request, Response,
         },
+        node::Node,
     },
     utils::{node_id, portal_wire},
 };
@@ -284,7 +282,7 @@ pub struct OverlayService<TContentKey, TMetric, TValidator, TStore> {
     /// The sender half of a channel for responses to outgoing requests.
     response_tx: UnboundedSender<OverlayResponse>,
     /// uTP socket.
-    utp_socket: Arc<UtpSocket<crate::portalnet::discovery::UtpEnr>>,
+    utp_socket: Arc<UtpSocket<crate::discovery::UtpEnr>>,
     /// Phantom content key.
     phantom_content_key: PhantomData<TContentKey>,
     /// Phantom metric (distance function).
@@ -309,6 +307,7 @@ where
     /// The state of the overlay network largely consists of its routing table. The routing table
     /// is updated according to incoming requests and responses as well as autonomous maintenance
     /// processes.
+    #[allow(clippy::too_many_arguments)]
     pub async fn spawn(
         discovery: Arc<Discovery>,
         store: Arc<RwLock<TStore>>,
@@ -317,7 +316,7 @@ where
         ping_queue_interval: Option<Duration>,
         data_radius: Arc<Distance>,
         protocol: ProtocolId,
-        utp_socket: Arc<UtpSocket<crate::portalnet::discovery::UtpEnr>>,
+        utp_socket: Arc<UtpSocket<crate::discovery::UtpEnr>>,
         enable_metrics: bool,
         validator: Arc<TValidator>,
         query_timeout: Duration,
@@ -396,11 +395,11 @@ where
             };
 
             // Attempt to insert the node into the routing table.
-            match self.kbuckets.write().insert_or_update(
-                &kbucket::Key::from(node_id.clone()),
-                node,
-                status,
-            ) {
+            match self
+                .kbuckets
+                .write()
+                .insert_or_update(&kbucket::Key::from(node_id), node, status)
+            {
                 InsertResult::Failed(reason) => {
                     warn!(
                         protocol = %self.protocol,
@@ -425,7 +424,7 @@ where
 
     /// Begins initial FINDNODES query to populate the routing table.
     fn initialize_routing_table(&mut self, bootnodes: Vec<Enr>) {
-        self.add_bootnodes(bootnodes.clone());
+        self.add_bootnodes(bootnodes);
         let local_node_id = self.local_enr().node_id();
 
         // Begin request for our local node ID.
@@ -529,7 +528,7 @@ where
 
             // Randomly pick one of these buckets.
             let target_bucket = buckets.choose(&mut rand::thread_rng());
-            let random_node_id_in_bucket = match target_bucket {
+            match target_bucket {
                 Some(bucket) => {
                     trace!(protocol = %self.protocol, bucket = %bucket.0, "Refreshing routing table bucket");
                     match u8::try_from(bucket.0) {
@@ -546,8 +545,7 @@ where
                     error!("Error choosing random bucket index for refresh");
                     return;
                 }
-            };
-            random_node_id_in_bucket
+            }
         };
 
         self.init_find_nodes_query(&target_node_id);
@@ -794,7 +792,7 @@ where
             let is_within_radius =
                 TMetric::distance(&node_id.raw(), &content_id) <= node.data_radius;
             if is_within_radius {
-                let content_items = vec![(content_key.clone().into(), content.clone().into())];
+                let content_items = vec![(content_key.clone().into(), content.clone())];
                 let offer_request = Request::PopulatedOffer(PopulatedOffer { content_items });
 
                 let request = OverlayRequest::new(
@@ -849,13 +847,15 @@ where
                         query_id: request.query_id,
                     },
                 );
-                self.metrics.as_ref().and_then(|m| match request.request {
-                    Request::Ping(_) => Some(m.report_outbound_ping()),
-                    Request::FindNodes(_) => Some(m.report_outbound_find_nodes()),
-                    Request::FindContent(_) => Some(m.report_outbound_find_content()),
-                    Request::Offer(_) => Some(m.report_outbound_offer()),
-                    Request::PopulatedOffer(_) => Some(m.report_outbound_offer()),
-                });
+                if let Some(m) = self.metrics.as_ref() {
+                    match request.request {
+                        Request::Ping(_) => m.report_outbound_ping(),
+                        Request::FindNodes(_) => m.report_outbound_find_nodes(),
+                        Request::FindContent(_) => m.report_outbound_find_content(),
+                        Request::Offer(_) => m.report_outbound_offer(),
+                        Request::PopulatedOffer(_) => m.report_outbound_offer(),
+                    }
+                }
                 self.send_talk_req(request.request, request.id, destination);
             }
         }
@@ -869,13 +869,13 @@ where
         source: &NodeId,
     ) -> Result<Response, OverlayRequestError> {
         match request {
-            Request::Ping(ping) => Ok(Response::Pong(self.handle_ping(ping, &source, id))),
+            Request::Ping(ping) => Ok(Response::Pong(self.handle_ping(ping, source, id))),
             Request::FindNodes(find_nodes) => Ok(Response::Nodes(
-                self.handle_find_nodes(find_nodes, &source, id),
+                self.handle_find_nodes(find_nodes, source, id),
             )),
             Request::FindContent(find_content) => Ok(Response::Content(self.handle_find_content(
                 find_content,
-                &source,
+                source,
                 id,
             )?)),
             Request::Offer(offer) => Ok(Response::Accept(self.handle_offer(offer, source, id)?)),
@@ -896,9 +896,9 @@ where
             request
         );
 
-        self.metrics
-            .as_ref()
-            .and_then(|m| Some(m.report_inbound_ping()));
+        if let Some(m) = self.metrics.as_ref() {
+            m.report_inbound_ping()
+        }
         let enr_seq = self.local_enr().seq();
         let data_radius = self.data_radius();
         let custom_payload = CustomPayload::from(data_radius.as_ssz_bytes());
@@ -922,9 +922,9 @@ where
             "Handling FindNodes message",
         );
 
-        self.metrics
-            .as_ref()
-            .and_then(|m| Some(m.report_inbound_find_nodes()));
+        if let Some(m) = self.metrics.as_ref() {
+            m.report_inbound_find_nodes()
+        }
         let distances64: Vec<u64> = request.distances.iter().map(|x| (*x).into()).collect();
         let mut enrs = self.nodes_by_distance(distances64);
 
@@ -948,9 +948,9 @@ where
             "Handling FindContent message",
         );
 
-        self.metrics
-            .as_ref()
-            .and_then(|m| Some(m.report_inbound_find_content()));
+        if let Some(m) = self.metrics.as_ref() {
+            m.report_inbound_find_content()
+        }
         let content_key = match (TContentKey::try_from)(request.content_key) {
             Ok(key) => key,
             Err(_) => {
@@ -967,10 +967,12 @@ where
                     Ok(Content::Content(content))
                 } else {
                     // Generate a connection ID for the uTP connection.
-                    let node_addr = self.discovery.cached_node_addr(&source).ok_or(
-                        OverlayRequestError::AcceptError(format!("unable to find ENR for NodeId")),
-                    )?;
-                    let enr = crate::portalnet::discovery::UtpEnr(node_addr.enr);
+                    let node_addr = self.discovery.cached_node_addr(source).ok_or_else(|| {
+                        OverlayRequestError::AcceptError(
+                            "unable to find ENR for NodeId".to_string(),
+                        )
+                    })?;
+                    let enr = crate::discovery::UtpEnr(node_addr.enr);
                     let cid = self.utp_socket.cid(enr, false);
                     let cid_send = cid.send;
 
@@ -1049,9 +1051,9 @@ where
             "Handling Offer message",
         );
 
-        self.metrics
-            .as_ref()
-            .and_then(|m| Some(m.report_inbound_offer()));
+        if let Some(m) = self.metrics.as_ref() {
+            m.report_inbound_offer()
+        }
 
         let mut requested_keys =
             BitList::with_capacity(request.content_keys.len()).map_err(|_| {
@@ -1100,13 +1102,10 @@ where
 
         // Generate a connection ID for the uTP connection if there is data we would like to
         // accept.
-        let node_addr =
-            self.discovery
-                .cached_node_addr(&source)
-                .ok_or(OverlayRequestError::AcceptError(format!(
-                    "unable to find ENR for NodeId"
-                )))?;
-        let enr = crate::portalnet::discovery::UtpEnr(node_addr.enr);
+        let node_addr = self.discovery.cached_node_addr(source).ok_or_else(|| {
+            OverlayRequestError::AcceptError("unable to find ENR for NodeId".to_string())
+        })?;
+        let enr = crate::discovery::UtpEnr(node_addr.enr);
         let cid = self.utp_socket.cid(enr, false);
         let cid_send = cid.send;
 
@@ -1187,9 +1186,8 @@ where
 
     /// Processes an incoming request from some source node.
     fn process_incoming_request(&mut self, request: Request, _id: RequestId, source: NodeId) {
-        match request {
-            Request::Ping(ping) => self.process_ping(ping, source),
-            _ => {}
+        if let Request::Ping(ping) = request {
+            self.process_ping(ping, source);
         }
     }
 
@@ -1197,11 +1195,10 @@ where
     fn register_node_activity(&mut self, source: NodeId) {
         // Look up the node in the routing table.
         let key = kbucket::Key::from(source);
-        let is_node_in_table = match self.kbuckets.write().entry(&key) {
-            kbucket::Entry::Present(_, _) => true,
-            kbucket::Entry::Pending(_, _) => true,
-            _ => false,
-        };
+        let is_node_in_table = matches!(
+            self.kbuckets.write().entry(&key),
+            kbucket::Entry::Present(_, _) | kbucket::Entry::Pending(_, _)
+        );
 
         // If the node is in the routing table, then call update on the routing table in order to
         // update the node's position in the kbucket. If the node is not in the routing table, then
@@ -1374,7 +1371,7 @@ where
         let cid = utp_rs::cid::ConnectionId {
             recv: conn_id,
             send: conn_id.wrapping_add(1),
-            peer: crate::portalnet::discovery::UtpEnr(enr.clone()),
+            peer: crate::discovery::UtpEnr(enr),
         };
 
         let store = Arc::clone(&self.store);
@@ -1510,9 +1507,7 @@ where
                     let key_desired = store.read().is_key_within_radius_and_unavailable(&key);
                     match key_desired {
                         Ok(true) => {
-                            if let Err(err) =
-                                store.write().put(key.clone(), &content_value.to_vec())
-                            {
+                            if let Err(err) = store.write().put(key.clone(), &content_value) {
                                 warn!(
                                     error = %err,
                                     content.id = %hex_encode(key.content_id()),
@@ -1648,7 +1643,7 @@ where
                 self.process_received_content(content.clone(), request);
                 // TODO: Should we only advance the query if the content has been validated?
                 if let Some(query_id) = query_id {
-                    self.advance_find_content_query_with_content(&query_id, source, content.into());
+                    self.advance_find_content_query_with_content(&query_id, source, content);
                 }
             }
             Content::Enrs(enrs) => {
@@ -1696,7 +1691,7 @@ where
                         return;
                     };
 
-                    if let Err(err) = store.write().put(content_key.clone(), content.to_vec()) {
+                    if let Err(err) = store.write().put(content_key.clone(), content) {
                         error!(
                             error = %err,
                             content.id = %hex_encode_compact(content_id),
@@ -1831,10 +1826,10 @@ where
             .iter()
             .zip(content_keys_offered.iter())
         {
-            if i == true {
+            if i {
                 match store.read().get(key) {
                     Ok(content) => match content {
-                        Some(content) => content_items.push(content.into()),
+                        Some(content) => content_items.push(content),
                         None => return Err(anyhow!("Unable to read offered content!")),
                     },
                     Err(err) => {
@@ -2063,7 +2058,7 @@ where
         self.kbuckets
             .write()
             .iter()
-            .map(|entry| entry.node.value.enr().clone())
+            .map(|entry| entry.node.value.enr())
             .collect()
     }
 
@@ -2083,7 +2078,7 @@ where
         if !log2_distances.is_empty() {
             let mut kbuckets = self.kbuckets.write();
             for node in kbuckets
-                .nodes_by_distances(&log2_distances, FIND_NODES_MAX_NODES)
+                .nodes_by_distances(log2_distances, FIND_NODES_MAX_NODES)
                 .into_iter()
                 .map(|entry| entry.node.value.clone())
             {
@@ -2113,7 +2108,7 @@ where
         let closest_nodes = nodes_with_distance
             .into_iter()
             .take(FIND_CONTENT_MAX_NODES)
-            .filter(|node_record| &node_record.0 < &self_distance)
+            .filter(|node_record| node_record.0 < self_distance)
             .map(|node_record| SszEnr::new(node_record.1))
             .collect();
 
@@ -2173,7 +2168,7 @@ where
     fn init_find_content_query(
         &mut self,
         target: TContentKey,
-        callback: Option<oneshot::Sender<(Option<Vec<u8>>, Vec<NodeId>)>>,
+        callback: Option<oneshot::Sender<FindContentResult>>,
     ) -> Option<QueryId> {
         // Represent the target content ID with a node ID.
         let target_node_id = NodeId::new(&target.content_id());
@@ -2262,13 +2257,12 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
     let kbuckets = kbuckets.read();
     let all_nodes: Vec<&kbucket::Node<NodeId, Node>> = kbuckets
         .buckets_iter()
-        .map(|kbucket| {
+        .flat_map(|kbucket| {
             kbucket
                 .iter()
                 .filter(|node| node.status.is_connected())
                 .collect::<Vec<&kbucket::Node<NodeId, Node>>>()
         })
-        .flatten()
         .collect();
 
     // HashMap to temporarily store all interested ENRs and the content.
@@ -2428,12 +2422,10 @@ mod tests {
     use rstest::rstest;
 
     use crate::{
-        portalnet::{
-            discovery::Discovery,
-            overlay::OverlayConfig,
-            storage::{DistanceFunction, MemoryContentStore},
-            types::messages::PortalnetConfig,
-        },
+        discovery::Discovery,
+        overlay::OverlayConfig,
+        storage::{DistanceFunction, MemoryContentStore},
+        types::messages::PortalnetConfig,
         utils::node_id::generate_random_remote_enr,
     };
     use trin_types::content_key::IdentityContentKey;
@@ -2461,10 +2453,8 @@ mod tests {
         let discovery = Arc::new(Discovery::new(portal_config).unwrap());
 
         let (_utp_talk_req_tx, utp_talk_req_rx) = unbounded_channel();
-        let discv5_utp = crate::portalnet::discovery::Discv5UdpSocket::new(
-            Arc::clone(&discovery),
-            utp_talk_req_rx,
-        );
+        let discv5_utp =
+            crate::discovery::Discv5UdpSocket::new(Arc::clone(&discovery), utp_talk_req_rx);
         let utp_socket = utp_rs::socket::UtpSocket::with_socket(discv5_utp);
         let utp_socket = Arc::new(utp_socket);
 
@@ -2490,7 +2480,7 @@ mod tests {
         let metrics = None;
         let validator = Arc::new(MockValidator {});
 
-        let service = OverlayService {
+        OverlayService {
             discovery,
             utp_socket,
             store,
@@ -2513,9 +2503,7 @@ mod tests {
             phantom_metric: PhantomData,
             metrics,
             validator,
-        };
-
-        service
+        }
     }
 
     #[test_log::test(tokio::test)]
@@ -2624,7 +2612,7 @@ mod tests {
 
         let request_id = rand::random();
         let error = OverlayRequestError::Timeout;
-        service.process_request_failure(request_id, destination.clone(), error);
+        service.process_request_failure(request_id, destination, error);
 
         assert!(!service.peers_to_ping.contains_key(&node_id));
 
@@ -2740,9 +2728,7 @@ mod tests {
         let (_, enr1) = generate_random_remote_enr();
         let (_, enr2) = generate_random_remote_enr();
 
-        let mut enrs: Vec<Enr> = vec![];
-        enrs.push(enr1.clone());
-        enrs.push(enr2.clone());
+        let enrs: Vec<Enr> = vec![enr1.clone(), enr2.clone()];
         service.process_discovered_enrs(enrs);
 
         let key1 = kbucket::Key::from(enr1.node_id());
@@ -2795,8 +2781,8 @@ mod tests {
         };
         let data_radius = Distance::MAX;
 
-        let node1 = Node::new(enr1.clone(), data_radius.clone());
-        let node2 = Node::new(enr2.clone(), data_radius.clone());
+        let node1 = Node::new(enr1.clone(), data_radius);
+        let node2 = Node::new(enr2.clone(), data_radius);
 
         // Insert nodes into routing table.
         let _ = service
@@ -2821,9 +2807,7 @@ mod tests {
         let _ = enr1.set_udp4(updated_udp, &sk1);
         assert_ne!(1, enr1.seq());
 
-        let mut enrs: Vec<Enr> = vec![];
-        enrs.push(enr1.clone());
-        enrs.push(enr2.clone());
+        let enrs: Vec<Enr> = vec![enr1, enr2];
         service.process_discovered_enrs(enrs);
 
         // Check routing table for first ENR.
@@ -2872,7 +2856,7 @@ mod tests {
         let peer_node_ids: Vec<NodeId> = vec![peer.enr.node_id()];
 
         // Node has maximum radius, so there should be one offer in the channel.
-        service.poke_content(content_key.clone(), content.clone(), peer_node_ids.clone());
+        service.poke_content(content_key, content, peer_node_ids);
         let cmd = assert_ready!(poll_command_rx!(service));
         let cmd = cmd.unwrap();
         if let OverlayCommand::Request(req) = cmd {
@@ -2936,7 +2920,7 @@ mod tests {
         let (_, enr2) = generate_random_remote_enr();
         let key2 = kbucket::Key::from(enr2.node_id());
         let peer2 = Node {
-            enr: enr2.clone(),
+            enr: enr2,
             data_radius: Distance::from(U256::zero()),
         };
         let _ = service
@@ -2944,7 +2928,7 @@ mod tests {
             .write()
             .insert_or_update(&key2, peer2.clone(), status);
 
-        let peers = vec![peer1.clone(), peer2.clone()];
+        let peers = vec![peer1.clone(), peer2];
         let peer_node_ids: Vec<NodeId> = peers.iter().map(|p| p.enr.node_id()).collect();
 
         // One offer should be in the channel for the maximum radius node.
@@ -3038,7 +3022,7 @@ mod tests {
         let key = kbucket::Key::from(node_id);
 
         let data_radius = Distance::MAX;
-        let node = Node::new(enr.clone(), data_radius);
+        let node = Node::new(enr, data_radius);
         let connection_direction = ConnectionDirection::Outgoing;
 
         assert!(!service.peers_to_ping.contains_key(&node_id));
@@ -3070,7 +3054,7 @@ mod tests {
         let key = kbucket::Key::from(node_id);
 
         let data_radius = Distance::MAX;
-        let node = Node::new(enr.clone(), data_radius);
+        let node = Node::new(enr, data_radius);
 
         let connection_direction = ConnectionDirection::Outgoing;
         let status = NodeStatus {
@@ -3112,7 +3096,7 @@ mod tests {
         let key = kbucket::Key::from(node_id);
 
         let data_radius = Distance::MAX;
-        let node = Node::new(enr.clone(), data_radius);
+        let node = Node::new(enr, data_radius);
 
         let connection_direction = ConnectionDirection::Outgoing;
         let status = NodeStatus {
@@ -3268,14 +3252,13 @@ mod tests {
         .await;
 
         // Check that the request is being sent to either node 1 or node 2. Keep track of which.
-        let first_node_id: Option<NodeId>;
-        match event {
+        let first_node_id: Option<NodeId> = match event {
             QueryEvent::Waiting(_, node_id, _) => {
                 assert!((node_id == node_id_1) || (node_id == node_id_2));
-                first_node_id = Some(node_id);
+                Some(node_id)
             }
             _ => panic!(),
-        }
+        };
 
         let event = OverlayService::<
             IdentityContentKey,
@@ -3314,7 +3297,7 @@ mod tests {
                 assert_eq!(query_id, QueryId(0));
                 let results = query.into_result();
 
-                assert_eq!(results.clone().len(), 3);
+                assert_eq!(results.len(), 3);
 
                 assert!(results.contains(&node_id_1));
                 assert!(results.contains(&node_id_2));
@@ -3455,7 +3438,7 @@ mod tests {
         let target_content = NodeId::random();
         let target_content_key = IdentityContentKey::new(target_content.raw());
 
-        let query_id = service.init_find_content_query(target_content_key.clone(), None);
+        let query_id = service.init_find_content_query(target_content_key, None);
         let query_id = query_id.expect("Query ID for new find content query is `None`");
 
         let (_, query) = service
@@ -3520,7 +3503,7 @@ mod tests {
         let target_content = NodeId::random();
         let target_content_key = IdentityContentKey::new(target_content.raw());
 
-        let query_id = service.init_find_content_query(target_content_key.clone(), None);
+        let query_id = service.init_find_content_query(target_content_key, None);
         let query_id = query_id.expect("Query ID for new find content query is `None`");
 
         let (_, query) = service
@@ -3534,11 +3517,7 @@ mod tests {
 
         // Simulate a response from the bootnode.
         let content: Vec<u8> = vec![0, 1, 2, 3];
-        service.advance_find_content_query_with_content(
-            &query_id,
-            bootnode_enr.clone(),
-            content.clone(),
-        );
+        service.advance_find_content_query_with_content(&query_id, bootnode_enr, content.clone());
 
         let (_, query) = service
             .find_content_query_pool

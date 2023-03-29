@@ -18,7 +18,7 @@ use rocksdb::{Options, DB};
 use rusqlite::params;
 use tracing::{debug, error, info};
 
-use crate::{portalnet::types::messages::ProtocolId, utils::db::get_data_dir};
+use crate::{types::messages::ProtocolId, utils::db::get_data_dir};
 use ethportal_api::types::content_key::{HistoryContentKey, OverlayContentKey};
 use trin_types::distance::{Distance, Metric, XorMetric};
 use trin_utils::bytes::{hex_decode, hex_encode};
@@ -66,19 +66,19 @@ impl std::error::Error for ContentStoreError {}
 
 impl From<rocksdb::Error> for ContentStoreError {
     fn from(err: rocksdb::Error) -> Self {
-        Self::Database(format!("(rocksdb) {}", err.to_string()))
+        Self::Database(format!("(rocksdb) {err}"))
     }
 }
 
 impl From<rusqlite::Error> for ContentStoreError {
     fn from(err: rusqlite::Error) -> Self {
-        Self::Database(format!("(sqlite) {}", err.to_string()))
+        Self::Database(format!("(sqlite) {err}"))
     }
 }
 
 impl From<r2d2::Error> for ContentStoreError {
     fn from(err: r2d2::Error) -> Self {
-        Self::Database(format!("(r2d2) {}", err.to_string()))
+        Self::Database(format!("(r2d2) {err}"))
     }
 }
 
@@ -156,7 +156,7 @@ impl MemoryContentStore {
 impl ContentStore for MemoryContentStore {
     fn get<K: OverlayContentKey>(&self, key: &K) -> Result<Option<Vec<u8>>, ContentStoreError> {
         let key = key.content_id();
-        let val = self.store.get(&key.to_vec()).map(|val| val.clone());
+        let val = self.store.get(&key.to_vec()).cloned();
         Ok(val)
     }
 
@@ -255,7 +255,7 @@ impl ContentStore for PortalStorage {
         }
 
         let key = key.content_id();
-        let is_key_available = self.db.get_pinned(&key)?.is_some();
+        let is_key_available = self.db.get_pinned(key)?.is_some();
         Ok(!is_key_available)
     }
 
@@ -414,8 +414,8 @@ impl PortalStorage {
                 "Error writing content ID {:?} to meta db. Reverting: {:?}",
                 content_id, err
             );
-            self.db.delete(&content_id)?;
-            return Err(err.into());
+            self.db.delete(content_id)?;
+            return Err(err);
         }
         self.prune_db()?;
         let total_bytes_on_disk = self.get_total_storage_usage_in_bytes_on_disk()?;
@@ -438,7 +438,7 @@ impl PortalStorage {
                 farthest_content_id.expect("Capacity reached, but no farthest id found!");
             debug!(
                 "Capacity reached, deleting farthest: {}",
-                hex_encode(&id_to_remove)
+                hex_encode(id_to_remove)
             );
             if let Err(err) = self.evict(id_to_remove) {
                 debug!("Error writing content ID {id_to_remove:?} to meta db. Reverted: {err:?}",);
@@ -453,7 +453,7 @@ impl PortalStorage {
                     self.set_radius(Distance::ZERO);
                 }
                 Some(farthest) => {
-                    debug!("Found new farthest: {}", hex_encode(&farthest));
+                    debug!("Found new farthest: {}", hex_encode(farthest));
                     self.set_radius(self.distance_to_content_id(&farthest));
                     farthest_content_id = Some(farthest);
                 }
@@ -465,8 +465,8 @@ impl PortalStorage {
     /// Public method for evicting a certain content id. Will revert RocksDB deletion if meta_db
     /// deletion fails.
     pub fn evict(&self, id: [u8; 32]) -> anyhow::Result<()> {
-        let deleted_value = self.db.get(&id)?;
-        self.db.delete(&id)?;
+        let deleted_value = self.db.get(id)?;
+        self.db.delete(id)?;
         // Revert rocksdb action if there's an error with writing to metadata db
         if let Err(err) = self.meta_db_remove(&id) {
             if let Some(value) = deleted_value {
@@ -514,7 +514,7 @@ impl PortalStorage {
                 "Unable to get data dir when calculating total storage usage: {err:?}"
             ))
         })?;
-        let storage_usage = self.get_total_size_of_directory_in_bytes(data_dir)?;
+        let storage_usage = Self::get_total_size_of_directory_in_bytes(data_dir)?;
         self.metrics
             .report_total_storage_usage(storage_usage as f64 / 1000.0);
         Ok(storage_usage)
@@ -522,7 +522,7 @@ impl PortalStorage {
 
     /// Internal method for inserting data into the db.
     fn db_insert(&self, content_id: &[u8; 32], value: &Vec<u8>) -> Result<(), ContentStoreError> {
-        self.db.put(&content_id, value)?;
+        self.db.put(content_id, value)?;
         Ok(())
     }
 
@@ -578,14 +578,13 @@ impl PortalStorage {
         let sum = match result?.next() {
             Some(total) => total,
             None => {
-                let err = format!("Unable to compute sum over content item sizes");
+                let err = "Unable to compute sum over content item sizes".to_string();
                 return Err(ContentStoreError::Database(err));
             }
         }?
         .sum;
 
-        self.metrics
-            .report_content_data_storage(sum as f64 / 1000.0);
+        self.metrics.report_content_data_storage(sum / 1000.0);
 
         Ok(sum as u64)
     }
@@ -633,7 +632,6 @@ impl PortalStorage {
 
     /// Internal method used to measure on-disk storage usage.
     fn get_total_size_of_directory_in_bytes(
-        &self,
         path: impl AsRef<Path>,
     ) -> Result<u64, ContentStoreError> {
         let metadata = match fs::metadata(&path) {
@@ -658,7 +656,7 @@ impl PortalStorage {
                         return Err(ContentStoreError::Database(err));
                     }
                 };
-                size += self.get_total_size_of_directory_in_bytes(path_string)?;
+                size += Self::get_total_size_of_directory_in_bytes(path_string)?;
             }
         }
 
@@ -681,7 +679,7 @@ impl PortalStorage {
 
         let mut array: [u8; 4] = [0, 0, 0, 0];
         for (index, byte) in vec.iter().take(4).enumerate() {
-            array[index] = byte.clone();
+            array[index] = *byte;
         }
 
         u32::from_be_bytes(array)
@@ -1133,7 +1131,7 @@ pub mod test {
             .unwrap());
 
         // Arbitrary key available.
-        let _ = store.put(arb_key.clone(), val.clone());
+        let _ = store.put(arb_key.clone(), val);
         assert!(!store
             .is_key_within_radius_and_unavailable(&arb_key)
             .unwrap());

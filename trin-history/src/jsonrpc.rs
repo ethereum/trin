@@ -5,7 +5,7 @@ use tokio::sync::mpsc;
 use tracing::error;
 
 use crate::network::HistoryNetwork;
-use trin_core::portalnet::storage::ContentStore;
+use portalnet::storage::ContentStore;
 use trin_utils::bytes::hex_encode;
 
 use crate::utils::bucket_entries_to_json;
