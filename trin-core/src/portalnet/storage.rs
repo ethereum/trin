@@ -10,13 +10,13 @@ use discv5::enr::NodeId;
 use ethportal_api::types::portal::PaginateLocalContentInfo;
 use prometheus_exporter::{
     self,
-    prometheus::{register_gauge, Gauge},
+    prometheus::{opts, register_gauge, register_gauge_with_registry, Gauge, Registry},
 };
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rocksdb::{Options, DB};
 use rusqlite::params;
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 
 use crate::{portalnet::types::messages::ProtocolId, utils::db::get_data_dir};
 use ethportal_api::types::content_key::{HistoryContentKey, OverlayContentKey};
@@ -228,8 +228,7 @@ pub struct PortalStorage {
     db: Arc<rocksdb::DB>,
     sql_connection_pool: Pool<SqliteConnectionManager>,
     distance_fn: DistanceFunction,
-    metrics: Option<StorageMetrics>,
-    protocol: ProtocolId,
+    metrics: StorageMetrics,
 }
 
 impl ContentStore for PortalStorage {
@@ -280,52 +279,57 @@ impl PortalStorage {
             db: config.db,
             sql_connection_pool: config.sql_connection_pool,
             distance_fn: config.distance_fn,
-            metrics: None,
-            protocol,
+            metrics: StorageMetrics::new(&protocol),
         };
+
+        // Set the metrics to the default radius, to start
+        storage.metrics.report_radius(storage.radius);
 
         // Check whether we already have data, and use it to set radius
         match storage.total_entry_count()? {
             0 => {
                 // Default radius is left in place, unless user selected 0kb capacity
                 if storage.storage_capacity_in_bytes == 0 {
-                    storage.radius = Distance::ZERO;
+                    storage.set_radius(Distance::ZERO);
                 }
             }
             // Only prunes data when at capacity. (eg. user changed it via kb flag)
-            _ => storage.prune_db()?,
+            _ => {
+                if storage.prune_db()? == 0 {
+                    // No items were pruned, so the radius was never calculated.
+                    // Calculate current radius now, rather than waiting for the next overfill.
+                    if let Some(farthest) = storage.find_farthest_content_id()? {
+                        storage.set_radius(storage.distance_to_content_id(&farthest));
+                    }
+                }
+            }
         }
 
-        if config.metrics_enabled {
-            let metrics = StorageMetrics::new(&storage.protocol);
-            storage.metrics = Some(metrics);
+        // Report current storage capacity.
+        storage
+            .metrics
+            .report_storage_capacity(storage.storage_capacity_in_bytes as f64 / 1000.0);
 
-            // Report current storage capacity.
-            storage.metrics.as_ref().and_then(|metrics| {
-                Some(
-                    metrics
-                        .report_storage_capacity(storage.storage_capacity_in_bytes as f64 / 1000.0),
-                )
-            });
+        // Report current total storage usage.
+        let total_storage_usage = storage.get_total_storage_usage_in_bytes_on_disk()?;
+        storage
+            .metrics
+            .report_total_storage_usage(total_storage_usage as f64 / 1000.0);
 
-            // Report current total storage usage.
-            let total_storage_usage = storage.get_total_storage_usage_in_bytes_on_disk()?;
-            storage.metrics.as_ref().and_then(|metrics| {
-                Some(metrics.report_total_storage_usage(total_storage_usage as f64 / 1000.0))
-            });
-
-            // Report total storage used by network content.
-            let network_content_storage_usage =
-                storage.get_total_storage_usage_in_bytes_from_network()?;
-            storage.metrics.as_ref().and_then(|metrics| {
-                Some(
-                    metrics
-                        .report_content_data_storage(network_content_storage_usage as f64 / 1000.0),
-                )
-            });
-        }
+        // Report total storage used by network content.
+        let network_content_storage_usage =
+            storage.get_total_storage_usage_in_bytes_from_network()?;
+        storage
+            .metrics
+            .report_content_data_storage(network_content_storage_usage as f64 / 1000.0);
 
         Ok(storage)
+    }
+
+    /// Sets the radius of the store to `radius`.
+    pub fn set_radius(&mut self, radius: Distance) {
+        self.radius = radius;
+        self.metrics.report_radius(radius);
     }
 
     /// Returns a paginated list of all available content keys from local storage (from any
@@ -414,18 +418,19 @@ impl PortalStorage {
             return Err(err.into());
         }
         self.prune_db()?;
-        if let Some(metrics) = &self.metrics {
-            let total_bytes_on_disk = self.get_total_storage_usage_in_bytes_on_disk()?;
-            metrics.report_total_storage_usage(total_bytes_on_disk as f64 / 1000.0)
-        }
+        let total_bytes_on_disk = self.get_total_storage_usage_in_bytes_on_disk()?;
+        self.metrics
+            .report_total_storage_usage(total_bytes_on_disk as f64 / 1000.0);
 
         Ok(())
     }
 
     /// Internal method for pruning any data that falls outside of the radius of the store.
     /// Resets the data radius if it prunes any data. Does nothing if the store is empty.
-    fn prune_db(&mut self) -> Result<(), ContentStoreError> {
+    /// Returns the number of items removed during pruning
+    fn prune_db(&mut self) -> Result<usize, ContentStoreError> {
         let mut farthest_content_id: Option<[u8; 32]> = self.find_farthest_content_id()?;
+        let mut num_removed_items = 0;
         // Delete furthest data until our data usage is less than capacity.
         while self.capacity_reached()? {
             let id_to_remove =
@@ -437,22 +442,24 @@ impl PortalStorage {
             );
             if let Err(err) = self.evict(id_to_remove) {
                 debug!("Error writing content ID {id_to_remove:?} to meta db. Reverted: {err:?}",);
+            } else {
+                num_removed_items += 1;
             }
             // Calculate new farthest_content_id and reset radius
             match self.find_farthest_content_id()? {
                 None => {
                     // We get here if the entire db has been pruned,
                     // eg. user selected 0kb capacity for storage
-                    self.radius = Distance::ZERO;
+                    self.set_radius(Distance::ZERO);
                 }
                 Some(farthest) => {
                     debug!("Found new farthest: {}", hex_encode(&farthest));
-                    self.radius = self.distance_to_content_id(&farthest);
+                    self.set_radius(self.distance_to_content_id(&farthest));
                     farthest_content_id = Some(farthest);
                 }
             }
         }
-        Ok(())
+        Ok(num_removed_items)
     }
 
     /// Public method for evicting a certain content id. Will revert RocksDB deletion if meta_db
@@ -508,9 +515,8 @@ impl PortalStorage {
             ))
         })?;
         let storage_usage = self.get_total_size_of_directory_in_bytes(data_dir)?;
-        self.metrics.as_ref().and_then(|metrics| {
-            Some(metrics.report_total_storage_usage(storage_usage as f64 / 1000.0))
-        });
+        self.metrics
+            .report_total_storage_usage(storage_usage as f64 / 1000.0);
         Ok(storage_usage)
     }
 
@@ -579,8 +585,7 @@ impl PortalStorage {
         .sum;
 
         self.metrics
-            .as_ref()
-            .and_then(|metrics| Some(metrics.report_content_data_storage(sum as f64 / 1000.0)));
+            .report_content_data_storage(sum as f64 / 1000.0);
 
         Ok(sum as u64)
     }
@@ -708,6 +713,11 @@ impl PortalStorage {
         pool.get()?.execute(CREATE_QUERY, params![])?;
         Ok(pool)
     }
+
+    /// Get a summary of the current state of storage
+    pub fn get_summary_info(&self) -> String {
+        self.metrics.get_summary()
+    }
 }
 
 #[derive(Debug)]
@@ -715,27 +725,56 @@ struct StorageMetrics {
     content_storage_usage_kb: Gauge,
     total_storage_usage_kb: Gauge,
     storage_capacity_kb: Gauge,
+    radius_percent: Gauge,
 }
 
 impl StorageMetrics {
     pub fn new(protocol: &ProtocolId) -> Self {
-        let content_storage_usage_kb = register_gauge!(
-            format!("trin_content_storage_usage_kb_{:?}", protocol),
-            "help"
+        let content_storage_usage_kb_options = opts!(
+            format!("trin_content_storage_usage_kb_{protocol:?}"),
+            "sum of size of individual content stored, in kb"
+        );
+        let (content_storage_usage_kb, registry) = match register_gauge!(
+            content_storage_usage_kb_options.clone()
+        ) {
+            Ok(gauge) => (gauge, Registry::default()),
+            Err(_) => {
+                error!("Failed to register prometheus gauge with default registry, creating new");
+                let custom_registry = Registry::new_custom(None, None)
+                    .expect("Prometheus docs don't explain when it might fail to create a custom registry, so... hopefully never");
+                let gauge = register_gauge_with_registry!(
+                    content_storage_usage_kb_options,
+                    custom_registry
+                )
+                .expect("a gauge can always be added to a new custom registry, without conflict");
+                (gauge, custom_registry)
+            }
+        };
+
+        let total_storage_usage_kb = register_gauge_with_registry!(
+            format!("trin_total_storage_usage_kb_{protocol:?}"),
+            "full on-disk database size, in kb",
+            registry,
         )
         .unwrap();
-        let total_storage_usage_kb = register_gauge!(
-            format!("trin_total_storage_usage_kb_{:?}", protocol),
-            "help"
+        let storage_capacity_kb = register_gauge_with_registry!(
+            format!("trin_storage_capacity_kb_{protocol:?}"),
+            "user-defined limit on storage usage, in kb",
+            registry
         )
         .unwrap();
-        let storage_capacity_kb =
-            register_gauge!(format!("trin_storage_capacity_kb_{:?}", protocol), "help").unwrap();
+        let radius_percent = register_gauge_with_registry!(
+            format!("trin_radius_percent_{protocol:?}"),
+            "the percentage of the whole data ring covered by the data radius",
+            registry,
+        )
+        .unwrap();
 
         Self {
             content_storage_usage_kb,
             total_storage_usage_kb,
             storage_capacity_kb,
+            radius_percent,
         }
     }
 
@@ -749,6 +788,21 @@ impl StorageMetrics {
 
     pub fn report_storage_capacity(&self, kb: f64) {
         self.storage_capacity_kb.set(kb);
+    }
+
+    pub fn report_radius(&self, radius: Distance) {
+        let coverage_percent = radius.byte(31) as f64 * 100.0 / 255.0;
+        self.radius_percent.set(coverage_percent);
+    }
+
+    pub fn get_summary(&self) -> String {
+        format!(
+            "radius={:.1}% content={:.1}/{}kb disk={:.1}kb",
+            self.radius_percent.get(),
+            self.content_storage_usage_kb.get(),
+            self.storage_capacity_kb.get(),
+            self.total_storage_usage_kb.get(),
+        )
     }
 }
 
