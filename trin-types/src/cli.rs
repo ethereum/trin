@@ -326,6 +326,11 @@ mod test {
     }
 
     #[test]
+    fn test_help() {
+        TrinConfig::new_from(["trin", "-h"].iter()).expect_err("Should be an error to exit early");
+    }
+
+    #[test]
     fn test_custom_http_args() {
         let expected_config = TrinConfig {
             web3_http_address: Url::parse("http://0.0.0.0:8080/").unwrap(),
