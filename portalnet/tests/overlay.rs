@@ -1,13 +1,11 @@
 use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
-use trin_core::{
-    portalnet::{
-        discovery::{Discovery, Discv5UdpSocket},
-        overlay::{OverlayConfig, OverlayProtocol},
-        storage::{ContentStore, DistanceFunction, MemoryContentStore},
-        types::messages::{Content, Message, PortalnetConfig, ProtocolId},
-    },
+use portalnet::{
+    discovery::{Discovery, Discv5UdpSocket},
+    overlay::{OverlayConfig, OverlayProtocol},
     socket,
+    storage::{ContentStore, DistanceFunction, MemoryContentStore},
+    types::messages::{Content, Message, PortalnetConfig, ProtocolId},
 };
 use trin_types::content_key::IdentityContentKey;
 use trin_types::distance::{Distance, XorMetric};

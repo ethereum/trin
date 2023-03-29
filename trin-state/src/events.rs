@@ -1,9 +1,9 @@
 use crate::network::StateNetwork;
 use discv5::TalkRequest;
+use portalnet::types::messages::Message;
 use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tracing::{error, warn, Instrument};
-use trin_core::portalnet::types::messages::Message;
 
 pub struct StateEvents {
     pub network: Arc<StateNetwork>,

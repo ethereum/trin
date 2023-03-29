@@ -5,7 +5,7 @@ use tokio::sync::RwLock;
 use utp_rs::socket::UtpSocket;
 
 use ethportal_api::HistoryContentKey;
-use trin_core::portalnet::{
+use portalnet::{
     discovery::{Discovery, UtpEnr},
     overlay::{OverlayConfig, OverlayProtocol},
     storage::{PortalStorage, PortalStorageConfig},

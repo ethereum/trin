@@ -12,9 +12,9 @@ use ethportal_api::types::content_item::{
 };
 use ethportal_api::HistoryContentKey;
 use ethportal_api::Receipt;
-use trin_core::portalnet::storage::{PortalStorage, PortalStorageConfig};
-use trin_core::portalnet::types::messages::ProtocolId;
-use trin_core::utils::db::get_data_dir;
+use portalnet::storage::{PortalStorage, PortalStorageConfig};
+use portalnet::types::messages::ProtocolId;
+use portalnet::utils::db::get_data_dir;
 
 ///
 /// This script will iterate through all content id / key pairs in rocksd & meta db.

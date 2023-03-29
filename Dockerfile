@@ -15,18 +15,18 @@ RUN apt-get update && apt-get install clang -y
 # copy over manifests and source to build image
 COPY ./Cargo.lock ./Cargo.lock
 COPY ./Cargo.toml ./Cargo.toml
+COPY ./ethportal-api ./ethportal-api
+COPY ./ethportal-peertest ./ethportal-peertest 
+COPY ./portalnet ./portalnet
+COPY ./rpc ./rpc
 COPY ./src ./src 
 COPY ./trin-cli ./trin-cli
-COPY ./trin-core ./trin-core 
 COPY ./trin-history ./trin-history 
 COPY ./trin-state ./trin-state 
 COPY ./trin-types ./trin-types
 COPY ./trin-utils ./trin-utils 
 COPY ./trin-validation ./trin-validation 
-COPY ./ethportal-peertest ./ethportal-peertest 
 COPY ./utp-testing ./utp-testing
-COPY ./ethportal-api ./ethportal-api
-COPY ./rpc ./rpc
 
 # build for release
 RUN cargo build -p trin -p trin-cli --release

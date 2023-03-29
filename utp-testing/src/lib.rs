@@ -8,14 +8,14 @@ use discv5::TalkRequest;
 use jsonrpsee::core::{async_trait, RpcResult};
 use jsonrpsee::http_server::{HttpServerBuilder, HttpServerHandle};
 use jsonrpsee::proc_macros::rpc;
+use portalnet::discovery::{Discovery, UtpEnr};
+use portalnet::types::messages::{PortalnetConfig, ProtocolId};
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::sync::RwLock;
-use trin_core::portalnet::discovery::{Discovery, UtpEnr};
-use trin_core::portalnet::types::messages::{PortalnetConfig, ProtocolId};
 use trin_types::enr::Enr;
 use trin_utils::bytes::{hex_encode, hex_encode_upper};
 use utp_rs::{conn::ConnectionConfig, socket::UtpSocket};
@@ -154,10 +154,8 @@ pub async fn run_test_app(
     let discovery = Arc::new(discovery);
 
     let (utp_talk_req_tx, utp_talk_req_rx) = mpsc::unbounded_channel();
-    let discv5_utp_socket = trin_core::portalnet::discovery::Discv5UdpSocket::new(
-        Arc::clone(&discovery),
-        utp_talk_req_rx,
-    );
+    let discv5_utp_socket =
+        portalnet::discovery::Discv5UdpSocket::new(Arc::clone(&discovery), utp_talk_req_rx);
     let utp_socket = utp_rs::socket::UtpSocket::with_socket(discv5_utp_socket);
     let utp_socket = Arc::new(utp_socket);
 

@@ -9,13 +9,11 @@ use tokio::sync::RwLock;
 use tracing::info;
 use utp_rs::socket::UtpSocket;
 
-use trin_core::{
-    portalnet::{
-        discovery::{Discovery, Discv5UdpSocket},
-        events::PortalnetEvents,
-        storage::PortalStorageConfig,
-        types::messages::PortalnetConfig,
-    },
+use portalnet::{
+    discovery::{Discovery, Discv5UdpSocket},
+    events::PortalnetEvents,
+    storage::PortalStorageConfig,
+    types::messages::PortalnetConfig,
     utils::{bootnodes::parse_bootnodes, db::setup_temp_dir},
 };
 use trin_history::initialize_history_network;

@@ -426,7 +426,7 @@ mod tests {
     fn sorted(target: &Key<NodeId>, peers: &[Key<NodeId>]) -> bool {
         peers
             .windows(2)
-            .all(|w| w[0].distance(&target) < w[1].distance(&target))
+            .all(|w| w[0].distance(target) < w[1].distance(target))
     }
 
     impl Arbitrary for TestQuery {
@@ -548,7 +548,7 @@ mod tests {
                 }
 
                 // Re-sort the remaining expected peers for the next "round".
-                remaining.sort_by_key(|k| target.distance(&k));
+                remaining.sort_by_key(|k| target.distance(k));
 
                 expected = remaining;
             }

@@ -1,5 +1,5 @@
 [package]
-name = "trin-core"
+name = "portalnet"
 version = "0.1.0"
 edition = "2021"
 repository = "https://github.com/ethereum/trin/tree/main/trin-core"
@@ -36,6 +36,7 @@ prometheus_exporter = "0.8.4"
 rand = "0.8.4"
 rlp = "0.5.0"
 rocksdb = "0.18.0"
+rusqlite = { version = "0.26.3", features = ["bundled"] }
 r2d2 = "0.8.9"
 r2d2_sqlite = "0.19.0"
 serde = { version = "1.0.150", features = ["derive"] }
@@ -63,10 +64,6 @@ uds_windows = "1.0.1"
 
 [target.'cfg(unix)'.dependencies]
 interfaces = "0.0.7"
-
-[dependencies.rusqlite]
-version = "0.26.3"
-features = ["bundled"]
 
 [dev-dependencies]
 env_logger = "0.9.0"

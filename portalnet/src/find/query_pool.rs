@@ -110,7 +110,7 @@ where
         let mut timeout = None;
 
         for (&query_id, (_, query)) in self.queries.iter_mut() {
-            if let None = query.started() {
+            if query.started().is_none() {
                 query.start(now);
             }
             match query.poll(now) {

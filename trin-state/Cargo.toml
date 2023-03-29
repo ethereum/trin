@@ -19,10 +19,10 @@ ethportal-api = { path = "../ethportal-api" }
 eth_trie = "0.1.0"
 num = "0.4.0"
 parking_lot = "0.11.2"
+portalnet = { path = "../portalnet" }
 rocksdb = "0.18.0"
 tracing = "0.1.36"
 tokio = {version = "1.14.0", features = ["full"]}
-trin-core = { path = "../trin-core" }
 trin-types = { path = "../trin-types" }
 trin-validation = { path = "../trin-validation" }
 utp-rs = "0.1.0-alpha.3"

@@ -3,7 +3,7 @@ use prometheus_exporter::{
     prometheus::{register_counter, Counter},
 };
 
-use crate::portalnet::types::messages::ProtocolId;
+use crate::types::messages::ProtocolId;
 
 /// General Metrics Strategy (wip)
 /// - Each module should maintain its own metrics reporter

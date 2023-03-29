@@ -30,7 +30,7 @@ use trin_utils::version::get_trin_version;
 const TALKREQ_CHANNEL_BUFFER: usize = 100;
 
 /// ENR key for portal network client version.
-const ENR_PORTAL_CLIENT_KEY: &'static str = "c";
+const ENR_PORTAL_CLIENT_KEY: &str = "c";
 
 #[derive(Clone)]
 pub struct Config {
@@ -117,7 +117,6 @@ impl Discovery {
             listen_port: ip_port,
             bootnode_enrs: portal_config.bootnode_enrs,
             private_key: portal_config.private_key,
-            ..Default::default()
         };
 
         let enr_key = match config.private_key {
@@ -170,8 +169,7 @@ impl Discovery {
             "Starting discv5",
         );
 
-        let _ = self
-            .discv5
+        self.discv5
             .start(self.listen_socket)
             .await
             .map_err(|e| format!("Failed to start discv5 server: {e:?}"))?;
@@ -288,10 +286,7 @@ impl Discovery {
 
     /// Returns the cached `NodeAddress` or `None` if not cached.
     pub fn cached_node_addr(&self, node_id: &NodeId) -> Option<NodeAddress> {
-        match self.node_addr_cache.write().get(node_id) {
-            Some(addr) => Some(addr.clone()),
-            None => None,
-        }
+        self.node_addr_cache.write().get(node_id).cloned()
     }
 
     /// Sends a TALKREQ message to `enr`.
@@ -302,7 +297,7 @@ impl Discovery {
         request: ProtocolRequest,
     ) -> Result<Vec<u8>, RequestError> {
         // Send empty protocol id if unable to convert it to bytes
-        let protocol = Vec::try_from(protocol).unwrap_or(vec![]);
+        let protocol = Vec::try_from(protocol).unwrap_or_default();
 
         let response = self.discv5.talk_req(enr, protocol, request).await?;
         Ok(response)

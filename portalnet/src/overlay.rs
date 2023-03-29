@@ -18,7 +18,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use tracing::{debug, error, info, warn};
 use utp_rs::socket::UtpSocket;
 
-use crate::portalnet::{
+use crate::{
     discovery::{Discovery, UtpEnr},
     overlay_service::{
         OverlayCommand, OverlayRequest, OverlayRequestError, OverlayService, RequestDirection,
@@ -75,6 +75,8 @@ impl Default for OverlayConfig {
         }
     }
 }
+
+type BucketEntry = (NodeId, Enr, NodeStatus, Distance, Option<String>);
 
 /// Overlay protocol is a layer on top of discv5 that handles all requests from the overlay networks
 /// (state, history etc.) and dispatch them to the discv5 protocol TalkReq. Each network should
@@ -206,7 +208,7 @@ where
     /// Propagate gossip accepted content via OFFER/ACCEPT, return number of peers propagated
     pub fn propagate_gossip(&self, content: Vec<(TContentKey, Vec<u8>)>) -> usize {
         let kbuckets = Arc::clone(&self.kbuckets);
-        crate::portalnet::overlay_service::propagate_gossip_cross_thread(
+        crate::overlay_service::propagate_gossip_cross_thread(
             content,
             kbuckets,
             self.command_tx.clone(),
@@ -227,16 +229,14 @@ where
         self.kbuckets
             .write()
             .iter()
-            .map(|entry| entry.node.value.enr().clone())
+            .map(|entry| entry.node.value.enr())
             .collect()
     }
 
     /// Returns a map (BTree for its ordering guarantees) with:
     ///     key: usize representing bucket index
     ///     value: Vec of tuples, each tuple represents a node
-    pub fn bucket_entries(
-        &self,
-    ) -> BTreeMap<usize, Vec<(NodeId, Enr, NodeStatus, Distance, Option<String>)>> {
+    pub fn bucket_entries(&self) -> BTreeMap<usize, Vec<BucketEntry>> {
         self.kbuckets
             .read()
             .buckets_iter()
@@ -249,7 +249,7 @@ where
                         .iter()
                         .map(|node| {
                             // "c" is used as short-hand for "client" within the ENR's key-values.
-                            let client_info: Option<String> = match node.value.enr().clone().get("c") {
+                            let client_info: Option<String> = match node.value.enr().get("c") {
                                 Some(slice) => {
                                     match std::str::from_utf8(slice) {
                                         Ok(client_string) => Some(client_string.to_string()),
@@ -263,7 +263,7 @@ where
                             };
                             (
                                 *node.key.preimage(),
-                                node.value.enr().clone(),
+                                node.value.enr(),
                                 node.status,
                                 node.value.data_radius(),
                                 client_info,
@@ -381,7 +381,7 @@ where
         let cid = utp_rs::cid::ConnectionId {
             recv: conn_id,
             send: conn_id.wrapping_add(1),
-            peer: crate::portalnet::discovery::UtpEnr(enr),
+            peer: crate::discovery::UtpEnr(enr),
         };
         let mut stream = self
             .utp_socket
@@ -549,7 +549,7 @@ where
 }
 
 fn validate_find_nodes_distances(distances: &Vec<u16>) -> Result<(), OverlayRequestError> {
-    if distances.len() == 0 {
+    if distances.is_empty() {
         return Err(OverlayRequestError::InvalidRequest(
             "Invalid distances: Empty list".to_string(),
         ));
@@ -560,10 +560,9 @@ fn validate_find_nodes_distances(distances: &Vec<u16>) -> Result<(), OverlayRequ
         ));
     }
     let invalid_distances: Vec<&u16> = distances.iter().filter(|val| val > &&256u16).collect();
-    if invalid_distances.len() > 0 {
+    if !invalid_distances.is_empty() {
         return Err(OverlayRequestError::InvalidRequest(format!(
-            "Invalid distances: Distances greater than 256 are not allowed. Found: {:?}",
-            invalid_distances
+            "Invalid distances: Distances greater than 256 are not allowed. Found: {invalid_distances:?}",
         )));
     }
     let unique: HashSet<u16> = HashSet::from_iter(distances.iter().cloned());
@@ -587,10 +586,7 @@ mod test {
     #[case((0u16..256u16).collect())]
     fn test_nodes_validator_accepts_valid_input(#[case] input: Vec<u16>) {
         let result = validate_find_nodes_distances(&input);
-        match result {
-            Ok(val) => assert_eq!(val, ()),
-            Err(_) => panic!("Valid test case fails"),
-        }
+        assert!(result.is_ok());
     }
 
     #[rstest]

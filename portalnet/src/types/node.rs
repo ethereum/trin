@@ -25,7 +25,7 @@ impl Node {
 
     /// Returns the data radius of the node.
     pub fn data_radius(&self) -> Distance {
-        self.data_radius.clone()
+        self.data_radius
     }
 
     /// Sets the ENR of the node.

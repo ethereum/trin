@@ -53,8 +53,8 @@ pub struct QueryConfig {
     pub peer_timeout: Duration,
 }
 
-impl QueryConfig {
-    pub fn default() -> Self {
+impl Default for QueryConfig {
+    fn default() -> Self {
         Self {
             parallelism: 3,
             num_results: 20,
