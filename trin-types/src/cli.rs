@@ -205,14 +205,14 @@ impl Default for TrinConfig {
 
 impl TrinConfig {
     pub fn from_cli() -> Self {
-        Self::new_from(env::args_os()).expect("Could not parse trin arguments")
+        Self::new_from(env::args_os()).unwrap_or_else(|e| e.exit())
     }
     pub fn new_from<I, T>(args: I) -> Result<Self, clap::Error>
     where
         I: Iterator<Item = T>,
         T: Into<OsString> + Clone,
     {
-        let config = Self::from_iter_safe(args).unwrap_or_else(|e| panic!("{e}"));
+        let config = Self::from_iter_safe(args)?;
 
         match config.web3_transport {
             Web3TransportType::HTTP => match &config.web3_ipc_path[..] {
