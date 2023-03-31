@@ -39,6 +39,10 @@ impl Distance {
         self.0.to_big_endian(&mut be);
         be
     }
+
+    pub fn saturating_mul(&self, factor: usize) -> Self {
+        self.0.saturating_mul(factor.into()).into()
+    }
 }
 
 impl From<U256> for Distance {
@@ -143,6 +147,34 @@ mod test {
         point.to_big_endian(&mut distance);
         let point = DhtPoint(distance);
         assert!(!prop(point).is_failure());
+    }
+
+    #[test]
+    fn distance_saturating_mul_identity() {
+        fn prop(x: DhtPoint, y: DhtPoint) -> TestResult {
+            let distance_xy = XorMetric::distance(&x.0, &y.0);
+            let distance_xy_times_1 = distance_xy.saturating_mul(1);
+            TestResult::from_bool(distance_xy == distance_xy_times_1)
+        }
+        quickcheck(prop as fn(DhtPoint, DhtPoint) -> TestResult);
+    }
+
+    #[test]
+    fn distance_saturating_mul_double() {
+        assert_eq!(Distance::MAX.saturating_mul(2), Distance::MAX);
+        assert_eq!(
+            Distance(*Distance::MAX - 1).saturating_mul(2),
+            Distance::MAX
+        );
+    }
+
+    #[test]
+    fn distance_saturating_mul_half_double() {
+        // Since MAX is not a multiple of 2, the last bit gets truncated in the half & double test
+        assert_eq!(
+            Distance(*Distance::MAX / 2).saturating_mul(2),
+            Distance(*Distance::MAX - 1)
+        );
     }
 
     #[test]

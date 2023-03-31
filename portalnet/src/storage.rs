@@ -285,6 +285,13 @@ impl PortalStorage {
         // Set the metrics to the default radius, to start
         storage.metrics.report_radius(storage.radius);
 
+        // Report total storage used by network content.
+        let network_content_storage_usage =
+            storage.get_total_storage_usage_in_bytes_from_network()?;
+        storage
+            .metrics
+            .report_content_data_storage(network_content_storage_usage as f64 / 1000.0);
+
         // Check whether we already have data, and use it to set radius
         match storage.total_entry_count()? {
             0 => {
@@ -299,7 +306,16 @@ impl PortalStorage {
                     // No items were pruned, so the radius was never calculated.
                     // Calculate current radius now, rather than waiting for the next overfill.
                     if let Some(farthest) = storage.find_farthest_content_id()? {
-                        storage.set_radius(storage.distance_to_content_id(&farthest));
+                        // Set the radius to attempt to fill the unused storage capacity
+                        // For example, if storage is half-full, then the radius should be 2x the
+                        // distance to the furthest currently-stored item.
+                        let radius_multiple = storage.storage_capacity_in_bytes as f64
+                            / network_content_storage_usage as f64;
+                        let current_span = storage.distance_to_content_id(&farthest);
+                        // For simplicity, convert to integer multipe, which means radius won't
+                        // bump up unless it needs to go up by 2x.
+                        let target_radius = current_span.saturating_mul(radius_multiple as usize);
+                        storage.set_radius(target_radius);
                     }
                 }
             }
@@ -315,13 +331,6 @@ impl PortalStorage {
         storage
             .metrics
             .report_total_storage_usage(total_storage_usage as f64 / 1000.0);
-
-        // Report total storage used by network content.
-        let network_content_storage_usage =
-            storage.get_total_storage_usage_in_bytes_from_network()?;
-        storage
-            .metrics
-            .report_content_data_storage(network_content_storage_usage as f64 / 1000.0);
 
         Ok(storage)
     }
