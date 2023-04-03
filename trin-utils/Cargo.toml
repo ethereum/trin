@@ -13,8 +13,4 @@ build = "build.rs"
 
 [dependencies]
 anyhow = "1.0.68"
-discv5 = { version = "0.2.1", features = ["serde"] }
 hex = "0.4.3"
-
-[dev-dependencies]
-rstest = "0.11.0"

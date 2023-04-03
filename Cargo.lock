@@ -225,17 +225,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-recursion"
-version = "1.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e97ce7de6cf12de5d7226c73f5ba9811622f4db3a5b91b55c53e987e5f91cba"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.11",
-]
-
-[[package]]
 name = "async-std"
 version = "1.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1290,10 +1279,8 @@ dependencies = [
  "serde_json",
  "sha2 0.10.6",
  "sha3 0.9.1",
- "test-log",
  "thiserror",
  "tracing",
- "tracing-subscriber",
  "trin-types",
  "trin-utils",
 ]
@@ -2900,47 +2887,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ntest"
-version = "0.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e865500b46e35210765d62d549178c520badc018b2a71a827c29b305d680d1fb"
-dependencies = [
- "ntest_proc_macro_helper",
- "ntest_test_cases",
- "ntest_timeout",
-]
-
-[[package]]
-name = "ntest_proc_macro_helper"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a0e328d267a679d683b55222b3d06c2fb7358220857945bfc4e65a6b531e9994"
-
-[[package]]
-name = "ntest_test_cases"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6f7caf063242bb66721e74515dc01a915901063fa1f994bee7a2b9136f13370e"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "ntest_timeout"
-version = "0.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bca6eaadc7c104fb2eb0c6d14782b9e33775aaf5584c3bcb0f87c89e3e6d6c07"
-dependencies = [
- "ntest_proc_macro_helper",
- "proc-macro-crate",
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "nu-ansi-term"
 version = "0.46.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3344,7 +3290,6 @@ name = "portalnet"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "async-recursion",
  "async-trait",
  "base64 0.13.1",
  "bytes 1.4.0",
@@ -3365,12 +3310,9 @@ dependencies = [
  "lazy_static 1.4.0",
  "leb128",
  "lru",
- "ntest",
- "num",
  "parking_lot 0.11.2",
  "prometheus_exporter",
  "quickcheck",
- "quickcheck_macros",
  "r2d2",
  "r2d2_sqlite",
  "rand 0.8.5",
@@ -5187,7 +5129,6 @@ dependencies = [
  "httpmock",
  "parking_lot 0.11.2",
  "portalnet",
- "rpc",
  "rstest 0.11.0",
  "serde_json",
  "test-log",
@@ -5244,7 +5185,6 @@ dependencies = [
  "ethnum",
  "keccak-hash",
  "quickcheck",
- "quickcheck_macros",
  "rlp 0.5.2",
  "rlp-derive",
  "rstest 0.16.0",
@@ -5272,9 +5212,7 @@ name = "trin-utils"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "discv5",
  "hex",
- "rstest 0.11.0",
 ]
 
 [[package]]
@@ -5288,7 +5226,6 @@ dependencies = [
  "eth2_ssz_derive",
  "eth2_ssz_types",
  "ethereum-types 0.12.1",
- "ethportal-api",
  "lazy_static 1.4.0",
  "quickcheck",
  "quickcheck_macros",
