@@ -22,7 +22,7 @@ tracing-subscriber = "0.3.15"
 trin-types = { path = "../trin-types" }
 trin-utils = { path = "../trin-utils" }
 tokio = {version = "1.14.0", features = ["full"]}
-utp-rs = "0.1.0-alpha.3"
+utp-rs = "0.1.0-alpha.4"
 
 [[bin]]
 name = "utp-test-app"
