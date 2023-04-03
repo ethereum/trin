@@ -64,13 +64,59 @@ use trin_validation::validator::Validator;
 
 /// Maximum number of ENRs in response to FindNodes.
 pub const FIND_NODES_MAX_NODES: usize = 32;
+
 /// Maximum number of ENRs in response to FindContent.
 pub const FIND_CONTENT_MAX_NODES: usize = 32;
+
 /// With even distribution assumptions, 2**17 is enough to put each node (estimating 100k nodes,
 /// which is more than 10x the ethereum mainnet node count) into a unique bucket by the 17th bucket index.
 const EXPECTED_NON_EMPTY_BUCKETS: usize = 17;
+
 /// Bucket refresh lookup interval in seconds
 const BUCKET_REFRESH_INTERVAL_SECS: u64 = 60;
+
+/// The maximum size of a Discv5 packet.
+const MAX_DISCV5_PACKET_SIZE: usize = 1280;
+
+/// The maximum size of a Discv5 talk request payload.
+///
+/// Discv5 talk request overhead:
+///   * masking IV length: 16
+///   * static header (protocol ID || version || flag || nonce || authdata-size) length: 23
+///   * authdata length: 32
+///   * HMAC length: 16
+///   * (max) talk request ID length: 8
+///   * (max assumed) talk request protocol length: 8
+///   * RLP byte array overhead: 6
+const MAX_DISCV5_TALK_REQ_PAYLOAD_SIZE: usize =
+    MAX_DISCV5_PACKET_SIZE - 16 - 23 - 32 - 16 - 8 - 8 - 6;
+
+/// The maximum size of a portal NODES `enrs` payload.
+///
+/// Portal wire overhead:
+///   * portal message SSZ union selector
+///   * NODES `total` field: 1
+///   * NODES SSZ length offset for List `enrs`
+const MAX_PORTAL_NODES_ENRS_SIZE: usize = MAX_DISCV5_TALK_REQ_PAYLOAD_SIZE
+    - ssz::BYTES_PER_UNION_SELECTOR
+    - 1
+    - ssz::BYTES_PER_LENGTH_OFFSET;
+
+/// The maximum size of a portal CONTENT `enrs` payload.
+///
+/// Portal wire overhead:
+///   * portal message SSZ union selector
+///   * CONTENT SSZ union selector
+///   * CONTENT SSZ length offset for List `enrs`
+const MAX_PORTAL_CONTENT_ENRS_SIZE: usize = MAX_DISCV5_TALK_REQ_PAYLOAD_SIZE
+    - (ssz::BYTES_PER_UNION_SELECTOR * 2)
+    - ssz::BYTES_PER_LENGTH_OFFSET;
+
+/// The maximum size of a portal CONTENT `content` payload.
+///
+/// The portal wire overhead for the `content` payload is equal to the overhead for the `enrs`
+/// payload. A SSZ length offset is also required for the List `content`.
+const MAX_PORTAL_CONTENT_CONTENT_SIZE: usize = MAX_PORTAL_CONTENT_ENRS_SIZE;
 
 /// The default configuration to use for uTP connections.
 pub const UTP_CONN_CFG: ConnectionConfig = ConnectionConfig {
@@ -929,7 +975,7 @@ where
         let mut enrs = self.nodes_by_distance(distances64);
 
         // Limit the ENRs so that their summed sizes do not surpass the max TALKREQ packet size.
-        pop_while_ssz_bytes_len_gt(&mut enrs, MAX_NODES_SIZE);
+        pop_while_ssz_bytes_len_gt(&mut enrs, MAX_PORTAL_NODES_ENRS_SIZE);
 
         Nodes { total: 1, enrs }
     }
@@ -961,9 +1007,7 @@ where
         };
         match self.store.read().get(&content_key) {
             Ok(Some(content)) => {
-                // Check content size and initiate uTP connection if the size is over the threshold
-                // TODO: Properly calculate max content size
-                if content.len() <= 1028 {
+                if content.len() <= MAX_PORTAL_CONTENT_CONTENT_SIZE {
                     Ok(Content::Content(content))
                 } else {
                     // Generate a connection ID for the uTP connection.
@@ -1025,7 +1069,7 @@ where
                 let enrs = self.find_nodes_close_to_content(content_key);
                 match enrs {
                     Ok(mut val) => {
-                        pop_while_ssz_bytes_len_gt(&mut val, MAX_CONTENT_NODES_SIZE);
+                        pop_while_ssz_bytes_len_gt(&mut val, MAX_PORTAL_CONTENT_ENRS_SIZE);
                         Ok(Content::Enrs(val))
                     }
                     Err(msg) => Err(OverlayRequestError::InvalidRequest(msg.to_string())),
@@ -2388,23 +2432,6 @@ pub enum QueryEvent<TQuery, TContentKey> {
     Finished(QueryId, QueryInfo<TContentKey>, TQuery),
 }
 
-const MAX_DISCV5_PACKET_SIZE: usize = 1280;
-const TALK_REQ_PACKET_OVERHEAD: usize = 16 + // IV
-    55 + // Header
-    1 + // Discv5 Message Type
-    3 + // RLP Encoding of outer list
-    9 + // Request ID, max 8 bytes + 1 for RLP encoding
-    3 + // RLP Encoding of inner response
-    16; // RLP HMAC
-const NODES_PACKET_OVERHEAD: usize = 1 + // Selector byte
-    1; // `total` field
-const CONTENT_PACKET_OVERHEAD: usize = 1 + // Selector byte
-    4; // Union type index
-const MAX_NODES_SIZE: usize =
-    MAX_DISCV5_PACKET_SIZE - TALK_REQ_PACKET_OVERHEAD - NODES_PACKET_OVERHEAD;
-const MAX_CONTENT_NODES_SIZE: usize =
-    MAX_DISCV5_PACKET_SIZE - TALK_REQ_PACKET_OVERHEAD - CONTENT_PACKET_OVERHEAD;
-
 /// Limits a to a maximum packet size, including the discv5 header overhead.
 fn pop_while_ssz_bytes_len_gt(enrs: &mut Vec<SszEnr>, max_size: usize) {
     while enrs.ssz_bytes_len() > max_size {
@@ -3145,7 +3172,7 @@ mod tests {
             enrs.push(SszEnr::new(enr));
         }
 
-        pop_while_ssz_bytes_len_gt(&mut enrs, MAX_NODES_SIZE);
+        pop_while_ssz_bytes_len_gt(&mut enrs, MAX_PORTAL_NODES_ENRS_SIZE);
 
         assert_eq!(enrs.len(), correct_limited_size);
     }
