@@ -69,4 +69,15 @@ mod test {
 
         assert_eq!(node_id, serde_json::from_str(&node_id_string).unwrap());
     }
+
+    #[test]
+    fn test_same_with_enr_node_id() {
+        let enr_node_id = EnrNodeId::random();
+        let portal_node_id = NodeId(enr_node_id);
+        assert_eq!(
+            serde_json::to_string(&enr_node_id).unwrap(),
+            serde_json::to_string(&portal_node_id).unwrap()
+        );
+        assert_eq!(enr_node_id, portal_node_id.0);
+    }
 }
