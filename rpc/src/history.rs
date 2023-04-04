@@ -95,8 +95,11 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
     }
 
     /// Lookup a target node within in the network
-    async fn recursive_find_nodes(&self, _node_id: NodeId) -> RpcResult<Vec<Enr>> {
-        Err(Error::MethodNotFound("recursive_find_nodes".to_owned()))
+    async fn recursive_find_nodes(&self, node_id: NodeId) -> RpcResult<Vec<Enr>> {
+        let endpoint = HistoryEndpoint::RecursiveFindNodes(node_id);
+        let result = self.proxy_query_to_history_subnet(endpoint).await?;
+        let result: Vec<Enr> = from_value(result)?;
+        Ok(result)
     }
 
     /// Lookup a target node within in the network

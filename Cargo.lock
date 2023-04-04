@@ -5189,6 +5189,7 @@ dependencies = [
  "rlp-derive",
  "rstest 0.16.0",
  "serde",
+ "serde-hex",
  "serde_json",
  "serde_yaml",
  "sha2 0.10.6",

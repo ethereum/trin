@@ -21,6 +21,7 @@ pub use trin_types::content_value::{ContentValue, HistoryContentValue};
 pub use trin_types::execution::block_body::*;
 pub use trin_types::execution::header::*;
 pub use trin_types::execution::receipts::*;
+pub use trin_types::node_id::NodeId;
 
 // Re-exports jsonrpsee crate
 pub use jsonrpsee;

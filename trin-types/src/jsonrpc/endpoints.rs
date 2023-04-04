@@ -1,3 +1,5 @@
+use discv5::enr::NodeId;
+
 use crate::content_key::HistoryContentKey;
 use crate::content_value::HistoryContentValue;
 use crate::distance::DataRadius;
@@ -33,6 +35,8 @@ pub enum HistoryEndpoint {
     FindContent(Enr, HistoryContentKey),
     /// params: [enr, distances]
     FindNodes(Enr, Vec<u16>),
+    /// params: [node_id]
+    RecursiveFindNodes(NodeId),
     /// params: content_key
     LocalContent(HistoryContentKey),
     /// params: [content_key, content_value]
