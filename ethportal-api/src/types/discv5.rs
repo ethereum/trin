@@ -1,29 +1,11 @@
 use crate::types::enr::Enr;
+use enr::NodeId as EnrNodeId;
 use serde::{Deserialize, Serialize};
-use serde_hex::{SerHex, StrictPfx};
 use serde_json::Value;
-use std::ops::Deref;
-
-type RawNodeId = [u8; 32];
 
 /// Discv5 NodeId
-// TODO: Wrap this type over discv5::NodeId type
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct NodeId(#[serde(with = "SerHex::<StrictPfx>")] pub RawNodeId);
-
-impl From<RawNodeId> for NodeId {
-    fn from(item: RawNodeId) -> Self {
-        NodeId(item)
-    }
-}
-
-impl Deref for NodeId {
-    type Target = RawNodeId;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
+pub struct NodeId(EnrNodeId);
 
 /// Discv5 bucket
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -53,7 +35,7 @@ pub type RoutingTableInfo = Value;
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use crate::types::discv5::{Enr, NodeId};
+    use super::*;
     use std::net::Ipv4Addr;
 
     #[test]
@@ -75,10 +57,13 @@ mod test {
 
     #[test]
     fn test_node_id_ser_de() {
-        let node_id = NodeId([
-            176, 202, 35, 254, 68, 245, 224, 61, 174, 106, 81, 237, 41, 88, 144, 15, 55, 58, 125,
-            119, 228, 39, 201, 211, 154, 95, 148, 198, 212, 185, 175, 219,
-        ]);
+        let node_id = NodeId(
+            [
+                176, 202, 35, 254, 68, 245, 224, 61, 174, 106, 81, 237, 41, 88, 144, 15, 55, 58,
+                125, 119, 228, 39, 201, 211, 154, 95, 148, 198, 212, 185, 175, 219,
+            ]
+            .into(),
+        );
 
         let node_id_string = serde_json::to_string(&node_id).unwrap();
 
