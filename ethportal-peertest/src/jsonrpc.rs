@@ -197,7 +197,12 @@ fn validate_discv5_node_info(val: &Value, _peertest: &Peertest) {
     let enr = val.get("enr").unwrap();
     assert!(enr.is_string());
     assert!(enr.as_str().unwrap().contains("enr:"));
-    assert!(val.get("nodeId").unwrap().is_string());
+    assert!(val
+        .get("nodeId")
+        .unwrap()
+        .as_object()
+        .unwrap()
+        .contains_key("raw"));
 }
 
 fn validate_discv5_routing_table_info(val: &Value, _peertest: &Peertest) {
