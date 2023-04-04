@@ -117,6 +117,9 @@ impl HistoryRequestHandler {
                     };
                     let _ = request.resp.send(response);
                 }
+                HistoryEndpoint::RecursiveFindNodes(node_id) => {
+                    // TODO.... where do I dispatch this...
+                }
                 HistoryEndpoint::Gossip(content_key, content_value) => {
                     let data = content_value.encode();
                     let content_values = vec![(content_key, data)];
