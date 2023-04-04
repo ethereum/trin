@@ -48,6 +48,7 @@ ureq = { version = "2.5.0", features = ["json"] }
 members = [
     "ethportal-api",
     "ethportal-peertest",
+    "light-client",
     "rpc",
     "trin-cli",
     "trin-history",
