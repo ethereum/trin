@@ -143,6 +143,8 @@ fn generate_trin_config(id: u16, bootnode_enr: Option<&SszEnr>) -> TrinConfig {
                 "history,state",
                 "--external-address",
                 external_addr.as_str(),
+                "--bootnodes",
+                "none",
                 "--discovery-port",
                 discovery_port.as_str(),
                 "--web3-ipc-path",

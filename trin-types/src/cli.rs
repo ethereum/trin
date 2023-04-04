@@ -4,6 +4,7 @@ use ethereum_types::H256;
 use structopt::StructOpt;
 use url::Url;
 
+use crate::bootnodes::Bootnodes;
 use crate::provider::TrustedProviderType;
 
 pub const DEFAULT_MASTER_ACC_PATH: &str = "src/assets/merge_macc.bin";
@@ -93,11 +94,11 @@ pub struct TrinConfig {
     pub discovery_port: u16,
 
     #[structopt(
-        use_delimiter = true,
+        default_value("default"),
         long = "bootnodes",
         help = "One or more comma-delimited base64-encoded ENR's or multiaddr strings of peers to initially add to the local routing table"
     )]
-    pub bootnodes: Vec<String>,
+    pub bootnodes: Bootnodes,
 
     #[structopt(
         long = "external-address",
@@ -183,7 +184,7 @@ impl Default for TrinConfig {
             discovery_port: DEFAULT_DISCOVERY_PORT
                 .parse()
                 .expect("Parsing static DEFAULT_DISCOVERY_PORT to work"),
-            bootnodes: vec![],
+            bootnodes: Bootnodes::Default,
             external_addr: None,
             no_stun: false,
             private_key: None,
@@ -424,18 +425,6 @@ mod test {
             TrinConfig::new_from(["trin", "--discovery-port", "999"].iter()).unwrap();
         assert!(env_is_set(&actual_config));
         assert_eq!(actual_config.discovery_port, expected_config.discovery_port);
-    }
-
-    #[test]
-    fn test_custom_bootnodes() {
-        let expected_config = TrinConfig {
-            bootnodes: vec!["enr:-aoeu".to_string(), "enr:-htns".to_string()],
-            ..Default::default()
-        };
-        let actual_config =
-            TrinConfig::new_from(["trin", "--bootnodes", "enr:-aoeu,enr:-htns"].iter()).unwrap();
-        assert!(env_is_set(&actual_config));
-        assert_eq!(actual_config.bootnodes, expected_config.bootnodes);
     }
 
     #[test]
