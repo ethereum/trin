@@ -5,7 +5,7 @@ use serde_json::Value;
 
 /// Discv5 NodeId
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct NodeId(EnrNodeId);
+pub struct NodeId(pub EnrNodeId);
 
 /// Discv5 bucket
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
