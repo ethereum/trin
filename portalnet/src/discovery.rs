@@ -232,7 +232,7 @@ impl Discovery {
         Ok(NodeInfo {
             enr: Enr::from_str(&self.discv5.local_enr().to_base64())
                 .map_err(|err| anyhow!("{err}"))?,
-            node_id: EthportalNodeId::from(self.discv5.local_enr().node_id().raw()),
+            node_id: EthportalNodeId(self.discv5.local_enr().node_id().raw().into()),
             ip: self
                 .discv5
                 .local_enr()
