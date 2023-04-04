@@ -14,7 +14,7 @@ use portalnet::{
     events::PortalnetEvents,
     storage::PortalStorageConfig,
     types::messages::PortalnetConfig,
-    utils::{bootnodes::parse_bootnodes, db::setup_temp_dir},
+    utils::db::setup_temp_dir,
 };
 use trin_history::initialize_history_network;
 use trin_state::initialize_state_network;
@@ -32,14 +32,13 @@ pub async fn run_trin(
     info!("Launching Trin: v{trin_version}");
     info!(config = %trin_config, "With:");
 
-    let bootnode_enrs = parse_bootnodes(&trin_config.bootnodes)?;
     let portalnet_config = PortalnetConfig {
         external_addr: trin_config.external_addr,
         private_key: trin_config.private_key,
         listen_port: trin_config.discovery_port,
         no_stun: trin_config.no_stun,
         enable_metrics: trin_config.enable_metrics_with_url.is_some(),
-        bootnode_enrs,
+        bootnode_enrs: trin_config.bootnodes.clone().into(),
         ..Default::default()
     };
 

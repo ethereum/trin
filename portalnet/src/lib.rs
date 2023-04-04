@@ -1,8 +1,5 @@
 #![warn(clippy::unwrap_used)]
 
-#[macro_use]
-extern crate lazy_static;
-
 pub mod discovery;
 pub mod events;
 pub mod find;

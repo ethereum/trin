@@ -22,7 +22,9 @@ cargo run -p trin -- --help
 ```
 ### Bootnodes
 
-To quickly connect to the testnet use the `--bootnodes default` flag.
+Trin automatically connects to the Portal Network bootnodes.
+Use the `--bootnodes` cli flag to connect to a specific node
+or to none.
 
 ### Control disk use
 

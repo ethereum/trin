@@ -1,3 +1,7 @@
+#[macro_use]
+extern crate lazy_static;
+
+pub mod bootnodes;
 pub mod bytes;
 pub mod cli;
 pub mod consensus;
