@@ -172,9 +172,40 @@ impl HistoryRequestHandler {
                     };
                     let _ = request.resp.send(response);
                 }
+<<<<<<< Updated upstream
                 HistoryEndpoint::FindNodes => {
                     let response = match FindNodesParams::try_from(request.params) {
                         Ok(val) => match self
+=======
+                HistoryEndpoint::FindNodes(enr, distances) => {
+                    let response = match self.network.overlay.send_find_nodes(enr, distances).await
+                    {
+                        Ok(nodes) => Ok(json!(FindNodesInfo {
+                            total: nodes.total,
+                            enrs: nodes
+                                .enrs
+                                .into_iter()
+                                .map(|enr| enr.into())
+                                .collect::<Vec<Enr>>(),
+                        })),
+                        Err(msg) => Err(format!("FindNodes request timeout: {msg:?}")),
+                    };
+                    let _ = request.resp.send(response);
+                }
+                HistoryEndpoint::RecursiveFindContent(node_id) => {
+                }
+                HistoryEndpoint::Gossip(content_key, content_value) => {
+                    let data = content_value.encode();
+                    let content_values = vec![(content_key, data)];
+                    let num_peers = self.network.overlay.propagate_gossip(content_values);
+                    let response = Ok(num_peers.into());
+                    let _ = request.resp.send(response);
+                }
+                HistoryEndpoint::Offer(enr, content_key, content_value) => {
+                    let response = if let Some(content_value) = content_value {
+                        let content_value = content_value.encode();
+                        match self
+>>>>>>> Stashed changes
                             .network
                             .overlay
                             .send_find_nodes(val.enr.into(), val.distances)
