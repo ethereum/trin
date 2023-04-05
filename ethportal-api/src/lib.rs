@@ -17,7 +17,9 @@ pub use trin_types::content_key::{
     BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey, HistoryContentKey,
     OverlayContentKey, StateContentKey,
 };
-pub use trin_types::content_value::{ContentValue, HistoryContentValue};
+pub use trin_types::content_value::{
+    ContentValue, ContentValueError, HistoryContentValue, PossibleHistoryContentValue,
+};
 pub use trin_types::execution::block_body::*;
 pub use trin_types::execution::header::*;
 pub use trin_types::execution::receipts::*;
