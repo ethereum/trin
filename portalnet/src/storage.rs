@@ -10,7 +10,10 @@ use discv5::enr::NodeId;
 use ethportal_api::types::portal::PaginateLocalContentInfo;
 use prometheus_exporter::{
     self,
-    prometheus::{opts, register_gauge, register_gauge_with_registry, Gauge, Registry},
+    prometheus::{
+        opts, register_gauge, register_gauge_with_registry, register_int_gauge_with_registry,
+        Gauge, IntGauge, Registry,
+    },
 };
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
@@ -270,7 +273,9 @@ impl PortalStorage {
                 }
             }
             // Only prunes data when at capacity. (eg. user changed it via kb flag)
-            _ => {
+            entry_count => {
+                storage.metrics.report_entry_count(entry_count);
+
                 if storage.prune_db()? == 0 {
                     // No items were pruned, so the radius was never calculated.
                     // Calculate current radius now, rather than waiting for the next overfill.
@@ -394,6 +399,8 @@ impl PortalStorage {
             );
             self.db.delete(content_id)?;
             return Err(err);
+        } else {
+            self.metrics.increase_entry_count();
         }
         self.prune_db()?;
         let total_bytes_on_disk = self.get_total_storage_usage_in_bytes_on_disk()?;
@@ -452,6 +459,7 @@ impl PortalStorage {
             }
             return Err(anyhow!("failed deletion {err}"));
         }
+        self.metrics.decrease_entry_count();
         Ok(())
     }
 
@@ -701,6 +709,7 @@ struct StorageMetrics {
     total_storage_usage_kb: Gauge,
     storage_capacity_kb: Gauge,
     radius_percent: Gauge,
+    entry_count: IntGauge,
 }
 
 impl StorageMetrics {
@@ -744,12 +753,19 @@ impl StorageMetrics {
             registry,
         )
         .unwrap();
+        let entry_count = register_int_gauge_with_registry!(
+            format!("trin_entry_count_{protocol:?}"),
+            "total number of storage entries",
+            registry,
+        )
+        .unwrap();
 
         Self {
             content_storage_usage_kb,
             total_storage_usage_kb,
             storage_capacity_kb,
             radius_percent,
+            entry_count,
         }
     }
 
@@ -770,12 +786,28 @@ impl StorageMetrics {
         self.radius_percent.set(coverage_percent);
     }
 
+    pub fn report_entry_count(&self, count: u64) {
+        let count: i64 = count
+            .try_into()
+            .expect("Number of db entries will be small enough to fit in i64");
+        self.entry_count.set(count);
+    }
+
+    pub fn increase_entry_count(&self) {
+        self.entry_count.inc();
+    }
+
+    pub fn decrease_entry_count(&self) {
+        self.entry_count.dec();
+    }
+
     pub fn get_summary(&self) -> String {
         format!(
-            "radius={:.1}% content={:.1}/{}kb disk={:.1}kb",
+            "radius={:.1}% content={:.1}/{}kb #={} disk={:.1}kb",
             self.radius_percent.get(),
             self.content_storage_usage_kb.get(),
             self.storage_capacity_kb.get(),
+            self.entry_count.get(),
             self.total_storage_usage_kb.get(),
         )
     }
