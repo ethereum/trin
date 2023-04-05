@@ -421,6 +421,16 @@ impl PortalStorage {
             let id_to_remove =
                 // Always expect a content id if capacity_reached(), even at 0kb capacity
                 farthest_content_id.expect("Capacity reached, but no farthest id found!");
+            // Test if removing the item would put us under capacity
+            if self.does_eviction_cause_under_capacity(&id_to_remove)? {
+                // If so, we're done pruning
+                debug!(
+                    "Removing item would drop us below capacity. We target slight overfilling. {}",
+                    hex_encode(id_to_remove)
+                );
+                self.set_radius(self.distance_to_content_id(&id_to_remove));
+                break;
+            }
             debug!(
                 "Capacity reached, deleting farthest: {}",
                 hex_encode(id_to_remove)
@@ -445,6 +455,41 @@ impl PortalStorage {
             }
         }
         Ok(num_removed_items)
+    }
+
+    /// Internal method for testing if an eviction would cause the store to fall under capacity.
+    /// Returns true if the store would fall under capacity, false otherwise.
+    /// Raises an error if there is a problem accessing the database.
+    fn does_eviction_cause_under_capacity(&self, id: &[u8; 32]) -> Result<bool, ContentStoreError> {
+        let total_bytes_on_disk = self.get_total_storage_usage_in_bytes_from_network()?;
+        // Get the size of the content we're about to remove
+        let bytes_to_remove = self.get_content_size(id)?;
+        Ok(total_bytes_on_disk - bytes_to_remove < self.storage_capacity_in_bytes)
+    }
+
+    /// Internal method for getting the size of a content item in bytes.
+    /// Returns the size of the content item in bytes.
+    /// Raises an error if there is a problem accessing the database.
+    fn get_content_size(&self, id: &[u8; 32]) -> Result<u64, ContentStoreError> {
+        let conn = self.sql_connection_pool.get()?;
+        let mut query = conn.prepare(CONTENT_SIZE_LOOKUP_QUERY)?;
+        let id_vec = id.to_vec();
+        let result = query.query_map([id_vec], |row| {
+            Ok(DataSize {
+                num_bytes: row.get(0)?,
+            })
+        });
+        let byte_size = match result?.next() {
+            Some(data_size) => data_size,
+            None => {
+                // Build error message with hex encoded content id
+                let err = format!("Unable to determine size of item {}", hex_encode(id));
+                return Err(ContentStoreError::Database(err));
+            }
+        }?
+        .num_bytes;
+
+        Ok(byte_size as u64)
     }
 
     /// Public method for evicting a certain content id. Will revert RocksDB deletion if meta_db
@@ -558,7 +603,11 @@ impl PortalStorage {
         let conn = self.sql_connection_pool.get()?;
         let mut query = conn.prepare(TOTAL_DATA_SIZE_QUERY)?;
 
-        let result = query.query_map([], |row| Ok(DataSizeSum { sum: row.get(0)? }));
+        let result = query.query_map([], |row| {
+            Ok(DataSize {
+                num_bytes: row.get(0)?,
+            })
+        });
 
         let sum = match result?.next() {
             Some(total) => total,
@@ -567,7 +616,7 @@ impl PortalStorage {
                 return Err(ContentStoreError::Database(err));
             }
         }?
-        .sum;
+        .num_bytes;
 
         self.metrics.report_content_data_storage(sum / 1000.0);
 
@@ -843,13 +892,16 @@ const TOTAL_ENTRY_COUNT_QUERY: &str = "SELECT COUNT(content_id_long) FROM conten
 const PAGINATE_QUERY: &str =
     "SELECT content_key FROM content_metadata ORDER BY content_key LIMIT :limit OFFSET :offset";
 
+const CONTENT_SIZE_LOOKUP_QUERY: &str =
+    "SELECT content_size FROM content_metadata WHERE content_id_long = (?1)";
+
 // SQLite Result Containers
 struct ContentId {
     id_long: Vec<u8>,
 }
 
-struct DataSizeSum {
-    sum: f64,
+struct DataSize {
+    num_bytes: f64,
 }
 
 struct EntryCount(u64);
@@ -988,8 +1040,8 @@ pub mod test {
 
         // test that previously set value has been pruned
         let bytes = new_storage.get_total_storage_usage_in_bytes_from_network()?;
-        assert_eq!(992, bytes);
-        assert_eq!(31, new_storage.total_entry_count().unwrap());
+        assert_eq!(1024, bytes);
+        assert_eq!(32, new_storage.total_entry_count().unwrap());
         assert_eq!(new_storage.storage_capacity_in_bytes, 1000);
         // test that radius has decreased now that we're at capacity
         assert!(new_storage.radius < Distance::MAX);
@@ -1004,6 +1056,53 @@ pub mod test {
         assert_eq!(new_storage.radius, Distance::ZERO);
         //assert_eq!(31, new_storage.total_entry_count().unwrap());
         std::mem::drop(new_storage);
+
+        temp_dir.close()?;
+        Ok(())
+    }
+
+    #[test_log::test(tokio::test)]
+    #[serial]
+    async fn test_restarting_full_storage_with_same_capacity() -> Result<(), ContentStoreError> {
+        // test a node that gets full and then restarts with the same capacity
+        let temp_dir = setup_temp_dir().unwrap();
+
+        let node_id = NodeId::random();
+        let min_capacity = 1;
+        // Use a tiny storage capacity, to fill up as quickly as possible
+        let storage_config = PortalStorageConfig::new(min_capacity, node_id, false).unwrap();
+        let mut storage = PortalStorage::new(storage_config.clone(), ProtocolId::History)?;
+
+        // Fill up the storage. This is overkill for the 1kb capacity, but an upcoming
+        // change will make the minimum storage size 1MB, so 32 keys should still be sufficient then.
+        for _ in 0..32 {
+            let content_key = generate_random_content_key();
+            let value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
+            storage.store(&content_key, &value)?;
+            // Speed up the test by ending the loop as soon as possible
+            // At 1kb, that should be immediately after the first item is stored.
+            // At 1MB, it will take the full 32 items.
+            if storage.capacity_reached()? {
+                break;
+            }
+        }
+        assert!(storage.capacity_reached()?);
+
+        // Save the number of items, to compare with the restarted storage
+        let total_entry_count = storage.total_entry_count().unwrap();
+        // Save the radius, to compare with the restarted storage
+        let radius = storage.radius;
+        assert!(radius < Distance::MAX);
+
+        // Restart a filled-up store with the same capacity
+        let new_storage = PortalStorage::new(storage_config, ProtocolId::History)?;
+
+        // The restarted store should have the same number of items
+        assert_eq!(total_entry_count, new_storage.total_entry_count().unwrap());
+        // The restarted store should be full
+        assert!(new_storage.capacity_reached()?);
+        // The restarted store should have the same radius as the original
+        assert_eq!(radius, new_storage.radius);
 
         temp_dir.close()?;
         Ok(())
