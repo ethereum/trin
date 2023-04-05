@@ -14,3 +14,13 @@ build = "build.rs"
 [dependencies]
 hex = "0.4.3"
 thiserror = "1.0.40"
+tracing = "0.1.36"
+tracing-subscriber = "0.3.15"
+
+[target.'cfg(windows)'.dependencies]
+# The crates for detecting whether the terminal supports colors are OS-specific.
+ansi_term = "0.12"
+
+[target.'cfg(not(windows))'.dependencies]
+# The crates for detecting whether the terminal supports colors are OS-specific.
+atty = "0.2.14"

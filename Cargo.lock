@@ -5661,8 +5661,12 @@ dependencies = [
 name = "trin-utils"
 version = "0.1.0"
 dependencies = [
+ "ansi_term",
+ "atty",
  "hex",
  "thiserror",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
