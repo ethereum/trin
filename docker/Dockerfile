@@ -20,6 +20,7 @@ COPY ./ethportal-peertest ./ethportal-peertest
 COPY ./portalnet ./portalnet
 COPY ./rpc ./rpc
 COPY ./src ./src 
+COPY ./trin-bridge ./trin-bridge
 COPY ./trin-cli ./trin-cli
 COPY ./trin-history ./trin-history 
 COPY ./trin-state ./trin-state 
