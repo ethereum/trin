@@ -53,7 +53,6 @@ impl StateNetwork {
             discovery,
             utp_socket,
             storage,
-            portal_config.data_radius,
             ProtocolId::State,
             validator,
         )

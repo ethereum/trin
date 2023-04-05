@@ -88,8 +88,6 @@ pub struct OverlayProtocol<TContentKey, TMetric, TValidator, TStore> {
     pub discovery: Arc<Discovery>,
     /// The data store.
     pub store: Arc<RwLock<TStore>>,
-    /// The user-defined data radius of the local node. This value is not updated as storage fills.
-    pub data_radius: Arc<Distance>,
     /// The overlay routing table of the local node.
     kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
     /// The subnetwork protocol of the overlay.
@@ -123,7 +121,6 @@ where
         discovery: Arc<Discovery>,
         utp_socket: Arc<UtpSocket<UtpEnr>>,
         store: Arc<RwLock<TStore>>,
-        data_radius: Distance,
         protocol: ProtocolId,
         validator: Arc<TValidator>,
     ) -> Self {
@@ -135,14 +132,12 @@ where
             config.bucket_filter,
         )));
 
-        let data_radius = Arc::new(data_radius);
         let command_tx = OverlayService::<TContentKey, TMetric, TValidator, TStore>::spawn(
             Arc::clone(&discovery),
             Arc::clone(&store),
             Arc::clone(&kbuckets),
             config.bootnode_enrs,
             config.ping_queue_interval,
-            Arc::clone(&data_radius),
             protocol.clone(),
             Arc::clone(&utp_socket),
             config.enable_metrics,
@@ -157,7 +152,6 @@ where
 
         Self {
             discovery,
-            data_radius,
             kbuckets,
             store,
             protocol,
@@ -181,7 +175,7 @@ where
 
     /// Returns the data radius of the local node.
     pub fn data_radius(&self) -> Distance {
-        *self.data_radius
+        self.store.read().radius()
     }
 
     /// Processes a single Discovery v5 TALKREQ message.

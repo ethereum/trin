@@ -8,7 +8,7 @@ use portalnet::{
     types::messages::{Content, Message, PortalnetConfig, ProtocolId},
 };
 use trin_types::content_key::IdentityContentKey;
-use trin_types::distance::{Distance, XorMetric};
+use trin_types::distance::XorMetric;
 use trin_types::enr::{Enr, SszEnr};
 use trin_validation::validator::MockValidator;
 
@@ -44,7 +44,6 @@ async fn init_overlay(
         discovery,
         utp_socket,
         store,
-        Distance::MAX,
         protocol,
         validator,
     )

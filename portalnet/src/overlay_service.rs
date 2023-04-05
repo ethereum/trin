@@ -248,8 +248,6 @@ pub struct OverlayService<TContentKey, TMetric, TValidator, TStore> {
     store: Arc<RwLock<TStore>>,
     /// The routing table of the local node.
     kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
-    /// The data radius of the local node.
-    data_radius: Arc<Distance>,
     /// The protocol identifier.
     protocol: ProtocolId,
     /// A queue of peers that require regular ping to check connectivity.
@@ -314,7 +312,6 @@ where
         kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
         bootnode_enrs: Vec<Enr>,
         ping_queue_interval: Option<Duration>,
-        data_radius: Arc<Distance>,
         protocol: ProtocolId,
         utp_socket: Arc<UtpSocket<crate::discovery::UtpEnr>>,
         enable_metrics: bool,
@@ -349,7 +346,6 @@ where
                 discovery,
                 store,
                 kbuckets,
-                data_radius,
                 protocol,
                 peers_to_ping,
                 command_rx,
@@ -558,7 +554,7 @@ where
 
     /// Returns the data radius of the node.
     fn data_radius(&self) -> Distance {
-        *self.data_radius
+        self.store.read().radius()
     }
 
     /// Maintains the routing table.
@@ -2473,7 +2469,6 @@ mod tests {
             overlay_config.bucket_filter,
         )));
 
-        let data_radius = Arc::new(Distance::MAX);
         let protocol = ProtocolId::History;
         let active_outgoing_requests = Arc::new(RwLock::new(HashMap::new()));
         let peers_to_ping = HashSetDelay::default();
@@ -2487,7 +2482,6 @@ mod tests {
             utp_socket,
             store,
             kbuckets,
-            data_radius,
             protocol,
             peers_to_ping,
             command_tx,
