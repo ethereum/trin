@@ -38,6 +38,8 @@ mod test {
                 "--ephemeral",
                 "--discovery-port",
                 test_discovery_port.to_string().as_ref(),
+                "--bootnodes",
+                "none",
             ]
             .iter(),
         )
