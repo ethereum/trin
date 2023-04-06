@@ -2,9 +2,8 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use discv5::{
     enr::{CombinedKey, EnrBuilder, NodeId},
-    Discv5, Discv5Config, Discv5ConfigBuilder, Discv5Event, RequestError, TalkRequest,
+    Discv5, Discv5ConfigBuilder, Discv5Event, RequestError, TalkRequest,
 };
-use ethereum_types::H256;
 use lru::LruCache;
 use parking_lot::RwLock;
 use serde_json::{json, Value};
@@ -16,12 +15,7 @@ use super::types::messages::{PortalnetConfig, ProtocolId};
 use crate::socket;
 use ethportal_api::{NodeId as EthportalNodeId, NodeInfo};
 use std::str::FromStr;
-use std::{
-    convert::TryFrom,
-    fmt, io,
-    net::{IpAddr, SocketAddr},
-    sync::Arc,
-};
+use std::{convert::TryFrom, fmt, io, net::SocketAddr, sync::Arc};
 use trin_types::enr::Enr;
 use trin_utils::bytes::hex_encode;
 use trin_utils::version::get_trin_version;
@@ -31,27 +25,6 @@ const TALKREQ_CHANNEL_BUFFER: usize = 100;
 
 /// ENR key for portal network client version.
 const ENR_PORTAL_CLIENT_KEY: &str = "c";
-
-#[derive(Clone)]
-pub struct Config {
-    pub enr_address: Option<IpAddr>,
-    pub listen_port: u16,
-    pub discv5_config: Discv5Config,
-    pub bootnode_enrs: Vec<Enr>,
-    pub private_key: Option<H256>,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            enr_address: None,
-            listen_port: 4242,
-            discv5_config: Discv5Config::default(),
-            bootnode_enrs: vec![],
-            private_key: None,
-        }
-    }
-}
 
 pub type ProtocolRequest = Vec<u8>;
 
@@ -97,7 +70,7 @@ impl Discovery {
             portal_config.listen_port,
         );
 
-        let (ip_addr, ip_port) = if portal_config.no_stun {
+        let (enr_address, enr_port) = if portal_config.no_stun {
             (None, portal_config.listen_port)
         } else {
             let known_external = portal_config
@@ -110,27 +83,16 @@ impl Discovery {
             }
         };
 
-        let config = Config {
-            discv5_config: Discv5ConfigBuilder::default().build(),
-            // This is for defining the ENR:
-            enr_address: ip_addr,
-            listen_port: ip_port,
-            bootnode_enrs: portal_config.bootnode_enrs,
-            private_key: portal_config.private_key,
-        };
-
-        let enr_key = match config.private_key {
-            Some(val) => CombinedKey::secp256k1_from_bytes(val.0.clone().as_mut_slice())
-                .map_err(|e| format!("When building servers key pair: {e:?}"))?,
-            None => CombinedKey::generate_secp256k1(),
-        };
+        let enr_key =
+            CombinedKey::secp256k1_from_bytes(portal_config.private_key.0.clone().as_mut_slice())
+                .map_err(|e| format!("Unable to create enr key: {:?}", e.to_string()))?;
 
         let enr = {
             let mut builder = EnrBuilder::new("v4");
-            if let Some(ip_address) = config.enr_address {
+            if let Some(ip_address) = enr_address {
                 builder.ip(ip_address);
             }
-            builder.udp4(config.listen_port);
+            builder.udp4(enr_port);
 
             let trin_version = get_trin_version();
             // Use "t" as short-hand for "Trin" to save bytes in ENR.
@@ -142,10 +104,11 @@ impl Discovery {
                 .map_err(|e| format!("When adding key to servers ENR: {e:?}"))?
         };
 
-        let discv5 = Discv5::new(enr, enr_key, config.discv5_config)
+        let discv5_config = Discv5ConfigBuilder::default().build();
+        let discv5 = Discv5::new(enr, enr_key, discv5_config)
             .map_err(|e| format!("Failed to create discv5 instance: {e}"))?;
 
-        for enr in config.bootnode_enrs {
+        for enr in portal_config.bootnode_enrs {
             discv5
                 .add_enr(enr)
                 .map_err(|e| format!("Failed to add bootnode enr: {e}"))?;

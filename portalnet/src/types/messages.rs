@@ -160,7 +160,7 @@ const NODE_ADDR_CACHE_CAPACITY: usize = discv5::kbucket::MAX_NODES_PER_BUCKET * 
 #[derive(Clone)]
 pub struct PortalnetConfig {
     pub external_addr: Option<SocketAddr>,
-    pub private_key: Option<H256>,
+    pub private_key: H256,
     pub listen_port: u16,
     pub bootnode_enrs: Vec<Enr>,
     pub data_radius: Distance,
@@ -173,7 +173,7 @@ impl Default for PortalnetConfig {
     fn default() -> Self {
         Self {
             external_addr: None,
-            private_key: None,
+            private_key: H256::random(),
             listen_port: 4242,
             bootnode_enrs: Vec::<Enr>::new(),
             data_radius: Distance::MAX,

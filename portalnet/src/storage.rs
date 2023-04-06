@@ -22,7 +22,7 @@ use rusqlite::params;
 use thiserror::Error;
 use tracing::{debug, error, info};
 
-use crate::{types::messages::ProtocolId, utils::db::get_data_dir};
+use crate::types::messages::ProtocolId;
 use trin_types::content_key::{ContentKeyError, HistoryContentKey, OverlayContentKey};
 use trin_types::distance::{Distance, Metric, XorMetric};
 use trin_utils::bytes::{hex_decode, hex_encode, ByteUtilsError};
@@ -40,9 +40,9 @@ pub enum DistanceFunction {
 /// An error from an operation on a `ContentStore`.
 #[derive(Debug, Error)]
 pub enum ContentStoreError {
-    #[error("An error from the underlying database.")]
+    #[error("An error from the underlying database: {0:?}")]
     Database(String),
-    #[error("IO error")]
+    #[error("IO error: {0:?}")]
     Io(#[from] std::io::Error),
     /// Unable to store content because it does not fall within the store's radius.
     #[error("radius {radius} insufficient to store content at distance {distance}")]
@@ -176,18 +176,24 @@ impl ContentStore for MemoryContentStore {
 pub struct PortalStorageConfig {
     pub storage_capacity_mb: u64,
     pub node_id: NodeId,
+    pub node_data_dir: PathBuf,
     pub distance_fn: DistanceFunction,
     pub db: Arc<rocksdb::DB>,
     pub sql_connection_pool: Pool<SqliteConnectionManager>,
 }
 
 impl PortalStorageConfig {
-    pub fn new(storage_capacity_mb: u64, node_id: NodeId) -> anyhow::Result<Self> {
-        let db = Arc::new(PortalStorage::setup_rocksdb(node_id)?);
-        let sql_connection_pool = PortalStorage::setup_sql(node_id)?;
+    pub fn new(
+        storage_capacity_mb: u64,
+        node_data_dir: PathBuf,
+        node_id: NodeId,
+    ) -> anyhow::Result<Self> {
+        let db = Arc::new(PortalStorage::setup_rocksdb(&node_data_dir)?);
+        let sql_connection_pool = PortalStorage::setup_sql(&node_data_dir)?;
         Ok(Self {
             storage_capacity_mb,
             node_id,
+            node_data_dir,
             distance_fn: DistanceFunction::Xor,
             db,
             sql_connection_pool,
@@ -199,6 +205,7 @@ impl PortalStorageConfig {
 #[derive(Debug)]
 pub struct PortalStorage {
     node_id: NodeId,
+    node_data_dir: PathBuf,
     storage_capacity_in_bytes: u64,
     radius: Distance,
     db: Arc<rocksdb::DB>,
@@ -250,6 +257,7 @@ impl PortalStorage {
         // Initialize the instance
         let mut storage = Self {
             node_id: config.node_id,
+            node_data_dir: config.node_data_dir,
             storage_capacity_in_bytes: config.storage_capacity_mb * BYTES_IN_MB_U64,
             radius: Distance::MAX,
             db: config.db,
@@ -531,12 +539,7 @@ impl PortalStorage {
     /// Public method for determining how much actual disk space is being used to store this node's Portal Network data.
     /// Intended for analysis purposes. PortalStorage's capacity decision-making is not based off of this method.
     pub fn get_total_storage_usage_in_bytes_on_disk(&self) -> Result<u64, ContentStoreError> {
-        let data_dir: PathBuf = get_data_dir(self.node_id).map_err(|err| {
-            ContentStoreError::Database(format!(
-                "Unable to get data dir when calculating total storage usage: {err:?}"
-            ))
-        })?;
-        let storage_usage = Self::get_total_size_of_directory_in_bytes(data_dir)?;
+        let storage_usage = Self::get_total_size_of_directory_in_bytes(&self.node_data_dir)?;
         Ok(storage_usage)
     }
 
@@ -710,27 +713,33 @@ impl PortalStorage {
     }
 
     /// Helper function for opening a RocksDB connection for the radius-constrained db.
-    pub fn setup_rocksdb(node_id: NodeId) -> Result<rocksdb::DB, ContentStoreError> {
-        let mut data_path: PathBuf = get_data_dir(node_id).map_err(|err| {
-            ContentStoreError::Database(format!("Unable to get data dir for rocksdb: {err:?}"))
-        })?;
-        data_path.push("rocksdb");
-        info!(path = %data_path.display(), "Setting up RocksDB");
+    pub fn setup_rocksdb(node_data_dir: &Path) -> Result<rocksdb::DB, ContentStoreError> {
+        let rocksdb_path = node_data_dir.join("rocksdb");
+        info!(path = %rocksdb_path.display(), "Setting up RocksDB");
 
         let mut db_opts = Options::default();
         db_opts.create_if_missing(true);
-        Ok(DB::open(&db_opts, data_path)?)
+        Ok(DB::open(&db_opts, rocksdb_path)?)
+    }
+
+    /// Helper function for opening a RocksDB connection for the trie db.
+    pub fn setup_triedb(node_data_dir: &Path) -> Result<rocksdb::DB, ContentStoreError> {
+        let trie_db_path = node_data_dir.join("triedb");
+        info!(path = %trie_db_path.display(), "Setting up triedb");
+
+        let mut db_opts = Options::default();
+        db_opts.create_if_missing(true);
+        Ok(DB::open(&db_opts, trie_db_path)?)
     }
 
     /// Helper function for opening a SQLite connection.
-    pub fn setup_sql(node_id: NodeId) -> Result<Pool<SqliteConnectionManager>, ContentStoreError> {
-        let mut data_path: PathBuf = get_data_dir(node_id).map_err(|err| {
-            ContentStoreError::Database(format!("Unable to get data dir for sql: {err:?}"))
-        })?;
-        data_path.push("trin.sqlite");
-        info!(path = %data_path.display(), "Setting up SqliteDB");
+    pub fn setup_sql(
+        node_data_dir: &Path,
+    ) -> Result<Pool<SqliteConnectionManager>, ContentStoreError> {
+        let sql_path = node_data_dir.join("trin.sqlite");
+        info!(path = %sql_path.display(), "Setting up SqliteDB");
 
-        let manager = SqliteConnectionManager::file(data_path);
+        let manager = SqliteConnectionManager::file(sql_path);
         let pool = Pool::new(manager)?;
         pool.get()?.execute(CREATE_QUERY, params![])?;
         Ok(pool)
@@ -935,11 +944,12 @@ pub mod test {
 
     use super::*;
 
+    use discv5::enr::{CombinedKey, EnrBuilder};
     use quickcheck::{quickcheck, QuickCheck, TestResult};
     use rand::RngCore;
     use serial_test::serial;
 
-    use crate::utils::db::setup_temp_dir;
+    use crate::utils::db::{configure_node_data_dir, setup_temp_dir};
     use trin_types::content_key::IdentityContentKey;
 
     const CAPACITY_MB: u64 = 2;
@@ -954,10 +964,10 @@ pub mod test {
     #[serial]
     async fn test_new() -> Result<(), ContentStoreError> {
         let temp_dir = setup_temp_dir().unwrap();
+        let node_id = get_active_node_id(temp_dir.path().to_path_buf());
 
-        let node_id = NodeId::random();
-
-        let storage_config = PortalStorageConfig::new(CAPACITY_MB, node_id).unwrap();
+        let storage_config =
+            PortalStorageConfig::new(CAPACITY_MB, temp_dir.path().to_path_buf(), node_id).unwrap();
         let storage = PortalStorage::new(storage_config, ProtocolId::History)?;
 
         // Assert that configs match the storage object's fields
@@ -978,9 +988,10 @@ pub mod test {
     async fn test_store() {
         fn test_store_random_bytes() -> TestResult {
             let temp_dir = setup_temp_dir().unwrap();
-
-            let node_id = NodeId::random();
-            let storage_config = PortalStorageConfig::new(CAPACITY_MB, node_id).unwrap();
+            let node_id = get_active_node_id(temp_dir.path().to_path_buf());
+            let storage_config =
+                PortalStorageConfig::new(CAPACITY_MB, temp_dir.path().to_path_buf(), node_id)
+                    .unwrap();
             let mut storage = PortalStorage::new(storage_config, ProtocolId::History).unwrap();
             let content_key = generate_random_content_key();
             let mut value = [0u8; 32];
@@ -1001,9 +1012,9 @@ pub mod test {
     #[serial]
     async fn test_get_data() -> Result<(), ContentStoreError> {
         let temp_dir = setup_temp_dir().unwrap();
-
-        let node_id = NodeId::random();
-        let storage_config = PortalStorageConfig::new(CAPACITY_MB, node_id).unwrap();
+        let node_id = get_active_node_id(temp_dir.path().to_path_buf());
+        let storage_config =
+            PortalStorageConfig::new(CAPACITY_MB, temp_dir.path().to_path_buf(), node_id).unwrap();
         let mut storage = PortalStorage::new(storage_config, ProtocolId::History)?;
         let content_key = generate_random_content_key();
         let value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
@@ -1022,9 +1033,9 @@ pub mod test {
     #[serial]
     async fn test_get_total_storage() -> Result<(), ContentStoreError> {
         let temp_dir = setup_temp_dir().unwrap();
-
-        let node_id = NodeId::random();
-        let storage_config = PortalStorageConfig::new(CAPACITY_MB, node_id).unwrap();
+        let node_id = get_active_node_id(temp_dir.path().to_path_buf());
+        let storage_config =
+            PortalStorageConfig::new(CAPACITY_MB, temp_dir.path().to_path_buf(), node_id).unwrap();
         let mut storage = PortalStorage::new(storage_config, ProtocolId::History)?;
 
         let content_key = generate_random_content_key();
@@ -1044,9 +1055,9 @@ pub mod test {
     #[serial]
     async fn test_restarting_storage_with_decreased_capacity() -> Result<(), ContentStoreError> {
         let temp_dir = setup_temp_dir().unwrap();
-
-        let node_id = NodeId::random();
-        let storage_config = PortalStorageConfig::new(CAPACITY_MB, node_id).unwrap();
+        let node_id = get_active_node_id(temp_dir.path().to_path_buf());
+        let storage_config =
+            PortalStorageConfig::new(CAPACITY_MB, temp_dir.path().to_path_buf(), node_id).unwrap();
         let mut storage = PortalStorage::new(storage_config, ProtocolId::History)?;
 
         for _ in 0..50 {
@@ -1061,7 +1072,8 @@ pub mod test {
         std::mem::drop(storage);
 
         // test with 1mb capacity
-        let new_storage_config = PortalStorageConfig::new(1, node_id).unwrap();
+        let new_storage_config =
+            PortalStorageConfig::new(1, temp_dir.path().to_path_buf(), node_id).unwrap();
         let new_storage = PortalStorage::new(new_storage_config, ProtocolId::History)?;
 
         // test that previously set value has been pruned
@@ -1074,7 +1086,8 @@ pub mod test {
         std::mem::drop(new_storage);
 
         // test with 0mb capacity
-        let new_storage_config = PortalStorageConfig::new(0, node_id).unwrap();
+        let new_storage_config =
+            PortalStorageConfig::new(0, temp_dir.path().to_path_buf(), node_id).unwrap();
         let new_storage = PortalStorage::new(new_storage_config, ProtocolId::History)?;
 
         // test that previously set value has been pruned
@@ -1091,11 +1104,12 @@ pub mod test {
     async fn test_restarting_full_storage_with_same_capacity() -> Result<(), ContentStoreError> {
         // test a node that gets full and then restarts with the same capacity
         let temp_dir = setup_temp_dir().unwrap();
+        let node_id = get_active_node_id(temp_dir.path().to_path_buf());
 
-        let node_id = NodeId::random();
         let min_capacity = 1;
         // Use a tiny storage capacity, to fill up as quickly as possible
-        let storage_config = PortalStorageConfig::new(min_capacity, node_id).unwrap();
+        let storage_config =
+            PortalStorageConfig::new(min_capacity, temp_dir.path().to_path_buf(), node_id).unwrap();
         let mut storage = PortalStorage::new(storage_config.clone(), ProtocolId::History)?;
 
         // Fill up the storage.
@@ -1134,9 +1148,12 @@ pub mod test {
     #[serial]
     async fn test_restarting_storage_with_increased_capacity() -> Result<(), ContentStoreError> {
         let temp_dir = setup_temp_dir().unwrap();
-
-        let node_id = NodeId::random();
-        let storage_config = PortalStorageConfig::new(CAPACITY_MB, node_id).unwrap();
+        let (node_data_dir, mut private_key) =
+            configure_node_data_dir(temp_dir.path().to_path_buf(), None).unwrap();
+        let private_key = CombinedKey::secp256k1_from_bytes(private_key.0.as_mut_slice()).unwrap();
+        let node_id = EnrBuilder::new("v4").build(&private_key).unwrap().node_id();
+        let storage_config =
+            PortalStorageConfig::new(CAPACITY_MB, node_data_dir.clone(), node_id).unwrap();
         let mut storage = PortalStorage::new(storage_config, ProtocolId::History)?;
 
         for _ in 0..50 {
@@ -1153,7 +1170,8 @@ pub mod test {
         std::mem::drop(storage);
 
         // test with increased capacity
-        let new_storage_config = PortalStorageConfig::new(2 * CAPACITY_MB, node_id).unwrap();
+        let new_storage_config =
+            PortalStorageConfig::new(2 * CAPACITY_MB, node_data_dir, node_id).unwrap();
         let new_storage = PortalStorage::new(new_storage_config, ProtocolId::History)?;
 
         // test that previously set value has not been pruned
@@ -1176,9 +1194,9 @@ pub mod test {
     #[serial]
     async fn test_new_storage_with_zero_capacity() -> Result<(), ContentStoreError> {
         let temp_dir = setup_temp_dir().unwrap();
-
-        let node_id = NodeId::random();
-        let storage_config = PortalStorageConfig::new(0, node_id).unwrap();
+        let node_id = get_active_node_id(temp_dir.path().to_path_buf());
+        let storage_config =
+            PortalStorageConfig::new(0, temp_dir.path().to_path_buf(), node_id).unwrap();
         let mut storage = PortalStorage::new(storage_config, ProtocolId::History)?;
 
         let content_key = generate_random_content_key();
@@ -1199,9 +1217,9 @@ pub mod test {
     #[serial]
     async fn test_find_farthest_empty_db() -> Result<(), ContentStoreError> {
         let temp_dir = setup_temp_dir().unwrap();
-
-        let node_id = NodeId::random();
-        let storage_config = PortalStorageConfig::new(CAPACITY_MB, node_id).unwrap();
+        let node_id = get_active_node_id(temp_dir.path().to_path_buf());
+        let storage_config =
+            PortalStorageConfig::new(CAPACITY_MB, temp_dir.path().to_path_buf(), node_id).unwrap();
         let storage = PortalStorage::new(storage_config, ProtocolId::History)?;
 
         let result = storage.find_farthest_content_id()?;
@@ -1217,10 +1235,12 @@ pub mod test {
     async fn test_find_farthest() {
         fn prop(x: IdentityContentKey, y: IdentityContentKey) -> TestResult {
             let temp_dir = setup_temp_dir().unwrap();
+            let node_id = get_active_node_id(temp_dir.path().to_path_buf());
 
-            let node_id = NodeId::random();
             let val = vec![0x00, 0x01, 0x02, 0x03, 0x04];
-            let storage_config = PortalStorageConfig::new(CAPACITY_MB, node_id).unwrap();
+            let storage_config =
+                PortalStorageConfig::new(CAPACITY_MB, temp_dir.path().to_path_buf(), node_id)
+                    .unwrap();
             let mut storage = PortalStorage::new(storage_config, ProtocolId::History).unwrap();
             storage.store(&x, &val).unwrap();
             storage.store(&y, &val).unwrap();
@@ -1352,5 +1372,11 @@ pub mod test {
         assert_eq!(StorageMetrics::precision_for_percentage(101.0), 0);
         assert_eq!(StorageMetrics::precision_for_percentage(-0.001), 4);
         assert_eq!(StorageMetrics::precision_for_percentage(-1000.0), 4);
+    }
+
+    fn get_active_node_id(temp_dir: PathBuf) -> NodeId {
+        let (_, mut pk) = configure_node_data_dir(temp_dir, None).unwrap();
+        let pk = CombinedKey::secp256k1_from_bytes(pk.0.as_mut_slice()).unwrap();
+        EnrBuilder::new("v4").build(&pk).unwrap().node_id()
     }
 }
