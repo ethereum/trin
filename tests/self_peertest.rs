@@ -8,11 +8,12 @@ mod test {
     use ethportal_peertest as peertest;
     use trin_types::cli::TrinConfig;
     use trin_types::provider::TrustedProvider;
+    use trin_utils::log::init_tracing_logger;
 
     // Logs don't show up when trying to use test_log here, maybe because of multi_thread
     #[tokio::test(flavor = "multi_thread")]
     async fn test_launches() {
-        tracing_subscriber::fmt::init();
+        init_tracing_logger();
 
         // Run a client, as a buddy peer for ping tests, etc.
         let peertest = peertest::launch_peertest_nodes(2).await;

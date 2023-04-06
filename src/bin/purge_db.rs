@@ -17,6 +17,7 @@ use trin_types::execution::block_body::BlockBody;
 use trin_types::execution::header::HeaderWithProof;
 use trin_types::execution::receipts::Receipts;
 use trin_utils::bytes::hex_encode;
+use trin_utils::log::init_tracing_logger;
 
 ///
 /// This script will iterate through all content id / key pairs in rocksd & meta db.
@@ -26,7 +27,7 @@ use trin_utils::bytes::hex_encode;
 /// need to be updated to avoid panicking.
 ///
 pub fn main() -> Result<()> {
-    tracing_subscriber::fmt::init();
+    init_tracing_logger();
     let purge_config = PurgeConfig::from_args();
 
     let enr_key =

@@ -1,6 +1,7 @@
 use std::net::SocketAddr;
 use std::str::FromStr;
 use tracing::info;
+use trin_utils::log::init_tracing_logger;
 use utp_testing::run_test_app;
 
 use structopt::StructOpt;
@@ -9,7 +10,7 @@ use utp_testing::cli::TestAppConfig;
 /// uTP test app, used for creation of a `test-app` docker image
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt::init();
+    init_tracing_logger();
 
     let config = TestAppConfig::from_args();
 

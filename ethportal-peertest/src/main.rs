@@ -2,6 +2,7 @@
 
 use std::{thread, time};
 use tracing::info;
+use trin_utils::log::init_tracing_logger;
 
 use ethportal_peertest::{
     cli::PeertestConfig,
@@ -11,7 +12,7 @@ use ethportal_peertest::{
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt::init();
+    init_tracing_logger();
 
     let peertest = launch_peertest_nodes(2).await;
     // Short sleep to make sure all peertest nodes can connect

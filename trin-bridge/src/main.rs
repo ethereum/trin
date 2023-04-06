@@ -8,12 +8,13 @@ use trin_bridge::cli::{BridgeConfig, BridgeMode};
 use trin_bridge::constants::PANDAOPS_URL;
 use trin_bridge::utils::generate_spaced_private_keys;
 use trin_types::provider::{build_pandaops_http_client_from_env, TrustedProvider};
+use trin_utils::log::init_tracing_logger;
 use trin_validation::accumulator::MasterAccumulator;
 use trin_validation::oracle::HeaderOracle;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt::init();
+    init_tracing_logger();
 
     let bridge_config = BridgeConfig::from_args();
     let private_keys = generate_spaced_private_keys(bridge_config.node_count);
