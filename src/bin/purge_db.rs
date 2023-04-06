@@ -9,7 +9,7 @@ use tracing::{info, warn};
 use ethportal_api::HistoryContentKey;
 use portalnet::storage::{PortalStorage, PortalStorageConfig};
 use portalnet::types::messages::ProtocolId;
-use portalnet::utils::db::get_data_dir;
+use portalnet::utils::db::{configure_node_data_dir, configure_trin_data_dir};
 use trin_types::execution::accumulator::EpochAccumulator;
 use trin_types::execution::block_body::BlockBody;
 use trin_types::execution::header::HeaderWithProof;
@@ -29,17 +29,20 @@ pub fn main() -> Result<()> {
     let purge_config = PurgeConfig::parse();
 
     let enr_key =
-        CombinedKey::secp256k1_from_bytes(&mut purge_config.private_key.to_fixed_bytes()).unwrap();
+        CombinedKey::secp256k1_from_bytes(purge_config.private_key.0.clone().as_mut_slice())
+            .expect("Failed to create ENR key");
     let enr = EnrBuilder::new("v4").build(&enr_key).unwrap();
     let node_id = enr.node_id();
-    let data_dir_path = get_data_dir(node_id);
-    info!("Purging data for NodeID: {}", node_id);
-    info!("DB Path: {:?}", data_dir_path);
+    let trin_data_dir = configure_trin_data_dir(false)?;
+    let (node_data_dir, _) =
+        configure_node_data_dir(trin_data_dir, Some(purge_config.private_key))?;
+    info!("Purging data for NodeID: {node_id}");
+    info!("DB Path: {node_data_dir:?}");
 
     // Capacity is 0 since it (eg. for data radius calculation) is irrelevant when only removing data.
     let capacity = 0;
     let protocol = ProtocolId::History;
-    let config = PortalStorageConfig::new(capacity, node_id)?;
+    let config = PortalStorageConfig::new(capacity, node_data_dir, node_id)?;
     let storage =
         PortalStorage::new(config.clone(), protocol).expect("Failed to create portal storage");
     let iter = config.db.iterator(IteratorMode::Start);
@@ -52,10 +55,9 @@ pub fn main() -> Result<()> {
         match purge_config.mode {
             PurgeMode::All => match storage.evict(content_id) {
                 Ok(_) => remove_count += 1,
-                Err(err) => warn!(
-                    "Error occurred while evicting content id: {:?} - {:?}",
-                    content_id, err
-                ),
+                Err(err) => {
+                    warn!("Error occurred while evicting content id: {content_id:?} - {err:?}")
+                }
             },
             PurgeMode::InvalidOnly => {
                 // naked unwrap since we shouldn't be storing any invalid content keys
@@ -92,18 +94,14 @@ pub fn main() -> Result<()> {
                     match storage.evict(content_id) {
                         Ok(_) => remove_count += 1,
                         Err(err) => warn!(
-                            "Error occurred while evicting content key: {:?} - {:?}",
-                            key_hex, err
+                            "Error occurred while evicting content key: {key_hex:?} - {err:?}"
                         ),
                     }
                 }
             }
         }
     }
-    info!(
-        "Found {:?} total items - Removed {:?} items",
-        item_count, remove_count
-    );
+    info!("Found {item_count:?} total items - Removed {remove_count:?} items");
     Ok(())
 }
 

@@ -77,7 +77,7 @@ impl Peertest {
     }
 }
 
-pub async fn launch_node(trin_config: TrinConfig) -> anyhow::Result<PeertestNode> {
+async fn launch_node(trin_config: TrinConfig) -> anyhow::Result<PeertestNode> {
     let web3_ipc_path = trin_config.web3_ipc_path.clone();
     let server = setup_mock_trusted_http_server();
     let mock_trusted_provider = TrustedProvider {

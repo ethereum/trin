@@ -14,7 +14,7 @@ use portalnet::{
     events::PortalnetEvents,
     storage::PortalStorageConfig,
     types::messages::PortalnetConfig,
-    utils::db::setup_temp_dir,
+    utils::db::{configure_node_data_dir, configure_trin_data_dir},
 };
 use trin_history::initialize_history_network;
 use trin_state::initialize_state_network;
@@ -32,9 +32,16 @@ pub async fn run_trin(
     info!("Launching Trin: v{trin_version}");
     info!(config = %trin_config, "With:");
 
+    // Setup temp trin data directory if we're in ephemeral mode
+    let trin_data_dir = configure_trin_data_dir(trin_config.ephemeral)?;
+
+    // Configure node data dir based on the provided private key
+    let (node_data_dir, private_key) =
+        configure_node_data_dir(trin_data_dir, trin_config.private_key)?;
+
     let portalnet_config = PortalnetConfig {
         external_addr: trin_config.external_addr,
-        private_key: trin_config.private_key,
+        private_key,
         listen_port: trin_config.discovery_port,
         no_stun: trin_config.no_stun,
         bootnode_enrs: trin_config.bootnodes.clone().into(),
@@ -57,13 +64,11 @@ pub async fn run_trin(
     let utp_socket = UtpSocket::with_socket(discv5_utp_socket);
     let utp_socket = Arc::new(utp_socket);
 
-    // Initialize Storage config
-    if trin_config.ephemeral {
-        setup_temp_dir()?;
-    }
-
-    let storage_config =
-        PortalStorageConfig::new(trin_config.mb.into(), discovery.local_enr().node_id())?;
+    let storage_config = PortalStorageConfig::new(
+        trin_config.mb.into(),
+        node_data_dir,
+        discovery.local_enr().node_id(),
+    )?;
 
     // Initialize validation oracle
     let master_accumulator = MasterAccumulator::try_from_file(trin_config.master_acc_path.clone())?;

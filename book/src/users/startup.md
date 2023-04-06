@@ -37,6 +37,17 @@ Trin can be tuned to control how much disk space is used:
 
 See the `--mb` flag.
 
+
+### Private Key management
+
+Trin requires a private key to configure a node's identity. Upon startup,
+Trin will automatically generate a random private key that will be re-used
+every time Trin is restarted. The only exceptions are if...
+- User supplies a private key via the `--unsafe-private-key` flag, in which
+  case that private key will be used to create the node's identity.
+- User deletes the `TRIN_DATA_DIR` or changes the `TRIN_DATA_DIR`. In which 
+  case a new private key will be randomly generated and used.
+
 ### Sub-Protocols
 
 Trin can connect to different sub-protocols to have access to

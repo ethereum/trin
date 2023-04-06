@@ -30,6 +30,8 @@ rocksdb = "0.18.0"
 rpc = { path = "rpc"}
 serde_json = {version = "1.0.89", features = ["preserve_order"]}
 sha3 = "0.9.1"
+structopt = "0.3.26"
+tempfile = "3.3.0"
 tokio = { version = "1.14.0", features = ["full"] }
 tracing = "0.1.36"
 tracing-subscriber = "0.3.15"
