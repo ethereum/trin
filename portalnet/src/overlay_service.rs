@@ -1495,7 +1495,7 @@ where
                         // Skip storing & propagating content if it's not valid
                         warn!(
                             error = %err,
-                            content.id = %hex_encode(key.content_id()),
+                            content.key = %key.to_hex(),
                             "Error validating accepted content"
                         );
                         return None;
@@ -1508,21 +1508,21 @@ where
                             if let Err(err) = store.write().put(key.clone(), &content_value) {
                                 warn!(
                                     error = %err,
-                                    content.id = %hex_encode(key.content_id()),
+                                    content.key = %key.to_hex(),
                                     "Error storing accepted content"
                                 );
                             }
                         }
                         Ok(false) => {
                             warn!(
-                                content.id = %hex_encode(key.content_id()),
+                                content.key = %key.to_hex(),
                                 "Accepted content outside radius or already stored"
                             );
                         }
                         Err(err) => {
                             warn!(
                                 error = %err,
-                                content.id = %hex_encode(key.content_id()),
+                                content.key = %key.to_hex(),
                                 "Error checking data store for content key"
                             );
                         }
