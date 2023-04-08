@@ -1,11 +1,11 @@
 use std::str::FromStr;
 
 use anyhow::{anyhow, Result};
+use clap::{Parser, ValueEnum};
 use discv5::enr::{CombinedKey, EnrBuilder};
 use ethereum_types::H256;
 use rocksdb::IteratorMode;
 use ssz::Decode;
-use structopt::StructOpt;
 use tracing::{info, warn};
 
 use ethportal_api::HistoryContentKey;
@@ -28,7 +28,7 @@ use trin_utils::log::init_tracing_logger;
 ///
 pub fn main() -> Result<()> {
     init_tracing_logger();
-    let purge_config = PurgeConfig::from_args();
+    let purge_config = PurgeConfig::parse();
 
     let enr_key =
         CombinedKey::secp256k1_from_bytes(&mut purge_config.private_key.to_fixed_bytes()).unwrap();
@@ -121,28 +121,29 @@ fn is_content_valid(content_key: &HistoryContentKey, value: &[u8]) -> bool {
 }
 
 // CLI Parameter Handling
-#[derive(StructOpt, Debug, PartialEq)]
-#[structopt(
+#[derive(Parser, Debug, PartialEq)]
+#[command(
     name = "Trin DB Purge Util",
     about = "Remove undesired or invalid data from Trin DB"
 )]
 pub struct PurgeConfig {
-    #[structopt(
+    #[arg(
         long,
         help = "(unsafe) Hex private key to generate node id for database namespace (with 0x prefix)"
     )]
     pub private_key: H256,
 
-    #[structopt(
+    #[arg(
+        value_enum,
         default_value = "all",
-        possible_values(&["all", "invalid-only"]),
+        value_parser = ["all", "invalid-only"],
         long,
         help = "Purge all content or only invalidly encoded content"
     )]
     pub mode: PurgeMode,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(ValueEnum, Debug, PartialEq, Eq, Clone)]
 pub enum PurgeMode {
     All,
     Invalid,
@@ -159,5 +160,16 @@ impl FromStr for PurgeMode {
                 "Invalid purge mode provided. Possible values include `all` and `invalid-only`"
             )),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn verify_cli() {
+        use clap::CommandFactory;
+        PurgeConfig::command().debug_assert()
     }
 }
