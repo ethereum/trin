@@ -1,5 +1,6 @@
 #![warn(clippy::unwrap_used)]
 
+use clap::Parser;
 use std::{thread, time};
 use tracing::info;
 use trin_utils::log::init_tracing_logger;
@@ -19,7 +20,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     thread::sleep(time::Duration::from_secs(1));
 
     tokio::spawn(async move {
-        let peertest_config = PeertestConfig::from_cli();
+        let peertest_config = PeertestConfig::parse();
         match peertest_config.target_transport.as_str() {
             "ipc" => test_jsonrpc_endpoints_over_ipc(peertest_config, &peertest).await,
             "http" => test_jsonrpc_endpoints_over_http(peertest_config, &peertest).await,
