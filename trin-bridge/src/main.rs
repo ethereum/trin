@@ -1,5 +1,5 @@
+use clap::Parser;
 use ethportal_api::jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
-use structopt::StructOpt;
 use tokio::process::Command;
 use tokio::time::{sleep, Duration};
 use tracing::info;
@@ -16,7 +16,7 @@ use trin_validation::oracle::HeaderOracle;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     init_tracing_logger();
 
-    let bridge_config = BridgeConfig::from_args();
+    let bridge_config = BridgeConfig::parse();
     let private_keys = generate_spaced_private_keys(bridge_config.node_count);
     let mut handles = vec![];
     let mut http_addresses = vec![];

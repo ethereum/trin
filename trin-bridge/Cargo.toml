@@ -21,7 +21,6 @@ eth2_ssz_derive = "0.3.0"
 eth2_ssz_types = "0.2.1"
 jsonrpsee = {version="0.16.2", features = ["async-client", "client", "macros", "server"]}
 serde_json = "1.0.89"
-structopt = "0.3.26"
 surf = "2.3.2"
 tokio = { version = "1.14.0", features = ["full"] }
 tracing = "0.1.36"
@@ -29,6 +28,7 @@ tracing-subscriber = "0.3.15"
 trin-types = { path = "../trin-types" }
 trin-utils = { path = "../trin-utils" }
 trin-validation = { path = "../trin-validation" }
+clap = { version = "4.2.1", features = ["derive"] }
 
 [dev-dependencies]
 rstest = "0.11.0"
