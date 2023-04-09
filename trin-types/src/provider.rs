@@ -1,9 +1,8 @@
+use anyhow::anyhow;
+use serde_json::Value;
 use std::env;
 use std::fmt;
 use std::str::FromStr;
-
-use anyhow::anyhow;
-use serde_json::Value;
 use url::Url;
 
 use std::io;
