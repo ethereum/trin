@@ -868,7 +868,8 @@ const CREATE_QUERY: &str = "create table if not exists content_metadata (
                                 content_id_short INTEGER NOT NULL,
                                 content_key TEXT NOT NULL,
                                 content_size INTEGER
-                            )";
+                            );
+                            create index content_size_idx on content_metadata(content_size);";
 
 const INSERT_QUERY: &str =
     "INSERT OR IGNORE INTO content_metadata (content_id_long, content_id_short, content_key, content_size)
