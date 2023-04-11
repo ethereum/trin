@@ -49,7 +49,8 @@ use crate::{
     types::{
         messages::{
             Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer, Ping,
-            Pong, PopulatedOffer, ProtocolId, Request, Response,
+            Pong, PopulatedOffer, ProtocolId, Request, Response, MAX_PORTAL_CONTENT_PAYLOAD_SIZE,
+            MAX_PORTAL_NODES_ENRS_SIZE,
         },
         node::Node,
     },
@@ -64,11 +65,14 @@ use trin_validation::validator::Validator;
 
 /// Maximum number of ENRs in response to FindNodes.
 pub const FIND_NODES_MAX_NODES: usize = 32;
+
 /// Maximum number of ENRs in response to FindContent.
 pub const FIND_CONTENT_MAX_NODES: usize = 32;
+
 /// With even distribution assumptions, 2**17 is enough to put each node (estimating 100k nodes,
 /// which is more than 10x the ethereum mainnet node count) into a unique bucket by the 17th bucket index.
 const EXPECTED_NON_EMPTY_BUCKETS: usize = 17;
+
 /// Bucket refresh lookup interval in seconds
 const BUCKET_REFRESH_INTERVAL_SECS: u64 = 60;
 
@@ -925,7 +929,7 @@ where
         let mut enrs = self.nodes_by_distance(distances64);
 
         // Limit the ENRs so that their summed sizes do not surpass the max TALKREQ packet size.
-        pop_while_ssz_bytes_len_gt(&mut enrs, MAX_NODES_SIZE);
+        pop_while_ssz_bytes_len_gt(&mut enrs, MAX_PORTAL_NODES_ENRS_SIZE);
 
         Nodes { total: 1, enrs }
     }
@@ -957,9 +961,7 @@ where
         };
         match self.store.read().get(&content_key) {
             Ok(Some(content)) => {
-                // Check content size and initiate uTP connection if the size is over the threshold
-                // TODO: Properly calculate max content size
-                if content.len() <= 1028 {
+                if content.len() <= MAX_PORTAL_CONTENT_PAYLOAD_SIZE {
                     Ok(Content::Content(content))
                 } else {
                     // Generate a connection ID for the uTP connection.
@@ -1021,7 +1023,7 @@ where
                 let enrs = self.find_nodes_close_to_content(content_key);
                 match enrs {
                     Ok(mut val) => {
-                        pop_while_ssz_bytes_len_gt(&mut val, MAX_CONTENT_NODES_SIZE);
+                        pop_while_ssz_bytes_len_gt(&mut val, MAX_PORTAL_CONTENT_PAYLOAD_SIZE);
                         Ok(Content::Enrs(val))
                     }
                     Err(msg) => Err(OverlayRequestError::InvalidRequest(msg.to_string())),
@@ -2386,23 +2388,6 @@ pub enum QueryEvent<TQuery, TContentKey> {
     Finished(QueryId, QueryInfo<TContentKey>, TQuery),
 }
 
-const MAX_DISCV5_PACKET_SIZE: usize = 1280;
-const TALK_REQ_PACKET_OVERHEAD: usize = 16 + // IV
-    55 + // Header
-    1 + // Discv5 Message Type
-    3 + // RLP Encoding of outer list
-    9 + // Request ID, max 8 bytes + 1 for RLP encoding
-    3 + // RLP Encoding of inner response
-    16; // RLP HMAC
-const NODES_PACKET_OVERHEAD: usize = 1 + // Selector byte
-    1; // `total` field
-const CONTENT_PACKET_OVERHEAD: usize = 1 + // Selector byte
-    4; // Union type index
-const MAX_NODES_SIZE: usize =
-    MAX_DISCV5_PACKET_SIZE - TALK_REQ_PACKET_OVERHEAD - NODES_PACKET_OVERHEAD;
-const MAX_CONTENT_NODES_SIZE: usize =
-    MAX_DISCV5_PACKET_SIZE - TALK_REQ_PACKET_OVERHEAD - CONTENT_PACKET_OVERHEAD;
-
 /// Limits a to a maximum packet size, including the discv5 header overhead.
 fn pop_while_ssz_bytes_len_gt(enrs: &mut Vec<SszEnr>, max_size: usize) {
     while enrs.ssz_bytes_len() > max_size {
@@ -3141,7 +3126,7 @@ mod tests {
             enrs.push(SszEnr::new(enr));
         }
 
-        pop_while_ssz_bytes_len_gt(&mut enrs, MAX_NODES_SIZE);
+        pop_while_ssz_bytes_len_gt(&mut enrs, MAX_PORTAL_NODES_ENRS_SIZE);
 
         assert_eq!(enrs.len(), correct_limited_size);
     }
