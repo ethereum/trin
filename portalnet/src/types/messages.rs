@@ -22,6 +22,48 @@ use trin_types::distance::Distance;
 use trin_types::enr::{Enr, SszEnr};
 use trin_utils::bytes::{hex_decode, hex_encode};
 
+/// The maximum size of a Discv5 packet.
+pub(crate) const MAX_DISCV5_PACKET_SIZE: usize = 1280;
+
+/// The maximum size of a Discv5 talk request payload.
+///
+/// Discv5 talk request overhead:
+///   * masking IV length: 16
+///   * static header (protocol ID || version || flag || nonce || authdata-size) length: 23
+///   * authdata length: 32
+///   * HMAC length: 16
+///   * (max) talk request ID length: 8
+///   * (max assumed) talk request protocol length: 8
+///   * RLP byte array overhead: 6
+pub(crate) const MAX_DISCV5_TALK_REQ_PAYLOAD_SIZE: usize =
+    MAX_DISCV5_PACKET_SIZE - 16 - 23 - 32 - 16 - 8 - 8 - 6;
+
+// NOTE: The wire constants below rely on the following SSZ constants:
+//   * `ssz::BYTES_PER_UNION_SELECTOR`: 1
+//   * `ssz::BYTES_PER_LENGTH_OFFSET`: 4
+
+/// The maximum size of a portal NODES `enrs` payload.
+///
+/// Portal wire overhead:
+///   * portal message SSZ union selector
+///   * NODES `total` field: 1
+///   * NODES SSZ length offset for List `enrs`
+pub(crate) const MAX_PORTAL_NODES_ENRS_SIZE: usize = MAX_DISCV5_TALK_REQ_PAYLOAD_SIZE
+    - ssz::BYTES_PER_UNION_SELECTOR
+    - 1
+    - ssz::BYTES_PER_LENGTH_OFFSET;
+
+/// The maximum size of a portal CONTENT payload. At the time of writing, this payload either
+/// corresponds to a `connection_id`, `enrs`, or `content` payload.
+///
+/// Portal wire overhead:
+///   * portal message SSZ union selector
+///   * CONTENT SSZ union selector
+///   * CONTENT SSZ length offset for List `enrs` or `content`
+pub(crate) const MAX_PORTAL_CONTENT_PAYLOAD_SIZE: usize = MAX_DISCV5_TALK_REQ_PAYLOAD_SIZE
+    - (ssz::BYTES_PER_UNION_SELECTOR * 2)
+    - ssz::BYTES_PER_LENGTH_OFFSET;
+
 /// Custom payload element of Ping and Pong overlay messages
 #[derive(Debug, PartialEq, Clone)]
 pub struct CustomPayload {

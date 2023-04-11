@@ -49,7 +49,8 @@ use crate::{
     types::{
         messages::{
             Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer, Ping,
-            Pong, PopulatedOffer, ProtocolId, Request, Response,
+            Pong, PopulatedOffer, ProtocolId, Request, Response, MAX_PORTAL_CONTENT_PAYLOAD_SIZE,
+            MAX_PORTAL_NODES_ENRS_SIZE,
         },
         node::Node,
     },
@@ -74,49 +75,6 @@ const EXPECTED_NON_EMPTY_BUCKETS: usize = 17;
 
 /// Bucket refresh lookup interval in seconds
 const BUCKET_REFRESH_INTERVAL_SECS: u64 = 60;
-
-/// The maximum size of a Discv5 packet.
-const MAX_DISCV5_PACKET_SIZE: usize = 1280;
-
-/// The maximum size of a Discv5 talk request payload.
-///
-/// Discv5 talk request overhead:
-///   * masking IV length: 16
-///   * static header (protocol ID || version || flag || nonce || authdata-size) length: 23
-///   * authdata length: 32
-///   * HMAC length: 16
-///   * (max) talk request ID length: 8
-///   * (max assumed) talk request protocol length: 8
-///   * RLP byte array overhead: 6
-const MAX_DISCV5_TALK_REQ_PAYLOAD_SIZE: usize =
-    MAX_DISCV5_PACKET_SIZE - 16 - 23 - 32 - 16 - 8 - 8 - 6;
-
-/// The maximum size of a portal NODES `enrs` payload.
-///
-/// Portal wire overhead:
-///   * portal message SSZ union selector
-///   * NODES `total` field: 1
-///   * NODES SSZ length offset for List `enrs`
-const MAX_PORTAL_NODES_ENRS_SIZE: usize = MAX_DISCV5_TALK_REQ_PAYLOAD_SIZE
-    - ssz::BYTES_PER_UNION_SELECTOR
-    - 1
-    - ssz::BYTES_PER_LENGTH_OFFSET;
-
-/// The maximum size of a portal CONTENT `enrs` payload.
-///
-/// Portal wire overhead:
-///   * portal message SSZ union selector
-///   * CONTENT SSZ union selector
-///   * CONTENT SSZ length offset for List `enrs`
-const MAX_PORTAL_CONTENT_ENRS_SIZE: usize = MAX_DISCV5_TALK_REQ_PAYLOAD_SIZE
-    - (ssz::BYTES_PER_UNION_SELECTOR * 2)
-    - ssz::BYTES_PER_LENGTH_OFFSET;
-
-/// The maximum size of a portal CONTENT `content` payload.
-///
-/// The portal wire overhead for the `content` payload is equal to the overhead for the `enrs`
-/// payload. A SSZ length offset is also required for the List `content`.
-const MAX_PORTAL_CONTENT_CONTENT_SIZE: usize = MAX_PORTAL_CONTENT_ENRS_SIZE;
 
 /// The default configuration to use for uTP connections.
 pub const UTP_CONN_CFG: ConnectionConfig = ConnectionConfig {
@@ -1007,7 +965,7 @@ where
         };
         match self.store.read().get(&content_key) {
             Ok(Some(content)) => {
-                if content.len() <= MAX_PORTAL_CONTENT_CONTENT_SIZE {
+                if content.len() <= MAX_PORTAL_CONTENT_PAYLOAD_SIZE {
                     Ok(Content::Content(content))
                 } else {
                     // Generate a connection ID for the uTP connection.
@@ -1069,7 +1027,7 @@ where
                 let enrs = self.find_nodes_close_to_content(content_key);
                 match enrs {
                     Ok(mut val) => {
-                        pop_while_ssz_bytes_len_gt(&mut val, MAX_PORTAL_CONTENT_ENRS_SIZE);
+                        pop_while_ssz_bytes_len_gt(&mut val, MAX_PORTAL_CONTENT_PAYLOAD_SIZE);
                         Ok(Content::Enrs(val))
                     }
                     Err(msg) => Err(OverlayRequestError::InvalidRequest(msg.to_string())),
