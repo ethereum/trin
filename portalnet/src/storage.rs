@@ -27,6 +27,9 @@ use trin_types::content_key::{ContentKeyError, HistoryContentKey, OverlayContent
 use trin_types::distance::{Distance, Metric, XorMetric};
 use trin_utils::bytes::{hex_decode, hex_encode, ByteUtilsError};
 
+const BYTES_IN_MB_U64: u64 = 1000 * 1000;
+const BYTES_IN_MB_F64: f64 = 1000.0 * 1000.0;
+
 // TODO: Replace enum with generic type parameter. This will require that we have a way to
 // associate a "find farthest" query with the generic Metric.
 #[derive(Copy, Clone, Debug)]
@@ -171,7 +174,7 @@ impl ContentStore for MemoryContentStore {
 /// Struct for configuring a `PortalStorage` instance.
 #[derive(Clone)]
 pub struct PortalStorageConfig {
-    pub storage_capacity_kb: u64,
+    pub storage_capacity_mb: u64,
     pub node_id: NodeId,
     pub distance_fn: DistanceFunction,
     pub db: Arc<rocksdb::DB>,
@@ -181,14 +184,14 @@ pub struct PortalStorageConfig {
 
 impl PortalStorageConfig {
     pub fn new(
-        storage_capacity_kb: u64,
+        storage_capacity_mb: u64,
         node_id: NodeId,
         metrics_enabled: bool,
     ) -> anyhow::Result<Self> {
         let db = Arc::new(PortalStorage::setup_rocksdb(node_id)?);
         let sql_connection_pool = PortalStorage::setup_sql(node_id)?;
         Ok(Self {
-            storage_capacity_kb,
+            storage_capacity_mb,
             node_id,
             distance_fn: DistanceFunction::Xor,
             db,
@@ -253,7 +256,7 @@ impl PortalStorage {
         // Initialize the instance
         let mut storage = Self {
             node_id: config.node_id,
-            storage_capacity_in_bytes: config.storage_capacity_kb * 1000,
+            storage_capacity_in_bytes: config.storage_capacity_mb * BYTES_IN_MB_U64,
             radius: Distance::MAX,
             db: config.db,
             sql_connection_pool: config.sql_connection_pool,
@@ -267,12 +270,12 @@ impl PortalStorage {
         // Check whether we already have data, and use it to set radius
         match storage.total_entry_count()? {
             0 => {
-                // Default radius is left in place, unless user selected 0kb capacity
+                // Default radius is left in place, unless user selected 0mb capacity
                 if storage.storage_capacity_in_bytes == 0 {
                     storage.set_radius(Distance::ZERO);
                 }
             }
-            // Only prunes data when at capacity. (eg. user changed it via kb flag)
+            // Only prunes data when at capacity. (eg. user changed it via mb flag)
             entry_count => {
                 storage.metrics.report_entry_count(entry_count);
 
@@ -289,20 +292,20 @@ impl PortalStorage {
         // Report current storage capacity.
         storage
             .metrics
-            .report_storage_capacity(storage.storage_capacity_in_bytes as f64 / 1000.0);
+            .report_storage_capacity(storage.storage_capacity_in_bytes as f64 / BYTES_IN_MB_F64);
 
         // Report current total storage usage.
         let total_storage_usage = storage.get_total_storage_usage_in_bytes_on_disk()?;
         storage
             .metrics
-            .report_total_storage_usage(total_storage_usage as f64 / 1000.0);
+            .report_total_storage_usage(total_storage_usage as f64 / BYTES_IN_MB_F64);
 
         // Report total storage used by network content.
         let network_content_storage_usage =
             storage.get_total_storage_usage_in_bytes_from_network()?;
         storage
             .metrics
-            .report_content_data_storage(network_content_storage_usage as f64 / 1000.0);
+            .report_content_data_storage(network_content_storage_usage as f64 / BYTES_IN_MB_F64);
 
         Ok(storage)
     }
@@ -405,7 +408,7 @@ impl PortalStorage {
         self.prune_db()?;
         let total_bytes_on_disk = self.get_total_storage_usage_in_bytes_on_disk()?;
         self.metrics
-            .report_total_storage_usage(total_bytes_on_disk as f64 / 1000.0);
+            .report_total_storage_usage(total_bytes_on_disk as f64 / BYTES_IN_MB_F64);
 
         Ok(())
     }
@@ -419,7 +422,7 @@ impl PortalStorage {
         // Delete furthest data until our data usage is less than capacity.
         while self.capacity_reached()? {
             let id_to_remove =
-                // Always expect a content id if capacity_reached(), even at 0kb capacity
+                // Always expect a content id if capacity_reached(), even at 0mb capacity
                 farthest_content_id.expect("Capacity reached, but no farthest id found!");
             // Test if removing the item would put us under capacity
             if self.does_eviction_cause_under_capacity(&id_to_remove)? {
@@ -444,7 +447,7 @@ impl PortalStorage {
             match self.find_farthest_content_id()? {
                 None => {
                     // We get here if the entire db has been pruned,
-                    // eg. user selected 0kb capacity for storage
+                    // eg. user selected 0mb capacity for storage
                     self.set_radius(Distance::ZERO);
                 }
                 Some(farthest) => {
@@ -546,7 +549,7 @@ impl PortalStorage {
         })?;
         let storage_usage = Self::get_total_size_of_directory_in_bytes(data_dir)?;
         self.metrics
-            .report_total_storage_usage(storage_usage as f64 / 1000.0);
+            .report_total_storage_usage(storage_usage as f64 / BYTES_IN_MB_F64);
         Ok(storage_usage)
     }
 
@@ -618,7 +621,8 @@ impl PortalStorage {
         }?
         .num_bytes;
 
-        self.metrics.report_content_data_storage(sum / 1000.0);
+        self.metrics
+            .report_content_data_storage(sum / BYTES_IN_MB_F64);
 
         Ok(sum as u64)
     }
@@ -754,21 +758,21 @@ impl PortalStorage {
 
 #[derive(Debug)]
 struct StorageMetrics {
-    content_storage_usage_kb: Gauge,
-    total_storage_usage_kb: Gauge,
-    storage_capacity_kb: Gauge,
+    content_storage_usage_mb: Gauge,
+    total_storage_usage_mb: Gauge,
+    storage_capacity_mb: Gauge,
     radius_percent: Gauge,
     entry_count: IntGauge,
 }
 
 impl StorageMetrics {
     pub fn new(protocol: &ProtocolId) -> Self {
-        let content_storage_usage_kb_options = opts!(
-            format!("trin_content_storage_usage_kb_{protocol:?}"),
-            "sum of size of individual content stored, in kb"
+        let content_storage_usage_mb_options = opts!(
+            format!("trin_content_storage_usage_mb_{protocol:?}"),
+            "sum of size of individual content stored, in mb"
         );
-        let (content_storage_usage_kb, registry) = match register_gauge!(
-            content_storage_usage_kb_options.clone()
+        let (content_storage_usage_mb, registry) = match register_gauge!(
+            content_storage_usage_mb_options.clone()
         ) {
             Ok(gauge) => (gauge, Registry::default()),
             Err(_) => {
@@ -776,7 +780,7 @@ impl StorageMetrics {
                 let custom_registry = Registry::new_custom(None, None)
                     .expect("Prometheus docs don't explain when it might fail to create a custom registry, so... hopefully never");
                 let gauge = register_gauge_with_registry!(
-                    content_storage_usage_kb_options,
+                    content_storage_usage_mb_options,
                     custom_registry
                 )
                 .expect("a gauge can always be added to a new custom registry, without conflict");
@@ -784,15 +788,15 @@ impl StorageMetrics {
             }
         };
 
-        let total_storage_usage_kb = register_gauge_with_registry!(
-            format!("trin_total_storage_usage_kb_{protocol:?}"),
-            "full on-disk database size, in kb",
+        let total_storage_usage_mb = register_gauge_with_registry!(
+            format!("trin_total_storage_usage_mb_{protocol:?}"),
+            "full on-disk database size, in mb",
             registry,
         )
         .unwrap();
-        let storage_capacity_kb = register_gauge_with_registry!(
-            format!("trin_storage_capacity_kb_{protocol:?}"),
-            "user-defined limit on storage usage, in kb",
+        let storage_capacity_mb = register_gauge_with_registry!(
+            format!("trin_storage_capacity_mb_{protocol:?}"),
+            "user-defined limit on storage usage, in mb",
             registry
         )
         .unwrap();
@@ -810,24 +814,24 @@ impl StorageMetrics {
         .unwrap();
 
         Self {
-            content_storage_usage_kb,
-            total_storage_usage_kb,
-            storage_capacity_kb,
+            content_storage_usage_mb,
+            total_storage_usage_mb,
+            storage_capacity_mb,
             radius_percent,
             entry_count,
         }
     }
 
-    pub fn report_content_data_storage(&self, kb: f64) {
-        self.content_storage_usage_kb.set(kb);
+    pub fn report_content_data_storage(&self, mb: f64) {
+        self.content_storage_usage_mb.set(mb);
     }
 
-    pub fn report_total_storage_usage(&self, kb: f64) {
-        self.total_storage_usage_kb.set(kb);
+    pub fn report_total_storage_usage(&self, mb: f64) {
+        self.total_storage_usage_mb.set(mb);
     }
 
-    pub fn report_storage_capacity(&self, kb: f64) {
-        self.storage_capacity_kb.set(kb);
+    pub fn report_storage_capacity(&self, mb: f64) {
+        self.storage_capacity_mb.set(mb);
     }
 
     pub fn report_radius(&self, radius: Distance) {
@@ -852,12 +856,12 @@ impl StorageMetrics {
 
     pub fn get_summary(&self) -> String {
         format!(
-            "radius={:.1}% content={:.1}/{}kb #={} disk={:.1}kb",
+            "radius={:.1}% content={:.1}/{}mb #={} disk={:.1}mb",
             self.radius_percent.get(),
-            self.content_storage_usage_kb.get(),
-            self.storage_capacity_kb.get(),
+            self.content_storage_usage_mb.get(),
+            self.storage_capacity_mb.get(),
             self.entry_count.get(),
-            self.total_storage_usage_kb.get(),
+            self.total_storage_usage_mb.get(),
         )
     }
 }
@@ -919,7 +923,7 @@ pub mod test {
     use crate::utils::db::setup_temp_dir;
     use trin_types::content_key::IdentityContentKey;
 
-    const CAPACITY: u64 = 100;
+    const CAPACITY_MB: u64 = 2;
 
     fn generate_random_content_key() -> IdentityContentKey {
         let mut key = [0u8; 32];
@@ -934,12 +938,15 @@ pub mod test {
 
         let node_id = NodeId::random();
 
-        let storage_config = PortalStorageConfig::new(CAPACITY, node_id, false).unwrap();
+        let storage_config = PortalStorageConfig::new(CAPACITY_MB, node_id, false).unwrap();
         let storage = PortalStorage::new(storage_config, ProtocolId::History)?;
 
         // Assert that configs match the storage object's fields
         assert_eq!(storage.node_id, node_id);
-        assert_eq!(storage.storage_capacity_in_bytes, CAPACITY * 1000);
+        assert_eq!(
+            storage.storage_capacity_in_bytes,
+            CAPACITY_MB * BYTES_IN_MB_U64
+        );
         assert_eq!(storage.radius, Distance::MAX);
 
         std::mem::drop(storage);
@@ -954,7 +961,7 @@ pub mod test {
             let temp_dir = setup_temp_dir().unwrap();
 
             let node_id = NodeId::random();
-            let storage_config = PortalStorageConfig::new(CAPACITY, node_id, false).unwrap();
+            let storage_config = PortalStorageConfig::new(CAPACITY_MB, node_id, false).unwrap();
             let mut storage = PortalStorage::new(storage_config, ProtocolId::History).unwrap();
             let content_key = generate_random_content_key();
             let mut value = [0u8; 32];
@@ -977,7 +984,7 @@ pub mod test {
         let temp_dir = setup_temp_dir().unwrap();
 
         let node_id = NodeId::random();
-        let storage_config = PortalStorageConfig::new(CAPACITY, node_id, false).unwrap();
+        let storage_config = PortalStorageConfig::new(CAPACITY_MB, node_id, false).unwrap();
         let mut storage = PortalStorage::new(storage_config, ProtocolId::History)?;
         let content_key = generate_random_content_key();
         let value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
@@ -998,7 +1005,7 @@ pub mod test {
         let temp_dir = setup_temp_dir().unwrap();
 
         let node_id = NodeId::random();
-        let storage_config = PortalStorageConfig::new(CAPACITY, node_id, false).unwrap();
+        let storage_config = PortalStorageConfig::new(CAPACITY_MB, node_id, false).unwrap();
         let mut storage = PortalStorage::new(storage_config, ProtocolId::History)?;
 
         let content_key = generate_random_content_key();
@@ -1020,41 +1027,40 @@ pub mod test {
         let temp_dir = setup_temp_dir().unwrap();
 
         let node_id = NodeId::random();
-        let storage_config = PortalStorageConfig::new(CAPACITY, node_id, false).unwrap();
+        let storage_config = PortalStorageConfig::new(CAPACITY_MB, node_id, false).unwrap();
         let mut storage = PortalStorage::new(storage_config, ProtocolId::History)?;
 
         for _ in 0..50 {
             let content_key = generate_random_content_key();
-            let value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
+            let value: Vec<u8> = vec![0; 32000];
             storage.store(&content_key, &value)?;
         }
 
         let bytes = storage.get_total_storage_usage_in_bytes_from_network()?;
-        assert_eq!(1600, bytes); // 32bytes * 50
+        assert_eq!(1600000, bytes); // 32kb * 50
         assert_eq!(storage.radius, Distance::MAX);
         std::mem::drop(storage);
 
-        // test with 1kb capacity
+        // test with 1mb capacity
         let new_storage_config = PortalStorageConfig::new(1, node_id, false).unwrap();
         let new_storage = PortalStorage::new(new_storage_config, ProtocolId::History)?;
 
         // test that previously set value has been pruned
         let bytes = new_storage.get_total_storage_usage_in_bytes_from_network()?;
-        assert_eq!(1024, bytes);
+        assert_eq!(1024000, bytes);
         assert_eq!(32, new_storage.total_entry_count().unwrap());
-        assert_eq!(new_storage.storage_capacity_in_bytes, 1000);
+        assert_eq!(new_storage.storage_capacity_in_bytes, BYTES_IN_MB_U64);
         // test that radius has decreased now that we're at capacity
         assert!(new_storage.radius < Distance::MAX);
         std::mem::drop(new_storage);
 
-        // test with 0kb capacity
+        // test with 0mb capacity
         let new_storage_config = PortalStorageConfig::new(0, node_id, false).unwrap();
         let new_storage = PortalStorage::new(new_storage_config, ProtocolId::History)?;
 
         // test that previously set value has been pruned
         assert_eq!(new_storage.storage_capacity_in_bytes, 0);
         assert_eq!(new_storage.radius, Distance::ZERO);
-        //assert_eq!(31, new_storage.total_entry_count().unwrap());
         std::mem::drop(new_storage);
 
         temp_dir.close()?;
@@ -1073,15 +1079,12 @@ pub mod test {
         let storage_config = PortalStorageConfig::new(min_capacity, node_id, false).unwrap();
         let mut storage = PortalStorage::new(storage_config.clone(), ProtocolId::History)?;
 
-        // Fill up the storage. This is overkill for the 1kb capacity, but an upcoming
-        // change will make the minimum storage size 1MB, so 32 keys should still be sufficient then.
+        // Fill up the storage.
         for _ in 0..32 {
             let content_key = generate_random_content_key();
-            let value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
+            let value: Vec<u8> = vec![0; 32000];
             storage.store(&content_key, &value)?;
             // Speed up the test by ending the loop as soon as possible
-            // At 1kb, that should be immediately after the first item is stored.
-            // At 1MB, it will take the full 32 items.
             if storage.capacity_reached()? {
                 break;
             }
@@ -1137,7 +1140,7 @@ pub mod test {
         let temp_dir = setup_temp_dir().unwrap();
 
         let node_id = NodeId::random();
-        let storage_config = PortalStorageConfig::new(CAPACITY, node_id, false).unwrap();
+        let storage_config = PortalStorageConfig::new(CAPACITY_MB, node_id, false).unwrap();
         let storage = PortalStorage::new(storage_config, ProtocolId::History)?;
 
         let result = storage.find_farthest_content_id()?;
@@ -1156,7 +1159,7 @@ pub mod test {
 
             let node_id = NodeId::random();
             let val = vec![0x00, 0x01, 0x02, 0x03, 0x04];
-            let storage_config = PortalStorageConfig::new(CAPACITY, node_id, false).unwrap();
+            let storage_config = PortalStorageConfig::new(CAPACITY_MB, node_id, false).unwrap();
             let mut storage = PortalStorage::new(storage_config, ProtocolId::History).unwrap();
             storage.store(&x, &val).unwrap();
             storage.store(&y, &val).unwrap();

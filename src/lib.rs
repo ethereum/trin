@@ -64,7 +64,7 @@ pub async fn run_trin(
     }
 
     let storage_config = PortalStorageConfig::new(
-        trin_config.kb.into(),
+        trin_config.mb.into(),
         discovery.local_enr().node_id(),
         trin_config.enable_metrics_with_url.is_some(),
     )?;

@@ -14,7 +14,7 @@ const DEFAULT_DISCOVERY_PORT: &str = "9000";
 pub const HISTORY_NETWORK: &str = "history";
 pub const STATE_NETWORK: &str = "state";
 const DEFAULT_SUBNETWORKS: &str = "history";
-pub const DEFAULT_STORAGE_CAPACITY: &str = "100000"; // 100mb
+pub const DEFAULT_STORAGE_CAPACITY_MB: &str = "100";
 pub const DEFAULT_TRUSTED_PROVIDER: &str = "infura";
 pub const DEFAULT_WEB3_TRANSPORT: &str = "ipc";
 
@@ -129,13 +129,13 @@ pub struct TrinConfig {
     )]
     pub networks: Vec<String>,
 
-    /// Number of Kilobytes to store in the DB
+    /// Storage capacity specified in megabytes.
     #[structopt(
-        default_value(DEFAULT_STORAGE_CAPACITY),
+        default_value(DEFAULT_STORAGE_CAPACITY_MB),
         long,
-        help = "Maximum number of kilobytes of total data to store in the DB"
+        help = "Maximum number of megabytes of total data to store in the DB"
     )]
-    pub kb: u32,
+    pub mb: u32,
 
     #[structopt(
         long = "enable-metrics-with-url",
@@ -192,9 +192,9 @@ impl Default for TrinConfig {
                 .split(',')
                 .map(|n| n.to_string())
                 .collect(),
-            kb: DEFAULT_STORAGE_CAPACITY
+            mb: DEFAULT_STORAGE_CAPACITY_MB
                 .parse()
-                .expect("Parsing static DEFAULT_STORAGE_CAPACITY to work"),
+                .expect("Parsing static DEFAULT_STORAGE_CAPACITY_MB to work"),
             enable_metrics_with_url: None,
             ephemeral: false,
             trusted_provider: TrustedProviderType::Infura,
@@ -285,8 +285,8 @@ impl fmt::Display for TrinConfig {
 
         write!(
             f,
-            "TrinConfig {{ networks: {:?}, capacity_kb: {}, ephemeral: {}, json_rpc_url: {}, metrics_enabled: {} }}",
-            self.networks, self.kb, self.ephemeral, json_rpc_url, self.enable_metrics_with_url.is_some()
+            "TrinConfig {{ networks: {:?}, capacity_mb: {}, ephemeral: {}, json_rpc_url: {}, metrics_enabled: {} }}",
+            self.networks, self.mb, self.ephemeral, json_rpc_url, self.enable_metrics_with_url.is_some()
         )
     }
 }
