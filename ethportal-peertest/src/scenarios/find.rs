@@ -1,3 +1,4 @@
+use discv5::enr::NodeId;
 use serde_json::{json, Value};
 
 use crate::{
@@ -5,6 +6,7 @@ use crate::{
     Peertest, PeertestConfig,
 };
 use trin_types::{constants::CONTENT_ABSENT, jsonrpc::params::Params};
+use trin_utils::bytes::hex_encode;
 
 pub fn test_trace_recursive_find_content(_peertest_config: PeertestConfig, peertest: &Peertest) {
     let uniq_content_key = "0x0015b11b918355b1ef9c5db810302ebad0bf2544255b530cdce90674d5887bb286";
@@ -106,4 +108,41 @@ pub fn test_trace_recursive_find_content_local_db(
     let result = make_ipc_request(&peertest.bootnode.web3_ipc_path, &request).unwrap();
     assert_eq!(result["content"], json!(HISTORY_CONTENT_VALUE.to_string()));
     assert_eq!(result["route"], json!([]));
+}
+
+pub async fn test_recursive_find_nodes_self(_peertest_config: PeertestConfig, peertest: &Peertest) {
+    let target_node_id = hex_encode(peertest.bootnode.enr.node_id().raw());
+    let request = JsonRpcRequest {
+        method: "portal_historyRecursiveFindNodes".to_string(),
+        id: 15,
+        params: Params::Array(vec![json!(target_node_id)]),
+    };
+    let result = make_ipc_request(&peertest.bootnode.web3_ipc_path, &request).unwrap();
+    assert_eq!(result, json!([peertest.bootnode.enr.to_base64()]));
+}
+
+pub async fn test_recursive_find_nodes_peer(_peertest_config: PeertestConfig, peertest: &Peertest) {
+    let target_enr = peertest.nodes[0].enr.clone();
+    let target_node_id = hex_encode(target_enr.node_id().raw());
+    let request = JsonRpcRequest {
+        method: "portal_historyRecursiveFindNodes".to_string(),
+        id: 15,
+        params: Params::Array(vec![json!(target_node_id)]),
+    };
+    let result = make_ipc_request(&peertest.bootnode.web3_ipc_path, &request).unwrap();
+    assert_eq!(result, json!([target_enr.to_base64()]));
+}
+
+pub async fn test_recursive_find_nodes_random(
+    _peertest_config: PeertestConfig,
+    peertest: &Peertest,
+) {
+    let target_node_id = hex_encode(NodeId::random());
+    let request = JsonRpcRequest {
+        method: "portal_historyRecursiveFindNodes".to_string(),
+        id: 15,
+        params: Params::Array(vec![json!(target_node_id)]),
+    };
+    let result = make_ipc_request(&peertest.bootnode.web3_ipc_path, &request).unwrap();
+    assert_eq!(result.as_array().unwrap().len(), 2);
 }
