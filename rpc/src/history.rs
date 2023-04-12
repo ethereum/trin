@@ -1,6 +1,6 @@
 use crate::jsonrpsee::core::{async_trait, Error, RpcResult};
 use anyhow::anyhow;
-use ethportal_api::types::discv5::{NodeId, RoutingTableInfo};
+use ethportal_api::types::discv5::RoutingTableInfo;
 use ethportal_api::types::portal::{
     AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
     TraceContentInfo,
@@ -15,6 +15,7 @@ use trin_types::content_value::PossibleHistoryContentValue;
 use trin_types::enr::Enr;
 use trin_types::jsonrpc::endpoints::HistoryEndpoint;
 use trin_types::jsonrpc::request::HistoryJsonRpcRequest;
+use trin_types::node_id::NodeId;
 
 pub struct HistoryNetworkApi {
     network: mpsc::UnboundedSender<HistoryJsonRpcRequest>,
@@ -96,8 +97,11 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
     }
 
     /// Lookup a target node within in the network
-    async fn recursive_find_nodes(&self, _node_id: NodeId) -> RpcResult<Vec<Enr>> {
-        Err(Error::MethodNotFound("recursive_find_nodes".to_owned()))
+    async fn recursive_find_nodes(&self, node_id: NodeId) -> RpcResult<Vec<Enr>> {
+        let endpoint = HistoryEndpoint::RecursiveFindNodes(node_id);
+        let result = self.proxy_query_to_history_subnet(endpoint).await?;
+        let result: Vec<Enr> = from_value(result)?;
+        Ok(result)
     }
 
     /// Lookup a target node within in the network

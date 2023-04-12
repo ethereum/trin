@@ -103,6 +103,12 @@ pub enum OverlayCommand<TContentKey> {
         /// A callback channel to transmit the result of the query.
         callback: oneshot::Sender<(Option<Vec<u8>>, Vec<NodeId>)>,
     },
+    FindNodeQuery {
+        /// The query target.
+        target: NodeId,
+        /// A callback channel to transmit the result of the query.
+        callback: oneshot::Sender<Vec<Enr>>,
+    },
 }
 
 /// An overlay request error.
@@ -424,12 +430,12 @@ where
         let local_node_id = self.local_enr().node_id();
 
         // Begin request for our local node ID.
-        self.init_find_nodes_query(&local_node_id);
+        self.init_find_nodes_query(&local_node_id, None);
 
         for bucket_index in (255 - EXPECTED_NON_EMPTY_BUCKETS as u8)..255 {
             let target_node_id =
                 node_id::generate_random_node_id(bucket_index, self.local_enr().node_id());
-            self.init_find_nodes_query(&target_node_id);
+            self.init_find_nodes_query(&target_node_id, None);
         }
     }
 
@@ -463,6 +469,15 @@ where
                                     content.id = %hex_encode_compact(target.content_id()),
                                     content.key = %target,
                                     "FindContent query initialized"
+                                );
+                            }
+                        }
+                        OverlayCommand::FindNodeQuery { target, callback } => {
+                            if let Some(query_id) = self.init_find_nodes_query(&target, Some(callback)) {
+                                trace!(
+                                    query.id = %query_id,
+                                    node.id = %hex_encode_compact(target),
+                                    "FindNode query initialized"
                                 );
                             }
                         }
@@ -544,7 +559,7 @@ where
             }
         };
 
-        self.init_find_nodes_query(&target_node_id);
+        self.init_find_nodes_query(&target_node_id, None);
     }
 
     /// Returns the local ENR of the node.
@@ -2114,7 +2129,11 @@ where
     }
 
     /// Starts a FindNode query to find nodes with IDs closest to `target`.
-    fn init_find_nodes_query(&mut self, target: &NodeId) {
+    fn init_find_nodes_query(
+        &mut self,
+        target: &NodeId,
+        callback: Option<oneshot::Sender<Vec<Enr>>>,
+    ) -> Option<QueryId> {
         let target_key = Key::from(*target);
         let mut closest_enrs: Vec<Enr> = self
             .kbuckets
@@ -2141,7 +2160,7 @@ where
             query_type: QueryType::FindNode {
                 target: *target,
                 distances_to_request: self.findnodes_query_distances_per_peer,
-                callback: None,
+                callback,
             },
             untrusted_enrs: SmallVec::from_vec(closest_enrs),
         };
@@ -2154,11 +2173,14 @@ where
 
         if known_closest_peers.is_empty() {
             warn!("Cannot initialize FindNode query (no known close peers)");
+            None
         } else {
             let find_nodes_query =
                 FindNodeQuery::with_config(query_config, query_info.key(), known_closest_peers);
-            self.find_node_query_pool
-                .add_query(query_info, find_nodes_query);
+            Some(
+                self.find_node_query_pool
+                    .add_query(query_info, find_nodes_query),
+            )
         }
     }
 
@@ -3162,7 +3184,7 @@ mod tests {
         service.add_bootnodes(bootnodes);
 
         // Initialize the query and call `poll` so that it starts
-        service.init_find_nodes_query(&target_node_id);
+        service.init_find_nodes_query(&target_node_id, None);
         let _ = service.find_node_query_pool.poll();
 
         let (query_info, query) = service.find_node_query_pool.iter().next().unwrap();
@@ -3200,7 +3222,7 @@ mod tests {
 
         service.add_bootnodes(bootnodes);
         service.query_num_results = 3;
-        service.init_find_nodes_query(&target_node_id);
+        service.init_find_nodes_query(&target_node_id, None);
 
         // Test that the first query event contains a proper query ID and request to the bootnode
         let event = OverlayService::<
@@ -3321,7 +3343,7 @@ mod tests {
 
         service.add_bootnodes(bootnodes);
 
-        service.init_find_nodes_query(&target_node_id);
+        service.init_find_nodes_query(&target_node_id, None);
 
         let _event = OverlayService::<
             IdentityContentKey,

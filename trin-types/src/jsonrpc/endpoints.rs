@@ -2,6 +2,7 @@ use crate::content_key::HistoryContentKey;
 use crate::content_value::HistoryContentValue;
 use crate::distance::DataRadius;
 use crate::enr::Enr;
+use crate::node_id::NodeId;
 
 /// Discv5 JSON-RPC endpoints. Start with "discv5_" prefix
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -52,6 +53,8 @@ pub enum HistoryEndpoint {
     // This endpoint is not History network specific
     /// params: [offset, limit]
     PaginateLocalContentKeys(u64, u64),
+    /// params: [node_id]
+    RecursiveFindNodes(NodeId),
 }
 
 /// Ethereum JSON-RPC endpoints not currently supported by portal network requests, proxied to

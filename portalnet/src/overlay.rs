@@ -441,6 +441,51 @@ where
         }
     }
 
+    pub async fn lookup_node(&self, target: NodeId) -> Vec<Enr> {
+        if target == self.local_enr().node_id() {
+            return vec![self.local_enr()];
+        }
+        let connected_peer = self
+            .kbuckets
+            .write()
+            .iter()
+            .filter(|entry| entry.status.is_connected())
+            .map(|entry| *entry.node.key.preimage())
+            .find(|node_id| node_id == &target);
+        if let Some(entry) = connected_peer {
+            match self.discovery.find_enr(&entry) {
+                Some(enr) => return vec![enr],
+                None => {
+                    warn!(
+                        protocol = %self.protocol,
+                        "Error finding ENR for node expected to exist in local routing table",
+                    );
+                    return vec![];
+                }
+            }
+        };
+        let (tx, rx) = oneshot::channel();
+        if let Err(err) = self.command_tx.send(OverlayCommand::FindNodeQuery {
+            target,
+            callback: tx,
+        }) {
+            warn!(
+                protocol = %self.protocol,
+                error = %err,
+                "Error submitting FindNode query to service"
+            );
+            return vec![];
+        }
+        rx.await.unwrap_or_else(|err| {
+            warn!(
+                protocol = %self.protocol,
+                error = %err,
+                "Error receiving FindNode query response"
+            );
+            vec![]
+        })
+    }
+
     /// Performs a content lookup for `target`.
     /// Returns the target content along with the peers traversed during content lookup.
     pub async fn lookup_content(&self, target: TContentKey) -> (Option<Vec<u8>>, Vec<NodeId>) {
@@ -460,18 +505,15 @@ where
             return (None, vec![]);
         }
 
-        match rx.await {
-            Ok(result) => result,
-            Err(err) => {
-                warn!(
-                    protocol = %self.protocol,
-                    error = %err,
-                    content.id = %hex_encode(content_id),
-                    "Error receiving content from service",
-                );
-                (None, vec![])
-            }
-        }
+        rx.await.unwrap_or_else(|err| {
+            warn!(
+                protocol = %self.protocol,
+                error = %err,
+                content.id = %hex_encode(content_id),
+                "Error receiving content from service",
+            );
+            (None, vec![])
+        })
     }
 
     /// Sends a request through the overlay service.
@@ -495,10 +537,8 @@ where
         }
 
         // Wait on the response.
-        match rx.await {
-            Ok(result) => result,
-            Err(error) => Err(OverlayRequestError::ChannelFailure(error.to_string())),
-        }
+        rx.await
+            .unwrap_or_else(|err| Err(OverlayRequestError::ChannelFailure(err.to_string())))
     }
 
     pub async fn ping_bootnodes(&self) {

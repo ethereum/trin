@@ -52,6 +52,22 @@ mod test {
         };
         let test_client_rpc_handle = trin::run_trin(trin_config, trusted_provider).await.unwrap();
 
+        peertest::scenarios::find::test_recursive_find_nodes_self(
+            peertest_config.clone(),
+            &peertest,
+        )
+        .await;
+        peertest::scenarios::find::test_recursive_find_nodes_peer(
+            peertest_config.clone(),
+            &peertest,
+        )
+        .await;
+        peertest::scenarios::find::test_recursive_find_nodes_random(
+            peertest_config.clone(),
+            &peertest,
+        )
+        .await;
+
         peertest::scenarios::paginate::test_paginate_local_storage(
             peertest_config.clone(),
             &peertest,
