@@ -3785,6 +3785,7 @@ dependencies = [
  "serde_yaml",
  "ssz-rs",
  "strum",
+ "superstruct",
  "thiserror",
  "tokio",
  "tracing",
@@ -6173,6 +6174,20 @@ name = "subtle"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6bdef32e8150c2a081110b42772ffe7d7c9032b606bc226c8260fd97e0976601"
+
+[[package]]
+name = "superstruct"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6f4e1f478a7728f8855d7e620e9a152cf8932c6614f86564c886f9b8141f3201"
+dependencies = [
+ "darling",
+ "itertools",
+ "proc-macro2",
+ "quote",
+ "smallvec 1.10.0",
+ "syn 1.0.109",
+]
 
 [[package]]
 name = "surf"

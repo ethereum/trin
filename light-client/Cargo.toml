@@ -23,6 +23,7 @@ reqwest = { version = "0.11.13", features = ["json"] }
 serde_json = "1.0.85"
 ssz-rs = { git = "https://github.com/ralexstokes/ssz-rs", rev = "d09f55b4f8554491e3431e01af1c32347a8781cd" }
 strum = "0.24.1"
+superstruct = "0.7.0"
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1.36"
 ethers = "1.0.0"
