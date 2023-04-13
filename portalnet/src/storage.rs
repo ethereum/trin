@@ -751,7 +751,7 @@ struct StorageMetrics {
     content_storage_usage_kb: Gauge,
     total_storage_usage_kb: Gauge,
     storage_capacity_kb: Gauge,
-    radius_percent: Gauge,
+    radius_ratio: Gauge,
     entry_count: IntGauge,
 }
 
@@ -790,9 +790,9 @@ impl StorageMetrics {
             registry
         )
         .unwrap();
-        let radius_percent = register_gauge_with_registry!(
-            format!("trin_radius_percent_{protocol:?}"),
-            "the percentage of the whole data ring covered by the data radius",
+        let radius_ratio = register_gauge_with_registry!(
+            format!("trin_radius_ratio_{protocol:?}"),
+            "the fraction of the whole data ring covered by the data radius",
             registry,
         )
         .unwrap();
@@ -807,7 +807,7 @@ impl StorageMetrics {
             content_storage_usage_kb,
             total_storage_usage_kb,
             storage_capacity_kb,
-            radius_percent,
+            radius_ratio,
             entry_count,
         }
     }
@@ -825,8 +825,15 @@ impl StorageMetrics {
     }
 
     pub fn report_radius(&self, radius: Distance) {
-        let coverage_percent = radius.byte(31) as f64 * 100.0 / 255.0;
-        self.radius_percent.set(coverage_percent);
+        let radius_high_bytes = [
+            radius.byte(31),
+            radius.byte(30),
+            radius.byte(29),
+            radius.byte(28),
+        ];
+        let radius_int = u32::from_be_bytes(radius_high_bytes);
+        let coverage_ratio = radius_int as f64 / u32::MAX as f64;
+        self.radius_ratio.set(coverage_ratio);
     }
 
     pub fn report_entry_count(&self, count: u64) {
@@ -847,7 +854,7 @@ impl StorageMetrics {
     pub fn get_summary(&self) -> String {
         format!(
             "radius={:.1}% content={:.1}/{}kb #={} disk={:.1}kb",
-            self.radius_percent.get(),
+            self.radius_ratio.get() * 100.0,
             self.content_storage_usage_kb.get(),
             self.storage_capacity_kb.get(),
             self.entry_count.get(),
