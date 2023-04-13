@@ -33,7 +33,6 @@ impl HistoryNetwork {
     ) -> anyhow::Result<Self> {
         let config = OverlayConfig {
             bootnode_enrs: portal_config.bootnode_enrs.clone(),
-            enable_metrics: portal_config.enable_metrics,
             ..Default::default()
         };
         let storage = Arc::new(PLRwLock::new(PortalStorage::new(

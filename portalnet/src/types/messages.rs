@@ -166,7 +166,6 @@ pub struct PortalnetConfig {
     pub data_radius: Distance,
     pub internal_ip: bool,
     pub no_stun: bool,
-    pub enable_metrics: bool,
     pub node_addr_cache_capacity: usize,
 }
 
@@ -180,7 +179,6 @@ impl Default for PortalnetConfig {
             data_radius: Distance::MAX,
             internal_ip: false,
             no_stun: false,
-            enable_metrics: false,
             node_addr_cache_capacity: NODE_ADDR_CACHE_CAPACITY,
         }
     }

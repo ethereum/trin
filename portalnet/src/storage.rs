@@ -176,15 +176,10 @@ pub struct PortalStorageConfig {
     pub distance_fn: DistanceFunction,
     pub db: Arc<rocksdb::DB>,
     pub sql_connection_pool: Pool<SqliteConnectionManager>,
-    pub metrics_enabled: bool,
 }
 
 impl PortalStorageConfig {
-    pub fn new(
-        storage_capacity_kb: u64,
-        node_id: NodeId,
-        metrics_enabled: bool,
-    ) -> anyhow::Result<Self> {
+    pub fn new(storage_capacity_kb: u64, node_id: NodeId) -> anyhow::Result<Self> {
         let db = Arc::new(PortalStorage::setup_rocksdb(node_id)?);
         let sql_connection_pool = PortalStorage::setup_sql(node_id)?;
         Ok(Self {
@@ -193,7 +188,6 @@ impl PortalStorageConfig {
             distance_fn: DistanceFunction::Xor,
             db,
             sql_connection_pool,
-            metrics_enabled,
         })
     }
 }
@@ -937,7 +931,7 @@ pub mod test {
 
         let node_id = NodeId::random();
 
-        let storage_config = PortalStorageConfig::new(CAPACITY, node_id, false).unwrap();
+        let storage_config = PortalStorageConfig::new(CAPACITY, node_id).unwrap();
         let storage = PortalStorage::new(storage_config, ProtocolId::History)?;
 
         // Assert that configs match the storage object's fields
@@ -957,7 +951,7 @@ pub mod test {
             let temp_dir = setup_temp_dir().unwrap();
 
             let node_id = NodeId::random();
-            let storage_config = PortalStorageConfig::new(CAPACITY, node_id, false).unwrap();
+            let storage_config = PortalStorageConfig::new(CAPACITY, node_id).unwrap();
             let mut storage = PortalStorage::new(storage_config, ProtocolId::History).unwrap();
             let content_key = generate_random_content_key();
             let mut value = [0u8; 32];
@@ -980,7 +974,7 @@ pub mod test {
         let temp_dir = setup_temp_dir().unwrap();
 
         let node_id = NodeId::random();
-        let storage_config = PortalStorageConfig::new(CAPACITY, node_id, false).unwrap();
+        let storage_config = PortalStorageConfig::new(CAPACITY, node_id).unwrap();
         let mut storage = PortalStorage::new(storage_config, ProtocolId::History)?;
         let content_key = generate_random_content_key();
         let value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
@@ -1001,7 +995,7 @@ pub mod test {
         let temp_dir = setup_temp_dir().unwrap();
 
         let node_id = NodeId::random();
-        let storage_config = PortalStorageConfig::new(CAPACITY, node_id, false).unwrap();
+        let storage_config = PortalStorageConfig::new(CAPACITY, node_id).unwrap();
         let mut storage = PortalStorage::new(storage_config, ProtocolId::History)?;
 
         let content_key = generate_random_content_key();
@@ -1023,7 +1017,7 @@ pub mod test {
         let temp_dir = setup_temp_dir().unwrap();
 
         let node_id = NodeId::random();
-        let storage_config = PortalStorageConfig::new(CAPACITY, node_id, false).unwrap();
+        let storage_config = PortalStorageConfig::new(CAPACITY, node_id).unwrap();
         let mut storage = PortalStorage::new(storage_config, ProtocolId::History)?;
 
         for _ in 0..50 {
@@ -1038,7 +1032,7 @@ pub mod test {
         std::mem::drop(storage);
 
         // test with 1kb capacity
-        let new_storage_config = PortalStorageConfig::new(1, node_id, false).unwrap();
+        let new_storage_config = PortalStorageConfig::new(1, node_id).unwrap();
         let new_storage = PortalStorage::new(new_storage_config, ProtocolId::History)?;
 
         // test that previously set value has been pruned
@@ -1051,7 +1045,7 @@ pub mod test {
         std::mem::drop(new_storage);
 
         // test with 0kb capacity
-        let new_storage_config = PortalStorageConfig::new(0, node_id, false).unwrap();
+        let new_storage_config = PortalStorageConfig::new(0, node_id).unwrap();
         let new_storage = PortalStorage::new(new_storage_config, ProtocolId::History)?;
 
         // test that previously set value has been pruned
@@ -1073,7 +1067,7 @@ pub mod test {
         let node_id = NodeId::random();
         let min_capacity = 1;
         // Use a tiny storage capacity, to fill up as quickly as possible
-        let storage_config = PortalStorageConfig::new(min_capacity, node_id, false).unwrap();
+        let storage_config = PortalStorageConfig::new(min_capacity, node_id).unwrap();
         let mut storage = PortalStorage::new(storage_config.clone(), ProtocolId::History)?;
 
         // Fill up the storage. This is overkill for the 1kb capacity, but an upcoming
@@ -1117,7 +1111,7 @@ pub mod test {
         let temp_dir = setup_temp_dir().unwrap();
 
         let node_id = NodeId::random();
-        let storage_config = PortalStorageConfig::new(0, node_id, false).unwrap();
+        let storage_config = PortalStorageConfig::new(0, node_id).unwrap();
         let mut storage = PortalStorage::new(storage_config, ProtocolId::History)?;
 
         let content_key = generate_random_content_key();
@@ -1140,7 +1134,7 @@ pub mod test {
         let temp_dir = setup_temp_dir().unwrap();
 
         let node_id = NodeId::random();
-        let storage_config = PortalStorageConfig::new(CAPACITY, node_id, false).unwrap();
+        let storage_config = PortalStorageConfig::new(CAPACITY, node_id).unwrap();
         let storage = PortalStorage::new(storage_config, ProtocolId::History)?;
 
         let result = storage.find_farthest_content_id()?;
@@ -1159,7 +1153,7 @@ pub mod test {
 
             let node_id = NodeId::random();
             let val = vec![0x00, 0x01, 0x02, 0x03, 0x04];
-            let storage_config = PortalStorageConfig::new(CAPACITY, node_id, false).unwrap();
+            let storage_config = PortalStorageConfig::new(CAPACITY, node_id).unwrap();
             let mut storage = PortalStorage::new(storage_config, ProtocolId::History).unwrap();
             storage.store(&x, &val).unwrap();
             storage.store(&y, &val).unwrap();

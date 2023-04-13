@@ -290,7 +290,7 @@ pub struct OverlayService<TContentKey, TMetric, TValidator, TStore> {
     /// Phantom metric (distance function).
     phantom_metric: PhantomData<TMetric>,
     /// Metrics reporting component
-    metrics: Option<OverlayMetrics>,
+    metrics: Arc<OverlayMetrics>,
     /// Validator for overlay network content.
     validator: Arc<TValidator>,
 }
@@ -318,7 +318,7 @@ where
         ping_queue_interval: Option<Duration>,
         protocol: ProtocolId,
         utp_socket: Arc<UtpSocket<crate::discovery::UtpEnr>>,
-        enable_metrics: bool,
+        metrics: Arc<OverlayMetrics>,
         validator: Arc<TValidator>,
         query_timeout: Duration,
         query_peer_timeout: Duration,
@@ -341,9 +341,6 @@ where
         };
 
         let (response_tx, response_rx) = mpsc::unbounded_channel();
-
-        let metrics: Option<OverlayMetrics> =
-            enable_metrics.then(|| OverlayMetrics::new(&protocol));
 
         tokio::spawn(async move {
             let mut service = Self {
@@ -484,7 +481,10 @@ where
 
                         // Perform background processing.
                         match response.response {
-                            Ok(response) => self.process_response(response, active_request.destination, active_request.request, active_request.query_id),
+                            Ok(response) => {
+                                self.metrics.report_inbound_response(&self.protocol, &response);
+                                self.process_response(response, active_request.destination, active_request.request, active_request.query_id)
+                            }
                             Err(error) => self.process_request_failure(response.request_id, active_request.destination, error),
                         }
 
@@ -832,6 +832,10 @@ where
                 let response = self.handle_request(request.request.clone(), id.clone(), &source);
                 // Send response to responder if present.
                 if let Some(responder) = request.responder {
+                    if let Ok(ref response) = response {
+                        self.metrics
+                            .report_outbound_response(&self.protocol, response);
+                    }
                     let _ = responder.send(response);
                 }
                 // Perform background processing.
@@ -847,15 +851,8 @@ where
                         query_id: request.query_id,
                     },
                 );
-                if let Some(m) = self.metrics.as_ref() {
-                    match request.request {
-                        Request::Ping(_) => m.report_outbound_ping(),
-                        Request::FindNodes(_) => m.report_outbound_find_nodes(),
-                        Request::FindContent(_) => m.report_outbound_find_content(),
-                        Request::Offer(_) => m.report_outbound_offer(),
-                        Request::PopulatedOffer(_) => m.report_outbound_offer(),
-                    }
-                }
+                self.metrics
+                    .report_outbound_request(&self.protocol, &request.request);
                 self.send_talk_req(request.request, request.id, destination);
             }
         }
@@ -896,9 +893,6 @@ where
             request
         );
 
-        if let Some(m) = self.metrics.as_ref() {
-            m.report_inbound_ping()
-        }
         let enr_seq = self.local_enr().seq();
         let data_radius = self.data_radius();
         let custom_payload = CustomPayload::from(data_radius.as_ssz_bytes());
@@ -922,9 +916,6 @@ where
             "Handling FindNodes message",
         );
 
-        if let Some(m) = self.metrics.as_ref() {
-            m.report_inbound_find_nodes()
-        }
         let distances64: Vec<u64> = request.distances.iter().map(|x| (*x).into()).collect();
         let mut enrs = self.nodes_by_distance(distances64);
 
@@ -948,9 +939,6 @@ where
             "Handling FindContent message",
         );
 
-        if let Some(m) = self.metrics.as_ref() {
-            m.report_inbound_find_content()
-        }
         let content_key = match (TContentKey::try_from)(request.content_key) {
             Ok(key) => key,
             Err(_) => {
@@ -1048,10 +1036,6 @@ where
             request.discv5.id = %request_id,
             "Handling Offer message",
         );
-
-        if let Some(m) = self.metrics.as_ref() {
-            m.report_inbound_offer()
-        }
 
         let mut requested_keys =
             BitList::with_capacity(request.content_keys.len()).map_err(|_| {
@@ -1184,6 +1168,8 @@ where
 
     /// Processes an incoming request from some source node.
     fn process_incoming_request(&mut self, request: Request, _id: RequestId, source: NodeId) {
+        self.metrics
+            .report_inbound_request(&self.protocol, &request);
         if let Request::Ping(ping) = request {
             self.process_ping(ping, source);
         }
@@ -2459,7 +2445,7 @@ mod tests {
         let peers_to_ping = HashSetDelay::default();
         let (command_tx, command_rx) = mpsc::unbounded_channel();
         let (response_tx, response_rx) = mpsc::unbounded_channel();
-        let metrics = None;
+        let metrics = Arc::new(OverlayMetrics::new());
         let validator = Arc::new(MockValidator {});
 
         OverlayService {
