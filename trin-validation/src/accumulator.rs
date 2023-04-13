@@ -387,6 +387,7 @@ mod test {
             mix_hash: None,
             nonce: None,
             base_fee_per_gas: None,
+            withdrawals_root: None,
         }
     }
 
