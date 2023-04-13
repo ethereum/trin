@@ -82,7 +82,6 @@ This crate contains implementations of `ethportal-api` jsonrpsee server API trai
 Trin uses Micro Transport Protocol (uTP) a UDP based protocol similar to the BitTorrent protocol.
 This crate can be used to set up clients and servers to test the protocol on a single machine.
 
-## `ethportal-peertest` (for deprecation)
+## `ethportal-peertest`
 
-This crate is marked for deprecation and was previously used for automated peer testing in CI.
-Now that a multi-client network exists, peer testing happens there.
+Home for integration testing utils used by trin.

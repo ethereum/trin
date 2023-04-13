@@ -7,7 +7,7 @@ license = "GPL-3.0"
 readme = "README.md"
 keywords = ["ethereum", "portal-network"]
 categories = ["cryptography::cryptocurrencies"]
-description = "A peer-to-peer test harness for Trin."
+description = "Testing utilities for trin"
 authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 [dependencies]
