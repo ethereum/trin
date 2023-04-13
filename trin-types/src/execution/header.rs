@@ -10,6 +10,7 @@ use crate::execution::block_body::Transaction;
 use trin_utils::bytes::{hex_decode, hex_encode};
 
 const LONDON_BLOCK_NUMBER: u64 = 12965000;
+const SHANGHAI_BLOCK_NUMBER: u64 = 17034871;
 
 /// A block header.
 #[derive(Debug, Clone, Eq, Deserialize, Serialize)]
@@ -53,6 +54,8 @@ pub struct Header {
     pub nonce: Option<H64>,
     /// Block base fee per gas. Introduced by EIP-1559.
     pub base_fee_per_gas: Option<U256>,
+    /// Withdrawals root from execution payload. Introduced by EIP-4895.
+    pub withdrawals_root: Option<H256>,
 }
 
 fn se_hex<S>(value: &[u8], serializer: S) -> Result<S::Ok, S::Error>
@@ -88,7 +91,9 @@ impl Header {
 
     /// Append header to RLP stream `s`, optionally `with_seal`.
     fn stream_rlp(&self, s: &mut RlpStream, with_seal: bool) {
-        let stream_length_without_seal = if self.base_fee_per_gas.is_some() {
+        let stream_length_without_seal = if self.withdrawals_root.is_some() {
+            15
+        } else if self.base_fee_per_gas.is_some() {
             14
         } else {
             13
@@ -123,6 +128,9 @@ impl Header {
         if let Some(val) = self.base_fee_per_gas {
             s.append(&val);
         }
+        if let Some(val) = self.withdrawals_root {
+            s.append(&val);
+        }
     }
 }
 
@@ -146,10 +154,15 @@ impl Decodable for Header {
             mix_hash: Some(rlp.val_at(13)?),
             nonce: Some(rlp.val_at(14)?),
             base_fee_per_gas: None,
+            withdrawals_root: None,
         };
 
         if header.number >= LONDON_BLOCK_NUMBER {
             header.base_fee_per_gas = Some(rlp.val_at(15)?);
+        }
+
+        if header.number >= SHANGHAI_BLOCK_NUMBER {
+            header.withdrawals_root = Some(rlp.val_at(16)?);
         }
 
         Ok(header)
@@ -180,6 +193,7 @@ impl PartialEq for Header {
             && self.mix_hash == other.mix_hash
             && self.nonce == other.nonce
             && self.base_fee_per_gas == other.base_fee_per_gas
+            && self.withdrawals_root == other.withdrawals_root
     }
 }
 
@@ -524,6 +538,20 @@ mod tests {
         assert_eq!(full_header.tx_hashes.hashes.len(), 19);
         assert_eq!(full_header.uncles.len(), 1);
         assert_eq!(full_header.header, header);
+    }
+
+    #[test]
+    fn post_shanghai_header() {
+        let body =
+            std::fs::read_to_string("../trin-types/src/assets/trin/block_17034871_value.json")
+                .unwrap();
+        let response: Value = serde_json::from_str(&body).unwrap();
+        let header: Header = serde_json::from_value(response["result"].clone()).unwrap();
+        let expected_hash = H256::from_slice(
+            &hex_decode("0x17cf53189035bbae5bce5c844355badd701aa9d2dd4b4f5ab1f9f0e8dd9fea5b")
+                .unwrap(),
+        );
+        assert_eq!(header.hash(), expected_hash);
     }
 
     #[test_log::test]
