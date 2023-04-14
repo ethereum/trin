@@ -15,10 +15,12 @@ anyhow = "1.0.68"
 clap = "2.33.3"
 discv5 = { version = "0.2.1", features = ["serde"]}
 eth2_ssz = "0.4.0"
+ethereum-types = "0.12.1"
 ethportal-api = { path="../ethportal-api"}
 futures = "0.3.21"
 httpmock = "0.6.6"
 hyper = { version = "0.14", features = ["full"] }
+jsonrpsee = {version="0.16.2", features = ["async-client", "client", "macros", "server"]}
 rand = "0.8.4"
 reth-ipc = { version = "0.1.0", git = "https://github.com/paradigmxyz/reth.git"}
 rocksdb = "0.18.0"

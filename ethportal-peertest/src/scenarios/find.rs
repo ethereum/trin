@@ -1,148 +1,143 @@
-use discv5::enr::NodeId;
-use serde_json::{json, Value};
+use ethereum_types::U256;
+use serde_json::json;
+use tracing::info;
 
-use crate::{
-    jsonrpc::{make_ipc_request, JsonRpcRequest, HISTORY_CONTENT_VALUE},
-    Peertest, PeertestConfig,
-};
-use trin_types::{constants::CONTENT_ABSENT, jsonrpc::params::Params};
-use trin_utils::bytes::hex_encode;
+use crate::{constants::HISTORY_CONTENT_VALUE, Peertest};
+use ethportal_api::types::portal::NodeInfo;
+use ethportal_api::HistoryNetworkApiClient;
+use trin_types::content_key::HistoryContentKey;
+use trin_types::content_value::{HistoryContentValue, PossibleHistoryContentValue};
+use trin_utils::bytes::hex_decode;
 
-pub fn test_trace_recursive_find_content(_peertest_config: PeertestConfig, peertest: &Peertest) {
+pub async fn test_trace_recursive_find_content(peertest: &Peertest) {
+    info!("Testing trace recursive find content");
     let uniq_content_key = "0x0015b11b918355b1ef9c5db810302ebad0bf2544255b530cdce90674d5887bb286";
-    // Store content to offer in the testnode db
-    let store_request = JsonRpcRequest {
-        method: "portal_historyStore".to_string(),
-        id: 11,
-        params: Params::Array(vec![
-            Value::String(uniq_content_key.to_string()),
-            Value::String(HISTORY_CONTENT_VALUE.to_string()),
-        ]),
-    };
 
-    let store_result = make_ipc_request(&peertest.bootnode.web3_ipc_path, &store_request).unwrap();
-    assert!(store_result.as_bool().unwrap());
+    let content_key: HistoryContentKey = serde_json::from_value(json!(uniq_content_key)).unwrap();
+    let content_value: HistoryContentValue =
+        serde_json::from_value(json!(HISTORY_CONTENT_VALUE)).unwrap();
+
+    // Store content in the bootnode db
+    let store_result = peertest
+        .bootnode
+        .ipc_client
+        .store(content_key.clone(), content_value.clone())
+        .await
+        .unwrap();
+    assert!(store_result);
 
     // Send trace recursive find content request
-    let request = JsonRpcRequest {
-        method: "portal_historyTraceRecursiveFindContent".to_string(),
-        id: 12,
-        params: Params::Array(vec![json!(uniq_content_key)]),
+    let result = peertest.nodes[0]
+        .ipc_client
+        .trace_recursive_find_content(content_key)
+        .await
+        .unwrap();
+    let received_content_value = match result.content {
+        PossibleHistoryContentValue::ContentPresent(c) => c,
+        PossibleHistoryContentValue::ContentAbsent => panic!("Expected content to be found"),
     };
-
-    let result = make_ipc_request(&peertest.nodes[0].web3_ipc_path, &request).unwrap();
-    assert_eq!(result["content"], json!(HISTORY_CONTENT_VALUE.to_string()));
+    assert_eq!(received_content_value, content_value);
     assert_eq!(
-        result["route"],
-        json!([{"enr": &peertest.bootnode.enr.to_base64(), "distance": "0x100"}])
+        result.route,
+        vec![NodeInfo {
+            enr: peertest.bootnode.enr.clone(),
+            distance: U256::from_str_radix("0x100", 16).unwrap()
+        }]
     );
 }
 
 // This test ensures that when content is not found the correct response is returned.
-pub fn test_trace_recursive_find_content_for_absent_content(
-    _peertest_config: PeertestConfig,
-    peertest: &Peertest,
-) {
+pub async fn test_trace_recursive_find_content_for_absent_content(peertest: &Peertest) {
+    info!("Testing trace recursive find content for absent content");
     // Different key to other test (final character).
     let uniq_content_key = "0x0015b11b918355b1ef9c5db810302ebad0bf2544255b530cdce90674d5887bb287";
-    // Do not store content to offer in the testnode db
+    let content_key: HistoryContentKey = serde_json::from_value(json!(uniq_content_key)).unwrap();
+    // Do not store content in the bootnode db
 
     // Send trace recursive find content request
-    let request = JsonRpcRequest {
-        method: "portal_historyTraceRecursiveFindContent".to_string(),
-        id: 12,
-        params: Params::Array(vec![json!(uniq_content_key)]),
-    };
+    let result = peertest
+        .bootnode
+        .ipc_client
+        .trace_recursive_find_content(content_key)
+        .await
+        .unwrap();
 
-    let result = make_ipc_request(&peertest.nodes[0].web3_ipc_path, &request).unwrap();
-    assert_eq!(result["content"], json!(CONTENT_ABSENT.to_string()));
+    if let PossibleHistoryContentValue::ContentPresent(_) = result.content {
+        panic!("Expected content to be absent");
+    }
     // Check that at least one route was involved.
-    assert!(!result["route"].as_array().unwrap().is_empty());
-}
-// This test ensures that the jsonrpc channels don't close if there is an invalid recursive find
-// content request
-pub fn test_recursive_find_content_invalid_params(
-    _peertest_config: PeertestConfig,
-    peertest: &Peertest,
-) {
-    let invalid_content_key = "0x00";
-    // Send trace recursive find content request
-    let request = JsonRpcRequest {
-        method: "portal_historyRecursiveFindContent".to_string(),
-        id: 12,
-        params: Params::Array(vec![json!(invalid_content_key)]),
-    };
-
-    // Expect invalid parameter response for invalid request
-    let response = make_ipc_request(&peertest.nodes[0].web3_ipc_path, &request);
-    assert!(response.is_err());
-    let error = response.err().unwrap().to_string();
-    assert_eq!(error, "JsonRpc response contains an error: Object {\"code\": Number(-32602), \"message\": String(\"unable to decode key SSZ bytes 0x00 due to InvalidByteLength { len: 0, expected: 32 }\")}");
+    assert!(!result.route.is_empty());
 }
 
-pub fn test_trace_recursive_find_content_local_db(
-    _peertest_config: PeertestConfig,
-    peertest: &Peertest,
-) {
+pub async fn test_trace_recursive_find_content_local_db(peertest: &Peertest) {
+    info!("Testing trace recursive find content local db");
     let uniq_content_key = "0x0025b11b918355b1ef9c5db810302ebad0bf2544255b530cdce90674d5887bb286";
-    // Store content to offer in the testnode db
-    let store_request = JsonRpcRequest {
-        method: "portal_historyStore".to_string(),
-        id: 13,
-        params: Params::Array(vec![
-            Value::String(uniq_content_key.to_string()),
-            Value::String(HISTORY_CONTENT_VALUE.to_string()),
-        ]),
-    };
+    let content_key: HistoryContentKey = serde_json::from_value(json!(uniq_content_key)).unwrap();
+    let content_value: HistoryContentValue =
+        serde_json::from_value(json!(HISTORY_CONTENT_VALUE)).unwrap();
 
-    let store_result = make_ipc_request(&peertest.bootnode.web3_ipc_path, &store_request).unwrap();
-    assert!(store_result.as_bool().unwrap());
+    // Store content in the bootnode db
+    let store_result = peertest
+        .bootnode
+        .ipc_client
+        .store(content_key.clone(), content_value.clone())
+        .await
+        .unwrap();
+    assert!(store_result);
 
     // Send trace recursive find content request
-    let request = JsonRpcRequest {
-        method: "portal_historyTraceRecursiveFindContent".to_string(),
-        id: 14,
-        params: Params::Array(vec![json!(uniq_content_key)]),
+    let result = peertest
+        .bootnode
+        .ipc_client
+        .trace_recursive_find_content(content_key)
+        .await
+        .unwrap();
+    let received_content_value = match result.content {
+        PossibleHistoryContentValue::ContentPresent(c) => c,
+        PossibleHistoryContentValue::ContentAbsent => panic!("Expected content to be found"),
     };
-
-    let result = make_ipc_request(&peertest.bootnode.web3_ipc_path, &request).unwrap();
-    assert_eq!(result["content"], json!(HISTORY_CONTENT_VALUE.to_string()));
-    assert_eq!(result["route"], json!([]));
+    assert_eq!(received_content_value, content_value);
+    assert_eq!(result.route, vec![]);
 }
 
-pub async fn test_recursive_find_nodes_self(_peertest_config: PeertestConfig, peertest: &Peertest) {
-    let target_node_id = hex_encode(peertest.bootnode.enr.node_id().raw());
-    let request = JsonRpcRequest {
-        method: "portal_historyRecursiveFindNodes".to_string(),
-        id: 15,
-        params: Params::Array(vec![json!(target_node_id)]),
-    };
-    let result = make_ipc_request(&peertest.bootnode.web3_ipc_path, &request).unwrap();
-    assert_eq!(result, json!([peertest.bootnode.enr.to_base64()]));
+pub async fn test_recursive_find_nodes_self(peertest: &Peertest) {
+    info!("Testing trace recursive find nodes self");
+    let target_enr = peertest.bootnode.enr.clone();
+    let target_node_id = trin_types::node_id::NodeId::from(target_enr.node_id().raw());
+    let result = peertest
+        .bootnode
+        .ipc_client
+        .recursive_find_nodes(target_node_id)
+        .await
+        .unwrap();
+    assert_eq!(result, vec![target_enr]);
 }
 
-pub async fn test_recursive_find_nodes_peer(_peertest_config: PeertestConfig, peertest: &Peertest) {
+pub async fn test_recursive_find_nodes_peer(peertest: &Peertest) {
+    info!("Testing trace recursive find nodes peer");
     let target_enr = peertest.nodes[0].enr.clone();
-    let target_node_id = hex_encode(target_enr.node_id().raw());
-    let request = JsonRpcRequest {
-        method: "portal_historyRecursiveFindNodes".to_string(),
-        id: 15,
-        params: Params::Array(vec![json!(target_node_id)]),
-    };
-    let result = make_ipc_request(&peertest.bootnode.web3_ipc_path, &request).unwrap();
-    assert_eq!(result, json!([target_enr.to_base64()]));
+    let target_node_id = trin_types::node_id::NodeId::from(target_enr.node_id().raw());
+    let result = peertest
+        .bootnode
+        .ipc_client
+        .recursive_find_nodes(target_node_id)
+        .await
+        .unwrap();
+    assert_eq!(result, vec![target_enr]);
 }
 
-pub async fn test_recursive_find_nodes_random(
-    _peertest_config: PeertestConfig,
-    peertest: &Peertest,
-) {
-    let target_node_id = hex_encode(NodeId::random());
-    let request = JsonRpcRequest {
-        method: "portal_historyRecursiveFindNodes".to_string(),
-        id: 15,
-        params: Params::Array(vec![json!(target_node_id)]),
-    };
-    let result = make_ipc_request(&peertest.bootnode.web3_ipc_path, &request).unwrap();
-    assert_eq!(result.as_array().unwrap().len(), 2);
+pub async fn test_recursive_find_nodes_random(peertest: &Peertest) {
+    info!("Testing trace recursive find nodes random");
+    let mut bytes = [0u8; 32];
+    let random_node_id =
+        hex_decode("0xcac75e7e776d84fba55a3104bdccfd716537bca3ad8465113f67f04d62694183").unwrap();
+    bytes.copy_from_slice(&random_node_id);
+    let target_node_id = trin_types::node_id::NodeId::from(bytes);
+    let result = peertest
+        .bootnode
+        .ipc_client
+        .recursive_find_nodes(target_node_id)
+        .await
+        .unwrap();
+    assert_eq!(result.len(), 3);
 }

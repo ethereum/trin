@@ -18,6 +18,17 @@ pub struct JsonRequest {
     pub id: u32,
 }
 
+impl Default for JsonRequest {
+    fn default() -> Self {
+        Self {
+            jsonrpc: "2.0".to_string(),
+            params: Params::None,
+            method: "".to_string(),
+            id: 0,
+        }
+    }
+}
+
 // Global portal network JSON-RPC request
 #[derive(Debug, Clone)]
 pub struct PortalJsonRpcRequest {

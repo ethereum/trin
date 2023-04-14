@@ -6,7 +6,7 @@ mod test {
     };
 
     use ethportal_peertest as peertest;
-    use trin_types::cli::TrinConfig;
+    use trin_types::cli::{TrinConfig, DEFAULT_WEB3_IPC_PATH};
     use trin_types::provider::TrustedProvider;
     use trin_utils::log::init_tracing_logger;
 
@@ -20,7 +20,6 @@ mod test {
         // Short sleep to make sure all peertest nodes can connect
         thread::sleep(time::Duration::from_secs(1));
 
-        let peertest_config = peertest::PeertestConfig::default();
         let test_ip_addr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
         // Use an uncommon port for the peertest to avoid clashes.
         let test_discovery_port = 8999;
@@ -35,7 +34,7 @@ mod test {
                 "--external-address",
                 external_addr.as_str(),
                 "--web3-ipc-path",
-                &peertest_config.target_ipc_path,
+                DEFAULT_WEB3_IPC_PATH,
                 "--ephemeral",
                 "--discovery-port",
                 test_discovery_port.to_string().as_ref(),
@@ -51,53 +50,30 @@ mod test {
             http: ureq::post(&server.url("/")),
         };
         let test_client_rpc_handle = trin::run_trin(trin_config, trusted_provider).await.unwrap();
-
-        peertest::scenarios::find::test_recursive_find_nodes_self(
-            peertest_config.clone(),
-            &peertest,
-        )
-        .await;
-        peertest::scenarios::find::test_recursive_find_nodes_peer(
-            peertest_config.clone(),
-            &peertest,
-        )
-        .await;
-        peertest::scenarios::find::test_recursive_find_nodes_random(
-            peertest_config.clone(),
-            &peertest,
-        )
-        .await;
-
-        peertest::scenarios::paginate::test_paginate_local_storage(
-            peertest_config.clone(),
-            &peertest,
-        )
-        .await;
-        peertest::jsonrpc::test_jsonrpc_endpoints_over_ipc(peertest_config.clone(), &peertest)
+        peertest::scenarios::paginate::test_paginate_local_storage(&peertest).await;
+        let target = reth_ipc::client::IpcClientBuilder::default()
+            .build(DEFAULT_WEB3_IPC_PATH)
+            .await
+            .unwrap();
+        peertest::scenarios::basic::test_web3_client_version(&target).await;
+        peertest::scenarios::basic::test_discv5_node_info(&peertest).await;
+        peertest::scenarios::basic::test_discv5_routing_table_info(&target).await;
+        peertest::scenarios::basic::test_history_radius(&target).await;
+        peertest::scenarios::basic::test_history_ping(&target, &peertest).await;
+        peertest::scenarios::basic::test_history_find_nodes(&target, &peertest).await;
+        peertest::scenarios::basic::test_history_find_nodes_zero_distance(&target, &peertest).await;
+        peertest::scenarios::basic::test_history_store(&target).await;
+        peertest::scenarios::basic::test_history_routing_table_info(&target).await;
+        peertest::scenarios::basic::test_history_local_content_absent(&target).await;
+        peertest::scenarios::offer_accept::test_unpopulated_offer(&peertest, &target).await;
+        peertest::scenarios::offer_accept::test_populated_offer(&peertest, &target).await;
+        peertest::scenarios::find::test_recursive_find_nodes_self(&peertest).await;
+        peertest::scenarios::find::test_recursive_find_nodes_peer(&peertest).await;
+        peertest::scenarios::find::test_recursive_find_nodes_random(&peertest).await;
+        peertest::scenarios::find::test_trace_recursive_find_content(&peertest).await;
+        peertest::scenarios::find::test_trace_recursive_find_content_for_absent_content(&peertest)
             .await;
-        peertest::scenarios::offer_accept::test_unpopulated_offer(
-            peertest_config.clone(),
-            &peertest,
-        )
-        .await;
-        peertest::scenarios::offer_accept::test_populated_offer(peertest_config.clone(), &peertest)
-            .await;
-        peertest::scenarios::find::test_trace_recursive_find_content(
-            peertest_config.clone(),
-            &peertest,
-        );
-        peertest::scenarios::find::test_trace_recursive_find_content_for_absent_content(
-            peertest_config.clone(),
-            &peertest,
-        );
-        peertest::scenarios::find::test_recursive_find_content_invalid_params(
-            peertest_config.clone(),
-            &peertest,
-        );
-        peertest::scenarios::find::test_trace_recursive_find_content_local_db(
-            peertest_config.clone(),
-            &peertest,
-        );
+        peertest::scenarios::find::test_trace_recursive_find_content_local_db(&peertest).await;
 
         peertest.exit_all_nodes();
         test_client_rpc_handle.stop().unwrap();

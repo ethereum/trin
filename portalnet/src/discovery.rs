@@ -14,7 +14,7 @@ use utp_rs::{cid::ConnectionPeer, udp::AsyncUdpSocket};
 
 use super::types::messages::{PortalnetConfig, ProtocolId};
 use crate::socket;
-use ethportal_api::types::discv5::{NodeId as EthportalNodeId, NodeInfo};
+use ethportal_api::types::discv5::NodeInfo;
 use std::str::FromStr;
 use std::{
     convert::TryFrom,
@@ -23,6 +23,7 @@ use std::{
     sync::Arc,
 };
 use trin_types::enr::Enr;
+use trin_types::node_id::NodeId as EthportalNodeId;
 use trin_utils::bytes::hex_encode;
 use trin_utils::version::get_trin_version;
 
