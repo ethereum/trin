@@ -9,7 +9,7 @@ use tracing::debug;
 
 use trin_utils::bytes::hex_encode;
 
-const TRIN_DATA_ENV_VAR: &str = "TRIN_DATA_PATH";
+pub const TRIN_DATA_ENV_VAR: &str = "TRIN_DATA_PATH";
 
 /// Creates a directory on the file system that is deleted once it goes out of scope
 pub fn setup_temp_dir() -> anyhow::Result<TempDir> {
@@ -19,7 +19,6 @@ pub fn setup_temp_dir() -> anyhow::Result<TempDir> {
     fs::create_dir_all(&os_temp)?;
 
     let temp_dir = TempDir::new_in(&os_temp)?;
-    env::set_var(TRIN_DATA_ENV_VAR, temp_dir.path());
     Ok(temp_dir)
 }
 
@@ -33,8 +32,6 @@ pub fn get_data_dir(node_id: NodeId) -> anyhow::Result<PathBuf> {
     application_string.push_str(suffix);
 
     trin_data_dir.push(application_string);
-
-    fs::create_dir_all(&trin_data_dir).expect("Unable to create data directory folder");
     Ok(trin_data_dir)
 }
 

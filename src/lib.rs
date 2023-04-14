@@ -14,7 +14,7 @@ use portalnet::{
     events::PortalnetEvents,
     storage::PortalStorageConfig,
     types::messages::PortalnetConfig,
-    utils::db::setup_temp_dir,
+    utils::db::{setup_temp_dir, TRIN_DATA_ENV_VAR},
 };
 use trin_history::initialize_history_network;
 use trin_state::initialize_state_network;
@@ -59,7 +59,8 @@ pub async fn run_trin(
 
     // Initialize Storage config
     if trin_config.ephemeral {
-        setup_temp_dir()?;
+        let temp_dir = setup_temp_dir()?;
+        std::env::set_var(TRIN_DATA_ENV_VAR, temp_dir.path());
     }
 
     let storage_config =

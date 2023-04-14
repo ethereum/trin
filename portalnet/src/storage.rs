@@ -718,6 +718,7 @@ impl PortalStorage {
         let mut data_path: PathBuf = get_data_dir(node_id).map_err(|err| {
             ContentStoreError::Database(format!("Unable to get data dir for rocksdb: {err:?}"))
         })?;
+        fs::create_dir_all(&data_path).expect("Unable to create data directory folder");
         data_path.push("rocksdb");
         info!(path = %data_path.display(), "Setting up RocksDB");
 
@@ -731,6 +732,7 @@ impl PortalStorage {
         let mut data_path: PathBuf = get_data_dir(node_id).map_err(|err| {
             ContentStoreError::Database(format!("Unable to get data dir for sql: {err:?}"))
         })?;
+        fs::create_dir_all(&data_path).expect("Unable to create data directory folder");
         data_path.push("trin.sqlite");
         info!(path = %data_path.display(), "Setting up SqliteDB");
 
