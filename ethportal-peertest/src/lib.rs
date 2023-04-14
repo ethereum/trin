@@ -1,19 +1,17 @@
-pub mod cli;
-pub mod jsonrpc;
+pub mod constants;
 pub mod scenarios;
-
-pub use cli::PeertestConfig;
-pub use jsonrpc::get_enode;
 
 use std::net::{IpAddr, Ipv4Addr};
 use std::{thread, time};
 
 use ethportal_api::jsonrpsee::server::ServerHandle;
+use ethportal_api::Discv5ApiClient;
 use futures::future;
 use httpmock::prelude::{MockServer, POST};
+use jsonrpsee::async_client::Client;
 use serde_json::json;
 
-use trin_types::enr::SszEnr;
+use trin_types::enr::Enr;
 use trin_types::{cli::TrinConfig, provider::TrustedProvider};
 use trin_utils::bytes::hex_encode;
 
@@ -59,8 +57,8 @@ pub fn setup_mock_trusted_http_server() -> MockServer {
 }
 
 pub struct PeertestNode {
-    pub enr: SszEnr,
-    pub web3_ipc_path: String,
+    pub enr: Enr,
+    pub ipc_client: Client,
     pub rpc_handle: ServerHandle,
 }
 
@@ -88,18 +86,21 @@ pub async fn launch_node(trin_config: TrinConfig) -> anyhow::Result<PeertestNode
         .await
         .unwrap();
 
-    let enr = get_enode(&web3_ipc_path)?;
-
     // Short sleep to make sure all peertest nodes can connect
     thread::sleep(time::Duration::from_secs(2));
+    let ipc_client = reth_ipc::client::IpcClientBuilder::default()
+        .build(web3_ipc_path)
+        .await
+        .unwrap();
+
     Ok(PeertestNode {
-        enr,
-        web3_ipc_path,
+        enr: ipc_client.node_info().await.unwrap().enr,
+        ipc_client,
         rpc_handle,
     })
 }
 
-fn generate_trin_config(id: u16, bootnode_enr: Option<&SszEnr>) -> TrinConfig {
+fn generate_trin_config(id: u16, bootnode_enr: Option<&Enr>) -> TrinConfig {
     let discovery_port: u16 = 9000 + id;
     let discovery_port: String = discovery_port.to_string();
     let web3_ipc_path = format!("/tmp/ethportal-peertest-buddy-{id}.ipc");

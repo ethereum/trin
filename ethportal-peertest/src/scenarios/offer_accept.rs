@@ -8,19 +8,15 @@ use ethportal_api::{
     HistoryNetworkApiClient,
 };
 use trin_types::{content_value::PossibleHistoryContentValue, enr::Enr};
+use trin_utils::bytes::hex_encode;
 
 use crate::{
-    jsonrpc::{validate_portal_offer, HISTORY_CONTENT_KEY, HISTORY_CONTENT_VALUE},
-    Peertest, PeertestConfig,
+    constants::{HISTORY_CONTENT_KEY, HISTORY_CONTENT_VALUE},
+    Peertest,
 };
 
-pub async fn test_unpopulated_offer(peertest_config: PeertestConfig, peertest: &Peertest) {
+pub async fn test_unpopulated_offer(peertest: &Peertest, target: &Client) {
     info!("Testing Unpopulated OFFER/ACCEPT flow");
-
-    let ipc_client = reth_ipc::client::IpcClientBuilder::default()
-        .build(&peertest_config.target_ipc_path)
-        .await
-        .unwrap();
 
     let content_key: HistoryContentKey =
         serde_json::from_value(json!(HISTORY_CONTENT_KEY)).unwrap();
@@ -28,7 +24,7 @@ pub async fn test_unpopulated_offer(peertest_config: PeertestConfig, peertest: &
         serde_json::from_value(json!(HISTORY_CONTENT_VALUE)).unwrap();
 
     // Store content to offer in the testnode db
-    let store_result = ipc_client
+    let store_result = target
         .store(content_key.clone(), content_value.clone())
         .await
         .unwrap();
@@ -36,7 +32,7 @@ pub async fn test_unpopulated_offer(peertest_config: PeertestConfig, peertest: &
     assert!(store_result);
 
     // Send unpopulated offer request from testnode to bootnode
-    let result = ipc_client
+    let result = target
         .offer(
             Enr::from_str(&peertest.bootnode.enr.to_base64()).unwrap(),
             content_key.clone(),
@@ -46,10 +42,10 @@ pub async fn test_unpopulated_offer(peertest_config: PeertestConfig, peertest: &
         .unwrap();
 
     // Check that ACCEPT response sent by bootnode accepted the offered content
-    validate_portal_offer(result, peertest);
+    assert_eq!(hex_encode(result.content_keys.into_bytes()), "0x03");
 
     // Check if the stored content value in bootnode's DB matches the offered
-    let response = wait_for_content(ipc_client, content_key).await;
+    let response = wait_for_content(target, content_key).await;
     let received_content_value = match response {
         PossibleHistoryContentValue::ContentPresent(c) => c,
         PossibleHistoryContentValue::ContentAbsent => panic!("Expected content to be found"),
@@ -60,13 +56,8 @@ pub async fn test_unpopulated_offer(peertest_config: PeertestConfig, peertest: &
     );
 }
 
-pub async fn test_populated_offer(peertest_config: PeertestConfig, peertest: &Peertest) {
+pub async fn test_populated_offer(peertest: &Peertest, target: &Client) {
     info!("Testing Populated Offer/ACCEPT flow");
-
-    let ipc_client = reth_ipc::client::IpcClientBuilder::default()
-        .build(&peertest_config.target_ipc_path)
-        .await
-        .unwrap();
 
     // Offer unique content key to bootnode
     let content_key: HistoryContentKey = serde_json::from_value(json!(
@@ -76,7 +67,7 @@ pub async fn test_populated_offer(peertest_config: PeertestConfig, peertest: &Pe
     let content_value: HistoryContentValue =
         serde_json::from_value(json!(HISTORY_CONTENT_VALUE)).unwrap();
 
-    let result = ipc_client
+    let result = target
         .offer(
             Enr::from_str(&peertest.bootnode.enr.to_base64()).unwrap(),
             content_key.clone(),
@@ -86,10 +77,10 @@ pub async fn test_populated_offer(peertest_config: PeertestConfig, peertest: &Pe
         .unwrap();
 
     // Check that ACCEPT response sent by bootnode accepted the offered content
-    validate_portal_offer(result, peertest);
+    assert_eq!(hex_encode(result.content_keys.into_bytes()), "0x03");
 
     // Check if the stored content value in bootnode's DB matches the offered
-    let response = wait_for_content(ipc_client, content_key).await;
+    let response = wait_for_content(&peertest.bootnode.ipc_client, content_key).await;
     let received_content_value = match response {
         PossibleHistoryContentValue::ContentPresent(c) => c,
         PossibleHistoryContentValue::ContentAbsent => panic!("Expected content to be found"),
@@ -102,7 +93,7 @@ pub async fn test_populated_offer(peertest_config: PeertestConfig, peertest: &Pe
 
 /// Wait for the content to be transferred
 async fn wait_for_content(
-    ipc_client: Client,
+    ipc_client: &Client,
     content_key: HistoryContentKey,
 ) -> PossibleHistoryContentValue {
     let mut received_content_value = ipc_client.local_content(content_key.clone()).await;

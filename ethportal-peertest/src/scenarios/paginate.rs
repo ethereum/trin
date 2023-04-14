@@ -3,14 +3,11 @@ use ethportal_api::HistoryNetworkApiClient;
 use ethportal_api::{BlockHeaderKey, HistoryContentKey};
 use serde_json::json;
 
-use crate::jsonrpc::HISTORY_CONTENT_VALUE;
-use crate::{Peertest, PeertestConfig};
+use crate::constants::HISTORY_CONTENT_VALUE;
+use crate::Peertest;
 
-pub async fn test_paginate_local_storage(peertest_config: PeertestConfig, _peertest: &Peertest) {
-    let ipc_client = reth_ipc::client::IpcClientBuilder::default()
-        .build(&peertest_config.target_ipc_path)
-        .await
-        .unwrap();
+pub async fn test_paginate_local_storage(peertest: &Peertest) {
+    let ipc_client = &peertest.bootnode.ipc_client;
     // Test paginate with empty storage
     let result = ipc_client.paginate_local_content_keys(0, 1).await.unwrap();
     assert_eq!(result.total_entries, 0);
