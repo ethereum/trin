@@ -154,10 +154,13 @@ async fn launch_jsonrpc_server(
     match trin_config.web3_transport {
         Web3TransportType::IPC => {
             // Launch jsonrpsee server with IPC transport
-            let rpc_handle =
-                JsonRpcServer::run_ipc(trin_config.web3_ipc_path, discv5, history_handler)
-                    .await
-                    .map_err(|e| format!("Launching IPC JSON-RPC server failed: {e:?}"))?;
+            let rpc_handle = JsonRpcServer::run_ipc(
+                Box::new(trin_config.web3_ipc_path),
+                discv5,
+                history_handler,
+            )
+            .await
+            .map_err(|e| format!("Launching IPC JSON-RPC server failed: {e:?}"))?;
             info!("IPC JSON-RPC server launched.");
             Ok(rpc_handle)
         }

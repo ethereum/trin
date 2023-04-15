@@ -84,7 +84,7 @@ pub struct TrinConfig {
         long = "web3-ipc-path",
         help = "path to json-rpc endpoint over IPC"
     )]
-    pub web3_ipc_path: String, // TODO: Change to PathBuf
+    pub web3_ipc_path: PathBuf,
 
     #[structopt(
         default_value(DEFAULT_DISCOVERY_PORT),
@@ -180,7 +180,7 @@ impl Default for TrinConfig {
                 .expect("Parsing static DEFAULT_WEB3_TRANSPORT to work"),
             web3_http_address: Url::parse(DEFAULT_WEB3_HTTP_ADDRESS)
                 .expect("Parsing static DEFAULT_WEB3_HTTP_ADDRESS to work"),
-            web3_ipc_path: DEFAULT_WEB3_IPC_PATH.to_string(),
+            web3_ipc_path: PathBuf::from(DEFAULT_WEB3_IPC_PATH),
             discovery_port: DEFAULT_DISCOVERY_PORT
                 .parse()
                 .expect("Parsing static DEFAULT_DISCOVERY_PORT to work"),
@@ -216,7 +216,7 @@ impl TrinConfig {
         let config = Self::from_iter_safe(args)?;
 
         match config.web3_transport {
-            Web3TransportType::HTTP => match &config.web3_ipc_path[..] {
+            Web3TransportType::HTTP => match &config.web3_ipc_path.as_path().display().to_string()[..] {
                 DEFAULT_WEB3_IPC_PATH => {}
                 _ => panic!("Must not supply an ipc path when using http protocol for json-rpc"),
             },
@@ -278,9 +278,10 @@ fn check_private_key_length(private_key: String) -> Result<(), String> {
 
 impl fmt::Display for TrinConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let web3_ipc_path_str = self.web3_ipc_path.as_path().display().to_string();
         let json_rpc_url = match &self.web3_transport {
             Web3TransportType::HTTP => self.web3_http_address.as_str(),
-            Web3TransportType::IPC => &self.web3_ipc_path,
+            Web3TransportType::IPC => &web3_ipc_path_str[..],
         };
 
         write!(
@@ -380,7 +381,7 @@ mod test {
         assert!(env_is_set(&actual_config));
         let expected_config = TrinConfig {
             web3_http_address: Url::parse(DEFAULT_WEB3_HTTP_ADDRESS).unwrap(),
-            web3_ipc_path: "/path/test.ipc".to_string(),
+            web3_ipc_path: PathBuf::from("/path/test.ipc"),
             web3_transport: Web3TransportType::IPC,
             ..Default::default()
         };
