@@ -18,10 +18,9 @@ impl SszEnr {
     }
 }
 
-#[allow(clippy::from_over_into)] // todo: remove this
-impl Into<Enr> for SszEnr {
-    fn into(self) -> Enr {
-        self.0
+impl From<SszEnr> for Enr {
+    fn from(val: SszEnr) -> Self {
+        val.0
     }
 }
 
