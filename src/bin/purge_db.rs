@@ -1,11 +1,9 @@
-use std::str::FromStr;
-
-use anyhow::{anyhow, Result};
+use anyhow::Result;
+use clap::{Parser, ValueEnum};
 use discv5::enr::{CombinedKey, EnrBuilder};
 use ethereum_types::H256;
 use rocksdb::IteratorMode;
 use ssz::Decode;
-use structopt::StructOpt;
 use tracing::{info, warn};
 
 use ethportal_api::HistoryContentKey;
@@ -28,7 +26,7 @@ use trin_utils::log::init_tracing_logger;
 ///
 pub fn main() -> Result<()> {
     init_tracing_logger();
-    let purge_config = PurgeConfig::from_args();
+    let purge_config = PurgeConfig::parse();
 
     let enr_key =
         CombinedKey::secp256k1_from_bytes(&mut purge_config.private_key.to_fixed_bytes()).unwrap();
@@ -59,7 +57,7 @@ pub fn main() -> Result<()> {
                     content_id, err
                 ),
             },
-            PurgeMode::Invalid => {
+            PurgeMode::InvalidOnly => {
                 // naked unwrap since we shouldn't be storing any invalid content keys
                 let key_bytes = match storage.lookup_content_key(content_id) {
                     Ok(Some(k)) => k,
@@ -121,43 +119,64 @@ fn is_content_valid(content_key: &HistoryContentKey, value: &[u8]) -> bool {
 }
 
 // CLI Parameter Handling
-#[derive(StructOpt, Debug, PartialEq)]
-#[structopt(
+#[derive(Parser, Debug, PartialEq)]
+#[command(
     name = "Trin DB Purge Util",
     about = "Remove undesired or invalid data from Trin DB"
 )]
 pub struct PurgeConfig {
-    #[structopt(
+    #[arg(
         long,
         help = "(unsafe) Hex private key to generate node id for database namespace (with 0x prefix)"
     )]
     pub private_key: H256,
 
-    #[structopt(
+    #[arg(
         default_value = "all",
-        possible_values(&["all", "invalid-only"]),
         long,
         help = "Purge all content or only invalidly encoded content"
     )]
     pub mode: PurgeMode,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(ValueEnum, Debug, PartialEq, Eq, Clone)]
 pub enum PurgeMode {
     All,
-    Invalid,
+    InvalidOnly,
 }
 
-impl FromStr for PurgeMode {
-    type Err = anyhow::Error;
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::str::FromStr;
 
-    fn from_str(s: &str) -> anyhow::Result<Self> {
-        match s {
-            "all" => Ok(Self::All),
-            "invalid-only" => Ok(Self::Invalid),
-            _ => Err(anyhow!(
-                "Invalid purge mode provided. Possible values include `all` and `invalid-only`"
-            )),
-        }
+    #[test]
+    fn test_default_purge_config() {
+        const PRIVATE_KEY: &str =
+            "0x9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
+        let purge_config = PurgeConfig::parse_from(["test", "--private-key", PRIVATE_KEY]);
+        assert_eq!(
+            purge_config.private_key,
+            H256::from_str(PRIVATE_KEY).unwrap()
+        );
+        assert_eq!(purge_config.mode, PurgeMode::All);
+    }
+
+    #[test]
+    fn test_purge_mode_with_invalid_only() {
+        const PRIVATE_KEY: &str =
+            "0x9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
+        let purge_config = PurgeConfig::parse_from([
+            "test",
+            "--private-key",
+            PRIVATE_KEY,
+            "--mode",
+            "invalid-only",
+        ]);
+        assert_eq!(
+            purge_config.private_key,
+            H256::from_str(PRIVATE_KEY).unwrap()
+        );
+        assert_eq!(purge_config.mode, PurgeMode::InvalidOnly);
     }
 }
