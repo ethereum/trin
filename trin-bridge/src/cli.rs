@@ -1,6 +1,6 @@
+use clap::Parser;
 use std::path::PathBuf;
 use std::str::FromStr;
-use structopt::StructOpt;
 
 // max value of 16 b/c...
 // - reliably calculate spaced private keys in a reasonable time
@@ -9,38 +9,37 @@ use structopt::StructOpt;
 // - running more than 16 trin nodes simultaneously is not thoroughly tested
 pub const MAX_NODE_COUNT: u8 = 16;
 
-#[derive(StructOpt, Debug, PartialEq)]
-#[structopt(name = "Trin Bridge", about = "Feed the network")]
+#[derive(Parser, Debug, PartialEq)]
+#[command(name = "Trin Bridge", about = "Feed the network")]
 pub struct BridgeConfig {
-    #[structopt(
+    #[arg(
         long,
         help = "number of trin nodes to launch - must be between 1 and 16",
-        validator(check_node_count)
+        value_parser = check_node_count
     )]
     pub node_count: u8,
 
-    #[structopt(long, help = "path to portalnet client executable")]
+    #[arg(long, help = "path to portalnet client executable")]
     pub executable_path: PathBuf,
 
-    #[structopt(
+    #[arg(
         long,
         default_value = "latest",
         help = "['latest', 'backfill', <u64> to provide the starting epoch]"
     )]
     pub mode: BridgeMode,
 
-    #[structopt(
+    #[arg(
         long = "epoch-accumulator-path",
-        help = "Path to epoch accumulator repo for bridge mode",
-        parse(from_os_str)
+        help = "Path to epoch accumulator repo for bridge mode"
     )]
     pub epoch_acc_path: PathBuf,
 }
 
-fn check_node_count(val: String) -> Result<(), String> {
+fn check_node_count(val: &str) -> Result<u8, String> {
     let node_count: u8 = val.parse().map_err(|_| "Invalid node count".to_string())?;
     if node_count > 0 && node_count <= MAX_NODE_COUNT {
-        Ok(())
+        Ok(node_count)
     } else {
         Err(format!("Node count must be between 1 and {MAX_NODE_COUNT}"))
     }
@@ -70,5 +69,83 @@ impl FromStr for BridgeMode {
                 .map(BridgeMode::StartFromEpoch)
                 .map_err(|_| "Invalid bridge mode arg"),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_default_bridge_config() {
+        const NODE_COUNT: &str = "1";
+        const EXECUTABLE_PATH: &str = "path/to/executable";
+        const EPOCH_ACC_PATH: &str = "path/to/epoch/accumulator";
+        let bridge_config = BridgeConfig::parse_from([
+            "test",
+            "--node-count",
+            NODE_COUNT,
+            "--executable-path",
+            EXECUTABLE_PATH,
+            "--epoch-accumulator-path",
+            EPOCH_ACC_PATH,
+        ]);
+        assert_eq!(bridge_config.node_count, 1);
+        assert_eq!(
+            bridge_config.executable_path,
+            PathBuf::from(EXECUTABLE_PATH)
+        );
+        assert_eq!(bridge_config.mode, BridgeMode::Latest);
+        assert_eq!(bridge_config.epoch_acc_path, PathBuf::from(EPOCH_ACC_PATH));
+    }
+
+    #[test]
+    fn test_bridge_config_with_epoch() {
+        const NODE_COUNT: &str = "1";
+        const EXECUTABLE_PATH: &str = "path/to/executable";
+        const EPOCH_ACC_PATH: &str = "path/to/epoch/accumulator";
+        const EPOCH: &str = "100";
+        let bridge_config = BridgeConfig::parse_from([
+            "test",
+            "--node-count",
+            NODE_COUNT,
+            "--executable-path",
+            EXECUTABLE_PATH,
+            "--epoch-accumulator-path",
+            EPOCH_ACC_PATH,
+            "--mode",
+            EPOCH,
+        ]);
+        assert_eq!(bridge_config.node_count, 1);
+        assert_eq!(
+            bridge_config.executable_path,
+            PathBuf::from(EXECUTABLE_PATH)
+        );
+        assert_eq!(bridge_config.mode, BridgeMode::StartFromEpoch(100));
+        assert_eq!(bridge_config.epoch_acc_path, PathBuf::from(EPOCH_ACC_PATH));
+    }
+
+    #[test]
+    fn test_bridge_config_with_max_node_count() {
+        let node_count_string = MAX_NODE_COUNT.to_string();
+        let node_count: &str = node_count_string.as_str();
+        const EXECUTABLE_PATH: &str = "path/to/executable";
+        const EPOCH_ACC_PATH: &str = "path/to/epoch/accumulator";
+        let bridge_config = BridgeConfig::parse_from([
+            "test",
+            "--node-count",
+            node_count,
+            "--executable-path",
+            EXECUTABLE_PATH,
+            "--epoch-accumulator-path",
+            EPOCH_ACC_PATH,
+        ]);
+        assert_eq!(bridge_config.node_count, 16);
+        assert_eq!(
+            bridge_config.executable_path,
+            PathBuf::from(EXECUTABLE_PATH)
+        );
+        assert_eq!(bridge_config.mode, BridgeMode::Latest);
+        assert_eq!(bridge_config.epoch_acc_path, PathBuf::from(EPOCH_ACC_PATH));
     }
 }
