@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install clang -y
 COPY ./Cargo.lock ./Cargo.lock
 COPY ./Cargo.toml ./Cargo.toml
 COPY ./portalnet ./portalnet
+COPY ./light-client ./light-client
 COPY ./src ./src 
 COPY ./trin-bridge ./trin-bridge
 COPY ./trin-cli ./trin-cli

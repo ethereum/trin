@@ -18,6 +18,7 @@ COPY ./Cargo.toml ./Cargo.toml
 COPY ./ethportal-api ./ethportal-api
 COPY ./ethportal-peertest ./ethportal-peertest 
 COPY ./portalnet ./portalnet
+COPY ./light-client ./light-client
 COPY ./rpc ./rpc
 COPY ./src ./src 
 COPY ./trin-bridge ./trin-bridge

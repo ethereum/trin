@@ -1,0 +1,37 @@
+[package]
+name = "light-client"
+version = "0.1.0"
+edition = "2021"
+repository = "https://github.com/ethereum/trin"
+license = "GPL-3.0"
+readme = "README.md"
+keywords = ["ethereum", "portal-network"]
+categories = ["cryptography::cryptocurrencies"]
+description = "Beacon chain light client implementation"
+
+[dependencies]
+async-trait = "0.1.57"
+chrono = "0.4.22"
+eyre = "0.6.8"
+figment = { version = "0.10.7", features = ["toml", "env"] }
+jsonrpsee = { version = "0.15.1", features = ["full"] }
+serde = { version = "1.0.143", features = ["derive"] }
+serde_yaml = "0.9.14"
+tracing-subscriber = "0.3.15"
+hex = "0.4.3"
+reqwest = { version = "0.11.13", features = ["json"] }
+serde_json = "1.0.85"
+ssz-rs = { git = "https://github.com/ralexstokes/ssz-rs", rev = "d09f55b4f8554491e3431e01af1c32347a8781cd" }
+strum = "0.24.1"
+superstruct = "0.7.0"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1.36"
+ethers = "1.0.0"
+futures = "0.3.23"
+log = "0.4.17"
+thiserror = "1.0.37"
+milagro_bls = { git = "https://github.com/Snowfork/milagro_bls" }
+
+[lib]
+name = "light_client"
+path = "src/lib.rs"
