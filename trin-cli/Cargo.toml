@@ -28,4 +28,3 @@ ureq = { version = "2.5.0", features = ["json"] }
 [[bin]]
 name="trin-cli"
 path="src/main.rs"
-
