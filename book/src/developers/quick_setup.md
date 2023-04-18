@@ -80,7 +80,7 @@ RUST_LOG=debug cargo run -- \
     --web3-transport http \
     --discovery-port 9009 \
     --bootnodes default \
-    --kb 200000 \
+    --mb 200 \
     --no-stun
 ```
 

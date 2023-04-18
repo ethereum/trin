@@ -35,7 +35,7 @@ Trin can be tuned to control how much disk space is used:
 |Smaller|Slower|Less|
 |Larger|Faster|More|
 
-See the `--kb` flag.
+See the `--mb` flag.
 
 ### Sub-Protocols
 
