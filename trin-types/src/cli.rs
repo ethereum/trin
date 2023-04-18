@@ -133,7 +133,7 @@ pub struct TrinConfig {
     #[structopt(
         default_value(DEFAULT_STORAGE_CAPACITY_MB),
         long,
-        help = "Maximum number of megabytes of total data to store in the DB"
+        help = "Maximum number of megabytes of total data to store in the DB (actual usage will exceed limit due to overhead)"
     )]
     pub mb: u32,
 

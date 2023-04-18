@@ -292,20 +292,20 @@ impl PortalStorage {
         // Report current storage capacity.
         storage
             .metrics
-            .report_storage_capacity(storage.storage_capacity_in_bytes as f64 / BYTES_IN_MB_F64);
+            .report_storage_capacity_bytes(storage.storage_capacity_in_bytes as f64);
 
         // Report current total storage usage.
         let total_storage_usage = storage.get_total_storage_usage_in_bytes_on_disk()?;
         storage
             .metrics
-            .report_total_storage_usage(total_storage_usage as f64 / BYTES_IN_MB_F64);
+            .report_total_storage_usage_bytes(total_storage_usage as f64);
 
         // Report total storage used by network content.
         let network_content_storage_usage =
             storage.get_total_storage_usage_in_bytes_from_network()?;
         storage
             .metrics
-            .report_content_data_storage(network_content_storage_usage as f64 / BYTES_IN_MB_F64);
+            .report_content_data_storage_bytes(network_content_storage_usage as f64);
 
         Ok(storage)
     }
@@ -408,7 +408,7 @@ impl PortalStorage {
         self.prune_db()?;
         let total_bytes_on_disk = self.get_total_storage_usage_in_bytes_on_disk()?;
         self.metrics
-            .report_total_storage_usage(total_bytes_on_disk as f64 / BYTES_IN_MB_F64);
+            .report_total_storage_usage_bytes(total_bytes_on_disk as f64);
 
         Ok(())
     }
@@ -421,8 +421,9 @@ impl PortalStorage {
         let mut num_removed_items = 0;
         // Delete furthest data until our data usage is less than capacity.
         while self.capacity_reached()? {
+            // If the database were empty, then `capacity_reached()` would be false, because the
+            // amount of content (zero) would not be greater than capacity.
             let id_to_remove =
-                // Always expect a content id if capacity_reached(), even at 0mb capacity
                 farthest_content_id.expect("Capacity reached, but no farthest id found!");
             // Test if removing the item would put us under capacity
             if self.does_eviction_cause_under_capacity(&id_to_remove)? {
@@ -548,8 +549,6 @@ impl PortalStorage {
             ))
         })?;
         let storage_usage = Self::get_total_size_of_directory_in_bytes(data_dir)?;
-        self.metrics
-            .report_total_storage_usage(storage_usage as f64 / BYTES_IN_MB_F64);
         Ok(storage_usage)
     }
 
@@ -621,8 +620,7 @@ impl PortalStorage {
         }?
         .num_bytes;
 
-        self.metrics
-            .report_content_data_storage(sum / BYTES_IN_MB_F64);
+        self.metrics.report_content_data_storage_bytes(sum);
 
         Ok(sum as u64)
     }
@@ -758,21 +756,21 @@ impl PortalStorage {
 
 #[derive(Debug)]
 struct StorageMetrics {
-    content_storage_usage_mb: Gauge,
-    total_storage_usage_mb: Gauge,
-    storage_capacity_mb: Gauge,
+    content_storage_usage_bytes: Gauge,
+    total_storage_usage_bytes: Gauge,
+    storage_capacity_bytes: Gauge,
     radius_percent: Gauge,
     entry_count: IntGauge,
 }
 
 impl StorageMetrics {
     pub fn new(protocol: &ProtocolId) -> Self {
-        let content_storage_usage_mb_options = opts!(
-            format!("trin_content_storage_usage_mb_{protocol:?}"),
-            "sum of size of individual content stored, in mb"
+        let content_storage_usage_bytes_options = opts!(
+            format!("trin_content_storage_usage_bytes_{protocol:?}"),
+            "sum of size of individual content stored, in bytes"
         );
-        let (content_storage_usage_mb, registry) = match register_gauge!(
-            content_storage_usage_mb_options.clone()
+        let (content_storage_usage_bytes, registry) = match register_gauge!(
+            content_storage_usage_bytes_options.clone()
         ) {
             Ok(gauge) => (gauge, Registry::default()),
             Err(_) => {
@@ -780,7 +778,7 @@ impl StorageMetrics {
                 let custom_registry = Registry::new_custom(None, None)
                     .expect("Prometheus docs don't explain when it might fail to create a custom registry, so... hopefully never");
                 let gauge = register_gauge_with_registry!(
-                    content_storage_usage_mb_options,
+                    content_storage_usage_bytes_options,
                     custom_registry
                 )
                 .expect("a gauge can always be added to a new custom registry, without conflict");
@@ -788,15 +786,15 @@ impl StorageMetrics {
             }
         };
 
-        let total_storage_usage_mb = register_gauge_with_registry!(
-            format!("trin_total_storage_usage_mb_{protocol:?}"),
-            "full on-disk database size, in mb",
+        let total_storage_usage_bytes = register_gauge_with_registry!(
+            format!("trin_total_storage_usage_bytes_{protocol:?}"),
+            "full on-disk database size, in bytes",
             registry,
         )
         .unwrap();
-        let storage_capacity_mb = register_gauge_with_registry!(
-            format!("trin_storage_capacity_mb_{protocol:?}"),
-            "user-defined limit on storage usage, in mb",
+        let storage_capacity_bytes = register_gauge_with_registry!(
+            format!("trin_storage_capacity_bytes_{protocol:?}"),
+            "user-defined limit on storage usage, in bytes",
             registry
         )
         .unwrap();
@@ -814,24 +812,24 @@ impl StorageMetrics {
         .unwrap();
 
         Self {
-            content_storage_usage_mb,
-            total_storage_usage_mb,
-            storage_capacity_mb,
+            content_storage_usage_bytes,
+            total_storage_usage_bytes,
+            storage_capacity_bytes,
             radius_percent,
             entry_count,
         }
     }
 
-    pub fn report_content_data_storage(&self, mb: f64) {
-        self.content_storage_usage_mb.set(mb);
+    pub fn report_content_data_storage_bytes(&self, bytes: f64) {
+        self.content_storage_usage_bytes.set(bytes);
     }
 
-    pub fn report_total_storage_usage(&self, mb: f64) {
-        self.total_storage_usage_mb.set(mb);
+    pub fn report_total_storage_usage_bytes(&self, bytes: f64) {
+        self.total_storage_usage_bytes.set(bytes);
     }
 
-    pub fn report_storage_capacity(&self, mb: f64) {
-        self.storage_capacity_mb.set(mb);
+    pub fn report_storage_capacity_bytes(&self, bytes: f64) {
+        self.storage_capacity_bytes.set(bytes);
     }
 
     pub fn report_radius(&self, radius: Distance) {
@@ -858,10 +856,10 @@ impl StorageMetrics {
         format!(
             "radius={:.1}% content={:.1}/{}mb #={} disk={:.1}mb",
             self.radius_percent.get(),
-            self.content_storage_usage_mb.get(),
-            self.storage_capacity_mb.get(),
+            self.content_storage_usage_bytes.get() / BYTES_IN_MB_F64,
+            self.storage_capacity_bytes.get() / BYTES_IN_MB_F64,
             self.entry_count.get(),
-            self.total_storage_usage_mb.get(),
+            self.total_storage_usage_bytes.get() / BYTES_IN_MB_F64,
         )
     }
 }
