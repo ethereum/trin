@@ -63,7 +63,7 @@ pub async fn run_trin(
     }
 
     let storage_config =
-        PortalStorageConfig::new(trin_config.kb.into(), discovery.local_enr().node_id())?;
+        PortalStorageConfig::new(trin_config.mb.into(), discovery.local_enr().node_id())?;
 
     // Initialize validation oracle
     let master_accumulator = MasterAccumulator::try_from_file(trin_config.master_acc_path.clone())?;

@@ -25,7 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let discovery_port = format!("{}", 9000 + i);
         let handle = Command::new(bridge_config.executable_path.clone())
             .kill_on_drop(true)
-            .args(["--kb", "0"])
+            .args(["--mb", "0"])
             .args(["--unsafe-private-key", key])
             .args(["--web3-transport", "http"])
             .args(["--web3-http-address", &web3_http_address])

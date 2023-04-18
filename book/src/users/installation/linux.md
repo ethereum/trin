@@ -50,8 +50,8 @@ $ /usr/local/bin/trin --help
 Some selected flags are described below.
 
 ### Optional flag for database size
-`--kb 200000`. Trin lets you control how much storage the node takes up (e.g., 200MB). The default is
-100_000 kilobytes and can be changed.
+`--mb 200`. Trin lets you control how much storage the node takes up (e.g., 200MB). The default is
+100 megabytes and can be changed.
 
 ### Optional flag for no connection to external server
 
@@ -104,7 +104,7 @@ ExecStart=/usr/local/bin/trin \
     --web3-http-address 127.0.0.1:8547 \
     --web3-transport http \
     --bootnodes default \
-    --kb 200000 \
+    --mb 200 \
     --no-stun
 [Install]
 WantedBy=default.target
@@ -184,7 +184,7 @@ $ cargo run -- --discovery-port 9009 \
     --web3-http-address 127.0.0.1:8547 \
     --web3-transport http \
     --bootnodes default \
-    --kb 200000 \
+    --mb 200 \
     --no-stun
 ```
 
