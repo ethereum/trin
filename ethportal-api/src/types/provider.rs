@@ -45,7 +45,11 @@ impl FromStr for TrustedProviderType {
             "pandaops" => Ok(TrustedProviderType::Pandaops),
             "infura" => Ok(TrustedProviderType::Infura),
             "custom" => Ok(TrustedProviderType::Custom),
-            _ => panic!("Invalid trusted provider arg: {s} is not an option."),
+            _ => clap::Error::with_description(
+                format!("Invalid trusted provider arg: {:?} is not an option.", s).as_str(),
+                clap::ErrorKind::InvalidValue,
+            )
+            .exit(),
         }
     }
 }
@@ -65,7 +69,10 @@ impl TrustedProvider {
             TrustedProviderType::Pandaops => match &trin_config.trusted_provider_url {
                 Some(val) => build_pandaops_http_client_from_env(val.to_string()),
                 None => {
-                    panic!("Must supply --trusted-provider-url cli flag to use pandaops as a trusted provider.")
+                    clap::Error::with_description(
+                        "Must supply --trusted-provider-url cli flag to use pandaops as a trusted provider.",
+                        clap::ErrorKind::MissingRequiredArgument,
+                    ).exit();
                 }
             },
             TrustedProviderType::Custom => match trin_config.trusted_provider_url.clone() {
@@ -139,10 +146,12 @@ fn proxy_to_url(request: &Value, trusted_http_client: Request) -> io::Result<Vec
 fn get_infura_project_id_from_env() -> String {
     match env::var("TRIN_INFURA_PROJECT_ID") {
         Ok(val) => val,
-        Err(_) => panic!(
+        Err(_) => clap::Error::with_description(
             "Must supply Infura key as environment variable, like:\n\
-            TRIN_INFURA_PROJECT_ID=\"your-key-here\" trin"
-        ),
+            TRIN_INFURA_PROJECT_ID=\"your-key-here\" trin",
+            clap::ErrorKind::MissingRequiredArgument,
+        )
+        .exit(),
     }
 }
 
@@ -155,20 +164,24 @@ fn build_infura_http_client_from_env() -> ureq::Request {
 fn get_pandaops_client_id_from_env() -> String {
     match env::var("PANDAOPS_CLIENT_ID") {
         Ok(val) => val,
-        Err(_) => panic!(
+        Err(_) => clap::Error::with_description(
             "Must supply pandaops client id as environment variable, like:\n\
-            PANDAOPS_CLIENT_ID=\"your-key-here\" trin"
-        ),
+            PANDAOPS_CLIENT_ID=\"your-key-here\" trin",
+            clap::ErrorKind::MissingRequiredArgument,
+        )
+        .exit(),
     }
 }
 
 fn get_pandaops_client_secret_from_env() -> String {
     match env::var("PANDAOPS_CLIENT_SECRET") {
         Ok(val) => val,
-        Err(_) => panic!(
+        Err(_) => clap::Error::with_description(
             "Must supply pandaops client secret as environment variable, like:\n\
-            PANDAOPS_CLIENT_SECRET=\"your-key-here\" trin"
-        ),
+            PANDAOPS_CLIENT_SECRET=\"your-key-here\" trin",
+            clap::ErrorKind::MissingRequiredArgument,
+        )
+        .exit(),
     }
 }
 

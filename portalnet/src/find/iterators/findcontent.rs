@@ -460,7 +460,11 @@ mod tests {
         let result = query.into_result();
         match result {
             FindContentQueryResult::Content { .. } => {
-                panic!("Unexpected result variant from new query")
+                clap::Error::with_description(
+                    "Unexpected result variant from new query",
+                    clap::ErrorKind::InvalidValue,
+                )
+                .exit();
             }
             FindContentQueryResult::ClosestNodes(closest_nodes) => assert!(
                 closest_nodes.is_empty(),
@@ -506,8 +510,16 @@ mod tests {
                     match query.poll(now) {
                         QueryState::Finished => break 'finished,
                         QueryState::Waiting(Some(p)) => assert_eq!(&p, k.preimage()),
-                        QueryState::Waiting(None) => panic!("Expected another peer."),
-                        QueryState::WaitingAtCapacity => panic!("Unexpectedly reached capacity."),
+                        QueryState::Waiting(None) => clap::Error::with_description(
+                            "Expected another peer.",
+                            clap::ErrorKind::TooFewValues,
+                        )
+                        .exit(),
+                        QueryState::WaitingAtCapacity => clap::Error::with_description(
+                            "Unexpectedly reached capacity.",
+                            clap::ErrorKind::TooManyValues,
+                        )
+                        .exit(),
                     }
                 }
                 let num_waiting = query.num_waiting;
@@ -618,7 +630,7 @@ mod tests {
             let peer1 = if let QueryState::Waiting(Some(p)) = query.poll(now) {
                 p
             } else {
-                panic!("No peer.");
+                clap::Error::with_description("No peer.", clap::ErrorKind::TooFewValues).exit();
             };
 
             query.on_success(
@@ -642,7 +654,11 @@ mod tests {
                     )
                 }
                 QueryState::Finished => {}
-                _ => panic!("Unexpectedly query state."),
+                _ => clap::Error::with_description(
+                    "Unexpectedly query state.",
+                    clap::ErrorKind::UnknownArgument,
+                )
+                .exit(),
             };
 
             // The "closer" peer must only be in the query once.
@@ -675,7 +691,7 @@ mod tests {
             // Poll the query for the first peer to be in progress.
             match query.poll(now) {
                 QueryState::Waiting(Some(id)) => assert_eq!(id, peer),
-                _ => panic!(),
+                _ => clap::Error::with_description("", clap::ErrorKind::ArgumentConflict).exit(),
             }
 
             // Artificially advance the clock.
@@ -688,7 +704,11 @@ mod tests {
                 QueryPeerState::Unresponsive => {
                     assert_eq!(first_peer.key().preimage(), &peer);
                 }
-                _ => panic!("Unexpected peer state: {:?}", first_peer.state()),
+                _ => clap::Error::with_description(
+                    format!("Unexpected peer state: {:?}", first_peer.state()).as_str(),
+                    clap::ErrorKind::InvalidValue,
+                )
+                .exit(),
             }
 
             let finished = query.progress == QueryProgress::Finished;
@@ -707,9 +727,11 @@ mod tests {
                     FindContentQueryResult::ClosestNodes(closest) => {
                         assert!(closest.is_empty());
                     }
-                    FindContentQueryResult::Content { .. } => {
-                        panic!("Unexpected query result variant")
-                    }
+                    FindContentQueryResult::Content { .. } => clap::Error::with_description(
+                        "Unexpected query result variant",
+                        clap::ErrorKind::InvalidSubcommand,
+                    )
+                    .exit(),
                 }
             } else {
                 // Unresponsive peers can still deliver results while the iterator
@@ -718,9 +740,11 @@ mod tests {
                     FindContentQueryResult::ClosestNodes(closest) => {
                         assert_eq!(closest, vec![peer]);
                     }
-                    FindContentQueryResult::Content { .. } => {
-                        panic!("Unexpected query result variant")
-                    }
+                    FindContentQueryResult::Content { .. } => clap::Error::with_description(
+                        "Unexpected query result variant",
+                        clap::ErrorKind::InvalidSubcommand,
+                    )
+                    .exit(),
                 }
             }
             true

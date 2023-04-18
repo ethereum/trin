@@ -139,6 +139,7 @@ pub async fn test_history_local_content_absent(target: &Client) {
     let result = target.local_content(content_key).await.unwrap();
 
     if let PossibleHistoryContentValue::ContentPresent(_) = result {
-        panic!("Expected absent content");
+        clap::Error::with_description("Expected absent content", clap::ErrorKind::TooFewValues)
+            .exit();
     };
 }

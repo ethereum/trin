@@ -3823,6 +3823,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
+ "clap 2.34.0",
  "ethers",
  "eyre",
  "figment",
@@ -4638,6 +4639,7 @@ dependencies = [
  "async-trait",
  "base64 0.13.1",
  "bytes 1.4.0",
+ "clap 2.34.0",
  "delay_map 0.1.2",
  "directories",
  "discv5",
@@ -7000,6 +7002,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "clap 2.34.0",
  "eth2_hashing",
  "eth2_ssz",
  "eth2_ssz_derive",

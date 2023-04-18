@@ -12,6 +12,7 @@ description = "Beacon chain light client implementation"
 [dependencies]
 async-trait = "0.1.57"
 chrono = "0.4.22"
+clap = "2.33.3"
 eyre = "0.6.8"
 figment = { version = "0.10.7", features = ["toml", "env"] }
 jsonrpsee = { version = "0.15.1", features = ["full"] }

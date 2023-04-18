@@ -206,28 +206,41 @@ impl TrinConfig {
         match config.web3_transport {
             Web3TransportType::HTTP => match &config.web3_ipc_path.as_path().display().to_string()[..] {
                 DEFAULT_WEB3_IPC_PATH => {}
-                _ => panic!("Must not supply an ipc path when using http protocol for json-rpc"),
+                _ => clap::Error::with_description(
+                        "Must not supply an ipc path when using http protocol for json-rpc",
+                        clap::ErrorKind::ArgumentConflict,
+                    ).exit(),
             },
             Web3TransportType::IPC => match config.web3_http_address.as_str() {
                 DEFAULT_WEB3_HTTP_ADDRESS => {}
-                p => panic!("Must not supply an http address when using ipc protocol for json-rpc (received: {p})"),
+                p => clap::Error::with_description(
+                        format!("Must not supply an http address when using ipc protocol for json-rpc (received: {p})").as_str(),
+                        clap::ErrorKind::ArgumentConflict,
+                    ).exit(),
             }
         }
 
         match config.trusted_provider_url {
             Some(_) => {
                 if config.trusted_provider == TrustedProviderType::Infura {
-                    panic!("--trusted-provider-url flag is incompatible with infura as the trusted provider.")
+                    clap::Error::with_description(
+                        "--trusted-provider-url flag is incompatible with infura as the trusted provider.",
+                        clap::ErrorKind::ArgumentConflict,
+                    ).exit();
                 }
             }
             None => match config.trusted_provider {
                 TrustedProviderType::Infura => {}
-                TrustedProviderType::Pandaops => panic!(
-                    "'--trusted-provider pandaops' choice requires the --trusted-provider-url flag."
-                ),
-                TrustedProviderType::Custom => panic!(
-                    "'--trusted-provider custom' choice requires the --trusted-provider-url flag."
-                ),
+                TrustedProviderType::Pandaops =>
+                    clap::Error::with_description(
+                        "'--trusted-provider pandaops' choice requires the --trusted-provider-url flag.",
+                        clap::ErrorKind::ArgumentConflict,
+                    ).exit(),
+                TrustedProviderType::Custom =>
+                clap::Error::with_description(
+                    "'--trusted-provider custom' choice requires the --trusted-provider-url flag.",
+                    clap::ErrorKind::ArgumentConflict,
+                ).exit(),
             },
         }
         // Should not serve http over same port as localhost provider.
@@ -238,7 +251,10 @@ impl TrinConfig {
                 let is_local_provider = url.host_str() == Some("127.0.0.1");
                 let port_clash = url.port() == config.web3_http_address.port();
                 if is_local_provider && port_clash {
-                    panic!("--trusted-provider-url and --web3-http-address cannot have the same localhost port.")
+                    clap::Error::with_description(
+                        "--trusted-provider-url and --web3-http-address cannot have the same localhost port.",
+                        clap::ErrorKind::ArgumentConflict,
+                    ).exit();
                 }
             }
         }
@@ -250,7 +266,11 @@ impl TrinConfig {
 fn check_url_format(url: &str) -> Result<Url, String> {
     match Url::parse(url) {
         Ok(val) => Ok(val),
-        Err(e) => panic!("Invalid URL '{url}', {e}"),
+        Err(e) => clap::Error::with_description(
+            format!("Invalid URL '{url}', {e}").as_str(),
+            clap::ErrorKind::InvalidValue,
+        )
+        .exit(),
     }
 }
 
@@ -258,10 +278,15 @@ fn check_private_key_length(private_key: &str) -> Result<H256, String> {
     if private_key.len() == 66 {
         return H256::from_str(private_key).map_err(|err| format!("HexError: {}", err));
     }
-    panic!(
-        "Invalid private key length: {}, expected 66 (0x-prefixed 32 byte hexstring)",
-        private_key.len()
+    clap::Error::with_description(
+        format!(
+            "Invalid private key length: {}, expected 66 (0x-prefixed 32 byte hexstring)",
+            private_key.len()
+        )
+        .as_str(),
+        clap::ErrorKind::InvalidValue,
     )
+    .exit();
 }
 
 impl fmt::Display for TrinConfig {
@@ -500,7 +525,7 @@ mod test {
             ]
             .iter(),
         )
-        .unwrap_err();
+        .unwrap();
     }
 
     #[test]
@@ -516,7 +541,7 @@ mod test {
             ]
             .iter(),
         )
-        .unwrap_err();
+        .unwrap();
     }
 
     #[test]

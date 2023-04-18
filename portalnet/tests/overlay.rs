@@ -65,10 +65,15 @@ async fn spawn_overlay(
                 match (req_protocol, overlay_protocol.clone()) {
                     (ProtocolId::History, ProtocolId::History)
                     | (ProtocolId::State, ProtocolId::State) => overlay_tx.send(talk_req).unwrap(),
-                    _ => panic!("Unexpected protocol"),
+                    _ => clap::Error::with_description(
+                        "Unexpected protocol",
+                        clap::ErrorKind::InvalidSubcommand,
+                    )
+                    .exit(),
                 }
             } else {
-                panic!("Invalid protocol");
+                clap::Error::with_description("Invalid protocol", clap::ErrorKind::InvalidValue)
+                    .exit();
             }
         }
     });
@@ -77,10 +82,18 @@ async fn spawn_overlay(
         while let Some(talk_req) = overlay_rx.recv().await {
             let talk_resp = match overlay.process_one_request(&talk_req).await {
                 Ok(response) => Message::from(response).into(),
-                Err(err) => panic!("Error processing request: {err}"),
+                Err(err) => clap::Error::with_description(
+                    format!("Error processing request: {err}").as_str(),
+                    clap::ErrorKind::ValueValidation,
+                )
+                .exit(),
             };
             if let Err(err) = talk_req.respond(talk_resp) {
-                panic!("Unable to respond to talk request: {err}");
+                clap::Error::with_description(
+                    format!("Unable to respond to talk request: {err}").as_str(),
+                    clap::ErrorKind::UnknownArgument,
+                )
+                .exit();
             }
         }
     });
@@ -147,7 +160,11 @@ async fn overlay() {
         Ok(pong) => {
             assert_eq!(1, pong.enr_seq);
         }
-        Err(err) => panic!("Unable to respond to ping: {err}"),
+        Err(err) => clap::Error::with_description(
+            format!("Unable to respond to ping: {err}").as_str(),
+            clap::ErrorKind::InvalidValue,
+        )
+        .exit(),
     }
     time::sleep(sleep_duration).await;
     let overlay_one_peers = overlay_one.table_entries_enr();
@@ -165,7 +182,11 @@ async fn overlay() {
             assert_eq!(1, nodes.enrs.len());
             assert!(nodes.enrs.contains(&SszEnr::new(overlay_three.local_enr())));
         }
-        Err(err) => panic!("Unable to respond to find nodes: {err}"),
+        Err(err) => clap::Error::with_description(
+            format!("Unable to respond to find nodes: {err}").as_str(),
+            clap::ErrorKind::InvalidValue,
+        )
+        .exit(),
     }
     time::sleep(sleep_duration).await;
     let overlay_one_peers = overlay_one.table_entries_enr();
@@ -187,7 +208,11 @@ async fn overlay() {
             assert!(nodes.enrs.contains(&SszEnr::new(overlay_two.local_enr())));
             assert!(nodes.enrs.contains(&SszEnr::new(overlay_three.local_enr())));
         }
-        Err(err) => panic!("Unable to respond to find nodes: {err}"),
+        Err(err) => clap::Error::with_description(
+            format!("Unable to respond to find nodes: {err}").as_str(),
+            clap::ErrorKind::InvalidValue,
+        )
+        .exit(),
     }
     time::sleep(sleep_duration).await;
     let overlay_three_peers = overlay_three.table_entries_enr();
@@ -206,9 +231,17 @@ async fn overlay() {
     {
         Ok(content) => match content {
             Content::Enrs(enrs) => enrs,
-            other => panic!("Unexpected response to find content: {other:?}"),
+            other => clap::Error::with_description(
+                format!("Unexpected response to find content: {other:?}").as_str(),
+                clap::ErrorKind::UnknownArgument,
+            )
+            .exit(),
         },
-        Err(err) => panic!("Unable to respond to find content: {err}"),
+        Err(err) => clap::Error::with_description(
+            format!("Unable to respond to find content: {err}").as_str(),
+            clap::ErrorKind::InvalidValue,
+        )
+        .exit(),
     };
     time::sleep(sleep_duration).await;
     let overlay_two_peers = overlay_two.table_entries_enr();
@@ -233,7 +266,11 @@ async fn overlay() {
             assert_eq!(found_content, content);
         }
         (None, _) => {
-            panic!("Unable to find content stored with peer");
+            clap::Error::with_description(
+                "Unable to find content stored with peer",
+                clap::ErrorKind::MissingRequiredArgument,
+            )
+            .exit();
         }
     }
 }

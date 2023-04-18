@@ -710,7 +710,8 @@ mod tests {
         let receipt: Receipt = serde_json::from_value(response).unwrap();
         let receipt = match receipt {
             Receipt::Legacy(val) => val,
-            _ => panic!("invalid test"),
+            _ => clap::Error::with_description("invalid test", clap::ErrorKind::UnknownArgument)
+                .exit(),
         };
         assert_eq!(
             receipt.cumulative_gas_used,

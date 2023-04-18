@@ -48,7 +48,11 @@ pub async fn test_unpopulated_offer(peertest: &Peertest, target: &Client) {
     let response = wait_for_content(target, content_key).await;
     let received_content_value = match response {
         PossibleHistoryContentValue::ContentPresent(c) => c,
-        PossibleHistoryContentValue::ContentAbsent => panic!("Expected content to be found"),
+        PossibleHistoryContentValue::ContentAbsent => clap::Error::with_description(
+            "Expected content to be found",
+            clap::ErrorKind::TooFewValues,
+        )
+        .exit(),
     };
     assert_eq!(
         content_value, received_content_value,
@@ -83,7 +87,11 @@ pub async fn test_populated_offer(peertest: &Peertest, target: &Client) {
     let response = wait_for_content(&peertest.bootnode.ipc_client, content_key).await;
     let received_content_value = match response {
         PossibleHistoryContentValue::ContentPresent(c) => c,
-        PossibleHistoryContentValue::ContentAbsent => panic!("Expected content to be found"),
+        PossibleHistoryContentValue::ContentAbsent => clap::Error::with_description(
+            "Expected content to be found",
+            clap::ErrorKind::TooFewValues,
+        )
+        .exit(),
     };
     assert_eq!(
         content_value, received_content_value,

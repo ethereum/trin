@@ -422,8 +422,16 @@ mod tests {
                     match query.poll(now) {
                         QueryState::Finished => break 'finished,
                         QueryState::Waiting(Some(p)) => assert_eq!(&p, k.preimage()),
-                        QueryState::Waiting(None) => panic!("Expected another peer."),
-                        QueryState::WaitingAtCapacity => panic!("Unexpectedly reached capacity."),
+                        QueryState::Waiting(None) => clap::Error::with_description(
+                            "Expected another peer.",
+                            clap::ErrorKind::WrongNumberOfValues,
+                        )
+                        .exit(),
+                        QueryState::WaitingAtCapacity => clap::Error::with_description(
+                            "Unexpectedly reached capacity.",
+                            clap::ErrorKind::ArgumentConflict,
+                        )
+                        .exit(),
                     }
                 }
                 let num_waiting = query.num_waiting;
@@ -502,7 +510,7 @@ mod tests {
             let peer1 = if let QueryState::Waiting(Some(p)) = query.poll(now) {
                 p
             } else {
-                panic!("No peer.");
+                clap::Error::with_description("No peer.", clap::ErrorKind::UnknownArgument).exit();
             };
             query.on_success(&peer1, closer.clone());
             // Duplicate result from the same peer.
@@ -515,7 +523,11 @@ mod tests {
                     query.on_success(&peer2, closer.clone())
                 }
                 QueryState::Finished => {}
-                _ => panic!("Unexpectedly query state."),
+                _ => clap::Error::with_description(
+                    "Unexpectedly query state.",
+                    clap::ErrorKind::UnknownArgument,
+                )
+                .exit(),
             };
 
             // The "closer" peer must only be in the query once.
@@ -547,7 +559,11 @@ mod tests {
             // Poll the query for the first peer to be in progress.
             match query.poll(now) {
                 QueryState::Waiting(Some(id)) => assert_eq!(id, peer),
-                _ => panic!(),
+                _ => clap::Error::with_description(
+                    "Poll timed out",
+                    clap::ErrorKind::ValueValidation,
+                )
+                .exit(),
             }
 
             // Artificially advance the clock.
@@ -560,7 +576,11 @@ mod tests {
                 QueryPeerState::Unresponsive => {
                     assert_eq!(first_peer.key().preimage(), &peer);
                 }
-                _ => panic!("Unexpected peer state: {:?}", first_peer.state()),
+                _ => clap::Error::with_description(
+                    format!("Unexpected peer state: {:?}", first_peer.state()).as_str(),
+                    clap::ErrorKind::InvalidValue,
+                )
+                .exit(),
             }
 
             let finished = query.progress == QueryProgress::Finished;

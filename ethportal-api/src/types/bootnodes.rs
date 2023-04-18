@@ -106,7 +106,11 @@ mod test {
             Bootnodes::Custom(bootnodes) => {
                 assert_eq!(bootnodes.len(), expected_length);
             }
-            _ => panic!("Bootnodes should be custom"),
+            _ => clap::Error::with_description(
+                "Bootnodes should be custom",
+                clap::ErrorKind::InvalidValue,
+            )
+            .exit(),
         };
         let bootnodes: Vec<Enr> = config.bootnodes.into();
         assert_eq!(bootnodes.len(), expected_length);

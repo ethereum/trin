@@ -762,7 +762,11 @@ mod test {
     fn test_nodes_validator_rejects_invalid_input(#[case] input: Vec<u16>, #[case] msg: String) {
         let result = validate_find_nodes_distances(&input);
         match result {
-            Ok(_) => panic!("Invalid test case passed"),
+            Ok(_) => clap::Error::with_description(
+                "Invalid test case passed",
+                clap::ErrorKind::InvalidValue,
+            )
+            .exit(),
             Err(err) => assert!(err.to_string().contains(&msg)),
         }
     }

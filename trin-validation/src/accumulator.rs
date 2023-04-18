@@ -275,7 +275,11 @@ mod test {
         let ck = HistoryContentKey::from_ssz_bytes(&raw_ck).unwrap();
         match ck {
             HistoryContentKey::BlockHeaderWithProof(_) => (),
-            _ => panic!("Invalid test, content key decoded improperly"),
+            _ => clap::Error::with_description(
+                "Invalid test, content key decoded improperly",
+                clap::ErrorKind::InvalidValue,
+            )
+            .exit(),
         }
         let raw_fluffy_hwp = obj.get("value").unwrap().as_str().unwrap();
         let fluffy_hwp =
@@ -284,7 +288,11 @@ mod test {
         let trin_proof = trin_macc.generate_proof(&header, tx).await.unwrap();
         let fluffy_proof = match fluffy_hwp.proof {
             BlockHeaderProof::AccumulatorProof(val) => val,
-            _ => panic!("test reached invalid state"),
+            _ => clap::Error::with_description(
+                "test reached invalid state",
+                clap::ErrorKind::InvalidValue,
+            )
+            .exit(),
         };
         assert_eq!(trin_proof, fluffy_proof.proof);
         let hwp = HeaderWithProof {
@@ -411,10 +419,18 @@ mod test {
                     let content: Value = json!(epoch_acc);
                     let _ = request.resp.send(Ok(content));
                 }
-                _ => panic!("Unexpected request endpoint"),
+                _ => clap::Error::with_description(
+                    "Unexpected request endpoint",
+                    clap::ErrorKind::UnknownArgument,
+                )
+                .exit(),
             },
             None => {
-                panic!("Test run failed: Unable to get response from master_acc validation.")
+                clap::Error::with_description(
+                    "Test run failed: Unable to get response from master_acc validation.",
+                    clap::ErrorKind::ValueValidation,
+                )
+                .exit();
             }
         }
     }

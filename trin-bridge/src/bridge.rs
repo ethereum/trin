@@ -26,6 +26,7 @@ use std::fs;
 use std::ops::Range;
 use std::path::PathBuf;
 use std::time;
+use structopt::clap;
 use tokio::task::JoinHandle;
 use tokio::time::{sleep, Duration};
 use tracing::{debug, info, warn};
@@ -105,10 +106,11 @@ impl Bridge {
         let mut epoch_index = match starting_epoch {
             Some(val) => {
                 if val * EPOCH_SIZE > latest_block {
-                    panic!(
-                        "Starting epoch is greater than current epoch. 
-                        Please specify a starting epoch that begins before the current block."
-                    );
+                    clap::Error::with_description(
+                        "Starting epoch is greater than current epoch. Please specify a starting epoch that begins before the current block.",
+                        clap::ErrorKind::InvalidValue,
+                    )
+                    .exit();
                 }
                 val
             }

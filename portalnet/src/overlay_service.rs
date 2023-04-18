@@ -2552,7 +2552,11 @@ mod tests {
         let request = if let OverlayCommand::Request(request) = command {
             request
         } else {
-            panic!("Unexpected overlay command variant");
+            clap::Error::with_description(
+                "Unexpected overlay command variant",
+                clap::ErrorKind::UnknownArgument,
+            )
+            .exit();
         };
 
         assert!(request.responder.is_none());
@@ -2570,7 +2574,7 @@ mod tests {
             Request::FindNodes(find_nodes) => {
                 assert_eq!(vec![0], find_nodes.distances)
             }
-            _ => panic!(),
+            _ => clap::Error::with_description("", clap::ErrorKind::ArgumentConflict).exit(),
         };
     }
 
@@ -2631,7 +2635,7 @@ mod tests {
             kbucket::Entry::Present(_entry, status) => {
                 assert_eq!(ConnectionState::Disconnected, status.state)
             }
-            _ => panic!(),
+            _ => clap::Error::with_description("", clap::ErrorKind::ArgumentConflict).exit(),
         };
     }
 
@@ -2670,7 +2674,11 @@ mod tests {
         let request = if let OverlayCommand::Request(request) = command {
             request
         } else {
-            panic!("Unexpected overlay command variant");
+            clap::Error::with_description(
+                "Unexpected overlay command variant",
+                clap::ErrorKind::UnknownArgument,
+            )
+            .exit();
         };
 
         assert!(request.responder.is_none());
@@ -2688,7 +2696,7 @@ mod tests {
             Request::FindNodes(find_nodes) => {
                 assert_eq!(vec![0], find_nodes.distances)
             }
-            _ => panic!(),
+            _ => clap::Error::with_description("", clap::ErrorKind::ArgumentConflict).exit(),
         };
     }
 
@@ -2752,7 +2760,7 @@ mod tests {
                 assert_eq!(ConnectionState::Disconnected, status.state);
                 assert_eq!(ConnectionDirection::Outgoing, status.direction);
             }
-            _ => panic!(),
+            _ => clap::Error::with_description("", clap::ErrorKind::ArgumentConflict).exit(),
         };
 
         // Check routing table for second ENR.
@@ -2762,7 +2770,7 @@ mod tests {
                 assert_eq!(ConnectionState::Disconnected, status.state);
                 assert_eq!(ConnectionDirection::Outgoing, status.direction);
             }
-            _ => panic!(),
+            _ => clap::Error::with_description("", clap::ErrorKind::ArgumentConflict).exit(),
         };
 
         // Check ping queue for first ENR.
@@ -2827,7 +2835,7 @@ mod tests {
             kbucket::Entry::Present(entry, _status) => {
                 assert_eq!(2, entry.value().enr.seq());
             }
-            _ => panic!(),
+            _ => clap::Error::with_description("", clap::ErrorKind::ArgumentConflict).exit(),
         };
 
         // Check routing table for second ENR.
@@ -2836,7 +2844,7 @@ mod tests {
             kbucket::Entry::Present(entry, _status) => {
                 assert_eq!(1, entry.value().enr.seq());
             }
-            _ => panic!(),
+            _ => clap::Error::with_description("", clap::ErrorKind::ArgumentConflict).exit(),
         };
     }
 
@@ -2879,7 +2887,11 @@ mod tests {
                 req.direction
             );
         } else {
-            panic!("Unexpected overlay command variant");
+            clap::Error::with_description(
+                "Unexpected overlay command variant",
+                clap::ErrorKind::UnknownArgument,
+            )
+            .exit();
         }
         assert_pending!(poll_command_rx!(service));
     }
@@ -2955,7 +2967,11 @@ mod tests {
                 req.direction
             );
         } else {
-            panic!("Unexpected overlay command variant");
+            clap::Error::with_description(
+                "Unexpected overlay command variant",
+                clap::ErrorKind::UnknownArgument,
+            )
+            .exit();
         }
         assert_pending!(poll_command_rx!(service));
     }
@@ -2975,7 +2991,11 @@ mod tests {
         let request = if let OverlayCommand::Request(request) = command {
             request
         } else {
-            panic!("Unexpected overlay command variant");
+            clap::Error::with_description(
+                "Unexpected overlay command variant",
+                clap::ErrorKind::UnknownArgument,
+            )
+            .exit();
         };
 
         assert!(request.responder.is_none());
@@ -2991,7 +3011,7 @@ mod tests {
             Request::FindNodes(find_nodes) => {
                 assert_eq!(vec![0], find_nodes.distances)
             }
-            _ => panic!(),
+            _ => clap::Error::with_description("", clap::ErrorKind::ArgumentConflict).exit(),
         };
     }
 
@@ -3010,7 +3030,11 @@ mod tests {
         let request = if let OverlayCommand::Request(request) = command {
             request
         } else {
-            panic!("Unexpected overlay command variant");
+            clap::Error::with_description(
+                "Unexpected overlay command variant",
+                clap::ErrorKind::UnknownArgument,
+            )
+            .exit();
         };
 
         assert!(request.responder.is_none());
@@ -3051,7 +3075,7 @@ mod tests {
                 assert_eq!(ConnectionState::Connected, status.state);
                 assert_eq!(connection_direction, status.direction);
             }
-            _ => panic!(),
+            _ => clap::Error::with_description("", clap::ErrorKind::ArgumentConflict).exit(),
         };
     }
 
@@ -3083,7 +3107,7 @@ mod tests {
                 assert_eq!(ConnectionState::Disconnected, status.state);
                 assert_eq!(connection_direction, status.direction);
             }
-            _ => panic!(),
+            _ => clap::Error::with_description("", clap::ErrorKind::ArgumentConflict).exit(),
         };
 
         let _ = service.update_node_connection_state(node_id, ConnectionState::Connected);
@@ -3093,7 +3117,7 @@ mod tests {
                 assert_eq!(ConnectionState::Connected, status.state);
                 assert_eq!(connection_direction, status.direction);
             }
-            _ => panic!(),
+            _ => clap::Error::with_description("", clap::ErrorKind::ArgumentConflict).exit(),
         };
     }
 
@@ -3125,7 +3149,7 @@ mod tests {
                 assert_eq!(ConnectionState::Connected, status.state);
                 assert_eq!(connection_direction, status.direction);
             }
-            _ => panic!(),
+            _ => clap::Error::with_description("", clap::ErrorKind::ArgumentConflict).exit(),
         };
 
         let _ = service.update_node_connection_state(node_id, ConnectionState::Disconnected);
@@ -3135,7 +3159,7 @@ mod tests {
                 assert_eq!(ConnectionState::Disconnected, status.state);
                 assert_eq!(connection_direction, status.direction);
             }
-            _ => panic!(),
+            _ => clap::Error::with_description("", clap::ErrorKind::ArgumentConflict).exit(),
         };
     }
 
@@ -3196,7 +3220,11 @@ mod tests {
                     service.findnodes_query_distances_per_peer
                 );
             }
-            _ => panic!("Unexpected query type"),
+            _ => clap::Error::with_description(
+                "Unexpected query type",
+                clap::ErrorKind::UnknownArgument,
+            )
+            .exit(),
         }
 
         assert!(query.started().is_some());
@@ -3234,12 +3262,14 @@ mod tests {
                             service.findnodes_query_distances_per_peer
                         );
                     }
-                    _ => panic!(),
+                    _ => {
+                        clap::Error::with_description("", clap::ErrorKind::ArgumentConflict).exit()
+                    }
                 }
                 assert_eq!(query_id, QueryId(0));
                 assert_eq!(node_id, bootnode_node_id);
             }
-            _ => panic!(),
+            _ => clap::Error::with_description("", clap::ErrorKind::ArgumentConflict).exit(),
         }
 
         // Create two ENRs to use as dummy responses to the query from the bootnode.
@@ -3268,7 +3298,7 @@ mod tests {
                 assert!((node_id == node_id_1) || (node_id == node_id_2));
                 Some(node_id)
             }
-            _ => panic!(),
+            _ => clap::Error::with_description("", clap::ErrorKind::ArgumentConflict).exit(),
         };
 
         let event = OverlayService::<
@@ -3289,7 +3319,7 @@ mod tests {
             QueryEvent::Waiting(_, node_id, _) => {
                 assert_eq!(node_id, second_node_id);
             }
-            _ => panic!(),
+            _ => clap::Error::with_description("", clap::ErrorKind::ArgumentConflict).exit(),
         };
 
         service.advance_find_node_query(enr1.clone(), vec![enr2.clone()], QueryId(0));
@@ -3319,7 +3349,7 @@ mod tests {
                 assert!(untrusted_enrs.contains(&enr2));
                 assert!(untrusted_enrs.contains(&bootnode));
             }
-            _ => panic!(),
+            _ => clap::Error::with_description("", clap::ErrorKind::ArgumentConflict).exit(),
         }
     }
 
@@ -3482,7 +3512,11 @@ mod tests {
             FindContentQueryResult::ClosestNodes(closest_nodes) => {
                 assert!(closest_nodes.contains(&bootnode_enr.node_id()));
             }
-            _ => panic!("Unexpected find content query result"),
+            _ => clap::Error::with_description(
+                "Unexpected find content query result",
+                clap::ErrorKind::InvalidValue,
+            )
+            .exit(),
         }
     }
 
@@ -3543,7 +3577,11 @@ mod tests {
             } => {
                 assert_eq!(result_content, content);
             }
-            _ => panic!("Unexpected find content query result"),
+            _ => clap::Error::with_description(
+                "Unexpected find content query result",
+                clap::ErrorKind::InvalidValue,
+            )
+            .exit(),
         }
     }
 
@@ -3600,7 +3638,11 @@ mod tests {
         let request = if let OverlayCommand::Request(request) = command {
             request
         } else {
-            panic!("Unexpected overlay command variant");
+            clap::Error::with_description(
+                "Unexpected overlay command variant",
+                clap::ErrorKind::UnknownArgument,
+            )
+            .exit();
         };
 
         assert_eq!(
@@ -3637,7 +3679,11 @@ mod tests {
             (Some(result_content), _) => {
                 assert_eq!(result_content, content);
             }
-            _ => panic!("Unexpected find content query result type"),
+            _ => clap::Error::with_description(
+                "Unexpected find content query result type",
+                clap::ErrorKind::UnknownArgument,
+            )
+            .exit(),
         }
     }
 

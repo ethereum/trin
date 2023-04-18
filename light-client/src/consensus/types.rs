@@ -84,7 +84,7 @@ impl ssz_rs::Deserialize for BeaconBlockBody {
     where
         Self: Sized,
     {
-        panic!("not implemented");
+        clap::Error::with_description("not implemented", clap::ErrorKind::UnknownArgument).exit();
     }
 }
 
@@ -198,7 +198,7 @@ impl ssz_rs::Deserialize for ExecutionPayload {
     where
         Self: Sized,
     {
-        panic!("not implemented");
+        clap::Error::with_description("not implemented", clap::ErrorKind::UnknownArgument).exit();
     }
 }
 

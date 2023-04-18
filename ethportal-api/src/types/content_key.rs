@@ -480,7 +480,11 @@ impl OverlayContentKey for StateContentKey {
     }
 
     fn to_bytes(&self) -> Vec<u8> {
-        panic!("Not implemented: Implement in pr along w/ new state content key spec update.")
+        clap::Error::with_description(
+            "Not implemented: Implement in pr along w/ new state content key spec update.",
+            clap::ErrorKind::UnknownArgument,
+        )
+        .exit();
     }
 }
 

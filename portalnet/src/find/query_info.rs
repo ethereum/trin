@@ -91,7 +91,11 @@ impl<TContentKey: OverlayContentKey> TargetKey<NodeId> for QueryInfo<TContentKey
 fn findnode_log2distance(target: NodeId, peer: NodeId, size: usize) -> Option<Vec<u16>> {
     if size > 127 {
         // invoke and endless loop - coding error
-        panic!("Iterations cannot be greater than 127");
+        clap::Error::with_description(
+            "Iterations cannot be greater than 127",
+            clap::ErrorKind::TooManyValues,
+        )
+        .exit();
     }
 
     let dst_key: Key<NodeId> = peer.into();
