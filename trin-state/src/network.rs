@@ -45,7 +45,6 @@ impl StateNetwork {
         let validator = Arc::new(StateValidator { header_oracle });
         let config = OverlayConfig {
             bootnode_enrs: portal_config.bootnode_enrs.clone(),
-            enable_metrics: portal_config.enable_metrics,
             ..Default::default()
         };
         let overlay = OverlayProtocol::new(

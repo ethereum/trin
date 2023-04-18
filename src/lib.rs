@@ -37,7 +37,6 @@ pub async fn run_trin(
         private_key: trin_config.private_key,
         listen_port: trin_config.discovery_port,
         no_stun: trin_config.no_stun,
-        enable_metrics: trin_config.enable_metrics_with_url.is_some(),
         bootnode_enrs: trin_config.bootnodes.clone().into(),
         ..Default::default()
     };
@@ -63,11 +62,8 @@ pub async fn run_trin(
         setup_temp_dir()?;
     }
 
-    let storage_config = PortalStorageConfig::new(
-        trin_config.mb.into(),
-        discovery.local_enr().node_id(),
-        trin_config.enable_metrics_with_url.is_some(),
-    )?;
+    let storage_config =
+        PortalStorageConfig::new(trin_config.mb.into(), discovery.local_enr().node_id())?;
 
     // Initialize validation oracle
     let master_accumulator = MasterAccumulator::try_from_file(trin_config.master_acc_path.clone())?;

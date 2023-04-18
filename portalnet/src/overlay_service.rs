@@ -49,7 +49,8 @@ use crate::{
     types::{
         messages::{
             Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer, Ping,
-            Pong, PopulatedOffer, ProtocolId, Request, Response,
+            Pong, PopulatedOffer, ProtocolId, Request, Response, MAX_PORTAL_CONTENT_PAYLOAD_SIZE,
+            MAX_PORTAL_NODES_ENRS_SIZE,
         },
         node::Node,
     },
@@ -64,11 +65,14 @@ use trin_validation::validator::Validator;
 
 /// Maximum number of ENRs in response to FindNodes.
 pub const FIND_NODES_MAX_NODES: usize = 32;
+
 /// Maximum number of ENRs in response to FindContent.
 pub const FIND_CONTENT_MAX_NODES: usize = 32;
+
 /// With even distribution assumptions, 2**17 is enough to put each node (estimating 100k nodes,
 /// which is more than 10x the ethereum mainnet node count) into a unique bucket by the 17th bucket index.
 const EXPECTED_NON_EMPTY_BUCKETS: usize = 17;
+
 /// Bucket refresh lookup interval in seconds
 const BUCKET_REFRESH_INTERVAL_SECS: u64 = 60;
 
@@ -102,6 +106,12 @@ pub enum OverlayCommand<TContentKey> {
         target: TContentKey,
         /// A callback channel to transmit the result of the query.
         callback: oneshot::Sender<(Option<Vec<u8>>, Vec<NodeId>)>,
+    },
+    FindNodeQuery {
+        /// The query target.
+        target: NodeId,
+        /// A callback channel to transmit the result of the query.
+        callback: oneshot::Sender<Vec<Enr>>,
     },
 }
 
@@ -286,7 +296,7 @@ pub struct OverlayService<TContentKey, TMetric, TValidator, TStore> {
     /// Phantom metric (distance function).
     phantom_metric: PhantomData<TMetric>,
     /// Metrics reporting component
-    metrics: Option<OverlayMetrics>,
+    metrics: Arc<OverlayMetrics>,
     /// Validator for overlay network content.
     validator: Arc<TValidator>,
 }
@@ -314,7 +324,7 @@ where
         ping_queue_interval: Option<Duration>,
         protocol: ProtocolId,
         utp_socket: Arc<UtpSocket<crate::discovery::UtpEnr>>,
-        enable_metrics: bool,
+        metrics: Arc<OverlayMetrics>,
         validator: Arc<TValidator>,
         query_timeout: Duration,
         query_peer_timeout: Duration,
@@ -337,9 +347,6 @@ where
         };
 
         let (response_tx, response_rx) = mpsc::unbounded_channel();
-
-        let metrics: Option<OverlayMetrics> =
-            enable_metrics.then(|| OverlayMetrics::new(&protocol));
 
         tokio::spawn(async move {
             let mut service = Self {
@@ -424,12 +431,12 @@ where
         let local_node_id = self.local_enr().node_id();
 
         // Begin request for our local node ID.
-        self.init_find_nodes_query(&local_node_id);
+        self.init_find_nodes_query(&local_node_id, None);
 
         for bucket_index in (255 - EXPECTED_NON_EMPTY_BUCKETS as u8)..255 {
             let target_node_id =
                 node_id::generate_random_node_id(bucket_index, self.local_enr().node_id());
-            self.init_find_nodes_query(&target_node_id);
+            self.init_find_nodes_query(&target_node_id, None);
         }
     }
 
@@ -466,6 +473,15 @@ where
                                 );
                             }
                         }
+                        OverlayCommand::FindNodeQuery { target, callback } => {
+                            if let Some(query_id) = self.init_find_nodes_query(&target, Some(callback)) {
+                                trace!(
+                                    query.id = %query_id,
+                                    node.id = %hex_encode_compact(target),
+                                    "FindNode query initialized"
+                                );
+                            }
+                        }
                     }
                 }
                 Some(response) = self.response_rx.recv() => {
@@ -480,7 +496,10 @@ where
 
                         // Perform background processing.
                         match response.response {
-                            Ok(response) => self.process_response(response, active_request.destination, active_request.request, active_request.query_id),
+                            Ok(response) => {
+                                self.metrics.report_inbound_response(&self.protocol, &response);
+                                self.process_response(response, active_request.destination, active_request.request, active_request.query_id)
+                            }
                             Err(error) => self.process_request_failure(response.request_id, active_request.destination, error),
                         }
 
@@ -544,7 +563,7 @@ where
             }
         };
 
-        self.init_find_nodes_query(&target_node_id);
+        self.init_find_nodes_query(&target_node_id, None);
     }
 
     /// Returns the local ENR of the node.
@@ -828,6 +847,10 @@ where
                 let response = self.handle_request(request.request.clone(), id.clone(), &source);
                 // Send response to responder if present.
                 if let Some(responder) = request.responder {
+                    if let Ok(ref response) = response {
+                        self.metrics
+                            .report_outbound_response(&self.protocol, response);
+                    }
                     let _ = responder.send(response);
                 }
                 // Perform background processing.
@@ -843,15 +866,8 @@ where
                         query_id: request.query_id,
                     },
                 );
-                if let Some(m) = self.metrics.as_ref() {
-                    match request.request {
-                        Request::Ping(_) => m.report_outbound_ping(),
-                        Request::FindNodes(_) => m.report_outbound_find_nodes(),
-                        Request::FindContent(_) => m.report_outbound_find_content(),
-                        Request::Offer(_) => m.report_outbound_offer(),
-                        Request::PopulatedOffer(_) => m.report_outbound_offer(),
-                    }
-                }
+                self.metrics
+                    .report_outbound_request(&self.protocol, &request.request);
                 self.send_talk_req(request.request, request.id, destination);
             }
         }
@@ -892,9 +908,6 @@ where
             request
         );
 
-        if let Some(m) = self.metrics.as_ref() {
-            m.report_inbound_ping()
-        }
         let enr_seq = self.local_enr().seq();
         let data_radius = self.data_radius();
         let custom_payload = CustomPayload::from(data_radius.as_ssz_bytes());
@@ -918,14 +931,11 @@ where
             "Handling FindNodes message",
         );
 
-        if let Some(m) = self.metrics.as_ref() {
-            m.report_inbound_find_nodes()
-        }
         let distances64: Vec<u64> = request.distances.iter().map(|x| (*x).into()).collect();
         let mut enrs = self.nodes_by_distance(distances64);
 
         // Limit the ENRs so that their summed sizes do not surpass the max TALKREQ packet size.
-        pop_while_ssz_bytes_len_gt(&mut enrs, MAX_NODES_SIZE);
+        pop_while_ssz_bytes_len_gt(&mut enrs, MAX_PORTAL_NODES_ENRS_SIZE);
 
         Nodes { total: 1, enrs }
     }
@@ -944,9 +954,6 @@ where
             "Handling FindContent message",
         );
 
-        if let Some(m) = self.metrics.as_ref() {
-            m.report_inbound_find_content()
-        }
         let content_key = match (TContentKey::try_from)(request.content_key) {
             Ok(key) => key,
             Err(_) => {
@@ -957,9 +964,7 @@ where
         };
         match self.store.read().get(&content_key) {
             Ok(Some(content)) => {
-                // Check content size and initiate uTP connection if the size is over the threshold
-                // TODO: Properly calculate max content size
-                if content.len() <= 1028 {
+                if content.len() <= MAX_PORTAL_CONTENT_PAYLOAD_SIZE {
                     Ok(Content::Content(content))
                 } else {
                     // Generate a connection ID for the uTP connection.
@@ -1021,7 +1026,7 @@ where
                 let enrs = self.find_nodes_close_to_content(content_key);
                 match enrs {
                     Ok(mut val) => {
-                        pop_while_ssz_bytes_len_gt(&mut val, MAX_CONTENT_NODES_SIZE);
+                        pop_while_ssz_bytes_len_gt(&mut val, MAX_PORTAL_CONTENT_PAYLOAD_SIZE);
                         Ok(Content::Enrs(val))
                     }
                     Err(msg) => Err(OverlayRequestError::InvalidRequest(msg.to_string())),
@@ -1046,10 +1051,6 @@ where
             request.discv5.id = %request_id,
             "Handling Offer message",
         );
-
-        if let Some(m) = self.metrics.as_ref() {
-            m.report_inbound_offer()
-        }
 
         let mut requested_keys =
             BitList::with_capacity(request.content_keys.len()).map_err(|_| {
@@ -1182,6 +1183,8 @@ where
 
     /// Processes an incoming request from some source node.
     fn process_incoming_request(&mut self, request: Request, _id: RequestId, source: NodeId) {
+        self.metrics
+            .report_inbound_request(&self.protocol, &request);
         if let Request::Ping(ping) = request {
             self.process_ping(ping, source);
         }
@@ -2114,7 +2117,11 @@ where
     }
 
     /// Starts a FindNode query to find nodes with IDs closest to `target`.
-    fn init_find_nodes_query(&mut self, target: &NodeId) {
+    fn init_find_nodes_query(
+        &mut self,
+        target: &NodeId,
+        callback: Option<oneshot::Sender<Vec<Enr>>>,
+    ) -> Option<QueryId> {
         let target_key = Key::from(*target);
         let mut closest_enrs: Vec<Enr> = self
             .kbuckets
@@ -2141,7 +2148,7 @@ where
             query_type: QueryType::FindNode {
                 target: *target,
                 distances_to_request: self.findnodes_query_distances_per_peer,
-                callback: None,
+                callback,
             },
             untrusted_enrs: SmallVec::from_vec(closest_enrs),
         };
@@ -2154,11 +2161,14 @@ where
 
         if known_closest_peers.is_empty() {
             warn!("Cannot initialize FindNode query (no known close peers)");
+            None
         } else {
             let find_nodes_query =
                 FindNodeQuery::with_config(query_config, query_info.key(), known_closest_peers);
-            self.find_node_query_pool
-                .add_query(query_info, find_nodes_query);
+            Some(
+                self.find_node_query_pool
+                    .add_query(query_info, find_nodes_query),
+            )
         }
     }
 
@@ -2386,23 +2396,6 @@ pub enum QueryEvent<TQuery, TContentKey> {
     Finished(QueryId, QueryInfo<TContentKey>, TQuery),
 }
 
-const MAX_DISCV5_PACKET_SIZE: usize = 1280;
-const TALK_REQ_PACKET_OVERHEAD: usize = 16 + // IV
-    55 + // Header
-    1 + // Discv5 Message Type
-    3 + // RLP Encoding of outer list
-    9 + // Request ID, max 8 bytes + 1 for RLP encoding
-    3 + // RLP Encoding of inner response
-    16; // RLP HMAC
-const NODES_PACKET_OVERHEAD: usize = 1 + // Selector byte
-    1; // `total` field
-const CONTENT_PACKET_OVERHEAD: usize = 1 + // Selector byte
-    4; // Union type index
-const MAX_NODES_SIZE: usize =
-    MAX_DISCV5_PACKET_SIZE - TALK_REQ_PACKET_OVERHEAD - NODES_PACKET_OVERHEAD;
-const MAX_CONTENT_NODES_SIZE: usize =
-    MAX_DISCV5_PACKET_SIZE - TALK_REQ_PACKET_OVERHEAD - CONTENT_PACKET_OVERHEAD;
-
 /// Limits a to a maximum packet size, including the discv5 header overhead.
 fn pop_while_ssz_bytes_len_gt(enrs: &mut Vec<SszEnr>, max_size: usize) {
     while enrs.ssz_bytes_len() > max_size {
@@ -2474,7 +2467,7 @@ mod tests {
         let peers_to_ping = HashSetDelay::default();
         let (command_tx, command_rx) = mpsc::unbounded_channel();
         let (response_tx, response_rx) = mpsc::unbounded_channel();
-        let metrics = None;
+        let metrics = Arc::new(OverlayMetrics::new());
         let validator = Arc::new(MockValidator {});
 
         OverlayService {
@@ -3141,7 +3134,7 @@ mod tests {
             enrs.push(SszEnr::new(enr));
         }
 
-        pop_while_ssz_bytes_len_gt(&mut enrs, MAX_NODES_SIZE);
+        pop_while_ssz_bytes_len_gt(&mut enrs, MAX_PORTAL_NODES_ENRS_SIZE);
 
         assert_eq!(enrs.len(), correct_limited_size);
     }
@@ -3162,7 +3155,7 @@ mod tests {
         service.add_bootnodes(bootnodes);
 
         // Initialize the query and call `poll` so that it starts
-        service.init_find_nodes_query(&target_node_id);
+        service.init_find_nodes_query(&target_node_id, None);
         let _ = service.find_node_query_pool.poll();
 
         let (query_info, query) = service.find_node_query_pool.iter().next().unwrap();
@@ -3200,7 +3193,7 @@ mod tests {
 
         service.add_bootnodes(bootnodes);
         service.query_num_results = 3;
-        service.init_find_nodes_query(&target_node_id);
+        service.init_find_nodes_query(&target_node_id, None);
 
         // Test that the first query event contains a proper query ID and request to the bootnode
         let event = OverlayService::<
@@ -3321,7 +3314,7 @@ mod tests {
 
         service.add_bootnodes(bootnodes);
 
-        service.init_find_nodes_query(&target_node_id);
+        service.init_find_nodes_query(&target_node_id, None);
 
         let _event = OverlayService::<
             IdentityContentKey,

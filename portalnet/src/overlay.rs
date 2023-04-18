@@ -20,6 +20,7 @@ use utp_rs::socket::UtpSocket;
 
 use crate::{
     discovery::{Discovery, UtpEnr},
+    metrics::{MessageDirectionLabel, MessageLabel, OverlayMetrics, ProtocolLabel},
     overlay_service::{
         OverlayCommand, OverlayRequest, OverlayRequestError, OverlayService, RequestDirection,
         UTP_CONN_CFG,
@@ -49,7 +50,6 @@ pub struct OverlayConfig {
     pub table_filter: Option<Box<dyn Filter<Node>>>,
     pub bucket_filter: Option<Box<dyn Filter<Node>>>,
     pub ping_queue_interval: Option<Duration>,
-    pub enable_metrics: bool,
     pub query_parallelism: usize,
     pub query_timeout: Duration,
     pub query_peer_timeout: Duration,
@@ -66,7 +66,6 @@ impl Default for OverlayConfig {
             table_filter: None,
             bucket_filter: None,
             ping_queue_interval: None,
-            enable_metrics: false,
             query_parallelism: 3, // (recommended α from kademlia paper)
             query_peer_timeout: Duration::from_secs(10),
             query_timeout: Duration::from_secs(60),
@@ -100,11 +99,13 @@ pub struct OverlayProtocol<TContentKey, TMetric, TValidator, TStore> {
     /// Use a phantom, because we don't store any keys in this struct.
     /// For example, this type is used when decoding a content key received over the network.
     phantom_content_key: PhantomData<TContentKey>,
-    /// Associate a metric with the overlay network.
+    /// Associate a distance metric with the overlay network.
     phantom_metric: PhantomData<TMetric>,
     /// Accepted content validator that makes requests to this/other overlay networks (or trusted
     /// http server)
     validator: Arc<TValidator>,
+    /// Runtime telemetry metrics for the overlay network.
+    metrics: Arc<OverlayMetrics>,
 }
 
 impl<
@@ -132,6 +133,9 @@ where
             config.bucket_filter,
         )));
 
+        // Initialize metrics, keep a reference in order to build metrics summaries for logging
+        let metrics = Arc::new(OverlayMetrics::new());
+
         let command_tx = OverlayService::<TContentKey, TMetric, TValidator, TStore>::spawn(
             Arc::clone(&discovery),
             Arc::clone(&store),
@@ -140,7 +144,7 @@ where
             config.ping_queue_interval,
             protocol.clone(),
             Arc::clone(&utp_socket),
-            config.enable_metrics,
+            Arc::clone(&metrics),
             Arc::clone(&validator),
             config.query_timeout,
             config.query_peer_timeout,
@@ -160,6 +164,7 @@ where
             phantom_content_key: PhantomData,
             phantom_metric: PhantomData,
             validator,
+            metrics,
         }
     }
 
@@ -441,6 +446,51 @@ where
         }
     }
 
+    pub async fn lookup_node(&self, target: NodeId) -> Vec<Enr> {
+        if target == self.local_enr().node_id() {
+            return vec![self.local_enr()];
+        }
+        let connected_peer = self
+            .kbuckets
+            .write()
+            .iter()
+            .filter(|entry| entry.status.is_connected())
+            .map(|entry| *entry.node.key.preimage())
+            .find(|node_id| node_id == &target);
+        if let Some(entry) = connected_peer {
+            match self.discovery.find_enr(&entry) {
+                Some(enr) => return vec![enr],
+                None => {
+                    warn!(
+                        protocol = %self.protocol,
+                        "Error finding ENR for node expected to exist in local routing table",
+                    );
+                    return vec![];
+                }
+            }
+        };
+        let (tx, rx) = oneshot::channel();
+        if let Err(err) = self.command_tx.send(OverlayCommand::FindNodeQuery {
+            target,
+            callback: tx,
+        }) {
+            warn!(
+                protocol = %self.protocol,
+                error = %err,
+                "Error submitting FindNode query to service"
+            );
+            return vec![];
+        }
+        rx.await.unwrap_or_else(|err| {
+            warn!(
+                protocol = %self.protocol,
+                error = %err,
+                "Error receiving FindNode query response"
+            );
+            vec![]
+        })
+    }
+
     /// Performs a content lookup for `target`.
     /// Returns the target content along with the peers traversed during content lookup.
     pub async fn lookup_content(&self, target: TContentKey) -> (Option<Vec<u8>>, Vec<NodeId>) {
@@ -460,18 +510,15 @@ where
             return (None, vec![]);
         }
 
-        match rx.await {
-            Ok(result) => result,
-            Err(err) => {
-                warn!(
-                    protocol = %self.protocol,
-                    error = %err,
-                    content.id = %hex_encode(content_id),
-                    "Error receiving content from service",
-                );
-                (None, vec![])
-            }
-        }
+        rx.await.unwrap_or_else(|err| {
+            warn!(
+                protocol = %self.protocol,
+                error = %err,
+                content.id = %hex_encode(content_id),
+                "Error receiving content from service",
+            );
+            (None, vec![])
+        })
     }
 
     /// Sends a request through the overlay service.
@@ -495,10 +542,8 @@ where
         }
 
         // Wait on the response.
-        match rx.await {
-            Ok(result) => result,
-            Err(error) => Err(OverlayRequestError::ChannelFailure(error.to_string())),
-        }
+        rx.await
+            .unwrap_or_else(|err| Err(OverlayRequestError::ChannelFailure(err.to_string())))
     }
 
     pub async fn ping_bootnodes(&self) {
@@ -539,6 +584,32 @@ where
                 "Failed to bond with any bootnodes",
             );
         }
+    }
+
+    pub fn get_summary_info(&self) -> String {
+        format!(
+            "offers={}/{}, accepts={}/{}",
+            self.metrics.message_count_by_labels(
+                ProtocolLabel::History,
+                MessageDirectionLabel::Received,
+                MessageLabel::Accept
+            ),
+            self.metrics.message_count_by_labels(
+                ProtocolLabel::History,
+                MessageDirectionLabel::Sent,
+                MessageLabel::Offer
+            ),
+            self.metrics.message_count_by_labels(
+                ProtocolLabel::History,
+                MessageDirectionLabel::Sent,
+                MessageLabel::Accept
+            ),
+            self.metrics.message_count_by_labels(
+                ProtocolLabel::History,
+                MessageDirectionLabel::Received,
+                MessageLabel::Offer
+            ),
+        )
     }
 }
 

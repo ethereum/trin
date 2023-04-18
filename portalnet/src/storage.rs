@@ -179,15 +179,10 @@ pub struct PortalStorageConfig {
     pub distance_fn: DistanceFunction,
     pub db: Arc<rocksdb::DB>,
     pub sql_connection_pool: Pool<SqliteConnectionManager>,
-    pub metrics_enabled: bool,
 }
 
 impl PortalStorageConfig {
-    pub fn new(
-        storage_capacity_mb: u64,
-        node_id: NodeId,
-        metrics_enabled: bool,
-    ) -> anyhow::Result<Self> {
+    pub fn new(storage_capacity_mb: u64, node_id: NodeId) -> anyhow::Result<Self> {
         let db = Arc::new(PortalStorage::setup_rocksdb(node_id)?);
         let sql_connection_pool = PortalStorage::setup_sql(node_id)?;
         Ok(Self {
@@ -196,7 +191,6 @@ impl PortalStorageConfig {
             distance_fn: DistanceFunction::Xor,
             db,
             sql_connection_pool,
-            metrics_enabled,
         })
     }
 }
@@ -759,7 +753,7 @@ struct StorageMetrics {
     content_storage_usage_bytes: Gauge,
     total_storage_usage_bytes: Gauge,
     storage_capacity_bytes: Gauge,
-    radius_percent: Gauge,
+    radius_ratio: Gauge,
     entry_count: IntGauge,
 }
 
@@ -798,9 +792,9 @@ impl StorageMetrics {
             registry
         )
         .unwrap();
-        let radius_percent = register_gauge_with_registry!(
-            format!("trin_radius_percent_{protocol:?}"),
-            "the percentage of the whole data ring covered by the data radius",
+        let radius_ratio = register_gauge_with_registry!(
+            format!("trin_radius_ratio_{protocol:?}"),
+            "the fraction of the whole data ring covered by the data radius",
             registry,
         )
         .unwrap();
@@ -815,7 +809,7 @@ impl StorageMetrics {
             content_storage_usage_bytes,
             total_storage_usage_bytes,
             storage_capacity_bytes,
-            radius_percent,
+            radius_ratio,
             entry_count,
         }
     }
@@ -833,8 +827,15 @@ impl StorageMetrics {
     }
 
     pub fn report_radius(&self, radius: Distance) {
-        let coverage_percent = radius.byte(31) as f64 * 100.0 / 255.0;
-        self.radius_percent.set(coverage_percent);
+        let radius_high_bytes = [
+            radius.byte(31),
+            radius.byte(30),
+            radius.byte(29),
+            radius.byte(28),
+        ];
+        let radius_int = u32::from_be_bytes(radius_high_bytes);
+        let coverage_ratio = radius_int as f64 / u32::MAX as f64;
+        self.radius_ratio.set(coverage_ratio);
     }
 
     pub fn report_entry_count(&self, count: u64) {
@@ -853,24 +854,39 @@ impl StorageMetrics {
     }
 
     pub fn get_summary(&self) -> String {
+        let radius_percent = self.radius_ratio.get() * 100.0;
         format!(
-            "radius={:.1}% content={:.1}/{}mb #={} disk={:.1}mb",
-            self.radius_percent.get(),
+            "radius={:.*}% content={:.1}/{}mb #={} disk={:.1}mb",
+            Self::precision_for_percentage(radius_percent),
+            radius_percent,
             self.content_storage_usage_bytes.get() / BYTES_IN_MB_F64,
             self.storage_capacity_bytes.get() / BYTES_IN_MB_F64,
             self.entry_count.get(),
             self.total_storage_usage_bytes.get() / BYTES_IN_MB_F64,
         )
     }
+
+    fn precision_for_percentage(percent: f64) -> usize {
+        match percent {
+            x if x >= 10.0 => 0,
+            x if x >= 1.0 => 1,
+            x if x >= 0.1 => 2,
+            x if x >= 0.01 => 3,
+            _ => 4,
+        }
+    }
 }
 
 // SQLite Statements
-const CREATE_QUERY: &str = "create table if not exists content_metadata (
+const CREATE_QUERY: &str = "CREATE TABLE IF NOT EXISTS content_metadata (
                                 content_id_long TEXT PRIMARY KEY,
                                 content_id_short INTEGER NOT NULL,
                                 content_key TEXT NOT NULL,
                                 content_size INTEGER
-                            )";
+                            );
+                            CREATE INDEX content_size_idx ON content_metadata(content_size);
+                            CREATE INDEX content_id_short_idx ON content_metadata(content_id_short);
+                            CREATE INDEX content_id_long_idx ON content_metadata(content_id_long);";
 
 const INSERT_QUERY: &str =
     "INSERT OR IGNORE INTO content_metadata (content_id_long, content_id_short, content_key, content_size)
@@ -936,7 +952,7 @@ pub mod test {
 
         let node_id = NodeId::random();
 
-        let storage_config = PortalStorageConfig::new(CAPACITY_MB, node_id, false).unwrap();
+        let storage_config = PortalStorageConfig::new(CAPACITY_MB, node_id).unwrap();
         let storage = PortalStorage::new(storage_config, ProtocolId::History)?;
 
         // Assert that configs match the storage object's fields
@@ -959,7 +975,7 @@ pub mod test {
             let temp_dir = setup_temp_dir().unwrap();
 
             let node_id = NodeId::random();
-            let storage_config = PortalStorageConfig::new(CAPACITY_MB, node_id, false).unwrap();
+            let storage_config = PortalStorageConfig::new(CAPACITY_MB, node_id).unwrap();
             let mut storage = PortalStorage::new(storage_config, ProtocolId::History).unwrap();
             let content_key = generate_random_content_key();
             let mut value = [0u8; 32];
@@ -982,7 +998,7 @@ pub mod test {
         let temp_dir = setup_temp_dir().unwrap();
 
         let node_id = NodeId::random();
-        let storage_config = PortalStorageConfig::new(CAPACITY_MB, node_id, false).unwrap();
+        let storage_config = PortalStorageConfig::new(CAPACITY_MB, node_id).unwrap();
         let mut storage = PortalStorage::new(storage_config, ProtocolId::History)?;
         let content_key = generate_random_content_key();
         let value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
@@ -1003,7 +1019,7 @@ pub mod test {
         let temp_dir = setup_temp_dir().unwrap();
 
         let node_id = NodeId::random();
-        let storage_config = PortalStorageConfig::new(CAPACITY_MB, node_id, false).unwrap();
+        let storage_config = PortalStorageConfig::new(CAPACITY_MB, node_id).unwrap();
         let mut storage = PortalStorage::new(storage_config, ProtocolId::History)?;
 
         let content_key = generate_random_content_key();
@@ -1025,7 +1041,7 @@ pub mod test {
         let temp_dir = setup_temp_dir().unwrap();
 
         let node_id = NodeId::random();
-        let storage_config = PortalStorageConfig::new(CAPACITY_MB, node_id, false).unwrap();
+        let storage_config = PortalStorageConfig::new(CAPACITY_MB, node_id).unwrap();
         let mut storage = PortalStorage::new(storage_config, ProtocolId::History)?;
 
         for _ in 0..50 {
@@ -1040,7 +1056,7 @@ pub mod test {
         std::mem::drop(storage);
 
         // test with 1mb capacity
-        let new_storage_config = PortalStorageConfig::new(1, node_id, false).unwrap();
+        let new_storage_config = PortalStorageConfig::new(1, node_id).unwrap();
         let new_storage = PortalStorage::new(new_storage_config, ProtocolId::History)?;
 
         // test that previously set value has been pruned
@@ -1053,7 +1069,7 @@ pub mod test {
         std::mem::drop(new_storage);
 
         // test with 0mb capacity
-        let new_storage_config = PortalStorageConfig::new(0, node_id, false).unwrap();
+        let new_storage_config = PortalStorageConfig::new(0, node_id).unwrap();
         let new_storage = PortalStorage::new(new_storage_config, ProtocolId::History)?;
 
         // test that previously set value has been pruned
@@ -1074,7 +1090,7 @@ pub mod test {
         let node_id = NodeId::random();
         let min_capacity = 1;
         // Use a tiny storage capacity, to fill up as quickly as possible
-        let storage_config = PortalStorageConfig::new(min_capacity, node_id, false).unwrap();
+        let storage_config = PortalStorageConfig::new(min_capacity, node_id).unwrap();
         let mut storage = PortalStorage::new(storage_config.clone(), ProtocolId::History)?;
 
         // Fill up the storage.
@@ -1115,7 +1131,7 @@ pub mod test {
         let temp_dir = setup_temp_dir().unwrap();
 
         let node_id = NodeId::random();
-        let storage_config = PortalStorageConfig::new(0, node_id, false).unwrap();
+        let storage_config = PortalStorageConfig::new(0, node_id).unwrap();
         let mut storage = PortalStorage::new(storage_config, ProtocolId::History)?;
 
         let content_key = generate_random_content_key();
@@ -1138,7 +1154,7 @@ pub mod test {
         let temp_dir = setup_temp_dir().unwrap();
 
         let node_id = NodeId::random();
-        let storage_config = PortalStorageConfig::new(CAPACITY_MB, node_id, false).unwrap();
+        let storage_config = PortalStorageConfig::new(CAPACITY_MB, node_id).unwrap();
         let storage = PortalStorage::new(storage_config, ProtocolId::History)?;
 
         let result = storage.find_farthest_content_id()?;
@@ -1157,7 +1173,7 @@ pub mod test {
 
             let node_id = NodeId::random();
             let val = vec![0x00, 0x01, 0x02, 0x03, 0x04];
-            let storage_config = PortalStorageConfig::new(CAPACITY_MB, node_id, false).unwrap();
+            let storage_config = PortalStorageConfig::new(CAPACITY_MB, node_id).unwrap();
             let mut storage = PortalStorage::new(storage_config, ProtocolId::History).unwrap();
             storage.store(&x, &val).unwrap();
             storage.store(&y, &val).unwrap();
@@ -1244,5 +1260,50 @@ pub mod test {
         assert!(!store
             .is_key_within_radius_and_unavailable(&arb_key)
             .unwrap());
+    }
+
+    #[test]
+    fn test_precision_for_percentage() {
+        fn formatted_percent(ratio: f64) -> String {
+            let precision = StorageMetrics::precision_for_percentage(ratio * 100.0);
+            format!("{:.*}%", precision, ratio * 100.0)
+        }
+        assert_eq!(formatted_percent(1.0), "100%");
+        assert_eq!(formatted_percent(0.9999), "100%");
+        assert_eq!(formatted_percent(0.9949), "99%");
+
+        assert_eq!(formatted_percent(0.10001), "10%");
+        assert_eq!(formatted_percent(0.1), "10%");
+        assert_eq!(formatted_percent(0.09949), "9.9%");
+
+        assert_eq!(formatted_percent(0.010001), "1.0%");
+        assert_eq!(formatted_percent(0.01), "1.0%");
+        assert_eq!(formatted_percent(0.009949), "0.99%");
+
+        assert_eq!(formatted_percent(0.0010001), "0.10%");
+        assert_eq!(formatted_percent(0.001), "0.10%");
+        assert_eq!(formatted_percent(0.0009949), "0.099%");
+
+        assert_eq!(formatted_percent(0.00010001), "0.010%");
+        assert_eq!(formatted_percent(0.0001), "0.010%");
+        assert_eq!(formatted_percent(0.00009949), "0.0099%");
+
+        assert_eq!(formatted_percent(0.000010001), "0.0010%");
+        assert_eq!(formatted_percent(0.00001), "0.0010%");
+        assert_eq!(formatted_percent(0.0000095), "0.0010%");
+        assert_eq!(formatted_percent(0.00000949), "0.0009%");
+
+        assert_eq!(formatted_percent(0.0000010001), "0.0001%");
+        assert_eq!(formatted_percent(0.000001), "0.0001%");
+        assert_eq!(formatted_percent(0.0000009949), "0.0001%");
+        assert_eq!(formatted_percent(0.0000005001), "0.0001%");
+        assert_eq!(formatted_percent(0.0000004999), "0.0000%");
+        assert_eq!(formatted_percent(0.0), "0.0000%");
+
+        // We mostly care that values outside of [0.0, 1.0] do not crash, but
+        // for now we also check that they pin to 0 or 4.
+        assert_eq!(StorageMetrics::precision_for_percentage(101.0), 0);
+        assert_eq!(StorageMetrics::precision_for_percentage(-0.001), 4);
+        assert_eq!(StorageMetrics::precision_for_percentage(-1000.0), 4);
     }
 }

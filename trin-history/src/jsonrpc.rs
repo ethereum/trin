@@ -170,6 +170,17 @@ impl HistoryRequestHandler {
 
                     let _ = request.resp.send(response);
                 }
+                HistoryEndpoint::RecursiveFindNodes(node_id) => {
+                    let node_id = discv5::enr::NodeId::from(node_id.0);
+                    let mut nodes = self.network.overlay.lookup_node(node_id).await;
+                    nodes.sort_by(|a, b| {
+                        XorMetric::distance(&node_id.raw(), &a.node_id().raw())
+                            .cmp(&XorMetric::distance(&node_id.raw(), &b.node_id().raw()))
+                    });
+                    let nodes: Vec<Enr> = nodes.into_iter().take(16).collect();
+                    let response = Ok(json!(nodes));
+                    let _ = request.resp.send(response);
+                }
             }
         }
     }

@@ -120,7 +120,8 @@ pub fn spawn_history_heartbeat(network: Arc<HistoryNetwork>) {
             heart_interval.tick().await;
 
             let storage_log = network.overlay.store.read().get_summary_info();
-            info!("storage-report: {storage_log}");
+            let message_log = network.overlay.get_summary_info();
+            info!("reports~ data: {storage_log}; msgs: {message_log}");
         }
     });
 }
