@@ -1,9 +1,9 @@
+use std::net::{IpAddr, Ipv4Addr};
 use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
 use portalnet::{
     discovery::{Discovery, Discv5UdpSocket},
     overlay::{OverlayConfig, OverlayProtocol},
-    socket,
     storage::{ContentStore, DistanceFunction, MemoryContentStore},
     types::messages::{Content, Message, PortalnetConfig, ProtocolId},
 };
@@ -94,7 +94,7 @@ async fn spawn_overlay(
 async fn overlay() {
     let protocol = ProtocolId::History;
     let sleep_duration = Duration::from_millis(5);
-    let ip_addr = socket::find_assigned_ip().expect("Could not find an IP for local connections");
+    let ip_addr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
 
     // Node one.
     let portal_config_one = PortalnetConfig {

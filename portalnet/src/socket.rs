@@ -1,11 +1,5 @@
-use std::net::{IpAddr, SocketAddr, UdpSocket};
+use std::net::{SocketAddr, UdpSocket};
 use tracing::{debug, info, warn};
-
-#[cfg(unix)]
-use interfaces::{self, Interface};
-
-#[cfg(windows)]
-use ipconfig;
 
 // This stun server is part of the testnet infrastructure.
 // If you are unable to connect, please create an issue.
@@ -40,42 +34,4 @@ pub fn stun_for_external(local_socket_addr: &SocketAddr) -> Option<SocketAddr> {
             None
         }
     }
-}
-
-#[cfg(unix)]
-pub fn find_assigned_ip() -> Option<IpAddr> {
-    let online_nics = Interface::get_all()
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|iface| iface.is_up() && iface.is_running() && !iface.is_loopback());
-
-    for nic in online_nics {
-        let ipv4_socket_addr = nic
-            .addresses
-            .iter()
-            .filter(|&addr_group| addr_group.kind == interfaces::Kind::Ipv4)
-            .find_map(|addr_group| addr_group.addr);
-
-        if let Some(valid_socket) = ipv4_socket_addr {
-            return Some(valid_socket.ip());
-        }
-        // else, check the next interface
-    }
-    None
-}
-
-#[cfg(windows)]
-pub fn find_assigned_ip() -> Option<IpAddr> {
-    let adapters = ipconfig::get_adapters().unwrap_or_default();
-
-    for adapter in adapters.iter() {
-        if !adapter.gateways().is_empty() {
-            for ip in adapter.ip_addresses().iter() {
-                if ip.is_ipv4() {
-                    return Some(*ip);
-                }
-            }
-        }
-    }
-    None
 }
