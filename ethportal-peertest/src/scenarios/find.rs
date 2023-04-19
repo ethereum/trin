@@ -1,104 +1,11 @@
-use ethereum_types::U256;
-use serde_json::json;
-use tracing::info;
-
 use crate::{constants::HISTORY_CONTENT_VALUE, Peertest};
-use ethportal_api::types::portal::NodeInfo;
-use ethportal_api::HistoryNetworkApiClient;
+use ethportal_api::types::portal::TraceContentInfo;
+use ethportal_api::{ContentValue, HistoryNetworkApiClient};
+use tracing::info;
 use trin_types::content_key::HistoryContentKey;
 use trin_types::content_value::{HistoryContentValue, PossibleHistoryContentValue};
+use trin_types::node_id::NodeId;
 use trin_utils::bytes::hex_decode;
-
-pub async fn test_trace_recursive_find_content(peertest: &Peertest) {
-    info!("Testing trace recursive find content");
-    let uniq_content_key = "0x0015b11b918355b1ef9c5db810302ebad0bf2544255b530cdce90674d5887bb286";
-
-    let content_key: HistoryContentKey = serde_json::from_value(json!(uniq_content_key)).unwrap();
-    let content_value: HistoryContentValue =
-        serde_json::from_value(json!(HISTORY_CONTENT_VALUE)).unwrap();
-
-    // Store content in the bootnode db
-    let store_result = peertest
-        .bootnode
-        .ipc_client
-        .store(content_key.clone(), content_value.clone())
-        .await
-        .unwrap();
-    assert!(store_result);
-
-    // Send trace recursive find content request
-    let result = peertest.nodes[0]
-        .ipc_client
-        .trace_recursive_find_content(content_key)
-        .await
-        .unwrap();
-    let received_content_value = match result.content {
-        PossibleHistoryContentValue::ContentPresent(c) => c,
-        PossibleHistoryContentValue::ContentAbsent => panic!("Expected content to be found"),
-    };
-    assert_eq!(received_content_value, content_value);
-    assert_eq!(
-        result.route,
-        vec![NodeInfo {
-            enr: peertest.bootnode.enr.clone(),
-            distance: U256::from_str_radix("0x100", 16).unwrap()
-        }]
-    );
-}
-
-// This test ensures that when content is not found the correct response is returned.
-pub async fn test_trace_recursive_find_content_for_absent_content(peertest: &Peertest) {
-    info!("Testing trace recursive find content for absent content");
-    // Different key to other test (final character).
-    let uniq_content_key = "0x0015b11b918355b1ef9c5db810302ebad0bf2544255b530cdce90674d5887bb287";
-    let content_key: HistoryContentKey = serde_json::from_value(json!(uniq_content_key)).unwrap();
-    // Do not store content in the bootnode db
-
-    // Send trace recursive find content request
-    let result = peertest
-        .bootnode
-        .ipc_client
-        .trace_recursive_find_content(content_key)
-        .await
-        .unwrap();
-
-    if let PossibleHistoryContentValue::ContentPresent(_) = result.content {
-        panic!("Expected content to be absent");
-    }
-    // Check that at least one route was involved.
-    assert!(!result.route.is_empty());
-}
-
-pub async fn test_trace_recursive_find_content_local_db(peertest: &Peertest) {
-    info!("Testing trace recursive find content local db");
-    let uniq_content_key = "0x0025b11b918355b1ef9c5db810302ebad0bf2544255b530cdce90674d5887bb286";
-    let content_key: HistoryContentKey = serde_json::from_value(json!(uniq_content_key)).unwrap();
-    let content_value: HistoryContentValue =
-        serde_json::from_value(json!(HISTORY_CONTENT_VALUE)).unwrap();
-
-    // Store content in the bootnode db
-    let store_result = peertest
-        .bootnode
-        .ipc_client
-        .store(content_key.clone(), content_value.clone())
-        .await
-        .unwrap();
-    assert!(store_result);
-
-    // Send trace recursive find content request
-    let result = peertest
-        .bootnode
-        .ipc_client
-        .trace_recursive_find_content(content_key)
-        .await
-        .unwrap();
-    let received_content_value = match result.content {
-        PossibleHistoryContentValue::ContentPresent(c) => c,
-        PossibleHistoryContentValue::ContentAbsent => panic!("Expected content to be found"),
-    };
-    assert_eq!(received_content_value, content_value);
-    assert_eq!(result.route, vec![]);
-}
 
 pub async fn test_recursive_find_nodes_self(peertest: &Peertest) {
     info!("Testing trace recursive find nodes self");
@@ -140,4 +47,117 @@ pub async fn test_recursive_find_nodes_random(peertest: &Peertest) {
         .await
         .unwrap();
     assert_eq!(result.len(), 3);
+}
+
+pub async fn test_trace_recursive_find_content(peertest: &Peertest) {
+    let uniq_content_key =
+        "\"0x0015b11b918355b1ef9c5db810302ebad0bf2544255b530cdce90674d5887bb286\"";
+    let history_content_key: HistoryContentKey = serde_json::from_str(uniq_content_key).unwrap();
+
+    let hex_data = hex_decode(HISTORY_CONTENT_VALUE).unwrap();
+    let history_content_value: HistoryContentValue =
+        HistoryContentValue::decode(&hex_data[..]).unwrap();
+
+    let store_result = peertest
+        .bootnode
+        .ipc_client
+        .store(history_content_key.clone(), history_content_value.clone())
+        .await
+        .unwrap();
+
+    assert!(store_result);
+
+    let trace_content_info: TraceContentInfo = peertest.nodes[0]
+        .ipc_client
+        .trace_recursive_find_content(history_content_key)
+        .await
+        .unwrap();
+
+    let content = trace_content_info.content;
+    let trace = trace_content_info.trace;
+
+    assert_eq!(
+        content,
+        PossibleHistoryContentValue::ContentPresent(history_content_value)
+    );
+
+    let query_origin_node: NodeId = peertest.nodes[0].enr.node_id().into();
+    let node_with_content: NodeId = peertest.bootnode.enr.node_id().into();
+
+    // Test that `origin` is set correctly
+    let origin = trace.origin;
+    assert_eq!(origin, query_origin_node);
+
+    // Test that `received_content_from_node` is set correctly
+    let received_content_from_node = trace.received_content_from_node.unwrap();
+    assert_eq!(node_with_content, received_content_from_node);
+
+    let responses = trace.responses;
+
+    // Test that origin response has `responses` containing `received_content_from_node` node
+    let origin_response = responses.get(&origin).unwrap();
+    assert!(origin_response
+        .responded_with
+        .contains(&received_content_from_node));
+}
+
+// This test ensures that when content is not found the correct response is returned.
+pub async fn test_trace_recursive_find_content_for_absent_content(peertest: &Peertest) {
+    let client = &peertest.nodes[0].ipc_client;
+
+    // Different key to other test (final character).
+    let uniq_content_key =
+        "\"0x0015b11b918355b1ef9c5db810302ebad0bf2544255b530cdce90674d5887bb287\"";
+    // Do not store content to offer in the testnode db
+
+    let history_content_key: HistoryContentKey = serde_json::from_str(uniq_content_key).unwrap();
+
+    let result = client
+        .trace_recursive_find_content(history_content_key)
+        .await
+        .unwrap();
+
+    assert_eq!(result.content, PossibleHistoryContentValue::ContentAbsent);
+    // Check that at least one route was involved.
+    assert!(result.trace.responses.len() > 1);
+}
+
+pub async fn test_trace_recursive_find_content_local_db(peertest: &Peertest) {
+    let uniq_content_key =
+        "\"0x0025b11b918355b1ef9c5db810302ebad0bf2544255b530cdce90674d5887bb286\"";
+
+    let history_content_key: HistoryContentKey = serde_json::from_str(uniq_content_key).unwrap();
+
+    let hex_data = hex_decode(HISTORY_CONTENT_VALUE).unwrap();
+    let history_content_value: HistoryContentValue =
+        HistoryContentValue::decode(&hex_data).unwrap();
+
+    let store_result = peertest
+        .bootnode
+        .ipc_client
+        .store(history_content_key.clone(), history_content_value.clone())
+        .await
+        .unwrap();
+
+    assert!(store_result);
+
+    let trace_content_info: TraceContentInfo = peertest
+        .bootnode
+        .ipc_client
+        .trace_recursive_find_content(history_content_key)
+        .await
+        .unwrap();
+    assert_eq!(
+        trace_content_info.content,
+        PossibleHistoryContentValue::ContentPresent(history_content_value)
+    );
+
+    let origin = trace_content_info.trace.origin;
+    assert_eq!(
+        trace_content_info.trace.received_content_from_node.unwrap(),
+        origin
+    );
+
+    let expected_origin_id: NodeId = peertest.bootnode.enr.node_id().into();
+    assert_eq!(expected_origin_id, origin);
 }

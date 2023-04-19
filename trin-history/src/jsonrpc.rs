@@ -1,4 +1,8 @@
+use discv5::enr::NodeId;
+use ssz::Encode;
 use std::sync::Arc;
+use trin_types::distance::{Metric, XorMetric};
+use trin_types::query_trace::QueryTrace;
 
 use serde_json::{json, Value};
 use tokio::sync::mpsc;
@@ -10,14 +14,10 @@ use portalnet::storage::ContentStore;
 use trin_utils::bytes::hex_encode;
 
 use crate::utils::bucket_entries_to_json;
-use ethportal_api::types::portal::{
-    AcceptInfo, Distance, FindNodesInfo, NodeInfo, PongInfo, TraceContentInfo,
-};
+use ethportal_api::types::portal::{AcceptInfo, FindNodesInfo, PongInfo, TraceContentInfo};
 use ethportal_api::ContentValue;
 use ethportal_api::{HistoryContentKey, OverlayContentKey};
-use ssz::Encode;
 use trin_types::content_key::RawContentKey;
-use trin_types::distance::{Metric, XorMetric};
 use trin_types::enr::Enr;
 use trin_types::jsonrpc::endpoints::HistoryEndpoint;
 use trin_types::jsonrpc::request::HistoryJsonRpcRequest;
@@ -204,13 +204,20 @@ impl HistoryRequestHandler {
                     None
                 }
             };
-        // Get data from peer
-        let (possible_content_bytes, closest_nodes) = match local_content {
-            Some(val) => (Some(val), vec![]),
+        let (possible_content_bytes, trace) = match local_content {
+            Some(val) => {
+                let local_enr = self.network.overlay.local_enr();
+                let mut trace = QueryTrace::new(
+                    &self.network.overlay.local_enr(),
+                    NodeId::new(&content_key.content_id()).into(),
+                );
+                trace.node_responded_with_content(&local_enr);
+                (Some(val), if is_trace { Some(trace) } else { None })
+            }
             None => {
                 self.network
                     .overlay
-                    .lookup_content(content_key.clone())
+                    .lookup_content(content_key.clone(), is_trace)
                     .await
             }
         };
@@ -225,29 +232,14 @@ impl HistoryRequestHandler {
         if !is_trace {
             return Ok(content_response_string);
         }
-
-        // Construct trace response
-        let closest_nodes: Vec<NodeInfo> = closest_nodes
-            .iter()
-            // Skip over enrs that are unable to be looked up
-            .filter_map(|node_id| {
-                let content_id = content_key.content_id();
-                // Return None for enrs that cannot be looked up
-                match self.network.overlay.discovery.find_enr(node_id) {
-                    Some(enr) => XorMetric::distance(&content_id, &enr.node_id().raw())
-                        .log2()
-                        .map(|distance| {
-                            let distance = Distance::from(distance);
-                            NodeInfo { enr, distance }
-                        }),
-                    None => None,
-                }
-            })
-            .collect();
-
-        Ok(json!(TraceContentInfo {
-            content: serde_json::from_value(content_response_string).map_err(|e| e.to_string())?,
-            route: closest_nodes,
-        }))
+        if let Some(trace) = trace {
+            Ok(json!(TraceContentInfo {
+                content: serde_json::from_value(content_response_string)
+                    .map_err(|e| e.to_string())?,
+                trace,
+            }))
+        } else {
+            Err("Content query trace requested but none provided.".to_owned())
+        }
     }
 }

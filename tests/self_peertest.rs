@@ -71,9 +71,9 @@ mod test {
         peertest::scenarios::find::test_recursive_find_nodes_peer(&peertest).await;
         peertest::scenarios::find::test_recursive_find_nodes_random(&peertest).await;
         peertest::scenarios::find::test_trace_recursive_find_content(&peertest).await;
+        peertest::scenarios::find::test_trace_recursive_find_content_local_db(&peertest).await;
         peertest::scenarios::find::test_trace_recursive_find_content_for_absent_content(&peertest)
             .await;
-        peertest::scenarios::find::test_trace_recursive_find_content_local_db(&peertest).await;
 
         peertest.exit_all_nodes();
         test_client_rpc_handle.stop().unwrap();

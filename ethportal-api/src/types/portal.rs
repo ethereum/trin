@@ -4,6 +4,8 @@ use trin_types::content_key::HistoryContentKey;
 use trin_types::content_value::{HistoryContentValue, PossibleHistoryContentValue};
 use trin_types::enr::Enr;
 
+use super::query_trace::QueryTrace;
+
 pub type DataRadius = ethereum_types::U256;
 pub type Distance = ethereum_types::U256;
 
@@ -58,7 +60,7 @@ pub struct AcceptInfo {
 #[serde(rename_all = "camelCase")]
 pub struct TraceContentInfo {
     pub content: PossibleHistoryContentValue,
-    pub route: Vec<NodeInfo>,
+    pub trace: QueryTrace,
 }
 
 /// Response for PaginateLocalContentKeys endpoint

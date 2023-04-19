@@ -40,8 +40,6 @@ pub enum FindContentQueryResult<TNodeId> {
     Content {
         content: Vec<u8>,
         closest_nodes: Vec<TNodeId>,
-        // Peer who actually returns the target content
-        content_provider: TNodeId,
     },
 }
 
@@ -316,7 +314,6 @@ where
 
                 FindContentQueryResult::Content {
                     content: content.content,
-                    content_provider: content.peer,
                     closest_nodes,
                 }
             }
@@ -575,7 +572,6 @@ mod tests {
                 FindContentQueryResult::Content {
                     content,
                     closest_nodes,
-                    content_provider,
                 } => {
                     let closest_nodes =
                         closest_nodes.into_iter().map(Key::from).collect::<Vec<_>>();
@@ -586,7 +582,6 @@ mod tests {
                     // The peer who returned the content should not be included in the closest
                     // nodes.
                     assert!(!closest_nodes.contains(&content_peer));
-                    assert_eq!(Key::from(content_provider), content_peer);
 
                     assert_eq!(content, found_content);
                 }
