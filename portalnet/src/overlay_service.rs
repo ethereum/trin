@@ -1105,7 +1105,6 @@ where
         let enr = crate::discovery::UtpEnr(node_addr.enr);
         let cid = self.utp_socket.cid(enr, false);
         let cid_send = cid.send;
-
         let validator = Arc::clone(&self.validator);
         let store = Arc::clone(&self.store);
         let kbuckets = Arc::clone(&self.kbuckets);
@@ -1125,7 +1124,8 @@ where
 
             let mut data = vec![];
             if let Err(err) = stream.read_to_eof(&mut data).await {
-                warn!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), "error reading data from uTP stream");
+                error!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), "error reading data from uTP stream");
+                return;
             }
 
             if let Err(err) = Self::process_accept_utp_payload(
