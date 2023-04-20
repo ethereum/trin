@@ -4,6 +4,7 @@ use ethportal_api::{Discv5ApiServer, HistoryNetworkApiServer, Web3ApiServer};
 use portalnet::discovery::Discovery;
 use reth_ipc::server::Builder as IpcServerBuilder;
 use std::net::SocketAddr;
+use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use trin_types::jsonrpc::request::HistoryJsonRpcRequest;
@@ -31,11 +32,12 @@ impl JsonRpcServer {
     }
 
     pub async fn run_ipc(
-        ipc_path: String,
+        ipc_path: Box<dyn AsRef<Path>>,
         discv5: Arc<Discovery>,
         history_handler: mpsc::UnboundedSender<HistoryJsonRpcRequest>,
     ) -> anyhow::Result<ServerHandle> {
-        let server = IpcServerBuilder::default().build(ipc_path)?;
+        let server =
+            IpcServerBuilder::default().build((*ipc_path).as_ref().display().to_string())?;
         let discv5_api = Discv5Api::new(discv5);
         let history_network_api = HistoryNetworkApi::new(history_handler);
         let mut api = discv5_api.into_rpc();
