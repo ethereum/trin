@@ -41,8 +41,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let trusted_provider = TrustedProvider {
         http: build_pandaops_http_client_from_env(PANDAOPS_URL.to_string()),
     };
-    let master_acc =
-        MasterAccumulator::try_from_file("../trin-validation/src/assets/merge_macc.bin".into())?;
+    let master_acc = MasterAccumulator::try_from_file("validation_assets/merge_macc.bin".into())?;
     let header_oracle = HeaderOracle::new(trusted_provider, master_acc);
 
     let portal_clients: Result<Vec<HttpClient>, String> = http_addresses
