@@ -273,13 +273,7 @@ impl PortalStorage {
             entry_count => {
                 storage.metrics.report_entry_count(entry_count);
 
-                if storage.prune_db()? == 0 {
-                    // No items were pruned, so the radius was never calculated.
-                    // Calculate current radius now, rather than waiting for the next overfill.
-                    if let Some(farthest) = storage.find_farthest_content_id()? {
-                        storage.set_radius(storage.distance_to_content_id(&farthest));
-                    }
-                }
+                let _ = storage.prune_db()?;
             }
         }
 
@@ -1131,6 +1125,48 @@ pub mod test {
         assert!(new_storage.capacity_reached()?);
         // The restarted store should have the same radius as the original
         assert_eq!(radius, new_storage.radius);
+
+        temp_dir.close()?;
+        Ok(())
+    }
+
+    #[test_log::test(tokio::test)]
+    #[serial]
+    async fn test_restarting_storage_with_increased_capacity() -> Result<(), ContentStoreError> {
+        let temp_dir = setup_temp_dir().unwrap();
+
+        let node_id = NodeId::random();
+        let storage_config = PortalStorageConfig::new(CAPACITY_MB, node_id).unwrap();
+        let mut storage = PortalStorage::new(storage_config, ProtocolId::History)?;
+
+        for _ in 0..50 {
+            let content_key = generate_random_content_key();
+            let value: Vec<u8> = vec![0; 32000];
+            storage.store(&content_key, &value)?;
+        }
+
+        let bytes = storage.get_total_storage_usage_in_bytes_from_network()?;
+        assert_eq!(1600000, bytes); // 32kb * 50
+        assert_eq!(storage.radius, Distance::MAX);
+        // Save the number of items, to compare with the restarted storage
+        let total_entry_count = storage.total_entry_count().unwrap();
+        std::mem::drop(storage);
+
+        // test with increased capacity
+        let new_storage_config = PortalStorageConfig::new(2 * CAPACITY_MB, node_id).unwrap();
+        let new_storage = PortalStorage::new(new_storage_config, ProtocolId::History)?;
+
+        // test that previously set value has not been pruned
+        let bytes = new_storage.get_total_storage_usage_in_bytes_from_network()?;
+        assert_eq!(1600000, bytes);
+        assert_eq!(new_storage.total_entry_count().unwrap(), total_entry_count);
+        assert_eq!(
+            new_storage.storage_capacity_in_bytes,
+            2 * CAPACITY_MB * BYTES_IN_MB_U64
+        );
+        // test that radius is at max
+        assert_eq!(new_storage.radius, Distance::MAX);
+        std::mem::drop(new_storage);
 
         temp_dir.close()?;
         Ok(())
