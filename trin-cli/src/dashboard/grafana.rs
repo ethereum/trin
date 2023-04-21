@@ -4,7 +4,9 @@ use serde::Deserialize;
 use std::fs;
 use ureq;
 
-const TEMPLATE_FILENAME: &str = "./trin-cli/src/dashboard/metrics_dashboard.json.template";
+pub const DASHBOARD_TEMPLATES: &[&str] =
+    &["./trin-cli/src/dashboard/collected-metrics-dashboard.json.template"];
+
 pub struct GrafanaAPI {
     basic_auth_string: String,
     address: String,
@@ -46,11 +48,11 @@ impl GrafanaAPI {
 
     pub fn create_dashboard(
         &self,
-        json_rpc_uid: String,
-        prometheus_uid: String,
+        template_path: &str,
+        prometheus_uid: &str,
     ) -> Result<String, anyhow::Error> {
         let filled_in_template =
-            GrafanaAPI::interpolate_dashboard_config(json_rpc_uid, prometheus_uid)?;
+            GrafanaAPI::interpolate_dashboard_config(template_path, prometheus_uid)?;
         let dashboard_json: serde_json::Value = serde_json::from_str(&filled_in_template[..])?;
 
         let dashboard_api_url = format!("{}/{}", self.address, "api/dashboards/db/");
@@ -65,17 +67,16 @@ impl GrafanaAPI {
     }
 
     fn interpolate_dashboard_config(
-        json_rpc_uid: String,
-        prometheus_uid: String,
+        template_path: &str,
+        prometheus_uid: &str,
     ) -> Result<String, anyhow::Error> {
         // Open docs/metrics_dashboard.json
         // Fill in template with uid
-        let template_string = fs::read_to_string(TEMPLATE_FILENAME)?;
+        let template_string = fs::read_to_string(template_path)?;
         let populated_template = template(
             &template_string[..],
             [
-                ("json_rpc_uid", &json_rpc_uid[..]),
-                ("prometheus_uid", &prometheus_uid[..]),
+                ("prometheus_uid", prometheus_uid),
                 ("", "{}"), // The templating library picks up an empty json object as a placeholder,
                             // so replace it with another empty json object.
             ],

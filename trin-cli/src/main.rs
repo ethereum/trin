@@ -12,7 +12,7 @@ use serde_json::value::RawValue;
 use structopt::StructOpt;
 use thiserror::Error;
 
-use dashboard::grafana::GrafanaAPI;
+use dashboard::grafana::{GrafanaAPI, DASHBOARD_TEMPLATES};
 use ethportal_api::{BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, HistoryContentKey};
 use trin_types::cli::DEFAULT_WEB3_IPC_PATH;
 use trin_utils::bytes::hex_encode;
@@ -83,9 +83,6 @@ struct DashboardConfig {
     #[structopt(default_value = "admin")]
     grafana_password: String,
 
-    #[structopt(default_value = "http://host.docker.internal:8545")]
-    trin_rpc_address: String,
-
     #[structopt(default_value = "http://host.docker.internal:9090")]
     prometheus_address: String,
 }
@@ -147,22 +144,18 @@ fn create_dashboard(dashboard_config: DashboardConfig) -> Result<(), Box<dyn std
         dashboard_config.grafana_address,
     );
 
-    // Create JSON-HTTP Datasource
-    let json_rpc_uid = grafana.create_datasource(
-        "yesoreyeram-infinity-datasource".to_string(),
-        "json-rpc".to_string(),
-        dashboard_config.trin_rpc_address,
-    )?;
-
     let prometheus_uid = grafana.create_datasource(
         "prometheus".to_string(),
         "prometheus".to_string(),
         dashboard_config.prometheus_address,
     )?;
 
-    let dashboard_url = grafana.create_dashboard(json_rpc_uid, prometheus_uid)?;
+    // Create a dashboard from each pre-defined template
+    for template_path in DASHBOARD_TEMPLATES.iter() {
+        let dashboard_url = grafana.create_dashboard(template_path, &prometheus_uid)?;
+        println!("Dashboard successfully created: {dashboard_url}");
+    }
 
-    println!("Dashboard successfully created: {dashboard_url}");
     Ok(())
 }
 
