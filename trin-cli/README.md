@@ -100,7 +100,7 @@ docker run -p 9090:9090 -v /**absolute/path/to/trin/docs/metrics_config**:/etc/p
 ```
 3. Run Grafana:
 ```sh
-docker run -p 3000:3000 -e "GF_INSTALL_PLUGINS=yesoreyeram-infinity-datasource" --add-host=host.docker.internal:host-gateway grafana/grafana:latest
+docker run -p 3000:3000 --add-host=host.docker.internal:host-gateway grafana/grafana:latest
 ```
 4. Start your Trin process with:
 ```sh
