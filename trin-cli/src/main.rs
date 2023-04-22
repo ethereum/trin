@@ -1,4 +1,5 @@
 pub mod dashboard;
+use clap::{Args, Parser, Subcommand};
 
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
@@ -9,7 +10,6 @@ use std::path::{Path, PathBuf};
 
 use ethereum_types::H256;
 use serde_json::value::RawValue;
-use structopt::StructOpt;
 use thiserror::Error;
 
 use dashboard::grafana::{GrafanaAPI, DASHBOARD_TEMPLATES};
@@ -17,8 +17,8 @@ use ethportal_api::{BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, HistoryConte
 use trin_types::cli::DEFAULT_WEB3_IPC_PATH;
 use trin_utils::bytes::hex_encode;
 
-#[derive(StructOpt)]
-#[structopt(
+#[derive(Parser, Debug, PartialEq)]
+#[command(
     name = "trin-cli",
     version = "0.0.1",
     author = "Ethereum Foundation",
@@ -26,69 +26,71 @@ use trin_utils::bytes::hex_encode;
 )]
 enum Trin {
     JsonRpc(JsonRpc),
+    #[command(subcommand)]
     EncodeKey(EncodeKey),
     CreateDashboard(DashboardConfig),
 }
 
-/// Run JSON-RPC commands against a trin node.
-#[derive(StructOpt, Debug)]
+#[derive(Args, Debug, PartialEq)]
+#[command(name = "json-rpc", about = "Run JSON-RPC commands against a trin node")]
 struct JsonRpc {
     /// IPC path of target JSON-RPC endpoint.
-    #[structopt(default_value(DEFAULT_WEB3_IPC_PATH), long)]
+    #[arg(default_value = DEFAULT_WEB3_IPC_PATH, long)]
     ipc: PathBuf,
 
     /// JSON-RPC method (e.g. discv5_routingTableInfo).
-    #[structopt(required = true)]
+    #[arg(required = true)]
     endpoint: String,
 
     /// Comma-separated list of JSON-RPC parameters.
-    #[structopt(long, use_delimiter = true)]
+    #[arg(long, value_delimiter = ',')]
     params: Option<Vec<String>>,
 }
 
 // TODO: Remove clippy allow once a variant with non-"Block" prefix is added.
 /// Encode a content key.
-#[derive(StructOpt)]
+#[derive(Subcommand, Debug, PartialEq)]
 #[allow(clippy::enum_variant_names)]
 enum EncodeKey {
     /// Encode the content key for a block header.
     BlockHeader {
         /// Hex-encoded block hash (omit '0x' prefix).
-        #[structopt(long)]
+        #[arg(long)]
         block_hash: H256,
     },
     /// Encode the content key for a block body.
     BlockBody {
         /// Hex-encoded block hash (omit '0x' prefix).
-        #[structopt(long)]
+        #[arg(long)]
         block_hash: H256,
     },
     /// Encode the content key for a block's transaction receipts.
     BlockReceipts {
         /// Hex-encoded block hash (omit '0x' prefix).
-        #[structopt(long)]
+        #[arg(long)]
         block_hash: H256,
     },
 }
 
-#[derive(StructOpt)]
+#[derive(Args, Debug, PartialEq)]
+#[command(name = "create-dashboard")]
 #[allow(clippy::enum_variant_names)]
 struct DashboardConfig {
-    #[structopt(default_value = "http://localhost:3000")]
+    #[arg(default_value = "http://localhost:3000")]
     grafana_address: String,
 
-    #[structopt(default_value = "admin")]
+    #[arg(default_value = "admin")]
     grafana_username: String,
 
-    #[structopt(default_value = "admin")]
+    #[arg(default_value = "admin")]
     grafana_password: String,
 
-    #[structopt(default_value = "http://host.docker.internal:9090")]
+    #[arg(default_value = "http://host.docker.internal:9090")]
     prometheus_address: String,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    match Trin::from_args() {
+    match Trin::parse() {
         Trin::JsonRpc(rpc) => json_rpc(rpc),
         Trin::EncodeKey(content_key) => encode_content_key(content_key),
         Trin::CreateDashboard(dashboard_config) => create_dashboard(dashboard_config),
@@ -261,5 +263,100 @@ where
 
         // this should only happen when they immediately send EOF
         Err(JsonRpcError::Empty)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::str::FromStr;
+
+    #[test]
+    fn test_trin_with_json_rpc() {
+        let trin = Trin::parse_from([
+            "test",
+            "json-rpc",
+            "--ipc",
+            "/tmp/trin.ipc",
+            "--params",
+            "p1,p2",
+            "discv5_routingTableInfo",
+        ]);
+        assert_eq!(
+            trin,
+            Trin::JsonRpc(JsonRpc {
+                ipc: PathBuf::from("/tmp/trin.ipc"),
+                endpoint: "discv5_routingTableInfo".to_string(),
+                params: Some(vec!["p1".to_string(), "p2".to_string()]),
+            })
+        );
+    }
+
+    #[test]
+    fn test_trin_with_encode_key() {
+        const BLOCK_HASH: &str =
+            "0x9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
+        let trin = Trin::parse_from([
+            "test",
+            "encode-key",
+            "block-header",
+            "--block-hash",
+            BLOCK_HASH,
+        ]);
+        assert_eq!(
+            trin,
+            Trin::EncodeKey(EncodeKey::BlockHeader {
+                block_hash: H256::from_str(BLOCK_HASH).unwrap()
+            })
+        );
+
+        let trin = Trin::parse_from([
+            "test",
+            "encode-key",
+            "block-body",
+            "--block-hash",
+            BLOCK_HASH,
+        ]);
+        assert_eq!(
+            trin,
+            Trin::EncodeKey(EncodeKey::BlockBody {
+                block_hash: H256::from_str(BLOCK_HASH).unwrap()
+            })
+        );
+
+        let trin = Trin::parse_from([
+            "test",
+            "encode-key",
+            "block-receipts",
+            "--block-hash",
+            BLOCK_HASH,
+        ]);
+        assert_eq!(
+            trin,
+            Trin::EncodeKey(EncodeKey::BlockReceipts {
+                block_hash: H256::from_str(BLOCK_HASH).unwrap()
+            })
+        );
+    }
+
+    #[test]
+    fn test_trin_with_create_dashboard() {
+        let trin = Trin::parse_from([
+            "test",
+            "create-dashboard",
+            "http://localhost:8787",
+            "username",
+            "password",
+            "http://docker:9090",
+        ]);
+        assert_eq!(
+            trin,
+            Trin::CreateDashboard(DashboardConfig {
+                grafana_address: "http://localhost:8787".to_string(),
+                grafana_username: "username".to_string(),
+                grafana_password: "password".to_string(),
+                prometheus_address: "http://docker:9090".to_string(),
+            })
+        );
     }
 }
