@@ -36,9 +36,6 @@ RUN cargo build -p trin -p trin-cli --release
 # final base
 FROM ubuntu:22.04
 
-# copy default merge master acc to expected location
-RUN mkdir -p /trin/trin-validation/src/assets
-COPY --from=builder /trin/trin-validation/src/assets/merge_macc.bin ./trin/trin-validation/src/assets/merge_macc.bin
 # copy build artifacts from build stage
 COPY --from=builder /trin/target/release/trin /usr/bin/
 COPY --from=builder /trin/target/release/trin-cli /usr/bin/
