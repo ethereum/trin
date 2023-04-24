@@ -1,3 +1,4 @@
+use rust_embed::RustEmbed;
 use std::path::PathBuf;
 
 use anyhow::anyhow;
@@ -26,6 +27,11 @@ use trin_utils::bytes::hex_decode;
 /// List of historical epoch accumulator merkle roots preceding current epoch.
 pub type HistoricalEpochRoots = VariableList<tree_hash::Hash256, typenum::U131072>;
 
+#[derive(RustEmbed)]
+#[folder = "src/assets/"]
+#[prefix = "validation_assets/"]
+struct TrinValidationAssets;
+
 /// SSZ Container
 /// Primary datatype used to maintain record of historical and current epoch.
 /// Verifies canonical-ness of a given header.
@@ -37,11 +43,11 @@ pub struct MasterAccumulator {
 impl MasterAccumulator {
     /// Load default trusted master acc
     pub fn try_from_file(master_acc_path: PathBuf) -> anyhow::Result<MasterAccumulator> {
-        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push(master_acc_path);
-        let raw = std::fs::read(&path)
-            .map_err(|_| anyhow!("Unable to find master accumulator at path: {:?}", path))?;
-        MasterAccumulator::from_ssz_bytes(&raw)
+        let raw = TrinValidationAssets::get(&(*master_acc_path).display().to_string()[..])
+            .ok_or_else(|| {
+                anyhow!("Unable to find master accumulator at path: {master_acc_path:?}")
+            })?;
+        MasterAccumulator::from_ssz_bytes(raw.data.as_ref())
             .map_err(|err| anyhow!("Unable to decode master accumulator: {err:?}"))
     }
 
@@ -352,8 +358,8 @@ mod test {
     // Testing utils
     //
     fn get_mainnet_master_acc() -> MasterAccumulator {
-        let master_acc = fs::read("./src/assets/merge_macc.bin").unwrap();
-        let master_acc = MasterAccumulator::from_ssz_bytes(&master_acc).unwrap();
+        let master_acc = TrinValidationAssets::get("validation_assets/merge_macc.bin").unwrap();
+        let master_acc = MasterAccumulator::from_ssz_bytes(master_acc.data.as_ref()).unwrap();
         assert_eq!(
             master_acc.tree_hash_root(),
             H256::from_str(DEFAULT_MASTER_ACC_HASH).unwrap()

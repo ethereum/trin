@@ -7,7 +7,7 @@ use url::Url;
 use crate::bootnodes::Bootnodes;
 use crate::provider::TrustedProviderType;
 
-pub const DEFAULT_MASTER_ACC_PATH: &str = "src/assets/merge_macc.bin";
+pub const DEFAULT_MASTER_ACC_PATH: &str = "validation_assets/merge_macc.bin";
 pub const DEFAULT_WEB3_IPC_PATH: &str = "/tmp/trin-jsonrpc.ipc";
 pub const DEFAULT_WEB3_HTTP_ADDRESS: &str = "http://127.0.0.1:8545/";
 const DEFAULT_DISCOVERY_PORT: &str = "9000";
