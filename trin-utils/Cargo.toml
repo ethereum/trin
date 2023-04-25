@@ -1,6 +1,6 @@
 [package]
 name = "trin-utils"
-version = "0.1.0"
+version = "0.1.1-alpha.1"
 edition = "2021"
 repository = "https://github.com/ethereum/trin/tree/main/trin-utils"
 license = "GPL-3.0"
