@@ -6958,7 +6958,7 @@ dependencies = [
 
 [[package]]
 name = "trin-types"
-version = "0.1.0"
+version = "0.1.1-alpha.1"
 dependencies = [
  "anyhow",
  "base64 0.13.1",
