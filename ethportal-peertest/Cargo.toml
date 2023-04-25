@@ -34,8 +34,8 @@ tree_hash = "0.4.0"
 trin = { path = ".." }
 trin-history = { path = "../trin-history" }
 trin-state = { path = "../trin-state" }
-trin-types = { path = "../trin-types" }
-trin-utils = { path = "../trin-utils" }
+trin-types = "0.1.1-alpha.1"
+trin-utils = "0.1.1-alpha.1"
 ureq = { version = "2.5.0", features = ["json"] }
 
 [target.'cfg(windows)'.dependencies]
