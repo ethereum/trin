@@ -2165,7 +2165,7 @@ dependencies = [
  "serde_json",
  "tracing",
  "trin-types",
- "trin-utils",
+ "trin-utils 0.1.1-alpha.1",
 ]
 
 [[package]]
@@ -2196,7 +2196,7 @@ dependencies = [
  "trin-history",
  "trin-state",
  "trin-types",
- "trin-utils",
+ "trin-utils 0.1.1-alpha.1",
  "uds_windows",
  "ureq",
 ]
@@ -4658,7 +4658,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "trin-types",
- "trin-utils",
+ "trin-utils 0.1.1-alpha.1",
  "trin-validation",
  "uds_windows",
  "url",
@@ -5274,7 +5274,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "trin-types",
- "trin-utils",
+ "trin-utils 0.1.1-alpha.1",
  "url",
 ]
 
@@ -6854,7 +6854,7 @@ dependencies = [
  "trin-history",
  "trin-state",
  "trin-types",
- "trin-utils",
+ "trin-utils 0.1.1-alpha.1",
  "trin-validation",
  "ureq",
  "utp-rs",
@@ -6880,7 +6880,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "trin-types",
- "trin-utils",
+ "trin-utils 0.1.1-alpha.1",
  "trin-validation",
 ]
 
@@ -6899,7 +6899,7 @@ dependencies = [
  "serde_json",
  "thiserror",
  "trin-types",
- "trin-utils",
+ "trin-utils 0.1.1-alpha.1",
  "ureq",
 ]
 
@@ -6926,7 +6926,7 @@ dependencies = [
  "tracing-subscriber",
  "tree_hash",
  "trin-types",
- "trin-utils",
+ "trin-utils 0.1.1-alpha.1",
  "trin-validation",
  "ureq",
  "utp-rs",
@@ -6995,7 +6995,7 @@ dependencies = [
  "tracing-subscriber",
  "tree_hash",
  "tree_hash_derive",
- "trin-utils",
+ "trin-utils 0.1.1-alpha.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "ureq",
  "url",
  "validator",
@@ -7004,6 +7004,21 @@ dependencies = [
 [[package]]
 name = "trin-utils"
 version = "0.1.1-alpha.1"
+dependencies = [
+ "ansi_term",
+ "atty",
+ "hex",
+ "rand 0.8.5",
+ "thiserror",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "trin-utils"
+version = "0.1.1-alpha.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69c4d5e151a7bc9c69bb706c5b46cd39c8c12a8e7be877d38b5c3830ff87e8e1"
 dependencies = [
  "ansi_term",
  "atty",
@@ -7037,7 +7052,7 @@ dependencies = [
  "tree_hash",
  "tree_hash_derive",
  "trin-types",
- "trin-utils",
+ "trin-utils 0.1.1-alpha.1",
 ]
 
 [[package]]
@@ -7229,7 +7244,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "trin-types",
- "trin-utils",
+ "trin-utils 0.1.1-alpha.1",
  "utp-rs",
 ]
 
