@@ -44,13 +44,7 @@ pub async fn test_history_radius(target: &Client) {
 
 pub async fn test_history_ping(target: &Client, peertest: &Peertest) {
     info!("Testing portal_historyPing");
-    let result = target
-        .ping(
-            peertest.bootnode.enr.clone(),
-            Some(U256::from_dec_str("256").unwrap()),
-        )
-        .await
-        .unwrap();
+    let result = target.ping(peertest.bootnode.enr.clone()).await.unwrap();
     assert_eq!(
         result.data_radius,
         U256::from_big_endian(Distance::MAX.as_ssz_bytes().as_slice())

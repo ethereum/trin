@@ -79,8 +79,8 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
     }
 
     /// Send a PING message to the designated node and wait for a PONG response
-    async fn ping(&self, enr: Enr, data_radius: Option<DataRadius>) -> RpcResult<PongInfo> {
-        let endpoint = HistoryEndpoint::Ping(enr, data_radius);
+    async fn ping(&self, enr: Enr) -> RpcResult<PongInfo> {
+        let endpoint = HistoryEndpoint::Ping(enr);
         let result = self.proxy_query_to_history_subnet(endpoint).await?;
         let result: PongInfo = from_value(result)?;
         Ok(result)
