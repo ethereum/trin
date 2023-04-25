@@ -52,4 +52,4 @@ RUN apt-get update && apt-get install libcurl4 -y
 
 ENV RUST_LOG=debug
 
-ENTRYPOINT ["/usr/bin/trin-bridge", "--node-count=1", "--executable-path=/usr/bin/trin", "--epoch-accumulator-path=./portal-accumulators"]
+ENTRYPOINT ["/usr/bin/trin-bridge"]
