@@ -51,11 +51,7 @@ url = "2.3.1"
 utp-rs = "0.1.0-alpha.4"
 
 [target.'cfg(windows)'.dependencies]
-ipconfig = "0.2.2"
 uds_windows = "1.0.1"
-
-[target.'cfg(unix)'.dependencies]
-interfaces = "0.0.7"
 
 [dev-dependencies]
 env_logger = "0.9.0"
