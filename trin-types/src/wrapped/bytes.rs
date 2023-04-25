@@ -14,21 +14,25 @@ impl From<Bytes> for bytes::Bytes {
         v.0
     }
 }
+
 impl ToString for Bytes {
     fn to_string(&self) -> String {
         hex_encode(self.0.as_ref())
     }
 }
+
 impl AsRef<[u8]> for Bytes {
     fn as_ref(&self) -> &[u8] {
         self.0.as_ref()
     }
 }
+
 impl From<U256> for Bytes {
     fn from(v: U256) -> Self {
         Self(v.to_be_bytes().to_vec().into())
     }
 }
+
 impl Decode for Bytes {
     fn is_ssz_fixed_len() -> bool {
         false
@@ -38,6 +42,7 @@ impl Decode for Bytes {
         Ok(Self(bytes::Bytes::copy_from_slice(bytes)))
     }
 }
+
 impl Encode for Bytes {
     fn is_ssz_fixed_len() -> bool {
         false

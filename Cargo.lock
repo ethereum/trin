@@ -6988,6 +6988,7 @@ dependencies = [
  "snap",
  "stremio-serde-hex",
  "structopt",
+ "superstruct",
  "test-log",
  "thiserror",
  "tokio",

@@ -42,14 +42,22 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                     .validate_header_with_proof(header_with_proof)
             }
             HistoryContentKey::BlockBody(key) => {
-                let block_body = BlockBody::from_ssz_bytes(content)
-                    .map_err(|msg| anyhow!("Block Body content has invalid encoding: {:?}", msg))?;
                 let trusted_header: Header = self
                     .header_oracle
                     .write()
                     .await
                     .get_header_by_hash(H256::from(key.block_hash))
                     .await?;
+
+                let block_body = if trusted_header.number > 100000 {
+                    BlockBody::from_ssz_bytes(content).map_err(|msg| {
+                        anyhow!("Block Body content has invalid encoding: {:?}", msg)
+                    })?
+                } else {
+                    BlockBody::from_ssz_bytes(content).map_err(|msg| {
+                        anyhow!("Block Body content has invalid encoding: {:?}", msg)
+                    })?
+                };
                 let actual_uncles_root = block_body.uncles_root()?;
                 if actual_uncles_root != trusted_header.uncles_hash {
                     return Err(anyhow!(

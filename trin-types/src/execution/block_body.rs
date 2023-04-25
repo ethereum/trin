@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::anyhow;
 use bytes::Bytes;
 use eth_trie::{EthTrie, MemoryDB, Trie};
-use ethereum_types::{H160, H256, U256, U64};
+use ethereum_types::{Address, H160, H256, U256, U64};
 use rlp::{Decodable, DecoderError, Encodable, Rlp, RlpStream};
 use rlp_derive::{RlpDecodable, RlpEncodable};
 use serde::{Deserialize, Deserializer};
@@ -11,9 +11,29 @@ use serde_json::{json, Value};
 use sha3::{Digest, Keccak256};
 use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, VariableList};
+use superstruct::superstruct;
 
 use super::{header::Header, receipts::TransactionId};
 use trin_utils::bytes::hex_decode;
+
+#[superstruct(variants(Legacy, Shanghai), variant_attributes(derive(Clone, Debug)))]
+#[derive(Clone, Debug)]
+pub struct NewBlockBody {
+    #[superstruct(getter(copy))]
+    pub txs: Vec<Transaction>,
+    #[superstruct(getter(copy))]
+    pub uncles: EncodableHeaderList,
+    #[superstruct(only(Shanghai))]
+    pub withdrawals: Vec<Withdrawal>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Withdrawal {
+    pub index: u64,
+    pub validator_index: u64,
+    pub address: Address,
+    pub amount: u64,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct BlockBody {
@@ -376,7 +396,7 @@ impl Into<EIP1559Transaction> for EIP1559TransactionHelper {
 
 /// Enum to represent the "to" field in a tx. Which can be an address, or Null if a contract is
 /// created.
-#[derive(Default, Eq, Debug, Clone, PartialEq)]
+#[derive(Default, Eq, Debug, Clone, Copy, PartialEq)]
 pub enum ToAddress {
     #[default]
     Empty,
