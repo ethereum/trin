@@ -29,6 +29,7 @@ use std::{
     collections::btree_map::{BTreeMap, Entry},
     time::Instant,
 };
+use tracing::debug;
 
 #[derive(Debug, Clone)]
 pub struct FindNodeQuery<TNodeId> {
@@ -213,10 +214,9 @@ where
                         return QueryState::WaitingAtCapacity;
                     } else {
                         // The query is still waiting for a result from a peer and the
-                        // `result_counter` did not yet reach `num_results`. Therefore
-                        // the query is not yet done, regardless of already successful
+                        // `result_counter` did not yet reach `num_results`. There may
+                        // be more peers than `num_results` so continue to check
                         // queries to peers farther from the target.
-                        result_counter = None;
                     }
                 }
                 QueryPeerState::Succeeded => {
@@ -226,6 +226,12 @@ where
                         // closest peers, the query is done.
                         if *count >= self.config.num_results {
                             self.progress = QueryProgress::Finished;
+                            let peers = self.closest_peers.len();
+                            debug!(
+                                peers.queried = peers,
+                                result.threshold = self.config.num_results,
+                                "Query finished after meeting threshold"
+                            );
                             return QueryState::Finished;
                         }
                     }
