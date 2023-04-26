@@ -1,6 +1,5 @@
 use crate::content_key::HistoryContentKey;
 use crate::content_value::HistoryContentValue;
-use crate::distance::DataRadius;
 use crate::enr::Enr;
 use crate::node_id::NodeId;
 
@@ -40,8 +39,8 @@ pub enum HistoryEndpoint {
     Gossip(HistoryContentKey, HistoryContentValue),
     /// params: [enr, content_key]
     Offer(Enr, HistoryContentKey, Option<HistoryContentValue>),
-    /// params: [enr, data_radius]
-    Ping(Enr, Option<DataRadius>),
+    /// params: [enr]
+    Ping(Enr),
     /// params: content_key
     RecursiveFindContent(HistoryContentKey),
     /// params: content_key

@@ -152,7 +152,7 @@ impl HistoryRequestHandler {
 
                     let _ = request.resp.send(response);
                 }
-                HistoryEndpoint::Ping(enr, _) => {
+                HistoryEndpoint::Ping(enr) => {
                     let response = match self.network.overlay.send_ping(enr).await {
                         Ok(pong) => Ok(json!(PongInfo {
                             enr_seq: pong.enr_seq as u32,

@@ -37,7 +37,7 @@ pub trait HistoryNetworkApi {
 
     /// Send a PING message to the designated node and wait for a PONG response
     #[method(name = "historyPing")]
-    async fn ping(&self, enr: Enr, data_radius: Option<DataRadius>) -> RpcResult<PongInfo>;
+    async fn ping(&self, enr: Enr) -> RpcResult<PongInfo>;
 
     /// Send a FINDNODES request for nodes that fall within the given set of distances, to the designated
     /// peer and wait for a response
