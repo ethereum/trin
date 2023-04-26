@@ -2175,8 +2175,8 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
- "trin-types",
- "trin-utils 0.1.1-alpha.1",
+ "trin-types 0.1.1-alpha.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "trin-utils 0.1.1-alpha.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2207,7 +2207,7 @@ dependencies = [
  "trin",
  "trin-history",
  "trin-state",
- "trin-types",
+ "trin-types 0.1.1-alpha.1",
  "trin-utils 0.1.1-alpha.1",
  "uds_windows",
  "ureq",
@@ -4669,8 +4669,8 @@ dependencies = [
  "tokio-test",
  "tracing",
  "tracing-subscriber",
- "trin-types",
- "trin-utils 0.1.1-alpha.1",
+ "trin-types 0.1.1-alpha.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "trin-utils 0.1.1-alpha.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "trin-validation",
  "uds_windows",
  "url",
@@ -5301,8 +5301,8 @@ dependencies = [
  "reth-ipc",
  "serde_json",
  "tokio",
- "trin-types",
- "trin-utils 0.1.1-alpha.1",
+ "trin-types 0.1.1-alpha.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "trin-utils 0.1.1-alpha.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "url",
 ]
 
@@ -6882,7 +6882,7 @@ dependencies = [
  "trin-bridge",
  "trin-history",
  "trin-state",
- "trin-types",
+ "trin-types 0.1.1-alpha.1",
  "trin-utils 0.1.1-alpha.1",
  "trin-validation",
  "ureq",
@@ -6908,8 +6908,8 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "trin-types",
- "trin-utils 0.1.1-alpha.1",
+ "trin-types 0.1.1-alpha.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "trin-utils 0.1.1-alpha.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "trin-validation",
 ]
 
@@ -6927,7 +6927,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
- "trin-types",
+ "trin-types 0.1.1-alpha.1",
  "trin-utils 0.1.1-alpha.1",
  "ureq",
 ]
@@ -6954,8 +6954,8 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tree_hash",
- "trin-types",
- "trin-utils 0.1.1-alpha.1",
+ "trin-types 0.1.1-alpha.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "trin-utils 0.1.1-alpha.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "trin-validation",
  "ureq",
  "utp-rs",
@@ -6980,7 +6980,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "trin-types",
+ "trin-types 0.1.1-alpha.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "trin-validation",
  "utp-rs",
 ]
@@ -7022,6 +7022,48 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "tree_hash",
+ "tree_hash_derive",
+ "trin-utils 0.1.1-alpha.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ureq",
+ "url",
+ "validator",
+]
+
+[[package]]
+name = "trin-types"
+version = "0.1.1-alpha.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a926388451bb3243f8d76f4fbf358c664b587007b1a5585b465d13b0633abe20"
+dependencies = [
+ "anyhow",
+ "base64 0.13.1",
+ "bytes 1.4.0",
+ "clap 2.34.0",
+ "discv5",
+ "eth2_ssz",
+ "eth2_ssz_derive",
+ "eth2_ssz_types",
+ "eth_trie",
+ "ethereum-types 0.12.1",
+ "ethnum",
+ "keccak-hash",
+ "lazy_static",
+ "quickcheck",
+ "rand 0.8.5",
+ "rlp 0.5.2",
+ "rlp-derive",
+ "serde",
+ "serde-hex",
+ "serde_json",
+ "serde_yaml",
+ "sha2 0.10.6",
+ "sha3 0.9.1",
+ "snap",
+ "stremio-serde-hex",
+ "structopt",
+ "thiserror",
+ "tokio",
  "tree_hash",
  "tree_hash_derive",
  "trin-utils 0.1.1-alpha.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -7080,8 +7122,8 @@ dependencies = [
  "tokio",
  "tree_hash",
  "tree_hash_derive",
- "trin-types",
- "trin-utils 0.1.1-alpha.1",
+ "trin-types 0.1.1-alpha.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "trin-utils 0.1.1-alpha.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -7272,7 +7314,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "trin-types",
+ "trin-types 0.1.1-alpha.1",
  "trin-utils 0.1.1-alpha.1",
  "utp-rs",
 ]

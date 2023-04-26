@@ -43,8 +43,8 @@ tempfile = "3.3.0"
 thiserror = "1.0.29"
 tokio = { version = "1.14.0", features = ["full"] }
 tracing = "0.1.36"
-trin-types = { path="../trin-types" }
-trin-utils = { path="../trin-utils" }
+trin-types = "0.1.1-alpha.1"
+trin-utils = "0.1.1-alpha.1"
 trin-validation = { path="../trin-validation" }
 validator = { version = "0.13.0", features = ["derive"] }
 url = "2.3.1"
