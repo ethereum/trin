@@ -2,9 +2,10 @@ use crate::cli::BridgeMode;
 use crate::constants::PANDAOPS_URL;
 use crate::utils::get_ranges;
 use anyhow::{anyhow, bail};
-use ethereum_types::H256;
+use ethereum_types::{H256, U256};
 use ethportal_api::jsonrpsee::http_client::HttpClient;
 use ethportal_api::HistoryNetworkApiClient;
+use lazy_static::lazy_static;
 use serde_json::{json, Value};
 use ssz::Decode;
 use std::env;
@@ -15,12 +16,16 @@ use std::time;
 use tokio::task::JoinHandle;
 use tokio::time::{sleep, Duration};
 use tracing::{debug, info, warn};
+use trin_types::consensus::withdrawal::{EncodableWithdrawalList, Withdrawal};
 use trin_types::content_key::{
     BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey, HistoryContentKey,
 };
 use trin_types::content_value::HistoryContentValue;
 use trin_types::execution::accumulator::EpochAccumulator;
-use trin_types::execution::block_body::{BlockBody, EncodableHeaderList};
+use trin_types::execution::block_body::{
+    BlockBody, BlockBodyLegacy, BlockBodyShanghai, EncodableHeaderList, MERGE_TIMESTAMP,
+    SHANGHAI_TIMESTAMP,
+};
 use trin_types::execution::header::{
     AccumulatorProof, BlockHeaderProof, FullHeader, FullHeaderBatch, Header, HeaderWithProof,
     SszNone,
@@ -32,6 +37,15 @@ use trin_utils::bytes::hex_encode;
 use trin_validation::accumulator::MasterAccumulator;
 use trin_validation::constants::{EPOCH_SIZE as EPOCH_SIZE_USIZE, MERGE_BLOCK_NUMBER};
 use trin_validation::oracle::HeaderOracle;
+
+lazy_static! {
+    static ref PANDAOPS_CLIENT_ID: String = env::var("PANDAOPS_CLIENT_ID")
+        .map_err(|_| anyhow!("PANDAOPS_CLIENT_ID env var not set."))
+        .unwrap();
+    static ref PANDAOPS_CLIENT_SECRET: String = env::var("PANDAOPS_CLIENT_SECRET")
+        .map_err(|_| anyhow!("PANDAOPS_CLIENT_SECRET env var not set."))
+        .unwrap();
+}
 
 pub struct Bridge {
     pub mode: BridgeMode,
@@ -45,6 +59,7 @@ const HEADER_SATURATION_DELAY: u64 = 10; // seconds
 const LATEST_BLOCK_POLL_RATE: u64 = 5; // seconds
 const BACKFILL_THREAD_COUNT: usize = 8;
 const EPOCH_SIZE: u64 = EPOCH_SIZE_USIZE as u64;
+
 impl Bridge {
     // Devops nodes don't have websockets available, so we can't actually poll the latest block.
     // Instead we loop on a short interval and fetch the latest blocks not yet served.
@@ -373,32 +388,30 @@ impl Bridge {
         portal_clients: Vec<HttpClient>,
         full_header: FullHeader,
     ) -> anyhow::Result<()> {
-        let uncle_headers = match full_header.uncles.len() {
-            0 => vec![],
-            _ => Bridge::get_trusted_uncles(full_header.uncles).await?,
+        let block_body = if full_header.header.timestamp > SHANGHAI_TIMESTAMP {
+            if !full_header.uncles.is_empty() {
+                bail!("Invalid block: Shanghai uncles");
+            }
+            // todo: assert 0 uncles
+            let withdrawals = Bridge::get_trusted_withdrawals(full_header.header.hash()).await?;
+            BlockBody::Shanghai(BlockBodyShanghai {
+                txs: full_header.txs,
+                uncles: EncodableHeaderList { list: vec![] },
+                withdrawals: EncodableWithdrawalList { list: withdrawals },
+            })
+        } else {
+            let uncle_headers = match full_header.uncles.len() {
+                0 => vec![],
+                _ => Bridge::get_trusted_uncles(full_header.uncles).await?,
+            };
+            BlockBody::Legacy(BlockBodyLegacy {
+                txs: full_header.txs,
+                uncles: EncodableHeaderList {
+                    list: uncle_headers,
+                },
+            })
         };
-        let block_body = BlockBody {
-            txs: full_header.txs,
-            uncles: EncodableHeaderList {
-                list: uncle_headers,
-            },
-        };
-        // Validate uncles root
-        let uncles_root = block_body.uncles_root()?;
-        if uncles_root != full_header.header.uncles_hash {
-            bail!(
-                "Block body uncles root doesn't match header uncles root: {uncles_root:?} - {:?}",
-                full_header.header.uncles_hash
-            );
-        }
-        // Validate txs root
-        let txs_root = block_body.transactions_root()?;
-        if txs_root != full_header.header.transactions_root {
-            bail!(
-                "Block body txs root doesn't match header txs root: {txs_root:?} - {:?}",
-                full_header.header.transactions_root
-            );
-        }
+        block_body.validate_against_header(&full_header.header)?;
 
         let content_key = HistoryContentKey::BlockBody(BlockBodyKey {
             block_hash: full_header.header.hash().to_fixed_bytes(),
@@ -431,6 +444,17 @@ impl Bridge {
             headers.push(header)
         }
         Ok(headers)
+    }
+
+    async fn get_trusted_withdrawals(block_hash: H256) -> anyhow::Result<Vec<Withdrawal>> {
+        let endpoint = format!(
+            "https://beacon.mainnet.ethpandaops.io/eth/v2/beacon/blocks/{}",
+            hex_encode(&block_hash)
+        );
+        let response = pandaops_beacon_request(endpoint).await?;
+        let result: Value = serde_json::from_str(&response)?;
+        let withdrawals = result["data"]["body"]["withdrawals"].clone();
+        Ok(serde_json::from_value(withdrawals)?)
     }
 
     /// Create a proof for the given header / epoch acc
@@ -555,17 +579,28 @@ async fn get_latest_block_number() -> anyhow::Result<u64> {
 /// multiple async requests. Using "ureq" consistently resulted in errors as soon as the number of
 /// concurrent tasks increased significantly.
 async fn pandaops_batch_request(obj: Vec<JsonRequest>) -> anyhow::Result<String> {
-    let client_id = env::var("PANDAOPS_CLIENT_ID")
-        .map_err(|_| anyhow!("PANDAOPS_CLIENT_ID env var not set."))?;
-    let client_secret = env::var("PANDAOPS_CLIENT_SECRET")
-        .map_err(|_| anyhow!("PANDAOPS_CLIENT_SECRET env var not set."))?;
-
     let result = surf::post(PANDAOPS_URL)
         .body_json(&json!(obj))
         .map_err(|e| anyhow!("Unable to construct json post request: {e:?}"))?
         .header("Content-Type", "application/json".to_string())
-        .header("CF-Access-Client-Id", client_id)
-        .header("CF-Access-Client-Secret", client_secret)
+        .header("CF-Access-Client-Id", PANDAOPS_CLIENT_ID.to_string())
+        .header(
+            "CF-Access-Client-Secret",
+            PANDAOPS_CLIENT_SECRET.to_string(),
+        )
+        .recv_string()
+        .await;
+    result.map_err(|_| anyhow!("Unable to request batch from geth"))
+}
+
+async fn pandaops_beacon_request(endpoint: String) -> anyhow::Result<String> {
+    let result = surf::get(endpoint)
+        .header("Content-Type", "application/json".to_string())
+        .header("CF-Access-Client-Id", PANDAOPS_CLIENT_ID.to_string())
+        .header(
+            "CF-Access-Client-Secret",
+            PANDAOPS_CLIENT_SECRET.to_string(),
+        )
         .recv_string()
         .await;
     result.map_err(|_| anyhow!("Unable to request batch from geth"))

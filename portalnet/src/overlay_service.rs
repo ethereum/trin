@@ -1379,7 +1379,7 @@ where
             let mut stream = match utp.connect_with_cid(cid.clone(), UTP_CONN_CFG).await {
                 Ok(stream) => stream,
                 Err(err) => {
-                    warn!(
+                    error!(
                         %err,
                         cid.send,
                         cid.recv,

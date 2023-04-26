@@ -48,32 +48,10 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                     .await
                     .get_header_by_hash(H256::from(key.block_hash))
                     .await?;
-
-                let block_body = if trusted_header.number > 100000 {
-                    BlockBody::from_ssz_bytes(content).map_err(|msg| {
-                        anyhow!("Block Body content has invalid encoding: {:?}", msg)
-                    })?
-                } else {
-                    BlockBody::from_ssz_bytes(content).map_err(|msg| {
-                        anyhow!("Block Body content has invalid encoding: {:?}", msg)
-                    })?
-                };
-                let actual_uncles_root = block_body.uncles_root()?;
-                if actual_uncles_root != trusted_header.uncles_hash {
-                    return Err(anyhow!(
-                        "Content validation failed: Invalid uncles root. Found: {:?} - Expected: {:?}",
-                        actual_uncles_root,
-                        trusted_header.uncles_hash
-                    ));
-                }
-                let actual_txs_root = block_body.transactions_root()?;
-                if actual_txs_root != trusted_header.transactions_root {
-                    return Err(anyhow!(
-                        "Content validation failed: Invalid transactions root. Found: {:?} - Expected: {:?}",
-                        actual_txs_root,
-                        trusted_header.transactions_root
-                    ));
-                }
+                println!("XXX: {:?}", trusted_header);
+                let block_body =
+                    BlockBody::decode_with_timestamp(content, trusted_header.timestamp)?;
+                block_body.validate_against_header(&trusted_header)?;
                 Ok(())
             }
             HistoryContentKey::BlockReceipts(key) => {
@@ -138,6 +116,7 @@ mod tests {
     use ethportal_api::{BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey};
     use trin_types::cli::DEFAULT_MASTER_ACC_PATH;
     use trin_types::execution::accumulator::HeaderRecord;
+    use trin_types::execution::block_body::BlockBodyLegacy;
     use trin_types::provider::TrustedProvider;
     use trin_utils::bytes::hex_decode;
     use trin_validation::accumulator::MasterAccumulator;
@@ -311,14 +290,14 @@ mod tests {
 
         let ssz_block_body: Vec<u8> =
             std::fs::read("../trin-types/src/assets/trin/block_body_14764013.bin").unwrap();
-        let mut valid_block = BlockBody::from_ssz_bytes(&ssz_block_body).unwrap();
-
+        let valid_block = BlockBody::from_ssz_bytes(&ssz_block_body).unwrap();
+        let mut txs = valid_block.txs().clone();
         // construct invalid ssz encoded block body
-        valid_block.txs.truncate(1);
-        let invalid_block = BlockBody {
-            txs: valid_block.txs,
-            uncles: valid_block.uncles,
-        };
+        txs.truncate(1);
+        let invalid_block = BlockBody::Legacy(BlockBodyLegacy {
+            txs,
+            uncles: valid_block.uncles().clone(),
+        });
         let invalid_ssz_block_body = invalid_block.as_ssz_bytes();
         let invalid_content: VariableList<_, typenum::U16384> =
             VariableList::from(invalid_ssz_block_body);

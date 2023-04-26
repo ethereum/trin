@@ -6,7 +6,7 @@ use ssz::{Encode, SszDecoderBuilder, SszEncoder};
 use ssz_derive::{Decode, Encode};
 
 use crate::bytes::ByteList;
-use crate::execution::block_body::Transaction;
+use crate::execution::transaction::Transaction;
 use trin_utils::bytes::{hex_decode, hex_encode};
 
 const LONDON_BLOCK_NUMBER: u64 = 12965000;
@@ -427,7 +427,7 @@ mod tests {
     use ssz::Decode;
     use test_log::test;
 
-    use crate::execution::block_body::{BlockBody, EncodableHeaderList};
+    use crate::execution::block_body::{BlockBody, BlockBodyLegacy, EncodableHeaderList};
 
     #[test]
     fn decode_and_encode_header() {
@@ -563,10 +563,10 @@ mod tests {
                 .unwrap();
         let full_headers: FullHeaderBatch = serde_json::from_str(&expected).unwrap();
         for full_header in full_headers.headers {
-            let block_body = BlockBody {
+            let block_body = BlockBody::Legacy(BlockBodyLegacy {
                 txs: full_header.txs,
                 uncles: EncodableHeaderList { list: vec![] },
-            };
+            });
             // test that txs are properly deserialized if tx root is properly calculated
             assert_eq!(
                 block_body.transactions_root().unwrap(),

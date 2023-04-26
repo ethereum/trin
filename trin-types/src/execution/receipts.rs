@@ -10,7 +10,7 @@ use rlp_derive::{RlpDecodable, RlpEncodable};
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 
-use crate::execution::block_body::JsonBytes;
+use crate::execution::transaction::JsonBytes;
 use trin_utils::bytes::hex_decode;
 
 // 2 ^ 14
