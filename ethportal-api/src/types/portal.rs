@@ -25,13 +25,7 @@ pub struct PongInfo {
     pub data_radius: DataRadius,
 }
 
-/// Response for FindNodes endpoint
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct FindNodesInfo {
-    pub total: u8,
-    pub enrs: Vec<Enr>,
-}
+pub type FindNodesInfo = Vec<Enr>;
 
 /// Response for FindContent endpoint
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
