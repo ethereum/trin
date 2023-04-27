@@ -11,7 +11,7 @@ use std::sync::Arc;
 use discv5::TalkRequest;
 use network::HistoryNetwork;
 use tokio::{
-    sync::{mpsc, RwLock},
+    sync::{mpsc, Mutex, RwLock},
     task::JoinHandle,
     time::{interval, Duration},
 };
@@ -57,17 +57,14 @@ pub async fn initialize_history_network(
         header_oracle,
     )
     .await?;
-    let history_network = Arc::new(history_network);
     let history_handler = HistoryRequestHandler {
-        network: Arc::clone(&history_network),
-        history_rx: history_jsonrpc_rx,
+        network: Arc::new(RwLock::new(history_network.clone())),
+        history_rx: Arc::new(Mutex::new(history_jsonrpc_rx)),
     };
-    let history_network_task = spawn_history_network(
-        Arc::clone(&history_network),
-        portalnet_config,
-        history_event_rx,
-    );
-    spawn_history_heartbeat(Arc::clone(&history_network));
+    let history_network = Arc::new(history_network);
+    let history_network_task =
+        spawn_history_network(history_network.clone(), portalnet_config, history_event_rx);
+    spawn_history_heartbeat(history_network);
     Ok((
         Some(history_handler),
         Some(history_network_task),
