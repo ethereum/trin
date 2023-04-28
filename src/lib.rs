@@ -123,7 +123,7 @@ pub async fn run_trin(
         tokio::spawn(handler.handle_client_queries());
     }
     if let Some(handler) = history_handler {
-        tokio::spawn(handler.handle_client_queries());
+        tokio::spawn(async move { handler.handle_client_queries().await });
     }
 
     // Spawn main portal events handler
