@@ -21,8 +21,8 @@ pub enum ProtocolLabel {
     State,
     History,
     TransactionGossip,
-    HeaderGossip,
     CanonicalIndices,
+    Beacon,
     Utp,
 }
 
@@ -135,8 +135,8 @@ impl From<ProtocolLabel> for MetricLabel {
             ProtocolLabel::State => "state",
             ProtocolLabel::History => "history",
             ProtocolLabel::TransactionGossip => "transaction_gossip",
-            ProtocolLabel::HeaderGossip => "header_gossip",
             ProtocolLabel::CanonicalIndices => "canonical_indices",
+            ProtocolLabel::Beacon => "beacon",
             ProtocolLabel::Utp => "utp",
         }
     }
@@ -172,8 +172,8 @@ impl From<&ProtocolId> for ProtocolLabel {
             ProtocolId::State => Self::State,
             ProtocolId::History => Self::History,
             ProtocolId::TransactionGossip => Self::TransactionGossip,
-            ProtocolId::HeaderGossip => Self::HeaderGossip,
             ProtocolId::CanonicalIndices => Self::CanonicalIndices,
+            ProtocolId::Beacon => Self::Beacon,
             ProtocolId::Utp => Self::Utp,
         }
     }
