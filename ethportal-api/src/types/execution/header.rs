@@ -5,7 +5,7 @@ use serde_json::Value;
 use ssz::{Encode, SszDecoderBuilder, SszEncoder};
 use ssz_derive::{Decode, Encode};
 
-use super::block_body::Transaction;
+use super::transaction::Transaction;
 use crate::types::bytes::ByteList;
 use crate::utils::bytes::{hex_decode, hex_encode};
 
@@ -427,7 +427,7 @@ mod tests {
     use ssz::Decode;
     use test_log::test;
 
-    use crate::types::execution::block_body::{BlockBody, EncodableHeaderList};
+    use crate::types::execution::block_body::{BlockBody, BlockBodyLegacy};
 
     #[test]
     fn decode_and_encode_header() {
@@ -560,10 +560,10 @@ mod tests {
             std::fs::read_to_string("../test_assets/geth_batch/headers.json").unwrap();
         let full_headers: FullHeaderBatch = serde_json::from_str(&expected).unwrap();
         for full_header in full_headers.headers {
-            let block_body = BlockBody {
+            let block_body = BlockBody::Legacy(BlockBodyLegacy {
                 txs: full_header.txs,
-                uncles: EncodableHeaderList { list: vec![] },
-            };
+                uncles: vec![],
+            });
             // test that txs are properly deserialized if tx root is properly calculated
             assert_eq!(
                 block_body.transactions_root().unwrap(),

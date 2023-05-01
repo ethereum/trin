@@ -1,15 +1,20 @@
 use crate::cli::BridgeMode;
 use crate::constants::PANDAOPS_URL;
 use crate::utils::get_ranges;
+use crate::{PANDAOPS_CLIENT_ID, PANDAOPS_CLIENT_SECRET};
 use anyhow::{anyhow, bail};
 use ethereum_types::H256;
 use ethportal_api::jsonrpsee::http_client::HttpClient;
+use ethportal_api::types::consensus::withdrawal::Withdrawal;
 use ethportal_api::types::content_key::{
     BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey, HistoryContentKey,
 };
 use ethportal_api::types::content_value::HistoryContentValue;
 use ethportal_api::types::execution::accumulator::EpochAccumulator;
-use ethportal_api::types::execution::block_body::{BlockBody, EncodableHeaderList};
+use ethportal_api::types::execution::block_body::{
+    BlockBody, BlockBodyLegacy, BlockBodyMerge, BlockBodyShanghai, MERGE_TIMESTAMP,
+    SHANGHAI_TIMESTAMP,
+};
 use ethportal_api::types::execution::header::{
     AccumulatorProof, BlockHeaderProof, FullHeader, FullHeaderBatch, Header, HeaderWithProof,
     SszNone,
@@ -373,32 +378,33 @@ impl Bridge {
         portal_clients: Vec<HttpClient>,
         full_header: FullHeader,
     ) -> anyhow::Result<()> {
-        let uncle_headers = match full_header.uncles.len() {
-            0 => vec![],
-            _ => Bridge::get_trusted_uncles(full_header.uncles).await?,
+        let block_body = if full_header.header.timestamp > SHANGHAI_TIMESTAMP {
+            if !full_header.uncles.is_empty() {
+                bail!("Invalid block: Shanghai block contains uncles");
+            }
+            let withdrawals = Bridge::get_trusted_withdrawals(full_header.header.hash()).await?;
+            BlockBody::Shanghai(BlockBodyShanghai {
+                txs: full_header.txs,
+                withdrawals,
+            })
+        } else if full_header.header.timestamp > MERGE_TIMESTAMP {
+            if !full_header.uncles.is_empty() {
+                bail!("Invalid block: Merge block contains uncles");
+            }
+            BlockBody::Merge(BlockBodyMerge {
+                txs: full_header.txs,
+            })
+        } else {
+            let uncles = match full_header.uncles.len() {
+                0 => vec![],
+                _ => Bridge::get_trusted_uncles(full_header.uncles).await?,
+            };
+            BlockBody::Legacy(BlockBodyLegacy {
+                txs: full_header.txs,
+                uncles,
+            })
         };
-        let block_body = BlockBody {
-            txs: full_header.txs,
-            uncles: EncodableHeaderList {
-                list: uncle_headers,
-            },
-        };
-        // Validate uncles root
-        let uncles_root = block_body.uncles_root()?;
-        if uncles_root != full_header.header.uncles_hash {
-            bail!(
-                "Block body uncles root doesn't match header uncles root: {uncles_root:?} - {:?}",
-                full_header.header.uncles_hash
-            );
-        }
-        // Validate txs root
-        let txs_root = block_body.transactions_root()?;
-        if txs_root != full_header.header.transactions_root {
-            bail!(
-                "Block body txs root doesn't match header txs root: {txs_root:?} - {:?}",
-                full_header.header.transactions_root
-            );
-        }
+        block_body.validate_against_header(&full_header.header)?;
 
         let content_key = HistoryContentKey::BlockBody(BlockBodyKey {
             block_hash: full_header.header.hash().to_fixed_bytes(),
@@ -502,6 +508,17 @@ impl Bridge {
             Ok(batch.headers)
         })
     }
+
+    async fn get_trusted_withdrawals(block_hash: H256) -> anyhow::Result<Vec<Withdrawal>> {
+        let endpoint = format!(
+            "https://beacon.mainnet.ethpandaops.io/eth/v2/beacon/blocks/{}",
+            hex_encode(block_hash)
+        );
+        let response = pandaops_beacon_request(endpoint).await?;
+        let result: Value = serde_json::from_str(&response)?;
+        let withdrawals = result["data"]["body"]["withdrawals"].clone();
+        Ok(serde_json::from_value(withdrawals)?)
+    }
 }
 
 /// Datatype to help track & report stats for bridge
@@ -568,7 +585,20 @@ async fn pandaops_batch_request(obj: Vec<JsonRequest>) -> anyhow::Result<String>
         .header("CF-Access-Client-Secret", client_secret)
         .recv_string()
         .await;
-    result.map_err(|_| anyhow!("Unable to request batch from geth"))
+    result.map_err(|_| anyhow!("Unable to request execution batch from pandaops"))
+}
+
+async fn pandaops_beacon_request(endpoint: String) -> anyhow::Result<String> {
+    let result = surf::get(endpoint)
+        .header("Content-Type", "application/json".to_string())
+        .header("CF-Access-Client-Id", PANDAOPS_CLIENT_ID.to_string())
+        .header(
+            "CF-Access-Client-Secret",
+            PANDAOPS_CLIENT_SECRET.to_string(),
+        )
+        .recv_string()
+        .await;
+    result.map_err(|_| anyhow!("Unable to request consensus block from pandaops"))
 }
 
 fn json_request(method: String, params: Params, id: u32) -> JsonRequest {
