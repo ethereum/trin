@@ -129,6 +129,7 @@ mod tests {
 
     use ethportal_api::types::cli::DEFAULT_MASTER_ACC_PATH;
     use ethportal_api::types::execution::accumulator::HeaderRecord;
+    use ethportal_api::types::execution::block_body::BlockBodyLegacy;
     use ethportal_api::types::provider::TrustedProvider;
     use ethportal_api::utils::bytes::hex_decode;
     use ethportal_api::{BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey};
@@ -303,14 +304,15 @@ mod tests {
 
         let ssz_block_body: Vec<u8> =
             std::fs::read("../test_assets/mainnet/block_body_14764013.bin").unwrap();
-        let mut valid_block = BlockBody::from_ssz_bytes(&ssz_block_body).unwrap();
+        let valid_block = BlockBody::from_ssz_bytes(&ssz_block_body).unwrap();
+        let mut invalid_txs = valid_block.transactions().unwrap();
 
         // construct invalid ssz encoded block body
-        valid_block.txs.truncate(1);
-        let invalid_block = BlockBody {
-            txs: valid_block.txs,
-            uncles: valid_block.uncles,
-        };
+        invalid_txs.truncate(1);
+        let invalid_block = BlockBody::Legacy(BlockBodyLegacy {
+            txs: invalid_txs,
+            uncles: valid_block.uncles().unwrap(),
+        });
         let invalid_ssz_block_body = invalid_block.as_ssz_bytes();
         let invalid_content: VariableList<_, typenum::U16384> =
             VariableList::from(invalid_ssz_block_body);

@@ -6910,6 +6910,7 @@ dependencies = [
  "ethereum-types 0.12.1",
  "ethportal-api",
  "jsonrpsee 0.16.2",
+ "lazy_static",
  "rstest 0.11.0",
  "serde_json",
  "surf",

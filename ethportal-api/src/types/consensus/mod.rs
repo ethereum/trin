@@ -5,3 +5,4 @@ pub mod proof;
 pub mod pubkey;
 pub mod serde;
 pub mod signature;
+pub mod withdrawal;
