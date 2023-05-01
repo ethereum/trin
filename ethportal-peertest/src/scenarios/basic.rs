@@ -58,8 +58,7 @@ pub async fn test_history_find_nodes(target: &Client, peertest: &Peertest) {
         .find_nodes(peertest.bootnode.enr.clone(), vec![256])
         .await
         .unwrap();
-    assert_eq!(result.total, 1);
-    assert!(result.enrs.contains(&peertest.nodes[0].enr));
+    assert!(result.contains(&peertest.nodes[0].enr));
 }
 
 pub async fn test_history_find_nodes_zero_distance(target: &Client, peertest: &Peertest) {
@@ -68,8 +67,7 @@ pub async fn test_history_find_nodes_zero_distance(target: &Client, peertest: &P
         .find_nodes(peertest.bootnode.enr.clone(), vec![0])
         .await
         .unwrap();
-    assert_eq!(result.total, 1);
-    assert!(result.enrs.contains(&peertest.bootnode.enr));
+    assert!(result.contains(&peertest.bootnode.enr));
 }
 
 pub async fn test_history_store(target: &Client) {

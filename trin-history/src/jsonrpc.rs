@@ -217,14 +217,11 @@ async fn find_nodes(
 ) -> Result<Value, String> {
     let overlay = network.read().await.overlay.clone();
     match overlay.send_find_nodes(enr, distances).await {
-        Ok(nodes) => Ok(json!(FindNodesInfo {
-            total: nodes.total,
-            enrs: nodes
-                .enrs
-                .into_iter()
-                .map(|enr| enr.into())
-                .collect::<Vec<Enr>>(),
-        })),
+        Ok(nodes) => Ok(json!(nodes
+            .enrs
+            .into_iter()
+            .map(|enr| enr.into())
+            .collect::<FindNodesInfo>())),
         Err(msg) => Err(format!("FindNodes request timeout: {msg:?}")),
     }
 }
