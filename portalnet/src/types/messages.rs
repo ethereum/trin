@@ -199,8 +199,8 @@ pub enum ProtocolId {
     State,
     History,
     TransactionGossip,
-    HeaderGossip,
     CanonicalIndices,
+    Beacon,
     Utp,
 }
 
@@ -213,8 +213,8 @@ impl FromStr for ProtocolId {
             "0x500A" => Ok(ProtocolId::State),
             "0x500B" => Ok(ProtocolId::History),
             "0x500C" => Ok(ProtocolId::TransactionGossip),
-            "0x500D" => Ok(ProtocolId::HeaderGossip),
-            "0x500E" => Ok(ProtocolId::CanonicalIndices),
+            "0x500D" => Ok(ProtocolId::CanonicalIndices),
+            "0x501A" => Ok(ProtocolId::Beacon),
             "0x757470" => Ok(ProtocolId::Utp),
             _ => Err(ProtocolIdError::Invalid),
         }
@@ -227,8 +227,8 @@ impl fmt::Display for ProtocolId {
             ProtocolId::State => "State",
             ProtocolId::History => "History",
             ProtocolId::TransactionGossip => "Transaction Gossip",
-            ProtocolId::HeaderGossip => "Header Gossip",
             ProtocolId::CanonicalIndices => "Canonical Indices",
+            ProtocolId::Beacon => "Beacon",
             ProtocolId::Utp => "uTP",
         };
         write!(f, "{}", protocol)
@@ -244,8 +244,8 @@ impl TryFrom<ProtocolId> for Vec<u8> {
             ProtocolId::State => hex_decode("0x500A"),
             ProtocolId::History => hex_decode("0x500B"),
             ProtocolId::TransactionGossip => hex_decode("0x500C"),
-            ProtocolId::HeaderGossip => hex_decode("0x500D"),
-            ProtocolId::CanonicalIndices => hex_decode("0x500E"),
+            ProtocolId::CanonicalIndices => hex_decode("0x500D"),
+            ProtocolId::Beacon => hex_decode("0x501A"),
             ProtocolId::Utp => hex_decode("0x757470"),
         };
         bytes.map_err(ProtocolIdError::Decode)
