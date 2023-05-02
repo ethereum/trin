@@ -28,4 +28,5 @@ pub use trin_types::execution::receipts::*;
 pub use jsonrpsee;
 
 pub use trin_types::discv5::*;
+pub use trin_types::enr::*;
 pub use trin_types::node_id::*;
