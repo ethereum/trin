@@ -1,3 +1,4 @@
+use crate::consensus::header_proof::HistoricalSummariesWithProof;
 use crate::constants::CONTENT_ABSENT;
 use crate::execution::accumulator::EpochAccumulator;
 use crate::execution::block_body::BlockBody;
@@ -207,6 +208,63 @@ impl<'de> Deserialize<'de> for HistoryContentValue {
     }
 }
 
+/// A content value for the beacon network.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum BeaconContentValue {
+    HistoricalSummariesWithProof(HistoricalSummariesWithProof),
+}
+
+impl ContentValue for BeaconContentValue {
+    fn encode(&self) -> Vec<u8> {
+        match self {
+            Self::HistoricalSummariesWithProof(value) => value.as_ssz_bytes(),
+        }
+    }
+
+    fn decode(buf: &[u8]) -> Result<Self, ContentValueError> {
+        if let Ok(value) = HistoricalSummariesWithProof::from_ssz_bytes(buf) {
+            return Ok(Self::HistoricalSummariesWithProof(value));
+        }
+        Err(ContentValueError::UnknownContent {
+            bytes: hex_encode(buf),
+            network: "beacon".to_string(),
+        })
+    }
+}
+
+impl Serialize for BeaconContentValue {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Self::HistoricalSummariesWithProof(value) => {
+                serializer.serialize_str(&hex_encode(value.as_ssz_bytes()))
+            }
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for BeaconContentValue {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        let content_bytes = hex_decode(&s).map_err(serde::de::Error::custom)?;
+
+        if let Ok(value) = HistoricalSummariesWithProof::from_ssz_bytes(&content_bytes) {
+            return Ok(Self::HistoricalSummariesWithProof(value));
+        }
+
+        Err(ContentValueError::UnknownContent {
+            bytes: s,
+            network: "beacon".to_string(),
+        })
+        .map_err(serde::de::Error::custom)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -281,4 +339,6 @@ mod test {
             "attempted to decode the '0x' absent content message"
         );
     }
+
+    // TODO: add test vectors for beacon content value
 }

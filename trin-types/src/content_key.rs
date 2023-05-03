@@ -484,6 +484,94 @@ impl OverlayContentKey for StateContentKey {
     }
 }
 
+/// A content key in the beacon chain network.
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[ssz(enum_behaviour = "union")]
+pub enum BeaconContentKey {
+    LightClientBootstrap(LightClientBootstrapKey),
+    LightClientUpdates(LightClientUpdatesKey),
+}
+
+/// Key used to identify a light client bootstrap.
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+pub struct LightClientBootstrapKey {
+    /// Hash of the block.
+    pub block_hash: [u8; 32],
+}
+
+/// Key used to identify a set of light client updates.
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+pub struct LightClientUpdatesKey {
+    pub start_period: u64,
+    pub count: u64,
+}
+
+impl From<&BeaconContentKey> for Vec<u8> {
+    fn from(val: &BeaconContentKey) -> Self {
+        val.as_ssz_bytes()
+    }
+}
+
+impl From<BeaconContentKey> for Vec<u8> {
+    fn from(val: BeaconContentKey) -> Self {
+        val.as_ssz_bytes()
+    }
+}
+
+impl TryFrom<Vec<u8>> for BeaconContentKey {
+    type Error = ContentKeyError;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        BeaconContentKey::from_ssz_bytes(&value).map_err(|e| ContentKeyError::DecodeSsz {
+            decode_error: e,
+            input: hex_encode(value),
+        })
+    }
+}
+
+impl fmt::Display for BeaconContentKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            Self::LightClientBootstrap(key) => format!(
+                "LightClientBootstrap {{ block_hash: {} }}",
+                hex_encode_compact(key.block_hash)
+            ),
+            Self::LightClientUpdates(key) => format!(
+                "LightClientUpdates {{ start_period: {}, count: {} }}",
+                key.start_period, key.count
+            ),
+        };
+
+        write!(f, "{s}")
+    }
+}
+
+impl OverlayContentKey for BeaconContentKey {
+    fn content_id(&self) -> [u8; 32] {
+        let mut sha256 = Sha256::new();
+        sha256.update(self.as_ssz_bytes());
+        sha256.finalize().into()
+    }
+
+    fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes: Vec<u8> = Vec::new();
+
+        match self {
+            BeaconContentKey::LightClientBootstrap(key) => {
+                bytes.push(0x00);
+                bytes.extend_from_slice(&key.block_hash);
+            }
+            BeaconContentKey::LightClientUpdates(key) => {
+                bytes.push(0x01);
+                bytes.extend_from_slice(&key.start_period.to_le_bytes());
+                bytes.extend_from_slice(&key.count.to_le_bytes());
+            }
+        }
+
+        bytes
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
@@ -828,4 +916,6 @@ mod test {
         assert_eq!(hex_decode(expected_content_key).unwrap(), encoded);
         assert_eq!(expected_content_id, key.content_id());
     }
+
+    // TODO: Add beacon content key test vectors
 }

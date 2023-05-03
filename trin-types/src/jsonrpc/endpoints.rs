@@ -1,5 +1,5 @@
-use crate::content_key::HistoryContentKey;
-use crate::content_value::HistoryContentValue;
+use crate::content_key::{BeaconContentKey, HistoryContentKey};
+use crate::content_value::{BeaconContentValue, HistoryContentValue};
 use crate::enr::Enr;
 use crate::node_id::NodeId;
 
@@ -56,6 +56,37 @@ pub enum HistoryEndpoint {
     RecursiveFindNodes(NodeId),
 }
 
+/// Beacon network JSON-RPC endpoints. Start with "portal_beacon" prefix
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum BeaconEndpoint {
+    /// params: None
+    DataRadius,
+    /// params: [enr, content_key]
+    FindContent(Enr, BeaconContentKey),
+    /// params: [enr, distances]
+    FindNodes(Enr, Vec<u16>),
+    /// params: content_key
+    LocalContent(BeaconContentKey),
+    /// params: [content_key, content_value]
+    Gossip(BeaconContentKey, BeaconContentValue),
+    /// params: [enr, content_key]
+    Offer(Enr, BeaconContentKey, Option<BeaconContentValue>),
+    /// params: enr
+    Ping(Enr),
+    /// params: content_key
+    RecursiveFindContent(BeaconContentKey),
+    /// params: content_key
+    TraceRecursiveFindContent(BeaconContentKey),
+    /// params: [content_key, content_value]
+    Store(BeaconContentKey, BeaconContentValue),
+    /// params: None
+    RoutingTableInfo,
+    /// params: [offset, limit]
+    PaginateLocalContentKeys(u64, u64),
+    /// params: [node_id]
+    RecursiveFindNodes(NodeId),
+}
+
 /// Ethereum JSON-RPC endpoints not currently supported by portal network requests, proxied to
 /// trusted provider
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -80,6 +111,7 @@ pub enum TrinEndpoint {
     Discv5Endpoint(Discv5Endpoint),
     HistoryEndpoint(HistoryEndpoint),
     StateEndpoint(StateEndpoint),
+    BeaconEndpoint(BeaconEndpoint),
     TrustedProviderEndpoint(TrustedProviderEndpoint),
     PortalEndpoint(PortalEndpoint),
 }
