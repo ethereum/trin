@@ -1,0 +1,28 @@
+[package]
+name = "trin-beacon"
+version = "0.1.0"
+edition = "2021"
+repository = "https://github.com/ethereum/trin/tree/master/trin-beacon"
+license = "GPL-3.0"
+readme = "README.md"
+keywords = ["ethereum", "portal-network"]
+categories = ["cryptography::cryptocurrencies"]
+description = "Beacon network subprotocol for Trin."
+authors = ["https://github.com/ethereum/trin/graphs/contributors"]
+
+
+[dependencies]
+anyhow = "1.0.68"
+async-trait = "0.1.53"
+discv5 = { version = "0.2.1", features = ["serde"]}
+ethportal-api = {path = "../ethportal-api"}
+eth2_ssz = "0.4.0"
+parking_lot = "0.11.2"
+portalnet = { path = "../portalnet" }
+serde_json = "1.0.89"
+tokio = {version = "1.14.0", features = ["full"]}
+tracing = "0.1.36"
+trin-types = { path = "../trin-types" }
+trin-validation = { path = "../trin-validation" }
+trin-utils = { path = "../trin-utils" }
+utp-rs = "0.1.0-alpha.4"

@@ -3,7 +3,7 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 use validator::{Validate, ValidationError};
 
-use crate::jsonrpc::endpoints::{HistoryEndpoint, StateEndpoint, TrinEndpoint};
+use crate::jsonrpc::endpoints::{BeaconEndpoint, HistoryEndpoint, StateEndpoint, TrinEndpoint};
 use crate::jsonrpc::params::Params;
 
 type Responder<T, E> = mpsc::UnboundedSender<Result<T, E>>;
@@ -48,6 +48,13 @@ pub struct HistoryJsonRpcRequest {
 #[derive(Debug)]
 pub struct StateJsonRpcRequest {
     pub endpoint: StateEndpoint,
+    pub resp: Responder<Value, String>,
+}
+
+/// Beacon chain network JSON-RPC request
+#[derive(Debug)]
+pub struct BeaconJsonRpcRequest {
+    pub endpoint: BeaconEndpoint,
     pub resp: Responder<Value, String>,
 }
 
