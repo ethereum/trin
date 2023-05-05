@@ -1,4 +1,4 @@
-name: Lint Build Test
+name: CI tests
 on:
   push:
     branches: [ "master" ]
@@ -8,7 +8,7 @@ env:
   RUSTFLAGS: '-D warnings'
   RUST_LOG: 'debug'
 jobs:
-  Rustfmt and Release Notes:
+  RustfmtAndReleaseNotes:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
@@ -18,7 +18,7 @@ jobs:
       run: ./newsfragments/validate_files.py
     - name: Run rustfmt
       run: cargo fmt --all -- --check
-  Clippy and Tests:
+  ClippyAndTests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
