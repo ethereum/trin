@@ -1,10 +1,3 @@
-use std::env;
-
-#[cfg(windows)]
-use ansi_term;
-#[cfg(not(windows))]
-use atty;
-
 pub fn init_tracing_logger() {
     tracing_subscriber::fmt()
         .with_ansi(detect_ansi_support())
@@ -28,6 +21,8 @@ fn detect_ansi_support() -> bool {
         }
 
         // Return whether terminal defined in TERM supports ANSI
-        env::var("TERM").map(|term| term != "dumb").unwrap_or(false)
+        std::env::var("TERM")
+            .map(|term| term != "dumb")
+            .unwrap_or(false)
     }
 }
