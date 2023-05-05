@@ -1,0 +1,38 @@
+name: Lint Build Test
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+env:
+  RUSTFLAGS: '-D warnings'
+  RUST_LOG: 'debug'
+jobs:
+  Rustfmt and Release Notes:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Get latest version of stable rust
+      run: rustup update stable
+    - name: Validate release notes entry
+      run: ./newsfragments/validate_files.py
+    - name: Run rustfmt
+      run: cargo fmt --all -- --check
+  Clippy and Tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Get latest version of stable rust
+        run: rustup update stable
+      - name: Prepare for apt upgrades
+        run: sudo apt update
+      - name: Install libssl-dev for openssl-sys
+        run: sudo apt install -y libssl-dev
+      - name: Install libclang for rocksdb
+        run: sudo apt install clang
+      - name: Run Clippy
+        run: cargo clippy --all --all-targets --all-features --no-deps -- --deny warnings
+      - name: Build Trin workspace
+        run: cargo build --workspace
+      - name: Test Trin workspace
+        run: cargo test --workspace -- --nocapture
