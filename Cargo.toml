@@ -39,7 +39,6 @@ trin-beacon = { path = "trin-beacon" }
 trin-bridge = { path = "trin-bridge" }
 trin-history = { path = "trin-history" }
 trin-state = { path = "trin-state" }
-trin-types = { path = "trin-types" }
 trin-utils = { path = "trin-utils" }
 trin-validation = { path = "trin-validation" }
 utp-rs = "0.1.0-alpha.4"
@@ -58,7 +57,6 @@ members = [
     "trin-cli",
     "trin-history",
     "trin-state",
-    "trin-types",
     "trin-utils",
     "utp-testing",
 ]

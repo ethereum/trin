@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use ethportal_api::trin_types::content_key::BeaconContentKey;
 use tokio::sync::RwLock;
-use trin_types::content_key::BeaconContentKey;
 
 use trin_validation::{oracle::HeaderOracle, validator::Validator};
 

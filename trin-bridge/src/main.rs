@@ -1,5 +1,6 @@
 use clap::Parser;
 use ethportal_api::jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
+use ethportal_api::trin_types::provider::{build_pandaops_http_client_from_env, TrustedProvider};
 use tokio::process::Command;
 use tokio::time::{sleep, Duration};
 use tracing::info;
@@ -7,7 +8,6 @@ use trin_bridge::bridge::Bridge;
 use trin_bridge::cli::{BridgeConfig, BridgeMode};
 use trin_bridge::constants::PANDAOPS_URL;
 use trin_bridge::utils::generate_spaced_private_keys;
-use trin_types::provider::{build_pandaops_http_client_from_env, TrustedProvider};
 use trin_utils::log::init_tracing_logger;
 use trin_validation::accumulator::MasterAccumulator;
 use trin_validation::oracle::HeaderOracle;

@@ -18,12 +18,12 @@ use utp_rs::socket::UtpSocket;
 
 use crate::network::BeaconNetwork;
 use crate::{events::BeaconEvents, jsonrpc::BeaconRequestHandler};
+use ethportal_api::trin_types::jsonrpc::request::BeaconJsonRpcRequest;
 use portalnet::{
     discovery::{Discovery, UtpEnr},
     storage::PortalStorageConfig,
     types::messages::PortalnetConfig,
 };
-use trin_types::jsonrpc::request::BeaconJsonRpcRequest;
 use trin_validation::oracle::HeaderOracle;
 
 type BeaconHandler = Option<BeaconRequestHandler>;

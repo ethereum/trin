@@ -9,6 +9,11 @@ use tokio::sync::RwLock;
 use tracing::info;
 use utp_rs::socket::UtpSocket;
 
+use ethportal_api::trin_types::cli::{
+    TrinConfig, Web3TransportType, BEACON_NETWORK, HISTORY_NETWORK, STATE_NETWORK,
+};
+use ethportal_api::trin_types::jsonrpc::request::HistoryJsonRpcRequest;
+use ethportal_api::trin_types::provider::TrustedProvider;
 use portalnet::{
     discovery::{Discovery, Discv5UdpSocket},
     events::PortalnetEvents,
@@ -19,11 +24,6 @@ use portalnet::{
 use trin_beacon::initialize_beacon_network;
 use trin_history::initialize_history_network;
 use trin_state::initialize_state_network;
-use trin_types::cli::{
-    TrinConfig, Web3TransportType, BEACON_NETWORK, HISTORY_NETWORK, STATE_NETWORK,
-};
-use trin_types::jsonrpc::request::HistoryJsonRpcRequest;
-use trin_types::provider::TrustedProvider;
 use trin_utils::version::get_trin_version;
 use trin_validation::{accumulator::MasterAccumulator, oracle::HeaderOracle};
 

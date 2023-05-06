@@ -1,1 +1,3 @@
-pub type QueryTrace = trin_types::query_trace::QueryTrace;
+use crate::trin_types::query_trace;
+
+pub type QueryTrace = query_trace::QueryTrace;

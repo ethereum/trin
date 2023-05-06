@@ -5,12 +5,12 @@ use ssz::Decode;
 use tokio::sync::mpsc;
 
 use crate::accumulator::MasterAccumulator;
-use trin_types::content_key::{BlockHeaderKey, HistoryContentKey};
-use trin_types::execution::header::{Header, HeaderWithProof};
-use trin_types::jsonrpc::endpoints::HistoryEndpoint;
-use trin_types::jsonrpc::params::Params;
-use trin_types::jsonrpc::request::{BeaconJsonRpcRequest, HistoryJsonRpcRequest};
-use trin_types::provider::TrustedProvider;
+use ethportal_api::trin_types::content_key::{BlockHeaderKey, HistoryContentKey};
+use ethportal_api::trin_types::execution::header::{Header, HeaderWithProof};
+use ethportal_api::trin_types::jsonrpc::endpoints::HistoryEndpoint;
+use ethportal_api::trin_types::jsonrpc::params::Params;
+use ethportal_api::trin_types::jsonrpc::request::{BeaconJsonRpcRequest, HistoryJsonRpcRequest};
+use ethportal_api::trin_types::provider::TrustedProvider;
 use trin_utils::bytes::hex_decode;
 
 /// Responsible for dispatching cross-overlay-network requests
@@ -109,7 +109,7 @@ mod test {
     use tree_hash::TreeHash;
 
     use crate::constants::DEFAULT_MASTER_ACC_HASH;
-    use trin_types::cli::TrinConfig;
+    use ethportal_api::trin_types::cli::TrinConfig;
 
     #[tokio::test]
     async fn header_oracle_bootstraps_with_default_merge_master_acc() {

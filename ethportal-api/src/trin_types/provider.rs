@@ -11,8 +11,8 @@ use std::io;
 use serde_json::json;
 use ureq::{self, Request};
 
-use crate::cli::TrinConfig;
-use crate::jsonrpc::params::Params;
+use super::cli::TrinConfig;
+use super::jsonrpc::params::Params;
 
 pub const INFURA_BASE_HTTP_URL: &str = "https://mainnet.infura.io:443/v3/";
 pub const DEFAULT_LOCAL_PROVIDER: &str = "http://127.0.0.1:8545";

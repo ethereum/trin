@@ -1,11 +1,11 @@
-use crate::enr::Enr;
+use super::enr::Enr;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 use stremio_serde_hex::{SerHex, StrictPfx};
 
 use discv5::enr::NodeId as EnrNodeId;
 
-use crate::distance::{Metric, XorMetric};
+use super::distance::{Metric, XorMetric};
 
 type RawNodeId = [u8; 32];
 
@@ -80,8 +80,8 @@ impl Deref for NodeId {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use crate::enr::Enr;
-    use crate::node_id::NodeId;
+    use crate::trin_types::enr::Enr;
+    use crate::trin_types::node_id::NodeId;
     use std::net::Ipv4Addr;
 
     #[test]

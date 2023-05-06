@@ -35,7 +35,6 @@ tree_hash = "0.4.0"
 trin = { path = ".." }
 trin-history = { path = "../trin-history" }
 trin-state = { path = "../trin-state" }
-trin-types = { path = "../trin-types" }
 trin-utils = { path = "../trin-utils" }
 ureq = { version = "2.5.0", features = ["json"] }
 

@@ -6,14 +6,14 @@ use rocksdb::IteratorMode;
 use ssz::Decode;
 use tracing::{info, warn};
 
+use ethportal_api::trin_types::execution::accumulator::EpochAccumulator;
+use ethportal_api::trin_types::execution::block_body::BlockBody;
+use ethportal_api::trin_types::execution::header::HeaderWithProof;
+use ethportal_api::trin_types::execution::receipts::Receipts;
 use ethportal_api::HistoryContentKey;
 use portalnet::storage::{PortalStorage, PortalStorageConfig};
 use portalnet::types::messages::ProtocolId;
 use portalnet::utils::db::{configure_node_data_dir, configure_trin_data_dir};
-use trin_types::execution::accumulator::EpochAccumulator;
-use trin_types::execution::block_body::BlockBody;
-use trin_types::execution::header::HeaderWithProof;
-use trin_types::execution::receipts::Receipts;
 use trin_utils::bytes::hex_encode;
 use trin_utils::log::init_tracing_logger;
 

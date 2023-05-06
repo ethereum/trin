@@ -1,15 +1,15 @@
 use std::net::{IpAddr, Ipv4Addr};
 use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
+use ethportal_api::trin_types::content_key::IdentityContentKey;
+use ethportal_api::trin_types::distance::XorMetric;
+use ethportal_api::trin_types::enr::{Enr, SszEnr};
 use portalnet::{
     discovery::{Discovery, Discv5UdpSocket},
     overlay::{OverlayConfig, OverlayProtocol},
     storage::{ContentStore, DistanceFunction, MemoryContentStore},
     types::messages::{Content, Message, PortalnetConfig, ProtocolId},
 };
-use trin_types::content_key::IdentityContentKey;
-use trin_types::distance::XorMetric;
-use trin_types::enr::{Enr, SszEnr};
 use trin_validation::validator::MockValidator;
 
 use discv5::TalkRequest;

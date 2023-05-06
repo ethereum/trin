@@ -16,11 +16,11 @@ use crate::{
     constants::{EPOCH_SIZE, MERGE_BLOCK_NUMBER},
     merkle::proof::{verify_merkle_proof, MerkleTree},
 };
-use trin_types::content_key::{EpochAccumulatorKey, HistoryContentKey};
-use trin_types::execution::accumulator::EpochAccumulator;
-use trin_types::execution::header::{BlockHeaderProof, Header, HeaderWithProof};
-use trin_types::jsonrpc::endpoints::HistoryEndpoint;
-use trin_types::jsonrpc::request::HistoryJsonRpcRequest;
+use ethportal_api::trin_types::content_key::{EpochAccumulatorKey, HistoryContentKey};
+use ethportal_api::trin_types::execution::accumulator::EpochAccumulator;
+use ethportal_api::trin_types::execution::header::{BlockHeaderProof, Header, HeaderWithProof};
+use ethportal_api::trin_types::jsonrpc::endpoints::HistoryEndpoint;
+use ethportal_api::trin_types::jsonrpc::request::HistoryJsonRpcRequest;
 use trin_utils::bytes::hex_decode;
 
 /// SSZ List[Hash256, max_length = MAX_HISTORICAL_EPOCHS]
@@ -239,7 +239,7 @@ mod test {
     use ssz::Decode;
 
     use crate::constants::DEFAULT_MASTER_ACC_HASH;
-    use trin_types::execution::header::{
+    use ethportal_api::trin_types::execution::header::{
         AccumulatorProof, BlockHeaderProof, HeaderWithProof, SszNone,
     };
     use trin_utils::bytes::hex_encode;

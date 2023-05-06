@@ -23,7 +23,6 @@ portalnet = { path = "../portalnet" }
 rocksdb = "0.18.0"
 tracing = "0.1.36"
 tokio = {version = "1.14.0", features = ["full"]}
-trin-types = { path = "../trin-types" }
 trin-validation = { path = "../trin-validation" }
 utp-rs = "0.1.0-alpha.4"
 

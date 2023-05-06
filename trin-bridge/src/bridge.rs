@@ -4,6 +4,19 @@ use crate::utils::get_ranges;
 use anyhow::{anyhow, bail};
 use ethereum_types::H256;
 use ethportal_api::jsonrpsee::http_client::HttpClient;
+use ethportal_api::trin_types::content_key::{
+    BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey, HistoryContentKey,
+};
+use ethportal_api::trin_types::content_value::HistoryContentValue;
+use ethportal_api::trin_types::execution::accumulator::EpochAccumulator;
+use ethportal_api::trin_types::execution::block_body::{BlockBody, EncodableHeaderList};
+use ethportal_api::trin_types::execution::header::{
+    AccumulatorProof, BlockHeaderProof, FullHeader, FullHeaderBatch, Header, HeaderWithProof,
+    SszNone,
+};
+use ethportal_api::trin_types::execution::receipts::Receipts;
+use ethportal_api::trin_types::jsonrpc::params::Params;
+use ethportal_api::trin_types::jsonrpc::request::JsonRequest;
 use ethportal_api::HistoryNetworkApiClient;
 use serde_json::{json, Value};
 use ssz::Decode;
@@ -15,19 +28,6 @@ use std::time;
 use tokio::task::JoinHandle;
 use tokio::time::{sleep, Duration};
 use tracing::{debug, info, warn};
-use trin_types::content_key::{
-    BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey, HistoryContentKey,
-};
-use trin_types::content_value::HistoryContentValue;
-use trin_types::execution::accumulator::EpochAccumulator;
-use trin_types::execution::block_body::{BlockBody, EncodableHeaderList};
-use trin_types::execution::header::{
-    AccumulatorProof, BlockHeaderProof, FullHeader, FullHeaderBatch, Header, HeaderWithProof,
-    SszNone,
-};
-use trin_types::execution::receipts::Receipts;
-use trin_types::jsonrpc::params::Params;
-use trin_types::jsonrpc::request::JsonRequest;
 use trin_utils::bytes::hex_encode;
 use trin_validation::accumulator::MasterAccumulator;
 use trin_validation::constants::{EPOCH_SIZE as EPOCH_SIZE_USIZE, MERGE_BLOCK_NUMBER};

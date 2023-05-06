@@ -60,8 +60,8 @@ fn random_node_id() -> (NodeId, CombinedKey) {
 mod tests {
     use super::*;
     use ethereum_types::U256;
+    use ethportal_api::trin_types::distance::{Metric, XorMetric};
     use rstest::rstest;
-    use trin_types::distance::{Metric, XorMetric};
     use trin_utils::bytes::hex_decode;
 
     #[rstest]

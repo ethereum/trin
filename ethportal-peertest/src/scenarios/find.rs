@@ -1,16 +1,16 @@
 use crate::{constants::HISTORY_CONTENT_VALUE, Peertest};
+use ethportal_api::trin_types::content_key::HistoryContentKey;
+use ethportal_api::trin_types::content_value::{HistoryContentValue, PossibleHistoryContentValue};
+use ethportal_api::trin_types::node_id::NodeId;
 use ethportal_api::types::portal::TraceContentInfo;
 use ethportal_api::{ContentValue, HistoryNetworkApiClient};
 use tracing::info;
-use trin_types::content_key::HistoryContentKey;
-use trin_types::content_value::{HistoryContentValue, PossibleHistoryContentValue};
-use trin_types::node_id::NodeId;
 use trin_utils::bytes::hex_decode;
 
 pub async fn test_recursive_find_nodes_self(peertest: &Peertest) {
     info!("Testing trace recursive find nodes self");
     let target_enr = peertest.bootnode.enr.clone();
-    let target_node_id = trin_types::node_id::NodeId::from(target_enr.node_id().raw());
+    let target_node_id = NodeId::from(target_enr.node_id().raw());
     let result = peertest
         .bootnode
         .ipc_client
@@ -23,7 +23,7 @@ pub async fn test_recursive_find_nodes_self(peertest: &Peertest) {
 pub async fn test_recursive_find_nodes_peer(peertest: &Peertest) {
     info!("Testing trace recursive find nodes peer");
     let target_enr = peertest.nodes[0].enr.clone();
-    let target_node_id = trin_types::node_id::NodeId::from(target_enr.node_id().raw());
+    let target_node_id = NodeId::from(target_enr.node_id().raw());
     let result = peertest
         .bootnode
         .ipc_client
@@ -39,7 +39,7 @@ pub async fn test_recursive_find_nodes_random(peertest: &Peertest) {
     let random_node_id =
         hex_decode("0xcac75e7e776d84fba55a3104bdccfd716537bca3ad8465113f67f04d62694183").unwrap();
     bytes.copy_from_slice(&random_node_id);
-    let target_node_id = trin_types::node_id::NodeId::from(bytes);
+    let target_node_id = NodeId::from(bytes);
     let result = peertest
         .bootnode
         .ipc_client

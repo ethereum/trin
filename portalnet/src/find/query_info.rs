@@ -6,8 +6,8 @@ use crate::{
     find::query_pool::TargetKey,
     types::messages::{FindContent, FindNodes, Request},
 };
-use trin_types::content_key::OverlayContentKey;
-use trin_types::query_trace::QueryTrace;
+use ethportal_api::trin_types::content_key::OverlayContentKey;
+use ethportal_api::trin_types::query_trace::QueryTrace;
 
 /// Information about a query.
 #[derive(Debug)]

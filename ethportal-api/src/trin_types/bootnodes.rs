@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use anyhow::anyhow;
 
-use crate::enr::Enr;
+use crate::trin_types::enr::Enr;
 
 lazy_static! {
     pub static ref DEFAULT_BOOTNODES: Vec<Enr> = vec![
@@ -69,7 +69,7 @@ impl FromStr for Bootnodes {
 #[allow(clippy::unwrap_used)]
 mod test {
     use super::*;
-    use crate::cli::TrinConfig;
+    use crate::trin_types::cli::TrinConfig;
     use rstest::rstest;
 
     #[test_log::test]

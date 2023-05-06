@@ -7,13 +7,13 @@ use ssz::Decode;
 use tokio::sync::RwLock;
 use tree_hash::TreeHash;
 
-use ethportal_api::HistoryContentKey;
-use trin_types::execution::{
+use ethportal_api::trin_types::execution::{
     accumulator::EpochAccumulator,
     block_body::BlockBody,
     header::{Header, HeaderWithProof},
     receipts::Receipts,
 };
+use ethportal_api::HistoryContentKey;
 use trin_validation::{oracle::HeaderOracle, validator::Validator};
 
 pub struct ChainHistoryValidator {
@@ -127,10 +127,10 @@ mod tests {
     use ssz::Encode;
     use ssz_types::{typenum, VariableList};
 
+    use ethportal_api::trin_types::cli::DEFAULT_MASTER_ACC_PATH;
+    use ethportal_api::trin_types::execution::accumulator::HeaderRecord;
+    use ethportal_api::trin_types::provider::TrustedProvider;
     use ethportal_api::{BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey};
-    use trin_types::cli::DEFAULT_MASTER_ACC_PATH;
-    use trin_types::execution::accumulator::HeaderRecord;
-    use trin_types::provider::TrustedProvider;
     use trin_utils::bytes::hex_decode;
     use trin_validation::accumulator::MasterAccumulator;
 
@@ -282,7 +282,7 @@ mod tests {
         let server = setup_mock_infura_server();
 
         let ssz_block_body: Vec<u8> =
-            std::fs::read("../trin-types/src/assets/trin/block_body_14764013.bin").unwrap();
+            std::fs::read("../test_assets/mainnet/block_body_14764013.bin").unwrap();
         let block_body_bytelist: VariableList<_, typenum::U16384> =
             VariableList::from(ssz_block_body);
 
@@ -302,7 +302,7 @@ mod tests {
         let server = setup_mock_infura_server();
 
         let ssz_block_body: Vec<u8> =
-            std::fs::read("../trin-types/src/assets/trin/block_body_14764013.bin").unwrap();
+            std::fs::read("../test_assets/mainnet/block_body_14764013.bin").unwrap();
         let mut valid_block = BlockBody::from_ssz_bytes(&ssz_block_body).unwrap();
 
         // construct invalid ssz encoded block body
@@ -329,7 +329,7 @@ mod tests {
     async fn validate_receipts() {
         let server = setup_mock_infura_server();
         let ssz_receipts: Vec<u8> =
-            std::fs::read("../trin-types/src/assets/trin/receipts_14764013.bin").unwrap();
+            std::fs::read("../test_assets/mainnet/receipts_14764013.bin").unwrap();
         let content: VariableList<_, typenum::U16384> = VariableList::from(ssz_receipts);
 
         let header_oracle = default_header_oracle(server.url("/14764013"));
@@ -347,7 +347,7 @@ mod tests {
     async fn invalidate_receipts() {
         let server = setup_mock_infura_server();
         let ssz_receipts: Vec<u8> =
-            std::fs::read("../trin-types/src/assets/trin/receipts_14764013.bin").unwrap();
+            std::fs::read("../test_assets/mainnet/receipts_14764013.bin").unwrap();
         let mut valid_receipts = Receipts::from_ssz_bytes(&ssz_receipts).unwrap();
 
         // construct invalid ssz encoded receipts

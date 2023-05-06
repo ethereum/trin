@@ -576,7 +576,7 @@ mod tests {
         let encoded = block_body.as_ssz_bytes();
 
         let expected: Vec<u8> =
-            std::fs::read("../trin-types/src/assets/trin/block_body_14764013.bin").unwrap();
+            std::fs::read("../test_assets/mainnet/block_body_14764013.bin").unwrap();
         assert_eq!(hex_encode(&encoded), hex_encode(expected));
 
         let decoded = BlockBody::from_ssz_bytes(&encoded).unwrap();

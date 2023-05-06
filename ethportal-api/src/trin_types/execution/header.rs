@@ -5,8 +5,8 @@ use serde_json::Value;
 use ssz::{Encode, SszDecoderBuilder, SszEncoder};
 use ssz_derive::{Decode, Encode};
 
-use crate::bytes::ByteList;
-use crate::execution::block_body::Transaction;
+use super::block_body::Transaction;
+use crate::trin_types::bytes::ByteList;
 use trin_utils::bytes::{hex_decode, hex_encode};
 
 const LONDON_BLOCK_NUMBER: u64 = 12965000;
@@ -427,7 +427,7 @@ mod tests {
     use ssz::Decode;
     use test_log::test;
 
-    use crate::execution::block_body::{BlockBody, EncodableHeaderList};
+    use crate::trin_types::execution::block_body::{BlockBody, EncodableHeaderList};
 
     #[test]
     fn decode_and_encode_header() {
@@ -529,8 +529,7 @@ mod tests {
     #[test]
     fn full_header_from_get_block_response() {
         let body =
-            std::fs::read_to_string("../trin-types/src/assets/trin/block_14764013_value.json")
-                .unwrap();
+            std::fs::read_to_string("../test_assets/mainnet/block_14764013_value.json").unwrap();
         let body: Value = serde_json::from_str(&body).unwrap();
         let full_header = FullHeader::try_from(body["result"].clone()).unwrap();
         let header: Header = serde_json::from_value(body["result"].clone()).unwrap();
@@ -543,8 +542,7 @@ mod tests {
     #[test]
     fn post_shanghai_header() {
         let body =
-            std::fs::read_to_string("../trin-types/src/assets/trin/block_17034871_value.json")
-                .unwrap();
+            std::fs::read_to_string("../test_assets/mainnet/block_17034871_value.json").unwrap();
         let response: Value = serde_json::from_str(&body).unwrap();
         let header: Header = serde_json::from_value(response["result"].clone()).unwrap();
         let expected_hash = H256::from_slice(
@@ -559,8 +557,7 @@ mod tests {
         // this block (15573637) was chosen since it contains all tx types (legacy, access list, eip1559)
         // as well as contract creation txs
         let expected: String =
-            std::fs::read_to_string("../trin-types/src/assets/test/geth_batch/headers.json")
-                .unwrap();
+            std::fs::read_to_string("../test_assets/geth_batch/headers.json").unwrap();
         let full_headers: FullHeaderBatch = serde_json::from_str(&expected).unwrap();
         for full_header in full_headers.headers {
             let block_body = BlockBody {

@@ -2167,16 +2167,45 @@ checksum = "0198b9d0078e0f30dedc7acbb21c974e838fc8fae3ee170128658a98cb2c1c04"
 name = "ethportal-api"
 version = "0.2.0"
 dependencies = [
+ "anyhow",
+ "base64 0.13.1",
+ "bytes 1.4.0",
+ "clap 4.2.4",
  "discv5",
  "env_logger 0.9.3",
+ "eth2_ssz",
+ "eth2_ssz_derive",
  "eth2_ssz_types",
+ "eth_trie",
  "ethereum-types 0.12.1",
+ "ethnum",
  "jsonrpsee 0.16.2",
+ "keccak-hash",
+ "lazy_static",
+ "quickcheck",
+ "rand 0.8.5",
+ "rlp 0.5.2",
+ "rlp-derive",
+ "rstest 0.16.0",
  "serde",
+ "serde-hex",
  "serde_json",
+ "serde_yaml",
+ "sha2 0.10.6",
+ "sha3 0.9.1",
+ "snap",
+ "stremio-serde-hex",
+ "test-log",
+ "thiserror",
+ "tokio",
  "tracing",
- "trin-types",
- "trin-utils 0.1.1-alpha.1",
+ "tracing-subscriber",
+ "tree_hash",
+ "tree_hash_derive",
+ "trin-utils",
+ "ureq",
+ "url",
+ "validator",
 ]
 
 [[package]]
@@ -2207,8 +2236,7 @@ dependencies = [
  "trin",
  "trin-history",
  "trin-state",
- "trin-types",
- "trin-utils 0.1.1-alpha.1",
+ "trin-utils",
  "uds_windows",
  "ureq",
 ]
@@ -4669,8 +4697,7 @@ dependencies = [
  "tokio-test",
  "tracing",
  "tracing-subscriber",
- "trin-types",
- "trin-utils 0.1.1-alpha.1",
+ "trin-utils",
  "trin-validation",
  "uds_windows",
  "url",
@@ -5301,8 +5328,7 @@ dependencies = [
  "reth-ipc",
  "serde_json",
  "tokio",
- "trin-types",
- "trin-utils 0.1.1-alpha.1",
+ "trin-utils",
  "url",
 ]
 
@@ -6883,8 +6909,7 @@ dependencies = [
  "trin-bridge",
  "trin-history",
  "trin-state",
- "trin-types",
- "trin-utils 0.1.1-alpha.1",
+ "trin-utils",
  "trin-validation",
  "ureq",
  "utp-rs",
@@ -6904,8 +6929,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
- "trin-types",
- "trin-utils 0.1.1-alpha.1",
+ "trin-utils",
  "trin-validation",
  "utp-rs",
 ]
@@ -6929,8 +6953,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "trin-types",
- "trin-utils 0.1.1-alpha.1",
+ "trin-utils",
  "trin-validation",
 ]
 
@@ -6948,8 +6971,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
- "trin-types",
- "trin-utils 0.1.1-alpha.1",
+ "trin-utils",
  "ureq",
 ]
 
@@ -6975,8 +6997,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tree_hash",
- "trin-types",
- "trin-utils 0.1.1-alpha.1",
+ "trin-utils",
  "trin-validation",
  "ureq",
  "utp-rs",
@@ -7001,73 +7022,13 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "trin-types",
  "trin-validation",
  "utp-rs",
 ]
 
 [[package]]
-name = "trin-types"
-version = "0.1.1-alpha.1"
-dependencies = [
- "anyhow",
- "base64 0.13.1",
- "bytes 1.4.0",
- "clap 4.2.4",
- "discv5",
- "env_logger 0.9.3",
- "eth2_ssz",
- "eth2_ssz_derive",
- "eth2_ssz_types",
- "eth_trie",
- "ethereum-types 0.12.1",
- "ethnum",
- "keccak-hash",
- "lazy_static",
- "quickcheck",
- "rand 0.8.5",
- "rlp 0.5.2",
- "rlp-derive",
- "rstest 0.16.0",
- "serde",
- "serde-hex",
- "serde_json",
- "serde_yaml",
- "sha2 0.10.6",
- "sha3 0.9.1",
- "snap",
- "stremio-serde-hex",
- "test-log",
- "thiserror",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "tree_hash",
- "tree_hash_derive",
- "trin-utils 0.1.1-alpha.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "ureq",
- "url",
- "validator",
-]
-
-[[package]]
 name = "trin-utils"
 version = "0.1.1-alpha.1"
-dependencies = [
- "ansi_term",
- "atty",
- "hex",
- "rand 0.8.5",
- "thiserror",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "trin-utils"
-version = "0.1.1-alpha.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69c4d5e151a7bc9c69bb706c5b46cd39c8c12a8e7be877d38b5c3830ff87e8e1"
 dependencies = [
  "ansi_term",
  "atty",
@@ -7089,6 +7050,7 @@ dependencies = [
  "eth2_ssz_derive",
  "eth2_ssz_types",
  "ethereum-types 0.12.1",
+ "ethportal-api",
  "lazy_static",
  "quickcheck",
  "quickcheck_macros",
@@ -7100,8 +7062,7 @@ dependencies = [
  "tokio",
  "tree_hash",
  "tree_hash_derive",
- "trin-types",
- "trin-utils 0.1.1-alpha.1",
+ "trin-utils",
 ]
 
 [[package]]
@@ -7285,6 +7246,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "discv5",
+ "ethportal-api",
  "jsonrpsee 0.15.1",
  "portalnet",
  "rand 0.8.5",
@@ -7292,8 +7254,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "trin-types",
- "trin-utils 0.1.1-alpha.1",
+ "trin-utils",
  "utp-rs",
 ]
 

@@ -16,10 +16,10 @@ use ssz_types::{typenum, BitList};
 use thiserror::Error;
 use validator::ValidationError;
 
-use trin_types::bytes::ByteList;
-use trin_types::content_key::RawContentKey;
-use trin_types::distance::Distance;
-use trin_types::enr::{Enr, SszEnr};
+use ethportal_api::trin_types::bytes::ByteList;
+use ethportal_api::trin_types::content_key::RawContentKey;
+use ethportal_api::trin_types::distance::Distance;
+use ethportal_api::trin_types::enr::{Enr, SszEnr};
 use trin_utils::bytes::{hex_decode, hex_encode, ByteUtilsError};
 
 /// The maximum size of a Discv5 packet.

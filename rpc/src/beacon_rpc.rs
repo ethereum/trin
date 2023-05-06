@@ -1,5 +1,10 @@
 use crate::jsonrpsee::core::{async_trait, RpcResult};
 use anyhow::anyhow;
+use ethportal_api::types::constants::CONTENT_ABSENT;
+use ethportal_api::types::content_value::PossibleBeaconContentValue;
+use ethportal_api::types::enr::Enr;
+use ethportal_api::types::jsonrpc::endpoints::BeaconEndpoint;
+use ethportal_api::types::jsonrpc::request::BeaconJsonRpcRequest;
 use ethportal_api::types::portal::{
     AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
     TraceContentInfo,
@@ -10,11 +15,6 @@ use ethportal_api::BeaconNetworkApiServer;
 use ethportal_api::{NodeId, RoutingTableInfo};
 use serde_json::{from_value, Value};
 use tokio::sync::mpsc;
-use trin_types::constants::CONTENT_ABSENT;
-use trin_types::content_value::PossibleBeaconContentValue;
-use trin_types::enr::Enr;
-use trin_types::jsonrpc::endpoints::BeaconEndpoint;
-use trin_types::jsonrpc::request::BeaconJsonRpcRequest;
 
 pub struct BeaconNetworkApi {
     network: mpsc::UnboundedSender<BeaconJsonRpcRequest>,

@@ -3,9 +3,13 @@
 //! `ethportal_api` is a collection of Portal Network APIs and types.
 #![warn(clippy::unwrap_used)]
 
+#[macro_use]
+extern crate lazy_static;
+
 mod beacon;
 pub mod discv5;
 mod history;
+pub mod trin_types;
 pub mod types;
 mod web3;
 
