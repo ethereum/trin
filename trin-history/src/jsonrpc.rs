@@ -192,7 +192,7 @@ async fn store(
         .put::<HistoryContentKey, Vec<u8>>(content_key, data)
     {
         Ok(_) => Ok(Value::Bool(true)),
-        Err(msg) => Ok(Value::String(msg.to_string())),
+        Err(err) => Ok(Value::String(err.to_string())),
     };
     response
 }
@@ -205,7 +205,7 @@ async fn add_enr(
     let overlay = network.read().await.overlay.clone();
     match overlay.add_enr(enr) {
         Ok(_) => Ok(json!(true)),
-        Err(_) => Ok(json!(false)),
+        Err(err) => Err(format!("AddEnr failed: {err:?}")),
     }
 }
 
@@ -218,7 +218,7 @@ async fn get_enr(
     let overlay = network.read().await.overlay.clone();
     match overlay.get_enr(node_id) {
         Ok(enr) => Ok(json!(enr)),
-        Err(msg) => Err(format!("GetEnr failed: {msg:?}")),
+        Err(err) => Err(format!("GetEnr failed: {err:?}")),
     }
 }
 
@@ -229,7 +229,8 @@ async fn delete_enr(
 ) -> Result<Value, String> {
     let node_id = discv5::enr::NodeId::from(node_id.0);
     let overlay = network.read().await.overlay.clone();
-    Ok(json!(overlay.delete_enr(node_id)))
+    let is_deleted = overlay.delete_enr(node_id);
+    Ok(json!(is_deleted))
 }
 
 /// Constructs a JSON call for the LookupEnr method.
@@ -241,7 +242,7 @@ async fn lookup_enr(
     let overlay = network.read().await.overlay.clone();
     match overlay.lookup_enr(node_id).await {
         Ok(enr) => Ok(json!(enr)),
-        Err(msg) => Err(format!("LookupEnr failed: {msg:?}")),
+        Err(err) => Err(format!("LookupEnr failed: {err:?}")),
     }
 }
 

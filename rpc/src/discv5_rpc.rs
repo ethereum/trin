@@ -52,8 +52,8 @@ impl Discv5ApiServer for Discv5Api {
         Err(Error::MethodNotFound("delete_enr".to_owned()))
     }
 
-    /// Fetch the ENR representation associated with the given Node ID and optional sequence number.
-    async fn lookup_enr(&self, _node_id: NodeId, _enr_seq: Option<u32>) -> RpcResult<Enr> {
+    /// Fetch the ENR representation associated with the given Node ID.
+    async fn lookup_enr(&self, _node_id: NodeId) -> RpcResult<Enr> {
         Err(Error::MethodNotFound("lookup_enr".to_owned()))
     }
 }

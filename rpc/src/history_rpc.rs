@@ -82,8 +82,8 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
         Ok(result)
     }
 
-    /// Fetch the ENR representation associated with the given Node ID and optional sequence number.
-    async fn lookup_enr(&self, node_id: NodeId, _enr_seq: Option<u32>) -> RpcResult<Enr> {
+    /// Fetch the ENR representation associated with the given Node ID.
+    async fn lookup_enr(&self, node_id: NodeId) -> RpcResult<Enr> {
         let endpoint = HistoryEndpoint::LookupEnr(node_id);
         let result = self.proxy_query_to_history_subnet(endpoint).await?;
         let result: Enr = from_value(result)?;

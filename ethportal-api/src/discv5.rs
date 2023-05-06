@@ -34,7 +34,7 @@ pub trait Discv5Api {
     #[method(name = "deleteEnr")]
     async fn delete_enr(&self, node_id: NodeId) -> RpcResult<bool>;
 
-    /// Fetch the ENR representation associated with the given Node ID and optional sequence number.
+    /// Fetch the ENR representation associated with the given Node ID.
     #[method(name = "lookupEnr")]
-    async fn lookup_enr(&self, node_id: NodeId, enr_seq: Option<u32>) -> RpcResult<Enr>;
+    async fn lookup_enr(&self, node_id: NodeId) -> RpcResult<Enr>;
 }

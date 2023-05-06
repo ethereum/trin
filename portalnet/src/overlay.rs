@@ -299,16 +299,16 @@ where
             | InsertResult::Updated { .. }
             | InsertResult::UpdatedPending => Ok(()),
             InsertResult::Failed(FailureReason::BucketFull) => {
-                Err(OverlayRequestError::Failure("Table full".into()))
+                Err(OverlayRequestError::Failure("The bucket was full.".into()))
             }
-            InsertResult::Failed(FailureReason::BucketFilter) => {
-                Err(OverlayRequestError::Failure("Failed bucket filter".into()))
-            }
-            InsertResult::Failed(FailureReason::TableFilter) => {
-                Err(OverlayRequestError::Failure("Failed table filter".into()))
-            }
+            InsertResult::Failed(FailureReason::BucketFilter) => Err(OverlayRequestError::Failure(
+                "The node didn't pass the bucket filter.".into(),
+            )),
+            InsertResult::Failed(FailureReason::TableFilter) => Err(OverlayRequestError::Failure(
+                "The node didn't pass the table filter.".into(),
+            )),
             InsertResult::Failed(FailureReason::InvalidSelfUpdate) => {
-                Err(OverlayRequestError::Failure("Invalid self update".into()))
+                Err(OverlayRequestError::Failure("Cannot update self.".into()))
             }
             InsertResult::Failed(_) => {
                 Err(OverlayRequestError::Failure("Failed to insert ENR".into()))
@@ -352,9 +352,8 @@ where
             }
         }
 
-        let lookup_node_enr = self
-            .lookup_node(node_id)
-            .await
+        let lookup_node_enr = self.lookup_node(node_id).await;
+        let lookup_node_enr = lookup_node_enr
             .into_iter()
             .max_by(|a, b| a.seq().cmp(&b.seq()));
         if let Some(lookup_node_enr) = lookup_node_enr {

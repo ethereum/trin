@@ -31,9 +31,9 @@ pub trait HistoryNetworkApi {
     #[method(name = "historyDeleteEnr")]
     async fn delete_enr(&self, node_id: NodeId) -> RpcResult<bool>;
 
-    /// Fetch the ENR representation associated with the given Node ID and optional sequence number.
+    /// Fetch the ENR representation associated with the given Node ID.
     #[method(name = "historyLookupEnr")]
-    async fn lookup_enr(&self, node_id: NodeId, enr_seq: Option<u32>) -> RpcResult<Enr>;
+    async fn lookup_enr(&self, node_id: NodeId) -> RpcResult<Enr>;
 
     /// Send a PING message to the designated node and wait for a PONG response
     #[method(name = "historyPing")]
