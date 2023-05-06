@@ -29,7 +29,17 @@ commands:
           key: sccache-cache-stable-{{ arch }}-{{ .Environment.CIRCLE_JOB }}-{{ epoch }}
           paths:
             - "~/.cache/sccache"
-
+  install-depends:
+    steps:
+      - run:
+          name: Prepare for apt upgrades
+          command: sudo apt update
+      - run:
+          name: Install libssl-dev for openssl-sys
+          command: sudo apt install -y libssl-dev
+      - run:
+          name: Install libclang for rocksdb
+          command: sudo apt install clang
 orbs:
   rust: circleci/rust@1.6.0
 executors:
@@ -104,9 +114,9 @@ jobs:
           command: |
             echo "$DOCKERHUB_PASS" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
             docker push $IMAGE_NAME:latest-bridge
-  lint-build-test:
+  lint:
         description: |
-            Check linting with Clippy and rustfmt, build the crate, and run tests.
+            Check linting with Clippy and rustfmt.
         resource_class: xlarge
         executor:
             name: rust/default
@@ -116,18 +126,7 @@ jobs:
             RUST_LOG: 'debug'
         steps:
             - checkout
-            - run:
-                name: Prepare for apt upgrades
-                command: sudo apt update
-            - run:
-                name: Install libssl-dev for openssl-sys
-                command: sudo apt install -y libssl-dev
-            - run:
-                name: Install libclang for rocksdb
-                command: sudo apt install clang
-            - run:
-                name: Install rustfmt
-                command: rustup component add rustfmt
+            - install-depends
             - run:
                 name: Validate release notes entry
                 command: ./newsfragments/validate_files.py
@@ -141,13 +140,43 @@ jobs:
             - run:
                 name: Run Clippy
                 command: cargo clippy --all --all-targets --all-features --no-deps -- --deny warnings
-            - run:
-                name: Build Trin workspace
-                command: cargo build --workspace
-            - run:
-                name: Test Trin workspace
-                command: cargo test --workspace -- --nocapture
             - save-sccache-cache
+  build:
+    description: |
+      Build the crate.
+    resource_class: xlarge
+    executor:
+      name: rust/default
+      tag: 1.66.1
+    environment:
+      RUSTFLAGS: '-D warnings'
+      RUST_LOG: 'debug'
+    steps:
+      - checkout
+      - install-depends
+      - setup-and-restore-sccache-cache
+      - run:
+          name: Build Trin workspace
+          command: cargo build --workspace
+      - save-sccache-cache
+  test:
+    description: |
+      Run tests.
+    resource_class: xlarge
+    executor:
+      name: rust/default
+      tag: 1.66.1
+    environment:
+      RUSTFLAGS: '-D warnings'
+      RUST_LOG: 'debug'
+    steps:
+      - checkout
+      - install-depends
+      - setup-and-restore-sccache-cache
+      - run:
+          name: Test Trin workspace
+          command: cargo test --workspace -- --nocapture
+      - save-sccache-cache
   utp-test:
     description: |
       Run uTP network simulator
@@ -227,5 +256,7 @@ workflows:
           filters:
             branches:
               only: master
-      - lint-build-test
+      - lint
+      - build
+      - test
       - utp-test
