@@ -17,7 +17,7 @@ use prometheus_exporter::{
 };
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
-use rocksdb::{Options, DB};
+use rocksdb::{IteratorMode, Options, DB};
 use rusqlite::params;
 use thiserror::Error;
 use tracing::{debug, error, info};
@@ -593,27 +593,12 @@ impl PortalStorage {
 
     /// Internal method for measuring the total amount of requestable data that the node is storing.
     fn get_total_storage_usage_in_bytes_from_network(&self) -> Result<u64, ContentStoreError> {
-        let conn = self.sql_connection_pool.get()?;
-        let mut query = conn.prepare(TOTAL_DATA_SIZE_QUERY)?;
-
-        let result = query.query_map([], |row| {
-            Ok(DataSize {
-                num_bytes: row.get(0)?,
-            })
-        });
-
-        let sum = match result?.next() {
-            Some(total) => total,
-            None => {
-                let err = "Unable to compute sum over content item sizes".to_string();
-                return Err(ContentStoreError::Database(err));
-            }
-        }?
-        .num_bytes;
-
-        self.metrics.report_content_data_storage_bytes(sum);
-
-        Ok(sum as u64)
+        let mut sum: u64 = 0;
+        for (_, value) in self.db.iterator(IteratorMode::Start) {
+            sum += (*value).len() as u64;
+        }
+        self.metrics.report_content_data_storage_bytes(sum as f64);
+        Ok(sum)
     }
 
     /// Internal method for finding the piece of stored data that has the farthest content id from our
@@ -916,8 +901,6 @@ const XOR_FIND_FARTHEST_QUERY: &str = "SELECT
 
 const CONTENT_KEY_LOOKUP_QUERY: &str =
     "SELECT content_key FROM content_metadata WHERE content_id_long = (?1)";
-
-const TOTAL_DATA_SIZE_QUERY: &str = "SELECT TOTAL(content_size) FROM content_metadata";
 
 const TOTAL_ENTRY_COUNT_QUERY: &str = "SELECT COUNT(content_id_long) FROM content_metadata";
 
