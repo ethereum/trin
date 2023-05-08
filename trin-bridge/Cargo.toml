@@ -13,6 +13,7 @@ authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 [dependencies]
 anyhow = "1.0.68"
+async-trait = "0.1.68"
 clap = { version = "4.2.1", features = ["derive"] }
 discv5 = { version = "0.2.1", features = ["serde"]}
 ethportal-api = { path = "../ethportal-api" }
@@ -20,8 +21,10 @@ ethereum-types = "0.12.1"
 eth2_ssz = "0.4.0"
 eth2_ssz_derive = "0.3.0"
 eth2_ssz_types = "0.2.1"
+futures = "0.3.21"
 jsonrpsee = {version="0.16.2", features = ["async-client", "client", "macros", "server"]}
 lazy_static = "1.4.0"
+serde = { version = "1.0.150", features = ["derive", "rc"] }
 serde_json = "1.0.89"
 surf = "2.3.2"
 tokio = { version = "1.14.0", features = ["full"] }
@@ -31,4 +34,6 @@ trin-utils = { path = "../trin-utils" }
 trin-validation = { path = "../trin-validation" }
 
 [dev-dependencies]
+env_logger = "0.9.0"
 rstest = "0.11.0"
+test-log = { version = "0.2.11", features = ["trace"] }

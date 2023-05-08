@@ -1,6 +1,6 @@
 use crate::cli::BridgeMode;
 use crate::constants::PANDAOPS_URL;
-use crate::utils::get_ranges;
+use crate::full_header::{FullHeader, FullHeaderBatch};
 use crate::{PANDAOPS_CLIENT_ID, PANDAOPS_CLIENT_SECRET};
 use anyhow::{anyhow, bail};
 use ethereum_types::H256;
@@ -16,22 +16,26 @@ use ethportal_api::types::execution::block_body::{
     SHANGHAI_TIMESTAMP,
 };
 use ethportal_api::types::execution::header::{
-    AccumulatorProof, BlockHeaderProof, FullHeader, FullHeaderBatch, Header, HeaderWithProof,
-    SszNone,
+    AccumulatorProof, BlockHeaderProof, Header, HeaderWithProof, SszNone,
 };
 use ethportal_api::types::execution::receipts::Receipts;
 use ethportal_api::types::jsonrpc::params::Params;
 use ethportal_api::types::jsonrpc::request::JsonRequest;
 use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::HistoryNetworkApiClient;
+use futures::stream::StreamExt;
 use serde_json::{json, Value};
 use ssz::Decode;
 use std::env;
 use std::fs;
 use std::ops::Range;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use std::time;
-use tokio::task::JoinHandle;
+use surf::{
+    middleware::{Middleware, Next},
+    Body, Client, Request, Response,
+};
 use tokio::time::{sleep, Duration};
 use tracing::{debug, info, warn};
 use trin_validation::accumulator::MasterAccumulator;
@@ -46,14 +50,15 @@ pub struct Bridge {
 }
 
 // todo: calculate / test optimal saturation delay
+// todo: single block option
 const HEADER_SATURATION_DELAY: u64 = 10; // seconds
 const LATEST_BLOCK_POLL_RATE: u64 = 5; // seconds
-const BACKFILL_THREAD_COUNT: usize = 8;
 const EPOCH_SIZE: u64 = EPOCH_SIZE_USIZE as u64;
+const FUTURES_BUFFER_SIZE: usize = 32;
+
 impl Bridge {
     // Devops nodes don't have websockets available, so we can't actually poll the latest block.
     // Instead we loop on a short interval and fetch the latest blocks not yet served.
-    // We only need one thread for this mode
     pub async fn launch_latest(&self) {
         let mut block_index = get_latest_block_number().await.expect(
             "Error launching bridge in latest mode. Unable to get latest block from provider.",
@@ -68,37 +73,28 @@ impl Bridge {
                 }
             };
             if latest_block > block_index {
-                let block_range_to_gossip = Range {
+                let gossip_range = Range {
                     start: block_index,
                     end: latest_block + 1,
                 };
-                info!("Discovered new blocks to gossip: {block_range_to_gossip:?}");
-                let full_headers = match Bridge::get_headers(&block_range_to_gossip).await {
-                    Ok(val) => val,
-                    Err(msg) => {
-                        warn!("error getting headers, skipping iteration: {msg:?}");
-                        block_index = latest_block + 1;
-                        continue;
+                info!("Discovered new blocks to gossip: {gossip_range:?}");
+                let gossip_stats = Arc::new(Mutex::new(GossipStats::new(gossip_range.clone())));
+                let futures = futures::stream::iter(gossip_range.clone().map(|height| {
+                    let gossip_stats = gossip_stats.clone();
+                    async move {
+                        let _ = Bridge::serve_full_block(
+                            height,
+                            None,
+                            gossip_stats,
+                            self.portal_clients.clone(),
+                        )
+                        .await;
                     }
-                };
-                // epoch index is None here bc it's irrelevant for post-merge headers
-                let mut gossip_batch = GossipBatch::new(block_range_to_gossip, None, full_headers);
-                if let Err(msg) = self.gossip_headers(&mut gossip_batch).await {
-                    warn!("error gossiping headers, skipping iteration: {msg:?}");
-                    block_index = latest_block + 1;
-                    continue;
-                };
-                // Sleep for 5 seconds to allow headers to saturate network,
-                // since they must be available for body / receipt validation.
-                sleep(Duration::from_secs(HEADER_SATURATION_DELAY)).await;
-                if let Err(err) = self.serve_bodies(&mut gossip_batch).await {
-                    warn!("error gossiping bodies: {err:?}");
-                };
-                if let Err(err) = self.serve_receipts(&mut gossip_batch).await {
-                    warn!("error gossiping receipts: {err:?}");
-                };
-                gossip_batch.display_stats();
-                block_index = gossip_batch.range.end;
+                }))
+                .buffer_unordered(FUTURES_BUFFER_SIZE)
+                .collect::<Vec<()>>();
+                futures.await;
+                block_index = gossip_range.end;
             }
         }
     }
@@ -123,118 +119,127 @@ impl Bridge {
         while epoch_index < current_epoch {
             let start = epoch_index * EPOCH_SIZE;
             let end = start + EPOCH_SIZE;
+            let gossip_range = Range { start, end };
+
             // Using epoch_size chunks & epoch boundaries ensures that every
             // "chunk" shares an epoch accumulator avoiding the need to
             // look up the epoch acc on a header by header basis
-            let block_range_to_gossip = Range { start, end };
-            let full_headers = match Bridge::get_headers(&block_range_to_gossip).await {
-                Ok(val) => val,
-                Err(msg) => {
-                    warn!("Error fetching headers in range: {block_range_to_gossip:?} - {msg:?}. Skipping iteration.");
-                    epoch_index += 1;
-                    continue;
+            let epoch_acc = if end <= MERGE_BLOCK_NUMBER {
+                match self.get_epoch_acc(epoch_index).await {
+                    Ok(val) => Some(val),
+                    Err(msg) => {
+                        warn!("Unable to find epoch acc for gossip range: {gossip_range:?}. Skipping iteration: {msg:?}");
+                        continue;
+                    }
                 }
+            } else {
+                None
             };
-            let mut gossip_batch = GossipBatch::new(
-                block_range_to_gossip.clone(),
-                Some(epoch_index),
-                full_headers,
-            );
-            if let Err(msg) = self.gossip_headers(&mut gossip_batch).await {
-                warn!("Error gossiping headers in range: {block_range_to_gossip:?} - {msg:?}. Skipping iteration.");
-                epoch_index += 1;
-                continue;
-            };
-            // Sleep for 5 seconds to allow headers to saturate network,
-            // since they must be available for body / receipt validation
-            sleep(Duration::from_secs(HEADER_SATURATION_DELAY)).await;
-            if let Err(err) = self.serve_bodies(&mut gossip_batch).await {
-                warn!("error gossiping bodies: {err:?}");
-            };
-            if let Err(err) = self.serve_receipts(&mut gossip_batch).await {
-                warn!("error gossiping receipts: {err:?}");
-            };
-            gossip_batch.display_stats();
+            info!("fetching headers in range: {gossip_range:?}");
+            let gossip_stats = Arc::new(Mutex::new(GossipStats::new(gossip_range.clone())));
+            let futures = futures::stream::iter(gossip_range.into_iter().map(|height| {
+                let epoch_acc = epoch_acc.clone();
+                let gossip_stats = gossip_stats.clone();
+                async move {
+                    let _ = Bridge::serve_full_block(
+                        height,
+                        epoch_acc,
+                        gossip_stats,
+                        self.portal_clients.clone(),
+                    )
+                    .await;
+                }
+            }))
+            .buffer_unordered(FUTURES_BUFFER_SIZE)
+            .collect::<Vec<()>>();
+            futures.await;
+            if let Ok(gossip_stats) = gossip_stats.lock() {
+                gossip_stats.display_stats();
+            } else {
+                warn!("Error displaying gossip stats. Unable to acquire lock.");
+            }
             epoch_index += 1;
         }
     }
 
-    async fn gossip_headers(&self, gossip_batch: &mut GossipBatch) -> anyhow::Result<()> {
-        info!("Gossiping headers in range: {:?}", gossip_batch.range);
-        if gossip_batch.range.end <= MERGE_BLOCK_NUMBER {
-            self.gossip_premerge_headers(gossip_batch).await
-        } else {
-            self.gossip_postmerge_headers(gossip_batch).await
+    async fn serve_full_block(
+        height: u64,
+        epoch_acc: Option<Arc<EpochAccumulator>>,
+        gossip_stats: Arc<Mutex<GossipStats>>,
+        portal_clients: Vec<HttpClient>,
+    ) -> anyhow::Result<()> {
+        debug!("Serving block: {height}");
+        let mut full_header = Bridge::get_header(height).await?;
+        if full_header.header.number <= MERGE_BLOCK_NUMBER {
+            full_header.epoch_acc = epoch_acc;
         }
+        Bridge::gossip_header(&full_header, &portal_clients, &gossip_stats).await?;
+        // Sleep for 10 seconds to allow headers to saturate network,
+        // since they must be available for body / receipt validation.
+        sleep(Duration::from_secs(HEADER_SATURATION_DELAY)).await;
+        Bridge::construct_and_gossip_block_body(&full_header, &portal_clients, &gossip_stats)
+            .await?;
+        Bridge::construct_and_gossip_receipt(&full_header, &portal_clients, &gossip_stats).await
     }
 
-    async fn gossip_premerge_headers(&self, gossip_batch: &mut GossipBatch) -> anyhow::Result<()> {
-        let epoch_index = match gossip_batch.epoch_index {
-            Some(val) => val,
-            None => bail!("Error gossiping pre-merge headers. Epoch index is None."),
+    async fn gossip_header(
+        full_header: &FullHeader,
+        portal_clients: &Vec<HttpClient>,
+        gossip_stats: &Arc<Mutex<GossipStats>>,
+    ) -> anyhow::Result<()> {
+        debug!("Serving header: {}", full_header.header.number);
+        if full_header.header.number < MERGE_BLOCK_NUMBER && full_header.epoch_acc.is_none() {
+            bail!("Invalid header, expected to have epoch accumulator");
+        }
+        let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
+            block_hash: full_header.header.hash().to_fixed_bytes(),
+        });
+        // validate pre-merge
+        let content_value = match &full_header.epoch_acc {
+            Some(epoch_acc) => {
+                // Fetch HeaderRecord from EpochAccumulator for validation
+                let header_index = full_header.header.number % EPOCH_SIZE;
+                let header_record = &epoch_acc[header_index as usize];
+
+                // Validate Header
+                if header_record.block_hash != full_header.header.hash() {
+                    bail!(
+                        "Header hash doesn't match record in local accumulator: {:?} - {:?}",
+                        full_header.header.hash(),
+                        header_record.block_hash
+                    );
+                }
+                // Construct HeaderWithProof
+                let header_with_proof =
+                    Bridge::construct_proof(full_header.header.clone(), epoch_acc).await?;
+                HistoryContentValue::BlockHeaderWithProof(header_with_proof)
+            }
+            None => {
+                let header_with_proof = HeaderWithProof {
+                    header: full_header.header.clone(),
+                    proof: BlockHeaderProof::None(SszNone { value: None }),
+                };
+                HistoryContentValue::BlockHeaderWithProof(header_with_proof)
+            }
         };
-        let epoch_acc = self.get_epoch_acc(epoch_index).await?;
-        for full_header in gossip_batch.full_headers.iter() {
-            // Fetch HeaderRecord from EpochAccumulator for validation
-            let header_index = full_header.header.number - epoch_index * EPOCH_SIZE;
-            let header_record = &epoch_acc[header_index as usize];
-
-            // Validate Header
-            if header_record.block_hash != full_header.header.hash() {
-                bail!(
-                    "Header hash doesn't match record in local accumulator: {:?} - {:?}",
-                    full_header.header.hash(),
-                    header_record.block_hash
-                );
-            }
-
-            // Construct HeaderWithProof
-            let (content_key, hwp) =
-                Bridge::construct_proof(&full_header.header, &epoch_acc).await?;
-            let content_value = HistoryContentValue::BlockHeaderWithProof(hwp);
-            debug!(
-                "Gossip: Block #{:?} HeaderWithProof",
-                full_header.header.number
-            );
-
-            // Gossip HeaderWithProof
-            if Bridge::gossip_content(self.portal_clients.clone(), content_key, content_value)
-                .await
-                .is_ok()
-            {
-                gossip_batch.hwp_count += 1;
+        debug!(
+            "Gossip: Block #{:?} HeaderWithProof",
+            full_header.header.number
+        );
+        let result = Bridge::gossip_content(portal_clients, content_key, content_value).await;
+        if result.is_ok() {
+            if let Ok(mut data) = gossip_stats.lock() {
+                data.header_with_proof_count += 1;
+            } else {
+                warn!("Error updating gossip header with proof stats. Unable to acquire lock.");
             }
         }
-        Ok(())
-    }
-
-    async fn gossip_postmerge_headers(&self, gossip_batch: &mut GossipBatch) -> anyhow::Result<()> {
-        for full_header in gossip_batch.full_headers.iter() {
-            let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
-                block_hash: full_header.header.hash().to_fixed_bytes(),
-            });
-            let header_with_proof = HeaderWithProof {
-                header: full_header.header.clone(),
-                proof: BlockHeaderProof::None(SszNone { value: None }),
-            };
-            let content_value = HistoryContentValue::BlockHeaderWithProof(header_with_proof);
-            debug!(
-                "Gossip: Block #{:?} HeaderWithProof",
-                full_header.header.number
-            );
-            if Bridge::gossip_content(self.portal_clients.clone(), content_key, content_value)
-                .await
-                .is_ok()
-            {
-                gossip_batch.hwp_count += 1;
-            }
-        }
-        Ok(())
+        result
     }
 
     /// Attempt to lookup an epoch accumulator from local portal-accumulators path provided via cli
-    /// arg. Fallback to retrieving epoch acc from network if unable to find epoch acc locally.
-    async fn get_epoch_acc(&self, epoch_index: u64) -> anyhow::Result<EpochAccumulator> {
+    /// arg. Gossip the epoch accumulator if found.
+    async fn get_epoch_acc(&self, epoch_index: u64) -> anyhow::Result<Arc<EpochAccumulator>> {
         let epoch_hash = self.header_oracle.master_acc.historical_epochs[epoch_index as usize];
         let epoch_hash_pretty = hex_encode(epoch_hash);
         let epoch_hash_pretty = epoch_hash_pretty.trim_start_matches("0x");
@@ -253,94 +258,21 @@ impl Bridge {
         // Gossip epoch acc to network if found locally
         let content_key = HistoryContentKey::EpochAccumulator(EpochAccumulatorKey { epoch_hash });
         let content_value = HistoryContentValue::EpochAccumulator(local_epoch_acc.clone());
-        let _ =
-            Bridge::gossip_content(self.portal_clients.clone(), content_key, content_value).await;
-        Ok(local_epoch_acc)
-    }
-
-    /// Fetch batch of BlockBodies from provider & gossip them to the network
-    /// Spawns the futures in groups of size - BACKFILL_THREAD_COUNT
-    async fn serve_bodies(&self, gossip_batch: &mut GossipBatch) -> anyhow::Result<()> {
-        info!("Serving bodies in range: {:?}", gossip_batch.range);
-        let mut header_index = 0;
-        while header_index < gossip_batch.full_headers.len() {
-            let num_of_tasks = std::cmp::min(
-                BACKFILL_THREAD_COUNT,
-                gossip_batch.full_headers.len() - header_index,
-            );
-            let futures: Vec<JoinHandle<anyhow::Result<()>>> = (0..num_of_tasks)
-                .map(|t| {
-                    Bridge::spawn_body_task(
-                        self.portal_clients.clone(),
-                        gossip_batch.full_headers[header_index + t].clone(),
-                    )
-                })
-                .collect();
-            for future in futures {
-                if let Ok(Ok(_)) = future.await {
-                    gossip_batch.bodies_count += 1;
-                }
-            }
-            header_index += num_of_tasks;
-        }
-        Ok(())
-    }
-
-    fn spawn_body_task(
-        portal_clients: Vec<HttpClient>,
-        full_header: FullHeader,
-    ) -> JoinHandle<anyhow::Result<()>> {
-        tokio::spawn(async move {
-            Bridge::construct_and_gossip_block_body(portal_clients, full_header).await
-        })
-    }
-
-    /// Fetch batch of Receipts from provider & gossip them to the network
-    /// Spawns the futures in groups of size - BACKFILL_THREAD_COUNT
-    async fn serve_receipts(&self, gossip_batch: &mut GossipBatch) -> anyhow::Result<()> {
-        info!("Serving receipts in range: {:?}", gossip_batch.range);
-        let mut header_index = 0;
-        while header_index < gossip_batch.full_headers.len() {
-            let num_of_tasks = std::cmp::min(
-                BACKFILL_THREAD_COUNT,
-                gossip_batch.full_headers.len() - header_index,
-            );
-            let futures: Vec<JoinHandle<anyhow::Result<()>>> = (0..num_of_tasks)
-                .map(|t| {
-                    Bridge::spawn_receipt_task(
-                        self.portal_clients.clone(),
-                        gossip_batch.full_headers[header_index + t].clone(),
-                    )
-                })
-                .collect();
-            for future in futures {
-                if let Ok(Ok(_)) = future.await {
-                    gossip_batch.receipts_count += 1;
-                }
-            }
-            header_index += num_of_tasks;
-        }
-        Ok(())
-    }
-
-    fn spawn_receipt_task(
-        portal_clients: Vec<HttpClient>,
-        full_header: FullHeader,
-    ) -> JoinHandle<anyhow::Result<()>> {
-        tokio::spawn(async move {
-            Bridge::construct_and_gossip_receipt(portal_clients, full_header).await
-        })
+        let _ = Bridge::gossip_content(&self.portal_clients, content_key, content_value).await;
+        Ok(Arc::new(local_epoch_acc))
     }
 
     async fn construct_and_gossip_receipt(
-        portal_clients: Vec<HttpClient>,
-        full_header: FullHeader,
+        full_header: &FullHeader,
+        portal_clients: &Vec<HttpClient>,
+        gossip_stats: &Arc<Mutex<GossipStats>>,
     ) -> anyhow::Result<()> {
+        debug!("Serving receipt: {:?}", full_header.header.number);
         let receipts = match full_header.txs.len() {
             0 => Receipts {
                 receipt_list: vec![],
             },
-            _ => Bridge::get_trusted_receipts(full_header.tx_hashes.hashes).await?,
+            _ => Bridge::get_trusted_receipts(&full_header.tx_hashes.hashes).await?,
         };
 
         // Validate Receipts
@@ -356,10 +288,18 @@ impl Bridge {
         });
         let content_value = HistoryContentValue::Receipts(receipts);
         debug!("Gossip: Block #{:?} Receipts", full_header.header.number,);
-        Bridge::gossip_content(portal_clients, content_key, content_value).await
+        let result = Bridge::gossip_content(portal_clients, content_key, content_value).await;
+        if result.is_ok() {
+            if let Ok(mut data) = gossip_stats.lock() {
+                data.receipts_count += 1;
+            } else {
+                warn!("Error updating gossip receipts stats. Unable to acquire lock.");
+            }
+        }
+        result
     }
 
-    async fn get_trusted_receipts(tx_hashes: Vec<H256>) -> anyhow::Result<Receipts> {
+    async fn get_trusted_receipts(tx_hashes: &[H256]) -> anyhow::Result<Receipts> {
         let request: Vec<JsonRequest> = tx_hashes
             .iter()
             .enumerate()
@@ -375,34 +315,28 @@ impl Bridge {
     }
 
     async fn construct_and_gossip_block_body(
-        portal_clients: Vec<HttpClient>,
-        full_header: FullHeader,
+        full_header: &FullHeader,
+        portal_clients: &Vec<HttpClient>,
+        gossip_stats: &Arc<Mutex<GossipStats>>,
     ) -> anyhow::Result<()> {
+        let txs = full_header.txs.clone();
         let block_body = if full_header.header.timestamp > SHANGHAI_TIMESTAMP {
             if !full_header.uncles.is_empty() {
                 bail!("Invalid block: Shanghai block contains uncles");
             }
             let withdrawals = Bridge::get_trusted_withdrawals(full_header.header.hash()).await?;
-            BlockBody::Shanghai(BlockBodyShanghai {
-                txs: full_header.txs,
-                withdrawals,
-            })
+            BlockBody::Shanghai(BlockBodyShanghai { txs, withdrawals })
         } else if full_header.header.timestamp > MERGE_TIMESTAMP {
             if !full_header.uncles.is_empty() {
                 bail!("Invalid block: Merge block contains uncles");
             }
-            BlockBody::Merge(BlockBodyMerge {
-                txs: full_header.txs,
-            })
+            BlockBody::Merge(BlockBodyMerge { txs })
         } else {
             let uncles = match full_header.uncles.len() {
                 0 => vec![],
-                _ => Bridge::get_trusted_uncles(full_header.uncles).await?,
+                _ => Bridge::get_trusted_uncles(&full_header.uncles).await?,
             };
-            BlockBody::Legacy(BlockBodyLegacy {
-                txs: full_header.txs,
-                uncles,
-            })
+            BlockBody::Legacy(BlockBodyLegacy { txs, uncles })
         };
         block_body.validate_against_header(&full_header.header)?;
 
@@ -411,10 +345,18 @@ impl Bridge {
         });
         let content_value = HistoryContentValue::BlockBody(block_body);
         debug!("Gossip: Block #{:?} BlockBody", full_header.header.number);
-        Bridge::gossip_content(portal_clients, content_key, content_value).await
+        let result = Bridge::gossip_content(portal_clients, content_key, content_value).await;
+        if result.is_ok() {
+            if let Ok(mut data) = gossip_stats.lock() {
+                data.bodies_count += 1;
+            } else {
+                warn!("Error updating gossip bodies stats. Unable to acquire lock.");
+            }
+        }
+        result
     }
 
-    async fn get_trusted_uncles(hashes: Vec<H256>) -> anyhow::Result<Vec<Header>> {
+    async fn get_trusted_uncles(hashes: &[H256]) -> anyhow::Result<Vec<Header>> {
         let batch_request = hashes
             .iter()
             .enumerate()
@@ -441,24 +383,17 @@ impl Bridge {
 
     /// Create a proof for the given header / epoch acc
     async fn construct_proof(
-        header: &Header,
+        header: Header,
         epoch_acc: &EpochAccumulator,
-    ) -> anyhow::Result<(HistoryContentKey, HeaderWithProof)> {
-        let proof = MasterAccumulator::construct_proof(header, epoch_acc)?;
+    ) -> anyhow::Result<HeaderWithProof> {
+        let proof = MasterAccumulator::construct_proof(&header, epoch_acc)?;
         let proof = BlockHeaderProof::AccumulatorProof(AccumulatorProof { proof });
-        let hwp = HeaderWithProof {
-            header: header.clone(),
-            proof,
-        };
-        let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
-            block_hash: header.hash().to_fixed_bytes(),
-        });
-        Ok((content_key, hwp))
+        Ok(HeaderWithProof { header, proof })
     }
 
     /// Gossip any given content key / value to the history network.
     async fn gossip_content(
-        portal_clients: Vec<HttpClient>,
+        portal_clients: &Vec<HttpClient>,
         content_key: HistoryContentKey,
         content_value: HistoryContentValue,
     ) -> anyhow::Result<()> {
@@ -470,43 +405,21 @@ impl Bridge {
         Ok(())
     }
 
-    /// Fetch batch of headers from Provider
-    async fn get_headers(range: &Range<u64>) -> anyhow::Result<Vec<FullHeader>> {
-        let mut headers: Vec<FullHeader> = vec![];
-        let ranges = get_ranges(range);
-        for range_set in ranges.chunks(BACKFILL_THREAD_COUNT) {
-            let futures: Vec<JoinHandle<anyhow::Result<Vec<FullHeader>>>> = (0..range_set.len())
-                .map(|t| Bridge::get_header_future(range_set[t].clone()))
-                .collect();
-            let mut results = Vec::with_capacity(futures.len());
-            for future in futures {
-                results.push(future.await?);
-            }
-            for result in results {
-                for h in result? {
-                    headers.push(h);
-                }
-            }
+    async fn get_header(height: u64) -> anyhow::Result<FullHeader> {
+        // Geth requires block numbers to be formatted using the following padding.
+        let block_param = format!("0x{height:01X}");
+        let params = Params::Array(vec![json!(block_param), json!(true)]);
+        let batch_request = vec![json_request(
+            "eth_getBlockByNumber".to_string(),
+            params,
+            height as u32,
+        )];
+        let response = pandaops_batch_request(batch_request).await?;
+        let batch: FullHeaderBatch = serde_json::from_str(&response)?;
+        if batch.headers.len() != 1 {
+            bail!("Expected 1 header, got {:#?}", batch.headers.len());
         }
-        Ok(headers)
-    }
-
-    fn get_header_future(block_range: Range<u64>) -> JoinHandle<anyhow::Result<Vec<FullHeader>>> {
-        tokio::spawn(async move {
-            debug!("Fetching headers: {block_range:?}");
-            let batch_request: Vec<JsonRequest> = block_range
-                .into_iter()
-                .map(|i| {
-                    // Geth requires block numbers to be formatted using the following padding.
-                    let block_param = format!("0x{i:01X}");
-                    let params = Params::Array(vec![json!(block_param), json!(true)]);
-                    json_request("eth_getBlockByNumber".to_string(), params, i as u32)
-                })
-                .collect();
-            let response = pandaops_batch_request(batch_request).await?;
-            let batch: FullHeaderBatch = serde_json::from_str(&response)?;
-            Ok(batch.headers)
-        })
+        Ok(batch.headers[0].clone())
     }
 
     async fn get_trusted_withdrawals(block_hash: H256) -> anyhow::Result<Vec<Withdrawal>> {
@@ -521,25 +434,19 @@ impl Bridge {
     }
 }
 
-/// Datatype to help track & report stats for bridge
-/// A single GossipBatch should never cross epoch boundaries.
-struct GossipBatch {
+struct GossipStats {
     range: Range<u64>,
-    epoch_index: Option<u64>,
-    full_headers: Vec<FullHeader>,
-    hwp_count: u64,
+    header_with_proof_count: u64,
     bodies_count: u64,
     receipts_count: u64,
     start_time: time::Instant,
 }
 
-impl GossipBatch {
-    fn new(range: Range<u64>, epoch_index: Option<u64>, full_headers: Vec<FullHeader>) -> Self {
+impl GossipStats {
+    fn new(range: Range<u64>) -> Self {
         Self {
             range,
-            epoch_index,
-            full_headers,
-            hwp_count: 0,
+            header_with_proof_count: 0,
             bodies_count: 0,
             receipts_count: 0,
             start_time: time::Instant::now(),
@@ -548,8 +455,8 @@ impl GossipBatch {
 
     fn display_stats(&self) {
         info!(
-            "Header Group: Range {:?} - HWP: {:?} - Bodies: {:?} - Receipts: {:?}",
-            self.range, self.hwp_count, self.bodies_count, self.receipts_count
+            "Header Group: Range {:?} - Header with proof: {:?} - Bodies: {:?} - Receipts: {:?}",
+            self.range, self.header_with_proof_count, self.bodies_count, self.receipts_count
         );
         info!("Group took: {:?}", time::Instant::now() - self.start_time);
     }
@@ -578,6 +485,7 @@ async fn pandaops_batch_request(obj: Vec<JsonRequest>) -> anyhow::Result<String>
         .map_err(|_| anyhow!("PANDAOPS_CLIENT_SECRET env var not set."))?;
 
     let result = surf::post(PANDAOPS_URL)
+        .middleware(Retry::default())
         .body_json(&json!(obj))
         .map_err(|e| anyhow!("Unable to construct json post request: {e:?}"))?
         .header("Content-Type", "application/json".to_string())
@@ -599,6 +507,54 @@ async fn pandaops_beacon_request(endpoint: String) -> anyhow::Result<String> {
         .recv_string()
         .await;
     result.map_err(|_| anyhow!("Unable to request consensus block from pandaops"))
+}
+
+#[derive(Debug)]
+pub struct Retry {
+    attempts: u8,
+}
+
+impl Retry {
+    pub fn new(attempts: u8) -> Self {
+        Retry { attempts }
+    }
+}
+
+#[async_trait::async_trait]
+impl Middleware for Retry {
+    async fn handle(
+        &self,
+        mut req: Request,
+        client: Client,
+        next: Next<'_>,
+    ) -> Result<Response, surf::Error> {
+        let mut retry_count: u8 = 0;
+        let body = req.take_body().into_bytes().await?;
+        while retry_count < self.attempts {
+            if retry_count > 0 {
+                info!("Retrying request");
+            }
+            let mut new_req = req.clone();
+            new_req.set_body(Body::from_bytes(body.clone()));
+            if let Ok(val) = next.run(new_req, client.clone()).await {
+                if val.status().is_success() {
+                    return Ok(val);
+                }
+            };
+            retry_count += 1;
+            sleep(Duration::from_millis(100)).await;
+        }
+        Err(surf::Error::from_str(
+            500,
+            "Unable to fetch batch after 3 retries",
+        ))
+    }
+}
+
+impl Default for Retry {
+    fn default() -> Self {
+        Self { attempts: 3 }
+    }
 }
 
 fn json_request(method: String, params: Params, id: u32) -> JsonRequest {

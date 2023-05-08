@@ -1,21 +1,5 @@
-use crate::constants::BATCH_SIZE;
 use discv5::enr::{CombinedKey, EnrBuilder, NodeId};
 use ethportal_api::utils::bytes::hex_encode;
-use std::ops::Range;
-
-/// Splits a range into chunks of (at most) BATCH_SIZE,
-/// Used in "latest" mode, since most "chunks" will contain only a couple headers
-pub fn get_ranges(range: &Range<u64>) -> Vec<Range<u64>> {
-    let mut ranges = vec![];
-    let mut index = range.start;
-    while index < range.end {
-        let end = std::cmp::min(index + BATCH_SIZE, range.end);
-        let range = Range { start: index, end };
-        ranges.push(range);
-        index += BATCH_SIZE;
-    }
-    ranges
-}
 
 /// Generates a set of N private keys, with node ids that are equally spaced
 /// around the 256-bit keys space.
