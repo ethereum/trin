@@ -465,25 +465,16 @@ impl PortalStorage {
     /// Returns the size of the content item in bytes.
     /// Raises an error if there is a problem accessing the database.
     fn get_content_size(&self, id: &[u8; 32]) -> Result<u64, ContentStoreError> {
-        let conn = self.sql_connection_pool.get()?;
-        let mut query = conn.prepare(CONTENT_SIZE_LOOKUP_QUERY)?;
-        let id_vec = id.to_vec();
-        let result = query.query_map([id_vec], |row| {
-            Ok(DataSize {
-                num_bytes: row.get(0)?,
-            })
-        });
-        let byte_size = match result?.next() {
-            Some(data_size) => data_size,
+        match self.db.get(id)? {
+            Some(vec) => Ok(vec.len() as u64),
             None => {
                 // Build error message with hex encoded content id
-                let err = format!("Unable to determine size of item {}", hex_encode(id));
-                return Err(ContentStoreError::Database(err));
+                Err(ContentStoreError::Database(format!(
+                    "Unable to determine size of item {}",
+                    hex_encode(id)
+                )))
             }
-        }?
-        .num_bytes;
-
-        Ok(byte_size as u64)
+        }
     }
 
     /// Public method for evicting a certain content id. Will revert RocksDB deletion if meta_db
@@ -899,16 +890,9 @@ const CONTENT_KEY_LOOKUP_QUERY: &str =
 const PAGINATE_QUERY: &str =
     "SELECT content_key FROM content_metadata ORDER BY content_key LIMIT :limit OFFSET :offset";
 
-const CONTENT_SIZE_LOOKUP_QUERY: &str =
-    "SELECT content_size FROM content_metadata WHERE content_id_long = (?1)";
-
 // SQLite Result Containers
 struct ContentId {
     id_long: Vec<u8>,
-}
-
-struct DataSize {
-    num_bytes: f64,
 }
 
 #[cfg(test)]
