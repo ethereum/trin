@@ -347,17 +347,11 @@ impl PortalStorage {
     }
 
     fn total_entry_count(&self) -> Result<u64, ContentStoreError> {
-        let conn = self.sql_connection_pool.get()?;
-        let mut query = conn.prepare(TOTAL_ENTRY_COUNT_QUERY)?;
-        let result: Result<Vec<EntryCount>, rusqlite::Error> = query
-            .query_map([], |row| Ok(EntryCount(row.get(0)?)))?
-            .collect();
-        match result?.first() {
-            Some(val) => Ok(val.0),
-            None => Err(ContentStoreError::InvalidData {
-                message: "Invalid total entries count returned from sql query.".to_string(),
-            }),
+        let mut count: u64 = 0;
+        for _ in self.db.iterator(IteratorMode::Start) {
+            count += 1;
         }
+        Ok(count)
     }
 
     /// Returns the distance to `key` from the local `NodeId` according to the distance function.
@@ -902,8 +896,6 @@ const XOR_FIND_FARTHEST_QUERY: &str = "SELECT
 const CONTENT_KEY_LOOKUP_QUERY: &str =
     "SELECT content_key FROM content_metadata WHERE content_id_long = (?1)";
 
-const TOTAL_ENTRY_COUNT_QUERY: &str = "SELECT COUNT(content_id_long) FROM content_metadata";
-
 const PAGINATE_QUERY: &str =
     "SELECT content_key FROM content_metadata ORDER BY content_key LIMIT :limit OFFSET :offset";
 
@@ -918,8 +910,6 @@ struct ContentId {
 struct DataSize {
     num_bytes: f64,
 }
-
-struct EntryCount(u64);
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
