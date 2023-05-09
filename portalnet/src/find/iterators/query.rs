@@ -58,7 +58,7 @@ impl Default for QueryConfig {
         Self {
             parallelism: 3,
             num_results: 20,
-            peer_timeout: Duration::from_secs(10),
+            peer_timeout: Duration::from_secs(2),
         }
     }
 }

@@ -69,7 +69,7 @@ impl Default for OverlayConfig {
             bucket_filter: None,
             ping_queue_interval: None,
             query_parallelism: 3, // (recommended α from kademlia paper)
-            query_peer_timeout: Duration::from_secs(10),
+            query_peer_timeout: Duration::from_secs(2),
             query_timeout: Duration::from_secs(60),
             query_num_results: MAX_NODES_PER_BUCKET,
             findnodes_query_distances_per_peer: 3,
