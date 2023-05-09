@@ -6879,6 +6879,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "trin-beacon",
  "trin-bridge",
  "trin-history",
  "trin-state",
@@ -6886,6 +6887,26 @@ dependencies = [
  "trin-utils 0.1.1-alpha.1",
  "trin-validation",
  "ureq",
+ "utp-rs",
+]
+
+[[package]]
+name = "trin-beacon"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "discv5",
+ "eth2_ssz",
+ "ethportal-api",
+ "parking_lot 0.11.2",
+ "portalnet",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "trin-types",
+ "trin-utils 0.1.1-alpha.1",
+ "trin-validation",
  "utp-rs",
 ]
 

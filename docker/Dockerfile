@@ -21,6 +21,7 @@ COPY ./portalnet ./portalnet
 COPY ./light-client ./light-client
 COPY ./rpc ./rpc
 COPY ./src ./src 
+COPY ./trin-beacon ./trin-beacon
 COPY ./trin-bridge ./trin-bridge
 COPY ./trin-cli ./trin-cli
 COPY ./trin-history ./trin-history 

@@ -9,7 +9,7 @@ use trin_types::content_key::{BlockHeaderKey, HistoryContentKey};
 use trin_types::execution::header::{Header, HeaderWithProof};
 use trin_types::jsonrpc::endpoints::HistoryEndpoint;
 use trin_types::jsonrpc::params::Params;
-use trin_types::jsonrpc::request::HistoryJsonRpcRequest;
+use trin_types::jsonrpc::request::{BeaconJsonRpcRequest, HistoryJsonRpcRequest};
 use trin_types::provider::TrustedProvider;
 use trin_utils::bytes::hex_decode;
 
@@ -23,6 +23,7 @@ pub struct HeaderOracle {
     // individual channel. But my sense is that this will be more useful in terms of
     // determining which subnetworks are actually available.
     pub history_jsonrpc_tx: Option<mpsc::UnboundedSender<HistoryJsonRpcRequest>>,
+    pub beacon_jsonrpc_tx: Option<mpsc::UnboundedSender<BeaconJsonRpcRequest>>,
     pub master_acc: MasterAccumulator,
 }
 
@@ -31,6 +32,7 @@ impl HeaderOracle {
         Self {
             trusted_provider,
             history_jsonrpc_tx: None,
+            beacon_jsonrpc_tx: None,
             master_acc,
         }
     }

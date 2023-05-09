@@ -53,6 +53,7 @@ members = [
     "ethportal-peertest",
     "light-client",
     "rpc",
+    "trin-beacon",
     "trin-cli",
     "trin-history",
     "trin-state",

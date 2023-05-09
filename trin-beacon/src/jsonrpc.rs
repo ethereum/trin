@@ -1,0 +1,295 @@
+use std::sync::Arc;
+
+use discv5::enr::NodeId;
+use ethportal_api::types::portal::{AcceptInfo, FindNodesInfo, PongInfo, TraceContentInfo};
+use portalnet::storage::ContentStore;
+use serde_json::{json, Value};
+use ssz::Encode;
+use tokio::sync::{mpsc, Mutex, RwLock};
+use tracing::error;
+use trin_types::content_key::{BeaconContentKey, OverlayContentKey};
+use trin_types::content_value::{BeaconContentValue, ContentValue};
+use trin_types::jsonrpc::endpoints::BeaconEndpoint;
+use trin_types::jsonrpc::request::BeaconJsonRpcRequest;
+use trin_types::{
+    constants::CONTENT_ABSENT,
+    content_key::RawContentKey,
+    distance::{Metric, XorMetric},
+    enr::Enr,
+    query_trace::QueryTrace,
+};
+use trin_utils::bytes::hex_encode;
+
+use crate::network::BeaconNetwork;
+
+/// Handles Beacon network JSON-RPC requests
+pub struct BeaconRequestHandler {
+    pub network: Arc<RwLock<BeaconNetwork>>,
+    pub rpc_rx: Arc<Mutex<mpsc::UnboundedReceiver<BeaconJsonRpcRequest>>>,
+}
+
+impl BeaconRequestHandler {
+    /// Complete RPC requests for the Beacon network.
+    pub async fn handle_client_queries(&self) {
+        let rpc_rx = self.rpc_rx.clone();
+        while let Some(request) = rpc_rx.lock().await.recv().await {
+            let network = self.network.clone();
+            tokio::spawn(async move { complete_request(network, request).await });
+        }
+    }
+}
+
+/// Generates a response for a given request and sends it to the receiver.
+async fn complete_request(network: Arc<RwLock<BeaconNetwork>>, request: BeaconJsonRpcRequest) {
+    let response: Result<Value, String> = match request.endpoint {
+        BeaconEndpoint::LocalContent(content_key) => local_content(network, content_key).await,
+        BeaconEndpoint::PaginateLocalContentKeys(offset, limit) => {
+            paginate_local_content_keys(network, offset, limit).await
+        }
+        BeaconEndpoint::Store(content_key, content_value) => {
+            store(network, content_key, content_value).await
+        }
+        BeaconEndpoint::RecursiveFindContent(content_key) => {
+            recursive_find_content(network, content_key, false).await
+        }
+        BeaconEndpoint::TraceRecursiveFindContent(content_key) => {
+            recursive_find_content(network, content_key, true).await
+        }
+        BeaconEndpoint::DataRadius => {
+            let radius = network.read().await.overlay.data_radius();
+            Ok(json!(*radius))
+        }
+        BeaconEndpoint::FindContent(enr, content_key) => {
+            find_content(network, enr, content_key).await
+        }
+        BeaconEndpoint::FindNodes(enr, distances) => find_nodes(network, enr, distances).await,
+        BeaconEndpoint::Gossip(content_key, content_value) => {
+            gossip(network, content_key, content_value).await
+        }
+        BeaconEndpoint::Offer(enr, content_key, content_value) => {
+            offer(network, enr, content_key, content_value).await
+        }
+        BeaconEndpoint::Ping(enr) => ping(network, enr).await,
+        BeaconEndpoint::RoutingTableInfo => Ok(json!("Not implemented")), // TODO: implement this when refactor trin_history utils
+        BeaconEndpoint::RecursiveFindNodes(node_id) => recursive_find_nodes(network, node_id).await,
+    };
+    let _ = request.resp.send(response);
+}
+
+/// Constructs a JSON call for the RecursiveFindContent method.
+async fn recursive_find_content(
+    network: Arc<RwLock<BeaconNetwork>>,
+    content_key: BeaconContentKey,
+    is_trace: bool,
+) -> Result<Value, String> {
+    // Check whether we have the data locally.
+    let overlay = network.read().await.overlay.clone();
+    let local_content: Option<Vec<u8>> = match overlay.store.read().get(&content_key) {
+        Ok(Some(data)) => Some(data),
+        Ok(None) => None,
+        Err(err) => {
+            error!(
+                error = %err,
+                content.key = %content_key,
+                "Error checking data store for content",
+            );
+            None
+        }
+    };
+    let (possible_content_bytes, trace) = match local_content {
+        Some(val) => {
+            let local_enr = overlay.local_enr();
+            let mut trace = QueryTrace::new(
+                &overlay.local_enr(),
+                NodeId::new(&content_key.content_id()).into(),
+            );
+            trace.node_responded_with_content(&local_enr);
+            (Some(val), if is_trace { Some(trace) } else { None })
+        }
+        None => overlay.lookup_content(content_key.clone(), is_trace).await,
+    };
+
+    // Format as string.
+    let content_response_string = match possible_content_bytes {
+        Some(bytes) => Value::String(hex_encode(bytes)),
+        None => Value::String(CONTENT_ABSENT.to_string()), // "0x"
+    };
+
+    // If tracing is not required, return content.
+    if !is_trace {
+        return Ok(content_response_string);
+    }
+    if let Some(trace) = trace {
+        Ok(json!(TraceContentInfo {
+            content: serde_json::from_value(content_response_string).map_err(|e| e.to_string())?,
+            trace,
+        }))
+    } else {
+        Err("Content query trace requested but none provided.".to_owned())
+    }
+}
+
+/// Constructs a JSON call for the LocalContent method.
+async fn local_content(
+    network: Arc<RwLock<BeaconNetwork>>,
+    content_key: BeaconContentKey,
+) -> Result<Value, String> {
+    let store = network.read().await.overlay.store.clone();
+    let response = match store.read().get(&content_key)
+        {
+            Ok(val) => match val {
+                Some(val) => {
+                    Ok(Value::String(hex_encode(val)))
+                }
+                None => {
+                    Ok(Value::String(CONTENT_ABSENT.to_string()))
+                }
+            },
+            Err(err) => Err(format!(
+                "Database error while looking for content key in local storage: {content_key:?}, with error: {err}",
+            )),
+        };
+    response
+}
+
+/// Constructs a JSON call for the PaginateLocalContentKeys method.
+async fn paginate_local_content_keys(
+    network: Arc<RwLock<BeaconNetwork>>,
+    offset: u64,
+    limit: u64,
+) -> Result<Value, String> {
+    let store = network.read().await.overlay.store.clone();
+    let response = match store.read().paginate(&offset, &limit)
+        {
+            Ok(val) => Ok(json!(val)),
+            Err(err) => Err(format!(
+                "Database error while paginating local content keys with offset: {offset:?}, limit: {limit:?}. Error message: {err}"
+            )),
+        };
+    response
+}
+
+/// Constructs a JSON call for the Store method.
+async fn store(
+    network: Arc<RwLock<BeaconNetwork>>,
+    content_key: BeaconContentKey,
+    content_value: BeaconContentValue,
+) -> Result<Value, String> {
+    let data = content_value.encode();
+    let store = network.read().await.overlay.store.clone();
+    let response = match store
+        .write()
+        .put::<BeaconContentKey, Vec<u8>>(content_key, data)
+    {
+        Ok(_) => Ok(Value::Bool(true)),
+        Err(msg) => Ok(Value::String(msg.to_string())),
+    };
+    response
+}
+
+/// Constructs a JSON call for the FindContent method.
+async fn find_content(
+    network: Arc<RwLock<BeaconNetwork>>,
+    enr: discv5::enr::Enr<discv5::enr::CombinedKey>,
+    content_key: BeaconContentKey,
+) -> Result<Value, String> {
+    let overlay = network.read().await.overlay.clone();
+    match overlay.send_find_content(enr, content_key.into()).await {
+        Ok(content) => match content.try_into() {
+            Ok(val) => Ok(val),
+            Err(_) => Err("Content response decoding error".to_string()),
+        },
+        Err(msg) => Err(format!("FindContent request timeout: {msg:?}")),
+    }
+}
+
+/// Constructs a JSON call for the FindNodes method.
+async fn find_nodes(
+    network: Arc<RwLock<BeaconNetwork>>,
+    enr: discv5::enr::Enr<discv5::enr::CombinedKey>,
+    distances: Vec<u16>,
+) -> Result<Value, String> {
+    let overlay = network.read().await.overlay.clone();
+    match overlay.send_find_nodes(enr, distances).await {
+        Ok(nodes) => Ok(json!(nodes
+            .enrs
+            .into_iter()
+            .map(|enr| enr.into())
+            .collect::<FindNodesInfo>())),
+        Err(msg) => Err(format!("FindNodes request timeout: {msg:?}")),
+    }
+}
+
+/// Constructs a JSON call for the Gossip method.
+async fn gossip(
+    network: Arc<RwLock<BeaconNetwork>>,
+    content_key: BeaconContentKey,
+    content_value: BeaconContentValue,
+) -> Result<Value, String> {
+    let data = content_value.encode();
+    let content_values = vec![(content_key, data)];
+    let overlay = network.read().await.overlay.clone();
+    let num_peers = overlay.propagate_gossip(content_values);
+    Ok(num_peers.into())
+}
+
+/// Constructs a JSON call for the Offer method.
+async fn offer(
+    network: Arc<RwLock<BeaconNetwork>>,
+    enr: discv5::enr::Enr<discv5::enr::CombinedKey>,
+    content_key: BeaconContentKey,
+    content_value: Option<BeaconContentValue>,
+) -> Result<Value, String> {
+    let overlay = network.read().await.overlay.clone();
+    if let Some(content_value) = content_value {
+        let content_value = content_value.encode();
+        match overlay
+            .send_populated_offer(enr, content_key.into(), content_value)
+            .await
+        {
+            Ok(accept) => Ok(json!(AcceptInfo {
+                content_keys: accept.content_keys,
+            })),
+            Err(msg) => Err(format!("Populated Offer request timeout: {msg:?}")),
+        }
+    } else {
+        let content_key: Vec<RawContentKey> = vec![content_key.as_ssz_bytes()];
+        match overlay.send_offer(content_key, enr).await {
+            Ok(accept) => Ok(json!(AcceptInfo {
+                content_keys: accept.content_keys,
+            })),
+            Err(msg) => Err(format!("Offer request timeout: {msg:?}")),
+        }
+    }
+}
+
+/// Constructs a JSON call for the Ping method.
+async fn ping(
+    network: Arc<RwLock<BeaconNetwork>>,
+    enr: discv5::enr::Enr<discv5::enr::CombinedKey>,
+) -> Result<Value, String> {
+    let overlay = network.read().await.overlay.clone();
+    match overlay.send_ping(enr).await {
+        Ok(pong) => Ok(json!(PongInfo {
+            enr_seq: pong.enr_seq as u32,
+            data_radius: *overlay.data_radius(),
+        })),
+        Err(msg) => Err(format!("Ping request timeout: {msg:?}")),
+    }
+}
+
+/// Constructs a JSON call for the RecursiveFindNodes method.
+async fn recursive_find_nodes(
+    network: Arc<RwLock<BeaconNetwork>>,
+    node_id: ethportal_api::NodeId,
+) -> Result<Value, String> {
+    let node_id = discv5::enr::NodeId::from(node_id.0);
+    let overlay = network.read().await.overlay.clone();
+    let mut nodes = overlay.lookup_node(node_id).await;
+    nodes.sort_by(|a, b| {
+        XorMetric::distance(&node_id.raw(), &a.node_id().raw())
+            .cmp(&XorMetric::distance(&node_id.raw(), &b.node_id().raw()))
+    });
+    let nodes: Vec<Enr> = nodes.into_iter().take(16).collect();
+    Ok(json!(nodes))
+}
