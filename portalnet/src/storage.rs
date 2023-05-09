@@ -541,7 +541,7 @@ impl PortalStorage {
         content_key: &String,
         value: &Vec<u8>,
     ) -> Result<(), ContentStoreError> {
-        let content_id_as_u32: u32 = Self::byte_vector_to_u32(content_id.to_vec());
+        let content_id_as_u32: u32 = Self::byte_vector_to_u32(&content_id.to_vec());
         let value_size = value.len();
         if content_key.starts_with("0x") {
             return Err(ContentStoreError::InvalidData {
@@ -591,27 +591,30 @@ impl PortalStorage {
     fn find_farthest_content_id(&self) -> Result<Option<[u8; 32]>, ContentStoreError> {
         let result = match self.distance_fn {
             DistanceFunction::Xor => {
-                let node_id_u32 = Self::byte_vector_to_u32(self.node_id.raw().to_vec());
-
-                let conn = self.sql_connection_pool.get()?;
-                let mut query = conn.prepare(XOR_FIND_FARTHEST_QUERY)?;
-
-                let mut result = query.query_map([node_id_u32], |row| {
-                    Ok(ContentId {
-                        id_long: row.get(0)?,
-                    })
-                })?;
-
-                let result = match result.next() {
-                    Some(row) => row,
-                    None => {
-                        return Ok(None);
+                let node_id_u32 = Self::byte_vector_to_u32(&self.node_id.raw().to_vec());
+                let mut farthest_content_id: Vec<u8> = Vec::new();
+                for (content_id, _) in self.db.iterator(IteratorMode::Start) {
+                    if farthest_content_id.is_empty() {
+                        farthest_content_id = (*content_id).to_vec()
+                    } else {
+                        let vec_content_id = (*content_id).to_vec();
+                        if ((node_id_u32 | Self::byte_vector_to_u32(&vec_content_id))
+                            - (node_id_u32 & Self::byte_vector_to_u32(&vec_content_id)))
+                            > ((node_id_u32 | Self::byte_vector_to_u32(&farthest_content_id))
+                                - (node_id_u32 & Self::byte_vector_to_u32(&farthest_content_id)))
+                        {
+                            farthest_content_id = vec_content_id;
+                        }
                     }
-                };
-                let result = result?.id_long;
-                let result_vec: [u8; 32] = match result.len() {
+                }
+
+                if farthest_content_id.is_empty() {
+                    return Ok(None);
+                }
+
+                let result_vec: [u8; 32] = match farthest_content_id.len() {
                     // If exact data size, safe to expect conversion.
-                    32 => result.try_into().expect(
+                    32 => farthest_content_id.try_into().expect(
                         "Unexpectedly failed to convert 32 element vec to 32 element array.",
                     ),
                     // Received data of size other than 32 bytes.
@@ -620,6 +623,7 @@ impl PortalStorage {
                         return Err(ContentStoreError::InvalidData { message: err });
                     }
                 };
+
                 result_vec
             }
         };
@@ -668,7 +672,7 @@ impl PortalStorage {
     }
 
     /// Converts most significant 4 bytes of a vector to a u32.
-    fn byte_vector_to_u32(vec: Vec<u8>) -> u32 {
+    fn byte_vector_to_u32(vec: &Vec<u8>) -> u32 {
         if vec.len() < 4 {
             debug!("Error: XOR returned less than 4 bytes.");
             return 0;
@@ -879,21 +883,11 @@ const INSERT_QUERY: &str =
 const DELETE_QUERY: &str = "DELETE FROM content_metadata
                             WHERE content_id_long = (?1)";
 
-const XOR_FIND_FARTHEST_QUERY: &str = "SELECT
-                                    content_id_long
-                                    FROM content_metadata
-                                    ORDER BY ((?1 | content_id_short) - (?1 & content_id_short)) DESC";
-
 const CONTENT_KEY_LOOKUP_QUERY: &str =
     "SELECT content_key FROM content_metadata WHERE content_id_long = (?1)";
 
 const PAGINATE_QUERY: &str =
     "SELECT content_key FROM content_metadata ORDER BY content_key LIMIT :limit OFFSET :offset";
-
-// SQLite Result Containers
-struct ContentId {
-    id_long: Vec<u8>,
-}
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
