@@ -6879,7 +6879,6 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "trin-beacon",
  "trin-bridge",
  "trin-history",
  "trin-state",
