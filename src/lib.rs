@@ -16,9 +16,12 @@ use portalnet::{
     types::messages::PortalnetConfig,
     utils::db::{configure_node_data_dir, configure_trin_data_dir},
 };
+use trin_beacon::initialize_beacon_network;
 use trin_history::initialize_history_network;
 use trin_state::initialize_state_network;
-use trin_types::cli::{TrinConfig, Web3TransportType, HISTORY_NETWORK, STATE_NETWORK};
+use trin_types::cli::{
+    TrinConfig, Web3TransportType, BEACON_NETWORK, HISTORY_NETWORK, STATE_NETWORK,
+};
 use trin_types::jsonrpc::request::HistoryJsonRpcRequest;
 use trin_types::provider::TrustedProvider;
 use trin_utils::version::get_trin_version;
@@ -94,6 +97,21 @@ pub async fn run_trin(
             (None, None, None, None)
         };
 
+    // Initialize trin-beacon sub-network service and event handlers, if selected
+    let (beacon_handler, beacon_network_task, beacon_event_tx, _beacon_jsonrpc_tx) =
+        if trin_config.networks.iter().any(|val| val == BEACON_NETWORK) {
+            initialize_beacon_network(
+                &discovery,
+                Arc::clone(&utp_socket),
+                portalnet_config.clone(),
+                storage_config.clone(),
+                header_oracle.clone(),
+            )
+            .await?
+        } else {
+            (None, None, None, None)
+        };
+
     // Initialize chain history sub-network service and event handlers, if selected
     let (history_handler, history_network_task, history_event_tx, history_jsonrpc_tx) =
         if trin_config
@@ -125,6 +143,9 @@ pub async fn run_trin(
     if let Some(handler) = history_handler {
         tokio::spawn(async move { handler.handle_client_queries().await });
     }
+    if let Some(handler) = beacon_handler {
+        tokio::spawn(async move { handler.handle_client_queries().await });
+    }
 
     // Spawn main portal events handler
     tokio::spawn(async move {
@@ -132,6 +153,7 @@ pub async fn run_trin(
             talk_req_rx,
             history_event_tx,
             state_event_tx,
+            beacon_event_tx,
             utp_talk_reqs_tx,
         )
         .await;
@@ -142,6 +164,9 @@ pub async fn run_trin(
         tokio::spawn(async { network.await });
     }
     if let Some(network) = state_network_task {
+        tokio::spawn(async { network.await });
+    }
+    if let Some(network) = beacon_network_task {
         tokio::spawn(async { network.await });
     }
 

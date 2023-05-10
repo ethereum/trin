@@ -15,6 +15,8 @@ pub struct PortalnetEvents {
     pub history_overlay_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
     /// Send overlay `TalkReq` to state network
     pub state_overlay_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
+    /// Send overlay `TalkReq` to beacon network
+    pub beacon_overlay_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
     /// Send TalkReq events with "utp" protocol id to `UtpListener`
     pub utp_talk_reqs: mpsc::UnboundedSender<TalkRequest>,
 }
@@ -24,12 +26,14 @@ impl PortalnetEvents {
         talk_req_receiver: mpsc::Receiver<TalkRequest>,
         history_overlay_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
         state_overlay_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
+        beacon_overlay_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
         utp_talk_reqs: mpsc::UnboundedSender<TalkRequest>,
     ) -> Self {
         Self {
             talk_req_receiver,
             history_overlay_sender,
             state_overlay_sender,
+            beacon_overlay_sender,
             utp_talk_reqs,
         }
     }
@@ -56,7 +60,19 @@ impl PortalnetEvents {
                                 );
                             }
                         }
-                        None => warn!("History event handler not initialized!"),
+                        None => error!("History event handler not initialized!"),
+                    };
+                }
+                ProtocolId::Beacon => {
+                    match &self.beacon_overlay_sender {
+                        Some(tx) => {
+                            if let Err(err) = tx.send(request) {
+                                error!(
+                                    "Error sending discv5 talk request to beacon network: {err}"
+                                );
+                            }
+                        }
+                        None => error!("Beacon event handler not initialized!"),
                     };
                 }
                 ProtocolId::State => {
@@ -66,12 +82,12 @@ impl PortalnetEvents {
                                 error!("Error sending discv5 talk request to state network: {err}");
                             }
                         }
-                        None => warn!("State event handler not initialized!"),
+                        None => error!("State event handler not initialized!"),
                     };
                 }
                 ProtocolId::Utp => {
                     if let Err(err) = self.utp_talk_reqs.send(request) {
-                        warn!(%err, "Error forwarding talk request to uTP socket");
+                        error!(%err, "Error forwarding talk request to uTP socket");
                     }
                 }
                 _ => {
