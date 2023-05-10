@@ -107,7 +107,7 @@ scrape_configs:
   - job_name: 'node_exporter'
     static_configs:
       - targets: ['localhost:9100']
-- job_name: 'trin'
+  - job_name: 'trin'
     static_configs:
       - targets: ['localhost:9101']
 ```
@@ -207,6 +207,10 @@ Node explorer uses port 9100 by default.
 
 Install
 ```sh
+sudo apt-get install -y apt-transport-https software-properties-common wget
+sudo wget -q -O /usr/share/keyrings/grafana.key https://apt.grafana.com/gpg.key
+echo "deb [signed-by=/usr/share/keyrings/grafana.key] https://apt.grafana.com stable main" | sudo tee -a /etc/apt/sources.list.d/grafana.list
+sudo apt update
 sudo apt install grafana
 ```
 Open config
