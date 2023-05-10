@@ -234,10 +234,10 @@ This will serve metrics over port 3000.
 
 Generate a grafana dashboard. From trin root directory:
 ```sh
-cargo run -p trin-cli -- create-dashboard
+cargo run -p trin-cli -- create-dashboard http://localhost:3000 admin admin http://127.0.0.1:9090
 ```
 This will create a new monitoring database for trin. This will
-be visible in the grafana GUI, or directly at a URL similar to:
+be visible in the grafana GUI, or directly at a URL similar to with username: ``admin`` and password: ``admin``:
 http://localhost:3000/d/trin-app-metrics/trin-app-metrics
 
 If you would like to run the create-dashboard command again, the
@@ -277,5 +277,5 @@ For example
 ssh -N -L 3000:127.0.0.1:3000 username@mycomputer
 ```
 Then navigate to [http://127.0.0.1:3000](http://127.0.0.1:3000)` in a browser and login
-with username: admin, password: admin. Then navigate to the trin-app-metrics dashboard.
+with username: ``admin``, password: ``admin``. Then navigate to the trin-app-metrics dashboard.
 
