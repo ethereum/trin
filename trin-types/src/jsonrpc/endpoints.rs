@@ -27,14 +27,22 @@ pub enum StateEndpoint {
 /// History network JSON-RPC endpoints. Start with "portal_history" prefix
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum HistoryEndpoint {
+    /// params: [enr]
+    AddEnr(Enr),
     /// params: None
     DataRadius,
+    /// params: [node_id]
+    DeleteEnr(NodeId),
     /// params: [enr, content_key]
     FindContent(Enr, HistoryContentKey),
     /// params: [enr, distances]
     FindNodes(Enr, Vec<u16>),
+    /// params: [node_id]
+    GetEnr(NodeId),
     /// params: content_key
     LocalContent(HistoryContentKey),
+    /// params: [node_id]
+    LookupEnr(NodeId),
     /// params: [content_key, content_value]
     Gossip(HistoryContentKey, HistoryContentValue),
     /// params: [enr, content_key]

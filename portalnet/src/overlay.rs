@@ -1,3 +1,14 @@
+use discv5::{
+    enr::NodeId,
+    kbucket::{
+        Entry, FailureReason, Filter, InsertResult, KBucketsTable, Key, NodeStatus,
+        MAX_NODES_PER_BUCKET,
+    },
+    ConnectionDirection, ConnectionState, TalkRequest,
+};
+use futures::channel::oneshot;
+use parking_lot::RwLock;
+use ssz::Encode;
 use std::{
     collections::{BTreeMap, HashSet},
     fmt::{Debug, Display},
@@ -5,15 +16,6 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-
-use discv5::{
-    enr::NodeId,
-    kbucket::{Filter, KBucketsTable, NodeStatus, MAX_NODES_PER_BUCKET},
-    TalkRequest,
-};
-use futures::channel::oneshot;
-use parking_lot::RwLock;
-use ssz::Encode;
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::{debug, error, info, warn};
 use utp_rs::socket::UtpSocket;
@@ -274,6 +276,97 @@ where
                 )
             })
             .collect()
+    }
+
+    /// `AddEnr` adds requested `enr` to our kbucket.
+    pub fn add_enr(&self, enr: Enr) -> Result<(), OverlayRequestError> {
+        let key = Key::from(enr.node_id());
+        match self.kbuckets.write().insert_or_update(
+            &key,
+            Node {
+                enr,
+                data_radius: Distance::MAX,
+            },
+            NodeStatus {
+                state: ConnectionState::Disconnected,
+                direction: ConnectionDirection::Incoming,
+            },
+        ) {
+            InsertResult::Inserted
+            | InsertResult::Pending { .. }
+            | InsertResult::StatusUpdated { .. }
+            | InsertResult::ValueUpdated
+            | InsertResult::Updated { .. }
+            | InsertResult::UpdatedPending => Ok(()),
+            InsertResult::Failed(FailureReason::BucketFull) => {
+                Err(OverlayRequestError::Failure("The bucket was full.".into()))
+            }
+            InsertResult::Failed(FailureReason::BucketFilter) => Err(OverlayRequestError::Failure(
+                "The node didn't pass the bucket filter.".into(),
+            )),
+            InsertResult::Failed(FailureReason::TableFilter) => Err(OverlayRequestError::Failure(
+                "The node didn't pass the table filter.".into(),
+            )),
+            InsertResult::Failed(FailureReason::InvalidSelfUpdate) => {
+                Err(OverlayRequestError::Failure("Cannot update self.".into()))
+            }
+            InsertResult::Failed(_) => {
+                Err(OverlayRequestError::Failure("Failed to insert ENR".into()))
+            }
+        }
+    }
+
+    /// `GetEnr` gets requested `enr` from our kbucket.
+    pub fn get_enr(&self, node_id: NodeId) -> Result<Enr, OverlayRequestError> {
+        if node_id == self.local_enr().node_id() {
+            return Ok(self.local_enr());
+        }
+        let key = Key::from(node_id);
+        if let Entry::Present(entry, _) = self.kbuckets.write().entry(&key) {
+            return Ok(entry.value().enr());
+        }
+        Err(OverlayRequestError::Failure("Couldn't get ENR".into()))
+    }
+
+    /// `DeleteEnr` deletes requested `enr` from our kbucket.
+    pub fn delete_enr(&self, node_id: NodeId) -> bool {
+        let key = &Key::from(node_id);
+        self.kbuckets.write().remove(key)
+    }
+
+    /// `LookupEnr` finds requested `enr` from our kbucket, FindNode, and RecursiveFindNode.
+    pub async fn lookup_enr(&self, node_id: NodeId) -> Result<Enr, OverlayRequestError> {
+        if node_id == self.local_enr().node_id() {
+            return Ok(self.local_enr());
+        }
+
+        let enr = self.get_enr(node_id);
+
+        // try to find more up to date enr
+        if let Ok(enr) = enr.clone() {
+            let nodes = self.send_find_nodes(enr, vec![0]).await?;
+            let enr_highest_seq = nodes.enrs.into_iter().max_by(|a, b| a.seq().cmp(&b.seq()));
+
+            if let Some(enr_highest_seq) = enr_highest_seq {
+                return Ok(enr_highest_seq.into());
+            }
+        }
+
+        let lookup_node_enr = self.lookup_node(node_id).await;
+        let lookup_node_enr = lookup_node_enr
+            .into_iter()
+            .max_by(|a, b| a.seq().cmp(&b.seq()));
+        if let Some(lookup_node_enr) = lookup_node_enr {
+            let mut enr_seq = 0;
+            if let Ok(enr) = enr.clone() {
+                enr_seq = enr.seq();
+            }
+            if lookup_node_enr.seq() > enr_seq {
+                return Ok(lookup_node_enr);
+            }
+        }
+
+        enr
     }
 
     /// Sends a `Ping` request to `enr`.

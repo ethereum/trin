@@ -59,6 +59,10 @@ mod test {
         peertest::scenarios::basic::test_discv5_node_info(&peertest).await;
         peertest::scenarios::basic::test_discv5_routing_table_info(&target).await;
         peertest::scenarios::basic::test_history_radius(&target).await;
+        peertest::scenarios::basic::test_history_add_enr(&target, &peertest).await;
+        peertest::scenarios::basic::test_history_get_enr(&target, &peertest).await;
+        peertest::scenarios::basic::test_history_delete_enr(&target, &peertest).await;
+        peertest::scenarios::basic::test_history_lookup_enr(&peertest).await;
         peertest::scenarios::basic::test_history_ping(&target, &peertest).await;
         peertest::scenarios::basic::test_history_find_nodes(&target, &peertest).await;
         peertest::scenarios::basic::test_history_find_nodes_zero_distance(&target, &peertest).await;

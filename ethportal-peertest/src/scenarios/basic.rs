@@ -42,6 +42,42 @@ pub async fn test_history_radius(target: &Client) {
     );
 }
 
+pub async fn test_history_add_enr(target: &Client, peertest: &Peertest) {
+    info!("Testing portal_historyAddEnr");
+    let result = HistoryNetworkApiClient::add_enr(target, peertest.bootnode.enr.clone())
+        .await
+        .unwrap();
+    assert!(result);
+}
+
+pub async fn test_history_get_enr(target: &Client, peertest: &Peertest) {
+    info!("Testing portal_historyGetEnr");
+    let result = HistoryNetworkApiClient::get_enr(target, peertest.bootnode.enr.node_id().into())
+        .await
+        .unwrap();
+    assert_eq!(result, peertest.bootnode.enr);
+}
+
+pub async fn test_history_delete_enr(target: &Client, peertest: &Peertest) {
+    info!("Testing portal_historyDeleteEnr");
+    let result =
+        HistoryNetworkApiClient::delete_enr(target, peertest.bootnode.enr.node_id().into())
+            .await
+            .unwrap();
+    assert!(result);
+}
+
+pub async fn test_history_lookup_enr(peertest: &Peertest) {
+    info!("Testing portal_historyLookupEnr");
+    let result = HistoryNetworkApiClient::lookup_enr(
+        &peertest.bootnode.ipc_client,
+        peertest.nodes[0].enr.node_id().into(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(result, peertest.nodes[0].enr);
+}
+
 pub async fn test_history_ping(target: &Client, peertest: &Peertest) {
     info!("Testing portal_historyPing");
     let result = target.ping(peertest.bootnode.enr.clone()).await.unwrap();

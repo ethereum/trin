@@ -1,4 +1,4 @@
-use crate::jsonrpsee::core::{async_trait, Error, RpcResult};
+use crate::jsonrpsee::core::{async_trait, RpcResult};
 use anyhow::anyhow;
 use ethportal_api::types::portal::{
     AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
@@ -59,23 +59,35 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
     }
 
     /// Write an Ethereum Node Record to the overlay routing table.
-    async fn add_enr(&self, _enr: Enr) -> RpcResult<bool> {
-        Err(Error::MethodNotFound("add_enr".to_owned()))
+    async fn add_enr(&self, enr: Enr) -> RpcResult<bool> {
+        let endpoint = HistoryEndpoint::AddEnr(enr);
+        let result = self.proxy_query_to_history_subnet(endpoint).await?;
+        let result: bool = from_value(result)?;
+        Ok(result)
     }
 
     /// Fetch the latest ENR associated with the given node ID.
-    async fn get_enr(&self, _node_id: NodeId) -> RpcResult<Enr> {
-        Err(Error::MethodNotFound("get_enr".to_owned()))
+    async fn get_enr(&self, node_id: NodeId) -> RpcResult<Enr> {
+        let endpoint = HistoryEndpoint::GetEnr(node_id);
+        let result = self.proxy_query_to_history_subnet(endpoint).await?;
+        let result: Enr = from_value(result)?;
+        Ok(result)
     }
 
     /// Delete Node ID from the overlay routing table.
-    async fn delete_enr(&self, _node_id: NodeId) -> RpcResult<bool> {
-        Err(Error::MethodNotFound("delete_enr".to_owned()))
+    async fn delete_enr(&self, node_id: NodeId) -> RpcResult<bool> {
+        let endpoint = HistoryEndpoint::DeleteEnr(node_id);
+        let result = self.proxy_query_to_history_subnet(endpoint).await?;
+        let result: bool = from_value(result)?;
+        Ok(result)
     }
 
-    /// Fetch the ENR representation associated with the given Node ID and optional sequence number.
-    async fn lookup_enr(&self, _node_id: NodeId, _enr_seq: Option<u32>) -> RpcResult<Enr> {
-        Err(Error::MethodNotFound("lookup_enr".to_owned()))
+    /// Fetch the ENR representation associated with the given Node ID.
+    async fn lookup_enr(&self, node_id: NodeId) -> RpcResult<Enr> {
+        let endpoint = HistoryEndpoint::LookupEnr(node_id);
+        let result = self.proxy_query_to_history_subnet(endpoint).await?;
+        let result: Enr = from_value(result)?;
+        Ok(result)
     }
 
     /// Send a PING message to the designated node and wait for a PONG response
