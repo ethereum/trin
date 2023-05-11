@@ -4,74 +4,71 @@ use crate::types::portal::{
 };
 use crate::{NodeId, RoutingTableInfo};
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
-use trin_types::content_key::HistoryContentKey;
-use trin_types::content_value::{HistoryContentValue, PossibleHistoryContentValue};
+use trin_types::content_key::BeaconContentKey;
+use trin_types::content_value::{BeaconContentValue, PossibleBeaconContentValue};
 use trin_types::enr::Enr;
 
-/// Portal History JSON-RPC endpoints
+/// Portal Beacon JSON-RPC endpoints
 #[rpc(client, server, namespace = "portal")]
-pub trait HistoryNetworkApi {
+pub trait BeaconNetworkApi {
     /// Returns meta information about overlay routing table.
-    #[method(name = "historyRoutingTableInfo")]
+    #[method(name = "beaconRoutingTableInfo")]
     async fn routing_table_info(&self) -> RpcResult<RoutingTableInfo>;
 
     /// Returns the node data radios
-    #[method(name = "historyRadius")]
+    #[method(name = "beaconRadius")]
     async fn radius(&self) -> RpcResult<DataRadius>;
 
     /// Write an Ethereum Node Record to the overlay routing table.
-    #[method(name = "historyAddEnr")]
+    #[method(name = "beaconAddEnr")]
     async fn add_enr(&self, enr: Enr) -> RpcResult<bool>;
 
     /// Fetch the latest ENR associated with the given node ID.
-    #[method(name = "historyGetEnr")]
+    #[method(name = "beaconGetEnr")]
     async fn get_enr(&self, node_id: NodeId) -> RpcResult<Enr>;
 
     /// Delete Node ID from the overlay routing table.
-    #[method(name = "historyDeleteEnr")]
+    #[method(name = "beaconDeleteEnr")]
     async fn delete_enr(&self, node_id: NodeId) -> RpcResult<bool>;
 
     /// Fetch the ENR representation associated with the given Node ID.
-    #[method(name = "historyLookupEnr")]
+    #[method(name = "beaconLookupEnr")]
     async fn lookup_enr(&self, node_id: NodeId) -> RpcResult<Enr>;
 
     /// Send a PING message to the designated node and wait for a PONG response
-    #[method(name = "historyPing")]
+    #[method(name = "beaconPing")]
     async fn ping(&self, enr: Enr) -> RpcResult<PongInfo>;
 
     /// Send a FINDNODES request for nodes that fall within the given set of distances, to the designated
     /// peer and wait for a response
-    #[method(name = "historyFindNodes")]
+    #[method(name = "beaconFindNodes")]
     async fn find_nodes(&self, enr: Enr, distances: Vec<u16>) -> RpcResult<FindNodesInfo>;
 
     /// Lookup a target node within in the network
-    #[method(name = "historyRecursiveFindNodes")]
+    #[method(name = "beaconRecursiveFindNodes")]
     async fn recursive_find_nodes(&self, node_id: NodeId) -> RpcResult<Vec<Enr>>;
 
     /// Send FINDCONTENT message to get the content with a content key.
-    #[method(name = "historyFindContent")]
-    async fn find_content(
-        &self,
-        enr: Enr,
-        content_key: HistoryContentKey,
-    ) -> RpcResult<ContentInfo>;
+    #[method(name = "beaconFindContent")]
+    async fn find_content(&self, enr: Enr, content_key: BeaconContentKey)
+        -> RpcResult<ContentInfo>;
 
     /// Lookup a target content key in the network
-    #[method(name = "historyRecursiveFindContent")]
+    #[method(name = "beaconRecursiveFindContent")]
     async fn recursive_find_content(
         &self,
-        content_key: HistoryContentKey,
-    ) -> RpcResult<PossibleHistoryContentValue>;
+        content_key: BeaconContentKey,
+    ) -> RpcResult<PossibleBeaconContentValue>;
 
     /// Lookup a target content key in the network. Return tracing info.
-    #[method(name = "historyTraceRecursiveFindContent")]
+    #[method(name = "beaconTraceRecursiveFindContent")]
     async fn trace_recursive_find_content(
         &self,
-        content_key: HistoryContentKey,
+        content_key: BeaconContentKey,
     ) -> RpcResult<TraceContentInfo>;
 
     /// Pagination of local content keys
-    #[method(name = "historyPaginateLocalContentKeys")]
+    #[method(name = "beaconPaginateLocalContentKeys")]
     async fn paginate_local_content_keys(
         &self,
         offset: u64,
@@ -80,35 +77,35 @@ pub trait HistoryNetworkApi {
 
     /// Send the provided content value to interested peers. Clients may choose to send to some or all peers.
     /// Return the number of peers that the content was gossiped to.
-    #[method(name = "historyGossip")]
+    #[method(name = "beaconGossip")]
     async fn gossip(
         &self,
-        content_key: HistoryContentKey,
-        content_value: HistoryContentValue,
+        content_key: BeaconContentKey,
+        content_value: BeaconContentValue,
     ) -> RpcResult<u32>;
 
     /// Send an OFFER request with given ContentKey, to the designated peer and wait for a response.
     /// Returns the content keys bitlist upon successful content transmission or empty bitlist receive.
-    #[method(name = "historyOffer")]
+    #[method(name = "beaconOffer")]
     async fn offer(
         &self,
         enr: Enr,
-        content_key: HistoryContentKey,
-        content_value: Option<HistoryContentValue>,
+        content_key: BeaconContentKey,
+        content_value: Option<BeaconContentValue>,
     ) -> RpcResult<AcceptInfo>;
 
     /// Store content key with a content data to the local database.
-    #[method(name = "historyStore")]
+    #[method(name = "beaconStore")]
     async fn store(
         &self,
-        content_key: HistoryContentKey,
-        content_value: HistoryContentValue,
+        content_key: BeaconContentKey,
+        content_value: BeaconContentValue,
     ) -> RpcResult<bool>;
 
     /// Get a content from the local database
-    #[method(name = "historyLocalContent")]
+    #[method(name = "beaconLocalContent")]
     async fn local_content(
         &self,
-        content_key: HistoryContentKey,
-    ) -> RpcResult<PossibleHistoryContentValue>;
+        content_key: BeaconContentKey,
+    ) -> RpcResult<PossibleBeaconContentValue>;
 }

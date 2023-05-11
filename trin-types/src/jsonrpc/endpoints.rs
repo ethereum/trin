@@ -67,14 +67,22 @@ pub enum HistoryEndpoint {
 /// Beacon network JSON-RPC endpoints. Start with "portal_beacon" prefix
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum BeaconEndpoint {
+    /// params: enr
+    AddEnr(Enr),
     /// params: None
     DataRadius,
+    /// params: node_id
+    DeleteEnr(NodeId),
     /// params: [enr, content_key]
     FindContent(Enr, BeaconContentKey),
     /// params: [enr, distances]
     FindNodes(Enr, Vec<u16>),
+    /// params: node_id
+    GetEnr(NodeId),
     /// params: content_key
     LocalContent(BeaconContentKey),
+    /// params: node_id
+    LookupEnr(NodeId),
     /// params: [content_key, content_value]
     Gossip(BeaconContentKey, BeaconContentValue),
     /// params: [enr, content_key]

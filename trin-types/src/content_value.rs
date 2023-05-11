@@ -42,6 +42,12 @@ pub enum PossibleHistoryContentValue {
     ContentAbsent,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PossibleBeaconContentValue {
+    ContentPresent(BeaconContentValue),
+    ContentAbsent,
+}
+
 impl Serialize for PossibleHistoryContentValue {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -90,6 +96,45 @@ impl<'de> Deserialize<'de> for PossibleHistoryContentValue {
         Err(ContentValueError::UnknownContent {
             bytes: s,
             network: "history".to_string(),
+        })
+        .map_err(serde::de::Error::custom)
+    }
+}
+
+impl Serialize for PossibleBeaconContentValue {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Self::ContentPresent(content) => content.serialize(serializer),
+            Self::ContentAbsent => serializer.serialize_str(CONTENT_ABSENT),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for PossibleBeaconContentValue {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+
+        if s.as_str() == CONTENT_ABSENT {
+            return Ok(PossibleBeaconContentValue::ContentAbsent);
+        }
+
+        let content_bytes = hex_decode(&s).map_err(serde::de::Error::custom)?;
+
+        if let Ok(value) = HistoricalSummariesWithProof::from_ssz_bytes(&content_bytes) {
+            return Ok(Self::ContentPresent(
+                BeaconContentValue::HistoricalSummariesWithProof(value),
+            ));
+        }
+
+        Err(ContentValueError::UnknownContent {
+            bytes: s,
+            network: "beacon".to_string(),
         })
         .map_err(serde::de::Error::custom)
     }

@@ -572,6 +572,40 @@ impl OverlayContentKey for BeaconContentKey {
     }
 }
 
+impl Serialize for BeaconContentKey {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_hex())
+    }
+}
+
+impl<'de> Deserialize<'de> for BeaconContentKey {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let data = String::deserialize(deserializer)?.to_lowercase();
+        let first_two = &data[..2];
+
+        if first_two != "0x" {
+            return Err(de::Error::custom(format!(
+                "Hex strings must start with 0x, but found {first_two}"
+            )));
+        }
+
+        let ssz_bytes = hex_decode(&data).map_err(de::Error::custom)?;
+
+        Self::from_ssz_bytes(&ssz_bytes)
+            .map_err(|e| ContentKeyError::DecodeSsz {
+                decode_error: e,
+                input: hex_encode(ssz_bytes),
+            })
+            .map_err(serde::de::Error::custom)
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
