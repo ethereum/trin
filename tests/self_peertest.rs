@@ -1,4 +1,4 @@
-#[cfg(test)]
+#[cfg(all(unix, test))]
 mod test {
     use std::{
         net::{IpAddr, Ipv4Addr},

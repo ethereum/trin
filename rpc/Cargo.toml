@@ -17,6 +17,8 @@ portalnet = { path = "../portalnet"}
 trin-types = { path = "../trin-types"}
 trin-utils = { path = "../trin-utils"}
 tokio = { version = "1.14.0", features = ["full"] }
-reth-ipc = { version = "0.1.0", git = "https://github.com/paradigmxyz/reth.git"}
 url = "2.3.1"
 serde_json = "1.0.95"
+
+[target.'cfg(not(windows))'.dependencies]
+reth-ipc = { version = "0.1.0", git = "https://github.com/paradigmxyz/reth.git"}

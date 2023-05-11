@@ -1,10 +1,6 @@
 pub mod dashboard;
 use clap::{Args, Parser};
 
-use std::path::Path;
-
-use thiserror::Error;
-
 use dashboard::grafana::{GrafanaAPI, DASHBOARD_TEMPLATES};
 
 #[derive(Parser, Debug, PartialEq)]
@@ -66,7 +62,6 @@ fn create_dashboard(dashboard_config: DashboardConfig) -> Result<(), Box<dyn std
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::str::FromStr;
 
     #[test]
     fn test_trin_with_create_dashboard() {
