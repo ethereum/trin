@@ -3,6 +3,7 @@ use crate::{Discv5Api, HistoryNetworkApi, Web3Api};
 use ethportal_api::types::jsonrpc::request::HistoryJsonRpcRequest;
 use ethportal_api::{Discv5ApiServer, HistoryNetworkApiServer, Web3ApiServer};
 use portalnet::discovery::Discovery;
+#[cfg(unix)]
 use reth_ipc::server::Builder as IpcServerBuilder;
 use std::net::SocketAddr;
 use std::path::Path;
@@ -31,6 +32,7 @@ impl JsonRpcServer {
         Ok(handle)
     }
 
+    #[cfg(unix)]
     pub async fn run_ipc(
         ipc_path: Box<dyn AsRef<Path>>,
         discv5: Arc<Discovery>,
@@ -45,5 +47,14 @@ impl JsonRpcServer {
         api.merge(Web3Api.into_rpc())?;
         let handle = server.start(api).await?;
         Ok(handle)
+    }
+
+    #[cfg(windows)]
+    pub async fn run_ipc(
+        _ipc_path: Box<dyn AsRef<Path>>,
+        _discv5: Arc<Discovery>,
+        _history_handler: mpsc::UnboundedSender<HistoryJsonRpcRequest>,
+    ) -> anyhow::Result<ServerHandle> {
+        panic!("Windows doesn't support Unix Domain Sockets IPC, use --web3-transport http")
     }
 }
