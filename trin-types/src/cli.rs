@@ -19,7 +19,7 @@ pub const DEFAULT_STORAGE_CAPACITY_MB: &str = "100";
 pub const DEFAULT_TRUSTED_PROVIDER: &str = "infura";
 pub const DEFAULT_WEB3_TRANSPORT: &str = "ipc";
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Eq)]
 pub enum Web3TransportType {
     HTTP,
     IPC,
@@ -34,26 +34,14 @@ impl fmt::Display for Web3TransportType {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub struct ParseWeb3TransportError;
-
-impl fmt::Display for ParseWeb3TransportError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Invalid web3-transport arg. Expected either 'http' or 'ipc'"
-        )
-    }
-}
-
 impl FromStr for Web3TransportType {
-    type Err = ParseWeb3TransportError;
+    type Err = &'static str;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "http" => Ok(Web3TransportType::HTTP),
             "ipc" => Ok(Web3TransportType::IPC),
-            _ => Err(ParseWeb3TransportError),
+            _ => Err("Invalid web3-transport arg. Expected either 'http' or 'ipc'"),
         }
     }
 }

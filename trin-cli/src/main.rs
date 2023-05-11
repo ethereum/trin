@@ -1,20 +1,23 @@
 pub mod dashboard;
 use clap::{Args, Parser, Subcommand};
 
+use ethportal_api::jsonrpsee::http_client::HttpClientBuilder;
 #[cfg(unix)]
-use std::os::unix::net::UnixStream;
-#[cfg(windows)]
-use uds_windows::UnixStream;
-
-use std::path::{Path, PathBuf};
+use reth_ipc::client::IpcClientBuilder;
+use std::path::PathBuf;
+use url::Url;
 
 use ethereum_types::H256;
-use serde_json::value::RawValue;
-use thiserror::Error;
+use serde_json::Value;
 
 use dashboard::grafana::{GrafanaAPI, DASHBOARD_TEMPLATES};
+use ethportal_api::jsonrpsee::core::client::ClientT;
+use ethportal_api::jsonrpsee::core::params::ArrayParams;
+use ethportal_api::jsonrpsee::tracing::warn;
 use ethportal_api::{BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, HistoryContentKey};
-use trin_types::cli::DEFAULT_WEB3_IPC_PATH;
+use trin_types::cli::{
+    Web3TransportType, DEFAULT_WEB3_HTTP_ADDRESS, DEFAULT_WEB3_IPC_PATH, DEFAULT_WEB3_TRANSPORT,
+};
 use trin_utils::bytes::hex_encode;
 
 #[derive(Parser, Debug, PartialEq)]
@@ -34,9 +37,26 @@ enum Trin {
 #[derive(Args, Debug, PartialEq)]
 #[command(name = "json-rpc", about = "Run JSON-RPC commands against a trin node")]
 struct JsonRpc {
+    /// Select transport protocol to serve json-rpc endpoint
+    #[arg(
+        default_value = DEFAULT_WEB3_TRANSPORT,
+        long = "web3-transport"
+    )]
+    pub web3_transport: Web3TransportType,
+
+    /// Address to accept json-rpc http connections
+    #[arg(
+        default_value = DEFAULT_WEB3_HTTP_ADDRESS,
+        long = "web3-http-address"
+    )]
+    pub web3_http_address: Url,
+
     /// IPC path of target JSON-RPC endpoint.
-    #[arg(default_value = DEFAULT_WEB3_IPC_PATH, long)]
-    ipc: PathBuf,
+    #[arg(
+        default_value = DEFAULT_WEB3_IPC_PATH,
+        long = "web3-ipc-path"
+    )]
+    pub web3_ipc_path: PathBuf,
 
     /// JSON-RPC method (e.g. discv5_routingTableInfo).
     #[arg(required = true)]
@@ -89,32 +109,68 @@ struct DashboardConfig {
     prometheus_address: String,
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match Trin::parse() {
-        Trin::JsonRpc(rpc) => json_rpc(rpc),
+        Trin::JsonRpc(rpc) => json_rpc(rpc).await,
         Trin::EncodeKey(content_key) => encode_content_key(content_key),
         Trin::CreateDashboard(dashboard_config) => create_dashboard(dashboard_config),
     }
 }
 
-fn json_rpc(rpc: JsonRpc) -> Result<(), Box<dyn std::error::Error>> {
-    let params: Option<Vec<Box<RawValue>>> = rpc
-        .params
-        .map(|param| param.into_iter().map(jsonrpc::arg).collect());
+fn param_builder(rpc_params: Option<Vec<String>>) -> ArrayParams {
+    let mut params = ArrayParams::new();
+    if let Some(rpc_params) = rpc_params {
+        for i in rpc_params.into_iter() {
+            if let Err(err) = params.insert(i) {
+                warn!("Failed to serialize params {}", err);
+            };
+        }
+    }
+    params
+}
+
+async fn json_rpc(rpc: JsonRpc) -> Result<(), Box<dyn std::error::Error>> {
+    match rpc.web3_transport {
+        Web3TransportType::HTTP => {
+            let params = param_builder(rpc.params);
+            eprintln!(
+                "Attempting RPC. endpoint={} params={:?} http_address={}",
+                rpc.endpoint, params, rpc.web3_http_address
+            );
+            let client = HttpClientBuilder::default().build(rpc.web3_http_address)?;
+
+            let resp: Value = client.request(&rpc.endpoint[..], params).await?;
+
+            println!("{}", serde_json::to_string_pretty(&resp).unwrap());
+
+            Ok(())
+        }
+        Web3TransportType::IPC => Ok(call_json_rpc_ipc(rpc).await?),
+    }
+}
+
+#[cfg(unix)]
+async fn call_json_rpc_ipc(rpc: JsonRpc) -> Result<(), Box<dyn std::error::Error>> {
+    let params = param_builder(rpc.params);
     eprintln!(
         "Attempting RPC. endpoint={} params={:?} file={}",
         rpc.endpoint,
         params,
-        rpc.ipc.to_string_lossy()
+        rpc.web3_ipc_path.to_string_lossy()
     );
-    let mut client = TrinClient::from_ipc(&rpc.ipc)?;
+    let client = IpcClientBuilder::default().build(rpc.web3_ipc_path).await?;
 
-    let req = client.build_request(rpc.endpoint.as_str(), &params);
-    let resp = client.make_request(req)?;
+    let resp: Value = client.request(&rpc.endpoint[..], params).await?;
 
     println!("{}", serde_json::to_string_pretty(&resp).unwrap());
 
     Ok(())
+}
+
+#[cfg(windows)]
+async fn call_json_rpc_ipc(rpc: JsonRpc) -> Result<(), Box<dyn std::error::Error>> {
+    panic!("Windows doesn't support Unix Domain Sockets IPC, use --web3-transport http")
 }
 
 fn encode_content_key(content_key: EncodeKey) -> Result<(), Box<dyn std::error::Error>> {
@@ -161,111 +217,6 @@ fn create_dashboard(dashboard_config: DashboardConfig) -> Result<(), Box<dyn std
     Ok(())
 }
 
-fn build_request<'a>(
-    method: &'a str,
-    raw_params: &'a Option<Vec<Box<RawValue>>>,
-    request_id: u64,
-) -> jsonrpc::Request<'a> {
-    match raw_params {
-        Some(val) => jsonrpc::Request {
-            method,
-            params: val,
-            id: serde_json::json!(request_id),
-            jsonrpc: Some("2.0"),
-        },
-        None => jsonrpc::Request {
-            method,
-            params: &[],
-            id: serde_json::json!(request_id),
-            jsonrpc: Some("2.0"),
-        },
-    }
-}
-
-pub trait TryClone {
-    fn try_clone(&self) -> std::io::Result<Self>
-    where
-        Self: Sized;
-}
-
-impl TryClone for UnixStream {
-    fn try_clone(&self) -> std::io::Result<Self> {
-        UnixStream::try_clone(self)
-    }
-}
-
-pub struct TrinClient<S>
-where
-    S: std::io::Read + std::io::Write + TryClone,
-{
-    stream: S,
-    request_id: u64,
-}
-
-impl TrinClient<UnixStream> {
-    fn from_ipc(path: &Path) -> std::io::Result<Self> {
-        // TODO: a nice error if this file does not exist
-        Ok(Self {
-            stream: UnixStream::connect(path)?,
-            request_id: 0,
-        })
-    }
-}
-
-#[derive(Error, Debug)]
-pub enum JsonRpcError {
-    #[error("Received malformed response: {0}")]
-    Malformed(serde_json::Error),
-
-    #[error("Received empty response")]
-    Empty,
-}
-
-// TryClone is used because JSON-RPC responses are not followed by EOF. We must read bytes
-// from the stream until a complete object is detected, and the simplest way of doing that
-// with available APIs is to give ownership of a Read to a serde_json::Deserializer. If we
-// gave it exclusive ownership that would require us to open a new connection for every
-// command we wanted to send! By making a clone (or, by trying to) we can have our cake
-// and eat it too.
-//
-// TryClone is not necessary if TrinClient stays in this file forever; this script only
-// needs to make a single request before it exits. However, in a future where TrinClient
-// becomes the mechanism other parts of the codebase (such as peertester) use to act as
-// JSON-RPC clients then this becomes necessary. So, this is slightly over-engineered but
-// with an eye to future growth.
-impl<'a, S> TrinClient<S>
-where
-    S: std::io::Read + std::io::Write + TryClone,
-{
-    fn build_request(
-        &mut self,
-        method: &'a str,
-        params: &'a Option<Vec<Box<RawValue>>>,
-    ) -> jsonrpc::Request<'a> {
-        let result = build_request(method, params, self.request_id);
-        self.request_id += 1;
-
-        result
-    }
-
-    fn make_request(&mut self, req: jsonrpc::Request) -> Result<serde_json::Value, JsonRpcError> {
-        let data = serde_json::to_vec(&req).unwrap();
-
-        self.stream.write_all(&data).unwrap();
-        self.stream.flush().unwrap();
-
-        let clone = self.stream.try_clone().unwrap();
-        let deser = serde_json::Deserializer::from_reader(clone);
-
-        if let Some(obj) = deser.into_iter::<serde_json::Value>().next() {
-            return obj.map_err(JsonRpcError::Malformed);
-        }
-
-        // this should only happen when they immediately send EOF
-        Err(JsonRpcError::Empty)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -276,7 +227,7 @@ mod tests {
         let trin = Trin::parse_from([
             "test",
             "json-rpc",
-            "--ipc",
+            "--web3-ipc-path",
             "/tmp/trin.ipc",
             "--params",
             "p1,p2",
@@ -285,9 +236,11 @@ mod tests {
         assert_eq!(
             trin,
             Trin::JsonRpc(JsonRpc {
-                ipc: PathBuf::from("/tmp/trin.ipc"),
+                web3_transport: Web3TransportType::IPC,
                 endpoint: "discv5_routingTableInfo".to_string(),
                 params: Some(vec!["p1".to_string(), "p2".to_string()]),
+                web3_ipc_path: PathBuf::from("/tmp/trin.ipc"),
+                web3_http_address: url::Url::parse(DEFAULT_WEB3_HTTP_ADDRESS).unwrap(),
             })
         );
     }

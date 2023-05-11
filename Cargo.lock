@@ -2209,7 +2209,6 @@ dependencies = [
  "trin-state",
  "trin-types",
  "trin-utils 0.1.1-alpha.1",
- "uds_windows",
  "ureq",
 ]
 
@@ -4672,7 +4671,6 @@ dependencies = [
  "trin-types",
  "trin-utils 0.1.1-alpha.1",
  "trin-validation",
- "uds_windows",
  "url",
  "utp-rs",
  "validator",
@@ -6879,6 +6877,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "trin-beacon",
  "trin-bridge",
  "trin-history",
  "trin-state",
@@ -6944,12 +6943,15 @@ dependencies = [
  "ethportal-api",
  "jsonrpc",
  "nanotemplate",
+ "reth-ipc",
  "serde",
  "serde_json",
  "thiserror",
+ "tokio",
  "trin-types",
  "trin-utils 0.1.1-alpha.1",
  "ureq",
+ "url",
 ]
 
 [[package]]
@@ -7115,16 +7117,6 @@ name = "typenum"
 version = "1.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "497961ef93d974e23eb6f433eb5fe1b7930b659f06d12dec6fc44a8f554c0bba"
-
-[[package]]
-name = "uds_windows"
-version = "1.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce65604324d3cce9b966701489fbd0cf318cb1f7bd9dd07ac9a4ee6fb791930d"
-dependencies = [
- "tempfile",
- "winapi 0.3.9",
-]
 
 [[package]]
 name = "uint"
