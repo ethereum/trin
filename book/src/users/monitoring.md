@@ -39,7 +39,11 @@ htop
 ```
 
 ## Metrics
+[Metrics setup no docker](#metrics-setup-no-docker)
 
+[Metrics setup with docker](#metrics-setup-with-docker)
+
+## Metrics setup no docker
 Prometheus maintains a database of metrics (trin & system). Grafana converts metrics into graphs. Node exporter provides system information.
 ```mermaid
 graph TD;
@@ -234,7 +238,7 @@ This will serve metrics over port 3000.
 
 Generate a grafana dashboard. From trin root directory:
 ```sh
-cargo run -p trin-cli -- create-dashboard
+cargo run -p trin -- create-dashboard http://localhost:3000 admin admin http://127.0.0.1:9090
 ```
 This will create a new monitoring database for trin. This will
 be visible in the grafana GUI, or directly at a URL similar to:
@@ -279,3 +283,31 @@ ssh -N -L 3000:127.0.0.1:3000 username@mycomputer
 Then navigate to [http://127.0.0.1:3000](http://127.0.0.1:3000)` in a browser and login
 with username: admin, password: admin. Then navigate to the trin-app-metrics dashboard.
 
+## Metrics setup with docker
+1. Install Docker.
+2. Run Prometheus, note that you MUST manually set the absolute path to your copy of Trin's `docs/metrics_config/`:
+```sh
+docker run -p 9090:9090 -v /**absolute/path/to/trin/docs/metrics_config**:/etc/prometheus --add-host=host.docker.internal:host-gateway prom/prometheus
+```
+3. Run Grafana:
+```sh
+docker run -p 3000:3000 --add-host=host.docker.internal:host-gateway grafana/grafana:latest
+```
+4. Start your Trin process with:
+```sh
+cargo run -p trin -- --enable-metrics-with-url 0.0.0.0:9100 --web3-http-address http://0.0.0.0:8545 --web3-transport http
+```
+- The addresses must be bound to 0.0.0.0, because 127.0.0.1 only allows internal requests to
+  complete, and requests from docker instances are considered external.
+- The `--enable-metrics-with-url` parameter is the address that Trin exports metrics to, and should be equal to the port to which your Prometheus server is targeting at the bottom of `metrics_config/prometheus.yml`
+- The `--web-transport http` will allow Grafana to request routing table information from Trin via JSON-RPC over HTTP
+5. From the root of the Trin repo, run `cargo run -p trin -- create-dashboard`. If you used different ports than detailed in the above steps, or you are not using docker, then this command's defaults will not work. Run the command with the `-h` flag to see how to provide non-default addresses or credentials.
+6. Upon successful dashboard creation, navigate to the dashboard URL that the `create-dashboard` outputs. Use `admin`/`admin` to login.
+
+## Gotchas
+
+- If `create-dashboard` fails with an error, the most likely reason is that it has already been run. From within the Grafana UI, delete the "json-rpc" and    "prometheus" datasources and the "trin" dashboard and re-run the command.
+
+- There is a limit on concurrent connections given by the threadpool. At last
+  doc update, that number was 2, but will surely change. If you leave
+  connections open, then new connections will block.

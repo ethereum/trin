@@ -57,7 +57,6 @@ members = [
     "light-client",
     "rpc",
     "trin-beacon",
-    "trin-cli",
     "trin-history",
     "trin-state",
     "trin-types",

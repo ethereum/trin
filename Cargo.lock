@@ -555,15 +555,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a4a4ddaa51a5bc52a6948f74c06d20aaaddb71924eab79b8c97a8c556e942d6a"
 
 [[package]]
-name = "base64-compat"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a8d4d2746f89841e49230dd26917df1876050f95abafafbe34f47cb534b88d7"
-dependencies = [
- "byteorder",
-]
-
-[[package]]
 name = "base64ct"
 version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3286,18 +3277,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68c16e1bfd491478ab155fd8b4896b86f9ede344949b641e61501e07c2b8b4d5"
 dependencies = [
  "wasm-bindgen",
-]
-
-[[package]]
-name = "jsonrpc"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f8423b78fc94d12ef1a4a9d13c348c9a78766dda0cc18817adf0faf77e670c8"
-dependencies = [
- "base64-compat",
- "serde",
- "serde_derive",
- "serde_json",
 ]
 
 [[package]]
@@ -6934,25 +6913,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "trin-cli"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "base64 0.13.1",
- "clap 4.2.7",
- "ethereum-types 0.12.1",
- "ethportal-api",
- "jsonrpc",
- "nanotemplate",
- "serde",
- "serde_json",
- "thiserror",
- "trin-types",
- "trin-utils 0.1.1-alpha.1",
- "ureq",
-]
-
-[[package]]
 name = "trin-history"
 version = "0.1.0"
 dependencies = [
@@ -7012,7 +6972,7 @@ dependencies = [
  "anyhow",
  "base64 0.13.1",
  "bytes 1.4.0",
- "clap 2.34.0",
+ "clap 4.2.7",
  "discv5",
  "env_logger 0.9.3",
  "eth2_ssz",
@@ -7023,6 +6983,7 @@ dependencies = [
  "ethnum",
  "keccak-hash",
  "lazy_static",
+ "nanotemplate",
  "quickcheck",
  "rand 0.8.5",
  "rlp 0.5.2",
@@ -7036,7 +6997,6 @@ dependencies = [
  "sha3 0.9.1",
  "snap",
  "stremio-serde-hex",
- "structopt",
  "test-log",
  "thiserror",
  "tokio",

@@ -1,7 +1,7 @@
 use std::{env, ffi::OsString, fmt, net::SocketAddr, path::PathBuf, str::FromStr};
 
+use clap::{arg, Args, Parser, Subcommand};
 use ethereum_types::H256;
-use structopt::StructOpt;
 use url::Url;
 
 use crate::bootnodes::Bootnodes;
@@ -19,6 +19,8 @@ pub const DEFAULT_STORAGE_CAPACITY_MB: &str = "100";
 pub const DEFAULT_TRUSTED_PROVIDER: &str = "infura";
 pub const DEFAULT_WEB3_TRANSPORT: &str = "ipc";
 
+use crate::dashboard::grafana::{GrafanaAPI, DASHBOARD_TEMPLATES};
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum Web3TransportType {
     HTTP,
@@ -34,31 +36,19 @@ impl fmt::Display for Web3TransportType {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub struct ParseWeb3TransportError;
-
-impl fmt::Display for ParseWeb3TransportError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Invalid web3-transport arg. Expected either 'http' or 'ipc'"
-        )
-    }
-}
-
 impl FromStr for Web3TransportType {
-    type Err = ParseWeb3TransportError;
+    type Err = &'static str;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "http" => Ok(Web3TransportType::HTTP),
             "ipc" => Ok(Web3TransportType::IPC),
-            _ => Err(ParseWeb3TransportError),
+            _ => Err("Invalid web3-transport arg. Expected either 'http' or 'ipc'"),
         }
     }
 }
 
-#[derive(StructOpt, Debug, PartialEq, Clone)]
+#[derive(Parser, Debug, PartialEq, Clone)]
 #[structopt(
     name = "trin",
     version = "0.0.1",
@@ -66,112 +56,114 @@ impl FromStr for Web3TransportType {
     about = "Run an eth portal client"
 )]
 pub struct TrinConfig {
-    #[structopt(
-        default_value(DEFAULT_WEB3_TRANSPORT),
+    #[arg(
+        default_value = DEFAULT_WEB3_TRANSPORT,
         long = "web3-transport",
         help = "select transport protocol to serve json-rpc endpoint"
     )]
     pub web3_transport: Web3TransportType,
 
-    #[structopt(
-        default_value(DEFAULT_WEB3_HTTP_ADDRESS),
+    #[arg(
+        default_value = DEFAULT_WEB3_HTTP_ADDRESS,
         long = "web3-http-address",
         help = "address to accept json-rpc http connections"
     )]
     pub web3_http_address: Url,
 
-    #[structopt(
-        default_value(DEFAULT_WEB3_IPC_PATH),
+    #[arg(
+        default_value = DEFAULT_WEB3_IPC_PATH,
         long = "web3-ipc-path",
         help = "path to json-rpc endpoint over IPC"
     )]
     pub web3_ipc_path: PathBuf,
 
-    #[structopt(
-        default_value(DEFAULT_DISCOVERY_PORT),
+    #[arg(
+        default_value = DEFAULT_DISCOVERY_PORT,
         long = "discovery-port",
         help = "The UDP port to listen on."
     )]
     pub discovery_port: u16,
 
-    #[structopt(
-        default_value("default"),
+    #[arg(
+        default_value = "default",
         long = "bootnodes",
         help = "One or more comma-delimited base64-encoded ENR's or multiaddr strings of peers to initially add to the local routing table"
     )]
     pub bootnodes: Bootnodes,
 
-    #[structopt(
+    #[arg(
         long = "external-address",
         group = "external-ips",
         help = "(Only use this if you are behind a NAT) The address which will be advertised to peers (in an ENR). Changing it does not change which port or address trin binds to. Port number is required, ex: 127.0.0.1:9001"
     )]
     pub external_addr: Option<SocketAddr>,
 
-    #[structopt(
+    #[arg(
         long = "no-stun",
         group = "external-ips",
         help = "Do not use STUN to determine an external IP. Leaves ENR entry for IP blank. Some users report better connections over VPN."
     )]
     pub no_stun: bool,
 
-    #[structopt(
-        validator(check_private_key_length),
+    #[arg(
         long = "unsafe-private-key",
+        value_parser = check_private_key_length,
         help = "Hex encoded 32 byte private key (with 0x prefix) (considered unsafe as it's stored in terminal history - keyfile support coming soon)"
     )]
     pub private_key: Option<H256>,
 
-    #[structopt(
+    #[arg(
         long = "networks",
         help = "Comma-separated list of which portal subnetworks to activate",
         default_value = DEFAULT_SUBNETWORKS,
-        use_delimiter = true
+        use_value_delimiter = true
     )]
     pub networks: Vec<String>,
 
     /// Storage capacity specified in megabytes.
-    #[structopt(
+    #[arg(
         default_value(DEFAULT_STORAGE_CAPACITY_MB),
         long,
         help = "Maximum number of megabytes of total data to store in the DB (actual usage will exceed limit due to overhead)"
     )]
     pub mb: u32,
 
-    #[structopt(
+    #[arg(
         long = "enable-metrics-with-url",
         help = "Enable prometheus metrics reporting (provide local IP/Port from which your Prometheus server is configured to fetch metrics)"
     )]
     pub enable_metrics_with_url: Option<SocketAddr>,
 
-    #[structopt(
-        short = "e",
+    #[arg(
+        short = 'e',
         long = "ephemeral",
         help = "Use temporary data storage that is deleted on exit."
     )]
     pub ephemeral: bool,
 
-    #[structopt(
+    #[arg(
         long = "trusted-provider",
         help = "Trusted provider to use. (options: 'infura' (default), 'pandaops' (devops) or 'custom')",
         default_value(DEFAULT_TRUSTED_PROVIDER)
     )]
     pub trusted_provider: TrustedProviderType,
 
-    #[structopt(
+    #[arg(
         long = "trusted-provider-url",
-        help = "URL for a trusted http provider. Must include a base, host and port (e.g., '<base>://<host>:<port>').",
-        validator(check_url_format)
+        value_parser = check_url_format,
+        help = "URL for a trusted http provider. Must include a base, host and port (e.g., '<base>://<host>:<port>')."
     )]
     pub trusted_provider_url: Option<Url>,
 
-    #[structopt(
+    #[arg(
         long = "master-accumulator-path",
         help = "Path to master accumulator for validation",
-        default_value(DEFAULT_MASTER_ACC_PATH),
-        parse(from_os_str)
+        default_value(DEFAULT_MASTER_ACC_PATH)
     )]
     pub master_acc_path: PathBuf,
+
+    #[command(subcommand)]
+    pub command: Option<TrinConfigCommands>,
 }
 
 impl Default for TrinConfig {
@@ -201,6 +193,7 @@ impl Default for TrinConfig {
             trusted_provider: TrustedProviderType::Infura,
             trusted_provider_url: None,
             master_acc_path: PathBuf::from(DEFAULT_MASTER_ACC_PATH.to_string()),
+            command: None,
         }
     }
 }
@@ -214,7 +207,15 @@ impl TrinConfig {
         I: Iterator<Item = T>,
         T: Into<OsString> + Clone,
     {
-        let config = Self::from_iter_safe(args)?;
+        let config = Self::try_parse_from(args)?;
+
+        if let Some(TrinConfigCommands::CreateDashboard(dashboard_config)) = config.command {
+            if let Err(err) = create_dashboard(dashboard_config) {
+                panic!("Creating dashboard failed {}", err);
+            }
+            // exit program since if the user uses create dashboard this is all we do
+            std::process::exit(0);
+        }
 
         match config.web3_transport {
             Web3TransportType::HTTP => match &config.web3_ipc_path.as_path().display().to_string()[..] {
@@ -260,16 +261,16 @@ impl TrinConfig {
 }
 
 /// A validator function for CLI URL arguments.
-fn check_url_format(url: String) -> Result<(), String> {
-    match Url::parse(&url) {
-        Ok(_) => Ok(()),
+fn check_url_format(url: &str) -> Result<Url, String> {
+    match Url::parse(url) {
+        Ok(val) => Ok(val),
         Err(e) => panic!("Invalid URL '{url}', {e}"),
     }
 }
 
-fn check_private_key_length(private_key: String) -> Result<(), String> {
+fn check_private_key_length(private_key: &str) -> Result<H256, String> {
     if private_key.len() == 66 {
-        return Ok(());
+        return H256::from_str(private_key).map_err(|err| format!("HexError: {}", err));
     }
     panic!(
         "Invalid private key length: {}, expected 66 (0x-prefixed 32 byte hexstring)",
@@ -291,6 +292,52 @@ impl fmt::Display for TrinConfig {
             self.networks, self.mb, self.ephemeral, json_rpc_url, self.enable_metrics_with_url.is_some()
         )
     }
+}
+
+#[derive(Subcommand, Debug, Clone, PartialEq)]
+#[allow(clippy::enum_variant_names)]
+pub enum TrinConfigCommands {
+    CreateDashboard(DashboardConfig),
+}
+
+#[derive(Args, Debug, Default, Clone, PartialEq)]
+#[allow(clippy::enum_variant_names)]
+pub struct DashboardConfig {
+    #[arg(default_value = "http://localhost:3000")]
+    pub grafana_address: String,
+
+    #[arg(default_value = "admin")]
+    pub grafana_username: String,
+
+    #[arg(default_value = "admin")]
+    pub grafana_password: String,
+
+    #[arg(default_value = "http://host.docker.internal:9090")]
+    pub prometheus_address: String,
+}
+
+pub fn create_dashboard(
+    dashboard_config: DashboardConfig,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let grafana = GrafanaAPI::new(
+        dashboard_config.grafana_username,
+        dashboard_config.grafana_password,
+        dashboard_config.grafana_address,
+    );
+
+    let prometheus_uid = grafana.create_datasource(
+        "prometheus".to_string(),
+        "prometheus".to_string(),
+        dashboard_config.prometheus_address,
+    )?;
+
+    // Create a dashboard from each pre-defined template
+    for template_path in DASHBOARD_TEMPLATES.iter() {
+        let dashboard_url = grafana.create_dashboard(template_path, &prometheus_uid)?;
+        println!("Dashboard successfully created: {dashboard_url}");
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -575,6 +622,33 @@ mod test {
         let url: ureq::RequestUrl = trusted_provider.http.request_url().unwrap();
         assert_eq!(url.host(), "127.0.0.1");
         assert_eq!(url.port(), Some(8546));
+    }
+
+    #[test]
+    fn test_trin_with_create_dashboard() {
+        let config = TrinConfig::try_parse_from([
+            "trin",
+            "create-dashboard",
+            "http://localhost:8787",
+            "username",
+            "password",
+            "http://docker:9090",
+        ])
+        .unwrap();
+        if let Some(TrinConfigCommands::CreateDashboard(dashboard_config)) = config.command {
+            assert_eq!(
+                dashboard_config.grafana_address,
+                "http://localhost:8787".to_string()
+            );
+            assert_eq!(dashboard_config.grafana_username, "username".to_string());
+            assert_eq!(dashboard_config.grafana_password, "password".to_string());
+            assert_eq!(
+                dashboard_config.prometheus_address,
+                "http://docker:9090".to_string()
+            );
+        } else {
+            unreachable!("")
+        }
     }
 
     #[test]
