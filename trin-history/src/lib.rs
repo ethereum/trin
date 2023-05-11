@@ -113,8 +113,10 @@ pub fn spawn_history_heartbeat(network: Arc<HistoryNetwork>) {
             heart_interval.tick().await;
 
             let storage_log = network.overlay.store.read().get_summary_info();
-            let message_log = network.overlay.get_summary_info();
+            let message_log = network.overlay.get_message_summary();
+            let utp_log = network.overlay.get_utp_summary();
             info!("reports~ data: {storage_log}; msgs: {message_log}");
+            info!("reports~ utp: {utp_log}");
         }
     });
 }

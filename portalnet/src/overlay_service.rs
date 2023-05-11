@@ -44,7 +44,10 @@ use crate::{
         query_info::{FindContentResult, QueryInfo, QueryType},
         query_pool::{QueryId, QueryPool, QueryPoolState, TargetKey},
     },
-    metrics::OverlayMetrics,
+    metrics::{
+        labels::{UtpDirectionLabel, UtpOutcomeLabel},
+        overlay::OverlayMetrics,
+    },
     storage::ContentStore,
     types::{
         messages::{
@@ -499,7 +502,7 @@ where
                         // Perform background processing.
                         match response.response {
                             Ok(response) => {
-                                self.metrics.report_inbound_response(&self.protocol, &response);
+                                self.metrics.report_inbound_response(&response);
                                 self.process_response(response, active_request.destination, active_request.request, active_request.query_id)
                             }
                             Err(error) => self.process_request_failure(response.request_id, active_request.destination, error),
@@ -841,8 +844,7 @@ where
                 // Send response to responder if present.
                 if let Some(responder) = request.responder {
                     if let Ok(ref response) = response {
-                        self.metrics
-                            .report_outbound_response(&self.protocol, response);
+                        self.metrics.report_outbound_response(response);
                     }
                     let _ = responder.send(response);
                 }
@@ -859,8 +861,7 @@ where
                         query_id: request.query_id,
                     },
                 );
-                self.metrics
-                    .report_outbound_request(&self.protocol, &request.request);
+                self.metrics.report_outbound_request(&request.request);
                 self.send_talk_req(request.request, request.id, destination);
             }
         }
@@ -973,11 +974,17 @@ where
                     // Wait for an incoming connection with the given CID. Then, write the data
                     // over the uTP stream.
                     let utp = Arc::clone(&self.utp_socket);
+                    let metrics = Arc::clone(&self.metrics);
                     tokio::spawn(async move {
+                        metrics.report_utp_active_inc(UtpDirectionLabel::Outbound);
                         let mut stream = match utp.accept_with_cid(cid.clone(), UTP_CONN_CFG).await
                         {
                             Ok(stream) => stream,
                             Err(err) => {
+                                metrics.report_utp_outcome(
+                                    UtpDirectionLabel::Outbound,
+                                    UtpOutcomeLabel::FailedConnection,
+                                );
                                 error!(
                                     %err,
                                     %cid.send,
@@ -988,18 +995,39 @@ where
                                 return;
                             }
                         };
-
                         match stream.write(&content).await {
-                            Ok(..) => {
-                                debug!(
-                                    %cid.send,
-                                    %cid.recv,
-                                    peer = ?cid.peer.client(),
-                                    content_id = %hex_encode(content_key.content_id()),
-                                    "wrote content to uTP stream"
-                                );
+                            Ok(write_size) => {
+                                if write_size != content.len() {
+                                    metrics.report_utp_outcome(
+                                        UtpDirectionLabel::Outbound,
+                                        UtpOutcomeLabel::FailedDataTx,
+                                    );
+                                    warn!(
+                                        %cid.send,
+                                        %cid.recv,
+                                        peer = ?cid.peer.client(),
+                                        content_id = %hex_encode(content_key.content_id()),
+                                        "failed to write all content to uTP stream"
+                                    );
+                                } else {
+                                    metrics.report_utp_outcome(
+                                        UtpDirectionLabel::Outbound,
+                                        UtpOutcomeLabel::Success,
+                                    );
+                                    debug!(
+                                        %cid.send,
+                                        %cid.recv,
+                                        peer = ?cid.peer.client(),
+                                        content_id = %hex_encode(content_key.content_id()),
+                                        "wrote content to uTP stream"
+                                    );
+                                }
                             }
                             Err(err) => {
+                                metrics.report_utp_outcome(
+                                    UtpDirectionLabel::Outbound,
+                                    UtpOutcomeLabel::FailedDataTx,
+                                );
                                 error!(
                                     %cid.send,
                                     %cid.recv,
@@ -1103,23 +1131,34 @@ where
         let kbuckets = Arc::clone(&self.kbuckets);
         let command_tx = self.command_tx.clone();
         let utp = Arc::clone(&self.utp_socket);
+        let metrics = Arc::clone(&self.metrics);
 
         tokio::spawn(async move {
             // Wait for an incoming connection with the given CID. Then, read the data from the uTP
             // stream.
+            metrics.report_utp_active_inc(UtpDirectionLabel::Inbound);
             let mut stream = match utp.accept_with_cid(cid.clone(), UTP_CONN_CFG).await {
                 Ok(stream) => stream,
                 Err(err) => {
-                    warn!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), "unable to accept uTP stream");
+                    metrics.report_utp_outcome(
+                        UtpDirectionLabel::Inbound,
+                        UtpOutcomeLabel::FailedConnection,
+                    );
+                    error!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), "unable to accept uTP stream");
                     return;
                 }
             };
 
             let mut data = vec![];
             if let Err(err) = stream.read_to_eof(&mut data).await {
+                metrics
+                    .report_utp_outcome(UtpDirectionLabel::Inbound, UtpOutcomeLabel::FailedDataTx);
                 error!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), "error reading data from uTP stream");
                 return;
             }
+
+            // report utp tx as successful, even if we go on to fail to process the payload
+            metrics.report_utp_outcome(UtpDirectionLabel::Inbound, UtpOutcomeLabel::Success);
 
             if let Err(err) = Self::process_accept_utp_payload(
                 validator,
@@ -1176,8 +1215,7 @@ where
 
     /// Processes an incoming request from some source node.
     fn process_incoming_request(&mut self, request: Request, _id: RequestId, source: NodeId) {
-        self.metrics
-            .report_inbound_request(&self.protocol, &request);
+        self.metrics.report_inbound_request(&request);
         if let Request::Ping(ping) = request {
             self.process_ping(ping, source);
         }
@@ -1370,10 +1408,17 @@ where
         let response_clone = response.clone();
 
         let utp = Arc::clone(&self.utp_socket);
+        let metrics = Arc::clone(&self.metrics);
+
         tokio::spawn(async move {
+            metrics.report_utp_active_inc(UtpDirectionLabel::Outbound);
             let mut stream = match utp.connect_with_cid(cid.clone(), UTP_CONN_CFG).await {
                 Ok(stream) => stream,
                 Err(err) => {
+                    metrics.report_utp_outcome(
+                        UtpDirectionLabel::Outbound,
+                        UtpOutcomeLabel::FailedConnection,
+                    );
                     warn!(
                         %err,
                         cid.send,
@@ -1425,8 +1470,13 @@ where
                 }
             };
 
+            // flag to track if we record the utp tx as failed, so we don't double count
+            let mut utp_tx_recorded = false;
             // send the content to the acceptor over a uTP stream
             if let Err(err) = stream.write(&content_payload).await {
+                metrics
+                    .report_utp_outcome(UtpDirectionLabel::Outbound, UtpOutcomeLabel::FailedDataTx);
+                utp_tx_recorded = true;
                 warn!(
                     %err,
                     cid.send,
@@ -1438,6 +1488,12 @@ where
 
             // close uTP connection
             if let Err(err) = stream.shutdown() {
+                if !utp_tx_recorded {
+                    metrics.report_utp_outcome(
+                        UtpDirectionLabel::Outbound,
+                        UtpOutcomeLabel::FailedShutdown,
+                    );
+                }
                 warn!(
                     %err,
                     cid.send,
@@ -1445,7 +1501,11 @@ where
                     peer = ?cid.peer.client(),
                     "Error closing uTP connection"
                 );
+                return;
             };
+            if !utp_tx_recorded {
+                metrics.report_utp_outcome(UtpDirectionLabel::Outbound, UtpOutcomeLabel::Success);
+            }
         });
 
         Ok(response)
@@ -2486,7 +2546,7 @@ mod tests {
         let peers_to_ping = HashSetDelay::default();
         let (command_tx, command_rx) = mpsc::unbounded_channel();
         let (response_tx, response_rx) = mpsc::unbounded_channel();
-        let metrics = Arc::new(OverlayMetrics::new());
+        let metrics = Arc::new(OverlayMetrics::new(&protocol));
         let validator = Arc::new(MockValidator {});
 
         OverlayService {

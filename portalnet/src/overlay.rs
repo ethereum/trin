@@ -22,7 +22,7 @@ use utp_rs::socket::UtpSocket;
 
 use crate::{
     discovery::{Discovery, UtpEnr},
-    metrics::{MessageDirectionLabel, MessageLabel, OverlayMetrics, ProtocolLabel},
+    metrics::overlay::OverlayMetrics,
     overlay_service::{
         OverlayCommand, OverlayRequest, OverlayRequestError, OverlayService, RequestDirection,
         UTP_CONN_CFG,
@@ -138,7 +138,7 @@ where
         )));
 
         // Initialize metrics, keep a reference in order to build metrics summaries for logging
-        let metrics = Arc::new(OverlayMetrics::new());
+        let metrics = Arc::new(OverlayMetrics::new(&protocol));
 
         let command_tx = OverlayService::<TContentKey, TMetric, TValidator, TStore>::spawn(
             Arc::clone(&discovery),
@@ -694,30 +694,12 @@ where
         }
     }
 
-    pub fn get_summary_info(&self) -> String {
-        format!(
-            "offers={}/{}, accepts={}/{}",
-            self.metrics.message_count_by_labels(
-                ProtocolLabel::History,
-                MessageDirectionLabel::Received,
-                MessageLabel::Accept
-            ),
-            self.metrics.message_count_by_labels(
-                ProtocolLabel::History,
-                MessageDirectionLabel::Sent,
-                MessageLabel::Offer
-            ),
-            self.metrics.message_count_by_labels(
-                ProtocolLabel::History,
-                MessageDirectionLabel::Sent,
-                MessageLabel::Accept
-            ),
-            self.metrics.message_count_by_labels(
-                ProtocolLabel::History,
-                MessageDirectionLabel::Received,
-                MessageLabel::Offer
-            ),
-        )
+    pub fn get_message_summary(&self) -> String {
+        self.metrics.get_message_summary()
+    }
+
+    pub fn get_utp_summary(&self) -> String {
+        self.metrics.get_utp_summary()
     }
 }
 
