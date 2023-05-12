@@ -53,7 +53,6 @@ members = [
     "rpc",
     "trin-beacon",
     "trin-bridge",
-    "trin-cli",
     "trin-history",
     "trin-state",
     "trin-utils",

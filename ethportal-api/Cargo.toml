@@ -26,6 +26,7 @@ hex = "0.4.3"
 jsonrpsee = {version="0.16.2", features = ["async-client", "client", "macros", "server"]}
 keccak-hash = "0.8.0"
 lazy_static = "1.4.0"
+nanotemplate = "0.3.0"
 quickcheck = "1.0.3"
 rand = "0.8.5"
 rlp = "0.5.0"

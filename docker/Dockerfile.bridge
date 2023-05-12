@@ -20,8 +20,7 @@ COPY ./light-client ./light-client
 COPY ./src ./src 
 COPY ./trin-beacon ./trin-beacon
 COPY ./trin-bridge ./trin-bridge
-COPY ./trin-cli ./trin-cli
-COPY ./trin-history ./trin-history 
+COPY ./trin-history ./trin-history
 COPY ./trin-state ./trin-state 
 COPY ./trin-utils ./trin-utils
 COPY ./trin-validation ./trin-validation

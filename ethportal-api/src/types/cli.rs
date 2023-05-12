@@ -1,6 +1,6 @@
 use std::{env, ffi::OsString, fmt, net::SocketAddr, path::PathBuf, str::FromStr};
 
-use clap::{arg, Parser};
+use clap::{arg, Args, Parser, Subcommand};
 use ethereum_types::H256;
 use url::Url;
 
@@ -18,6 +18,8 @@ const DEFAULT_SUBNETWORKS: &str = "history";
 pub const DEFAULT_STORAGE_CAPACITY_MB: &str = "100";
 pub const DEFAULT_TRUSTED_PROVIDER: &str = "infura";
 pub const DEFAULT_WEB3_TRANSPORT: &str = "ipc";
+
+use crate::dashboard::grafana::{GrafanaAPI, DASHBOARD_TEMPLATES};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Web3TransportType {
@@ -159,6 +161,9 @@ pub struct TrinConfig {
         default_value(DEFAULT_MASTER_ACC_PATH)
     )]
     pub master_acc_path: PathBuf,
+
+    #[command(subcommand)]
+    pub command: Option<TrinConfigCommands>,
 }
 
 impl Default for TrinConfig {
@@ -188,6 +193,7 @@ impl Default for TrinConfig {
             trusted_provider: TrustedProviderType::Infura,
             trusted_provider_url: None,
             master_acc_path: PathBuf::from(DEFAULT_MASTER_ACC_PATH.to_string()),
+            command: None,
         }
     }
 }
@@ -202,6 +208,14 @@ impl TrinConfig {
         T: Into<OsString> + Clone,
     {
         let config = Self::try_parse_from(args)?;
+
+        if let Some(TrinConfigCommands::CreateDashboard(dashboard_config)) = config.command {
+            if let Err(err) = create_dashboard(dashboard_config) {
+                panic!("Creating dashboard failed {}", err);
+            }
+            // exit program since if the user uses create dashboard this is all we do
+            std::process::exit(0);
+        }
 
         match config.web3_transport {
             Web3TransportType::HTTP => match &config.web3_ipc_path.as_path().display().to_string()[..] {
@@ -278,6 +292,52 @@ impl fmt::Display for TrinConfig {
             self.networks, self.mb, self.ephemeral, json_rpc_url, self.enable_metrics_with_url.is_some()
         )
     }
+}
+
+#[derive(Subcommand, Debug, Clone, PartialEq)]
+#[allow(clippy::enum_variant_names)]
+pub enum TrinConfigCommands {
+    CreateDashboard(DashboardConfig),
+}
+
+#[derive(Args, Debug, Default, Clone, PartialEq)]
+#[allow(clippy::enum_variant_names)]
+pub struct DashboardConfig {
+    #[arg(default_value = "http://localhost:3000")]
+    pub grafana_address: String,
+
+    #[arg(default_value = "admin")]
+    pub grafana_username: String,
+
+    #[arg(default_value = "admin")]
+    pub grafana_password: String,
+
+    #[arg(default_value = "http://host.docker.internal:9090")]
+    pub prometheus_address: String,
+}
+
+pub fn create_dashboard(
+    dashboard_config: DashboardConfig,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let grafana = GrafanaAPI::new(
+        dashboard_config.grafana_username,
+        dashboard_config.grafana_password,
+        dashboard_config.grafana_address,
+    );
+
+    let prometheus_uid = grafana.create_datasource(
+        "prometheus".to_string(),
+        "prometheus".to_string(),
+        dashboard_config.prometheus_address,
+    )?;
+
+    // Create a dashboard from each pre-defined template
+    for template_path in DASHBOARD_TEMPLATES.iter() {
+        let dashboard_url = grafana.create_dashboard(template_path, &prometheus_uid)?;
+        println!("Dashboard successfully created: {dashboard_url}");
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -562,6 +622,33 @@ mod test {
         let url: ureq::RequestUrl = trusted_provider.http.request_url().unwrap();
         assert_eq!(url.host(), "127.0.0.1");
         assert_eq!(url.port(), Some(8546));
+    }
+
+    #[test]
+    fn test_trin_with_create_dashboard() {
+        let config = TrinConfig::try_parse_from([
+            "trin",
+            "create-dashboard",
+            "http://localhost:8787",
+            "username",
+            "password",
+            "http://docker:9090",
+        ])
+        .unwrap();
+        if let Some(TrinConfigCommands::CreateDashboard(dashboard_config)) = config.command {
+            assert_eq!(
+                dashboard_config.grafana_address,
+                "http://localhost:8787".to_string()
+            );
+            assert_eq!(dashboard_config.grafana_username, "username".to_string());
+            assert_eq!(dashboard_config.grafana_password, "password".to_string());
+            assert_eq!(
+                dashboard_config.prometheus_address,
+                "http://docker:9090".to_string()
+            );
+        } else {
+            unreachable!("")
+        }
     }
 
     #[test]
