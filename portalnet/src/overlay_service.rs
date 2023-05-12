@@ -976,11 +976,14 @@ where
                     // Wait for an incoming connection with the given CID. Then, write the data
                     // over the uTP stream.
                     let utp = Arc::clone(&self.utp_socket);
+                    let metrics = Arc::clone(&self.metrics);
+                    let protocol = self.protocol.clone();
                     tokio::spawn(async move {
                         let mut stream = match utp.accept_with_cid(cid.clone(), UTP_CONN_CFG).await
                         {
                             Ok(stream) => stream,
                             Err(err) => {
+                                metrics.report_outbound_utp_tx(&protocol, false);
                                 error!(
                                     %err,
                                     %cid.send,
@@ -993,6 +996,7 @@ where
                         };
                         match stream.write(&content).await {
                             Ok(..) => {
+                                metrics.report_outbound_utp_tx(&protocol, true);
                                 debug!(
                                     %cid.send,
                                     %cid.recv,
@@ -1002,6 +1006,7 @@ where
                                 );
                             }
                             Err(err) => {
+                                metrics.report_outbound_utp_tx(&protocol, false);
                                 error!(
                                     %cid.send,
                                     %cid.recv,
@@ -1114,8 +1119,8 @@ where
             let mut stream = match utp.accept_with_cid(cid.clone(), UTP_CONN_CFG).await {
                 Ok(stream) => stream,
                 Err(err) => {
-                    error!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), "unable to accept uTP stream");
                     metrics.report_inbound_utp_tx(&protocol, false);
+                    error!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), "unable to accept uTP stream");
                     return;
                 }
             };
@@ -1127,7 +1132,7 @@ where
                 return;
             }
 
-            // report utp tx as successful, even if we fail to process the payload
+            // report utp tx as successful, even if we go on to fail to process the payload
             metrics.report_inbound_utp_tx(&protocol, true);
 
             if let Err(err) = Self::process_accept_utp_payload(
@@ -1426,8 +1431,6 @@ where
                         peer = ?cid.peer.client(),
                         "Error decoding previously offered content items"
                     );
-                    // weird since we're reporting failure but its not a utp error
-                    metrics.report_outbound_utp_tx(&protocol, false);
                     return;
                 }
             };
@@ -1436,8 +1439,6 @@ where
                 Ok(payload) => payload,
                 Err(err) => {
                     warn!(%err, "Unable to build content payload");
-                    // weird since we're reporting failure but its not a utp error
-                    metrics.report_outbound_utp_tx(&protocol, false);
                     return;
                 }
             };
@@ -1452,7 +1453,6 @@ where
                     peer = ?cid.peer.client(),
                     "Error sending content over uTP connection"
                 );
-                // ? or should we still shutdown?
                 return;
             }
 

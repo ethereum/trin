@@ -29,6 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .args(["--unsafe-private-key", key])
             .args(["--web3-transport", "http"])
             .args(["--web3-http-address", &web3_http_address])
+            .args(["--enable-metrics-with-url", "127.0.0.1:9101"])
             .args(["--discovery-port", &discovery_port])
             .args(["--bootnodes", "default"])
             .spawn()
