@@ -14,7 +14,7 @@ use serde_json::json;
 
 use ethportal_api::trin_types::enr::Enr;
 use ethportal_api::trin_types::{cli::TrinConfig, provider::TrustedProvider};
-use trin_utils::bytes::hex_encode;
+use ethportal_api::utils::bytes::hex_encode;
 
 pub fn setup_mock_trusted_http_server() -> MockServer {
     let server = MockServer::start();

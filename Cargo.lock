@@ -2179,6 +2179,7 @@ dependencies = [
  "eth_trie",
  "ethereum-types 0.12.1",
  "ethnum",
+ "hex",
  "jsonrpsee 0.16.2",
  "keccak-hash",
  "lazy_static",

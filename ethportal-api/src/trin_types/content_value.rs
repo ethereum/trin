@@ -4,10 +4,10 @@ use crate::trin_types::execution::accumulator::EpochAccumulator;
 use crate::trin_types::execution::block_body::BlockBody;
 use crate::trin_types::execution::header::HeaderWithProof;
 use crate::trin_types::execution::receipts::Receipts;
+use crate::utils::bytes::{hex_decode, hex_encode};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use ssz::{Decode, Encode};
 use thiserror::Error;
-use trin_utils::bytes::{hex_decode, hex_encode};
 
 /// An encodable portal network content value.
 pub trait ContentValue: Sized {

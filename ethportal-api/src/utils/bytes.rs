@@ -179,9 +179,9 @@ mod test {
     fn test_hex_decode_prefix_only_returns_empty_byte_vector() {
         let to_decode = "0x";
         let result = hex_decode(to_decode).unwrap();
-        assert_eq!(result, vec![]);
+        assert_eq!(result, vec![] as Vec<u8>);
         // Confirm this matches behaviour of hex crate.
-        assert_eq!(hex::decode("").unwrap(), vec![])
+        assert_eq!(hex::decode("").unwrap(), vec![] as Vec<u8>);
     }
 
     #[test]

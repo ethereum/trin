@@ -20,7 +20,7 @@ use ethportal_api::trin_types::bytes::ByteList;
 use ethportal_api::trin_types::content_key::RawContentKey;
 use ethportal_api::trin_types::distance::Distance;
 use ethportal_api::trin_types::enr::{Enr, SszEnr};
-use trin_utils::bytes::{hex_decode, hex_encode, ByteUtilsError};
+use ethportal_api::utils::bytes::{hex_decode, hex_encode, ByteUtilsError};
 
 /// The maximum size of a Discv5 packet.
 pub(crate) const MAX_DISCV5_PACKET_SIZE: usize = 1280;
@@ -587,8 +587,8 @@ impl From<Accept> for Value {
 #[allow(clippy::unwrap_used)]
 mod test {
     use super::*;
+    use ethportal_api::utils::bytes::hex_encode_upper;
     use test_log::test;
-    use trin_utils::bytes::hex_encode_upper;
 
     #[test]
     #[should_panic]

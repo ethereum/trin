@@ -39,8 +39,8 @@ use crate::{
 use ethportal_api::trin_types::content_key::RawContentKey;
 use ethportal_api::trin_types::distance::{Distance, Metric};
 use ethportal_api::trin_types::enr::Enr;
+use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::OverlayContentKey;
-use trin_utils::bytes::hex_encode;
 use trin_validation::validator::Validator;
 
 use ethportal_api::trin_types::query_trace::QueryTrace;

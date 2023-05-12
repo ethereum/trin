@@ -6,6 +6,7 @@ pub mod rpc;
 use crate::rpc::RpcServer;
 use discv5::TalkRequest;
 use ethportal_api::trin_types::enr::Enr;
+use ethportal_api::utils::bytes::{hex_encode, hex_encode_upper};
 use jsonrpsee::core::{async_trait, RpcResult};
 use jsonrpsee::http_server::{HttpServerBuilder, HttpServerHandle};
 use jsonrpsee::proc_macros::rpc;
@@ -17,7 +18,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::sync::RwLock;
-use trin_utils::bytes::{hex_encode, hex_encode_upper};
 use utp_rs::{conn::ConnectionConfig, socket::UtpSocket};
 
 /// uTP test app

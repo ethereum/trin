@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 
 use ethportal_api::trin_types::distance::Distance;
 use ethportal_api::trin_types::enr::Enr;
-use trin_utils::bytes::hex_encode;
+use ethportal_api::utils::bytes::hex_encode;
 
 type NodeMap = BTreeMap<String, String>;
 type NodeTuple = (NodeId, Enr, NodeStatus, Distance, Option<String>);

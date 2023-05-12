@@ -11,7 +11,7 @@ use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 
 use super::block_body::JsonBytes;
-use trin_utils::bytes::hex_decode;
+use crate::utils::bytes::hex_decode;
 
 // 2 ^ 14
 const MAX_TRANSACTION_COUNT: usize = 16384;
@@ -469,7 +469,7 @@ mod tests {
     use ssz::{Decode, Encode};
     use test_log::test;
 
-    use trin_utils::bytes::hex_encode;
+    use crate::utils::bytes::hex_encode;
 
     //
     // Tests using custom generated rlp encoded receipts from block 14764013

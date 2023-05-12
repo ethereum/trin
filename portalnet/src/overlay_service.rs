@@ -61,8 +61,8 @@ use ethportal_api::trin_types::distance::{Distance, Metric, XorMetric};
 use ethportal_api::trin_types::enr::{Enr, SszEnr};
 use ethportal_api::trin_types::node_id::NodeId as TrinNodeId;
 use ethportal_api::trin_types::query_trace::QueryTrace;
+use ethportal_api::utils::bytes::{hex_encode, hex_encode_compact};
 use ethportal_api::OverlayContentKey;
-use trin_utils::bytes::{hex_encode, hex_encode_compact};
 use trin_validation::validator::Validator;
 
 pub const FIND_NODES_MAX_NODES: usize = 32;

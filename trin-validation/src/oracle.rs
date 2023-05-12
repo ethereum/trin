@@ -11,7 +11,7 @@ use ethportal_api::trin_types::jsonrpc::endpoints::HistoryEndpoint;
 use ethportal_api::trin_types::jsonrpc::params::Params;
 use ethportal_api::trin_types::jsonrpc::request::{BeaconJsonRpcRequest, HistoryJsonRpcRequest};
 use ethportal_api::trin_types::provider::TrustedProvider;
-use trin_utils::bytes::hex_decode;
+use ethportal_api::utils::bytes::hex_decode;
 
 /// Responsible for dispatching cross-overlay-network requests
 /// for data to perform validation. Currently, it just proxies these requests

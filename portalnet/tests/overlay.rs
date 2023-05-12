@@ -20,7 +20,7 @@ use tokio::{
 };
 use utp_rs::socket::UtpSocket;
 
-use trin_utils::bytes::hex_encode_upper;
+use ethportal_api::utils::bytes::hex_encode_upper;
 
 async fn init_overlay(
     discovery: Arc<Discovery>,

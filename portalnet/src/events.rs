@@ -5,7 +5,7 @@ use tokio::sync::mpsc;
 use tracing::{error, warn};
 
 use super::types::messages::ProtocolId;
-use trin_utils::bytes::{hex_encode, hex_encode_upper};
+use ethportal_api::utils::bytes::{hex_encode, hex_encode_upper};
 
 /// Main handler for portal network events
 pub struct PortalnetEvents {

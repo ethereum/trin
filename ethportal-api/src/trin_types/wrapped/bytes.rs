@@ -3,7 +3,7 @@ use rlp::{Decodable, DecoderError, Encodable, Rlp, RlpStream};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use ssz::{Decode, Encode};
 
-use trin_utils::bytes::{hex_decode, hex_encode};
+use crate::utils::bytes::{hex_decode, hex_encode};
 
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 /// Wrapper over bytes::Bytes that implements serde::Serialize and serde::Deserialize.

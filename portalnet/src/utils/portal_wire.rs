@@ -72,8 +72,8 @@ pub fn read_varint(buf: &[u8]) -> anyhow::Result<(usize, u32)> {
 #[allow(clippy::unwrap_used)]
 mod test {
     use super::*;
+    use ethportal_api::utils::bytes::hex_decode;
     use rstest::rstest;
-    use trin_utils::bytes::hex_decode;
 
     #[rstest]
     #[case(u8::MIN as u32)]

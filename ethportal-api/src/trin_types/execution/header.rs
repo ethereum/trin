@@ -7,7 +7,7 @@ use ssz_derive::{Decode, Encode};
 
 use super::block_body::Transaction;
 use crate::trin_types::bytes::ByteList;
-use trin_utils::bytes::{hex_decode, hex_encode};
+use crate::utils::bytes::{hex_decode, hex_encode};
 
 const LONDON_BLOCK_NUMBER: u64 = 12965000;
 const SHANGHAI_BLOCK_NUMBER: u64 = 17034871;

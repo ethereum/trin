@@ -8,8 +8,8 @@ use ssz_types::{typenum, FixedVector, VariableList};
 use std::fmt;
 use thiserror::Error;
 
+use crate::utils::bytes::{hex_decode, hex_encode, hex_encode_compact};
 use quickcheck::{Arbitrary, Gen};
-use trin_utils::bytes::{hex_decode, hex_encode, hex_encode_compact};
 
 /// SSZ encoded overlay content key as bytes
 pub type RawContentKey = Vec<u8>;

@@ -3,9 +3,9 @@ use ethportal_api::trin_types::content_key::HistoryContentKey;
 use ethportal_api::trin_types::content_value::{HistoryContentValue, PossibleHistoryContentValue};
 use ethportal_api::trin_types::node_id::NodeId;
 use ethportal_api::types::portal::TraceContentInfo;
+use ethportal_api::utils::bytes::hex_decode;
 use ethportal_api::{ContentValue, HistoryNetworkApiClient};
 use tracing::info;
-use trin_utils::bytes::hex_decode;
 
 pub async fn test_recursive_find_nodes_self(peertest: &Peertest) {
     info!("Testing trace recursive find nodes self");

@@ -10,6 +10,7 @@ use ethportal_api::trin_types::{
     jsonrpc::request::HistoryJsonRpcRequest,
     query_trace::QueryTrace,
 };
+use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::{
     types::portal::{AcceptInfo, FindNodesInfo, PongInfo, TraceContentInfo},
     ContentValue, {HistoryContentKey, OverlayContentKey},
@@ -19,7 +20,6 @@ use serde_json::{json, Value};
 use ssz::Encode;
 use tokio::sync::{mpsc, Mutex, RwLock};
 use tracing::error;
-use trin_utils::bytes::hex_encode;
 
 use crate::network::HistoryNetwork;
 use crate::utils::bucket_entries_to_json;

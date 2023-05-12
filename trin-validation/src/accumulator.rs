@@ -21,7 +21,7 @@ use ethportal_api::trin_types::execution::accumulator::EpochAccumulator;
 use ethportal_api::trin_types::execution::header::{BlockHeaderProof, Header, HeaderWithProof};
 use ethportal_api::trin_types::jsonrpc::endpoints::HistoryEndpoint;
 use ethportal_api::trin_types::jsonrpc::request::HistoryJsonRpcRequest;
-use trin_utils::bytes::hex_decode;
+use ethportal_api::utils::bytes::hex_decode;
 
 /// SSZ List[Hash256, max_length = MAX_HISTORICAL_EPOCHS]
 /// List of historical epoch accumulator merkle roots preceding current epoch.
@@ -242,7 +242,7 @@ mod test {
     use ethportal_api::trin_types::execution::header::{
         AccumulatorProof, BlockHeaderProof, HeaderWithProof, SszNone,
     };
-    use trin_utils::bytes::hex_encode;
+    use ethportal_api::utils::bytes::hex_encode;
 
     #[rstest]
     #[case(1_000_001)]

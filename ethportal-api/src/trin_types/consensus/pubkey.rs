@@ -1,7 +1,7 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use ssz::{Decode, Encode};
 
-use trin_utils::bytes::{hex_decode, hex_encode};
+use crate::utils::bytes::{hex_decode, hex_encode};
 
 /// Types based off specs @
 /// https://github.com/ethereum/consensus-specs/blob/5970ae56a1/specs/phase0/beacon-chain.md

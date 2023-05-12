@@ -13,12 +13,12 @@ use ethportal_api::trin_types::{
     query_trace::QueryTrace,
 };
 use ethportal_api::types::portal::{AcceptInfo, FindNodesInfo, PongInfo, TraceContentInfo};
+use ethportal_api::utils::bytes::hex_encode;
 use portalnet::storage::ContentStore;
 use serde_json::{json, Value};
 use ssz::Encode;
 use tokio::sync::{mpsc, Mutex, RwLock};
 use tracing::error;
-use trin_utils::bytes::hex_encode;
 
 use crate::network::BeaconNetwork;
 

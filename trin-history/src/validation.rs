@@ -130,8 +130,8 @@ mod tests {
     use ethportal_api::trin_types::cli::DEFAULT_MASTER_ACC_PATH;
     use ethportal_api::trin_types::execution::accumulator::HeaderRecord;
     use ethportal_api::trin_types::provider::TrustedProvider;
+    use ethportal_api::utils::bytes::hex_decode;
     use ethportal_api::{BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey};
-    use trin_utils::bytes::hex_decode;
     use trin_validation::accumulator::MasterAccumulator;
 
     fn get_hwp_ssz() -> Vec<u8> {

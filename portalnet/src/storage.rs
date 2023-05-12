@@ -27,7 +27,7 @@ use ethportal_api::trin_types::content_key::{
     ContentKeyError, HistoryContentKey, OverlayContentKey,
 };
 use ethportal_api::trin_types::distance::{Distance, Metric, XorMetric};
-use trin_utils::bytes::{hex_decode, hex_encode, ByteUtilsError};
+use ethportal_api::utils::bytes::{hex_decode, hex_encode, ByteUtilsError};
 
 const BYTES_IN_MB_U64: u64 = 1000 * 1000;
 const BYTES_IN_MB_F64: f64 = 1000.0 * 1000.0;

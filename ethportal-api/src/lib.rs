@@ -11,6 +11,7 @@ pub mod discv5;
 mod history;
 pub mod trin_types;
 pub mod types;
+pub mod utils;
 mod web3;
 
 pub use crate::discv5::{Discv5ApiClient, Discv5ApiServer};

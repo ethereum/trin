@@ -1,7 +1,7 @@
 use crate::constants::BATCH_SIZE;
 use discv5::enr::{CombinedKey, EnrBuilder, NodeId};
+use ethportal_api::utils::bytes::hex_encode;
 use std::ops::Range;
-use trin_utils::bytes::hex_encode;
 
 /// Splits a range into chunks of (at most) BATCH_SIZE,
 /// Used in "latest" mode, since most "chunks" will contain only a couple headers
@@ -61,8 +61,8 @@ mod tests {
     use super::*;
     use ethereum_types::U256;
     use ethportal_api::trin_types::distance::{Metric, XorMetric};
+    use ethportal_api::utils::bytes::hex_decode;
     use rstest::rstest;
-    use trin_utils::bytes::hex_decode;
 
     #[rstest]
     #[case(2)]
