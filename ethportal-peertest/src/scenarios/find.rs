@@ -1,7 +1,7 @@
 use crate::{constants::HISTORY_CONTENT_VALUE, Peertest};
-use ethportal_api::trin_types::content_key::HistoryContentKey;
-use ethportal_api::trin_types::content_value::{HistoryContentValue, PossibleHistoryContentValue};
-use ethportal_api::trin_types::node_id::NodeId;
+use ethportal_api::types::content_key::HistoryContentKey;
+use ethportal_api::types::content_value::{HistoryContentValue, PossibleHistoryContentValue};
+use ethportal_api::types::node_id::NodeId;
 use ethportal_api::types::portal::TraceContentInfo;
 use ethportal_api::utils::bytes::hex_decode;
 use ethportal_api::{ContentValue, HistoryNetworkApiClient};

@@ -7,7 +7,7 @@ use ssz::Decode;
 use tokio::sync::RwLock;
 use tree_hash::TreeHash;
 
-use ethportal_api::trin_types::execution::{
+use ethportal_api::types::execution::{
     accumulator::EpochAccumulator,
     block_body::BlockBody,
     header::{Header, HeaderWithProof},
@@ -127,9 +127,9 @@ mod tests {
     use ssz::Encode;
     use ssz_types::{typenum, VariableList};
 
-    use ethportal_api::trin_types::cli::DEFAULT_MASTER_ACC_PATH;
-    use ethportal_api::trin_types::execution::accumulator::HeaderRecord;
-    use ethportal_api::trin_types::provider::TrustedProvider;
+    use ethportal_api::types::cli::DEFAULT_MASTER_ACC_PATH;
+    use ethportal_api::types::execution::accumulator::HeaderRecord;
+    use ethportal_api::types::provider::TrustedProvider;
     use ethportal_api::utils::bytes::hex_decode;
     use ethportal_api::{BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey};
     use trin_validation::accumulator::MasterAccumulator;

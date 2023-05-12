@@ -80,8 +80,8 @@ impl Deref for NodeId {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use crate::trin_types::enr::Enr;
-    use crate::trin_types::node_id::NodeId;
+    use crate::types::enr::Enr;
+    use crate::types::node_id::NodeId;
     use std::net::Ipv4Addr;
 
     #[test]

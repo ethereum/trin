@@ -9,11 +9,11 @@ use tokio::sync::RwLock;
 use tracing::info;
 use utp_rs::socket::UtpSocket;
 
-use ethportal_api::trin_types::cli::{
+use ethportal_api::types::cli::{
     TrinConfig, Web3TransportType, BEACON_NETWORK, HISTORY_NETWORK, STATE_NETWORK,
 };
-use ethportal_api::trin_types::jsonrpc::request::HistoryJsonRpcRequest;
-use ethportal_api::trin_types::provider::TrustedProvider;
+use ethportal_api::types::jsonrpc::request::HistoryJsonRpcRequest;
+use ethportal_api::types::provider::TrustedProvider;
 use portalnet::{
     discovery::{Discovery, Discv5UdpSocket},
     events::PortalnetEvents,

@@ -1,6 +1,6 @@
 use clap::Parser;
 use ethportal_api::jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
-use ethportal_api::trin_types::provider::{build_pandaops_http_client_from_env, TrustedProvider};
+use ethportal_api::types::provider::{build_pandaops_http_client_from_env, TrustedProvider};
 use tokio::process::Command;
 use tokio::time::{sleep, Duration};
 use tracing::info;

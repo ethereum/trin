@@ -1,6 +1,6 @@
-use crate::trin_types::content_key::HistoryContentKey;
-use crate::trin_types::content_value::{HistoryContentValue, PossibleHistoryContentValue};
-use crate::trin_types::enr::Enr;
+use crate::types::content_key::HistoryContentKey;
+use crate::types::content_value::{HistoryContentValue, PossibleHistoryContentValue};
+use crate::types::enr::Enr;
 use crate::types::portal::FindNodesInfo;
 use crate::types::portal::{
     AcceptInfo, ContentInfo, DataRadius, PaginateLocalContentInfo, PongInfo, TraceContentInfo,

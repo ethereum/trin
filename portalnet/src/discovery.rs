@@ -13,7 +13,7 @@ use utp_rs::{cid::ConnectionPeer, udp::AsyncUdpSocket};
 
 use super::types::messages::{PortalnetConfig, ProtocolId};
 use crate::socket;
-use ethportal_api::trin_types::enr::Enr;
+use ethportal_api::types::enr::Enr;
 use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::{NodeId as EthportalNodeId, NodeInfo};
 use std::str::FromStr;

@@ -6,10 +6,10 @@ use rocksdb::IteratorMode;
 use ssz::Decode;
 use tracing::{info, warn};
 
-use ethportal_api::trin_types::execution::accumulator::EpochAccumulator;
-use ethportal_api::trin_types::execution::block_body::BlockBody;
-use ethportal_api::trin_types::execution::header::HeaderWithProof;
-use ethportal_api::trin_types::execution::receipts::Receipts;
+use ethportal_api::types::execution::accumulator::EpochAccumulator;
+use ethportal_api::types::execution::block_body::BlockBody;
+use ethportal_api::types::execution::header::HeaderWithProof;
+use ethportal_api::types::execution::receipts::Receipts;
 use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::HistoryContentKey;
 use portalnet::storage::{PortalStorage, PortalStorageConfig};

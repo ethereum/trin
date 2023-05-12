@@ -1,10 +1,10 @@
 use crate::jsonrpsee::core::{async_trait, RpcResult};
 use anyhow::anyhow;
-use ethportal_api::trin_types::constants::CONTENT_ABSENT;
-use ethportal_api::trin_types::content_value::PossibleHistoryContentValue;
-use ethportal_api::trin_types::enr::Enr;
-use ethportal_api::trin_types::jsonrpc::endpoints::HistoryEndpoint;
-use ethportal_api::trin_types::jsonrpc::request::HistoryJsonRpcRequest;
+use ethportal_api::types::constants::CONTENT_ABSENT;
+use ethportal_api::types::content_value::PossibleHistoryContentValue;
+use ethportal_api::types::enr::Enr;
+use ethportal_api::types::jsonrpc::endpoints::HistoryEndpoint;
+use ethportal_api::types::jsonrpc::request::HistoryJsonRpcRequest;
 use ethportal_api::types::portal::{
     AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
     TraceContentInfo,

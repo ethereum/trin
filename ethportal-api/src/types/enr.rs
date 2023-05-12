@@ -98,8 +98,8 @@ pub fn generate_random_remote_enr() -> (CombinedKey, Enr) {
 
 #[cfg(test)]
 mod test {
-    use crate::trin_types::distance::{Metric, XorMetric};
-    use crate::trin_types::node_id::NodeId;
+    use crate::types::distance::{Metric, XorMetric};
+    use crate::types::node_id::NodeId;
     use test_log::test;
 
     #[test]

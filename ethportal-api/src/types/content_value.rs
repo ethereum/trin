@@ -1,9 +1,9 @@
-use crate::trin_types::consensus::header_proof::HistoricalSummariesWithProof;
-use crate::trin_types::constants::CONTENT_ABSENT;
-use crate::trin_types::execution::accumulator::EpochAccumulator;
-use crate::trin_types::execution::block_body::BlockBody;
-use crate::trin_types::execution::header::HeaderWithProof;
-use crate::trin_types::execution::receipts::Receipts;
+use crate::types::consensus::header_proof::HistoricalSummariesWithProof;
+use crate::types::constants::CONTENT_ABSENT;
+use crate::types::execution::accumulator::EpochAccumulator;
+use crate::types::execution::block_body::BlockBody;
+use crate::types::execution::header::HeaderWithProof;
+use crate::types::execution::receipts::Receipts;
 use crate::utils::bytes::{hex_decode, hex_encode};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use ssz::{Decode, Encode};

@@ -6,7 +6,7 @@ use ssz::{Encode, SszDecoderBuilder, SszEncoder};
 use ssz_derive::{Decode, Encode};
 
 use super::block_body::Transaction;
-use crate::trin_types::bytes::ByteList;
+use crate::types::bytes::ByteList;
 use crate::utils::bytes::{hex_decode, hex_encode};
 
 const LONDON_BLOCK_NUMBER: u64 = 12965000;
@@ -427,7 +427,7 @@ mod tests {
     use ssz::Decode;
     use test_log::test;
 
-    use crate::trin_types::execution::block_body::{BlockBody, EncodableHeaderList};
+    use crate::types::execution::block_body::{BlockBody, EncodableHeaderList};
 
     #[test]
     fn decode_and_encode_header() {

@@ -4,19 +4,19 @@ use crate::utils::get_ranges;
 use anyhow::{anyhow, bail};
 use ethereum_types::H256;
 use ethportal_api::jsonrpsee::http_client::HttpClient;
-use ethportal_api::trin_types::content_key::{
+use ethportal_api::types::content_key::{
     BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey, HistoryContentKey,
 };
-use ethportal_api::trin_types::content_value::HistoryContentValue;
-use ethportal_api::trin_types::execution::accumulator::EpochAccumulator;
-use ethportal_api::trin_types::execution::block_body::{BlockBody, EncodableHeaderList};
-use ethportal_api::trin_types::execution::header::{
+use ethportal_api::types::content_value::HistoryContentValue;
+use ethportal_api::types::execution::accumulator::EpochAccumulator;
+use ethportal_api::types::execution::block_body::{BlockBody, EncodableHeaderList};
+use ethportal_api::types::execution::header::{
     AccumulatorProof, BlockHeaderProof, FullHeader, FullHeaderBatch, Header, HeaderWithProof,
     SszNone,
 };
-use ethportal_api::trin_types::execution::receipts::Receipts;
-use ethportal_api::trin_types::jsonrpc::params::Params;
-use ethportal_api::trin_types::jsonrpc::request::JsonRequest;
+use ethportal_api::types::execution::receipts::Receipts;
+use ethportal_api::types::jsonrpc::params::Params;
+use ethportal_api::types::jsonrpc::request::JsonRequest;
 use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::HistoryNetworkApiClient;
 use serde_json::{json, Value};

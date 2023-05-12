@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use discv5::enr::NodeId;
-use ethportal_api::trin_types::{
+use ethportal_api::types::{
     constants::CONTENT_ABSENT,
     content_key::RawContentKey,
     distance::{Metric, XorMetric},

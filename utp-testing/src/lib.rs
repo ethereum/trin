@@ -5,7 +5,7 @@ pub mod rpc;
 
 use crate::rpc::RpcServer;
 use discv5::TalkRequest;
-use ethportal_api::trin_types::enr::Enr;
+use ethportal_api::types::enr::Enr;
 use ethportal_api::utils::bytes::{hex_encode, hex_encode_upper};
 use jsonrpsee::core::{async_trait, RpcResult};
 use jsonrpsee::http_server::{HttpServerBuilder, HttpServerHandle};

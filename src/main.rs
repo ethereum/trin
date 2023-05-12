@@ -1,6 +1,6 @@
 #![warn(clippy::unwrap_used)]
 
-use ethportal_api::trin_types::{cli::TrinConfig, provider::TrustedProvider};
+use ethportal_api::types::{cli::TrinConfig, provider::TrustedProvider};
 use tracing::error;
 use trin_utils::log::init_tracing_logger;
 

@@ -5,8 +5,8 @@ use discv5::{
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
-use ethportal_api::trin_types::distance::Distance;
-use ethportal_api::trin_types::enr::Enr;
+use ethportal_api::types::distance::Distance;
+use ethportal_api::types::enr::Enr;
 use ethportal_api::utils::bytes::hex_encode;
 
 type NodeMap = BTreeMap<String, String>;

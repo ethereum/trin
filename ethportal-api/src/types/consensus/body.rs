@@ -10,7 +10,7 @@ use super::{
     serde::{de_hex_to_txs, de_number_to_u256, se_hex_to_number, se_txs_to_hex},
     signature::BlsSignature,
 };
-use crate::trin_types::wrapped::{bloom::Bloom, bytes::Bytes, h160::H160};
+use crate::types::wrapped::{bloom::Bloom, bytes::Bytes, h160::H160};
 
 /// Types based off specs @
 /// https://github.com/ethereum/consensus-specs/blob/5970ae56a1cd50ea06049d8aad6bed74093d49d3/specs/bellatrix/beacon-chain.md

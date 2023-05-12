@@ -1,9 +1,9 @@
 use std::net::{IpAddr, Ipv4Addr};
 use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
-use ethportal_api::trin_types::content_key::IdentityContentKey;
-use ethportal_api::trin_types::distance::XorMetric;
-use ethportal_api::trin_types::enr::{Enr, SszEnr};
+use ethportal_api::types::content_key::IdentityContentKey;
+use ethportal_api::types::distance::XorMetric;
+use ethportal_api::types::enr::{Enr, SszEnr};
 use portalnet::{
     discovery::{Discovery, Discv5UdpSocket},
     overlay::{OverlayConfig, OverlayProtocol},

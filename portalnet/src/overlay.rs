@@ -36,14 +36,14 @@ use crate::{
         node::Node,
     },
 };
-use ethportal_api::trin_types::content_key::RawContentKey;
-use ethportal_api::trin_types::distance::{Distance, Metric};
-use ethportal_api::trin_types::enr::Enr;
+use ethportal_api::types::content_key::RawContentKey;
+use ethportal_api::types::distance::{Distance, Metric};
+use ethportal_api::types::enr::Enr;
 use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::OverlayContentKey;
 use trin_validation::validator::Validator;
 
-use ethportal_api::trin_types::query_trace::QueryTrace;
+use ethportal_api::types::query_trace::QueryTrace;
 
 /// Configuration parameters for the overlay network.
 #[derive(Clone)]
