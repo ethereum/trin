@@ -30,13 +30,11 @@ rocksdb = "0.18.0"
 rpc = { path = "rpc"}
 serde_json = {version = "1.0.89", features = ["preserve_order"]}
 sha3 = "0.9.1"
-structopt = "0.3.26"
 tempfile = "3.3.0"
 tokio = { version = "1.14.0", features = ["full"] }
 tracing = "0.1.36"
 tracing-subscriber = "0.3.15"
 trin-beacon = { path = "trin-beacon" }
-trin-bridge = { path = "trin-bridge" }
 trin-history = { path = "trin-history" }
 trin-state = { path = "trin-state" }
 trin-utils = { path = "trin-utils" }
@@ -54,6 +52,7 @@ members = [
     "light-client",
     "rpc",
     "trin-beacon",
+    "trin-bridge",
     "trin-cli",
     "trin-history",
     "trin-state",

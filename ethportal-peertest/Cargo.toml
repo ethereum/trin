@@ -12,7 +12,6 @@ authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 [dependencies]
 anyhow = "1.0.68"
-clap = "2.33.3"
 discv5 = { version = "0.2.1", features = ["serde"]}
 eth2_ssz = "0.4.0"
 ethereum-types = "0.12.1"
@@ -26,7 +25,6 @@ rand = "0.8.4"
 reth-ipc = { version = "0.1.0", git = "https://github.com/paradigmxyz/reth.git"}
 rocksdb = "0.18.0"
 serde_json = "1.0.89"
-structopt = "0.3.26"
 tempfile = "3.3.0"
 tokio = {version = "1.14.0", features = ["full"]}
 tracing = "0.1.36"

@@ -14,15 +14,11 @@ authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 anyhow = "1.0.68"
 base64 = "0.13.0"
 clap = { version = "4.2.1", features = ["derive"] }
-ethereum-types = "0.12.1"
 ethportal-api = { path = "../ethportal-api" }
-jsonrpc = "0.12.0"
 nanotemplate = "0.3.0"
 serde = "1.0.150"
 serde_json = { version = "1.0.89", features = ["raw_value"] }
 
-thiserror = "1.0.29"
-trin-utils = { path = "../trin-utils" }
 ureq = { version = "2.5.0", features = ["json"] }
 
 [[bin]]

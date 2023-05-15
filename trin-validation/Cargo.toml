@@ -26,7 +26,6 @@ serde_json = "1.0.89"
 tokio = { version = "1.14.0", features = ["full"] }
 tree_hash = "0.4.0"
 tree_hash_derive = "0.4.0"
-trin-utils = { path = "../trin-utils" }
 
 [dev-dependencies]
 quickcheck = "1.0.3"

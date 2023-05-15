@@ -551,15 +551,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a4a4ddaa51a5bc52a6948f74c06d20aaaddb71924eab79b8c97a8c556e942d6a"
 
 [[package]]
-name = "base64-compat"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a8d4d2746f89841e49230dd26917df1876050f95abafafbe34f47cb534b88d7"
-dependencies = [
- "byteorder",
-]
-
-[[package]]
 name = "base64ct"
 version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2189,7 +2180,6 @@ dependencies = [
  "rlp-derive",
  "rstest 0.16.0",
  "serde",
- "serde-hex",
  "serde_json",
  "serde_yaml",
  "sha2 0.10.6",
@@ -2203,7 +2193,6 @@ dependencies = [
  "tracing-subscriber",
  "tree_hash",
  "tree_hash_derive",
- "trin-utils",
  "ureq",
  "url",
  "validator",
@@ -2214,7 +2203,6 @@ name = "ethportal-peertest"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap 2.34.0",
  "discv5",
  "eth2_ssz",
  "ethereum-types 0.12.1",
@@ -2228,7 +2216,6 @@ dependencies = [
  "reth-ipc",
  "rocksdb",
  "serde_json",
- "structopt",
  "tempfile",
  "tokio",
  "tracing",
@@ -3312,18 +3299,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "445dde2150c55e483f3d8416706b97ec8e8237c307e5b7b4b8dd15e6af2a0730"
 dependencies = [
  "wasm-bindgen",
-]
-
-[[package]]
-name = "jsonrpc"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f8423b78fc94d12ef1a4a9d13c348c9a78766dda0cc18817adf0faf77e670c8"
-dependencies = [
- "base64-compat",
- "serde",
- "serde_derive",
- "serde_json",
 ]
 
 [[package]]
@@ -5697,17 +5672,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde-hex"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca37e3e4d1b39afd7ff11ee4e947efae85adfddf4841787bfa47c470e96dc26d"
-dependencies = [
- "array-init",
- "serde",
- "smallvec 0.6.14",
-]
-
-[[package]]
 name = "serde_derive"
 version = "1.0.160"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6901,13 +6865,11 @@ dependencies = [
  "rpc",
  "serde_json",
  "sha3 0.9.1",
- "structopt",
  "tempfile",
  "tokio",
  "tracing",
  "tracing-subscriber",
  "trin-beacon",
- "trin-bridge",
  "trin-history",
  "trin-state",
  "trin-utils",
@@ -6965,14 +6927,10 @@ dependencies = [
  "anyhow",
  "base64 0.13.1",
  "clap 4.2.4",
- "ethereum-types 0.12.1",
  "ethportal-api",
- "jsonrpc",
  "nanotemplate",
  "serde",
  "serde_json",
- "thiserror",
- "trin-utils",
  "ureq",
 ]
 
@@ -7033,10 +6991,6 @@ version = "0.1.1-alpha.1"
 dependencies = [
  "ansi_term",
  "atty",
- "hex",
- "rand 0.8.5",
- "thiserror",
- "tracing",
  "tracing-subscriber",
 ]
 
@@ -7063,7 +7017,6 @@ dependencies = [
  "tokio",
  "tree_hash",
  "tree_hash_derive",
- "trin-utils",
 ]
 
 [[package]]
