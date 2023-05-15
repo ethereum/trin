@@ -1,5 +1,6 @@
 #![warn(clippy::unwrap_used)]
 
+mod beacon_rpc;
 mod discv5_rpc;
 mod history_rpc;
 mod server_rpc;
