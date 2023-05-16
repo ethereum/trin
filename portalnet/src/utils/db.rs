@@ -8,7 +8,7 @@ use ethereum_types::H256;
 use tempfile::TempDir;
 use tracing::debug;
 
-use trin_utils::bytes::{hex_decode, hex_encode};
+use ethportal_api::utils::bytes::{hex_decode, hex_encode};
 
 const TRIN_DATA_ENV_VAR: &str = "TRIN_DATA_PATH";
 const TRIN_DATA_DIR: &str = "trin";

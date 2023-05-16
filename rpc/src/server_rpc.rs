@@ -1,5 +1,6 @@
 use crate::jsonrpsee::server::{ServerBuilder as HttpServerBuilder, ServerHandle};
 use crate::{Discv5Api, HistoryNetworkApi, Web3Api};
+use ethportal_api::types::jsonrpc::request::HistoryJsonRpcRequest;
 use ethportal_api::{Discv5ApiServer, HistoryNetworkApiServer, Web3ApiServer};
 use portalnet::discovery::Discovery;
 use reth_ipc::server::Builder as IpcServerBuilder;
@@ -7,7 +8,6 @@ use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use trin_types::jsonrpc::request::HistoryJsonRpcRequest;
 
 use url::Url;
 

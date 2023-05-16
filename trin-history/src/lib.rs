@@ -19,12 +19,12 @@ use tracing::info;
 use utp_rs::socket::UtpSocket;
 
 use crate::{events::HistoryEvents, jsonrpc::HistoryRequestHandler};
+use ethportal_api::types::jsonrpc::request::HistoryJsonRpcRequest;
 use portalnet::{
     discovery::{Discovery, UtpEnr},
     storage::PortalStorageConfig,
     types::messages::PortalnetConfig,
 };
-use trin_types::jsonrpc::request::HistoryJsonRpcRequest;
 use trin_validation::oracle::HeaderOracle;
 
 type HistoryHandler = Option<HistoryRequestHandler>;

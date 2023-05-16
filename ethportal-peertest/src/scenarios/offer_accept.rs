@@ -3,12 +3,12 @@ use std::str::FromStr;
 use serde_json::json;
 use tracing::{error, info};
 
+use ethportal_api::types::{content_value::PossibleHistoryContentValue, enr::Enr};
+use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::{
     jsonrpsee::async_client::Client, HistoryContentKey, HistoryContentValue,
     HistoryNetworkApiClient,
 };
-use trin_types::{content_value::PossibleHistoryContentValue, enr::Enr};
-use trin_utils::bytes::hex_encode;
 
 use crate::{
     constants::{HISTORY_CONTENT_KEY, HISTORY_CONTENT_VALUE},

@@ -1,6 +1,16 @@
 use std::sync::Arc;
 
 use discv5::enr::NodeId;
+use ethportal_api::types::{
+    constants::CONTENT_ABSENT,
+    content_key::RawContentKey,
+    distance::{Metric, XorMetric},
+    enr::Enr,
+    jsonrpc::endpoints::HistoryEndpoint,
+    jsonrpc::request::HistoryJsonRpcRequest,
+    query_trace::QueryTrace,
+};
+use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::{
     types::portal::{AcceptInfo, FindNodesInfo, PongInfo, TraceContentInfo},
     ContentValue, {HistoryContentKey, OverlayContentKey},
@@ -10,16 +20,6 @@ use serde_json::{json, Value};
 use ssz::Encode;
 use tokio::sync::{mpsc, Mutex, RwLock};
 use tracing::error;
-use trin_types::{
-    constants::CONTENT_ABSENT,
-    content_key::RawContentKey,
-    distance::{Metric, XorMetric},
-    enr::Enr,
-    jsonrpc::endpoints::HistoryEndpoint,
-    jsonrpc::request::HistoryJsonRpcRequest,
-    query_trace::QueryTrace,
-};
-use trin_utils::bytes::hex_encode;
 
 use crate::network::HistoryNetwork;
 use crate::utils::bucket_entries_to_json;

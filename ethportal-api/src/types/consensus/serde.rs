@@ -4,7 +4,7 @@ use serde_json::Value;
 use ssz_types::VariableList;
 
 use super::body::{Transaction, Transactions};
-use trin_utils::bytes::{hex_decode, hex_encode};
+use crate::utils::bytes::{hex_decode, hex_encode};
 
 pub fn se_txs_to_hex<S>(value: &Transactions, serializer: S) -> Result<S::Ok, S::Error>
 where

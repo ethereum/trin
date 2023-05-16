@@ -5,14 +5,14 @@ use tokio::sync::RwLock;
 use utp_rs::socket::UtpSocket;
 
 use crate::validation::BeaconValidator;
+use ethportal_api::types::content_key::BeaconContentKey;
+use ethportal_api::types::distance::XorMetric;
 use portalnet::{
     discovery::{Discovery, UtpEnr},
     overlay::{OverlayConfig, OverlayProtocol},
     storage::{PortalStorage, PortalStorageConfig},
     types::messages::{PortalnetConfig, ProtocolId},
 };
-use trin_types::content_key::BeaconContentKey;
-use trin_types::distance::XorMetric;
 use trin_validation::oracle::HeaderOracle;
 
 /// Beacon network layer on top of the overlay protocol. Encapsulates beacon network specific data and logic.

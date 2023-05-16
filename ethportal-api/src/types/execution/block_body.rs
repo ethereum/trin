@@ -13,7 +13,7 @@ use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, VariableList};
 
 use super::{header::Header, receipts::TransactionId};
-use trin_utils::bytes::hex_decode;
+use crate::utils::bytes::hex_decode;
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct BlockBody {
@@ -480,7 +480,7 @@ mod tests {
     use rstest::rstest;
     use ssz::{Decode, Encode};
 
-    use trin_utils::bytes::hex_encode;
+    use crate::utils::bytes::hex_encode;
 
     // tx data from: https://etherscan.io/txs?block=14764013
     #[rstest]
@@ -576,7 +576,7 @@ mod tests {
         let encoded = block_body.as_ssz_bytes();
 
         let expected: Vec<u8> =
-            std::fs::read("../trin-types/src/assets/trin/block_body_14764013.bin").unwrap();
+            std::fs::read("../test_assets/mainnet/block_body_14764013.bin").unwrap();
         assert_eq!(hex_encode(&encoded), hex_encode(expected));
 
         let decoded = BlockBody::from_ssz_bytes(&encoded).unwrap();

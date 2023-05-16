@@ -1,14 +1,14 @@
 use crate::constants::{HISTORY_CONTENT_KEY, HISTORY_CONTENT_VALUE};
 use crate::Peertest;
 use ethereum_types::U256;
+use ethportal_api::types::content_key::HistoryContentKey;
+use ethportal_api::types::content_value::{HistoryContentValue, PossibleHistoryContentValue};
+use ethportal_api::types::distance::Distance;
 use ethportal_api::{Discv5ApiClient, HistoryNetworkApiClient, Web3ApiClient};
 use jsonrpsee::async_client::Client;
 use serde_json::json;
 use ssz::Encode;
 use tracing::info;
-use trin_types::content_key::HistoryContentKey;
-use trin_types::content_value::{HistoryContentValue, PossibleHistoryContentValue};
-use trin_types::distance::Distance;
 use trin_utils::version::get_trin_version;
 
 pub async fn test_web3_client_version(target: &Client) {

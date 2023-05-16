@@ -1,8 +1,8 @@
+use crate::types::content_key::HistoryContentKey;
+use crate::types::content_value::{HistoryContentValue, PossibleHistoryContentValue};
+use crate::types::enr::Enr;
 use serde::{Deserialize, Serialize};
 use ssz_types::{typenum, BitList};
-use trin_types::content_key::HistoryContentKey;
-use trin_types::content_value::{HistoryContentValue, PossibleHistoryContentValue};
-use trin_types::enr::Enr;
 
 use super::query_trace::QueryTrace;
 

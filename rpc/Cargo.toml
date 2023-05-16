@@ -14,7 +14,6 @@ authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 anyhow = "1.0.68"
 ethportal-api = { path = "../ethportal-api"}
 portalnet = { path = "../portalnet"}
-trin-types = { path = "../trin-types"}
 trin-utils = { path = "../trin-utils"}
 tokio = { version = "1.14.0", features = ["full"] }
 reth-ipc = { version = "0.1.0", git = "https://github.com/paradigmxyz/reth.git"}

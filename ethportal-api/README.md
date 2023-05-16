@@ -1,7 +1,7 @@
 # ethportal-api
 
 > **Warning!**
-> This crate is with experimental status! Do not rely on it in a production setting.
+> This crate is experimental! Do not rely on it in a production setting.
 
 This crate contains definitions for various Portal Network JSON-RPC APIs using [jsonrpsee](https://github.com/paritytech/jsonrpsee) framework.
 
@@ -45,6 +45,23 @@ async fn main() {
     assert_eq!(result, content_item);
 }
 ```
+
+## Types
+
+A variety of types are published in the `types` module. For now, types go into
+this module if either 1) they are used by multiple crates, or 2) it's part of
+the ethportal-api type signatures. Importantly, ethportal-api shouldn't have
+andy dependencies on other crates in the workspace. It's a goal to be able to
+publish ethportal-api without also publishing any other supporting crates.
+
+Especially during this experimental period, the types are subject to change, as
+many of them are used internally by trin. When ethportal-api becomes
+production-ready, the types will follow semantic versioning as usual: any
+incompatible change will be introduced with a major version increase.
+
+Utilities used throughout trin are still generally kept in trin-utils, unless
+they are used by ethportal-api. Then they are published into ethportal-api,
+like the hex utilities.
 
 ## License
 The entire code within this repository is licensed under the [GNU General Public License v3.0](./LICENSE)

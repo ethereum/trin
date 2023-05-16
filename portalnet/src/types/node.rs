@@ -1,7 +1,7 @@
 use std::fmt;
 
-use trin_types::distance::Distance;
-use trin_types::enr::Enr;
+use ethportal_api::types::distance::Distance;
+use ethportal_api::types::enr::Enr;
 
 /// A node in the overlay network routing table.
 #[derive(Clone, Debug, Eq, PartialEq)]

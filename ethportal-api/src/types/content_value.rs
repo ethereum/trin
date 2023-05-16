@@ -1,13 +1,13 @@
-use crate::consensus::header_proof::HistoricalSummariesWithProof;
-use crate::constants::CONTENT_ABSENT;
-use crate::execution::accumulator::EpochAccumulator;
-use crate::execution::block_body::BlockBody;
-use crate::execution::header::HeaderWithProof;
-use crate::execution::receipts::Receipts;
+use crate::types::consensus::header_proof::HistoricalSummariesWithProof;
+use crate::types::constants::CONTENT_ABSENT;
+use crate::types::execution::accumulator::EpochAccumulator;
+use crate::types::execution::block_body::BlockBody;
+use crate::types::execution::header::HeaderWithProof;
+use crate::types::execution::receipts::Receipts;
+use crate::utils::bytes::{hex_decode, hex_encode};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use ssz::{Decode, Encode};
 use thiserror::Error;
-use trin_utils::bytes::{hex_decode, hex_encode};
 
 /// An encodable portal network content value.
 pub trait ContentValue: Sized {

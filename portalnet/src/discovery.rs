@@ -13,11 +13,11 @@ use utp_rs::{cid::ConnectionPeer, udp::AsyncUdpSocket};
 
 use super::types::messages::{PortalnetConfig, ProtocolId};
 use crate::socket;
+use ethportal_api::types::enr::Enr;
+use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::{NodeId as EthportalNodeId, NodeInfo};
 use std::str::FromStr;
 use std::{convert::TryFrom, fmt, io, net::SocketAddr, sync::Arc};
-use trin_types::enr::Enr;
-use trin_utils::bytes::hex_encode;
 use trin_utils::version::get_trin_version;
 
 /// Size of the buffer of the Discv5 TALKREQ channel.

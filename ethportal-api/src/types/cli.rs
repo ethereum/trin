@@ -4,8 +4,8 @@ use clap::{arg, Parser};
 use ethereum_types::H256;
 use url::Url;
 
-use crate::bootnodes::Bootnodes;
-use crate::provider::TrustedProviderType;
+use crate::types::bootnodes::Bootnodes;
+use crate::types::provider::TrustedProviderType;
 
 pub const DEFAULT_MASTER_ACC_PATH: &str = "validation_assets/merge_macc.bin";
 pub const DEFAULT_WEB3_IPC_PATH: &str = "/tmp/trin-jsonrpc.ipc";
@@ -284,7 +284,7 @@ impl fmt::Display for TrinConfig {
 #[allow(clippy::unwrap_used)]
 mod test {
     use super::*;
-    use crate::provider::TrustedProvider;
+    use crate::types::provider::TrustedProvider;
     use std::env;
     use std::net::{IpAddr, Ipv4Addr};
     use test_log::test;

@@ -23,9 +23,9 @@ use thiserror::Error;
 use tracing::{debug, error, info};
 
 use crate::types::messages::ProtocolId;
-use trin_types::content_key::{ContentKeyError, HistoryContentKey, OverlayContentKey};
-use trin_types::distance::{Distance, Metric, XorMetric};
-use trin_utils::bytes::{hex_decode, hex_encode, ByteUtilsError};
+use ethportal_api::types::content_key::{ContentKeyError, HistoryContentKey, OverlayContentKey};
+use ethportal_api::types::distance::{Distance, Metric, XorMetric};
+use ethportal_api::utils::bytes::{hex_decode, hex_encode, ByteUtilsError};
 
 const BYTES_IN_MB_U64: u64 = 1000 * 1000;
 const BYTES_IN_MB_F64: f64 = 1000.0 * 1000.0;
@@ -950,7 +950,7 @@ pub mod test {
     use serial_test::serial;
 
     use crate::utils::db::{configure_node_data_dir, setup_temp_dir};
-    use trin_types::content_key::IdentityContentKey;
+    use ethportal_api::types::content_key::IdentityContentKey;
 
     const CAPACITY_MB: u64 = 2;
 

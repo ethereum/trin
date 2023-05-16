@@ -551,15 +551,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a4a4ddaa51a5bc52a6948f74c06d20aaaddb71924eab79b8c97a8c556e942d6a"
 
 [[package]]
-name = "base64-compat"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a8d4d2746f89841e49230dd26917df1876050f95abafafbe34f47cb534b88d7"
-dependencies = [
- "byteorder",
-]
-
-[[package]]
 name = "base64ct"
 version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2167,16 +2158,44 @@ checksum = "0198b9d0078e0f30dedc7acbb21c974e838fc8fae3ee170128658a98cb2c1c04"
 name = "ethportal-api"
 version = "0.2.0"
 dependencies = [
+ "anyhow",
+ "base64 0.13.1",
+ "bytes 1.4.0",
+ "clap 4.2.4",
  "discv5",
  "env_logger 0.9.3",
+ "eth2_ssz",
+ "eth2_ssz_derive",
  "eth2_ssz_types",
+ "eth_trie",
  "ethereum-types 0.12.1",
+ "ethnum",
+ "hex",
  "jsonrpsee 0.16.2",
+ "keccak-hash",
+ "lazy_static",
+ "quickcheck",
+ "rand 0.8.5",
+ "rlp 0.5.2",
+ "rlp-derive",
+ "rstest 0.16.0",
  "serde",
  "serde_json",
+ "serde_yaml",
+ "sha2 0.10.6",
+ "sha3 0.9.1",
+ "snap",
+ "stremio-serde-hex",
+ "test-log",
+ "thiserror",
+ "tokio",
  "tracing",
- "trin-types",
- "trin-utils 0.1.1-alpha.1",
+ "tracing-subscriber",
+ "tree_hash",
+ "tree_hash_derive",
+ "ureq",
+ "url",
+ "validator",
 ]
 
 [[package]]
@@ -2184,7 +2203,6 @@ name = "ethportal-peertest"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap 2.34.0",
  "discv5",
  "eth2_ssz",
  "ethereum-types 0.12.1",
@@ -2198,7 +2216,6 @@ dependencies = [
  "reth-ipc",
  "rocksdb",
  "serde_json",
- "structopt",
  "tempfile",
  "tokio",
  "tracing",
@@ -2207,8 +2224,7 @@ dependencies = [
  "trin",
  "trin-history",
  "trin-state",
- "trin-types",
- "trin-utils 0.1.1-alpha.1",
+ "trin-utils",
  "uds_windows",
  "ureq",
 ]
@@ -3283,18 +3299,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "445dde2150c55e483f3d8416706b97ec8e8237c307e5b7b4b8dd15e6af2a0730"
 dependencies = [
  "wasm-bindgen",
-]
-
-[[package]]
-name = "jsonrpc"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f8423b78fc94d12ef1a4a9d13c348c9a78766dda0cc18817adf0faf77e670c8"
-dependencies = [
- "base64-compat",
- "serde",
- "serde_derive",
- "serde_json",
 ]
 
 [[package]]
@@ -4669,8 +4673,7 @@ dependencies = [
  "tokio-test",
  "tracing",
  "tracing-subscriber",
- "trin-types",
- "trin-utils 0.1.1-alpha.1",
+ "trin-utils",
  "trin-validation",
  "uds_windows",
  "url",
@@ -5301,8 +5304,7 @@ dependencies = [
  "reth-ipc",
  "serde_json",
  "tokio",
- "trin-types",
- "trin-utils 0.1.1-alpha.1",
+ "trin-utils",
  "url",
 ]
 
@@ -5667,17 +5669,6 @@ checksum = "c3dfe1b7eb6f9dcf011bd6fad169cdeaae75eda0d61b1a99a3f015b41b0cae39"
 dependencies = [
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "serde-hex"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca37e3e4d1b39afd7ff11ee4e947efae85adfddf4841787bfa47c470e96dc26d"
-dependencies = [
- "array-init",
- "serde",
- "smallvec 0.6.14",
 ]
 
 [[package]]
@@ -6874,17 +6865,14 @@ dependencies = [
  "rpc",
  "serde_json",
  "sha3 0.9.1",
- "structopt",
  "tempfile",
  "tokio",
  "tracing",
  "tracing-subscriber",
  "trin-beacon",
- "trin-bridge",
  "trin-history",
  "trin-state",
- "trin-types",
- "trin-utils 0.1.1-alpha.1",
+ "trin-utils",
  "trin-validation",
  "ureq",
  "utp-rs",
@@ -6904,8 +6892,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
- "trin-types",
- "trin-utils 0.1.1-alpha.1",
+ "trin-utils",
  "trin-validation",
  "utp-rs",
 ]
@@ -6929,8 +6916,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "trin-types",
- "trin-utils 0.1.1-alpha.1",
+ "trin-utils",
  "trin-validation",
 ]
 
@@ -6941,15 +6927,10 @@ dependencies = [
  "anyhow",
  "base64 0.13.1",
  "clap 4.2.4",
- "ethereum-types 0.12.1",
  "ethportal-api",
- "jsonrpc",
  "nanotemplate",
  "serde",
  "serde_json",
- "thiserror",
- "trin-types",
- "trin-utils 0.1.1-alpha.1",
  "ureq",
 ]
 
@@ -6975,8 +6956,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tree_hash",
- "trin-types",
- "trin-utils 0.1.1-alpha.1",
+ "trin-utils",
  "trin-validation",
  "ureq",
  "utp-rs",
@@ -7001,80 +6981,16 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "trin-types",
  "trin-validation",
  "utp-rs",
 ]
 
 [[package]]
-name = "trin-types"
-version = "0.1.1-alpha.1"
-dependencies = [
- "anyhow",
- "base64 0.13.1",
- "bytes 1.4.0",
- "clap 4.2.4",
- "discv5",
- "env_logger 0.9.3",
- "eth2_ssz",
- "eth2_ssz_derive",
- "eth2_ssz_types",
- "eth_trie",
- "ethereum-types 0.12.1",
- "ethnum",
- "keccak-hash",
- "lazy_static",
- "quickcheck",
- "rand 0.8.5",
- "rlp 0.5.2",
- "rlp-derive",
- "rstest 0.16.0",
- "serde",
- "serde-hex",
- "serde_json",
- "serde_yaml",
- "sha2 0.10.6",
- "sha3 0.9.1",
- "snap",
- "stremio-serde-hex",
- "test-log",
- "thiserror",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "tree_hash",
- "tree_hash_derive",
- "trin-utils 0.1.1-alpha.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "ureq",
- "url",
- "validator",
-]
-
-[[package]]
 name = "trin-utils"
 version = "0.1.1-alpha.1"
 dependencies = [
  "ansi_term",
  "atty",
- "hex",
- "rand 0.8.5",
- "thiserror",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "trin-utils"
-version = "0.1.1-alpha.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69c4d5e151a7bc9c69bb706c5b46cd39c8c12a8e7be877d38b5c3830ff87e8e1"
-dependencies = [
- "ansi_term",
- "atty",
- "hex",
- "rand 0.8.5",
- "thiserror",
- "tracing",
  "tracing-subscriber",
 ]
 
@@ -7089,6 +7005,7 @@ dependencies = [
  "eth2_ssz_derive",
  "eth2_ssz_types",
  "ethereum-types 0.12.1",
+ "ethportal-api",
  "lazy_static",
  "quickcheck",
  "quickcheck_macros",
@@ -7100,8 +7017,6 @@ dependencies = [
  "tokio",
  "tree_hash",
  "tree_hash_derive",
- "trin-types",
- "trin-utils 0.1.1-alpha.1",
 ]
 
 [[package]]
@@ -7285,6 +7200,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "discv5",
+ "ethportal-api",
  "jsonrpsee 0.15.1",
  "portalnet",
  "rand 0.8.5",
@@ -7292,8 +7208,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "trin-types",
- "trin-utils 0.1.1-alpha.1",
+ "trin-utils",
  "utp-rs",
 ]
 

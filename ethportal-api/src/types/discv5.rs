@@ -1,8 +1,8 @@
-use crate::enr::Enr;
+use super::enr::Enr;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::node_id::NodeId;
+use super::node_id::NodeId;
 
 /// Discv5 bucket
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

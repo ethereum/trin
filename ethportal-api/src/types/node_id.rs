@@ -1,11 +1,11 @@
-use crate::enr::Enr;
+use super::enr::Enr;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 use stremio_serde_hex::{SerHex, StrictPfx};
 
 use discv5::enr::NodeId as EnrNodeId;
 
-use crate::distance::{Metric, XorMetric};
+use super::distance::{Metric, XorMetric};
 
 type RawNodeId = [u8; 32];
 
@@ -29,7 +29,7 @@ impl NodeId {
     // TODO: We should be able to make this generic over a `Metric`.
     pub fn generate_random_node_id(target_bucket_idx: u8, local_node_id: NodeId) -> NodeId {
         let distance_leading_zeroes = 255 - target_bucket_idx;
-        let random_distance = trin_utils::bytes::random_32byte_array(distance_leading_zeroes);
+        let random_distance = crate::utils::bytes::random_32byte_array(distance_leading_zeroes);
 
         let raw_node_id = XorMetric::distance(&local_node_id.raw(), &random_distance);
 
@@ -80,8 +80,8 @@ impl Deref for NodeId {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use crate::enr::Enr;
-    use crate::node_id::NodeId;
+    use crate::types::enr::Enr;
+    use crate::types::node_id::NodeId;
     use std::net::Ipv4Addr;
 
     #[test]

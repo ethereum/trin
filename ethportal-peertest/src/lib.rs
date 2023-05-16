@@ -12,9 +12,9 @@ use httpmock::prelude::{MockServer, POST};
 use jsonrpsee::async_client::Client;
 use serde_json::json;
 
-use trin_types::enr::Enr;
-use trin_types::{cli::TrinConfig, provider::TrustedProvider};
-use trin_utils::bytes::hex_encode;
+use ethportal_api::types::enr::Enr;
+use ethportal_api::types::{cli::TrinConfig, provider::TrustedProvider};
+use ethportal_api::utils::bytes::hex_encode;
 
 pub fn setup_mock_trusted_http_server() -> MockServer {
     let server = MockServer::start();

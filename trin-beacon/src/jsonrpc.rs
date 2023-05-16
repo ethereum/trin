@@ -1,24 +1,24 @@
 use std::sync::Arc;
 
 use discv5::enr::NodeId;
+use ethportal_api::types::content_key::{BeaconContentKey, OverlayContentKey};
+use ethportal_api::types::content_value::{BeaconContentValue, ContentValue};
+use ethportal_api::types::jsonrpc::endpoints::BeaconEndpoint;
+use ethportal_api::types::jsonrpc::request::BeaconJsonRpcRequest;
 use ethportal_api::types::portal::{AcceptInfo, FindNodesInfo, PongInfo, TraceContentInfo};
-use portalnet::storage::ContentStore;
-use serde_json::{json, Value};
-use ssz::Encode;
-use tokio::sync::{mpsc, Mutex, RwLock};
-use tracing::error;
-use trin_types::content_key::{BeaconContentKey, OverlayContentKey};
-use trin_types::content_value::{BeaconContentValue, ContentValue};
-use trin_types::jsonrpc::endpoints::BeaconEndpoint;
-use trin_types::jsonrpc::request::BeaconJsonRpcRequest;
-use trin_types::{
+use ethportal_api::types::{
     constants::CONTENT_ABSENT,
     content_key::RawContentKey,
     distance::{Metric, XorMetric},
     enr::Enr,
     query_trace::QueryTrace,
 };
-use trin_utils::bytes::hex_encode;
+use ethportal_api::utils::bytes::hex_encode;
+use portalnet::storage::ContentStore;
+use serde_json::{json, Value};
+use ssz::Encode;
+use tokio::sync::{mpsc, Mutex, RwLock};
+use tracing::error;
 
 use crate::network::BeaconNetwork;
 

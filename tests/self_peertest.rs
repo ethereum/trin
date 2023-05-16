@@ -5,9 +5,9 @@ mod test {
         thread, time,
     };
 
+    use ethportal_api::types::cli::{TrinConfig, DEFAULT_WEB3_IPC_PATH};
+    use ethportal_api::types::provider::TrustedProvider;
     use ethportal_peertest as peertest;
-    use trin_types::cli::{TrinConfig, DEFAULT_WEB3_IPC_PATH};
-    use trin_types::provider::TrustedProvider;
     use trin_utils::log::init_tracing_logger;
 
     // Logs don't show up when trying to use test_log here, maybe because of multi_thread

@@ -1,7 +1,7 @@
-use crate::content_key::{BeaconContentKey, HistoryContentKey};
-use crate::content_value::{BeaconContentValue, HistoryContentValue};
-use crate::enr::Enr;
-use crate::node_id::NodeId;
+use crate::types::content_key::{BeaconContentKey, HistoryContentKey};
+use crate::types::content_value::{BeaconContentValue, HistoryContentValue};
+use crate::types::enr::Enr;
+use crate::types::node_id::NodeId;
 
 /// Discv5 JSON-RPC endpoints. Start with "discv5_" prefix
 #[derive(Debug, PartialEq, Eq, Clone)]

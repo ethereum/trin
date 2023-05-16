@@ -1,15 +1,15 @@
 use std::net::{IpAddr, Ipv4Addr};
 use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
+use ethportal_api::types::content_key::IdentityContentKey;
+use ethportal_api::types::distance::XorMetric;
+use ethportal_api::types::enr::{Enr, SszEnr};
 use portalnet::{
     discovery::{Discovery, Discv5UdpSocket},
     overlay::{OverlayConfig, OverlayProtocol},
     storage::{ContentStore, DistanceFunction, MemoryContentStore},
     types::messages::{Content, Message, PortalnetConfig, ProtocolId},
 };
-use trin_types::content_key::IdentityContentKey;
-use trin_types::distance::XorMetric;
-use trin_types::enr::{Enr, SszEnr};
 use trin_validation::validator::MockValidator;
 
 use discv5::TalkRequest;
@@ -20,7 +20,7 @@ use tokio::{
 };
 use utp_rs::socket::UtpSocket;
 
-use trin_utils::bytes::hex_encode_upper;
+use ethportal_api::utils::bytes::hex_encode_upper;
 
 async fn init_overlay(
     discovery: Arc<Discovery>,

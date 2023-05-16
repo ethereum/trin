@@ -22,7 +22,6 @@ portalnet = { path = "../portalnet" }
 serde_json = "1.0.89"
 tokio = {version = "1.14.0", features = ["full"]}
 tracing = "0.1.36"
-trin-types = { path = "../trin-types" }
 trin-validation = { path = "../trin-validation" }
 trin-utils = { path = "../trin-utils" }
 utp-rs = "0.1.0-alpha.4"
