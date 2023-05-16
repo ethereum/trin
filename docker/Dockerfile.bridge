@@ -23,7 +23,6 @@ COPY ./trin-bridge ./trin-bridge
 COPY ./trin-cli ./trin-cli
 COPY ./trin-history ./trin-history 
 COPY ./trin-state ./trin-state 
-COPY ./trin-types ./trin-types
 COPY ./trin-utils ./trin-utils
 COPY ./trin-validation ./trin-validation
 COPY ./ethportal-peertest ./ethportal-peertest 
