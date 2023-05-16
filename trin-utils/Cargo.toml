@@ -12,7 +12,7 @@ authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 build = "build.rs"
 
 [dependencies]
-tracing-subscriber = "0.3.15"
+tracing-subscriber = { version = "0.3.15", features = ["env-filter"] }
 
 [target.'cfg(windows)'.dependencies]
 # The crates for detecting whether the terminal supports colors are OS-specific.
