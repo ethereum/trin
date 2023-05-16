@@ -7,10 +7,7 @@ use ethportal_api::types::jsonrpc::endpoints::BeaconEndpoint;
 use ethportal_api::types::jsonrpc::request::BeaconJsonRpcRequest;
 use ethportal_api::types::portal::{AcceptInfo, FindNodesInfo, PongInfo, TraceContentInfo};
 use ethportal_api::types::{
-    constants::CONTENT_ABSENT,
-    content_key::RawContentKey,
-    enr::Enr,
-    query_trace::QueryTrace,
+    constants::CONTENT_ABSENT, content_key::RawContentKey, query_trace::QueryTrace,
 };
 use ethportal_api::utils::bytes::hex_encode;
 use portalnet::storage::ContentStore;
@@ -338,6 +335,5 @@ async fn recursive_find_nodes(
     let node_id = discv5::enr::NodeId::from(node_id.0);
     let overlay = network.read().await.overlay.clone();
     let nodes = overlay.lookup_node(node_id).await;
-    let nodes: Vec<Enr> = nodes.into_iter().take(16).collect();
     Ok(json!(nodes))
 }
