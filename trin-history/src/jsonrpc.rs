@@ -4,7 +4,6 @@ use discv5::enr::NodeId;
 use ethportal_api::types::{
     constants::CONTENT_ABSENT,
     content_key::RawContentKey,
-    distance::{Metric, XorMetric},
     enr::Enr,
     jsonrpc::endpoints::HistoryEndpoint,
     jsonrpc::request::HistoryJsonRpcRequest,
@@ -344,11 +343,7 @@ async fn recursive_find_nodes(
 ) -> Result<Value, String> {
     let node_id = discv5::enr::NodeId::from(node_id.0);
     let overlay = network.read().await.overlay.clone();
-    let mut nodes = overlay.lookup_node(node_id).await;
-    nodes.sort_by(|a, b| {
-        XorMetric::distance(&node_id.raw(), &a.node_id().raw())
-            .cmp(&XorMetric::distance(&node_id.raw(), &b.node_id().raw()))
-    });
+    let nodes = overlay.lookup_node(node_id).await;
     let nodes: Vec<Enr> = nodes.into_iter().take(16).collect();
     Ok(json!(nodes))
 }
