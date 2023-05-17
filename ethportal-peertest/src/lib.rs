@@ -5,11 +5,11 @@ use std::net::{IpAddr, Ipv4Addr};
 use std::path::PathBuf;
 use std::{thread, time};
 
-use ethportal_api::jsonrpsee::server::ServerHandle;
 use ethportal_api::Discv5ApiClient;
 use futures::future;
 use httpmock::prelude::{MockServer, POST};
 use jsonrpsee::async_client::Client;
+use rpc::RpcServerHandle;
 use serde_json::json;
 
 use ethportal_api::types::enr::Enr;
@@ -60,7 +60,7 @@ pub fn setup_mock_trusted_http_server() -> MockServer {
 pub struct PeertestNode {
     pub enr: Enr,
     pub ipc_client: Client,
-    pub rpc_handle: ServerHandle,
+    pub rpc_handle: RpcServerHandle,
 }
 
 pub struct Peertest {
@@ -70,10 +70,10 @@ pub struct Peertest {
 
 impl Peertest {
     pub fn exit_all_nodes(&self) {
-        self.bootnode.rpc_handle.stop().unwrap();
+        self.bootnode.rpc_handle.clone().stop().unwrap();
         self.nodes
             .iter()
-            .for_each(|node| node.rpc_handle.stop().unwrap());
+            .for_each(|node| node.rpc_handle.clone().stop().unwrap());
     }
 }
 

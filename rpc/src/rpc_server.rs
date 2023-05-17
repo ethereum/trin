@@ -326,7 +326,7 @@ impl RpcServerConfig {
 
     /// Configures the endpoint of the ipc server
     ///
-    /// Default is [DEFAULT_IPC_ENDPOINT]
+    /// Default is [DEFAULT_WEB3_IPC_PATH]
     pub fn with_ipc_endpoint(mut self, path: impl Into<String>) -> Self {
         self.ipc_endpoint = Some(Endpoint::new(path.into()));
         self
@@ -563,8 +563,6 @@ pub enum WsHttpServerKind {
     /// Http server with cors
     WithCors(Server<Stack<CorsLayer, Identity>>),
 }
-
-// === impl WsHttpServerKind ===
 
 impl WsHttpServerKind {
     /// Starts the server and returns the handle

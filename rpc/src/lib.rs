@@ -1,5 +1,4 @@
 #![warn(clippy::unwrap_used)]
-#![allow(dead_code)]
 
 mod beacon_rpc;
 mod builder;
@@ -13,7 +12,7 @@ mod web3_rpc;
 use crate::jsonrpsee::server::ServerBuilder;
 pub use crate::rpc_server::RpcServerHandle;
 use beacon_rpc::BeaconNetworkApi;
-use builder::{PortalRpcModule, RpcModuleBuilder, TransportRpcModuleConfig};
+pub use builder::{PortalRpcModule, RpcModuleBuilder, TransportRpcModuleConfig};
 use discv5_rpc::Discv5Api;
 use errors::RpcError;
 use ethportal_api::jsonrpsee;
@@ -29,8 +28,6 @@ use web3_rpc::Web3Api;
 use crate::rpc_server::RpcServerConfig;
 use portalnet::discovery::Discovery;
 use reth_ipc::server::Builder as IpcServerBuilder;
-use std::net::SocketAddr;
-use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
@@ -90,8 +87,10 @@ pub async fn launch_jsonrpc_server(
 
             RpcServerConfig::default()
                 .with_http_address(
-                    SocketAddr::from_str(trin_config.web3_http_address.as_str())
-                        .expect("web3_http_address to be a valid SocketAddr"),
+                    trin_config
+                        .web3_http_address
+                        .socket_addrs(|| None)
+                        .expect("Invalid socket address")[0],
                 )
                 .with_http(ServerBuilder::default())
                 .with_ws(ServerBuilder::default())
