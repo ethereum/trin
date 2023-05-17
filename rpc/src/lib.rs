@@ -1,13 +1,104 @@
 #![warn(clippy::unwrap_used)]
+#![allow(dead_code)]
 
 mod beacon_rpc;
+mod builder;
+mod cors;
 mod discv5_rpc;
+mod errors;
 mod history_rpc;
-mod server_rpc;
+mod rpc_server;
 mod web3_rpc;
 
-pub use discv5_rpc::Discv5Api;
-pub use ethportal_api::jsonrpsee;
-pub use history_rpc::HistoryNetworkApi;
-pub use server_rpc::JsonRpcServer;
-pub use web3_rpc::Web3Api;
+use crate::jsonrpsee::server::ServerBuilder;
+pub use crate::rpc_server::RpcServerHandle;
+use beacon_rpc::BeaconNetworkApi;
+use builder::{PortalRpcModule, RpcModuleBuilder, TransportRpcModuleConfig};
+use discv5_rpc::Discv5Api;
+use errors::RpcError;
+use ethportal_api::jsonrpsee;
+use ethportal_api::types::cli::{
+    TrinConfig, Web3TransportType, BEACON_NETWORK, HISTORY_NETWORK, STATE_NETWORK,
+};
+use ethportal_api::types::jsonrpc::request::{
+    BeaconJsonRpcRequest, HistoryJsonRpcRequest, StateJsonRpcRequest,
+};
+use history_rpc::HistoryNetworkApi;
+use web3_rpc::Web3Api;
+
+use crate::rpc_server::RpcServerConfig;
+use portalnet::discovery::Discovery;
+use reth_ipc::server::Builder as IpcServerBuilder;
+use std::net::SocketAddr;
+use std::str::FromStr;
+use std::sync::Arc;
+use tokio::sync::mpsc;
+
+pub async fn launch_jsonrpc_server(
+    trin_config: TrinConfig,
+    discv5: Arc<Discovery>,
+    history_handler: Option<mpsc::UnboundedSender<HistoryJsonRpcRequest>>,
+    state_handler: Option<mpsc::UnboundedSender<StateJsonRpcRequest>>,
+    beacon_handler: Option<mpsc::UnboundedSender<BeaconJsonRpcRequest>>,
+) -> Result<RpcServerHandle, RpcError> {
+    let mut modules = vec![PortalRpcModule::Discv5];
+
+    for network in trin_config.networks.iter() {
+        match network.as_str() {
+            HISTORY_NETWORK => {
+                modules.push(PortalRpcModule::History);
+                modules.push(PortalRpcModule::Web3);
+            }
+            STATE_NETWORK => {
+                // not implemented
+            }
+            BEACON_NETWORK => modules.push(PortalRpcModule::Beacon),
+            _ => panic!("Unexpected network type: {}", network),
+        }
+    }
+
+    let handle: RpcServerHandle = match trin_config.web3_transport {
+        Web3TransportType::IPC => {
+            let transport = TransportRpcModuleConfig::default().with_ipc(modules);
+            let transport_modules = RpcModuleBuilder::new(discv5)
+                .maybe_with_history(history_handler)
+                .maybe_with_beacon(beacon_handler)
+                .maybe_with_state(state_handler)
+                .build(transport);
+
+            RpcServerConfig::default()
+                .with_ipc_endpoint(
+                    trin_config
+                        .web3_ipc_path
+                        .to_str()
+                        .expect("Path should be string"),
+                )
+                .with_ipc(IpcServerBuilder::default())
+                .start(transport_modules)
+                .await?
+        }
+        Web3TransportType::HTTP => {
+            // Run WebSockets support alongside HTTP
+            let transport = TransportRpcModuleConfig::default()
+                .with_http(modules.clone())
+                .with_ws(modules);
+            let transport_modules = RpcModuleBuilder::new(discv5)
+                .maybe_with_history(history_handler)
+                .maybe_with_beacon(beacon_handler)
+                .maybe_with_state(state_handler)
+                .build(transport);
+
+            RpcServerConfig::default()
+                .with_http_address(
+                    SocketAddr::from_str(trin_config.web3_http_address.as_str())
+                        .expect("web3_http_address to be a valid SocketAddr"),
+                )
+                .with_http(ServerBuilder::default())
+                .with_ws(ServerBuilder::default())
+                .start(transport_modules)
+                .await?
+        }
+    };
+
+    Ok(handle)
+}

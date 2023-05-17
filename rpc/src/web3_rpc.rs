@@ -4,6 +4,18 @@ use trin_utils::version::get_trin_version;
 
 pub struct Web3Api;
 
+impl Web3Api {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for Web3Api {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait]
 impl Web3ApiServer for Web3Api {
     async fn client_version(&self) -> RpcResult<String> {
