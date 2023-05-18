@@ -420,3 +420,86 @@ impl RpcModuleBuilder {
             .collect::<Vec<_>>()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn identical_selection() {
+        assert!(RpcModuleSelection::are_identical(
+            Some(&RpcModuleSelection::All),
+            Some(&RpcModuleSelection::All),
+        ));
+        assert!(!RpcModuleSelection::are_identical(
+            Some(&RpcModuleSelection::All),
+            Some(&RpcModuleSelection::Standard),
+        ));
+        assert!(RpcModuleSelection::are_identical(
+            Some(&RpcModuleSelection::Selection(
+                RpcModuleSelection::Standard.into_selection()
+            )),
+            Some(&RpcModuleSelection::Standard),
+        ));
+    }
+
+    #[test]
+    fn test_rpc_module_str() {
+        macro_rules! assert_rpc_module {
+            ($($s:expr => $v:expr,)*) => {
+                $(
+                    let val: PortalRpcModule  = $s.parse().unwrap();
+                    assert_eq!(val, $v);
+                    assert_eq!(val.to_string().as_str(), $s);
+                )*
+            };
+        }
+        assert_rpc_module!
+        (
+                "beacon" =>  PortalRpcModule::Beacon,
+                "discv5" =>  PortalRpcModule::Discv5,
+                "history" =>  PortalRpcModule::History,
+                "web3" =>  PortalRpcModule::Web3,
+            );
+    }
+
+    #[test]
+    fn test_default_selection() {
+        let selection = RpcModuleSelection::Standard.into_selection();
+        assert_eq!(
+            selection,
+            vec![
+                PortalRpcModule::Discv5,
+                PortalRpcModule::History,
+                PortalRpcModule::Web3,
+            ]
+        )
+    }
+
+    #[test]
+    fn test_create_rpc_module_config() {
+        let selection = vec!["history", "web3"];
+        let config = RpcModuleSelection::try_from_selection(selection).unwrap();
+        assert_eq!(
+            config,
+            RpcModuleSelection::Selection(vec![PortalRpcModule::History, PortalRpcModule::Web3])
+        );
+    }
+
+    #[test]
+    fn test_configure_transport_config() {
+        let config = TransportRpcModuleConfig::default()
+            .with_http([PortalRpcModule::History, PortalRpcModule::Web3]);
+        assert_eq!(
+            config,
+            TransportRpcModuleConfig {
+                http: Some(RpcModuleSelection::Selection(vec![
+                    PortalRpcModule::History,
+                    PortalRpcModule::Web3
+                ])),
+                ws: None,
+                ipc: None,
+            }
+        )
+    }
+}

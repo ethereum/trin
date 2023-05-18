@@ -602,3 +602,190 @@ impl WsHttpServerKind {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::builder::RpcModuleSelection;
+    use crate::{PortalRpcModule, RpcModuleBuilder};
+    use portalnet::discovery::Discovery;
+    use std::io;
+    use std::sync::Arc;
+
+    /// Localhost with port 0 so a free port is used.
+    pub fn test_address() -> SocketAddr {
+        SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0))
+    }
+
+    fn is_addr_in_use_kind(err: &RpcError, kind: ServerKind) -> bool {
+        match err {
+            RpcError::AddressAlreadyInUse { kind: k, error } => {
+                *k == kind && error.kind() == io::ErrorKind::AddrInUse
+            }
+            _ => false,
+        }
+    }
+
+    /// Returns an [RpcModuleBuilder] with testing components.
+    #[allow(clippy::unwrap_used)]
+    pub fn test_rpc_builder() -> RpcModuleBuilder {
+        let (history_tx, _) = tokio::sync::mpsc::unbounded_channel();
+        let (beacon_tx, _) = tokio::sync::mpsc::unbounded_channel();
+        let discv5 = Arc::new(Discovery::new(Default::default()).unwrap());
+        RpcModuleBuilder::new(discv5)
+            .with_history(history_tx)
+            .with_beacon(beacon_tx)
+    }
+
+    /// Launches a new server with http only with the given modules
+    #[allow(clippy::unwrap_used)]
+    pub async fn launch_http(modules: impl Into<RpcModuleSelection>) -> RpcServerHandle {
+        let builder = test_rpc_builder();
+        let server = builder.build(TransportRpcModuleConfig::set_http(modules));
+        server
+            .start_server(
+                RpcServerConfig::http(Default::default()).with_http_address(test_address()),
+            )
+            .await
+            .unwrap()
+    }
+
+    /// Launches a new server with ws only with the given modules
+    #[allow(clippy::unwrap_used)]
+    pub async fn launch_ws(modules: impl Into<RpcModuleSelection>) -> RpcServerHandle {
+        let builder = test_rpc_builder();
+        let server = builder.build(TransportRpcModuleConfig::set_ws(modules));
+        server
+            .start_server(RpcServerConfig::ws(Default::default()).with_ws_address(test_address()))
+            .await
+            .unwrap()
+    }
+
+    /// Launches a new server with http and ws and with the given modules on the same port.
+    #[allow(clippy::unwrap_used)]
+    pub async fn launch_http_ws_same_port(
+        modules: impl Into<RpcModuleSelection>,
+    ) -> RpcServerHandle {
+        let builder = test_rpc_builder();
+        let modules = modules.into();
+        let server =
+            builder.build(TransportRpcModuleConfig::set_ws(modules.clone()).with_http(modules));
+        let addr = test_address();
+        server
+            .start_server(
+                RpcServerConfig::ws(Default::default())
+                    .with_ws_address(addr)
+                    .with_http(Default::default())
+                    .with_http_address(addr),
+            )
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_http_addr_in_use() {
+        let handle = launch_http(vec![PortalRpcModule::History]).await;
+        let addr = handle.http_local_addr().unwrap();
+        let builder = test_rpc_builder();
+        let server = builder.build(TransportRpcModuleConfig::set_http(vec![
+            PortalRpcModule::History,
+        ]));
+        let result = server
+            .start_server(RpcServerConfig::http(Default::default()).with_http_address(addr))
+            .await;
+        let err = result.unwrap_err();
+        assert!(is_addr_in_use_kind(&err, ServerKind::Http(addr)), "{err:?}");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_ws_addr_in_use() {
+        let handle = launch_ws(vec![PortalRpcModule::History]).await;
+        let addr = handle.ws_local_addr().unwrap();
+        let builder = test_rpc_builder();
+        let server = builder.build(TransportRpcModuleConfig::set_ws(vec![
+            PortalRpcModule::History,
+        ]));
+        let result = server
+            .start_server(RpcServerConfig::ws(Default::default()).with_ws_address(addr))
+            .await;
+        let err = result.unwrap_err();
+        assert!(is_addr_in_use_kind(&err, ServerKind::WS(addr)), "{err:?}");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_launch_same_port() {
+        let handle = launch_http_ws_same_port(vec![PortalRpcModule::History]).await;
+        let ws_addr = handle.ws_local_addr().unwrap();
+        let http_addr = handle.http_local_addr().unwrap();
+        assert_eq!(ws_addr, http_addr);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_launch_same_port_different_modules() {
+        let builder = test_rpc_builder();
+        let server = builder.build(
+            TransportRpcModuleConfig::set_ws(vec![PortalRpcModule::History])
+                .with_http(vec![PortalRpcModule::Beacon]),
+        );
+        let addr = test_address();
+        let res = server
+            .start_server(
+                RpcServerConfig::ws(Default::default())
+                    .with_ws_address(addr)
+                    .with_http(Default::default())
+                    .with_http_address(addr),
+            )
+            .await;
+        let err = res.unwrap_err();
+        assert!(matches!(
+            err,
+            RpcError::WsHttpSamePortError(WsHttpSamePortError::ConflictingModules { .. })
+        ));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_launch_same_port_same_cors() {
+        let builder = test_rpc_builder();
+        let server = builder.build(
+            TransportRpcModuleConfig::set_ws(vec![PortalRpcModule::History])
+                .with_http(vec![PortalRpcModule::History]),
+        );
+        let addr = test_address();
+        let res = server
+            .start_server(
+                RpcServerConfig::ws(Default::default())
+                    .with_ws_address(addr)
+                    .with_http(Default::default())
+                    .with_cors(Some("*".to_string()))
+                    .with_http_cors(Some("*".to_string()))
+                    .with_http_address(addr),
+            )
+            .await;
+        assert!(res.is_ok());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_launch_same_port_different_cors() {
+        let builder = test_rpc_builder();
+        let server = builder.build(
+            TransportRpcModuleConfig::set_ws(vec![PortalRpcModule::History])
+                .with_http(vec![PortalRpcModule::History]),
+        );
+        let addr = test_address();
+        let res = server
+            .start_server(
+                RpcServerConfig::ws(Default::default())
+                    .with_ws_address(addr)
+                    .with_http(Default::default())
+                    .with_cors(Some("*".to_string()))
+                    .with_http_cors(Some("example".to_string()))
+                    .with_http_address(addr),
+            )
+            .await;
+        let err = res.unwrap_err();
+        assert!(matches!(
+            err,
+            RpcError::WsHttpSamePortError(WsHttpSamePortError::ConflictingCorsDomains { .. })
+        ));
+    }
+}

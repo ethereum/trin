@@ -38,13 +38,13 @@ pub async fn launch_jsonrpc_server(
     state_handler: Option<mpsc::UnboundedSender<StateJsonRpcRequest>>,
     beacon_handler: Option<mpsc::UnboundedSender<BeaconJsonRpcRequest>>,
 ) -> Result<RpcServerHandle, RpcError> {
-    let mut modules = vec![PortalRpcModule::Discv5];
+    // Discv5 and Web3 modules are enabled with every network
+    let mut modules = vec![PortalRpcModule::Discv5, PortalRpcModule::Web3];
 
     for network in trin_config.networks.iter() {
         match network.as_str() {
             HISTORY_NETWORK => {
                 modules.push(PortalRpcModule::History);
-                modules.push(PortalRpcModule::Web3);
             }
             STATE_NETWORK => {
                 // not implemented
