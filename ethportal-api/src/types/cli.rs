@@ -1,7 +1,7 @@
-use std::{env, ffi::OsString, fmt, net::SocketAddr, path::PathBuf, str::FromStr};
-
+use clap::error::{Error, ErrorKind};
 use clap::{arg, Args, Parser, Subcommand};
 use ethereum_types::H256;
+use std::{env, ffi::OsString, fmt, net::SocketAddr, path::PathBuf, str::FromStr};
 use url::Url;
 
 use crate::types::bootnodes::Bootnodes;
@@ -222,28 +222,28 @@ impl TrinConfig {
         match config.web3_transport {
             Web3TransportType::HTTP => match &config.web3_ipc_path.as_path().display().to_string()[..] {
                 DEFAULT_WEB3_IPC_PATH => {}
-                _ => panic!("Must not supply an ipc path when using http protocol for json-rpc"),
+                _ => return Err(Error::raw(ErrorKind::ArgumentConflict, "Must not supply an ipc path when using http protocol for json-rpc")),
             },
             Web3TransportType::IPC => match config.web3_http_address.as_str() {
                 DEFAULT_WEB3_HTTP_ADDRESS => {}
-                p => panic!("Must not supply an http address when using ipc protocol for json-rpc (received: {p})"),
+                p => return Err(Error::raw(ErrorKind::ArgumentConflict,format!("Must not supply an http address when using ipc protocol for json-rpc (received: {p})"))),
             }
         }
 
         match config.trusted_provider_url {
             Some(_) => {
                 if config.trusted_provider == TrustedProviderType::Infura {
-                    panic!("--trusted-provider-url flag is incompatible with infura as the trusted provider.")
+                    return Err(Error::raw(ErrorKind::ArgumentConflict,"--trusted-provider-url flag is incompatible with infura as the trusted provider."));
                 }
             }
             None => match config.trusted_provider {
                 TrustedProviderType::Infura => {}
-                TrustedProviderType::Pandaops => panic!(
+                TrustedProviderType::Pandaops => return Err(Error::raw(ErrorKind::ArgumentConflict,
                     "'--trusted-provider pandaops' choice requires the --trusted-provider-url flag."
-                ),
-                TrustedProviderType::Custom => panic!(
+                )),
+                TrustedProviderType::Custom => return Err(Error::raw(ErrorKind::ArgumentConflict,
                     "'--trusted-provider custom' choice requires the --trusted-provider-url flag."
-                ),
+                )),
             },
         }
         // Should not serve http over same port as localhost provider.
@@ -254,7 +254,7 @@ impl TrinConfig {
                 let is_local_provider = url.host_str() == Some("127.0.0.1");
                 let port_clash = url.port() == config.web3_http_address.port();
                 if is_local_provider && port_clash {
-                    panic!("--trusted-provider-url and --web3-http-address cannot have the same localhost port.")
+                    return Err(Error::raw(ErrorKind::ArgumentConflict,"--trusted-provider-url and --web3-http-address cannot have the same localhost port."));
                 }
             }
         }
@@ -266,7 +266,7 @@ impl TrinConfig {
 fn check_url_format(url: &str) -> Result<Url, String> {
     match Url::parse(url) {
         Ok(val) => Ok(val),
-        Err(e) => panic!("Invalid URL '{url}', {e}"),
+        Err(e) => Err(format!("Invalid URL '{url}', {e}")),
     }
 }
 
@@ -274,10 +274,10 @@ fn check_private_key_length(private_key: &str) -> Result<H256, String> {
     if private_key.len() == 66 {
         return H256::from_str(private_key).map_err(|err| format!("HexError: {}", err));
     }
-    panic!(
+    Err(format!(
         "Invalid private key length: {}, expected 66 (0x-prefixed 32 byte hexstring)",
         private_key.len()
-    )
+    ))
 }
 
 impl fmt::Display for TrinConfig {
@@ -445,6 +445,7 @@ mod test {
 
     #[test]
     #[should_panic(expected = "Must not supply an ipc path when using http")]
+
     fn test_http_protocol_rejects_custom_web3_ipc_path() {
         TrinConfig::new_from(
             [
@@ -456,14 +457,14 @@ mod test {
             ]
             .iter(),
         )
-        .unwrap_err();
+        .unwrap();
     }
 
     #[test]
     #[should_panic(expected = "Must not supply an http address when using ipc")]
     fn test_ipc_protocol_rejects_custom_web3_http_address() {
         TrinConfig::new_from(["trin", "--web3-http-address", "http://127.0.0.1:1234/"].iter())
-            .unwrap_err();
+            .unwrap();
     }
 
     #[test]
@@ -562,7 +563,7 @@ mod test {
             ]
             .iter(),
         )
-        .unwrap_err();
+        .unwrap();
     }
 
     #[test]
@@ -578,7 +579,7 @@ mod test {
             ]
             .iter(),
         )
-        .unwrap_err();
+        .unwrap();
     }
 
     #[test]
