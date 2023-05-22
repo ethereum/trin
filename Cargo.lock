@@ -2174,6 +2174,7 @@ dependencies = [
  "jsonrpsee 0.16.2",
  "keccak-hash",
  "lazy_static",
+ "nanotemplate",
  "quickcheck",
  "rand 0.8.5",
  "rlp 0.5.2",
@@ -6918,20 +6919,6 @@ dependencies = [
  "tracing-subscriber",
  "trin-utils",
  "trin-validation",
-]
-
-[[package]]
-name = "trin-cli"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "base64 0.13.1",
- "clap 4.2.4",
- "ethportal-api",
- "nanotemplate",
- "serde",
- "serde_json",
- "ureq",
 ]
 
 [[package]]

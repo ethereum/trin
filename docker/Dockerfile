@@ -23,22 +23,20 @@ COPY ./rpc ./rpc
 COPY ./src ./src 
 COPY ./trin-beacon ./trin-beacon
 COPY ./trin-bridge ./trin-bridge
-COPY ./trin-cli ./trin-cli
-COPY ./trin-history ./trin-history 
+COPY ./trin-history ./trin-history
 COPY ./trin-state ./trin-state 
 COPY ./trin-utils ./trin-utils 
 COPY ./trin-validation ./trin-validation 
 COPY ./utp-testing ./utp-testing
 
 # build for release
-RUN cargo build -p trin -p trin-cli --release
+RUN cargo build -p trin --release
 
 # final base
 FROM ubuntu:22.04
 
 # copy build artifacts from build stage
 COPY --from=builder /trin/target/release/trin /usr/bin/
-COPY --from=builder /trin/target/release/trin-cli /usr/bin/
 COPY --from=builder /trin/target/release/purge_db /usr/bin/
 
 ENV RUST_LOG=debug

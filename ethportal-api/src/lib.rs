@@ -7,6 +7,7 @@
 extern crate lazy_static;
 
 mod beacon;
+mod dashboard;
 pub mod discv5;
 mod history;
 pub mod types;

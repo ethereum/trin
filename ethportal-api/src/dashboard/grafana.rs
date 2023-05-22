@@ -5,7 +5,7 @@ use std::fs;
 use ureq;
 
 pub const DASHBOARD_TEMPLATES: &[&str] =
-    &["./trin-cli/src/dashboard/collected-metrics-dashboard.json.template"];
+    &["./trin/src/dashboard/collected-metrics-dashboard.json.template"];
 
 pub struct GrafanaAPI {
     basic_auth_string: String,
