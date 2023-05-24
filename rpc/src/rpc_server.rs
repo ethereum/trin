@@ -604,6 +604,7 @@ impl WsHttpServerKind {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::builder::RpcModuleSelection;
@@ -627,7 +628,6 @@ mod tests {
     }
 
     /// Returns an [RpcModuleBuilder] with testing components.
-    #[allow(clippy::unwrap_used)]
     pub fn test_rpc_builder() -> RpcModuleBuilder {
         let (history_tx, _) = tokio::sync::mpsc::unbounded_channel();
         let (beacon_tx, _) = tokio::sync::mpsc::unbounded_channel();
@@ -638,7 +638,6 @@ mod tests {
     }
 
     /// Launches a new server with http only with the given modules
-    #[allow(clippy::unwrap_used)]
     pub async fn launch_http(modules: impl Into<RpcModuleSelection>) -> RpcServerHandle {
         let builder = test_rpc_builder();
         let server = builder.build(TransportRpcModuleConfig::set_http(modules));
@@ -651,7 +650,6 @@ mod tests {
     }
 
     /// Launches a new server with ws only with the given modules
-    #[allow(clippy::unwrap_used)]
     pub async fn launch_ws(modules: impl Into<RpcModuleSelection>) -> RpcServerHandle {
         let builder = test_rpc_builder();
         let server = builder.build(TransportRpcModuleConfig::set_ws(modules));
@@ -662,7 +660,6 @@ mod tests {
     }
 
     /// Launches a new server with http and ws and with the given modules on the same port.
-    #[allow(clippy::unwrap_used)]
     pub async fn launch_http_ws_same_port(
         modules: impl Into<RpcModuleSelection>,
     ) -> RpcServerHandle {

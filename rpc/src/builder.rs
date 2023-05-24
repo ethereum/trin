@@ -113,7 +113,7 @@ impl TransportRpcModuleConfig {
     }
 
     /// Ensures that both http and ws are configured and that they are configured to use the same
-    /// port.j
+    /// port.
     pub(crate) fn ensure_ws_http_identical(&self) -> Result<(), WsHttpSamePortError> {
         if RpcModuleSelection::are_identical(self.http.as_ref(), self.ws.as_ref()) {
             Ok(())
@@ -141,7 +141,7 @@ impl TransportRpcModuleConfig {
 pub enum RpcModuleSelection {
     /// Use _all_ available modules.
     All,
-    /// The default modules `discv5`, `history`, `web3`
+    /// The default modules `discv5`, `history`, `web3`, `beacon`.
     #[default]
     Standard,
     /// Only use the configured modules.
@@ -149,8 +149,9 @@ pub enum RpcModuleSelection {
 }
 
 impl RpcModuleSelection {
-    /// The standard modules to instantiate by default `discv5`, `history`, `web3`
-    pub const STANDARD_MODULES: [PortalRpcModule; 3] = [
+    /// The standard modules to instantiate by default `discv5`, `history`, `web3` and `beacon`.
+    pub const STANDARD_MODULES: [PortalRpcModule; 4] = [
+        PortalRpcModule::Beacon,
         PortalRpcModule::Discv5,
         PortalRpcModule::History,
         PortalRpcModule::Web3,
@@ -431,10 +432,6 @@ mod tests {
             Some(&RpcModuleSelection::All),
             Some(&RpcModuleSelection::All),
         ));
-        assert!(!RpcModuleSelection::are_identical(
-            Some(&RpcModuleSelection::All),
-            Some(&RpcModuleSelection::Standard),
-        ));
         assert!(RpcModuleSelection::are_identical(
             Some(&RpcModuleSelection::Selection(
                 RpcModuleSelection::Standard.into_selection()
@@ -469,6 +466,7 @@ mod tests {
         assert_eq!(
             selection,
             vec![
+                PortalRpcModule::Beacon,
                 PortalRpcModule::Discv5,
                 PortalRpcModule::History,
                 PortalRpcModule::Web3,
