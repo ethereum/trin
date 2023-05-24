@@ -619,7 +619,7 @@ mod test {
         assert!(env_is_set(&config));
         assert_eq!(config.trusted_provider, TrustedProviderType::Custom);
         let trusted_provider = TrustedProvider::from_trin_config(&config);
-        let url: surf::Url = trusted_provider.http.url().clone();
+        let url: surf::Url = trusted_provider.execution_url;
         assert_eq!(url.host().unwrap().to_string(), "127.0.0.1");
         assert_eq!(url.port(), Some(8546));
     }

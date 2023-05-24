@@ -8,3 +8,4 @@ pub const BATCH_SIZE: u64 = 128;
 // If you don't have access to the PANDAOPS nodes, but still want to use the bridge feature, let us
 // know on Discord or Github and we'll prioritize support for any provider.
 pub const PANDAOPS_URL: &str = "https://geth-lighthouse.mainnet.ethpandaops.io/";
+pub const BEACON_PANDAOPS_URL: &str = "https://beacon.mainnet.ethpandaops.io/";

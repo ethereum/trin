@@ -1,6 +1,5 @@
 use crate::cli::BridgeMode;
 use crate::full_header::{FullHeader, FullHeaderBatch};
-use crate::{PANDAOPS_CLIENT_ID, PANDAOPS_CLIENT_SECRET};
 use anyhow::{anyhow, bail};
 use ethereum_types::H256;
 use ethportal_api::jsonrpsee::http_client::HttpClient;
@@ -31,10 +30,6 @@ use std::ops::Range;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time;
-use surf::{
-    middleware::{Middleware, Next},
-    Body, Client, Request, Response,
-};
 use tokio::time::{sleep, Duration};
 use tracing::{debug, info, warn};
 use trin_validation::accumulator::MasterAccumulator;
@@ -363,7 +358,11 @@ impl Bridge {
             if !full_header.uncles.is_empty() {
                 bail!("Invalid block: Shanghai block contains uncles");
             }
-            let withdrawals = Bridge::get_trusted_withdrawals(full_header.header.hash()).await?;
+            let withdrawals = Bridge::get_trusted_withdrawals(
+                full_header.header.hash(),
+                trusted_provider.clone(),
+            )
+            .await?;
             BlockBody::Shanghai(BlockBodyShanghai { txs, withdrawals })
         } else if full_header.header.timestamp > MERGE_TIMESTAMP {
             if !full_header.uncles.is_empty() {
@@ -467,12 +466,12 @@ impl Bridge {
         Ok(batch.headers[0].clone())
     }
 
-    async fn get_trusted_withdrawals(block_hash: H256) -> anyhow::Result<Vec<Withdrawal>> {
-        let endpoint = format!(
-            "https://beacon.mainnet.ethpandaops.io/eth/v2/beacon/blocks/{}",
-            hex_encode(block_hash)
-        );
-        let response = pandaops_beacon_request(endpoint).await?;
+    async fn get_trusted_withdrawals(
+        block_hash: H256,
+        trusted_provider: TrustedProvider,
+    ) -> anyhow::Result<Vec<Withdrawal>> {
+        let endpoint = format!("eth/v2/beacon/blocks/{}", hex_encode(block_hash));
+        let response = trusted_provider.beacon_request(endpoint).await?;
         let result: Value = serde_json::from_str(&response)?;
         let withdrawals = result["data"]["body"]["withdrawals"].clone();
         Ok(serde_json::from_value(withdrawals)?)
@@ -504,66 +503,5 @@ impl GossipStats {
             self.range, self.header_with_proof_count, self.bodies_count, self.receipts_count
         );
         info!("Group took: {:?}", time::Instant::now() - self.start_time);
-    }
-}
-
-async fn pandaops_beacon_request(endpoint: String) -> anyhow::Result<String> {
-    let result = surf::get(endpoint)
-        .header("Content-Type", "application/json".to_string())
-        .header("CF-Access-Client-Id", PANDAOPS_CLIENT_ID.to_string())
-        .header(
-            "CF-Access-Client-Secret",
-            PANDAOPS_CLIENT_SECRET.to_string(),
-        )
-        .recv_string()
-        .await;
-    result.map_err(|_| anyhow!("Unable to request consensus block from pandaops"))
-}
-
-#[derive(Debug)]
-pub struct Retry {
-    attempts: u8,
-}
-
-impl Retry {
-    pub fn new(attempts: u8) -> Self {
-        Retry { attempts }
-    }
-}
-
-#[async_trait::async_trait]
-impl Middleware for Retry {
-    async fn handle(
-        &self,
-        mut req: Request,
-        client: Client,
-        next: Next<'_>,
-    ) -> Result<Response, surf::Error> {
-        let mut retry_count: u8 = 0;
-        let body = req.take_body().into_bytes().await?;
-        while retry_count < self.attempts {
-            if retry_count > 0 {
-                info!("Retrying request");
-            }
-            let mut new_req = req.clone();
-            new_req.set_body(Body::from_bytes(body.clone()));
-            if let Ok(val) = next.run(new_req, client.clone()).await {
-                if val.status().is_success() {
-                    return Ok(val);
-                }
-            };
-            retry_count += 1;
-            sleep(Duration::from_millis(100)).await;
-        }
-        Err(surf::Error::from_str(
-            500,
-            "Unable to fetch batch after 3 retries",
-        ))
-    }
-}
-
-impl Default for Retry {
-    fn default() -> Self {
-        Self { attempts: 3 }
     }
 }

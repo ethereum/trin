@@ -4,9 +4,10 @@ mod test {
         net::{IpAddr, Ipv4Addr},
         thread, time,
     };
+    use surf::Url;
 
     use ethportal_api::types::cli::{TrinConfig, DEFAULT_WEB3_IPC_PATH};
-    use ethportal_api::types::provider::TrustedProvider;
+    use ethportal_api::types::provider::{TrustedProvider, TrustedProviderType};
     use ethportal_peertest as peertest;
     use trin_utils::log::init_tracing_logger;
 
@@ -47,7 +48,9 @@ mod test {
 
         let server = peertest::setup_mock_trusted_http_server();
         let trusted_provider = TrustedProvider {
-            http: surf::post(server.url("/")).into(),
+            execution_url: Url::parse(&server.url("/")).unwrap(),
+            beacon_base_url: None,
+            trusted_provider_type: TrustedProviderType::Custom,
         };
         let test_client_rpc_handle = trin::run_trin(trin_config, trusted_provider).await.unwrap();
         peertest::scenarios::paginate::test_paginate_local_storage(&peertest).await;

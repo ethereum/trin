@@ -126,11 +126,12 @@ mod tests {
     use serde_json::{json, Value};
     use ssz::Encode;
     use ssz_types::{typenum, VariableList};
+    use surf::Url;
 
     use ethportal_api::types::cli::DEFAULT_MASTER_ACC_PATH;
     use ethportal_api::types::execution::accumulator::HeaderRecord;
     use ethportal_api::types::execution::block_body::BlockBodyLegacy;
-    use ethportal_api::types::provider::TrustedProvider;
+    use ethportal_api::types::provider::{TrustedProvider, TrustedProviderType};
     use ethportal_api::utils::bytes::hex_decode;
     use ethportal_api::{BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey};
     use trin_validation::accumulator::MasterAccumulator;
@@ -441,7 +442,9 @@ mod tests {
 
     fn default_header_oracle(infura_url: String) -> Arc<RwLock<HeaderOracle>> {
         let trusted_provider = TrustedProvider {
-            http: surf::post(infura_url).into(),
+            execution_url: Url::parse(&infura_url).expect("Couldn't parse infura url"),
+            beacon_base_url: None,
+            trusted_provider_type: TrustedProviderType::Infura,
         };
         let master_acc =
             MasterAccumulator::try_from_file(PathBuf::from(DEFAULT_MASTER_ACC_PATH.to_string()))

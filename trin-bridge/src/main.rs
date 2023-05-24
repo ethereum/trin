@@ -1,8 +1,7 @@
 use clap::Parser;
 use ethportal_api::jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
 use ethportal_api::types::provider::{
-    build_custom_provider_http_client, build_infura_http_client_from_env,
-    build_pandaops_http_client_from_env, TrustedProvider, TrustedProviderType,
+    build_infura_execution_url_from_env, TrustedProvider, TrustedProviderType,
     DEFAULT_LOCAL_PROVIDER,
 };
 use surf::Url;
@@ -11,6 +10,7 @@ use tokio::time::{sleep, Duration};
 use tracing::info;
 use trin_bridge::bridge::Bridge;
 use trin_bridge::cli::{BridgeConfig, BridgeMode};
+use trin_bridge::constants::BEACON_PANDAOPS_URL;
 use trin_bridge::utils::generate_spaced_private_keys;
 use trin_utils::log::init_tracing_logger;
 use trin_validation::accumulator::MasterAccumulator;
@@ -43,22 +43,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     sleep(Duration::from_secs(5)).await;
 
     let trusted_provider = TrustedProvider {
-        http: match bridge_config.trusted_provider {
-            TrustedProviderType::Infura => build_infura_http_client_from_env(),
-            TrustedProviderType::Pandaops => match &bridge_config.trusted_provider_url {
-                Some(val) => build_pandaops_http_client_from_env(val.to_string()),
+        execution_url: match bridge_config.trusted_provider {
+            TrustedProviderType::Infura => build_infura_execution_url_from_env(),
+            TrustedProviderType::Pandaops => match bridge_config.trusted_provider_url.clone() {
+                Some(val) => val,
                 None => {
                     panic!("Must supply --trusted-provider-url cli flag to use pandaops as a trusted provider.")
                 }
             },
             TrustedProviderType::Custom => match bridge_config.trusted_provider_url.clone() {
-                Some(val) => build_custom_provider_http_client(val),
-                None => build_custom_provider_http_client(
-                    Url::parse(DEFAULT_LOCAL_PROVIDER)
-                        .expect("Could not parse default local provider."),
-                ),
+                Some(val) => val,
+                None => Url::parse(DEFAULT_LOCAL_PROVIDER)
+                    .expect("Could not parse default local provider."),
             },
         },
+        beacon_base_url: Some(Url::parse(BEACON_PANDAOPS_URL)?),
+        trusted_provider_type: bridge_config.trusted_provider,
     };
 
     let master_acc = MasterAccumulator::try_from_file("validation_assets/merge_macc.bin".into())?;

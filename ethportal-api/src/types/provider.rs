@@ -1,6 +1,7 @@
 use std::env;
 use std::fmt;
 use std::str::FromStr;
+use std::time::Duration;
 
 use anyhow::anyhow;
 use serde_json::Value;
@@ -8,6 +9,10 @@ use url::Url;
 
 use crate::types::jsonrpc::request::JsonRequest;
 use serde_json::json;
+use surf::middleware::{Middleware, Next};
+use surf::{Body, Client, Request, Response};
+use tokio::time::sleep;
+use tracing::info;
 
 use super::cli::TrinConfig;
 use super::jsonrpc::params::Params;
@@ -53,29 +58,31 @@ impl FromStr for TrustedProviderType {
 /// a String, which can be used to create a `Client` when necessary.
 #[derive(Clone, Debug)]
 pub struct TrustedProvider {
-    pub http: surf::Request,
+    pub execution_url: Url,
+    pub beacon_base_url: Option<Url>,
+    pub trusted_provider_type: TrustedProviderType,
 }
 
 impl TrustedProvider {
     pub fn from_trin_config(trin_config: &TrinConfig) -> Self {
-        let trusted_http_client = match trin_config.trusted_provider {
-            TrustedProviderType::Infura => build_infura_http_client_from_env(),
-            TrustedProviderType::Pandaops => match &trin_config.trusted_provider_url {
-                Some(val) => build_pandaops_http_client_from_env(val.to_string()),
+        let trusted_execution_url = match trin_config.trusted_provider {
+            TrustedProviderType::Infura => build_infura_execution_url_from_env(),
+            TrustedProviderType::Pandaops => match trin_config.trusted_provider_url.clone() {
+                Some(val) => val,
                 None => {
                     panic!("Must supply --trusted-provider-url cli flag to use pandaops as a trusted provider.")
                 }
             },
             TrustedProviderType::Custom => match trin_config.trusted_provider_url.clone() {
-                Some(val) => build_custom_provider_http_client(val),
-                None => build_custom_provider_http_client(
-                    Url::parse(DEFAULT_LOCAL_PROVIDER)
-                        .expect("Could not parse default local provider."),
-                ),
+                Some(val) => val,
+                None => Url::parse(DEFAULT_LOCAL_PROVIDER)
+                    .expect("Could not parse default local provider."),
             },
         };
         Self {
-            http: trusted_http_client,
+            execution_url: trusted_execution_url,
+            beacon_base_url: None,
+            trusted_provider_type: TrustedProviderType::Infura,
         }
     }
 
@@ -84,12 +91,14 @@ impl TrustedProvider {
         method: String,
         params: Params,
     ) -> anyhow::Result<Value> {
-        let request = json_request(method, params, 1);
+        let json_request = json_request(method, params, 1);
 
         let client = surf::Client::new();
-        let mut result: surf::Request = self.http.clone();
+
+        let url: Url = self.execution_url.clone();
+        let mut result = self.add_headers(surf::Request::from(surf::post(url)));
         result
-            .body_json(&json!(request))
+            .body_json(&json!(json_request))
             .map_err(|e| anyhow!("Unable to construct json post request: {e:?}"))?;
         let response = client.recv_string(result).await;
 
@@ -104,12 +113,45 @@ impl TrustedProvider {
     /// concurrent tasks increased significantly.
     pub async fn batch_request(&self, obj: Vec<JsonRequest>) -> anyhow::Result<String> {
         let client = surf::Client::new();
-        let mut request: surf::Request = self.http.clone();
+        let url: Url = self.execution_url.clone();
+        let mut request = self.add_headers(surf::Request::from(
+            surf::post(url).middleware(Retry::default()),
+        ));
         request
             .body_json(&json!(obj))
             .map_err(|e| anyhow!("Unable to construct json post request: {e:?}"))?;
         let result = client.recv_string(request).await;
         result.map_err(|_| anyhow!("Unable to request batch from geth"))
+    }
+
+    pub async fn beacon_request(&self, endpoint: String) -> anyhow::Result<String> {
+        if let Some(beacon_base_url) = self.beacon_base_url.clone() {
+            let client = surf::Client::new();
+            let request = self.add_headers(surf::Request::from(surf::get(
+                beacon_base_url.join(&endpoint)?,
+            )));
+            let result = client.recv_string(request).await;
+            result.map_err(|_| anyhow!("Unable to request consensus block from beacon URL"))
+        } else {
+            Err(anyhow!("Beacon base URL wasn't provided"))
+        }
+    }
+
+    fn add_headers(&self, mut request: Request) -> surf::Request {
+        match self.trusted_provider_type {
+            TrustedProviderType::Infura => {}
+            TrustedProviderType::Pandaops => {
+                let client_id = get_pandaops_client_id_from_env();
+                let client_secret = get_pandaops_client_secret_from_env();
+                request.append_header("Content-Type", "application/json");
+                request.append_header("CF-Access-Client-Id", client_id.as_str());
+                request.append_header("CF-Access-Client-Secret", client_secret.as_str());
+            }
+            TrustedProviderType::Custom => {
+                request.append_header("Content-Type", "application/json");
+            }
+        }
+        request
     }
 }
 
@@ -123,10 +165,10 @@ fn get_infura_project_id_from_env() -> String {
     }
 }
 
-pub fn build_infura_http_client_from_env() -> surf::Request {
+pub fn build_infura_execution_url_from_env() -> Url {
     let infura_project_id = get_infura_project_id_from_env();
-    let infura_url = format!("{INFURA_BASE_HTTP_URL}{infura_project_id}");
-    surf::Request::from(surf::post(infura_url))
+    Url::parse(&format!("{INFURA_BASE_HTTP_URL}{infura_project_id}"))
+        .expect("Couldn't parse infura url")
 }
 
 fn get_pandaops_client_id_from_env() -> String {
@@ -149,19 +191,52 @@ fn get_pandaops_client_secret_from_env() -> String {
     }
 }
 
-pub fn build_pandaops_http_client_from_env(pandaops_url: String) -> surf::Request {
-    let client_id = get_pandaops_client_id_from_env();
-    let client_secret = get_pandaops_client_secret_from_env();
-    surf::Request::from(
-        surf::post(pandaops_url)
-            .header("Content-Type", "application/json")
-            .header("CF-Access-Client-Id", client_id.as_str())
-            .header("CF-Access-Client-Secret", client_secret.as_str()),
-    )
+#[derive(Debug)]
+pub struct Retry {
+    attempts: u8,
 }
 
-pub fn build_custom_provider_http_client(node_url: Url) -> surf::Request {
-    surf::Request::from(surf::post(node_url.as_str()).header("Content-Type", "application/json"))
+impl Retry {
+    pub fn new(attempts: u8) -> Self {
+        Retry { attempts }
+    }
+}
+
+#[async_trait::async_trait]
+impl Middleware for Retry {
+    async fn handle(
+        &self,
+        mut req: Request,
+        client: Client,
+        next: Next<'_>,
+    ) -> Result<Response, surf::Error> {
+        let mut retry_count: u8 = 0;
+        let body = req.take_body().into_bytes().await?;
+        while retry_count < self.attempts {
+            if retry_count > 0 {
+                info!("Retrying request");
+            }
+            let mut new_req = req.clone();
+            new_req.set_body(Body::from_bytes(body.clone()));
+            if let Ok(val) = next.run(new_req, client.clone()).await {
+                if val.status().is_success() {
+                    return Ok(val);
+                }
+            };
+            retry_count += 1;
+            sleep(Duration::from_millis(100)).await;
+        }
+        Err(surf::Error::from_str(
+            500,
+            "Unable to fetch batch after 3 retries",
+        ))
+    }
+}
+
+impl Default for Retry {
+    fn default() -> Self {
+        Self { attempts: 3 }
+    }
 }
 
 pub fn json_request(method: String, params: Params, id: u32) -> JsonRequest {

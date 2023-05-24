@@ -11,9 +11,12 @@ use futures::future;
 use httpmock::prelude::{MockServer, POST};
 use jsonrpsee::async_client::Client;
 use serde_json::json;
+use surf::Url;
 
 use ethportal_api::types::enr::Enr;
-use ethportal_api::types::{cli::TrinConfig, provider::TrustedProvider};
+use ethportal_api::types::{
+    cli::TrinConfig, provider::TrustedProvider, provider::TrustedProviderType,
+};
 use ethportal_api::utils::bytes::hex_encode;
 
 pub fn setup_mock_trusted_http_server() -> MockServer {
@@ -81,7 +84,9 @@ async fn launch_node(trin_config: TrinConfig) -> anyhow::Result<PeertestNode> {
     let web3_ipc_path = trin_config.web3_ipc_path.clone();
     let server = setup_mock_trusted_http_server();
     let mock_trusted_provider = TrustedProvider {
-        http: surf::post(server.url("/")).into(),
+        execution_url: Url::parse(&server.url("/")).unwrap(),
+        beacon_base_url: None,
+        trusted_provider_type: TrustedProviderType::Custom,
     };
     let rpc_handle = trin::run_trin(trin_config, mock_trusted_provider)
         .await

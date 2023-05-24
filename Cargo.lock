@@ -2159,6 +2159,7 @@ name = "ethportal-api"
 version = "0.2.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "base64 0.13.1",
  "bytes 1.4.0",
  "clap 4.2.4",
