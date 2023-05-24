@@ -1,6 +1,9 @@
+use crate::constants::PANDAOPS_URL;
 use clap::Parser;
+use ethportal_api::types::{cli::check_url_format, provider::TrustedProviderType};
 use std::path::PathBuf;
 use std::str::FromStr;
+use surf::Url;
 
 // max value of 16 b/c...
 // - reliably calculate spaced private keys in a reasonable time
@@ -34,6 +37,21 @@ pub struct BridgeConfig {
         help = "Path to epoch accumulator repo for bridge mode"
     )]
     pub epoch_acc_path: PathBuf,
+
+    #[arg(
+        long = "trusted-provider",
+        help = "Trusted provider to use. (options: 'infura' (default), 'pandaops' (devops) or 'custom')",
+        default_value("pandaops")
+    )]
+    pub trusted_provider: TrustedProviderType,
+
+    #[arg(
+        long = "trusted-provider-url",
+        value_parser =  check_url_format,
+        help = "URL for a trusted http provider. Must include a base, host and port (e.g., '<base>://<host>:<port>').",
+        default_value(PANDAOPS_URL)
+    )]
+    pub trusted_provider_url: Option<Url>,
 }
 
 fn check_node_count(val: &str) -> Result<u8, String> {

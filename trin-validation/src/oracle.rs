@@ -55,7 +55,8 @@ impl HeaderOracle {
         let params = Params::Array(vec![json!(block_hash), json!(false)]);
         let response: Value = self
             .trusted_provider
-            .dispatch_http_request(method, params)?;
+            .dispatch_http_request(method, params)
+            .await?;
         let header: Header = serde_json::from_value(response["result"].clone())?;
         Ok(header)
     }

@@ -261,7 +261,7 @@ impl TrinConfig {
 }
 
 /// A validator function for CLI URL arguments.
-fn check_url_format(url: &str) -> Result<Url, String> {
+pub fn check_url_format(url: &str) -> Result<Url, String> {
     match Url::parse(url) {
         Ok(val) => Ok(val),
         Err(e) => panic!("Invalid URL '{url}', {e}"),
@@ -619,8 +619,8 @@ mod test {
         assert!(env_is_set(&config));
         assert_eq!(config.trusted_provider, TrustedProviderType::Custom);
         let trusted_provider = TrustedProvider::from_trin_config(&config);
-        let url: ureq::RequestUrl = trusted_provider.http.request_url().unwrap();
-        assert_eq!(url.host(), "127.0.0.1");
+        let url: surf::Url = trusted_provider.http.url().clone();
+        assert_eq!(url.host().unwrap().to_string(), "127.0.0.1");
         assert_eq!(url.port(), Some(8546));
     }
 

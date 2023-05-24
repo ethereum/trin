@@ -43,6 +43,7 @@ utp-rs = "0.1.0-alpha.4"
 
 [dev-dependencies]
 ethportal-peertest = { path = "ethportal-peertest" }
+surf = "2.3.2"
 ureq = { version = "2.5.0", features = ["json"] }
 
 [workspace]

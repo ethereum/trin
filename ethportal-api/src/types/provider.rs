@@ -6,10 +6,8 @@ use anyhow::anyhow;
 use serde_json::Value;
 use url::Url;
 
-use std::io;
-
+use crate::types::jsonrpc::request::JsonRequest;
 use serde_json::json;
-use ureq::{self, Request};
 
 use super::cli::TrinConfig;
 use super::jsonrpc::params::Params;
@@ -55,7 +53,7 @@ impl FromStr for TrustedProviderType {
 /// a String, which can be used to create a `Client` when necessary.
 #[derive(Clone, Debug)]
 pub struct TrustedProvider {
-    pub http: Request,
+    pub http: surf::Request,
 }
 
 impl TrustedProvider {
@@ -81,58 +79,37 @@ impl TrustedProvider {
         }
     }
 
-    pub fn dispatch_http_request(&self, method: String, params: Params) -> anyhow::Result<Value> {
-        let request = ureq::json!({
-            "jsonrpc": "2.0".to_string(),
-            "params": params,
-            "method": method,
-            "id": 1,
-        });
+    pub async fn dispatch_http_request(
+        &self,
+        method: String,
+        params: Params,
+    ) -> anyhow::Result<Value> {
+        let request = json_request(method, params, 1);
 
-        match dispatch_trusted_http_request(request, self.http.clone()) {
+        let client = surf::Client::new();
+        let mut result: surf::Request = self.http.clone();
+        result
+            .body_json(&json!(request))
+            .map_err(|e| anyhow!("Unable to construct json post request: {e:?}"))?;
+        let response = client.recv_string(result).await;
+
+        match response {
             Ok(val) => Ok(serde_json::from_str(&val)?),
-            Err(err) => Err(anyhow!(
-                "Unable to request validation data from trusted provider: {err:?}",
-            )),
+            Err(err) => Err(anyhow!("Unable to request: {err:?}",)),
         }
     }
-}
 
-// Handle all http requests served by the trusted provider
-fn dispatch_trusted_http_request(
-    obj: Value,
-    trusted_http_client: Request,
-) -> Result<String, String> {
-    match proxy_to_url(&obj, trusted_http_client) {
-        Ok(result_body) => Ok(std::str::from_utf8(&result_body)
-            .map_err(|e| format!("When decoding utf8 from proxied provider: {e:?}"))?
-            .to_owned()),
-        Err(err) => Err(json!({
-            "jsonrpc": "2.0",
-            "id": obj.get("id"),
-            "error": format!("Infura failure: {err}"),
-        })
-        .to_string()),
-    }
-}
-
-fn proxy_to_url(request: &Value, trusted_http_client: Request) -> io::Result<Vec<u8>> {
-    match trusted_http_client.send_json(ureq::json!(request)) {
-        Ok(response) => match response.into_string() {
-            Ok(val) => Ok(val.as_bytes().to_vec()),
-            Err(msg) => Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!("Error decoding response: {msg:?}"),
-            )),
-        },
-        Err(ureq::Error::Status(code, _response)) => Err(io::Error::new(
-            io::ErrorKind::Other,
-            format!("Responded with status code: {code:?}"),
-        )),
-        Err(err) => Err(io::Error::new(
-            io::ErrorKind::Other,
-            format!("Request failure: {err:?}"),
-        )),
+    /// Used the "surf" library here instead of "ureq" since "surf" is much more capable of handling
+    /// multiple async requests. Using "ureq" consistently resulted in errors as soon as the number of
+    /// concurrent tasks increased significantly.
+    pub async fn batch_request(&self, obj: Vec<JsonRequest>) -> anyhow::Result<String> {
+        let client = surf::Client::new();
+        let mut request: surf::Request = self.http.clone();
+        request
+            .body_json(&json!(obj))
+            .map_err(|e| anyhow!("Unable to construct json post request: {e:?}"))?;
+        let result = client.recv_string(request).await;
+        result.map_err(|_| anyhow!("Unable to request batch from geth"))
     }
 }
 
@@ -146,10 +123,10 @@ fn get_infura_project_id_from_env() -> String {
     }
 }
 
-fn build_infura_http_client_from_env() -> ureq::Request {
+pub fn build_infura_http_client_from_env() -> surf::Request {
     let infura_project_id = get_infura_project_id_from_env();
     let infura_url = format!("{INFURA_BASE_HTTP_URL}{infura_project_id}");
-    ureq::post(&infura_url)
+    surf::Request::from(surf::post(infura_url))
 }
 
 fn get_pandaops_client_id_from_env() -> String {
@@ -172,15 +149,26 @@ fn get_pandaops_client_secret_from_env() -> String {
     }
 }
 
-pub fn build_pandaops_http_client_from_env(pandaops_url: String) -> ureq::Request {
+pub fn build_pandaops_http_client_from_env(pandaops_url: String) -> surf::Request {
     let client_id = get_pandaops_client_id_from_env();
     let client_secret = get_pandaops_client_secret_from_env();
-    ureq::post(&pandaops_url)
-        .set("Content-Type", "application/json")
-        .set("CF-Access-Client-Id", client_id.as_str())
-        .set("CF-Access-Client-Secret", client_secret.as_str())
+    surf::Request::from(
+        surf::post(pandaops_url)
+            .header("Content-Type", "application/json")
+            .header("CF-Access-Client-Id", client_id.as_str())
+            .header("CF-Access-Client-Secret", client_secret.as_str()),
+    )
 }
 
-fn build_custom_provider_http_client(node_url: Url) -> ureq::Request {
-    ureq::post(node_url.as_str()).set("Content-Type", "application/json")
+pub fn build_custom_provider_http_client(node_url: Url) -> surf::Request {
+    surf::Request::from(surf::post(node_url.as_str()).header("Content-Type", "application/json"))
+}
+
+pub fn json_request(method: String, params: Params, id: u32) -> JsonRequest {
+    JsonRequest {
+        jsonrpc: "2.0".to_string(),
+        params,
+        method,
+        id,
+    }
 }

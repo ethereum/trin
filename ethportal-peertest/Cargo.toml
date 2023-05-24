@@ -25,6 +25,7 @@ rand = "0.8.4"
 reth-ipc = { version = "0.1.0", git = "https://github.com/paradigmxyz/reth.git"}
 rocksdb = "0.18.0"
 serde_json = "1.0.89"
+surf = "2.3.2"
 tempfile = "3.3.0"
 tokio = {version = "1.14.0", features = ["full"]}
 tracing = "0.1.36"
@@ -34,7 +35,6 @@ trin = { path = ".." }
 trin-history = { path = "../trin-history" }
 trin-state = { path = "../trin-state" }
 trin-utils = { path = "../trin-utils" }
-ureq = { version = "2.5.0", features = ["json"] }
 
 [target.'cfg(windows)'.dependencies]
 uds_windows = "1.0.1"

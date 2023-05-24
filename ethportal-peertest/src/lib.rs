@@ -81,7 +81,7 @@ async fn launch_node(trin_config: TrinConfig) -> anyhow::Result<PeertestNode> {
     let web3_ipc_path = trin_config.web3_ipc_path.clone();
     let server = setup_mock_trusted_http_server();
     let mock_trusted_provider = TrustedProvider {
-        http: ureq::post(&server.url("/")),
+        http: surf::post(server.url("/")).into(),
     };
     let rpc_handle = trin::run_trin(trin_config, mock_trusted_provider)
         .await

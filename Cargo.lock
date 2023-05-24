@@ -2187,6 +2187,7 @@ dependencies = [
  "sha3 0.9.1",
  "snap",
  "stremio-serde-hex",
+ "surf",
  "test-log",
  "thiserror",
  "tokio",
@@ -2217,6 +2218,7 @@ dependencies = [
  "reth-ipc",
  "rocksdb",
  "serde_json",
+ "surf",
  "tempfile",
  "tokio",
  "tracing",
@@ -2227,7 +2229,6 @@ dependencies = [
  "trin-state",
  "trin-utils",
  "uds_windows",
- "ureq",
 ]
 
 [[package]]
@@ -6866,6 +6867,7 @@ dependencies = [
  "rpc",
  "serde_json",
  "sha3 0.9.1",
+ "surf",
  "tempfile",
  "tokio",
  "tracing",
@@ -6944,6 +6946,7 @@ dependencies = [
  "portalnet",
  "rstest 0.11.0",
  "serde_json",
+ "surf",
  "test-log",
  "tokio",
  "tracing",
@@ -6951,7 +6954,6 @@ dependencies = [
  "tree_hash",
  "trin-utils",
  "trin-validation",
- "ureq",
  "utp-rs",
 ]
 

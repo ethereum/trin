@@ -47,7 +47,7 @@ mod test {
 
         let server = peertest::setup_mock_trusted_http_server();
         let trusted_provider = TrustedProvider {
-            http: ureq::post(&server.url("/")),
+            http: surf::post(server.url("/")).into(),
         };
         let test_client_rpc_handle = trin::run_trin(trin_config, trusted_provider).await.unwrap();
         peertest::scenarios::paginate::test_paginate_local_storage(&peertest).await;
