@@ -2,13 +2,8 @@ use std::sync::Arc;
 
 use discv5::enr::NodeId;
 use ethportal_api::types::{
-    constants::CONTENT_ABSENT,
-    content_key::RawContentKey,
-    distance::{Metric, XorMetric},
-    enr::Enr,
-    jsonrpc::endpoints::HistoryEndpoint,
-    jsonrpc::request::HistoryJsonRpcRequest,
-    query_trace::QueryTrace,
+    constants::CONTENT_ABSENT, content_key::RawContentKey, jsonrpc::endpoints::HistoryEndpoint,
+    jsonrpc::request::HistoryJsonRpcRequest, query_trace::QueryTrace,
 };
 use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::{
@@ -344,11 +339,6 @@ async fn recursive_find_nodes(
 ) -> Result<Value, String> {
     let node_id = discv5::enr::NodeId::from(node_id.0);
     let overlay = network.read().await.overlay.clone();
-    let mut nodes = overlay.lookup_node(node_id).await;
-    nodes.sort_by(|a, b| {
-        XorMetric::distance(&node_id.raw(), &a.node_id().raw())
-            .cmp(&XorMetric::distance(&node_id.raw(), &b.node_id().raw()))
-    });
-    let nodes: Vec<Enr> = nodes.into_iter().take(16).collect();
+    let nodes = overlay.lookup_node(node_id).await;
     Ok(json!(nodes))
 }
