@@ -12,8 +12,7 @@ use ethportal_api::types::jsonrpc::request::{BeaconJsonRpcRequest, HistoryJsonRp
 use ethportal_api::utils::bytes::hex_decode;
 
 /// Responsible for dispatching cross-overlay-network requests
-/// for data to perform validation. Currently, it just proxies these requests
-/// on to the trusted provider.
+/// for data to perform validation.
 #[derive(Clone, Debug)]
 pub struct HeaderOracle {
     // We could simply store the main portal jsonrpc tx channel here, rather than each

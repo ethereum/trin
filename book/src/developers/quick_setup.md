@@ -7,9 +7,6 @@ This is a single page the aims to cover everything required to get Trin running.
 **Check out the `./newsfragments` directory to see the latest changes.**
 
 ## Prerequisites
-- Execution node, either:
-    - Local node
-    - [Infura](https://infura.io/) project ID
 - [Rust](https://www.rust-lang.org/) installation
 
 ## Building, Testing, and Running
@@ -25,9 +22,6 @@ apt install libssl-dev librocksdb-dev libclang-dev pkg-config build-essential
 Environment variables:
 
 ```sh
-# Required if not using a local node ("--trusted-provider custom" flag).
-export TRIN_INFURA_PROJECT_ID=<infura-project-id>
-
 # Optional
 export RUST_LOG=<error/warn/info/debug/trace>
 export TRIN_DATA_PATH=<path-to-data-directory>
@@ -67,15 +61,11 @@ cargo run -- --help
 
 ### Run locally
 
-Run with the `--trusted-provider` as a local execution node (normally runs on `127.0.0.1:8545`), which can be configured with the `--trusted-provider-url` flag.
-
 Serve portal node web3 access over a different port (such as `8547`) using the `--web3-http-address` flag. The `--web3-transport` for a local node will be over `http`
 (rather than `ipc`).
 
 ```sh
 RUST_LOG=debug cargo run -- \
-    --trusted-provider custom \
-    --trusted-provider-url http://127.0.0.1:8545 \
     --web3-http-address http://127.0.0.1:8547 \
     --web3-transport http \
     --discovery-port 9009 \

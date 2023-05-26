@@ -11,7 +11,7 @@ See sections below for more detail.
 
 ## Wallet connection
 
-Open the wallet and look for options to configure "node/rpc/provider".
+Open the wallet and look for options to configure "node/rpc".
 
 Create a custom connection by providing the following:
 ```sh

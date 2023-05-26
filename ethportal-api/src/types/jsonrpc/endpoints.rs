@@ -111,7 +111,7 @@ pub enum PortalEndpoint {
     GetBlockByNumber,
 }
 
-/// Global portal network endpoints supported by trin, including trusted providers, Discv5, Ethereum and all overlay network endpoints supported by portal network requests
+/// Global portal network endpoints supported by trin, Discv5, Ethereum and all overlay network endpoints supported by portal network requests
 // When adding a json-rpc endpoint, make sure to...
 // - Update `docs/jsonrpc_api.md`
 // - Add tests to ethportal-peertest

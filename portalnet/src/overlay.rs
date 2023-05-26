@@ -105,8 +105,7 @@ pub struct OverlayProtocol<TContentKey, TMetric, TValidator, TStore> {
     phantom_content_key: PhantomData<TContentKey>,
     /// Associate a distance metric with the overlay network.
     phantom_metric: PhantomData<TMetric>,
-    /// Accepted content validator that makes requests to this/other overlay networks (or trusted
-    /// http server)
+    /// Accepted content validator that makes requests to this/other overlay networks
     validator: Arc<TValidator>,
     /// Runtime telemetry metrics for the overlay network.
     metrics: Arc<OverlayMetrics>,
