@@ -203,23 +203,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn validate_block_body() {
-        let ssz_block_body: Vec<u8> =
-            std::fs::read("../test_assets/mainnet/block_body_14764013.bin").unwrap();
-        let block_body_bytelist: VariableList<_, typenum::U16384> =
-            VariableList::from(ssz_block_body);
-
-        let header_oracle = default_header_oracle();
-        let chain_history_validator = ChainHistoryValidator { header_oracle };
-        let content_key = block_14764013_body_key();
-
-        chain_history_validator
-            .validate_content(&content_key, &block_body_bytelist)
-            .await
-            .unwrap();
-    }
-
-    #[tokio::test]
     #[should_panic]
     async fn invalidate_block_body() {
         let ssz_block_body: Vec<u8> =
@@ -243,22 +226,6 @@ mod tests {
 
         chain_history_validator
             .validate_content(&content_key, &invalid_content)
-            .await
-            .unwrap();
-    }
-
-    #[tokio::test]
-    async fn validate_receipts() {
-        let ssz_receipts: Vec<u8> =
-            std::fs::read("../test_assets/mainnet/receipts_14764013.bin").unwrap();
-        let content: VariableList<_, typenum::U16384> = VariableList::from(ssz_receipts);
-
-        let header_oracle = default_header_oracle();
-        let chain_history_validator = ChainHistoryValidator { header_oracle };
-        let content_key = block_14764013_receipts_key();
-
-        chain_history_validator
-            .validate_content(&content_key, &content)
             .await
             .unwrap();
     }

@@ -41,7 +41,7 @@ impl HeaderOracle {
     }
 
     pub async fn get_header_by_hash(&self, block_hash: H256) -> anyhow::Result<Header> {
-        // try to find the header in the history subnetwork before falling back to infura
+        // try to find the header in the history subnetwork
         // this will check local storage before making a RFC request to the history subnetwork
         if let Ok(hwp) = self.recursive_find_hwp(block_hash).await {
             return Ok(hwp.header);
