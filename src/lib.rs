@@ -2,17 +2,13 @@
 
 use std::sync::Arc;
 
-use ethportal_api::jsonrpsee::server::ServerHandle;
-use rpc::JsonRpcServer;
+use rpc::{launch_jsonrpc_server, RpcServerHandle};
 use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 use tracing::info;
 use utp_rs::socket::UtpSocket;
 
-use ethportal_api::types::cli::{
-    TrinConfig, Web3TransportType, BEACON_NETWORK, HISTORY_NETWORK, STATE_NETWORK,
-};
-use ethportal_api::types::jsonrpc::request::HistoryJsonRpcRequest;
+use ethportal_api::types::cli::{TrinConfig, BEACON_NETWORK, HISTORY_NETWORK, STATE_NETWORK};
 use ethportal_api::types::provider::TrustedProvider;
 use portalnet::{
     discovery::{Discovery, Discv5UdpSocket},
@@ -30,7 +26,7 @@ use trin_validation::{accumulator::MasterAccumulator, oracle::HeaderOracle};
 pub async fn run_trin(
     trin_config: TrinConfig,
     trusted_provider: TrustedProvider,
-) -> Result<ServerHandle, Box<dyn std::error::Error>> {
+) -> Result<RpcServerHandle, Box<dyn std::error::Error>> {
     let trin_version = get_trin_version();
     info!("Launching Trin: v{trin_version}");
     info!(config = %trin_config, "With:");
@@ -83,7 +79,7 @@ pub async fn run_trin(
     let header_oracle = Arc::new(RwLock::new(header_oracle));
 
     // Initialize state sub-network service and event handlers, if selected
-    let (state_handler, state_network_task, state_event_tx, _state_jsonrpc_tx) =
+    let (state_handler, state_network_task, state_event_tx, state_jsonrpc_tx) =
         if trin_config.networks.iter().any(|val| val == STATE_NETWORK) {
             initialize_state_network(
                 &discovery,
@@ -98,7 +94,7 @@ pub async fn run_trin(
         };
 
     // Initialize trin-beacon sub-network service and event handlers, if selected
-    let (beacon_handler, beacon_network_task, beacon_event_tx, _beacon_jsonrpc_tx) =
+    let (beacon_handler, beacon_network_task, beacon_event_tx, beacon_jsonrpc_tx) =
         if trin_config.networks.iter().any(|val| val == BEACON_NETWORK) {
             initialize_beacon_network(
                 &discovery,
@@ -134,8 +130,14 @@ pub async fn run_trin(
     // Launch JSON-RPC server
     let jsonrpc_trin_config = trin_config.clone();
     let jsonrpc_discovery = Arc::clone(&discovery);
-    let rpc_handle =
-        launch_jsonrpc_server(jsonrpc_trin_config, jsonrpc_discovery, history_jsonrpc_tx).await;
+    let rpc_handle: RpcServerHandle = launch_jsonrpc_server(
+        jsonrpc_trin_config,
+        jsonrpc_discovery,
+        history_jsonrpc_tx,
+        state_jsonrpc_tx,
+        beacon_jsonrpc_tx,
+    )
+    .await?;
 
     if let Some(handler) = state_handler {
         tokio::spawn(handler.handle_client_queries());
@@ -170,38 +172,5 @@ pub async fn run_trin(
         tokio::spawn(async { network.await });
     }
 
-    Ok(rpc_handle?)
-}
-
-async fn launch_jsonrpc_server(
-    trin_config: TrinConfig,
-    discv5: Arc<Discovery>,
-    history_handler: Option<mpsc::UnboundedSender<HistoryJsonRpcRequest>>,
-) -> Result<ServerHandle, String> {
-    let history_handler = history_handler.ok_or_else(|| {
-        "History network must be available to use IPC transport for JSON-RPC server".to_string()
-    })?;
-    match trin_config.web3_transport {
-        Web3TransportType::IPC => {
-            // Launch jsonrpsee server with IPC transport
-            let rpc_handle = JsonRpcServer::run_ipc(
-                Box::new(trin_config.web3_ipc_path),
-                discv5,
-                history_handler,
-            )
-            .await
-            .map_err(|e| format!("Launching IPC JSON-RPC server failed: {e:?}"))?;
-            info!("IPC JSON-RPC server launched.");
-            Ok(rpc_handle)
-        }
-        Web3TransportType::HTTP => {
-            // Launch jsonrpsee server with http and WS transport
-            let rpc_handle =
-                JsonRpcServer::run_http(trin_config.web3_http_address, discv5, history_handler)
-                    .await
-                    .map_err(|e| format!("Launching HTTP JSON-RPC server failed: {e:?}"))?;
-            info!("HTTP JSON-RPC server launched.");
-            Ok(rpc_handle)
-        }
-    }
+    Ok(rpc_handle)
 }
