@@ -12,6 +12,5 @@ pub mod execution;
 pub mod jsonrpc;
 pub mod node_id;
 pub mod portal;
-pub mod provider;
 pub mod query_trace;
 pub mod wrapped;

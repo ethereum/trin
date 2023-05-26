@@ -1,6 +1,6 @@
 #![warn(clippy::unwrap_used)]
 
-use ethportal_api::types::{cli::TrinConfig, provider::TrustedProvider};
+use ethportal_api::types::cli::TrinConfig;
 use tracing::error;
 use trin_utils::log::init_tracing_logger;
 
@@ -10,8 +10,7 @@ use trin::run_trin;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     init_tracing_logger();
     let trin_config = TrinConfig::from_cli();
-    let trusted_provider = TrustedProvider::from_trin_config(&trin_config);
-    let rpc_handle = run_trin(trin_config, trusted_provider).await?;
+    let rpc_handle = run_trin(trin_config).await?;
 
     tokio::signal::ctrl_c()
         .await

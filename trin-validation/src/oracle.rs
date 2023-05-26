@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 use ethereum_types::H256;
-use serde_json::{json, Value};
+use serde_json::Value;
 use ssz::Decode;
 use tokio::sync::mpsc;
 
@@ -8,9 +8,7 @@ use crate::accumulator::MasterAccumulator;
 use ethportal_api::types::content_key::{BlockHeaderKey, HistoryContentKey};
 use ethportal_api::types::execution::header::{Header, HeaderWithProof};
 use ethportal_api::types::jsonrpc::endpoints::HistoryEndpoint;
-use ethportal_api::types::jsonrpc::params::Params;
 use ethportal_api::types::jsonrpc::request::{BeaconJsonRpcRequest, HistoryJsonRpcRequest};
-use ethportal_api::types::provider::TrustedProvider;
 use ethportal_api::utils::bytes::hex_decode;
 
 /// Responsible for dispatching cross-overlay-network requests
@@ -18,7 +16,6 @@ use ethportal_api::utils::bytes::hex_decode;
 /// on to the trusted provider.
 #[derive(Clone, Debug)]
 pub struct HeaderOracle {
-    pub trusted_provider: TrustedProvider,
     // We could simply store the main portal jsonrpc tx channel here, rather than each
     // individual channel. But my sense is that this will be more useful in terms of
     // determining which subnetworks are actually available.
@@ -28,9 +25,8 @@ pub struct HeaderOracle {
 }
 
 impl HeaderOracle {
-    pub fn new(trusted_provider: TrustedProvider, master_acc: MasterAccumulator) -> Self {
+    pub fn new(master_acc: MasterAccumulator) -> Self {
         Self {
-            trusted_provider,
             history_jsonrpc_tx: None,
             beacon_jsonrpc_tx: None,
             master_acc,
@@ -50,14 +46,7 @@ impl HeaderOracle {
         if let Ok(hwp) = self.recursive_find_hwp(block_hash).await {
             return Ok(hwp.header);
         }
-        let block_hash = format!("0x{block_hash:02X}");
-        let method = "eth_getBlockByHash".to_string();
-        let params = Params::Array(vec![json!(block_hash), json!(false)]);
-        let response: Value = self
-            .trusted_provider
-            .dispatch_http_request(method, params)?;
-        let header: Header = serde_json::from_value(response["result"].clone())?;
-        Ok(header)
+        Err(anyhow!("Couldn't find header with proof"))
     }
 
     /// Returns the HeaderWithProof for the given block hash by performing a recursive find content
@@ -114,9 +103,8 @@ mod test {
     #[tokio::test]
     async fn header_oracle_bootstraps_with_default_merge_master_acc() {
         let trin_config = TrinConfig::default();
-        let trusted_provider = TrustedProvider::from_trin_config(&trin_config);
         let master_acc = MasterAccumulator::try_from_file(trin_config.master_acc_path).unwrap();
-        let header_oracle = HeaderOracle::new(trusted_provider, master_acc);
+        let header_oracle = HeaderOracle::new(master_acc);
         assert_eq!(
             header_oracle.master_acc.tree_hash_root(),
             H256::from_str(DEFAULT_MASTER_ACC_HASH).unwrap(),

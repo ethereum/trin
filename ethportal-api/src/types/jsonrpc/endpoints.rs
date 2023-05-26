@@ -103,13 +103,6 @@ pub enum BeaconEndpoint {
     RecursiveFindNodes(NodeId),
 }
 
-/// Ethereum JSON-RPC endpoints not currently supported by portal network requests, proxied to
-/// trusted provider
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum TrustedProviderEndpoint {
-    BlockNumber,
-}
-
 /// Ethereum JSON-RPC endpoints supported by portal network requests
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum PortalEndpoint {
@@ -128,6 +121,5 @@ pub enum TrinEndpoint {
     HistoryEndpoint(HistoryEndpoint),
     StateEndpoint(StateEndpoint),
     BeaconEndpoint(BeaconEndpoint),
-    TrustedProviderEndpoint(TrustedProviderEndpoint),
     PortalEndpoint(PortalEndpoint),
 }

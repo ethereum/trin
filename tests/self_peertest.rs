@@ -6,7 +6,6 @@ mod test {
     };
 
     use ethportal_api::types::cli::{TrinConfig, DEFAULT_WEB3_IPC_PATH};
-    use ethportal_api::types::provider::TrustedProvider;
     use ethportal_peertest as peertest;
     use trin_utils::log::init_tracing_logger;
 
@@ -45,11 +44,7 @@ mod test {
         )
         .unwrap();
 
-        let server = peertest::setup_mock_trusted_http_server();
-        let trusted_provider = TrustedProvider {
-            http: ureq::post(&server.url("/")),
-        };
-        let test_client_rpc_handle = trin::run_trin(trin_config, trusted_provider).await.unwrap();
+        let test_client_rpc_handle = trin::run_trin(trin_config).await.unwrap();
         peertest::scenarios::paginate::test_paginate_local_storage(&peertest).await;
         let target = reth_ipc::client::IpcClientBuilder::default()
             .build(DEFAULT_WEB3_IPC_PATH)

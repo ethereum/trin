@@ -122,15 +122,13 @@ mod tests {
     use std::path::PathBuf;
 
     use ethereum_types::U256;
-    use httpmock::prelude::*;
-    use serde_json::{json, Value};
+    use serde_json::Value;
     use ssz::Encode;
     use ssz_types::{typenum, VariableList};
 
     use ethportal_api::types::cli::DEFAULT_MASTER_ACC_PATH;
     use ethportal_api::types::execution::accumulator::HeaderRecord;
     use ethportal_api::types::execution::block_body::BlockBodyLegacy;
-    use ethportal_api::types::provider::TrustedProvider;
     use ethportal_api::utils::bytes::hex_decode;
     use ethportal_api::{BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey};
     use trin_validation::accumulator::MasterAccumulator;
@@ -146,83 +144,11 @@ mod tests {
         hex_decode(raw_header).unwrap()
     }
 
-    fn setup_mock_infura_server() -> MockServer {
-        let server = MockServer::start();
-        server.mock(|when, then| {
-            when.method(POST)
-                .path("/get_header");
-            then.status(200)
-                .header("content-type", "application/json")
-                .json_body(json!({
-                    "jsonrpc":"2.0",
-                    "id":1,
-                    "result":{
-                        "difficulty":"0x717d1b1cd0e",
-                        "extraData":"0xd983010203844765746887676f312e342e328777696e646f7773",
-                        "gasLimit":"0x2fefd8",
-                        "gasUsed":"0x0",
-                        "hash":"0xe2f81ab2f7a0aaa6c5cee61a82d176a2344603f8cf8569e135e1ee98667f0bc3",
-                        "logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
-                        "miner":"0xf8b483dba2c3b7176a3da549ad41a48bb3121069",
-                        "mixHash":"0xdaa40d4b72000209b43526ada798b90b98f9cd6e4cdc5bebbad690208aa17287",
-                        "nonce":"0xe6b9441a5df2f6ad",
-                        "number":"0xa357b",
-                        "parentHash":"0x92bccf7a38604c5441dffc5eb5a5ca295b3fbb7ff01cc92fb3b48f0d456e732e",
-                        "receiptsRoot":"0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
-                        "sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",
-                        "size":"0x21f",
-                        "stateRoot":"0x8a779b9d52800c3f0fc2ec4f8388dd56e1fcf4685126466bc1a9832ab2ddf612",
-                        "timestamp":"0x566930a3",
-                        "totalDifficulty":"0x37b4d6b53544c4e1",
-                        "transactions":[],
-                        "transactionsRoot":"0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
-                        "uncles":[]
-                    }
-                }));
-        });
-        server.mock(|when, then| {
-            when.method(POST)
-                .path("/14764013");
-            then.status(200)
-                .header("content-type", "application/json")
-                .json_body(json!({
-                    "jsonrpc":"2.0",
-                    "id":1,
-                    "result": {
-                        "baseFeePerGas": "0x1aae1651b6",
-                        "difficulty": "0x327bd7ad3116ce",
-                        "extraData": "0x457468657265756d50504c4e532f326d696e6572735f55534133",
-                        "gasLimit": "0x1c9c364",
-                        "gasUsed": "0x140db1",
-                        "hash": "0x720704f3aa11c53cf344ea069db95cecb81ad7453c8f276b2a1062979611f09c",
-                        // Using an empty bloom that doesn't match the real logs, because it is easy and isn't validated
-                        "logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
-                        "miner": "0x00192fb10df37c9fb26829eb2cc623cd1bf599e8",
-                        "mixHash": "0xf1a32e24eb62f01ec3f2b3b5893f7be9062fbf5482bc0d490a54352240350e26",
-                        "nonce": "0x2087fbb243327696",
-                        "number": "0xe147ed",
-                        "parentHash": "0x2c58e3212c085178dbb1277e2f3c24b3f451267a75a234945c1581af639f4a7a",
-                        "receiptsRoot": "0x168a3827607627e781941dc777737fc4b6beb69a8b139240b881992b35b854ea",
-                        "sha3Uncles": "0x58a694212e0416353a4d3865ccf475496b55af3a3d3b002057000741af973191",
-                        "size": "0x1f96",
-                        "stateRoot": "0x67a9fb631f4579f9015ef3c6f1f3830dfa2dc08afe156f750e90022134b9ebf6",
-                        "timestamp": "0x627d9afa",
-                        "totalDifficulty": "0xa55e1baf12dfa3fc50c",
-                        "transactions": [],
-                        "transactionsRoot": "0x18a2978fc62cd1a23e90de920af68c0c3af3330327927cda4c005faccefb5ce7",
-                        "uncles": ["0x817d4158df626cd8e9a20da9552c51a0d43f22b25de0b4dc5a089d81af899c70"]
-                    }
-                }));
-        });
-        server
-    }
-
     #[test_log::test(tokio::test)]
     async fn validate_header() {
-        let server = setup_mock_infura_server();
         let hwp_ssz = get_hwp_ssz();
         let hwp = HeaderWithProof::from_ssz_bytes(&hwp_ssz).expect("error decoding header");
-        let header_oracle = default_header_oracle(server.url("/get_header"));
+        let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
             block_hash: hwp.header.hash().0,
@@ -236,7 +162,6 @@ mod tests {
     #[test_log::test(tokio::test)]
     #[should_panic(expected = "Merkle proof validation failed for pre-merge header")]
     async fn invalidate_header_with_invalid_number() {
-        let server = setup_mock_infura_server();
         let hwp_ssz = get_hwp_ssz();
         let mut header = HeaderWithProof::from_ssz_bytes(&hwp_ssz).expect("error decoding header");
 
@@ -244,7 +169,7 @@ mod tests {
         header.header.number = 669052;
 
         let content_value = header.as_ssz_bytes();
-        let header_oracle = default_header_oracle(server.url("/get_header"));
+        let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
             block_hash: header.header.hash().0,
@@ -258,7 +183,6 @@ mod tests {
     #[test_log::test(tokio::test)]
     #[should_panic(expected = "Merkle proof validation failed for pre-merge header")]
     async fn invalidate_header_with_invalid_gaslimit() {
-        let server = setup_mock_infura_server();
         let hwp_ssz = get_hwp_ssz();
         let mut header = HeaderWithProof::from_ssz_bytes(&hwp_ssz).expect("error decoding header");
 
@@ -267,7 +191,7 @@ mod tests {
         header.header.gas_limit = U256::from(3141591);
 
         let content_value = header.as_ssz_bytes();
-        let header_oracle = default_header_oracle(server.url("/get_header"));
+        let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
             block_hash: header.header.hash().0,
@@ -280,14 +204,12 @@ mod tests {
 
     #[tokio::test]
     async fn validate_block_body() {
-        let server = setup_mock_infura_server();
-
         let ssz_block_body: Vec<u8> =
             std::fs::read("../test_assets/mainnet/block_body_14764013.bin").unwrap();
         let block_body_bytelist: VariableList<_, typenum::U16384> =
             VariableList::from(ssz_block_body);
 
-        let header_oracle = default_header_oracle(server.url("/14764013"));
+        let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = block_14764013_body_key();
 
@@ -300,8 +222,6 @@ mod tests {
     #[tokio::test]
     #[should_panic]
     async fn invalidate_block_body() {
-        let server = setup_mock_infura_server();
-
         let ssz_block_body: Vec<u8> =
             std::fs::read("../test_assets/mainnet/block_body_14764013.bin").unwrap();
         let valid_block = BlockBody::from_ssz_bytes(&ssz_block_body).unwrap();
@@ -317,7 +237,7 @@ mod tests {
         let invalid_content: VariableList<_, typenum::U16384> =
             VariableList::from(invalid_ssz_block_body);
 
-        let header_oracle = default_header_oracle(server.url("/14764013"));
+        let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = block_14764013_body_key();
 
@@ -329,12 +249,11 @@ mod tests {
 
     #[tokio::test]
     async fn validate_receipts() {
-        let server = setup_mock_infura_server();
         let ssz_receipts: Vec<u8> =
             std::fs::read("../test_assets/mainnet/receipts_14764013.bin").unwrap();
         let content: VariableList<_, typenum::U16384> = VariableList::from(ssz_receipts);
 
-        let header_oracle = default_header_oracle(server.url("/14764013"));
+        let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = block_14764013_receipts_key();
 
@@ -347,7 +266,6 @@ mod tests {
     #[tokio::test]
     #[should_panic]
     async fn invalidate_receipts() {
-        let server = setup_mock_infura_server();
         let ssz_receipts: Vec<u8> =
             std::fs::read("../test_assets/mainnet/receipts_14764013.bin").unwrap();
         let mut valid_receipts = Receipts::from_ssz_bytes(&ssz_receipts).unwrap();
@@ -361,7 +279,7 @@ mod tests {
         let invalid_content: VariableList<_, typenum::U16384> =
             VariableList::from(invalid_ssz_receipts);
 
-        let header_oracle = default_header_oracle(server.url("/14764013"));
+        let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = block_14764013_receipts_key();
 
@@ -373,11 +291,10 @@ mod tests {
 
     #[tokio::test]
     async fn validate_epoch_acc() {
-        let server = setup_mock_infura_server();
         let epoch_acc =
             std::fs::read("./../trin-validation/src/assets/epoch_accs/0x5ec1…4218.bin").unwrap();
         let epoch_acc = EpochAccumulator::from_ssz_bytes(&epoch_acc).unwrap();
-        let header_oracle = default_header_oracle(server.url("/14764013"));
+        let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = HistoryContentKey::EpochAccumulator(EpochAccumulatorKey {
             epoch_hash: epoch_acc.tree_hash_root(),
@@ -392,11 +309,10 @@ mod tests {
     #[tokio::test]
     #[should_panic(expected = "Invalid epoch accumulator tree hash root.")]
     async fn invalidate_epoch_acc_with_invalid_root_hash() {
-        let server = setup_mock_infura_server();
         let epoch_acc =
             std::fs::read("./../trin-validation/src/assets/epoch_accs/0x5ec1…4218.bin").unwrap();
         let mut epoch_acc = EpochAccumulator::from_ssz_bytes(&epoch_acc).unwrap();
-        let header_oracle = default_header_oracle(server.url("/14764013"));
+        let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator { header_oracle };
         let content_key = HistoryContentKey::EpochAccumulator(EpochAccumulatorKey {
             epoch_hash: epoch_acc.tree_hash_root(),
@@ -417,11 +333,10 @@ mod tests {
     #[tokio::test]
     #[should_panic(expected = "Invalid epoch accumulator, missing from master accumulator.")]
     async fn invalidate_epoch_acc_missing_from_master_acc() {
-        let server = setup_mock_infura_server();
         let epoch_acc =
             std::fs::read("./../trin-validation/src/assets/epoch_accs/0x5ec1…4218.bin").unwrap();
         let mut epoch_acc = EpochAccumulator::from_ssz_bytes(&epoch_acc).unwrap();
-        let header_oracle = default_header_oracle(server.url("/14764013"));
+        let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator { header_oracle };
 
         epoch_acc[0] = HeaderRecord {
@@ -439,14 +354,11 @@ mod tests {
             .unwrap();
     }
 
-    fn default_header_oracle(infura_url: String) -> Arc<RwLock<HeaderOracle>> {
-        let trusted_provider = TrustedProvider {
-            http: ureq::post(&infura_url),
-        };
+    fn default_header_oracle() -> Arc<RwLock<HeaderOracle>> {
         let master_acc =
             MasterAccumulator::try_from_file(PathBuf::from(DEFAULT_MASTER_ACC_PATH.to_string()))
                 .unwrap();
-        Arc::new(RwLock::new(HeaderOracle::new(trusted_provider, master_acc)))
+        Arc::new(RwLock::new(HeaderOracle::new(master_acc)))
     }
 
     fn block_14764013_hash() -> H256 {
