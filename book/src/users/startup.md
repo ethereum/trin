@@ -67,15 +67,3 @@ Optionally one can specify Trin's network proprties:
 - Port for connecting to other nodes
 
 These types of flags have defaults.
-
-### Connect to a full node
-
-During development of the Portal Network, some parts of the network
-are not yet available. A connection to a full (Execution) node allows
-Trin to use that node when necessary.
-
-For example: If the state network is not live, state data requests
-to Trin will be forwarded to the full node.
-
-If a node is not provided, Trin requires connection to Infura, and will
-ask for an Infura key upon startup. See the `--trusted-provider` flag for more.

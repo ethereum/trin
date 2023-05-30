@@ -128,8 +128,6 @@ Paste the following, replace the Infura ID with your own.
 > Tip: The 'info' level of logs is a good starting value.
 ```sh
 [Service]
-# (required unless the '--trusted-provider' is set to 'local')
-Environment="TRIN_INFURA_PROJECT_ID=<infura-project-id>"
 # (optional) Rust log level: <error/warn/info/debug/trace>
 Environment="RUST_LOG=info"
 # (optional) This flag sets the data directory to the location we created earlier.

@@ -18,7 +18,7 @@ Check out the [Trin book](https://ethereum.github.io/trin) to quickly get up and
 
 Trin is a prototype Portal Network client. This implementation and the Portal Network specifications will continue to co-evolve.
 
-In this stage of development, Trin relies on a separate execution node (local node or Infura) to respond to some requests that it cannot fulfill itself. Additionally, Trin lacks comprehensive data validation.
+In this stage of development, Trin lacks comprehensive data validation.
 
 ## Want to help?
 

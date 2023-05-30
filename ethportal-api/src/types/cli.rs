@@ -5,7 +5,6 @@ use std::{env, ffi::OsString, fmt, net::SocketAddr, path::PathBuf, str::FromStr}
 use url::Url;
 
 use crate::types::bootnodes::Bootnodes;
-use crate::types::provider::TrustedProviderType;
 
 pub const DEFAULT_MASTER_ACC_PATH: &str = "validation_assets/merge_macc.bin";
 pub const DEFAULT_WEB3_IPC_PATH: &str = "/tmp/trin-jsonrpc.ipc";
@@ -18,7 +17,6 @@ pub const HISTORY_NETWORK: &str = "history";
 pub const STATE_NETWORK: &str = "state";
 const DEFAULT_SUBNETWORKS: &str = "history";
 pub const DEFAULT_STORAGE_CAPACITY_MB: &str = "100";
-pub const DEFAULT_TRUSTED_PROVIDER: &str = "infura";
 pub const DEFAULT_WEB3_TRANSPORT: &str = "ipc";
 
 use crate::dashboard::grafana::{GrafanaAPI, DASHBOARD_TEMPLATES};
@@ -144,20 +142,6 @@ pub struct TrinConfig {
     pub ephemeral: bool,
 
     #[arg(
-        long = "trusted-provider",
-        help = "Trusted provider to use. (options: 'infura' (default), 'pandaops' (devops) or 'custom')",
-        default_value(DEFAULT_TRUSTED_PROVIDER)
-    )]
-    pub trusted_provider: TrustedProviderType,
-
-    #[arg(
-        long = "trusted-provider-url",
-        value_parser = check_url_format,
-        help = "URL for a trusted http provider. Must include a base, host and port (e.g., '<base>://<host>:<port>')."
-    )]
-    pub trusted_provider_url: Option<Url>,
-
-    #[arg(
         long = "master-accumulator-path",
         help = "Path to master accumulator for validation",
         default_value(DEFAULT_MASTER_ACC_PATH)
@@ -192,8 +176,6 @@ impl Default for TrinConfig {
                 .expect("Parsing static DEFAULT_STORAGE_CAPACITY_MB to work"),
             enable_metrics_with_url: None,
             ephemeral: false,
-            trusted_provider: TrustedProviderType::Infura,
-            trusted_provider_url: None,
             master_acc_path: PathBuf::from(DEFAULT_MASTER_ACC_PATH.to_string()),
             command: None,
         }
@@ -229,44 +211,7 @@ impl TrinConfig {
                 p => return Err(Error::raw(ErrorKind::ArgumentConflict,format!("Must not supply an http address when using ipc protocol for json-rpc (received: {p})"))),
             }
         }
-
-        match config.trusted_provider_url {
-            Some(_) => {
-                if config.trusted_provider == TrustedProviderType::Infura {
-                    return Err(Error::raw(ErrorKind::ArgumentConflict,"--trusted-provider-url flag is incompatible with infura as the trusted provider."));
-                }
-            }
-            None => match config.trusted_provider {
-                TrustedProviderType::Infura => {}
-                TrustedProviderType::Pandaops => return Err(Error::raw(ErrorKind::ArgumentConflict,
-                    "'--trusted-provider pandaops' choice requires the --trusted-provider-url flag."
-                )),
-                TrustedProviderType::Custom => return Err(Error::raw(ErrorKind::ArgumentConflict,
-                    "'--trusted-provider custom' choice requires the --trusted-provider-url flag."
-                )),
-            },
-        }
-        // Should not serve http over same port as localhost provider.
-        if config.web3_transport == Web3TransportType::HTTP
-            && config.trusted_provider == TrustedProviderType::Custom
-        {
-            if let Some(url) = &config.trusted_provider_url {
-                let is_local_provider = url.host_str() == Some("127.0.0.1");
-                let port_clash = url.port() == config.web3_http_address.port();
-                if is_local_provider && port_clash {
-                    return Err(Error::raw(ErrorKind::ArgumentConflict,"--trusted-provider-url and --web3-http-address cannot have the same localhost port."));
-                }
-            }
-        }
         Ok(config)
-    }
-}
-
-/// A validator function for CLI URL arguments.
-fn check_url_format(url: &str) -> Result<Url, String> {
-    match Url::parse(url) {
-        Ok(val) => Ok(val),
-        Err(e) => Err(format!("Invalid URL '{url}', {e}")),
     }
 }
 
@@ -346,27 +291,13 @@ pub fn create_dashboard(
 #[allow(clippy::unwrap_used)]
 mod test {
     use super::*;
-    use crate::types::provider::TrustedProvider;
-    use std::env;
     use std::net::{IpAddr, Ipv4Addr};
     use test_log::test;
-
-    fn env_is_set(config: &TrinConfig) -> bool {
-        match config.trusted_provider {
-            // Custom node does not require infura id.
-            TrustedProviderType::Custom => return true,
-            // Pandaops node does not require infura id.
-            TrustedProviderType::Pandaops => return true,
-            _ => {}
-        }
-        matches!(env::var("TRIN_INFURA_PROJECT_ID"), Ok(_))
-    }
 
     #[test]
     fn test_default_args() {
         let expected_config = TrinConfig::default();
         let actual_config = TrinConfig::new_from(["trin"].iter()).unwrap();
-        assert!(env_is_set(&actual_config));
         assert_eq!(actual_config.web3_transport, expected_config.web3_transport);
         assert_eq!(
             actual_config.web3_http_address,
@@ -400,7 +331,6 @@ mod test {
             .iter(),
         )
         .unwrap();
-        assert!(env_is_set(&actual_config));
         assert_eq!(actual_config.web3_transport, expected_config.web3_transport);
         assert_eq!(
             actual_config.web3_http_address,
@@ -410,8 +340,7 @@ mod test {
 
     #[test]
     fn test_ipc_protocol() {
-        let actual_config = Default::default();
-        assert!(env_is_set(&actual_config));
+        let actual_config: TrinConfig = Default::default();
         let expected_config = TrinConfig {
             web3_http_address: Url::parse(DEFAULT_WEB3_HTTP_ADDRESS).unwrap(),
             web3_transport: Web3TransportType::IPC,
@@ -428,7 +357,6 @@ mod test {
     fn test_ipc_with_custom_path() {
         let actual_config =
             TrinConfig::new_from(["trin", "--web3-ipc-path", "/path/test.ipc"].iter()).unwrap();
-        assert!(env_is_set(&actual_config));
         let expected_config = TrinConfig {
             web3_http_address: Url::parse(DEFAULT_WEB3_HTTP_ADDRESS).unwrap(),
             web3_ipc_path: PathBuf::from("/path/test.ipc"),
@@ -475,7 +403,6 @@ mod test {
         };
         let actual_config =
             TrinConfig::new_from(["trin", "--discovery-port", "999"].iter()).unwrap();
-        assert!(env_is_set(&actual_config));
         assert_eq!(actual_config.discovery_port, expected_config.discovery_port);
     }
 
@@ -483,7 +410,6 @@ mod test {
     fn test_manual_external_addr_v4() {
         let actual_config =
             TrinConfig::new_from(["trin", "--external-address", "127.0.0.1:1234"].iter()).unwrap();
-        assert!(env_is_set(&actual_config));
         assert_eq!(
             actual_config.external_addr,
             Some(SocketAddr::from(([127, 0, 0, 1], 1234)))
@@ -494,7 +420,6 @@ mod test {
     fn test_manual_external_addr_v6() {
         let actual_config =
             TrinConfig::new_from(["trin", "--external-address", "[::1]:1234"].iter()).unwrap();
-        assert!(env_is_set(&actual_config));
         assert_eq!(
             actual_config.external_addr,
             Some(SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 1], 1234)))
@@ -516,7 +441,6 @@ mod test {
             .iter(),
         )
         .unwrap();
-        assert!(env_is_set(&actual_config));
         assert_eq!(actual_config.private_key, expected_config.private_key);
     }
 
@@ -527,7 +451,6 @@ mod test {
             ..Default::default()
         };
         let actual_config = TrinConfig::new_from(["trin", "--ephemeral"].iter()).unwrap();
-        assert!(env_is_set(&actual_config));
         assert_eq!(actual_config.ephemeral, expected_config.ephemeral);
     }
 
@@ -543,7 +466,6 @@ mod test {
         let actual_config =
             TrinConfig::new_from(["trin", "--enable-metrics-with-url", "127.0.0.1:1234"].iter())
                 .unwrap();
-        assert!(env_is_set(&actual_config));
         assert_eq!(
             actual_config.enable_metrics_with_url,
             expected_config.enable_metrics_with_url
@@ -583,51 +505,6 @@ mod test {
     }
 
     #[test]
-    fn test_default_trusted_provider_is_infura() {
-        let config = TrinConfig::new_from(["trin"].iter()).unwrap();
-        assert!(env_is_set(&config));
-        assert_eq!(config.trusted_provider, TrustedProviderType::Infura);
-    }
-
-    #[test]
-    fn test_pandaops_trusted_provider() {
-        let config = TrinConfig::new_from(
-            [
-                "trin",
-                "--trusted-provider",
-                "pandaops",
-                "--trusted-provider-url",
-                "https://www.geth.com/",
-            ]
-            .iter(),
-        )
-        .unwrap();
-        assert!(env_is_set(&config));
-        assert_eq!(config.trusted_provider, TrustedProviderType::Pandaops);
-    }
-
-    #[test]
-    fn test_custom_local_node_trusted_provider() {
-        let config = TrinConfig::new_from(
-            [
-                "trin",
-                "--trusted-provider",
-                "custom",
-                "--trusted-provider-url",
-                "http://127.0.0.1:8546/",
-            ]
-            .iter(),
-        )
-        .unwrap();
-        assert!(env_is_set(&config));
-        assert_eq!(config.trusted_provider, TrustedProviderType::Custom);
-        let trusted_provider = TrustedProvider::from_trin_config(&config);
-        let url: ureq::RequestUrl = trusted_provider.http.request_url().unwrap();
-        assert_eq!(url.host(), "127.0.0.1");
-        assert_eq!(url.port(), Some(8546));
-    }
-
-    #[test]
     fn test_trin_with_create_dashboard() {
         let config = TrinConfig::try_parse_from([
             "trin",
@@ -652,102 +529,6 @@ mod test {
         } else {
             unreachable!("")
         }
-    }
-
-    #[test]
-    #[should_panic(
-        expected = "--trusted-provider-url flag is incompatible with infura as the trusted provider."
-    )]
-    fn test_trusted_provider_url_must_not_be_used_with_infura_provider() {
-        TrinConfig::new_from(["trin", "--trusted-provider-url", "http://127.0.0.1:8546/"].iter())
-            .unwrap();
-    }
-
-    #[test]
-    #[should_panic(
-        expected = "'--trusted-provider custom' choice requires the --trusted-provider-url flag."
-    )]
-    fn test_custom_node_trusted_provider_requires_node_url() {
-        TrinConfig::new_from(["trin", "--trusted-provider", "custom"].iter()).unwrap();
-    }
-
-    #[test]
-    #[should_panic(
-        expected = "--trusted-provider-url and --web3-http-address cannot have the same localhost port."
-    )]
-    fn test_web3_port_must_not_clash_with_local_provider_port() {
-        TrinConfig::new_from(
-            [
-                "trin",
-                "--trusted-provider",
-                "custom",
-                "--trusted-provider-url",
-                "http://127.0.0.1:8545/",
-                "--web3-transport",
-                "http",
-                "--web3-http-address",
-                "http://127.0.0.1:8545/",
-            ]
-            .iter(),
-        )
-        .unwrap();
-    }
-
-    #[test]
-    fn test_web3_port_different_from_local_provider_port() {
-        TrinConfig::new_from(
-            [
-                "trin",
-                "--trusted-provider",
-                "custom",
-                "--trusted-provider-url",
-                "http://127.0.0.1:8545/",
-                "--web3-transport",
-                "http",
-                "--web3-http-address",
-                "http://127.0.0.1:8546/",
-            ]
-            .iter(),
-        )
-        .unwrap();
-    }
-
-    #[test]
-    #[should_panic(
-        expected = "'--trusted-provider pandaops' choice requires the --trusted-provider-url flag."
-    )]
-    fn test_pandaops_trusted_provider_requires_trusted_provider_url() {
-        TrinConfig::new_from(["trin", "--trusted-provider", "pandaops"].iter()).unwrap();
-    }
-
-    #[test]
-    #[should_panic(expected = "Invalid trusted provider arg")]
-    fn test_trusted_provider_invalid_argument() {
-        TrinConfig::new_from(["trin", "--trusted-provider", "prysm"].iter()).unwrap();
-    }
-
-    #[test]
-    #[should_panic(expected = "Invalid URL 'www.geth.com', relative URL without a base")]
-    fn test_pandaops_malformed_url_fails() {
-        TrinConfig::new_from(["trin", "--trusted-provider-url", "www.geth.com"].iter()).unwrap();
-    }
-
-    #[test]
-    #[should_panic(
-        expected = "--trusted-provider-url flag is incompatible with infura as the trusted provider."
-    )]
-    fn test_provider_url_invalid_with_infura_as_trusted_provider() {
-        TrinConfig::new_from(
-            [
-                "trin",
-                "--trusted-provider",
-                "infura",
-                "--trusted-provider-url",
-                "https://www.geth.com/",
-            ]
-            .iter(),
-        )
-        .unwrap();
     }
 
     #[test]

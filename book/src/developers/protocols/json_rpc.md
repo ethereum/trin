@@ -26,17 +26,6 @@ The specification for these endpoints can be found [here](https://playground.ope
 - `portal_stateStore`
 - `portal_statePing`
 
-### Ethereum endpoints
-The specification for these endpoints can be found [here](https://eth.wiki/json-rpc/API#json-rpc-methods).
-
-- [`eth_blockNumber`](https://eth.wiki/json-rpc/API#eth_blocknumber)
-	- This endpoint is currently proxied to a trusted provider (local node or Infura), and not served by the Portal Network.
-- [`eth_getBlockByHash`](https://eth.wiki/json-rpc/API#eth_getblockbyhash)
-	- This endpoint relies on fetching block headers from the Portal Network, so all blocks may not be available until the Portal Network stabilizes.
-- [`eth_getBlockByNumber`](https://eth.wiki/json-rpc/API#eth_getblockbynumber)
-	- This endpoint relies on the master accumulator to lookup the block hash. Since the master accumulator was frozen at the merge block, only pre-merge blocks are currently supported.
-- [`web3_clientVersion`](https://eth.wiki/json-rpc/API#web3_clientversion)
-
 ### Custom Trin JSON-RPC endpoints
 The following endpoints are not part of the Portal Network specification and are defined
 in subsequent sections:

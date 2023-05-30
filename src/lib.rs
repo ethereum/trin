@@ -9,7 +9,6 @@ use tracing::info;
 use utp_rs::socket::UtpSocket;
 
 use ethportal_api::types::cli::{TrinConfig, BEACON_NETWORK, HISTORY_NETWORK, STATE_NETWORK};
-use ethportal_api::types::provider::TrustedProvider;
 use portalnet::{
     discovery::{Discovery, Discv5UdpSocket},
     events::PortalnetEvents,
@@ -25,7 +24,6 @@ use trin_validation::{accumulator::MasterAccumulator, oracle::HeaderOracle};
 
 pub async fn run_trin(
     trin_config: TrinConfig,
-    trusted_provider: TrustedProvider,
 ) -> Result<RpcServerHandle, Box<dyn std::error::Error>> {
     let trin_version = get_trin_version();
     info!("Launching Trin: v{trin_version}");
@@ -75,7 +73,7 @@ pub async fn run_trin(
         "Loaded master accumulator from: {:?}",
         trin_config.master_acc_path
     );
-    let header_oracle = HeaderOracle::new(trusted_provider.clone(), master_accumulator);
+    let header_oracle = HeaderOracle::new(master_accumulator);
     let header_oracle = Arc::new(RwLock::new(header_oracle));
 
     // Initialize state sub-network service and event handlers, if selected
