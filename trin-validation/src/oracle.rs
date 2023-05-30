@@ -6,7 +6,7 @@ use tokio::sync::mpsc;
 
 use crate::accumulator::MasterAccumulator;
 use ethportal_api::types::content_key::{BlockHeaderKey, HistoryContentKey};
-use ethportal_api::types::execution::header::{Header, HeaderWithProof};
+use ethportal_api::types::execution::header::HeaderWithProof;
 use ethportal_api::types::jsonrpc::endpoints::HistoryEndpoint;
 use ethportal_api::types::jsonrpc::request::{BeaconJsonRpcRequest, HistoryJsonRpcRequest};
 use ethportal_api::utils::bytes::hex_decode;
@@ -41,7 +41,7 @@ impl HeaderOracle {
 
     /// Returns the HeaderWithProof for the given block hash by performing a recursive find content
     /// request.
-    async fn recursive_find_hwp(&self, block_hash: H256) -> anyhow::Result<HeaderWithProof> {
+    pub async fn recursive_find_hwp(&self, block_hash: H256) -> anyhow::Result<HeaderWithProof> {
         let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
             block_hash: block_hash.0,
         });
