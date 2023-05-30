@@ -126,11 +126,9 @@ mod tests {
     use ethereum_types::U256;
     use serde_json::Value;
     use ssz::Encode;
-    use ssz_types::{typenum, VariableList};
 
     use ethportal_api::types::cli::DEFAULT_MASTER_ACC_PATH;
     use ethportal_api::types::execution::accumulator::HeaderRecord;
-    use ethportal_api::types::execution::block_body::BlockBodyLegacy;
     use ethportal_api::utils::bytes::hex_decode;
     use ethportal_api::{BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey};
     use trin_validation::accumulator::MasterAccumulator;
@@ -274,26 +272,5 @@ mod tests {
             MasterAccumulator::try_from_file(PathBuf::from(DEFAULT_MASTER_ACC_PATH.to_string()))
                 .unwrap();
         Arc::new(RwLock::new(HeaderOracle::new(master_acc)))
-    }
-
-    fn block_14764013_hash() -> H256 {
-        H256::from_slice(
-            &hex_decode("0x720704f3aa11c53cf344ea069db95cecb81ad7453c8f276b2a1062979611f09c")
-                .unwrap(),
-        )
-    }
-
-    fn block_14764013_body_key() -> HistoryContentKey {
-        let block_hash = block_14764013_hash();
-        HistoryContentKey::BlockBody(BlockBodyKey {
-            block_hash: block_hash.0,
-        })
-    }
-
-    fn block_14764013_receipts_key() -> HistoryContentKey {
-        let block_hash = block_14764013_hash();
-        HistoryContentKey::BlockReceipts(BlockReceiptsKey {
-            block_hash: block_hash.0,
-        })
     }
 }
