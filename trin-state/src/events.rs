@@ -16,6 +16,9 @@ impl StateEvents {
             tokio::select! {
                 Some(talk_request) = self.event_rx.recv() => {
                     self.handle_state_talk_request(talk_request);
+                } else => {
+                    error!("State event channel closed, shutting down");
+                    break;
                 }
             }
         }

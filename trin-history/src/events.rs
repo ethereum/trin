@@ -16,6 +16,9 @@ impl HistoryEvents {
             tokio::select! {
                 Some(talk_request) = self.event_rx.recv() => {
                     self.handle_history_talk_request(talk_request);
+                } else => {
+                    error!("History event channel closed, shutting down");
+                    break;
                 }
             }
         }

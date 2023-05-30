@@ -16,6 +16,9 @@ impl BeaconEvents {
             tokio::select! {
                 Some(talk_request) = self.event_rx.recv() => {
                     self.handle_beacon_talk_request(talk_request);
+                } else => {
+                    error!("Beacon event channel closed, shutting down");
+                    break;
                 }
             }
         }
