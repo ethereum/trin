@@ -130,7 +130,7 @@ mod tests {
     use ethportal_api::types::cli::DEFAULT_MASTER_ACC_PATH;
     use ethportal_api::types::execution::accumulator::HeaderRecord;
     use ethportal_api::utils::bytes::hex_decode;
-    use ethportal_api::{BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey};
+    use ethportal_api::{BlockHeaderKey, EpochAccumulatorKey};
     use trin_validation::accumulator::MasterAccumulator;
 
     fn get_hwp_ssz() -> Vec<u8> {
