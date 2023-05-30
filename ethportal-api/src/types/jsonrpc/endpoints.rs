@@ -103,14 +103,6 @@ pub enum BeaconEndpoint {
     RecursiveFindNodes(NodeId),
 }
 
-/// Ethereum JSON-RPC endpoints supported by portal network requests
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum PortalEndpoint {
-    ClientVersion, // Doesn't actually rely on portal network data, but it makes sense to live here
-    GetBlockByHash,
-    GetBlockByNumber,
-}
-
 /// Global portal network endpoints supported by trin, Discv5, Ethereum and all overlay network endpoints supported by portal network requests
 // When adding a json-rpc endpoint, make sure to...
 // - Update `docs/jsonrpc_api.md`
@@ -121,5 +113,4 @@ pub enum TrinEndpoint {
     HistoryEndpoint(HistoryEndpoint),
     StateEndpoint(StateEndpoint),
     BeaconEndpoint(BeaconEndpoint),
-    PortalEndpoint(PortalEndpoint),
 }

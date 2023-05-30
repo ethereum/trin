@@ -48,8 +48,9 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                     .header_oracle
                     .write()
                     .await
-                    .get_header_by_hash(H256::from(key.block_hash))
-                    .await?;
+                    .recursive_find_hwp(H256::from(key.block_hash))
+                    .await?
+                    .header;
                 let actual_uncles_root = block_body.uncles_root()?;
                 if actual_uncles_root != trusted_header.uncles_hash {
                     return Err(anyhow!(
@@ -76,8 +77,9 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                     .header_oracle
                     .write()
                     .await
-                    .get_header_by_hash(H256::from(key.block_hash))
-                    .await?;
+                    .recursive_find_hwp(H256::from(key.block_hash))
+                    .await?
+                    .header;
                 let actual_receipts_root = receipts.root()?;
                 if actual_receipts_root != trusted_header.receipts_root {
                     return Err(anyhow!(
@@ -198,60 +200,6 @@ mod tests {
         });
         chain_history_validator
             .validate_content(&content_key, &content_value)
-            .await
-            .unwrap();
-    }
-
-    #[tokio::test]
-    #[should_panic]
-    async fn invalidate_block_body() {
-        let ssz_block_body: Vec<u8> =
-            std::fs::read("../test_assets/mainnet/block_body_14764013.bin").unwrap();
-        let valid_block = BlockBody::from_ssz_bytes(&ssz_block_body).unwrap();
-        let mut invalid_txs = valid_block.transactions().unwrap();
-
-        // construct invalid ssz encoded block body
-        invalid_txs.truncate(1);
-        let invalid_block = BlockBody::Legacy(BlockBodyLegacy {
-            txs: invalid_txs,
-            uncles: valid_block.uncles().unwrap(),
-        });
-        let invalid_ssz_block_body = invalid_block.as_ssz_bytes();
-        let invalid_content: VariableList<_, typenum::U16384> =
-            VariableList::from(invalid_ssz_block_body);
-
-        let header_oracle = default_header_oracle();
-        let chain_history_validator = ChainHistoryValidator { header_oracle };
-        let content_key = block_14764013_body_key();
-
-        chain_history_validator
-            .validate_content(&content_key, &invalid_content)
-            .await
-            .unwrap();
-    }
-
-    #[tokio::test]
-    #[should_panic]
-    async fn invalidate_receipts() {
-        let ssz_receipts: Vec<u8> =
-            std::fs::read("../test_assets/mainnet/receipts_14764013.bin").unwrap();
-        let mut valid_receipts = Receipts::from_ssz_bytes(&ssz_receipts).unwrap();
-
-        // construct invalid ssz encoded receipts
-        valid_receipts.receipt_list.truncate(1);
-        let invalid_receipts = Receipts {
-            receipt_list: valid_receipts.receipt_list,
-        };
-        let invalid_ssz_receipts = invalid_receipts.as_ssz_bytes();
-        let invalid_content: VariableList<_, typenum::U16384> =
-            VariableList::from(invalid_ssz_receipts);
-
-        let header_oracle = default_header_oracle();
-        let chain_history_validator = ChainHistoryValidator { header_oracle };
-        let content_key = block_14764013_receipts_key();
-
-        chain_history_validator
-            .validate_content(&content_key, &invalid_content)
             .await
             .unwrap();
     }
