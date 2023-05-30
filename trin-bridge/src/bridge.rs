@@ -173,13 +173,25 @@ impl Bridge {
         if full_header.header.number <= MERGE_BLOCK_NUMBER {
             full_header.epoch_acc = epoch_acc;
         }
-        Bridge::gossip_header(&full_header, &portal_clients, &gossip_stats).await?;
+        if let Err(err) = Bridge::gossip_header(&full_header, &portal_clients, &gossip_stats).await
+        {
+            warn!("Error gossiping header #{height:?}: {err:?}");
+        }
         // Sleep for 10 seconds to allow headers to saturate network,
         // since they must be available for body / receipt validation.
         sleep(Duration::from_secs(HEADER_SATURATION_DELAY)).await;
-        Bridge::construct_and_gossip_block_body(&full_header, &portal_clients, &gossip_stats)
-            .await?;
-        Bridge::construct_and_gossip_receipt(&full_header, &portal_clients, &gossip_stats).await
+        if let Err(err) =
+            Bridge::construct_and_gossip_block_body(&full_header, &portal_clients, &gossip_stats)
+                .await
+        {
+            warn!("Error gossiping block body #{height:?}: {err:?}");
+        }
+        if let Err(err) =
+            Bridge::construct_and_gossip_receipt(&full_header, &portal_clients, &gossip_stats).await
+        {
+            warn!("Error gossiping receipt #{height:?}: {err:?}");
+        }
+        Ok(())
     }
 
     async fn gossip_header(
