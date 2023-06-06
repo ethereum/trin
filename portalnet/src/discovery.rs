@@ -2,7 +2,7 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use discv5::{
     enr::{CombinedKey, EnrBuilder, NodeId},
-    Discv5, Discv5ConfigBuilder, Discv5Event, RequestError, TalkRequest,
+    Discv5, Discv5ConfigBuilder, Discv5Event, ListenConfig, RequestError, TalkRequest,
 };
 use lru::LruCache;
 use parking_lot::RwLock;
@@ -16,6 +16,7 @@ use crate::socket;
 use ethportal_api::types::enr::Enr;
 use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::{NodeId as EthportalNodeId, NodeInfo};
+use std::net::Ipv4Addr;
 use std::str::FromStr;
 use std::{convert::TryFrom, fmt, io, net::SocketAddr, sync::Arc};
 use trin_utils::version::get_trin_version;
@@ -98,13 +99,18 @@ impl Discovery {
             // Use "t" as short-hand for "Trin" to save bytes in ENR.
             let client_info = format!("t {trin_version}");
             // Use "c" as short-hand for "client".
-            builder.add_value(ENR_PORTAL_CLIENT_KEY, client_info.as_bytes());
+            builder.add_value(ENR_PORTAL_CLIENT_KEY, &client_info.as_bytes());
             builder
                 .build(&enr_key)
                 .map_err(|e| format!("When adding key to servers ENR: {e:?}"))?
         };
 
-        let discv5_config = Discv5ConfigBuilder::default().build();
+        let listen_config = ListenConfig::Ipv4 {
+            ip: Ipv4Addr::UNSPECIFIED,
+            port: portal_config.listen_port,
+        };
+
+        let discv5_config = Discv5ConfigBuilder::new(listen_config).build();
         let discv5 = Discv5::new(enr, enr_key, discv5_config)
             .map_err(|e| format!("Failed to create discv5 instance: {e}"))?;
 
@@ -133,7 +139,7 @@ impl Discovery {
         );
 
         self.discv5
-            .start(self.listen_socket)
+            .start()
             .await
             .map_err(|e| format!("Failed to start discv5 server: {e:?}"))?;
         self.started = true;

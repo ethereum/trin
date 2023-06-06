@@ -15,7 +15,7 @@ description = "A Rust implementation of the Ethereum Portal Network"
 [dependencies]
 anyhow = "1.0.68"
 clap = { version = "4.2.1", features = ["derive"] }
-discv5 = { version = "0.2.1", features = ["serde"] }
+discv5 = { version = "0.3.0", features = ["serde"] }
 enr = { version = "=0.7.0", features = ["k256", "ed25519"] }
 eth2_ssz = "0.4.0"
 ethereum-types = "0.12.1"
