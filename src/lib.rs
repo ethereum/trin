@@ -161,13 +161,13 @@ pub async fn run_trin(
     });
 
     if let Some(network) = history_network_task {
-        tokio::spawn(async { network.await });
+        tokio::spawn(network);
     }
     if let Some(network) = state_network_task {
-        tokio::spawn(async { network.await });
+        tokio::spawn(network);
     }
     if let Some(network) = beacon_network_task {
-        tokio::spawn(async { network.await });
+        tokio::spawn(network);
     }
 
     Ok(rpc_handle)
