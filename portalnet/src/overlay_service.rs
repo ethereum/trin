@@ -82,6 +82,7 @@ pub const UTP_CONN_CFG: ConnectionConfig = ConnectionConfig {
     max_packet_size: 1024,
     max_conn_attempts: 3,
     max_idle_timeout: Duration::from_secs(32),
+    max_timeout: Duration::from_secs(60),
     initial_timeout: Duration::from_millis(1500),
     min_timeout: Duration::from_millis(500),
     target_delay: Duration::from_millis(250),
