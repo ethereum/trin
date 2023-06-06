@@ -18,7 +18,6 @@ use std::{
 };
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::{debug, error, info, warn};
-use utp_rs::conn::ConnectionConfig;
 use utp_rs::socket::UtpSocket;
 
 use crate::{
@@ -26,6 +25,7 @@ use crate::{
     metrics::{MessageDirectionLabel, MessageLabel, OverlayMetrics, ProtocolLabel},
     overlay_service::{
         OverlayCommand, OverlayRequest, OverlayRequestError, OverlayService, RequestDirection,
+        UTP_CONN_CFG,
     },
     storage::ContentStore,
     types::{
@@ -478,7 +478,7 @@ where
         };
         let mut stream = self
             .utp_socket
-            .connect_with_cid(cid, ConnectionConfig::default())
+            .connect_with_cid(cid, *UTP_CONN_CFG)
             .await
             .map_err(|err| OverlayRequestError::UtpError(format!("{err:?}")))?;
         let mut data = vec![];

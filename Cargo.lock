@@ -4689,6 +4689,7 @@ dependencies = [
  "ethportal-api",
  "fnv",
  "futures 0.3.28",
+ "lazy_static",
  "leb128",
  "lru",
  "parking_lot 0.11.2",

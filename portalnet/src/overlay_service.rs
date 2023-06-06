@@ -20,6 +20,7 @@ use discv5::{
     rpc::RequestId,
 };
 use futures::{channel::oneshot, future::join_all, prelude::*};
+use lazy_static::lazy_static;
 use parking_lot::RwLock;
 use rand::seq::{IteratorRandom, SliceRandom};
 use smallvec::SmallVec;
@@ -69,6 +70,16 @@ pub const FIND_NODES_MAX_NODES: usize = 32;
 
 /// Maximum number of ENRs in response to FindContent.
 pub const FIND_CONTENT_MAX_NODES: usize = 32;
+
+lazy_static! {
+    pub static ref UTP_CONN_CFG: ConnectionConfig = ConnectionConfig {
+        // set max packet size = discv5 max packet size
+        // https://github.com/sigp/discv5/blob/19342b374647c617eead7e88a4242e8cec68f7f9/src/packet/mod.rs#L44
+        max_packet_size: 1280,
+        // use default values for other fields
+        ..Default::default()
+    };
+}
 
 /// With even distribution assumptions, 2**17 is enough to put each node (estimating 100k nodes,
 /// which is more than 10x the ethereum mainnet node count) into a unique bucket by the 17th bucket index.
@@ -967,9 +978,7 @@ where
                     // over the uTP stream.
                     let utp = Arc::clone(&self.utp_socket);
                     tokio::spawn(async move {
-                        let mut stream = match utp
-                            .accept_with_cid(cid.clone(), ConnectionConfig::default())
-                            .await
+                        let mut stream = match utp.accept_with_cid(cid.clone(), *UTP_CONN_CFG).await
                         {
                             Ok(stream) => stream,
                             Err(err) => {
@@ -1102,10 +1111,7 @@ where
         tokio::spawn(async move {
             // Wait for an incoming connection with the given CID. Then, read the data from the uTP
             // stream.
-            let mut stream = match utp
-                .accept_with_cid(cid.clone(), ConnectionConfig::default())
-                .await
-            {
+            let mut stream = match utp.accept_with_cid(cid.clone(), *UTP_CONN_CFG).await {
                 Ok(stream) => stream,
                 Err(err) => {
                     warn!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), "unable to accept uTP stream");
@@ -1369,10 +1375,7 @@ where
 
         let utp = Arc::clone(&self.utp_socket);
         tokio::spawn(async move {
-            let mut stream = match utp
-                .connect_with_cid(cid.clone(), ConnectionConfig::default())
-                .await
-            {
+            let mut stream = match utp.connect_with_cid(cid.clone(), *UTP_CONN_CFG).await {
                 Ok(stream) => stream,
                 Err(err) => {
                     warn!(
