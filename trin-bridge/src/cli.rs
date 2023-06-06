@@ -1,3 +1,4 @@
+use crate::types::NetworkKind;
 use clap::Parser;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -8,6 +9,7 @@ use std::str::FromStr;
 //   less and less evenly spread
 // - running more than 16 trin nodes simultaneously is not thoroughly tested
 pub const MAX_NODE_COUNT: u8 = 16;
+const DEFAULT_SUBNETWORK: &str = "history";
 
 #[derive(Parser, Debug, PartialEq)]
 #[command(name = "Trin Bridge", about = "Feed the network")]
@@ -34,6 +36,14 @@ pub struct BridgeConfig {
         help = "Path to epoch accumulator repo for bridge mode"
     )]
     pub epoch_acc_path: PathBuf,
+
+    #[arg(
+        long = "network",
+        help = "Comma-separated list of which portal subnetworks to activate",
+        default_value = DEFAULT_SUBNETWORK,
+        use_value_delimiter = true
+    )]
+    pub network: Vec<NetworkKind>,
 }
 
 fn check_node_count(val: &str) -> Result<u8, String> {
@@ -89,6 +99,8 @@ mod test {
             EXECUTABLE_PATH,
             "--epoch-accumulator-path",
             EPOCH_ACC_PATH,
+            "--network",
+            "history,beacon",
         ]);
         assert_eq!(bridge_config.node_count, 1);
         assert_eq!(
@@ -97,6 +109,10 @@ mod test {
         );
         assert_eq!(bridge_config.mode, BridgeMode::Latest);
         assert_eq!(bridge_config.epoch_acc_path, PathBuf::from(EPOCH_ACC_PATH));
+        assert_eq!(
+            bridge_config.network,
+            vec![NetworkKind::History, NetworkKind::Beacon]
+        );
     }
 
     #[test]
@@ -123,6 +139,7 @@ mod test {
         );
         assert_eq!(bridge_config.mode, BridgeMode::StartFromEpoch(100));
         assert_eq!(bridge_config.epoch_acc_path, PathBuf::from(EPOCH_ACC_PATH));
+        assert_eq!(bridge_config.network, vec![NetworkKind::History]);
     }
 
     #[test]
@@ -147,5 +164,14 @@ mod test {
         );
         assert_eq!(bridge_config.mode, BridgeMode::Latest);
         assert_eq!(bridge_config.epoch_acc_path, PathBuf::from(EPOCH_ACC_PATH));
+        assert_eq!(bridge_config.network, vec![NetworkKind::History]);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Invalid network arg. Expected either 'beacon', 'history' or 'state'"
+    )]
+    fn test_invalid_network_arg() {
+        BridgeConfig::try_parse_from(["test", "--network", "das"].iter()).unwrap();
     }
 }
