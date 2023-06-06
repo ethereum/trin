@@ -1,5 +1,6 @@
 use crate::jsonrpsee::core::{async_trait, RpcResult};
 use anyhow::anyhow;
+use discv5::enr::NodeId;
 use ethportal_api::types::constants::CONTENT_ABSENT;
 use ethportal_api::types::content_value::PossibleBeaconContentValue;
 use ethportal_api::types::enr::Enr;
@@ -12,7 +13,7 @@ use ethportal_api::types::portal::{
 use ethportal_api::BeaconContentKey;
 use ethportal_api::BeaconContentValue;
 use ethportal_api::BeaconNetworkApiServer;
-use ethportal_api::{NodeId, RoutingTableInfo};
+use ethportal_api::RoutingTableInfo;
 use serde_json::{from_value, Value};
 use tokio::sync::mpsc;
 

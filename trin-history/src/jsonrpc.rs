@@ -104,10 +104,8 @@ async fn recursive_find_content(
     let (possible_content_bytes, trace) = match local_content {
         Some(val) => {
             let local_enr = overlay.local_enr();
-            let mut trace = QueryTrace::new(
-                &overlay.local_enr(),
-                NodeId::new(&content_key.content_id()).into(),
-            );
+            let mut trace =
+                QueryTrace::new(&overlay.local_enr(), NodeId::new(&content_key.content_id()));
             trace.node_responded_with_content(&local_enr);
             (Some(val), if is_trace { Some(trace) } else { None })
         }
@@ -205,11 +203,7 @@ async fn add_enr(
 }
 
 /// Constructs a JSON call for the GetEnr method.
-async fn get_enr(
-    network: Arc<RwLock<HistoryNetwork>>,
-    node_id: ethportal_api::NodeId,
-) -> Result<Value, String> {
-    let node_id = discv5::enr::NodeId::from(node_id.0);
+async fn get_enr(network: Arc<RwLock<HistoryNetwork>>, node_id: NodeId) -> Result<Value, String> {
     let overlay = network.read().await.overlay.clone();
     match overlay.get_enr(node_id) {
         Ok(enr) => Ok(json!(enr)),
@@ -220,9 +214,8 @@ async fn get_enr(
 /// Constructs a JSON call for the deleteEnr method.
 async fn delete_enr(
     network: Arc<RwLock<HistoryNetwork>>,
-    node_id: ethportal_api::NodeId,
+    node_id: NodeId,
 ) -> Result<Value, String> {
-    let node_id = discv5::enr::NodeId::from(node_id.0);
     let overlay = network.read().await.overlay.clone();
     let is_deleted = overlay.delete_enr(node_id);
     Ok(json!(is_deleted))
@@ -231,9 +224,8 @@ async fn delete_enr(
 /// Constructs a JSON call for the LookupEnr method.
 async fn lookup_enr(
     network: Arc<RwLock<HistoryNetwork>>,
-    node_id: ethportal_api::NodeId,
+    node_id: NodeId,
 ) -> Result<Value, String> {
-    let node_id = discv5::enr::NodeId::from(node_id.0);
     let overlay = network.read().await.overlay.clone();
     match overlay.lookup_enr(node_id).await {
         Ok(enr) => Ok(json!(enr)),
@@ -335,9 +327,8 @@ async fn ping(
 /// Constructs a JSON call for the RecursiveFindNodes method.
 async fn recursive_find_nodes(
     network: Arc<RwLock<HistoryNetwork>>,
-    node_id: ethportal_api::NodeId,
+    node_id: NodeId,
 ) -> Result<Value, String> {
-    let node_id = discv5::enr::NodeId::from(node_id.0);
     let overlay = network.read().await.overlay.clone();
     let nodes = overlay.lookup_node(node_id).await;
     Ok(json!(nodes))

@@ -1,7 +1,7 @@
 use crate::{constants::HISTORY_CONTENT_VALUE, Peertest};
+use discv5::enr::NodeId;
 use ethportal_api::types::content_key::HistoryContentKey;
 use ethportal_api::types::content_value::{HistoryContentValue, PossibleHistoryContentValue};
-use ethportal_api::types::node_id::NodeId;
 use ethportal_api::types::portal::TraceContentInfo;
 use ethportal_api::utils::bytes::hex_decode;
 use ethportal_api::{ContentValue, HistoryNetworkApiClient};
@@ -81,8 +81,8 @@ pub async fn test_trace_recursive_find_content(peertest: &Peertest) {
         PossibleHistoryContentValue::ContentPresent(history_content_value)
     );
 
-    let query_origin_node: NodeId = peertest.nodes[0].enr.node_id().into();
-    let node_with_content: NodeId = peertest.bootnode.enr.node_id().into();
+    let query_origin_node: NodeId = peertest.nodes[0].enr.node_id();
+    let node_with_content: NodeId = peertest.bootnode.enr.node_id();
 
     // Test that `origin` is set correctly
     let origin = trace.origin;
@@ -158,6 +158,6 @@ pub async fn test_trace_recursive_find_content_local_db(peertest: &Peertest) {
         origin
     );
 
-    let expected_origin_id: NodeId = peertest.bootnode.enr.node_id().into();
+    let expected_origin_id: NodeId = peertest.bootnode.enr.node_id();
     assert_eq!(expected_origin_id, origin);
 }

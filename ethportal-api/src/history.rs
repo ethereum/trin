@@ -5,7 +5,8 @@ use crate::types::portal::FindNodesInfo;
 use crate::types::portal::{
     AcceptInfo, ContentInfo, DataRadius, PaginateLocalContentInfo, PongInfo, TraceContentInfo,
 };
-use crate::{NodeId, RoutingTableInfo};
+use crate::RoutingTableInfo;
+use discv5::enr::NodeId;
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
 
 /// Portal History JSON-RPC endpoints

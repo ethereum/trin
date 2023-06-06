@@ -98,15 +98,16 @@ pub fn generate_random_remote_enr() -> (CombinedKey, Enr) {
 
 #[cfg(test)]
 mod test {
+    use crate::generate_random_node_id;
     use crate::types::distance::{Metric, XorMetric};
-    use crate::types::node_id::NodeId;
+    use discv5::enr::NodeId;
     use test_log::test;
 
     #[test]
     fn test_generate_random_node_id_1() {
         let target_bucket_idx: u8 = 5;
         let local_node_id = NodeId::random();
-        let random_node_id = NodeId::generate_random_node_id(target_bucket_idx, local_node_id);
+        let random_node_id = generate_random_node_id(target_bucket_idx, local_node_id);
         let distance = XorMetric::distance(&random_node_id.raw(), &local_node_id.raw());
         let distance = distance.big_endian();
 
@@ -118,7 +119,7 @@ mod test {
     fn test_generate_random_node_id_2() {
         let target_bucket_idx: u8 = 0;
         let local_node_id = NodeId::random();
-        let random_node_id = NodeId::generate_random_node_id(target_bucket_idx, local_node_id);
+        let random_node_id = generate_random_node_id(target_bucket_idx, local_node_id);
         let distance = XorMetric::distance(&random_node_id.raw(), &local_node_id.raw());
         let distance = distance.big_endian();
 
@@ -130,7 +131,7 @@ mod test {
     fn test_generate_random_node_id_3() {
         let target_bucket_idx: u8 = 255;
         let local_node_id = NodeId::random();
-        let random_node_id = NodeId::generate_random_node_id(target_bucket_idx, local_node_id);
+        let random_node_id = generate_random_node_id(target_bucket_idx, local_node_id);
         let distance = XorMetric::distance(&random_node_id.raw(), &local_node_id.raw());
         let distance = distance.big_endian();
 
