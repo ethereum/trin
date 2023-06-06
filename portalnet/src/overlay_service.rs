@@ -77,17 +77,6 @@ const EXPECTED_NON_EMPTY_BUCKETS: usize = 17;
 /// Bucket refresh lookup interval in seconds
 const BUCKET_REFRESH_INTERVAL_SECS: u64 = 60;
 
-/// The default configuration to use for uTP connections.
-pub const UTP_CONN_CFG: ConnectionConfig = ConnectionConfig {
-    max_packet_size: 1024,
-    max_conn_attempts: 3,
-    max_idle_timeout: Duration::from_secs(32),
-    max_timeout: Duration::from_secs(60),
-    initial_timeout: Duration::from_millis(1500),
-    min_timeout: Duration::from_millis(500),
-    target_delay: Duration::from_millis(250),
-};
-
 /// A network-based action that the overlay may perform.
 ///
 /// The overlay performs network-based actions on behalf of the command issuer. The issuer may be
@@ -978,7 +967,9 @@ where
                     // over the uTP stream.
                     let utp = Arc::clone(&self.utp_socket);
                     tokio::spawn(async move {
-                        let mut stream = match utp.accept_with_cid(cid.clone(), UTP_CONN_CFG).await
+                        let mut stream = match utp
+                            .accept_with_cid(cid.clone(), ConnectionConfig::default())
+                            .await
                         {
                             Ok(stream) => stream,
                             Err(err) => {
@@ -1111,7 +1102,10 @@ where
         tokio::spawn(async move {
             // Wait for an incoming connection with the given CID. Then, read the data from the uTP
             // stream.
-            let mut stream = match utp.accept_with_cid(cid.clone(), UTP_CONN_CFG).await {
+            let mut stream = match utp
+                .accept_with_cid(cid.clone(), ConnectionConfig::default())
+                .await
+            {
                 Ok(stream) => stream,
                 Err(err) => {
                     warn!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), "unable to accept uTP stream");
@@ -1375,7 +1369,10 @@ where
 
         let utp = Arc::clone(&self.utp_socket);
         tokio::spawn(async move {
-            let mut stream = match utp.connect_with_cid(cid.clone(), UTP_CONN_CFG).await {
+            let mut stream = match utp
+                .connect_with_cid(cid.clone(), ConnectionConfig::default())
+                .await
+            {
                 Ok(stream) => stream,
                 Err(err) => {
                     warn!(
