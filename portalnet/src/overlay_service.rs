@@ -2206,7 +2206,7 @@ where
 
         let trace: Option<QueryTrace> = {
             if is_trace {
-                let mut trace = QueryTrace::new(&self.local_enr(), target_node_id);
+                let mut trace = QueryTrace::new(&self.local_enr(), target_node_id.into());
                 let local_enr = self.local_enr();
                 trace.node_responded_with(&local_enr, closest_enrs.iter().collect());
                 Some(trace)

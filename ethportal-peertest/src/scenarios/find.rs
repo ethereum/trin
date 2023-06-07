@@ -86,11 +86,14 @@ pub async fn test_trace_recursive_find_content(peertest: &Peertest) {
 
     // Test that `origin` is set correctly
     let origin = trace.origin;
-    assert_eq!(origin, query_origin_node);
+    assert_eq!(origin, ethportal_api::NodeId::from(query_origin_node));
 
     // Test that `received_content_from_node` is set correctly
     let received_content_from_node = trace.received_content_from_node.unwrap();
-    assert_eq!(node_with_content, received_content_from_node);
+    assert_eq!(
+        ethportal_api::NodeId::from(node_with_content),
+        received_content_from_node
+    );
 
     let responses = trace.responses;
 
@@ -159,5 +162,5 @@ pub async fn test_trace_recursive_find_content_local_db(peertest: &Peertest) {
     );
 
     let expected_origin_id: NodeId = peertest.bootnode.enr.node_id();
-    assert_eq!(expected_origin_id, origin);
+    assert_eq!(ethportal_api::NodeId::from(expected_origin_id), origin);
 }

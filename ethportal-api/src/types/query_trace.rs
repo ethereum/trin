@@ -1,5 +1,5 @@
 use super::enr::Enr;
-use discv5::enr::NodeId;
+use super::node_id::NodeId;
 use std::collections::HashMap;
 use std::time::SystemTime;
 
@@ -115,7 +115,7 @@ impl QueryTrace {
             None => "".to_owned(),
         };
         let port = enr.udp4().unwrap_or(0).to_string();
-        let distance = XorMetric::distance(&node_id_raw, &target.raw());
+        let distance = XorMetric::distance(&node_id_raw, &target.0);
         let distance_log2 = distance.log2().unwrap_or(0);
         let distance: u64 = distance.0[3];
         let distance = (distance >> 32) as u32;
@@ -158,9 +158,9 @@ mod tests {
     #[test]
     fn test_query_trace() {
         let (_, local_enr) = generate_random_remote_enr();
-        let local_node_id = &local_enr.node_id();
+        let local_node_id = &local_enr.node_id().into();
 
-        let mut tracer = QueryTrace::new(&local_enr, local_enr.node_id());
+        let mut tracer = QueryTrace::new(&local_enr, local_enr.node_id().into());
         let (_, enr_a) = generate_random_remote_enr();
         let node_id_a: &NodeId = &enr_a.clone().into();
         let (_, enr_b) = generate_random_remote_enr();
@@ -173,7 +173,7 @@ mod tests {
         tracer.node_responded_with(&local_enr, vec![&enr_c]);
 
         let (_, enr_d) = generate_random_remote_enr();
-        let node_id_d = &enr_d.node_id();
+        let node_id_d = &enr_d.node_id().into();
 
         tracer.node_responded_with(&enr_a, vec![]);
         tracer.node_responded_with(&enr_b, vec![&enr_d]);
