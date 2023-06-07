@@ -6,7 +6,9 @@ use crate::jsonrpsee::server::{IdProvider, Server, ServerBuilder, ServerHandle};
 use crate::jsonrpsee::ws_client::{WsClient, WsClientBuilder};
 use crate::jsonrpsee::RpcModule;
 use crate::{RpcError, TransportRpcModuleConfig};
-use ethportal_api::types::cli::{DEFAULT_WEB3_HTTP_PORT, DEFAULT_WEB3_IPC_PATH};
+use ethportal_api::types::cli::{
+    DEFAULT_WEB3_HTTP_PORT, DEFAULT_WEB3_IPC_PATH, DEFAULT_WEB3_WS_PORT,
+};
 use reth_ipc::server::Builder as IpcServerBuilder;
 use reth_ipc::server::{Endpoint, IpcServer};
 use std::fmt;
@@ -373,11 +375,10 @@ impl RpcServerConfig {
             ))
         });
 
-        // by default, we configure ws on the same port as http
         let ws_socket_addr = self.ws_addr.unwrap_or_else(|| {
             SocketAddr::V4(SocketAddrV4::new(
                 Ipv4Addr::UNSPECIFIED,
-                http_socket_addr.port(),
+                DEFAULT_WEB3_WS_PORT,
             ))
         });
 

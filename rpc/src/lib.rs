@@ -75,10 +75,7 @@ pub async fn launch_jsonrpc_server(
                 .await?
         }
         Web3TransportType::HTTP => {
-            // Run WebSockets support alongside HTTP
-            let transport = TransportRpcModuleConfig::default()
-                .with_http(modules.clone())
-                .with_ws(modules);
+            let transport = TransportRpcModuleConfig::default().with_http(modules);
             let transport_modules = RpcModuleBuilder::new(discv5)
                 .maybe_with_history(history_handler)
                 .maybe_with_beacon(beacon_handler)
