@@ -1411,19 +1411,6 @@ dependencies = [
 
 [[package]]
 name = "curve25519-dalek"
-version = "3.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b9fdf9972b2bd6af2d913799d9ebc165ea4d2e65878e329d9c6b372c4491b61"
-dependencies = [
- "byteorder",
- "digest 0.9.0",
- "rand_core 0.5.1",
- "subtle",
- "zeroize",
-]
-
-[[package]]
-name = "curve25519-dalek"
 version = "4.0.0-rc.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "03d928d978dbec61a1167414f5ec534f24bea0d7a0d24dd9b6233d3d8223e585"
@@ -1660,7 +1647,7 @@ dependencies = [
  "aes-gcm 0.9.4",
  "arrayvec",
  "delay_map 0.3.0",
- "enr 0.8.1",
+ "enr",
  "fnv",
  "futures 0.3.28",
  "hashlink",
@@ -1715,15 +1702,6 @@ dependencies = [
 
 [[package]]
 name = "ed25519"
-version = "1.5.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91cff35c70bba8a626e3185d8cd48cc11b5437e1a5bcd15b9b5fa3c64b6dfee7"
-dependencies = [
- "signature 1.6.4",
-]
-
-[[package]]
-name = "ed25519"
 version = "2.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5fb04eee5d9d907f29e80ee6b0e78f7e2c82342c63e3580d8c4f69d9d5aad963"
@@ -1734,26 +1712,12 @@ dependencies = [
 
 [[package]]
 name = "ed25519-dalek"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c762bae6dcaf24c4c84667b8579785430908723d5c889f469d76a41d59cc7a9d"
-dependencies = [
- "curve25519-dalek 3.2.0",
- "ed25519 1.5.3",
- "rand 0.7.3",
- "serde",
- "sha2 0.9.9",
- "zeroize",
-]
-
-[[package]]
-name = "ed25519-dalek"
 version = "2.0.0-rc.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "798f704d128510932661a3489b08e3f4c934a01d61c5def59ae7b8e48f19665a"
 dependencies = [
- "curve25519-dalek 4.0.0-rc.2",
- "ed25519 2.2.1",
+ "curve25519-dalek",
+ "ed25519",
  "rand_core 0.6.4",
  "serde",
  "sha2 0.10.6",
@@ -1825,33 +1789,13 @@ dependencies = [
 
 [[package]]
 name = "enr"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "492a7e5fc2504d5fdce8e124d3e263b244a68b283cac67a69eda0cd43e0aebad"
-dependencies = [
- "base64 0.13.1",
- "bs58",
- "bytes 1.4.0",
- "ed25519-dalek 1.0.1",
- "hex",
- "k256 0.11.6",
- "log",
- "rand 0.8.5",
- "rlp 0.5.2",
- "serde",
- "sha3 0.10.7",
- "zeroize",
-]
-
-[[package]]
-name = "enr"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf56acd72bb22d2824e66ae8e9e5ada4d0de17a69c7fd35569dde2ada8ec9116"
 dependencies = [
  "base64 0.13.1",
  "bytes 1.4.0",
- "ed25519-dalek 2.0.0-rc.2",
+ "ed25519-dalek",
  "hex",
  "k256 0.13.1",
  "log",
@@ -7173,7 +7117,6 @@ dependencies = [
  "anyhow",
  "clap 4.2.4",
  "discv5",
- "enr 0.7.0",
  "eth2_ssz",
  "ethereum-types 0.12.1",
  "ethportal-api",
