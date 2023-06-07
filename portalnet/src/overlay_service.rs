@@ -59,10 +59,9 @@ use crate::{
 use ethportal_api::types::content_key::RawContentKey;
 use ethportal_api::types::distance::{Distance, Metric, XorMetric};
 use ethportal_api::types::enr::{Enr, SszEnr};
-use ethportal_api::types::node_id::NodeId as TrinNodeId;
 use ethportal_api::types::query_trace::QueryTrace;
 use ethportal_api::utils::bytes::{hex_encode, hex_encode_compact};
-use ethportal_api::OverlayContentKey;
+use ethportal_api::{generate_random_node_id, OverlayContentKey};
 use trin_validation::validator::Validator;
 
 pub const FIND_NODES_MAX_NODES: usize = 32;
@@ -438,9 +437,8 @@ where
         self.init_find_nodes_query(&local_node_id, None);
 
         for bucket_index in (255 - EXPECTED_NON_EMPTY_BUCKETS as u8)..255 {
-            let target_node_id =
-                TrinNodeId::generate_random_node_id(bucket_index, self.local_enr().into());
-            self.init_find_nodes_query(&target_node_id.into(), None);
+            let target_node_id = generate_random_node_id(bucket_index, self.local_enr().into());
+            self.init_find_nodes_query(&target_node_id, None);
         }
     }
 
@@ -551,9 +549,7 @@ where
                 Some(bucket) => {
                     trace!(protocol = %self.protocol, bucket = %bucket.0, "Refreshing routing table bucket");
                     match u8::try_from(bucket.0) {
-                        Ok(idx) => {
-                            TrinNodeId::generate_random_node_id(idx, self.local_enr().into())
-                        }
+                        Ok(idx) => generate_random_node_id(idx, self.local_enr().into()),
                         Err(err) => {
                             error!(error = %err, "Error downcasting bucket index");
                             return;
@@ -567,7 +563,7 @@ where
             }
         };
 
-        self.init_find_nodes_query(&target_node_id.into(), None);
+        self.init_find_nodes_query(&target_node_id, None);
     }
 
     /// Returns the local ENR of the node.

@@ -52,7 +52,7 @@ pub async fn test_history_add_enr(target: &Client, peertest: &Peertest) {
 
 pub async fn test_history_get_enr(target: &Client, peertest: &Peertest) {
     info!("Testing portal_historyGetEnr");
-    let result = HistoryNetworkApiClient::get_enr(target, peertest.bootnode.enr.node_id().into())
+    let result = HistoryNetworkApiClient::get_enr(target, peertest.bootnode.enr.node_id())
         .await
         .unwrap();
     assert_eq!(result, peertest.bootnode.enr);
@@ -60,10 +60,9 @@ pub async fn test_history_get_enr(target: &Client, peertest: &Peertest) {
 
 pub async fn test_history_delete_enr(target: &Client, peertest: &Peertest) {
     info!("Testing portal_historyDeleteEnr");
-    let result =
-        HistoryNetworkApiClient::delete_enr(target, peertest.bootnode.enr.node_id().into())
-            .await
-            .unwrap();
+    let result = HistoryNetworkApiClient::delete_enr(target, peertest.bootnode.enr.node_id())
+        .await
+        .unwrap();
     assert!(result);
 }
 
@@ -71,7 +70,7 @@ pub async fn test_history_lookup_enr(peertest: &Peertest) {
     info!("Testing portal_historyLookupEnr");
     let result = HistoryNetworkApiClient::lookup_enr(
         &peertest.bootnode.ipc_client,
-        peertest.nodes[0].enr.node_id().into(),
+        peertest.nodes[0].enr.node_id(),
     )
     .await
     .unwrap();

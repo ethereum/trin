@@ -5541,6 +5541,7 @@ name = "rpc"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "discv5",
  "ethportal-api",
  "hyper",
  "portalnet",

@@ -115,7 +115,7 @@ impl QueryTrace {
             None => "".to_owned(),
         };
         let port = enr.udp4().unwrap_or(0).to_string();
-        let distance = XorMetric::distance(&node_id_raw, &target.raw());
+        let distance = XorMetric::distance(&node_id_raw, &target.0);
         let distance_log2 = distance.log2().unwrap_or(0);
         let distance: u64 = distance.0[3];
         let distance = (distance >> 32) as u32;

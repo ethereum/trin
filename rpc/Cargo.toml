@@ -12,6 +12,7 @@ authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 [dependencies]
 anyhow = "1.0.68"
+discv5 = { version = "0.3.0", features = ["serde"] }
 ethportal-api = { path = "../ethportal-api"}
 portalnet = { path = "../portalnet"}
 tracing = "0.1.27"

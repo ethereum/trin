@@ -15,7 +15,7 @@ use super::types::messages::{PortalnetConfig, ProtocolId};
 use crate::socket;
 use ethportal_api::types::enr::Enr;
 use ethportal_api::utils::bytes::hex_encode;
-use ethportal_api::{NodeId as EthportalNodeId, NodeInfo};
+use ethportal_api::NodeInfo;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
 use std::{convert::TryFrom, fmt, io, net::SocketAddr, sync::Arc};
@@ -201,7 +201,7 @@ impl Discovery {
         Ok(NodeInfo {
             enr: Enr::from_str(&self.discv5.local_enr().to_base64())
                 .map_err(|err| anyhow!("{err}"))?,
-            node_id: EthportalNodeId::from(self.discv5.local_enr().node_id().raw()),
+            node_id: self.discv5.local_enr().node_id(),
             ip: self
                 .discv5
                 .local_enr()

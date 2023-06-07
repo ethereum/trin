@@ -2,7 +2,7 @@ use super::enr::Enr;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::node_id::NodeId;
+use discv5::enr::NodeId;
 
 /// Discv5 bucket
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
