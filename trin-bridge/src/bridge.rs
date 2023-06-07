@@ -1,9 +1,7 @@
 use crate::cli::BridgeMode;
-use crate::constants::PANDAOPS_URL;
-use crate::full_header::{FullHeader, FullHeaderBatch};
-use crate::{PANDAOPS_CLIENT_ID, PANDAOPS_CLIENT_SECRET};
+use crate::full_header::FullHeader;
+use crate::pandaops::PandaOpsMiddleware;
 use anyhow::{anyhow, bail};
-use ethereum_types::H256;
 use ethportal_api::jsonrpsee::http_client::HttpClient;
 use ethportal_api::types::content_key::{
     BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey, HistoryContentKey,
@@ -18,12 +16,9 @@ use ethportal_api::types::execution::header::{
     AccumulatorProof, BlockHeaderProof, Header, HeaderWithProof, SszNone,
 };
 use ethportal_api::types::execution::receipts::Receipts;
-use ethportal_api::types::jsonrpc::params::Params;
-use ethportal_api::types::jsonrpc::request::JsonRequest;
 use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::HistoryNetworkApiClient;
 use futures::stream::StreamExt;
-use serde_json::{json, Value};
 use ssz::Decode;
 use std::fs;
 use std::ops::Range;
@@ -40,19 +35,36 @@ use trin_validation::accumulator::MasterAccumulator;
 use trin_validation::constants::{EPOCH_SIZE as EPOCH_SIZE_USIZE, MERGE_BLOCK_NUMBER};
 use trin_validation::oracle::HeaderOracle;
 
-pub struct Bridge {
-    pub mode: BridgeMode,
-    pub portal_clients: Vec<HttpClient>,
-    pub header_oracle: HeaderOracle,
-    pub epoch_acc_path: PathBuf,
-}
-
 // todo: calculate / test optimal saturation delay
-// todo: single block option
 const HEADER_SATURATION_DELAY: u64 = 10; // seconds
 const LATEST_BLOCK_POLL_RATE: u64 = 5; // seconds
 const EPOCH_SIZE: u64 = EPOCH_SIZE_USIZE as u64;
 const FUTURES_BUFFER_SIZE: usize = 32;
+
+pub struct Bridge {
+    pub mode: BridgeMode,
+    pub portal_clients: Vec<HttpClient>,
+    pub pandaops: PandaOpsMiddleware,
+    pub header_oracle: HeaderOracle,
+    pub epoch_acc_path: PathBuf,
+}
+
+impl Bridge {
+    pub fn new(
+        mode: BridgeMode,
+        portal_clients: Vec<HttpClient>,
+        header_oracle: HeaderOracle,
+        epoch_acc_path: PathBuf,
+    ) -> Self {
+        Self {
+            mode,
+            portal_clients,
+            pandaops: PandaOpsMiddleware::default(),
+            header_oracle,
+            epoch_acc_path,
+        }
+    }
+}
 
 impl Bridge {
     pub async fn launch_single(&self, block_number: u64) {
@@ -75,13 +87,14 @@ impl Bridge {
 
         info!("Gossiping block: {block_number:?}");
         let gossip_stats = Arc::new(Mutex::new(GossipStats::new(gossip_range.clone())));
-        match Bridge::serve_full_block(
-            block_number,
-            epoch_acc,
-            gossip_stats,
-            self.portal_clients.clone(),
-        )
-        .await
+        match self
+            .serve_full_block(
+                block_number,
+                epoch_acc,
+                gossip_stats,
+                self.portal_clients.clone(),
+            )
+            .await
         {
             Ok(_) => info!("Successfully served block: {block_number:?}"),
             Err(msg) => warn!("Error serving block: {block_number:?}: {msg:?}"),
@@ -91,12 +104,12 @@ impl Bridge {
     // Devops nodes don't have websockets available, so we can't actually poll the latest block.
     // Instead we loop on a short interval and fetch the latest blocks not yet served.
     pub async fn launch_latest(&self) {
-        let mut block_index = get_latest_block_number().await.expect(
+        let mut block_index = self.pandaops.get_latest_block_number().await.expect(
             "Error launching bridge in latest mode. Unable to get latest block from provider.",
         );
         loop {
             sleep(Duration::from_secs(LATEST_BLOCK_POLL_RATE)).await;
-            let latest_block = match get_latest_block_number().await {
+            let latest_block = match self.pandaops.get_latest_block_number().await {
                 Ok(val) => val,
                 Err(msg) => {
                     warn!("error getting latest block, skipping iteration: {msg:?}");
@@ -113,16 +126,14 @@ impl Bridge {
                 let futures = futures::stream::iter(gossip_range.clone().map(|height| {
                     let gossip_stats = gossip_stats.clone();
                     async move {
-                        if let Err(err) = Bridge::serve_full_block(
-                            height,
-                            None,
-                            gossip_stats,
-                            self.portal_clients.clone(),
-                        )
-                        .await
-                        {
-                            warn!("Error serving block: {height:?}: {err:?}");
-                        }
+                        let _ = self
+                            .serve_full_block(
+                                height,
+                                None,
+                                gossip_stats,
+                                self.portal_clients.clone(),
+                            )
+                            .await;
                     }
                 }))
                 .buffer_unordered(FUTURES_BUFFER_SIZE)
@@ -134,7 +145,7 @@ impl Bridge {
     }
 
     pub async fn launch_backfill(&self, starting_epoch: Option<u64>) {
-        let latest_block = get_latest_block_number().await.expect(
+        let latest_block = self.pandaops.get_latest_block_number().await.expect(
             "Error launching bridge in backfill mode. Unable to get latest block from provider.",
         );
         let mut epoch_index = match starting_epoch {
@@ -175,16 +186,14 @@ impl Bridge {
                 let epoch_acc = epoch_acc.clone();
                 let gossip_stats = gossip_stats.clone();
                 async move {
-                    if let Err(err) = Bridge::serve_full_block(
-                        height,
-                        epoch_acc,
-                        gossip_stats,
-                        self.portal_clients.clone(),
-                    )
-                    .await
-                    {
-                        warn!("Error serving block: {height:?}: {err:?}");
-                    }
+                    let _ = self
+                        .serve_full_block(
+                            height,
+                            epoch_acc,
+                            gossip_stats,
+                            self.portal_clients.clone(),
+                        )
+                        .await;
                 }
             }))
             .buffer_unordered(FUTURES_BUFFER_SIZE)
@@ -200,13 +209,14 @@ impl Bridge {
     }
 
     async fn serve_full_block(
+        &self,
         height: u64,
         epoch_acc: Option<Arc<EpochAccumulator>>,
         gossip_stats: Arc<Mutex<GossipStats>>,
         portal_clients: Vec<HttpClient>,
     ) -> anyhow::Result<()> {
         debug!("Serving block: {height}");
-        let mut full_header = Bridge::get_header(height).await?;
+        let mut full_header = self.pandaops.get_header(height).await?;
         if full_header.header.number <= MERGE_BLOCK_NUMBER {
             full_header.epoch_acc = epoch_acc;
         }
@@ -214,9 +224,14 @@ impl Bridge {
         // Sleep for 10 seconds to allow headers to saturate network,
         // since they must be available for body / receipt validation.
         sleep(Duration::from_secs(HEADER_SATURATION_DELAY)).await;
-        Bridge::construct_and_gossip_block_body(&full_header, &portal_clients, &gossip_stats)
-            .await?;
-        Bridge::construct_and_gossip_receipt(&full_header, &portal_clients, &gossip_stats).await
+        self.construct_and_gossip_block_body(&full_header, &portal_clients, &gossip_stats)
+            .await
+            .map_err(|err| anyhow!("Error gossiping block body #{height:?}: {err:?}"))?;
+
+        self.construct_and_gossip_receipt(&full_header, &portal_clients, &gossip_stats)
+            .await
+            .map_err(|err| anyhow!("Error gossiping receipt #{height:?}: {err:?}"))?;
+        Ok(())
     }
 
     async fn gossip_header(
@@ -300,6 +315,7 @@ impl Bridge {
     }
 
     async fn construct_and_gossip_receipt(
+        &self,
         full_header: &FullHeader,
         portal_clients: &Vec<HttpClient>,
         gossip_stats: &Arc<Mutex<GossipStats>>,
@@ -309,7 +325,11 @@ impl Bridge {
             0 => Receipts {
                 receipt_list: vec![],
             },
-            _ => Bridge::get_trusted_receipts(&full_header.tx_hashes.hashes).await?,
+            _ => {
+                self.pandaops
+                    .get_trusted_receipts(&full_header.tx_hashes.hashes)
+                    .await?
+            }
         };
 
         // Validate Receipts
@@ -336,22 +356,8 @@ impl Bridge {
         result
     }
 
-    async fn get_trusted_receipts(tx_hashes: &[H256]) -> anyhow::Result<Receipts> {
-        let request: Vec<JsonRequest> = tx_hashes
-            .iter()
-            .enumerate()
-            .map(|(id, tx_hash)| {
-                let tx_hash = hex_encode(tx_hash);
-                let params = Params::Array(vec![json!(tx_hash)]);
-                let method = "eth_getTransactionReceipt".to_string();
-                json_request(method, params, id as u32)
-            })
-            .collect();
-        let response = pandaops_batch_request(request).await?;
-        Ok(serde_json::from_str(&response)?)
-    }
-
     async fn construct_and_gossip_block_body(
+        &self,
         full_header: &FullHeader,
         portal_clients: &Vec<HttpClient>,
         gossip_stats: &Arc<Mutex<GossipStats>>,
@@ -374,7 +380,11 @@ impl Bridge {
         } else {
             let uncles = match full_header.uncles.len() {
                 0 => vec![],
-                _ => Bridge::get_trusted_uncles(&full_header.uncles).await?,
+                _ => {
+                    self.pandaops
+                        .get_trusted_uncles(&full_header.uncles)
+                        .await?
+                }
             };
             BlockBody::Legacy(BlockBodyLegacy { txs, uncles })
         };
@@ -394,31 +404,6 @@ impl Bridge {
             }
         }
         result
-    }
-
-    async fn get_trusted_uncles(hashes: &[H256]) -> anyhow::Result<Vec<Header>> {
-        let batch_request = hashes
-            .iter()
-            .enumerate()
-            .map(|(id, uncle)| {
-                let uncle_hash = hex_encode(uncle);
-                let params = Params::Array(vec![json!(uncle_hash), json!(false)]);
-                let method = "eth_getBlockByHash".to_string();
-                json_request(method, params, id as u32)
-            })
-            .collect();
-        let response = pandaops_batch_request(batch_request).await?;
-        let response: Vec<Value> = serde_json::from_str(&response).map_err(|e| anyhow!(e))?;
-        // single responses are in an array, since we batch them...
-        let mut headers = vec![];
-        for res in response {
-            if res["result"].as_object().is_none() {
-                bail!("unable to find uncle header");
-            }
-            let header: Header = serde_json::from_value(res.clone())?;
-            headers.push(header)
-        }
-        Ok(headers)
     }
 
     /// Create a proof for the given header / epoch acc
@@ -443,23 +428,6 @@ impl Bridge {
                 .await?;
         }
         Ok(())
-    }
-
-    async fn get_header(height: u64) -> anyhow::Result<FullHeader> {
-        // Geth requires block numbers to be formatted using the following padding.
-        let block_param = format!("0x{height:01X}");
-        let params = Params::Array(vec![json!(block_param), json!(true)]);
-        let batch_request = vec![json_request(
-            "eth_getBlockByNumber".to_string(),
-            params,
-            height as u32,
-        )];
-        let response = pandaops_batch_request(batch_request).await?;
-        let batch: FullHeaderBatch = serde_json::from_str(&response)?;
-        if batch.headers.len() != 1 {
-            bail!("Expected 1 header, got {:#?}", batch.headers.len());
-        }
-        Ok(batch.headers[0].clone())
     }
 }
 
@@ -489,51 +457,6 @@ impl GossipStats {
         );
         info!("Group took: {:?}", time::Instant::now() - self.start_time);
     }
-}
-
-async fn get_latest_block_number() -> anyhow::Result<u64> {
-    let params = Params::Array(vec![json!("latest"), json!(false)]);
-    let method = "eth_getBlockByNumber".to_string();
-    let request = json_request(method, params, 1);
-    let response = pandaops_batch_request(vec![request]).await?;
-    let response: Vec<Value> = serde_json::from_str(&response)?;
-    let result = response[0]
-        .get("result")
-        .ok_or_else(|| anyhow!("Unable to fetch latest block"))?;
-    let header: Header = serde_json::from_value(result.clone())?;
-    Ok(header.number)
-}
-
-/// Used the "surf" library here instead of "ureq" since "surf" is much more capable of handling
-/// multiple async requests. Using "ureq" consistently resulted in errors as soon as the number of
-/// concurrent tasks increased significantly.
-async fn pandaops_batch_request(obj: Vec<JsonRequest>) -> anyhow::Result<String> {
-    let response = surf::post(PANDAOPS_URL)
-        .middleware(Retry::default())
-        .body_json(&json!(obj))
-        .map_err(|e| anyhow!("Unable to construct json post request: {e:?}"))?
-        .header("Content-Type", "application/json".to_string())
-        .header("CF-Access-Client-Id", PANDAOPS_CLIENT_ID.to_string())
-        .header(
-            "CF-Access-Client-Secret",
-            PANDAOPS_CLIENT_SECRET.to_string(),
-        )
-        .recv_string()
-        .await
-        .map_err(|e| anyhow!("Unable to send json post request: {e:?}"))?;
-    // validate that every response from batched request was successful
-    let batch_response: Vec<Value> = serde_json::from_str(&response)?;
-    for response in batch_response {
-        match response.get("result") {
-            Some(result) => {
-                if result.is_null() {
-                    bail!("Null response in pandaops batch response");
-                }
-            }
-            None => bail!("Missing result in pandaops batch response"),
-        }
-    }
-    Ok(response)
 }
 
 #[derive(Debug)]
@@ -581,14 +504,5 @@ impl Middleware for Retry {
 impl Default for Retry {
     fn default() -> Self {
         Self { attempts: 3 }
-    }
-}
-
-fn json_request(method: String, params: Params, id: u32) -> JsonRequest {
-    JsonRequest {
-        jsonrpc: "2.0".to_string(),
-        params,
-        method,
-        id,
     }
 }

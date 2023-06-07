@@ -18,6 +18,17 @@ pub struct JsonRequest {
     pub id: u32,
 }
 
+impl JsonRequest {
+    pub fn new(method: String, params: Params, id: u32) -> Self {
+        Self {
+            jsonrpc: "2.0".to_string(),
+            params,
+            method,
+            id,
+        }
+    }
+}
+
 impl Default for JsonRequest {
     fn default() -> Self {
         Self {

@@ -46,12 +46,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .map_err(|e| e.to_string())
         })
         .collect();
-    let bridge = Bridge {
-        mode: bridge_config.mode,
-        portal_clients: portal_clients?,
+    let bridge = Bridge::new(
+        bridge_config.mode,
+        portal_clients?,
         header_oracle,
-        epoch_acc_path: bridge_config.epoch_acc_path,
-    };
+        bridge_config.epoch_acc_path,
+    );
 
     info!("Launching bridge mode: {:?}", bridge.mode);
     match bridge.mode {

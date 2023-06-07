@@ -7,4 +7,7 @@ pub const BATCH_SIZE: u64 = 128;
 // These are only intended to be used by core team members who have access to the nodes.
 // If you don't have access to the PANDAOPS nodes, but still want to use the bridge feature, let us
 // know on Discord or Github and we'll prioritize support for any provider.
-pub const PANDAOPS_URL: &str = "https://archive.mainnet.ethpandaops.io/";
+/// Execution layer PandaOps endpoint
+pub const BASE_EL_ENDPOINT: &str = "https://archive.mainnet.eu1.ethpandaops.io";
+/// Consensus layer PandaOps endpoint
+pub const BASE_CL_ENDPOINT: &str = "https://beacon.mainnet.ethpandaops.io";
