@@ -114,7 +114,8 @@ impl Discovery {
         let discv5 = Discv5::new(enr, enr_key, discv5_config)
             .map_err(|e| format!("Failed to create discv5 instance: {e}"))?;
 
-        for enr in portal_config.bootnode_enrs {
+        let bootnode_enrs: Vec<Enr> = portal_config.bootnodes.into();
+        for enr in bootnode_enrs {
             discv5
                 .add_enr(enr)
                 .map_err(|e| format!("Failed to add bootnode enr: {e}"))?;

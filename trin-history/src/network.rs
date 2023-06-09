@@ -5,6 +5,7 @@ use tokio::sync::RwLock;
 use utp_rs::socket::UtpSocket;
 
 use ethportal_api::types::distance::XorMetric;
+use ethportal_api::types::enr::Enr;
 use ethportal_api::HistoryContentKey;
 use portalnet::{
     discovery::{Discovery, UtpEnr},
@@ -31,8 +32,9 @@ impl HistoryNetwork {
         portal_config: PortalnetConfig,
         header_oracle: Arc<RwLock<HeaderOracle>>,
     ) -> anyhow::Result<Self> {
+        let bootnode_enrs: Vec<Enr> = portal_config.bootnodes.into();
         let config = OverlayConfig {
-            bootnode_enrs: portal_config.bootnode_enrs.clone(),
+            bootnode_enrs,
             ..Default::default()
         };
         let storage = Arc::new(PLRwLock::new(PortalStorage::new(

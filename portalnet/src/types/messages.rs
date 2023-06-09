@@ -16,6 +16,7 @@ use ssz_types::{typenum, BitList};
 use thiserror::Error;
 use validator::ValidationError;
 
+use ethportal_api::types::bootnodes::Bootnodes;
 use ethportal_api::types::bytes::ByteList;
 use ethportal_api::types::content_key::RawContentKey;
 use ethportal_api::types::distance::Distance;
@@ -162,7 +163,7 @@ pub struct PortalnetConfig {
     pub external_addr: Option<SocketAddr>,
     pub private_key: H256,
     pub listen_port: u16,
-    pub bootnode_enrs: Vec<Enr>,
+    pub bootnodes: Bootnodes,
     pub data_radius: Distance,
     pub internal_ip: bool,
     pub no_stun: bool,
@@ -175,7 +176,7 @@ impl Default for PortalnetConfig {
             external_addr: None,
             private_key: H256::random(),
             listen_port: 4242,
-            bootnode_enrs: Vec::<Enr>::new(),
+            bootnodes: Bootnodes::default(),
             data_radius: Distance::MAX,
             internal_ip: false,
             no_stun: false,

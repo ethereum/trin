@@ -12,6 +12,7 @@ use tracing::info;
 use utp_rs::socket::UtpSocket;
 
 use crate::{events::StateEvents, jsonrpc::StateRequestHandler};
+use ethportal_api::types::enr::Enr;
 use ethportal_api::types::jsonrpc::request::StateJsonRpcRequest;
 use portalnet::{
     discovery::{Discovery, UtpEnr},
@@ -69,15 +70,10 @@ pub fn spawn_state_network(
     portalnet_config: PortalnetConfig,
     state_event_rx: mpsc::UnboundedReceiver<TalkRequest>,
 ) -> JoinHandle<()> {
-    let bootnodes: Vec<String> = portalnet_config
-        .bootnode_enrs
-        .iter()
-        .map(|enr| format!("{{ {}, Encoded ENR: {} }}", enr, enr.to_base64()))
-        .collect();
-    let bootnodes = bootnodes.join(", ");
+    let bootnode_enrs: Vec<Enr> = portalnet_config.bootnodes.into();
     info!(
-        "About to spawn State Network with boot nodes: {}",
-        bootnodes
+        "About to spawn State Network with {} boot nodes.",
+        bootnode_enrs.len()
     );
 
     tokio::spawn(async move {

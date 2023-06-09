@@ -41,7 +41,7 @@ pub async fn run_trin(
         private_key,
         listen_port: trin_config.discovery_port,
         no_stun: trin_config.no_stun,
-        bootnode_enrs: trin_config.bootnodes.clone().into(),
+        bootnodes: trin_config.bootnodes.clone(),
         ..Default::default()
     };
 
