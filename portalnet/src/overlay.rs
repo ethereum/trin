@@ -36,6 +36,7 @@ use crate::{
         node::Node,
     },
 };
+use ethportal_api::types::bootnodes::Bootnode;
 use ethportal_api::types::content_key::RawContentKey;
 use ethportal_api::types::distance::{Distance, Metric};
 use ethportal_api::types::enr::Enr;
@@ -658,20 +659,28 @@ where
             );
             return;
         }
-        for enr in enrs {
-            debug!(bootnode.enr = %enr, "Attempting to bond with bootnode");
-            let ping_result = self.send_ping(enr.clone()).await;
+        // Convert raw enrs to bootnode type to get alias
+        let bootnodes: Vec<Bootnode> = enrs
+            .into_iter()
+            .map(|enr| {
+                let enr: ethportal_api::types::enr::Enr = enr;
+                enr.into()
+            })
+            .collect();
+        for bootnode in bootnodes {
+            debug!(alias = %bootnode.alias, "Attempting to bond with bootnode");
+            let ping_result = self.send_ping(bootnode.enr.clone()).await;
 
             match ping_result {
                 Ok(_) => {
-                    info!(bootnode.enr = %enr, "Bonded with bootnode");
+                    info!(alias = %bootnode.alias, "Bonded with bootnode");
                     successfully_bonded_bootnode = true;
                 }
                 Err(err) => {
                     error!(
+                        alias = %bootnode.alias,
                         protocol = %self.protocol,
                         error = %err,
-                        bootnode.enr = %enr,
                         "Error bonding with bootnode",
                     );
                 }
