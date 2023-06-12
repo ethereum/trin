@@ -5,7 +5,7 @@ use std::fs;
 use ureq;
 
 pub const DASHBOARD_TEMPLATES: &[&str] =
-    &["./trin/src/dashboard/collected-metrics-dashboard.json.template"];
+    &["./ethportal-api/src/dashboard/collected-metrics-dashboard.json.template"];
 
 pub struct GrafanaAPI {
     basic_auth_string: String,
@@ -32,7 +32,9 @@ impl GrafanaAPI {
     ) -> Result<String, anyhow::Error> {
         let datasource_api_url = format!("{}/{}", self.address, "api/datasources/");
 
-        let datasource_creation_response = ureq::post(&datasource_api_url[..])
+        // If this fails with a 409 error, it's because the datasource already exists.
+        // Delete it and try again.
+        let datasource_creation_response = ureq::post(&datasource_api_url)
             .set("Authorization", &self.basic_auth_string)
             .send_json(ureq::json!({
                 "name": name,
@@ -56,11 +58,10 @@ impl GrafanaAPI {
         let dashboard_json: serde_json::Value = serde_json::from_str(&filled_in_template[..])?;
 
         let dashboard_api_url = format!("{}/{}", self.address, "api/dashboards/db/");
-        let dashboard_creation_response: DashboardCreationResponse =
-            ureq::post(&dashboard_api_url[..])
-                .set("Authorization", &self.basic_auth_string)
-                .send_json(ureq::json!({ "dashboard": dashboard_json }))?
-                .into_json()?;
+        let dashboard_creation_response: DashboardCreationResponse = ureq::post(&dashboard_api_url)
+            .set("Authorization", &self.basic_auth_string)
+            .send_json(ureq::json!({ "dashboard": dashboard_json }))?
+            .into_json()?;
 
         let full_dashboard_url = format!("{}{}", self.address, dashboard_creation_response.url);
         Ok(full_dashboard_url)
