@@ -60,6 +60,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         BridgeMode::StartFromEpoch(epoch_number) => {
             bridge.launch_backfill(Some(epoch_number)).await
         }
+        BridgeMode::Single(block_number) => {
+            bridge.launch_single(block_number).await;
+        }
     }
     Ok(())
 }

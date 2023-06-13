@@ -73,10 +73,6 @@ impl HeaderOracle {
             None => Err(anyhow!("History subnetwork is not available")),
         }
     }
-
-    pub fn validate_header_with_proof(&self, hwp: HeaderWithProof) -> anyhow::Result<()> {
-        self.master_acc.validate_header_with_proof(&hwp)
-    }
 }
 
 #[cfg(test)]

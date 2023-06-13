@@ -59,11 +59,15 @@ fn check_node_count(val: &str) -> Result<u8, String> {
 /// - Latest: tracks the latest header
 /// - Backfill: starts at block 0
 /// - StartFromEpoch: starts at the given epoch
+///   - ex: "e123" starts at epoch 123
+/// - Single: executes a single block
+///   - ex: "b123" executes block 123
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BridgeMode {
     Latest,
     Backfill,
     StartFromEpoch(u64),
+    Single(u64),
 }
 
 type ParseError = &'static str;
@@ -75,9 +79,21 @@ impl FromStr for BridgeMode {
         match s {
             "latest" => Ok(BridgeMode::Latest),
             "backfill" => Ok(BridgeMode::Backfill),
-            val => u64::from_str(val)
-                .map(BridgeMode::StartFromEpoch)
-                .map_err(|_| "Invalid bridge mode arg"),
+            val => match &val[..1] {
+                "e" => {
+                    let epoch = val[1..]
+                        .parse()
+                        .map_err(|_| "Invalid bridge mode arg: epoch number")?;
+                    Ok(BridgeMode::StartFromEpoch(epoch))
+                }
+                "b" => {
+                    let block = val[1..]
+                        .parse()
+                        .map_err(|_| "Invalid bridge mode arg: block number")?;
+                    Ok(BridgeMode::Single(block))
+                }
+                _ => Err("Invalid bridge mode arg: type prefix"),
+            },
         }
     }
 }
@@ -120,7 +136,7 @@ mod test {
         const NODE_COUNT: &str = "1";
         const EXECUTABLE_PATH: &str = "path/to/executable";
         const EPOCH_ACC_PATH: &str = "path/to/epoch/accumulator";
-        const EPOCH: &str = "100";
+        const EPOCH: &str = "e100";
         let bridge_config = BridgeConfig::parse_from([
             "test",
             "--node-count",
