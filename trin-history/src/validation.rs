@@ -39,7 +39,8 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                 self.header_oracle
                     .write()
                     .await
-                    .validate_header_with_proof(header_with_proof)
+                    .master_acc
+                    .validate_header_with_proof(&header_with_proof)
             }
             HistoryContentKey::BlockBody(key) => {
                 let block_body = BlockBody::from_ssz_bytes(content)

@@ -57,6 +57,39 @@ const EPOCH_SIZE: u64 = EPOCH_SIZE_USIZE as u64;
 const FUTURES_BUFFER_SIZE: usize = 32;
 
 impl Bridge {
+    pub async fn launch_single(&self, block_number: u64) {
+        let gossip_range = Range {
+            start: block_number,
+            end: block_number + 1,
+        };
+        let epoch_acc = if block_number <= MERGE_BLOCK_NUMBER {
+            let epoch_index = block_number / EPOCH_SIZE;
+            match self.get_epoch_acc(epoch_index).await {
+                Ok(val) => Some(val),
+                Err(msg) => {
+                    warn!("Unable to find epoch acc for block number: {block_number:?}. Skipping gossip: {msg:?}");
+                    return;
+                }
+            }
+        } else {
+            None
+        };
+
+        info!("Gossiping block: {block_number:?}");
+        let gossip_stats = Arc::new(Mutex::new(GossipStats::new(gossip_range.clone())));
+        match Bridge::serve_full_block(
+            block_number,
+            epoch_acc,
+            gossip_stats,
+            self.portal_clients.clone(),
+        )
+        .await
+        {
+            Ok(_) => info!("Successfully served block: {block_number:?}"),
+            Err(msg) => warn!("Error serving block: {block_number:?}: {msg:?}"),
+        }
+    }
+
     // Devops nodes don't have websockets available, so we can't actually poll the latest block.
     // Instead we loop on a short interval and fetch the latest blocks not yet served.
     pub async fn launch_latest(&self) {
@@ -82,13 +115,16 @@ impl Bridge {
                 let futures = futures::stream::iter(gossip_range.clone().map(|height| {
                     let gossip_stats = gossip_stats.clone();
                     async move {
-                        let _ = Bridge::serve_full_block(
+                        if let Err(err) = Bridge::serve_full_block(
                             height,
                             None,
                             gossip_stats,
                             self.portal_clients.clone(),
                         )
-                        .await;
+                        .await
+                        {
+                            warn!("Error serving block: {height:?}: {err:?}");
+                        }
                     }
                 }))
                 .buffer_unordered(FUTURES_BUFFER_SIZE)
@@ -141,13 +177,16 @@ impl Bridge {
                 let epoch_acc = epoch_acc.clone();
                 let gossip_stats = gossip_stats.clone();
                 async move {
-                    let _ = Bridge::serve_full_block(
+                    if let Err(err) = Bridge::serve_full_block(
                         height,
                         epoch_acc,
                         gossip_stats,
                         self.portal_clients.clone(),
                     )
-                    .await;
+                    .await
+                    {
+                        warn!("Error serving block: {height:?}: {err:?}");
+                    }
                 }
             }))
             .buffer_unordered(FUTURES_BUFFER_SIZE)
@@ -173,25 +212,13 @@ impl Bridge {
         if full_header.header.number <= MERGE_BLOCK_NUMBER {
             full_header.epoch_acc = epoch_acc;
         }
-        if let Err(err) = Bridge::gossip_header(&full_header, &portal_clients, &gossip_stats).await
-        {
-            warn!("Error gossiping header #{height:?}: {err:?}");
-        }
+        Bridge::gossip_header(&full_header, &portal_clients, &gossip_stats).await?;
         // Sleep for 10 seconds to allow headers to saturate network,
         // since they must be available for body / receipt validation.
         sleep(Duration::from_secs(HEADER_SATURATION_DELAY)).await;
-        if let Err(err) =
-            Bridge::construct_and_gossip_block_body(&full_header, &portal_clients, &gossip_stats)
-                .await
-        {
-            warn!("Error gossiping block body #{height:?}: {err:?}");
-        }
-        if let Err(err) =
-            Bridge::construct_and_gossip_receipt(&full_header, &portal_clients, &gossip_stats).await
-        {
-            warn!("Error gossiping receipt #{height:?}: {err:?}");
-        }
-        Ok(())
+        Bridge::construct_and_gossip_block_body(&full_header, &portal_clients, &gossip_stats)
+            .await?;
+        Bridge::construct_and_gossip_receipt(&full_header, &portal_clients, &gossip_stats).await
     }
 
     async fn gossip_header(
@@ -496,7 +523,7 @@ async fn pandaops_batch_request(obj: Vec<JsonRequest>) -> anyhow::Result<String>
     let client_secret = env::var("PANDAOPS_CLIENT_SECRET")
         .map_err(|_| anyhow!("PANDAOPS_CLIENT_SECRET env var not set."))?;
 
-    let result = surf::post(PANDAOPS_URL)
+    let response = surf::post(PANDAOPS_URL)
         .middleware(Retry::default())
         .body_json(&json!(obj))
         .map_err(|e| anyhow!("Unable to construct json post request: {e:?}"))?
@@ -504,8 +531,21 @@ async fn pandaops_batch_request(obj: Vec<JsonRequest>) -> anyhow::Result<String>
         .header("CF-Access-Client-Id", client_id)
         .header("CF-Access-Client-Secret", client_secret)
         .recv_string()
-        .await;
-    result.map_err(|_| anyhow!("Unable to request execution batch from pandaops"))
+        .await
+        .map_err(|_| anyhow!("Unable to request execution batch from pandaops"))?;
+    // validate that every response from batched request was successful
+    let batch_response: Vec<Value> = serde_json::from_str(&response)?;
+    for response in batch_response {
+        match response.get("result") {
+            Some(result) => {
+                if result.is_null() {
+                    bail!("Null response in pandaops batch response");
+                }
+            }
+            None => bail!("Missing result in pandaops batch response"),
+        }
+    }
+    Ok(response)
 }
 
 async fn pandaops_beacon_request(endpoint: String) -> anyhow::Result<String> {

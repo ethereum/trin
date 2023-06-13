@@ -222,11 +222,6 @@ impl<'de> Deserialize<'de> for HistoryContentValue {
         D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-
-        if s.as_str() == CONTENT_ABSENT {
-            return Err(ContentValueError::DeserializeAbsentContent)
-                .map_err(serde::de::Error::custom);
-        }
         let content_bytes = hex_decode(&s).map_err(serde::de::Error::custom)?;
 
         if let Ok(value) = HeaderWithProof::from_ssz_bytes(&content_bytes) {
@@ -237,6 +232,7 @@ impl<'de> Deserialize<'de> for HistoryContentValue {
             return Ok(Self::BlockBody(value));
         }
 
+        // all "0x" values will return as empty receipts here
         if let Ok(value) = Receipts::from_ssz_bytes(&content_bytes) {
             return Ok(Self::Receipts(value));
         }
