@@ -116,6 +116,10 @@ impl Discovery {
 
         let bootnode_enrs: Vec<Enr> = portal_config.bootnodes.into();
         for enr in bootnode_enrs {
+            if enr.node_id() == discv5.local_enr().node_id() {
+                warn!("Bootnode ENR is the same as the local ENR. Skipping.");
+                continue;
+            }
             discv5
                 .add_enr(enr)
                 .map_err(|e| format!("Failed to add bootnode enr: {e}"))?;
