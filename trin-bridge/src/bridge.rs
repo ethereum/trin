@@ -54,7 +54,7 @@ pub struct Bridge {
 const HEADER_SATURATION_DELAY: u64 = 10; // seconds
 const LATEST_BLOCK_POLL_RATE: u64 = 5; // seconds
 const EPOCH_SIZE: u64 = EPOCH_SIZE_USIZE as u64;
-const FUTURES_BUFFER_SIZE: usize = 8;
+const FUTURES_BUFFER_SIZE: usize = 32;
 
 impl Bridge {
     // Devops nodes don't have websockets available, so we can't actually poll the latest block.
@@ -82,16 +82,13 @@ impl Bridge {
                 let futures = futures::stream::iter(gossip_range.clone().map(|height| {
                     let gossip_stats = gossip_stats.clone();
                     async move {
-                        if let Err(msg) = Bridge::serve_full_block(
+                        let _ = Bridge::serve_full_block(
                             height,
                             None,
                             gossip_stats,
                             self.portal_clients.clone(),
                         )
-                        .await
-                        {
-                            warn!("Error serving block: {height}. Skipping iteration: {msg:?}");
-                        }
+                        .await;
                     }
                 }))
                 .buffer_unordered(FUTURES_BUFFER_SIZE)
@@ -144,16 +141,13 @@ impl Bridge {
                 let epoch_acc = epoch_acc.clone();
                 let gossip_stats = gossip_stats.clone();
                 async move {
-                    if let Err(msg) = Bridge::serve_full_block(
+                    let _ = Bridge::serve_full_block(
                         height,
                         epoch_acc,
                         gossip_stats,
                         self.portal_clients.clone(),
                     )
-                    .await
-                    {
-                        warn!("Error serving block: {height}. Skipping iteration: {msg:?}");
-                    }
+                    .await;
                 }
             }))
             .buffer_unordered(FUTURES_BUFFER_SIZE)

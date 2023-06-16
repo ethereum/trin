@@ -1,8 +1,9 @@
 use prometheus_exporter::{
     self,
     prometheus::{
-        opts, register_int_counter_vec, register_int_counter_vec_with_registry, IntCounterVec,
-        Registry,
+        opts, register_int_counter_vec, register_int_counter_vec_with_registry,
+        register_int_gauge_vec, register_int_gauge_vec_with_registry, IntCounterVec, IntGaugeVec,
+        Opts, Registry,
     },
 };
 use tracing::error;
@@ -34,14 +35,6 @@ pub enum MessageDirectionLabel {
     Received,
 }
 
-/// Utp Transfer Direction Labels
-pub enum UtpTxDirectionLabel {
-    /// Utp transfers initiated
-    Inbound,
-    /// Utp transfers received
-    Outbound,
-}
-
 /// Message Labels
 /// - These label values identify the type of message in the metrics
 pub enum MessageLabel {
@@ -59,7 +52,8 @@ pub enum MessageLabel {
 #[derive(Clone, Debug)]
 pub struct OverlayMetrics {
     message_count: IntCounterVec,
-    utp_tx_count: IntCounterVec,
+    utp_tx_outcome_count: IntCounterVec,
+    utp_tx_active_count: IntGaugeVec,
 }
 
 impl OverlayMetrics {
@@ -69,58 +63,39 @@ impl OverlayMetrics {
             "count all network messages sent and received"
         );
         let message_count_labels = &["protocol", "direction", "type"];
+        let message_count =
+            OverlayMetrics::register_counter_metric(message_count_options, message_count_labels);
 
-        // Register the metric with the default registry, or if that fails, register with a
-        // newly-created registry.
-        let message_count = register_int_counter_vec!(message_count_options.clone(), message_count_labels).unwrap_or_else(|_| {
-            // Trying to register the same metric multiple times in the process should only happen
-            // in testing situations. In regular usage, it should be reported as an error:
-            error!("Failed to register prometheus messaging metrics with default registry, creating new");
-
-            let custom_registry = Registry::new_custom(None, None)
-                .expect("Prometheus docs don't explain when it might fail to create a custom registry, so... hopefully never");
-            register_int_counter_vec_with_registry!(message_count_options, message_count_labels, custom_registry)
-                .expect("a gauge can always be added to a new custom registry, without conflict")
-        });
-
-        let utp_tx_count_options = opts!(
-            "trin_utp_tx_total",
-            "count all utp transfers outbound and inbound"
+        let utp_tx_outcome_count_options = opts!(
+            "trin_utp_tx_outcome",
+            "track success rate for all utp transfers outbound and inbound"
         );
-        let utp_tx_count_labels = &["protocol", "direction", "success"];
+        let utp_tx_outcome_count_labels = &["direction", "success"];
+        let utp_tx_outcome_count = OverlayMetrics::register_counter_metric(
+            utp_tx_outcome_count_options,
+            utp_tx_outcome_count_labels,
+        );
 
-        // Register the metric with the default registry, or if that fails, register with a
-        // newly-created registry.
-        let utp_tx_count = register_int_counter_vec!(utp_tx_count_options.clone(), utp_tx_count_labels).unwrap_or_else(|_| {
-            // Trying to register the same metric multiple times in the process should only happen
-            // in testing situations. In regular usage, it should be reported as an error:
-            error!("Failed to register prometheus utp tx metrics with default registry, creating new");
-
-            let custom_registry = Registry::new_custom(None, None)
-                .expect("Prometheus docs don't explain when it might fail to create a custom registry, so... hopefully never");
-            register_int_counter_vec_with_registry!(utp_tx_count_options, utp_tx_count_labels, custom_registry)
-                .expect("a gauge can always be added to a new custom registry, without conflict")
-        });
+        let utp_tx_active_count_options = opts!(
+            "trin_utp_tx_active",
+            "count all active utp transfers outbound and inbound"
+        );
+        let utp_tx_active_count =
+            OverlayMetrics::register_gauge_metric(utp_tx_active_count_options, &[]);
 
         Self {
             message_count,
-            utp_tx_count,
+            utp_tx_outcome_count,
+            utp_tx_active_count,
         }
     }
 
-    /// Returns the value of the given metric with the specified labels.
-    pub fn message_count_by_labels(
-        &self,
-        network: ProtocolLabel,
-        direction: MessageDirectionLabel,
-        message_name: MessageLabel,
-    ) -> u64 {
-        let labels = [network.into(), direction.into(), message_name.into()];
-        self.message_count.with_label_values(&labels).get()
-    }
+    //
+    // Message Count
+    //
 
     /// Returns the value of the given metric with the specified labels.
-    pub fn utp_tx_count_by_labels(
+    pub fn message_count_by_labels(
         &self,
         network: ProtocolLabel,
         direction: MessageDirectionLabel,
@@ -168,22 +143,66 @@ impl OverlayMetrics {
         self.message_count.with_label_values(&labels).inc();
     }
 
-    pub fn report_outbound_utp_tx(&self, protocol: &ProtocolId, success: bool) {
-        self.increment_utp_tx_count(protocol.into(), UtpTxDirectionLabel::Outbound, success);
-    }
+    //
+    // uTP metrics
+    //
 
-    pub fn report_inbound_utp_tx(&self, protocol: &ProtocolId, success: bool) {
-        self.increment_utp_tx_count(protocol.into(), UtpTxDirectionLabel::Inbound, success);
-    }
-
-    fn increment_utp_tx_count(
+    /// Returns the value of the given metric with the specified labels.
+    pub fn utp_tx_count_by_labels(
         &self,
-        protocol: ProtocolLabel,
-        direction: UtpTxDirectionLabel,
-        success: bool,
-    ) {
-        let labels: [&str; 3] = [protocol.into(), direction.into(), &success.to_string()];
-        self.utp_tx_count.with_label_values(&labels).inc();
+        direction: MessageDirectionLabel,
+        message_name: MessageLabel,
+    ) -> u64 {
+        let labels = [direction.into(), message_name.into()];
+        self.message_count.with_label_values(&labels).get()
+    }
+
+    pub fn report_utp_tx_outcome(&self, success: bool, direction: MessageDirectionLabel) {
+        self.increment_utp_tx_count(direction, success);
+        self.report_utp_tx_active_dec();
+    }
+
+    pub fn report_utp_tx_active_inc(&self) {
+        self.utp_tx_active_count.with_label_values(&[]).inc();
+    }
+
+    pub fn report_utp_tx_active_dec(&self) {
+        self.utp_tx_active_count.with_label_values(&[]).dec();
+    }
+
+    fn increment_utp_tx_count(&self, direction: MessageDirectionLabel, success: bool) {
+        let labels: [&str; 2] = [direction.into(), &success.to_string()];
+        self.utp_tx_outcome_count.with_label_values(&labels).inc();
+    }
+
+    fn register_counter_metric(options: Opts, labels: &[&str]) -> IntCounterVec {
+        // Register the metric with the default registry, or if that fails, register with a
+        // newly-created registry.
+        register_int_counter_vec!(options.clone(), labels).unwrap_or_else(|_| {
+            // Trying to register the same metric multiple times in the process should only happen
+            // in testing situations. In regular usage, it should be reported as an error:
+            error!("Failed to register prometheus metrics with default registry, creating new");
+
+            let custom_registry = Registry::new_custom(None, None)
+                .expect("Prometheus docs don't explain when it might fail to create a custom registry, so... hopefully never");
+            register_int_counter_vec_with_registry!(options, labels, custom_registry)
+                .expect("a counter can always be added to a new custom registry, without conflict")
+        })
+    }
+
+    fn register_gauge_metric(options: Opts, labels: &[&str]) -> IntGaugeVec {
+        // Register the metric with the default registry, or if that fails, register with a
+        // newly-created registry.
+        register_int_gauge_vec!(options.clone(), labels).unwrap_or_else(|_| {
+            // Trying to register the same metric multiple times in the process should only happen
+            // in testing situations. In regular usage, it should be reported as an error:
+            error!("Failed to register prometheus metrics with default registry, creating new");
+
+            let custom_registry = Registry::new_custom(None, None)
+                .expect("Prometheus docs don't explain when it might fail to create a custom registry, so... hopefully never");
+            register_int_gauge_vec_with_registry!(options, labels, custom_registry)
+                .expect("a gauge can always be added to a new custom registry, without conflict")
+        })
     }
 }
 
@@ -207,15 +226,6 @@ impl From<MessageDirectionLabel> for MetricLabel {
         match label {
             MessageDirectionLabel::Sent => "sent",
             MessageDirectionLabel::Received => "received",
-        }
-    }
-}
-
-impl From<UtpTxDirectionLabel> for MetricLabel {
-    fn from(label: UtpTxDirectionLabel) -> Self {
-        match label {
-            UtpTxDirectionLabel::Inbound => "inbound",
-            UtpTxDirectionLabel::Outbound => "outbound",
         }
     }
 }

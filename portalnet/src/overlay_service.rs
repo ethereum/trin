@@ -44,7 +44,7 @@ use crate::{
         query_info::{FindContentResult, QueryInfo, QueryType},
         query_pool::{QueryId, QueryPool, QueryPoolState, TargetKey},
     },
-    metrics::OverlayMetrics,
+    metrics::{MessageDirectionLabel, OverlayMetrics},
     storage::ContentStore,
     types::{
         messages::{
@@ -977,13 +977,13 @@ where
                     // over the uTP stream.
                     let utp = Arc::clone(&self.utp_socket);
                     let metrics = Arc::clone(&self.metrics);
-                    let protocol = self.protocol.clone();
                     tokio::spawn(async move {
+                        metrics.report_utp_tx_active_inc();
                         let mut stream = match utp.accept_with_cid(cid.clone(), UTP_CONN_CFG).await
                         {
                             Ok(stream) => stream,
                             Err(err) => {
-                                metrics.report_outbound_utp_tx(&protocol, false);
+                                metrics.report_utp_tx_outcome(false, MessageDirectionLabel::Sent);
                                 error!(
                                     %err,
                                     %cid.send,
@@ -996,7 +996,7 @@ where
                         };
                         match stream.write(&content).await {
                             Ok(..) => {
-                                metrics.report_outbound_utp_tx(&protocol, true);
+                                metrics.report_utp_tx_outcome(true, MessageDirectionLabel::Sent);
                                 debug!(
                                     %cid.send,
                                     %cid.recv,
@@ -1006,7 +1006,7 @@ where
                                 );
                             }
                             Err(err) => {
-                                metrics.report_outbound_utp_tx(&protocol, false);
+                                metrics.report_utp_tx_outcome(false, MessageDirectionLabel::Sent);
                                 error!(
                                     %cid.send,
                                     %cid.recv,
@@ -1111,15 +1111,15 @@ where
         let command_tx = self.command_tx.clone();
         let utp = Arc::clone(&self.utp_socket);
         let metrics = Arc::clone(&self.metrics);
-        let protocol = self.protocol.clone();
 
         tokio::spawn(async move {
             // Wait for an incoming connection with the given CID. Then, read the data from the uTP
             // stream.
+            metrics.report_utp_tx_active_inc();
             let mut stream = match utp.accept_with_cid(cid.clone(), UTP_CONN_CFG).await {
                 Ok(stream) => stream,
                 Err(err) => {
-                    metrics.report_inbound_utp_tx(&protocol, false);
+                    metrics.report_utp_tx_outcome(false, MessageDirectionLabel::Sent);
                     error!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), "unable to accept uTP stream");
                     return;
                 }
@@ -1127,13 +1127,13 @@ where
 
             let mut data = vec![];
             if let Err(err) = stream.read_to_eof(&mut data).await {
-                metrics.report_inbound_utp_tx(&protocol, false);
+                metrics.report_utp_tx_outcome(false, MessageDirectionLabel::Sent);
                 error!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), "error reading data from uTP stream");
                 return;
             }
 
             // report utp tx as successful, even if we go on to fail to process the payload
-            metrics.report_inbound_utp_tx(&protocol, true);
+            metrics.report_utp_tx_outcome(true, MessageDirectionLabel::Sent);
 
             if let Err(err) = Self::process_accept_utp_payload(
                 validator,
@@ -1385,13 +1385,13 @@ where
 
         let utp = Arc::clone(&self.utp_socket);
         let metrics = Arc::clone(&self.metrics);
-        let protocol = self.protocol.clone();
 
         tokio::spawn(async move {
+            metrics.report_utp_tx_active_inc();
             let mut stream = match utp.connect_with_cid(cid.clone(), UTP_CONN_CFG).await {
                 Ok(stream) => stream,
                 Err(err) => {
-                    metrics.report_outbound_utp_tx(&protocol, false);
+                    metrics.report_utp_tx_outcome(false, MessageDirectionLabel::Received);
                     warn!(
                         %err,
                         cid.send,
@@ -1443,9 +1443,12 @@ where
                 }
             };
 
+            // flag to track if we record the utp tx as failed, so we don't double count
+            let mut utp_tx_recorded = false;
             // send the content to the acceptor over a uTP stream
             if let Err(err) = stream.write(&content_payload).await {
-                metrics.report_outbound_utp_tx(&protocol, false);
+                metrics.report_utp_tx_outcome(false, MessageDirectionLabel::Received);
+                utp_tx_recorded = true;
                 warn!(
                     %err,
                     cid.send,
@@ -1453,12 +1456,13 @@ where
                     peer = ?cid.peer.client(),
                     "Error sending content over uTP connection"
                 );
-                return;
             }
 
             // close uTP connection
             if let Err(err) = stream.shutdown() {
-                metrics.report_outbound_utp_tx(&protocol, false);
+                if !utp_tx_recorded {
+                    metrics.report_utp_tx_outcome(false, MessageDirectionLabel::Received);
+                }
                 warn!(
                     %err,
                     cid.send,
@@ -1468,7 +1472,9 @@ where
                 );
                 return;
             };
-            metrics.report_outbound_utp_tx(&protocol, true);
+            if !utp_tx_recorded {
+                metrics.report_utp_tx_outcome(true, MessageDirectionLabel::Received);
+            }
         });
 
         Ok(response)
