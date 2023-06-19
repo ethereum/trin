@@ -1,8 +1,5 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use validator::ValidationError;
-
-use crate::types::enr::SszEnr;
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -23,33 +20,6 @@ impl From<Params> for Value {
             Params::Map(map) => Value::Object(map),
             Params::None => Value::Null,
         }
-    }
-}
-
-#[derive(Debug)]
-pub struct NodesParams {
-    pub total: u8,
-    pub enrs: Vec<SszEnr>,
-}
-
-impl TryFrom<&Value> for NodesParams {
-    type Error = ValidationError;
-
-    fn try_from(value: &Value) -> Result<Self, Self::Error> {
-        let total = value
-            .get("total")
-            .ok_or_else(|| ValidationError::new("Missing total param"))?
-            .as_u64()
-            .ok_or_else(|| ValidationError::new("Invalid total param"))? as u8;
-
-        let enrs: &Vec<Value> = value
-            .get("enrs")
-            .ok_or_else(|| ValidationError::new("Missing enrs param"))?
-            .as_array()
-            .ok_or_else(|| ValidationError::new("Empty enrs param"))?;
-        let enrs: Result<Vec<SszEnr>, Self::Error> = enrs.iter().map(SszEnr::try_from).collect();
-
-        Ok(Self { total, enrs: enrs? })
     }
 }
 
