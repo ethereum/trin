@@ -3,7 +3,7 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 use validator::{Validate, ValidationError};
 
-use super::endpoints::{BeaconEndpoint, HistoryEndpoint, StateEndpoint, TrinEndpoint};
+use super::endpoints::{BeaconEndpoint, HistoryEndpoint, StateEndpoint};
 use super::params::Params;
 
 type Responder<T, E> = mpsc::UnboundedSender<Result<T, E>>;
@@ -27,14 +27,6 @@ impl Default for JsonRequest {
             id: 0,
         }
     }
-}
-
-// Global portal network JSON-RPC request
-#[derive(Debug, Clone)]
-pub struct PortalJsonRpcRequest {
-    pub endpoint: TrinEndpoint,
-    pub resp: Responder<Value, anyhow::Error>,
-    pub params: Params,
 }
 
 /// History network JSON-RPC request
