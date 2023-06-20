@@ -12,6 +12,7 @@ pub struct GrafanaAPI {
     address: String,
 }
 
+// todo: automatically update datasource/dashboard rather than deleting and recreating them
 impl GrafanaAPI {
     pub fn new(username: String, password: String, address: String) -> Self {
         let basic_auth_string = format!("{username}:{password}");

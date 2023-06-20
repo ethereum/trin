@@ -86,10 +86,230 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 11,
+        "h": 8,
         "w": 11,
         "x": 0,
         "y": 0
+      },
+      "id": 18,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "{prometheus_uid}"
+          },
+          "editorMode": "builder",
+          "expr": "trin_utp_tx_outcome{direction=\"sent\", success=\"true\"}",
+          "legendFormat": "Outbound success",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "{prometheus_uid}"
+          },
+          "editorMode": "builder",
+          "expr": "trin_utp_tx_outcome{direction=\"received\", success=\"true\"}",
+          "hide": false,
+          "legendFormat": "Inbound success",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "{prometheus_uid}"
+          },
+          "editorMode": "builder",
+          "expr": "trin_utp_tx_outcome{direction=\"received\", success=\"false\"}",
+          "hide": false,
+          "legendFormat": "Inbound failure",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "{prometheus_uid}"
+          },
+          "editorMode": "builder",
+          "expr": "trin_utp_tx_outcome{direction=\"sent\", success=\"false\"}",
+          "hide": false,
+          "legendFormat": "Outbound failure",
+          "range": true,
+          "refId": "D"
+        }
+      ],
+      "title": "uTP Stream Outcomes",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "{prometheus_uid}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 11,
+        "y": 0
+      },
+      "id": 17,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "{prometheus_uid}"
+          },
+          "editorMode": "builder",
+          "expr": "trin_utp_tx_active",
+          "legendFormat": "Number of streams",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Active uTP streams",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "{prometheus_uid}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 11,
+        "x": 0,
+        "y": 8
       },
       "id": 2,
       "options": {
@@ -186,7 +406,7 @@
         "h": 11,
         "w": 12,
         "x": 11,
-        "y": 0
+        "y": 8
       },
       "id": 4,
       "options": {
@@ -281,7 +501,7 @@
         "h": 10,
         "w": 11,
         "x": 0,
-        "y": 11
+        "y": 19
       },
       "id": 14,
       "options": {
@@ -376,7 +596,7 @@
         "h": 10,
         "w": 12,
         "x": 11,
-        "y": 11
+        "y": 19
       },
       "id": 16,
       "options": {
@@ -472,7 +692,7 @@
         "h": 11,
         "w": 11,
         "x": 0,
-        "y": 21
+        "y": 29
       },
       "id": 6,
       "options": {
@@ -564,7 +784,7 @@
         "h": 11,
         "w": 12,
         "x": 11,
-        "y": 21
+        "y": 29
       },
       "id": 8,
       "options": {
@@ -657,7 +877,7 @@
         "h": 8,
         "w": 11,
         "x": 0,
-        "y": 32
+        "y": 40
       },
       "id": 10,
       "options": {
@@ -762,7 +982,7 @@
         "h": 8,
         "w": 12,
         "x": 11,
-        "y": 32
+        "y": 40
       },
       "id": 12,
       "options": {
@@ -796,7 +1016,7 @@
       "type": "timeseries"
     }
   ],
-  "refresh": "5m",
+  "refresh": "5s",
   "revision": 1,
   "schemaVersion": 38,
   "style": "dark",
@@ -805,13 +1025,13 @@
     "list": []
   },
   "time": {
-    "from": "now-3h",
+    "from": "now-30m",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "Trin App metrics",
   "uid": "trin-app-metrics",
-  "version": 2,
+  "version": 3,
   "weekStart": ""
 }

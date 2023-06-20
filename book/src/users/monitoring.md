@@ -266,6 +266,12 @@ cargo run -p trin -- \
     --web3-transport http
 ```
 
+### Updating metrics dashboard
+If there are new changes to the metrics dashboard template that you want to view in
+your already-existing dashboard. The simplest way to update your dashboard is to delete
+your `prometheus` datasource and `Trin App metrics` dashboard, and re-run the
+`create-dashboard` command.
+
 ### View metrics remotely
 Trin metrics on a remote machine can be monitored by listening to the grafana
 address on a local machine.
