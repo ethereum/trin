@@ -5,7 +5,6 @@ use crate::{PANDAOPS_CLIENT_ID, PANDAOPS_CLIENT_SECRET};
 use anyhow::{anyhow, bail};
 use ethereum_types::H256;
 use ethportal_api::jsonrpsee::http_client::HttpClient;
-use ethportal_api::types::consensus::withdrawal::Withdrawal;
 use ethportal_api::types::content_key::{
     BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey, HistoryContentKey,
 };
@@ -26,7 +25,6 @@ use ethportal_api::HistoryNetworkApiClient;
 use futures::stream::StreamExt;
 use serde_json::{json, Value};
 use ssz::Decode;
-use std::env;
 use std::fs;
 use std::ops::Range;
 use std::path::PathBuf;
@@ -363,7 +361,10 @@ impl Bridge {
             if !full_header.uncles.is_empty() {
                 bail!("Invalid block: Shanghai block contains uncles");
             }
-            let withdrawals = Bridge::get_trusted_withdrawals(full_header.header.hash()).await?;
+            let withdrawals = match full_header.withdrawals.clone() {
+                Some(val) => val,
+                None => bail!("Invalid block: Shanghai block missing withdrawals"),
+            };
             BlockBody::Shanghai(BlockBodyShanghai { txs, withdrawals })
         } else if full_header.header.timestamp > MERGE_TIMESTAMP {
             if !full_header.uncles.is_empty() {
@@ -460,17 +461,6 @@ impl Bridge {
         }
         Ok(batch.headers[0].clone())
     }
-
-    async fn get_trusted_withdrawals(block_hash: H256) -> anyhow::Result<Vec<Withdrawal>> {
-        let endpoint = format!(
-            "https://beacon.mainnet.ethpandaops.io/eth/v2/beacon/blocks/{}",
-            hex_encode(block_hash)
-        );
-        let response = pandaops_beacon_request(endpoint).await?;
-        let result: Value = serde_json::from_str(&response)?;
-        let withdrawals = result["data"]["body"]["withdrawals"].clone();
-        Ok(serde_json::from_value(withdrawals)?)
-    }
 }
 
 struct GossipStats {
@@ -518,21 +508,19 @@ async fn get_latest_block_number() -> anyhow::Result<u64> {
 /// multiple async requests. Using "ureq" consistently resulted in errors as soon as the number of
 /// concurrent tasks increased significantly.
 async fn pandaops_batch_request(obj: Vec<JsonRequest>) -> anyhow::Result<String> {
-    let client_id = env::var("PANDAOPS_CLIENT_ID")
-        .map_err(|_| anyhow!("PANDAOPS_CLIENT_ID env var not set."))?;
-    let client_secret = env::var("PANDAOPS_CLIENT_SECRET")
-        .map_err(|_| anyhow!("PANDAOPS_CLIENT_SECRET env var not set."))?;
-
     let response = surf::post(PANDAOPS_URL)
         .middleware(Retry::default())
         .body_json(&json!(obj))
         .map_err(|e| anyhow!("Unable to construct json post request: {e:?}"))?
         .header("Content-Type", "application/json".to_string())
-        .header("CF-Access-Client-Id", client_id)
-        .header("CF-Access-Client-Secret", client_secret)
+        .header("CF-Access-Client-Id", PANDAOPS_CLIENT_ID.to_string())
+        .header(
+            "CF-Access-Client-Secret",
+            PANDAOPS_CLIENT_SECRET.to_string(),
+        )
         .recv_string()
         .await
-        .map_err(|_| anyhow!("Unable to request execution batch from pandaops"))?;
+        .map_err(|e| anyhow!("Unable to send json post request: {e:?}"))?;
     // validate that every response from batched request was successful
     let batch_response: Vec<Value> = serde_json::from_str(&response)?;
     for response in batch_response {
@@ -546,19 +534,6 @@ async fn pandaops_batch_request(obj: Vec<JsonRequest>) -> anyhow::Result<String>
         }
     }
     Ok(response)
-}
-
-async fn pandaops_beacon_request(endpoint: String) -> anyhow::Result<String> {
-    let result = surf::get(endpoint)
-        .header("Content-Type", "application/json".to_string())
-        .header("CF-Access-Client-Id", PANDAOPS_CLIENT_ID.to_string())
-        .header(
-            "CF-Access-Client-Secret",
-            PANDAOPS_CLIENT_SECRET.to_string(),
-        )
-        .recv_string()
-        .await;
-    result.map_err(|_| anyhow!("Unable to request consensus block from pandaops"))
 }
 
 #[derive(Debug)]

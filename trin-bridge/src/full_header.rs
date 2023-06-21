@@ -4,6 +4,7 @@ use ethereum_types::H256;
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 
+use ethportal_api::types::consensus::withdrawal::Withdrawal;
 use ethportal_api::types::execution::accumulator::EpochAccumulator;
 use ethportal_api::types::execution::header::{Header, TxHashes};
 use ethportal_api::types::execution::transaction::Transaction;
@@ -44,6 +45,7 @@ pub struct FullHeader {
     pub tx_hashes: TxHashes,
     pub uncles: Vec<H256>,
     pub epoch_acc: Option<Arc<EpochAccumulator>>,
+    pub withdrawals: Option<Vec<Withdrawal>>,
 }
 
 // Prefer TryFrom<Value> over implementing Deserialize trait, since it's much simpler when
@@ -56,11 +58,16 @@ impl TryFrom<Value> for FullHeader {
         let uncles: Vec<H256> = serde_json::from_value(val["uncles"].clone())?;
         let tx_hashes: TxHashes = serde_json::from_value(val["transactions"].clone())?;
         let txs: Vec<Transaction> = serde_json::from_value(val["transactions"].clone())?;
+        let withdrawals = match val["withdrawals"].clone() {
+            Value::Null => None,
+            _ => serde_json::from_value(val["withdrawals"].clone())?,
+        };
         Ok(Self {
             header,
             txs,
             tx_hashes,
             uncles,
+            withdrawals,
             epoch_acc: None,
         })
     }
@@ -69,7 +76,9 @@ impl TryFrom<Value> for FullHeader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ethportal_api::types::execution::block_body::{BlockBody, BlockBodyLegacy};
+    use ethportal_api::types::execution::block_body::{
+        BlockBody, BlockBodyLegacy, BlockBodyShanghai,
+    };
     use serde_json::Value;
 
     #[test]
@@ -83,6 +92,34 @@ mod tests {
         assert_eq!(full_header.tx_hashes.hashes.len(), 19);
         assert_eq!(full_header.uncles.len(), 1);
         assert_eq!(full_header.header, header);
+    }
+
+    #[test]
+    fn full_header_with_withdrawals() {
+        let body =
+            std::fs::read_to_string("../test_assets/mainnet/block_17034871_value.json").unwrap();
+        let body: Value = serde_json::from_str(&body).unwrap();
+        let full_header = FullHeader::try_from(body["result"].clone()).unwrap();
+        let block_body = BlockBody::Shanghai(BlockBodyShanghai {
+            txs: full_header.txs.clone(),
+            withdrawals: full_header.withdrawals.unwrap(),
+        });
+        let header: Header = serde_json::from_value(body["result"].clone()).unwrap();
+        block_body.validate_against_header(&header).unwrap();
+    }
+
+    #[test]
+    fn full_header_with_empty_withdrawals() {
+        let body =
+            std::fs::read_to_string("../test_assets/mainnet/block_17034873_value.json").unwrap();
+        let body: Value = serde_json::from_str(&body).unwrap();
+        let full_header = FullHeader::try_from(body["result"].clone()).unwrap();
+        let block_body = BlockBody::Shanghai(BlockBodyShanghai {
+            txs: full_header.txs.clone(),
+            withdrawals: full_header.withdrawals.unwrap(),
+        });
+        let header: Header = serde_json::from_value(body["result"].clone()).unwrap();
+        block_body.validate_against_header(&header).unwrap();
     }
 
     #[test_log::test]
