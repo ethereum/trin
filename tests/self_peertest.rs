@@ -73,6 +73,13 @@ mod test {
         peertest::scenarios::find::test_trace_recursive_find_content_local_db(&peertest).await;
         peertest::scenarios::find::test_trace_recursive_find_content_for_absent_content(&peertest)
             .await;
+        peertest::scenarios::validation::test_validate_pre_merge_header_with_proof(
+            &peertest, &target,
+        )
+        .await;
+        peertest::scenarios::validation::test_validate_pre_merge_block_body(&peertest, &target)
+            .await;
+        peertest::scenarios::validation::test_validate_pre_merge_receipts(&peertest, &target).await;
 
         peertest.exit_all_nodes();
         test_client_rpc_handle.stop().unwrap();
