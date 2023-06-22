@@ -35,6 +35,7 @@ trin = { path = ".." }
 trin-history = { path = "../trin-history" }
 trin-state = { path = "../trin-state" }
 trin-utils = { path = "../trin-utils" }
+trin-validation = { path = "../trin-validation" }
 ureq = { version = "2.5.0", features = ["json"] }
 
 [target.'cfg(windows)'.dependencies]

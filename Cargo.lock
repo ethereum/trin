@@ -2347,6 +2347,7 @@ dependencies = [
  "trin-history",
  "trin-state",
  "trin-utils",
+ "trin-validation",
  "uds_windows",
  "ureq",
 ]
