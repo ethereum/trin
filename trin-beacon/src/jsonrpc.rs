@@ -69,6 +69,9 @@ async fn complete_request(network: Arc<RwLock<BeaconNetwork>>, request: BeaconJs
         BeaconEndpoint::Offer(enr, content_key, content_value) => {
             offer(network, enr, content_key, content_value).await
         }
+        BeaconEndpoint::ValidateContent(content_key, content_value) => {
+            validate_content(network, content_key, content_value).await
+        }
         BeaconEndpoint::Ping(enr) => ping(network, enr).await,
         BeaconEndpoint::RoutingTableInfo => Ok(json!("Not implemented")), // TODO: implement this when refactor trin_history utils
         BeaconEndpoint::RecursiveFindNodes(node_id) => recursive_find_nodes(network, node_id).await,
@@ -297,6 +300,22 @@ async fn offer(
             })),
             Err(msg) => Err(format!("Offer request timeout: {msg:?}")),
         }
+    }
+}
+
+/// Constructs a JSON call for the Validate Content method.
+async fn validate_content(
+    network: Arc<RwLock<BeaconNetwork>>,
+    content_key: BeaconContentKey,
+    content_value: BeaconContentValue,
+) -> Result<Value, String> {
+    let overlay = network.read().await.overlay.clone();
+    match overlay
+        .validate_content(content_key.into(), content_value.encode())
+        .await
+    {
+        Ok(bool) => Ok(json!(bool)),
+        Err(msg) => Err(format!("Validate Content request timeout: {msg:?}")),
     }
 }
 

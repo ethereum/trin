@@ -118,3 +118,51 @@ pub async fn test_validate_pre_merge_receipts(peertest: &Peertest, target: &Clie
         _ => panic!("Content value's should match"),
     }
 }
+
+pub async fn test_validate_content_rpc_pre_merge_header_with_proof(target: &Client) {
+    info!("Test validate content rpc pre-merge header-with-proof");
+    let header_with_proof_content_key: HistoryContentKey =
+        serde_json::from_value(json!(HEADER_WITH_PROOF_CONTENT_KEY)).unwrap();
+    let header_with_proof_content_value: HistoryContentValue =
+        serde_json::from_value(json!(HEADER_WITH_PROOF_CONTENT_VALUE)).unwrap();
+
+    let result = target
+        .validate_content(
+            header_with_proof_content_key,
+            header_with_proof_content_value,
+        )
+        .await
+        .unwrap();
+
+    assert!(result)
+}
+
+pub async fn test_validate_content_rpc_pre_merge_block_body(target: &Client) {
+    info!("Test validate content rpc pre-merge block body");
+    let block_body_content_key: HistoryContentKey =
+        serde_json::from_value(json!(BLOCK_BODY_CONTENT_KEY)).unwrap();
+    let block_body_content_value: HistoryContentValue =
+        serde_json::from_value(json!(BLOCK_BODY_CONTENT_VALUE)).unwrap();
+
+    let result = target
+        .validate_content(block_body_content_key, block_body_content_value)
+        .await
+        .unwrap();
+
+    assert!(result)
+}
+
+pub async fn test_validate_content_rpc_pre_merge_receipts(target: &Client) {
+    info!("Test validate content rpc pre-merge receipts");
+    let receipts_content_key: HistoryContentKey =
+        serde_json::from_value(json!(RECEIPTS_CONTENT_KEY)).unwrap();
+    let receipts_content_value: HistoryContentValue =
+        serde_json::from_value(json!(RECEIPTS_CONTENT_VALUE)).unwrap();
+
+    let result = target
+        .validate_content(receipts_content_key, receipts_content_value)
+        .await
+        .unwrap();
+
+    assert!(result)
+}

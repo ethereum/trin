@@ -70,6 +70,9 @@ async fn complete_request(network: Arc<RwLock<HistoryNetwork>>, request: History
         HistoryEndpoint::Offer(enr, content_key, content_value) => {
             offer(network, enr, content_key, content_value).await
         }
+        HistoryEndpoint::ValidateContent(content_key, content_value) => {
+            validate_content(network, content_key, content_value).await
+        }
         HistoryEndpoint::Ping(enr) => ping(network, enr).await,
         HistoryEndpoint::RoutingTableInfo => Ok(bucket_entries_to_json(
             network.read().await.overlay.bucket_entries(),
@@ -308,6 +311,22 @@ async fn offer(
             })),
             Err(msg) => Err(format!("Offer request timeout: {msg:?}")),
         }
+    }
+}
+
+/// Constructs a JSON call for the Validate Content method.
+async fn validate_content(
+    network: Arc<RwLock<HistoryNetwork>>,
+    content_key: HistoryContentKey,
+    content_value: ethportal_api::HistoryContentValue,
+) -> Result<Value, String> {
+    let overlay = network.read().await.overlay.clone();
+    match overlay
+        .validate_content(content_key.into(), content_value.encode())
+        .await
+    {
+        Ok(bool) => Ok(json!(bool)),
+        Err(msg) => Err(format!("Validate Content request timeout: {msg:?}")),
     }
 }
 

@@ -201,6 +201,18 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
         Ok(result)
     }
 
+    /// Returns true or false depending on if the client was able to validate a given history content key and content data.
+    async fn validate_content(
+        &self,
+        content_key: BeaconContentKey,
+        content_value: BeaconContentValue,
+    ) -> RpcResult<bool> {
+        let endpoint = BeaconEndpoint::ValidateContent(content_key, content_value);
+        let result = self.proxy_query_to_beacon_subnet(endpoint).await?;
+        let result: bool = from_value(result)?;
+        Ok(result)
+    }
+
     /// Store content key with a content data to the local database.
     async fn store(
         &self,

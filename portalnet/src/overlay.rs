@@ -541,6 +541,30 @@ where
         }
     }
 
+    /// Validate Content request
+    pub async fn validate_content(
+        &self,
+        content_key: RawContentKey,
+        content_value: Vec<u8>,
+    ) -> Result<bool, OverlayRequestError> {
+        let content_key = TContentKey::try_from(content_key).map_err(|err| {
+            OverlayRequestError::FailedValidation(format!(
+                "Error decoding content key for received utp content: {err}"
+            ))
+        })?;
+        match self
+            .validator
+            .validate_content(&content_key, &content_value)
+            .await
+        {
+            Ok(_) => Ok(true),
+            Err(msg) => Err(OverlayRequestError::FailedValidation(format!(
+                "Network: {:?}, Reason: {:?}",
+                self.protocol, msg
+            ))),
+        }
+    }
+
     pub async fn lookup_node(&self, target: NodeId) -> Vec<Enr> {
         if target == self.local_enr().node_id() {
             return vec![self.local_enr()];

@@ -98,6 +98,14 @@ pub trait HistoryNetworkApi {
         content_value: Option<HistoryContentValue>,
     ) -> RpcResult<AcceptInfo>;
 
+    /// Returns true or false depending on if the client was able to validate a given history content key and content data.
+    #[method(name = "historyValidateContent")]
+    async fn validate_content(
+        &self,
+        content_key: HistoryContentKey,
+        content_value: HistoryContentValue,
+    ) -> RpcResult<bool>;
+
     /// Store content key with a content data to the local database.
     #[method(name = "historyStore")]
     async fn store(

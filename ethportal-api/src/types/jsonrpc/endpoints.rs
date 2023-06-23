@@ -47,6 +47,8 @@ pub enum HistoryEndpoint {
     Gossip(HistoryContentKey, HistoryContentValue),
     /// params: [enr, content_key]
     Offer(Enr, HistoryContentKey, Option<HistoryContentValue>),
+    /// params: [content_key, content_value]
+    ValidateContent(HistoryContentKey, HistoryContentValue),
     /// params: [enr]
     Ping(Enr),
     /// params: content_key
@@ -87,6 +89,8 @@ pub enum BeaconEndpoint {
     Gossip(BeaconContentKey, BeaconContentValue),
     /// params: [enr, content_key]
     Offer(Enr, BeaconContentKey, Option<BeaconContentValue>),
+    /// params: [content_key, content_value]
+    ValidateContent(BeaconContentKey, BeaconContentValue),
     /// params: enr
     Ping(Enr),
     /// params: content_key

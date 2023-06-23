@@ -95,6 +95,14 @@ pub trait BeaconNetworkApi {
         content_value: Option<BeaconContentValue>,
     ) -> RpcResult<AcceptInfo>;
 
+    /// Returns true or false depending on if the client was able to validate a given history content key and content data.
+    #[method(name = "historyValidateContent")]
+    async fn validate_content(
+        &self,
+        content_key: BeaconContentKey,
+        content_value: BeaconContentValue,
+    ) -> RpcResult<bool>;
+
     /// Store content key with a content data to the local database.
     #[method(name = "beaconStore")]
     async fn store(
