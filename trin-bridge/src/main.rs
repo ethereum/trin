@@ -1,9 +1,8 @@
 use clap::Parser;
 use ethportal_api::jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
 use tokio::time::{sleep, Duration};
-use tracing::info;
 use trin_bridge::bridge::Bridge;
-use trin_bridge::cli::{BridgeConfig, BridgeMode};
+use trin_bridge::cli::BridgeConfig;
 use trin_bridge::utils::generate_spaced_private_keys;
 use trin_utils::log::init_tracing_logger;
 use trin_validation::accumulator::MasterAccumulator;
@@ -49,16 +48,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         bridge_config.epoch_acc_path,
     );
 
-    info!("Launching bridge mode: {:?}", bridge.mode);
-    match bridge.mode {
-        BridgeMode::Latest => bridge.launch_latest().await,
-        BridgeMode::Backfill => bridge.launch_backfill(None).await,
-        BridgeMode::StartFromEpoch(epoch_number) => {
-            bridge.launch_backfill(Some(epoch_number)).await
-        }
-        BridgeMode::Single(block_number) => {
-            bridge.launch_single(block_number).await;
-        }
-    }
+    bridge.launch().await;
     Ok(())
 }

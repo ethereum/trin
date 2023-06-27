@@ -1,6 +1,7 @@
-use crate::cli::BridgeMode;
 use crate::full_header::FullHeader;
+use crate::mode::{BridgeMode, ModeType};
 use crate::pandaops::PandaOpsMiddleware;
+use crate::utils::TestAssets;
 use anyhow::{anyhow, bail};
 use ethportal_api::jsonrpsee::http_client::HttpClient;
 use ethportal_api::types::content_key::{
@@ -67,43 +68,30 @@ impl Bridge {
 }
 
 impl Bridge {
-    pub async fn launch_single(&self, block_number: u64) {
-        let gossip_range = Range {
-            start: block_number,
-            end: block_number + 1,
-        };
-        let epoch_acc = if block_number <= MERGE_BLOCK_NUMBER {
-            let epoch_index = block_number / EPOCH_SIZE;
-            match self.get_epoch_acc(epoch_index).await {
-                Ok(val) => Some(val),
-                Err(msg) => {
-                    warn!("Unable to find epoch acc for block number: {block_number:?}. Skipping gossip: {msg:?}");
-                    return;
-                }
-            }
-        } else {
-            None
-        };
+    pub async fn launch(&self) {
+        info!("Launching bridge mode: {:?}", self.mode);
+        match self.mode.clone() {
+            BridgeMode::Test(path) => self.launch_test(path).await,
+            BridgeMode::Latest => self.launch_latest().await,
+            _ => self.launch_backfill().await,
+        }
+        info!("Bridge mode: {:?} complete.", self.mode);
+    }
 
-        info!("Gossiping block: {block_number:?}");
-        let gossip_stats = Arc::new(Mutex::new(GossipStats::new(gossip_range.clone())));
-        match self
-            .serve_full_block(
-                block_number,
-                epoch_acc,
-                gossip_stats,
-                self.portal_clients.clone(),
-            )
-            .await
-        {
-            Ok(_) => info!("Successfully served block: {block_number:?}"),
-            Err(msg) => warn!("Error serving block: {block_number:?}: {msg:?}"),
+    async fn launch_test(&self, test_path: PathBuf) {
+        let test_asset = fs::read_to_string(test_path).expect("Error reading test asset.");
+        let assets: TestAssets =
+            serde_json::from_str(&test_asset).expect("Unable to parse test asset.");
+        for asset in assets.0.into_iter() {
+            Bridge::gossip_content(&self.portal_clients, asset.content_key, asset.content_value)
+                .await
+                .expect("Error serving block range in test mode.");
         }
     }
 
     // Devops nodes don't have websockets available, so we can't actually poll the latest block.
     // Instead we loop on a short interval and fetch the latest blocks not yet served.
-    pub async fn launch_latest(&self) {
+    async fn launch_latest(&self) {
         let mut block_index = self.pandaops.get_latest_block_number().await.expect(
             "Error launching bridge in latest mode. Unable to get latest block from provider.",
         );
@@ -123,53 +111,57 @@ impl Bridge {
                 };
                 info!("Discovered new blocks to gossip: {gossip_range:?}");
                 let gossip_stats = Arc::new(Mutex::new(GossipStats::new(gossip_range.clone())));
-                let futures = futures::stream::iter(gossip_range.clone().map(|height| {
-                    let gossip_stats = gossip_stats.clone();
-                    async move {
-                        let _ = self
-                            .serve_full_block(
-                                height,
-                                None,
-                                gossip_stats,
-                                self.portal_clients.clone(),
-                            )
-                            .await;
-                    }
-                }))
-                .buffer_unordered(FUTURES_BUFFER_SIZE)
-                .collect::<Vec<()>>();
-                futures.await;
+                let epoch_acc = None;
+                self.serve(gossip_range.clone(), epoch_acc, gossip_stats.clone())
+                    .await
+                    .expect("Error serving block range in latest mode.");
                 block_index = gossip_range.end;
             }
         }
     }
 
-    pub async fn launch_backfill(&self, starting_epoch: Option<u64>) {
+    async fn launch_backfill(&self) {
         let latest_block = self.pandaops.get_latest_block_number().await.expect(
             "Error launching bridge in backfill mode. Unable to get latest block from provider.",
         );
-        let mut epoch_index = match starting_epoch {
-            Some(val) => {
-                if val * EPOCH_SIZE > latest_block {
-                    panic!(
-                        "Starting epoch is greater than current epoch. 
-                        Please specify a starting epoch that begins before the current block."
-                    );
-                }
-                val
-            }
-            None => 0,
+        let (looped, mode_type) = match self.mode.clone() {
+            BridgeMode::Backfill(val) => (true, val),
+            BridgeMode::Single(val) => (false, val),
+            _ => panic!("Invalid backfill mode"),
         };
+        let (mut start_block, mut end_block, mut epoch_index) = match mode_type {
+            // end block will be same for an epoch in single & backfill modes
+            ModeType::Epoch(block) => (
+                block * EPOCH_SIZE,
+                ((block + 1) * EPOCH_SIZE),
+                block / EPOCH_SIZE,
+            ),
+            ModeType::Block(block) => {
+                let epoch_index = block / EPOCH_SIZE;
+                let end_block = match looped {
+                    true => (epoch_index + 1) * EPOCH_SIZE,
+                    false => block + 1,
+                };
+                (block, end_block, epoch_index)
+            }
+        };
+        if start_block > latest_block {
+            panic!(
+                "Starting block/epoch is greater than latest block. 
+                        Please specify a starting block/epoch that begins before the current block."
+            );
+        }
         let current_epoch = latest_block / EPOCH_SIZE;
+        let mut gossip_range = Range {
+            start: start_block,
+            end: end_block,
+        };
+        let gossip_stats = Arc::new(Mutex::new(GossipStats::new(gossip_range.clone())));
         while epoch_index < current_epoch {
-            let start = epoch_index * EPOCH_SIZE;
-            let end = start + EPOCH_SIZE;
-            let gossip_range = Range { start, end };
-
             // Using epoch_size chunks & epoch boundaries ensures that every
             // "chunk" shares an epoch accumulator avoiding the need to
             // look up the epoch acc on a header by header basis
-            let epoch_acc = if end <= MERGE_BLOCK_NUMBER {
+            let epoch_acc = if gossip_range.end <= MERGE_BLOCK_NUMBER {
                 match self.get_epoch_acc(epoch_index).await {
                     Ok(val) => Some(val),
                     Err(msg) => {
@@ -181,31 +173,52 @@ impl Bridge {
                 None
             };
             info!("fetching headers in range: {gossip_range:?}");
-            let gossip_stats = Arc::new(Mutex::new(GossipStats::new(gossip_range.clone())));
-            let futures = futures::stream::iter(gossip_range.into_iter().map(|height| {
-                let epoch_acc = epoch_acc.clone();
-                let gossip_stats = gossip_stats.clone();
-                async move {
-                    let _ = self
-                        .serve_full_block(
-                            height,
-                            epoch_acc,
-                            gossip_stats,
-                            self.portal_clients.clone(),
-                        )
-                        .await;
-                }
-            }))
-            .buffer_unordered(FUTURES_BUFFER_SIZE)
-            .collect::<Vec<()>>();
-            futures.await;
+            self.serve(gossip_range, epoch_acc, gossip_stats.clone())
+                .await
+                .expect("Error serving headers in backfill mode.");
             if let Ok(gossip_stats) = gossip_stats.lock() {
                 gossip_stats.display_stats();
             } else {
                 warn!("Error displaying gossip stats. Unable to acquire lock.");
             }
+            if !looped {
+                break;
+            }
+            // update index values if we're looping
             epoch_index += 1;
+            start_block = epoch_index * EPOCH_SIZE;
+            end_block = start_block + EPOCH_SIZE;
+            gossip_range = Range {
+                start: start_block,
+                end: end_block,
+            };
         }
+    }
+
+    async fn serve(
+        &self,
+        gossip_range: Range<u64>,
+        epoch_acc: Option<Arc<EpochAccumulator>>,
+        gossip_stats: Arc<Mutex<GossipStats>>,
+    ) -> anyhow::Result<()> {
+        let futures = futures::stream::iter(gossip_range.into_iter().map(|height| {
+            let epoch_acc = epoch_acc.clone();
+            let gossip_stats = gossip_stats.clone();
+            async move {
+                let _ = self
+                    .serve_full_block(height, epoch_acc, gossip_stats, self.portal_clients.clone())
+                    .await;
+            }
+        }))
+        .buffer_unordered(FUTURES_BUFFER_SIZE)
+        .collect::<Vec<()>>();
+        futures.await;
+        if let Ok(gossip_stats) = gossip_stats.lock() {
+            gossip_stats.display_stats();
+        } else {
+            warn!("Error displaying gossip stats. Unable to acquire lock.");
+        }
+        Ok(())
     }
 
     async fn serve_full_block(
@@ -431,12 +444,13 @@ impl Bridge {
     }
 }
 
-struct GossipStats {
-    range: Range<u64>,
-    header_with_proof_count: u64,
-    bodies_count: u64,
-    receipts_count: u64,
-    start_time: time::Instant,
+#[derive(Debug, Clone)]
+pub struct GossipStats {
+    pub range: Range<u64>,
+    pub header_with_proof_count: u64,
+    pub bodies_count: u64,
+    pub receipts_count: u64,
+    pub start_time: time::Instant,
 }
 
 impl GossipStats {

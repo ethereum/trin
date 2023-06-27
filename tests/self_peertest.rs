@@ -1,23 +1,24 @@
 #[cfg(test)]
 mod test {
-    use std::{
-        net::{IpAddr, Ipv4Addr},
-        thread, time,
-    };
+    use std::env;
+    use std::net::{IpAddr, Ipv4Addr};
 
-    use ethportal_api::types::cli::{TrinConfig, DEFAULT_WEB3_IPC_PATH};
+    use ethportal_api::types::cli::{TrinConfig, DEFAULT_WEB3_HTTP_ADDRESS, DEFAULT_WEB3_IPC_PATH};
     use ethportal_peertest as peertest;
+    use serial_test::serial;
+    use tokio::time::{sleep, Duration};
     use trin_utils::log::init_tracing_logger;
 
     // Logs don't show up when trying to use test_log here, maybe because of multi_thread
     #[tokio::test(flavor = "multi_thread")]
+    #[serial]
     async fn test_launches() {
         init_tracing_logger();
 
         // Run a client, as a buddy peer for ping tests, etc.
         let peertest = peertest::launch_peertest_nodes(2).await;
         // Short sleep to make sure all peertest nodes can connect
-        thread::sleep(time::Duration::from_secs(1));
+        sleep(Duration::from_secs(1)).await;
 
         let test_ip_addr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
         // Use an uncommon port for the peertest to avoid clashes.
@@ -82,6 +83,54 @@ mod test {
         peertest::scenarios::validation::test_validate_pre_merge_receipts(&peertest, &target).await;
 
         peertest.exit_all_nodes();
+        test_client_rpc_handle.stop().unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial]
+    async fn test_bridge() {
+        // Run a client, as a buddy peer for ping tests, etc.
+        let peertest = peertest::launch_peertest_nodes(1).await;
+        // Short sleep to make sure all peertest nodes can connect
+        sleep(Duration::from_secs(1)).await;
+
+        let test_ip_addr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+        // Use an uncommon port for the peertest to avoid clashes.
+        let test_discovery_port = 8999;
+        let external_addr = format!("{test_ip_addr}:{test_discovery_port}");
+
+        // add fake secrets for bridge activation
+        env::set_var("PANDAOPS_CLIENT_ID", "xxx");
+        env::set_var("PANDAOPS_CLIENT_SECRET", "xxx");
+        // Run a client, to be tested
+        let trin_config = TrinConfig::new_from(
+            [
+                "trin",
+                "--networks",
+                "history,state",
+                "--external-address",
+                external_addr.as_str(),
+                // Run bridge test with http, since bridge doesn't support ipc yet.
+                "--web3-transport",
+                "http",
+                "--web3-http-address",
+                DEFAULT_WEB3_HTTP_ADDRESS,
+                "--ephemeral",
+                "--discovery-port",
+                test_discovery_port.to_string().as_ref(),
+                "--bootnodes",
+                &peertest.bootnode.enr.to_base64(),
+            ]
+            .iter(),
+        )
+        .unwrap();
+
+        let test_client_rpc_handle = trin::run_trin(trin_config).await.unwrap();
+        let target = ethportal_api::jsonrpsee::http_client::HttpClientBuilder::default()
+            .build(DEFAULT_WEB3_HTTP_ADDRESS)
+            .unwrap();
+        peertest::scenarios::bridge::test_bridge(&peertest, &target).await;
+
         test_client_rpc_handle.stop().unwrap();
     }
 }

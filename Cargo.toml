@@ -42,6 +42,7 @@ utp-rs = "0.1.0-alpha.5"
 
 [dev-dependencies]
 ethportal-peertest = { path = "ethportal-peertest" }
+serial_test = "0.5.1"
 ureq = { version = "2.5.0", features = ["json"] }
 
 [workspace]

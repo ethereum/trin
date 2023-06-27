@@ -40,6 +40,15 @@ pub struct MasterAccumulator {
     pub historical_epochs: HistoricalEpochRoots,
 }
 
+impl Default for MasterAccumulator {
+    fn default() -> Self {
+        let raw = TrinValidationAssets::get("validation_assets/merge_macc.bin")
+            .expect("Unable to find default master accumulator");
+        MasterAccumulator::from_ssz_bytes(raw.data.as_ref())
+            .expect("Unable to decode default master accumulator")
+    }
+}
+
 impl MasterAccumulator {
     /// Load default trusted master acc
     pub fn try_from_file(master_acc_path: PathBuf) -> anyhow::Result<MasterAccumulator> {
@@ -358,8 +367,7 @@ mod test {
     // Testing utils
     //
     fn get_mainnet_master_acc() -> MasterAccumulator {
-        let master_acc = TrinValidationAssets::get("validation_assets/merge_macc.bin").unwrap();
-        let master_acc = MasterAccumulator::from_ssz_bytes(master_acc.data.as_ref()).unwrap();
+        let master_acc = MasterAccumulator::default();
         assert_eq!(
             master_acc.tree_hash_root(),
             H256::from_str(DEFAULT_MASTER_ACC_HASH).unwrap()
