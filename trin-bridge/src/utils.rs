@@ -1,5 +1,8 @@
 use discv5::enr::{CombinedKey, EnrBuilder, NodeId};
+use ethportal_api::types::content_key::HistoryContentKey;
+use ethportal_api::types::content_value::HistoryContentValue;
 use ethportal_api::utils::bytes::hex_encode;
+use serde::{Deserialize, Serialize};
 
 /// Generates a set of N private keys, with node ids that are equally spaced
 /// around the 256-bit keys space.
@@ -37,6 +40,16 @@ fn random_node_id() -> (NodeId, CombinedKey) {
         .build(&random_private_key)
         .expect("to be able to generate a random node id");
     (enr.node_id(), random_private_key)
+}
+
+// Struct definitions for test assets
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TestAssets(pub Vec<Asset>);
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Asset {
+    pub content_key: HistoryContentKey,
+    pub content_value: HistoryContentValue,
 }
 
 #[cfg(test)]

@@ -1,4 +1,5 @@
 use crate::client_handles::{fluffy_handle, trin_handle};
+use crate::mode::BridgeMode;
 use crate::types::NetworkKind;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
@@ -20,6 +21,7 @@ pub struct BridgeConfig {
     #[arg(
         long,
         help = "number of trin nodes to launch - must be between 1 and 16",
+        default_value = "1",
         value_parser = check_node_count
     )]
     pub node_count: u8,
@@ -64,48 +66,7 @@ fn check_node_count(val: &str) -> Result<u8, String> {
     }
 }
 
-/// Used to help decode cli args identifying the desired bridge mode.
-/// - Latest: tracks the latest header
-/// - Backfill: starts at block 0
-/// - StartFromEpoch: starts at the given epoch
-///   - ex: "e123" starts at epoch 123
-/// - Single: executes a single block
-///   - ex: "b123" executes block 123
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum BridgeMode {
-    Latest,
-    Backfill,
-    StartFromEpoch(u64),
-    Single(u64),
-}
-
 type ParseError = &'static str;
-
-impl FromStr for BridgeMode {
-    type Err = ParseError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "latest" => Ok(BridgeMode::Latest),
-            "backfill" => Ok(BridgeMode::Backfill),
-            val => match &val[..1] {
-                "e" => {
-                    let epoch = val[1..]
-                        .parse()
-                        .map_err(|_| "Invalid bridge mode arg: epoch number")?;
-                    Ok(BridgeMode::StartFromEpoch(epoch))
-                }
-                "b" => {
-                    let block = val[1..]
-                        .parse()
-                        .map_err(|_| "Invalid bridge mode arg: block number")?;
-                    Ok(BridgeMode::Single(block))
-                }
-                _ => Err("Invalid bridge mode arg: type prefix"),
-            },
-        }
-    }
-}
 
 #[derive(Clone, Debug, PartialEq, Eq, Subcommand)]
 pub enum ClientType {
@@ -139,9 +100,11 @@ impl ClientType {
         }
     }
 }
+
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::mode::ModeType;
 
     #[test]
     fn test_default_bridge_config() {
@@ -178,7 +141,7 @@ mod test {
         const NODE_COUNT: &str = "1";
         const EXECUTABLE_PATH: &str = "path/to/executable";
         const EPOCH_ACC_PATH: &str = "path/to/epoch/accumulator";
-        const EPOCH: &str = "e100";
+        const EPOCH: &str = "backfill:e100";
         let bridge_config = BridgeConfig::parse_from([
             "bridge",
             "--node-count",
@@ -196,7 +159,10 @@ mod test {
             bridge_config.executable_path,
             PathBuf::from(EXECUTABLE_PATH)
         );
-        assert_eq!(bridge_config.mode, BridgeMode::StartFromEpoch(100));
+        assert_eq!(
+            bridge_config.mode,
+            BridgeMode::Backfill(ModeType::Epoch(100))
+        );
         assert_eq!(bridge_config.epoch_acc_path, PathBuf::from(EPOCH_ACC_PATH));
         assert_eq!(bridge_config.network, vec![NetworkKind::History]);
     }

@@ -1,5 +1,6 @@
 pub mod constants;
 pub mod scenarios;
+pub mod utils;
 
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::PathBuf;

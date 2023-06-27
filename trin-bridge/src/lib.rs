@@ -5,6 +5,7 @@ pub mod cli;
 pub mod client_handles;
 pub mod constants;
 pub mod full_header;
+pub mod mode;
 pub mod pandaops;
 pub mod types;
 pub mod utils;
