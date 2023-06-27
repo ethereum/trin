@@ -206,7 +206,7 @@ impl Discovery {
         Ok(NodeInfo {
             enr: Enr::from_str(&self.discv5.local_enr().to_base64())
                 .map_err(|err| anyhow!("{err}"))?,
-            node_id: self.discv5.local_enr().node_id(),
+            node_id: hex_encode(self.discv5.local_enr().node_id().raw()),
             ip: self
                 .discv5
                 .local_enr()
