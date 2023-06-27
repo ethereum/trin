@@ -7182,6 +7182,7 @@ dependencies = [
  "futures 0.3.28",
  "jsonrpsee 0.16.2",
  "lazy_static",
+ "portalnet",
  "rstest 0.11.0",
  "serde",
  "serde_json",
@@ -7192,6 +7193,7 @@ dependencies = [
  "tracing-subscriber",
  "trin-utils",
  "trin-validation",
+ "url",
 ]
 
 [[package]]

@@ -1,6 +1,5 @@
 use clap::Parser;
 use ethportal_api::jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
-use tokio::process::Command;
 use tokio::time::{sleep, Duration};
 use tracing::info;
 use trin_bridge::bridge::Bridge;
@@ -18,19 +17,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let private_keys = generate_spaced_private_keys(bridge_config.node_count);
     let mut handles = vec![];
     let mut http_addresses = vec![];
-    for (i, key) in private_keys.iter().enumerate() {
-        let web3_http_address = format!("http://127.0.0.1:{}", 8545 + i);
-        let discovery_port = format!("{}", 9000 + i);
-        let handle = Command::new(bridge_config.executable_path.clone())
-            .kill_on_drop(true)
-            .args(["--mb", "0"])
-            .args(["--unsafe-private-key", key])
-            .args(["--web3-transport", "http"])
-            .args(["--web3-http-address", &web3_http_address])
-            .args(["--discovery-port", &discovery_port])
-            .args(["--bootnodes", "default"])
-            .spawn()
-            .expect("failed to spawn trin process");
+    for (i, key) in private_keys.into_iter().enumerate() {
+        let web3_http_port = 8545 + i;
+        let discovery_port = 9000 + i;
+        let handle = bridge_config.client_type.build_handle(
+            key,
+            web3_http_port as u16,
+            discovery_port as u16,
+            bridge_config.clone(),
+        );
+        let web3_http_address = format!("http://127.0.0.1:{}", web3_http_port);
         http_addresses.push(web3_http_address);
         handles.push(handle);
     }

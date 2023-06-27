@@ -1,7 +1,10 @@
+use crate::client_handles::{fluffy_handle, trin_handle};
 use crate::types::NetworkKind;
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use std::str::FromStr;
+use tokio::process::Child;
+use url::Url;
 
 // max value of 16 b/c...
 // - reliably calculate spaced private keys in a reasonable time
@@ -11,7 +14,7 @@ use std::str::FromStr;
 pub const MAX_NODE_COUNT: u8 = 16;
 const DEFAULT_SUBNETWORK: &str = "history";
 
-#[derive(Parser, Debug, PartialEq)]
+#[derive(Parser, Debug, PartialEq, Clone)]
 #[command(name = "Trin Bridge", about = "Feed the network")]
 pub struct BridgeConfig {
     #[arg(
@@ -44,6 +47,12 @@ pub struct BridgeConfig {
         use_value_delimiter = true
     )]
     pub network: Vec<NetworkKind>,
+
+    #[arg(long, help = "Url for metrics reporting")]
+    pub metrics_url: Option<Url>,
+
+    #[command(subcommand)]
+    pub client_type: ClientType,
 }
 
 fn check_node_count(val: &str) -> Result<u8, String> {
@@ -98,6 +107,38 @@ impl FromStr for BridgeMode {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Subcommand)]
+pub enum ClientType {
+    Fluffy,
+    Trin,
+}
+
+impl FromStr for ClientType {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "fluffy" => Ok(ClientType::Fluffy),
+            "trin" => Ok(ClientType::Trin),
+            _ => Err("Invalid client type"),
+        }
+    }
+}
+
+impl ClientType {
+    pub fn build_handle(
+        &self,
+        private_key: String,
+        rpc_port: u16,
+        udp_port: u16,
+        bridge_config: BridgeConfig,
+    ) -> anyhow::Result<Child> {
+        match self {
+            ClientType::Fluffy => fluffy_handle(private_key, rpc_port, udp_port, bridge_config),
+            ClientType::Trin => trin_handle(private_key, rpc_port, udp_port, bridge_config),
+        }
+    }
+}
 #[cfg(test)]
 mod test {
     use super::*;
@@ -108,7 +149,7 @@ mod test {
         const EXECUTABLE_PATH: &str = "path/to/executable";
         const EPOCH_ACC_PATH: &str = "path/to/epoch/accumulator";
         let bridge_config = BridgeConfig::parse_from([
-            "test",
+            "bridge",
             "--node-count",
             NODE_COUNT,
             "--executable-path",
@@ -117,6 +158,7 @@ mod test {
             EPOCH_ACC_PATH,
             "--network",
             "history,beacon",
+            "trin",
         ]);
         assert_eq!(bridge_config.node_count, 1);
         assert_eq!(
@@ -138,7 +180,7 @@ mod test {
         const EPOCH_ACC_PATH: &str = "path/to/epoch/accumulator";
         const EPOCH: &str = "e100";
         let bridge_config = BridgeConfig::parse_from([
-            "test",
+            "bridge",
             "--node-count",
             NODE_COUNT,
             "--executable-path",
@@ -147,6 +189,7 @@ mod test {
             EPOCH_ACC_PATH,
             "--mode",
             EPOCH,
+            "trin",
         ]);
         assert_eq!(bridge_config.node_count, 1);
         assert_eq!(
@@ -165,13 +208,14 @@ mod test {
         const EXECUTABLE_PATH: &str = "path/to/executable";
         const EPOCH_ACC_PATH: &str = "path/to/epoch/accumulator";
         let bridge_config = BridgeConfig::parse_from([
-            "test",
+            "bridge",
             "--node-count",
             node_count,
             "--executable-path",
             EXECUTABLE_PATH,
             "--epoch-accumulator-path",
             EPOCH_ACC_PATH,
+            "trin",
         ]);
         assert_eq!(bridge_config.node_count, 16);
         assert_eq!(
@@ -188,6 +232,21 @@ mod test {
         expected = "Invalid network arg. Expected either 'beacon', 'history' or 'state'"
     )]
     fn test_invalid_network_arg() {
-        BridgeConfig::try_parse_from(["test", "--network", "das"].iter()).unwrap();
+        BridgeConfig::try_parse_from(["bridge", "--network", "das", "trin"].iter()).unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "MissingSubcommand")]
+    fn test_config_requires_client_type_subcommand() {
+        BridgeConfig::try_parse_from([
+            "bridge",
+            "--node-count",
+            "1",
+            "--executable-path",
+            "path/to/executable",
+            "--epoch-accumulator-path",
+            "path/to/epoch/accumulator",
+        ])
+        .unwrap();
     }
 }

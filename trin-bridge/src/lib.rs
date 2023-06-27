@@ -2,6 +2,7 @@
 
 pub mod bridge;
 pub mod cli;
+pub mod client_handles;
 pub mod constants;
 pub mod full_header;
 pub mod pandaops;
