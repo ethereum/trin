@@ -23,7 +23,7 @@ pub struct KBucketsTable {
 #[serde(rename_all = "camelCase")]
 pub struct NodeInfo {
     pub enr: Enr,
-    pub node_id: NodeId,
+    pub node_id: String,
     pub ip: Option<String>,
 }
 
