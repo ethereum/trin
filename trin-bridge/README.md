@@ -3,5 +3,5 @@ Process to feed the portal network by gossiping data retrieved from a trusted pr
 
 ex.
 ```
-cargo run -p trin-bridge -- --node-count 1 --executable-path ./target/debug/trin --epoch-accumulator-path ./portal-accumulators
+cargo run -p trin-bridge -- --node-count 1 --executable-path ./target/debug/trin --epoch-accumulator-path ./portal-accumulators trin
 ```
