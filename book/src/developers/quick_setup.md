@@ -105,9 +105,9 @@ In a python shell:
 ```py
 >>> from web3 import Web3
 >>> w3 = Web3(Web3.IPCProvider("/tmp/trin-jsonrpc.ipc"))
->>> w3.clientVersion
+>>> w3.client_version
 'trin 0.0.1-alpha'
->>> w3.eth.blockNumber
+>>> w3.eth.block_number
 11870768
 ```
 
@@ -135,9 +135,9 @@ Then, in a python shell:
 ```py
 >>> from web3 import Web3
 >>> w3 = Web3(Web3.HTTPProvider("http://127.0.0.1:8545"))
->>> w3.clientVersion
+>>> w3.client_version
 'trin 0.0.1-alpha'
->>> w3.eth.blockNumber
+>>> w3.eth.block_number
 11870768
 ```
 
