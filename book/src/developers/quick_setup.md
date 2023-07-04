@@ -105,10 +105,8 @@ In a python shell:
 ```py
 >>> from web3 import Web3
 >>> w3 = Web3(Web3.IPCProvider("/tmp/trin-jsonrpc.ipc"))
->>> w3.clientVersion
+>>> w3.client_version
 'trin 0.0.1-alpha'
->>> w3.eth.blockNumber
-11870768
 ```
 
 To request a custom jsonrpc endpoint, provide the endpoint and array of params. eg:
@@ -135,10 +133,8 @@ Then, in a python shell:
 ```py
 >>> from web3 import Web3
 >>> w3 = Web3(Web3.HTTPProvider("http://127.0.0.1:8545"))
->>> w3.clientVersion
+>>> w3.client_version
 'trin 0.0.1-alpha'
->>> w3.eth.blockNumber
-11870768
 ```
 
 The client version responds immediately, from the trin client. The block number is retrieved more slowly, by proxying to Infura.
