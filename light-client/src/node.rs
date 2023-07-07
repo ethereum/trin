@@ -9,13 +9,13 @@ use eyre::{eyre, Result};
 use crate::config::client_config::Config;
 use crate::consensus::rpc::nimbus_rpc::NimbusRpc;
 use crate::consensus::types::{ExecutionPayload, Header};
-use crate::consensus::ConsensusClient;
+use crate::consensus::ConsensusLightClient;
 
 use crate::errors::{BlockNotFoundError, NodeError};
 use crate::types::BlockTag;
 
 pub struct Node {
-    pub consensus: ConsensusClient<NimbusRpc>,
+    pub consensus: ConsensusLightClient<NimbusRpc>,
     pub config: Arc<Config>,
     payloads: BTreeMap<u64, ExecutionPayload>,
     finalized_payloads: BTreeMap<u64, ExecutionPayload>,
@@ -27,7 +27,7 @@ impl Node {
         let consensus_rpc = &config.consensus_rpc;
         let checkpoint_hash = &config.checkpoint.as_ref().unwrap();
 
-        let consensus = ConsensusClient::new(consensus_rpc, checkpoint_hash, config.clone())
+        let consensus = ConsensusLightClient::new(consensus_rpc, checkpoint_hash, config.clone())
             .map_err(NodeError::ConsensusClientCreationError)?;
 
         let payloads = BTreeMap::new();

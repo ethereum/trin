@@ -3,9 +3,9 @@ use std::sync::Arc;
 use light_client::config::client_config::Config;
 use light_client::config::networks;
 use light_client::consensus::rpc::mock_rpc::MockRpc;
-use light_client::consensus::ConsensusClient;
+use light_client::consensus::ConsensusLightClient;
 
-async fn setup() -> ConsensusClient<MockRpc> {
+async fn setup() -> ConsensusLightClient<MockRpc> {
     let base_config = networks::goerli();
     let config = Config {
         consensus_rpc: String::new(),
@@ -18,7 +18,7 @@ async fn setup() -> ConsensusClient<MockRpc> {
     let checkpoint =
         hex::decode("1e591af1e90f2db918b2a132991c7c2ee9a4ab26da496bd6e71e4f0bd65ea870").unwrap();
 
-    ConsensusClient::new("testdata/", &checkpoint, Arc::new(config)).unwrap()
+    ConsensusLightClient::new("testdata/", &checkpoint, Arc::new(config)).unwrap()
 }
 
 #[tokio::test]
