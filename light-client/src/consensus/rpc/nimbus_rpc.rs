@@ -4,9 +4,8 @@ use eyre::Result;
 use std::cmp;
 
 use super::ConsensusRpc;
-// use crate::types::*;
 use crate::consensus::constants::MAX_REQUEST_LIGHT_CLIENT_UPDATES;
-use crate::consensus::types::{BeaconBlock, Bootstrap, FinalityUpdate, OptimisticUpdate, Update};
+use crate::consensus::types::{Bootstrap, FinalityUpdate, OptimisticUpdate, Update};
 use crate::errors::RpcError;
 
 #[derive(Debug)]
@@ -86,18 +85,6 @@ impl ConsensusRpc for NimbusRpc {
         Ok(res.data)
     }
 
-    async fn get_block(&self, slot: u64) -> Result<BeaconBlock> {
-        let req = format!("{}/eth/v2/beacon/blocks/{}", self.rpc, slot);
-        let res = reqwest::get(req)
-            .await
-            .map_err(|e| RpcError::new("blocks", e))?
-            .json::<BeaconBlockResponse>()
-            .await
-            .map_err(|e| RpcError::new("blocks", e))?;
-
-        Ok(res.data.message)
-    }
-
     async fn chain_id(&self) -> Result<u64> {
         let req = format!("{}/eth/v1/config/spec", self.rpc);
         let res = reqwest::get(req)
@@ -109,16 +96,6 @@ impl ConsensusRpc for NimbusRpc {
 
         Ok(res.data.chain_id)
     }
-}
-
-#[derive(serde::Deserialize, Debug)]
-struct BeaconBlockResponse {
-    data: BeaconBlockData,
-}
-
-#[derive(serde::Deserialize, Debug)]
-struct BeaconBlockData {
-    message: BeaconBlock,
 }
 
 type UpdateResponse = Vec<UpdateData>;

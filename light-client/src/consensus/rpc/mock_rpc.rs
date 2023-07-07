@@ -1,7 +1,7 @@
 use std::{fs::read_to_string, path::PathBuf};
 
 use super::ConsensusRpc;
-use crate::consensus::types::{BeaconBlock, Bootstrap, FinalityUpdate, OptimisticUpdate, Update};
+use crate::consensus::types::{Bootstrap, FinalityUpdate, OptimisticUpdate, Update};
 use async_trait::async_trait;
 use eyre::Result;
 
@@ -35,11 +35,6 @@ impl ConsensusRpc for MockRpc {
     async fn get_optimistic_update(&self) -> Result<OptimisticUpdate> {
         let optimistic = read_to_string(self.testdata.join("optimistic.json"))?;
         Ok(serde_json::from_str(&optimistic)?)
-    }
-
-    async fn get_block(&self, _slot: u64) -> Result<BeaconBlock> {
-        let block = read_to_string(self.testdata.join("blocks.json"))?;
-        Ok(serde_json::from_str(&block)?)
     }
 
     async fn chain_id(&self) -> Result<u64> {

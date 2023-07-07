@@ -4,7 +4,6 @@ use std::sync::Arc;
 use chrono::Duration;
 use eyre::eyre;
 use eyre::Result;
-use futures::future::join_all;
 use log::warn;
 use log::{debug, info};
 use milagro_bls::PublicKey;
@@ -69,73 +68,6 @@ impl<R: ConsensusRpc> ConsensusClient<R> {
         } else {
             Ok(())
         }
-    }
-
-    pub async fn get_execution_payload(&self, slot: &Option<u64>) -> Result<ExecutionPayload> {
-        let slot = slot.unwrap_or(self.store.optimistic_header.slot);
-        let mut block = self.rpc.get_block(slot).await?;
-        let block_hash = block.hash_tree_root()?;
-
-        let latest_slot = self.store.optimistic_header.slot;
-        let finalized_slot = self.store.finalized_header.slot;
-
-        let verified_block_hash = if slot == latest_slot {
-            self.store.optimistic_header.clone().hash_tree_root()?
-        } else if slot == finalized_slot {
-            self.store.finalized_header.clone().hash_tree_root()?
-        } else {
-            return Err(ConsensusError::PayloadNotFound(slot).into());
-        };
-
-        if verified_block_hash != block_hash {
-            Err(ConsensusError::InvalidHeaderHash(
-                block_hash.to_string(),
-                verified_block_hash.to_string(),
-            )
-            .into())
-        } else {
-            Ok(block.body.execution_payload().clone())
-        }
-    }
-
-    pub async fn get_payloads(
-        &self,
-        start_slot: u64,
-        end_slot: u64,
-    ) -> Result<Vec<ExecutionPayload>> {
-        let payloads_fut = (start_slot..end_slot)
-            .rev()
-            .map(|slot| self.rpc.get_block(slot));
-
-        let mut prev_parent_hash: Bytes32 = self
-            .rpc
-            .get_block(end_slot)
-            .await?
-            .body
-            .execution_payload()
-            .parent_hash()
-            .clone();
-
-        let mut payloads: Vec<ExecutionPayload> = Vec::new();
-        for result in join_all(payloads_fut).await {
-            if result.is_err() {
-                continue;
-            }
-            let payload = result.unwrap().body.execution_payload().clone();
-            if payload.block_hash() != &prev_parent_hash {
-                warn!(
-                    "error while backfilling blocks: {}",
-                    ConsensusError::InvalidHeaderHash(
-                        format!("{prev_parent_hash:02X?}"),
-                        format!("{:02X?}", payload.parent_hash()),
-                    )
-                );
-                break;
-            }
-            prev_parent_hash = payload.parent_hash().clone();
-            payloads.push(payload);
-        }
-        Ok(payloads)
     }
 
     pub fn get_header(&self) -> &Header {

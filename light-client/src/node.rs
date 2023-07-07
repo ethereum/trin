@@ -19,7 +19,6 @@ pub struct Node {
     pub config: Arc<Config>,
     payloads: BTreeMap<u64, ExecutionPayload>,
     finalized_payloads: BTreeMap<u64, ExecutionPayload>,
-    current_slot: Option<u64>,
     pub history_size: usize,
 }
 
@@ -39,7 +38,6 @@ impl Node {
             config,
             payloads,
             finalized_payloads,
-            current_slot: None,
             history_size: 64,
         })
     }
@@ -53,17 +51,14 @@ impl Node {
         self.consensus
             .sync()
             .await
-            .map_err(NodeError::ConsensusSyncError)?;
-
-        self.update_payloads().await
+            .map_err(NodeError::ConsensusSyncError)
     }
 
     pub async fn advance(&mut self) -> Result<(), NodeError> {
         self.consensus
             .advance()
             .await
-            .map_err(NodeError::ConsensusAdvanceError)?;
-        self.update_payloads().await
+            .map_err(NodeError::ConsensusAdvanceError)
     }
 
     pub fn duration_until_next_update(&self) -> Duration {
@@ -71,55 +66,6 @@ impl Node {
             .duration_until_next_update()
             .to_std()
             .unwrap()
-    }
-
-    async fn update_payloads(&mut self) -> Result<(), NodeError> {
-        let latest_header = self.consensus.get_header();
-        let latest_payload = self
-            .consensus
-            .get_execution_payload(&Some(latest_header.slot))
-            .await
-            .map_err(NodeError::ConsensusPayloadError)?;
-
-        let finalized_header = self.consensus.get_finalized_header();
-        let finalized_payload = self
-            .consensus
-            .get_execution_payload(&Some(finalized_header.slot))
-            .await
-            .map_err(NodeError::ConsensusPayloadError)?;
-
-        self.payloads
-            .insert(*latest_payload.block_number(), latest_payload);
-        self.payloads
-            .insert(*finalized_payload.block_number(), finalized_payload.clone());
-        self.finalized_payloads
-            .insert(*finalized_payload.block_number(), finalized_payload);
-
-        let start_slot = self
-            .current_slot
-            .unwrap_or(latest_header.slot - self.history_size as u64);
-        let backfill_payloads = self
-            .consensus
-            .get_payloads(start_slot, latest_header.slot)
-            .await
-            .map_err(NodeError::ConsensusPayloadError)?;
-        for payload in backfill_payloads {
-            self.payloads.insert(*payload.block_number(), payload);
-        }
-
-        self.current_slot = Some(latest_header.slot);
-
-        while self.payloads.len() > self.history_size {
-            self.payloads.pop_first();
-        }
-
-        // only save one finalized block per epoch
-        // finality updates only occur on epoch boundaries
-        while self.finalized_payloads.len() > usize::max(self.history_size / 32, 1) {
-            self.finalized_payloads.pop_first();
-        }
-
-        Ok(())
     }
 
     pub fn get_block_transaction_count_by_hash(&self, hash: &Vec<u8>) -> Result<u64> {
