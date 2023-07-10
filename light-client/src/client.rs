@@ -4,7 +4,7 @@ use ethers::prelude::{Address, U256};
 use ethers::types::SyncingStatus;
 use eyre::{eyre, Result};
 
-use crate::consensus::{types::Header, ConsensusClient};
+use crate::consensus::{types::Header, ConsensusLightClient};
 use crate::types::BlockTag;
 use log::{error, info, warn};
 use tokio::sync::RwLock;
@@ -286,8 +286,11 @@ impl<DB: Database> Client<DB> {
             // Try to sync again with the new checkpoint by reconstructing the consensus client
             // We fail fast here since the node is unrecoverable at this point
             let config = self.node.read().await.config.clone();
-            let consensus =
-                ConsensusClient::new(&config.consensus_rpc, checkpoint.as_bytes(), config.clone())?;
+            let consensus = ConsensusLightClient::new(
+                &config.consensus_rpc,
+                checkpoint.as_bytes(),
+                config.clone(),
+            )?;
             self.node.write().await.consensus = consensus;
             self.node.write().await.sync().await?;
 
@@ -327,8 +330,11 @@ impl<DB: Database> Client<DB> {
         // Try to sync again with the new checkpoint by reconstructing the consensus client
         // We fail fast here since the node is unrecoverable at this point
         let config = self.node.read().await.config.clone();
-        let consensus =
-            ConsensusClient::new(&config.consensus_rpc, checkpoint.as_bytes(), config.clone())?;
+        let consensus = ConsensusLightClient::new(
+            &config.consensus_rpc,
+            checkpoint.as_bytes(),
+            config.clone(),
+        )?;
         self.node.write().await.consensus = consensus;
         self.node.write().await.sync().await?;
         Ok(())
