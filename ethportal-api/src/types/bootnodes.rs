@@ -30,22 +30,22 @@ lazy_static! {
         // Fluffy bootstrap nodes
         Bootnode{
             enr:
-        Enr::from_str("enr:-IS4QGeIshGTdA7EpUV9SYYKUWxzMg1mihWOEg-_Kf1lndQRTYY5jXRIiZnL8XJ-wnwuUXnZvwLjhbaXfOAhf_qNkUUBgmlkgnY0gmlwhEFsKgOJc2VjcDI1NmsxoQPlKmIWSMXPn_FgUiVnopQ_Y0T64f7zKIAu26T8BhVPdIN1ZHCCI40").expect("Parsing static bootnode enr to work"),
+        Enr::from_str("enr:-IS4QGUtAA29qeT3cWVr8lmJfySmkceR2wp6oFQtvO_uMe7KWaK_qd1UQvd93MJKXhMnubSsTQPJ6KkbIu0ywjvNdNEBgmlkgnY0gmlwhMIhKO6Jc2VjcDI1NmsxoQJ508pIqRqsjsvmUQfYGvaUFTxfsELPso_62FKDqlxI24N1ZHCCI40").expect("Parsing static bootnode enr to work"),
             alias: "fluffy-1".to_string()
         },
         Bootnode{
             enr:
-        Enr::from_str("enr:-IS4QBDo5n39042MrxWU8tOmGgleD2tc42ODP-EMoUEdFBXxchTyNRVjlcxfajOwnUmi9Ro-BS5_Z5JwpWW58kUarLwBgmlkgnY0gmlwhEFsKgOJc2VjcDI1NmsxoQLj_0Y6aW4yEhZolYwQRW6Tya10jVB_UB1vplJzC4o0hYN1ZHCCI44").expect("Parsing static bootnode enr to work"),
+        Enr::from_str("enr:-IS4QNaaoQuHGReAMJKoDd6DbQKMbQ4Mked3Gi3GRatwgRVVPXynPlO_-gJKRF_ZSuJr3wyHfwMHyJDbd6q1xZQVZ2kBgmlkgnY0gmlwhMIhKO6Jc2VjcDI1NmsxoQM2kBHT5s_Uh4gsNiOclQDvLK4kPpoQucge3mtbuLuUGYN1ZHCCI44").expect("Parsing static bootnode enr to work"),
             alias: "fluffy-2".to_string()
         },
         Bootnode{
             enr:
-        Enr::from_str("enr:-IS4QFzPZ7Cc7BGYSQBlWdkPyep8XASIVlviHbi-ZzcCdvkcE382unsRq8Tb_dYQFNZFWLqhJsJljdgJ7WtWP830Gq0BgmlkgnY0gmlwhEFsKq6Jc2VjcDI1NmsxoQPjz2Y1Hsa0edvzvn6-OADS3re-FOkSiJSmBB7DVrsAXIN1ZHCCI40").expect("Parsing static bootnode enr to work"),
+        Enr::from_str("enr:-IS4QBdIjs6S1ZkvlahSkuYNq5QW3DbD-UDcrm1l81f2PPjnNjb_NDa4B5x4olHCXtx0d2ZeZBHQyoHyNnuVZ-P1GVkBgmlkgnY0gmlwhMIhKO-Jc2VjcDI1NmsxoQOO3gFuaCAyQKscaiNLC9HfLbVzFdIerESFlOGcEuKWH4N1ZHCCI40").expect("Parsing static bootnode enr to work"),
             alias: "fluffy-3".to_string()
         },
         Bootnode{
             enr:
-        Enr::from_str("enr:-IS4QHA1PJCdmESyKkQsBmMUhSkRDgwKjwTtPZYMcbMiqCb8I1Xt-Xyh9Nj0yWeIN4S3sOpP9nxI6qCCR1Nf4LjY0IABgmlkgnY0gmlwhEFsKq6Jc2VjcDI1NmsxoQLMWRNAgXVdGc0Ij9RZCPsIyrrL67eYfE9PPwqwRvmZooN1ZHCCI44").expect("Parsing static bootnode enr to work"),
+        Enr::from_str("enr:-IS4QM731tV0CvQXLTDcZNvgFyhhpAjYDKU5XLbM7sZ1WEzIRq4zsakgrv3KO3qyOYZ8jFBK-VzENF8o-vnykuQ99iABgmlkgnY0gmlwhMIhKO-Jc2VjcDI1NmsxoQMTq6Cdx3HmL3Q9sitavcPHPbYKyEibKPKvyVyOlNF8J4N1ZHCCI44").expect("Parsing static bootnode enr to work"),
             alias: "fluffy-4".to_string()
         },
 
