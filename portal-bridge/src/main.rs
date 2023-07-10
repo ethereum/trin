@@ -1,9 +1,9 @@
 use clap::Parser;
 use ethportal_api::jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
+use portal_bridge::bridge::Bridge;
+use portal_bridge::cli::BridgeConfig;
+use portal_bridge::utils::generate_spaced_private_keys;
 use tokio::time::{sleep, Duration};
-use trin_bridge::bridge::Bridge;
-use trin_bridge::cli::BridgeConfig;
-use trin_bridge::utils::generate_spaced_private_keys;
 use trin_utils::log::init_tracing_logger;
 use trin_validation::accumulator::MasterAccumulator;
 use trin_validation::oracle::HeaderOracle;

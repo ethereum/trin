@@ -2333,6 +2333,7 @@ dependencies = [
  "httpmock",
  "hyper",
  "jsonrpsee 0.16.2",
+ "portal-bridge",
  "rand 0.8.5",
  "reth-ipc",
  "rocksdb",
@@ -2344,7 +2345,6 @@ dependencies = [
  "tracing-subscriber",
  "tree_hash",
  "trin",
- "trin-bridge",
  "trin-history",
  "trin-state",
  "trin-utils",
@@ -4809,6 +4809,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "portal-bridge"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "clap 4.2.4",
+ "discv5",
+ "env_logger 0.9.3",
+ "eth2_ssz",
+ "eth2_ssz_derive",
+ "eth2_ssz_types",
+ "ethereum-types 0.12.1",
+ "ethportal-api",
+ "futures 0.3.28",
+ "jsonrpsee 0.16.2",
+ "lazy_static",
+ "portalnet",
+ "rstest 0.11.0",
+ "serde",
+ "serde_json",
+ "surf",
+ "test-log",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "trin-utils",
+ "trin-validation",
+ "url",
+]
+
+[[package]]
 name = "portalnet"
 version = "0.1.0"
 dependencies = [
@@ -7165,37 +7196,6 @@ dependencies = [
  "trin-utils",
  "trin-validation",
  "utp-rs",
-]
-
-[[package]]
-name = "trin-bridge"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "clap 4.2.4",
- "discv5",
- "env_logger 0.9.3",
- "eth2_ssz",
- "eth2_ssz_derive",
- "eth2_ssz_types",
- "ethereum-types 0.12.1",
- "ethportal-api",
- "futures 0.3.28",
- "jsonrpsee 0.16.2",
- "lazy_static",
- "portalnet",
- "rstest 0.11.0",
- "serde",
- "serde_json",
- "surf",
- "test-log",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "trin-utils",
- "trin-validation",
- "url",
 ]
 
 [[package]]

@@ -22,7 +22,7 @@ COPY ./light-client ./light-client
 COPY ./rpc ./rpc
 COPY ./src ./src 
 COPY ./trin-beacon ./trin-beacon
-COPY ./trin-bridge ./trin-bridge
+COPY ./portal-bridge ./portal-bridge
 COPY ./trin-history ./trin-history
 COPY ./trin-state ./trin-state 
 COPY ./trin-utils ./trin-utils 

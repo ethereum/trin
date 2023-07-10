@@ -1,8 +1,8 @@
 [package]
-name = "trin-bridge"
+name = "portal-bridge"
 version = "0.1.0"
 edition = "2021"
-repository = "https://github.com/ethereum/trin/tree/main/trin-bridge"
+repository = "https://github.com/ethereum/trin/tree/main/portal-bridge"
 license = "GPL-3.0"
 readme = "README.md"
 keywords = ["ethereum", "portal-network"]

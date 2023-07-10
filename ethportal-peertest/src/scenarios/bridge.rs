@@ -4,10 +4,10 @@ use crate::Peertest;
 use ethportal_api::jsonrpsee::http_client::HttpClient;
 use ethportal_api::types::content_value::PossibleHistoryContentValue;
 use ethportal_api::{HistoryContentKey, HistoryContentValue};
+use portal_bridge::bridge::Bridge;
+use portal_bridge::mode::BridgeMode;
 use serde_json::json;
 use tokio::time::{sleep, Duration};
-use trin_bridge::bridge::Bridge;
-use trin_bridge::mode::BridgeMode;
 use trin_validation::accumulator::MasterAccumulator;
 use trin_validation::oracle::HeaderOracle;
 
