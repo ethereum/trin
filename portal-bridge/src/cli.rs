@@ -11,7 +11,7 @@ use url::Url;
 // - reliably calculate spaced private keys in a reasonable time
 // - for values b/w 16 - 256, calculated spaced private keys are
 //   less and less evenly spread
-// - running more than 16 trin nodes simultaneously is not thoroughly tested
+// - running more than 16 nodes simultaneously is not thoroughly tested
 pub const MAX_NODE_COUNT: u8 = 16;
 const DEFAULT_SUBNETWORK: &str = "history";
 
@@ -20,7 +20,7 @@ const DEFAULT_SUBNETWORK: &str = "history";
 pub struct BridgeConfig {
     #[arg(
         long,
-        help = "number of trin nodes to launch - must be between 1 and 16",
+        help = "number of nodes to launch - must be between 1 and 16",
         default_value = "1",
         value_parser = check_node_count
     )]

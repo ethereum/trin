@@ -19,7 +19,7 @@ COPY ./portalnet ./portalnet
 COPY ./light-client ./light-client
 COPY ./src ./src 
 COPY ./trin-beacon ./trin-beacon
-COPY ./trin-bridge ./trin-bridge
+COPY ./portal-bridge ./portal-bridge
 COPY ./trin-history ./trin-history
 COPY ./trin-state ./trin-state 
 COPY ./trin-utils ./trin-utils
@@ -31,14 +31,14 @@ COPY ./portal-accumulators ./portal-accumulators
 COPY ./rpc ./rpc
 
 # build for release
-RUN cargo build -p trin -p trin-bridge --release
+RUN cargo build -p trin -p portal-bridge --release
 
 # final base
 FROM ubuntu:22.04
 
 # copy build artifacts from build stage
 COPY --from=builder /trin/target/release/trin /usr/bin/
-COPY --from=builder /trin/target/release/trin-bridge /usr/bin/
+COPY --from=builder /trin/target/release/portal-bridge /usr/bin/
 COPY --from=builder /trin/target/release/purge_db /usr/bin/
 # These steps copy over the epoch accumulators repo for the bridge to use
 # This data is too large to be kept inside trin-source code
@@ -51,4 +51,4 @@ RUN apt-get update && apt-get install libcurl4 -y
 
 ENV RUST_LOG=debug
 
-ENTRYPOINT ["/usr/bin/trin-bridge"]
+ENTRYPOINT ["/usr/bin/portal-bridge"]

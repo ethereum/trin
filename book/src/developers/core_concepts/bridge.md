@@ -16,5 +16,4 @@ sequenceDiagram
     Execution-->>Bridge: block
     Bridge-->>Portal: block
 ```
-Currently the bridge functionality exists as a separate python application
-with plans to implement in Trin.
+Currently the bridge functionality exists as a separate executable under `portal-bridge`.

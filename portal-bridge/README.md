@@ -1,13 +1,13 @@
-# Trin-Bridge
-Process to feed the portal network by gossiping data retrieved from a trusted provider. Currently, this is only compatible with `Trin`, but it is intended to be client-agnostic, at some point.
+# Portal-Bridge
+Process to feed the portal network by gossiping data retrieved from a trusted provider. Currently, this is only compatible with `Trin` & `Fluffy` clients.
 
 ex.
 ```
-cargo run -p trin-bridge -- --node-count 1 --executable-path ./target/debug/trin --epoch-accumulator-path ./portal-accumulators trin
+cargo run -p portal-bridge -- --node-count 1 --executable-path ./target/debug/trin --epoch-accumulator-path ./portal-accumulators trin
 ```
 
 ## Must specify a client
-To run Trin-Bridge, you must specify what kind of client exists at the provided executable path.
+To run Portal-Bridge, you must specify what kind of client exists at the provided executable path.
 Current options include `"trin"` / `"fluffy"`.
 
 ### Bridge modes

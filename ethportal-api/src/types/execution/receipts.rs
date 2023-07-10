@@ -68,7 +68,7 @@ impl ssz::Decode for Receipts {
 }
 
 // Deserialize is currently only implemented for BATCHED responses from an execution client
-// Used inside trin-bridge
+// Used inside portal-bridge
 impl<'de> Deserialize<'de> for Receipts {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
