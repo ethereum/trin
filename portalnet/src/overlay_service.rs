@@ -35,6 +35,7 @@ use utp_rs::{conn::ConnectionConfig, socket::UtpSocket};
 
 use crate::{
     discovery::Discovery,
+    events::OverlayEvent,
     find::{
         iterators::{
             findcontent::{FindContentQuery, FindContentQueryResponse, FindContentQueryResult},
@@ -119,6 +120,8 @@ pub enum OverlayCommand<TContentKey> {
         /// A callback channel to transmit the result of the query.
         callback: oneshot::Sender<Vec<Enr>>,
     },
+    /// Sets up an event stream where the overlay server will return various events.
+    RequestEventStream(oneshot::Sender<mpsc::Receiver<OverlayEvent>>),
 }
 
 /// An overlay request error.
@@ -305,6 +308,8 @@ pub struct OverlayService<TContentKey, TMetric, TValidator, TStore> {
     metrics: Arc<OverlayMetrics>,
     /// Validator for overlay network content.
     validator: Arc<TValidator>,
+    /// A channel that the overlay service emits events on.
+    event_stream: Option<mpsc::Sender<OverlayEvent>>,
 }
 
 impl<
@@ -377,6 +382,7 @@ where
                 phantom_metric: PhantomData,
                 metrics,
                 validator,
+                event_stream: None,
             };
 
             info!(protocol = %overlay_protocol, "Starting overlay service");
@@ -485,6 +491,15 @@ where
                                     node.id = %hex_encode_compact(target),
                                     "FindNode query initialized"
                                 );
+                            }
+                        }
+                        OverlayCommand::RequestEventStream(callback) => {
+                            // the channel size needs to be large to handle many events
+                            let channel_size = 100;
+                            let (event_stream, event_stream_recv) = mpsc::channel(channel_size);
+                            self.event_stream = Some(event_stream);
+                            if callback.send(event_stream_recv).is_err() {
+                                error!("Failed to return the event stream channel");
                             }
                         }
                     }
@@ -2331,6 +2346,17 @@ where
 
         None
     }
+
+    /// Send `OverlayEvent` to the event stream.
+    #[allow(dead_code)] // TODO: remove when used
+    fn send_event(&mut self, event: OverlayEvent) {
+        if let Some(stream) = self.event_stream.as_mut() {
+            if let Err(mpsc::error::TrySendError::Closed(_)) = stream.try_send(event) {
+                // If the stream has been dropped prevent future attempts to send events
+                self.event_stream = None;
+            }
+        }
+    }
 }
 
 // Propagate gossip in a way that can be used across threads, without &self
@@ -2571,6 +2597,7 @@ mod tests {
             phantom_metric: PhantomData,
             metrics,
             validator,
+            event_stream: None,
         }
     }
 
@@ -3711,5 +3738,18 @@ mod tests {
     ) {
         let gossip_recipients = select_gossip_recipients(all_nodes);
         assert_eq!(gossip_recipients.len(), expected_size);
+    }
+
+    #[tokio::test]
+    async fn test_event_stream() {
+        // Get overlay service event stream
+        let mut service = task::spawn(build_service());
+        let (sender, mut receiver) = mpsc::channel(1);
+        service.event_stream = Some(sender);
+        // Emit LightClientUpdate event
+        service.send_event(OverlayEvent::LightClientOptimisticUpdate);
+        // Check that the event is received
+        let event = receiver.recv().await.unwrap();
+        assert_eq!(event, OverlayEvent::LightClientOptimisticUpdate);
     }
 }

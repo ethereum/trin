@@ -103,3 +103,10 @@ impl PortalnetEvents {
         }
     }
 }
+
+/// Events that can be produced by the `OverlayProtocol` event stream.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OverlayEvent {
+    LightClientOptimisticUpdate,
+    LightClientFinalityUpdate,
+}

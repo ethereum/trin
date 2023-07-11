@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use discv5::{
     enr::NodeId,
     kbucket::{
@@ -9,6 +10,7 @@ use discv5::{
 use futures::channel::oneshot;
 use parking_lot::RwLock;
 use ssz::Encode;
+use std::future::Future;
 use std::{
     collections::{BTreeMap, HashSet},
     fmt::{Debug, Display},
@@ -16,6 +18,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
+use tokio::sync::mpsc;
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::{debug, error, info, warn};
 use utp_rs::socket::UtpSocket;
@@ -44,6 +47,7 @@ use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::OverlayContentKey;
 use trin_validation::validator::Validator;
 
+use crate::events::OverlayEvent;
 use ethportal_api::types::query_trace::QueryTrace;
 
 /// Configuration parameters for the overlay network.
@@ -97,7 +101,7 @@ pub struct OverlayProtocol<TContentKey, TMetric, TValidator, TStore> {
     /// The subnetwork protocol of the overlay.
     protocol: ProtocolId,
     /// A sender to send commands to the OverlayService.
-    command_tx: UnboundedSender<OverlayCommand<TContentKey>>,
+    pub command_tx: UnboundedSender<OverlayCommand<TContentKey>>,
     /// uTP socket.
     utp_socket: Arc<UtpSocket<UtpEnr>>,
     /// Declare the allowed content key types for a given overlay network.
@@ -701,6 +705,26 @@ where
 
     pub fn get_utp_summary(&self) -> String {
         self.metrics.get_utp_summary()
+    }
+
+    /// Creates an event stream channel which can be polled to receive overlay events.
+    pub fn event_stream(
+        &self,
+    ) -> impl Future<Output = anyhow::Result<mpsc::Receiver<OverlayEvent>>> + 'static {
+        let channel = self.command_tx.clone();
+
+        async move {
+            let (callback_send, callback_recv) = oneshot::channel();
+
+            let command = OverlayCommand::RequestEventStream(callback_send);
+            channel
+                .send(command)
+                .map_err(|_| anyhow!("The Overlay Service channel has been closed early."))?;
+
+            callback_recv
+                .await
+                .map_err(|_| anyhow!("The Overlay Service channel has been closed early."))
+        }
     }
 }
 

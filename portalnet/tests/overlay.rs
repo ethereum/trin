@@ -237,3 +237,15 @@ async fn overlay() {
         }
     }
 }
+
+#[tokio::test]
+async fn overlay_event_stream() {
+    let portal_config = PortalnetConfig {
+        no_stun: true,
+        ..Default::default()
+    };
+    let discovery = Arc::new(Discovery::new(portal_config).unwrap());
+    let overlay = init_overlay(discovery, ProtocolId::Beacon).await;
+
+    overlay.event_stream().await.unwrap();
+}
