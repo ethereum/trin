@@ -14,7 +14,7 @@ pub async fn test_recursive_find_nodes_self(peertest: &Peertest) {
     let result = peertest
         .bootnode
         .ipc_client
-        .recursive_find_nodes(target_node_id)
+        .recursive_find_nodes(target_node_id.into())
         .await
         .unwrap();
     assert_eq!(result, vec![target_enr]);
@@ -27,7 +27,7 @@ pub async fn test_recursive_find_nodes_peer(peertest: &Peertest) {
     let result = peertest
         .bootnode
         .ipc_client
-        .recursive_find_nodes(target_node_id)
+        .recursive_find_nodes(target_node_id.into())
         .await
         .unwrap();
     assert_eq!(result, vec![target_enr]);
@@ -43,7 +43,7 @@ pub async fn test_recursive_find_nodes_random(peertest: &Peertest) {
     let result = peertest
         .bootnode
         .ipc_client
-        .recursive_find_nodes(target_node_id)
+        .recursive_find_nodes(target_node_id.into())
         .await
         .unwrap();
     assert_eq!(result.len(), 3);

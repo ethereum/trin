@@ -1,11 +1,11 @@
 use crate::jsonrpsee::core::{async_trait, RpcResult};
 use anyhow::anyhow;
-use discv5::enr::NodeId;
 use ethportal_api::types::constants::CONTENT_ABSENT;
 use ethportal_api::types::content_value::PossibleHistoryContentValue;
 use ethportal_api::types::enr::Enr;
 use ethportal_api::types::jsonrpc::endpoints::HistoryEndpoint;
 use ethportal_api::types::jsonrpc::request::HistoryJsonRpcRequest;
+use ethportal_api::types::node_id::NodeId;
 use ethportal_api::types::portal::{
     AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
     TraceContentInfo,
@@ -69,7 +69,7 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
 
     /// Fetch the latest ENR associated with the given node ID.
     async fn get_enr(&self, node_id: NodeId) -> RpcResult<Enr> {
-        let endpoint = HistoryEndpoint::GetEnr(node_id);
+        let endpoint = HistoryEndpoint::GetEnr(node_id.into());
         let result = self.proxy_query_to_history_subnet(endpoint).await?;
         let result: Enr = from_value(result)?;
         Ok(result)
@@ -77,7 +77,7 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
 
     /// Delete Node ID from the overlay routing table.
     async fn delete_enr(&self, node_id: NodeId) -> RpcResult<bool> {
-        let endpoint = HistoryEndpoint::DeleteEnr(node_id);
+        let endpoint = HistoryEndpoint::DeleteEnr(node_id.into());
         let result = self.proxy_query_to_history_subnet(endpoint).await?;
         let result: bool = from_value(result)?;
         Ok(result)
@@ -85,7 +85,7 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
 
     /// Fetch the ENR representation associated with the given Node ID.
     async fn lookup_enr(&self, node_id: NodeId) -> RpcResult<Enr> {
-        let endpoint = HistoryEndpoint::LookupEnr(node_id);
+        let endpoint = HistoryEndpoint::LookupEnr(node_id.into());
         let result = self.proxy_query_to_history_subnet(endpoint).await?;
         let result: Enr = from_value(result)?;
         Ok(result)
@@ -110,7 +110,7 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
 
     /// Lookup a target node within in the network
     async fn recursive_find_nodes(&self, node_id: NodeId) -> RpcResult<Vec<Enr>> {
-        let endpoint = HistoryEndpoint::RecursiveFindNodes(node_id);
+        let endpoint = HistoryEndpoint::RecursiveFindNodes(node_id.into());
         let result = self.proxy_query_to_history_subnet(endpoint).await?;
         let result: Vec<Enr> = from_value(result)?;
         Ok(result)

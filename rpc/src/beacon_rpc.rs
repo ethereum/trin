@@ -1,11 +1,11 @@
 use crate::jsonrpsee::core::{async_trait, RpcResult};
 use anyhow::anyhow;
-use discv5::enr::NodeId;
 use ethportal_api::types::constants::CONTENT_ABSENT;
 use ethportal_api::types::content_value::PossibleBeaconContentValue;
 use ethportal_api::types::enr::Enr;
 use ethportal_api::types::jsonrpc::endpoints::BeaconEndpoint;
 use ethportal_api::types::jsonrpc::request::BeaconJsonRpcRequest;
+use ethportal_api::types::node_id::NodeId;
 use ethportal_api::types::portal::{
     AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
     TraceContentInfo,
@@ -70,7 +70,7 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
 
     /// Fetch the latest ENR associated with the given node ID.
     async fn get_enr(&self, node_id: NodeId) -> RpcResult<Enr> {
-        let endpoint = BeaconEndpoint::GetEnr(node_id);
+        let endpoint = BeaconEndpoint::GetEnr(node_id.into());
         let result = self.proxy_query_to_beacon_subnet(endpoint).await?;
         let result: Enr = from_value(result)?;
         Ok(result)
@@ -78,7 +78,7 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
 
     /// Delete Node ID from the overlay routing table.
     async fn delete_enr(&self, node_id: NodeId) -> RpcResult<bool> {
-        let endpoint = BeaconEndpoint::DeleteEnr(node_id);
+        let endpoint = BeaconEndpoint::DeleteEnr(node_id.into());
         let result = self.proxy_query_to_beacon_subnet(endpoint).await?;
         let result: bool = from_value(result)?;
         Ok(result)
@@ -86,7 +86,7 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
 
     /// Fetch the ENR representation associated with the given Node ID.
     async fn lookup_enr(&self, node_id: NodeId) -> RpcResult<Enr> {
-        let endpoint = BeaconEndpoint::LookupEnr(node_id);
+        let endpoint = BeaconEndpoint::LookupEnr(node_id.into());
         let result = self.proxy_query_to_beacon_subnet(endpoint).await?;
         let result: Enr = from_value(result)?;
         Ok(result)
@@ -111,7 +111,7 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
 
     /// Lookup a target node within in the network
     async fn recursive_find_nodes(&self, node_id: NodeId) -> RpcResult<Vec<Enr>> {
-        let endpoint = BeaconEndpoint::RecursiveFindNodes(node_id);
+        let endpoint = BeaconEndpoint::RecursiveFindNodes(node_id.into());
         let result = self.proxy_query_to_beacon_subnet(endpoint).await?;
         let result: Vec<Enr> = from_value(result)?;
         Ok(result)

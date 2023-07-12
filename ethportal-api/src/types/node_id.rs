@@ -45,3 +45,9 @@ impl From<EnrNodeId> for NodeId {
         NodeId(value.raw())
     }
 }
+
+impl From<NodeId> for EnrNodeId {
+    fn from(val: NodeId) -> Self {
+        EnrNodeId::new(&val.0)
+    }
+}
