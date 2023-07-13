@@ -33,6 +33,7 @@ use tokio::{
 use tracing::{debug, error, info, trace, warn};
 use utp_rs::{conn::ConnectionConfig, socket::UtpSocket};
 
+use crate::events::EventEnvelope;
 use crate::{
     discovery::Discovery,
     events::OverlayEvent,
@@ -121,7 +122,7 @@ pub enum OverlayCommand<TContentKey> {
         callback: oneshot::Sender<Vec<Enr>>,
     },
     /// Sets up an event stream where the overlay server will return various events.
-    RequestEventStream(oneshot::Sender<mpsc::Receiver<OverlayEvent>>),
+    RequestEventStream(oneshot::Sender<mpsc::Receiver<EventEnvelope>>),
 }
 
 /// An overlay request error.
@@ -309,7 +310,7 @@ pub struct OverlayService<TContentKey, TMetric, TValidator, TStore> {
     /// Validator for overlay network content.
     validator: Arc<TValidator>,
     /// A channel that the overlay service emits events on.
-    event_stream: Option<mpsc::Sender<OverlayEvent>>,
+    event_stream: Option<mpsc::Sender<EventEnvelope>>,
 }
 
 impl<
@@ -2351,6 +2352,7 @@ where
     #[allow(dead_code)] // TODO: remove when used
     fn send_event(&mut self, event: OverlayEvent) {
         if let Some(stream) = self.event_stream.as_mut() {
+            let event = EventEnvelope::new(event);
             if let Err(mpsc::error::TrySendError::Closed(_)) = stream.try_send(event) {
                 // If the stream has been dropped prevent future attempts to send events
                 self.event_stream = None;
@@ -3750,6 +3752,6 @@ mod tests {
         service.send_event(OverlayEvent::LightClientOptimisticUpdate);
         // Check that the event is received
         let event = receiver.recv().await.unwrap();
-        assert_eq!(event, OverlayEvent::LightClientOptimisticUpdate);
+        assert_eq!(event.payload, OverlayEvent::LightClientOptimisticUpdate);
     }
 }

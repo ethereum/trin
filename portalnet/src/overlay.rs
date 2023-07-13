@@ -47,7 +47,7 @@ use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::OverlayContentKey;
 use trin_validation::validator::Validator;
 
-use crate::events::OverlayEvent;
+use crate::events::EventEnvelope;
 use ethportal_api::types::query_trace::QueryTrace;
 
 /// Configuration parameters for the overlay network.
@@ -710,7 +710,7 @@ where
     /// Creates an event stream channel which can be polled to receive overlay events.
     pub fn event_stream(
         &self,
-    ) -> impl Future<Output = anyhow::Result<mpsc::Receiver<OverlayEvent>>> + 'static {
+    ) -> impl Future<Output = anyhow::Result<mpsc::Receiver<EventEnvelope>>> + 'static {
         let channel = self.command_tx.clone();
 
         async move {
@@ -723,7 +723,7 @@ where
 
             callback_recv
                 .await
-                .map_err(|_| anyhow!("The Overlay Service channel has been closed early."))
+                .map_err(|_| anyhow!("The Overlay Service callback channel has been closed early."))
         }
     }
 }
