@@ -344,11 +344,12 @@ where
 
         // try to find more up to date enr
         if let Ok(enr) = enr.clone() {
-            let nodes = self.send_find_nodes(enr, vec![0]).await?;
-            let enr_highest_seq = nodes.enrs.into_iter().max_by(|a, b| a.seq().cmp(&b.seq()));
+            if let Ok(nodes) = self.send_find_nodes(enr, vec![0]).await {
+                let enr_highest_seq = nodes.enrs.into_iter().max_by(|a, b| a.seq().cmp(&b.seq()));
 
-            if let Some(enr_highest_seq) = enr_highest_seq {
-                return Ok(enr_highest_seq.into());
+                if let Some(enr_highest_seq) = enr_highest_seq {
+                    return Ok(enr_highest_seq.into());
+                }
             }
         }
 
