@@ -50,6 +50,8 @@ impl BeaconNetwork {
         )
         .await;
 
+        let _ = overlay.event_stream().await?;
+
         Ok(Self {
             overlay: Arc::new(overlay),
         })
