@@ -1,4 +1,5 @@
 pub mod body;
+pub mod execution_payload;
 pub mod header;
 pub mod header_proof;
 pub mod proof;

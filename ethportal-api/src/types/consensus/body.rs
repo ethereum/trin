@@ -1,16 +1,10 @@
-use ethereum_types::{H256, U256};
+use crate::types::consensus::execution_payload::ExecutionPayload;
+use ethereum_types::H256;
 use serde::{Deserialize, Serialize};
 use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, BitList, BitVector, VariableList};
 
-use super::{
-    header::BeaconBlockHeader,
-    proof::Proof,
-    pubkey::PubKey,
-    serde::{de_hex_to_txs, de_number_to_u256, se_hex_to_number, se_txs_to_hex},
-    signature::BlsSignature,
-};
-use crate::types::wrapped::{bloom::Bloom, bytes::Bytes, h160::H160};
+use super::{header::BeaconBlockHeader, proof::Proof, pubkey::PubKey, signature::BlsSignature};
 
 /// Types based off specs @
 /// https://github.com/ethereum/consensus-specs/blob/5970ae56a1cd50ea06049d8aad6bed74093d49d3/specs/bellatrix/beacon-chain.md
@@ -32,29 +26,6 @@ pub struct BeaconBlockBody {
 pub struct SyncAggregate {
     pub sync_committee_bits: BitVector<typenum::U512>,
     pub sync_committee_signature: BlsSignature,
-}
-
-#[derive(Debug, PartialEq, Clone, Deserialize, Serialize, Decode, Encode)]
-pub struct ExecutionPayload {
-    pub parent_hash: H256,
-    pub fee_recipient: H160,
-    pub state_root: H256,
-    pub receipts_root: H256,
-    pub logs_bloom: Bloom,
-    pub prev_randao: H256, // 'difficulty' in the yellow paper
-    pub block_number: u64, // 'number' in the yellow paper
-    pub gas_limit: u64,
-    pub gas_used: u64,
-    pub timestamp: u64,
-    pub extra_data: Bytes,
-    #[serde(deserialize_with = "de_number_to_u256")]
-    #[serde(serialize_with = "se_hex_to_number")]
-    pub base_fee_per_gas: U256,
-    // Extra payload fields
-    pub block_hash: H256, // Hash of execution block
-    #[serde(serialize_with = "se_txs_to_hex")]
-    #[serde(deserialize_with = "de_hex_to_txs")]
-    pub transactions: Transactions,
 }
 
 pub type Transaction = VariableList<u8, typenum::U1073741824>;
@@ -158,7 +129,7 @@ mod test {
     #[case("case_4")]
     fn serde(#[case] case: &str) {
         let value = std::fs::read_to_string(format!(
-            "../test_assets/beacon/BeaconBlockBody/ssz_random/{case}/value.yaml"
+            "../test_assets/beacon/bellatrix/BeaconBlockBody/ssz_random/{case}/value.yaml"
         ))
         .expect("cannot find test asset");
         let value: Value = serde_yaml::from_str(&value).unwrap();
@@ -175,14 +146,14 @@ mod test {
     #[case("case_4")]
     fn ssz(#[case] case: &str) {
         let value = std::fs::read_to_string(format!(
-            "../test_assets/beacon/BeaconBlockBody/ssz_random/{case}/value.yaml"
+            "../test_assets/beacon/bellatrix/BeaconBlockBody/ssz_random/{case}/value.yaml"
         ))
         .expect("cannot find test asset");
         let value: Value = serde_yaml::from_str(&value).unwrap();
         let body: BeaconBlockBody = serde_json::from_value(value).unwrap();
 
         let compressed = std::fs::read(format!(
-            "../test_assets/beacon/BeaconBlockBody/ssz_random/{case}/serialized.ssz_snappy"
+            "../test_assets/beacon/bellatrix/BeaconBlockBody/ssz_random/{case}/serialized.ssz_snappy"
         ))
         .expect("cannot find test asset");
         let mut decoder = snap::raw::Decoder::new();
