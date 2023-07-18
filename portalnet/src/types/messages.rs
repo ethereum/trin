@@ -542,7 +542,7 @@ impl TryInto<Value> for Content {
         } else if let Content::Content(val) = self {
             Ok(serde_json::json!({ "content": hex_encode(val) }))
         } else if let Content::Enrs(val) = self {
-            Ok(serde_json::json!({ "enrs": format!("{:?}", val) }))
+            Ok(serde_json::json!({ "enrs": val }))
         } else {
             Err(MessageDecodeError::Type)
         }

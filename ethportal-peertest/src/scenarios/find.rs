@@ -1,11 +1,55 @@
-use crate::{constants::HISTORY_CONTENT_VALUE, Peertest};
+use crate::constants::{HEADER_WITH_PROOF_CONTENT_KEY, HISTORY_CONTENT_VALUE};
+use crate::Peertest;
 use discv5::enr::NodeId;
 use ethportal_api::types::content_key::HistoryContentKey;
 use ethportal_api::types::content_value::{HistoryContentValue, PossibleHistoryContentValue};
-use ethportal_api::types::portal::TraceContentInfo;
+use ethportal_api::types::portal::{ContentInfo, TraceContentInfo};
 use ethportal_api::utils::bytes::hex_decode;
 use ethportal_api::{ContentValue, HistoryNetworkApiClient};
+use jsonrpsee::async_client::Client;
+use serde_json::json;
 use tracing::info;
+
+pub async fn test_find_content_return_enr(target: &Client, peertest: &Peertest) {
+    info!("Testing find content returns enrs properly");
+
+    let header_with_proof_key: HistoryContentKey =
+        serde_json::from_value(json!(HEADER_WITH_PROOF_CONTENT_KEY)).unwrap();
+
+    // check if we can fetch data from routing table
+    match HistoryNetworkApiClient::get_enr(
+        &peertest.bootnode.ipc_client,
+        peertest.nodes[0].enr.node_id(),
+    )
+    .await
+    {
+        Ok(response) => {
+            if response != peertest.nodes[0].enr.clone() {
+                panic!("Response from GetEnr didn't return expected Enr");
+            }
+        }
+        Err(err) => panic!("{}", &err.to_string()),
+    }
+
+    let result = target
+        .find_content(peertest.bootnode.enr.clone(), header_with_proof_key.clone())
+        .await;
+
+    let enrs = match result {
+        Ok(result) => match result {
+            ContentInfo::Enrs { enrs } => enrs,
+            other => panic!("Error: Unexpected FINDCONTENT response not Enrs: {other:?}"),
+        },
+        Err(err) => {
+            panic!("Error: Unable to get response from FINDCONTENT request (Enrs): {err:?}");
+        }
+    };
+
+    // check if find_content contains an expected enr
+    if !enrs.contains(&peertest.nodes[0].enr.clone()) {
+        panic!("find_content didn't return expected ENR");
+    }
+}
 
 pub async fn test_recursive_find_nodes_self(peertest: &Peertest) {
     info!("Testing trace recursive find nodes self");
