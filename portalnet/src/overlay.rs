@@ -447,11 +447,7 @@ where
             Ok(Response::Content(found_content)) => {
                 match found_content {
                     Content::Content(content) => {
-                        match self
-                            .validator
-                            .validate_content(&content_key, &content)
-                            .await
-                        {
+                        match self.validate_content(&content_key, &content).await {
                             Ok(_) => Ok((Content::Content(content), false)),
                             Err(msg) => Err(OverlayRequestError::FailedValidation(format!(
                                 "Network: {:?}, Reason: {msg:?}",
@@ -464,11 +460,7 @@ where
                     Content::ConnectionId(conn_id) => {
                         let conn_id = u16::from_be(conn_id);
                         let content = self.init_find_content_stream(enr, conn_id).await?;
-                        match self
-                            .validator
-                            .validate_content(&content_key, &content)
-                            .await
-                        {
+                        match self.validate_content(&content_key, &content).await {
                             Ok(_) => Ok((Content::Content(content), true)),
                             Err(msg) => Err(OverlayRequestError::FailedValidation(format!(
                                 "Network: {:?}, Reason: {msg:?}",
@@ -480,6 +472,27 @@ where
             }
             Ok(_) => Err(OverlayRequestError::InvalidResponse),
             Err(error) => Err(error),
+        }
+    }
+
+    async fn validate_content(
+        &self,
+        content_key: &TContentKey,
+        content: &[u8],
+    ) -> anyhow::Result<()> {
+        match self.validator.validate_content(content_key, content).await {
+            Ok(_) => {
+                self.metrics.report_validation(true);
+                Ok(())
+            }
+            Err(msg) => {
+                self.metrics.report_validation(false);
+                Err(anyhow!(
+                    "Content validation failed for content key {:?} with error: {:?}",
+                    content_key,
+                    msg
+                ))
+            }
         }
     }
 
