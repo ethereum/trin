@@ -786,6 +786,7 @@ where
                         let store = self.store.clone();
                         let kbuckets = self.kbuckets.clone();
                         let command_tx = self.command_tx.clone();
+                        let metrics = self.metrics.clone();
                         tokio::spawn(async move {
                             Self::process_received_content(
                                 kbuckets,
@@ -798,6 +799,7 @@ where
                                 callback,
                                 query_info.trace,
                                 nodes_to_poke,
+                                metrics,
                             )
                             .await;
                         });
@@ -874,6 +876,7 @@ where
                             );
 
                             let trace = query_info.trace;
+                            let metrics = metrics.clone();
                             Self::process_received_content(
                                 kbuckets,
                                 command_tx,
@@ -885,6 +888,7 @@ where
                                 callback,
                                 trace,
                                 nodes_to_poke,
+                                metrics,
                             )
                             .await;
                         });
@@ -1258,6 +1262,7 @@ where
             if let Err(err) = Self::process_accept_utp_payload(
                 validator,
                 store,
+                metrics,
                 kbuckets,
                 command_tx,
                 content_keys,
@@ -1572,6 +1577,7 @@ where
     async fn process_accept_utp_payload(
         validator: Arc<TValidator>,
         store: Arc<RwLock<TStore>>,
+        metrics: Arc<OverlayMetrics>,
         kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
         command_tx: UnboundedSender<OverlayCommand<TContentKey>>,
         content_keys: Vec<TContentKey>,
@@ -1599,6 +1605,7 @@ where
                 // - Propagate all validated content
                 let validator = Arc::clone(&validator);
                 let store = Arc::clone(&store);
+                let metrics = Arc::clone(&metrics);
                 tokio::spawn(async move {
                     // Validated received content
                     if let Err(err) = validator
@@ -1606,6 +1613,7 @@ where
                         .await
                     {
                         // Skip storing & propagating content if it's not valid
+                        metrics.report_validation(false);
                         warn!(
                             error = %err,
                             content.key = %key.to_hex(),
@@ -1613,6 +1621,7 @@ where
                         );
                         return None;
                     }
+                    metrics.report_validation(true);
 
                     // Check if data should be stored, and store if true.
                     let key_desired = store.read().is_key_within_radius_and_unavailable(&key);
@@ -1808,6 +1817,7 @@ where
         responder: Option<oneshot::Sender<RecursiveFindContentResult>>,
         trace: Option<QueryTrace>,
         nodes_to_poke: Vec<NodeId>,
+        metrics: Arc<OverlayMetrics>,
     ) {
         let mut content = content;
         // Operate under assumption that all content in the store is valid
@@ -1819,6 +1829,7 @@ where
         } else {
             let content_id = content_key.content_id();
             if let Err(err) = validator.validate_content(&content_key, &content).await {
+                metrics.report_validation(false);
                 warn!(
                     error = ?err,
                     content.id = %hex_encode_compact(content_id),
@@ -1830,6 +1841,7 @@ where
                 }
                 return;
             };
+            metrics.report_validation(true);
 
             // skip storing if the content is already stored
             // or if there's an error reading the store

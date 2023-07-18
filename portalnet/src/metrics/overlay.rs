@@ -26,6 +26,7 @@ pub struct OverlayMetrics {
     message_count: IntCounterVec,
     utp_outcome_count: IntCounterVec,
     utp_active_count: IntGaugeVec,
+    validation_count: IntCounterVec,
 }
 
 impl OverlayMetrics {
@@ -58,11 +59,22 @@ impl OverlayMetrics {
             utp_active_count_labels,
         );
 
+        let validation_count_options = opts!(
+            "trin_validation_total",
+            "count all content validations successful and failed"
+        );
+        let validation_count_labels = &["protocol", "success"];
+        let validation_count = OverlayMetrics::register_counter_metric(
+            validation_count_options,
+            validation_count_labels,
+        );
+
         Self {
             protocol: protocol.into(),
             message_count,
             utp_outcome_count,
             utp_active_count,
+            validation_count,
         }
     }
 
@@ -129,6 +141,22 @@ impl OverlayMetrics {
     pub fn report_utp_active_dec(&self, direction: UtpDirectionLabel) {
         let labels: [&str; 2] = [self.protocol.into(), direction.into()];
         self.utp_active_count.with_label_values(&labels).dec();
+    }
+
+    //
+    // Validations
+    //
+    /// Returns the value of the given metric with the specified labels.
+    pub fn validation_count_by_outcome(&self, outcome: bool) -> u64 {
+        let outcome = outcome.to_string();
+        let labels = [self.protocol.into(), outcome.as_str()];
+        self.validation_count.with_label_values(&labels).get()
+    }
+
+    pub fn report_validation(&self, success: bool) {
+        let success = success.to_string();
+        let labels: [&str; 2] = [self.protocol.into(), success.as_str()];
+        self.validation_count.with_label_values(&labels).inc();
     }
 
     fn register_counter_metric(options: Opts, labels: &[&str]) -> IntCounterVec {
@@ -216,12 +244,16 @@ impl OverlayMetrics {
     pub fn get_message_summary(&self) -> String {
         // for every offer you made, how many accepts did you receive
         // for every offer you received, how many accepts did you make
+        let successful_validations = self.validation_count_by_outcome(true);
+        let failed_validations = self.validation_count_by_outcome(false);
         format!(
-            "offers={}/{}, accepts={}/{}",
+            "offers={}/{}, accepts={}/{}, validations={}/{}",
             self.message_count_by_labels(MessageDirectionLabel::Received, MessageLabel::Accept),
             self.message_count_by_labels(MessageDirectionLabel::Sent, MessageLabel::Offer),
             self.message_count_by_labels(MessageDirectionLabel::Sent, MessageLabel::Accept),
             self.message_count_by_labels(MessageDirectionLabel::Received, MessageLabel::Offer),
+            successful_validations,
+            successful_validations + failed_validations,
         )
     }
 }
