@@ -46,11 +46,12 @@ mod test {
         .unwrap();
 
         let test_client_rpc_handle = trin::run_trin(trin_config).await.unwrap();
-        peertest::scenarios::paginate::test_paginate_local_storage(&peertest).await;
         let target = reth_ipc::client::IpcClientBuilder::default()
             .build(DEFAULT_WEB3_IPC_PATH)
             .await
             .unwrap();
+
+        peertest::scenarios::paginate::test_paginate_local_storage(&peertest).await;
         peertest::scenarios::basic::test_web3_client_version(&target).await;
         peertest::scenarios::basic::test_discv5_node_info(&peertest).await;
         peertest::scenarios::basic::test_discv5_routing_table_info(&target).await;
@@ -67,6 +68,7 @@ mod test {
         peertest::scenarios::basic::test_history_local_content_absent(&target).await;
         peertest::scenarios::offer_accept::test_unpopulated_offer(&peertest, &target).await;
         peertest::scenarios::offer_accept::test_populated_offer(&peertest, &target).await;
+        peertest::scenarios::find::test_find_content_return_enr(&target, &peertest).await;
         peertest::scenarios::find::test_recursive_find_nodes_self(&peertest).await;
         peertest::scenarios::find::test_recursive_find_nodes_peer(&peertest).await;
         peertest::scenarios::find::test_recursive_find_nodes_random(&peertest).await;

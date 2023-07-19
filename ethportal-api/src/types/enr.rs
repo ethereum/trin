@@ -2,6 +2,7 @@ use discv5::enr::CombinedKey;
 use discv5::enr::EnrBuilder;
 use rand::Rng;
 use rlp::Encodable;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use ssz::DecodeError;
 use std::net::Ipv4Addr;
@@ -11,7 +12,7 @@ use validator::ValidationError;
 
 pub type Enr = discv5::enr::Enr<CombinedKey>;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct SszEnr(pub Enr);
 
 impl SszEnr {
