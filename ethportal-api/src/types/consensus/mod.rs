@@ -2,6 +2,7 @@ pub mod body;
 pub mod execution_payload;
 pub mod header;
 pub mod header_proof;
+pub mod light_client;
 pub mod proof;
 pub mod pubkey;
 pub mod serde;

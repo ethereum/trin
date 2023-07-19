@@ -42,7 +42,6 @@ pub struct ExecutionPayload {
     variant_attributes(derive(Default, Debug, Clone, Serialize, Deserialize, Encode, Decode,),)
 )]
 #[derive(Debug, Clone, Serialize, Deserialize, Encode)]
-#[serde(untagged)]
 #[ssz(enum_behaviour = "transparent")]
 pub struct ExecutionPayloadHeader {
     #[superstruct(getter(copy))]
