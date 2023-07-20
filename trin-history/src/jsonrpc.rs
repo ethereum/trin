@@ -104,10 +104,8 @@ async fn recursive_find_content(
     let (possible_content_bytes, trace) = match local_content {
         Some(val) => {
             let local_enr = overlay.local_enr();
-            let mut trace = QueryTrace::new(
-                &overlay.local_enr(),
-                NodeId::new(&content_key.content_id()).into(),
-            );
+            let mut trace =
+                QueryTrace::new(&overlay.local_enr(), NodeId::new(&content_key.content_id()));
             trace.node_responded_with_content(&local_enr);
             (Some(val), if is_trace { Some(trace) } else { None })
         }
