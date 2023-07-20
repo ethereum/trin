@@ -2270,15 +2270,39 @@ where
             peer_timeout: self.query_peer_timeout,
         };
 
+        // Filter out all disconnected nodes
+        let kbuckets = self.kbuckets.read();
+        let mut all_nodes: Vec<&kbucket::Node<NodeId, Node>> = kbuckets
+            .buckets_iter()
+            .flat_map(|kbucket| {
+                kbucket
+                    .iter()
+                    .filter(|node| node.status.is_connected())
+                    .collect::<Vec<&kbucket::Node<NodeId, Node>>>()
+            })
+            .collect();
+
+        all_nodes.sort_by(|a, b| {
+            let a_distance = a.key.distance(&target_key);
+            let b_distance = b.key.distance(&target_key);
+            a_distance.cmp(&b_distance)
+        });
+
+        let closest_enrs: Vec<Enr> = all_nodes
+            .iter()
+            .take(query_config.num_results)
+            .map(|closest| closest.value.enr.clone())
+            .collect();
+
         // Look up the closest ENRs to the target.
         // Limit the number of ENRs according to the query config.
-        let closest_enrs: Vec<Enr> = self
-            .kbuckets
-            .write()
-            .closest_values(&target_key)
-            .map(|closest| closest.value.enr)
-            .take(query_config.num_results)
-            .collect();
+        // let closest_enrs: Vec<Enr> = self
+        //     .kbuckets
+        //     .write()
+        //     .closest_values(&target_key)
+        //     .map(|closest| closest.value.enr)
+        //     .take(query_config.num_results)
+        //     .collect();
 
         let trace: Option<QueryTrace> = {
             if is_trace {
