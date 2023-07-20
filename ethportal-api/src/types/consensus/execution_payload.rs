@@ -1,5 +1,6 @@
 use super::serde::{de_hex_to_txs, de_number_to_u256, se_hex_to_number, se_txs_to_hex};
 use crate::types::consensus::body::Transactions;
+use crate::types::consensus::fork::ForkName;
 use crate::types::wrapped::bloom::Bloom;
 use crate::types::wrapped::bytes::Bytes;
 use crate::types::wrapped::h160::H160;
@@ -8,11 +9,6 @@ use serde::{Deserialize, Serialize};
 use ssz::Decode;
 use ssz_derive::{Decode, Encode};
 use superstruct::superstruct;
-
-pub enum ForkName {
-    Bellatrix,
-    Capella,
-}
 
 #[derive(Debug, PartialEq, Clone, Deserialize, Serialize, Encode, Decode)]
 pub struct ExecutionPayload {

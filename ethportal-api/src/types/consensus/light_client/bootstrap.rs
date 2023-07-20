@@ -1,4 +1,4 @@
-use crate::types::consensus::execution_payload::ForkName;
+use crate::types::consensus::fork::ForkName;
 use crate::types::consensus::light_client::header::{
     LightClientHeaderBellatrix, LightClientHeaderCapella,
 };

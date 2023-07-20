@@ -1,5 +1,5 @@
 use crate::types::consensus::execution_payload::ExecutionPayloadHeaderCapella;
-use crate::types::consensus::execution_payload::ForkName;
+use crate::types::consensus::fork::ForkName;
 use crate::types::consensus::header::BeaconBlockHeader;
 use ethereum_types::H256;
 use serde::{Deserialize, Serialize};

@@ -1,5 +1,6 @@
 pub mod body;
 pub mod execution_payload;
+pub mod fork;
 pub mod header;
 pub mod header_proof;
 pub mod light_client;
