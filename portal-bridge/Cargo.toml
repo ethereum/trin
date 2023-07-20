@@ -15,7 +15,7 @@ authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 anyhow = "1.0.68"
 async-trait = "0.1.68"
 clap = { version = "4.2.1", features = ["derive"] }
-discv5 = { version = "0.3.0", features = ["serde"]}
+discv5 = { version = "0.3.1", features = ["serde"]}
 ethportal-api = { path = "../ethportal-api" }
 ethereum-types = "0.12.1"
 eth2_ssz = "0.4.0"
