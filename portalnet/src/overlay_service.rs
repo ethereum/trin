@@ -1176,13 +1176,20 @@ where
             // report utp tx as successful, even if we go on to fail to process the payload
             metrics.report_utp_outcome(UtpDirectionLabel::Inbound, UtpOutcomeLabel::Success);
 
+            let content_values = match portal_wire::decode_content_payload(data) {
+                Ok(val) => val,
+                Err(err) => {
+                    error!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), "unable to decode uTP payload");
+                    return;
+                }
+            };
             if let Err(err) = Self::process_accept_utp_payload(
                 validator,
                 store,
                 kbuckets,
                 command_tx,
                 content_keys,
-                data,
+                content_values,
             )
             .await
             {
@@ -1534,10 +1541,8 @@ where
         kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
         command_tx: UnboundedSender<OverlayCommand<TContentKey>>,
         content_keys: Vec<TContentKey>,
-        payload: Vec<u8>,
+        content_values: Vec<Vec<u8>>,
     ) -> anyhow::Result<()> {
-        let content_values = portal_wire::decode_content_payload(payload)?;
-
         // Accepted content keys len should match content value len
         let keys_len = content_keys.len();
         let vals_len = content_values.len();
@@ -1704,11 +1709,80 @@ where
             "Processing Content message",
         );
         match content {
-            Content::ConnectionId(id) => debug!(
-                protocol = %self.protocol,
-                "Skipping processing for content connection ID {}",
-                u16::from_be(id)
-            ),
+            Content::ConnectionId(id) => {
+                let id = u16::from_be(id);
+                let utp = Arc::clone(&self.utp_socket);
+                let metrics = self.metrics.clone();
+                let store = self.store.clone();
+                let validator = self.validator.clone();
+                let command_tx = self.command_tx.clone();
+                let kbuckets = Arc::clone(&self.kbuckets);
+                let cid = utp_rs::cid::ConnectionId {
+                    recv: id,
+                    send: id.wrapping_add(1),
+                    peer: crate::discovery::UtpEnr(source),
+                };
+                let content_key: TContentKey = match request.content_key.clone().try_into() {
+                    Ok(key) => key,
+                    Err(_) => {
+                        warn!(
+                            "Received invalid content key from peer: {}",
+                            hex_encode(&request.content_key)
+                        );
+                        return;
+                    }
+                };
+                let content_keys = vec![content_key];
+
+                tokio::spawn(async move {
+                    metrics.report_utp_active_inc(UtpDirectionLabel::Inbound);
+                    let mut stream = match utp.connect_with_cid(cid.clone(), UTP_CONN_CFG).await {
+                        Ok(stream) => stream,
+                        Err(err) => {
+                            metrics.report_utp_outcome(
+                                UtpDirectionLabel::Inbound,
+                                UtpOutcomeLabel::FailedConnection,
+                            );
+                            warn!(
+                                %err,
+                                cid.send,
+                                cid.recv,
+                                peer = ?cid.peer.client(),
+                                "Unable to establish uTP conn based on Accept",
+                            );
+                            return;
+                        }
+                    };
+
+                    let mut data = vec![];
+                    if let Err(err) = stream.read_to_eof(&mut data).await {
+                        metrics.report_utp_outcome(
+                            UtpDirectionLabel::Inbound,
+                            UtpOutcomeLabel::FailedDataTx,
+                        );
+                        error!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), "error reading data from uTP stream");
+                        return;
+                    }
+
+                    // report utp tx as successful, even if we go on to fail to process the payload
+                    metrics
+                        .report_utp_outcome(UtpDirectionLabel::Inbound, UtpOutcomeLabel::Success);
+
+                    let content_values = vec![data];
+                    if let Err(err) = Self::process_accept_utp_payload(
+                        validator,
+                        store,
+                        kbuckets,
+                        command_tx,
+                        content_keys,
+                        content_values,
+                    )
+                    .await
+                    {
+                        error!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), "unable to process uTP payload");
+                    }
+                });
+            }
             Content::Content(content) => {
                 self.process_received_content(content.clone(), request);
                 // TODO: Should we only advance the query if the content has been validated?
