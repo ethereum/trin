@@ -61,7 +61,7 @@ impl ssz::Decode for SszEnr {
     }
 
     fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
-        let string = base64::encode_config(bytes, base64::URL_SAFE);
+        let string = base64::encode_config(bytes, base64::URL_SAFE_NO_PAD);
         Ok(SszEnr(
             Enr::from_str(&string).map_err(DecodeError::BytesInvalid)?,
         ))
