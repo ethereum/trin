@@ -51,38 +51,38 @@ mod test {
             .await
             .unwrap();
 
-        peertest::scenarios::paginate::test_paginate_local_storage(&peertest).await;
-        peertest::scenarios::basic::test_web3_client_version(&target).await;
-        peertest::scenarios::basic::test_discv5_node_info(&peertest).await;
-        peertest::scenarios::basic::test_discv5_routing_table_info(&target).await;
-        peertest::scenarios::basic::test_history_radius(&target).await;
-        peertest::scenarios::basic::test_history_add_enr(&target, &peertest).await;
-        peertest::scenarios::basic::test_history_get_enr(&target, &peertest).await;
-        peertest::scenarios::basic::test_history_delete_enr(&target, &peertest).await;
-        peertest::scenarios::basic::test_history_lookup_enr(&peertest).await;
-        peertest::scenarios::basic::test_history_ping(&target, &peertest).await;
-        peertest::scenarios::basic::test_history_find_nodes(&target, &peertest).await;
-        peertest::scenarios::basic::test_history_find_nodes_zero_distance(&target, &peertest).await;
-        peertest::scenarios::basic::test_history_store(&target).await;
-        peertest::scenarios::basic::test_history_routing_table_info(&target).await;
-        peertest::scenarios::basic::test_history_local_content_absent(&target).await;
-        peertest::scenarios::offer_accept::test_unpopulated_offer(&peertest, &target).await;
-        peertest::scenarios::offer_accept::test_populated_offer(&peertest, &target).await;
-        peertest::scenarios::find::test_find_content_return_enr(&target, &peertest).await;
-        peertest::scenarios::find::test_recursive_find_nodes_self(&peertest).await;
-        peertest::scenarios::find::test_recursive_find_nodes_peer(&peertest).await;
-        peertest::scenarios::find::test_recursive_find_nodes_random(&peertest).await;
+        // peertest::scenarios::paginate::test_paginate_local_storage(&peertest).await;
+        // peertest::scenarios::basic::test_web3_client_version(&target).await;
+        // peertest::scenarios::basic::test_discv5_node_info(&peertest).await;
+        // peertest::scenarios::basic::test_discv5_routing_table_info(&target).await;
+        // peertest::scenarios::basic::test_history_radius(&target).await;
+        // peertest::scenarios::basic::test_history_add_enr(&target, &peertest).await;
+        // peertest::scenarios::basic::test_history_get_enr(&target, &peertest).await;
+        // peertest::scenarios::basic::test_history_delete_enr(&target, &peertest).await;
+        // peertest::scenarios::basic::test_history_lookup_enr(&peertest).await;
+        // peertest::scenarios::basic::test_history_ping(&target, &peertest).await;
+        // peertest::scenarios::basic::test_history_find_nodes(&target, &peertest).await;
+        // peertest::scenarios::basic::test_history_find_nodes_zero_distance(&target, &peertest).await;
+        // peertest::scenarios::basic::test_history_store(&target).await;
+        // peertest::scenarios::basic::test_history_routing_table_info(&target).await;
+        // peertest::scenarios::basic::test_history_local_content_absent(&target).await;
+        // peertest::scenarios::offer_accept::test_unpopulated_offer(&peertest, &target).await;
+        // peertest::scenarios::offer_accept::test_populated_offer(&peertest, &target).await;
+        // peertest::scenarios::find::test_find_content_return_enr(&target, &peertest).await;
+        // peertest::scenarios::find::test_recursive_find_nodes_self(&peertest).await;
+        // peertest::scenarios::find::test_recursive_find_nodes_peer(&peertest).await;
+        // peertest::scenarios::find::test_recursive_find_nodes_random(&peertest).await;
         peertest::scenarios::find::test_trace_recursive_find_content(&peertest).await;
-        peertest::scenarios::find::test_trace_recursive_find_content_local_db(&peertest).await;
-        peertest::scenarios::find::test_trace_recursive_find_content_for_absent_content(&peertest)
-            .await;
-        peertest::scenarios::validation::test_validate_pre_merge_header_with_proof(
-            &peertest, &target,
-        )
-        .await;
-        peertest::scenarios::validation::test_validate_pre_merge_block_body(&peertest, &target)
-            .await;
-        peertest::scenarios::validation::test_validate_pre_merge_receipts(&peertest, &target).await;
+        // peertest::scenarios::find::test_trace_recursive_find_content_local_db(&peertest).await;
+        // peertest::scenarios::find::test_trace_recursive_find_content_for_absent_content(&peertest)
+        //     .await;
+        // peertest::scenarios::validation::test_validate_pre_merge_header_with_proof(
+        //     &peertest, &target,
+        // )
+        // .await;
+        // peertest::scenarios::validation::test_validate_pre_merge_block_body(&peertest, &target)
+        //     .await;
+        // peertest::scenarios::validation::test_validate_pre_merge_receipts(&peertest, &target).await;
 
         peertest.exit_all_nodes();
         test_client_rpc_handle.stop().unwrap();

@@ -36,7 +36,7 @@ pub enum HistoryContentValue {
 /// This type allows the RPC response to be non-error,
 /// functioning as an Option, but with None serializing to "0x"
 /// rather than 'null'.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PossibleHistoryContentValue {
     ContentPresent(HistoryContentValue),
     ContentAbsent,
@@ -48,58 +48,58 @@ pub enum PossibleBeaconContentValue {
     ContentAbsent,
 }
 
-impl Serialize for PossibleHistoryContentValue {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match self {
-            PossibleHistoryContentValue::ContentPresent(content) => content.serialize(serializer),
-            PossibleHistoryContentValue::ContentAbsent => serializer.serialize_str(CONTENT_ABSENT),
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for PossibleHistoryContentValue {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-
-        if s.as_str() == CONTENT_ABSENT {
-            return Ok(PossibleHistoryContentValue::ContentAbsent);
-        }
-
-        let content_bytes = hex_decode(&s).map_err(serde::de::Error::custom)?;
-
-        if let Ok(value) = HeaderWithProof::from_ssz_bytes(&content_bytes) {
-            return Ok(Self::ContentPresent(
-                HistoryContentValue::BlockHeaderWithProof(value),
-            ));
-        }
-
-        if let Ok(value) = BlockBody::from_ssz_bytes(&content_bytes) {
-            return Ok(Self::ContentPresent(HistoryContentValue::BlockBody(value)));
-        }
-
-        if let Ok(value) = Receipts::from_ssz_bytes(&content_bytes) {
-            return Ok(Self::ContentPresent(HistoryContentValue::Receipts(value)));
-        }
-
-        if let Ok(value) = EpochAccumulator::from_ssz_bytes(&content_bytes) {
-            return Ok(Self::ContentPresent(HistoryContentValue::EpochAccumulator(
-                value,
-            )));
-        }
-
-        Err(ContentValueError::UnknownContent {
-            bytes: s,
-            network: "history".to_string(),
-        })
-        .map_err(serde::de::Error::custom)
-    }
-}
+// impl Serialize for PossibleHistoryContentValue {
+//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+//     where
+//         S: Serializer,
+//     {
+//         match self {
+//             PossibleHistoryContentValue::ContentPresent(content) => content.serialize(serializer),
+//             PossibleHistoryContentValue::ContentAbsent => serializer.serialize_str(CONTENT_ABSENT),
+//         }
+//     }
+// }
+//
+// impl<'de> Deserialize<'de> for PossibleHistoryContentValue {
+//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+//     where
+//         D: Deserializer<'de>,
+//     {
+//         let s = String::deserialize(deserializer)?;
+//
+//         if s.as_str() == CONTENT_ABSENT {
+//             return Ok(PossibleHistoryContentValue::ContentAbsent);
+//         }
+//
+//         let content_bytes = hex_decode(&s).map_err(serde::de::Error::custom)?;
+//
+//         if let Ok(value) = HeaderWithProof::from_ssz_bytes(&content_bytes) {
+//             return Ok(Self::ContentPresent(
+//                 HistoryContentValue::BlockHeaderWithProof(value),
+//             ));
+//         }
+//
+//         if let Ok(value) = BlockBody::from_ssz_bytes(&content_bytes) {
+//             return Ok(Self::ContentPresent(HistoryContentValue::BlockBody(value)));
+//         }
+//
+//         if let Ok(value) = Receipts::from_ssz_bytes(&content_bytes) {
+//             return Ok(Self::ContentPresent(HistoryContentValue::Receipts(value)));
+//         }
+//
+//         if let Ok(value) = EpochAccumulator::from_ssz_bytes(&content_bytes) {
+//             return Ok(Self::ContentPresent(HistoryContentValue::EpochAccumulator(
+//                 value,
+//             )));
+//         }
+//
+//         Err(ContentValueError::UnknownContent {
+//             bytes: s,
+//             network: "history".to_string(),
+//         })
+//         .map_err(serde::de::Error::custom)
+//     }
+// }
 
 impl Serialize for PossibleBeaconContentValue {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>

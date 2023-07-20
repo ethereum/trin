@@ -6,10 +6,7 @@ use ethportal_api::types::{
     jsonrpc::request::HistoryJsonRpcRequest, query_trace::QueryTrace,
 };
 use ethportal_api::utils::bytes::hex_encode;
-use ethportal_api::{
-    types::portal::{AcceptInfo, FindNodesInfo, PongInfo, TraceContentInfo},
-    ContentValue, {HistoryContentKey, OverlayContentKey},
-};
+use ethportal_api::{types::portal::{AcceptInfo, FindNodesInfo, PongInfo, TraceContentInfo}, ContentValue, {HistoryContentKey, OverlayContentKey}, HistoryContentValue};
 use portalnet::storage::ContentStore;
 use serde_json::{json, Value};
 use ssz::Encode;
@@ -90,9 +87,13 @@ async fn recursive_find_content(
     // Check whether we have the data locally.
     let overlay = network.read().await.overlay.clone();
     let local_content: Option<Vec<u8>> = match overlay.store.read().get(&content_key) {
-        Ok(Some(data)) => Some(data),
+        Ok(Some(data)) => {
+            tracing::info!("test 3");
+            Some(data)
+        },
         Ok(None) => None,
         Err(err) => {
+            tracing::info!("test 4");
             error!(
                 error = %err,
                 content.key = %content_key,
@@ -107,13 +108,19 @@ async fn recursive_find_content(
             let mut trace =
                 QueryTrace::new(&overlay.local_enr(), NodeId::new(&content_key.content_id()));
             trace.node_responded_with_content(&local_enr);
-            (Some(val), if is_trace { Some(trace) } else { None })
+            (Some(val), if is_trace {
+                tracing::info!("test 5");
+                Some(trace)
+            } else {
+                tracing::info!("test 6");
+                None
+            })
         }
         None => overlay.lookup_content(content_key.clone(), is_trace).await,
     };
 
     // Format as string.
-    let content_response_string = match possible_content_bytes {
+    let content_response_string: Value = match possible_content_bytes {
         Some(bytes) => Value::String(hex_encode(bytes)),
         None => Value::String(CONTENT_ABSENT.to_string()), // "0x"
     };
@@ -123,8 +130,10 @@ async fn recursive_find_content(
         return Ok(content_response_string);
     }
     if let Some(trace) = trace {
+        tracing::info!("test 11");
+        let result: HistoryContentValue = serde_json::from_value(content_response_string).unwrap();
         Ok(json!(TraceContentInfo {
-            content: serde_json::from_value(content_response_string).map_err(|e| e.to_string())?,
+            content: ethportal_api::PossibleHistoryContentValue::ContentPresent(result),
             trace,
         }))
     } else {

@@ -157,7 +157,9 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
     ) -> RpcResult<TraceContentInfo> {
         let endpoint = HistoryEndpoint::TraceRecursiveFindContent(content_key);
         let result = self.proxy_query_to_history_subnet(endpoint).await?;
+        tracing::info!("test 1");
         let info: TraceContentInfo = from_value(result)?;
+        tracing::info!("test 2");
         Ok(info)
     }
 
