@@ -55,18 +55,19 @@ pub async fn test_validate_pre_merge_header_with_proof(peertest: &Peertest, targ
 pub async fn test_validate_pre_merge_block_body(peertest: &Peertest, target: &Client) {
     info!("Test validating a pre-merge block body");
     // store block body
-    let block_body_content_key: HistoryContentKey =
-        serde_json::from_value(json!(BLOCK_BODY_CONTENT_KEY)).unwrap();
+    //let block_body_content_key: HistoryContentKey =
+    //serde_json::from_value(json!(BLOCK_BODY_CONTENT_KEY)).unwrap();
+    let content_key: HistoryContentKey = serde_json::from_value(json!(
+        "0x01a468e1fc13aebc6b5e1be1db0d4e0de9ddf96b42accc69bcb726e98d4503e817"
+    ))
+    .unwrap();
     let block_body_content_value: HistoryContentValue =
         serde_json::from_value(json!(BLOCK_BODY_CONTENT_VALUE)).unwrap();
 
     let store_result = peertest
         .bootnode
         .ipc_client
-        .store(
-            block_body_content_key.clone(),
-            block_body_content_value.clone(),
-        )
+        .store(content_key.clone(), block_body_content_value.clone())
         .await
         .unwrap();
 
@@ -76,14 +77,16 @@ pub async fn test_validate_pre_merge_block_body(peertest: &Peertest, target: &Cl
     let result = target
         .find_content(
             Enr::from_str(&peertest.bootnode.enr.to_base64()).unwrap(),
-            block_body_content_key.clone(),
+            content_key.clone(),
         )
         .await
         .unwrap();
 
     match result {
-        ContentInfo::Content { content } => assert_eq!(content, block_body_content_value),
-        _ => panic!("Content value's should match"),
+        ContentInfo::Content { content } => {
+            assert_eq!(content, block_body_content_value);
+        }
+        _ => panic!("Content values should match"),
     }
 }
 
