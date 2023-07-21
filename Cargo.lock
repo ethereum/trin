@@ -7168,6 +7168,7 @@ dependencies = [
  "ethereum-types 0.12.1",
  "ethportal-api",
  "ethportal-peertest",
+ "jsonrpsee 0.16.2",
  "parking_lot 0.11.2",
  "portalnet",
  "prometheus_exporter",
