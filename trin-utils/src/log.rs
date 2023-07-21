@@ -7,7 +7,7 @@ pub fn init_tracing_logger() {
         .init();
 }
 
-fn detect_ansi_support() -> bool {
+pub fn detect_ansi_support() -> bool {
     #[cfg(windows)]
     {
         use ansi_term::enable_ansi_support;
