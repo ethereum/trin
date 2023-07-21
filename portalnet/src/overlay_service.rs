@@ -840,7 +840,6 @@ where
 
     /// Processes an overlay request.
     fn process_request(&mut self, request: OverlayRequest) {
-        info!("PROCESSING request: {:?}", request);
         // For incoming requests, handle the request, possibly send the response over the channel,
         // and then process the request.
         //
@@ -869,6 +868,7 @@ where
                 info!("PROCESSING outgoing request: {:?}", request.id);
                 info!("PROCESSING outgoing request: {:?}", request.responder);
                 info!("PROCESSING outgoing request: {:?}", request.request);
+                info!("PROCESSING outgoing request: {:?}", request.query_id);
                 self.active_outgoing_requests.write().insert(
                     request.id,
                     ActiveOutgoingRequest {
@@ -1135,6 +1135,9 @@ where
             });
         }
 
+        // all content keys fetched from network must be validated
+        // maybe add a content key for unvalidated data?
+
         // Generate a connection ID for the uTP connection if there is data we would like to
         // accept.
         let node_addr = self.discovery.cached_node_addr(source).ok_or_else(|| {
@@ -1346,7 +1349,7 @@ where
             kbucket::Entry::Pending(ref mut entry, status) => (entry.value().clone(), status),
             _ => {
                 // TODO: Decide default data radius, and define a constant.
-                let node = Node::new(source.clone(), Distance::MAX);
+                let node = Node::new(request.destination.clone(), Distance::MAX);
                 let status = NodeStatus {
                     state: ConnectionState::Disconnected,
                     direction: ConnectionDirection::Outgoing,
@@ -1792,12 +1795,10 @@ where
                         query_id,
                         source,
                     );
-                    println!("XXXXXXXXXXXXXXXXX");
                     // respond to overlay only after utp stream has processed, validated and stored
                     if let Some(responder) = responder {
                         let _ = responder.send(Ok(Response::Content(Content::Content(data))));
                     }
-                    println!("XXXXXXXXXXXXXXXXX");
                 });
             }
             Content::Content(content) => {
@@ -1877,6 +1878,9 @@ where
                         );
                         let mut pool = pool.write();
                         let (query_info, query) = pool.get_mut(query_id.unwrap()).unwrap();
+                        if let Some(trace) = &mut query_info.trace {
+                            trace.node_responded_with_content(&source);
+                        }
                         query.on_failure(&source.node_id());
                         return;
                     };
@@ -1889,16 +1893,24 @@ where
                             "Error storing content"
                         );
                         let mut pool = pool.write();
-                        let (_, query) = pool.get_mut(query_id.unwrap()).unwrap();
+                        let (query_info, query) = pool.get_mut(query_id.unwrap()).unwrap();
+                        if let Some(trace) = &mut query_info.trace {
+                            trace.node_responded_with_content(&source);
+                        }
                         query.on_failure(&source.node_id());
                         return;
                     }
                     let mut pool = pool.write();
-                    let (_, query) = pool.get_mut(query_id.unwrap()).unwrap();
+                    let query_id = query_id.unwrap();
+                    let (query_info, query) = pool.get_mut(query_id).unwrap();
+                    if let Some(trace) = &mut query_info.trace {
+                        trace.node_responded_with_content(&source);
+                    }
                     query.on_success(
                         &source.node_id(),
                         FindContentQueryResponse::Content(content),
                     );
+
                     trace!(
                         content.id = %hex_encode_compact(content_id),
                         content.key = %content_key,

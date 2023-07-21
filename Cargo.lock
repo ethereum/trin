@@ -2339,6 +2339,7 @@ dependencies = [
  "reth-ipc",
  "rocksdb",
  "rpc",
+ "serde",
  "serde_json",
  "tempfile",
  "tokio",

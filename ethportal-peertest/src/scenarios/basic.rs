@@ -1,4 +1,3 @@
-use crate::constants::{HISTORY_CONTENT_KEY, HISTORY_CONTENT_VALUE};
 use crate::Peertest;
 use ethereum_types::U256;
 use ethportal_api::types::content_key::HistoryContentKey;
@@ -105,14 +104,12 @@ pub async fn test_history_find_nodes_zero_distance(target: &Client, peertest: &P
     assert!(result.contains(&peertest.bootnode.enr));
 }
 
-pub async fn test_history_store(target: &Client) {
+pub async fn test_history_store(
+    target: &Client,
+    test_content: (HistoryContentKey, HistoryContentValue),
+) {
     info!("Testing portal_historyStore");
-
-    let content_key: HistoryContentKey =
-        serde_json::from_value(json!(HISTORY_CONTENT_KEY)).unwrap();
-    let content_value: HistoryContentValue =
-        serde_json::from_value(json!(HISTORY_CONTENT_VALUE)).unwrap();
-
+    let (content_key, content_value) = test_content;
     let result = target.store(content_key, content_value).await.unwrap();
     assert!(result);
 }

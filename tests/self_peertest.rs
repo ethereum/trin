@@ -45,6 +45,8 @@ mod test {
         )
         .unwrap();
 
+        let test_content = peertest::utils::generate_test_content();
+        let mut small = test_content.small.into_iter();
         let test_client_rpc_handle = trin::run_trin(trin_config).await.unwrap();
         peertest::scenarios::paginate::test_paginate_local_storage(&peertest).await;
         let target = reth_ipc::client::IpcClientBuilder::default()
@@ -62,25 +64,62 @@ mod test {
         peertest::scenarios::basic::test_history_ping(&target, &peertest).await;
         peertest::scenarios::basic::test_history_find_nodes(&target, &peertest).await;
         peertest::scenarios::basic::test_history_find_nodes_zero_distance(&target, &peertest).await;
-        peertest::scenarios::basic::test_history_store(&target).await;
+        peertest::scenarios::basic::test_history_store(
+            &target,
+            small.next().unwrap().header_with_proof,
+        )
+        .await;
         peertest::scenarios::basic::test_history_routing_table_info(&target).await;
         peertest::scenarios::basic::test_history_local_content_absent(&target).await;
-        peertest::scenarios::offer_accept::test_unpopulated_offer(&peertest, &target).await;
-        peertest::scenarios::offer_accept::test_populated_offer(&peertest, &target).await;
+        peertest::scenarios::offer_accept::test_unpopulated_offer(
+            &peertest,
+            &target,
+            small.next().unwrap().header_with_proof,
+        )
+        .await;
+        peertest::scenarios::offer_accept::test_populated_offer(
+            &peertest,
+            &target,
+            small.next().unwrap().header_with_proof,
+        )
+        .await;
         peertest::scenarios::find::test_recursive_find_nodes_self(&peertest).await;
         peertest::scenarios::find::test_recursive_find_nodes_peer(&peertest).await;
         peertest::scenarios::find::test_recursive_find_nodes_random(&peertest).await;
-        peertest::scenarios::find::test_trace_recursive_find_content(&peertest).await;
-        peertest::scenarios::find::test_trace_recursive_find_content_local_db(&peertest).await;
-        peertest::scenarios::find::test_trace_recursive_find_content_for_absent_content(&peertest)
-            .await;
-        peertest::scenarios::validation::test_validate_pre_merge_header_with_proof(
-            &peertest, &target,
+        peertest::scenarios::find::test_trace_recursive_find_content(
+            &peertest,
+            small.next().unwrap().header_with_proof,
         )
         .await;
-        peertest::scenarios::validation::test_validate_pre_merge_block_body(&peertest, &target)
-            .await;
-        peertest::scenarios::validation::test_validate_pre_merge_receipts(&peertest, &target).await;
+        peertest::scenarios::find::test_trace_recursive_find_content_local_db(
+            &peertest,
+            small.next().unwrap().header_with_proof,
+        )
+        .await;
+        peertest::scenarios::find::test_trace_recursive_find_content_for_absent_content(
+            &peertest,
+            small.next().unwrap().header_with_proof,
+        )
+        .await;
+        let large = test_content.large.into_iter().next().unwrap();
+        peertest::scenarios::validation::test_validate_pre_merge_header_with_proof(
+            &peertest,
+            &target,
+            large.header_with_proof,
+        )
+        .await;
+        peertest::scenarios::validation::test_validate_pre_merge_block_body(
+            &peertest,
+            &target,
+            large.block_body,
+        )
+        .await;
+        peertest::scenarios::validation::test_validate_pre_merge_receipts(
+            &peertest,
+            &target,
+            large.receipts,
+        )
+        .await;
         //peertest::scenarios::utp::test_large(&peertest, &target).await;
 
         peertest.exit_all_nodes();

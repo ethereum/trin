@@ -28,7 +28,6 @@ use crate::{
     metrics::overlay::OverlayMetrics,
     overlay_service::{
         OverlayCommand, OverlayRequest, OverlayRequestError, OverlayService, RequestDirection,
-        UTP_CONN_CFG,
     },
     storage::ContentStore,
     types::{
@@ -108,8 +107,8 @@ pub struct OverlayProtocol<TContentKey, TMetric, TValidator, TStore> {
     phantom_content_key: PhantomData<TContentKey>,
     /// Associate a distance metric with the overlay network.
     phantom_metric: PhantomData<TMetric>,
-    /// Accepted content validator that makes requests to this/other overlay networks
-    validator: Arc<TValidator>,
+    /// xxx
+    phantom_validator: PhantomData<TValidator>,
     /// Runtime telemetry metrics for the overlay network.
     metrics: Arc<OverlayMetrics>,
 }
@@ -168,7 +167,7 @@ where
             command_tx,
             phantom_content_key: PhantomData,
             phantom_metric: PhantomData,
-            validator,
+            phantom_validator: PhantomData,
             metrics,
         }
     }
