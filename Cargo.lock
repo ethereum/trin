@@ -7290,6 +7290,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "tracing",
  "tree_hash",
  "tree_hash_derive",
 ]

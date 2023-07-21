@@ -242,6 +242,7 @@ impl OverlayRequest {
 }
 
 /// An active outgoing overlay request.
+#[derive(Debug)]
 struct ActiveOutgoingRequest {
     /// The ENR of the destination (target) node.
     pub destination: Enr,
@@ -507,25 +508,16 @@ where
                 }
                 Some(response) = self.response_rx.recv() => {
                     // Look up active request that corresponds to the response.
-                    let optional_active_request = self.active_outgoing_requests.write().remove(&response.request_id);
-                    if let Some(active_request) = optional_active_request {
-
-                        // Send response to responder if present.
-                        if let Some(responder) = active_request.responder {
-                            let _ = responder.send(response.response.clone());
-                        }
-
-                        // Perform background processing.
-                        match response.response {
-                            Ok(response) => {
-                                self.metrics.report_inbound_response(&response);
-                                self.process_response(response, active_request.destination, active_request.request, active_request.query_id)
+                    let active_request = self.active_outgoing_requests.write().remove(&response.request_id);
+                    match active_request {
+                        Some(request) => {
+                            // Perform background processing.
+                            match response.response {
+                                Ok(response) => self.process_response(response, request),
+                                Err(error) => self.process_request_failure(response.request_id, request.destination, error),
                             }
-                            Err(error) => self.process_request_failure(response.request_id, active_request.destination, error),
                         }
-
-                    } else {
-                        warn!(request.id = %hex_encode_compact(response.request_id.to_be_bytes()), "No request found for response");
+                        None => warn!(request.id = %hex_encode_compact(response.request_id.to_be_bytes()), "No request found for response"),
                     }
                 }
                 Some(Ok(node_id)) = self.peers_to_ping.next() => {
@@ -536,6 +528,7 @@ where
                         self.peers_to_ping.insert(node_id);
                     }
                 }
+                // Handle query events for queries in the find node query pool.
                 query_event = OverlayService::<TContentKey, TMetric, TValidator, TStore>::query_event_poll(self.find_node_query_pool.clone()) => {
                     self.handle_find_nodes_query_event(query_event);
                 }
@@ -624,7 +617,7 @@ where
     /// Maintains the query pool.
     /// Returns a `QueryEvent` when the `QueryPoolState` updates.
     /// This happens when a query needs to send a request to a node, when a query has completed,
-    // or when a query has timed out.
+    /// or when a query has timed out.
     async fn query_event_poll<TQuery: Query<NodeId>>(
         queries: Arc<RwLock<QueryPool<NodeId, TQuery, TContentKey>>>,
     ) -> QueryEvent<TQuery, TContentKey> {
@@ -765,6 +758,7 @@ where
             }
             QueryEvent::Finished(query_id, query_info, query)
             | QueryEvent::TimedOut(query_id, query_info, query) => {
+                info!("XXXXXXXXXX: handle_find_content_query_event: {:?}", query);
                 let result = query.into_result();
                 let (content, closest_nodes) = match result {
                     FindContentQueryResult::ClosestNodes(closest_nodes) => (None, closest_nodes),
@@ -846,6 +840,7 @@ where
 
     /// Processes an overlay request.
     fn process_request(&mut self, request: OverlayRequest) {
+        info!("PROCESSING request: {:?}", request);
         // For incoming requests, handle the request, possibly send the response over the channel,
         // and then process the request.
         //
@@ -854,10 +849,13 @@ where
         // channel if the request was initiated internally (e.g. for maintenance).
         match request.direction {
             RequestDirection::Incoming { id, source } => {
+                info!("PROCESSING incoming request: {:?}", id);
+                info!("PROCESSING incoming request: {:?}", source);
                 self.register_node_activity(source);
 
                 let response = self.handle_request(request.request.clone(), id.clone(), &source);
                 // Send response to responder if present.
+                // do we need to change this?
                 if let Some(responder) = request.responder {
                     if let Ok(ref response) = response {
                         self.metrics.report_outbound_response(response);
@@ -868,6 +866,9 @@ where
                 self.process_incoming_request(request.request, id, source);
             }
             RequestDirection::Outgoing { destination } => {
+                info!("PROCESSING outgoing request: {:?}", request.id);
+                info!("PROCESSING outgoing request: {:?}", request.responder);
+                info!("PROCESSING outgoing request: {:?}", request.request);
                 self.active_outgoing_requests.write().insert(
                     request.id,
                     ActiveOutgoingRequest {
@@ -986,7 +987,6 @@ where
                     let enr = UtpEnr(node_addr.enr);
                     let cid = self.utp_socket.cid(enr, false);
                     let cid_send = cid.send;
-                    println!("ZZZ: cid_send: {:?}", cid_send);
 
                     // Wait for an incoming connection with the given CID. Then, write the data
                     // over the uTP stream.
@@ -1150,6 +1150,7 @@ where
         let utp = Arc::clone(&self.utp_socket);
         let metrics = Arc::clone(&self.metrics);
 
+        // we also need to change this so it only registers valid content as successful
         tokio::spawn(async move {
             // Wait for an incoming connection with the given CID. Then, read the data from the uTP
             // stream.
@@ -1332,17 +1333,13 @@ where
     }
 
     /// Processes a response to an outgoing request from some source node.
-    fn process_response(
-        &mut self,
-        response: Response,
-        source: Enr,
-        request: Request,
-        query_id: Option<QueryId>,
-    ) {
+    fn process_response(&mut self, response: Response, request: ActiveOutgoingRequest) {
         // If the node is present in the routing table, but the node is not connected, then
         // use the existing entry's value and direction. Otherwise, build a new entry from
         // the source ENR and establish a connection in the outgoing direction, because this
         // node is responding to our request.
+        self.metrics.report_inbound_response(&response);
+        let source = request.destination.clone();
         let key = kbucket::Key::from(source.node_id());
         let (node, status) = match self.kbuckets.write().entry(&key) {
             kbucket::Entry::Present(ref mut entry, status) => (entry.value().clone(), status),
@@ -1380,24 +1377,31 @@ where
             }
         }
 
-        match response {
-            Response::Pong(pong) => self.process_pong(pong, source),
-            Response::Nodes(nodes) => self.process_nodes(nodes, source, query_id),
-            Response::Content(content) => {
-                let find_content_request = match request {
-                    Request::FindContent(find_content) => find_content,
-                    _ => {
-                        error!(
-                            response.source = %source.node_id(),
-                            "Content response associated with non-FindContent request"
-                        );
-                        return;
-                    }
-                };
-                self.process_content(content, source, find_content_request, query_id)
+        match response.clone() {
+            Response::Pong(pong) => {
+                // send response to overlay
+                if let Some(responder) = request.responder {
+                    let _ = responder.send(Ok(response));
+                }
+                self.process_pong(pong, source)
+            }
+            Response::Nodes(nodes) => {
+                // send response to overlay
+                if let Some(responder) = request.responder {
+                    let _ = responder.send(Ok(response));
+                }
+                self.process_nodes(nodes, source, request.query_id)
+            }
+            Response::Content(_content) => {
+                // handle responses to overlay inside process_content to manage utp txs
+                self.process_content(response, request)
             }
             Response::Accept(accept) => {
-                if let Err(err) = self.process_accept(accept, source, request) {
+                // send response to overlay
+                if let Some(responder) = request.responder {
+                    let _ = responder.send(Ok(response.clone()));
+                }
+                if let Err(err) = self.process_accept(accept, source, request.request) {
                     error!(response.error = %err, "Error processing ACCEPT message")
                 }
             }
@@ -1536,6 +1540,7 @@ where
     }
 
     /// Process accepted uTP payload of the OFFER/ACCEPT stream
+    /// and stores if validated
     async fn process_accept_utp_payload(
         validator: Arc<TValidator>,
         store: Arc<RwLock<TStore>>,
@@ -1697,119 +1702,130 @@ where
     }
 
     /// Processes a Content response.
-    fn process_content(
-        &mut self,
-        content: Content,
-        source: Enr,
-        request: FindContent,
-        query_id: Option<QueryId>,
-    ) {
+    ///
+    fn process_content(&mut self, response: Response, request: ActiveOutgoingRequest) {
+        trace!("active outgoing req: {:?}", request);
+        let source = request.destination;
         trace!(
             protocol = %self.protocol,
             response.source = %source.node_id(),
             "Processing Content message",
         );
-        println!("XX: {:?}", content);
+        let query_id = request.query_id;
+        let responder = request.responder;
+        let request = match request.request {
+            Request::FindContent(find_content) => find_content,
+            _ => panic!("fuck"),
+        };
+        let content = match response.clone() {
+            Response::Content(content) => content,
+            _ => panic!("fuck"),
+        };
+        let find_content_query_pool = self.find_content_query_pool.clone();
         match content {
             Content::ConnectionId(id) => {
-                println!("XXXX: {:?}", id);
+                let content_key = request.content_key.clone();
                 // Connection id is decoded as BE because uTP header values are stored as BE
-                /*                let id = u16::from_be(id);*/
-                /*let utp = Arc::clone(&self.utp_socket);*/
-                /*let metrics = self.metrics.clone();*/
-                /*let store = self.store.clone();*/
-                /*let validator = self.validator.clone();*/
-                /*let command_tx = self.command_tx.clone();*/
-                /*let kbuckets = Arc::clone(&self.kbuckets);*/
-                /*let cid = ConnectionId {*/
-                /*recv: id,*/
-                /*send: id.wrapping_add(1),*/
-                /*peer: UtpEnr(source.clone()),*/
-                /*};*/
-                /*let content_key: TContentKey = match request.content_key.clone().try_into() {*/
-                /*Ok(key) => key,*/
-                /*Err(_) => {*/
-                /*warn!(*/
-                /*"Received invalid content key from peer: {}",*/
-                /*hex_encode(&request.content_key)*/
-                /*);*/
-                /*return;*/
-                /*}*/
-                /*};*/
-                /*let content_keys = vec![content_key];*/
-                /*let find_content_query_pool = self.find_content_query_pool.clone();*/
-                /*tokio::spawn(async move {*/
-                /*metrics.report_utp_active_inc(UtpDirectionLabel::Inbound);*/
-                /*let mut stream = match utp.connect_with_cid(cid.clone(), UTP_CONN_CFG).await {*/
-                /*Ok(stream) => stream,*/
-                /*Err(err) => {*/
-                /*metrics.report_utp_outcome(*/
-                /*UtpDirectionLabel::Inbound,*/
-                /*UtpOutcomeLabel::FailedConnection,*/
-                /*);*/
-                /*warn!(*/
-                /*%err,*/
-                /*cid.send,*/
-                /*cid.recv,*/
-                /*peer = ?cid.peer.client(),*/
-                /*"Unable to establish uTP conn based on Accept",*/
-                /*);*/
-                /*return;*/
-                /*}*/
-                /*};*/
+                let id = u16::from_be(id);
+                let utp = Arc::clone(&self.utp_socket);
+                let metrics = self.metrics.clone();
+                let store = self.store.clone();
+                let protocol = self.protocol.clone();
+                let validator = self.validator.clone();
+                let command_tx = self.command_tx.clone();
+                let kbuckets = Arc::clone(&self.kbuckets);
+                let cid = ConnectionId {
+                    recv: id,
+                    send: id.wrapping_add(1),
+                    peer: UtpEnr(source.clone()),
+                };
+                let content_key: TContentKey = match content_key.clone().try_into() {
+                    Ok(key) => key,
+                    Err(_) => {
+                        warn!(
+                            "Received invalid content key from peer: {}",
+                            hex_encode(&request.content_key)
+                        );
+                        return;
+                    }
+                };
+                tokio::spawn(async move {
+                    metrics.report_utp_active_inc(UtpDirectionLabel::Inbound);
+                    let mut stream = match utp.connect_with_cid(cid.clone(), UTP_CONN_CFG).await {
+                        Ok(stream) => stream,
+                        Err(err) => {
+                            metrics.report_utp_outcome(
+                                UtpDirectionLabel::Inbound,
+                                UtpOutcomeLabel::FailedConnection,
+                            );
+                            warn!(
+                                %err,
+                                cid.send,
+                                cid.recv,
+                                peer = ?cid.peer.client(),
+                                "Unable to establish uTP conn based on Accept",
+                            );
+                            return;
+                        }
+                    };
 
-                /*let mut data = vec![];*/
-                /*if let Err(err) = stream.read_to_eof(&mut data).await {*/
-                /*metrics.report_utp_outcome(*/
-                /*UtpDirectionLabel::Inbound,*/
-                /*UtpOutcomeLabel::FailedDataTx,*/
-                /*);*/
-                /*error!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), "error reading data from uTP stream");*/
-                /*return;*/
-                /*}*/
+                    let mut data = vec![];
+                    if let Err(err) = stream.read_to_eof(&mut data).await {
+                        metrics.report_utp_outcome(
+                            UtpDirectionLabel::Inbound,
+                            UtpOutcomeLabel::FailedDataTx,
+                        );
+                        error!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), "error reading data from uTP stream");
+                        return;
+                    }
 
-                /*// report utp tx as successful, even if we go on to fail to process the payload*/
-                /*metrics*/
-                /*.report_utp_outcome(UtpDirectionLabel::Inbound, UtpOutcomeLabel::Success);*/
+                    // report utp tx as successful, even if we go on to fail to process the payload
+                    metrics
+                        .report_utp_outcome(UtpDirectionLabel::Inbound, UtpOutcomeLabel::Success);
 
-                /*let content_values = vec![data.clone()];*/
-                /*println!("YYYY");*/
-                /*if let Err(err) = Self::process_accept_utp_payload(*/
-                /*validator,*/
-                /*store,*/
-                /*kbuckets,*/
-                /*command_tx,*/
-                /*content_keys,*/
-                /*content_values,*/
-                /*)*/
-                /*.await*/
-                /*{*/
-                /*error!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), "unable to process uTP payload");*/
-                /*}*/
-                /*println!("ZZZZ");*/
-                /*if let Some(query_id) = query_id {*/
-                /*Self::advance_find_content_query_with_content(*/
-                /*find_content_query_pool,*/
-                /*&query_id,*/
-                /*source,*/
-                /*data,*/
-                /*);*/
-                /*}*/
-                /*});*/
+                    Self::process_received_content(
+                        find_content_query_pool,
+                        validator,
+                        store,
+                        data.clone(),
+                        request,
+                        query_id,
+                        source,
+                    );
+                    println!("XXXXXXXXXXXXXXXXX");
+                    // respond to overlay only after utp stream has processed, validated and stored
+                    if let Some(responder) = responder {
+                        let _ = responder.send(Ok(Response::Content(Content::Content(data))));
+                    }
+                    println!("XXXXXXXXXXXXXXXXX");
+                });
             }
             Content::Content(content) => {
-                self.process_received_content(content.clone(), request);
-                // TODO: Should we only advance the query if the content has been validated?
-                if let Some(query_id) = query_id {
-                    Self::advance_find_content_query_with_content(
-                        self.find_content_query_pool.clone(),
-                        &query_id,
-                        source,
-                        content,
-                    );
+                // respond to overlay before processing, validating and storing
+                info!("XXXXXXXXXX: {:?}", responder);
+                if let Some(responder) = responder {
+                    info!("SENDING RESPONSE TO OVERLAY");
+                    match responder.send(Ok(response)) {
+                        Ok(_) => info!("RESPONSE SENT TO OVERLAY"),
+                        Err(_) => info!("RESPONSE FAILED TO SEND TO OVERLAY"),
+                    }
                 }
+                Self::process_received_content(
+                    find_content_query_pool,
+                    Arc::clone(&self.validator),
+                    Arc::clone(&self.store),
+                    content.clone(),
+                    request,
+                    query_id,
+                    source,
+                );
             }
             Content::Enrs(enrs) => {
+                // is this right? if we're replacing cid with utp then
+                // we shouldnt return if enrs....
+                if let Some(responder) = responder {
+                    let _ = responder.send(Ok(response));
+                }
                 let enrs: Vec<Enr> = enrs.into_iter().map(|ssz_enr| ssz_enr.into()).collect();
                 self.process_discovered_enrs(enrs.clone());
                 if let Some(query_id) = query_id {
@@ -1819,31 +1835,39 @@ where
         }
     }
 
-    fn process_received_content(&mut self, content: Vec<u8>, request: FindContent) {
-        let content_key = match TContentKey::try_from(request.content_key) {
-            Ok(val) => val,
-            Err(msg) => {
-                error!(
-                    protocol = %self.protocol,
-                    error = ?msg,
-                    "Error decoding content key requested by local node"
-                );
-                return;
-            }
-        };
+    // processes a single piece of content received over findcontent
+    // either via utp tx or direct content response
+    fn process_received_content(
+        find_content_query_pool: Arc<
+            RwLock<QueryPool<NodeId, FindContentQuery<NodeId>, TContentKey>>,
+        >,
+        validator: Arc<TValidator>,
+        store: Arc<RwLock<TStore>>,
+        content: Vec<u8>,
+        request: FindContent,
+        query_id: Option<QueryId>,
+        source: Enr,
+    ) {
+        let content_key = TContentKey::try_from(request.content_key).unwrap();
         let content_id = content_key.content_id();
 
-        match self
-            .store
+        match store
             .read()
             .is_key_within_radius_and_unavailable(&content_key)
         {
             Ok(true) => {
-                let validator = Arc::clone(&self.validator);
-                let store = Arc::clone(&self.store);
+                let validator = Arc::clone(&validator);
+                let store = Arc::clone(&store);
+                let pool = Arc::clone(&find_content_query_pool);
+                let query_id = query_id.clone();
                 // Spawn task that validates content before storing.
                 // Allows for non-blocking requests to this/other overlay services.
                 tokio::spawn(async move {
+                    trace!(
+                        content.id = %hex_encode_compact(content_id),
+                        content.key = %content_key,
+                        "Validating content"
+                    );
                     if let Err(err) = validator.validate_content(&content_key, &content).await {
                         warn!(
                             error = ?err,
@@ -1851,33 +1875,67 @@ where
                             content.key = %content_key,
                             "Error validating content"
                         );
+                        let mut pool = pool.write();
+                        let (query_info, query) = pool.get_mut(query_id.unwrap()).unwrap();
+                        query.on_failure(&source.node_id());
                         return;
                     };
 
-                    if let Err(err) = store.write().put(content_key.clone(), content) {
+                    if let Err(err) = store.write().put(content_key.clone(), content.clone()) {
                         error!(
                             error = %err,
                             content.id = %hex_encode_compact(content_id),
                             content.key = %content_key,
                             "Error storing content"
                         );
+                        let mut pool = pool.write();
+                        let (_, query) = pool.get_mut(query_id.unwrap()).unwrap();
+                        query.on_failure(&source.node_id());
+                        return;
                     }
+                    let mut pool = pool.write();
+                    let (_, query) = pool.get_mut(query_id.unwrap()).unwrap();
+                    query.on_success(
+                        &source.node_id(),
+                        FindContentQueryResponse::Content(content),
+                    );
+                    trace!(
+                        content.id = %hex_encode_compact(content_id),
+                        content.key = %content_key,
+                        "Validated content"
+                    );
                 });
             }
             Ok(false) => {
+                let mut pool = find_content_query_pool.write();
+                let (query_info, query) = pool.get_mut(query_id.unwrap()).unwrap();
+
+                // will this mess things up if we have invalid data?
+                if let Some(trace) = &mut query_info.trace {
+                    trace.node_responded_with_content(&source);
+                }
                 debug!(
                     content.id = %hex_encode_compact(content_id),
                     content.key = %content_key,
                     "Content not stored (key outside radius or already stored)"
                 );
+                query.on_failure(&source.node_id());
             }
             Err(err) => {
+                let mut pool = find_content_query_pool.write();
+                let (query_info, query) = pool.get_mut(query_id.unwrap()).unwrap();
+
+                // will this mess things up if we have invalid data?
+                if let Some(trace) = &mut query_info.trace {
+                    trace.node_responded_with_content(&source);
+                }
                 error!(
                     error = %err,
                     content.id = %hex_encode_compact(content_id),
                     content.key = %content_key,
                     "Error storing content"
                 );
+                query.on_failure(&source.node_id());
             }
         }
     }

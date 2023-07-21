@@ -102,8 +102,6 @@ pub struct OverlayProtocol<TContentKey, TMetric, TValidator, TStore> {
     protocol: ProtocolId,
     /// A sender to send commands to the OverlayService.
     pub command_tx: UnboundedSender<OverlayCommand<TContentKey>>,
-    /// uTP socket.
-    utp_socket: Arc<UtpSocket<UtpEnr>>,
     /// Declare the allowed content key types for a given overlay network.
     /// Use a phantom, because we don't store any keys in this struct.
     /// For example, this type is used when decoding a content key received over the network.
@@ -151,7 +149,7 @@ where
             config.bootnode_enrs,
             config.ping_queue_interval,
             protocol.clone(),
-            Arc::clone(&utp_socket),
+            utp_socket,
             Arc::clone(&metrics),
             Arc::clone(&validator),
             config.query_timeout,
@@ -168,7 +166,6 @@ where
             store,
             protocol,
             command_tx,
-            utp_socket,
             phantom_content_key: PhantomData,
             phantom_metric: PhantomData,
             validator,
@@ -439,61 +436,16 @@ where
             .send_overlay_request(Request::FindContent(request), direction)
             .await
         {
-            Ok(Response::Content(found_content)) => {
-                match found_content {
-                    Content::Content(_) => Ok(found_content),
-                    Content::Enrs(_) => Ok(found_content),
-                    // Init uTP stream if `connection_id`is received
-                    Content::ConnectionId(conn_id) => {
-                        let conn_id = u16::from_be(conn_id);
-                        let content = self.init_find_content_stream(enr, conn_id).await?;
-                        let content_key = TContentKey::try_from(content_key).map_err(|err| {
-                            OverlayRequestError::FailedValidation(format!(
-                                "Error decoding content key for received utp content: {err}"
-                            ))
-                        })?;
-                        match self
-                            .validator
-                            .validate_content(&content_key, &content)
-                            .await
-                        {
-                            Ok(_) => Ok(Content::Content(content)),
-                            Err(msg) => Err(OverlayRequestError::FailedValidation(format!(
-                                "Network: {:?}, Reason: {:?}",
-                                self.protocol, msg
-                            ))),
-                        }
-                    }
+            Ok(Response::Content(found_content)) => match found_content {
+                Content::Content(_) => Ok(found_content),
+                Content::Enrs(_) => Ok(found_content),
+                Content::ConnectionId(_) => {
+                    panic!("fuck, we shouldnt be doing utp at this level")
                 }
-            }
+            },
             Ok(_) => Err(OverlayRequestError::InvalidResponse),
             Err(error) => Err(error),
         }
-    }
-
-    /// Initialize FindContent uTP stream with remote node
-    async fn init_find_content_stream(
-        &self,
-        enr: Enr,
-        conn_id: u16,
-    ) -> Result<Vec<u8>, OverlayRequestError> {
-        let cid = utp_rs::cid::ConnectionId {
-            recv: conn_id,
-            send: conn_id.wrapping_add(1),
-            peer: crate::discovery::UtpEnr(enr),
-        };
-        let mut stream = self
-            .utp_socket
-            .connect_with_cid(cid, UTP_CONN_CFG)
-            .await
-            .map_err(|err| OverlayRequestError::UtpError(format!("{err:?}")))?;
-        let mut data = vec![];
-        stream
-            .read_to_eof(&mut data)
-            .await
-            .map_err(|err| OverlayRequestError::UtpError(format!("{:?}", err)))?;
-
-        Ok(data)
     }
 
     /// Offer is sent in order to store content to k nodes with radii that contain content-id

@@ -13,6 +13,7 @@ use ethportal_api::types::execution::{
     header::{Header, HeaderWithProof},
     receipts::Receipts,
 };
+use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::HistoryContentKey;
 use trin_validation::{oracle::HeaderOracle, validator::Validator};
 
@@ -31,11 +32,18 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
         HistoryContentKey: 'async_trait,
     {
         match content_key {
-            HistoryContentKey::BlockHeaderWithProof(_key) => {
+            HistoryContentKey::BlockHeaderWithProof(key) => {
                 let header_with_proof =
                     HeaderWithProof::from_ssz_bytes(content).map_err(|err| {
                         anyhow!("Header with proof content has invalid encoding: {err:?}")
                     })?;
+                if header_with_proof.header.hash() != H256::from(key.block_hash) {
+                    return Err(anyhow!(
+                        "Content validation failed: Invalid header hash. Found: {:?} - Expected: {:?}",
+                        header_with_proof.header.hash(),
+                        hex_encode(key.block_hash)
+                    ));
+                }
                 self.header_oracle
                     .write()
                     .await
