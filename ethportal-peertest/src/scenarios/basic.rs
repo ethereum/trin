@@ -1,3 +1,4 @@
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use crate::constants::{HISTORY_CONTENT_KEY, HISTORY_CONTENT_VALUE};
 use crate::Peertest;
 use ethereum_types::U256;
@@ -31,6 +32,44 @@ pub async fn test_discv5_routing_table_info(target: &Client) {
     assert!(local_key.is_string());
     assert!(local_key.as_str().unwrap().starts_with("0x"));
     assert!(result.get("buckets").unwrap().is_array());
+}
+
+pub async fn test_discv5_add_enr(target: &Client, peertest: &Peertest) {
+    info!("Testing discv5_addEnr");
+    let result = Discv5ApiClient::add_enr(target, peertest.bootnode.enr.clone()).await.unwrap();
+    assert_eq!(result, true);
+}
+
+pub async fn test_discv5_get_enr(target: &Client, peertest: &Peertest) {
+    info!("Testing discv5_getEnr");
+    let result = Discv5ApiClient::add_enr(target, peertest.bootnode.enr.clone()).await.unwrap();
+    assert_eq!(result, true);
+    let result = Discv5ApiClient::get_enr(target, peertest.bootnode.enr.node_id().into()).await.unwrap();
+    assert_eq!(result, peertest.bootnode.enr);
+}
+
+pub async fn test_discv5_delete_enr(target: &Client, peertest: &Peertest) {
+    info!("Testing discv5_deleteEnr");
+    let result = Discv5ApiClient::delete_enr(target, peertest.bootnode.enr.node_id().into()).await.unwrap();
+    assert_eq!(result, true);
+    let result = Discv5ApiClient::get_enr(target, peertest.bootnode.enr.node_id().into()).await.unwrap_err();
+    assert_eq!(result.to_string(), "RPC call failed: ErrorObject { code: ServerError(-32001), message: \"Custom error: ENR not found for get_enr\", data: None }");
+    // add it back since scenario tests share resources so a different test could still need it
+    let result = Discv5ApiClient::add_enr(target, peertest.bootnode.enr.clone()).await.unwrap();
+    assert_eq!(result, true);
+}
+
+pub async fn test_discv5_update_node_info(target: &Client, peertest: &Peertest) {
+    info!("Testing discv5_updateNodeInfo");
+    let result = peertest.bootnode.ipc_client.update_node_info(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080).to_string(), false).await.unwrap();
+    assert_eq!(result, true);
+    let result = peertest.bootnode.ipc_client.node_info().await.unwrap();
+    assert_eq!(result.enr.udp4().unwrap(), 8080);
+    // switch it back
+    let result = peertest.bootnode.ipc_client.update_node_info(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9001).to_string(), false).await.unwrap();
+    assert_eq!(result, true);
+    let result = peertest.bootnode.ipc_client.node_info().await.unwrap();
+    assert_eq!(result.enr.udp4().unwrap(), 9001);
 }
 
 pub async fn test_history_radius(target: &Client) {
@@ -84,7 +123,7 @@ pub async fn test_history_ping(target: &Client, peertest: &Peertest) {
         result.data_radius,
         U256::from_big_endian(Distance::MAX.as_ssz_bytes().as_slice())
     );
-    assert_eq!(result.enr_seq, 1);
+    assert_eq!(result.enr_seq, 3);
 }
 
 pub async fn test_history_find_nodes(target: &Client, peertest: &Peertest) {

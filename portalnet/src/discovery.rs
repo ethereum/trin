@@ -1,9 +1,6 @@
 use anyhow::anyhow;
 use async_trait::async_trait;
-use discv5::{
-    enr::{CombinedKey, EnrBuilder, NodeId},
-    Discv5, Discv5ConfigBuilder, Discv5Event, ListenConfig, RequestError, TalkRequest,
-};
+use discv5::{enr::{CombinedKey, EnrBuilder, NodeId}, Discv5, Discv5ConfigBuilder, Discv5Event, ListenConfig, RequestError, TalkRequest, QueryError};
 use lru::LruCache;
 use parking_lot::RwLock;
 use serde_json::{json, Value};
@@ -19,6 +16,8 @@ use ethportal_api::NodeInfo;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
 use std::{convert::TryFrom, fmt, io, net::SocketAddr, sync::Arc};
+use std::cmp::min;
+use discv5::service::Pong;
 use trin_utils::version::get_trin_version;
 
 /// Size of the buffer of the Discv5 TALKREQ channel.
@@ -258,6 +257,16 @@ impl Discovery {
         self.discv5.add_enr(enr)
     }
 
+    /// Removes `enr` from the discv5 routing table.
+    pub fn remove_node(&self, node_id: &NodeId) -> bool {
+        self.discv5.remove_node(node_id)
+    }
+
+    /// Returns a vector of closest nodes by the given distances.
+    pub fn nodes_by_distance(&self, distances: Vec<u64>) -> Vec<Enr> {
+        self.discv5.nodes_by_distance(distances)
+    }
+
     /// Returns the cached `NodeAddress` or `None` if not cached.
     pub fn cached_node_addr(&self, node_id: &NodeId) -> Option<NodeAddress> {
         self.node_addr_cache.write().get(node_id).cloned()
@@ -275,6 +284,27 @@ impl Discovery {
 
         let response = self.discv5.talk_req(enr, protocol, request).await?;
         Ok(response)
+    }
+
+    /// Sends a TALKREQ message to `enr`.
+    pub async fn send_ping(
+        &self,
+        enr: Enr,
+    ) -> Result<Pong, RequestError> {
+        let response = self.discv5.send_ping(enr).await?;
+        Ok(response)
+    }
+
+    /// Updates the local ENR TCP/UDP socket.
+    pub fn update_node_info(&self, socket_addr: SocketAddr, is_tcp: bool) -> bool {
+        self.discv5.update_local_enr_socket(socket_addr, is_tcp)
+    }
+
+    /// Look up ENRs closest to the given target and return at most 16
+    pub async fn recursive_find_nodes(&self, node_id: NodeId) -> Result<Vec<Enr>, QueryError> {
+        // in sigp/discv5 find_node is the specs recursive_find_nodes
+        let response = self.discv5.find_node(node_id).await?;
+        Ok(response[0..min(response.len(), 16)].to_vec())
     }
 }
 

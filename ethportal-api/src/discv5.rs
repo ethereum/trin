@@ -1,7 +1,9 @@
 use crate::types::discv5::{NodeInfo, RoutingTableInfo};
 use crate::types::enr::Enr;
 use discv5::enr::NodeId;
+use discv5::service::Pong;
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
+use crate::types::portal::FindNodesInfo;
 
 /// Discv5 JSON-RPC endpoints
 #[rpc(client, server, namespace = "discv5")]
@@ -12,11 +14,7 @@ pub trait Discv5Api {
 
     /// Update the socket address of the local node record.
     #[method(name = "updateNodeInfo")]
-    async fn update_node_info(
-        &self,
-        socket_addr: String,
-        is_tcp: Option<bool>,
-    ) -> RpcResult<NodeInfo>;
+    async fn update_node_info(&self, socket_addr: String, is_tcp: bool) -> RpcResult<NodeInfo>;
 
     /// Returns meta information about discv5 routing table.
     #[method(name = "routingTableInfo")]
@@ -37,4 +35,21 @@ pub trait Discv5Api {
     /// Fetch the ENR representation associated with the given Node ID.
     #[method(name = "lookupEnr")]
     async fn lookup_enr(&self, node_id: NodeId) -> RpcResult<Enr>;
+
+
+    /// Send a PING message to the designated node and wait for a PONG response
+    #[method(name = "ping")]
+    async fn send_ping(&self, _enr: Enr) -> RpcResult<Pong>;
+
+    /// Send a FINDNODES request for nodes that fall within the given set of distances, to the designated peer and wait for a response.
+    #[method(name = "findNodes")]
+    async fn find_node(&self, _enr: Enr, _distances: Vec<u16>) -> RpcResult<FindNodesInfo>;
+
+    /// Send a TALKREQ request with a payload to a given peer and wait for response.
+    #[method(name = "talkReq")]
+    async fn talk_req(&self, enr: Enr, protocol: String, request: Vec<u8>) -> RpcResult<Vec<u8>>;
+
+    /// Look up ENRs closest to the given target
+    #[method(name = "recursiveFindNodes")]
+    async fn recursive_find_nodes(&self, _node_id: NodeId) -> RpcResult<Vec<Enr>>;
 }
