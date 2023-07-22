@@ -1063,6 +1063,7 @@ where
                 let enrs = self.find_nodes_close_to_content(content_key);
                 match enrs {
                     Ok(mut val) => {
+                        val.retain(|x| source != &x.node_id());
                         pop_while_ssz_bytes_len_gt(&mut val, MAX_PORTAL_CONTENT_PAYLOAD_SIZE);
                         Ok(Content::Enrs(val))
                     }
