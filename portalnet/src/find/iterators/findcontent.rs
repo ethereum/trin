@@ -32,19 +32,34 @@ use super::query::{Query, QueryConfig, QueryPeer, QueryPeerState, QueryProgress}
 pub enum FindContentQueryResponse<TNodeId> {
     ClosestNodes(Vec<TNodeId>),
     Content(Vec<u8>),
+    // what where is connection id?
 }
 
 #[derive(Debug)]
 pub enum FindContentQueryResult<TNodeId> {
     ClosestNodes(Vec<TNodeId>),
-    Content {
-        content: Vec<u8>,
-        closest_nodes: Vec<TNodeId>,
-    },
+    Invalid(ResultDetails<TNodeId>),
+    Valid(ResultDetails<TNodeId>),
 }
 
 #[derive(Debug, Clone)]
-struct ContentAndPeer<TNodeId> {
+pub struct ResultDetails<TNodeId> {
+    pub content: Vec<u8>,
+    // needed to boot peer from query pool
+    // remove if not needed here
+    pub peer: TNodeId,
+    pub utp: bool,
+    pub closest_nodes: Vec<TNodeId>,
+}
+
+#[derive(Debug, Clone)]
+enum ContentAndPeer<TNodeId> {
+    Valid(ContentAndPeerDetails<TNodeId>),
+    Invalid(ContentAndPeerDetails<TNodeId>),
+}
+
+#[derive(Debug, Clone)]
+struct ContentAndPeerDetails<TNodeId> {
     content: Vec<u8>,
     peer: TNodeId,
 }
@@ -167,11 +182,17 @@ where
             }
             FindContentQueryResponse::Content(content) => {
                 // Incorporate the found content into the query.
-                self.content = Some(ContentAndPeer {
+                self.content = Some(ContentAndPeer::Valid(ContentAndPeerDetails {
                     content,
                     peer: peer.clone(),
-                });
-            }
+                }));
+            } //FindContentQueryResponse::InvalidContent(content) => {
+              //// Incorporate the found content into the query.
+              //self.content = Some(ContentAndPeer::Invalid(ContentAndPeerDetails {
+              //content,
+              //peer: peer.clone(),
+              //}));
+              //}
         }
     }
 
@@ -294,27 +315,52 @@ where
     fn into_result(self) -> Self::Result {
         match self.content {
             Some(content) => {
-                let closest_nodes = self
-                    .closest_peers
-                    .into_values()
-                    .filter_map(|peer| {
-                        if let QueryPeerState::Succeeded = peer.state() {
-                            // Do not include the peer who returned the content.
-                            if *peer.key().preimage() == content.peer {
-                                None
-                            } else {
-                                Some(peer.key().clone().into_preimage())
-                            }
-                        } else {
-                            None
-                        }
-                    })
-                    .take(self.config.num_results)
-                    .collect();
-
-                FindContentQueryResult::Content {
-                    content: content.content,
-                    closest_nodes,
+                match content {
+                    ContentAndPeer::Valid(val) => {
+                        let closest_nodes = self
+                            .closest_peers
+                            .into_values()
+                            .filter_map(|peer| {
+                                if let QueryPeerState::Succeeded = peer.state() {
+                                    // Do not include the peer who returned the content.
+                                    if *peer.key().preimage() == val.peer {
+                                        None
+                                    } else {
+                                        Some(peer.key().clone().into_preimage())
+                                    }
+                                } else {
+                                    None
+                                }
+                            })
+                            .take(self.config.num_results)
+                            .collect();
+                        FindContentQueryResult::Valid(ResultDetails {
+                            content: val.content,
+                            peer: val.peer,
+                            utp: false, //???
+                            closest_nodes,
+                        })
+                    }
+                    ContentAndPeer::Invalid(val) => {
+                        let closest_nodes = self
+                            .closest_peers
+                            .into_values()
+                            .filter_map(|peer| {
+                                if let QueryPeerState::Succeeded = peer.state() {
+                                    Some(peer.key().clone().into_preimage())
+                                } else {
+                                    None
+                                }
+                            })
+                            .take(self.config.num_results)
+                            .collect();
+                        FindContentQueryResult::Invalid(ResultDetails {
+                            peer: val.peer,
+                            content: val.content,
+                            utp: false, //???
+                            closest_nodes,
+                        })
+                    }
                 }
             }
             None => {
@@ -459,13 +505,11 @@ mod tests {
 
         let result = query.into_result();
         match result {
-            FindContentQueryResult::Content { .. } => {
-                panic!("Unexpected result variant from new query")
-            }
             FindContentQueryResult::ClosestNodes(closest_nodes) => assert!(
                 closest_nodes.is_empty(),
                 "Unexpected closest peers in new query"
             ),
+            _ => panic!("Unexpected result variant from new query"),
         }
     }
 
@@ -569,12 +613,12 @@ mod tests {
 
             let result = query.into_result();
             match result {
-                FindContentQueryResult::Content {
-                    content,
-                    closest_nodes,
-                } => {
-                    let closest_nodes =
-                        closest_nodes.into_iter().map(Key::from).collect::<Vec<_>>();
+                FindContentQueryResult::Valid(val) => {
+                    let closest_nodes = val
+                        .closest_nodes
+                        .into_iter()
+                        .map(Key::from)
+                        .collect::<Vec<_>>();
                     assert!(sorted(&target_key, &closest_nodes));
 
                     let content_peer = content_peer.unwrap();
@@ -583,7 +627,23 @@ mod tests {
                     // nodes.
                     assert!(!closest_nodes.contains(&content_peer));
 
-                    assert_eq!(content, found_content);
+                    assert_eq!(val.content, found_content);
+                }
+                FindContentQueryResult::Invalid(val) => {
+                    let closest_nodes = val
+                        .closest_nodes
+                        .into_iter()
+                        .map(Key::from)
+                        .collect::<Vec<_>>();
+                    assert!(sorted(&target_key, &closest_nodes));
+
+                    let content_peer = content_peer.unwrap();
+
+                    // The peer who returned the content should not be included in the closest
+                    // nodes.
+                    assert!(!closest_nodes.contains(&content_peer));
+
+                    assert_eq!(val.content, found_content);
                 }
                 FindContentQueryResult::ClosestNodes(closest_nodes) => {
                     let closest_nodes =
@@ -707,7 +767,7 @@ mod tests {
                     FindContentQueryResult::ClosestNodes(closest) => {
                         assert!(closest.is_empty());
                     }
-                    FindContentQueryResult::Content { .. } => {
+                    _ => {
                         panic!("Unexpected query result variant")
                     }
                 }
@@ -718,7 +778,7 @@ mod tests {
                     FindContentQueryResult::ClosestNodes(closest) => {
                         assert_eq!(closest, vec![peer]);
                     }
-                    FindContentQueryResult::Content { .. } => {
+                    _ => {
                         panic!("Unexpected query result variant")
                     }
                 }

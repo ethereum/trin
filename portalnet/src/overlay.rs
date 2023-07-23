@@ -425,7 +425,7 @@ where
         &self,
         enr: Enr,
         content_key: Vec<u8>,
-    ) -> Result<Content, OverlayRequestError> {
+    ) -> Result<serde_json::Value, OverlayRequestError> {
         // Construct the request.
         let request = FindContent {
             content_key: content_key.clone(),
@@ -441,59 +441,24 @@ where
         {
             Ok(Response::Content(found_content)) => {
                 match found_content {
-                    Content::Content(_) => Ok(found_content),
-                    Content::Enrs(_) => Ok(found_content),
+                    Content::Content(val) => {
+                        let content = hex_encode(&val);
+                        Ok(serde_json::json!({
+                            "content": content,
+                            "utpTransfer": false,
+                        }))
+                    }
+                    // should this be valid?
+                    Content::Enrs(val) => Ok(serde_json::json!({ "enrs": val })),
                     // Init uTP stream if `connection_id`is received
                     Content::ConnectionId(conn_id) => {
-                        let conn_id = u16::from_be(conn_id);
-                        let content = self.init_find_content_stream(enr, conn_id).await?;
-                        let content_key = TContentKey::try_from(content_key).map_err(|err| {
-                            OverlayRequestError::FailedValidation(format!(
-                                "Error decoding content key for received utp content: {err}"
-                            ))
-                        })?;
-                        match self
-                            .validator
-                            .validate_content(&content_key, &content)
-                            .await
-                        {
-                            Ok(_) => Ok(Content::Content(content)),
-                            Err(msg) => Err(OverlayRequestError::FailedValidation(format!(
-                                "Network: {:?}, Reason: {:?}",
-                                self.protocol, msg
-                            ))),
-                        }
+                        panic!("Fuck: {:?}", conn_id);
                     }
                 }
             }
             Ok(_) => Err(OverlayRequestError::InvalidResponse),
             Err(error) => Err(error),
         }
-    }
-
-    /// Initialize FindContent uTP stream with remote node
-    async fn init_find_content_stream(
-        &self,
-        enr: Enr,
-        conn_id: u16,
-    ) -> Result<Vec<u8>, OverlayRequestError> {
-        let cid = utp_rs::cid::ConnectionId {
-            recv: conn_id,
-            send: conn_id.wrapping_add(1),
-            peer: crate::discovery::UtpEnr(enr),
-        };
-        let mut stream = self
-            .utp_socket
-            .connect_with_cid(cid, UTP_CONN_CFG)
-            .await
-            .map_err(|err| OverlayRequestError::UtpError(format!("{err:?}")))?;
-        let mut data = vec![];
-        stream
-            .read_to_eof(&mut data)
-            .await
-            .map_err(|err| OverlayRequestError::UtpError(format!("{:?}", err)))?;
-
-        Ok(data)
     }
 
     /// Offer is sent in order to store content to k nodes with radii that contain content-id
@@ -597,7 +562,7 @@ where
         &self,
         target: TContentKey,
         is_trace: bool,
-    ) -> (Option<Vec<u8>>, Option<QueryTrace>) {
+    ) -> (Option<Vec<u8>>, bool, Option<QueryTrace>) {
         let (tx, rx) = oneshot::channel();
         let content_id = target.content_id();
 
@@ -612,7 +577,7 @@ where
                 content.id = %hex_encode(content_id),
                 "Error submitting FindContent query to service"
             );
-            return (None, None);
+            return (None, false, None);
         }
 
         rx.await.unwrap_or_else(|err| {
@@ -622,7 +587,7 @@ where
                 content.id = %hex_encode(content_id),
                 "Error receiving content from service",
             );
-            (None, None)
+            (None, false, None)
         })
     }
 

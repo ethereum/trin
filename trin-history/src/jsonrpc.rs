@@ -101,7 +101,7 @@ async fn recursive_find_content(
             None
         }
     };
-    let (possible_content_bytes, trace) = match local_content {
+    let (possible_content_bytes, utp, trace) = match local_content {
         Some(val) => {
             let local_enr = overlay.local_enr();
             let mut trace = QueryTrace::new(
@@ -109,7 +109,7 @@ async fn recursive_find_content(
                 NodeId::new(&content_key.content_id()).into(),
             );
             trace.node_responded_with_content(&local_enr);
-            (Some(val), if is_trace { Some(trace) } else { None })
+            (Some(val), false, if is_trace { Some(trace) } else { None })
         }
         None => overlay.lookup_content(content_key.clone(), is_trace).await,
     };
@@ -122,8 +122,13 @@ async fn recursive_find_content(
 
     // If tracing is not required, return content.
     if !is_trace {
-        return Ok(content_response_string);
+        let content_response = json!({
+            "content": content_response_string,
+            "utp": utp,
+        });
+        return Ok(content_response);
     }
+    // do we want to add utp bool here?
     if let Some(trace) = trace {
         Ok(json!(TraceContentInfo {
             content: serde_json::from_value(content_response_string).map_err(|e| e.to_string())?,
@@ -242,7 +247,8 @@ async fn find_content(
     content_key: HistoryContentKey,
 ) -> Result<Value, String> {
     let overlay = network.read().await.overlay.clone();
-    match overlay.send_find_content(enr, content_key.into()).await {
+    let x = overlay.send_find_content(enr, content_key.into()).await;
+    match x {
         Ok(content) => match content.try_into() {
             Ok(val) => Ok(val),
             Err(_) => Err("Content response decoding error".to_string()),

@@ -132,6 +132,7 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
     ) -> RpcResult<ContentInfo> {
         let endpoint = HistoryEndpoint::FindContent(enr, content_key);
         let result = self.proxy_query_to_history_subnet(endpoint).await?;
+        tracing::info!("find_content result: {:?}", result);
         let result: ContentInfo = from_value(result)?;
         Ok(result)
     }

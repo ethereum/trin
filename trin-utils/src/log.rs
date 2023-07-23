@@ -4,6 +4,7 @@ pub fn init_tracing_logger() {
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .with_ansi(detect_ansi_support())
+        .with_thread_ids(true)
         .init();
 }
 

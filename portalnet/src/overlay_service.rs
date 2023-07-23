@@ -39,7 +39,9 @@ use crate::{
     events::OverlayEvent,
     find::{
         iterators::{
-            findcontent::{FindContentQuery, FindContentQueryResponse, FindContentQueryResult},
+            findcontent::{
+                FindContentQuery, FindContentQueryResponse, FindContentQueryResult, ResultDetails,
+            },
             findnodes::FindNodeQuery,
             query::{Query, QueryConfig},
         },
@@ -111,7 +113,7 @@ pub enum OverlayCommand<TContentKey> {
         /// The query target.
         target: TContentKey,
         /// A callback channel to transmit the result of the query.
-        callback: oneshot::Sender<(Option<Vec<u8>>, Option<QueryTrace>)>,
+        callback: oneshot::Sender<FindContentResult>,
         /// Whether or not a trace for the content query should be kept and returned.
         is_trace: bool,
     },
@@ -766,12 +768,23 @@ where
             QueryEvent::Finished(query_id, query_info, query)
             | QueryEvent::TimedOut(query_id, query_info, query) => {
                 let result = query.into_result();
-                let (content, closest_nodes) = match result {
-                    FindContentQueryResult::ClosestNodes(closest_nodes) => (None, closest_nodes),
-                    FindContentQueryResult::Content {
+                let (content, utp, closest_nodes) = match result {
+                    FindContentQueryResult::ClosestNodes(closest_nodes) => (None, false, closest_nodes),
+                    FindContentQueryResult::Valid(ResultDetails {
                         content,
                         closest_nodes,
-                    } => (Some(content), closest_nodes),
+                        utp,
+                        ..
+                    }) => (Some(content), utp, closest_nodes),
+                    // make sure we boot this peer
+                    // do we need to distinguish if content validation failed?
+                    FindContentQueryResult::Invalid(ResultDetails {
+                        content,
+                        closest_nodes,
+                        utp,
+                        ..
+                    // or vec![]?
+                    }) => (None, utp, closest_nodes),
                 };
 
                 if let QueryType::FindContent {
@@ -779,22 +792,23 @@ where
                     target: content_key,
                 } = query_info.query_type
                 {
-                    let response = (content.clone(), query_info.trace);
+                    let response = (content.clone(), utp, query_info.trace);
                     // Send (possibly `None`) content on callback channel.
                     if let Err(err) = callback.send(response) {
                         error!(
-                            query.id = %query_id,
-                            error = ?err,
-                            "Error sending FindContent query result to callback",
+                        query.id = %query_id,
+                        error = ?err,
+                        "Error sending FindContent query result to callback",
                         );
                     }
-
-                    // If content was found, then offer the content to the closest nodes who did
-                    // not possess the content.
-                    if let Some(content) = content {
-                        self.poke_content(content_key, content, closest_nodes);
-                    }
                 }
+
+                /*// If content was found, then offer the content to the closest nodes who did*/
+                /*// not possess the content.*/
+                /*if let Some(content) = content {*/
+                /*self.poke_content(content_key, content, closest_nodes);*/
+                /*}*/
+                /*}*/
             }
         }
     }
@@ -1056,6 +1070,7 @@ where
                     });
 
                     // Connection id is send as BE because uTP header values are stored also as BE
+                    info!("xxxxx: {:?}", cid_send.to_be());
                     Ok(Content::ConnectionId(cid_send.to_be()))
                 }
             }
@@ -1376,17 +1391,14 @@ where
             Response::Pong(pong) => self.process_pong(pong, source),
             Response::Nodes(nodes) => self.process_nodes(nodes, source, query_id),
             Response::Content(content) => {
-                let find_content_request = match request {
-                    Request::FindContent(find_content) => find_content,
-                    _ => {
-                        error!(
-                            response.source = %source.node_id(),
-                            "Content response associated with non-FindContent request"
-                        );
-                        return;
-                    }
-                };
-                self.process_content(content, source, find_content_request, query_id)
+                if let Request::FindContent(find_content) = request {
+                    self.process_content(content, source, find_content, query_id)
+                } else {
+                    error!(
+                        response.source = %source.node_id(),
+                        "Content response associated with non-FindContent request"
+                    );
+                }
             }
             Response::Accept(accept) => {
                 if let Err(err) = self.process_accept(accept, source, request) {
@@ -1707,7 +1719,8 @@ where
             Content::ConnectionId(id) => debug!(
                 protocol = %self.protocol,
                 "Skipping processing for content connection ID {}",
-                u16::from_be(id)
+                //u16::from_be(id)
+                id
             ),
             Content::Content(content) => {
                 self.process_received_content(content.clone(), request);
@@ -3623,10 +3636,10 @@ mod tests {
 
         // Query result should contain content.
         match query.clone().into_result() {
-            FindContentQueryResult::Content {
+            FindContentQueryResult::Valid(ResultDetails {
                 content: result_content,
                 ..
-            } => {
+            }) => {
                 assert_eq!(result_content, content);
             }
             _ => panic!("Unexpected find content query result"),
@@ -3720,8 +3733,9 @@ mod tests {
             .await
             .expect("Expected result on callback channel receiver")
         {
-            (Some(result_content), _) => {
+            (Some(result_content), utp, _) => {
                 assert_eq!(result_content, content);
+                assert!(!utp);
             }
             _ => panic!("Unexpected find content query result type"),
         }

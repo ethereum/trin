@@ -204,12 +204,10 @@ async fn overlay() {
         .send_find_content(overlay_one.local_enr(), content_key.into())
         .await
     {
-        Ok(content) => match content {
-            Content::Enrs(enrs) => enrs,
-            other => panic!("Unexpected response to find content: {other:?}"),
-        },
+        Ok(content) => content,
         Err(err) => panic!("Unable to respond to find content: {err}"),
     };
+    let content_enrs: Vec<Enr> = serde_json::from_value(content_enrs).unwrap();
     time::sleep(sleep_duration).await;
     let overlay_two_peers = overlay_two.table_entries_enr();
     assert!(overlay_two_peers.contains(&overlay_one.local_enr()));
@@ -229,10 +227,11 @@ async fn overlay() {
         .put(content_key.clone(), &content)
         .expect("Unable to store content");
     match overlay_one.lookup_content(content_key, false).await {
-        (Some(found_content), _) => {
+        (Some(found_content), utp, _) => {
             assert_eq!(found_content, content);
+            assert!(!utp);
         }
-        (None, _) => {
+        (None, _, _) => {
             panic!("Unable to find content stored with peer");
         }
     }
