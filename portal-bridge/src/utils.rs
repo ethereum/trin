@@ -1,7 +1,7 @@
 use discv5::enr::{CombinedKey, EnrBuilder, NodeId};
-use ethportal_api::types::content_key::HistoryContentKey;
 use ethportal_api::types::content_value::HistoryContentValue;
 use ethportal_api::utils::bytes::hex_encode;
+use ethportal_api::HistoryContentKey;
 use serde::{Deserialize, Serialize};
 
 /// Generates a set of N private keys, with node ids that are equally spaced

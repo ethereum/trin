@@ -40,11 +40,11 @@ use crate::{
     },
 };
 use ethportal_api::types::bootnodes::Bootnode;
-use ethportal_api::types::content_key::RawContentKey;
 use ethportal_api::types::distance::{Distance, Metric};
 use ethportal_api::types::enr::Enr;
 use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::OverlayContentKey;
+use ethportal_api::RawContentKey;
 use trin_validation::validator::Validator;
 
 use crate::events::EventEnvelope;

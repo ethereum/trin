@@ -1,4 +1,4 @@
-use crate::types::content_key::BeaconContentKey;
+use crate::types::content_key::beacon::BeaconContentKey;
 use crate::types::content_value::{BeaconContentValue, PossibleBeaconContentValue};
 use crate::types::enr::Enr;
 use crate::types::portal::FindNodesInfo;

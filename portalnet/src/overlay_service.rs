@@ -61,12 +61,13 @@ use crate::{
     },
     utils::portal_wire,
 };
-use ethportal_api::types::content_key::RawContentKey;
+use ethportal_api::generate_random_node_id;
 use ethportal_api::types::distance::{Distance, Metric, XorMetric};
 use ethportal_api::types::enr::{Enr, SszEnr};
 use ethportal_api::types::query_trace::QueryTrace;
 use ethportal_api::utils::bytes::{hex_encode, hex_encode_compact};
-use ethportal_api::{generate_random_node_id, OverlayContentKey};
+use ethportal_api::OverlayContentKey;
+use ethportal_api::RawContentKey;
 use trin_validation::validator::Validator;
 
 pub const FIND_NODES_MAX_NODES: usize = 32;
@@ -2549,7 +2550,7 @@ mod tests {
         types::messages::PortalnetConfig,
     };
 
-    use ethportal_api::types::content_key::IdentityContentKey;
+    use ethportal_api::types::content_key::overlay::IdentityContentKey;
     use ethportal_api::types::distance::XorMetric;
     use ethportal_api::types::enr::generate_random_remote_enr;
     use trin_validation::validator::MockValidator;

@@ -4,9 +4,6 @@ use crate::pandaops::PandaOpsMiddleware;
 use crate::utils::TestAssets;
 use anyhow::{anyhow, bail};
 use ethportal_api::jsonrpsee::http_client::HttpClient;
-use ethportal_api::types::content_key::{
-    BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey, HistoryContentKey,
-};
 use ethportal_api::types::content_value::HistoryContentValue;
 use ethportal_api::types::execution::accumulator::EpochAccumulator;
 use ethportal_api::types::execution::block_body::{
@@ -19,6 +16,9 @@ use ethportal_api::types::execution::header::{
 use ethportal_api::types::execution::receipts::Receipts;
 use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::HistoryNetworkApiClient;
+use ethportal_api::{
+    BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey, HistoryContentKey,
+};
 use futures::stream::StreamExt;
 use ssz::Decode;
 use std::fs;

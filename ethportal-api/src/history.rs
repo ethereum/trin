@@ -1,4 +1,4 @@
-use crate::types::content_key::HistoryContentKey;
+use crate::types::content_key::history::HistoryContentKey;
 use crate::types::content_value::{HistoryContentValue, PossibleHistoryContentValue};
 use crate::types::enr::Enr;
 use crate::types::portal::FindNodesInfo;
