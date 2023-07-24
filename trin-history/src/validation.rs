@@ -32,10 +32,12 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
     {
         match content_key {
             HistoryContentKey::BlockHeaderWithProof(_key) => {
+                tracing::info!("XX:0 ");
                 let header_with_proof =
                     HeaderWithProof::from_ssz_bytes(content).map_err(|err| {
                         anyhow!("Header with proof content has invalid encoding: {err:?}")
                     })?;
+                tracing::info!("XX:1 ");
                 self.header_oracle
                     .write()
                     .await

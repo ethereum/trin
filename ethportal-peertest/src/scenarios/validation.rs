@@ -46,7 +46,6 @@ pub async fn test_validate_pre_merge_header_with_proof(peertest: &Peertest, targ
         .await
         .unwrap();
 
-    info!("Result: {:?}", result);
     match result {
         ContentInfo::Content {
             content,
@@ -55,7 +54,7 @@ pub async fn test_validate_pre_merge_header_with_proof(peertest: &Peertest, targ
             assert_eq!(content, header_with_proof_content_value);
             assert!(!utp_transfer);
         }
-        _ => panic!("Content value's should match"),
+        _ => panic!("Content values should match"),
     }
 }
 
@@ -96,7 +95,7 @@ pub async fn test_validate_pre_merge_block_body(peertest: &Peertest, target: &Cl
             assert_eq!(content, block_body_content_value);
             assert!(utp_transfer);
         }
-        _ => panic!("Content value's should match"),
+        _ => panic!("Content values should match"),
     }
 }
 
@@ -134,6 +133,6 @@ pub async fn test_validate_pre_merge_receipts(peertest: &Peertest, target: &Clie
             assert_eq!(content, receipts_content_value);
             assert!(utp_transfer);
         }
-        _ => panic!("Content value's should match"),
+        _ => panic!("Content values should match"),
     }
 }

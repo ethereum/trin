@@ -529,7 +529,7 @@ pub struct FindContent {
 #[ssz(enum_behaviour = "union")]
 pub enum Content {
     ConnectionId(u16),
-    Content(Vec<u8>),
+    Content((Vec<u8>, bool)),
     Enrs(Vec<SszEnr>),
 }
 
@@ -540,7 +540,7 @@ impl TryInto<Value> for Content {
         if let Content::ConnectionId(val) = self {
             Ok(serde_json::json!({ "connection_id": val }))
         } else if let Content::Content(val) = self {
-            Ok(serde_json::json!({ "content": hex_encode(val) }))
+            Ok(serde_json::json!({ "content": hex_encode(val.0), "utpTransfer": val.1}))
         } else if let Content::Enrs(val) = self {
             Ok(serde_json::json!({ "enrs": val }))
         } else {
@@ -731,7 +731,7 @@ mod test {
     #[test]
     fn message_encoding_content_content() {
         let content_val = hex_decode("0x7468652063616b652069732061206c6965").unwrap();
-        let content = Content::Content(content_val);
+        let content = Content::Content((content_val, false));
         let content = Message::Content(content);
 
         let encoded: Vec<u8> = content.clone().into();

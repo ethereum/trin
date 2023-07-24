@@ -28,7 +28,6 @@ use crate::{
     metrics::overlay::OverlayMetrics,
     overlay_service::{
         OverlayCommand, OverlayRequest, OverlayRequestError, OverlayService, RequestDirection,
-        UTP_CONN_CFG,
     },
     storage::ContentStore,
     types::{
@@ -441,18 +440,12 @@ where
         {
             Ok(Response::Content(found_content)) => {
                 match found_content {
-                    Content::Content(val) => {
-                        let content = hex_encode(&val);
-                        Ok(serde_json::json!({
-                            "content": content,
-                            "utpTransfer": false,
-                        }))
-                    }
+                    Content::Content(_) => Ok(found_content.try_into().unwrap()),
                     // should this be valid?
                     Content::Enrs(val) => Ok(serde_json::json!({ "enrs": val })),
                     // Init uTP stream if `connection_id`is received
                     Content::ConnectionId(conn_id) => {
-                        panic!("Fuck: {:?}", conn_id);
+                        panic!("shouldn't be here: {:?}", conn_id);
                     }
                 }
             }

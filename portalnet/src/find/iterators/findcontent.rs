@@ -186,13 +186,7 @@ where
                     content,
                     peer: peer.clone(),
                 }));
-            } //FindContentQueryResponse::InvalidContent(content) => {
-              //// Incorporate the found content into the query.
-              //self.content = Some(ContentAndPeer::Invalid(ContentAndPeerDetails {
-              //content,
-              //peer: peer.clone(),
-              //}));
-              //}
+            }
         }
     }
 
