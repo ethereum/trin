@@ -1,11 +1,11 @@
 use crate::types::content_key::history::HistoryContentKey;
-use crate::types::content_value::{HistoryContentValue, PossibleHistoryContentValue};
 use crate::types::enr::Enr;
 use crate::types::portal::FindNodesInfo;
 use crate::types::portal::{
     AcceptInfo, ContentInfo, DataRadius, PaginateLocalContentInfo, PongInfo, TraceContentInfo,
 };
 use crate::RoutingTableInfo;
+use crate::{HistoryContentValue, PossibleHistoryContentValue};
 use discv5::enr::NodeId;
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
 

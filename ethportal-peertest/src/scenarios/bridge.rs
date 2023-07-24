@@ -2,7 +2,7 @@ use crate::constants::{HISTORY_CONTENT_KEY, HISTORY_CONTENT_VALUE};
 use crate::utils::wait_for_content;
 use crate::Peertest;
 use ethportal_api::jsonrpsee::http_client::HttpClient;
-use ethportal_api::types::content_value::PossibleHistoryContentValue;
+use ethportal_api::PossibleHistoryContentValue;
 use ethportal_api::{HistoryContentKey, HistoryContentValue};
 use portal_bridge::bridge::Bridge;
 use portal_bridge::mode::BridgeMode;

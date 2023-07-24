@@ -41,11 +41,11 @@ impl<'de> Deserialize<'de> for HistoryContentKey {
         D: Deserializer<'de>,
     {
         let data = String::deserialize(deserializer)?.to_lowercase();
-        let first_two = &data[..2];
 
-        if first_two != "0x" {
+        if !data.starts_with("0x") {
             return Err(de::Error::custom(format!(
-                "Hex strings must start with 0x, but found {first_two}"
+                "Hex strings must start with 0x, but found {}",
+                &data[..2]
             )));
         }
 
@@ -63,7 +63,6 @@ impl<'de> Deserialize<'de> for HistoryContentKey {
 /// A key for a block header.
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct BlockHeaderKey {
-    /// Chain identifier.
     /// Hash of the block.
     pub block_hash: [u8; 32],
 }

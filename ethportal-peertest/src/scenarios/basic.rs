@@ -1,10 +1,10 @@
 use crate::constants::{HISTORY_CONTENT_KEY, HISTORY_CONTENT_VALUE};
 use crate::Peertest;
 use ethereum_types::U256;
-use ethportal_api::types::content_value::{HistoryContentValue, PossibleHistoryContentValue};
 use ethportal_api::types::distance::Distance;
 use ethportal_api::HistoryContentKey;
 use ethportal_api::{Discv5ApiClient, HistoryNetworkApiClient, Web3ApiClient};
+use ethportal_api::{HistoryContentValue, PossibleHistoryContentValue};
 use jsonrpsee::async_client::Client;
 use serde_json::json;
 use ssz::Encode;

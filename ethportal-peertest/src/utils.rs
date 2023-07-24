@@ -1,6 +1,6 @@
 use tracing::error;
 
-use ethportal_api::types::content_value::PossibleHistoryContentValue;
+use ethportal_api::PossibleHistoryContentValue;
 use ethportal_api::{HistoryContentKey, HistoryNetworkApiClient};
 
 /// Wait for the content to be transferred

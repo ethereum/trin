@@ -25,7 +25,9 @@ pub struct LightClientBootstrapKey {
 /// Key used to identify a set of light client updates.
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct LightClientUpdatesKey {
+    /// The start sync committee period.
     pub start_period: u64,
+    /// the count of periods.
     pub count: u64,
 }
 
@@ -110,11 +112,11 @@ impl<'de> Deserialize<'de> for BeaconContentKey {
         D: Deserializer<'de>,
     {
         let data = String::deserialize(deserializer)?.to_lowercase();
-        let first_two = &data[..2];
 
-        if first_two != "0x" {
+        if !data.starts_with("0x") {
             return Err(de::Error::custom(format!(
-                "Hex strings must start with 0x, but found {first_two}"
+                "Hex strings must start with 0x, but found {}",
+                &data[..2]
             )));
         }
 
