@@ -1,7 +1,6 @@
 use anyhow::anyhow;
 use ethereum_types::H256;
 use serde_json::Value;
-use ssz::Decode;
 use tokio::sync::mpsc;
 
 use crate::accumulator::MasterAccumulator;
@@ -11,7 +10,6 @@ use ethportal_api::types::execution::header::HeaderWithProof;
 use ethportal_api::types::jsonrpc::endpoints::HistoryEndpoint;
 use ethportal_api::types::jsonrpc::request::{BeaconJsonRpcRequest, HistoryJsonRpcRequest};
 use ethportal_api::types::portal::ContentInfo;
-use ethportal_api::utils::bytes::hex_decode;
 
 /// Responsible for dispatching cross-overlay-network requests
 /// for data to perform validation.
@@ -61,16 +59,13 @@ impl HeaderOracle {
         };
         let hwp: ContentInfo = serde_json::from_value(hwp_ssz).unwrap();
         let hwp = match hwp {
-            ContentInfo::Content {
-                content,
-                utp_transfer,
-            } => content,
+            ContentInfo::Content { content, .. } => content,
             _ => return Err(anyhow!("Invalid HWP received from chain history network")),
         };
         if let HistoryContentValue::BlockHeaderWithProof(hwp) = hwp {
-            return Ok(hwp);
+            Ok(hwp)
         } else {
-            return Err(anyhow!("Invalid HWP received from chain history network"));
+            Err(anyhow!("Invalid HWP received from chain history network"))
         }
     }
 

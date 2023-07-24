@@ -32,35 +32,45 @@ use super::query::{Query, QueryConfig, QueryPeer, QueryPeerState, QueryProgress}
 pub enum FindContentQueryResponse<TNodeId> {
     ClosestNodes(Vec<TNodeId>),
     Content(Vec<u8>),
-    // what where is connection id?
+    ConnectionId(u16),
 }
 
 #[derive(Debug)]
 pub enum FindContentQueryResult<TNodeId> {
     ClosestNodes(Vec<TNodeId>),
-    Invalid(ResultDetails<TNodeId>),
-    Valid(ResultDetails<TNodeId>),
+    Content(ContentDetails<TNodeId>),
+    Utp(UtpDetails<TNodeId>),
 }
 
 #[derive(Debug, Clone)]
-pub struct ResultDetails<TNodeId> {
+pub struct ContentDetails<TNodeId> {
     pub content: Vec<u8>,
-    // needed to boot peer from query pool
-    // remove if not needed here
     pub peer: TNodeId,
-    pub utp: bool,
+    pub closest_nodes: Vec<TNodeId>,
+}
+
+#[derive(Debug, Clone)]
+pub struct UtpDetails<TNodeId> {
+    pub peer: TNodeId,
+    pub utp: u16,
     pub closest_nodes: Vec<TNodeId>,
 }
 
 #[derive(Debug, Clone)]
 enum ContentAndPeer<TNodeId> {
-    Valid(ContentAndPeerDetails<TNodeId>),
-    Invalid(ContentAndPeerDetails<TNodeId>),
+    Content(ContentAndPeerDetails<TNodeId>),
+    Utp(UtpAndPeerDetails<TNodeId>),
 }
 
 #[derive(Debug, Clone)]
 struct ContentAndPeerDetails<TNodeId> {
     content: Vec<u8>,
+    peer: TNodeId,
+}
+
+#[derive(Debug, Clone)]
+struct UtpAndPeerDetails<TNodeId> {
+    utp: u16,
     peer: TNodeId,
 }
 
@@ -182,8 +192,14 @@ where
             }
             FindContentQueryResponse::Content(content) => {
                 // Incorporate the found content into the query.
-                self.content = Some(ContentAndPeer::Valid(ContentAndPeerDetails {
+                self.content = Some(ContentAndPeer::Content(ContentAndPeerDetails {
                     content,
+                    peer: peer.clone(),
+                }));
+            }
+            FindContentQueryResponse::ConnectionId(utp) => {
+                self.content = Some(ContentAndPeer::Utp(UtpAndPeerDetails {
+                    utp,
                     peer: peer.clone(),
                 }));
             }
@@ -310,7 +326,7 @@ where
         match self.content {
             Some(content) => {
                 match content {
-                    ContentAndPeer::Valid(val) => {
+                    ContentAndPeer::Content(val) => {
                         let closest_nodes = self
                             .closest_peers
                             .into_values()
@@ -328,14 +344,13 @@ where
                             })
                             .take(self.config.num_results)
                             .collect();
-                        FindContentQueryResult::Valid(ResultDetails {
+                        FindContentQueryResult::Content(ContentDetails {
                             content: val.content,
                             peer: val.peer,
-                            utp: false, //???
                             closest_nodes,
                         })
                     }
-                    ContentAndPeer::Invalid(val) => {
+                    ContentAndPeer::Utp(val) => {
                         let closest_nodes = self
                             .closest_peers
                             .into_values()
@@ -348,10 +363,9 @@ where
                             })
                             .take(self.config.num_results)
                             .collect();
-                        FindContentQueryResult::Invalid(ResultDetails {
+                        FindContentQueryResult::Utp(UtpDetails {
                             peer: val.peer,
-                            content: val.content,
-                            utp: false, //???
+                            utp: val.utp,
                             closest_nodes,
                         })
                     }
@@ -607,7 +621,7 @@ mod tests {
 
             let result = query.into_result();
             match result {
-                FindContentQueryResult::Valid(val) => {
+                FindContentQueryResult::Content(val) => {
                     let closest_nodes = val
                         .closest_nodes
                         .into_iter()
@@ -623,22 +637,7 @@ mod tests {
 
                     assert_eq!(val.content, found_content);
                 }
-                FindContentQueryResult::Invalid(val) => {
-                    let closest_nodes = val
-                        .closest_nodes
-                        .into_iter()
-                        .map(Key::from)
-                        .collect::<Vec<_>>();
-                    assert!(sorted(&target_key, &closest_nodes));
-
-                    let content_peer = content_peer.unwrap();
-
-                    // The peer who returned the content should not be included in the closest
-                    // nodes.
-                    assert!(!closest_nodes.contains(&content_peer));
-
-                    assert_eq!(val.content, found_content);
-                }
+                FindContentQueryResult::Utp(_) => {}
                 FindContentQueryResult::ClosestNodes(closest_nodes) => {
                     let closest_nodes =
                         closest_nodes.into_iter().map(Key::from).collect::<Vec<_>>();

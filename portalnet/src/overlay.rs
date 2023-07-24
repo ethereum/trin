@@ -101,8 +101,6 @@ pub struct OverlayProtocol<TContentKey, TMetric, TValidator, TStore> {
     protocol: ProtocolId,
     /// A sender to send commands to the OverlayService.
     pub command_tx: UnboundedSender<OverlayCommand<TContentKey>>,
-    /// uTP socket.
-    utp_socket: Arc<UtpSocket<UtpEnr>>,
     /// Declare the allowed content key types for a given overlay network.
     /// Use a phantom, because we don't store any keys in this struct.
     /// For example, this type is used when decoding a content key received over the network.
@@ -110,7 +108,7 @@ pub struct OverlayProtocol<TContentKey, TMetric, TValidator, TStore> {
     /// Associate a distance metric with the overlay network.
     phantom_metric: PhantomData<TMetric>,
     /// Accepted content validator that makes requests to this/other overlay networks
-    validator: Arc<TValidator>,
+    phantom_validator: PhantomData<TValidator>,
     /// Runtime telemetry metrics for the overlay network.
     metrics: Arc<OverlayMetrics>,
 }
@@ -167,10 +165,9 @@ where
             store,
             protocol,
             command_tx,
-            utp_socket,
             phantom_content_key: PhantomData,
             phantom_metric: PhantomData,
-            validator,
+            phantom_validator: PhantomData,
             metrics,
         }
     }

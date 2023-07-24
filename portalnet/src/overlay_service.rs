@@ -40,7 +40,8 @@ use crate::{
     find::{
         iterators::{
             findcontent::{
-                FindContentQuery, FindContentQueryResponse, FindContentQueryResult, ResultDetails,
+                ContentDetails, FindContentQuery, FindContentQueryResponse, FindContentQueryResult,
+                UtpDetails,
             },
             findnodes::FindNodeQuery,
             query::{Query, QueryConfig},
@@ -616,7 +617,7 @@ where
     /// Maintains the query pool.
     /// Returns a `QueryEvent` when the `QueryPoolState` updates.
     /// This happens when a query needs to send a request to a node, when a query has completed,
-    // or when a query has timed out.
+    /// or when a query has timed out.
     async fn query_event_poll<TQuery: Query<NodeId>>(
         queries: Arc<RwLock<QueryPool<NodeId, TQuery, TContentKey>>>,
     ) -> QueryEvent<TQuery, TContentKey> {
@@ -758,41 +759,123 @@ where
             QueryEvent::Finished(query_id, query_info, query)
             | QueryEvent::TimedOut(query_id, query_info, query) => {
                 let result = query.into_result();
-                let (content, utp, closest_nodes) = match result {
-                    FindContentQueryResult::ClosestNodes(closest_nodes) => (None, false, closest_nodes),
-                    FindContentQueryResult::Valid(ResultDetails {
+                match result {
+                    FindContentQueryResult::ClosestNodes(closest_nodes) => {}
+                    FindContentQueryResult::Content(ContentDetails {
                         content,
                         closest_nodes,
-                        utp,
                         ..
-                    }) => (Some(content), utp, closest_nodes),
+                    }) => {
+                        let validator = self.validator.clone();
+                        let store = self.store.clone();
+                        let (callback, content_key) = match query_info.query_type {
+                            QueryType::FindContent { callback, target } => (callback, target),
+                            _ => {
+                                error!("Received uTP payload for non-FC query");
+                                return;
+                            }
+                        };
+
+                        tokio::spawn(async move {
+                            Self::process_received_content(
+                                validator,
+                                store,
+                                (content.clone(), true),
+                                content_key,
+                                query_info.trace,
+                                callback,
+                            );
+                        });
+                    }
                     // make sure we boot this peer
                     // do we need to distinguish if content validation failed?
-                    FindContentQueryResult::Invalid(ResultDetails {
-                        content,
+                    FindContentQueryResult::Utp(UtpDetails {
                         closest_nodes,
                         utp,
-                        ..
-                    // or vec![]?
-                    }) => (None, utp, closest_nodes),
-                };
+                        peer,
+                        // or vec![]?
+                    }) => {
+                        let id = utp;
+                        info!("Received connection id: {}", id);
+                        let metrics = self.metrics.clone();
+                        let utp = self.utp_socket.clone();
+                        let id = u16::from_be(id);
 
-                if let QueryType::FindContent {
-                    callback: Some(callback),
-                    target: content_key,
-                } = query_info.query_type
-                {
-                    let response = (content.clone(), utp, query_info.trace);
-                    // Send (possibly `None`) content on callback channel.
-                    if let Err(err) = callback.send(response) {
-                        error!(
-                        query.id = %query_id,
-                        error = ?err,
-                        "Error sending FindContent query result to callback",
-                        );
+                        let key = kbucket::Key::from(peer);
+                        let source = match self.kbuckets.write().entry(&key) {
+                            kbucket::Entry::Present(entry, _) => entry.value().enr().clone(),
+                            // idk
+                            _ => {
+                                warn!("Received uTP payload from unknown peer");
+                                return;
+                            }
+                        };
+
+                        let cid = utp_rs::cid::ConnectionId {
+                            recv: id,
+                            send: id.wrapping_add(1),
+                            peer: crate::discovery::UtpEnr(source),
+                        };
+                        let validator = self.validator.clone();
+                        let store = self.store.clone();
+                        tokio::spawn(async move {
+                            metrics.report_utp_active_inc(UtpDirectionLabel::Inbound);
+                            let mut stream =
+                                match utp.connect_with_cid(cid.clone(), UTP_CONN_CFG).await {
+                                    Ok(stream) => stream,
+                                    Err(err) => {
+                                        metrics.report_utp_outcome(
+                                            UtpDirectionLabel::Inbound,
+                                            UtpOutcomeLabel::FailedConnection,
+                                        );
+                                        warn!(
+                                            %err,
+                                            cid.send,
+                                            cid.recv,
+                                            peer = ?cid.peer.client(),
+                                            "Unable to establish uTP conn based on Accept",
+                                        );
+                                        return;
+                                    }
+                                };
+
+                            let mut data = vec![];
+                            if let Err(err) = stream.read_to_eof(&mut data).await {
+                                metrics.report_utp_outcome(
+                                    UtpDirectionLabel::Inbound,
+                                    UtpOutcomeLabel::FailedDataTx,
+                                );
+                                error!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), "error reading data from uTP stream");
+                                return;
+                            }
+
+                            // report utp tx as successful, even if we go on to fail to process the payload
+                            metrics.report_utp_outcome(
+                                UtpDirectionLabel::Inbound,
+                                UtpOutcomeLabel::Success,
+                            );
+
+                            let (callback, content_key) = match query_info.query_type {
+                                QueryType::FindContent { callback, target } => (callback, target),
+                                _ => {
+                                    error!("Received uTP payload for non-FC query");
+                                    return;
+                                }
+                            };
+
+                            Self::process_received_content(
+                                validator,
+                                store,
+                                (data.clone(), true),
+                                content_key,
+                                query_info.trace,
+                                callback,
+                            );
+                        });
                     }
-                }
-
+                };
+                /*// Always poking?*/
+                /*// are the gossip paths still accurate?*/
                 /*// If content was found, then offer the content to the closest nodes who did*/
                 /*// not possess the content.*/
                 /*if let Some(content) = content {*/
@@ -1716,74 +1799,12 @@ where
         };
         match content {
             Content::ConnectionId(id) => {
-                info!("Received connection id: {}", id);
-                let metrics = self.metrics.clone();
-                let utp = self.utp_socket.clone();
-                let id = u16::from_be(id);
-                let cid = utp_rs::cid::ConnectionId {
-                    recv: id,
-                    send: id.wrapping_add(1),
-                    peer: crate::discovery::UtpEnr(source.clone()),
-                };
-                tokio::spawn(async move {
-                    metrics.report_utp_active_inc(UtpDirectionLabel::Inbound);
-                    let mut stream = match utp.connect_with_cid(cid.clone(), UTP_CONN_CFG).await {
-                        Ok(stream) => stream,
-                        Err(err) => {
-                            metrics.report_utp_outcome(
-                                UtpDirectionLabel::Inbound,
-                                UtpOutcomeLabel::FailedConnection,
-                            );
-                            warn!(
-                                %err,
-                                cid.send,
-                                cid.recv,
-                                peer = ?cid.peer.client(),
-                                "Unable to establish uTP conn based on Accept",
-                            );
-                            return;
-                        }
-                    };
-
-                    let mut data = vec![];
-                    if let Err(err) = stream.read_to_eof(&mut data).await {
-                        metrics.report_utp_outcome(
-                            UtpDirectionLabel::Inbound,
-                            UtpOutcomeLabel::FailedDataTx,
-                        );
-                        error!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), "error reading data from uTP stream");
-                        return;
-                    }
-
-                    // report utp tx as successful, even if we go on to fail to process the payload
-                    metrics
-                        .report_utp_outcome(UtpDirectionLabel::Inbound, UtpOutcomeLabel::Success);
-                    Self::process_received_content(
-                        find_content_query_pool,
-                        validator,
-                        store,
-                        (data.clone(), true),
-                        fc_request,
-                        query_id,
-                        source,
-                        request.responder,
-                    );
-                });
+                // update query
+                if let Some(query_id) = query_id {
+                    self.advance_find_content_query_with_utp(&query_id, source, id);
+                }
             }
             Content::Content(content) => {
-                Self::process_received_content(
-                    find_content_query_pool,
-                    validator,
-                    store,
-                    content.clone(),
-                    fc_request,
-                    query_id,
-                    source.clone(),
-                    request.responder,
-                );
-
-                // TODO: Should we only advance the query if the content has been validated?
-                // yes...
                 if let Some(query_id) = query_id {
                     self.advance_find_content_query_with_content(&query_id, source, content.0);
                 }
@@ -1804,18 +1825,13 @@ where
 
     // validate & store content (try to)
     fn process_received_content(
-        find_content_query_pool: Arc<
-            RwLock<QueryPool<NodeId, FindContentQuery<NodeId>, TContentKey>>,
-        >,
         validator: Arc<TValidator>,
         store: Arc<RwLock<TStore>>,
         content: (Vec<u8>, bool),
-        request: FindContent,
-        query_id: Option<QueryId>,
-        source: Enr,
-        responder: Option<oneshot::Sender<Result<Response, OverlayRequestError>>>,
+        content_key: TContentKey,
+        trace: Option<QueryTrace>,
+        responder: Option<oneshot::Sender<FindContentResult>>,
     ) {
-        let content_key = TContentKey::try_from(request.content_key).unwrap();
         let content_id = content_key.content_id();
 
         let is_good = store
@@ -1834,17 +1850,15 @@ where
                             "Error validating content"
                         );
                         if let Some(responder) = responder {
-                            let _ = responder.send(Err(OverlayRequestError::FailedValidation(
-                                "Invalid content".to_string(),
-                            )));
+                            let _ = responder.send((None, content.1, trace));
                         }
                         return;
                     };
 
                     // respond success whether or not we store it
-                    let response = Response::Content(Content::Content(content.clone()));
+                    let response = (Some(content.0.clone()), content.1, trace);
                     if let Some(responder) = responder {
-                        let _ = responder.send(Ok(response));
+                        let _ = responder.send(response);
                     }
                     if let Err(err) = store.write().put(content_key.clone(), content.0) {
                         error!(
@@ -1863,9 +1877,7 @@ where
                     "Content not stored (key outside radius or already stored)"
                 );
                 if let Some(responder) = responder {
-                    let _ =
-                        // bad error msg
-                        responder.send(Err(OverlayRequestError::FailedValidation("x".to_string())));
+                    let _ = responder.send((Some(content.0), content.1, trace));
                 }
             }
             Err(err) => {
@@ -1876,9 +1888,7 @@ where
                     "Error storing content"
                 );
                 if let Some(responder) = responder {
-                    let _ =
-                        // bad error msg
-                        responder.send(Err(OverlayRequestError::FailedValidation("x".to_string())));
+                    let _ = responder.send((Some(content.0), content.1, trace));
                 }
             }
         };
@@ -2086,6 +2096,19 @@ where
             query.on_success(
                 &source.node_id(),
                 FindContentQueryResponse::Content(content),
+            );
+        }
+    }
+
+    fn advance_find_content_query_with_utp(&mut self, query_id: &QueryId, source: Enr, utp: u16) {
+        if let Some((query_info, query)) = self.find_content_query_pool.write().get_mut(*query_id) {
+            if let Some(trace) = &mut query_info.trace {
+                trace.node_responded_with_content(&source);
+            }
+            // Mark the query successful for the source of the response with the content.
+            query.on_success(
+                &source.node_id(),
+                FindContentQueryResponse::ConnectionId(utp),
             );
         }
     }
@@ -3730,7 +3753,7 @@ mod tests {
 
         // Query result should contain content.
         match query.clone().into_result() {
-            FindContentQueryResult::Valid(ResultDetails {
+            FindContentQueryResult::Content(ContentDetails {
                 content: result_content,
                 ..
             }) => {
