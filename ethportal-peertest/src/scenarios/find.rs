@@ -1,4 +1,7 @@
-use crate::constants::{HEADER_WITH_PROOF_CONTENT_KEY, HISTORY_CONTENT_VALUE};
+use crate::constants::{
+    BLOCK_BODY_CONTENT_KEY, BLOCK_BODY_CONTENT_VALUE, HEADER_WITH_PROOF_CONTENT_KEY,
+    HEADER_WITH_PROOF_CONTENT_VALUE, HISTORY_CONTENT_VALUE,
+};
 use crate::Peertest;
 use discv5::enr::NodeId;
 use ethportal_api::types::content_key::HistoryContentKey;
@@ -93,6 +96,53 @@ pub async fn test_recursive_find_nodes_random(peertest: &Peertest) {
     assert_eq!(result.len(), 3);
 }
 
+pub async fn test_recursive_utp(peertest: &Peertest) {
+    info!("Test recursive utp");
+
+    // store header_with_proof to validate block body
+    let header_with_proof_content_key: HistoryContentKey =
+        serde_json::from_value(json!(HEADER_WITH_PROOF_CONTENT_KEY)).unwrap();
+    let header_with_proof_content_value: HistoryContentValue =
+        serde_json::from_value(json!(HEADER_WITH_PROOF_CONTENT_VALUE)).unwrap();
+
+    let store_result = peertest.nodes[0]
+        .ipc_client
+        .store(
+            header_with_proof_content_key.clone(),
+            header_with_proof_content_value.clone(),
+        )
+        .await
+        .unwrap();
+
+    assert!(store_result);
+
+    let history_content_key: HistoryContentKey =
+        serde_json::from_value(json!(BLOCK_BODY_CONTENT_KEY)).unwrap();
+    let hex_data = hex_decode(BLOCK_BODY_CONTENT_VALUE).unwrap();
+    let history_content_value: HistoryContentValue =
+        HistoryContentValue::decode(&hex_data).unwrap();
+
+    let store_result = peertest
+        .bootnode
+        .ipc_client
+        .store(history_content_key.clone(), history_content_value.clone())
+        .await
+        .unwrap();
+
+    assert!(store_result);
+
+    let content_info = peertest.nodes[0]
+        .ipc_client
+        .recursive_find_content(history_content_key)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        content_info,
+        PossibleHistoryContentValue::ContentPresent(history_content_value)
+    );
+}
+
 pub async fn test_trace_recursive_find_content(peertest: &Peertest) {
     let uniq_content_key =
         "\"0x0015b11b918355b1ef9c5db810302ebad0bf2544255b530cdce90674d5887bb286\"";
@@ -100,7 +150,7 @@ pub async fn test_trace_recursive_find_content(peertest: &Peertest) {
 
     let hex_data = hex_decode(HISTORY_CONTENT_VALUE).unwrap();
     let history_content_value: HistoryContentValue =
-        HistoryContentValue::decode(&hex_data[..]).unwrap();
+        HistoryContentValue::decode(&hex_data).unwrap();
 
     let store_result = peertest
         .bootnode
