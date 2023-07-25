@@ -23,8 +23,10 @@ use tokio::sync::mpsc::UnboundedSender;
 use tracing::{debug, error, info, warn};
 use utp_rs::socket::UtpSocket;
 
+use crate::events::EventEnvelope;
 use crate::{
     discovery::{Discovery, UtpEnr},
+    find::query_info::FindContentResult,
     metrics::overlay::OverlayMetrics,
     overlay_service::{
         OverlayCommand, OverlayRequest, OverlayRequestError, OverlayService, RequestDirection,
@@ -45,9 +47,6 @@ use ethportal_api::types::enr::Enr;
 use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::OverlayContentKey;
 use trin_validation::validator::Validator;
-
-use crate::events::EventEnvelope;
-use ethportal_api::types::query_trace::QueryTrace;
 
 /// Configuration parameters for the overlay network.
 #[derive(Clone)]
@@ -438,12 +437,9 @@ where
             Ok(Response::Content(found_content)) => {
                 match found_content {
                     Content::Content(_) => Ok(found_content.try_into().unwrap()),
-                    // should this be valid?
                     Content::Enrs(val) => Ok(serde_json::json!({ "enrs": val })),
-                    // Init uTP stream if `connection_id`is received
-                    Content::ConnectionId(conn_id) => {
-                        panic!("shouldn't be here: {:?}", conn_id);
-                    }
+                    // all utp should be handled within service
+                    Content::ConnectionId(_) => panic!("invalid state"),
                 }
             }
             Ok(_) => Err(OverlayRequestError::InvalidResponse),
@@ -501,6 +497,7 @@ where
         }
     }
 
+    /// this is the problem.
     pub async fn lookup_node(&self, target: NodeId) -> Vec<Enr> {
         if target == self.local_enr().node_id() {
             return vec![self.local_enr()];
@@ -546,13 +543,8 @@ where
         })
     }
 
-    /// Performs a content lookup for `target`.
-    /// Returns the target content along with the peers traversed during content lookup.
-    pub async fn lookup_content(
-        &self,
-        target: TContentKey,
-        is_trace: bool,
-    ) -> (Option<Vec<u8>>, bool, Option<QueryTrace>) {
+    /// and this.
+    pub async fn lookup_content(&self, target: TContentKey, is_trace: bool) -> FindContentResult {
         let (tx, rx) = oneshot::channel();
         let content_id = target.content_id();
 

@@ -37,44 +37,49 @@ pub enum FindContentQueryResponse<TNodeId> {
 
 #[derive(Debug)]
 pub enum FindContentQueryResult<TNodeId> {
-    ClosestNodes(Vec<TNodeId>),
+    ClosestNodes(ClosestNodesDetails<TNodeId>),
     Content(ContentDetails<TNodeId>),
     Utp(UtpDetails<TNodeId>),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
+pub struct ClosestNodesDetails<TNodeId> {
+    pub closest_nodes: Vec<TNodeId>,
+}
+
+#[derive(Debug)]
 pub struct ContentDetails<TNodeId> {
     pub content: Vec<u8>,
     pub peer: TNodeId,
     pub closest_nodes: Vec<TNodeId>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct UtpDetails<TNodeId> {
     pub peer: TNodeId,
     pub utp: u16,
     pub closest_nodes: Vec<TNodeId>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 enum ContentAndPeer<TNodeId> {
     Content(ContentAndPeerDetails<TNodeId>),
     Utp(UtpAndPeerDetails<TNodeId>),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 struct ContentAndPeerDetails<TNodeId> {
     content: Vec<u8>,
     peer: TNodeId,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 struct UtpAndPeerDetails<TNodeId> {
     utp: u16,
     peer: TNodeId,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct FindContentQuery<TNodeId> {
     /// The target key we are looking for
     target_key: Key<TNodeId>,
@@ -385,7 +390,7 @@ where
                     .take(self.config.num_results)
                     .collect();
 
-                FindContentQueryResult::ClosestNodes(closest_nodes)
+                FindContentQueryResult::ClosestNodes(ClosestNodesDetails { closest_nodes })
             }
         }
     }
@@ -457,6 +462,20 @@ mod tests {
 
     type TestQuery = FindContentQuery<NodeId>;
 
+    impl Clone for TestQuery {
+        fn clone(&self) -> Self {
+            Self {
+                target_key: self.target_key.clone(),
+                started: self.started,
+                progress: self.progress.clone(),
+                closest_peers: self.closest_peers.clone(),
+                content: None,
+                num_waiting: self.num_waiting,
+                config: self.config.clone(),
+            }
+        }
+    }
+
     fn random_nodes(n: usize) -> impl Iterator<Item = NodeId> + Clone {
         (0..n).map(|_| NodeId::random())
     }
@@ -514,7 +533,7 @@ mod tests {
         let result = query.into_result();
         match result {
             FindContentQueryResult::ClosestNodes(closest_nodes) => assert!(
-                closest_nodes.is_empty(),
+                closest_nodes.closest_nodes.is_empty(),
                 "Unexpected closest peers in new query"
             ),
             _ => panic!("Unexpected result variant from new query"),
@@ -639,8 +658,11 @@ mod tests {
                 }
                 FindContentQueryResult::Utp(_) => {}
                 FindContentQueryResult::ClosestNodes(closest_nodes) => {
-                    let closest_nodes =
-                        closest_nodes.into_iter().map(Key::from).collect::<Vec<_>>();
+                    let closest_nodes = closest_nodes
+                        .closest_nodes
+                        .into_iter()
+                        .map(Key::from)
+                        .collect::<Vec<_>>();
                     assert!(sorted(&target_key, &closest_nodes));
 
                     if closest_nodes.len() < num_results {
@@ -758,7 +780,7 @@ mod tests {
                 // no effect.
                 match closest {
                     FindContentQueryResult::ClosestNodes(closest) => {
-                        assert!(closest.is_empty());
+                        assert!(closest.closest_nodes.is_empty());
                     }
                     _ => {
                         panic!("Unexpected query result variant")
@@ -769,7 +791,7 @@ mod tests {
                 // is not finished.
                 match closest {
                     FindContentQueryResult::ClosestNodes(closest) => {
-                        assert_eq!(closest, vec![peer]);
+                        assert_eq!(closest.closest_nodes, vec![peer]);
                     }
                     _ => {
                         panic!("Unexpected query result variant")

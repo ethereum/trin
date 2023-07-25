@@ -94,6 +94,7 @@ pub async fn test_recursive_find_nodes_random(peertest: &Peertest) {
 }
 
 pub async fn test_trace_recursive_find_content(peertest: &Peertest) {
+    info!("Testing trace recursive find content");
     let uniq_content_key =
         "\"0x0015b11b918355b1ef9c5db810302ebad0bf2544255b530cdce90674d5887bb286\"";
     let history_content_key: HistoryContentKey = serde_json::from_str(uniq_content_key).unwrap();
@@ -150,6 +151,7 @@ pub async fn test_trace_recursive_find_content(peertest: &Peertest) {
 
 // This test ensures that when content is not found the correct response is returned.
 pub async fn test_trace_recursive_find_content_for_absent_content(peertest: &Peertest) {
+    info!("Testing trace recursive find content for absent content");
     let client = &peertest.nodes[0].ipc_client;
 
     // Different key to other test (final character).
@@ -170,6 +172,7 @@ pub async fn test_trace_recursive_find_content_for_absent_content(peertest: &Pee
 }
 
 pub async fn test_trace_recursive_find_content_local_db(peertest: &Peertest) {
+    info!("Testing trace recursive find content local db");
     let uniq_content_key =
         "\"0x0025b11b918355b1ef9c5db810302ebad0bf2544255b530cdce90674d5887bb286\"";
 

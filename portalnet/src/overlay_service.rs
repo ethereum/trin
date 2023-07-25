@@ -114,7 +114,7 @@ pub enum OverlayCommand<TContentKey> {
         /// The query target.
         target: TContentKey,
         /// A callback channel to transmit the result of the query.
-        callback: oneshot::Sender<FindContentResult>,
+        callback: oneshot::Sender<(Option<Vec<u8>>, bool, Option<QueryTrace>)>,
         /// Whether or not a trace for the content query should be kept and returned.
         is_trace: bool,
     },
@@ -513,8 +513,12 @@ where
                     let active_request = self.active_outgoing_requests.write().remove(&response.request_id);
                     match active_request {
                         Some(active_request) => {
+                            // Send response to responder if present.
+                            if let Some(responder) = active_request.responder {
+                                let _ = responder.send(response.response.clone());
+                            }
                             match response.response {
-                                Ok(response) => self.process_response(response, active_request),
+                                Ok(res) => self.process_response(res, active_request.destination, active_request.request, active_request.query_id),
                                 Err(error) => self.process_request_failure(response.request_id, active_request.destination, error),
                             }
                         }
@@ -756,16 +760,26 @@ where
                     }
                 }
             }
-            QueryEvent::Finished(query_id, query_info, query)
-            | QueryEvent::TimedOut(query_id, query_info, query) => {
+            QueryEvent::Finished(_query_id, query_info, query)
+            | QueryEvent::TimedOut(_query_id, query_info, query) => {
                 let result = query.into_result();
                 match result {
-                    FindContentQueryResult::ClosestNodes(closest_nodes) => {}
-                    FindContentQueryResult::Content(ContentDetails {
-                        content,
-                        closest_nodes,
-                        ..
-                    }) => {
+                    // whats closest nodes vs query trace?
+                    FindContentQueryResult::ClosestNodes(_closest_nodes) => {
+                        let (callback, _) = match query_info.query_type {
+                            QueryType::FindContent { callback, target } => (callback, target),
+                            _ => {
+                                error!("Received uTP payload for non-FC query");
+                                return;
+                            }
+                        };
+                        let trace = query_info.trace;
+
+                        if let Some(responder) = callback {
+                            let _ = responder.send((None, false, trace));
+                        }
+                    }
+                    FindContentQueryResult::Content(ContentDetails { content, .. }) => {
                         let validator = self.validator.clone();
                         let store = self.store.clone();
                         let (callback, content_key) = match query_info.query_type {
@@ -775,26 +789,21 @@ where
                                 return;
                             }
                         };
-
+                        let trace = query_info.trace;
                         tokio::spawn(async move {
                             Self::process_received_content(
                                 validator,
                                 store,
                                 (content.clone(), true),
                                 content_key,
-                                query_info.trace,
                                 callback,
+                                trace,
                             );
                         });
                     }
                     // make sure we boot this peer
                     // do we need to distinguish if content validation failed?
-                    FindContentQueryResult::Utp(UtpDetails {
-                        closest_nodes,
-                        utp,
-                        peer,
-                        // or vec![]?
-                    }) => {
+                    FindContentQueryResult::Utp(UtpDetails { utp, peer, .. }) => {
                         let id = utp;
                         info!("Received connection id: {}", id);
                         let metrics = self.metrics.clone();
@@ -855,21 +864,21 @@ where
                                 UtpOutcomeLabel::Success,
                             );
 
-                            let (callback, content_key) = match query_info.query_type {
+                            let (responder, content_key) = match query_info.query_type {
                                 QueryType::FindContent { callback, target } => (callback, target),
                                 _ => {
                                     error!("Received uTP payload for non-FC query");
                                     return;
                                 }
                             };
-
+                            let trace = query_info.trace;
                             Self::process_received_content(
                                 validator,
                                 store,
                                 (data.clone(), true),
                                 content_key,
-                                query_info.trace,
-                                callback,
+                                responder,
+                                trace,
                             );
                         });
                     }
@@ -1411,13 +1420,18 @@ where
     }
 
     /// Processes a response to an outgoing request from some source node.
-    fn process_response(&mut self, response: Response, request: ActiveOutgoingRequest) {
+    fn process_response(
+        &mut self,
+        response: Response,
+        source: Enr,
+        request: Request,
+        query_id: Option<QueryId>,
+    ) {
         self.metrics.report_inbound_response(&response);
         // If the node is present in the routing table, but the node is not connected, then
         // use the existing entry's value and direction. Otherwise, build a new entry from
         // the source ENR and establish a connection in the outgoing direction, because this
         // node is responding to our request.
-        let source = request.destination.clone();
         let key = kbucket::Key::from(source.node_id());
         let (node, status) = match self.kbuckets.write().entry(&key) {
             kbucket::Entry::Present(ref mut entry, status) => (entry.value().clone(), status),
@@ -1456,27 +1470,11 @@ where
         }
 
         match response.clone() {
-            Response::Pong(pong) => {
-                if let Some(responder) = request.responder {
-                    let _ = responder.send(Ok(response));
-                }
-                self.process_pong(pong, source)
-            }
-            Response::Nodes(nodes) => {
-                if let Some(responder) = request.responder {
-                    let _ = responder.send(Ok(response));
-                }
-                self.process_nodes(nodes, source, request.query_id)
-            }
-            Response::Content(_content) => {
-                // handle sending result to overlay inside process_content to manage utp txs
-                self.process_content(response, request);
-            }
+            Response::Pong(pong) => self.process_pong(pong, source),
+            Response::Nodes(nodes) => self.process_nodes(nodes, source, query_id),
+            Response::Content(content) => self.process_content(content, source, query_id),
             Response::Accept(accept) => {
-                if let Some(responder) = request.responder {
-                    let _ = responder.send(Ok(response));
-                }
-                if let Err(err) = self.process_accept(accept, source, request.request) {
+                if let Err(err) = self.process_accept(accept, source, request) {
                     error!(response.error = %err, "Error processing ACCEPT message")
                 }
             }
@@ -1778,25 +1776,12 @@ where
     }
 
     /// Processes a Content response.
-    fn process_content(&mut self, response: Response, request: ActiveOutgoingRequest) {
-        let source = request.destination;
+    fn process_content(&mut self, content: Content, source: Enr, query_id: Option<QueryId>) {
         trace!(
             protocol = %self.protocol,
-            response.source = %source.node_id(),
+            source = %source.node_id(),
             "Processing Content message",
         );
-        let find_content_query_pool = self.find_content_query_pool.clone();
-        let validator = self.validator.clone();
-        let store = self.store.clone();
-        let query_id = request.query_id;
-        let fc_request = match request.request {
-            Request::FindContent(find_content) => find_content,
-            _ => panic!("Incorrect request type"),
-        };
-        let content = match response.clone() {
-            Response::Content(content) => content,
-            _ => unreachable!("Incorrect response type"),
-        };
         match content {
             Content::ConnectionId(id) => {
                 // update query
@@ -1815,10 +1800,6 @@ where
                 if let Some(query_id) = query_id {
                     self.advance_find_content_query_with_enrs(&query_id, source, enrs);
                 }
-                // send response to overlay
-                if let Some(responder) = request.responder {
-                    let _ = responder.send(Ok(response));
-                }
             }
         }
     }
@@ -1829,10 +1810,11 @@ where
         store: Arc<RwLock<TStore>>,
         content: (Vec<u8>, bool),
         content_key: TContentKey,
-        trace: Option<QueryTrace>,
         responder: Option<oneshot::Sender<FindContentResult>>,
+        trace: Option<QueryTrace>,
     ) {
         let content_id = content_key.content_id();
+        info!("XXX processing");
 
         let is_good = store
             .read()
@@ -1850,15 +1832,14 @@ where
                             "Error validating content"
                         );
                         if let Some(responder) = responder {
-                            let _ = responder.send((None, content.1, trace));
+                            // wrong
+                            let _ = responder.send((None, false, trace));
                         }
                         return;
                     };
 
-                    // respond success whether or not we store it
-                    let response = (Some(content.0.clone()), content.1, trace);
                     if let Some(responder) = responder {
-                        let _ = responder.send(response);
+                        let _ = responder.send((Some(content.0.clone()), false, trace));
                     }
                     if let Err(err) = store.write().put(content_key.clone(), content.0) {
                         error!(
@@ -1877,7 +1858,7 @@ where
                     "Content not stored (key outside radius or already stored)"
                 );
                 if let Some(responder) = responder {
-                    let _ = responder.send((Some(content.0), content.1, trace));
+                    let _ = responder.send((Some(content.0), false, trace));
                 }
             }
             Err(err) => {
@@ -1888,7 +1869,7 @@ where
                     "Error storing content"
                 );
                 if let Some(responder) = responder {
-                    let _ = responder.send((Some(content.0), content.1, trace));
+                    let _ = responder.send((Some(content.0), false, trace));
                 }
             }
         };
@@ -3695,7 +3676,9 @@ mod tests {
         // Query result should contain bootnode who responded successfully.
         match query.clone().into_result() {
             FindContentQueryResult::ClosestNodes(closest_nodes) => {
-                assert!(closest_nodes.contains(&bootnode_enr.node_id()));
+                assert!(closest_nodes
+                    .closest_nodes
+                    .contains(&bootnode_enr.node_id()));
             }
             _ => panic!("Unexpected find content query result"),
         }
