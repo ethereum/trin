@@ -21,4 +21,8 @@ pub enum ContentValueError {
     /// This error implies that handling of the "content absent" response was skipped.
     #[error("attempted to decode the '0x' absent content message")]
     DecodeAbsentContent,
+    #[error("could not determine fork digest of {bytes} from {network} network")]
+    UnknownForkDigest { bytes: String, network: String },
+    #[error("could not determine fork name of {bytes} from {network} network")]
+    UnknownForkName { bytes: String, network: String },
 }

@@ -134,5 +134,29 @@ impl<'de> Deserialize<'de> for BeaconContentKey {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    // FIXME: Add beacon content key test vectors
+    use super::*;
+
+    #[test]
+    fn light_client_bootstrap() {
+        // Slot 6718368
+        const KEY_STR: &str =
+            "0x00bd9f42d9a42d972bdaf4dee84e5b419dd432b52867258acb7bcc7f567b6e3af1";
+        const BLOCK_HASH: &str =
+            "0xbd9f42d9a42d972bdaf4dee84e5b419dd432b52867258acb7bcc7f567b6e3af1";
+
+        let expected_content_key = hex_decode(KEY_STR).unwrap();
+
+        let bootstrap = LightClientBootstrapKey {
+            block_hash: <[u8; 32]>::try_from(hex_decode(BLOCK_HASH).unwrap()).unwrap(),
+        };
+
+        let key = BeaconContentKey::LightClientBootstrap(bootstrap);
+
+        assert_eq!(key.to_bytes(), expected_content_key);
+        assert_eq!(
+            key.to_string(),
+            "LightClientBootstrap { block_hash: 0xbd9f..3af1 }"
+        );
+        assert_eq!(key.to_hex(), KEY_STR);
+    }
 }
