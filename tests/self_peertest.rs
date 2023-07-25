@@ -83,6 +83,7 @@ mod test {
         peertest::scenarios::validation::test_validate_pre_merge_block_body(&peertest, &target)
             .await;
         peertest::scenarios::validation::test_validate_pre_merge_receipts(&peertest, &target).await;
+        peertest::scenarios::find::test_recursive_utp(&peertest).await;
 
         peertest.exit_all_nodes();
         test_client_rpc_handle.stop().unwrap();

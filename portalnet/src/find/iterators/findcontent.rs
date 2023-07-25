@@ -32,6 +32,7 @@ use super::query::{Query, QueryConfig, QueryPeer, QueryPeerState, QueryProgress}
 pub enum FindContentQueryResponse<TNodeId> {
     ClosestNodes(Vec<TNodeId>),
     Content(Vec<u8>),
+    ConnectionId(u16),
 }
 
 #[derive(Debug)]
@@ -39,13 +40,31 @@ pub enum FindContentQueryResult<TNodeId> {
     ClosestNodes(Vec<TNodeId>),
     Content {
         content: Vec<u8>,
-        closest_nodes: Vec<TNodeId>,
+        nodes_to_poke: Vec<TNodeId>,
+    },
+    Utp {
+        connection_id: u16,
+        nodes_to_poke: Vec<TNodeId>,
+        // peer used to create utp stream
+        peer: TNodeId,
     },
 }
 
 #[derive(Debug, Clone)]
-struct ContentAndPeer<TNodeId> {
+enum ContentAndPeer<TNodeId> {
+    Content(ContentAndPeerDetails<TNodeId>),
+    Utp(UtpAndPeerDetails<TNodeId>),
+}
+
+#[derive(Debug, Clone)]
+struct ContentAndPeerDetails<TNodeId> {
     content: Vec<u8>,
+    peer: TNodeId,
+}
+
+#[derive(Debug, Clone)]
+struct UtpAndPeerDetails<TNodeId> {
+    connection_id: u16,
     peer: TNodeId,
 }
 
@@ -167,10 +186,17 @@ where
             }
             FindContentQueryResponse::Content(content) => {
                 // Incorporate the found content into the query.
-                self.content = Some(ContentAndPeer {
+                self.content = Some(ContentAndPeer::Content(ContentAndPeerDetails {
                     content,
                     peer: peer.clone(),
-                });
+                }));
+            }
+            FindContentQueryResponse::ConnectionId(connection_id) => {
+                // Incorporate the found content into the query.
+                self.content = Some(ContentAndPeer::Utp(UtpAndPeerDetails {
+                    connection_id,
+                    peer: peer.clone(),
+                }));
             }
         }
     }
@@ -293,30 +319,51 @@ where
 
     fn into_result(self) -> Self::Result {
         match self.content {
-            Some(content) => {
-                let closest_nodes = self
-                    .closest_peers
-                    .into_values()
-                    .filter_map(|peer| {
-                        if let QueryPeerState::Succeeded = peer.state() {
-                            // Do not include the peer who returned the content.
-                            if *peer.key().preimage() == content.peer {
-                                None
+            Some(content) => match content {
+                ContentAndPeer::Content(val) => {
+                    let nodes_to_poke = self
+                        .closest_peers
+                        .into_values()
+                        .filter_map(|peer| {
+                            if let QueryPeerState::Succeeded = peer.state() {
+                                // Do not include the peer who returned the content.
+                                if *peer.key().preimage() == val.peer {
+                                    None
+                                } else {
+                                    Some(peer.key().clone().into_preimage())
+                                }
                             } else {
-                                Some(peer.key().clone().into_preimage())
+                                None
                             }
-                        } else {
-                            None
-                        }
-                    })
-                    .take(self.config.num_results)
-                    .collect();
+                        })
+                        .take(self.config.num_results)
+                        .collect();
 
-                FindContentQueryResult::Content {
-                    content: content.content,
-                    closest_nodes,
+                    FindContentQueryResult::Content {
+                        content: val.content,
+                        nodes_to_poke,
+                    }
                 }
-            }
+                ContentAndPeer::Utp(val) => {
+                    let nodes_to_poke = self
+                        .closest_peers
+                        .into_values()
+                        .filter_map(|peer| {
+                            if let QueryPeerState::Succeeded = peer.state() {
+                                Some(peer.key().clone().into_preimage())
+                            } else {
+                                None
+                            }
+                        })
+                        .take(self.config.num_results)
+                        .collect();
+                    FindContentQueryResult::Utp {
+                        connection_id: val.connection_id,
+                        nodes_to_poke,
+                        peer: val.peer,
+                    }
+                }
+            },
             None => {
                 let closest_nodes = self
                     .closest_peers
@@ -459,13 +506,11 @@ mod tests {
 
         let result = query.into_result();
         match result {
-            FindContentQueryResult::Content { .. } => {
-                panic!("Unexpected result variant from new query")
-            }
             FindContentQueryResult::ClosestNodes(closest_nodes) => assert!(
                 closest_nodes.is_empty(),
                 "Unexpected closest peers in new query"
             ),
+            _ => panic!("Unexpected result variant from new query"),
         }
     }
 
@@ -571,17 +616,16 @@ mod tests {
             match result {
                 FindContentQueryResult::Content {
                     content,
-                    closest_nodes,
+                    nodes_to_poke,
                 } => {
-                    let closest_nodes =
-                        closest_nodes.into_iter().map(Key::from).collect::<Vec<_>>();
-                    assert!(sorted(&target_key, &closest_nodes));
+                    let nodes_to_poke =
+                        nodes_to_poke.into_iter().map(Key::from).collect::<Vec<_>>();
+                    assert!(sorted(&target_key, &nodes_to_poke));
 
                     let content_peer = content_peer.unwrap();
 
-                    // The peer who returned the content should not be included in the closest
-                    // nodes.
-                    assert!(!closest_nodes.contains(&content_peer));
+                    // The peer who returned the content should not be included in the poke nodes
+                    assert!(!nodes_to_poke.contains(&content_peer));
 
                     assert_eq!(content, found_content);
                 }
@@ -602,6 +646,7 @@ mod tests {
                         assert_eq!(num_results, closest_nodes.len(), "Too  many results.");
                     }
                 }
+                _ => panic!("Unexpected result."),
             }
         }
 
@@ -707,9 +752,7 @@ mod tests {
                     FindContentQueryResult::ClosestNodes(closest) => {
                         assert!(closest.is_empty());
                     }
-                    FindContentQueryResult::Content { .. } => {
-                        panic!("Unexpected query result variant")
-                    }
+                    _ => panic!("Unexpected query result variant"),
                 }
             } else {
                 // Unresponsive peers can still deliver results while the iterator
@@ -718,9 +761,7 @@ mod tests {
                     FindContentQueryResult::ClosestNodes(closest) => {
                         assert_eq!(closest, vec![peer]);
                     }
-                    FindContentQueryResult::Content { .. } => {
-                        panic!("Unexpected query result variant")
-                    }
+                    _ => panic!("Unexpected query result variant"),
                 }
             }
             true

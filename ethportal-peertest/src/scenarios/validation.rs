@@ -54,6 +54,22 @@ pub async fn test_validate_pre_merge_header_with_proof(peertest: &Peertest, targ
 
 pub async fn test_validate_pre_merge_block_body(peertest: &Peertest, target: &Client) {
     info!("Test validating a pre-merge block body");
+    // store header_with_proof to validate block body
+    let header_with_proof_content_key: HistoryContentKey =
+        serde_json::from_value(json!(HEADER_WITH_PROOF_CONTENT_KEY)).unwrap();
+    let header_with_proof_content_value: HistoryContentValue =
+        serde_json::from_value(json!(HEADER_WITH_PROOF_CONTENT_VALUE)).unwrap();
+
+    let store_result = target
+        .store(
+            header_with_proof_content_key.clone(),
+            header_with_proof_content_value.clone(),
+        )
+        .await
+        .unwrap();
+
+    assert!(store_result);
+
     // store block body
     let block_body_content_key: HistoryContentKey =
         serde_json::from_value(json!(BLOCK_BODY_CONTENT_KEY)).unwrap();
