@@ -12,7 +12,7 @@ use std::fmt;
 #[ssz(enum_behaviour = "union")]
 pub enum BeaconContentKey {
     LightClientBootstrap(LightClientBootstrapKey),
-    LightClientUpdates(LightClientUpdatesKey),
+    LightClientUpdatesByRange(LightClientUpdatesByRangeKey),
 }
 
 /// Key used to identify a light client bootstrap.
@@ -24,7 +24,7 @@ pub struct LightClientBootstrapKey {
 
 /// Key used to identify a set of light client updates.
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
-pub struct LightClientUpdatesKey {
+pub struct LightClientUpdatesByRangeKey {
     /// The start sync committee period.
     pub start_period: u64,
     /// the count of periods.
@@ -61,8 +61,8 @@ impl fmt::Display for BeaconContentKey {
                 "LightClientBootstrap {{ block_hash: {} }}",
                 hex_encode_compact(key.block_hash)
             ),
-            Self::LightClientUpdates(key) => format!(
-                "LightClientUpdates {{ start_period: {}, count: {} }}",
+            Self::LightClientUpdatesByRange(key) => format!(
+                "LightClientUpdatesByRange {{ start_period: {}, count: {} }}",
                 key.start_period, key.count
             ),
         };
@@ -86,10 +86,10 @@ impl OverlayContentKey for BeaconContentKey {
                 bytes.push(0x00);
                 bytes.extend_from_slice(&key.block_hash);
             }
-            BeaconContentKey::LightClientUpdates(key) => {
+            BeaconContentKey::LightClientUpdatesByRange(key) => {
                 bytes.push(0x01);
-                bytes.extend_from_slice(&key.start_period.to_le_bytes());
-                bytes.extend_from_slice(&key.count.to_le_bytes());
+                bytes.extend_from_slice(&key.start_period.as_ssz_bytes());
+                bytes.extend_from_slice(&key.count.as_ssz_bytes());
             }
         }
 
@@ -158,5 +158,28 @@ mod test {
             "LightClientBootstrap { block_hash: 0xbd9f..3af1 }"
         );
         assert_eq!(key.to_hex(), KEY_STR);
+    }
+
+    #[test]
+    fn light_client_updates_by_range() {
+        const KEY_STR: &str = "0x0130030000000000000400000000000000";
+        let expected_content_key = hex_decode(KEY_STR).unwrap();
+
+        // SLOT / (SLOTS_PER_EPOCH * EPOCHS_PER_SYNC_COMMITTEE_PERIOD)
+        let start_period: u64 = 6684738 / (32 * 256);
+
+        let content_key = LightClientUpdatesByRangeKey {
+            start_period,
+            count: 4,
+        };
+
+        let content_key = BeaconContentKey::LightClientUpdatesByRange(content_key);
+
+        assert_eq!(content_key.to_bytes(), expected_content_key);
+        assert_eq!(
+            content_key.to_string(),
+            "LightClientUpdatesByRange { start_period: 816, count: 4 }"
+        );
+        assert_eq!(content_key.to_hex(), KEY_STR);
     }
 }
