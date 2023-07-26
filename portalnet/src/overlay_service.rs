@@ -2195,6 +2195,33 @@ where
         Ok(closest_nodes)
     }
 
+    /// Returns a vector of ENRs of the `max_nodes` closest connected nodes to the target from our routing table.
+    fn closest_connected_nodes(&self, target_key: &Key<NodeId>, max_nodes: usize) -> Vec<Enr> {
+        // Filter out all disconnected nodes
+        let kbuckets = self.kbuckets.read();
+        let mut all_nodes: Vec<&kbucket::Node<NodeId, Node>> = kbuckets
+            .buckets_iter()
+            .flat_map(|kbucket| {
+                kbucket
+                    .iter()
+                    .filter(|node| node.status.is_connected())
+                    .collect::<Vec<&kbucket::Node<NodeId, Node>>>()
+            })
+            .collect();
+
+        all_nodes.sort_by(|a, b| {
+            let a_distance = a.key.distance(target_key);
+            let b_distance = b.key.distance(target_key);
+            a_distance.cmp(&b_distance)
+        });
+
+        all_nodes
+            .iter()
+            .take(max_nodes)
+            .map(|closest| closest.value.enr.clone())
+            .collect()
+    }
+
     /// Starts a FindNode query to find nodes with IDs closest to `target`.
     fn init_find_nodes_query(
         &mut self,
@@ -2202,19 +2229,23 @@ where
         callback: Option<oneshot::Sender<Vec<Enr>>>,
     ) -> Option<QueryId> {
         let target_key = Key::from(*target);
-        let mut closest_enrs: Vec<Enr> = self
-            .kbuckets
-            .write()
-            .closest_values(&target_key)
-            .map(|closest| closest.value.enr)
-            .collect();
 
-        // `closest_enrs` will be empty if `target` is our local node ID
-        // due to the behavior of `closest_values`. In this case, set closest_enrs
-        // to be all ENRs in routing table.
+        let mut closest_enrs = self.closest_connected_nodes(&target_key, self.query_num_results);
+
+        // All nodes may be disconnected at boot, before they respond to pings.
+        // If no connected nodes, use the closest nodes regardless of connectivity.
         if closest_enrs.is_empty() {
-            let mut all_enrs: Vec<Enr> = self.table_entries_enr();
-            closest_enrs.append(&mut all_enrs);
+            closest_enrs = self
+                .kbuckets
+                .write()
+                .closest_values(&target_key)
+                .map(|closest| closest.value.enr)
+                .take(self.query_num_results)
+                .collect();
+            // `closest_values` return is empty if querying our own Node ID
+            if closest_enrs.is_empty() {
+                closest_enrs = self.table_entries_enr();
+            }
         }
 
         let query_config = QueryConfig {
@@ -2271,15 +2302,7 @@ where
             peer_timeout: self.query_peer_timeout,
         };
 
-        // Look up the closest ENRs to the target.
-        // Limit the number of ENRs according to the query config.
-        let closest_enrs: Vec<Enr> = self
-            .kbuckets
-            .write()
-            .closest_values(&target_key)
-            .map(|closest| closest.value.enr)
-            .take(query_config.num_results)
-            .collect();
+        let closest_enrs = self.closest_connected_nodes(&target_key, query_config.num_results);
 
         let trace: Option<QueryTrace> = {
             if is_trace {
