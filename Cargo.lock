@@ -2308,6 +2308,7 @@ dependencies = [
  "sha3 0.9.1",
  "snap",
  "stremio-serde-hex",
+ "superstruct",
  "test-log",
  "thiserror",
  "tokio",

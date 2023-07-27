@@ -1,8 +1,12 @@
 pub mod body;
+pub mod execution_payload;
+pub mod fork;
 pub mod header;
 pub mod header_proof;
+pub mod light_client;
 pub mod proof;
 pub mod pubkey;
 pub mod serde;
 pub mod signature;
+pub mod sync_committee;
 pub mod withdrawal;

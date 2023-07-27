@@ -31,7 +31,7 @@ mod test {
     #[case("case_4")]
     fn serde(#[case] case: &str) {
         let value = std::fs::read_to_string(format!(
-            "../test_assets/beacon/BeaconBlockHeader/ssz_random/{case}/value.yaml"
+            "../test_assets/beacon/bellatrix/BeaconBlockHeader/ssz_random/{case}/value.yaml"
         ))
         .expect("cannot find test asset");
         let value: Value = serde_yaml::from_str(&value).unwrap();
@@ -48,14 +48,14 @@ mod test {
     #[case("case_4")]
     fn ssz(#[case] case: &str) {
         let value = std::fs::read_to_string(format!(
-            "../test_assets/beacon/BeaconBlockHeader/ssz_random/{case}/value.yaml"
+            "../test_assets/beacon/bellatrix/BeaconBlockHeader/ssz_random/{case}/value.yaml"
         ))
         .expect("cannot find test asset");
         let value: Value = serde_yaml::from_str(&value).unwrap();
         let body: BeaconBlockHeader = serde_json::from_value(value).unwrap();
 
         let expected = std::fs::read(format!(
-            "../test_assets/beacon/BeaconBlockHeader/ssz_random/{case}/serialized.ssz_snappy"
+            "../test_assets/beacon/bellatrix/BeaconBlockHeader/ssz_random/{case}/serialized.ssz_snappy"
         ))
         .expect("cannot find test asset");
         let mut decoder = snap::raw::Decoder::new();
