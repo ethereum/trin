@@ -13,11 +13,11 @@ use superstruct::superstruct;
 #[superstruct(
     variants(Bellatrix, Capella),
     variant_attributes(
-        derive(Debug, Clone, Serialize, Deserialize, Encode, Decode,),
+        derive(Debug, Clone, PartialEq, Serialize, Deserialize, Encode, Decode,),
         serde(deny_unknown_fields),
     )
 )]
-#[derive(Debug, Clone, Serialize, Deserialize, Encode)]
+#[derive(Debug, Clone, Serialize, PartialEq, Deserialize, Encode)]
 #[ssz(enum_behaviour = "transparent")]
 pub struct LightClientOptimisticUpdate {
     /// The last `LightClientHeader` from the last attested block by the sync committee.

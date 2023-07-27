@@ -13,6 +13,40 @@ use std::fmt;
 pub enum BeaconContentKey {
     LightClientBootstrap(LightClientBootstrapKey),
     LightClientUpdatesByRange(LightClientUpdatesByRangeKey),
+    LightClientOptimisticUpdate(ZeroKey),
+}
+
+/// Represents a zero value for SSZ content key.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ZeroKey;
+
+impl Encode for ZeroKey {
+    fn is_ssz_fixed_len() -> bool {
+        true
+    }
+
+    fn ssz_bytes_len(&self) -> usize {
+        8
+    }
+
+    fn ssz_append(&self, buf: &mut Vec<u8>) {
+        buf.extend_from_slice(&[0u8; 8]);
+    }
+}
+
+impl Decode for ZeroKey {
+    fn is_ssz_fixed_len() -> bool {
+        true
+    }
+
+    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
+        if bytes != [0u8; 8] {
+            return Err(ssz::DecodeError::BytesInvalid(
+                "Signature must be 32 bytes long".to_string(),
+            ));
+        }
+        Ok(Self)
+    }
 }
 
 /// Key used to identify a light client bootstrap.
@@ -65,6 +99,7 @@ impl fmt::Display for BeaconContentKey {
                 "LightClientUpdatesByRange {{ start_period: {}, count: {} }}",
                 key.start_period, key.count
             ),
+            Self::LightClientOptimisticUpdate(_) => "LightClientOptimisticUpdate".to_string(),
         };
 
         write!(f, "{s}")
@@ -90,6 +125,10 @@ impl OverlayContentKey for BeaconContentKey {
                 bytes.push(0x01);
                 bytes.extend_from_slice(&key.start_period.as_ssz_bytes());
                 bytes.extend_from_slice(&key.count.as_ssz_bytes());
+            }
+            BeaconContentKey::LightClientOptimisticUpdate(key) => {
+                bytes.push(0x03);
+                bytes.extend_from_slice(&key.as_ssz_bytes())
             }
         }
 
@@ -180,6 +219,18 @@ mod test {
             content_key.to_string(),
             "LightClientUpdatesByRange { start_period: 816, count: 4 }"
         );
+        assert_eq!(content_key.to_hex(), KEY_STR);
+    }
+
+    #[test]
+    fn light_client_optimistic_update() {
+        const KEY_STR: &str = "0x030000000000000000";
+        let expected_content_key = hex_decode(KEY_STR).unwrap();
+
+        let content_key = BeaconContentKey::LightClientOptimisticUpdate(ZeroKey);
+
+        assert_eq!(content_key.to_bytes(), expected_content_key);
+        assert_eq!(content_key.to_string(), "LightClientOptimisticUpdate");
         assert_eq!(content_key.to_hex(), KEY_STR);
     }
 }
