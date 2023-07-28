@@ -13,10 +13,11 @@ use std::fmt;
 pub enum BeaconContentKey {
     LightClientBootstrap(LightClientBootstrapKey),
     LightClientUpdatesByRange(LightClientUpdatesByRangeKey),
+    LightClientFinalityUpdate(ZeroKey),
     LightClientOptimisticUpdate(ZeroKey),
 }
 
-/// Represents a zero value for SSZ content key.
+/// Represents a zero ssz bytes for a portal content key.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ZeroKey;
 
@@ -99,6 +100,7 @@ impl fmt::Display for BeaconContentKey {
                 "LightClientUpdatesByRange {{ start_period: {}, count: {} }}",
                 key.start_period, key.count
             ),
+            Self::LightClientFinalityUpdate(_) => "LightClientFinalityUpdate".to_string(),
             Self::LightClientOptimisticUpdate(_) => "LightClientOptimisticUpdate".to_string(),
         };
 
@@ -125,6 +127,10 @@ impl OverlayContentKey for BeaconContentKey {
                 bytes.push(0x01);
                 bytes.extend_from_slice(&key.start_period.as_ssz_bytes());
                 bytes.extend_from_slice(&key.count.as_ssz_bytes());
+            }
+            BeaconContentKey::LightClientFinalityUpdate(key) => {
+                bytes.push(0x02);
+                bytes.extend_from_slice(&key.as_ssz_bytes())
             }
             BeaconContentKey::LightClientOptimisticUpdate(key) => {
                 bytes.push(0x03);
@@ -219,6 +225,18 @@ mod test {
             content_key.to_string(),
             "LightClientUpdatesByRange { start_period: 816, count: 4 }"
         );
+        assert_eq!(content_key.to_hex(), KEY_STR);
+    }
+
+    #[test]
+    fn light_client_finality_update() {
+        const KEY_STR: &str = "0x020000000000000000";
+        let expected_content_key = hex_decode(KEY_STR).unwrap();
+
+        let content_key = BeaconContentKey::LightClientFinalityUpdate(ZeroKey);
+
+        assert_eq!(content_key.to_bytes(), expected_content_key);
+        assert_eq!(content_key.to_string(), "LightClientFinalityUpdate");
         assert_eq!(content_key.to_hex(), KEY_STR);
     }
 
