@@ -5,7 +5,9 @@ use ethportal_api::types::content_key::{BeaconContentKey, OverlayContentKey};
 use ethportal_api::types::content_value::{BeaconContentValue, ContentValue};
 use ethportal_api::types::jsonrpc::endpoints::BeaconEndpoint;
 use ethportal_api::types::jsonrpc::request::BeaconJsonRpcRequest;
-use ethportal_api::types::portal::{AcceptInfo, FindNodesInfo, PongInfo, TraceContentInfo};
+use ethportal_api::types::portal::{
+    AcceptInfo, ContentInfo, FindNodesInfo, PongInfo, TraceContentInfo,
+};
 use ethportal_api::types::{
     constants::CONTENT_ABSENT, content_key::RawContentKey, query_trace::QueryTrace,
 };
@@ -96,7 +98,7 @@ async fn recursive_find_content(
             None
         }
     };
-    let (possible_content_bytes, trace) = match local_content {
+    let (possible_content_bytes, utp_transfer, trace) = match local_content {
         Some(val) => {
             let local_enr = overlay.local_enr();
             let mut trace = QueryTrace::new(
@@ -104,7 +106,7 @@ async fn recursive_find_content(
                 NodeId::new(&content_key.content_id()).into(),
             );
             trace.node_responded_with_content(&local_enr);
-            (Some(val), if is_trace { Some(trace) } else { None })
+            (Some(val), false, if is_trace { Some(trace) } else { None })
         }
         None => overlay.lookup_content(content_key.clone(), is_trace).await,
     };
@@ -117,11 +119,15 @@ async fn recursive_find_content(
 
     // If tracing is not required, return content.
     if !is_trace {
-        return Ok(content_response_string);
+        return Ok(json!(ContentInfo::Content {
+            content: serde_json::from_value(content_response_string).map_err(|e| e.to_string())?,
+            utp_transfer,
+        }));
     }
     if let Some(trace) = trace {
         Ok(json!(TraceContentInfo {
             content: serde_json::from_value(content_response_string).map_err(|e| e.to_string())?,
+            utp_transfer,
             trace,
         }))
     } else {

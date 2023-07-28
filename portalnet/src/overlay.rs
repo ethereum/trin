@@ -25,6 +25,7 @@ use utp_rs::socket::UtpSocket;
 
 use crate::{
     discovery::{Discovery, UtpEnr},
+    find::query_info::FindContentResult,
     metrics::overlay::OverlayMetrics,
     overlay_service::{
         OverlayCommand, OverlayRequest, OverlayRequestError, OverlayService, RequestDirection,
@@ -48,7 +49,6 @@ use ethportal_api::OverlayContentKey;
 use trin_validation::validator::Validator;
 
 use crate::events::EventEnvelope;
-use ethportal_api::types::query_trace::QueryTrace;
 
 /// Configuration parameters for the overlay network.
 #[derive(Clone)]
@@ -593,11 +593,7 @@ where
 
     /// Performs a content lookup for `target`.
     /// Returns the target content along with the peers traversed during content lookup.
-    pub async fn lookup_content(
-        &self,
-        target: TContentKey,
-        is_trace: bool,
-    ) -> (Option<Vec<u8>>, Option<QueryTrace>) {
+    pub async fn lookup_content(&self, target: TContentKey, is_trace: bool) -> FindContentResult {
         let (tx, rx) = oneshot::channel();
         let content_id = target.content_id();
 
@@ -612,7 +608,7 @@ where
                 content.id = %hex_encode(content_id),
                 "Error submitting FindContent query to service"
             );
-            return (None, None);
+            return (None, false, None);
         }
 
         rx.await.unwrap_or_else(|err| {
@@ -622,7 +618,7 @@ where
                 content.id = %hex_encode(content_id),
                 "Error receiving content from service",
             );
-            (None, None)
+            (None, false, None)
         })
     }
 
