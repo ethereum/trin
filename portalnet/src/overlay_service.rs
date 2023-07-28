@@ -809,9 +809,8 @@ where
                         let metrics = self.metrics.clone();
                         let utp = self.utp_socket.clone();
                         let id = u16::from_be(connection_id);
-                        let key = kbucket::Key::from(peer);
-                        let source = match self.kbuckets.write().entry(&key) {
-                            kbucket::Entry::Present(entry, _) => entry.value().enr(),
+                        let source = match self.find_enr(&peer) {
+                            Some(enr) => enr,
                             _ => {
                                 warn!("Received uTP payload from unknown peer");
                                 return;
@@ -1819,7 +1818,6 @@ where
                     "Error validating content"
                 );
                 if let Some(responder) = responder {
-                    // wrong
                     let _ = responder.send((None, trace));
                 }
                 return;
