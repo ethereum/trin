@@ -10,7 +10,7 @@ The portal network is a response to two needs. Users should have the ability to:
 
 [EIP-4444: Bound Historical Data in Execution Clients](https://eips.ethereum.org/EIPS/eip-4444)
 is an upgrade that seeks to limit the costs of participating in the network. It does this
-by allowing by clearing data older than 1 year.
+by allowing the clearing of data older than 1 year.
 
 ## How the Portal network works
 
@@ -52,7 +52,7 @@ graph LR;
 ```
 
 ### Standard requests
-Node each have a name, and only hold data that is similar to that name. Peers can tell who
+Each node has a name, and only holds data that is similar to that name. Peers can tell who
 is likely to have what data based on these names.
 ```mermaid
 sequenceDiagram
