@@ -18,10 +18,10 @@ use validator::ValidationError;
 
 use ethportal_api::types::bootnodes::Bootnodes;
 use ethportal_api::types::bytes::ByteList;
-use ethportal_api::types::content_key::RawContentKey;
 use ethportal_api::types::distance::Distance;
 use ethportal_api::types::enr::{Enr, SszEnr};
 use ethportal_api::utils::bytes::{hex_decode, hex_encode, ByteUtilsError};
+use ethportal_api::RawContentKey;
 
 /// The maximum size of a Discv5 packet.
 pub(crate) const MAX_DISCV5_PACKET_SIZE: usize = 1280;

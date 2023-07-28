@@ -1,11 +1,12 @@
 use crate::constants::{HEADER_WITH_PROOF_CONTENT_KEY, HISTORY_CONTENT_VALUE};
 use crate::Peertest;
 use discv5::enr::NodeId;
-use ethportal_api::types::content_key::HistoryContentKey;
-use ethportal_api::types::content_value::{HistoryContentValue, PossibleHistoryContentValue};
+use ethportal_api::types::content_value::ContentValue;
 use ethportal_api::types::portal::{ContentInfo, TraceContentInfo};
 use ethportal_api::utils::bytes::hex_decode;
-use ethportal_api::{ContentValue, HistoryNetworkApiClient};
+use ethportal_api::HistoryContentKey;
+use ethportal_api::HistoryNetworkApiClient;
+use ethportal_api::{HistoryContentValue, PossibleHistoryContentValue};
 use jsonrpsee::async_client::Client;
 use serde_json::json;
 use tracing::info;

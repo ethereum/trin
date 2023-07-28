@@ -1,25 +1,10 @@
-use crate::types::consensus::header_proof::HistoricalSummariesWithProof;
 use crate::types::constants::CONTENT_ABSENT;
+use crate::types::content_value::ContentValue;
 use crate::types::execution::accumulator::EpochAccumulator;
-use crate::types::execution::block_body::BlockBody;
-use crate::types::execution::header::HeaderWithProof;
-use crate::types::execution::receipts::Receipts;
 use crate::utils::bytes::{hex_decode, hex_encode};
+use crate::{BlockBody, ContentValueError, HeaderWithProof, Receipts};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use ssz::{Decode, Encode};
-use thiserror::Error;
-
-/// An encodable portal network content value.
-pub trait ContentValue: Sized {
-    /// Encodes the content value into a byte vector.
-    fn encode(&self) -> Vec<u8>;
-    /// Decodes `buf` into a content value.
-    fn decode(buf: &[u8]) -> Result<Self, ContentValueError>;
-}
-
-/// The length of the Merkle proof for the inclusion of a block header in a particular epoch
-/// accumulator.
-pub const EPOCH_ACC_PROOF_LEN: usize = 15;
 
 /// A Portal History content value.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -39,12 +24,6 @@ pub enum HistoryContentValue {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PossibleHistoryContentValue {
     ContentPresent(HistoryContentValue),
-    ContentAbsent,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum PossibleBeaconContentValue {
-    ContentPresent(BeaconContentValue),
     ContentAbsent,
 }
 
@@ -99,68 +78,6 @@ impl<'de> Deserialize<'de> for PossibleHistoryContentValue {
         })
         .map_err(serde::de::Error::custom)
     }
-}
-
-impl Serialize for PossibleBeaconContentValue {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match self {
-            Self::ContentPresent(content) => content.serialize(serializer),
-            Self::ContentAbsent => serializer.serialize_str(CONTENT_ABSENT),
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for PossibleBeaconContentValue {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-
-        if s.as_str() == CONTENT_ABSENT {
-            return Ok(PossibleBeaconContentValue::ContentAbsent);
-        }
-
-        let content_bytes = hex_decode(&s).map_err(serde::de::Error::custom)?;
-
-        if let Ok(value) = HistoricalSummariesWithProof::from_ssz_bytes(&content_bytes) {
-            return Ok(Self::ContentPresent(
-                BeaconContentValue::HistoricalSummariesWithProof(value),
-            ));
-        }
-
-        Err(ContentValueError::UnknownContent {
-            bytes: s,
-            network: "beacon".to_string(),
-        })
-        .map_err(serde::de::Error::custom)
-    }
-}
-
-/// An error decoding a portal network content value.
-#[derive(Clone, Debug, Error, PartialEq)]
-pub enum ContentValueError {
-    #[error("unable to decode value SSZ bytes {input} due to {decode_error:?}")]
-    DecodeSsz {
-        decode_error: ssz::DecodeError,
-        input: String,
-    },
-    #[error("could not determine content type of {bytes} from {network} network")]
-    UnknownContent { bytes: String, network: String },
-    /// The content value is the "0x" absent content message rather than data.
-    ///
-    /// This error implies that handling of the "content absent" response was skipped.
-    #[error("attempted to deserialize the '0x' absent content message")]
-    DeserializeAbsentContent,
-
-    /// The content value is the "0x" absent content message rather than data.
-    ///
-    /// This error implies that handling of the "content absent" response was skipped.
-    #[error("attempted to decode the '0x' absent content message")]
-    DecodeAbsentContent,
 }
 
 impl ContentValue for HistoryContentValue {
@@ -249,69 +166,13 @@ impl<'de> Deserialize<'de> for HistoryContentValue {
     }
 }
 
-/// A content value for the beacon network.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum BeaconContentValue {
-    HistoricalSummariesWithProof(HistoricalSummariesWithProof),
-}
-
-impl ContentValue for BeaconContentValue {
-    fn encode(&self) -> Vec<u8> {
-        match self {
-            Self::HistoricalSummariesWithProof(value) => value.as_ssz_bytes(),
-        }
-    }
-
-    fn decode(buf: &[u8]) -> Result<Self, ContentValueError> {
-        if let Ok(value) = HistoricalSummariesWithProof::from_ssz_bytes(buf) {
-            return Ok(Self::HistoricalSummariesWithProof(value));
-        }
-        Err(ContentValueError::UnknownContent {
-            bytes: hex_encode(buf),
-            network: "beacon".to_string(),
-        })
-    }
-}
-
-impl Serialize for BeaconContentValue {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match self {
-            Self::HistoricalSummariesWithProof(value) => {
-                serializer.serialize_str(&hex_encode(value.as_ssz_bytes()))
-            }
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for BeaconContentValue {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        let content_bytes = hex_decode(&s).map_err(serde::de::Error::custom)?;
-
-        if let Ok(value) = HistoricalSummariesWithProof::from_ssz_bytes(&content_bytes) {
-            return Ok(Self::HistoricalSummariesWithProof(value));
-        }
-
-        Err(ContentValueError::UnknownContent {
-            bytes: s,
-            network: "beacon".to_string(),
-        })
-        .map_err(serde::de::Error::custom)
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
 
     use serde_json::Value;
 
+    use crate::HistoryContentValue;
     use std::fs;
 
     /// Max number of blocks / epoch = 2 ** 13
@@ -380,6 +241,4 @@ mod test {
             "attempted to decode the '0x' absent content message"
         );
     }
-
-    // TODO: add test vectors for beacon content value
 }

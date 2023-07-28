@@ -1,7 +1,7 @@
 use std::net::{IpAddr, Ipv4Addr};
 use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
-use ethportal_api::types::content_key::IdentityContentKey;
+use ethportal_api::types::content_key::overlay::IdentityContentKey;
 use ethportal_api::types::distance::XorMetric;
 use ethportal_api::types::enr::{Enr, SszEnr};
 use portalnet::{

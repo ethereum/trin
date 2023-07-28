@@ -5,9 +5,9 @@ use tokio::sync::RwLock;
 use utp_rs::socket::UtpSocket;
 
 use crate::validation::BeaconValidator;
-use ethportal_api::types::content_key::BeaconContentKey;
 use ethportal_api::types::distance::XorMetric;
 use ethportal_api::types::enr::Enr;
+use ethportal_api::BeaconContentKey;
 use portalnet::{
     discovery::{Discovery, UtpEnr},
     overlay::{OverlayConfig, OverlayProtocol},
