@@ -21,7 +21,8 @@ pub struct QueryInfo<TContentKey> {
     pub trace: Option<QueryTrace>,
 }
 
-pub type FindContentResult = (Option<Vec<u8>>, Option<QueryTrace>);
+// Content, utp_transfer, trace
+pub type FindContentResult = (Option<Vec<u8>>, bool, Option<QueryTrace>);
 
 /// Additional information about the query.
 #[derive(Debug)]

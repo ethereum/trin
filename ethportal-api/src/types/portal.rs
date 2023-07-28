@@ -34,7 +34,10 @@ pub enum ContentInfo {
     #[serde(rename_all = "camelCase")]
     ConnectionId { connection_id: u16 },
     #[serde(rename_all = "camelCase")]
-    Content { content: HistoryContentValue },
+    Content {
+        content: HistoryContentValue,
+        utp_transfer: bool,
+    },
     #[serde(rename_all = "camelCase")]
     Enrs { enrs: Vec<Enr> },
 }
@@ -54,6 +57,7 @@ pub struct AcceptInfo {
 #[serde(rename_all = "camelCase")]
 pub struct TraceContentInfo {
     pub content: PossibleHistoryContentValue,
+    pub utp_transfer: bool,
     pub trace: QueryTrace,
 }
 

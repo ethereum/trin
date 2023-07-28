@@ -112,7 +112,7 @@ pub enum OverlayCommand<TContentKey> {
         /// The query target.
         target: TContentKey,
         /// A callback channel to transmit the result of the query.
-        callback: oneshot::Sender<(Option<Vec<u8>>, Option<QueryTrace>)>,
+        callback: oneshot::Sender<FindContentResult>,
         /// Whether or not a trace for the content query should be kept and returned.
         is_trace: bool,
     },
@@ -780,7 +780,7 @@ where
                 match query.into_result() {
                     FindContentQueryResult::ClosestNodes(_closest_nodes) => {
                         if let Some(responder) = callback {
-                            let _ = responder.send((None, query_info.trace));
+                            let _ = responder.send((None, false, query_info.trace));
                         }
                     }
                     FindContentQueryResult::Content {
@@ -797,7 +797,8 @@ where
                                 command_tx,
                                 validator,
                                 store,
-                                (content.clone(), true),
+                                content.clone(),
+                                false,
                                 content_key,
                                 callback,
                                 query_info.trace,
@@ -874,7 +875,8 @@ where
                                 command_tx,
                                 validator,
                                 store,
-                                (data, true),
+                                data,
+                                true,
                                 content_key,
                                 callback,
                                 trace,
@@ -1809,13 +1811,14 @@ where
         command_tx: UnboundedSender<OverlayCommand<TContentKey>>,
         validator: Arc<TValidator>,
         store: Arc<RwLock<TStore>>,
-        content: (Vec<u8>, bool),
+        content: Vec<u8>,
+        utp_transfer: bool,
         content_key: TContentKey,
         responder: Option<oneshot::Sender<FindContentResult>>,
         trace: Option<QueryTrace>,
         nodes_to_poke: Vec<NodeId>,
     ) {
-        let (mut content, _utp_transfer) = content;
+        let mut content = content;
         // Operate under assumption that all content in the store is valid
         let local_value = store.read().get(&content_key);
         if let Ok(Some(val)) = local_value {
@@ -1832,7 +1835,7 @@ where
                     "Error validating content"
                 );
                 if let Some(responder) = responder {
-                    let _ = responder.send((None, trace));
+                    let _ = responder.send((None, utp_transfer, trace));
                 }
                 return;
             };
@@ -1861,7 +1864,7 @@ where
             }
         }
         if let Some(responder) = responder {
-            let _ = responder.send((Some(content.clone()), trace));
+            let _ = responder.send((Some(content.clone()), utp_transfer, trace));
         }
         Self::poke_content(kbuckets, command_tx, content_key, content, nodes_to_poke);
     }
@@ -3941,8 +3944,9 @@ mod tests {
             .await
             .expect("Expected result on callback channel receiver")
         {
-            (Some(result_content), _) => {
+            (Some(result_content), utp_transfer, _) => {
                 assert_eq!(result_content, content);
+                assert!(!utp_transfer);
             }
             _ => panic!("Unexpected find content query result type"),
         }
