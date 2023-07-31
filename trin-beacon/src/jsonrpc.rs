@@ -7,13 +7,11 @@ use ethportal_api::types::jsonrpc::request::BeaconJsonRpcRequest;
 use ethportal_api::types::portal::{
     AcceptInfo, ContentInfo, FindNodesInfo, PongInfo, TraceContentInfo,
 };
-use ethportal_api::types::{
-    constants::CONTENT_ABSENT, content_key::RawContentKey, query_trace::QueryTrace,
-};
+use ethportal_api::types::{constants::CONTENT_ABSENT, query_trace::QueryTrace};
 use ethportal_api::utils::bytes::hex_encode;
-use ethportal_api::BeaconContentValue;
-use ethportal_api::{BeaconContentKey, OverlayContentKey, RawContentKey};
+use ethportal_api::{BeaconContentKey, BeaconContentValue, OverlayContentKey, RawContentKey};
 use portalnet::storage::ContentStore;
+use portalnet::types::messages::Content;
 use serde_json::{json, Value};
 use ssz::Encode;
 use tokio::sync::{mpsc, Mutex, RwLock};
@@ -239,9 +237,17 @@ async fn find_content(
 ) -> Result<Value, String> {
     let overlay = network.read().await.overlay.clone();
     match overlay.send_find_content(enr, content_key.into()).await {
-        Ok(content) => match content.try_into() {
-            Ok(val) => Ok(val),
-            Err(_) => Err("Content response decoding error".to_string()),
+        Ok((content, utp_transfer)) => match content{
+            Content::ConnectionId(id) => Err(format!(
+                "FindContent request returned a connection id ({id:?}) instead of conducting utp transfer."
+            )),
+            Content::Content(content) => Ok(json!({
+                "content": hex_encode(content),
+                "utpTransfer": utp_transfer,
+            })),
+            Content::Enrs(enrs) => Ok(json!({
+                "enrs": enrs,
+            })),
         },
         Err(msg) => Err(format!("FindContent request timeout: {msg:?}")),
     }

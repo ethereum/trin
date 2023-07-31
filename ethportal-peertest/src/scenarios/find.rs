@@ -7,9 +7,9 @@ use discv5::enr::NodeId;
 use ethportal_api::types::content_value::ContentValue;
 use ethportal_api::types::portal::{ContentInfo, TraceContentInfo};
 use ethportal_api::utils::bytes::hex_decode;
-use ethportal_api::HistoryContentKey;
-use ethportal_api::HistoryNetworkApiClient;
-use ethportal_api::{HistoryContentValue, PossibleHistoryContentValue};
+use ethportal_api::{
+    HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient, PossibleHistoryContentValue,
+};
 use jsonrpsee::async_client::Client;
 use serde_json::json;
 use tracing::info;
@@ -39,14 +39,10 @@ pub async fn test_find_content_return_enr(target: &Client, peertest: &Peertest) 
         .find_content(peertest.bootnode.enr.clone(), header_with_proof_key.clone())
         .await;
 
-    let enrs = match result {
-        Ok(result) => match result {
-            ContentInfo::Enrs { enrs } => enrs,
-            other => panic!("Error: Unexpected FINDCONTENT response not Enrs: {other:?}"),
-        },
-        Err(err) => {
-            panic!("Error: Unable to get response from FINDCONTENT request (Enrs): {err:?}");
-        }
+    let enrs = if let Ok(ContentInfo::Enrs { enrs }) = result {
+        enrs
+    } else {
+        panic!("Error: Invalid response from FINDCONTENT request, expected ENRs got: {result:?}");
     };
 
     // check if find_content contains an expected enr
@@ -138,10 +134,19 @@ pub async fn test_recursive_utp(peertest: &Peertest) {
         .await
         .unwrap();
 
-    assert_eq!(
-        content_info,
-        PossibleHistoryContentValue::ContentPresent(history_content_value)
-    );
+    if let ContentInfo::Content {
+        content,
+        utp_transfer,
+    } = content_info
+    {
+        assert_eq!(
+            content,
+            PossibleHistoryContentValue::ContentPresent(history_content_value)
+        );
+        assert!(utp_transfer);
+    } else {
+        panic!("Error: Unexpected content info response");
+    }
 }
 
 pub async fn test_trace_recursive_find_content(peertest: &Peertest) {
@@ -168,6 +173,7 @@ pub async fn test_trace_recursive_find_content(peertest: &Peertest) {
         .await
         .unwrap();
 
+    assert!(!trace_content_info.utp_transfer);
     let content = trace_content_info.content;
     let trace = trace_content_info.trace;
 
@@ -215,6 +221,7 @@ pub async fn test_trace_recursive_find_content_for_absent_content(peertest: &Pee
         .await
         .unwrap();
 
+    assert!(!result.utp_transfer);
     assert_eq!(result.content, PossibleHistoryContentValue::ContentAbsent);
     // Check that at least one route was involved.
     assert!(result.trace.responses.len() > 1);
@@ -245,6 +252,7 @@ pub async fn test_trace_recursive_find_content_local_db(peertest: &Peertest) {
         .trace_recursive_find_content(history_content_key)
         .await
         .unwrap();
+    assert!(!trace_content_info.utp_transfer);
     assert_eq!(
         trace_content_info.content,
         PossibleHistoryContentValue::ContentPresent(history_content_value)

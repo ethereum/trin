@@ -1,6 +1,6 @@
 use crate::types::enr::Enr;
 use crate::HistoryContentKey;
-use crate::{HistoryContentValue, PossibleHistoryContentValue};
+use crate::PossibleHistoryContentValue;
 use serde::{Deserialize, Serialize};
 use ssz_types::{typenum, BitList};
 
@@ -27,7 +27,7 @@ pub struct PongInfo {
 
 pub type FindNodesInfo = Vec<Enr>;
 
-/// Response for FindContent endpoint
+/// Response for FindContent & RecursiveFindContent endpoints
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ContentInfo {
@@ -35,7 +35,7 @@ pub enum ContentInfo {
     ConnectionId { connection_id: u16 },
     #[serde(rename_all = "camelCase")]
     Content {
-        content: HistoryContentValue,
+        content: PossibleHistoryContentValue,
         utp_transfer: bool,
     },
     #[serde(rename_all = "camelCase")]

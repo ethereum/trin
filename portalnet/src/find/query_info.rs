@@ -4,7 +4,7 @@ use smallvec::SmallVec;
 
 use crate::{
     find::query_pool::TargetKey,
-    types::messages::{FindContent, FindNodes, Request},
+    types::messages::{Content, FindContent, FindNodes, Request},
 };
 use ethportal_api::types::query_trace::QueryTrace;
 use ethportal_api::OverlayContentKey;
@@ -22,7 +22,15 @@ pub struct QueryInfo<TContentKey> {
 }
 
 // Content, utp_transfer, trace
-pub type FindContentResult = (Option<Vec<u8>>, bool, Option<QueryTrace>);
+// Content is Option<Vec<u8>> because it can be None if the content is not found
+// in a recursive find content query.
+pub type RecursiveFindContentResult = (Option<Vec<u8>>, bool, Option<QueryTrace>);
+// Content, utp_transfer
+// Content is Content type because the response to a simple find content query
+// cannot be None and must be a valid Content response, to account for the
+// possibility of returning Enrs / ConnectionIds (although in practice we never
+// return ConnectionIds in favor of executing the utp transfer).
+pub type FindContentResult = (Content, bool);
 
 /// Additional information about the query.
 #[derive(Debug)]
@@ -44,7 +52,7 @@ pub enum QueryType<TContentKey> {
         target: TContentKey,
 
         /// A callback channel for the result of the query.
-        callback: Option<oneshot::Sender<FindContentResult>>,
+        callback: Option<oneshot::Sender<RecursiveFindContentResult>>,
     },
 }
 

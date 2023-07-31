@@ -140,14 +140,17 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
     async fn recursive_find_content(
         &self,
         content_key: HistoryContentKey,
-    ) -> RpcResult<PossibleHistoryContentValue> {
+    ) -> RpcResult<ContentInfo> {
         let endpoint = HistoryEndpoint::RecursiveFindContent(content_key);
         let result = self.proxy_query_to_history_subnet(endpoint).await?;
         if result == serde_json::Value::String(CONTENT_ABSENT.to_string()) {
-            return Ok(PossibleHistoryContentValue::ContentAbsent);
+            return Ok(ContentInfo::Content {
+                content: PossibleHistoryContentValue::ContentAbsent,
+                utp_transfer: false,
+            });
         };
-        let result: HistoryContentValue = from_value(result)?;
-        Ok(PossibleHistoryContentValue::ContentPresent(result))
+        let result: ContentInfo = from_value(result)?;
+        Ok(result)
     }
 
     /// Lookup a target content key in the network. Return tracing info.

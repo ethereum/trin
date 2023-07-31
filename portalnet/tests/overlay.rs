@@ -204,8 +204,11 @@ async fn overlay() {
         .send_find_content(overlay_one.local_enr(), content_key.into())
         .await
     {
-        Ok(content) => match content {
-            Content::Enrs(enrs) => enrs,
+        Ok((content, utp_transfer)) => match content {
+            Content::Enrs(enrs) => {
+                assert!(!utp_transfer);
+                enrs
+            }
             other => panic!("Unexpected response to find content: {other:?}"),
         },
         Err(err) => panic!("Unable to respond to find content: {err}"),
