@@ -1,7 +1,7 @@
 use crate::types::consensus::fork::{ForkDigest, ForkName};
 use crate::types::consensus::header_proof::HistoricalSummariesWithProof;
 use crate::types::consensus::light_client::bootstrap::{
-    LightClientBootstrapBellatrix, LightClientBootstrapCapella,
+    LightClientBootstrap, LightClientBootstrapBellatrix, LightClientBootstrapCapella,
 };
 use crate::types::consensus::light_client::finality_update::{
     LightClientFinalityUpdate, LightClientFinalityUpdateBellatrix, LightClientFinalityUpdateCapella,
@@ -67,11 +67,75 @@ impl<'de> Deserialize<'de> for PossibleBeaconContentValue {
     }
 }
 
+/// A wrapper type including a `ForkName` and `LightClientBootstrap`
+#[derive(Clone, Debug, PartialEq)]
+pub struct ForkVersionedLightClientBootstrap {
+    pub fork_name: ForkName,
+    pub bootstrap: LightClientBootstrap,
+}
+
+impl ForkVersionedLightClientBootstrap {
+    pub fn encode(&self) -> Vec<u8> {
+        let fork_digest = self.fork_name.as_fork_digest();
+
+        let mut data = fork_digest.to_vec();
+        data.extend(self.bootstrap.as_ssz_bytes());
+        data
+    }
+
+    pub fn decode(bytes: &[u8]) -> Result<Self, DecodeError> {
+        let fork_digest = ForkDigest::try_from(&bytes[0..4]).map_err(|err| {
+            DecodeError::BytesInvalid(format!("Unable to decode fork digest: {err:?}"))
+        })?;
+        let fork_name = ForkName::try_from(fork_digest).map_err(|_| {
+            DecodeError::BytesInvalid(format!("Unable to decode fork name: {fork_digest:?}"))
+        })?;
+
+        let light_client_bootstrap = match fork_name {
+            ForkName::Bellatrix => LightClientBootstrap::Bellatrix(
+                LightClientBootstrapBellatrix::from_ssz_bytes(&bytes[4..])?,
+            ),
+            ForkName::Capella => LightClientBootstrap::Capella(
+                LightClientBootstrapCapella::from_ssz_bytes(&bytes[4..])?,
+            ),
+        };
+
+        Ok(Self {
+            fork_name,
+            bootstrap: light_client_bootstrap,
+        })
+    }
+}
+
+impl Decode for ForkVersionedLightClientBootstrap {
+    fn is_ssz_fixed_len() -> bool {
+        false
+    }
+
+    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
+        Self::decode(bytes)
+    }
+}
+
+impl Encode for ForkVersionedLightClientBootstrap {
+    fn is_ssz_fixed_len() -> bool {
+        false
+    }
+
+    fn ssz_append(&self, buf: &mut Vec<u8>) {
+        buf.extend_from_slice(&self.encode());
+    }
+
+    fn ssz_bytes_len(&self) -> usize {
+        self.encode().len()
+    }
+}
+
 /// A wrapper type including a `ForkName` and `LightClientUpdate`
 #[derive(Clone, Debug, PartialEq)]
 pub struct ForkVersionedLightClientUpdate {
     pub fork_name: ForkName,
-    pub light_client_update: LightClientUpdate,
+    pub update: LightClientUpdate,
 }
 
 impl ForkVersionedLightClientUpdate {
@@ -79,7 +143,7 @@ impl ForkVersionedLightClientUpdate {
         let fork_digest = self.fork_name.as_fork_digest();
 
         let mut data = fork_digest.to_vec();
-        data.extend(self.light_client_update.as_ssz_bytes());
+        data.extend(self.update.as_ssz_bytes());
         data
     }
 
@@ -102,7 +166,7 @@ impl ForkVersionedLightClientUpdate {
 
         Ok(Self {
             fork_name,
-            light_client_update,
+            update: light_client_update,
         })
     }
 }
@@ -139,7 +203,7 @@ impl Serialize for ForkVersionedLightClientUpdate {
         let fork_digest = self.fork_name.as_fork_digest();
 
         let mut data = fork_digest.to_vec();
-        data.extend(self.light_client_update.as_ssz_bytes());
+        data.extend(self.update.as_ssz_bytes());
         serializer.serialize_str(&hex_encode(data))
     }
 }
@@ -148,7 +212,7 @@ impl Serialize for ForkVersionedLightClientUpdate {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ForkVersionedLightClientOptimisticUpdate {
     pub fork_name: ForkName,
-    pub content: LightClientOptimisticUpdate,
+    pub update: LightClientOptimisticUpdate,
 }
 
 impl ForkVersionedLightClientOptimisticUpdate {
@@ -156,7 +220,7 @@ impl ForkVersionedLightClientOptimisticUpdate {
         let fork_digest = self.fork_name.as_fork_digest();
 
         let mut data = fork_digest.to_vec();
-        data.extend(self.content.as_ssz_bytes());
+        data.extend(self.update.as_ssz_bytes());
         data
     }
 
@@ -178,7 +242,10 @@ impl ForkVersionedLightClientOptimisticUpdate {
             ),
         };
 
-        Ok(Self { fork_name, content })
+        Ok(Self {
+            fork_name,
+            update: content,
+        })
     }
 }
 
@@ -210,7 +277,7 @@ impl Encode for ForkVersionedLightClientOptimisticUpdate {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ForkVersionedLightClientFinalityUpdate {
     pub fork_name: ForkName,
-    pub content: LightClientFinalityUpdate,
+    pub update: LightClientFinalityUpdate,
 }
 
 impl ForkVersionedLightClientFinalityUpdate {
@@ -218,7 +285,7 @@ impl ForkVersionedLightClientFinalityUpdate {
         let fork_digest = self.fork_name.as_fork_digest();
 
         let mut data = fork_digest.to_vec();
-        data.extend(self.content.as_ssz_bytes());
+        data.extend(self.update.as_ssz_bytes());
         data
     }
 
@@ -240,7 +307,10 @@ impl ForkVersionedLightClientFinalityUpdate {
             ),
         };
 
-        Ok(Self { fork_name, content })
+        Ok(Self {
+            fork_name,
+            update: content,
+        })
     }
 }
 
@@ -305,8 +375,7 @@ impl Decode for LightClientUpdatesByRange {
 #[derive(Clone, Debug, PartialEq)]
 pub enum BeaconContentValue {
     HistoricalSummariesWithProof(HistoricalSummariesWithProof),
-    LightClientBootstrapBellatrix(LightClientBootstrapBellatrix),
-    LightClientBootstrapCapella(LightClientBootstrapCapella),
+    LightClientBootstrap(ForkVersionedLightClientBootstrap),
     LightClientUpdatesByRange(LightClientUpdatesByRange),
     LightClientOptimisticUpdate(ForkVersionedLightClientOptimisticUpdate),
     LightClientFinalityUpdate(ForkVersionedLightClientFinalityUpdate),
@@ -316,16 +385,7 @@ impl ContentValue for BeaconContentValue {
     fn encode(&self) -> Vec<u8> {
         match self {
             Self::HistoricalSummariesWithProof(value) => value.as_ssz_bytes(),
-            Self::LightClientBootstrapBellatrix(value) => {
-                let mut data = ForkName::Bellatrix.as_fork_digest().to_vec();
-                data.extend(value.as_ssz_bytes());
-                data
-            }
-            Self::LightClientBootstrapCapella(value) => {
-                let mut data = ForkName::Capella.as_fork_digest().to_vec();
-                data.extend(value.as_ssz_bytes());
-                data
-            }
+            Self::LightClientBootstrap(value) => value.as_ssz_bytes(),
             Self::LightClientUpdatesByRange(value) => value.as_ssz_bytes(),
             Self::LightClientOptimisticUpdate(value) => value.as_ssz_bytes(),
             Self::LightClientFinalityUpdate(value) => value.as_ssz_bytes(),
@@ -336,42 +396,17 @@ impl ContentValue for BeaconContentValue {
         if let Ok(value) = HistoricalSummariesWithProof::from_ssz_bytes(buf) {
             return Ok(Self::HistoricalSummariesWithProof(value));
         }
-
+        if let Ok(value) = ForkVersionedLightClientBootstrap::from_ssz_bytes(buf) {
+            return Ok(Self::LightClientBootstrap(value));
+        }
         if let Ok(value) = LightClientUpdatesByRange::from_ssz_bytes(buf) {
             return Ok(Self::LightClientUpdatesByRange(value));
         }
-
         if let Ok(value) = ForkVersionedLightClientOptimisticUpdate::from_ssz_bytes(buf) {
             return Ok(Self::LightClientOptimisticUpdate(value));
         }
-
         if let Ok(value) = ForkVersionedLightClientFinalityUpdate::from_ssz_bytes(buf) {
             return Ok(Self::LightClientFinalityUpdate(value));
-        }
-
-        let fork_digest =
-            ForkDigest::try_from(&buf[0..4]).map_err(|_| ContentValueError::UnknownForkDigest {
-                bytes: hex_encode(buf),
-                network: "beacon".to_string(),
-            })?;
-
-        let fork_name =
-            ForkName::try_from(fork_digest).map_err(|_| ContentValueError::UnknownForkName {
-                bytes: hex_encode(fork_digest),
-                network: "beacon".to_string(),
-            })?;
-
-        match fork_name {
-            ForkName::Bellatrix => {
-                if let Ok(value) = LightClientBootstrapBellatrix::from_ssz_bytes(&buf[4..]) {
-                    return Ok(Self::LightClientBootstrapBellatrix(value));
-                }
-            }
-            ForkName::Capella => {
-                if let Ok(value) = LightClientBootstrapCapella::from_ssz_bytes(&buf[4..]) {
-                    return Ok(Self::LightClientBootstrapCapella(value));
-                }
-            }
         }
 
         Err(ContentValueError::UnknownContent {
@@ -390,17 +425,8 @@ impl Serialize for BeaconContentValue {
             Self::HistoricalSummariesWithProof(value) => {
                 serializer.serialize_str(&hex_encode(value.as_ssz_bytes()))
             }
-            Self::LightClientBootstrapBellatrix(value) => {
-                let mut data = ForkName::Bellatrix.as_fork_digest().to_vec();
-                data.extend(value.as_ssz_bytes());
-
-                serializer.serialize_str(&hex_encode(data))
-            }
-            Self::LightClientBootstrapCapella(value) => {
-                let mut data = ForkName::Bellatrix.as_fork_digest().to_vec();
-                data.extend(value.as_ssz_bytes());
-
-                serializer.serialize_str(&hex_encode(data))
+            Self::LightClientBootstrap(value) => {
+                serializer.serialize_str(&hex_encode(value.as_ssz_bytes()))
             }
             Self::LightClientUpdatesByRange(value) => {
                 serializer.serialize_str(&hex_encode(value.as_ssz_bytes()))
@@ -426,48 +452,18 @@ impl<'de> Deserialize<'de> for BeaconContentValue {
         if let Ok(value) = HistoricalSummariesWithProof::from_ssz_bytes(&content_bytes) {
             return Ok(Self::HistoricalSummariesWithProof(value));
         }
-
+        if let Ok(value) = ForkVersionedLightClientBootstrap::from_ssz_bytes(&content_bytes) {
+            return Ok(Self::LightClientBootstrap(value));
+        }
         if let Ok(value) = LightClientUpdatesByRange::from_ssz_bytes(&content_bytes) {
             return Ok(Self::LightClientUpdatesByRange(value));
         }
-
         if let Ok(value) = ForkVersionedLightClientOptimisticUpdate::from_ssz_bytes(&content_bytes)
         {
             return Ok(Self::LightClientOptimisticUpdate(value));
         }
-
         if let Ok(value) = ForkVersionedLightClientFinalityUpdate::from_ssz_bytes(&content_bytes) {
             return Ok(Self::LightClientFinalityUpdate(value));
-        }
-
-        let fork_digest = ForkDigest::try_from(&content_bytes[0..4])
-            .map_err(|_| ContentValueError::UnknownForkDigest {
-                bytes: hex_encode(&content_bytes[0..4]),
-                network: "beacon".to_string(),
-            })
-            .map_err(serde::de::Error::custom)?;
-
-        let fork_name = ForkName::try_from(fork_digest)
-            .map_err(|_| ContentValueError::UnknownForkName {
-                bytes: hex_encode(fork_digest),
-                network: "beacon".to_string(),
-            })
-            .map_err(serde::de::Error::custom)?;
-
-        match fork_name {
-            ForkName::Bellatrix => {
-                if let Ok(value) =
-                    LightClientBootstrapBellatrix::from_ssz_bytes(&content_bytes[4..])
-                {
-                    return Ok(Self::LightClientBootstrapBellatrix(value));
-                }
-            }
-            ForkName::Capella => {
-                if let Ok(value) = LightClientBootstrapCapella::from_ssz_bytes(&content_bytes[4..])
-                {
-                    return Ok(Self::LightClientBootstrapCapella(value));
-                }
-            }
         }
 
         Err(ContentValueError::UnknownContent {
@@ -500,8 +496,11 @@ mod test {
             let beacon_content = BeaconContentValue::decode(&content_encoded).unwrap();
 
             match beacon_content {
-                BeaconContentValue::LightClientBootstrapCapella(ref value) => {
-                    assert_eq!(slot_num, value.header.beacon.slot);
+                BeaconContentValue::LightClientBootstrap(ref value) => {
+                    assert_eq!(
+                        slot_num,
+                        value.bootstrap.header_capella().unwrap().beacon.slot
+                    );
                 }
                 _ => panic!("Invalid beacon content type!"),
             }
@@ -529,7 +528,7 @@ mod test {
                     assert_eq!(
                         slot_num,
                         value.0[0]
-                            .light_client_update
+                            .update
                             .attested_header_capella()
                             .unwrap()
                             .beacon
@@ -562,7 +561,7 @@ mod test {
                 BeaconContentValue::LightClientOptimisticUpdate(ref value) => {
                     assert_eq!(
                         slot_num,
-                        value.content.attested_header_capella().unwrap().beacon.slot
+                        value.update.attested_header_capella().unwrap().beacon.slot
                     );
                 }
                 _ => panic!("Invalid beacon content type!"),
@@ -590,7 +589,7 @@ mod test {
                 BeaconContentValue::LightClientFinalityUpdate(ref value) => {
                     assert_eq!(
                         slot_num,
-                        value.content.attested_header_capella().unwrap().beacon.slot
+                        value.update.attested_header_capella().unwrap().beacon.slot
                     );
                 }
                 _ => panic!("Invalid beacon content type!"),
