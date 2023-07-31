@@ -2,7 +2,7 @@ use ethportal_api::types::enr::Enr;
 use ethportal_api::types::portal::ContentInfo;
 use ethportal_api::{
     jsonrpsee::async_client::Client, HistoryContentKey, HistoryContentValue,
-    HistoryNetworkApiClient,
+    HistoryNetworkApiClient, PossibleHistoryContentValue,
 };
 use serde_json::json;
 use std::str::FromStr;
@@ -51,10 +51,13 @@ pub async fn test_validate_pre_merge_header_with_proof(peertest: &Peertest, targ
             content,
             utp_transfer,
         } => {
-            assert_eq!(content, header_with_proof_content_value);
+            assert_eq!(
+                content,
+                PossibleHistoryContentValue::ContentPresent(header_with_proof_content_value)
+            );
             assert!(!utp_transfer);
         }
-        _ => panic!("Content value's should match"),
+        _ => panic!("Content values should match"),
     }
 }
 
@@ -108,10 +111,13 @@ pub async fn test_validate_pre_merge_block_body(peertest: &Peertest, target: &Cl
             content,
             utp_transfer,
         } => {
-            assert_eq!(content, block_body_content_value);
+            assert_eq!(
+                content,
+                PossibleHistoryContentValue::ContentPresent(block_body_content_value)
+            );
             assert!(utp_transfer);
         }
-        _ => panic!("Content value's should match"),
+        _ => panic!("Content values should match"),
     }
 }
 
@@ -146,9 +152,12 @@ pub async fn test_validate_pre_merge_receipts(peertest: &Peertest, target: &Clie
             content,
             utp_transfer,
         } => {
-            assert_eq!(content, receipts_content_value);
+            assert_eq!(
+                content,
+                PossibleHistoryContentValue::ContentPresent(receipts_content_value)
+            );
             assert!(utp_transfer);
         }
-        _ => panic!("Content value's should match"),
+        _ => panic!("Content values should match"),
     }
 }

@@ -1,15 +1,16 @@
 use anyhow::anyhow;
 use ethereum_types::H256;
 use serde_json::Value;
-use ssz::Decode;
 use tokio::sync::mpsc;
 
 use crate::accumulator::MasterAccumulator;
 use ethportal_api::types::execution::header::HeaderWithProof;
 use ethportal_api::types::jsonrpc::endpoints::HistoryEndpoint;
 use ethportal_api::types::jsonrpc::request::{BeaconJsonRpcRequest, HistoryJsonRpcRequest};
-use ethportal_api::utils::bytes::hex_decode;
-use ethportal_api::{BlockHeaderKey, HistoryContentKey};
+use ethportal_api::types::portal::ContentInfo;
+use ethportal_api::{
+    BlockHeaderKey, HistoryContentKey, HistoryContentValue, PossibleHistoryContentValue,
+};
 
 /// Responsible for dispatching cross-overlay-network requests
 /// for data to perform validation.
@@ -41,7 +42,10 @@ impl HeaderOracle {
 
     /// Returns the HeaderWithProof for the given block hash by performing a recursive find content
     /// request.
-    pub async fn recursive_find_hwp(&self, block_hash: H256) -> anyhow::Result<HeaderWithProof> {
+    pub async fn recursive_find_header_with_proof(
+        &self,
+        block_hash: H256,
+    ) -> anyhow::Result<HeaderWithProof> {
         let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
             block_hash: block_hash.0,
         });
@@ -51,18 +55,39 @@ impl HeaderOracle {
         let tx = self.history_jsonrpc_tx()?;
         tx.send(request)?;
 
-        let hwp_ssz = match resp_rx.recv().await {
+        let content = match resp_rx.recv().await {
             Some(val) => {
                 val.map_err(|err| anyhow!("Chain history subnetwork request error: {err:?}"))?
             }
             None => return Err(anyhow!("No response from chain history subnetwork")),
         };
-        let hwp_ssz = hwp_ssz
-            .as_str()
-            .ok_or_else(|| anyhow!("Invalid HWP format."))?;
-        let hwp_ssz = hex_decode(hwp_ssz)?;
-        HeaderWithProof::from_ssz_bytes(&hwp_ssz)
-            .map_err(|err| anyhow!("Invalid HWP received from chain history network: {err:?}"))
+        let content = match serde_json::from_value(content)? {
+            ContentInfo::Content { content, .. } => content,
+            ContentInfo::ConnectionId { .. } => {
+                return Err(anyhow!(
+                    "Invalid ContentInfo (cid) received from HeaderWithProof lookup"
+                ))
+            }
+            ContentInfo::Enrs { .. } => {
+                return Err(anyhow!(
+                    "Invalid ContentInfo (enrs) received from HeaderWithProof lookup"
+                ))
+            }
+        };
+        let content = match content {
+            PossibleHistoryContentValue::ContentPresent(header) => header,
+            PossibleHistoryContentValue::ContentAbsent => {
+                return Err(anyhow!(
+                    "ContentAbsent received from HeaderWithProof lookup"
+                ))
+            }
+        };
+        match content {
+            HistoryContentValue::BlockHeaderWithProof(content) => Ok(content),
+            _ => Err(anyhow!(
+                "Invalid HistoryContentValue received from HeaderWithProof lookup, expected BlockHeaderWithProof: {content:?}"
+            )),
+        }
     }
 
     pub fn history_jsonrpc_tx(

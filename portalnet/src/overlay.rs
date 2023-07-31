@@ -25,7 +25,7 @@ use utp_rs::socket::UtpSocket;
 
 use crate::{
     discovery::{Discovery, UtpEnr},
-    find::query_info::FindContentResult,
+    find::query_info::{FindContentResult, RecursiveFindContentResult},
     metrics::overlay::OverlayMetrics,
     overlay_service::{
         OverlayCommand, OverlayRequest, OverlayRequestError, OverlayService, RequestDirection,
@@ -425,7 +425,7 @@ where
         &self,
         enr: Enr,
         content_key: Vec<u8>,
-    ) -> Result<Content, OverlayRequestError> {
+    ) -> Result<FindContentResult, OverlayRequestError> {
         // Construct the request.
         let request = FindContent {
             content_key: content_key.clone(),
@@ -441,8 +441,8 @@ where
         {
             Ok(Response::Content(found_content)) => {
                 match found_content {
-                    Content::Content(_) => Ok(found_content),
-                    Content::Enrs(_) => Ok(found_content),
+                    Content::Content(_) => Ok((found_content, false)),
+                    Content::Enrs(_) => Ok((found_content, false)),
                     // Init uTP stream if `connection_id`is received
                     Content::ConnectionId(conn_id) => {
                         let conn_id = u16::from_be(conn_id);
@@ -457,10 +457,10 @@ where
                             .validate_content(&content_key, &content)
                             .await
                         {
-                            Ok(_) => Ok(Content::Content(content)),
+                            Ok(_) => Ok((Content::Content(content), true)),
                             Err(msg) => Err(OverlayRequestError::FailedValidation(format!(
-                                "Network: {:?}, Reason: {:?}",
-                                self.protocol, msg
+                                "Network: {:?}, Reason: {msg:?}",
+                                self.protocol
                             ))),
                         }
                     }
@@ -593,7 +593,11 @@ where
 
     /// Performs a content lookup for `target`.
     /// Returns the target content along with the peers traversed during content lookup.
-    pub async fn lookup_content(&self, target: TContentKey, is_trace: bool) -> FindContentResult {
+    pub async fn lookup_content(
+        &self,
+        target: TContentKey,
+        is_trace: bool,
+    ) -> RecursiveFindContentResult {
         let (tx, rx) = oneshot::channel();
         let content_id = target.content_id();
 

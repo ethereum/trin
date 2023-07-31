@@ -49,7 +49,7 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                     .header_oracle
                     .write()
                     .await
-                    .recursive_find_hwp(H256::from(key.block_hash))
+                    .recursive_find_header_with_proof(H256::from(key.block_hash))
                     .await?
                     .header;
                 let actual_uncles_root = block_body.uncles_root()?;
@@ -78,7 +78,7 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                     .header_oracle
                     .write()
                     .await
-                    .recursive_find_hwp(H256::from(key.block_hash))
+                    .recursive_find_header_with_proof(H256::from(key.block_hash))
                     .await?
                     .header;
                 let actual_receipts_root = receipts.root()?;

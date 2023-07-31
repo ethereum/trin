@@ -56,5 +56,6 @@ members = [
     "trin-history",
     "trin-state",
     "trin-utils",
+    "trin-validation",
     "utp-testing",
 ]

@@ -43,7 +43,7 @@ use crate::{
             findnodes::FindNodeQuery,
             query::{Query, QueryConfig},
         },
-        query_info::{FindContentResult, QueryInfo, QueryType},
+        query_info::{QueryInfo, QueryType, RecursiveFindContentResult},
         query_pool::{QueryId, QueryPool, QueryPoolState, TargetKey},
     },
     metrics::{
@@ -112,7 +112,7 @@ pub enum OverlayCommand<TContentKey> {
         /// The query target.
         target: TContentKey,
         /// A callback channel to transmit the result of the query.
-        callback: oneshot::Sender<FindContentResult>,
+        callback: oneshot::Sender<RecursiveFindContentResult>,
         /// Whether or not a trace for the content query should be kept and returned.
         is_trace: bool,
     },
@@ -1814,7 +1814,7 @@ where
         content: Vec<u8>,
         utp_transfer: bool,
         content_key: TContentKey,
-        responder: Option<oneshot::Sender<FindContentResult>>,
+        responder: Option<oneshot::Sender<RecursiveFindContentResult>>,
         trace: Option<QueryTrace>,
         nodes_to_poke: Vec<NodeId>,
     ) {
@@ -2387,7 +2387,7 @@ where
     fn init_find_content_query(
         &mut self,
         target: TContentKey,
-        callback: Option<oneshot::Sender<FindContentResult>>,
+        callback: Option<oneshot::Sender<RecursiveFindContentResult>>,
         is_trace: bool,
     ) -> Option<QueryId> {
         info!("Starting query for content key: {}", target);
@@ -2452,7 +2452,7 @@ where
         }
 
         // Check the existing find node queries for the ENR.
-        for (query_info, _) in self.find_node_query_pool.write().iter() {
+        for (query_info, _) in self.find_node_query_pool.read().iter() {
             if let Some(enr) = query_info
                 .untrusted_enrs
                 .iter()
@@ -2463,7 +2463,7 @@ where
         }
 
         // Check the existing find content queries for the ENR.
-        for (query_info, _) in self.find_content_query_pool.write().iter() {
+        for (query_info, _) in self.find_content_query_pool.read().iter() {
             if let Some(enr) = query_info
                 .untrusted_enrs
                 .iter()
