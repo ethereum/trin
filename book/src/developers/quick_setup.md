@@ -118,7 +118,7 @@ To request a custom jsonrpc endpoint, provide the endpoint and array of params. 
   'dataRadius': '115792089237316195423570985008687907853269984665640564039457584007913129639935'}}
 ```
 
-See the [JSON-RPC API docs](/docs/jsonrpc_api.md) for other standard methods that are implemented. You can use the [web3.py](https://web3py.readthedocs.io/en/stable/web3.eth.html#module-web3.eth) API to access these.
+See the [JSON-RPC API docs](https://playground.open-rpc.org/?schemaUrl=https://raw.githubusercontent.com/ethereum/portal-network-specs/assembled-spec/jsonrpc/openrpc.json&uiSchema%5BappBar%5D%5Bui:splitView%5D=false&uiSchema%5BappBar%5D%5Bui:input%5D=false&uiSchema%5BappBar%5D%5Bui:examplesDropdown%5D=false) for other standard methods that are implemented. You can use the [web3.py](https://web3py.readthedocs.io/en/stable/web3.eth.html#module-web3.eth) API to access these.
 
 ### Connect over HTTP
 
