@@ -1,3 +1,5 @@
+#![warn(clippy::unwrap_used)]
+
 extern crate core;
 
 pub mod cli;

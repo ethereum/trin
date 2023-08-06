@@ -1,3 +1,5 @@
+#![warn(clippy::unwrap_used)]
+
 mod client;
 pub use crate::client::*;
 
