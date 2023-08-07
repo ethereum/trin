@@ -18,7 +18,7 @@ pub async fn test_find_content_return_enr(target: &Client, peertest: &Peertest) 
     info!("Testing find content returns enrs properly");
 
     let header_with_proof_key: HistoryContentKey =
-        serde_json::from_value(json!(HEADER_WITH_PROOF_CONTENT_KEY)).unwrap();
+        serde_json::from_value(json!(HEADER_WITH_PROOF_CONTENT_KEY)).expect("conversion failed");
 
     // check if we can fetch data from routing table
     match HistoryNetworkApiClient::get_enr(
@@ -60,7 +60,7 @@ pub async fn test_recursive_find_nodes_self(peertest: &Peertest) {
         .ipc_client
         .recursive_find_nodes(target_node_id)
         .await
-        .unwrap();
+        .expect("operation failed");
     assert_eq!(result, vec![target_enr]);
 }
 
@@ -73,7 +73,7 @@ pub async fn test_recursive_find_nodes_peer(peertest: &Peertest) {
         .ipc_client
         .recursive_find_nodes(target_node_id)
         .await
-        .unwrap();
+        .expect("operation failed");
     assert_eq!(result, vec![target_enr]);
 }
 
@@ -81,7 +81,8 @@ pub async fn test_recursive_find_nodes_random(peertest: &Peertest) {
     info!("Testing trace recursive find nodes random");
     let mut bytes = [0u8; 32];
     let random_node_id =
-        hex_decode("0xcac75e7e776d84fba55a3104bdccfd716537bca3ad8465113f67f04d62694183").unwrap();
+        hex_decode("0xcac75e7e776d84fba55a3104bdccfd716537bca3ad8465113f67f04d62694183")
+            .expect("conversion failed");
     bytes.copy_from_slice(&random_node_id);
     let target_node_id = NodeId::from(bytes);
     let result = peertest
@@ -89,7 +90,7 @@ pub async fn test_recursive_find_nodes_random(peertest: &Peertest) {
         .ipc_client
         .recursive_find_nodes(target_node_id)
         .await
-        .unwrap();
+        .expect("operation failed");
     assert_eq!(result.len(), 3);
 }
 
@@ -98,9 +99,9 @@ pub async fn test_recursive_utp(peertest: &Peertest) {
 
     // store header_with_proof to validate block body
     let header_with_proof_content_key: HistoryContentKey =
-        serde_json::from_value(json!(HEADER_WITH_PROOF_CONTENT_KEY)).unwrap();
+        serde_json::from_value(json!(HEADER_WITH_PROOF_CONTENT_KEY)).expect("conversion failed");
     let header_with_proof_content_value: HistoryContentValue =
-        serde_json::from_value(json!(HEADER_WITH_PROOF_CONTENT_VALUE)).unwrap();
+        serde_json::from_value(json!(HEADER_WITH_PROOF_CONTENT_VALUE)).expect("conversion failed");
 
     let store_result = peertest.nodes[0]
         .ipc_client
@@ -109,22 +110,22 @@ pub async fn test_recursive_utp(peertest: &Peertest) {
             header_with_proof_content_value.clone(),
         )
         .await
-        .unwrap();
+        .expect("operation failed");
 
     assert!(store_result);
 
     let history_content_key: HistoryContentKey =
-        serde_json::from_value(json!(BLOCK_BODY_CONTENT_KEY)).unwrap();
-    let hex_data = hex_decode(BLOCK_BODY_CONTENT_VALUE).unwrap();
+        serde_json::from_value(json!(BLOCK_BODY_CONTENT_KEY)).expect("conversion failed");
+    let hex_data = hex_decode(BLOCK_BODY_CONTENT_VALUE).expect("conversion failed");
     let history_content_value: HistoryContentValue =
-        HistoryContentValue::decode(&hex_data).unwrap();
+        HistoryContentValue::decode(&hex_data).expect("conversion failed");
 
     let store_result = peertest
         .bootnode
         .ipc_client
         .store(history_content_key.clone(), history_content_value.clone())
         .await
-        .unwrap();
+        .expect("operation failed");
 
     assert!(store_result);
 
@@ -132,7 +133,7 @@ pub async fn test_recursive_utp(peertest: &Peertest) {
         .ipc_client
         .recursive_find_content(history_content_key)
         .await
-        .unwrap();
+        .expect("operation failed");
 
     if let ContentInfo::Content {
         content,
@@ -152,18 +153,19 @@ pub async fn test_recursive_utp(peertest: &Peertest) {
 pub async fn test_trace_recursive_find_content(peertest: &Peertest) {
     let uniq_content_key =
         "\"0x0015b11b918355b1ef9c5db810302ebad0bf2544255b530cdce90674d5887bb286\"";
-    let history_content_key: HistoryContentKey = serde_json::from_str(uniq_content_key).unwrap();
+    let history_content_key: HistoryContentKey =
+        serde_json::from_str(uniq_content_key).expect("conversion failed");
 
-    let hex_data = hex_decode(HISTORY_CONTENT_VALUE).unwrap();
+    let hex_data = hex_decode(HISTORY_CONTENT_VALUE).expect("conversion failed");
     let history_content_value: HistoryContentValue =
-        HistoryContentValue::decode(&hex_data).unwrap();
+        HistoryContentValue::decode(&hex_data).expect("conversion failed");
 
     let store_result = peertest
         .bootnode
         .ipc_client
         .store(history_content_key.clone(), history_content_value.clone())
         .await
-        .unwrap();
+        .expect("operation failed");
 
     assert!(store_result);
 
@@ -171,7 +173,7 @@ pub async fn test_trace_recursive_find_content(peertest: &Peertest) {
         .ipc_client
         .trace_recursive_find_content(history_content_key)
         .await
-        .unwrap();
+        .expect("operation failed");
 
     assert!(!trace_content_info.utp_transfer);
     let content = trace_content_info.content;
@@ -190,7 +192,7 @@ pub async fn test_trace_recursive_find_content(peertest: &Peertest) {
     assert_eq!(origin, ethportal_api::NodeId::from(query_origin_node));
 
     // Test that `received_content_from_node` is set correctly
-    let received_content_from_node = trace.received_content_from_node.unwrap();
+    let received_content_from_node = trace.received_content_from_node.expect("content not found");
     assert_eq!(
         ethportal_api::NodeId::from(node_with_content),
         received_content_from_node
@@ -199,7 +201,7 @@ pub async fn test_trace_recursive_find_content(peertest: &Peertest) {
     let responses = trace.responses;
 
     // Test that origin response has `responses` containing `received_content_from_node` node
-    let origin_response = responses.get(&origin).unwrap();
+    let origin_response = responses.get(&origin).expect("origin response not found");
     assert!(origin_response
         .responded_with
         .contains(&received_content_from_node));
@@ -214,12 +216,13 @@ pub async fn test_trace_recursive_find_content_for_absent_content(peertest: &Pee
         "\"0x0015b11b918355b1ef9c5db810302ebad0bf2544255b530cdce90674d5887bb287\"";
     // Do not store content to offer in the testnode db
 
-    let history_content_key: HistoryContentKey = serde_json::from_str(uniq_content_key).unwrap();
+    let history_content_key: HistoryContentKey =
+        serde_json::from_str(uniq_content_key).expect("conversion failed");
 
     let result = client
         .trace_recursive_find_content(history_content_key)
         .await
-        .unwrap();
+        .expect("operation failed");
 
     assert!(!result.utp_transfer);
     assert_eq!(result.content, PossibleHistoryContentValue::ContentAbsent);
@@ -231,18 +234,19 @@ pub async fn test_trace_recursive_find_content_local_db(peertest: &Peertest) {
     let uniq_content_key =
         "\"0x0025b11b918355b1ef9c5db810302ebad0bf2544255b530cdce90674d5887bb286\"";
 
-    let history_content_key: HistoryContentKey = serde_json::from_str(uniq_content_key).unwrap();
+    let history_content_key: HistoryContentKey =
+        serde_json::from_str(uniq_content_key).expect("conversion failed");
 
-    let hex_data = hex_decode(HISTORY_CONTENT_VALUE).unwrap();
+    let hex_data = hex_decode(HISTORY_CONTENT_VALUE).expect("conversion failed");
     let history_content_value: HistoryContentValue =
-        HistoryContentValue::decode(&hex_data).unwrap();
+        HistoryContentValue::decode(&hex_data).expect("conversion failed");
 
     let store_result = peertest
         .bootnode
         .ipc_client
         .store(history_content_key.clone(), history_content_value.clone())
         .await
-        .unwrap();
+        .expect("operation failed");
 
     assert!(store_result);
 
@@ -251,7 +255,7 @@ pub async fn test_trace_recursive_find_content_local_db(peertest: &Peertest) {
         .ipc_client
         .trace_recursive_find_content(history_content_key)
         .await
-        .unwrap();
+        .expect("operation failed");
     assert!(!trace_content_info.utp_transfer);
     assert_eq!(
         trace_content_info.content,
@@ -260,7 +264,10 @@ pub async fn test_trace_recursive_find_content_local_db(peertest: &Peertest) {
 
     let origin = trace_content_info.trace.origin;
     assert_eq!(
-        trace_content_info.trace.received_content_from_node.unwrap(),
+        trace_content_info
+            .trace
+            .received_content_from_node
+            .expect("content not found"),
         origin
     );
 

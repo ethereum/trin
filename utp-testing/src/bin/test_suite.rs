@@ -23,11 +23,11 @@ async fn send_10k_bytes() -> anyhow::Result<()> {
     println!("Sending 10k bytes uTP payload from client to server...");
     let client_url = format!("http://{CLIENT_ADDR}");
     let client_rpc = HttpClientBuilder::default().build(client_url)?;
-    let client_enr: String = client_rpc.request("local_enr", None).await.unwrap();
+    let client_enr: String = client_rpc.request("local_enr", None).await?;
 
     let server_url = format!("http://{SERVER_ADDR}");
     let server_rpc = HttpClientBuilder::default().build(server_url)?;
-    let server_enr: String = server_rpc.request("local_enr", None).await.unwrap();
+    let server_enr: String = server_rpc.request("local_enr", None).await?;
 
     let client_cid_recv: u16 = thread_rng().gen();
     let client_cid_send = client_cid_recv.wrapping_add(1);
@@ -38,7 +38,7 @@ async fn send_10k_bytes() -> anyhow::Result<()> {
 
     // Add client enr to allowed server uTP connections
     let params = rpc_params!(client_enr, server_cid_send, server_cid_recv);
-    let response: String = server_rpc.request("prepare_to_recv", params).await.unwrap();
+    let response: String = server_rpc.request("prepare_to_recv", params).await?;
     assert_eq!(response, "true");
 
     // Send uTP payload from client to server
@@ -50,10 +50,7 @@ async fn send_10k_bytes() -> anyhow::Result<()> {
         client_cid_recv,
         payload.clone()
     );
-    let response: String = client_rpc
-        .request("send_utp_payload", params)
-        .await
-        .unwrap();
+    let response: String = client_rpc.request("send_utp_payload", params).await?;
 
     assert_eq!(response, "true");
 
@@ -61,7 +58,7 @@ async fn send_10k_bytes() -> anyhow::Result<()> {
     tokio::time::sleep(Duration::from_secs(16)).await;
 
     // Verify received uTP payload
-    let utp_payload: String = server_rpc.request("get_utp_payload", None).await.unwrap();
+    let utp_payload: String = server_rpc.request("get_utp_payload", None).await?;
     let expected_payload = hex_encode(payload);
 
     assert_eq!(expected_payload, utp_payload);

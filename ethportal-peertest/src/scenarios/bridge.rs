@@ -23,9 +23,9 @@ pub async fn test_bridge(peertest: &Peertest, target: &HttpClient) {
     bridge.launch().await;
 
     let content_key: HistoryContentKey =
-        serde_json::from_value(json!(HISTORY_CONTENT_KEY)).unwrap();
+        serde_json::from_value(json!(HISTORY_CONTENT_KEY)).expect("conversion failed");
     let content_value: HistoryContentValue =
-        serde_json::from_value(json!(HISTORY_CONTENT_VALUE)).unwrap();
+        serde_json::from_value(json!(HISTORY_CONTENT_VALUE)).expect("conversion failed");
 
     // Check if the stored content value in bootnode's DB matches the offered
     let response = wait_for_content(&peertest.bootnode.ipc_client, content_key).await;

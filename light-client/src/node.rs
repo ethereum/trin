@@ -25,7 +25,7 @@ pub struct Node {
 impl Node {
     pub fn new(config: Arc<Config>) -> Result<Self, NodeError> {
         let consensus_rpc = &config.consensus_rpc;
-        let checkpoint_hash = &config.checkpoint.as_ref().unwrap();
+        let checkpoint_hash = &config.checkpoint.as_ref().expect("operation failed");
 
         let consensus = ConsensusLightClient::new(consensus_rpc, checkpoint_hash, config.clone())
             .map_err(NodeError::ConsensusClientCreationError)?;
@@ -65,7 +65,7 @@ impl Node {
         self.consensus
             .duration_until_next_update()
             .to_std()
-            .unwrap()
+            .expect("duration is less than zero")
     }
 
     pub fn get_block_transaction_count_by_hash(&self, hash: &Vec<u8>) -> Result<u64> {
