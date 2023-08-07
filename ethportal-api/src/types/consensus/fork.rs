@@ -6,7 +6,7 @@ use thiserror::Error;
 
 /// Error thrown when failed to parse a valid [`ForkName`].
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
-#[error("Unknown fork name version: {0}")]
+#[error("Unknown fork for digest: {0}")]
 pub struct ParseForkNameError(String);
 
 pub type ForkDigest = [u8; 4];

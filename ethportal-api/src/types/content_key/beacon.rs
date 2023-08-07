@@ -41,11 +41,18 @@ impl Decode for ZeroKey {
     }
 
     fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
+        if bytes.len() != 8 {
+            return Err(ssz::DecodeError::InvalidByteLength {
+                len: bytes.len(),
+                expected: 8,
+            });
+        }
         if bytes != [0u8; 8] {
             return Err(ssz::DecodeError::BytesInvalid(
-                "Signature must be 32 bytes long".to_string(),
+                "ZeroKey Bytes should be all 0".to_string(),
             ));
         }
+
         Ok(Self)
     }
 }

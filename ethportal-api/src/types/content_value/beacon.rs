@@ -21,6 +21,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use ssz::{Decode, DecodeError, Encode};
 use ssz_types::typenum::U128;
 use ssz_types::VariableList;
+use std::ops::Deref;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum PossibleBeaconContentValue {
@@ -208,6 +209,47 @@ impl Serialize for ForkVersionedLightClientUpdate {
     }
 }
 
+/// Maximum number of `LightClientUpdate` instances in a single request is 128;
+/// Defined in https://github.com/ethereum/consensus-specs/blob/48143056b9be031ec810912ffc3227f7443eccd9/specs/altair/light-client/p2p-interface.md#configuration
+#[derive(Clone, Debug, PartialEq)]
+pub struct LightClientUpdatesByRange(VariableList<ForkVersionedLightClientUpdate, U128>);
+
+impl Deref for LightClientUpdatesByRange {
+    type Target = VariableList<ForkVersionedLightClientUpdate, U128>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Encode for LightClientUpdatesByRange {
+    fn is_ssz_fixed_len() -> bool {
+        false
+    }
+
+    fn ssz_append(&self, buf: &mut Vec<u8>) {
+        buf.extend_from_slice(&self.0.as_ssz_bytes());
+    }
+
+    fn ssz_bytes_len(&self) -> usize {
+        self.0
+            .iter()
+            .map(|update| update.encode().len())
+            .sum::<usize>()
+    }
+}
+
+impl Decode for LightClientUpdatesByRange {
+    fn is_ssz_fixed_len() -> bool {
+        false
+    }
+
+    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
+        let updates = VariableList::<ForkVersionedLightClientUpdate, U128>::from_ssz_bytes(bytes)?;
+        Ok(Self(updates))
+    }
+}
+
 /// A wrapper type including a `ForkName` and `LightClientOptimisticUpdate`
 #[derive(Clone, Debug, PartialEq)]
 pub struct ForkVersionedLightClientOptimisticUpdate {
@@ -338,39 +380,6 @@ impl Encode for ForkVersionedLightClientFinalityUpdate {
     }
 }
 
-/// Maximum number of `LightClientUpdate` instances in a single request is 128;
-/// Defined in https://github.com/ethereum/consensus-specs/blob/dev/specs/altair/light-client/p2p-interface.md#configuration
-#[derive(Clone, Debug, PartialEq)]
-pub struct LightClientUpdatesByRange(VariableList<ForkVersionedLightClientUpdate, U128>);
-
-impl Encode for LightClientUpdatesByRange {
-    fn is_ssz_fixed_len() -> bool {
-        false
-    }
-
-    fn ssz_append(&self, buf: &mut Vec<u8>) {
-        buf.extend_from_slice(&self.0.as_ssz_bytes());
-    }
-
-    fn ssz_bytes_len(&self) -> usize {
-        self.0
-            .iter()
-            .map(|update| update.encode().len())
-            .sum::<usize>()
-    }
-}
-
-impl Decode for LightClientUpdatesByRange {
-    fn is_ssz_fixed_len() -> bool {
-        false
-    }
-
-    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
-        let updates = VariableList::<ForkVersionedLightClientUpdate, U128>::from_ssz_bytes(bytes)?;
-        Ok(Self(updates))
-    }
-}
-
 /// A content value for the beacon network.
 #[derive(Clone, Debug, PartialEq)]
 pub enum BeaconContentValue {
@@ -491,9 +500,9 @@ mod test {
         let json = json.as_object().unwrap();
         for (slot_num, obj) in json {
             let slot_num: u64 = slot_num.parse().unwrap();
-            let content = obj.get("content_value").unwrap().as_str().unwrap();
-            let content_encoded = hex_decode(content).unwrap();
-            let beacon_content = BeaconContentValue::decode(&content_encoded).unwrap();
+            let content_hexstr = obj.get("content_value").unwrap().as_str().unwrap();
+            let content_bytes = hex_decode(content_hexstr).unwrap();
+            let beacon_content = BeaconContentValue::decode(&content_bytes).unwrap();
 
             match beacon_content {
                 BeaconContentValue::LightClientBootstrap(ref value) => {
@@ -505,7 +514,7 @@ mod test {
                 _ => panic!("Invalid beacon content type!"),
             }
 
-            assert_eq!(content_encoded, beacon_content.encode())
+            assert_eq!(content_bytes, beacon_content.encode())
         }
     }
 
@@ -519,27 +528,27 @@ mod test {
         let json = json.as_object().unwrap();
         for (slot_num, obj) in json {
             let slot_num: u64 = slot_num.parse().unwrap();
-            let content = obj.get("content_value").unwrap().as_str().unwrap();
-            let content_encoded = hex_decode(content).unwrap();
-            let beacon_content = BeaconContentValue::decode(&content_encoded).unwrap();
+            let content_hexstr = obj.get("content_value").unwrap().as_str().unwrap();
+            let content_bytes = hex_decode(content_hexstr).unwrap();
+            let beacon_content = BeaconContentValue::decode(&content_bytes).unwrap();
 
             match beacon_content {
-                BeaconContentValue::LightClientUpdatesByRange(ref value) => {
+                BeaconContentValue::LightClientUpdatesByRange(ref updates) => {
                     assert_eq!(
                         slot_num,
-                        value.0[0]
+                        updates[0]
                             .update
                             .attested_header_capella()
                             .unwrap()
                             .beacon
                             .slot
                     );
-                    assert_eq!(value.0.len(), 4)
+                    assert_eq!(updates.len(), 4)
                 }
                 _ => panic!("Invalid beacon content type!"),
             }
 
-            assert_eq!(content_encoded, beacon_content.encode())
+            assert_eq!(content_bytes, beacon_content.encode())
         }
     }
 
@@ -553,9 +562,9 @@ mod test {
         let json = json.as_object().unwrap();
         for (slot_num, obj) in json {
             let slot_num: u64 = slot_num.parse().unwrap();
-            let content = obj.get("content_value").unwrap().as_str().unwrap();
-            let content_encoded = hex_decode(content).unwrap();
-            let beacon_content = BeaconContentValue::decode(&content_encoded).unwrap();
+            let content_hexstr = obj.get("content_value").unwrap().as_str().unwrap();
+            let content_bytes = hex_decode(content_hexstr).unwrap();
+            let beacon_content = BeaconContentValue::decode(&content_bytes).unwrap();
 
             match beacon_content {
                 BeaconContentValue::LightClientOptimisticUpdate(ref value) => {
@@ -567,7 +576,7 @@ mod test {
                 _ => panic!("Invalid beacon content type!"),
             }
 
-            assert_eq!(content_encoded, beacon_content.encode())
+            assert_eq!(content_bytes, beacon_content.encode())
         }
     }
 
@@ -581,9 +590,9 @@ mod test {
         let json = json.as_object().unwrap();
         for (slot_num, obj) in json {
             let slot_num: u64 = slot_num.parse().unwrap();
-            let content = obj.get("content_value").unwrap().as_str().unwrap();
-            let content_encoded = hex_decode(content).unwrap();
-            let beacon_content = BeaconContentValue::decode(&content_encoded).unwrap();
+            let content_hexstr = obj.get("content_value").unwrap().as_str().unwrap();
+            let content_bytes = hex_decode(content_hexstr).unwrap();
+            let beacon_content = BeaconContentValue::decode(&content_bytes).unwrap();
 
             match beacon_content {
                 BeaconContentValue::LightClientFinalityUpdate(ref value) => {
@@ -595,7 +604,7 @@ mod test {
                 _ => panic!("Invalid beacon content type!"),
             }
 
-            assert_eq!(content_encoded, beacon_content.encode())
+            assert_eq!(content_bytes, beacon_content.encode())
         }
     }
 }
