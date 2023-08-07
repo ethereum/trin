@@ -20,7 +20,7 @@ pub use history::{HistoryNetworkApiClient, HistoryNetworkApiServer};
 pub use web3::{Web3ApiClient, Web3ApiServer};
 
 pub use types::content_key::{
-    beacon::{BeaconContentKey, LightClientBootstrapKey, LightClientUpdatesKey},
+    beacon::{BeaconContentKey, LightClientBootstrapKey, LightClientUpdatesByRangeKey},
     error::ContentKeyError,
     history::{
         BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey, HistoryContentKey,

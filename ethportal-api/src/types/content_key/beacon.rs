@@ -12,7 +12,49 @@ use std::fmt;
 #[ssz(enum_behaviour = "union")]
 pub enum BeaconContentKey {
     LightClientBootstrap(LightClientBootstrapKey),
-    LightClientUpdates(LightClientUpdatesKey),
+    LightClientUpdatesByRange(LightClientUpdatesByRangeKey),
+    LightClientFinalityUpdate(ZeroKey),
+    LightClientOptimisticUpdate(ZeroKey),
+}
+
+/// Represents a zero ssz bytes for a portal content key.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ZeroKey;
+
+impl Encode for ZeroKey {
+    fn is_ssz_fixed_len() -> bool {
+        true
+    }
+
+    fn ssz_bytes_len(&self) -> usize {
+        8
+    }
+
+    fn ssz_append(&self, buf: &mut Vec<u8>) {
+        buf.extend_from_slice(&[0u8; 8]);
+    }
+}
+
+impl Decode for ZeroKey {
+    fn is_ssz_fixed_len() -> bool {
+        true
+    }
+
+    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
+        if bytes.len() != 8 {
+            return Err(ssz::DecodeError::InvalidByteLength {
+                len: bytes.len(),
+                expected: 8,
+            });
+        }
+        if bytes != [0u8; 8] {
+            return Err(ssz::DecodeError::BytesInvalid(
+                "ZeroKey Bytes should be all 0".to_string(),
+            ));
+        }
+
+        Ok(Self)
+    }
 }
 
 /// Key used to identify a light client bootstrap.
@@ -24,7 +66,7 @@ pub struct LightClientBootstrapKey {
 
 /// Key used to identify a set of light client updates.
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
-pub struct LightClientUpdatesKey {
+pub struct LightClientUpdatesByRangeKey {
     /// The start sync committee period.
     pub start_period: u64,
     /// the count of periods.
@@ -61,10 +103,12 @@ impl fmt::Display for BeaconContentKey {
                 "LightClientBootstrap {{ block_hash: {} }}",
                 hex_encode_compact(key.block_hash)
             ),
-            Self::LightClientUpdates(key) => format!(
-                "LightClientUpdates {{ start_period: {}, count: {} }}",
+            Self::LightClientUpdatesByRange(key) => format!(
+                "LightClientUpdatesByRange {{ start_period: {}, count: {} }}",
                 key.start_period, key.count
             ),
+            Self::LightClientFinalityUpdate(_) => "LightClientFinalityUpdate".to_string(),
+            Self::LightClientOptimisticUpdate(_) => "LightClientOptimisticUpdate".to_string(),
         };
 
         write!(f, "{s}")
@@ -86,10 +130,18 @@ impl OverlayContentKey for BeaconContentKey {
                 bytes.push(0x00);
                 bytes.extend_from_slice(&key.block_hash);
             }
-            BeaconContentKey::LightClientUpdates(key) => {
+            BeaconContentKey::LightClientUpdatesByRange(key) => {
                 bytes.push(0x01);
-                bytes.extend_from_slice(&key.start_period.to_le_bytes());
-                bytes.extend_from_slice(&key.count.to_le_bytes());
+                bytes.extend_from_slice(&key.start_period.as_ssz_bytes());
+                bytes.extend_from_slice(&key.count.as_ssz_bytes());
+            }
+            BeaconContentKey::LightClientFinalityUpdate(key) => {
+                bytes.push(0x02);
+                bytes.extend_from_slice(&key.as_ssz_bytes())
+            }
+            BeaconContentKey::LightClientOptimisticUpdate(key) => {
+                bytes.push(0x03);
+                bytes.extend_from_slice(&key.as_ssz_bytes())
             }
         }
 
@@ -134,5 +186,76 @@ impl<'de> Deserialize<'de> for BeaconContentKey {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    // FIXME: Add beacon content key test vectors
+    use super::*;
+
+    #[test]
+    fn light_client_bootstrap() {
+        // Slot 6718368
+        const KEY_STR: &str =
+            "0x00bd9f42d9a42d972bdaf4dee84e5b419dd432b52867258acb7bcc7f567b6e3af1";
+        const BLOCK_HASH: &str =
+            "0xbd9f42d9a42d972bdaf4dee84e5b419dd432b52867258acb7bcc7f567b6e3af1";
+
+        let expected_content_key = hex_decode(KEY_STR).unwrap();
+
+        let bootstrap = LightClientBootstrapKey {
+            block_hash: <[u8; 32]>::try_from(hex_decode(BLOCK_HASH).unwrap()).unwrap(),
+        };
+
+        let key = BeaconContentKey::LightClientBootstrap(bootstrap);
+
+        assert_eq!(key.to_bytes(), expected_content_key);
+        assert_eq!(
+            key.to_string(),
+            "LightClientBootstrap { block_hash: 0xbd9f..3af1 }"
+        );
+        assert_eq!(key.to_hex(), KEY_STR);
+    }
+
+    #[test]
+    fn light_client_updates_by_range() {
+        const KEY_STR: &str = "0x0130030000000000000400000000000000";
+        let expected_content_key = hex_decode(KEY_STR).unwrap();
+
+        // SLOT / (SLOTS_PER_EPOCH * EPOCHS_PER_SYNC_COMMITTEE_PERIOD)
+        let start_period: u64 = 6684738 / (32 * 256);
+
+        let content_key = LightClientUpdatesByRangeKey {
+            start_period,
+            count: 4,
+        };
+
+        let content_key = BeaconContentKey::LightClientUpdatesByRange(content_key);
+
+        assert_eq!(content_key.to_bytes(), expected_content_key);
+        assert_eq!(
+            content_key.to_string(),
+            "LightClientUpdatesByRange { start_period: 816, count: 4 }"
+        );
+        assert_eq!(content_key.to_hex(), KEY_STR);
+    }
+
+    #[test]
+    fn light_client_finality_update() {
+        const KEY_STR: &str = "0x020000000000000000";
+        let expected_content_key = hex_decode(KEY_STR).unwrap();
+
+        let content_key = BeaconContentKey::LightClientFinalityUpdate(ZeroKey);
+
+        assert_eq!(content_key.to_bytes(), expected_content_key);
+        assert_eq!(content_key.to_string(), "LightClientFinalityUpdate");
+        assert_eq!(content_key.to_hex(), KEY_STR);
+    }
+
+    #[test]
+    fn light_client_optimistic_update() {
+        const KEY_STR: &str = "0x030000000000000000";
+        let expected_content_key = hex_decode(KEY_STR).unwrap();
+
+        let content_key = BeaconContentKey::LightClientOptimisticUpdate(ZeroKey);
+
+        assert_eq!(content_key.to_bytes(), expected_content_key);
+        assert_eq!(content_key.to_string(), "LightClientOptimisticUpdate");
+        assert_eq!(content_key.to_hex(), KEY_STR);
+    }
 }

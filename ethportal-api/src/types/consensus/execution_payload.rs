@@ -35,7 +35,16 @@ pub struct ExecutionPayload {
 
 #[superstruct(
     variants(Bellatrix, Capella),
-    variant_attributes(derive(Default, Debug, Clone, Serialize, Deserialize, Encode, Decode,),)
+    variant_attributes(derive(
+        Default,
+        Debug,
+        Clone,
+        PartialEq,
+        Serialize,
+        Deserialize,
+        Encode,
+        Decode,
+    ),)
 )]
 #[derive(Debug, Clone, Serialize, Deserialize, Encode)]
 #[ssz(enum_behaviour = "transparent")]
