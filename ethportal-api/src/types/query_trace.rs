@@ -150,6 +150,7 @@ pub struct NodeInfo {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

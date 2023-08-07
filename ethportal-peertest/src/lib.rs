@@ -30,26 +30,30 @@ pub struct Peertest {
 
 impl Peertest {
     pub fn exit_all_nodes(&self) {
-        self.bootnode.rpc_handle.clone().stop().unwrap();
+        self.bootnode
+            .rpc_handle
+            .clone()
+            .stop()
+            .expect("operation failed");
         self.nodes
             .iter()
-            .for_each(|node| node.rpc_handle.clone().stop().unwrap());
+            .for_each(|node| node.rpc_handle.clone().stop().expect("operation failed"));
     }
 }
 
 async fn launch_node(trin_config: TrinConfig) -> anyhow::Result<PeertestNode> {
     let web3_ipc_path = trin_config.web3_ipc_path.clone();
-    let rpc_handle = trin::run_trin(trin_config).await.unwrap();
+    let rpc_handle = trin::run_trin(trin_config).await.expect("operation failed");
 
     // Short sleep to make sure all peertest nodes can connect
     thread::sleep(time::Duration::from_secs(2));
     let ipc_client = reth_ipc::client::IpcClientBuilder::default()
         .build(web3_ipc_path)
         .await
-        .unwrap();
+        .expect("operation failed");
 
     Ok(PeertestNode {
-        enr: ipc_client.node_info().await.unwrap().enr,
+        enr: ipc_client.node_info().await.expect("operation failed").enr,
         ipc_client,
         rpc_handle,
     })
@@ -89,7 +93,7 @@ fn generate_trin_config(id: u16, bootnode_enr: Option<&Enr>) -> TrinConfig {
                 private_key.as_str(),
                 "--ephemeral",
             ];
-            TrinConfig::new_from(trin_config_args.iter()).unwrap()
+            TrinConfig::new_from(trin_config_args.iter()).expect("operation failed")
         }
         None => {
             let ip_addr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
@@ -111,7 +115,7 @@ fn generate_trin_config(id: u16, bootnode_enr: Option<&Enr>) -> TrinConfig {
                 private_key.as_str(),
                 "--ephemeral",
             ];
-            TrinConfig::new_from(trin_config_args.iter()).unwrap()
+            TrinConfig::new_from(trin_config_args.iter()).expect("operation failed")
         }
     }
 }
@@ -119,7 +123,9 @@ fn generate_trin_config(id: u16, bootnode_enr: Option<&Enr>) -> TrinConfig {
 pub async fn launch_peertest_nodes(count: u16) -> Peertest {
     // Bootnode uses a peertest id of 1
     let bootnode_config = generate_trin_config(1, None);
-    let bootnode = launch_node(bootnode_config).await.unwrap();
+    let bootnode = launch_node(bootnode_config)
+        .await
+        .expect("operation failed");
     let bootnode_enr = &bootnode.enr;
     // All other peertest node ids begin at 2, and increment from there
     let nodes = future::try_join_all((2..count + 1).map(|id| {
@@ -127,6 +133,6 @@ pub async fn launch_peertest_nodes(count: u16) -> Peertest {
         launch_node(node_config)
     }))
     .await
-    .unwrap();
+    .expect("operation failed");
     Peertest { bootnode, nodes }
 }

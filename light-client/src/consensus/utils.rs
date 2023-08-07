@@ -70,7 +70,7 @@ pub fn compute_domain(
     let start = domain_type;
     let end = &fork_data_root.as_bytes()[..28];
     let d = [start, end].concat();
-    Ok(d.to_vec().try_into().unwrap())
+    Ok(d.to_vec().try_into()?)
 }
 
 fn compute_fork_data_root(

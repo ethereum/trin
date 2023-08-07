@@ -123,7 +123,7 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
             let mut updates = self.rpc.get_updates(current_period, 1).await?;
 
             if updates.len() == 1 {
-                let update = updates.get_mut(0).unwrap();
+                let update = updates.get_mut(0).expect("operation failed");
                 let res = self.verify_update(update);
 
                 if res.is_ok() {
@@ -226,8 +226,8 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
         if update.finalized_header.is_some() && update.finality_branch.is_some() {
             let is_valid = is_finality_proof_valid(
                 &update.attested_header,
-                &mut update.finalized_header.clone().unwrap(),
-                &update.finality_branch.clone().unwrap(),
+                &mut update.finalized_header.clone().unwrap_or_default(),
+                &update.finality_branch.clone().unwrap_or_default(),
             );
 
             if !is_valid {
@@ -238,8 +238,11 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
         if update.next_sync_committee.is_some() && update.next_sync_committee_branch.is_some() {
             let is_valid = is_next_committee_proof_valid(
                 &update.attested_header,
-                &mut update.next_sync_committee.clone().unwrap(),
-                &update.next_sync_committee_branch.clone().unwrap(),
+                &mut update.next_sync_committee.clone().unwrap_or_default(),
+                &update
+                    .next_sync_committee_branch
+                    .clone()
+                    .unwrap_or_default(),
             );
 
             if !is_valid {
@@ -250,7 +253,10 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
         let sync_committee = if update_sig_period == store_period {
             &self.store.current_sync_committee
         } else {
-            self.store.next_sync_committee.as_ref().unwrap()
+            self.store
+                .next_sync_committee
+                .as_ref()
+                .expect("operation failed")
         };
 
         let pks =
@@ -331,7 +337,8 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
                 self.store.next_sync_committee = update.next_sync_committee.clone();
             } else if update_finalized_period == store_period + 1 {
                 info!("sync committee updated");
-                self.store.current_sync_committee = self.store.next_sync_committee.clone().unwrap();
+                self.store.current_sync_committee =
+                    self.store.next_sync_committee.clone().unwrap_or_default();
                 self.store.next_sync_committee = update.next_sync_committee.clone();
                 self.store.previous_max_active_participants =
                     self.store.current_max_active_participants;
@@ -339,7 +346,7 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
             }
 
             if update_finalized_slot > self.store.finalized_header.slot {
-                self.store.finalized_header = update.finalized_header.clone().unwrap();
+                self.store.finalized_header = update.finalized_header.clone().unwrap_or_default();
                 self.log_finality_update(update);
 
                 if self.store.finalized_header.slot % 32 == 0 {
@@ -444,7 +451,7 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
     }
 
     fn compute_committee_sign_root(&self, header: Bytes32, slot: u64) -> Result<Node> {
-        let genesis_root = self.config.chain.genesis_root.to_vec().try_into().unwrap();
+        let genesis_root = self.config.chain.genesis_root.to_vec().try_into()?;
 
         let domain_type = &hex::decode("07000000")?[..];
         let fork_version = Vector::from_iter(self.config.fork_version(slot));
@@ -454,13 +461,17 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
 
     fn age(&self, slot: u64) -> Duration {
         let expected_time = self.slot_timestamp(slot);
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Timestamp passed is later than self");
         let delay = now - std::time::Duration::from_secs(expected_time);
-        chrono::Duration::from_std(delay).unwrap()
+        chrono::Duration::from_std(delay).expect("delay is out of range")
     }
 
     pub fn expected_current_slot(&self) -> u64 {
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Timestamp passed is later than self");
         let genesis_time = self.config.chain.genesis_time;
         let since_genesis = now - std::time::Duration::from_secs(genesis_time);
 
@@ -480,7 +491,7 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
 
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("Timestamp passed is later than self")
             .as_secs();
 
         let time_to_next_slot = next_slot_timestamp - now;
@@ -509,7 +520,7 @@ fn get_participating_keys(
     bitfield.iter().enumerate().for_each(|(i, bit)| {
         if bit == true {
             let pk = &committee.pubkeys[i];
-            let pk = PublicKey::from_bytes_unchecked(pk).unwrap();
+            let pk = PublicKey::from_bytes_unchecked(pk).expect("conversion failed");
             pks.push(pk);
         }
     });
@@ -565,6 +576,7 @@ fn is_current_committee_proof_valid(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use std::sync::Arc;
 

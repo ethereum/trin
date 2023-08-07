@@ -20,27 +20,27 @@ pub async fn test_unpopulated_offer(peertest: &Peertest, target: &Client) {
     info!("Testing Unpopulated OFFER/ACCEPT flow");
 
     let content_key: HistoryContentKey =
-        serde_json::from_value(json!(HISTORY_CONTENT_KEY)).unwrap();
+        serde_json::from_value(json!(HISTORY_CONTENT_KEY)).expect("conversion failed");
     let content_value: HistoryContentValue =
-        serde_json::from_value(json!(HISTORY_CONTENT_VALUE)).unwrap();
+        serde_json::from_value(json!(HISTORY_CONTENT_VALUE)).expect("conversion failed");
 
     // Store content to offer in the testnode db
     let store_result = target
         .store(content_key.clone(), content_value.clone())
         .await
-        .unwrap();
+        .expect("operation failed");
 
     assert!(store_result);
 
     // Send unpopulated offer request from testnode to bootnode
     let result = target
         .offer(
-            Enr::from_str(&peertest.bootnode.enr.to_base64()).unwrap(),
+            Enr::from_str(&peertest.bootnode.enr.to_base64()).expect("conversion failed"),
             content_key.clone(),
             None,
         )
         .await
-        .unwrap();
+        .expect("operation failed");
 
     // Check that ACCEPT response sent by bootnode accepted the offered content
     assert_eq!(hex_encode(result.content_keys.into_bytes()), "0x03");
@@ -64,18 +64,18 @@ pub async fn test_populated_offer(peertest: &Peertest, target: &Client) {
     let content_key: HistoryContentKey = serde_json::from_value(json!(
         "0x00cb5cab7266694daa0d28cbf40496c08dd30bf732c41e0455e7ad389c10d79f4f"
     ))
-    .unwrap();
+    .expect("conversion failed");
     let content_value: HistoryContentValue =
-        serde_json::from_value(json!(HISTORY_CONTENT_VALUE)).unwrap();
+        serde_json::from_value(json!(HISTORY_CONTENT_VALUE)).expect("conversion failed");
 
     let result = target
         .offer(
-            Enr::from_str(&peertest.bootnode.enr.to_base64()).unwrap(),
+            Enr::from_str(&peertest.bootnode.enr.to_base64()).expect("conversion failed"),
             content_key.clone(),
             Some(content_value.clone()),
         )
         .await
-        .unwrap();
+        .expect("operation failed");
 
     // Check that ACCEPT response sent by bootnode accepted the offered content
     assert_eq!(hex_encode(result.content_keys.into_bytes()), "0x03");
