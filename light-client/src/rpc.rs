@@ -127,7 +127,7 @@ impl EthRpcServer for RpcInner {
 
     async fn get_coinbase(&self) -> Result<Address, Error> {
         let node = self.node.read().await;
-        Ok(node.get_coinbase().unwrap())
+        Ok(node.get_coinbase().expect("coinbase not found"))
     }
 
     async fn syncing(&self) -> Result<SyncingStatus, Error> {
@@ -170,7 +170,7 @@ fn format_hex(num: &U256) -> String {
     let stripped = num
         .encode_hex()
         .strip_prefix("0x")
-        .unwrap()
+        .expect("prefix not found")
         .trim_start_matches('0')
         .to_string();
 
