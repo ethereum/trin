@@ -1,5 +1,6 @@
 #![warn(clippy::unwrap_used)]
 
+pub mod beacon_bridge;
 pub mod bridge;
 pub mod cli;
 pub mod client_handles;
