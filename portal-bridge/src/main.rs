@@ -1,7 +1,11 @@
 use clap::Parser;
 use ethportal_api::jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
+use portal_bridge::beacon_bridge::BeaconBridge;
 use portal_bridge::bridge::Bridge;
 use portal_bridge::cli::BridgeConfig;
+use portal_bridge::consensus_api::ConsensusApi;
+use portal_bridge::pandaops::PandaOpsMiddleware;
+use portal_bridge::types::NetworkKind;
 use portal_bridge::utils::generate_spaced_private_keys;
 use tokio::time::{sleep, Duration};
 use trin_utils::log::init_tracing_logger;
@@ -30,8 +34,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         handles.push(handle);
     }
     sleep(Duration::from_secs(5)).await;
-    let master_acc = MasterAccumulator::try_from_file("validation_assets/merge_macc.bin".into())?;
-    let header_oracle = HeaderOracle::new(master_acc);
 
     let portal_clients: Result<Vec<HttpClient>, String> = http_addresses
         .iter()
@@ -41,13 +43,48 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .map_err(|e| e.to_string())
         })
         .collect();
-    let bridge = Bridge::new(
-        bridge_config.mode,
-        portal_clients?,
-        header_oracle,
-        bridge_config.epoch_acc_path,
-    );
 
-    bridge.launch().await;
+    // Launch Beacon Network portal bridge
+    if bridge_config.network.contains(&NetworkKind::Beacon) {
+        let bridge_mode = bridge_config.mode.clone();
+        let portal_clients = portal_clients.clone();
+        let bridge_handle = tokio::spawn(async move {
+            let pandaops_middleware = PandaOpsMiddleware::default();
+            let consensus_api = ConsensusApi::new(pandaops_middleware);
+            let beacon_bridge = BeaconBridge::new(
+                consensus_api,
+                bridge_mode,
+                portal_clients.expect("Failed to create beacon JSON-RPC clients"),
+            );
+
+            beacon_bridge.launch().await;
+        });
+
+        bridge_handle.await.expect("Failed to launch beacon bridge");
+    }
+
+    // Launch History Network portal bridge
+    if bridge_config.network.contains(&NetworkKind::History) {
+        let bridge_handle = tokio::spawn(async move {
+            let master_acc =
+                MasterAccumulator::try_from_file("validation_assets/merge_macc.bin".into())
+                    .expect("Failed to load master accumulator");
+            let header_oracle = HeaderOracle::new(master_acc);
+
+            let bridge = Bridge::new(
+                bridge_config.mode,
+                portal_clients.expect("Failed to create history JSON-RPC clients"),
+                header_oracle,
+                bridge_config.epoch_acc_path,
+            );
+
+            bridge.launch().await;
+        });
+
+        bridge_handle
+            .await
+            .expect("Failed to launch history bridge");
+    }
+
     Ok(())
 }
