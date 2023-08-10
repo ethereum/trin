@@ -37,7 +37,7 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                         anyhow!("Header with proof content has invalid encoding: {err:?}")
                     })?;
                 self.header_oracle
-                    .write()
+                    .read()
                     .await
                     .master_acc
                     .validate_header_with_proof(&header_with_proof)
@@ -47,7 +47,7 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                     .map_err(|msg| anyhow!("Block Body content has invalid encoding: {:?}", msg))?;
                 let trusted_header: Header = self
                     .header_oracle
-                    .write()
+                    .read()
                     .await
                     .recursive_find_header_with_proof(H256::from(key.block_hash))
                     .await?
@@ -76,7 +76,7 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                 })?;
                 let trusted_header: Header = self
                     .header_oracle
-                    .write()
+                    .read()
                     .await
                     .recursive_find_header_with_proof(H256::from(key.block_hash))
                     .await?
