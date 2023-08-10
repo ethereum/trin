@@ -10,7 +10,7 @@ pub const BATCH_SIZE: u64 = 128;
 /// Execution layer PandaOps endpoint
 pub const BASE_EL_ENDPOINT: &str = "https://archive.mainnet.eu1.ethpandaops.io";
 /// Consensus layer PandaOps endpoint
-pub const BASE_CL_ENDPOINT: &str = "https://beacon.mainnet.ethpandaops.io";
+pub const BASE_CL_ENDPOINT: &str = "https://nimbus.mainnet.ethpandaops.io";
 
 /// History * content key & value
 pub const HEADER_WITH_PROOF_CONTENT_KEY: &str =
