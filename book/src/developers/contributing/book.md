@@ -1,31 +1,36 @@
-# Book
+# Contribute to trin Book
 
 ## Using the book
 
 The book can be built and served locally.
+
+### Installing book tools
+
+The first time you work on the book, you need to install mdbook and the mermaid
+tool to generate diagrams:
 ```sh
-cargo install mdbook
-```
-Install support for `mermaid` diagrams:
-```sh
-cd book
-cargo install mdbook-mermaid
+cargo install mdbook mdbook-mermaid
+cd book/
 mdbook-mermaid install
+cd ..
 ```
 This will create `mermaid.min.js` and `mermaid-init.js` files.
 
+### Running the book server
+
 Then run the book from the book crate:
 ```sh
+cd book/
 mdbook serve --open
 ```
-Or the project root:
+Or, from the project root:
 ```sh
 mdbook serve --open ./book
 ```
 
 ## Adding new pages
 
-Add a new entry to `./book/SUMMARY.md`. Follow the style there, which
+Add a new entry to `./book/src/SUMMARY.md`. Follow the style there, which
 follows strict formatting. There are two kinds of additions:
 
 - New single section
@@ -37,7 +42,7 @@ follows strict formatting. There are two kinds of additions:
         - Add `[Subsection one](section_name/subsection_one.md)`
         - Add `[Subsection two](section_name/subsection_two.md)`
 
-Don't ceate these pages, the `./book/SUMMARY.md` file is parsed and any missing
+Don't create these pages, the `./book/src/SUMMARY.md` file is parsed and any missing
 pages are generated when `mdbook serve` is run. Content can then be added to the
 generated pages.
 
@@ -81,16 +86,6 @@ graph TD;
     A-->C;
     B-->D;
     C-->D;
-```
-
-### Installation
-
-Installation is required to enable diagram generation
-
-```sh
-cd book
-cargo install mdbook-mermaid
-mdbook-mermaid install
 ```
 
 ## Crate documentation location
