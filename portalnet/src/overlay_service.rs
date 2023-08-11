@@ -2402,7 +2402,35 @@ where
             peer_timeout: self.query_peer_timeout,
         };
 
-        let closest_enrs = self.closest_connected_nodes(&target_key, query_config.num_results);
+        let mut closest_enrs = self.closest_connected_nodes(&target_key, query_config.num_results);
+        if closest_enrs.is_empty() {
+            // If there are no connected nodes, use the closest nodes regardless of connectivity.
+            warn!("No connected nodes, using disconnected nodes for query.");
+            closest_enrs = self
+                .kbuckets
+                .write()
+                .closest_values(&target_key)
+                .map(|closest| closest.value.enr)
+                .take(query_config.num_results)
+                .collect();
+        }
+
+        if closest_enrs.is_empty() {
+            // If there are no nodes in the routing table the query cannot proceed.
+            warn!("No nodes in routing table, query cannot proceed.");
+            if closest_enrs.is_empty() {
+                if let Some(callback) = callback {
+                    let _ = callback.send((None, false, None));
+                }
+                return None;
+            }
+        }
+
+        // Convert ENRs into k-bucket keys.
+        let closest_nodes: Vec<Key<NodeId>> = closest_enrs
+            .iter()
+            .map(|enr| Key::from(enr.node_id()))
+            .collect();
 
         let trace: Option<QueryTrace> = {
             if is_trace {
@@ -2421,26 +2449,12 @@ where
             trace,
         };
 
-        // Convert ENRs into k-bucket keys.
-        let closest_enrs: Vec<Key<NodeId>> = query_info
-            .untrusted_enrs
-            .iter()
-            .map(|enr| Key::from(enr.node_id()))
-            .collect();
-
-        // If the initial set of peers is non-empty, then add the query to the query pool.
-        // Otherwise, there is no way for the query to progress, so drop it.
-        if closest_enrs.is_empty() {
-            warn!("Cannot initialize FindContent query (no known close peers)");
-            None
-        } else {
-            let query = FindContentQuery::with_config(query_config, target_key, closest_enrs);
-            Some(
-                self.find_content_query_pool
-                    .write()
-                    .add_query(query_info, query),
-            )
-        }
+        let query = FindContentQuery::with_config(query_config, target_key, closest_nodes);
+        Some(
+            self.find_content_query_pool
+                .write()
+                .add_query(query_info, query),
+        )
     }
 
     /// Returns an ENR if one is known for the given NodeId.
@@ -3657,6 +3671,19 @@ mod tests {
         // Query info should contain bootnode ENR. It is the only node in the routing table, so
         // it is among the "closest".
         assert!(query_info.untrusted_enrs.contains(&bootnode_enr));
+    }
+
+    #[tokio::test]
+    async fn test_find_content_no_nodes() {
+        let mut service = task::spawn(build_service());
+
+        let target_content = NodeId::random();
+        let target_content_key = IdentityContentKey::new(target_content.raw());
+        let (tx, rx) = oneshot::channel();
+        let query_id = service.init_find_content_query(target_content_key.clone(), Some(tx), false);
+
+        assert!(query_id.is_none());
+        assert_eq!(rx.await.unwrap(), (None, false, None));
     }
 
     #[tokio::test]
