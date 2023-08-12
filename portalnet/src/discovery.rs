@@ -279,18 +279,13 @@ impl Discovery {
 }
 
 pub struct Discv5UdpSocket {
-    // `Mutex` for interior mutability.
-    // TODO: Figure out a better mechanism here. The socket is the only holder of the lock.
-    talk_reqs: tokio::sync::Mutex<mpsc::UnboundedReceiver<TalkRequest>>,
+    talk_reqs: mpsc::UnboundedReceiver<TalkRequest>,
     discv5: Arc<Discovery>,
 }
 
 impl Discv5UdpSocket {
     pub fn new(discv5: Arc<Discovery>, talk_reqs: mpsc::UnboundedReceiver<TalkRequest>) -> Self {
-        Self {
-            discv5,
-            talk_reqs: tokio::sync::Mutex::new(talk_reqs),
-        }
+        Self { discv5, talk_reqs }
     }
 }
 
@@ -333,8 +328,7 @@ impl AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
     }
 
     async fn recv_from(&mut self, buf: &mut [u8]) -> io::Result<(usize, UtpEnr)> {
-        let mut talk_reqs = self.talk_reqs.lock().await;
-        match talk_reqs.recv().await {
+        match self.talk_reqs.recv().await {
             Some(talk_req) => {
                 let src_node_id = talk_req.node_id();
                 let enr = match self.discv5.find_enr(src_node_id) {
