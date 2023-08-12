@@ -7459,12 +7459,12 @@ checksum = "711b9620af191e0cdc7468a8d14e709c3dcdb115b36f838e601583af800a370a"
 
 [[package]]
 name = "utp-rs"
-version = "0.1.0-alpha.5"
+version = "0.1.0-alpha.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a29f56696d12604e7ce844c299a2f4807583480836201ac1a46d8639ade963c6"
+checksum = "ecba6a54e3c37e15bc6320a4aa63fd057eea9c34b06743f09b5d4eea65746c2e"
 dependencies = [
  "async-trait",
- "delay_map 0.1.2",
+ "delay_map 0.3.0",
  "futures 0.3.28",
  "rand 0.8.5",
  "tokio",

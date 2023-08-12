@@ -314,7 +314,7 @@ impl ConnectionPeer for UtpEnr {}
 
 #[async_trait]
 impl AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
-    async fn send_to(&self, buf: &[u8], target: &UtpEnr) -> io::Result<usize> {
+    async fn send_to(&mut self, buf: &[u8], target: &UtpEnr) -> io::Result<usize> {
         let discv5 = Arc::clone(&self.discv5);
         let target = target.0.clone();
         let data = buf.to_vec();
@@ -332,7 +332,7 @@ impl AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
         Ok(buf.len())
     }
 
-    async fn recv_from(&self, buf: &mut [u8]) -> io::Result<(usize, UtpEnr)> {
+    async fn recv_from(&mut self, buf: &mut [u8]) -> io::Result<(usize, UtpEnr)> {
         let mut talk_reqs = self.talk_reqs.lock().await;
         match talk_reqs.recv().await {
             Some(talk_req) => {

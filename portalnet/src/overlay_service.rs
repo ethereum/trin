@@ -1588,7 +1588,7 @@ where
             }
 
             // close uTP connection
-            if let Err(err) = stream.shutdown() {
+            if let Err(err) = stream.close().await {
                 if !utp_tx_recorded {
                     metrics.report_utp_outcome(
                         UtpDirectionLabel::Outbound,

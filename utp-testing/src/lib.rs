@@ -74,7 +74,7 @@ impl RpcServer for TestApp {
 
             tracing::info!("read {n} bytes from uTP stream");
 
-            conn.shutdown().unwrap();
+            conn.close().await.unwrap();
 
             payload_store.write().await.push(data);
         });
@@ -110,7 +110,7 @@ impl RpcServer for TestApp {
 
             conn.write(&payload).await.unwrap();
 
-            conn.shutdown().unwrap();
+            conn.close().await.unwrap();
         });
 
         Ok("true".to_string())
