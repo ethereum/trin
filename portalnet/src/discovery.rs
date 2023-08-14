@@ -279,18 +279,13 @@ impl Discovery {
 }
 
 pub struct Discv5UdpSocket {
-    // `Mutex` for interior mutability.
-    // TODO: Figure out a better mechanism here. The socket is the only holder of the lock.
-    talk_reqs: tokio::sync::Mutex<mpsc::UnboundedReceiver<TalkRequest>>,
+    talk_reqs: mpsc::UnboundedReceiver<TalkRequest>,
     discv5: Arc<Discovery>,
 }
 
 impl Discv5UdpSocket {
     pub fn new(discv5: Arc<Discovery>, talk_reqs: mpsc::UnboundedReceiver<TalkRequest>) -> Self {
-        Self {
-            discv5,
-            talk_reqs: tokio::sync::Mutex::new(talk_reqs),
-        }
+        Self { discv5, talk_reqs }
     }
 }
 
@@ -314,7 +309,7 @@ impl ConnectionPeer for UtpEnr {}
 
 #[async_trait]
 impl AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
-    async fn send_to(&self, buf: &[u8], target: &UtpEnr) -> io::Result<usize> {
+    async fn send_to(&mut self, buf: &[u8], target: &UtpEnr) -> io::Result<usize> {
         let discv5 = Arc::clone(&self.discv5);
         let target = target.0.clone();
         let data = buf.to_vec();
@@ -332,9 +327,8 @@ impl AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
         Ok(buf.len())
     }
 
-    async fn recv_from(&self, buf: &mut [u8]) -> io::Result<(usize, UtpEnr)> {
-        let mut talk_reqs = self.talk_reqs.lock().await;
-        match talk_reqs.recv().await {
+    async fn recv_from(&mut self, buf: &mut [u8]) -> io::Result<(usize, UtpEnr)> {
+        match self.talk_reqs.recv().await {
             Some(talk_req) => {
                 let src_node_id = talk_req.node_id();
                 let enr = match self.discv5.find_enr(src_node_id) {
