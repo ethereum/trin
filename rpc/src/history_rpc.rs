@@ -1,5 +1,7 @@
+use crate::errors::RpcServeError;
+use crate::serde::from_value;
+
 use crate::jsonrpsee::core::{async_trait, RpcResult};
-use anyhow::anyhow;
 use discv5::enr::NodeId;
 use ethportal_api::types::constants::CONTENT_ABSENT;
 use ethportal_api::types::enr::Enr;
@@ -14,7 +16,7 @@ use ethportal_api::HistoryContentValue;
 use ethportal_api::HistoryNetworkApiServer;
 use ethportal_api::PossibleHistoryContentValue;
 use ethportal_api::RoutingTableInfo;
-use serde_json::{from_value, Value};
+use serde_json::Value;
 use tokio::sync::mpsc;
 
 pub struct HistoryNetworkApi {
@@ -29,7 +31,7 @@ impl HistoryNetworkApi {
     pub async fn proxy_query_to_history_subnet(
         &self,
         endpoint: HistoryEndpoint,
-    ) -> anyhow::Result<Value> {
+    ) -> Result<Value, RpcServeError> {
         let (resp_tx, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
         let message = HistoryJsonRpcRequest {
             endpoint,
@@ -40,10 +42,10 @@ impl HistoryNetworkApi {
         match resp_rx.recv().await {
             Some(val) => match val {
                 Ok(result) => Ok(result),
-                Err(msg) => Err(anyhow!(msg)),
+                Err(msg) => Err(RpcServeError::Message(msg)),
             },
-            None => Err(anyhow!(
-                "Internal error: No response from chain history subnetwork"
+            None => Err(RpcServeError::Message(
+                "Internal error: No response from chain history subnetwork".to_string(),
             )),
         }
     }
