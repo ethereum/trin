@@ -928,13 +928,24 @@ where
                     None,
                 );
 
-                if let Ok(..) = command_tx.send(OverlayCommand::Request(request)) {
-                    trace!(
-                        content.id = %hex_encode_compact(content_id),
-                        content.key = %content_key,
-                        peer.node_id = %node_id,
-                        "Content poked"
-                    );
+                match command_tx.send(OverlayCommand::Request(request)) {
+                    Ok(_) => {
+                        trace!(
+                            content.id = %hex_encode_compact(content_id),
+                            content.key = %content_key,
+                            peer.node_id = %node_id,
+                            "Content poked"
+                        );
+                    }
+                    Err(err) => {
+                        warn!(
+                            content.id = %hex_encode_compact(content_id),
+                            content.key = %content_key,
+                            peer.node_id = %node_id,
+                            %err,
+                            "Failed to poke content to peer"
+                        );
+                    }
                 }
             }
         }

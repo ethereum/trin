@@ -414,7 +414,7 @@ impl RpcModuleBuilder {
                                 .expect("Beacon protocol not initialized");
                             BeaconNetworkApi::new(beacon_tx).into_rpc().into()
                         }
-                        PortalRpcModule::Web3 => Web3Api::default().into_rpc().into(),
+                        PortalRpcModule::Web3 => Web3Api.into_rpc().into(),
                     })
                     .clone()
             })
