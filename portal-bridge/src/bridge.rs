@@ -79,9 +79,19 @@ impl Bridge {
     }
 
     async fn launch_test(&self, test_path: PathBuf) {
+        let extension = test_path
+            .extension()
+            .and_then(|x| x.to_str())
+            .expect("Unable to parse test path extension")
+            .to_string();
         let test_asset = fs::read_to_string(test_path).expect("Error reading test asset.");
-        let assets: TestAssets =
-            serde_json::from_str(&test_asset).expect("Unable to parse test asset.");
+
+        let assets: TestAssets = match &extension[..] {
+            "json" => serde_json::from_str(&test_asset).expect("Unable to parse json test asset."),
+            "yaml" => serde_yaml::from_str(&test_asset).expect("Unable to parse yaml test asset."),
+            _ => panic!("Invalid file extension"),
+        };
+
         for asset in assets.0.into_iter() {
             Bridge::gossip_content(&self.portal_clients, asset.content_key, asset.content_value)
                 .await
