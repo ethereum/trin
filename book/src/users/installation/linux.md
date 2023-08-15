@@ -1,5 +1,13 @@
 # Linux
 
+## Installing Trin on Arch Linux
+
+There's an [AUR package](https://aur.archlinux.org/packages/trin-git) for Trin. You can install it with your favorite AUR helper, e.g. `yay`:
+
+```sh
+yay -S trin-git
+```
+
 ## Trin on Ubuntu
 
 These steps are for setting up a Trin node as a service on Ubuntu.
