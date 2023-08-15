@@ -1,15 +1,17 @@
 # Quick setup
 
-This is a single page the aims to cover everything required to get Trin running.
+This is a single page that aims to cover everything required to get Trin running.
 
 **Trin is currently in unstable alpha, and should not be used in production. If you run into any bugs while using Trin, please file an Issue!**
 
 **Check out the `./newsfragments` directory to see the latest changes.**
 
-## Prerequisites
+## Building on Debian Based Systems
+
+### Prerequisites
 - [Rust](https://www.rust-lang.org/) installation
 
-## Building, Testing, and Running
+### Building, Testing, and Running
 
 Note: If you use a VPN, you should disable it before running Trin.
 
@@ -40,8 +42,8 @@ cargo build --workspace
 cargo test --workspace
 
 # Build and run test suite for an individual crate
-cargo build -p trin-core
-cargo test -p trin-core
+cargo build -p trin-history
+cargo test -p trin-history
 
 # Run
 cargo run
@@ -59,7 +61,63 @@ View CLI options:
 cargo run -- --help
 ```
 
-### Run locally
+## Building on Arch Based Systems
+
+Before starting, update your system.
+
+```bash
+sudo pacman -Syu
+```
+
+Then, install rust.
+
+```bash
+sudo pacman -S rustup
+rustup install stable
+```
+
+To check that the rust toolchain was successfully installed, run:
+
+```bash
+rustc --version
+```
+
+You should see something like:
+
+```bash
+rustc 1.71.1 (eb26296b5 2023-08-03)
+```
+
+Next, install the required dependencies:
+
+```bash
+sudo pacman -S openssl clang pkg-config base-devel llvm git
+```
+
+Now you can build, test and run Trin!
+
+```bash
+git clone https://github.com/ethereum/trin.git
+cd trin
+
+# Build
+cargo build --workspace
+
+# Run test suite
+cargo test --workspace
+
+# Build and run test suite for an individual crate
+cargo build -p trin-history
+cargo test -p trin-history
+
+# Run help
+cargo run -- --help
+
+# Run Trin with defaults
+cargo run
+```
+
+## Run locally
 
 Serve portal node web3 access over a different port (such as `8547`) using the `--web3-http-address` flag. The `--web3-transport` for a local node will be over `http`
 (rather than `ipc`).
@@ -109,7 +167,7 @@ In a python shell:
 'trin 0.0.1-alpha'
 ```
 
-To request a custom jsonrpc endpoint, provide the endpoint and array of params. eg:
+To request a custom jsonrpc endpoint, provide the endpoint and array of params. e.g.:
 ```py
 >>> w3.provider.make_request("portal_historyPing", ["enr:-IS4QBz_40AQVBaqlhPIWFwVEphZqPKS3EPso1PwK01nwDMtMCcgK73FppW1C9V_BQRsvWV5QTbT1IYUR-zv8_cnIakDgmlkgnY0gmlwhKRc9_OJc2VjcDI1NmsxoQM-ccaM0TOFvYqC_RY_KhZNhEmWx8zdf6AQALhKyMVyboN1ZHCCE4w", "18446744073709551615"])
 {'jsonrpc': '2.0',
