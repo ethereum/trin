@@ -2403,14 +2403,12 @@ where
         }
 
         if closest_enrs.is_empty() {
-            // If there are no nodes in the routing table the query cannot proceed.
+            // If there are no nodes whatsoever in the routing table the query cannot proceed.
             warn!("No nodes in routing table, query cannot proceed.");
-            if closest_enrs.is_empty() {
-                if let Some(callback) = callback {
-                    let _ = callback.send((None, false, None));
-                }
-                return None;
+            if let Some(callback) = callback {
+                let _ = callback.send((None, false, None));
             }
+            return None;
         }
 
         // Convert ENRs into k-bucket keys.
