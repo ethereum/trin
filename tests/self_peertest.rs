@@ -254,18 +254,9 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread")]
     #[serial]
-    async fn peertest_bridge_json() {
+    async fn peertest_bridge() {
         let (peertest, target, handle) = setup_peertest_bridge().await;
-        peertest::scenarios::bridge::test_bridge_json(&peertest, &target).await;
-        peertest.exit_all_nodes();
-        handle.stop().unwrap();
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    #[serial]
-    async fn peertest_bridge_yaml() {
-        let (peertest, target, handle) = setup_peertest_bridge().await;
-        peertest::scenarios::bridge::test_bridge_yaml(&peertest, &target).await;
+        peertest::scenarios::bridge::test_bridge(&peertest, &target).await;
         peertest.exit_all_nodes();
         handle.stop().unwrap();
     }
