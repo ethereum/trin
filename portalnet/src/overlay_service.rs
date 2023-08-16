@@ -818,6 +818,9 @@ where
                             Some(enr) => enr,
                             _ => {
                                 warn!("Received uTP payload from unknown {peer}");
+                                if let Some(responder) = callback {
+                                    let _ = responder.send((None, true, query_info.trace));
+                                };
                                 return;
                             }
                         };
