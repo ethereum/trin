@@ -51,6 +51,11 @@ pub struct TestAssets(pub Vec<Asset>);
 pub struct Asset {
     pub content_key: HistoryContentKey,
     pub content_value: HistoryContentValue,
+
+    // Comments are only supported by yaml. We don't de/serialize them for json, but only serialize
+    // them for yaml through our write yaml file code
+    #[serde(skip_serializing, skip_deserializing)]
+    pub comment: String,
 }
 
 pub fn read_test_assets_from_file(test_path: PathBuf) -> TestAssets {

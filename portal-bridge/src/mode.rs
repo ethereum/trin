@@ -8,6 +8,8 @@ use trin_validation::constants::EPOCH_SIZE;
 ///   - ex: "e123" starts at epoch 123
 /// - Single: executes a single block
 ///   - ex: "b123" executes block 123
+/// - GenerateTestData: generates test data from block x to y
+///   - ex: "r10-12" creates a test file with test data for block 10, 11, and 12
 #[derive(Clone, Debug, PartialEq, Default, Eq)]
 pub enum BridgeMode {
     #[default]
@@ -15,6 +17,7 @@ pub enum BridgeMode {
     Backfill(ModeType),
     Single(ModeType),
     Test(PathBuf),
+    GenerateTestData(ModeType, PathBuf),
 }
 
 type ParseError = &'static str;
@@ -55,6 +58,7 @@ impl FromStr for BridgeMode {
 pub enum ModeType {
     Epoch(u64),
     Block(u64),
+    Range(u64, u64),
 }
 
 impl ModeType {
@@ -62,6 +66,7 @@ impl ModeType {
         match self {
             ModeType::Epoch(epoch) => epoch * EPOCH_SIZE as u64,
             ModeType::Block(block) => *block,
+            ModeType::Range(_, end_block) => *end_block,
         }
     }
 }
@@ -81,6 +86,28 @@ impl FromStr for ModeType {
                     .parse()
                     .map_err(|_| "Invalid bridge mode arg: block number")?;
                 Ok(ModeType::Block(block))
+            }
+            "r" => {
+                let range_vec = s[1..]
+                    .split(':')
+                    .map(|x| {
+                        x.parse()
+                            .expect("Invalid bridge mode arg: range format invalid expected (x:y)")
+                    })
+                    .collect::<Vec<u64>>();
+
+                if range_vec.len() != 2 {
+                    return Err("Invalid bridge mode arg: expected 2 numbers in range");
+                }
+
+                let start_block = range_vec[0].to_owned();
+                let end_block = range_vec[1].to_owned();
+
+                if start_block > end_block {
+                    return Err("Invalid bridge mode arg: end_block is less than start_block");
+                }
+
+                Ok(ModeType::Range(start_block, end_block))
             }
             _ => Err("Invalid bridge mode arg: type prefix"),
         }

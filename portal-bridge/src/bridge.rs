@@ -1,7 +1,7 @@
 use crate::full_header::FullHeader;
 use crate::mode::{BridgeMode, ModeType};
 use crate::pandaops::PandaOpsMiddleware;
-use crate::utils::{read_test_assets_from_file, TestAssets};
+use crate::utils::{read_test_assets_from_file, Asset, TestAssets};
 use anyhow::{anyhow, bail};
 use ethportal_api::jsonrpsee::http_client::HttpClient;
 use ethportal_api::types::execution::accumulator::EpochAccumulator;
@@ -14,14 +14,15 @@ use ethportal_api::types::execution::header::{
 };
 use ethportal_api::types::execution::receipts::Receipts;
 use ethportal_api::utils::bytes::hex_encode;
-use ethportal_api::HistoryContentValue;
 use ethportal_api::HistoryNetworkApiClient;
 use ethportal_api::{
     BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey, HistoryContentKey,
 };
+use ethportal_api::{ContentValue, HistoryContentValue, OverlayContentKey};
 use futures::stream::StreamExt;
 use ssz::Decode;
 use std::fs;
+use std::io::Write;
 use std::ops::Range;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -72,6 +73,9 @@ impl Bridge {
         info!("Launching bridge mode: {:?}", self.mode);
         match self.mode.clone() {
             BridgeMode::Test(path) => self.launch_test(path).await,
+            BridgeMode::GenerateTestData(mode, path) => {
+                self.launch_generate_test_data(mode, path).await
+            }
             BridgeMode::Latest => self.launch_latest().await,
             _ => self.launch_backfill().await,
         }
@@ -119,6 +123,129 @@ impl Bridge {
         }
     }
 
+    async fn launch_generate_test_data(&self, mode: ModeType, test_path: PathBuf) {
+        let latest_block = self.pandaops.get_latest_block_number().await.expect(
+            "Error launching bridge in backfill mode. Unable to get latest block from provider.",
+        );
+        let (start_block, end_block) = match mode {
+            ModeType::Range(start_block, end_block) => (start_block, end_block),
+            _ => panic!("Invalid ModeType"),
+        };
+
+        if start_block > latest_block {
+            panic!(
+                "Starting block/epoch is greater than latest block.
+                        Please specify a starting block/epoch that begins before the current block."
+            );
+        }
+
+        let mut assets: Vec<Asset> = Vec::new();
+
+        // We are not using serve since it is based on throughput so data could not be sent in order
+        // we want to append the test data linearly to the file
+        for height in start_block..=end_block {
+            let epoch_acc = if end_block <= MERGE_BLOCK_NUMBER {
+                match self.get_epoch_acc(height / EPOCH_SIZE).await {
+                    Ok(val) => Some(val),
+                    Err(msg) => {
+                        warn!("Unable to find epoch acc for block height: {height}. Skipping iteration: {msg:?}");
+                        continue;
+                    }
+                }
+            } else {
+                None
+            };
+
+            debug!("Serving block: {height}");
+            let mut full_header = self
+                .pandaops
+                .get_header(height)
+                .await
+                .expect("Error fetching header");
+            if full_header.header.number <= MERGE_BLOCK_NUMBER {
+                full_header.epoch_acc = epoch_acc;
+            }
+
+            let (content_key, content_value) = Bridge::construct_header(&full_header)
+                .await
+                .expect("Error constructing header");
+            assets.push(Asset {
+                content_key,
+                content_value,
+                comment: format!("Block number: {height}").to_string(),
+            });
+
+            let (content_key, content_value) = self
+                .construct_block_body(&full_header)
+                .await
+                .expect("Error constructing block body");
+            assets.push(Asset {
+                content_key,
+                content_value,
+                comment: "".to_string(),
+            });
+
+            let (content_key, content_value) = self
+                .construct_receipt(&full_header)
+                .await
+                .expect("Error constructing receipt");
+            assets.push(Asset {
+                content_key,
+                content_value,
+                comment: "".to_string(),
+            });
+        }
+
+        let extension = test_path
+            .extension()
+            .and_then(|x| x.to_str())
+            .expect("Unable to parse test path extension")
+            .to_string();
+
+        match &extension[..] {
+            "json" => {
+                let mut file = std::fs::File::create(test_path)
+                    .expect("Failed to create file json test data file");
+                serde_json::to_writer_pretty(&mut file, &assets)
+                    .expect("Failed to dump json test data to file");
+            }
+            "yaml" => {
+                // yaml we will write it ourselves since we want to add comments
+                let mut file = std::fs::File::create(test_path)
+                    .expect("Failed to create file yaml test data file");
+
+                // Write a header listing the block range and what content types are included.
+                file.write_all(
+                    format!(
+                    "# Test data for Portal Bridge\n
+                    # Block range is {start_block}-{end_block}\n
+                    # Data is formatted by comment of block height, header, block body, and receipt\n\n")
+                    .as_bytes())
+                    .expect("Failed to write test file header");
+
+                // loop over assets and write them to the file
+                for asset in assets {
+                    let mut comment = "".to_string();
+                    if !asset.comment.is_empty() {
+                        comment = format!("# {}\n", asset.comment).to_string();
+                    }
+                    let content_key =
+                        format!("- content_key: {}\n", asset.content_key.to_hex()).to_string();
+                    let content_value = format!(
+                        "  content_value: {}\n",
+                        hex_encode(asset.content_value.encode())
+                    )
+                    .to_string();
+
+                    // Write asset to file
+                    file.write_all(format!("{comment}{content_key}{content_value}").as_bytes())
+                        .expect("Failed to write test file header");
+                }
+            }
+            _ => panic!("Invalid file extension"),
+        };
+    }
+
     async fn launch_backfill(&self) {
         let latest_block = self.pandaops.get_latest_block_number().await.expect(
             "Error launching bridge in backfill mode. Unable to get latest block from provider.",
@@ -143,6 +270,7 @@ impl Bridge {
                 };
                 (block, end_block, epoch_index)
             }
+            _ => panic!("Invalid ModeType"),
         };
         if start_block > latest_block {
             panic!(
@@ -232,25 +360,54 @@ impl Bridge {
         if full_header.header.number <= MERGE_BLOCK_NUMBER {
             full_header.epoch_acc = epoch_acc;
         }
-        Bridge::gossip_header(&full_header, &portal_clients, &gossip_stats).await?;
+
+        let (content_key, content_value) = Bridge::construct_header(&full_header).await?;
+        debug!(
+            "Gossip: Block #{:?} HeaderWithProof",
+            full_header.header.number
+        );
+        let result = Bridge::gossip_content(&portal_clients, content_key, content_value).await;
+        if result.is_ok() {
+            if let Ok(mut data) = gossip_stats.lock() {
+                data.header_with_proof_count += 1;
+            } else {
+                warn!("Error updating gossip header with proof stats. Unable to acquire lock.");
+            }
+        }
+
         // Sleep for 10 seconds to allow headers to saturate network,
         // since they must be available for body / receipt validation.
         sleep(Duration::from_secs(HEADER_SATURATION_DELAY)).await;
-        self.construct_and_gossip_block_body(&full_header, &portal_clients, &gossip_stats)
-            .await
-            .map_err(|err| anyhow!("Error gossiping block body #{height:?}: {err:?}"))?;
 
-        self.construct_and_gossip_receipt(&full_header, &portal_clients, &gossip_stats)
-            .await
-            .map_err(|err| anyhow!("Error gossiping receipt #{height:?}: {err:?}"))?;
+        let (content_key, content_value) = self.construct_block_body(&full_header).await?;
+        debug!("Gossip: Block #{:?} BlockBody", full_header.header.number);
+        let result = Bridge::gossip_content(&portal_clients, content_key, content_value).await;
+        if result.is_ok() {
+            if let Ok(mut data) = gossip_stats.lock() {
+                data.bodies_count += 1;
+            } else {
+                warn!("Error updating gossip bodies stats. Unable to acquire lock.");
+            }
+        }
+        result.map_err(|err| anyhow!("Error gossiping block body #{height:?}: {err:?}"))?;
+
+        let (content_key, content_value) = self.construct_receipt(&full_header).await?;
+        debug!("Gossip: Block #{:?} Receipts", full_header.header.number,);
+        let result = Bridge::gossip_content(&portal_clients, content_key, content_value).await;
+        if result.is_ok() {
+            if let Ok(mut data) = gossip_stats.lock() {
+                data.receipts_count += 1;
+            } else {
+                warn!("Error updating gossip receipts stats. Unable to acquire lock.");
+            }
+        }
+        result.map_err(|err| anyhow!("Error gossiping receipt #{height:?}: {err:?}"))?;
         Ok(())
     }
 
-    async fn gossip_header(
+    async fn construct_header(
         full_header: &FullHeader,
-        portal_clients: &Vec<HttpClient>,
-        gossip_stats: &Arc<Mutex<GossipStats>>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<(HistoryContentKey, HistoryContentValue)> {
         debug!("Serving header: {}", full_header.header.number);
         if full_header.header.number < MERGE_BLOCK_NUMBER && full_header.epoch_acc.is_none() {
             bail!("Invalid header, expected to have epoch accumulator");
@@ -286,19 +443,7 @@ impl Bridge {
                 HistoryContentValue::BlockHeaderWithProof(header_with_proof)
             }
         };
-        debug!(
-            "Gossip: Block #{:?} HeaderWithProof",
-            full_header.header.number
-        );
-        let result = Bridge::gossip_content(portal_clients, content_key, content_value).await;
-        if result.is_ok() {
-            if let Ok(mut data) = gossip_stats.lock() {
-                data.header_with_proof_count += 1;
-            } else {
-                warn!("Error updating gossip header with proof stats. Unable to acquire lock.");
-            }
-        }
-        result
+        Ok((content_key, content_value))
     }
 
     /// Attempt to lookup an epoch accumulator from local portal-accumulators path provided via cli
@@ -326,12 +471,10 @@ impl Bridge {
         Ok(Arc::new(local_epoch_acc))
     }
 
-    async fn construct_and_gossip_receipt(
+    async fn construct_receipt(
         &self,
         full_header: &FullHeader,
-        portal_clients: &Vec<HttpClient>,
-        gossip_stats: &Arc<Mutex<GossipStats>>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<(HistoryContentKey, HistoryContentValue)> {
         debug!("Serving receipt: {:?}", full_header.header.number);
         let receipts = match full_header.txs.len() {
             0 => Receipts {
@@ -356,24 +499,13 @@ impl Bridge {
             block_hash: full_header.header.hash().to_fixed_bytes(),
         });
         let content_value = HistoryContentValue::Receipts(receipts);
-        debug!("Gossip: Block #{:?} Receipts", full_header.header.number,);
-        let result = Bridge::gossip_content(portal_clients, content_key, content_value).await;
-        if result.is_ok() {
-            if let Ok(mut data) = gossip_stats.lock() {
-                data.receipts_count += 1;
-            } else {
-                warn!("Error updating gossip receipts stats. Unable to acquire lock.");
-            }
-        }
-        result
+        Ok((content_key, content_value))
     }
 
-    async fn construct_and_gossip_block_body(
+    async fn construct_block_body(
         &self,
         full_header: &FullHeader,
-        portal_clients: &Vec<HttpClient>,
-        gossip_stats: &Arc<Mutex<GossipStats>>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<(HistoryContentKey, HistoryContentValue)> {
         let txs = full_header.txs.clone();
         let block_body = if full_header.header.timestamp > SHANGHAI_TIMESTAMP {
             if !full_header.uncles.is_empty() {
@@ -406,16 +538,7 @@ impl Bridge {
             block_hash: full_header.header.hash().to_fixed_bytes(),
         });
         let content_value = HistoryContentValue::BlockBody(block_body);
-        debug!("Gossip: Block #{:?} BlockBody", full_header.header.number);
-        let result = Bridge::gossip_content(portal_clients, content_key, content_value).await;
-        if result.is_ok() {
-            if let Ok(mut data) = gossip_stats.lock() {
-                data.bodies_count += 1;
-            } else {
-                warn!("Error updating gossip bodies stats. Unable to acquire lock.");
-            }
-        }
-        result
+        Ok((content_key, content_value))
     }
 
     /// Create a proof for the given header / epoch acc
