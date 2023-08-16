@@ -3,6 +3,7 @@ use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::HistoryContentKey;
 use ethportal_api::HistoryContentValue;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 /// Generates a set of N private keys, with node ids that are equally spaced
 /// around the 256-bit keys space.
@@ -52,14 +53,33 @@ pub struct Asset {
     pub content_value: HistoryContentValue,
 }
 
+pub fn read_test_assets_from_file(test_path: PathBuf) -> TestAssets {
+    let extension = test_path
+        .extension()
+        .and_then(|path| path.to_str())
+        .expect("Unable to parse test path extension")
+        .to_string();
+    let test_asset = std::fs::read_to_string(test_path).expect("Error reading test asset.");
+
+    let assets: TestAssets = match &extension[..] {
+        "json" => serde_json::from_str(&test_asset).expect("Unable to parse json test asset."),
+        "yaml" => serde_yaml::from_str(&test_asset).expect("Unable to parse yaml test asset."),
+        _ => panic!("Invalid file extension"),
+    };
+
+    assets
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use crate::constants::{HEADER_WITH_PROOF_CONTENT_KEY, HEADER_WITH_PROOF_CONTENT_VALUE};
     use ethereum_types::U256;
     use ethportal_api::types::distance::{Metric, XorMetric};
     use ethportal_api::utils::bytes::hex_decode;
     use rstest::rstest;
+    use serde_json::json;
 
     #[rstest]
     #[case(2)]
@@ -88,5 +108,31 @@ mod tests {
             distance > min_spread,
             "{distance} vs {min_spread}, first bytes: {first_byte1} vs {first_byte2}"
         );
+    }
+
+    #[test]
+    fn test_read_test_assets_from_file_json() {
+        let assets: TestAssets =
+            read_test_assets_from_file(PathBuf::from("../test_assets/portalnet/bridge_data.json"));
+        let content_key: HistoryContentKey =
+            serde_json::from_value(json!(HEADER_WITH_PROOF_CONTENT_KEY)).unwrap();
+        let content_value: HistoryContentValue =
+            serde_json::from_value(json!(HEADER_WITH_PROOF_CONTENT_VALUE)).unwrap();
+
+        assert_eq!(assets.0[0].content_key, content_key);
+        assert_eq!(assets.0[0].content_value, content_value);
+    }
+
+    #[test]
+    fn test_read_test_assets_from_file_yaml() {
+        let assets: TestAssets =
+            read_test_assets_from_file(PathBuf::from("../test_assets/portalnet/bridge_data.yaml"));
+        let content_key: HistoryContentKey =
+            serde_json::from_value(json!(HEADER_WITH_PROOF_CONTENT_KEY)).unwrap();
+        let content_value: HistoryContentValue =
+            serde_json::from_value(json!(HEADER_WITH_PROOF_CONTENT_VALUE)).unwrap();
+
+        assert_eq!(assets.0[0].content_key, content_key);
+        assert_eq!(assets.0[0].content_value, content_value);
     }
 }

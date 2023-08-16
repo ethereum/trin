@@ -4613,6 +4613,7 @@ dependencies = [
  "rstest 0.11.0",
  "serde",
  "serde_json",
+ "serde_yaml",
  "surf",
  "test-log",
  "tokio",

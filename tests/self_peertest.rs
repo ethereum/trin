@@ -6,7 +6,9 @@ mod test {
 
     use ethportal_api::types::cli::{TrinConfig, DEFAULT_WEB3_HTTP_ADDRESS, DEFAULT_WEB3_IPC_PATH};
     use ethportal_peertest as peertest;
+    use ethportal_peertest::Peertest;
     use jsonrpsee::async_client::Client;
+    use jsonrpsee::http_client::HttpClient;
     use serial_test::serial;
     use tokio::time::{sleep, Duration};
 
@@ -205,9 +207,8 @@ mod test {
         (peertest, target, test_client_rpc_handle)
     }
 
-    #[tokio::test(flavor = "multi_thread")]
-    #[serial]
-    async fn peertest_bridge() {
+    async fn setup_peertest_bridge() -> (Peertest, HttpClient, RpcServerHandle) {
+        init_tracing();
         // Run a client, as a buddy peer for ping tests, etc.
         let peertest = peertest::launch_peertest_nodes(1).await;
         // Short sleep to make sure all peertest nodes can connect
@@ -248,7 +249,15 @@ mod test {
         let target = ethportal_api::jsonrpsee::http_client::HttpClientBuilder::default()
             .build(DEFAULT_WEB3_HTTP_ADDRESS)
             .unwrap();
+        (peertest, target, test_client_rpc_handle)
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial]
+    async fn peertest_bridge() {
+        let (peertest, target, handle) = setup_peertest_bridge().await;
         peertest::scenarios::bridge::test_bridge(&peertest, &target).await;
-        test_client_rpc_handle.stop().unwrap();
+        peertest.exit_all_nodes();
+        handle.stop().unwrap();
     }
 }
