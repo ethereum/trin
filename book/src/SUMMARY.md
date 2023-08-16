@@ -56,9 +56,9 @@
             - [Fetching a pull request](developers/contributing/git/fetching_pull_requests.md)
             - [Merging](developers/contributing/git/merging.md)
         - [Releases](developers/contributing/releases/README.md)
-            - [Release notes](developers/contributing/releases/release_notes.md)
-            - [Versioning](developers/contributing/releases/versioning.md)
-            - [Generation](developers/contributing/releases/generation.md)
+            - [Pre-release checklist](developers/contributing/releases/prerelease_checklist.md)
+            - [Release checklist](developers/contributing/releases/release_checklist.md)
+            - [Deployment](developers/contributing/releases/deployment.md)
         - [Tests](developers/contributing/tests.md)
         - [Book](developers/contributing/book.md)
 
