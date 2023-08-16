@@ -14,7 +14,7 @@ async-trait = "0.1.57"
 chrono = "0.4.22"
 eyre = "0.6.8"
 figment = { version = "0.10.7", features = ["toml", "env"] }
-jsonrpsee = { version = "0.15.1", features = ["full"] }
+jsonrpsee = { version = "0.20.0", features = ["full"] }
 serde = { version = "1.0.143", features = ["derive"] }
 serde_yaml = "0.9.14"
 tracing-subscriber = "0.3.15"

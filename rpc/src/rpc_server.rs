@@ -570,8 +570,8 @@ impl WsHttpServerKind {
     /// Starts the server and returns the handle
     async fn start(self, module: RpcModule<()>) -> Result<ServerHandle, RpcError> {
         match self {
-            WsHttpServerKind::Plain(server) => Ok(server.start(module)?),
-            WsHttpServerKind::WithCors(server) => Ok(server.start(module)?),
+            WsHttpServerKind::Plain(server) => Ok(server.start(module)),
+            WsHttpServerKind::WithCors(server) => Ok(server.start(module)),
         }
     }
 

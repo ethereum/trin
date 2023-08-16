@@ -19,7 +19,7 @@ tracing = "0.1.27"
 trin-utils = { path = "../trin-utils"}
 tokio = { version = "1.14.0", features = ["full"] }
 hyper = "0.14"
-reth-ipc = { version = "0.1.0", git = "https://github.com/paradigmxyz/reth.git"}
+reth-ipc = { version = "0.1.0-alpha.6", git = "https://github.com/paradigmxyz/reth.git"}
 url = "2.3.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.95"

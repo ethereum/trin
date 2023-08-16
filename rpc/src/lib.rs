@@ -7,6 +7,7 @@ mod discv5_rpc;
 mod errors;
 mod history_rpc;
 mod rpc_server;
+mod serde;
 mod web3_rpc;
 
 use crate::jsonrpsee::server::ServerBuilder;

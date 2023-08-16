@@ -22,7 +22,7 @@ eth2_ssz = "0.4.0"
 eth2_ssz_derive = "0.3.0"
 eth2_ssz_types = "0.2.1"
 futures = "0.3.21"
-jsonrpsee = {version="0.16.2", features = ["async-client", "client", "macros", "server"]}
+jsonrpsee = {version="0.20.0", features = ["async-client", "client", "macros", "server"]}
 lazy_static = "1.4.0"
 portalnet = { path = "../portalnet" }
 serde = { version = "1.0.150", features = ["derive", "rc"] }

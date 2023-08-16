@@ -1,6 +1,7 @@
+use crate::errors::RpcServeError;
+
 use crate::jsonrpsee::core::{async_trait, RpcResult};
 use discv5::enr::NodeId;
-use ethportal_api::jsonrpsee::core::Error;
 use ethportal_api::types::enr::Enr;
 use ethportal_api::Discv5ApiServer;
 use ethportal_api::{NodeInfo, RoutingTableInfo};
@@ -21,7 +22,10 @@ impl Discv5Api {
 impl Discv5ApiServer for Discv5Api {
     /// Returns ENR and Node ID information of the local discv5 node.
     async fn node_info(&self) -> RpcResult<NodeInfo> {
-        Ok(self.discv5.node_info()?)
+        Ok(self
+            .discv5
+            .node_info()
+            .map_err(|err| RpcServeError::Message(err.to_string()))?)
     }
 
     /// Update the socket address of the local node record.
@@ -30,7 +34,7 @@ impl Discv5ApiServer for Discv5Api {
         _socket_addr: String,
         _is_tcp: Option<bool>,
     ) -> RpcResult<NodeInfo> {
-        Err(Error::MethodNotFound("update_node_info".to_owned()))
+        Err(RpcServeError::MethodNotFound("update_node_info".to_owned()))?
     }
 
     /// Returns meta information about discv5 routing table.
@@ -40,22 +44,22 @@ impl Discv5ApiServer for Discv5Api {
 
     /// Write an Ethereum Node Record to the routing table.
     async fn add_enr(&self, _enr: Enr) -> RpcResult<bool> {
-        Err(Error::MethodNotFound("add_enr".to_owned()))
+        Err(RpcServeError::MethodNotFound("add_enr".to_owned()))?
     }
 
     /// Fetch the latest ENR associated with the given node ID.
     async fn get_enr(&self, _node_id: NodeId) -> RpcResult<Enr> {
-        Err(Error::MethodNotFound("get_enr".to_owned()))
+        Err(RpcServeError::MethodNotFound("get_enr".to_owned()))?
     }
 
     /// Delete Node ID from the routing table.
     async fn delete_enr(&self, _node_id: NodeId) -> RpcResult<bool> {
-        Err(Error::MethodNotFound("delete_enr".to_owned()))
+        Err(RpcServeError::MethodNotFound("delete_enr".to_owned()))?
     }
 
     /// Fetch the ENR representation associated with the given Node ID.
     async fn lookup_enr(&self, _node_id: NodeId) -> RpcResult<Enr> {
-        Err(Error::MethodNotFound("lookup_enr".to_owned()))
+        Err(RpcServeError::MethodNotFound("lookup_enr".to_owned()))?
     }
 }
 
