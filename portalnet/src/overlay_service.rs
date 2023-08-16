@@ -852,6 +852,9 @@ where
                                         peer = ?cid.peer.client(),
                                         "Unable to establish uTP conn based on Content response",
                                     );
+                                    if let Some(responder) = callback {
+                                        let _ = responder.send((None, true, query_info.trace));
+                                    };
                                     return;
                                 }
                             };
@@ -863,6 +866,9 @@ where
                                     UtpOutcomeLabel::FailedDataTx,
                                 );
                                 error!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), "error reading data from uTP stream, while handling a FindContent request.");
+                                if let Some(responder) = callback {
+                                    let _ = responder.send((None, true, query_info.trace));
+                                };
                                 return;
                             }
 
