@@ -55,6 +55,7 @@
             - [Code review](developers/contributing/git/code_review.md)
             - [Fetching a pull request](developers/contributing/git/fetching_pull_requests.md)
             - [Merging](developers/contributing/git/merging.md)
+        - [Flamingo Rotation](developers/contributing/rotation/index.md)
         - [Releases](developers/contributing/releases/README.md)
             - [Pre-release checklist](developers/contributing/releases/prerelease_checklist.md)
             - [Release checklist](developers/contributing/releases/release_checklist.md)
