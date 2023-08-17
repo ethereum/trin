@@ -2283,7 +2283,6 @@ where
         let closest_nodes = nodes_with_distance
             .into_iter()
             .take(FIND_CONTENT_MAX_NODES)
-            .filter(|node_record| node_record.0 < self_distance)
             .map(|node_record| SszEnr::new(node_record.1))
             .collect();
 
