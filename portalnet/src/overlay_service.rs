@@ -2269,8 +2269,6 @@ where
         content_key: impl OverlayContentKey,
     ) -> Result<Vec<SszEnr>, OverlayRequestError> {
         let content_id = content_key.content_id();
-        let self_node_id = self.local_enr().node_id();
-        let self_distance = TMetric::distance(&content_id, &self_node_id.raw());
 
         let mut nodes_with_distance: Vec<(Distance, Enr)> = self
             .table_entries_enr()
