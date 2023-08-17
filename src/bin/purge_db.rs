@@ -48,7 +48,8 @@ pub fn main() -> Result<()> {
     let iter = config.db.iterator(IteratorMode::Start);
     let mut item_count = 0;
     let mut remove_count = 0;
-    for (id, value) in iter {
+    for element in iter {
+        let (id, value) = element?;
         item_count += 1;
         let mut content_id = [0u8; 32];
         content_id.copy_from_slice(&id);
