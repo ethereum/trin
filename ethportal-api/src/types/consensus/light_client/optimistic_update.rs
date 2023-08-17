@@ -4,6 +4,7 @@ use crate::types::consensus::light_client::header::{
     LightClientHeaderBellatrix, LightClientHeaderCapella,
 };
 use serde::{Deserialize, Serialize};
+use serde_this_or_that::as_u64;
 use ssz::Decode;
 use ssz_derive::{Decode, Encode};
 use superstruct::superstruct;
@@ -28,6 +29,7 @@ pub struct LightClientOptimisticUpdate {
     /// current sync aggregate
     pub sync_aggregate: SyncAggregate,
     /// Slot of the sync aggregated signature
+    #[serde(deserialize_with = "as_u64")]
     pub signature_slot: u64,
 }
 

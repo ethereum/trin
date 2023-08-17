@@ -10,6 +10,7 @@ use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::{Header, Receipts};
 use serde_json::{json, Value};
 
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PandaOpsMiddleware {
     pub base_el_endpoint: String,
     pub base_cl_endpoint: String,

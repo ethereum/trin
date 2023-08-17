@@ -6,6 +6,7 @@ use crate::types::consensus::light_client::header::{
 use crate::types::consensus::sync_committee::SyncCommittee;
 use ethereum_types::H256;
 use serde::{Deserialize, Serialize};
+use serde_this_or_that::as_u64;
 use ssz::Decode;
 use ssz_derive::{Decode, Encode};
 use ssz_types::typenum::{U5, U6};
@@ -44,6 +45,7 @@ pub struct LightClientUpdate {
     /// current sync aggregate
     pub sync_aggregate: SyncAggregate,
     /// Slot of the sync aggregated signature
+    #[serde(deserialize_with = "as_u64")]
     pub signature_slot: u64,
 }
 

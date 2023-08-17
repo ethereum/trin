@@ -1,5 +1,7 @@
 use crate::pandaops::PandaOpsMiddleware;
 
+/// Implements endpoints from the Beacon API to access data from the consensus layer.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ConsensusApi {
     middleware: PandaOpsMiddleware,
 }

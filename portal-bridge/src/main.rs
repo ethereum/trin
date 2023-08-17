@@ -66,9 +66,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Launch History Network portal bridge
     if bridge_config.network.contains(&NetworkKind::History) {
         let bridge_handle = tokio::spawn(async move {
-            let master_acc =
-                MasterAccumulator::try_from_file("validation_assets/merge_macc.bin".into())
-                    .expect("Failed to load master accumulator");
+            let master_acc = MasterAccumulator::default();
             let header_oracle = HeaderOracle::new(master_acc);
 
             let bridge = Bridge::new(
