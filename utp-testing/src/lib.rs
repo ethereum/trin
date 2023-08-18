@@ -1,5 +1,3 @@
-#![warn(clippy::unwrap_used)]
-
 extern crate core;
 
 pub mod cli;
@@ -52,13 +50,13 @@ impl RpcServer for TestApp {
         cid_send: u16,
         cid_recv: u16,
     ) -> RpcResult<String> {
-        let src_enr = Enr::from_str(&src_enr).expect("conversion failed");
+        let src_enr = Enr::from_str(&src_enr).unwrap();
         let cid = utp_rs::cid::ConnectionId {
             send: cid_send,
             recv: cid_recv,
             peer: UtpEnr(src_enr.clone()),
         };
-        self.discovery.add_enr(src_enr).expect("operation failed");
+        self.discovery.add_enr(src_enr).unwrap();
 
         let utp = Arc::clone(&self.utp_socket);
         let payload_store = Arc::clone(&self.utp_payload);
@@ -70,12 +68,9 @@ impl RpcServer for TestApp {
                 initial_timeout: Duration::from_millis(1250),
                 ..Default::default()
             };
-            let mut conn = utp
-                .accept_with_cid(cid, utp_config)
-                .await
-                .expect("operation failed");
+            let mut conn = utp.accept_with_cid(cid, utp_config).await.unwrap();
             let mut data = vec![];
-            let n = conn.read_to_eof(&mut data).await.expect("operation failed");
+            let n = conn.read_to_eof(&mut data).await.unwrap();
 
             tracing::info!("read {n} bytes from uTP stream");
 
@@ -94,13 +89,13 @@ impl RpcServer for TestApp {
         cid_recv: u16,
         payload: Vec<u8>,
     ) -> RpcResult<String> {
-        let dst_enr = Enr::from_str(&dst_enr).expect("conversion failed");
+        let dst_enr = Enr::from_str(&dst_enr).unwrap();
         let cid = utp_rs::cid::ConnectionId {
             send: cid_send,
             recv: cid_recv,
             peer: UtpEnr(dst_enr.clone()),
         };
-        self.discovery.add_enr(dst_enr).expect("operation failed");
+        self.discovery.add_enr(dst_enr).unwrap();
 
         let utp = Arc::clone(&self.utp_socket);
         let utp_config = ConnectionConfig {
@@ -111,12 +106,9 @@ impl RpcServer for TestApp {
             ..Default::default()
         };
         tokio::spawn(async move {
-            let mut conn = utp
-                .connect_with_cid(cid, utp_config)
-                .await
-                .expect("operation failed");
+            let mut conn = utp.connect_with_cid(cid, utp_config).await.unwrap();
 
-            conn.write(&payload).await.expect("operation failed");
+            conn.write(&payload).await.unwrap();
 
             conn.close().await.unwrap();
         });
@@ -132,11 +124,11 @@ impl TestApp {
         // Forward discv5 uTP packets to uTP socket
         tokio::spawn(async move {
             while let Some(request) = talk_req_rx.recv().await {
-                let protocol_id = ProtocolId::from_str(&hex_encode_upper(request.protocol()))
-                    .expect("conversion failed");
+                let protocol_id =
+                    ProtocolId::from_str(&hex_encode_upper(request.protocol())).unwrap();
 
                 if let ProtocolId::Utp = protocol_id {
-                    utp_talk_reqs_tx.send(request).expect("operation failed");
+                    utp_talk_reqs_tx.send(request).unwrap();
                 };
             }
         });
@@ -156,8 +148,8 @@ pub async fn run_test_app(
         ..Default::default()
     };
 
-    let mut discovery = Discovery::new(config).expect("operation failed");
-    let talk_req_rx = discovery.start().await.expect("operation failed");
+    let mut discovery = Discovery::new(config).unwrap();
+    let talk_req_rx = discovery.start().await.unwrap();
     let enr = discovery.local_enr();
     let discovery = Arc::new(discovery);
 

@@ -14,9 +14,7 @@ pub async fn wait_for_content<P: HistoryNetworkApiClient + std::marker::Sync>(
     // If content is absent an error will be returned.
     while counter < 5 {
         let message = match received_content_value {
-            x @ Ok(PossibleHistoryContentValue::ContentPresent(_)) => {
-                return x.expect("operation failed")
-            }
+            x @ Ok(PossibleHistoryContentValue::ContentPresent(_)) => return x.unwrap(),
             Ok(PossibleHistoryContentValue::ContentAbsent) => {
                 "absent content response received".to_string()
             }
@@ -28,5 +26,5 @@ pub async fn wait_for_content<P: HistoryNetworkApiClient + std::marker::Sync>(
         counter += 1;
     }
 
-    received_content_value.expect("operatin failed")
+    received_content_value.unwrap()
 }

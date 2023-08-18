@@ -1,5 +1,3 @@
-#![warn(clippy::unwrap_used)]
-
 pub mod constants;
 pub mod scenarios;
 pub mod utils;

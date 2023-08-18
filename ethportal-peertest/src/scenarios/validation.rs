@@ -24,7 +24,7 @@ pub async fn test_validate_pre_merge_header_with_proof(peertest: &Peertest, targ
         .ipc_client
         .store(content_key.clone(), content_value.clone())
         .await
-        .expect("operation failed");
+        .unwrap();
 
     assert!(store_result);
 
@@ -35,7 +35,7 @@ pub async fn test_validate_pre_merge_header_with_proof(peertest: &Peertest, targ
             content_key.clone(),
         )
         .await
-        .expect("operation failed");
+        .unwrap();
 
     match result {
         ContentInfo::Content {
@@ -51,7 +51,6 @@ pub async fn test_validate_pre_merge_header_with_proof(peertest: &Peertest, targ
         _ => panic!("Content values should match"),
     }
 }
-
 
 pub async fn test_invalidate_header_by_hash(peertest: &Peertest, target: &Client) {
     info!("Test invalidating a pre-merge header-with-proof by header hash");
@@ -99,7 +98,7 @@ pub async fn test_validate_pre_merge_block_body(peertest: &Peertest, target: &Cl
         .ipc_client
         .store(content_key.clone(), content_value.clone())
         .await
-        .expect("operation failed");
+        .unwrap();
 
     assert!(store_result);
 
@@ -110,7 +109,7 @@ pub async fn test_validate_pre_merge_block_body(peertest: &Peertest, target: &Cl
             content_key.clone(),
         )
         .await
-        .expect("operation failed");
+        .unwrap();
 
     match result {
         ContentInfo::Content {
@@ -142,7 +141,7 @@ pub async fn test_validate_pre_merge_receipts(peertest: &Peertest, target: &Clie
         .ipc_client
         .store(content_key.clone(), content_value.clone())
         .await
-        .expect("operation failed");
+        .unwrap();
 
     assert!(store_result);
 
@@ -153,7 +152,7 @@ pub async fn test_validate_pre_merge_receipts(peertest: &Peertest, target: &Clie
             content_key.clone(),
         )
         .await
-        .expect("operation failed");
+        .unwrap();
 
     match result {
         ContentInfo::Content {

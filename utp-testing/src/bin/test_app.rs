@@ -15,7 +15,7 @@ async fn main() {
     let config = TestAppConfig::from_args();
 
     let udp_listen_address = format!("{}:{}", config.udp_listen_address, config.udp_port);
-    let udp_listen_address = SocketAddr::from_str(&udp_listen_address).expect("conversion failed");
+    let udp_listen_address = SocketAddr::from_str(&udp_listen_address).unwrap();
     let (rpc_addr, enr, _handle) = run_test_app(
         config.udp_port,
         udp_listen_address,
@@ -23,7 +23,7 @@ async fn main() {
         config.rpc_port,
     )
     .await
-    .expect("operation failed");
+    .unwrap();
 
     info!("uTP test app started. RPC address: {rpc_addr}, Enr: {enr}");
 

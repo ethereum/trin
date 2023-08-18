@@ -44,7 +44,7 @@ async fn send_10k_bytes() -> anyhow::Result<()> {
 
     // Add client enr to allowed server uTP connections
     let params = rpc_params!(client_enr, server_cid_send, server_cid_recv);
-    let response: String = server_rpc.request("prepare_to_recv", params).await?;
+    let response: String = server_rpc.request("prepare_to_recv", params).await.unwrap();
     assert_eq!(response, "true");
 
     // Send uTP payload from client to server
@@ -56,7 +56,10 @@ async fn send_10k_bytes() -> anyhow::Result<()> {
         client_cid_recv,
         payload.clone()
     );
-    let response: String = client_rpc.request("send_utp_payload", params).await?;
+    let response: String = client_rpc
+        .request("send_utp_payload", params)
+        .await
+        .unwrap();
 
     assert_eq!(response, "true");
 

@@ -9,6 +9,7 @@ use tracing::info;
 
 pub async fn test_find_content_return_enr(target: &Client, peertest: &Peertest) {
     info!("Testing find content returns enrs properly");
+
     let (content_key, _) = fixture_header_with_proof();
 
     // check if we can fetch data from routing table
@@ -51,7 +52,7 @@ pub async fn test_recursive_find_nodes_self(peertest: &Peertest) {
         .ipc_client
         .recursive_find_nodes(target_node_id)
         .await
-        .expect("operation failed");
+        .unwrap();
     assert_eq!(result, vec![target_enr]);
 }
 
@@ -64,7 +65,7 @@ pub async fn test_recursive_find_nodes_peer(peertest: &Peertest) {
         .ipc_client
         .recursive_find_nodes(target_node_id)
         .await
-        .expect("operation failed");
+        .unwrap();
     assert_eq!(result, vec![target_enr]);
 }
 
@@ -72,8 +73,7 @@ pub async fn test_recursive_find_nodes_random(peertest: &Peertest) {
     info!("Testing recursive find nodes random");
     let mut bytes = [0u8; 32];
     let random_node_id =
-        hex_decode("0xcac75e7e776d84fba55a3104bdccfd716537bca3ad8465113f67f04d62694183")
-            .expect("conversion failed");
+        hex_decode("0xcac75e7e776d84fba55a3104bdccfd716537bca3ad8465113f67f04d62694183").unwrap();
     bytes.copy_from_slice(&random_node_id);
     let target_node_id = NodeId::from(bytes);
     let result = peertest
@@ -81,7 +81,7 @@ pub async fn test_recursive_find_nodes_random(peertest: &Peertest) {
         .ipc_client
         .recursive_find_nodes(target_node_id)
         .await
-        .expect("operation failed");
+        .unwrap();
     assert_eq!(result.len(), 3);
 }
 
@@ -93,7 +93,7 @@ pub async fn test_trace_recursive_find_content(peertest: &Peertest) {
         .ipc_client
         .store(content_key.clone(), content_value.clone())
         .await
-        .expect("operation failed");
+        .unwrap();
 
     assert!(store_result);
 
@@ -101,7 +101,7 @@ pub async fn test_trace_recursive_find_content(peertest: &Peertest) {
         .ipc_client
         .trace_recursive_find_content(content_key)
         .await
-        .expect("operation failed");
+        .unwrap();
 
     assert!(!trace_content_info.utp_transfer);
     let content = trace_content_info.content;
@@ -120,7 +120,7 @@ pub async fn test_trace_recursive_find_content(peertest: &Peertest) {
     assert_eq!(origin, ethportal_api::NodeId::from(query_origin_node));
 
     // Test that `received_content_from_node` is set correctly
-    let received_content_from_node = trace.received_content_from_node.expect("content not found");
+    let received_content_from_node = trace.received_content_from_node.unwrap();
     assert_eq!(
         ethportal_api::NodeId::from(node_with_content),
         received_content_from_node
@@ -129,7 +129,7 @@ pub async fn test_trace_recursive_find_content(peertest: &Peertest) {
     let responses = trace.responses;
 
     // Test that origin response has `responses` containing `received_content_from_node` node
-    let origin_response = responses.get(&origin).expect("origin response not found");
+    let origin_response = responses.get(&origin).unwrap();
     assert!(origin_response
         .responded_with
         .contains(&received_content_from_node));
@@ -143,7 +143,7 @@ pub async fn test_trace_recursive_find_content_for_absent_content(peertest: &Pee
     let result = client
         .trace_recursive_find_content(content_key)
         .await
-        .expect("operation failed");
+        .unwrap();
 
     assert!(!result.utp_transfer);
     assert_eq!(result.content, PossibleHistoryContentValue::ContentAbsent);
@@ -159,7 +159,7 @@ pub async fn test_trace_recursive_find_content_local_db(peertest: &Peertest) {
         .ipc_client
         .store(content_key.clone(), content_value.clone())
         .await
-        .expect("operation failed");
+        .unwrap();
 
     assert!(store_result);
 
@@ -168,7 +168,7 @@ pub async fn test_trace_recursive_find_content_local_db(peertest: &Peertest) {
         .ipc_client
         .trace_recursive_find_content(content_key)
         .await
-        .expect("operation failed");
+        .unwrap();
     assert!(!trace_content_info.utp_transfer);
     assert_eq!(
         trace_content_info.content,
@@ -177,10 +177,7 @@ pub async fn test_trace_recursive_find_content_local_db(peertest: &Peertest) {
 
     let origin = trace_content_info.trace.origin;
     assert_eq!(
-        trace_content_info
-            .trace
-            .received_content_from_node
-            .expect("content not found"),
+        trace_content_info.trace.received_content_from_node.unwrap(),
         origin
     );
 

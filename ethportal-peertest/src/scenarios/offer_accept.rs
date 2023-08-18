@@ -10,24 +10,25 @@ use ethportal_api::{
 
 pub async fn test_unpopulated_offer(peertest: &Peertest, target: &Client) {
     info!("Testing Unpopulated OFFER/ACCEPT flow");
+
     let (content_key, content_value) = fixture_header_with_proof();
     // Store content to offer in the testnode db
     let store_result = target
         .store(content_key.clone(), content_value.clone())
         .await
-        .expect("operation failed");
+        .unwrap();
 
     assert!(store_result);
 
     // Send unpopulated offer request from testnode to bootnode
     let result = target
         .offer(
-            Enr::from_str(&peertest.bootnode.enr.to_base64()).expect("conversion failed"),
+            Enr::from_str(&peertest.bootnode.enr.to_base64()).unwrap(),
             content_key.clone(),
             None,
         )
         .await
-        .expect("operation failed");
+        .unwrap();
 
     // Check that ACCEPT response sent by bootnode accepted the offered content
     assert_eq!(hex_encode(result.content_keys.into_bytes()), "0x03");
@@ -46,15 +47,16 @@ pub async fn test_unpopulated_offer(peertest: &Peertest, target: &Client) {
 
 pub async fn test_populated_offer(peertest: &Peertest, target: &Client) {
     info!("Testing Populated Offer/ACCEPT flow");
+
     let (content_key, content_value) = fixture_header_with_proof();
     let result = target
         .offer(
-            Enr::from_str(&peertest.bootnode.enr.to_base64()).expect("conversion failed"),
+            Enr::from_str(&peertest.bootnode.enr.to_base64()).unwrap(),
             content_key.clone(),
             Some(content_value.clone()),
         )
         .await
-        .expect("operation failed");
+        .unwrap();
 
     // Check that ACCEPT response sent by bootnode accepted the offered content
     assert_eq!(hex_encode(result.content_keys.into_bytes()), "0x03");
