@@ -10,6 +10,7 @@ pub const BATCH_SIZE: u64 = 128;
 /// Execution layer PandaOps endpoint
 pub const BASE_EL_ENDPOINT: &str = "https://archive.mainnet.eu1.ethpandaops.io";
 /// Consensus layer PandaOps endpoint
+/// We use Nimbus as the CL client, because it supports light client data by default.
 pub const BASE_CL_ENDPOINT: &str = "https://nimbus.mainnet.ethpandaops.io";
 
 /// History * content key & value

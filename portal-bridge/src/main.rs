@@ -44,6 +44,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .collect();
 
+    let mut bridge_tasks = Vec::new();
+
     // Launch Beacon Network portal bridge
     if bridge_config.network.contains(&NetworkKind::Beacon) {
         let bridge_mode = bridge_config.mode.clone();
@@ -60,7 +62,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             beacon_bridge.launch().await;
         });
 
-        bridge_handle.await.expect("Failed to launch beacon bridge");
+        bridge_tasks.push(bridge_handle);
     }
 
     // Launch History Network portal bridge
@@ -79,10 +81,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             bridge.launch().await;
         });
 
-        bridge_handle
-            .await
-            .expect("Failed to launch history bridge");
+        bridge_tasks.push(bridge_handle);
     }
+
+    futures::future::join_all(bridge_tasks).await;
 
     Ok(())
 }
