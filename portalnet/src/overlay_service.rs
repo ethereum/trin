@@ -31,7 +31,7 @@ use tokio::{
     task::JoinHandle,
 };
 use tracing::{debug, error, info, trace, warn};
-use utp_rs::{conn::ConnectionConfig, socket::UtpSocket};
+use utp_rs::{conn::ConnectionConfig, socket::UtpSocket, stream::UtpStream};
 
 use crate::events::EventEnvelope;
 use crate::{
@@ -818,6 +818,9 @@ where
                             Some(enr) => enr,
                             _ => {
                                 warn!("Received uTP payload from unknown {peer}");
+                                if let Some(responder) = callback {
+                                    let _ = responder.send((None, true, query_info.trace));
+                                };
                                 return;
                             }
                         };
@@ -849,6 +852,9 @@ where
                                         peer = ?cid.peer.client(),
                                         "Unable to establish uTP conn based on Content response",
                                     );
+                                    if let Some(responder) = callback {
+                                        let _ = responder.send((None, true, query_info.trace));
+                                    };
                                     return;
                                 }
                             };
@@ -860,6 +866,9 @@ where
                                     UtpOutcomeLabel::FailedDataTx,
                                 );
                                 error!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), "error reading data from uTP stream, while handling a FindContent request.");
+                                if let Some(responder) = callback {
+                                    let _ = responder.send((None, true, query_info.trace));
+                                };
                                 return;
                             }
 
@@ -928,13 +937,24 @@ where
                     None,
                 );
 
-                if let Ok(..) = command_tx.send(OverlayCommand::Request(request)) {
-                    trace!(
-                        content.id = %hex_encode_compact(content_id),
-                        content.key = %content_key,
-                        peer.node_id = %node_id,
-                        "Content poked"
-                    );
+                match command_tx.send(OverlayCommand::Request(request)) {
+                    Ok(_) => {
+                        trace!(
+                            content.id = %hex_encode_compact(content_id),
+                            content.key = %content_key,
+                            peer.node_id = %node_id,
+                            "Content poked"
+                        );
+                    }
+                    Err(err) => {
+                        warn!(
+                            content.id = %hex_encode_compact(content_id),
+                            content.key = %content_key,
+                            peer.node_id = %node_id,
+                            %err,
+                            "Failed to poke content to peer"
+                        );
+                    }
                 }
             }
         }
@@ -1089,8 +1109,7 @@ where
                     let metrics = Arc::clone(&self.metrics);
                     tokio::spawn(async move {
                         metrics.report_utp_active_inc(UtpDirectionLabel::Outbound);
-                        let mut stream = match utp.accept_with_cid(cid.clone(), UTP_CONN_CFG).await
-                        {
+                        let stream = match utp.accept_with_cid(cid.clone(), UTP_CONN_CFG).await {
                             Ok(stream) => stream,
                             Err(err) => {
                                 metrics.report_utp_outcome(
@@ -1107,47 +1126,15 @@ where
                                 return;
                             }
                         };
-                        match stream.write(&content).await {
-                            Ok(write_size) => {
-                                if write_size != content.len() {
-                                    metrics.report_utp_outcome(
-                                        UtpDirectionLabel::Outbound,
-                                        UtpOutcomeLabel::FailedDataTx,
-                                    );
-                                    warn!(
-                                        %cid.send,
-                                        %cid.recv,
-                                        peer = ?cid.peer.client(),
-                                        content_id = %hex_encode(content_key.content_id()),
-                                        "failed to write all content to uTP stream"
-                                    );
-                                } else {
-                                    metrics.report_utp_outcome(
-                                        UtpDirectionLabel::Outbound,
-                                        UtpOutcomeLabel::Success,
-                                    );
-                                    debug!(
-                                        %cid.send,
-                                        %cid.recv,
-                                        peer = ?cid.peer.client(),
-                                        content_id = %hex_encode(content_key.content_id()),
-                                        "wrote content to uTP stream"
-                                    );
-                                }
-                            }
-                            Err(err) => {
-                                metrics.report_utp_outcome(
-                                    UtpDirectionLabel::Outbound,
-                                    UtpOutcomeLabel::FailedDataTx,
-                                );
-                                error!(
-                                    %cid.send,
-                                    %cid.recv,
-                                    peer = ?cid.peer.client(),
-                                    %err,
-                                    "error writing content to uTP stream"
-                                );
-                            }
+                        if let Err(err) = Self::send_utp_content(stream, &content, metrics).await {
+                            warn!(
+                                %err,
+                                %cid.send,
+                                %cid.recv,
+                                peer = ?cid.peer.client(),
+                                content_id = %hex_encode(content_key.content_id()),
+                                "Error sending content over uTP, in response to FindContent"
+                            );
                         }
                     });
 
@@ -1513,7 +1500,7 @@ where
 
         tokio::spawn(async move {
             metrics.report_utp_active_inc(UtpDirectionLabel::Outbound);
-            let mut stream = match utp.connect_with_cid(cid.clone(), UTP_CONN_CFG).await {
+            let stream = match utp.connect_with_cid(cid.clone(), UTP_CONN_CFG).await {
                 Ok(stream) => stream,
                 Err(err) => {
                     metrics.report_utp_outcome(
@@ -1571,41 +1558,15 @@ where
                 }
             };
 
-            // flag to track if we record the utp tx as failed, so we don't double count
-            let mut utp_tx_recorded = false;
             // send the content to the acceptor over a uTP stream
-            if let Err(err) = stream.write(&content_payload).await {
-                metrics
-                    .report_utp_outcome(UtpDirectionLabel::Outbound, UtpOutcomeLabel::FailedDataTx);
-                utp_tx_recorded = true;
+            if let Err(err) = Self::send_utp_content(stream, &content_payload, metrics).await {
                 warn!(
                     %err,
-                    cid.send,
-                    cid.recv,
+                    %cid.send,
+                    %cid.recv,
                     peer = ?cid.peer.client(),
-                    "Error sending content over uTP connection"
+                    "Error sending content over uTP, in response to ACCEPT"
                 );
-            }
-
-            // close uTP connection
-            if let Err(err) = stream.shutdown() {
-                if !utp_tx_recorded {
-                    metrics.report_utp_outcome(
-                        UtpDirectionLabel::Outbound,
-                        UtpOutcomeLabel::FailedShutdown,
-                    );
-                }
-                warn!(
-                    %err,
-                    cid.send,
-                    cid.recv,
-                    peer = ?cid.peer.client(),
-                    "Error closing uTP connection"
-                );
-                return;
-            };
-            if !utp_tx_recorded {
-                metrics.report_utp_outcome(UtpDirectionLabel::Outbound, UtpOutcomeLabel::Success);
             }
         });
 
@@ -1702,6 +1663,41 @@ where
         debug!(ids = ?validated_ids, "propagating validated content");
         propagate_gossip_cross_thread(validated_content, kbuckets, command_tx.clone());
 
+        Ok(())
+    }
+
+    async fn send_utp_content(
+        mut stream: UtpStream<crate::discovery::UtpEnr>,
+        content: &[u8],
+        metrics: Arc<OverlayMetrics>,
+    ) -> anyhow::Result<()> {
+        match stream.write(content).await {
+            Ok(write_size) => {
+                if write_size != content.len() {
+                    metrics.report_utp_outcome(
+                        UtpDirectionLabel::Outbound,
+                        UtpOutcomeLabel::FailedDataTx,
+                    );
+                    return Err(anyhow!(
+                        "uTP write exited before sending all content: {write_size} bytes written, {} bytes expected",
+                        content.len()
+                    ));
+                }
+            }
+            Err(err) => {
+                metrics
+                    .report_utp_outcome(UtpDirectionLabel::Outbound, UtpOutcomeLabel::FailedDataTx);
+                return Err(anyhow!("Error writing content to uTP stream: {err}"));
+            }
+        }
+
+        // close uTP connection
+        if let Err(err) = stream.close().await {
+            metrics
+                .report_utp_outcome(UtpDirectionLabel::Outbound, UtpOutcomeLabel::FailedShutdown);
+            return Err(anyhow!("Error closing uTP connection: {err}"));
+        };
+        metrics.report_utp_outcome(UtpDirectionLabel::Outbound, UtpOutcomeLabel::Success);
         Ok(())
     }
 
@@ -2402,7 +2398,33 @@ where
             peer_timeout: self.query_peer_timeout,
         };
 
-        let closest_enrs = self.closest_connected_nodes(&target_key, query_config.num_results);
+        let mut closest_enrs = self.closest_connected_nodes(&target_key, query_config.num_results);
+        if closest_enrs.is_empty() {
+            // If there are no connected nodes, use the closest nodes regardless of connectivity.
+            warn!("No connected nodes, using disconnected nodes for query.");
+            closest_enrs = self
+                .kbuckets
+                .write()
+                .closest_values(&target_key)
+                .map(|closest| closest.value.enr)
+                .take(query_config.num_results)
+                .collect();
+        }
+
+        if closest_enrs.is_empty() {
+            // If there are no nodes whatsoever in the routing table the query cannot proceed.
+            warn!("No nodes in routing table, query cannot proceed.");
+            if let Some(callback) = callback {
+                let _ = callback.send((None, false, None));
+            }
+            return None;
+        }
+
+        // Convert ENRs into k-bucket keys.
+        let closest_nodes: Vec<Key<NodeId>> = closest_enrs
+            .iter()
+            .map(|enr| Key::from(enr.node_id()))
+            .collect();
 
         let trace: Option<QueryTrace> = {
             if is_trace {
@@ -2421,26 +2443,12 @@ where
             trace,
         };
 
-        // Convert ENRs into k-bucket keys.
-        let closest_enrs: Vec<Key<NodeId>> = query_info
-            .untrusted_enrs
-            .iter()
-            .map(|enr| Key::from(enr.node_id()))
-            .collect();
-
-        // If the initial set of peers is non-empty, then add the query to the query pool.
-        // Otherwise, there is no way for the query to progress, so drop it.
-        if closest_enrs.is_empty() {
-            warn!("Cannot initialize FindContent query (no known close peers)");
-            None
-        } else {
-            let query = FindContentQuery::with_config(query_config, target_key, closest_enrs);
-            Some(
-                self.find_content_query_pool
-                    .write()
-                    .add_query(query_info, query),
-            )
-        }
+        let query = FindContentQuery::with_config(query_config, target_key, closest_nodes);
+        Some(
+            self.find_content_query_pool
+                .write()
+                .add_query(query_info, query),
+        )
     }
 
     /// Returns an ENR if one is known for the given NodeId.
@@ -3657,6 +3665,19 @@ mod tests {
         // Query info should contain bootnode ENR. It is the only node in the routing table, so
         // it is among the "closest".
         assert!(query_info.untrusted_enrs.contains(&bootnode_enr));
+    }
+
+    #[tokio::test]
+    async fn test_find_content_no_nodes() {
+        let mut service = task::spawn(build_service());
+
+        let target_content = NodeId::random();
+        let target_content_key = IdentityContentKey::new(target_content.raw());
+        let (tx, rx) = oneshot::channel();
+        let query_id = service.init_find_content_query(target_content_key.clone(), Some(tx), false);
+
+        assert!(query_id.is_none());
+        assert_eq!(rx.await.unwrap(), (None, false, None));
     }
 
     #[tokio::test]

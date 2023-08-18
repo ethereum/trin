@@ -433,6 +433,11 @@ where
         let direction = RequestDirection::Outgoing {
             destination: enr.clone(),
         };
+        let content_key = TContentKey::try_from(content_key).map_err(|err| {
+            OverlayRequestError::FailedValidation(format!(
+                "Error decoding content key for received utp content: {err}"
+            ))
+        })?;
 
         // Send the request and wait on the response.
         match self
@@ -441,17 +446,24 @@ where
         {
             Ok(Response::Content(found_content)) => {
                 match found_content {
-                    Content::Content(_) => Ok((found_content, false)),
+                    Content::Content(content) => {
+                        match self
+                            .validator
+                            .validate_content(&content_key, &content)
+                            .await
+                        {
+                            Ok(_) => Ok((Content::Content(content), false)),
+                            Err(msg) => Err(OverlayRequestError::FailedValidation(format!(
+                                "Network: {:?}, Reason: {msg:?}",
+                                self.protocol
+                            ))),
+                        }
+                    }
                     Content::Enrs(_) => Ok((found_content, false)),
-                    // Init uTP stream if `connection_id`is received
+                    // Init uTP stream if `connection_id` is received
                     Content::ConnectionId(conn_id) => {
                         let conn_id = u16::from_be(conn_id);
                         let content = self.init_find_content_stream(enr, conn_id).await?;
-                        let content_key = TContentKey::try_from(content_key).map_err(|err| {
-                            OverlayRequestError::FailedValidation(format!(
-                                "Error decoding content key for received utp content: {err}"
-                            ))
-                        })?;
                         match self
                             .validator
                             .validate_content(&content_key, &content)

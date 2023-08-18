@@ -1,6 +1,5 @@
 use crate::errors::{RpcError, WsHttpSamePortError};
-use crate::jsonrpsee::core::server::rpc_module::Methods;
-use crate::jsonrpsee::RpcModule;
+use crate::jsonrpsee::{Methods, RpcModule};
 use crate::rpc_server::{RpcServerConfig, RpcServerHandle};
 use crate::{BeaconNetworkApi, Discv5Api, HistoryNetworkApi, Web3Api};
 use ethportal_api::types::jsonrpc::request::{
@@ -414,7 +413,7 @@ impl RpcModuleBuilder {
                                 .expect("Beacon protocol not initialized");
                             BeaconNetworkApi::new(beacon_tx).into_rpc().into()
                         }
-                        PortalRpcModule::Web3 => Web3Api::default().into_rpc().into(),
+                        PortalRpcModule::Web3 => Web3Api.into_rpc().into(),
                     })
                     .clone()
             })

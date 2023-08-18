@@ -13,7 +13,7 @@ use ethportal_api::types::execution::{
     header::{Header, HeaderWithProof},
     receipts::Receipts,
 };
-use ethportal_api::HistoryContentKey;
+use ethportal_api::{utils::bytes::hex_encode, HistoryContentKey};
 use trin_validation::{oracle::HeaderOracle, validator::Validator};
 
 pub struct ChainHistoryValidator {
@@ -31,13 +31,20 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
         HistoryContentKey: 'async_trait,
     {
         match content_key {
-            HistoryContentKey::BlockHeaderWithProof(_key) => {
+            HistoryContentKey::BlockHeaderWithProof(key) => {
                 let header_with_proof =
                     HeaderWithProof::from_ssz_bytes(content).map_err(|err| {
                         anyhow!("Header with proof content has invalid encoding: {err:?}")
                     })?;
+                let header_hash = header_with_proof.header.hash();
+                if header_hash != H256::from(key.block_hash) {
+                    return Err(anyhow!(
+                        "Content validation failed: Invalid header hash. Found: {header_hash:?} - Expected: {:?}",
+                        hex_encode(key.block_hash)
+                    ));
+                }
                 self.header_oracle
-                    .write()
+                    .read()
                     .await
                     .master_acc
                     .validate_header_with_proof(&header_with_proof)
@@ -47,7 +54,7 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                     .map_err(|msg| anyhow!("Block Body content has invalid encoding: {:?}", msg))?;
                 let trusted_header: Header = self
                     .header_oracle
-                    .write()
+                    .read()
                     .await
                     .recursive_find_header_with_proof(H256::from(key.block_hash))
                     .await?
@@ -76,7 +83,7 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                 })?;
                 let trusted_header: Header = self
                     .header_oracle
-                    .write()
+                    .read()
                     .await
                     .recursive_find_header_with_proof(H256::from(key.block_hash))
                     .await?

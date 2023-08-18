@@ -1,10 +1,7 @@
-use ethportal_api::HistoryContentValue;
 use ethportal_api::HistoryNetworkApiClient;
 use ethportal_api::{BlockHeaderKey, HistoryContentKey};
-use serde_json::json;
 
-use crate::constants::HISTORY_CONTENT_VALUE;
-use crate::Peertest;
+use crate::{constants::fixture_header_with_proof, Peertest};
 
 pub async fn test_paginate_local_storage(peertest: &Peertest) {
     let ipc_client = &peertest.bootnode.ipc_client;
@@ -24,15 +21,13 @@ pub async fn test_paginate_local_storage(peertest: &Peertest) {
             .expect("conversion failed")
         })
         .collect();
-
+    let (_, content_value) = fixture_header_with_proof();
     for content_key in content_keys.clone().into_iter() {
         // Store content to offer in the testnode db
-        let dummy_content_value: HistoryContentValue =
-            serde_json::from_value(json!(HISTORY_CONTENT_VALUE)).expect("conversion failed");
         let store_result = ipc_client
             .store(
-                serde_json::from_str(&content_key).expect("conversion failed"),
-                dummy_content_value,
+                serde_json::from_str(&content_key).unwrap(),
+                content_value.clone(),
             )
             .await
             .expect("operation failed");

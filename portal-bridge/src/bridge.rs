@@ -1,7 +1,7 @@
 use crate::full_header::FullHeader;
 use crate::mode::{BridgeMode, ModeType};
 use crate::pandaops::PandaOpsMiddleware;
-use crate::utils::TestAssets;
+use crate::utils::{read_test_assets_from_file, TestAssets};
 use anyhow::{anyhow, bail};
 use ethportal_api::jsonrpsee::http_client::HttpClient;
 use ethportal_api::types::execution::accumulator::EpochAccumulator;
@@ -79,9 +79,8 @@ impl Bridge {
     }
 
     async fn launch_test(&self, test_path: PathBuf) {
-        let test_asset = fs::read_to_string(test_path).expect("Error reading test asset.");
-        let assets: TestAssets =
-            serde_json::from_str(&test_asset).expect("Unable to parse test asset.");
+        let assets: TestAssets = read_test_assets_from_file(test_path);
+
         for asset in assets.0.into_iter() {
             Bridge::gossip_content(&self.portal_clients, asset.content_key, asset.content_value)
                 .await

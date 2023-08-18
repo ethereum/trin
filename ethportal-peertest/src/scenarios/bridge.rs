@@ -1,12 +1,10 @@
-use crate::constants::{HISTORY_CONTENT_KEY, HISTORY_CONTENT_VALUE};
+use crate::constants::fixture_header_with_proof_1000010;
 use crate::utils::wait_for_content;
 use crate::Peertest;
 use ethportal_api::jsonrpsee::http_client::HttpClient;
 use ethportal_api::PossibleHistoryContentValue;
-use ethportal_api::{HistoryContentKey, HistoryContentValue};
 use portal_bridge::bridge::Bridge;
 use portal_bridge::mode::BridgeMode;
-use serde_json::json;
 use tokio::time::{sleep, Duration};
 use trin_validation::accumulator::MasterAccumulator;
 use trin_validation::oracle::HeaderOracle;
@@ -21,12 +19,7 @@ pub async fn test_bridge(peertest: &Peertest, target: &HttpClient) {
     sleep(Duration::from_secs(1)).await;
     let bridge = Bridge::new(mode, portal_clients, header_oracle, epoch_acc_path);
     bridge.launch().await;
-
-    let content_key: HistoryContentKey =
-        serde_json::from_value(json!(HISTORY_CONTENT_KEY)).expect("conversion failed");
-    let content_value: HistoryContentValue =
-        serde_json::from_value(json!(HISTORY_CONTENT_VALUE)).expect("conversion failed");
-
+    let (content_key, content_value) = fixture_header_with_proof_1000010();
     // Check if the stored content value in bootnode's DB matches the offered
     let response = wait_for_content(&peertest.bootnode.ipc_client, content_key).await;
     let received_content_value = match response {

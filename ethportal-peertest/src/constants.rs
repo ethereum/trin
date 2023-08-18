@@ -1,3 +1,46 @@
+use ethportal_api::{HistoryContentKey, HistoryContentValue};
+use serde_json::json;
+
+/// History HeaderWithProof content key & value
+/// Block #1000010
+pub fn fixture_header_with_proof_1000010() -> (HistoryContentKey, HistoryContentValue) {
+    let content_key: HistoryContentKey =
+        serde_json::from_value(json!(HISTORY_CONTENT_KEY)).unwrap();
+    let content_value: HistoryContentValue =
+        serde_json::from_value(json!(HISTORY_CONTENT_VALUE)).unwrap();
+    (content_key, content_value)
+}
+
+/// History HeaderWithProof content key & value
+/// Block #14764013 (pre-merge)
+pub fn fixture_header_with_proof() -> (HistoryContentKey, HistoryContentValue) {
+    let content_key: HistoryContentKey =
+        serde_json::from_value(json!(HEADER_WITH_PROOF_CONTENT_KEY)).unwrap();
+    let content_value: HistoryContentValue =
+        serde_json::from_value(json!(HEADER_WITH_PROOF_CONTENT_VALUE)).unwrap();
+    (content_key, content_value)
+}
+
+/// History BlockBody content key & value
+/// Block #14764013 (pre-merge)
+pub fn fixture_block_body() -> (HistoryContentKey, HistoryContentValue) {
+    let content_key: HistoryContentKey =
+        serde_json::from_value(json!(BLOCK_BODY_CONTENT_KEY)).unwrap();
+    let content_value: HistoryContentValue =
+        serde_json::from_value(json!(BLOCK_BODY_CONTENT_VALUE)).unwrap();
+    (content_key, content_value)
+}
+
+/// History Receipts content key & value
+/// Block #14764013 (pre-merge)
+pub fn fixture_receipts() -> (HistoryContentKey, HistoryContentValue) {
+    let content_key: HistoryContentKey =
+        serde_json::from_value(json!(RECEIPTS_CONTENT_KEY)).unwrap();
+    let content_value: HistoryContentValue =
+        serde_json::from_value(json!(RECEIPTS_CONTENT_VALUE)).unwrap();
+    (content_key, content_value)
+}
+
 /// History HeaderWithProof content key & value
 /// Block #1000010
 pub const HISTORY_CONTENT_KEY: &str =

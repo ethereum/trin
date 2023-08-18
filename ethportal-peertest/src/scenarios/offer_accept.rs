@@ -1,29 +1,16 @@
 use std::str::FromStr;
 
-use serde_json::json;
 use tracing::info;
 
-use ethportal_api::types::enr::Enr;
-use ethportal_api::utils::bytes::hex_encode;
+use crate::{constants::fixture_header_with_proof, utils::wait_for_content, Peertest};
 use ethportal_api::{
-    jsonrpsee::async_client::Client, HistoryContentKey, HistoryContentValue,
+    jsonrpsee::async_client::Client, types::enr::Enr, utils::bytes::hex_encode,
     HistoryNetworkApiClient, PossibleHistoryContentValue,
-};
-
-use crate::{
-    constants::{HISTORY_CONTENT_KEY, HISTORY_CONTENT_VALUE},
-    utils::wait_for_content,
-    Peertest,
 };
 
 pub async fn test_unpopulated_offer(peertest: &Peertest, target: &Client) {
     info!("Testing Unpopulated OFFER/ACCEPT flow");
-
-    let content_key: HistoryContentKey =
-        serde_json::from_value(json!(HISTORY_CONTENT_KEY)).expect("conversion failed");
-    let content_value: HistoryContentValue =
-        serde_json::from_value(json!(HISTORY_CONTENT_VALUE)).expect("conversion failed");
-
+    let (content_key, content_value) = fixture_header_with_proof();
     // Store content to offer in the testnode db
     let store_result = target
         .store(content_key.clone(), content_value.clone())
@@ -59,15 +46,7 @@ pub async fn test_unpopulated_offer(peertest: &Peertest, target: &Client) {
 
 pub async fn test_populated_offer(peertest: &Peertest, target: &Client) {
     info!("Testing Populated Offer/ACCEPT flow");
-
-    // Offer unique content key to bootnode
-    let content_key: HistoryContentKey = serde_json::from_value(json!(
-        "0x00cb5cab7266694daa0d28cbf40496c08dd30bf732c41e0455e7ad389c10d79f4f"
-    ))
-    .expect("conversion failed");
-    let content_value: HistoryContentValue =
-        serde_json::from_value(json!(HISTORY_CONTENT_VALUE)).expect("conversion failed");
-
+    let (content_key, content_value) = fixture_header_with_proof();
     let result = target
         .offer(
             Enr::from_str(&peertest.bootnode.enr.to_base64()).expect("conversion failed"),

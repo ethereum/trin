@@ -1,7 +1,6 @@
 use tracing::error;
 
-use ethportal_api::PossibleHistoryContentValue;
-use ethportal_api::{HistoryContentKey, HistoryNetworkApiClient};
+use ethportal_api::{HistoryContentKey, HistoryNetworkApiClient, PossibleHistoryContentValue};
 
 /// Wait for the content to be transferred
 pub async fn wait_for_content<P: HistoryNetworkApiClient + std::marker::Sync>(

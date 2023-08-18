@@ -23,11 +23,17 @@ async fn send_10k_bytes() -> anyhow::Result<()> {
     println!("Sending 10k bytes uTP payload from client to server...");
     let client_url = format!("http://{CLIENT_ADDR}");
     let client_rpc = HttpClientBuilder::default().build(client_url)?;
-    let client_enr: String = client_rpc.request("local_enr", None).await?;
+    let client_enr: String = client_rpc
+        .request("local_enr", rpc_params![])
+        .await
+        .unwrap();
 
     let server_url = format!("http://{SERVER_ADDR}");
     let server_rpc = HttpClientBuilder::default().build(server_url)?;
-    let server_enr: String = server_rpc.request("local_enr", None).await?;
+    let server_enr: String = server_rpc
+        .request("local_enr", rpc_params![])
+        .await
+        .unwrap();
 
     let client_cid_recv: u16 = thread_rng().gen();
     let client_cid_send = client_cid_recv.wrapping_add(1);
@@ -58,7 +64,10 @@ async fn send_10k_bytes() -> anyhow::Result<()> {
     tokio::time::sleep(Duration::from_secs(16)).await;
 
     // Verify received uTP payload
-    let utp_payload: String = server_rpc.request("get_utp_payload", None).await?;
+    let utp_payload: String = server_rpc
+        .request("get_utp_payload", rpc_params![])
+        .await
+        .unwrap();
     let expected_payload = hex_encode(payload);
 
     assert_eq!(expected_payload, utp_payload);

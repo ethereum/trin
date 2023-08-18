@@ -18,11 +18,11 @@ pub type CurrentSyncCommitteeProofLen = U5;
 #[superstruct(
     variants(Bellatrix, Capella),
     variant_attributes(
-        derive(Debug, Clone, Serialize, Deserialize, Encode, Decode,),
+        derive(Debug, Clone, Serialize, PartialEq, Deserialize, Encode, Decode,),
         serde(deny_unknown_fields),
     )
 )]
-#[derive(Debug, Clone, Serialize, Deserialize, Encode)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Encode)]
 #[ssz(enum_behaviour = "transparent")]
 pub struct LightClientBootstrap {
     /// Header matching the requested beacon block root

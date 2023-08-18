@@ -1,12 +1,12 @@
-use crate::constants::{HISTORY_CONTENT_KEY, HISTORY_CONTENT_VALUE};
+use crate::constants::fixture_header_with_proof;
 use crate::Peertest;
-use ethereum_types::U256;
+use ethereum_types::{H256, U256};
 use ethportal_api::types::distance::Distance;
-use ethportal_api::HistoryContentKey;
-use ethportal_api::{Discv5ApiClient, HistoryNetworkApiClient, Web3ApiClient};
-use ethportal_api::{HistoryContentValue, PossibleHistoryContentValue};
+use ethportal_api::{
+    BlockHeaderKey, Discv5ApiClient, HistoryContentKey, HistoryNetworkApiClient,
+    PossibleHistoryContentValue, Web3ApiClient,
+};
 use jsonrpsee::async_client::Client;
-use serde_json::json;
 use ssz::Encode;
 use tracing::info;
 use trin_utils::version::get_trin_version;
@@ -117,16 +117,8 @@ pub async fn test_history_find_nodes_zero_distance(target: &Client, peertest: &P
 
 pub async fn test_history_store(target: &Client) {
     info!("Testing portal_historyStore");
-
-    let content_key: HistoryContentKey =
-        serde_json::from_value(json!(HISTORY_CONTENT_KEY)).expect("conversion failed");
-    let content_value: HistoryContentValue =
-        serde_json::from_value(json!(HISTORY_CONTENT_VALUE)).expect("conversion failed");
-
-    let result = target
-        .store(content_key, content_value)
-        .await
-        .expect("operation failed");
+    let (content_key, content_value) = fixture_header_with_proof();
+    let result = target.store(content_key, content_value).await.unwrap();
     assert!(result);
 }
 
@@ -146,15 +138,10 @@ pub async fn test_history_routing_table_info(target: &Client) {
 
 pub async fn test_history_local_content_absent(target: &Client) {
     info!("Testing portal_historyLocalContent absent");
-
-    let content_key: HistoryContentKey = serde_json::from_value(json!(
-        "0x00cb5cab7266694daa0d28cbf40496c08dd30bf732c41e0455e7ad389c10d79f4f"
-    ))
-    .expect("conversion failed");
-    let result = target
-        .local_content(content_key)
-        .await
-        .expect("operation failed");
+    let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
+        block_hash: H256::random().into(),
+    });
+    let result = target.local_content(content_key).await.unwrap();
 
     if let PossibleHistoryContentValue::ContentPresent(_) = result {
         panic!("Expected absent content");

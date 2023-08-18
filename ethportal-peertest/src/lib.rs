@@ -8,14 +8,13 @@ use std::net::{IpAddr, Ipv4Addr};
 use std::path::PathBuf;
 use std::{thread, time};
 
+use ethportal_api::types::cli::TrinConfig;
+use ethportal_api::types::enr::Enr;
+use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::Discv5ApiClient;
 use futures::future;
 use jsonrpsee::async_client::Client;
 use rpc::RpcServerHandle;
-
-use ethportal_api::types::cli::TrinConfig;
-use ethportal_api::types::enr::Enr;
-use ethportal_api::utils::bytes::hex_encode;
 
 pub struct PeertestNode {
     pub enr: Enr,

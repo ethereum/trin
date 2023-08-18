@@ -1,4 +1,5 @@
 use crate::jsonrpsee::core::Error as JsonRpseeError;
+use crate::jsonrpsee::types::{ErrorObject, ErrorObjectOwned};
 use crate::rpc_server::ServerKind;
 use crate::PortalRpcModule;
 use std::io;
@@ -42,6 +43,27 @@ impl RpcError {
                 RpcError::RpcError(JsonRpseeError::Transport(err))
             }
             _ => err.into(),
+        }
+    }
+}
+
+pub enum RpcServeError {
+    /// A generic error with no data
+    Message(String),
+    /// Method not available
+    MethodNotFound(String),
+}
+
+impl From<RpcServeError> for ErrorObjectOwned {
+    fn from(e: RpcServeError) -> Self {
+        match e {
+            // -32099 is a custom error code for a server error
+            // see: https://www.jsonrpc.org/specification#error_object
+            // It's a bit of a cop-out, until we implement more specific errors, being
+            // sure not to confilct with the standard Ethereum error codes:
+            // https://docs.infura.io/networks/ethereum/json-rpc-methods#error-codes
+            RpcServeError::Message(msg) => ErrorObject::owned(-32099, msg, None::<()>),
+            RpcServeError::MethodNotFound(method) => ErrorObject::owned(-32601, method, None::<()>),
         }
     }
 }

@@ -20,10 +20,10 @@ futures = "0.3.21"
 httpmock = "0.6.6"
 hex = "0.4.3"
 hyper = { version = "0.14", features = ["full"] }
-jsonrpsee = {version="0.16.2", features = ["async-client", "client", "macros", "server"]}
+jsonrpsee = {version="0.20.0", features = ["async-client", "client", "macros", "server"]}
 rand = "0.8.4"
-reth-ipc = { version = "0.1.0", git = "https://github.com/paradigmxyz/reth.git"}
-rocksdb = "0.18.0"
+reth-ipc = { version = "0.1.0-alpha.6", git = "https://github.com/paradigmxyz/reth.git"}
+rocksdb = "0.21.0"
 rpc = { path = "../rpc" }
 serde_json = "1.0.89"
 tempfile = "3.3.0"

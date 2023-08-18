@@ -3,7 +3,7 @@ name = "trin"
 version = "0.1.0"
 authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 edition = "2021"
-rust-version = "1.66.1"
+rust-version = "1.71.1"
 default-run = "trin"
 repository = "https://github.com/ethereum/trin"
 license = "GPL-3.0"
@@ -19,13 +19,14 @@ discv5 = { version = "0.3.1", features = ["serde"] }
 eth2_ssz = "0.4.0"
 ethereum-types = "0.12.1"
 ethportal-api = { path = "ethportal-api" }
+jsonrpsee = "0.20.0"
 parking_lot = "0.11.2"
 portalnet = { path = "portalnet" }
 prometheus_exporter = "0.8.4"
 rand = "0.8.4"
-reth-ipc = { version = "0.1.0", git = "https://github.com/paradigmxyz/reth.git"}
+reth-ipc = { version = "0.1.0-alpha.6", git = "https://github.com/paradigmxyz/reth.git"}
 rlp = "0.5.0"
-rocksdb = "0.18.0"
+rocksdb = "0.21.0"
 rpc = { path = "rpc"}
 serde_json = {version = "1.0.89", features = ["preserve_order"]}
 sha3 = "0.9.1"

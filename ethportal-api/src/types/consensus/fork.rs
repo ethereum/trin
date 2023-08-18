@@ -1,11 +1,41 @@
+use crate::utils::bytes::hex_encode;
 use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
+use thiserror::Error;
+
+/// Error thrown when failed to parse a valid [`ForkName`].
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[error("Unknown fork for digest: {0}")]
+pub struct ParseForkNameError(String);
+
+pub type ForkDigest = [u8; 4];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ForkName {
     Bellatrix,
     Capella,
+}
+
+impl TryFrom<ForkDigest> for ForkName {
+    type Error = ParseForkNameError;
+
+    fn try_from(fork_digest: ForkDigest) -> Result<Self, Self::Error> {
+        match fork_digest {
+            [0x0, 0x0, 0x0, 0x0] => Ok(ForkName::Bellatrix),
+            [0xbb, 0xa4, 0xda, 0x96] => Ok(ForkName::Capella),
+            _ => Err(ParseForkNameError(hex_encode(fork_digest))),
+        }
+    }
+}
+
+impl ForkName {
+    pub fn as_fork_digest(&self) -> [u8; 4] {
+        match self {
+            ForkName::Bellatrix => [0x0, 0x0, 0x0, 0x0],
+            ForkName::Capella => [0xbb, 0xa4, 0xda, 0x96],
+        }
+    }
 }
 
 impl FromStr for ForkName {

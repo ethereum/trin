@@ -10,8 +10,8 @@ use discv5::TalkRequest;
 use ethportal_api::types::enr::Enr;
 use ethportal_api::utils::bytes::{hex_encode, hex_encode_upper};
 use jsonrpsee::core::{async_trait, RpcResult};
-use jsonrpsee::http_server::{HttpServerBuilder, HttpServerHandle};
 use jsonrpsee::proc_macros::rpc;
+use jsonrpsee::server::{Server, ServerHandle};
 use portalnet::discovery::{Discovery, UtpEnr};
 use portalnet::types::messages::{PortalnetConfig, ProtocolId};
 use std::net::SocketAddr;
@@ -79,7 +79,7 @@ impl RpcServer for TestApp {
 
             tracing::info!("read {n} bytes from uTP stream");
 
-            conn.shutdown().expect("operation failed");
+            conn.close().await.unwrap();
 
             payload_store.write().await.push(data);
         });
@@ -118,7 +118,7 @@ impl RpcServer for TestApp {
 
             conn.write(&payload).await.expect("operation failed");
 
-            conn.shutdown().expect("operation failed");
+            conn.close().await.unwrap();
         });
 
         Ok("true".to_string())
@@ -149,7 +149,7 @@ pub async fn run_test_app(
     socket_addr: SocketAddr,
     rpc_addr: String,
     rpc_port: u16,
-) -> anyhow::Result<(SocketAddr, Enr, HttpServerHandle)> {
+) -> anyhow::Result<(SocketAddr, Enr, ServerHandle)> {
     let config = PortalnetConfig {
         listen_port: udp_port,
         external_addr: Some(socket_addr),
@@ -179,12 +179,12 @@ pub async fn run_test_app(
     let rpc_addr = format!("{rpc_addr}:{rpc_port}");
 
     // Start HTTP json-rpc server
-    let server = HttpServerBuilder::default()
+    let server = Server::builder()
         .build(rpc_addr.parse::<SocketAddr>()?)
         .await?;
 
     let addr = server.local_addr()?;
-    let handle = server.start(test_app.into_rpc()).expect("operation failed");
+    let handle = server.start(test_app.into_rpc());
 
     Ok((addr, enr, handle))
 }
