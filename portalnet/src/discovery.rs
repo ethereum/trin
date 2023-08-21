@@ -2,7 +2,7 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use discv5::{
     enr::{CombinedKey, EnrBuilder, NodeId},
-    Discv5, Discv5ConfigBuilder, Discv5Event, ListenConfig, RequestError, TalkRequest,
+    ConfigBuilder, Discv5, Event, ListenConfig, RequestError, TalkRequest,
 };
 use lru::LruCache;
 use parking_lot::RwLock;
@@ -110,7 +110,7 @@ impl Discovery {
             port: portal_config.listen_port,
         };
 
-        let discv5_config = Discv5ConfigBuilder::new(listen_config).build();
+        let discv5_config = ConfigBuilder::new(listen_config).build();
         let discv5 = Discv5::new(enr, enr_key, discv5_config)
             .map_err(|e| format!("Failed to create discv5 instance: {e}"))?;
 
@@ -162,11 +162,11 @@ impl Discovery {
         tokio::spawn(async move {
             while let Some(event) = event_rx.recv().await {
                 match event {
-                    Discv5Event::TalkRequest(talk_req) => {
+                    Event::TalkRequest(talk_req) => {
                         // Forward all TALKREQ messages.
                         let _ = talk_req_tx.send(talk_req).await;
                     }
-                    Discv5Event::SessionEstablished(enr, socket_addr) => {
+                    Event::SessionEstablished(enr, socket_addr) => {
                         if let Some(old) = node_addr_cache.write().put(
                             enr.node_id(),
                             NodeAddress {

@@ -24,7 +24,7 @@ pub async fn test_find_content_return_enr(target: &Client, peertest: &Peertest) 
                 panic!("Response from GetEnr didn't return expected Enr");
             }
         }
-        Err(err) => panic!("{}", &err.to_string()),
+        Err(err) => panic!("{err}"),
     }
 
     let result = target

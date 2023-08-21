@@ -685,12 +685,12 @@ where
             })
             .collect();
         for bootnode in bootnodes {
-            debug!(alias = %bootnode.alias, "Attempting to bond with bootnode");
+            debug!(alias = %bootnode.alias, protocol = %self.protocol, "Attempting to bond with bootnode");
             let ping_result = self.send_ping(bootnode.enr.clone()).await;
 
             match ping_result {
                 Ok(_) => {
-                    info!(alias = %bootnode.alias, "Bonded with bootnode");
+                    info!(alias = %bootnode.alias, protocol = %self.protocol, "Bonded with bootnode");
                     successfully_bonded_bootnode = true;
                 }
                 Err(err) => {
