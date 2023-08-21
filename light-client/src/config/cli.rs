@@ -31,10 +31,7 @@ impl CliConfig {
             user_dict.insert("rpc_port", Value::from(port));
         }
 
-        user_dict.insert(
-            "data_dir",
-            Value::from(self.data_dir.to_str().expect("conversion failed")),
-        );
+        user_dict.insert("data_dir", Value::from(self.data_dir.to_str().unwrap()));
 
         if let Some(fallback) = &self.fallback {
             user_dict.insert("fallback", Value::from(fallback.clone()));

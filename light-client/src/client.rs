@@ -215,7 +215,6 @@ impl<DB: Database> Client<DB> {
 
         if let Err(err) = sync_res {
             match err {
-                #[allow(clippy::unwrap_used)]
                 NodeError::ConsensusSyncError(err) => match err.downcast_ref().unwrap() {
                     ConsensusError::CheckpointTooOld => {
                         warn!(

@@ -3,7 +3,7 @@ where
     D: serde::Deserializer<'de>,
 {
     let bytes: String = serde::Deserialize::deserialize(deserializer)?;
-    Ok(hex_str_to_bytes(&bytes).expect("conversion failed"))
+    Ok(hex_str_to_bytes(&bytes).unwrap())
 }
 
 pub fn bytes_serialize<S>(bytes: &Vec<u8>, serializer: S) -> Result<S::Ok, S::Error>
@@ -20,7 +20,7 @@ where
 {
     let bytes_opt: Option<String> = serde::Deserialize::deserialize(deserializer)?;
     if let Some(bytes) = bytes_opt {
-        Ok(Some(hex_str_to_bytes(&bytes).expect("conversion failed")))
+        Ok(Some(hex_str_to_bytes(&bytes).unwrap()))
     } else {
         Ok(None)
     }

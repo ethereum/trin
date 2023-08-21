@@ -517,7 +517,7 @@ where
     D: serde::Deserializer<'de>,
 {
     let val: String = serde::Deserialize::deserialize(deserializer)?;
-    Ok(val.parse().expect("conversion failed"))
+    Ok(val.parse().unwrap())
 }
 
 fn u256_deserialize<'de, D>(deserializer: D) -> Result<U256, D::Error>
@@ -536,9 +536,8 @@ where
     D: serde::Deserializer<'de>,
 {
     let bytes: String = serde::Deserialize::deserialize(deserializer)?;
-    let bytes =
-        hex::decode(bytes.strip_prefix("0x").expect("prefix not found")).expect("decoding failed");
-    Ok(bytes.to_vec().try_into().expect("conversion failed"))
+    let bytes = hex::decode(bytes.strip_prefix("0x").unwrap()).unwrap();
+    Ok(bytes.to_vec().try_into().unwrap())
 }
 
 fn logs_bloom_deserialize<'de, D>(deserializer: D) -> Result<LogsBloom, D::Error>
@@ -546,9 +545,8 @@ where
     D: serde::Deserializer<'de>,
 {
     let bytes: String = serde::Deserialize::deserialize(deserializer)?;
-    let bytes =
-        hex::decode(bytes.strip_prefix("0x").expect("prefix not found")).expect("decoding failed");
-    Ok(bytes.to_vec().try_into().expect("conversion failed"))
+    let bytes = hex::decode(bytes.strip_prefix("0x").unwrap()).unwrap();
+    Ok(bytes.to_vec().try_into().unwrap())
 }
 
 fn address_deserialize<'de, D>(deserializer: D) -> Result<Address, D::Error>
@@ -556,9 +554,8 @@ where
     D: serde::Deserializer<'de>,
 {
     let bytes: String = serde::Deserialize::deserialize(deserializer)?;
-    let bytes =
-        hex::decode(bytes.strip_prefix("0x").expect("prefix not found")).expect("decoding failed");
-    Ok(bytes.to_vec().try_into().expect("conversion failed"))
+    let bytes = hex::decode(bytes.strip_prefix("0x").unwrap()).unwrap();
+    Ok(bytes.to_vec().try_into().unwrap())
 }
 
 fn extra_data_deserialize<'de, D>(deserializer: D) -> Result<List<u8, 32>, D::Error>
@@ -566,9 +563,8 @@ where
     D: serde::Deserializer<'de>,
 {
     let bytes: String = serde::Deserialize::deserialize(deserializer)?;
-    let bytes =
-        hex::decode(bytes.strip_prefix("0x").expect("prefix not found")).expect("decoding failed");
-    Ok(bytes.to_vec().try_into().expect("conversion failed"))
+    let bytes = hex::decode(bytes.strip_prefix("0x").unwrap()).unwrap();
+    Ok(bytes.to_vec().try_into().unwrap())
 }
 
 fn transactions_deserialize<'de, D>(deserializer: D) -> Result<List<Transaction, 1048576>, D::Error>
@@ -579,7 +575,7 @@ where
     let transactions = transactions
         .iter()
         .map(|tx| {
-            let tx = hex_str_to_bytes(tx).expect("conversion failed");
+            let tx = hex_str_to_bytes(tx).unwrap();
             let tx: Transaction = List::from_iter(tx);
             tx
         })
@@ -594,7 +590,7 @@ where
     let attesting_indices: Vec<String> = serde::Deserialize::deserialize(deserializer)?;
     let attesting_indices = attesting_indices
         .iter()
-        .map(|i| i.parse().unwrap_or_default())
+        .map(|i| i.parse().unwrap())
         .collect::<List<u64, 2048>>();
 
     Ok(attesting_indices)
