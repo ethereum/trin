@@ -164,7 +164,7 @@ name = "amcl"
 version = "0.3.0"
 source = "git+https://github.com/Snowfork/milagro_bls#7d1776edb42870b006430ece9741c15811e4c9e3"
 dependencies = [
- "parity-scale-codec 3.6.8",
+ "parity-scale-codec 3.6.5",
  "scale-info",
 ]
 
@@ -299,9 +299,9 @@ dependencies = [
 
 [[package]]
 name = "async-compression"
-version = "0.4.2"
+version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d495b6dc0184693324491a5ac05f559acc97bf937ab31d7a1c33dd0016be6d2b"
+checksum = "bb42b2197bf15ccb092b62c74515dbd8b86d0effd934795f6687c93b6e679a2c"
 dependencies = [
  "brotli",
  "flate2",
@@ -1336,8 +1336,7 @@ checksum = "212d0f5754cb6769937f4501cc0e67f4f4483c8d2c3e1e922ee9edbe4ab4c7c0"
 [[package]]
 name = "discv5"
 version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98c05fa26996c6141f78ac4fafbe297a7fa69690565ba4e0d1f2e60bde5ce501"
+source = "git+https://github.com/njgheorghita/discv5.git?rev=09262ead2882e062de1a6a45df9ea61917eb8465#09262ead2882e062de1a6a45df9ea61917eb8465"
 dependencies = [
  "aes 0.7.5",
  "aes-gcm 0.9.4",
@@ -2638,7 +2637,7 @@ version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba6a270039626615617f3f36d15fc827041df3b78c439da2cadfa47455a77f2f"
 dependencies = [
- "parity-scale-codec 3.6.8",
+ "parity-scale-codec 3.6.5",
 ]
 
 [[package]]
@@ -3338,7 +3337,7 @@ dependencies = [
  "amcl",
  "hex",
  "lazy_static",
- "parity-scale-codec 3.6.8",
+ "parity-scale-codec 3.6.5",
  "rand 0.8.5",
  "scale-info",
  "zeroize",
@@ -3663,15 +3662,15 @@ dependencies = [
 
 [[package]]
 name = "parity-scale-codec"
-version = "3.6.8"
+version = "3.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f88eaac72ead1b9bd4ce747d577dbd2ad31fb0a56a9a20c611bf27bd1b97fbed"
+checksum = "0dec8a8073036902368c2cdc0387e85ff9a37054d7e7c98e592145e0c92cd4fb"
 dependencies = [
  "arrayvec",
  "bitvec 1.0.1",
  "byte-slice-cast",
  "impl-trait-for-tuples",
- "parity-scale-codec-derive 3.6.8",
+ "parity-scale-codec-derive 3.6.5",
  "serde",
 ]
 
@@ -3689,9 +3688,9 @@ dependencies = [
 
 [[package]]
 name = "parity-scale-codec-derive"
-version = "3.6.8"
+version = "3.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33bdcd446e9400b6ad9fc85b4aea68846c258b07c3efb994679ae82707b133f0"
+checksum = "312270ee71e1cd70289dacf597cab7b207aa107d2f28191c2ae45b2ece18a260"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -4557,7 +4556,7 @@ dependencies = [
 [[package]]
 name = "reth-ipc"
 version = "0.1.0-alpha.8"
-source = "git+https://github.com/paradigmxyz/reth.git#660ea0c9376c4b03793995f700ee36182cfdf781"
+source = "git+https://github.com/paradigmxyz/reth.git#261a9f949996eb2f6129cf7f17469d5134c09761"
 dependencies = [
  "async-trait",
  "bytes 1.5.0",
@@ -4836,7 +4835,7 @@ checksum = "cd8d6c9f025a446bc4d18ad9632e69aec8f287aa84499ee335599fabd20c3fd8"
 dependencies = [
  "log",
  "ring",
- "rustls-webpki 0.101.4",
+ "rustls-webpki 0.101.5",
  "sct",
 ]
 
@@ -4873,9 +4872,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.101.4"
+version = "0.101.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d93931baf2d282fff8d3a532bbfd7653f734643161b87e3e01e59a04439bf0d"
+checksum = "45a27e3b59326c16e23d30aeb7a36a24cc0d29e71d68ff611cdfb4a01d013bed"
 dependencies = [
  "ring",
  "untrusted",
@@ -4911,7 +4910,7 @@ dependencies = [
  "bitvec 1.0.1",
  "cfg-if 1.0.0",
  "derive_more",
- "parity-scale-codec 3.6.8",
+ "parity-scale-codec 3.6.5",
  "scale-info-derive",
 ]
 

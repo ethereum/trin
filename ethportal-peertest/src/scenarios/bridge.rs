@@ -53,7 +53,7 @@ pub async fn test_beacon_bridge(peertest: &Peertest, target: &HttpClient) {
     let mode = BridgeMode::Test("./test_assets/portalnet/beacon_bridge_data.yaml".into());
     // Wait for bootnode to start
     sleep(Duration::from_secs(1)).await;
-    let consensus_api = ConsensusApi::new(Default::default());
+    let consensus_api = ConsensusApi::default();
     let bridge = BeaconBridge::new(consensus_api, mode, portal_clients);
     bridge.launch().await;
 
