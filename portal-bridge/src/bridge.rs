@@ -81,6 +81,9 @@ impl Bridge {
 
     async fn launch_test(&self, test_path: PathBuf) {
         let assets: TestAssets = read_test_assets_from_file(test_path);
+        let assets = assets
+            .into_history_assets()
+            .expect("Error parsing history test assets.");
 
         for asset in assets.0.into_iter() {
             Bridge::gossip_content(&self.portal_clients, asset.content_key, asset.content_value)
