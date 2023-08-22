@@ -2263,7 +2263,7 @@ where
         nodes_to_send
     }
 
-    /// Returns list of nodes closer to content than self, sorted by distance.
+    /// Returns list of nodes closest to content, sorted by distance.
     fn find_nodes_close_to_content(
         &self,
         content_key: impl OverlayContentKey,
