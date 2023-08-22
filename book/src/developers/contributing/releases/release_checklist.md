@@ -45,3 +45,9 @@ Attach the generated binaries.
 ## Deploy
 
 Push these changes out to the nodes we run in the network. See next page for details.
+
+## Communicate
+
+Notify in Discord chat about the new release being complete.
+
+As trin stabilizes, more notifications will be necessary (twitter, blog post, etc). Though we probably want to do at least a small network deployment before publicizing.
