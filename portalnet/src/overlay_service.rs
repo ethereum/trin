@@ -2263,14 +2263,12 @@ where
         nodes_to_send
     }
 
-    /// Returns list of nodes closer to content than self, sorted by distance.
+    /// Returns list of nodes closest to content, sorted by distance.
     fn find_nodes_close_to_content(
         &self,
         content_key: impl OverlayContentKey,
     ) -> Result<Vec<SszEnr>, OverlayRequestError> {
         let content_id = content_key.content_id();
-        let self_node_id = self.local_enr().node_id();
-        let self_distance = TMetric::distance(&content_id, &self_node_id.raw());
 
         let mut nodes_with_distance: Vec<(Distance, Enr)> = self
             .table_entries_enr()
@@ -2283,7 +2281,6 @@ where
         let closest_nodes = nodes_with_distance
             .into_iter()
             .take(FIND_CONTENT_MAX_NODES)
-            .filter(|node_record| node_record.0 < self_distance)
             .map(|node_record| SszEnr::new(node_record.1))
             .collect();
 
