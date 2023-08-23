@@ -1,10 +1,10 @@
+use clap::Parser;
 use std::net::SocketAddr;
 use std::str::FromStr;
 use tracing::info;
 use trin_utils::log::init_tracing_logger;
 use utp_testing::run_test_app;
 
-use structopt::StructOpt;
 use utp_testing::cli::TestAppConfig;
 
 /// uTP test app, used for creation of a `test-app` docker image
@@ -12,7 +12,7 @@ use utp_testing::cli::TestAppConfig;
 async fn main() {
     init_tracing_logger();
 
-    let config = TestAppConfig::from_args();
+    let config = TestAppConfig::parse();
 
     let udp_listen_address = format!("{}:{}", config.udp_listen_address, config.udp_port);
     let udp_listen_address = SocketAddr::from_str(&udp_listen_address).unwrap();
