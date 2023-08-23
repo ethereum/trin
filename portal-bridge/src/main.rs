@@ -4,6 +4,7 @@ use portal_bridge::beacon_bridge::BeaconBridge;
 use portal_bridge::bridge::Bridge;
 use portal_bridge::cli::BridgeConfig;
 use portal_bridge::consensus_api::ConsensusApi;
+use portal_bridge::execution_api::ExecutionApi;
 use portal_bridge::pandaops::PandaOpsMiddleware;
 use portal_bridge::types::NetworkKind;
 use portal_bridge::utils::generate_spaced_private_keys;
@@ -70,9 +71,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let bridge_handle = tokio::spawn(async move {
             let master_acc = MasterAccumulator::default();
             let header_oracle = HeaderOracle::new(master_acc);
+            let pandaops_middleware = PandaOpsMiddleware::default();
+            let execution_api = ExecutionApi::new(pandaops_middleware);
 
             let bridge = Bridge::new(
                 bridge_config.mode,
+                execution_api,
                 portal_clients.expect("Failed to create history JSON-RPC clients"),
                 header_oracle,
                 bridge_config.epoch_acc_path,

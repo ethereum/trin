@@ -4,7 +4,9 @@ use crate::Peertest;
 use ethportal_api::jsonrpsee::http_client::HttpClient;
 use ethportal_api::PossibleHistoryContentValue;
 use portal_bridge::bridge::Bridge;
+use portal_bridge::execution_api::ExecutionApi;
 use portal_bridge::mode::BridgeMode;
+use portal_bridge::pandaops::PandaOpsMiddleware;
 use tokio::time::{sleep, Duration};
 use trin_validation::accumulator::MasterAccumulator;
 use trin_validation::oracle::HeaderOracle;
@@ -15,9 +17,17 @@ pub async fn test_bridge(peertest: &Peertest, target: &HttpClient) {
     let portal_clients = vec![target.clone()];
     let epoch_acc_path = "validation_assets/epoch_acc.bin".into();
     let mode = BridgeMode::Test("./test_assets/portalnet/bridge_data.json".into());
+    let pandaops_middleware = PandaOpsMiddleware::default();
+    let execution_api = ExecutionApi::new(pandaops_middleware);
     // Wait for bootnode to start
     sleep(Duration::from_secs(1)).await;
-    let bridge = Bridge::new(mode, portal_clients, header_oracle, epoch_acc_path);
+    let bridge = Bridge::new(
+        mode,
+        execution_api,
+        portal_clients,
+        header_oracle,
+        epoch_acc_path,
+    );
     bridge.launch().await;
     let (content_key, content_value) = fixture_header_with_proof_1000010();
     // Check if the stored content value in bootnode's DB matches the offered
