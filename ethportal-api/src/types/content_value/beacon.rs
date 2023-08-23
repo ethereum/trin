@@ -60,6 +60,31 @@ impl<'de> Deserialize<'de> for PossibleBeaconContentValue {
             ));
         }
 
+        if let Ok(value) = ForkVersionedLightClientBootstrap::from_ssz_bytes(&content_bytes) {
+            return Ok(Self::ContentPresent(
+                BeaconContentValue::LightClientBootstrap(value),
+            ));
+        }
+
+        if let Ok(value) = LightClientUpdatesByRange::from_ssz_bytes(&content_bytes) {
+            return Ok(Self::ContentPresent(
+                BeaconContentValue::LightClientUpdatesByRange(value),
+            ));
+        }
+
+        if let Ok(value) = ForkVersionedLightClientOptimisticUpdate::from_ssz_bytes(&content_bytes)
+        {
+            return Ok(Self::ContentPresent(
+                BeaconContentValue::LightClientOptimisticUpdate(value),
+            ));
+        }
+
+        if let Ok(value) = ForkVersionedLightClientFinalityUpdate::from_ssz_bytes(&content_bytes) {
+            return Ok(Self::ContentPresent(
+                BeaconContentValue::LightClientFinalityUpdate(value),
+            ));
+        }
+
         Err(ContentValueError::UnknownContent {
             bytes: s,
             network: "beacon".to_string(),
@@ -486,7 +511,7 @@ impl<'de> Deserialize<'de> for BeaconContentValue {
 #[cfg(test)]
 mod test {
     use crate::utils::bytes::hex_decode;
-    use crate::{BeaconContentValue, ContentValue};
+    use crate::{BeaconContentValue, ContentValue, PossibleBeaconContentValue};
     use serde_json::Value;
     use std::fs;
 
@@ -514,7 +539,9 @@ mod test {
                 _ => panic!("Invalid beacon content type!"),
             }
 
-            assert_eq!(content_bytes, beacon_content.encode())
+            assert_eq!(content_bytes, beacon_content.encode());
+
+            assert_possible_content_value_roundtrip(beacon_content);
         }
     }
 
@@ -548,7 +575,9 @@ mod test {
                 _ => panic!("Invalid beacon content type!"),
             }
 
-            assert_eq!(content_bytes, beacon_content.encode())
+            assert_eq!(content_bytes, beacon_content.encode());
+
+            assert_possible_content_value_roundtrip(beacon_content);
         }
     }
 
@@ -576,7 +605,9 @@ mod test {
                 _ => panic!("Invalid beacon content type!"),
             }
 
-            assert_eq!(content_bytes, beacon_content.encode())
+            assert_eq!(content_bytes, beacon_content.encode());
+
+            assert_possible_content_value_roundtrip(beacon_content);
         }
     }
 
@@ -604,7 +635,19 @@ mod test {
                 _ => panic!("Invalid beacon content type!"),
             }
 
-            assert_eq!(content_bytes, beacon_content.encode())
+            assert_eq!(content_bytes, beacon_content.encode());
+
+            assert_possible_content_value_roundtrip(beacon_content);
         }
+    }
+
+    fn assert_possible_content_value_roundtrip(beacon_content: BeaconContentValue) {
+        let expected_possible_content_value =
+            PossibleBeaconContentValue::ContentPresent(beacon_content);
+        let json_str = serde_json::to_string(&expected_possible_content_value).unwrap();
+        let possible_content_value: PossibleBeaconContentValue =
+            serde_json::from_str(&json_str).unwrap();
+
+        assert_eq!(expected_possible_content_value, possible_content_value);
     }
 }

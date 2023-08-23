@@ -17,7 +17,7 @@ pub async fn wait_for_history_content<P: HistoryNetworkApiClient + std::marker::
     // If content is absent an error will be returned.
     while counter < 5 {
         let message = match received_content_value {
-            x @ Ok(PossibleHistoryContentValue::ContentPresent(_)) => return x.unwrap(),
+            Ok(cp @ PossibleHistoryContentValue::ContentPresent(_)) => return cp,
             Ok(PossibleHistoryContentValue::ContentAbsent) => {
                 "absent history content response received".to_string()
             }
@@ -44,7 +44,7 @@ pub async fn wait_for_beacon_content<P: BeaconNetworkApiClient + std::marker::Sy
     // If content is absent an error will be returned.
     while counter < 5 {
         let message = match received_content_value {
-            x @ Ok(PossibleBeaconContentValue::ContentPresent(_)) => return x.unwrap(),
+            Ok(cp @ PossibleBeaconContentValue::ContentPresent(_)) => return cp,
             Ok(PossibleBeaconContentValue::ContentAbsent) => {
                 "absent beacon content response received".to_string()
             }
