@@ -48,11 +48,19 @@ pub fn trin_handle(
     bridge_config: BridgeConfig,
 ) -> anyhow::Result<Child> {
     let mut command = Command::new(bridge_config.executable_path);
+    let networks = bridge_config
+        .network
+        .into_iter()
+        .map(|n| n.to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+
     command
         .kill_on_drop(true)
         .args(["--ephemeral"])
         .args(["--mb", "0"])
         .args(["--web3-transport", "http"])
+        .args(["--networks", &networks])
         .args(["--unsafe-private-key", &private_key])
         .args([
             "--web3-http-address",

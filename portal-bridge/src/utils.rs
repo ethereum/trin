@@ -1,9 +1,11 @@
+use chrono::Duration;
 use discv5::enr::{CombinedKey, EnrBuilder, NodeId};
 use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::HistoryContentKey;
 use ethportal_api::HistoryContentValue;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Generates a set of N private keys, with node ids that are equally spaced
 /// around the 256-bit keys space.
@@ -69,12 +71,43 @@ pub fn read_test_assets_from_file(test_path: PathBuf) -> TestAssets {
 
     assets
 }
+/// Gets the duration until the next light client update
+/// Updates are scheduled for 4 seconds into each slot
+pub fn duration_until_next_update(genesis_time: u64, now: SystemTime) -> Duration {
+    let current_slot = expected_current_slot(genesis_time, now);
+    let next_slot = current_slot + 1;
+    let next_slot_timestamp = slot_timestamp(next_slot, genesis_time);
+
+    let now = now
+        .duration_since(UNIX_EPOCH)
+        .expect("Time went backwards")
+        .as_secs();
+
+    let time_to_next_slot = next_slot_timestamp - now;
+    let next_update = time_to_next_slot + 4;
+
+    Duration::seconds(next_update as i64)
+}
+
+pub fn expected_current_slot(genesis_time: u64, now: SystemTime) -> u64 {
+    let now = now.duration_since(UNIX_EPOCH).expect("Time went backwards");
+    let since_genesis = now - std::time::Duration::from_secs(genesis_time);
+
+    since_genesis.as_secs() / 12
+}
+
+fn slot_timestamp(slot: u64, genesis_time: u64) -> u64 {
+    slot * 12 + genesis_time
+}
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use crate::constants::{HEADER_WITH_PROOF_CONTENT_KEY, HEADER_WITH_PROOF_CONTENT_VALUE};
+    use crate::constants::{
+        BEACON_GENESIS_TIME, HEADER_WITH_PROOF_CONTENT_KEY, HEADER_WITH_PROOF_CONTENT_VALUE,
+    };
+    use chrono::{DateTime, TimeZone, Utc};
     use ethereum_types::U256;
     use ethportal_api::types::distance::{Metric, XorMetric};
     use ethportal_api::utils::bytes::hex_decode;
@@ -134,5 +167,25 @@ mod tests {
 
         assert_eq!(assets.0[0].content_key, content_key);
         assert_eq!(assets.0[0].content_value, content_value);
+    }
+
+    #[rstest]
+    #[case(10, 5)]
+    #[case(11, 16)]
+    fn test_duration_until_next_update(#[case] seconds: u32, #[case] expected_duration: i64) {
+        let date: DateTime<Utc> = Utc.with_ymd_and_hms(2023, 8, 23, 11, 00, seconds).unwrap();
+        let now = SystemTime::from(date);
+        let duration = duration_until_next_update(BEACON_GENESIS_TIME, now);
+        assert_eq!(duration, Duration::seconds(expected_duration));
+    }
+
+    #[rstest]
+    #[case(10, 7163698)]
+    #[case(11, 7163699)]
+    fn test_expected_current_slot(#[case] seconds: u32, #[case] expected_slot: u64) {
+        let date: DateTime<Utc> = Utc.with_ymd_and_hms(2023, 8, 23, 11, 00, seconds).unwrap();
+        let now = SystemTime::from(date);
+        let slot = expected_current_slot(BEACON_GENESIS_TIME, now);
+        assert_eq!(slot, expected_slot);
     }
 }

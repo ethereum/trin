@@ -212,7 +212,7 @@ impl Serialize for ForkVersionedLightClientUpdate {
 /// Maximum number of `LightClientUpdate` instances in a single request is 128;
 /// Defined in https://github.com/ethereum/consensus-specs/blob/48143056b9be031ec810912ffc3227f7443eccd9/specs/altair/light-client/p2p-interface.md#configuration
 #[derive(Clone, Debug, PartialEq)]
-pub struct LightClientUpdatesByRange(VariableList<ForkVersionedLightClientUpdate, U128>);
+pub struct LightClientUpdatesByRange(pub VariableList<ForkVersionedLightClientUpdate, U128>);
 
 impl Deref for LightClientUpdatesByRange {
     type Target = VariableList<ForkVersionedLightClientUpdate, U128>;

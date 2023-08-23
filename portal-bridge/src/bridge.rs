@@ -1,6 +1,6 @@
+use crate::execution_api::ExecutionApi;
 use crate::full_header::FullHeader;
 use crate::mode::{BridgeMode, ModeType};
-use crate::pandaops::PandaOpsMiddleware;
 use crate::utils::{read_test_assets_from_file, TestAssets};
 use anyhow::{anyhow, bail};
 use ethportal_api::jsonrpsee::http_client::HttpClient;
@@ -45,7 +45,7 @@ const FUTURES_BUFFER_SIZE: usize = 32;
 pub struct Bridge {
     pub mode: BridgeMode,
     pub portal_clients: Vec<HttpClient>,
-    pub pandaops: PandaOpsMiddleware,
+    pub execution_api: ExecutionApi,
     pub header_oracle: HeaderOracle,
     pub epoch_acc_path: PathBuf,
 }
@@ -53,6 +53,7 @@ pub struct Bridge {
 impl Bridge {
     pub fn new(
         mode: BridgeMode,
+        execution_api: ExecutionApi,
         portal_clients: Vec<HttpClient>,
         header_oracle: HeaderOracle,
         epoch_acc_path: PathBuf,
@@ -60,7 +61,7 @@ impl Bridge {
         Self {
             mode,
             portal_clients,
-            pandaops: PandaOpsMiddleware::default(),
+            execution_api,
             header_oracle,
             epoch_acc_path,
         }
@@ -91,12 +92,12 @@ impl Bridge {
     // Devops nodes don't have websockets available, so we can't actually poll the latest block.
     // Instead we loop on a short interval and fetch the latest blocks not yet served.
     async fn launch_latest(&self) {
-        let mut block_index = self.pandaops.get_latest_block_number().await.expect(
+        let mut block_index = self.execution_api.get_latest_block_number().await.expect(
             "Error launching bridge in latest mode. Unable to get latest block from provider.",
         );
         loop {
             sleep(Duration::from_secs(LATEST_BLOCK_POLL_RATE)).await;
-            let latest_block = match self.pandaops.get_latest_block_number().await {
+            let latest_block = match self.execution_api.get_latest_block_number().await {
                 Ok(val) => val,
                 Err(msg) => {
                     warn!("error getting latest block, skipping iteration: {msg:?}");
@@ -120,7 +121,7 @@ impl Bridge {
     }
 
     async fn launch_backfill(&self) {
-        let latest_block = self.pandaops.get_latest_block_number().await.expect(
+        let latest_block = self.execution_api.get_latest_block_number().await.expect(
             "Error launching bridge in backfill mode. Unable to get latest block from provider.",
         );
         let (looped, mode_type) = match self.mode.clone() {
@@ -228,7 +229,7 @@ impl Bridge {
         portal_clients: Vec<HttpClient>,
     ) -> anyhow::Result<()> {
         debug!("Serving block: {height}");
-        let mut full_header = self.pandaops.get_header(height).await?;
+        let mut full_header = self.execution_api.get_header(height).await?;
         if full_header.header.number <= MERGE_BLOCK_NUMBER {
             full_header.epoch_acc = epoch_acc;
         }
@@ -338,7 +339,7 @@ impl Bridge {
                 receipt_list: vec![],
             },
             _ => {
-                self.pandaops
+                self.execution_api
                     .get_trusted_receipts(&full_header.tx_hashes.hashes)
                     .await?
             }
@@ -393,7 +394,7 @@ impl Bridge {
             let uncles = match full_header.uncles.len() {
                 0 => vec![],
                 _ => {
-                    self.pandaops
+                    self.execution_api
                         .get_trusted_uncles(&full_header.uncles)
                         .await?
                 }

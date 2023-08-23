@@ -6,6 +6,7 @@ use crate::types::wrapped::bytes::Bytes;
 use crate::types::wrapped::h160::H160;
 use ethereum_types::{H256, U256};
 use serde::{Deserialize, Serialize};
+use serde_this_or_that::as_u64;
 use ssz::Decode;
 use ssz_derive::{Decode, Encode};
 use superstruct::superstruct;
@@ -18,9 +19,13 @@ pub struct ExecutionPayload {
     pub receipts_root: H256,
     pub logs_bloom: Bloom,
     pub prev_randao: H256, // 'difficulty' in the yellow paper
+    #[serde(deserialize_with = "as_u64")]
     pub block_number: u64, // 'number' in the yellow paper
+    #[serde(deserialize_with = "as_u64")]
     pub gas_limit: u64,
+    #[serde(deserialize_with = "as_u64")]
     pub gas_used: u64,
+    #[serde(deserialize_with = "as_u64")]
     pub timestamp: u64,
     pub extra_data: Bytes,
     #[serde(deserialize_with = "de_number_to_u256")]
@@ -60,12 +65,16 @@ pub struct ExecutionPayloadHeader {
     #[superstruct(getter(copy))]
     pub prev_randao: H256,
     #[superstruct(getter(copy))]
+    #[serde(deserialize_with = "as_u64")]
     pub block_number: u64,
     #[superstruct(getter(copy))]
+    #[serde(deserialize_with = "as_u64")]
     pub gas_limit: u64,
     #[superstruct(getter(copy))]
+    #[serde(deserialize_with = "as_u64")]
     pub gas_used: u64,
     #[superstruct(getter(copy))]
+    #[serde(deserialize_with = "as_u64")]
     pub timestamp: u64,
     pub extra_data: Bytes,
     #[superstruct(getter(copy))]

@@ -18,6 +18,12 @@ Current options include `"trin"` / `"fluffy"`.
 - `"--mode single:b100"`: gossip a single block #100
 - `"--mode single:e100"`: gossip a single epoch #100
 
+### Network
+You can specify the `--network` flag for which network to run the bridge for
+- `"--network history"`: Default value. Run the bridge for the history network.
+- `"--network beacon"`: Run the bridge for the beacon network.
+`  "--network history,beacon"`: Run the bridge for the history and beacon network.
+
 ###Test File example
 ```json
 [{
