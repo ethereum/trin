@@ -8,6 +8,7 @@ use portal_bridge::execution_api::ExecutionApi;
 use portal_bridge::pandaops::PandaOpsMiddleware;
 use portal_bridge::types::NetworkKind;
 use portal_bridge::utils::generate_spaced_private_keys;
+use std::sync::Arc;
 use tokio::time::{sleep, Duration};
 use trin_utils::log::init_tracing_logger;
 use trin_validation::accumulator::MasterAccumulator;
@@ -50,15 +51,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Launch Beacon Network portal bridge
     if bridge_config.network.contains(&NetworkKind::Beacon) {
         let bridge_mode = bridge_config.mode.clone();
-        let portal_clients = portal_clients.clone();
+        let portal_clients = portal_clients
+            .clone()
+            .expect("Failed to create beacon JSON-RPC clients");
         let bridge_handle = tokio::spawn(async move {
             let pandaops_middleware = PandaOpsMiddleware::default();
             let consensus_api = ConsensusApi::new(pandaops_middleware);
-            let beacon_bridge = BeaconBridge::new(
-                consensus_api,
-                bridge_mode,
-                portal_clients.expect("Failed to create beacon JSON-RPC clients"),
-            );
+            let beacon_bridge =
+                BeaconBridge::new(consensus_api, bridge_mode, Arc::new(portal_clients));
 
             beacon_bridge.launch().await;
         });

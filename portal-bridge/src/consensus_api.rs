@@ -1,4 +1,5 @@
 use crate::pandaops::PandaOpsMiddleware;
+use std::fmt::Display;
 
 /// Implements endpoints from the Beacon API to access data from the consensus layer.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -12,10 +13,27 @@ impl ConsensusApi {
     }
 
     /// Requests the `LightClientBootstrap` structure corresponding to a given post-Altair beacon block root.
-    pub async fn get_lc_bootstrap(&self, block_root: String) -> anyhow::Result<String> {
+    pub async fn get_lc_bootstrap<S: AsRef<str> + Display>(
+        &self,
+        block_root: S,
+    ) -> anyhow::Result<String> {
         let endpoint = format!(
             "{}/eth/v1/beacon/light_client/bootstrap/{}",
             self.middleware.base_cl_endpoint, block_root
+        );
+        self.middleware.request(endpoint).await
+    }
+
+    /// Retrieves hashTreeRoot of `BeaconBlock/BeaconBlockHeader`
+    /// Block identifier can be one of: "head" (canonical head in node's view),
+    /// "genesis", "finalized", <slot>, <hex encoded blockRoot with 0x prefix>.
+    pub async fn get_beacon_block_root<S: AsRef<str> + Display>(
+        &self,
+        block_id: S,
+    ) -> anyhow::Result<String> {
+        let endpoint = format!(
+            "{}/eth/v1/beacon/blocks/{}/root",
+            self.middleware.base_cl_endpoint, block_id
         );
         self.middleware.request(endpoint).await
     }

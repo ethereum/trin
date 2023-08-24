@@ -100,6 +100,15 @@ pub struct ForkVersionedLightClientBootstrap {
     pub bootstrap: LightClientBootstrap,
 }
 
+impl From<LightClientBootstrapCapella> for ForkVersionedLightClientBootstrap {
+    fn from(bootstrap: LightClientBootstrapCapella) -> Self {
+        Self {
+            fork_name: ForkName::Capella,
+            bootstrap: LightClientBootstrap::Capella(bootstrap),
+        }
+    }
+}
+
 impl ForkVersionedLightClientBootstrap {
     pub fn encode(&self) -> Vec<u8> {
         let fork_digest = self.fork_name.as_fork_digest();
@@ -282,6 +291,15 @@ pub struct ForkVersionedLightClientOptimisticUpdate {
     pub update: LightClientOptimisticUpdate,
 }
 
+impl From<LightClientOptimisticUpdateCapella> for ForkVersionedLightClientOptimisticUpdate {
+    fn from(update: LightClientOptimisticUpdateCapella) -> Self {
+        Self {
+            fork_name: ForkName::Capella,
+            update: LightClientOptimisticUpdate::Capella(update),
+        }
+    }
+}
+
 impl ForkVersionedLightClientOptimisticUpdate {
     fn encode(&self) -> Vec<u8> {
         let fork_digest = self.fork_name.as_fork_digest();
@@ -345,6 +363,15 @@ impl Encode for ForkVersionedLightClientOptimisticUpdate {
 pub struct ForkVersionedLightClientFinalityUpdate {
     pub fork_name: ForkName,
     pub update: LightClientFinalityUpdate,
+}
+
+impl From<LightClientFinalityUpdateCapella> for ForkVersionedLightClientFinalityUpdate {
+    fn from(update: LightClientFinalityUpdateCapella) -> Self {
+        Self {
+            fork_name: ForkName::Capella,
+            update: LightClientFinalityUpdate::Capella(update),
+        }
+    }
 }
 
 impl ForkVersionedLightClientFinalityUpdate {
