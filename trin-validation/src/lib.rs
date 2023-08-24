@@ -1,3 +1,5 @@
+#![warn(clippy::unwrap_used)]
+
 pub mod accumulator;
 pub mod constants;
 pub mod merkle;
