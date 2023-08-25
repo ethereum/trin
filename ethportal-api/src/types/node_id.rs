@@ -28,6 +28,12 @@ pub fn generate_random_node_id(target_bucket_idx: u8, local_node_id: EnrNodeId) 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct NodeId(#[serde(with = "SerHex::<StrictPfx>")] pub RawNodeId);
 
+impl NodeId {
+    pub fn random() -> Self {
+        NodeId(rand::random())
+    }
+}
+
 impl From<&Enr> for NodeId {
     fn from(enr: &Enr) -> Self {
         NodeId(enr.node_id().raw())
