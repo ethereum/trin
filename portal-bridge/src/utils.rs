@@ -1,9 +1,11 @@
+use anyhow::bail;
 use chrono::Duration;
 use discv5::enr::{CombinedKey, EnrBuilder, NodeId};
 use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::HistoryContentKey;
-use ethportal_api::HistoryContentValue;
+use ethportal_api::{BeaconContentKey, BeaconContentValue, HistoryContentValue};
 use serde::{Deserialize, Serialize};
+use std::ops::Deref;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -45,14 +47,62 @@ fn random_node_id() -> (NodeId, CombinedKey) {
     (enr.node_id(), random_private_key)
 }
 
-// Struct definitions for test assets
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TestAssets(pub Vec<Asset>);
+pub struct HistoryTestAssets(pub Vec<HistoryAsset>);
+
+impl Deref for HistoryTestAssets {
+    type Target = Vec<HistoryAsset>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Asset {
+pub struct BeaconTestAssets(pub Vec<BeaconAsset>);
+
+impl Deref for BeaconTestAssets {
+    type Target = Vec<BeaconAsset>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+// Struct definitions for test assets
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum TestAssets {
+    History(HistoryTestAssets),
+    Beacon(BeaconTestAssets),
+}
+
+impl TestAssets {
+    pub fn into_history_assets(self) -> anyhow::Result<HistoryTestAssets> {
+        match self {
+            TestAssets::History(assets) => Ok(assets),
+            _ => bail!("Test assets are not of type History"),
+        }
+    }
+
+    pub fn into_beacon_assets(self) -> anyhow::Result<BeaconTestAssets> {
+        match self {
+            TestAssets::Beacon(assets) => Ok(assets),
+            _ => bail!("Test assets are not of type Beacon"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HistoryAsset {
     pub content_key: HistoryContentKey,
     pub content_value: HistoryContentValue,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BeaconAsset {
+    pub content_key: BeaconContentKey,
+    pub content_value: BeaconContentValue,
 }
 
 pub fn read_test_assets_from_file(test_path: PathBuf) -> TestAssets {
@@ -145,28 +195,32 @@ mod tests {
 
     #[test]
     fn test_read_test_assets_from_file_json() {
-        let assets: TestAssets =
-            read_test_assets_from_file(PathBuf::from("../test_assets/portalnet/bridge_data.json"));
+        let assets: HistoryTestAssets =
+            read_test_assets_from_file(PathBuf::from("../test_assets/portalnet/bridge_data.json"))
+                .into_history_assets()
+                .unwrap();
         let content_key: HistoryContentKey =
             serde_json::from_value(json!(HEADER_WITH_PROOF_CONTENT_KEY)).unwrap();
         let content_value: HistoryContentValue =
             serde_json::from_value(json!(HEADER_WITH_PROOF_CONTENT_VALUE)).unwrap();
 
-        assert_eq!(assets.0[0].content_key, content_key);
-        assert_eq!(assets.0[0].content_value, content_value);
+        assert_eq!(assets[0].content_key, content_key);
+        assert_eq!(assets[0].content_value, content_value);
     }
 
     #[test]
     fn test_read_test_assets_from_file_yaml() {
-        let assets: TestAssets =
-            read_test_assets_from_file(PathBuf::from("../test_assets/portalnet/bridge_data.yaml"));
+        let assets: HistoryTestAssets =
+            read_test_assets_from_file(PathBuf::from("../test_assets/portalnet/bridge_data.yaml"))
+                .into_history_assets()
+                .unwrap();
         let content_key: HistoryContentKey =
             serde_json::from_value(json!(HEADER_WITH_PROOF_CONTENT_KEY)).unwrap();
         let content_value: HistoryContentValue =
             serde_json::from_value(json!(HEADER_WITH_PROOF_CONTENT_VALUE)).unwrap();
 
-        assert_eq!(assets.0[0].content_key, content_key);
-        assert_eq!(assets.0[0].content_value, content_value);
+        assert_eq!(assets[0].content_key, content_key);
+        assert_eq!(assets[0].content_value, content_value);
     }
 
     #[rstest]

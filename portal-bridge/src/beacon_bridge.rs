@@ -1,7 +1,9 @@
 use crate::consensus_api::ConsensusApi;
 use crate::constants::BEACON_GENESIS_TIME;
 use crate::mode::BridgeMode;
-use crate::utils::{duration_until_next_update, expected_current_slot};
+use crate::utils::{
+    duration_until_next_update, expected_current_slot, read_test_assets_from_file, TestAssets,
+};
 use anyhow::bail;
 use ethportal_api::types::consensus::fork::ForkName;
 use ethportal_api::types::consensus::light_client::bootstrap::LightClientBootstrapCapella;
@@ -21,6 +23,7 @@ use serde_json::Value;
 use ssz::Encode;
 use ssz_types::VariableList;
 use std::cmp::Ordering;
+use std::path::PathBuf;
 use std::sync::atomic;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
@@ -48,10 +51,28 @@ impl BeaconBridge {
 
         match self.mode.clone() {
             BridgeMode::Latest => self.launch_latest().await,
-            _ => unimplemented!(),
+            BridgeMode::Test(test_path) => self.launch_test(test_path).await,
+            other => panic!("Beacon bridge mode {other:?} not implemented!"),
         }
 
         info!("Bridge mode: {:?} complete.", self.mode);
+    }
+
+    async fn launch_test(&self, test_path: PathBuf) {
+        let assets: TestAssets = read_test_assets_from_file(test_path);
+        let assets = assets
+            .into_beacon_assets()
+            .expect("Error parsing beacon test assets.");
+
+        for asset in assets.0.into_iter() {
+            BeaconBridge::gossip_beacon_content(
+                &self.portal_clients,
+                asset.content_key,
+                asset.content_value,
+            )
+            .await
+            .expect("Error serving beacon data in test mode.");
+        }
     }
 
     ///  Get and serve the latest beacon data.

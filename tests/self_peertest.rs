@@ -227,7 +227,7 @@ mod test {
             [
                 "trin",
                 "--networks",
-                "history,state",
+                "history,beacon",
                 "--external-address",
                 external_addr.as_str(),
                 // Run bridge test with http, since bridge doesn't support ipc yet.
@@ -254,9 +254,18 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread")]
     #[serial]
-    async fn peertest_bridge() {
+    async fn peertest_history_bridge() {
         let (peertest, target, handle) = setup_peertest_bridge().await;
-        peertest::scenarios::bridge::test_bridge(&peertest, &target).await;
+        peertest::scenarios::bridge::test_history_bridge(&peertest, &target).await;
+        peertest.exit_all_nodes();
+        handle.stop().unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[serial]
+    async fn peertest_beacon_bridge() {
+        let (peertest, target, handle) = setup_peertest_bridge().await;
+        peertest::scenarios::bridge::test_beacon_bridge(&peertest, &target).await;
         peertest.exit_all_nodes();
         handle.stop().unwrap();
     }
