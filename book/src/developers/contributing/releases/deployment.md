@@ -46,9 +46,14 @@ This step directs Ansible to use the current master version of trin. Read [about
 - Run the deployment: `ansible-playbook playbook.yml --tags trin`
 - Wait for completion
 - Launch a fresh trin node, check it against the bootnodes
-- ssh into a random node and a random bridge node, to check the logs:
+- ssh into random nodes, one of each kind, to check the logs:
 	- [find an IP address](https://github.com/ethereum/cluster/blob/master/portal-network/trin/ansible/inventories/dev/inventory.yml)
 	- `ssh ubuntu@$IP_ADDR`
+	- node types
+		- bootnode: `trin-*-1`
+		- bridge node: `trin-*-2`
+		- backfill node: `trin-*-3`
+		- regular nodes: all remaining ips
   - check logs, ignoring DEBUG: `sudo docker logs trin -n 1000 | grep -v DEBUG`
 - Check monitoring tools to see if network health is the same or better as before deployment. Glados might lag for 10-15 minutes, so keep checking back.
 - ?? Also release glados, to use the latest trin ??

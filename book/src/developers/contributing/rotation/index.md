@@ -28,7 +28,7 @@ At the end of the previous week, you will get the [Flamingo notes](https://notes
 
 Read through the notes, and then generate the new checklist for the week, by [creating a note from this template](https://notes.ethereum.org/?nav=overview&template=b35733cd-b374-4b79-bc57-f2bb58ee651e).
 
-Link the generated checklist into the Flamingo notes for your week.
+Link the generated checklist into the Flamingo notes for your week. Make sure your status is "online" in Discord. Make sure you're tagged under the `trin-flamingo` role. Put on your favorite pink shirt. Listen to the [flamingo anthem](https://www.youtube.com/watch?v=6hJv5yBLe9c). Fly.
 
 ### Daily
 
@@ -49,9 +49,11 @@ When you get to the end of your checklist, here are ideas for what to work on ne
   - link to the TODO in the code, and any relevant context
   - label issue as Flamingo. If it is not urgent and a good fit, add "Good First Issue"
   - Post a PR to remove the `TODO` from the code, in favor of the issue.
+  - `git grep -i "todo"` & `git grep -i "fixme"`
 - Look through all [open trin issues](https://github.com/ethereum/trin/issues)
   - Close outdated issues, with a short explanation
   - If appropriate, add a Flamingo tag
+  - Sort by "Least Recently Updated" and tackle the most stale issues, until the stale issue bot is active & we've caught up to date with 0 stale issues.
 - Write new portal-hive tests
   - The first step is to make an issue with a list of test ideas, or take over [this one](https://github.com/ethereum/portal-hive/issues/54)
   - Add new portal-hive test ideas to the list
