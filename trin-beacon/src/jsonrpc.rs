@@ -75,7 +75,10 @@ async fn complete_request(network: Arc<RwLock<BeaconNetwork>>, request: BeaconJs
             offer(network, enr, content_key, content_value).await
         }
         BeaconEndpoint::Ping(enr) => ping(network, enr).await,
-        BeaconEndpoint::RoutingTableInfo => Ok(json!("Not implemented")), // TODO: implement this when refactor trin_history utils
+        BeaconEndpoint::RoutingTableInfo => {
+            serde_json::to_value(network.read().await.overlay.routing_table_info())
+                .map_err(|err| err.to_string())
+        }
         BeaconEndpoint::RecursiveFindNodes(node_id) => recursive_find_nodes(network, node_id).await,
     };
     let _ = request.resp.send(response);

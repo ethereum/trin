@@ -18,7 +18,6 @@ use tokio::sync::{mpsc, Mutex, RwLock};
 use tracing::error;
 
 use crate::network::HistoryNetwork;
-use crate::utils::bucket_entries_to_json;
 
 /// Handles History network JSON-RPC requests
 pub struct HistoryRequestHandler {
@@ -75,9 +74,10 @@ async fn complete_request(network: Arc<RwLock<HistoryNetwork>>, request: History
             offer(network, enr, content_key, content_value).await
         }
         HistoryEndpoint::Ping(enr) => ping(network, enr).await,
-        HistoryEndpoint::RoutingTableInfo => Ok(bucket_entries_to_json(
-            network.read().await.overlay.bucket_entries(),
-        )),
+        HistoryEndpoint::RoutingTableInfo => {
+            serde_json::to_value(network.read().await.overlay.routing_table_info())
+                .map_err(|err| err.to_string())
+        }
         HistoryEndpoint::RecursiveFindNodes(node_id) => {
             recursive_find_nodes(network, node_id).await
         }

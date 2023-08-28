@@ -15,7 +15,6 @@ use discv5::{
 use lru::LruCache;
 use parking_lot::RwLock;
 use rlp::RlpStream;
-use serde_json::{json, Value};
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 use utp_rs::{cid::ConnectionPeer, udp::AsyncUdpSocket};
@@ -23,6 +22,7 @@ use utp_rs::{cid::ConnectionPeer, udp::AsyncUdpSocket};
 use super::config::PortalnetConfig;
 use super::types::messages::ProtocolId;
 use crate::socket;
+use ethportal_api::types::discv5::RoutingTableInfo;
 use ethportal_api::types::enr::Enr;
 use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::NodeInfo;
@@ -249,27 +249,12 @@ impl Discovery {
         })
     }
 
-    /// Returns vector of all ENR node IDs of nodes currently contained in the routing table mapped to JSON Value.
-    pub fn routing_table_info(&self) -> Value {
-        let buckets: Vec<(String, String, String)> = self
-            .discv5
-            .table_entries()
-            .iter()
-            .map(|(node_id, enr, node_status)| {
-                (
-                    hex_encode(node_id.raw()),
-                    enr.to_base64(),
-                    format!("{:?}", node_status.state),
-                )
-            })
-            .collect();
-
-        json!(
-            {
-                "localNodeId": hex_encode(self.discv5.local_enr().node_id().raw()),
-                "buckets": buckets
-            }
-        )
+    /// Returns the local node-id and a nested array of node-ids contained in each of this node's k-buckets.
+    pub fn routing_table_info(&self) -> RoutingTableInfo {
+        RoutingTableInfo {
+            local_node_id: hex_encode(self.discv5.local_enr().node_id().raw()),
+            buckets: self.discv5.kbuckets().into(),
+        }
     }
 
     /// Returns the node IDs of connected peers in the Discv5 routing table.
