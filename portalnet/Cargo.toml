@@ -55,7 +55,7 @@ uds_windows = "1.0.1"
 [dev-dependencies]
 env_logger = "0.9.0"
 quickcheck = "1.0.3"
-rstest = "0.11.0"
+rstest = "0.18.2"
 serial_test = "0.5.1"
 test-log = { version = "0.2.11", features = ["trace"] }
 tokio-test = "0.4.2"
