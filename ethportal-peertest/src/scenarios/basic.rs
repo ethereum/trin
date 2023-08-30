@@ -111,8 +111,10 @@ pub async fn test_history_store(target: &Client) {
 
 pub async fn test_history_routing_table_info(target: &Client) {
     info!("Testing portal_historyRoutingTableInfo");
-    let result = HistoryNetworkApiClient::routing_table_info(target).await;
-    assert!(result.is_ok());
+    let result = HistoryNetworkApiClient::routing_table_info(target)
+        .await
+        .unwrap();
+    assert!(result.local_node_id.starts_with("0x"));
 }
 
 pub async fn test_history_local_content_absent(target: &Client) {

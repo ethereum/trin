@@ -28,6 +28,7 @@ pub struct NodeInfo {
     pub ip: Option<String>,
 }
 
+/// Information about a discv5/overlay network's routing table.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RoutingTableInfo {
