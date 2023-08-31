@@ -2235,7 +2235,7 @@ checksum = "0198b9d0078e0f30dedc7acbb21c974e838fc8fae3ee170128658a98cb2c1c04"
 
 [[package]]
 name = "ethportal-api"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "base64 0.13.1",
@@ -4594,7 +4594,7 @@ dependencies = [
  "jsonrpsee",
  "lazy_static",
  "portalnet",
- "rstest 0.11.0",
+ "rstest 0.18.2",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -4637,7 +4637,7 @@ dependencies = [
  "rand 0.8.5",
  "rlp 0.5.2",
  "rocksdb",
- "rstest 0.11.0",
+ "rstest 0.18.2",
  "rusqlite",
  "serde",
  "serde_json",
@@ -5147,6 +5147,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5ea92a5b6195c6ef2a0295ea818b312502c6fc94dde986c5553242e18fd4ce2"
 
 [[package]]
+name = "relative-path"
+version = "1.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c707298afce11da2efef2f600116fa93ffa7a032b5d7b628aa17711ec81383ca"
+
+[[package]]
 name = "reqwest"
 version = "0.11.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5325,26 +5331,25 @@ dependencies = [
 
 [[package]]
 name = "rstest"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2288c66aeafe3b2ed227c981f364f9968fa952ef0b30e84ada4486e7ee24d00a"
-dependencies = [
- "cfg-if 1.0.0",
- "proc-macro2",
- "quote",
- "rustc_version 0.4.0",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "rstest"
 version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b07f2d176c472198ec1e6551dc7da28f1c089652f66a7b722676c2238ebc0edf"
 dependencies = [
  "futures 0.3.28",
  "futures-timer",
- "rstest_macros",
+ "rstest_macros 0.16.0",
+ "rustc_version 0.4.0",
+]
+
+[[package]]
+name = "rstest"
+version = "0.18.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "97eeab2f3c0a199bc4be135c36c924b6590b88c377d416494288c14f2db30199"
+dependencies = [
+ "futures 0.3.28",
+ "futures-timer",
+ "rstest_macros 0.18.2",
  "rustc_version 0.4.0",
 ]
 
@@ -5359,6 +5364,23 @@ dependencies = [
  "quote",
  "rustc_version 0.4.0",
  "syn 1.0.109",
+ "unicode-ident",
+]
+
+[[package]]
+name = "rstest_macros"
+version = "0.18.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d428f8247852f894ee1be110b375111b586d4fa431f6c46e64ba5a0dcccbe605"
+dependencies = [
+ "cfg-if 1.0.0",
+ "glob",
+ "proc-macro2",
+ "quote",
+ "regex",
+ "relative-path",
+ "rustc_version 0.4.0",
+ "syn 2.0.28",
  "unicode-ident",
 ]
 
@@ -7054,7 +7076,7 @@ dependencies = [
  "httpmock",
  "parking_lot 0.11.2",
  "portalnet",
- "rstest 0.11.0",
+ "rstest 0.18.2",
  "serde_json",
  "test-log",
  "tokio",
@@ -7114,7 +7136,7 @@ dependencies = [
  "quickcheck",
  "quickcheck_macros",
  "rlp 0.5.2",
- "rstest 0.11.0",
+ "rstest 0.18.2",
  "rust-embed",
  "serde",
  "serde_json",
