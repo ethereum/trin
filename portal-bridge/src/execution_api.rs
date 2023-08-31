@@ -30,7 +30,7 @@ impl ExecutionApi {
                 JsonRequest::new(method, params, id as u32)
             })
             .collect();
-        let response = self.middleware.batch_request(request).await?;
+        let response = self.middleware.batch_requests(request).await?;
         Ok(serde_json::from_str(&response)?)
     }
 
@@ -38,7 +38,7 @@ impl ExecutionApi {
         let params = Params::Array(vec![json!("latest"), json!(false)]);
         let method = "eth_getBlockByNumber".to_string();
         let request = JsonRequest::new(method, params, 1);
-        let response = self.middleware.batch_request(vec![request]).await?;
+        let response = self.middleware.batch_requests(vec![request]).await?;
         let response: Vec<Value> = serde_json::from_str(&response)?;
         let result = response[0]
             .get("result")
@@ -58,7 +58,7 @@ impl ExecutionApi {
                 JsonRequest::new(method, params, id as u32)
             })
             .collect();
-        let response = self.middleware.batch_request(batch_request).await?;
+        let response = self.middleware.batch_requests(batch_request).await?;
         let response: Vec<Value> = serde_json::from_str(&response).map_err(|e| anyhow!(e))?;
         // single responses are in an array, since we batch them...
         let mut headers = vec![];
@@ -81,7 +81,7 @@ impl ExecutionApi {
             params,
             height as u32,
         )];
-        let response = self.middleware.batch_request(batch_request).await?;
+        let response = self.middleware.batch_requests(batch_request).await?;
         let batch: FullHeaderBatch = serde_json::from_str(&response)?;
         if batch.headers.len() != 1 {
             bail!("Expected 1 header, got {:#?}", batch.headers.len());
