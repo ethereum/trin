@@ -12,7 +12,7 @@ pip install ansible
 ```
 - Publish your pgp public key with keybase, using: `keybase pgp select --import`
   - This fails if you don't have a pgp key yet. If so, create one with `gpg --generate-key`
-- [Install sops](https://github.com/ethereum/cluster/tree/master/portal-network/trin/ansible)
+- [Install sops](https://github.com/getsops/sops)
 - Contact `@paulj`, get public gpg key into cluster repo
 - Make sure your pgp key is working by running:
   ```sops portal-network/trin/ansible/inventories/dev/group_vars/secrets.sops.yml```
