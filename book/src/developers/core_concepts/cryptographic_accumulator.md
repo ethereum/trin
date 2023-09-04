@@ -1,6 +1,6 @@
 # Cryptographic accumulator
 
-A cryptographic accumulator is a structure that allows verification that a specific
+A cryptographic accumulator is a structure that allows verification of a specific
 block header in the past is part of the canonical chain.
 
 The History sub-protocol is reponsible for accumulator-related data.
@@ -34,7 +34,7 @@ processes non-uncle blocks A-F.
 
 First, the most recent block hash at the tip of the accumulator must be known.
 
-This is easy, as the the accumulator only needs to cover pre-merge blocks. The
+This is easy, as the accumulator only needs to cover pre-merge blocks. The
 final pre-merge block (last Proof of Work block) hash is known and never needs to be updated.
 
 ## Proofs
