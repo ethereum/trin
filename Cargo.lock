@@ -4394,6 +4394,7 @@ dependencies = [
  "test-log",
  "thiserror",
  "tokio",
+ "tokio-stream",
  "tokio-test",
  "tracing",
  "tracing-subscriber",
@@ -6623,6 +6624,7 @@ dependencies = [
  "futures-core",
  "pin-project-lite",
  "tokio",
+ "tokio-util 0.7.9",
 ]
 
 [[package]]

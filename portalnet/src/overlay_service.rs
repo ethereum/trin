@@ -27,7 +27,10 @@ use ssz::Encode;
 use ssz_types::BitList;
 use thiserror::Error;
 use tokio::{
-    sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
+    sync::{
+        broadcast,
+        mpsc::{self, UnboundedReceiver, UnboundedSender},
+    },
     task::JoinHandle,
 };
 use tracing::{debug, enabled, error, info, trace, warn, Level};
@@ -82,6 +85,9 @@ const EXPECTED_NON_EMPTY_BUCKETS: usize = 17;
 /// Bucket refresh lookup interval in seconds
 const BUCKET_REFRESH_INTERVAL_SECS: u64 = 60;
 
+/// The capacity of the event-stream's broadcast channel.
+const EVENT_STREAM_CHANNEL_CAPACITY: usize = 10;
+
 lazy_static! {
     /// The default configuration to use for uTP connections.
     pub static ref UTP_CONN_CFG: ConnectionConfig = ConnectionConfig { max_packet_size: 1024, ..Default::default()};
@@ -117,7 +123,9 @@ pub enum OverlayCommand<TContentKey> {
         callback: oneshot::Sender<Vec<Enr>>,
     },
     /// Sets up an event stream where the overlay server will return various events.
-    RequestEventStream(oneshot::Sender<mpsc::Receiver<EventEnvelope>>),
+    RequestEventStream(oneshot::Sender<broadcast::Receiver<EventEnvelope>>),
+    /// Handle an event sent from another overlay.
+    Event(EventEnvelope),
 }
 
 /// An overlay request error.
@@ -305,7 +313,7 @@ pub struct OverlayService<TContentKey, TMetric, TValidator, TStore> {
     /// Validator for overlay network content.
     validator: Arc<TValidator>,
     /// A channel that the overlay service emits events on.
-    event_stream: Option<mpsc::Sender<EventEnvelope>>,
+    event_stream: broadcast::Sender<EventEnvelope>,
     /// Disable poke mechanism
     disable_poke: bool,
 }
@@ -348,8 +356,6 @@ where
         let (command_tx, command_rx) = mpsc::unbounded_channel();
         let internal_command_tx = command_tx.clone();
 
-        let overlay_protocol = protocol.clone();
-
         let peers_to_ping = if let Some(interval) = ping_queue_interval {
             HashSetDelay::new(interval)
         } else {
@@ -357,6 +363,7 @@ where
         };
 
         let (response_tx, response_rx) = mpsc::unbounded_channel();
+        let (event_stream, _) = broadcast::channel(EVENT_STREAM_CHANNEL_CAPACITY);
 
         tokio::spawn(async move {
             let mut service = Self {
@@ -381,11 +388,11 @@ where
                 phantom_metric: PhantomData,
                 metrics,
                 validator,
-                event_stream: None,
+                event_stream,
                 disable_poke,
             };
 
-            info!(protocol = %overlay_protocol, "Starting overlay service");
+            info!(protocol = %protocol, "Starting overlay service");
             service.initialize_routing_table(bootnode_enrs);
             service.start().await;
         });
@@ -474,6 +481,7 @@ where
                 Some(command) = self.command_rx.recv() => {
                     match command {
                         OverlayCommand::Request(request) => self.process_request(request),
+                        OverlayCommand::Event(event) => self.process_event(event),
                         OverlayCommand::FindContentQuery { target, callback, is_trace } => {
                             if let Some(query_id) = self.init_find_content_query(target.clone(), Some(callback), is_trace) {
                                 trace!(
@@ -494,11 +502,7 @@ where
                             }
                         }
                         OverlayCommand::RequestEventStream(callback) => {
-                            // the channel size needs to be large to handle many events
-                            let channel_size = 100;
-                            let (event_stream, event_stream_recv) = mpsc::channel(channel_size);
-                            self.event_stream = Some(event_stream);
-                            if callback.send(event_stream_recv).is_err() {
+                            if callback.send(self.event_stream.subscribe()).is_err() {
                                 error!("Failed to return the event stream channel");
                             }
                         }
@@ -542,7 +546,7 @@ where
                 query_event = OverlayService::<TContentKey, TMetric, TValidator, TStore>::query_event_poll(self.find_content_query_pool.clone()) => {
                     self.handle_find_content_query_event(query_event);
                 }
-                _ = OverlayService::<TContentKey, TMetric, TValidator, TStore>::bucket_maintenance_poll(self.protocol.clone(), &self.kbuckets) => {}
+                _ = OverlayService::<TContentKey, TMetric, TValidator, TStore>::bucket_maintenance_poll(self.protocol, &self.kbuckets) => {}
                 _ = bucket_refresh_interval.tick() => {
                     trace!(protocol = %self.protocol, "Routing table bucket refresh");
                     self.bucket_refresh_lookup();
@@ -1005,6 +1009,8 @@ where
         }
     }
 
+    fn process_event(&mut self, _event: EventEnvelope) {}
+
     /// Attempts to build a response for a request.
     fn handle_request(
         &mut self,
@@ -1322,8 +1328,8 @@ where
     /// Sends a TALK request via Discovery v5 to some destination node.
     fn send_talk_req(&self, request: Request, request_id: OverlayRequestId, destination: Enr) {
         let discovery = Arc::clone(&self.discovery);
-        let protocol = self.protocol.clone();
         let response_tx = self.response_tx.clone();
+        let protocol = self.protocol;
 
         // Spawn a new thread to send the TALK request. Otherwise we would delay processing of
         // other tasks until we receive the response. Send the response over the response channel,
@@ -2612,14 +2618,19 @@ where
     }
 
     /// Send `OverlayEvent` to the event stream.
-    #[allow(dead_code)] // TODO: remove when used
-    fn send_event(&mut self, event: OverlayEvent) {
-        if let Some(stream) = self.event_stream.as_mut() {
-            let event = EventEnvelope::new(event);
-            if let Err(mpsc::error::TrySendError::Closed(_)) = stream.try_send(event) {
-                // If the stream has been dropped prevent future attempts to send events
-                self.event_stream = None;
-            }
+    #[allow(dead_code)]
+    fn send_event(&self, event: OverlayEvent) {
+        trace!(
+            "Sending event={:?} to event-stream from protocol {}",
+            event,
+            self.protocol
+        );
+        let event = EventEnvelope::new(event, self.protocol);
+        if let Err(err) = self.event_stream.send(event) {
+            error!(
+                error = %err,
+                "Error sending event through event-stream"
+            )
         }
     }
 }
@@ -2741,7 +2752,7 @@ mod tests {
             phantom_metric: PhantomData,
             metrics,
             validator,
-            event_stream: None,
+            event_stream: broadcast::channel(EVENT_STREAM_CHANNEL_CAPACITY).0,
             disable_poke: false,
         }
     }
@@ -3994,8 +4005,8 @@ mod tests {
     async fn test_event_stream() {
         // Get overlay service event stream
         let mut service = task::spawn(build_service());
-        let (sender, mut receiver) = mpsc::channel(1);
-        service.event_stream = Some(sender);
+        let (sender, mut receiver) = broadcast::channel(1);
+        service.event_stream = sender;
         // Emit LightClientUpdate event
         service.send_event(OverlayEvent::LightClientOptimisticUpdate);
         // Check that the event is received

@@ -49,6 +49,7 @@ trin-validation = { path="../trin-validation" }
 validator = { version = "0.13.0", features = ["derive"] }
 url = "2.3.1"
 utp-rs = "0.1.0-alpha.8"
+tokio-stream = { version = "0.1.14", features = ["sync"] }
 
 [target.'cfg(windows)'.dependencies]
 uds_windows = "1.0.1"

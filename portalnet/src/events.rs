@@ -2,22 +2,61 @@ use std::str::FromStr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use discv5::TalkRequest;
-use tokio::sync::mpsc;
 use tracing::{debug, error, warn};
+use futures::stream::{select_all, StreamExt};
+use tokio::sync::{broadcast, mpsc};
+use tokio_stream::wrappers::BroadcastStream;
 
 use super::types::messages::ProtocolId;
 use ethportal_api::utils::bytes::{hex_encode, hex_encode_upper};
+
+/// Handles for communication between the main event handler and an overlay.
+pub struct OverlayHandle {
+    /// Dispatch messages to an overlay.
+    pub tx: Option<mpsc::UnboundedSender<OverlayRequest>>,
+    /// Receive submitted events from an overlay.
+    pub rx: Option<broadcast::Receiver<EventEnvelope>>,
+}
+
+type OverlayChannels = (
+    Option<mpsc::UnboundedSender<OverlayRequest>>,
+    Option<broadcast::Receiver<EventEnvelope>>,
+);
+impl From<OverlayChannels> for OverlayHandle {
+    fn from((tx, rx): OverlayChannels) -> Self {
+        OverlayHandle { tx, rx }
+    }
+}
+
+#[derive(Debug)]
+/// Messages that can be dispatched to an overlay network.
+pub enum OverlayRequest {
+    /// A TALK-REQ.
+    Talk(TalkRequest),
+    /// A forwarded event from another overlay.
+    Event(EventEnvelope),
+}
+impl From<EventEnvelope> for OverlayRequest {
+    fn from(event: EventEnvelope) -> Self {
+        OverlayRequest::Event(event)
+    }
+}
+impl From<TalkRequest> for OverlayRequest {
+    fn from(talk_req: TalkRequest) -> Self {
+        OverlayRequest::Talk(talk_req)
+    }
+}
 
 /// Main handler for portal network events
 pub struct PortalnetEvents {
     /// Receive Discv5 talk requests.
     pub talk_req_receiver: mpsc::Receiver<TalkRequest>,
-    /// Send overlay `TalkReq` to history network
-    pub history_overlay_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
-    /// Send overlay `TalkReq` to state network
-    pub state_overlay_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
-    /// Send overlay `TalkReq` to beacon network
-    pub beacon_overlay_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
+    /// History network send & receive handles.
+    pub history_handle: OverlayHandle,
+    /// State network send & receive handles.
+    pub state_handle: OverlayHandle,
+    /// Beacon network send & receive handles.
+    pub beacon_handle: OverlayHandle,
     /// Send TalkReq events with "utp" protocol id to `UtpListener`
     pub utp_talk_reqs: mpsc::UnboundedSender<TalkRequest>,
 }
@@ -25,24 +64,51 @@ pub struct PortalnetEvents {
 impl PortalnetEvents {
     pub async fn new(
         talk_req_receiver: mpsc::Receiver<TalkRequest>,
-        history_overlay_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
-        state_overlay_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
-        beacon_overlay_sender: Option<mpsc::UnboundedSender<TalkRequest>>,
+        history_channels: OverlayChannels,
+        state_channels: OverlayChannels,
+        beacon_channels: OverlayChannels,
         utp_talk_reqs: mpsc::UnboundedSender<TalkRequest>,
     ) -> Self {
         Self {
             talk_req_receiver,
-            history_overlay_sender,
-            state_overlay_sender,
-            beacon_overlay_sender,
+            history_handle: history_channels.into(),
+            state_handle: state_channels.into(),
+            beacon_handle: beacon_channels.into(),
             utp_talk_reqs,
         }
     }
 
     /// Main loop to dispatch `Discv5` and uTP events
     pub async fn start(mut self) {
-        while let Some(talk_req) = self.talk_req_receiver.recv().await {
-            self.dispatch_discv5_talk_req(talk_req);
+        let mut receivers = vec![];
+        if let Some(rx) = self.history_handle.rx.take() {
+            receivers.push(rx);
+        }
+        if let Some(rx) = self.state_handle.rx.take() {
+            receivers.push(rx);
+        }
+        if let Some(rx) = self.beacon_handle.rx.take() {
+            receivers.push(rx);
+        }
+
+        if receivers.is_empty() {
+            warn!("Fused stream has zero receivers");
+        }
+
+        let mut event_stream = select_all(receivers.into_iter().map(BroadcastStream::new));
+        loop {
+            tokio::select! {
+                Some(talk_req) = self.talk_req_receiver.recv() => self.dispatch_discv5_talk_req(talk_req),
+                Some(event) = event_stream.next() => {
+                    match event {
+                        Ok(event) => self.dispatch_overlay_event(event),
+                        Err(e) => error!(
+                            error = %e,
+                            "Error reading from event stream"
+                        )
+                    }
+                }
+            }
         }
     }
 
@@ -51,63 +117,66 @@ impl PortalnetEvents {
         let protocol_id = ProtocolId::from_str(&hex_encode_upper(request.protocol()));
 
         match protocol_id {
-            Ok(protocol) => {
-                match protocol {
-                    ProtocolId::History => {
-                        match &self.history_overlay_sender {
-                        Some(tx) => {
-                            if let Err(err) = tx.send(request) {
-                                error!(
-                                    "Error sending discv5 talk request to history network: {err}"
-                                );
-                            }
-                        }
-                        None => debug!("Received History TALKREQ, but History event handler not initialized."),
-                    };
+            Ok(protocol) => match protocol {
+                ProtocolId::History => {
+                    self.send_overlay_request(&self.history_handle.tx, request.into(), "history")
+                }
+                ProtocolId::Beacon => {
+                    self.send_overlay_request(&self.beacon_handle.tx, request.into(), "beacon")
+                }
+                ProtocolId::State => {
+                    self.send_overlay_request(&self.state_handle.tx, request.into(), "state")
+                }
+                ProtocolId::Utp => {
+                    if let Err(err) = self.utp_talk_reqs.send(request) {
+                        error!(%err, "Error forwarding talk request to uTP socket");
                     }
-                    ProtocolId::Beacon => {
-                        match &self.beacon_overlay_sender {
-                        Some(tx) => {
-                            if let Err(err) = tx.send(request) {
-                                error!(
-                                    "Error sending discv5 talk request to beacon network: {err}"
-                                );
-                            }
-                        }
-                        None => debug!("Received Beacon TALKREQ, but Beacon event handler not initialized."),
-                    };
-                    }
-                    ProtocolId::State => {
-                        match &self.state_overlay_sender {
-                            Some(tx) => {
-                                if let Err(err) = tx.send(request) {
-                                    error!(
-                                        "Error sending discv5 talk request to state network: {err}"
-                                    );
-                                }
-                            }
-                            None => debug!(
-                                "Received State TALKREQ, but State event handler not initialized."
-                            ),
-                        };
-                    }
-                    ProtocolId::Utp => {
-                        if let Err(err) = self.utp_talk_reqs.send(request) {
-                            error!(%err, "Error forwarding talk request to uTP socket");
-                        }
-                    }
-                    _ => {
-                        warn!(
-                            "Received TalkRequest on unknown protocol from={} protocol={} body={}",
-                            request.node_id(),
-                            hex_encode_upper(request.protocol()),
-                            hex_encode(request.body()),
-                        );
-                    }
+                }
+                _ => {
+                    warn!(
+                        "Received TalkRequest on unknown protocol from={} protocol={} body={}",
+                        request.node_id(),
+                        hex_encode_upper(request.protocol()),
+                        hex_encode(request.body()),
+                    );
                 }
             }
             Err(_) => warn!("Unable to decode protocol id"),
         }
+    }
+
+    fn dispatch_overlay_event(&self, event: EventEnvelope) {
+        use OverlayRequest::Event;
+
+        tracing::trace!("Dispatching event {:?} from {} overlay", event, event.from);
+
+        if event.from != ProtocolId::Beacon {
+            self.send_overlay_request(&self.beacon_handle.tx, Event(event.clone()), "beacon");
+        }
+        if event.from != ProtocolId::State {
+            self.send_overlay_request(&self.state_handle.tx, Event(event.clone()), "state");
+        }
+        if event.from != ProtocolId::History {
+            self.send_overlay_request(&self.history_handle.tx, Event(event.clone()), "history");
+        }
+    }
+
+    fn send_overlay_request(
+        &self,
+        tx: &Option<mpsc::UnboundedSender<OverlayRequest>>,
+        msg: OverlayRequest,
+        dest: &'static str,
+    ) {
+        match tx {
+            Some(tx) => {
+                if let Err(err) = tx.send(msg) {
+                    error!(
+                        "Error sending request to {dest} network: {err}"
+                    );
+                }
+            }
+            None => debug!("Received {dest} request, but {dest} event handler not initialized."),
+        };
     }
 }
 
@@ -157,14 +226,22 @@ impl From<SystemTime> for Timestamp {
 /// A wrapper around an overlay event that includes additional metadata.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct EventEnvelope {
+    /// The timestamp of this event's generation.
     pub timestamp: Timestamp,
+    /// The protocol that generated this event.
+    pub from: ProtocolId,
+    /// The event payload.
     pub payload: OverlayEvent,
 }
 
 impl EventEnvelope {
-    pub fn new(payload: OverlayEvent) -> Self {
+    pub fn new(payload: OverlayEvent, from: ProtocolId) -> Self {
         let timestamp = Timestamp::now();
-        Self { timestamp, payload }
+        Self {
+            timestamp,
+            from,
+            payload,
+        }
     }
 }
 
