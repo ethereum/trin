@@ -12,6 +12,7 @@ use portal_bridge::execution_api::ExecutionApi;
 use portal_bridge::mode::BridgeMode;
 use portal_bridge::pandaops::PandaOpsMiddleware;
 use serde_json::Value;
+use std::sync::Arc;
 use tokio::time::{sleep, Duration};
 use trin_validation::accumulator::MasterAccumulator;
 use trin_validation::oracle::HeaderOracle;
@@ -48,7 +49,7 @@ pub async fn test_history_bridge(peertest: &Peertest, target: &HttpClient) {
 }
 
 pub async fn test_beacon_bridge(peertest: &Peertest, target: &HttpClient) {
-    let portal_clients = vec![target.clone()];
+    let portal_clients = Arc::new(vec![target.clone()]);
     let mode = BridgeMode::Test("./test_assets/portalnet/beacon_bridge_data.yaml".into());
     // Wait for bootnode to start
     sleep(Duration::from_secs(1)).await;
