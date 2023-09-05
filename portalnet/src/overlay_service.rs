@@ -1193,15 +1193,19 @@ where
 
         for (i, key) in content_keys.iter().enumerate() {
             // Accept content if within radius and not already present in the data store.
-            let accept = self
-                .store
-                .read()
-                .is_key_within_radius_and_unavailable(key)
-                .map_err(|err| {
-                    OverlayRequestError::AcceptError(format!(
-                        "Unable to check content availability {err}"
-                    ))
-                })?;
+            let accept = if key.is_zero() {
+                // Always accept zero content keys, as they are ephemeral
+                true
+            } else {
+                self.store
+                    .read()
+                    .is_key_within_radius_and_unavailable(key)
+                    .map_err(|err| {
+                        OverlayRequestError::AcceptError(format!(
+                            "Unable to check content availability {err}"
+                        ))
+                    })?
+            };
             requested_keys.set(i, accept).map_err(|err| {
                 OverlayRequestError::AcceptError(format!(
                     "Unable to set requested keys bits: {err:?}"
@@ -1620,7 +1624,13 @@ where
                     }
 
                     // Check if data should be stored, and store if true.
-                    let key_desired = store.read().is_key_within_radius_and_unavailable(&key);
+                    let key_desired = if key.is_zero() {
+                        // Zero content keys are always stored.
+                        Ok(true)
+                    } else {
+                        store.read().is_key_within_radius_and_unavailable(&key)
+                    };
+
                     match key_desired {
                         Ok(true) => {
                             if let Err(err) = store.write().put(key.clone(), &content_value) {

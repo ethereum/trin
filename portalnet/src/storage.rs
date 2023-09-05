@@ -376,7 +376,8 @@ impl PortalStorage {
         let content_id = key.content_id();
         let distance_to_content_id = self.distance_to_content_id(&content_id);
 
-        if distance_to_content_id > self.radius {
+        // Check if content is outside radius and if the content key is not zero (zero keys are always stored).
+        if distance_to_content_id > self.radius && !key.is_zero() {
             // Return Err if content is outside radius
             debug!("Not storing: {:02X?}", key.clone().into());
             return Err(ContentStoreError::InsufficientRadius {
@@ -945,6 +946,8 @@ pub mod test {
     use super::*;
 
     use discv5::enr::{CombinedKey, EnrBuilder};
+    use ethportal_api::types::content_key::beacon::ZeroKey;
+    use ethportal_api::BeaconContentKey;
     use quickcheck::{quickcheck, QuickCheck, TestResult};
     use rand::RngCore;
     use serial_test::serial;
@@ -1006,6 +1009,25 @@ pub mod test {
         QuickCheck::new()
             .tests(10)
             .quickcheck(test_store_random_bytes as fn() -> _);
+    }
+
+    #[test_log::test(tokio::test)]
+    #[serial]
+    async fn test_store_zero_content_key() {
+        let temp_dir = setup_temp_dir().unwrap();
+        let node_id = get_active_node_id(temp_dir.path().to_path_buf());
+        let storage_config =
+            PortalStorageConfig::new(CAPACITY_MB, temp_dir.path().to_path_buf(), node_id).unwrap();
+        let mut storage = PortalStorage::new(storage_config, ProtocolId::History).unwrap();
+        storage.radius = Distance::ZERO;
+        let content_key = BeaconContentKey::LightClientFinalityUpdate(ZeroKey);
+        let mut value = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut value);
+        storage.store(&content_key, &value.to_vec()).unwrap();
+        storage.store(&content_key, &value.to_vec()).unwrap();
+
+        drop(storage);
+        temp_dir.close().unwrap();
     }
 
     #[test_log::test(tokio::test)]

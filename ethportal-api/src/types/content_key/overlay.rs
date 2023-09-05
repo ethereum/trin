@@ -17,6 +17,11 @@ pub trait OverlayContentKey:
     fn to_hex(&self) -> String {
         hex_encode(self.to_bytes())
     }
+    /// Returns true if the content key is zero.
+    fn is_zero(&self) -> bool {
+        // Content key is zero if the last 8 bytes are zero.
+        self.to_bytes().ends_with(&[0; 8])
+    }
 }
 
 /// A content key type whose content id is the inner value. Allows for the construction

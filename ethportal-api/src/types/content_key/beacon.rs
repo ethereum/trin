@@ -242,6 +242,7 @@ mod test {
 
         let content_key = BeaconContentKey::LightClientFinalityUpdate(ZeroKey);
 
+        assert!(content_key.is_zero());
         assert_eq!(content_key.to_bytes(), expected_content_key);
         assert_eq!(content_key.to_string(), "LightClientFinalityUpdate");
         assert_eq!(content_key.to_hex(), KEY_STR);
@@ -254,6 +255,7 @@ mod test {
 
         let content_key = BeaconContentKey::LightClientOptimisticUpdate(ZeroKey);
 
+        assert!(content_key.is_zero());
         assert_eq!(content_key.to_bytes(), expected_content_key);
         assert_eq!(content_key.to_string(), "LightClientOptimisticUpdate");
         assert_eq!(content_key.to_hex(), KEY_STR);
