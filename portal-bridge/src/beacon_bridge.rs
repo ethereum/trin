@@ -27,9 +27,10 @@ use ssz_types::VariableList;
 use std::cmp::Ordering;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::thread::sleep;
 use std::time::SystemTime;
 use tracing::{info, warn};
+
+use tokio::time::{interval, sleep, Duration, MissedTickBehavior};
 
 pub struct BeaconBridge {
     pub api: ConsensusApi,
@@ -78,8 +79,27 @@ impl BeaconBridge {
     ///  Get and serve the latest beacon data.
     async fn launch_latest(&self) {
         // Current sync committee period known by the bridge
-        let mut current_period: usize = 0;
-        let mut finalized_block_root = String::new();
+        let (mut current_period, mut finalized_block_root) = Self::serve_latest(
+            self.api.clone(),
+            self.portal_clients.clone(),
+            0,
+            String::new(),
+        )
+        .await;
+
+        // Sleep until next update becomes available. This sets up the interval to update as soon as
+        // the following slot becomes available.
+        let now = SystemTime::now();
+        let next_update = duration_until_next_update(BEACON_GENESIS_TIME, now)
+            .to_std()
+            .expect("failed to convert chrono duration to std duration");
+        sleep(next_update).await;
+
+        // Run the beacon bridge update once every slot
+        let mut interval = interval(Duration::from_secs(12));
+        // If serving takes a little too long, then we want to serve the next one as soon as
+        // possible, but not serve any extras until the following slot. "Skip" gets this behavior.
+        interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
         loop {
             let consensus_api = self.api.clone();
@@ -93,12 +113,7 @@ impl BeaconBridge {
             )
             .await;
 
-            let now = SystemTime::now();
-
-            let next_update = duration_until_next_update(BEACON_GENESIS_TIME, now)
-                .to_std()
-                .expect("failed to convert chrono duration to std duration");
-            sleep(next_update);
+            interval.tick().await;
         }
     }
 
