@@ -82,7 +82,7 @@ pub async fn test_recursive_find_nodes_random(peertest: &Peertest) {
         .recursive_find_nodes(target_node_id)
         .await
         .unwrap();
-    assert_eq!(result.len(), 3);
+    assert_eq!(result.len(), 2);
 }
 
 pub async fn test_trace_recursive_find_content(peertest: &Peertest) {

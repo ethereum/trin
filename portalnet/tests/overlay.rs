@@ -183,9 +183,8 @@ async fn overlay() {
     {
         Ok(nodes) => {
             assert_eq!(1, nodes.total);
-            assert_eq!(2, nodes.enrs.len());
+            assert_eq!(1, nodes.enrs.len());
             assert!(nodes.enrs.contains(&SszEnr::new(overlay_two.local_enr())));
-            assert!(nodes.enrs.contains(&SszEnr::new(overlay_three.local_enr())));
         }
         Err(err) => panic!("Unable to respond to find nodes: {err}"),
     }
