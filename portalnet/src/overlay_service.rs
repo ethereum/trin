@@ -1057,7 +1057,14 @@ where
         );
 
         let distances64: Vec<u64> = request.distances.iter().map(|x| (*x).into()).collect();
-        let mut enrs = self.nodes_by_distance(distances64);
+        let mut enrs = self
+            .nodes_by_distance(distances64)
+            .into_iter()
+            .filter(|enr| {
+                // Filter out the source node.
+                &enr.node_id() != source
+            })
+            .collect();
 
         // Limit the ENRs so that their summed sizes do not surpass the max TALKREQ packet size.
         pop_while_ssz_bytes_len_gt(&mut enrs, MAX_PORTAL_NODES_ENRS_SIZE);
