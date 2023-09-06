@@ -42,7 +42,7 @@ pub async fn wait_for_beacon_content<P: BeaconNetworkApiClient + std::marker::Sy
     let mut counter = 0;
 
     // If content is absent an error will be returned.
-    while counter < 5 {
+    while counter < 60 {
         let message = match received_content_value {
             Ok(cp @ PossibleBeaconContentValue::ContentPresent(_)) => return cp,
             Ok(PossibleBeaconContentValue::ContentAbsent) => {
@@ -56,5 +56,8 @@ pub async fn wait_for_beacon_content<P: BeaconNetworkApiClient + std::marker::Sy
         counter += 1;
     }
 
+    if counter > 6 {
+        panic!("Beacon content took {counter} attempts to retrieve: {received_content_value:?}");
+    }
     received_content_value.unwrap()
 }
