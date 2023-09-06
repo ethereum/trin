@@ -42,7 +42,7 @@ pub async fn wait_for_beacon_content<P: BeaconNetworkApiClient + std::marker::Sy
     let mut counter = 0;
 
     // If content is absent an error will be returned.
-    while counter < 5 {
+    while counter < 60 {
         let message = match received_content_value {
             Ok(cp @ PossibleBeaconContentValue::ContentPresent(_)) => return cp,
             Ok(PossibleBeaconContentValue::ContentAbsent) => {
@@ -50,10 +50,10 @@ pub async fn wait_for_beacon_content<P: BeaconNetworkApiClient + std::marker::Sy
             }
             Err(e) => format!("received an error {e}"),
         };
-        error!("Retrying after 0.5s, because {message}");
+        counter += 1;
+        error!("Retry attempt #{counter} in 0.5s to find beacon content, because {message}");
         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
         received_content_value = ipc_client.local_content(content_key.clone()).await;
-        counter += 1;
     }
 
     received_content_value.unwrap()
