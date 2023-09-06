@@ -42,7 +42,7 @@ smallvec = "1.8.0"
 stunclient = "0.1.2"
 tempfile = "3.3.0"
 thiserror = "1.0.29"
-tokio = { version = "1.14.0", features = ["full"] }
+tokio = { version = "1.32.0", features = ["full"] }
 tracing = "0.1.36"
 trin-utils = { path="../trin-utils" }
 trin-validation = { path="../trin-validation" }

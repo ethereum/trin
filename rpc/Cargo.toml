@@ -18,7 +18,7 @@ ethereum-types = "0.12.1"
 portalnet = { path = "../portalnet"}
 tracing = "0.1.27"
 trin-utils = { path = "../trin-utils"}
-tokio = { version = "1.14.0", features = ["full"] }
+tokio = { version = "1.32.0", features = ["full"] }
 hyper = "0.14"
 reth-ipc = { version = "0.1.0-alpha.6", git = "https://github.com/paradigmxyz/reth.git"}
 url = "2.3.1"
