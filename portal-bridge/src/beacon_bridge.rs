@@ -26,12 +26,11 @@ use serde_json::Value;
 use ssz_types::VariableList;
 use std::cmp::Ordering;
 use std::path::PathBuf;
-use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
-use std::sync::{atomic, Mutex};
-use std::thread::sleep;
 use std::time::SystemTime;
 use tracing::{info, warn};
+
+use tokio::time::{interval, sleep, Duration, MissedTickBehavior};
 
 pub struct BeaconBridge {
     pub api: ConsensusApi,
@@ -80,69 +79,83 @@ impl BeaconBridge {
     ///  Get and serve the latest beacon data.
     async fn launch_latest(&self) {
         // Current sync committee period known by the bridge
-        let current_period = Arc::new(AtomicUsize::new(0));
-        let finalized_block_root = Arc::new(Mutex::new(String::new()));
+        let (mut current_period, mut finalized_block_root) = Self::serve_latest(
+            self.api.clone(),
+            self.portal_clients.clone(),
+            0,
+            String::new(),
+        )
+        .await;
+
+        // Sleep until next update becomes available. This sets up the interval to update as soon as
+        // the following slot becomes available.
+        let now = SystemTime::now();
+        let next_update = duration_until_next_update(BEACON_GENESIS_TIME, now)
+            .to_std()
+            .expect("failed to convert chrono duration to std duration");
+        sleep(next_update).await;
+
+        // Run the beacon bridge update once every slot
+        let mut interval = interval(Duration::from_secs(12));
+        // If serving takes a little too long, then we want to serve the next one as soon as
+        // possible, but not serve any extras until the following slot. "Skip" gets this behavior.
+        interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
         loop {
             let consensus_api = self.api.clone();
             let portal_clients = self.portal_clients.clone();
-            let current_period = Arc::clone(&current_period);
-            let finalized_block_root = Arc::clone(&finalized_block_root);
 
-            tokio::spawn(async move {
-                Self::serve_latest(
-                    consensus_api,
-                    portal_clients,
-                    current_period,
-                    finalized_block_root,
-                )
-                .await;
-            });
+            (current_period, finalized_block_root) = Self::serve_latest(
+                consensus_api,
+                portal_clients,
+                current_period,
+                finalized_block_root,
+            )
+            .await;
 
-            let now = SystemTime::now();
-
-            let next_update = duration_until_next_update(BEACON_GENESIS_TIME, now)
-                .to_std()
-                .expect("failed to convert chrono duration to std duration");
-            sleep(next_update);
+            interval.tick().await;
         }
     }
 
     /// Serve latest beacon network data to the network
+    ///
+    /// Returns the new current period and finalized block root
     async fn serve_latest(
         api: ConsensusApi,
         portal_clients: Arc<Vec<HttpClient>>,
-        current_period: Arc<AtomicUsize>,
-        finalized_block_root: Arc<Mutex<String>>,
-    ) {
+        current_period: u64,
+        finalized_block_root: String,
+    ) -> (u64, String) {
         // Serve LightClientBootstrap data
         let api_clone = api.clone();
         let portal_clients_clone = Arc::clone(&portal_clients);
-        let finalized_block_root = Arc::clone(&finalized_block_root);
 
-        tokio::spawn(async move {
-            if let Err(err) = Self::serve_light_client_bootstrap(
+        let bootstrap_result = tokio::spawn(async move {
+            Self::serve_light_client_bootstrap(
                 api_clone,
                 portal_clients_clone,
-                finalized_block_root,
+                &finalized_block_root,
             )
             .await
-            {
+            .or_else(|err| {
                 warn!("Failed to serve light client bootstrap: {err}");
-            }
+                Ok::<String, ()>(finalized_block_root)
+            })
+            .expect("always return the original or new finalized block root")
         });
 
         // Serve `LightClientUpdate` data
         let api_clone = api.clone();
         let portal_clients_clone = Arc::clone(&portal_clients);
 
-        tokio::spawn(async move {
-            if let Err(err) =
-                Self::serve_light_client_update(api_clone, portal_clients_clone, current_period)
-                    .await
-            {
-                warn!("Failed to serve light client update: {err}");
-            }
+        let update_result = tokio::spawn(async move {
+            Self::serve_light_client_update(api_clone, portal_clients_clone, current_period)
+                .await
+                .or_else(|err| {
+                    warn!("Failed to serve light client update: {err}");
+                    Ok::<u64, ()>(current_period)
+                })
+                .expect("always return the original or new period")
         });
 
         // Serve `LightClientFinalityUpdate` data
@@ -163,71 +176,65 @@ impl BeaconBridge {
                 warn!("Failed to serve light client optimistic update: {err}");
             }
         });
+
+        let new_period = update_result.await.expect("update task is never cancelled");
+        let new_finalized_block_root = bootstrap_result
+            .await
+            .expect("bootstrap task is never cancelled");
+        (new_period, new_finalized_block_root)
     }
 
     /// Serve `LightClientBootstrap` data
     async fn serve_light_client_bootstrap(
         api: ConsensusApi,
         portal_clients: Arc<Vec<HttpClient>>,
-        finalized_block_root: Arc<Mutex<String>>,
-    ) -> anyhow::Result<()> {
+        finalized_block_root: &str,
+    ) -> anyhow::Result<String> {
         let response = api.get_beacon_block_root("finalized".to_owned()).await?;
         let response: Value = serde_json::from_str(&response)?;
         let latest_finalized_block_root: String =
             serde_json::from_value(response["data"]["root"].clone())?;
 
-        // If the latest finalized block root has changed, serve a new bootstrap
-        if !finalized_block_root
-            .lock()
-            .expect("Failed to lock finalized block root")
-            .eq(&latest_finalized_block_root)
-        {
-            let result = api.get_lc_bootstrap(&latest_finalized_block_root).await?;
-            let result: Value = serde_json::from_str(&result)?;
-            let bootstrap: LightClientBootstrapCapella =
-                serde_json::from_value(result["data"].clone())?;
-
-            info!(
-                "Got lc bootstrap for slot {:?}",
-                bootstrap.header.beacon.slot
-            );
-
-            let content_value = BeaconContentValue::LightClientBootstrap(bootstrap.into());
-            let content_key = BeaconContentKey::LightClientBootstrap(LightClientBootstrapKey {
-                block_hash: <[u8; 32]>::try_from(hex_decode(&latest_finalized_block_root)?)
-                    .map_err(|err| {
-                        anyhow::anyhow!("Failed to convert finalized block root to bytes: {err:?}")
-                    })?,
-            });
-
-            // Update the latest finalized block root if we successfully gossiped the latest bootstrap.
-            match Self::gossip_beacon_content(portal_clients, content_key, content_value).await {
-                Ok(_) => {
-                    let mut finalized_block_root = finalized_block_root
-                        .lock()
-                        .expect("Unable to lock finalized block root");
-                    *finalized_block_root = latest_finalized_block_root;
-                }
-                Err(err) => return Err(err),
-            }
+        // If the latest finalized block root is the same, return as unchanged
+        if finalized_block_root.eq(&latest_finalized_block_root) {
+            return Ok(latest_finalized_block_root);
         }
 
-        Ok(())
+        // finalized block root is different, so serve a new bootstrap
+        let result = api.get_lc_bootstrap(&latest_finalized_block_root).await?;
+        let result: Value = serde_json::from_str(&result)?;
+        let bootstrap: LightClientBootstrapCapella =
+            serde_json::from_value(result["data"].clone())?;
+
+        info!(
+            "Got lc bootstrap for slot {:?}",
+            bootstrap.header.beacon.slot
+        );
+
+        let content_value = BeaconContentValue::LightClientBootstrap(bootstrap.into());
+        let content_key = BeaconContentKey::LightClientBootstrap(LightClientBootstrapKey {
+            block_hash: <[u8; 32]>::try_from(hex_decode(&latest_finalized_block_root)?).map_err(
+                |err| anyhow::anyhow!("Failed to convert finalized block root to bytes: {err:?}"),
+            )?,
+        });
+
+        // Return the latest finalized block root if we successfully gossiped the latest bootstrap.
+        Self::gossip_beacon_content(portal_clients, content_key, content_value)
+            .await
+            .map(|_| latest_finalized_block_root)
     }
 
     async fn serve_light_client_update(
         api: ConsensusApi,
         portal_clients: Arc<Vec<HttpClient>>,
-        current_period: Arc<AtomicUsize>,
-    ) -> anyhow::Result<()> {
+        current_period: u64,
+    ) -> anyhow::Result<u64> {
         let now = SystemTime::now();
         let expected_current_period = expected_current_slot(BEACON_GENESIS_TIME, now) / (32 * 256);
-        match (expected_current_period as usize)
-            .cmp(&current_period.load(atomic::Ordering::Acquire))
-        {
+        match expected_current_period.cmp(&current_period) {
             Ordering::Equal => {
                 // We already gossiped the latest data from the current period, no need to serve it again.
-                return Ok(());
+                return Ok(current_period);
             }
             Ordering::Less => {
                 // if we panic here, it is a bug
@@ -260,13 +267,9 @@ impl BeaconBridge {
         );
 
         // Update the current known period if we successfully gossiped the latest data.
-        match Self::gossip_beacon_content(portal_clients, content_key, content_value).await {
-            Ok(_) => {
-                current_period.store(expected_current_period as usize, atomic::Ordering::Release);
-                Ok(())
-            }
-            Err(err) => Err(err),
-        }
+        Self::gossip_beacon_content(portal_clients, content_key, content_value)
+            .await
+            .map(|_| expected_current_period)
     }
 
     async fn serve_light_client_optimistic_update(
