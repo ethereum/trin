@@ -7,3 +7,6 @@ pub const EPOCH_SIZE: usize = 8192;
 
 // Max number of epochs = 2 ** 17
 // const MAX_HISTORICAL_EPOCHS: usize = 131072;
+
+// EIP-155 chain ID for Ethereum mainnet
+pub const CHAIN_ID: usize = 1;
