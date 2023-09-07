@@ -50,6 +50,13 @@ pub struct BridgeConfig {
     )]
     pub network: Vec<NetworkKind>,
 
+    #[arg(
+        long = "infura",
+        help = "Use Infura as the execution layer provider",
+        default_value = "false"
+    )]
+    pub infura: bool,
+
     #[arg(long, help = "Url for metrics reporting")]
     pub metrics_url: Option<Url>,
 

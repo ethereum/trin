@@ -1,6 +1,6 @@
 use crate::bridge::Retry;
-use crate::constants::{BASE_CL_ENDPOINT, BASE_EL_ENDPOINT};
-use crate::{PANDAOPS_CLIENT_ID, PANDAOPS_CLIENT_SECRET};
+use crate::constants::{BASE_CL_ENDPOINT, BASE_EL_ENDPOINT, INFURA_BASE_URL};
+use crate::{INFURA_CLIENT_ID, PANDAOPS_CLIENT_ID, PANDAOPS_CLIENT_SECRET};
 use anyhow::anyhow;
 use ethportal_api::types::jsonrpc::request::JsonRequest;
 use futures::future::join_all;
@@ -17,6 +17,7 @@ pub struct PandaOpsMiddleware {
     pub base_cl_endpoint: String,
     pub client_id: String,
     pub client_secret: String,
+    infura: bool,
 }
 
 impl PandaOpsMiddleware {
@@ -25,12 +26,14 @@ impl PandaOpsMiddleware {
         base_cl_endpoint: String,
         client_id: String,
         client_secret: String,
+        infura: bool,
     ) -> Self {
         Self {
             base_el_endpoint,
             base_cl_endpoint,
             client_id,
             client_secret,
+            infura,
         }
     }
 }
@@ -42,11 +45,21 @@ impl Default for PandaOpsMiddleware {
             base_cl_endpoint: BASE_CL_ENDPOINT.to_string(),
             client_id: PANDAOPS_CLIENT_ID.clone(),
             client_secret: PANDAOPS_CLIENT_SECRET.clone(),
+            infura: false,
         }
     }
 }
 
 impl PandaOpsMiddleware {
+    pub fn infura() -> Self {
+        Self {
+            base_el_endpoint: INFURA_BASE_URL.to_string(),
+            base_cl_endpoint: "".to_string(),
+            client_id: INFURA_CLIENT_ID.clone(),
+            client_secret: "".to_owned(),
+            infura: true,
+        }
+    }
     /// Used the "surf" library here instead of "ureq" since "surf" is much more capable of handling
     /// multiple async requests. Using "ureq" consistently resulted in errors as soon as the number of
     /// concurrent tasks increased significantly.
@@ -71,7 +84,13 @@ impl PandaOpsMiddleware {
         if requests.len() > BATCH_LIMIT {
             warn!("Attempting to send requests outnumbering pandaops limit")
         }
-        let result = surf::post(self.base_el_endpoint.clone())
+
+        let endpoint = match self.infura {
+            false => self.base_el_endpoint.clone(),
+            true => format!("{}{}", self.base_el_endpoint, self.client_id),
+        };
+
+        let result = surf::post(endpoint)
             .middleware(Retry::default())
             .body_json(&json!(requests))
             .map_err(|e| anyhow!("Unable to construct json post request: {e:?}"))?

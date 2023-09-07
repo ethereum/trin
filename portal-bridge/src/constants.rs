@@ -13,6 +13,9 @@ pub const BASE_EL_ENDPOINT: &str = "https://archive.mainnet.eu1.ethpandaops.io";
 /// We use Nimbus as the CL client, because it supports light client data by default.
 pub const BASE_CL_ENDPOINT: &str = "https://nimbus.mainnet.ethpandaops.io";
 
+/// Endpoint for Infura, which can be used instead of PandaOps via the --infura flag.
+pub const INFURA_BASE_URL: &str = "https://mainnet.infura.io/v3/";
+
 /// History * content key & value
 pub const HEADER_WITH_PROOF_CONTENT_KEY: &str =
     "0x006251d65b8a8668efabe2f89c96a5b6332d83b3bbe585089ea6b2ab9b6754f5e9";

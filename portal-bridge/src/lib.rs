@@ -21,4 +21,6 @@ lazy_static! {
         env::var("PANDAOPS_CLIENT_ID").expect("PANDAOPS_CLIENT_ID env var not set.");
     static ref PANDAOPS_CLIENT_SECRET: String =
         env::var("PANDAOPS_CLIENT_SECRET").expect("PANDAOPS_CLIENT_SECRET env var not set.");
+    static ref INFURA_CLIENT_ID: String =
+        env::var("TRIN_INFURA_PROJECT_ID").expect("TRIN_INFURA_PROJECT_ID env var not set.");
 }

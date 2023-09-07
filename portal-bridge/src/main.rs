@@ -71,7 +71,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let bridge_handle = tokio::spawn(async move {
             let master_acc = MasterAccumulator::default();
             let header_oracle = HeaderOracle::new(master_acc);
-            let pandaops_middleware = PandaOpsMiddleware::default();
+            let pandaops_middleware = match bridge_config.infura {
+                true => PandaOpsMiddleware::infura(),
+                false => PandaOpsMiddleware::default(),
+            };
             let execution_api = ExecutionApi::new(pandaops_middleware);
 
             let bridge = Bridge::new(
