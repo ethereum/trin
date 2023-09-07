@@ -12,7 +12,6 @@ use ethportal_api::types::consensus::light_client::optimistic_update::LightClien
 use ethportal_api::types::consensus::light_client::update::{
     LightClientUpdate, LightClientUpdateCapella,
 };
-use ethportal_api::types::content_key::beacon::ZeroKey;
 use ethportal_api::types::content_value::beacon::{
     ForkVersionedLightClientUpdate, LightClientUpdatesByRange,
 };
@@ -30,6 +29,9 @@ use std::sync::Arc;
 use std::time::SystemTime;
 use tracing::{info, warn};
 
+use ethportal_api::types::content_key::beacon::{
+    LightClientFinalityUpdateKey, LightClientOptimisticUpdateKey,
+};
 use tokio::time::{interval, sleep, Duration, MissedTickBehavior};
 
 pub struct BeaconBridge {
@@ -285,8 +287,10 @@ impl BeaconBridge {
             "Got lc optimistic update for slot {:?}",
             update.attested_header.beacon.slot
         );
+        let content_key = BeaconContentKey::LightClientOptimisticUpdate(
+            LightClientOptimisticUpdateKey::new(update.signature_slot),
+        );
         let content_value = BeaconContentValue::LightClientOptimisticUpdate(update.into());
-        let content_key = BeaconContentKey::LightClientOptimisticUpdate(ZeroKey);
 
         Self::gossip_beacon_content(portal_clients, content_key, content_value).await
     }
@@ -303,8 +307,10 @@ impl BeaconBridge {
             "Got lc finality update for slot {:?}",
             update.attested_header.beacon.slot
         );
+        let content_key = BeaconContentKey::LightClientFinalityUpdate(
+            LightClientFinalityUpdateKey::new(update.signature_slot),
+        );
         let content_value = BeaconContentValue::LightClientFinalityUpdate(update.into());
-        let content_key = BeaconContentKey::LightClientFinalityUpdate(ZeroKey);
 
         Self::gossip_beacon_content(portal_clients, content_key, content_value).await
     }
