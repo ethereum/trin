@@ -86,9 +86,16 @@ impl Bridge {
             .expect("Error parsing history test assets.");
 
         for asset in assets.0.into_iter() {
-            Bridge::gossip_content(&self.portal_clients, asset.content_key, asset.content_value)
-                .await
-                .expect("Error serving block range in test mode.");
+            Bridge::gossip_content(
+                &self.portal_clients,
+                asset.content_key.clone(),
+                asset.content_value,
+            )
+            .await
+            .expect("Error serving block range in test mode.");
+            if let HistoryContentKey::BlockHeaderWithProof(_) = asset.content_key {
+                sleep(Duration::from_secs(HEADER_SATURATION_DELAY)).await;
+            }
         }
     }
 
