@@ -20,8 +20,6 @@ pub enum ConsensusError {
     InvalidSignature,
     #[error("invalid header hash found: {0}, expected: {1}")]
     InvalidHeaderHash(String, String),
-    #[error("payload not found for slot: {0}")]
-    PayloadNotFound(u64),
     #[error("checkpoint is too old")]
     CheckpointTooOld,
     #[error("consensus rpc is for the incorrect network")]

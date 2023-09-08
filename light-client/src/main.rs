@@ -20,7 +20,7 @@ async fn main() -> Result<()> {
 
     // Set the checkpoint to the last known checkpoint
     builder =
-        builder.checkpoint("0x760387ebbc6d7c48e421424def00cfd85d71dd8f4ea3a9c0bb2f01b684553a6d");
+        builder.checkpoint("0x31c982c923f839527f4be15308d5bcc41930dd4b2db514b8fbc52929509d126f");
 
     // Set the rpc port
     builder = builder.rpc_port(8545);

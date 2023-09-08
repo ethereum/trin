@@ -1,11 +1,8 @@
 use std::sync::Arc;
 
-use ethers::prelude::{Address, U256};
-use ethers::types::SyncingStatus;
 use eyre::{eyre, Result};
 
 use crate::consensus::{types::Header, ConsensusLightClient};
-use crate::types::BlockTag;
 use log::{error, info, warn};
 use tokio::sync::RwLock;
 
@@ -355,45 +352,11 @@ impl<DB: Database> Client<DB> {
         }
     }
 
-    pub async fn get_block_transaction_count_by_hash(&self, hash: &Vec<u8>) -> Result<u64> {
-        self.node
-            .read()
-            .await
-            .get_block_transaction_count_by_hash(hash)
-    }
-
-    pub async fn get_block_transaction_count_by_number(&self, block: BlockTag) -> Result<u64> {
-        self.node
-            .read()
-            .await
-            .get_block_transaction_count_by_number(block)
-    }
-
-    pub async fn get_gas_price(&self) -> Result<U256> {
-        self.node.read().await.get_gas_price()
-    }
-
-    pub async fn get_priority_fee(&self) -> Result<U256> {
-        self.node.read().await.get_priority_fee()
-    }
-
-    pub async fn get_block_number(&self) -> Result<u64> {
-        self.node.read().await.get_block_number()
-    }
-
     pub async fn chain_id(&self) -> u64 {
         self.node.read().await.chain_id()
     }
 
-    pub async fn syncing(&self) -> Result<SyncingStatus> {
-        self.node.read().await.syncing()
-    }
-
     pub async fn get_header(&self) -> Result<Header> {
         self.node.read().await.get_header()
-    }
-
-    pub async fn get_coinbase(&self) -> Result<Address> {
-        self.node.read().await.get_coinbase()
     }
 }

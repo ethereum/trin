@@ -1,18 +1,5 @@
-use crate::types::BlockTag;
 use eyre::Report;
 use thiserror::Error;
-
-#[derive(Debug, Error)]
-#[error("block not available: {block}")]
-pub struct BlockNotFoundError {
-    block: BlockTag,
-}
-
-impl BlockNotFoundError {
-    pub fn new(block: BlockTag) -> Self {
-        Self { block }
-    }
-}
 
 #[derive(Debug, Error)]
 #[error("rpc error on method: {method}, message: {error}")]
@@ -36,9 +23,6 @@ pub enum NodeError {
     #[error("out of sync: {0} slots behind")]
     OutOfSync(u64),
 
-    #[error("consensus payload error: {0}")]
-    ConsensusPayloadError(Report),
-
     #[error("consensus client creation error: {0}")]
     ConsensusClientCreationError(Report),
 
@@ -47,7 +31,4 @@ pub enum NodeError {
 
     #[error("consensus sync error: {0}")]
     ConsensusSyncError(Report),
-
-    #[error(transparent)]
-    BlockNotFoundError(#[from] BlockNotFoundError),
 }
