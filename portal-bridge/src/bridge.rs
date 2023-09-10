@@ -115,9 +115,25 @@ impl Bridge {
                 info!("Discovered new blocks to gossip: {gossip_range:?}");
                 let gossip_stats = Arc::new(Mutex::new(GossipStats::new(gossip_range.clone())));
                 let epoch_acc = None;
-                self.serve(gossip_range.clone(), epoch_acc, gossip_stats.clone())
-                    .await
-                    .expect("Error serving block range in latest mode.");
+                loop {
+                    match self
+                        .serve(
+                            gossip_range.clone(),
+                            epoch_acc.clone(),
+                            gossip_stats.clone(),
+                        )
+                        .await
+                    {
+                        Ok(_) => break,
+                        Err(e) => {
+                            warn!(
+                                "Error serving block range in latest mode: {:?}. Retrying...",
+                                e
+                            );
+                            continue;
+                        }
+                    }
+                }
                 block_index = gossip_range.end;
             }
         }
