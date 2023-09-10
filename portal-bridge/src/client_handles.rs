@@ -14,17 +14,19 @@ pub fn fluffy_handle(
     let listen_all_ips = SocketAddr::new("0.0.0.0".parse().expect("to parse ip"), udp_port);
     let ip = stun_for_external(&listen_all_ips).expect("to stun for external ip");
     let storage_size = bridge_config.storage_size;
+    let fluffy_network = bridge_config.fluffy_network;
+    let table_ip_limit = bridge_config.table_ip_limit;
+    let bucket_ip_limit = bridge_config.bucket_ip_limit;
     command
         .kill_on_drop(true)
-        .arg("--storage-size:0")
         .arg(format!("--storage-size:{storage_size}"))
         .arg("--rpc")
         .arg(format!("--rpc-port:{rpc_port}"))
         .arg(format!("--udp-port:{udp_port}"))
         .arg(format!("--nat:extip:{}", ip.ip()))
-        .arg("--network:testnet0")
-        .arg("--table-ip-limit:1024")
-        .arg("--bucket-ip-limit:24")
+        .arg(format!("--network:{fluffy_network}"))
+        .arg(format!("--table-ip-limit:{table_ip_limit}"))
+        .arg(format!("--bucket-ip-limit:{bucket_ip_limit}"))
         .arg(format!("--netkey-unsafe:{private_key}"));
     if let Some(metrics_url) = bridge_config.metrics_url {
         let address = match metrics_url.host_str() {

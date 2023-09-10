@@ -58,6 +58,27 @@ pub struct BridgeConfig {
     )]
     pub storage_size: u64,
 
+    #[arg(
+        long = "Fluffy Bridge's Network",
+        help = "The Network for the fluffy bridge",
+        default_value = "testnet0"
+    )]
+    pub fluffy_network: NetworkKind,
+
+    #[arg(
+        long = "Fluffy Bridge's Table Ip Limit",
+        help = "Table Ip Limit for the fluffy bridge",
+        default_value = "1024"
+    )]
+    pub table_ip_limit: u64,
+
+    #[arg(
+        long = "Fluffy Bridge's Bucket Ip Limit",
+        help = "Bucket Ip Limit for the fluffy bridge",
+        default_value = "24"
+    )]
+    pub bucket_ip_limit: u64,
+
     #[arg(long, help = "Url for metrics reporting")]
     pub metrics_url: Option<Url>,
 
