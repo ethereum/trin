@@ -50,6 +50,14 @@ pub struct BridgeConfig {
     )]
     pub network: Vec<NetworkKind>,
 
+    #[arg(
+        long = "storage_size",
+        help = "Storage Size for Fluffy Bridge",
+        default_value = "0",
+        use_value_delimiter = true
+    )]
+    pub storage_size: u64,
+
     #[arg(long, help = "Url for metrics reporting")]
     pub metrics_url: Option<Url>,
 

@@ -13,9 +13,11 @@ pub fn fluffy_handle(
     let mut command = Command::new(bridge_config.executable_path);
     let listen_all_ips = SocketAddr::new("0.0.0.0".parse().expect("to parse ip"), udp_port);
     let ip = stun_for_external(&listen_all_ips).expect("to stun for external ip");
+    let storage_size = bridge_config.storage_size;
     command
         .kill_on_drop(true)
         .arg("--storage-size:0")
+        .arg(format!("--storage-size:{storage_size}"))
         .arg("--rpc")
         .arg(format!("--rpc-port:{rpc_port}"))
         .arg(format!("--udp-port:{udp_port}"))
