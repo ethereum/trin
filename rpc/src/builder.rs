@@ -1,12 +1,12 @@
 use crate::errors::{RpcError, WsHttpSamePortError};
 use crate::jsonrpsee::{Methods, RpcModule};
 use crate::rpc_server::{RpcServerConfig, RpcServerHandle};
-use crate::{BeaconNetworkApi, Discv5Api, HistoryNetworkApi, Web3Api};
+use crate::{BeaconNetworkApi, Discv5Api, EthApi, HistoryNetworkApi, Web3Api};
 use ethportal_api::types::jsonrpc::request::{
     BeaconJsonRpcRequest, HistoryJsonRpcRequest, StateJsonRpcRequest,
 };
 use ethportal_api::{
-    BeaconNetworkApiServer, Discv5ApiServer, HistoryNetworkApiServer, Web3ApiServer,
+    BeaconNetworkApiServer, Discv5ApiServer, EthApiServer, HistoryNetworkApiServer, Web3ApiServer,
 };
 use portalnet::discovery::Discovery;
 use serde::Deserialize;
@@ -27,6 +27,8 @@ pub enum PortalRpcModule {
     Beacon,
     /// `discv5_` module
     Discv5,
+    /// `eth_` module
+    Eth,
     /// `portal_history` module
     History,
     /// `web3_` module
@@ -148,10 +150,11 @@ pub enum RpcModuleSelection {
 }
 
 impl RpcModuleSelection {
-    /// The standard modules to instantiate by default `discv5`, `history`, `web3` and `beacon`.
-    pub const STANDARD_MODULES: [PortalRpcModule; 4] = [
+    /// The standard modules to instantiate by default
+    pub const STANDARD_MODULES: [PortalRpcModule; 5] = [
         PortalRpcModule::Beacon,
         PortalRpcModule::Discv5,
+        PortalRpcModule::Eth,
         PortalRpcModule::History,
         PortalRpcModule::Web3,
     ];
@@ -399,6 +402,7 @@ impl RpcModuleBuilder {
                         PortalRpcModule::Discv5 => {
                             Discv5Api::new(self.discv5.clone()).into_rpc().into()
                         }
+                        PortalRpcModule::Eth => EthApi.into_rpc().into(),
                         PortalRpcModule::History => {
                             let history_tx = self
                                 .history_tx
@@ -467,6 +471,7 @@ mod tests {
             vec![
                 PortalRpcModule::Beacon,
                 PortalRpcModule::Discv5,
+                PortalRpcModule::Eth,
                 PortalRpcModule::History,
                 PortalRpcModule::Web3,
             ]

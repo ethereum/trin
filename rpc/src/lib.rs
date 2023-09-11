@@ -5,6 +5,7 @@ mod builder;
 mod cors;
 mod discv5_rpc;
 mod errors;
+mod eth_rpc;
 mod history_rpc;
 mod rpc_server;
 mod serde;
@@ -16,6 +17,7 @@ use beacon_rpc::BeaconNetworkApi;
 pub use builder::{PortalRpcModule, RpcModuleBuilder, TransportRpcModuleConfig};
 use discv5_rpc::Discv5Api;
 use errors::RpcError;
+use eth_rpc::EthApi;
 use ethportal_api::jsonrpsee;
 use ethportal_api::types::cli::{
     TrinConfig, Web3TransportType, BEACON_NETWORK, HISTORY_NETWORK, STATE_NETWORK,
@@ -46,6 +48,7 @@ pub async fn launch_jsonrpc_server(
         match network.as_str() {
             HISTORY_NETWORK => {
                 modules.push(PortalRpcModule::History);
+                modules.push(PortalRpcModule::Eth);
             }
             STATE_NETWORK => {
                 // not implemented

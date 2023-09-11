@@ -14,6 +14,7 @@ authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 anyhow = "1.0.68"
 discv5 = { version = "0.3.1", features = ["serde"] }
 ethportal-api = { path = "../ethportal-api"}
+ethereum-types = "0.12.1"
 portalnet = { path = "../portalnet"}
 tracing = "0.1.27"
 trin-utils = { path = "../trin-utils"}
@@ -26,4 +27,5 @@ serde_json = "1.0.95"
 strum = { version = "0.24.1", features = ["derive"] }
 tower-http = { version = "0.4", features = ["full"] }
 tower = { version = "0.4", features = ["full"] }
+trin-validation = { path="../trin-validation" }
 thiserror = "1.0"
