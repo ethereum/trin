@@ -63,7 +63,7 @@ pub struct BridgeConfig {
         help = "The Network for the fluffy bridge",
         default_value = "testnet0"
     )]
-    pub fluffy_network: NetworkKind,
+    pub fluffy_network: String,
 
     #[arg(
         long = "Fluffy Bridge's Table Ip Limit",
