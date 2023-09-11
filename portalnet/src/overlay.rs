@@ -670,7 +670,7 @@ where
         let mut successfully_bonded_bootnode = false;
         let enrs = self.discovery.table_entries_enr();
         if enrs.is_empty() {
-            error!(
+            info!(
                 protocol = %self.protocol,
                 "No bootnodes provided to join portal network",
             );
