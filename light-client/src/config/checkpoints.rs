@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use ethers::types::H256;
+use ethereum_types::H256;
 use serde::{Deserialize, Serialize};
 
 use crate::config::networks;
@@ -275,9 +275,9 @@ impl CheckpointFallback {
 
 #[cfg(test)]
 mod test {
+    use super::*;
     use crate::config;
     use crate::config::networks;
-    use ethers::prelude::H256;
 
     #[tokio::test]
     async fn test_checkpoint_fallback() {
