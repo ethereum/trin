@@ -2513,7 +2513,6 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
         .collect();
 
     if all_nodes.is_empty() {
-        // If there are no connected nodes, use the nodes regardless of connectivity.
         warn!("No connected nodes, using disconnected nodes for gossip.");
         all_nodes = kbuckets
             .buckets_iter()
