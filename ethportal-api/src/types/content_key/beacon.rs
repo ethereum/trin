@@ -13,48 +13,8 @@ use std::fmt;
 pub enum BeaconContentKey {
     LightClientBootstrap(LightClientBootstrapKey),
     LightClientUpdatesByRange(LightClientUpdatesByRangeKey),
-    LightClientFinalityUpdate(ZeroKey),
-    LightClientOptimisticUpdate(ZeroKey),
-}
-
-/// Represents a zero ssz bytes for a portal content key.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ZeroKey;
-
-impl Encode for ZeroKey {
-    fn is_ssz_fixed_len() -> bool {
-        true
-    }
-
-    fn ssz_bytes_len(&self) -> usize {
-        8
-    }
-
-    fn ssz_append(&self, buf: &mut Vec<u8>) {
-        buf.extend_from_slice(&[0u8; 8]);
-    }
-}
-
-impl Decode for ZeroKey {
-    fn is_ssz_fixed_len() -> bool {
-        true
-    }
-
-    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
-        if bytes.len() != 8 {
-            return Err(ssz::DecodeError::InvalidByteLength {
-                len: bytes.len(),
-                expected: 8,
-            });
-        }
-        if bytes != [0u8; 8] {
-            return Err(ssz::DecodeError::BytesInvalid(
-                "ZeroKey Bytes should be all 0".to_string(),
-            ));
-        }
-
-        Ok(Self)
-    }
+    LightClientFinalityUpdate(LightClientFinalityUpdateKey),
+    LightClientOptimisticUpdate(LightClientOptimisticUpdateKey),
 }
 
 /// Key used to identify a light client bootstrap.
@@ -71,6 +31,32 @@ pub struct LightClientUpdatesByRangeKey {
     pub start_period: u64,
     /// the count of periods.
     pub count: u64,
+}
+
+/// Key used to identify a light client finality update.
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+pub struct LightClientFinalityUpdateKey {
+    /// Finalized slot number
+    pub signature_slot: u64,
+}
+
+impl LightClientFinalityUpdateKey {
+    pub fn new(signature_slot: u64) -> Self {
+        Self { signature_slot }
+    }
+}
+
+/// Key used to identify a light client optimistic update.
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+pub struct LightClientOptimisticUpdateKey {
+    /// Optimistic slot number
+    pub signature_slot: u64,
+}
+
+impl LightClientOptimisticUpdateKey {
+    pub fn new(signature_slot: u64) -> Self {
+        Self { signature_slot }
+    }
 }
 
 impl From<&BeaconContentKey> for Vec<u8> {
@@ -107,8 +93,14 @@ impl fmt::Display for BeaconContentKey {
                 "LightClientUpdatesByRange {{ start_period: {}, count: {} }}",
                 key.start_period, key.count
             ),
-            Self::LightClientFinalityUpdate(_) => "LightClientFinalityUpdate".to_string(),
-            Self::LightClientOptimisticUpdate(_) => "LightClientOptimisticUpdate".to_string(),
+            Self::LightClientFinalityUpdate(key) => format!(
+                "LightClientFinalityUpdate {{ signature_slot: {} }}",
+                key.signature_slot
+            ),
+            Self::LightClientOptimisticUpdate(key) => format!(
+                "LightClientOptimisticUpdate {{ signature_slot: {} }}",
+                key.signature_slot
+            ),
         };
 
         write!(f, "{s}")
@@ -137,11 +129,11 @@ impl OverlayContentKey for BeaconContentKey {
             }
             BeaconContentKey::LightClientFinalityUpdate(key) => {
                 bytes.push(0x02);
-                bytes.extend_from_slice(&key.as_ssz_bytes())
+                bytes.extend_from_slice(&key.signature_slot.as_ssz_bytes())
             }
             BeaconContentKey::LightClientOptimisticUpdate(key) => {
                 bytes.push(0x03);
-                bytes.extend_from_slice(&key.as_ssz_bytes())
+                bytes.extend_from_slice(&key.signature_slot.as_ssz_bytes())
             }
         }
 
@@ -237,25 +229,32 @@ mod test {
 
     #[test]
     fn light_client_finality_update() {
-        const KEY_STR: &str = "0x020000000000000000";
+        const KEY_STR: &str = "0x02c2f36e0000000000";
         let expected_content_key = hex_decode(KEY_STR).unwrap();
-
-        let content_key = BeaconContentKey::LightClientFinalityUpdate(ZeroKey);
+        let content_key =
+            BeaconContentKey::LightClientFinalityUpdate(LightClientFinalityUpdateKey::new(7271362));
 
         assert_eq!(content_key.to_bytes(), expected_content_key);
-        assert_eq!(content_key.to_string(), "LightClientFinalityUpdate");
+        assert_eq!(
+            content_key.to_string(),
+            "LightClientFinalityUpdate { signature_slot: 7271362 }"
+        );
         assert_eq!(content_key.to_hex(), KEY_STR);
     }
 
     #[test]
     fn light_client_optimistic_update() {
-        const KEY_STR: &str = "0x030000000000000000";
+        const KEY_STR: &str = "0x03c2f36e0000000000";
         let expected_content_key = hex_decode(KEY_STR).unwrap();
-
-        let content_key = BeaconContentKey::LightClientOptimisticUpdate(ZeroKey);
+        let content_key = BeaconContentKey::LightClientOptimisticUpdate(
+            LightClientOptimisticUpdateKey::new(7271362),
+        );
 
         assert_eq!(content_key.to_bytes(), expected_content_key);
-        assert_eq!(content_key.to_string(), "LightClientOptimisticUpdate");
+        assert_eq!(
+            content_key.to_string(),
+            "LightClientOptimisticUpdate { signature_slot: 7271362 }"
+        );
         assert_eq!(content_key.to_hex(), KEY_STR);
     }
 }
