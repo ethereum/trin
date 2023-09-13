@@ -507,7 +507,7 @@ fn get_participating_keys(
 ) -> Result<Vec<PublicKey>> {
     let mut pks: Vec<PublicKey> = Vec::new();
     bitfield.iter().enumerate().for_each(|(i, bit)| {
-        if bit == true {
+        if bit {
             let pk = &committee.pubkeys[i];
             let pk = PublicKey::from_bytes_unchecked(pk).unwrap();
             pks.push(pk);
@@ -520,7 +520,7 @@ fn get_participating_keys(
 fn get_bits(bitfield: &Bitvector<512>) -> u64 {
     let mut count = 0;
     bitfield.iter().for_each(|bit| {
-        if bit == true {
+        if bit {
             count += 1;
         }
     });
