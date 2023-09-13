@@ -407,29 +407,25 @@ where
             };
 
             // Attempt to insert the node into the routing table.
-            match self
-                .kbuckets
-                .write()
-                .insert_or_update(&kbucket::Key::from(node_id), node, status)
-            {
-                InsertResult::Failed(reason) => {
-                    warn!(
-                        protocol = %self.protocol,
-                        bootnode = %node_id,
-                        error = ?reason,
-                        "Error inserting bootnode into routing table",
-                    );
-                }
-                _ => {
-                    debug!(
-                        protocol = %self.protocol,
-                        bootnode = %node_id,
-                        "Inserted bootnode into routing table",
-                    );
+            if let InsertResult::Failed(reason) = self
+                            .kbuckets
+                            .write()
+                            .insert_or_update(&kbucket::Key::from(node_id), node, status) {
+                warn!(
+                    protocol = %self.protocol,
+                    bootnode = %node_id,
+                    error = ?reason,
+                    "Error inserting bootnode into routing table",
+                );
+            } else {
+                debug!(
+                    protocol = %self.protocol,
+                    bootnode = %node_id,
+                    "Inserted bootnode into routing table",
+                );
 
-                    // Queue the node in the ping queue.
-                    self.peers_to_ping.insert(node_id);
-                }
+                // Queue the node in the ping queue.
+                self.peers_to_ping.insert(node_id);
             }
         }
     }
@@ -761,15 +757,14 @@ where
             }
             QueryEvent::Finished(_, query_info, query)
             | QueryEvent::TimedOut(_, query_info, query) => {
-                let (callback, content_key) = match query_info.query_type {
-                    QueryType::FindContent { callback, target } => (callback, target),
-                    _ => {
-                        error!(
-                            "Only FindContent queries trigger a Finished or TimedOut event, but this is a {:?}",
-                            query_info.query_type
-                        );
-                        return;
-                    }
+                let (callback, content_key) = if let QueryType::FindContent { callback, target } = query_info.query_type {
+                    (callback, target)
+                } else {
+                    error!(
+                        "Only FindContent queries trigger a Finished or TimedOut event, but this is a {:?}",
+                        query_info.query_type
+                    );
+                    return;
                 };
 
                 match query.into_result() {
@@ -809,15 +804,14 @@ where
                     } => {
                         let metrics = self.metrics.clone();
                         let utp = self.utp_socket.clone();
-                        let source = match self.find_enr(&peer) {
-                            Some(enr) => enr,
-                            _ => {
-                                warn!("Received uTP payload from unknown {peer}");
-                                if let Some(responder) = callback {
-                                    let _ = responder.send((None, true, query_info.trace));
-                                };
-                                return;
-                            }
+                        let source = if let Some(enr) = self.find_enr(&peer) {
+                            enr
+                        } else {
+                            warn!("Received uTP payload from unknown {peer}");
+                            if let Some(responder) = callback {
+                                let _ = responder.send((None, true, query_info.trace));
+                            };
+                            return;
                         };
                         let cid = utp_rs::cid::ConnectionId {
                             recv: connection_id,
@@ -2197,29 +2191,28 @@ where
     ) -> Result<(), FailureReason> {
         let key = kbucket::Key::from(node_id);
 
-        match self.kbuckets.write().update_node_status(&key, state, None) {
-            UpdateResult::Failed(reason) => match reason {
-                FailureReason::KeyNonExistent => Err(FailureReason::KeyNonExistent),
-                other => {
-                    warn!(
-                        protocol = %self.protocol,
-                        peer = %node_id,
-                        error = ?other,
-                        "Error updating node connection state",
-                    );
-
-                    Err(other)
-                }
-            },
-            _ => {
-                trace!(
+        if let UpdateResult::Failed(reason) = self.kbuckets.write().update_node_status(&key, state, None) {
+            match reason {
+            FailureReason::KeyNonExistent => Err(FailureReason::KeyNonExistent),
+            other => {
+                warn!(
                     protocol = %self.protocol,
-                    updated = %node_id,
-                    updated.conn_state = ?state,
-                    "Node connection state updated",
+                    peer = %node_id,
+                    error = ?other,
+                    "Error updating node connection state",
                 );
-                Ok(())
+
+                Err(other)
             }
+        }
+        } else {
+            trace!(
+                protocol = %self.protocol,
+                updated = %node_id,
+                updated.conn_state = ?state,
+                "Node connection state updated",
+            );
+            Ok(())
         }
     }
 
