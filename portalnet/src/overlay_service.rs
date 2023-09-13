@@ -20,6 +20,7 @@ use discv5::{
     rpc::RequestId,
 };
 use futures::{channel::oneshot, future::join_all, prelude::*};
+use lazy_static::lazy_static;
 use parking_lot::RwLock;
 use rand::seq::{IteratorRandom, SliceRandom};
 use smallvec::SmallVec;
@@ -82,16 +83,10 @@ const EXPECTED_NON_EMPTY_BUCKETS: usize = 17;
 /// Bucket refresh lookup interval in seconds
 const BUCKET_REFRESH_INTERVAL_SECS: u64 = 60;
 
-/// The default configuration to use for uTP connections.
-pub const UTP_CONN_CFG: ConnectionConfig = ConnectionConfig {
-    max_packet_size: 1024,
-    max_conn_attempts: 3,
-    max_idle_timeout: Duration::from_secs(32),
-    max_timeout: Duration::from_secs(60),
-    initial_timeout: Duration::from_millis(1500),
-    min_timeout: Duration::from_millis(500),
-    target_delay: Duration::from_millis(250),
-};
+lazy_static! {
+    /// The default configuration to use for uTP connections.
+    pub static ref UTP_CONN_CFG: ConnectionConfig = ConnectionConfig { max_packet_size: 1024, ..Default::default()};
+}
 
 /// A network-based action that the overlay may perform.
 ///
@@ -836,7 +831,7 @@ where
                         tokio::spawn(async move {
                             metrics.report_utp_active_inc(UtpDirectionLabel::Inbound);
                             let mut stream = match utp
-                                .connect_with_cid(cid.clone(), UTP_CONN_CFG)
+                                .connect_with_cid(cid.clone(), *UTP_CONN_CFG)
                                 .await
                             {
                                 Ok(stream) => stream,
@@ -1109,7 +1104,7 @@ where
                     let metrics = Arc::clone(&self.metrics);
                     tokio::spawn(async move {
                         metrics.report_utp_active_inc(UtpDirectionLabel::Outbound);
-                        let stream = match utp.accept_with_cid(cid.clone(), UTP_CONN_CFG).await {
+                        let stream = match utp.accept_with_cid(cid.clone(), *UTP_CONN_CFG).await {
                             Ok(stream) => stream,
                             Err(err) => {
                                 metrics.report_utp_outcome(
@@ -1237,7 +1232,7 @@ where
             // Wait for an incoming connection with the given CID. Then, read the data from the uTP
             // stream.
             metrics.report_utp_active_inc(UtpDirectionLabel::Inbound);
-            let mut stream = match utp.accept_with_cid(cid.clone(), UTP_CONN_CFG).await {
+            let mut stream = match utp.accept_with_cid(cid.clone(), *UTP_CONN_CFG).await {
                 Ok(stream) => stream,
                 Err(err) => {
                     metrics.report_utp_outcome(
@@ -1500,7 +1495,7 @@ where
 
         tokio::spawn(async move {
             metrics.report_utp_active_inc(UtpDirectionLabel::Outbound);
-            let stream = match utp.connect_with_cid(cid.clone(), UTP_CONN_CFG).await {
+            let stream = match utp.connect_with_cid(cid.clone(), *UTP_CONN_CFG).await {
                 Ok(stream) => stream,
                 Err(err) => {
                     metrics.report_utp_outcome(
