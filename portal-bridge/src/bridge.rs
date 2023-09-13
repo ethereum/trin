@@ -141,9 +141,10 @@ impl Bridge {
             ),
             ModeType::Block(block) => {
                 let epoch_index = block / EPOCH_SIZE;
-                let end_block = match looped {
-                    true => (epoch_index + 1) * EPOCH_SIZE,
-                    false => block + 1,
+                let end_block = if looped {
+                    (epoch_index + 1) * EPOCH_SIZE
+                } else {
+                    block + 1
                 };
                 (block, end_block, epoch_index)
             }
