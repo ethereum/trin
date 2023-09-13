@@ -76,29 +76,26 @@ impl MerkleTree {
             return Zero(depth);
         }
 
-        match depth {
-            0 => {
-                debug_assert_eq!(leaves.len(), 1);
-                Leaf(leaves[0])
-            }
-            _ => {
-                // Split leaves into left and right subtrees
-                let subtree_capacity = 2usize.pow(depth as u32 - 1);
-                let (left_leaves, right_leaves) = if leaves.len() <= subtree_capacity {
-                    (leaves, EMPTY_SLICE)
-                } else {
-                    leaves.split_at(subtree_capacity)
-                };
+        if let 0 = depth {
+            debug_assert_eq!(leaves.len(), 1);
+            Leaf(leaves[0])
+        } else {
+            // Split leaves into left and right subtrees
+            let subtree_capacity = 2usize.pow(depth as u32 - 1);
+            let (left_leaves, right_leaves) = if leaves.len() <= subtree_capacity {
+                (leaves, EMPTY_SLICE)
+            } else {
+                leaves.split_at(subtree_capacity)
+            };
 
-                let left_subtree = MerkleTree::create(left_leaves, depth - 1);
-                let right_subtree = MerkleTree::create(right_leaves, depth - 1);
-                let hash = H256::from_slice(&hash32_concat(
-                    left_subtree.hash().as_bytes(),
-                    right_subtree.hash().as_bytes(),
-                ));
+            let left_subtree = MerkleTree::create(left_leaves, depth - 1);
+            let right_subtree = MerkleTree::create(right_leaves, depth - 1);
+            let hash = H256::from_slice(&hash32_concat(
+                left_subtree.hash().as_bytes(),
+                right_subtree.hash().as_bytes(),
+            ));
 
-                Node(hash, Box::new(left_subtree), Box::new(right_subtree))
-            }
+            Node(hash, Box::new(left_subtree), Box::new(right_subtree))
         }
     }
 
