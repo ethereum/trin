@@ -119,7 +119,7 @@ pub async fn launch_peertest_nodes(count: u16) -> Peertest {
     let bootnode = launch_node(bootnode_config).await.unwrap();
     let bootnode_enr = &bootnode.enr;
     // All other peertest node ids begin at 2, and increment from there
-    let nodes = future::try_join_all((2..count + 1).map(|id| {
+    let nodes = future::try_join_all((2..=count).map(|id| {
         let node_config = generate_trin_config(id, Some(bootnode_enr));
         launch_node(node_config)
     }))
