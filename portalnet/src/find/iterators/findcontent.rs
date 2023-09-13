@@ -565,7 +565,7 @@ mod tests {
                             );
                             content_peer = Some(k.clone());
                         } else {
-                            let num_closer = rng.gen_range(0..query.config.num_results + 1);
+                            let num_closer = rng.gen_range(0..=query.config.num_results);
                             let closer_peers = random_nodes(num_closer).collect::<Vec<_>>();
                             remaining.extend(closer_peers.iter().map(|x| Key::from(*x)));
                             query.on_success(
