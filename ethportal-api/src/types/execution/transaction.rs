@@ -282,9 +282,10 @@ impl Encodable for ToAddress {
 
 impl Decodable for ToAddress {
     fn decode(rlp: &Rlp<'_>) -> Result<Self, DecoderError> {
-        match rlp.is_empty() {
-            true => Ok(ToAddress::Empty),
-            false => Ok(ToAddress::Exists(rlp::decode(rlp.as_raw())?)),
+        if rlp.is_empty() {
+            Ok(ToAddress::Empty)
+        } else {
+            Ok(ToAddress::Exists(rlp::decode(rlp.as_raw())?))
         }
     }
 }

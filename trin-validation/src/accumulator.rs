@@ -108,11 +108,12 @@ impl MasterAccumulator {
         let gen_index = calculate_generalized_index(&hwp.header);
         let epoch_index = self.get_epoch_index_of_header(&hwp.header) as usize;
         let epoch_hash = self.historical_epochs[epoch_index];
-        match verify_merkle_proof(hwp.header.hash(), &proof.proof, 15, gen_index, epoch_hash) {
-            true => Ok(()),
-            false => Err(anyhow!(
-                "Merkle proof validation failed for pre-merge header"
-            )),
+        if verify_merkle_proof(hwp.header.hash(), &proof.proof, 15, gen_index, epoch_hash) {
+            Ok(())
+        } else {
+            Err(anyhow!(
+            "Merkle proof validation failed for pre-merge header"
+        ))
         }
     }
 
