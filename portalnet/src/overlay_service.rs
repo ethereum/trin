@@ -1009,6 +1009,7 @@ where
         }
     }
 
+    /// Process an event dispatched by another overlay on the discovery.
     fn process_event(&mut self, _event: EventEnvelope) {}
 
     /// Attempts to build a response for a request.
@@ -2619,13 +2620,13 @@ where
 
     /// Send `OverlayEvent` to the event stream.
     #[allow(dead_code)]
-    fn send_event(&self, event: OverlayEvent) {
+    fn send_event(&self, event: OverlayEvent, to: Option<Vec<ProtocolId>>) {
         trace!(
             "Sending event={:?} to event-stream from protocol {}",
             event,
             self.protocol
         );
-        let event = EventEnvelope::new(event, self.protocol);
+        let event = EventEnvelope::new(event, self.protocol, to);
         if let Err(err) = self.event_stream.send(event) {
             error!(
                 error = %err,
@@ -4008,7 +4009,7 @@ mod tests {
         let (sender, mut receiver) = broadcast::channel(1);
         service.event_stream = sender;
         // Emit LightClientUpdate event
-        service.send_event(OverlayEvent::LightClientOptimisticUpdate);
+        service.send_event(OverlayEvent::LightClientOptimisticUpdate, None);
         // Check that the event is received
         let event = receiver.recv().await.unwrap();
         assert_eq!(event.payload, OverlayEvent::LightClientOptimisticUpdate);

@@ -148,15 +148,23 @@ impl PortalnetEvents {
     fn dispatch_overlay_event(&self, event: EventEnvelope) {
         use OverlayRequest::Event;
 
+        let all_protocols = vec![ProtocolId::History, ProtocolId::Beacon, ProtocolId::State];
+        let mut recipients = event
+            .destination
+            .as_ref()
+            .unwrap_or(&all_protocols)
+            .to_owned();
+        recipients.retain(|id| id != &event.from);
+
         tracing::trace!("Dispatching event {:?} from {} overlay", event, event.from);
 
-        if event.from != ProtocolId::Beacon {
+        if recipients.contains(&ProtocolId::Beacon) {
             self.send_overlay_request(&self.beacon_handle.tx, Event(event.clone()), "beacon");
         }
-        if event.from != ProtocolId::State {
+        if recipients.contains(&ProtocolId::State) {
             self.send_overlay_request(&self.state_handle.tx, Event(event.clone()), "state");
         }
-        if event.from != ProtocolId::History {
+        if recipients.contains(&ProtocolId::History) {
             self.send_overlay_request(&self.history_handle.tx, Event(event.clone()), "history");
         }
     }
@@ -232,15 +240,24 @@ pub struct EventEnvelope {
     pub from: ProtocolId,
     /// The event payload.
     pub payload: OverlayEvent,
+    /// Specifies the protocols to which this event should be sent.
+    ///
+    /// A value of `None` is taken to indicate `all protocols`.
+    pub destination: Option<Vec<ProtocolId>>,
 }
 
 impl EventEnvelope {
-    pub fn new(payload: OverlayEvent, from: ProtocolId) -> Self {
+    pub fn new(
+        payload: OverlayEvent,
+        from: ProtocolId,
+        destination: Option<Vec<ProtocolId>>,
+    ) -> Self {
         let timestamp = Timestamp::now();
         Self {
             timestamp,
             from,
             payload,
+            destination,
         }
     }
 }
