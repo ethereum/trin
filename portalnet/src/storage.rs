@@ -1140,6 +1140,8 @@ pub mod test {
         // The restarted store should have the same radius as the original
         assert_eq!(radius, new_storage.radius);
 
+        drop(storage);
+        drop(new_storage);
         temp_dir.close()?;
         Ok(())
     }

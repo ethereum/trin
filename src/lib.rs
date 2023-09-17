@@ -8,6 +8,8 @@ use tokio::sync::RwLock;
 use tracing::info;
 use utp_rs::socket::UtpSocket;
 
+#[cfg(windows)]
+use ethportal_api::types::cli::Web3TransportType;
 use ethportal_api::types::cli::{TrinConfig, BEACON_NETWORK, HISTORY_NETWORK, STATE_NETWORK};
 use portalnet::{
     discovery::{Discovery, Discv5UdpSocket},
@@ -25,6 +27,13 @@ use trin_validation::{accumulator::MasterAccumulator, oracle::HeaderOracle};
 pub async fn run_trin(
     trin_config: TrinConfig,
 ) -> Result<RpcServerHandle, Box<dyn std::error::Error>> {
+    // Panic early on a windows build that is trying to use IPC, which is unsupported for now
+    // Make sure not to panic on non-windows configurations.
+    #[cfg(windows)]
+    if let Web3TransportType::IPC = trin_config.web3_transport {
+        panic!("Windows doesn't support Unix Domain Sockets IPC, use --web3-transport http");
+    }
+
     let trin_version = get_trin_version();
     info!("Launching Trin: v{trin_version}");
     info!(config = %trin_config, "With:");

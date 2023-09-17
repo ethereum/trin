@@ -1,3 +1,4 @@
+#![cfg(unix)]
 use rpc::RpcServerHandle;
 use std::env;
 use std::net::{IpAddr, Ipv4Addr};
