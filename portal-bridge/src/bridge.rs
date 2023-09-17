@@ -94,7 +94,7 @@ impl Bridge {
             .await
             .expect("Error serving block range in test mode.");
             if let HistoryContentKey::BlockHeaderWithProof(_) = asset.content_key {
-                sleep(Duration::from_millis(100)).await;
+                sleep(Duration::from_millis(50)).await;
             }
         }
     }
