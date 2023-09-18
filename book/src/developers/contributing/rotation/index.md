@@ -28,7 +28,7 @@ At the end of the previous week, you will get the [Flamingo notes](https://notes
 
 Read through the notes, and then generate the new checklist for the week, by [creating a note from this template](https://notes.ethereum.org/?nav=overview&template=b35733cd-b374-4b79-bc57-f2bb58ee651e).
 
-Link the generated checklist into the Flamingo notes for your week. Make sure your status is "online" in Discord. Make sure you're tagged under the `trin-flamingo` role. Put on your favorite pink shirt. Listen to the [flamingo anthem](https://www.youtube.com/watch?v=6hJv5yBLe9c). Fly.
+Link the generated checklist into the Flamingo notes for your week. Make sure your status is "online" in Discord. Make sure you're tagged under the `trin-flamingo` role. Put on your favorite pink shirt. Watch a [silly flamingo video](https://www.youtube.com/watch?v=gWNWtbPEWw0). Fly.
 
 ### Daily
 
