@@ -49,7 +49,7 @@ When you get to the end of your checklist, here are ideas for what to work on ne
   - link to the TODO in the code, and any relevant context
   - label issue as Flamingo. If it is not urgent and a good fit, add "Good First Issue"
   - Post a PR to remove the `TODO` from the code, in favor of the issue.
-  - `git grep -i "todo"` & `git grep -i "fixme"`
+  - `git grep -iE "(todo)|(fixme)"`
 - Look through all [open trin issues](https://github.com/ethereum/trin/issues)
   - Close outdated issues, with a short explanation
   - If appropriate, add a Flamingo tag
