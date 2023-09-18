@@ -11,6 +11,7 @@ jobs:
     steps:
       - uses: actions/stale@v5
         with:
+          close-issue-reason: "not_planned"
           days-before-issue-stale: 42
           days-before-issue-close: 14
           stale-issue-label: "stale"
