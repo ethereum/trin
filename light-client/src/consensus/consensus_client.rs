@@ -18,8 +18,16 @@ use super::errors::ConsensusError;
 use crate::config::client_config::Config;
 use crate::types::Bytes32;
 use crate::utils::bytes_to_bytes32;
+use ethereum_types::H256;
+use ethportal_api::consensus::header::BeaconBlockHeader;
+use ethportal_api::consensus::signature::BlsSignature;
+use ethportal_api::light_client::bootstrap::CurrentSyncCommitteeProofLen;
+use ethportal_api::light_client::update::FinalizedRootProofLen;
+use ethportal_api::utils::bytes::hex_encode;
+use ssz_types::{typenum, BitVector, FixedVector};
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
+use tree_hash::TreeHash;
 
 // https://github.com/ethereum/consensus-specs/blob/dev/specs/altair/light-client/sync-protocol.md
 // does not implement force updates
@@ -35,10 +43,10 @@ pub struct ConsensusLightClient<R: ConsensusRpc> {
 
 #[derive(Debug, Default)]
 struct LightClientStore {
-    finalized_header: Header,
+    finalized_header: BeaconBlockHeader,
     current_sync_committee: SyncCommittee,
     next_sync_committee: Option<SyncCommittee>,
-    optimistic_header: Header,
+    optimistic_header: BeaconBlockHeader,
     previous_max_active_participants: u64,
     current_max_active_participants: u64,
 }
@@ -70,11 +78,11 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
         }
     }
 
-    pub fn get_header(&self) -> &Header {
+    pub fn get_header(&self) -> &BeaconBlockHeader {
         &self.store.optimistic_header
     }
 
-    pub fn get_finalized_header(&self) -> &Header {
+    pub fn get_finalized_header(&self) -> &BeaconBlockHeader {
         &self.store.finalized_header
     }
 
@@ -141,9 +149,9 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
             .rpc
             .get_bootstrap(&self.initial_checkpoint)
             .await
-            .map_err(|_| eyre!("could not fetch bootstrap"))?;
+            .map_err(|err| eyre!("could not fetch bootstrap: {err}"))?;
 
-        let is_valid = self.is_valid_checkpoint(bootstrap.header.slot);
+        let is_valid = self.is_valid_checkpoint(bootstrap.header.beacon.slot);
 
         if !is_valid {
             if self.config.strict_checkpoint_age {
@@ -154,13 +162,13 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
         }
 
         let committee_valid = is_current_committee_proof_valid(
-            &bootstrap.header,
+            &bootstrap.header.beacon,
             &mut bootstrap.current_sync_committee,
             &bootstrap.current_sync_committee_branch,
         );
 
-        let header_hash = bootstrap.header.hash_tree_root()?.to_string();
-        let expected_hash = format!("0x{}", hex::encode(&self.initial_checkpoint));
+        let header_hash = hex_encode(bootstrap.header.beacon.tree_hash_root());
+        let expected_hash = hex_encode(&self.initial_checkpoint);
         let header_valid = header_hash == expected_hash;
 
         if !header_valid {
@@ -172,10 +180,10 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
         }
 
         self.store = LightClientStore {
-            finalized_header: bootstrap.header.clone(),
+            finalized_header: bootstrap.header.beacon.clone(),
             current_sync_committee: bootstrap.current_sync_committee,
             next_sync_committee: None,
-            optimistic_header: bootstrap.header.clone(),
+            optimistic_header: bootstrap.header.beacon,
             previous_max_active_participants: 0,
             current_max_active_participants: 0,
         };
@@ -270,17 +278,17 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
         Ok(())
     }
 
-    fn verify_update(&self, update: &Update) -> Result<()> {
+    fn verify_update(&self, update: &LightClientUpdateCapella) -> Result<()> {
         let update = GenericUpdate::from(update);
         self.verify_generic_update(&update)
     }
 
-    fn verify_finality_update(&self, update: &FinalityUpdate) -> Result<()> {
+    fn verify_finality_update(&self, update: &LightClientFinalityUpdateCapella) -> Result<()> {
         let update = GenericUpdate::from(update);
         self.verify_generic_update(&update)
     }
 
-    fn verify_optimistic_update(&self, update: &OptimisticUpdate) -> Result<()> {
+    fn verify_optimistic_update(&self, update: &LightClientOptimisticUpdateCapella) -> Result<()> {
         let update = GenericUpdate::from(update);
         self.verify_generic_update(&update)
     }
@@ -339,14 +347,12 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
             }
 
             if update_finalized_slot > self.store.finalized_header.slot {
-                self.store.finalized_header = update.finalized_header.clone().unwrap();
+                self.store.finalized_header = update.finalized_header.as_ref().unwrap().clone();
                 self.log_finality_update(update);
 
                 if self.store.finalized_header.slot % 32 == 0 {
-                    let checkpoint_res = self.store.finalized_header.hash_tree_root();
-                    if let Ok(checkpoint) = checkpoint_res {
-                        self.last_checkpoint = Some(checkpoint.as_bytes().to_vec());
-                    }
+                    let checkpoint = self.store.finalized_header.tree_hash_root();
+                    self.last_checkpoint = Some(checkpoint.as_bytes().to_vec());
                 }
 
                 if self.store.finalized_header.slot > self.store.optimistic_header.slot {
@@ -356,12 +362,12 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
         }
     }
 
-    fn apply_update(&mut self, update: &Update) {
+    fn apply_update(&mut self, update: &LightClientUpdateCapella) {
         let update = GenericUpdate::from(update);
         self.apply_generic_update(&update);
     }
 
-    fn apply_finality_update(&mut self, update: &FinalityUpdate) {
+    fn apply_finality_update(&mut self, update: &LightClientFinalityUpdateCapella) {
         let update = GenericUpdate::from(update);
         self.apply_generic_update(&update);
     }
@@ -383,7 +389,7 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
         );
     }
 
-    fn apply_optimistic_update(&mut self, update: &OptimisticUpdate) {
+    fn apply_optimistic_update(&mut self, update: &LightClientOptimisticUpdateCapella) {
         let update = GenericUpdate::from(update);
         self.apply_generic_update(&update);
     }
@@ -423,14 +429,13 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
     fn verify_sync_committee_signture(
         &self,
         pks: &[PublicKey],
-        attested_header: &Header,
-        signature: &SignatureBytes,
+        attested_header: &BeaconBlockHeader,
+        signature: &BlsSignature,
         signature_slot: u64,
     ) -> bool {
         let res: Result<bool> = (move || {
             let pks: Vec<&PublicKey> = pks.iter().collect();
-            let header_root =
-                bytes_to_bytes32(attested_header.clone().hash_tree_root()?.as_bytes());
+            let header_root = bytes_to_bytes32(attested_header.tree_hash_root().as_bytes());
             let signing_root = self.compute_committee_sign_root(header_root, signature_slot)?;
 
             Ok(is_aggregate_valid(signature, signing_root.as_bytes(), &pks))
@@ -503,13 +508,13 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
 
 fn get_participating_keys(
     committee: &SyncCommittee,
-    bitfield: &Bitvector<512>,
+    bitfield: &BitVector<typenum::U512>,
 ) -> Result<Vec<PublicKey>> {
     let mut pks: Vec<PublicKey> = Vec::new();
     bitfield.iter().enumerate().for_each(|(i, bit)| {
-        if bit == true {
+        if bit {
             let pk = &committee.pubkeys[i];
-            let pk = PublicKey::from_bytes_unchecked(pk).unwrap();
+            let pk = PublicKey::from_bytes_unchecked(pk.as_ref()).expect("invalid pubkey bytes");
             pks.push(pk);
         }
     });
@@ -517,10 +522,10 @@ fn get_participating_keys(
     Ok(pks)
 }
 
-fn get_bits(bitfield: &Bitvector<512>) -> u64 {
+fn get_bits(bitfield: &BitVector<typenum::U512>) -> u64 {
     let mut count = 0;
     bitfield.iter().for_each(|bit| {
-        if bit == true {
+        if bit {
             count += 1;
         }
     });
@@ -529,36 +534,48 @@ fn get_bits(bitfield: &Bitvector<512>) -> u64 {
 }
 
 fn is_finality_proof_valid(
-    attested_header: &Header,
-    finality_header: &mut Header,
-    finality_branch: &[Bytes32],
+    attested_header: &BeaconBlockHeader,
+    finality_header: &mut BeaconBlockHeader,
+    finality_branch: &FixedVector<H256, FinalizedRootProofLen>,
 ) -> bool {
-    is_proof_valid(attested_header, finality_header, finality_branch, 6, 41)
+    let finality_branch = finality_branch
+        .iter()
+        .map(|h| bytes_to_bytes32(h.as_bytes()))
+        .collect::<Vec<_>>();
+    is_proof_valid(attested_header, finality_header, &finality_branch, 6, 41)
 }
 
 fn is_next_committee_proof_valid(
-    attested_header: &Header,
+    attested_header: &BeaconBlockHeader,
     next_committee: &mut SyncCommittee,
-    next_committee_branch: &[Bytes32],
+    next_committee_branch: &FixedVector<H256, CurrentSyncCommitteeProofLen>,
 ) -> bool {
+    let next_committee_branch = next_committee_branch
+        .iter()
+        .map(|h| bytes_to_bytes32(h.as_bytes()))
+        .collect::<Vec<_>>();
     is_proof_valid(
         attested_header,
         next_committee,
-        next_committee_branch,
+        &next_committee_branch,
         5,
         23,
     )
 }
 
 fn is_current_committee_proof_valid(
-    attested_header: &Header,
+    attested_header: &BeaconBlockHeader,
     current_committee: &mut SyncCommittee,
-    current_committee_branch: &[Bytes32],
+    current_committee_branch: &FixedVector<H256, CurrentSyncCommitteeProofLen>,
 ) -> bool {
+    let current_committee_branch = current_committee_branch
+        .iter()
+        .map(|h| bytes_to_bytes32(h.as_bytes()))
+        .collect::<Vec<_>>();
     is_proof_valid(
         attested_header,
         current_committee,
-        current_committee_branch,
+        &current_committee_branch,
         5,
         22,
     )
@@ -568,7 +585,9 @@ fn is_current_committee_proof_valid(
 mod tests {
     use std::sync::Arc;
 
-    use ssz_rs::Vector;
+    use ethportal_api::consensus::header::BeaconBlockHeader;
+    use ethportal_api::consensus::pubkey::PubKey;
+    use ethportal_api::consensus::signature::BlsSignature;
 
     use crate::config::client_config::Config;
     use crate::config::networks;
@@ -577,11 +596,10 @@ mod tests {
     use crate::consensus::errors::ConsensusError;
     use crate::consensus::rpc::mock_rpc::MockRpc;
     use crate::consensus::rpc::ConsensusRpc;
-    use crate::consensus::types::Header;
     use crate::consensus::utils::calc_sync_period;
 
     async fn get_client(strict_checkpoint_age: bool) -> ConsensusLightClient<MockRpc> {
-        let base_config = networks::goerli();
+        let base_config = networks::mainnet();
         let config = Config {
             consensus_rpc: String::new(),
             chain: base_config.chain,
@@ -591,7 +609,7 @@ mod tests {
         };
 
         let checkpoint =
-            hex::decode("1e591af1e90f2db918b2a132991c7c2ee9a4ab26da496bd6e71e4f0bd65ea870")
+            hex::decode("c62aa0de55e6f21230fa63713715e1a6c13e73005e89f6389da271955d819bde")
                 .unwrap();
 
         let mut client =
@@ -618,16 +636,15 @@ mod tests {
     async fn test_verify_update_invalid_committee() {
         let client = get_client(false).await;
         let period = calc_sync_period(client.store.finalized_header.slot);
-        let updates = client
+        let mut updates = client
             .rpc
             .get_updates(period, MAX_REQUEST_LIGHT_CLIENT_UPDATES)
             .await
             .unwrap();
 
-        let mut update = updates[0].clone();
-        update.next_sync_committee.pubkeys[0] = Vector::default();
+        updates[0].next_sync_committee.pubkeys[0] = PubKey::default();
 
-        let err = client.verify_update(&update).err().unwrap();
+        let err = client.verify_update(&updates[0]).err().unwrap();
         assert_eq!(
             err.to_string(),
             ConsensusError::InvalidNextSyncCommitteeProof.to_string()
@@ -645,7 +662,7 @@ mod tests {
             .unwrap();
 
         let mut update = updates[0].clone();
-        update.finalized_header = Header::default();
+        update.finalized_header.beacon = BeaconBlockHeader::default();
 
         let err = client.verify_update(&update).err().unwrap();
         assert_eq!(
@@ -658,16 +675,15 @@ mod tests {
     async fn test_verify_update_invalid_sig() {
         let client = get_client(false).await;
         let period = calc_sync_period(client.store.finalized_header.slot);
-        let updates = client
+        let mut updates = client
             .rpc
             .get_updates(period, MAX_REQUEST_LIGHT_CLIENT_UPDATES)
             .await
             .unwrap();
 
-        let mut update = updates[0].clone();
-        update.sync_aggregate.sync_committee_signature = Vector::default();
+        updates[0].sync_aggregate.sync_committee_signature = BlsSignature::default();
 
-        let err = client.verify_update(&update).err().unwrap();
+        let err = client.verify_update(&updates[0]).err().unwrap();
         assert_eq!(
             err.to_string(),
             ConsensusError::InvalidSignature.to_string()
@@ -690,7 +706,8 @@ mod tests {
         client.sync().await.unwrap();
 
         let mut update = client.rpc.get_finality_update().await.unwrap();
-        update.finalized_header = Header::default();
+
+        update.finalized_header.beacon = BeaconBlockHeader::default();
 
         let err = client.verify_finality_update(&update).err().unwrap();
         assert_eq!(
@@ -705,7 +722,7 @@ mod tests {
         client.sync().await.unwrap();
 
         let mut update = client.rpc.get_finality_update().await.unwrap();
-        update.sync_aggregate.sync_committee_signature = Vector::default();
+        update.sync_aggregate.sync_committee_signature = BlsSignature::default();
 
         let err = client.verify_finality_update(&update).err().unwrap();
         assert_eq!(
@@ -729,7 +746,7 @@ mod tests {
         client.sync().await.unwrap();
 
         let mut update = client.rpc.get_optimistic_update().await.unwrap();
-        update.sync_aggregate.sync_committee_signature = Vector::default();
+        update.sync_aggregate.sync_committee_signature = BlsSignature::default();
 
         let err = client.verify_optimistic_update(&update).err().unwrap();
         assert_eq!(

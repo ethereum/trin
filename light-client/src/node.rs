@@ -1,11 +1,11 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use ethportal_api::consensus::header::BeaconBlockHeader;
 use eyre::Result;
 
 use crate::config::client_config::Config;
 use crate::consensus::rpc::nimbus_rpc::NimbusRpc;
-use crate::consensus::types::Header;
 use crate::consensus::ConsensusLightClient;
 
 use crate::errors::NodeError;
@@ -61,7 +61,7 @@ impl Node {
         self.config.chain.chain_id
     }
 
-    pub fn get_header(&self) -> Result<Header> {
+    pub fn get_header(&self) -> Result<BeaconBlockHeader> {
         self.check_head_age()?;
         Ok(self.consensus.get_header().clone())
     }

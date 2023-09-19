@@ -1,33 +1,38 @@
-use crate::consensus::types::{Header, SignatureBytes};
 use crate::types::Bytes32;
 use crate::utils::bytes32_to_node;
+use ethportal_api::consensus::header::BeaconBlockHeader;
+use ethportal_api::consensus::signature::BlsSignature;
 use eyre::Result;
 use milagro_bls::{AggregateSignature, PublicKey};
 use ssz_rs::prelude::*;
+use tree_hash::TreeHash;
 
 pub fn calc_sync_period(slot: u64) -> u64 {
     let epoch = slot / 32; // 32 slots per epoch
     epoch / 256 // 256 epochs per sync committee
 }
 
-pub fn is_aggregate_valid(sig_bytes: &SignatureBytes, msg: &[u8], pks: &[&PublicKey]) -> bool {
-    let sig_res = AggregateSignature::from_bytes(sig_bytes);
+pub fn is_aggregate_valid(sig_bytes: &BlsSignature, msg: &[u8], pks: &[&PublicKey]) -> bool {
+    let sig_res = AggregateSignature::from_bytes(&sig_bytes.signature);
     match sig_res {
         Ok(sig) => sig.fast_aggregate_verify(msg, pks),
         Err(_) => false,
     }
 }
 
-pub fn is_proof_valid<L: Merkleized>(
-    attested_header: &Header,
+pub fn is_proof_valid<L: TreeHash>(
+    attested_header: &BeaconBlockHeader,
     leaf_object: &mut L,
     branch: &[Bytes32],
     depth: usize,
     index: usize,
 ) -> bool {
     let res: Result<bool> = (move || {
-        let leaf_hash = leaf_object.hash_tree_root()?;
-        let state_root = bytes32_to_node(&attested_header.state_root)?;
+        let leaf_hash = Node::from_bytes(<[u8; 32]>::from(leaf_object.tree_hash_root()));
+        let state_root = bytes32_to_node(
+            &Bytes32::try_from(attested_header.state_root.0.to_vec())
+                .expect("Unable to convert state root to bytes"),
+        )?;
         let branch = branch_to_nodes(branch.to_vec())?;
 
         let is_valid = is_valid_merkle_branch(&leaf_hash, branch.iter(), depth, index, &state_root);

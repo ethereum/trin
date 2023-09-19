@@ -12,6 +12,9 @@ use ssz_types::{typenum, FixedVector, VariableList};
 use superstruct::superstruct;
 use tree_hash_derive::TreeHash;
 
+pub type Bloom = FixedVector<u8, typenum::U256>;
+pub type ExtraData = VariableList<u8, typenum::U32>;
+
 #[derive(Debug, PartialEq, Clone, Deserialize, Serialize, Encode, Decode)]
 pub struct ExecutionPayload {
     pub parent_hash: H256,
@@ -19,7 +22,7 @@ pub struct ExecutionPayload {
     pub state_root: H256,
     pub receipts_root: H256,
     #[serde(with = "hex_fixed_vec")]
-    pub logs_bloom: FixedVector<u8, typenum::U256>,
+    pub logs_bloom: Bloom,
     pub prev_randao: H256, // 'difficulty' in the yellow paper
     #[serde(deserialize_with = "as_u64")]
     pub block_number: u64, // 'number' in the yellow paper
@@ -30,7 +33,7 @@ pub struct ExecutionPayload {
     #[serde(deserialize_with = "as_u64")]
     pub timestamp: u64,
     #[serde(with = "hex_var_list")]
-    pub extra_data: VariableList<u8, typenum::U32>,
+    pub extra_data: ExtraData,
     #[serde(deserialize_with = "de_number_to_u256")]
     #[serde(serialize_with = "se_hex_to_number")]
     pub base_fee_per_gas: U256,
@@ -67,7 +70,7 @@ pub struct ExecutionPayloadHeader {
     #[superstruct(getter(copy))]
     pub receipts_root: H256,
     #[serde(with = "hex_fixed_vec")]
-    pub logs_bloom: FixedVector<u8, typenum::U256>,
+    pub logs_bloom: Bloom,
     #[superstruct(getter(copy))]
     pub prev_randao: H256,
     #[superstruct(getter(copy))]
@@ -83,7 +86,7 @@ pub struct ExecutionPayloadHeader {
     #[serde(deserialize_with = "as_u64")]
     pub timestamp: u64,
     #[serde(with = "hex_var_list")]
-    pub extra_data: VariableList<u8, typenum::U32>,
+    pub extra_data: ExtraData,
     #[superstruct(getter(copy))]
     #[serde(deserialize_with = "de_number_to_u256")]
     #[serde(serialize_with = "se_hex_to_number")]
