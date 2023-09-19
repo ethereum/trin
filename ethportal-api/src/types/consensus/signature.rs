@@ -10,6 +10,14 @@ pub struct BlsSignature {
     pub signature: [u8; 96],
 }
 
+impl Default for BlsSignature {
+    fn default() -> Self {
+        Self {
+            signature: [0u8; 96],
+        }
+    }
+}
+
 impl Decode for BlsSignature {
     fn is_ssz_fixed_len() -> bool {
         true

@@ -23,6 +23,7 @@ pub type CurrentSyncCommitteeProofLen = U5;
     )
 )]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Encode)]
+#[serde(untagged)]
 #[ssz(enum_behaviour = "transparent")]
 pub struct LightClientBootstrap {
     /// Header matching the requested beacon block root

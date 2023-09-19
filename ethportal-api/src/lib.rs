@@ -32,6 +32,8 @@ pub use types::content_key::{
     state::StateContentKey,
 };
 
+pub use types::consensus;
+pub use types::consensus::light_client;
 pub use types::content_value::{
     beacon::{BeaconContentValue, PossibleBeaconContentValue},
     error::ContentValueError,

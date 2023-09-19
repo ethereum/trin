@@ -24,6 +24,7 @@ use ssz_types::VariableList;
 use std::ops::Deref;
 
 #[derive(Clone, Debug, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub enum PossibleBeaconContentValue {
     ContentPresent(BeaconContentValue),
     ContentAbsent,
@@ -434,6 +435,7 @@ impl Encode for ForkVersionedLightClientFinalityUpdate {
 
 /// A content value for the beacon network.
 #[derive(Clone, Debug, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub enum BeaconContentValue {
     HistoricalSummariesWithProof(HistoricalSummariesWithProof),
     LightClientBootstrap(ForkVersionedLightClientBootstrap),
