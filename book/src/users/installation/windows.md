@@ -9,7 +9,7 @@ If you don't already have Rust install it
 $ winget install Rustlang.Rustup
 ```
 
-Install clang as it is required to compile rocksdb
+Install clang/llvm as it is required to compile rocksdb
 If you don't already have Rust install it
 ```sh
 $ winget install LLVM.LLVM
@@ -28,7 +28,7 @@ $ rustup toolchain install stable-x86_64-pc-windows-msvc
 Build Trin
 
 ```sh
-$ cargo build -p trin --release
+$ cargo build -p trin
 ```
 
 
@@ -47,5 +47,5 @@ Clone trin and build.
 ```sh
 $ git clone https://github.com/ethereum/trin.git
 $ cd trin
-$ cargo build --target x86_64-pc-windows-gnu
+$ cargo build -p trin --target x86_64-pc-windows-gnu
 ```
