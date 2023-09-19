@@ -9,11 +9,15 @@ cd cluster
 python3 -m venv venv
 . venv/bin/activate
 pip install ansible
+sudo apt install ansible-core
 ```
+- [Install keybase](https://keybase.io/docs/the_app/install_linux)
 - Publish your pgp public key with keybase, using: `keybase pgp select --import`
   - This fails if you don't have a pgp key yet. If so, create one with `gpg --generate-key`
 - [Install sops](https://github.com/getsops/sops)
-- Contact `@paulj`, get public gpg key into cluster repo
+- Contact `@paulj`, get public pgp key into cluster repo
+- Contact `@paulj`, get public ssh key onto cluster nodes
+
 - Make sure your pgp key is working by running:
   ```sops portal-network/trin/ansible/inventories/dev/group_vars/secrets.sops.yml```
 - Log in to Docker with: `docker login`
