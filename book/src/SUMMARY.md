@@ -33,7 +33,6 @@
         - [uTP](developers/protocols/utp.md)
         - [JSON-RPC](developers/protocols/json_rpc.md)
         - [SSZ](developers/protocols/ssz.md)
-        - [Kademlia](developers/protocols/kademlia.md)
     - [Core concepts](developers/core_concepts/README.md)
         - [Finding peers](developers/core_concepts/finding_peers.md)
         - [Chain tip](developers/core_concepts/chain_tip.md)
