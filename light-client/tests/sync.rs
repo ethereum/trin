@@ -6,7 +6,7 @@ use light_client::consensus::rpc::mock_rpc::MockRpc;
 use light_client::consensus::ConsensusLightClient;
 
 async fn setup() -> ConsensusLightClient<MockRpc> {
-    let base_config = networks::goerli();
+    let base_config = networks::mainnet();
     let config = Config {
         consensus_rpc: String::new(),
         chain: base_config.chain,
@@ -16,7 +16,7 @@ async fn setup() -> ConsensusLightClient<MockRpc> {
     };
 
     let checkpoint =
-        hex::decode("1e591af1e90f2db918b2a132991c7c2ee9a4ab26da496bd6e71e4f0bd65ea870").unwrap();
+        hex::decode("c62aa0de55e6f21230fa63713715e1a6c13e73005e89f6389da271955d819bde").unwrap();
 
     ConsensusLightClient::new("testdata/", &checkpoint, Arc::new(config)).unwrap()
 }
@@ -27,8 +27,8 @@ async fn test_sync() {
     client.sync().await.unwrap();
 
     let head = client.get_header();
-    assert_eq!(head.slot, 3818196);
+    assert_eq!(head.slot, 7358726);
 
     let finalized_head = client.get_finalized_header();
-    assert_eq!(finalized_head.slot, 3818112);
+    assert_eq!(finalized_head.slot, 7358656);
 }

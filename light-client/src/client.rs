@@ -2,10 +2,11 @@ use std::sync::Arc;
 
 use eyre::{eyre, Result};
 
-use crate::consensus::{types::Header, ConsensusLightClient};
+use crate::consensus::ConsensusLightClient;
 use log::{error, info, warn};
 use tokio::sync::RwLock;
 
+use ethportal_api::consensus::header::BeaconBlockHeader;
 use std::path::PathBuf;
 use tokio::spawn;
 use tokio::time::sleep;
@@ -356,7 +357,7 @@ impl<DB: Database> Client<DB> {
         self.node.read().await.chain_id()
     }
 
-    pub async fn get_header(&self) -> Result<Header> {
+    pub async fn get_header(&self) -> Result<BeaconBlockHeader> {
         self.node.read().await.get_header()
     }
 }

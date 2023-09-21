@@ -8,24 +8,42 @@ use ssz_derive::{Decode, Encode};
 use ssz_types::typenum::U4;
 use ssz_types::FixedVector;
 use superstruct::superstruct;
+use tree_hash_derive::TreeHash;
 
 pub type ExecutionBranchLen = U4;
 
 #[superstruct(
     variants(Bellatrix, Capella),
     variant_attributes(
-        derive(Debug, Clone, Serialize, PartialEq, Deserialize, Encode, Decode,),
+        derive(
+            Debug,
+            Clone,
+            Serialize,
+            PartialEq,
+            Deserialize,
+            Encode,
+            Decode,
+            Default,
+            TreeHash
+        ),
         serde(deny_unknown_fields),
     )
 )]
-#[derive(Debug, Clone, Serialize, Deserialize, Encode)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, TreeHash)]
 #[ssz(enum_behaviour = "transparent")]
+#[tree_hash(enum_behaviour = "transparent")]
 pub struct LightClientHeader {
     pub beacon: BeaconBlockHeader,
     #[superstruct(only(Capella))]
     pub execution: ExecutionPayloadHeaderCapella,
     #[superstruct(only(Capella))]
     pub execution_branch: FixedVector<H256, ExecutionBranchLen>,
+}
+
+impl Default for LightClientHeader {
+    fn default() -> Self {
+        Self::Capella(LightClientHeaderCapella::default())
+    }
 }
 
 impl LightClientHeader {

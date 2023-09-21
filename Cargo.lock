@@ -1663,6 +1663,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "ethereum_serde_utils"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0f8cb04ea380a33e9c269fa5f8df6f2d63dee19728235f3e639e7674e038686a"
+dependencies = [
+ "ethereum-types 0.14.1",
+ "hex",
+ "serde",
+ "serde_derive",
+ "serde_json",
+]
+
+[[package]]
 name = "ethers-core"
 version = "2.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1748,6 +1761,7 @@ dependencies = [
  "eth2_ssz_types",
  "eth_trie",
  "ethereum-types 0.12.1",
+ "ethereum_serde_utils",
  "ethnum",
  "hex",
  "jsonrpsee",
@@ -3217,7 +3231,9 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
+ "eth2_ssz_types",
  "ethereum-types 0.12.1",
+ "ethportal-api",
  "eyre",
  "figment",
  "futures 0.3.28",
@@ -3235,6 +3251,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "tree_hash",
 ]
 
 [[package]]
