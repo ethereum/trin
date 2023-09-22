@@ -31,7 +31,7 @@ pub async fn run_trin(
     // Make sure not to panic on non-windows configurations.
     #[cfg(windows)]
     if let Web3TransportType::IPC = trin_config.web3_transport {
-        panic!("Windows doesn't support Unix Domain Sockets IPC, use --web3-transport http");
+        panic!("Tokio doesn't support Windows Unix Domain Sockets IPC, use --web3-transport http");
     }
 
     let trin_version = get_trin_version();
