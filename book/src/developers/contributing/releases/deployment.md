@@ -46,6 +46,7 @@ This step directs Ansible to use the current master version of trin. Read [about
 - Check monitoring tools to understand network health, and compare against post-deployment, eg~
     - [Glados](http://glados.ethportal.net/content/)
     - [Grafana](https://trin-bench.ethdevops.io/d/e23mBdEVk/trin-metrics?orgId=1)
+- Activate the virtual environment in the cluster repo: `. venv/bin/activate`
 - Go into Portal section of Ansible: `cd portal-network/trin/ansible/`
 - Run the deployment: `ansible-playbook playbook.yml --tags trin`
 - Wait for completion
