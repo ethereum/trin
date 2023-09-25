@@ -16,6 +16,7 @@ use crate::socket;
 use ethportal_api::types::enr::Enr;
 use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::NodeInfo;
+use std::hash::{Hash, Hasher};
 use std::net::Ipv4Addr;
 use std::str::FromStr;
 use std::{convert::TryFrom, fmt, io, net::SocketAddr, sync::Arc};
@@ -290,7 +291,7 @@ impl Discv5UdpSocket {
 }
 
 /// A wrapper around `Enr` that implements `ConnectionPeer`.
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug)]
 pub struct UtpEnr(pub Enr);
 
 impl UtpEnr {
@@ -304,6 +305,28 @@ impl UtpEnr {
             .and_then(|v| String::from_utf8(v.to_vec()).ok())
     }
 }
+
+// Why are we implementing Hash, PartialEq, Eq for UtpEnr?
+// UtpEnr is used as an element of the key for a Connections HashTable in our uTP library.
+// Enr's can change and are not stable, so if we initiate a ``connect_with_cid`` we are inserting
+// our known Enr for the peer, but if the peer has a more upto date Enr, values will be different
+// and the Hash for the old Enr and New Enr will be different, along with equating the two structs will return false.
+// This leads us to a situation where our peer sends us a uTP messages back and our code thinks the same peer
+// is instead 2 different peers causing uTP to ignore the messages. We fixed this by implementing Eq and
+// Hash only using the NodeId of the Enr as it is the only stable non-updatable field in the Enr.
+impl Hash for UtpEnr {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.node_id().hash(state);
+    }
+}
+
+impl PartialEq for UtpEnr {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.node_id() == other.0.node_id()
+    }
+}
+
+impl Eq for UtpEnr {}
 
 impl ConnectionPeer for UtpEnr {}
 
