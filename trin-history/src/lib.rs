@@ -22,9 +22,9 @@ use crate::{events::HistoryEvents, jsonrpc::HistoryRequestHandler};
 use ethportal_api::types::enr::Enr;
 use ethportal_api::types::jsonrpc::request::HistoryJsonRpcRequest;
 use portalnet::{
+    config::PortalnetConfig,
     discovery::{Discovery, UtpEnr},
     storage::PortalStorageConfig,
-    types::messages::PortalnetConfig,
 };
 use trin_validation::oracle::HeaderOracle;
 

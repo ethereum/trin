@@ -8,10 +8,11 @@ use ethportal_api::types::distance::XorMetric;
 use ethportal_api::types::enr::Enr;
 use ethportal_api::HistoryContentKey;
 use portalnet::{
+    config::PortalnetConfig,
     discovery::{Discovery, UtpEnr},
     overlay::{OverlayConfig, OverlayProtocol},
     storage::{PortalStorage, PortalStorageConfig},
-    types::messages::{PortalnetConfig, ProtocolId},
+    types::messages::ProtocolId,
 };
 use trin_validation::oracle::HeaderOracle;
 

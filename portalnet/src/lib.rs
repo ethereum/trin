@@ -1,5 +1,6 @@
 #![warn(clippy::unwrap_used)]
 
+pub mod config;
 pub mod discovery;
 pub mod events;
 pub mod find;

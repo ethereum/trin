@@ -1,12 +1,11 @@
 use std::{
     convert::{TryFrom, TryInto},
     fmt,
-    net::SocketAddr,
     ops::Deref,
     str::FromStr,
 };
 
-use ethereum_types::{H256, U256};
+use ethereum_types::U256;
 use rlp::Encodable;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -16,7 +15,6 @@ use ssz_types::{typenum, BitList};
 use thiserror::Error;
 use validator::ValidationError;
 
-use ethportal_api::types::bootnodes::Bootnodes;
 use ethportal_api::types::bytes::ByteList;
 use ethportal_api::types::distance::Distance;
 use ethportal_api::types::enr::{Enr, SszEnr};
@@ -151,38 +149,6 @@ pub enum MessageDecodeError {
 pub enum DiscoveryRequestError {
     #[error("Invalid discv5 request message")]
     InvalidMessage,
-}
-
-/// Capacity of the cache for observed `NodeAddress` values.
-/// Provides capacity for 32 full k-buckets. This capacity will be shared among all active portal
-/// subnetworks.
-const NODE_ADDR_CACHE_CAPACITY: usize = discv5::kbucket::MAX_NODES_PER_BUCKET * 32;
-
-#[derive(Clone)]
-pub struct PortalnetConfig {
-    pub external_addr: Option<SocketAddr>,
-    pub private_key: H256,
-    pub listen_port: u16,
-    pub bootnodes: Bootnodes,
-    pub data_radius: Distance,
-    pub internal_ip: bool,
-    pub no_stun: bool,
-    pub node_addr_cache_capacity: usize,
-}
-
-impl Default for PortalnetConfig {
-    fn default() -> Self {
-        Self {
-            external_addr: None,
-            private_key: H256::random(),
-            listen_port: 4242,
-            bootnodes: Bootnodes::default(),
-            data_radius: Distance::MAX,
-            internal_ip: false,
-            no_stun: false,
-            node_addr_cache_capacity: NODE_ADDR_CACHE_CAPACITY,
-        }
-    }
 }
 
 #[derive(Error, Debug)]

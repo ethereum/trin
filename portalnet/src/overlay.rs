@@ -26,7 +26,8 @@ use utp_rs::socket::UtpSocket;
 use crate::{
     discovery::{Discovery, UtpEnr},
     find::query_info::{FindContentResult, RecursiveFindContentResult},
-    metrics::overlay::OverlayMetrics,
+    metrics::overlay::OverlayMetricsReporter,
+    metrics::portalnet::PORTALNET_METRICS,
     overlay_service::{
         OverlayCommand, OverlayRequest, OverlayRequestError, OverlayService, RequestDirection,
         UTP_CONN_CFG,
@@ -113,7 +114,7 @@ pub struct OverlayProtocol<TContentKey, TMetric, TValidator, TStore> {
     /// Accepted content validator that makes requests to this/other overlay networks
     validator: Arc<TValidator>,
     /// Runtime telemetry metrics for the overlay network.
-    metrics: Arc<OverlayMetrics>,
+    metrics: OverlayMetricsReporter,
 }
 
 impl<
@@ -140,10 +141,11 @@ where
             config.table_filter,
             config.bucket_filter,
         )));
-
         // Initialize metrics, keep a reference in order to build metrics summaries for logging
-        let metrics = Arc::new(OverlayMetrics::new(&protocol));
-
+        let metrics = OverlayMetricsReporter {
+            overlay_metrics: PORTALNET_METRICS.overlay(),
+            protocol: protocol.to_string(),
+        };
         let command_tx = OverlayService::<TContentKey, TMetric, TValidator, TStore>::spawn(
             Arc::clone(&discovery),
             Arc::clone(&store),
@@ -152,7 +154,7 @@ where
             config.ping_queue_interval,
             protocol.clone(),
             Arc::clone(&utp_socket),
-            Arc::clone(&metrics),
+            metrics.clone(),
             Arc::clone(&validator),
             config.query_timeout,
             config.query_peer_timeout,

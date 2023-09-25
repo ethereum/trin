@@ -49,7 +49,7 @@ use crate::{
     },
     metrics::{
         labels::{UtpDirectionLabel, UtpOutcomeLabel},
-        overlay::OverlayMetrics,
+        overlay::OverlayMetricsReporter,
     },
     storage::ContentStore,
     types::{
@@ -302,7 +302,7 @@ pub struct OverlayService<TContentKey, TMetric, TValidator, TStore> {
     /// Phantom metric (distance function).
     phantom_metric: PhantomData<TMetric>,
     /// Metrics reporting component
-    metrics: Arc<OverlayMetrics>,
+    metrics: OverlayMetricsReporter,
     /// Validator for overlay network content.
     validator: Arc<TValidator>,
     /// A channel that the overlay service emits events on.
@@ -332,7 +332,7 @@ where
         ping_queue_interval: Option<Duration>,
         protocol: ProtocolId,
         utp_socket: Arc<UtpSocket<crate::discovery::UtpEnr>>,
-        metrics: Arc<OverlayMetrics>,
+        metrics: OverlayMetricsReporter,
         validator: Arc<TValidator>,
         query_timeout: Duration,
         query_peer_timeout: Duration,
@@ -1112,7 +1112,7 @@ where
                     // Wait for an incoming connection with the given CID. Then, write the data
                     // over the uTP stream.
                     let utp = Arc::clone(&self.utp_socket);
-                    let metrics = Arc::clone(&self.metrics);
+                    let metrics = self.metrics.clone();
                     tokio::spawn(async move {
                         metrics.report_utp_active_inc(UtpDirectionLabel::Outbound);
                         let stream = match utp.accept_with_cid(cid.clone(), *UTP_CONN_CFG).await {
@@ -1237,7 +1237,7 @@ where
         let kbuckets = Arc::clone(&self.kbuckets);
         let command_tx = self.command_tx.clone();
         let utp = Arc::clone(&self.utp_socket);
-        let metrics = Arc::clone(&self.metrics);
+        let metrics = self.metrics.clone();
 
         tokio::spawn(async move {
             // Wait for an incoming connection with the given CID. Then, read the data from the uTP
@@ -1503,7 +1503,7 @@ where
         let response_clone = response.clone();
 
         let utp = Arc::clone(&self.utp_socket);
-        let metrics = Arc::clone(&self.metrics);
+        let metrics = self.metrics.clone();
 
         tokio::spawn(async move {
             metrics.report_utp_active_inc(UtpDirectionLabel::Outbound);
@@ -1584,7 +1584,7 @@ where
     async fn process_accept_utp_payload(
         validator: Arc<TValidator>,
         store: Arc<RwLock<TStore>>,
-        metrics: Arc<OverlayMetrics>,
+        metrics: OverlayMetricsReporter,
         kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
         command_tx: UnboundedSender<OverlayCommand<TContentKey>>,
         content_keys: Vec<TContentKey>,
@@ -1612,7 +1612,7 @@ where
                 // - Propagate all validated content
                 let validator = Arc::clone(&validator);
                 let store = Arc::clone(&store);
-                let metrics = Arc::clone(&metrics);
+                let metrics = metrics.clone();
                 tokio::spawn(async move {
                     // Validated received content
                     if let Err(err) = validator
@@ -1680,7 +1680,7 @@ where
     async fn send_utp_content(
         mut stream: UtpStream<crate::discovery::UtpEnr>,
         content: &[u8],
-        metrics: Arc<OverlayMetrics>,
+        metrics: OverlayMetricsReporter,
     ) -> anyhow::Result<()> {
         match stream.write(content).await {
             Ok(write_size) => {
@@ -1824,7 +1824,7 @@ where
         responder: Option<oneshot::Sender<RecursiveFindContentResult>>,
         trace: Option<QueryTrace>,
         nodes_to_poke: Vec<NodeId>,
-        metrics: Arc<OverlayMetrics>,
+        metrics: OverlayMetricsReporter,
     ) {
         let mut content = content;
         // Operate under assumption that all content in the store is valid
@@ -2684,27 +2684,27 @@ fn pop_while_ssz_bytes_len_gt(enrs: &mut Vec<SszEnr>, max_size: usize) {
 mod tests {
     use super::*;
 
+    use std::net::SocketAddr;
     use std::time::Instant;
 
-    use rstest::rstest;
-
-    use crate::{
-        discovery::{Discovery, NodeAddress},
-        overlay::OverlayConfig,
-        storage::{DistanceFunction, MemoryContentStore},
-        types::messages::PortalnetConfig,
-    };
-
-    use crate::utils::db::setup_temp_dir;
     use discv5::kbucket::Entry;
     use ethereum_types::U256;
+    use rstest::*;
+    use serial_test::serial;
+    use tokio::sync::mpsc::unbounded_channel;
+    use tokio_test::{assert_pending, assert_ready, task};
+
+    use crate::{
+        config::PortalnetConfig,
+        discovery::{Discovery, NodeAddress},
+        metrics::portalnet::PORTALNET_METRICS,
+        overlay::OverlayConfig,
+        storage::{DistanceFunction, MemoryContentStore},
+        utils::db::setup_temp_dir,
+    };
     use ethportal_api::types::content_key::overlay::IdentityContentKey;
     use ethportal_api::types::distance::XorMetric;
     use ethportal_api::types::enr::generate_random_remote_enr;
-    use serial_test::serial;
-    use std::net::SocketAddr;
-    use tokio::sync::mpsc::unbounded_channel;
-    use tokio_test::{assert_pending, assert_ready, task};
     use trin_validation::validator::MockValidator;
 
     macro_rules! poll_command_rx {
@@ -2746,7 +2746,10 @@ mod tests {
         let peers_to_ping = HashSetDelay::default();
         let (command_tx, command_rx) = mpsc::unbounded_channel();
         let (response_tx, response_rx) = mpsc::unbounded_channel();
-        let metrics = Arc::new(OverlayMetrics::new(&protocol));
+        let metrics = OverlayMetricsReporter {
+            overlay_metrics: PORTALNET_METRICS.overlay(),
+            protocol: "test".to_string(),
+        };
         let validator = Arc::new(MockValidator {});
 
         OverlayService {

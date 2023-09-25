@@ -21,9 +21,9 @@ use crate::{events::BeaconEvents, jsonrpc::BeaconRequestHandler};
 use ethportal_api::types::enr::Enr;
 use ethportal_api::types::jsonrpc::request::BeaconJsonRpcRequest;
 use portalnet::{
+    config::PortalnetConfig,
     discovery::{Discovery, UtpEnr},
     storage::PortalStorageConfig,
-    types::messages::PortalnetConfig,
 };
 use trin_validation::oracle::HeaderOracle;
 
