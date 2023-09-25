@@ -306,6 +306,14 @@ impl UtpEnr {
     }
 }
 
+// Why are we implementing Hash, PartialEq, Eq for UtpEnr?
+// UtpEnr is used as an element of the key for a Connections HashTable in our uTP library.
+// Enr's can change and are not stable, so if we initiate a ``connect_with_cid`` we are inserting
+// our known Enr for the peer, but if the peer has a more upto date Enr, values will be different
+// and the Hash for the old Enr and New Enr will be different, along with equating the two structs will return false.
+// This leads us to a situation where our peer sends us a uTP messages back and our code thinks the same peer
+// is instead 2 different peers causing uTP to ignore the messages. We fixed this by implementing Eq and
+// Hash only using the NodeId of the Enr as it is the only stable non-updatable field in the Enr.
 impl Hash for UtpEnr {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.0.node_id().hash(state);
