@@ -19,6 +19,7 @@ use ethportal_api::NodeInfo;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
 use std::{convert::TryFrom, fmt, io, net::SocketAddr, sync::Arc};
+use std::hash::{Hash, Hasher};
 use trin_utils::version::get_trin_version;
 
 /// Size of the buffer of the Discv5 TALKREQ channel.
@@ -290,7 +291,7 @@ impl Discv5UdpSocket {
 }
 
 /// A wrapper around `Enr` that implements `ConnectionPeer`.
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug)]
 pub struct UtpEnr(pub Enr);
 
 impl UtpEnr {
@@ -304,6 +305,21 @@ impl UtpEnr {
             .and_then(|v| String::from_utf8(v.to_vec()).ok())
     }
 }
+
+
+impl Hash for UtpEnr {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.node_id().hash(state);
+    }
+}
+
+impl PartialEq for UtpEnr {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.node_id() == other.0.node_id()
+    }
+}
+
+impl Eq for UtpEnr {}
 
 impl ConnectionPeer for UtpEnr {}
 
