@@ -16,10 +16,10 @@ use crate::socket;
 use ethportal_api::types::enr::Enr;
 use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::NodeInfo;
+use std::hash::{Hash, Hasher};
 use std::net::Ipv4Addr;
 use std::str::FromStr;
 use std::{convert::TryFrom, fmt, io, net::SocketAddr, sync::Arc};
-use std::hash::{Hash, Hasher};
 use trin_utils::version::get_trin_version;
 
 /// Size of the buffer of the Discv5 TALKREQ channel.
@@ -305,7 +305,6 @@ impl UtpEnr {
             .and_then(|v| String::from_utf8(v.to_vec()).ok())
     }
 }
-
 
 impl Hash for UtpEnr {
     fn hash<H: Hasher>(&self, state: &mut H) {
