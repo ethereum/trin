@@ -1,217 +1,209 @@
 use prometheus_exporter::{
     self,
     prometheus::{
-        opts, register_int_counter_vec, register_int_counter_vec_with_registry,
-        register_int_gauge_vec, register_int_gauge_vec_with_registry, IntCounterVec, IntGaugeVec,
-        Opts, Registry,
+        opts, register_int_counter_vec_with_registry, register_int_gauge_vec_with_registry,
+        IntCounterVec, IntGaugeVec, Registry,
     },
 };
-use tracing::error;
 
 use crate::metrics::labels::{
-    MessageDirectionLabel, MessageLabel, ProtocolLabel, UtpDirectionLabel, UtpOutcomeLabel,
+    MessageDirectionLabel, MessageLabel, UtpDirectionLabel, UtpOutcomeLabel,
 };
-use crate::types::messages::{ProtocolId, Request, Response};
+use crate::types::messages::{Request, Response};
 
-/// General Metrics Strategy (wip)
-/// - Each module should maintain its own metrics reporter
-/// - When possible, use the lazy_static! approach
-/// - - https://romankudryashov.com/blog/2021/11/monitoring-rust-web-application/
-/// - - https://github.com/sigp/lighthouse/blob/c3a793fd73a3b11b130b82032904d39c952869e4/beacon_node/lighthouse_network/src/metrics.rs
-
-/// Overlay Service Metrics Reporter
-#[derive(Clone, Debug)]
+/// Contains metrics reporters for use in the overlay network
+/// (eg. `portalnet/src/overlay.rs` & `portalnet/src/overlay_service.rs`).
+/// Metric types reported here include protocol messages, utp transfers,
+/// and content validation.
+#[derive(Clone)]
 pub struct OverlayMetrics {
-    protocol: ProtocolLabel,
-    message_count: IntCounterVec,
-    utp_outcome_count: IntCounterVec,
-    utp_active_count: IntGaugeVec,
-    validation_count: IntCounterVec,
+    pub message_total: IntCounterVec,
+    pub utp_outcome_total: IntCounterVec,
+    pub utp_active_gauge: IntGaugeVec,
+    pub validation_total: IntCounterVec,
 }
 
 impl OverlayMetrics {
-    pub fn new(protocol: &ProtocolId) -> Self {
-        let message_count_options = opts!(
-            "trin_message_total",
-            "count all network messages sent and received"
-        );
-        let message_count_labels = &["protocol", "direction", "type"];
-        let message_count =
-            OverlayMetrics::register_counter_metric(message_count_options, message_count_labels);
-
-        let utp_outcome_count_options = opts!(
-            "trin_utp_outcome",
-            "track success rate for all utp transfers outbound and inbound"
-        );
-        let utp_outcome_count_labels = &["protocol", "direction", "outcome"];
-        let utp_outcome_count = OverlayMetrics::register_counter_metric(
-            utp_outcome_count_options,
-            utp_outcome_count_labels,
-        );
-
-        let utp_active_count_options = opts!(
-            "trin_utp_active",
-            "count all active utp transfers outbound and inbound"
-        );
-        let utp_active_count_labels = &["protocol", "direction"];
-        let utp_active_count = OverlayMetrics::register_gauge_metric(
-            utp_active_count_options,
-            utp_active_count_labels,
-        );
-
-        let validation_count_options = opts!(
-            "trin_validation_total",
-            "count all content validations successful and failed"
-        );
-        let validation_count_labels = &["protocol", "success"];
-        let validation_count = OverlayMetrics::register_counter_metric(
-            validation_count_options,
-            validation_count_labels,
-        );
-
-        Self {
-            protocol: protocol.into(),
-            message_count,
-            utp_outcome_count,
-            utp_active_count,
-            validation_count,
-        }
+    pub fn new(registry: &Registry) -> anyhow::Result<Self> {
+        let message_total = register_int_counter_vec_with_registry!(
+            opts!(
+                "trin_message_total",
+                "count all network messages sent and received"
+            ),
+            &["protocol", "direction", "type"],
+            registry
+        )?;
+        let utp_outcome_total = register_int_counter_vec_with_registry!(
+            opts!(
+                "trin_utp_outcome_total",
+                "track success rate for all utp transfers outbound and inbound"
+            ),
+            &["protocol", "direction", "outcome"],
+            registry
+        )?;
+        let utp_active_gauge = register_int_gauge_vec_with_registry!(
+            opts!(
+                "trin_utp_active_streams",
+                "count all active utp transfers outbound and inbound"
+            ),
+            &["protocol", "direction"],
+            registry
+        )?;
+        let validation_total = register_int_counter_vec_with_registry!(
+            opts!(
+                "trin_validation_total",
+                "count all content validations successful and failed"
+            ),
+            &["protocol", "success"],
+            registry
+        )?;
+        Ok(Self {
+            message_total,
+            utp_outcome_total,
+            utp_active_gauge,
+            validation_total,
+        })
     }
+}
 
+#[derive(Clone)]
+pub struct OverlayMetricsReporter {
+    pub protocol: String,
+    pub overlay_metrics: OverlayMetrics,
+}
+
+impl OverlayMetricsReporter {
     //
     // Message Count
     //
 
     /// Returns the value of the given metric with the specified labels.
-    pub fn message_count_by_labels(
+    fn message_total_by_labels(
         &self,
         direction: MessageDirectionLabel,
         message_name: MessageLabel,
     ) -> u64 {
-        let labels = [self.protocol.into(), direction.into(), message_name.into()];
-        self.message_count.with_label_values(&labels).get()
+        let labels: [&str; 3] = [&self.protocol, direction.into(), message_name.into()];
+        self.overlay_metrics
+            .message_total
+            .with_label_values(&labels)
+            .get()
     }
 
     pub fn report_outbound_request(&self, request: &Request) {
-        self.increment_message_count(MessageDirectionLabel::Sent, request.into());
+        self.increment_message_total(MessageDirectionLabel::Sent, request.into());
     }
 
     pub fn report_inbound_request(&self, request: &Request) {
-        self.increment_message_count(MessageDirectionLabel::Received, request.into());
+        self.increment_message_total(MessageDirectionLabel::Received, request.into());
     }
 
     pub fn report_outbound_response(&self, response: &Response) {
-        self.increment_message_count(MessageDirectionLabel::Sent, response.into());
+        self.increment_message_total(MessageDirectionLabel::Sent, response.into());
     }
 
     pub fn report_inbound_response(&self, response: &Response) {
-        self.increment_message_count(MessageDirectionLabel::Received, response.into());
+        self.increment_message_total(MessageDirectionLabel::Received, response.into());
     }
 
-    fn increment_message_count(&self, direction: MessageDirectionLabel, message: MessageLabel) {
-        let labels = [self.protocol.into(), direction.into(), message.into()];
-        self.message_count.with_label_values(&labels).inc();
+    fn increment_message_total(&self, direction: MessageDirectionLabel, message: MessageLabel) {
+        let labels: [&str; 3] = [&self.protocol, direction.into(), message.into()];
+        self.overlay_metrics
+            .message_total
+            .with_label_values(&labels)
+            .inc();
     }
 
     //
     // uTP metrics
     //
 
-    fn utp_active_count(&self, direction: UtpDirectionLabel) -> u64 {
-        let labels: [&str; 2] = [self.protocol.into(), direction.into()];
-        self.utp_active_count.with_label_values(&labels).get() as u64
+    fn utp_active_streams(&self, direction: UtpDirectionLabel) -> u64 {
+        let labels: [&str; 2] = [&self.protocol, direction.into()];
+        self.overlay_metrics
+            .utp_active_gauge
+            .with_label_values(&labels)
+            .get() as u64
     }
 
-    fn utp_outcome_count(&self, direction: UtpDirectionLabel, outcome: UtpOutcomeLabel) -> u64 {
-        let labels: [&str; 3] = [self.protocol.into(), direction.into(), outcome.into()];
-        self.utp_outcome_count.with_label_values(&labels).get()
+    fn utp_outcome_total(&self, direction: UtpDirectionLabel, outcome: UtpOutcomeLabel) -> u64 {
+        let labels: [&str; 3] = [&self.protocol, direction.into(), outcome.into()];
+        self.overlay_metrics
+            .utp_outcome_total
+            .with_label_values(&labels)
+            .get()
     }
 
     pub fn report_utp_outcome(&self, direction: UtpDirectionLabel, outcome: UtpOutcomeLabel) {
-        let labels: [&str; 3] = [self.protocol.into(), direction.into(), outcome.into()];
-        self.utp_outcome_count.with_label_values(&labels).inc();
+        let labels: [&str; 3] = [&self.protocol, direction.into(), outcome.into()];
+        self.overlay_metrics
+            .utp_outcome_total
+            .with_label_values(&labels)
+            .inc();
         self.report_utp_active_dec(direction);
     }
 
     pub fn report_utp_active_inc(&self, direction: UtpDirectionLabel) {
-        let labels: [&str; 2] = [self.protocol.into(), direction.into()];
-        self.utp_active_count.with_label_values(&labels).inc();
+        let labels: [&str; 2] = [&self.protocol, direction.into()];
+        self.overlay_metrics
+            .utp_active_gauge
+            .with_label_values(&labels)
+            .inc();
     }
 
     pub fn report_utp_active_dec(&self, direction: UtpDirectionLabel) {
-        let labels: [&str; 2] = [self.protocol.into(), direction.into()];
-        self.utp_active_count.with_label_values(&labels).dec();
+        let labels: [&str; 2] = [&self.protocol, direction.into()];
+        self.overlay_metrics
+            .utp_active_gauge
+            .with_label_values(&labels)
+            .dec();
     }
 
     //
     // Validations
     //
     /// Returns the value of the given metric with the specified labels.
-    pub fn validation_count_by_outcome(&self, outcome: bool) -> u64 {
+    fn validation_total_by_outcome(&self, outcome: bool) -> u64 {
         let outcome = outcome.to_string();
-        let labels = [self.protocol.into(), outcome.as_str()];
-        self.validation_count.with_label_values(&labels).get()
+        let labels: [&str; 2] = [&self.protocol, outcome.as_str()];
+        self.overlay_metrics
+            .validation_total
+            .with_label_values(&labels)
+            .get()
     }
 
     pub fn report_validation(&self, success: bool) {
         let success = success.to_string();
-        let labels: [&str; 2] = [self.protocol.into(), success.as_str()];
-        self.validation_count.with_label_values(&labels).inc();
-    }
-
-    fn register_counter_metric(options: Opts, labels: &[&str]) -> IntCounterVec {
-        // Register the metric with the default registry, or if that fails, register with a
-        // newly-created registry.
-        register_int_counter_vec!(options.clone(), labels).unwrap_or_else(|_| {
-            // Trying to register the same metric multiple times in the process should only happen
-            // in testing situations. In regular usage, it should be reported as an error:
-            error!("Failed to register prometheus metrics with default registry, creating new");
-
-            let custom_registry = Registry::new_custom(None, None)
-                .expect("Prometheus docs don't explain when it might fail to create a custom registry, so... hopefully never");
-            register_int_counter_vec_with_registry!(options, labels, custom_registry)
-                .expect("a counter can always be added to a new custom registry, without conflict")
-        })
-    }
-
-    fn register_gauge_metric(options: Opts, labels: &[&str]) -> IntGaugeVec {
-        // Register the metric with the default registry, or if that fails, register with a
-        // newly-created registry.
-        register_int_gauge_vec!(options.clone(), labels).unwrap_or_else(|_| {
-            // Trying to register the same metric multiple times in the process should only happen
-            // in testing situations. In regular usage, it should be reported as an error:
-            error!("Failed to register prometheus metrics with default registry, creating new");
-
-            let custom_registry = Registry::new_custom(None, None)
-                .expect("Prometheus docs don't explain when it might fail to create a custom registry, so... hopefully never");
-            register_int_gauge_vec_with_registry!(options, labels, custom_registry)
-                .expect("a gauge can always be added to a new custom registry, without conflict")
-        })
+        let labels: [&str; 2] = [&self.protocol, success.as_str()];
+        self.overlay_metrics
+            .validation_total
+            .with_label_values(&labels)
+            .inc();
     }
 
     pub fn get_utp_summary(&self) -> String {
         let inbound_success =
-            self.utp_outcome_count(UtpDirectionLabel::Inbound, UtpOutcomeLabel::Success);
-        let inbound_failed_connection = self.utp_outcome_count(
+            self.utp_outcome_total(UtpDirectionLabel::Inbound, UtpOutcomeLabel::Success);
+        let inbound_failed_connection = self.utp_outcome_total(
             UtpDirectionLabel::Inbound,
             UtpOutcomeLabel::FailedConnection,
         );
         let inbound_failed_data_tx =
-            self.utp_outcome_count(UtpDirectionLabel::Inbound, UtpOutcomeLabel::FailedDataTx);
+            self.utp_outcome_total(UtpDirectionLabel::Inbound, UtpOutcomeLabel::FailedDataTx);
         let inbound_failed_shutdown =
-            self.utp_outcome_count(UtpDirectionLabel::Inbound, UtpOutcomeLabel::FailedShutdown);
+            self.utp_outcome_total(UtpDirectionLabel::Inbound, UtpOutcomeLabel::FailedShutdown);
         let outbound_success =
-            self.utp_outcome_count(UtpDirectionLabel::Outbound, UtpOutcomeLabel::Success);
-        let outbound_failed_connection = self.utp_outcome_count(
+            self.utp_outcome_total(UtpDirectionLabel::Outbound, UtpOutcomeLabel::Success);
+        let outbound_failed_connection = self.utp_outcome_total(
             UtpDirectionLabel::Outbound,
             UtpOutcomeLabel::FailedConnection,
         );
         let outbound_failed_data_tx =
-            self.utp_outcome_count(UtpDirectionLabel::Outbound, UtpOutcomeLabel::FailedDataTx);
+            self.utp_outcome_total(UtpDirectionLabel::Outbound, UtpOutcomeLabel::FailedDataTx);
         let outbound_failed_shutdown =
-            self.utp_outcome_count(UtpDirectionLabel::Outbound, UtpOutcomeLabel::FailedShutdown);
-        let active_inbound = self.utp_active_count(UtpDirectionLabel::Inbound);
-        let active_outbound = self.utp_active_count(UtpDirectionLabel::Outbound);
+            self.utp_outcome_total(UtpDirectionLabel::Outbound, UtpOutcomeLabel::FailedShutdown);
+        let active_inbound = self.utp_active_streams(UtpDirectionLabel::Inbound);
+        let active_outbound = self.utp_active_streams(UtpDirectionLabel::Outbound);
         format!(
             "(in/out): active={} ({}/{}), success={} ({}/{}), failed={} ({}/{}) \
             failed_connection={} ({}/{}), failed_data_tx={} ({}/{}), failed_shutdown={} ({}/{})",
@@ -244,14 +236,14 @@ impl OverlayMetrics {
     pub fn get_message_summary(&self) -> String {
         // for every offer you made, how many accepts did you receive
         // for every offer you received, how many accepts did you make
-        let successful_validations = self.validation_count_by_outcome(true);
-        let failed_validations = self.validation_count_by_outcome(false);
+        let successful_validations = self.validation_total_by_outcome(true);
+        let failed_validations = self.validation_total_by_outcome(false);
         format!(
             "offers={}/{}, accepts={}/{}, validations={}/{}",
-            self.message_count_by_labels(MessageDirectionLabel::Received, MessageLabel::Accept),
-            self.message_count_by_labels(MessageDirectionLabel::Sent, MessageLabel::Offer),
-            self.message_count_by_labels(MessageDirectionLabel::Sent, MessageLabel::Accept),
-            self.message_count_by_labels(MessageDirectionLabel::Received, MessageLabel::Offer),
+            self.message_total_by_labels(MessageDirectionLabel::Received, MessageLabel::Accept),
+            self.message_total_by_labels(MessageDirectionLabel::Sent, MessageLabel::Offer),
+            self.message_total_by_labels(MessageDirectionLabel::Sent, MessageLabel::Accept),
+            self.message_total_by_labels(MessageDirectionLabel::Received, MessageLabel::Offer),
             successful_validations,
             successful_validations + failed_validations,
         )

@@ -1,5 +1,9 @@
-use super::types::messages::{PortalnetConfig, ProtocolId};
-use crate::socket;
+use std::hash::{Hash, Hasher};
+use std::net::Ipv4Addr;
+use std::path::PathBuf;
+use std::str::FromStr;
+use std::{convert::TryFrom, fmt, fs, io, net::SocketAddr, sync::Arc};
+
 use anyhow::anyhow;
 use async_trait::async_trait;
 use bytes::BytesMut;
@@ -7,22 +11,21 @@ use discv5::{
     enr::{CombinedKey, EnrBuilder, NodeId},
     ConfigBuilder, Discv5, Event, ListenConfig, RequestError, TalkRequest,
 };
-use ethportal_api::types::enr::Enr;
-use ethportal_api::utils::bytes::hex_encode;
-use ethportal_api::NodeInfo;
 use lru::LruCache;
 use parking_lot::RwLock;
 use rlp::RlpStream;
 use serde_json::{json, Value};
-use std::hash::{Hash, Hasher};
-use std::net::Ipv4Addr;
-use std::path::PathBuf;
-use std::str::FromStr;
-use std::{convert::TryFrom, fmt, fs, io, net::SocketAddr, sync::Arc};
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
-use trin_utils::version::get_trin_version;
 use utp_rs::{cid::ConnectionPeer, udp::AsyncUdpSocket};
+
+use super::config::PortalnetConfig;
+use super::types::messages::ProtocolId;
+use crate::socket;
+use ethportal_api::types::enr::Enr;
+use ethportal_api::utils::bytes::hex_encode;
+use ethportal_api::NodeInfo;
+use trin_utils::version::get_trin_version;
 
 /// Size of the buffer of the Discv5 TALKREQ channel.
 const TALKREQ_CHANNEL_BUFFER: usize = 100;

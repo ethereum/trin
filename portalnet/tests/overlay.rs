@@ -1,17 +1,6 @@
 use std::net::{IpAddr, Ipv4Addr};
 use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
-use ethportal_api::types::content_key::overlay::IdentityContentKey;
-use ethportal_api::types::distance::XorMetric;
-use ethportal_api::types::enr::{Enr, SszEnr};
-use portalnet::{
-    discovery::{Discovery, Discv5UdpSocket},
-    overlay::{OverlayConfig, OverlayProtocol},
-    storage::{ContentStore, DistanceFunction, MemoryContentStore},
-    types::messages::{Content, Message, PortalnetConfig, ProtocolId},
-};
-use trin_validation::validator::MockValidator;
-
 use discv5::TalkRequest;
 use parking_lot::RwLock;
 use tokio::{
@@ -20,8 +9,19 @@ use tokio::{
 };
 use utp_rs::socket::UtpSocket;
 
+use ethportal_api::types::content_key::overlay::IdentityContentKey;
+use ethportal_api::types::distance::XorMetric;
+use ethportal_api::types::enr::{Enr, SszEnr};
 use ethportal_api::utils::bytes::hex_encode_upper;
 use portalnet::utils::db::setup_temp_dir;
+use portalnet::{
+    config::PortalnetConfig,
+    discovery::{Discovery, Discv5UdpSocket},
+    overlay::{OverlayConfig, OverlayProtocol},
+    storage::{ContentStore, DistanceFunction, MemoryContentStore},
+    types::messages::{Content, Message, ProtocolId},
+};
+use trin_validation::validator::MockValidator;
 
 async fn init_overlay(
     discovery: Arc<Discovery>,

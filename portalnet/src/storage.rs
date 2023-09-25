@@ -8,13 +8,6 @@ use std::{
 use anyhow::anyhow;
 use discv5::enr::NodeId;
 use ethportal_api::types::portal::PaginateLocalContentInfo;
-use prometheus_exporter::{
-    self,
-    prometheus::{
-        default_registry, opts, register_gauge, register_gauge_with_registry,
-        register_int_gauge_with_registry, Gauge, IntGauge, Registry,
-    },
-};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rocksdb::{Options, DB};
@@ -22,13 +15,14 @@ use rusqlite::params;
 use thiserror::Error;
 use tracing::{debug, error, info};
 
+use crate::metrics::portalnet::PORTALNET_METRICS;
+use crate::metrics::storage::StorageMetricsReporter;
 use crate::types::messages::ProtocolId;
 use ethportal_api::types::distance::{Distance, Metric, XorMetric};
 use ethportal_api::utils::bytes::{hex_decode, hex_encode, ByteUtilsError};
 use ethportal_api::{ContentKeyError, HistoryContentKey, OverlayContentKey};
 
 const BYTES_IN_MB_U64: u64 = 1000 * 1000;
-const BYTES_IN_MB_F64: f64 = 1000.0 * 1000.0;
 
 // TODO: Replace enum with generic type parameter. This will require that we have a way to
 // associate a "find farthest" query with the generic Metric.
@@ -42,14 +36,17 @@ pub enum DistanceFunction {
 pub enum ContentStoreError {
     #[error("An error from the underlying database: {0:?}")]
     Database(String),
+
     #[error("IO error: {0:?}")]
     Io(#[from] std::io::Error),
+
     /// Unable to store content because it does not fall within the store's radius.
     #[error("radius {radius} insufficient to store content at distance {distance}")]
     InsufficientRadius {
         radius: Distance,
         distance: Distance,
     },
+
     /// Unable to store or retrieve data because it is invalid.
     #[error("data invalid {message}")]
     InvalidData { message: String },
@@ -211,7 +208,7 @@ pub struct PortalStorage {
     db: Arc<rocksdb::DB>,
     sql_connection_pool: Pool<SqliteConnectionManager>,
     distance_fn: DistanceFunction,
-    metrics: StorageMetrics,
+    metrics: StorageMetricsReporter,
 }
 
 impl ContentStore for PortalStorage {
@@ -255,6 +252,10 @@ impl PortalStorage {
         protocol: ProtocolId,
     ) -> Result<Self, ContentStoreError> {
         // Initialize the instance
+        let metrics = StorageMetricsReporter {
+            storage_metrics: PORTALNET_METRICS.storage(),
+            protocol: protocol.to_string(),
+        };
         let mut storage = Self {
             node_id: config.node_id,
             node_data_dir: config.node_data_dir,
@@ -263,7 +264,7 @@ impl PortalStorage {
             db: config.db,
             sql_connection_pool: config.sql_connection_pool,
             distance_fn: config.distance_fn,
-            metrics: StorageMetrics::new(&protocol),
+            metrics,
         };
 
         // Set the metrics to the default radius, to start
@@ -751,146 +752,6 @@ impl PortalStorage {
     }
 }
 
-#[derive(Debug)]
-struct StorageMetrics {
-    content_storage_usage_bytes: Gauge,
-    total_storage_usage_bytes: Gauge,
-    storage_capacity_bytes: Gauge,
-    radius_ratio: Gauge,
-    entry_count: IntGauge,
-}
-
-impl StorageMetrics {
-    pub fn new(protocol: &ProtocolId) -> Self {
-        let content_storage_usage_bytes_options = opts!(
-            format!("trin_content_storage_usage_bytes_{protocol:?}"),
-            "sum of size of individual content stored, in bytes"
-        );
-        // Keep a reference to the registry. Make mutable, because we may have to switch to a new
-        // one if the default registry is already using a metric of the same name (which should
-        // only happen during tests).
-        let mut registry = default_registry();
-
-        // Always create a custom registry, so that we can use it in the error case
-        // It's just an easy way to throw away duplicate metrics.
-        let custom_registry = Registry::default();
-
-        let content_storage_usage_bytes =
-            match register_gauge!(content_storage_usage_bytes_options.clone()) {
-                Ok(gauge) => gauge,
-                Err(_) => {
-                    error!(
-                        "Failed to register prometheus gauge with default registry, creating new"
-                    );
-
-                    // Assign the new registry to the outer variable, so it can be used by all metrics
-                    registry = &custom_registry;
-
-                    // Reattempt to register the gauge with the empty registry
-                    register_gauge_with_registry!(content_storage_usage_bytes_options, registry)
-                        .expect(
-                        "a gauge can always be added to a new custom registry, without conflict",
-                    )
-                }
-            };
-
-        let total_storage_usage_bytes = register_gauge_with_registry!(
-            format!("trin_total_storage_usage_bytes_{protocol:?}"),
-            "full on-disk database size, in bytes",
-            registry,
-        )
-        .unwrap();
-        let storage_capacity_bytes = register_gauge_with_registry!(
-            format!("trin_storage_capacity_bytes_{protocol:?}"),
-            "user-defined limit on storage usage, in bytes",
-            registry
-        )
-        .unwrap();
-        let radius_ratio = register_gauge_with_registry!(
-            format!("trin_radius_ratio_{protocol:?}"),
-            "the fraction of the whole data ring covered by the data radius",
-            registry,
-        )
-        .unwrap();
-        let entry_count = register_int_gauge_with_registry!(
-            format!("trin_entry_count_{protocol:?}"),
-            "total number of storage entries",
-            registry,
-        )
-        .unwrap();
-
-        Self {
-            content_storage_usage_bytes,
-            total_storage_usage_bytes,
-            storage_capacity_bytes,
-            radius_ratio,
-            entry_count,
-        }
-    }
-
-    pub fn report_content_data_storage_bytes(&self, bytes: f64) {
-        self.content_storage_usage_bytes.set(bytes);
-    }
-
-    pub fn report_total_storage_usage_bytes(&self, bytes: f64) {
-        self.total_storage_usage_bytes.set(bytes);
-    }
-
-    pub fn report_storage_capacity_bytes(&self, bytes: f64) {
-        self.storage_capacity_bytes.set(bytes);
-    }
-
-    pub fn report_radius(&self, radius: Distance) {
-        let radius_high_bytes = [
-            radius.byte(31),
-            radius.byte(30),
-            radius.byte(29),
-            radius.byte(28),
-        ];
-        let radius_int = u32::from_be_bytes(radius_high_bytes);
-        let coverage_ratio = radius_int as f64 / u32::MAX as f64;
-        self.radius_ratio.set(coverage_ratio);
-    }
-
-    pub fn report_entry_count(&self, count: u64) {
-        let count: i64 = count
-            .try_into()
-            .expect("Number of db entries will be small enough to fit in i64");
-        self.entry_count.set(count);
-    }
-
-    pub fn increase_entry_count(&self) {
-        self.entry_count.inc();
-    }
-
-    pub fn decrease_entry_count(&self) {
-        self.entry_count.dec();
-    }
-
-    pub fn get_summary(&self) -> String {
-        let radius_percent = self.radius_ratio.get() * 100.0;
-        format!(
-            "radius={:.*}% content={:.1}/{}mb #={} disk={:.1}mb",
-            Self::precision_for_percentage(radius_percent),
-            radius_percent,
-            self.content_storage_usage_bytes.get() / BYTES_IN_MB_F64,
-            self.storage_capacity_bytes.get() / BYTES_IN_MB_F64,
-            self.entry_count.get(),
-            self.total_storage_usage_bytes.get() / BYTES_IN_MB_F64,
-        )
-    }
-
-    fn precision_for_percentage(percent: f64) -> usize {
-        match percent {
-            x if x >= 10.0 => 0,
-            x if x >= 1.0 => 1,
-            x if x >= 0.1 => 2,
-            x if x >= 0.01 => 3,
-            _ => 4,
-        }
-    }
-}
-
 // SQLite Statements
 const CREATE_QUERY: &str = "CREATE TABLE IF NOT EXISTS content_metadata (
                                 content_id_long TEXT PRIMARY KEY,
@@ -1334,7 +1195,7 @@ pub mod test {
     #[test]
     fn test_precision_for_percentage() {
         fn formatted_percent(ratio: f64) -> String {
-            let precision = StorageMetrics::precision_for_percentage(ratio * 100.0);
+            let precision = StorageMetricsReporter::precision_for_percentage(ratio * 100.0);
             format!("{:.*}%", precision, ratio * 100.0)
         }
         assert_eq!(formatted_percent(1.0), "100%");
@@ -1371,9 +1232,9 @@ pub mod test {
 
         // We mostly care that values outside of [0.0, 1.0] do not crash, but
         // for now we also check that they pin to 0 or 4.
-        assert_eq!(StorageMetrics::precision_for_percentage(101.0), 0);
-        assert_eq!(StorageMetrics::precision_for_percentage(-0.001), 4);
-        assert_eq!(StorageMetrics::precision_for_percentage(-1000.0), 4);
+        assert_eq!(StorageMetricsReporter::precision_for_percentage(101.0), 0);
+        assert_eq!(StorageMetricsReporter::precision_for_percentage(-0.001), 4);
+        assert_eq!(StorageMetricsReporter::precision_for_percentage(-1000.0), 4);
     }
 
     fn get_active_node_id(temp_dir: PathBuf) -> NodeId {

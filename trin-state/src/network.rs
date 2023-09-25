@@ -9,10 +9,11 @@ use ethportal_api::types::distance::XorMetric;
 use ethportal_api::types::enr::Enr;
 use ethportal_api::StateContentKey;
 use portalnet::{
+    config::PortalnetConfig,
     discovery::{Discovery, UtpEnr},
     overlay::{OverlayConfig, OverlayProtocol},
     storage::{PortalStorage, PortalStorageConfig},
-    types::messages::{PortalnetConfig, ProtocolId},
+    types::messages::ProtocolId,
 };
 use trin_validation::oracle::HeaderOracle;
 
@@ -36,7 +37,6 @@ impl StateNetwork {
         let db = PortalStorage::setup_triedb(&storage_config.node_data_dir)?;
         let triedb = TrieDB::new(Arc::new(db));
         let trie = EthTrie::new(Arc::new(triedb));
-
         let storage = Arc::new(PLRwLock::new(PortalStorage::new(
             storage_config,
             ProtocolId::State,

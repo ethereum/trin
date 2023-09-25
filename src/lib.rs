@@ -12,10 +12,10 @@ use utp_rs::socket::UtpSocket;
 use ethportal_api::types::cli::Web3TransportType;
 use ethportal_api::types::cli::{TrinConfig, BEACON_NETWORK, HISTORY_NETWORK, STATE_NETWORK};
 use portalnet::{
+    config::PortalnetConfig,
     discovery::{Discovery, Discv5UdpSocket},
     events::PortalnetEvents,
     storage::PortalStorageConfig,
-    types::messages::PortalnetConfig,
     utils::db::{configure_node_data_dir, configure_trin_data_dir},
 };
 use trin_beacon::initialize_beacon_network;
@@ -45,14 +45,7 @@ pub async fn run_trin(
     let (node_data_dir, private_key) =
         configure_node_data_dir(trin_data_dir, trin_config.private_key)?;
 
-    let portalnet_config = PortalnetConfig {
-        external_addr: trin_config.external_addr,
-        private_key,
-        listen_port: trin_config.discovery_port,
-        no_stun: trin_config.no_stun,
-        bootnodes: trin_config.bootnodes.clone(),
-        ..Default::default()
-    };
+    let portalnet_config = PortalnetConfig::new(&trin_config, private_key);
 
     // Initialize base discovery protocol
     let mut discovery = Discovery::new(portalnet_config.clone(), node_data_dir.clone())?;
