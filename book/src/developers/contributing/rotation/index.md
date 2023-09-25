@@ -28,7 +28,7 @@ At the end of the previous week, you will get the [Flamingo notes](https://notes
 
 Read through the notes, and then generate the new checklist for the week, by [creating a note from this template](https://notes.ethereum.org/?nav=overview&template=b35733cd-b374-4b79-bc57-f2bb58ee651e).
 
-Link the generated checklist into the Flamingo notes for your week. Make sure your status is "online" in Discord. Make sure you're tagged under the `trin-flamingo` role. Put on your favorite pink shirt. Listen to the [flamingo anthem](https://www.youtube.com/watch?v=6hJv5yBLe9c). Fly.
+Link the generated checklist into the Flamingo notes for your week. Make sure your status is "online" in Discord. Make sure you're tagged under the `trin-flamingo` role. Put on your favorite pink shirt. Watch a [silly flamingo video](https://www.youtube.com/watch?v=gWNWtbPEWw0). Fly.
 
 ### Daily
 
@@ -44,12 +44,16 @@ When you get to the end of your checklist, here are ideas for what to work on ne
 - Respond to [Github Participating Notifications](https://github.com/notifications?query=reason%3Aparticipating)
 - Review PRs that have been stuck for >24 hours
 - Find a [Flamingo Issue](https://github.com/ethereum/trin/issues?q=is%3Aopen+is%3Aissue+label%3Aflamingo) that seems promising, and assign it to yourself (and the project dashbord)
+- Run `cargo outdated`
+  - Pick one or several libraries to upgrade
+  - Post a PR with the new `Cargo.lock`
+  - If `cargo outdated` shows all libraries as up-to-date, try `cargo outdated --aggressive`
 - grep code for `TODO`s. For each one you find:
   - write up issue to explain what needs to be done, and a plan
   - link to the TODO in the code, and any relevant context
   - label issue as Flamingo. If it is not urgent and a good fit, add "Good First Issue"
   - Post a PR to remove the `TODO` from the code, in favor of the issue.
-  - `git grep -i "todo"` & `git grep -i "fixme"`
+  - `git grep -iE "(todo)|(fixme)"`
 - Look through all [open trin issues](https://github.com/ethereum/trin/issues)
   - Close outdated issues, with a short explanation
   - If appropriate, add a Flamingo tag

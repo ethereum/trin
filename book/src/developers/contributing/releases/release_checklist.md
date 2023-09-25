@@ -8,13 +8,12 @@ Make sure that version follows [semver](https://semver.org/) rules e.g (`0.2.0-a
 
 ## Bump the version
 
-Update the version number in Cargo.toml file(s), using semantic versioning.
-Once that's merged to master, tag it like:
-
-```sh
-git tag -a v0.1.0-alpha.6 -m "Version 0.1.0-alpha.6"
-git push upstream --tags
-```
+- In github, open the page to [create the new release](https://github.com/ethereum/trin/releases/new).
+- In the tag, type out the version number that the new release bumps to.
+- Github should say "Excellent! This tag will be created from the target when you publish this release."
+- Click "Generate release notes"
+- Add "Trin " to the beginning of the release title
+- Add any clarifying information that's helpful about the release
 
 ## Build the binary for release
 
@@ -31,16 +30,6 @@ We no longer use `make release` because it's not worth the effort to release all
 
 > ⚠️  **TODO**: How do we generate binaries for all target systems, for this
 > release page? Linux, Mac, Windows, ARM, etc
-
-## Create github release page
-
-Go to [trin tags](https://github.com/ethereum/trin/tags).
-
-Find the tag you pushed, and in the `...` menu, select [Create release]
-
-Write up a high-level overview, and link to the generated release notes.
-
-Attach the generated binaries.
 
 ## Deploy
 
