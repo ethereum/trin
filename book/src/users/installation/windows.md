@@ -1,6 +1,6 @@
 # Windows
 
-These steps are for setting up a Trin node as a service on Ubuntu.
+These are instructions for Native and cross compiling Windows builds 
 
 ## Native compilation of Windows
 
