@@ -175,6 +175,9 @@ jobs:
           name: Prepare for apt updates
           command: sudo apt update
       - run:
+          name: Install libclang for rocksdb
+          command: sudo apt install clang
+      - run:
           name: Install g++-mingw-w64-x86-64-posix Windows gnu toolchain for linux
           command: sudo apt install g++-mingw-w64-x86-64-posix
       - run:
