@@ -1525,7 +1525,7 @@ where
                 Request::PopulatedOffer(offer) => Ok(response_clone
                     .content_keys
                     .iter()
-                    .zip(offer.content_items.into_iter())
+                    .zip(offer.content_items)
                     .filter(|(is_accepted, _item)| *is_accepted)
                     .map(|(_is_accepted, (_key, val))| val)
                     .collect()),

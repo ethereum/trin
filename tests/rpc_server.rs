@@ -1,3 +1,4 @@
+#![cfg(unix)]
 /// Test that a 3rd-party web3 client can understand our JSON-RPC API
 use std::net::{IpAddr, Ipv4Addr};
 
