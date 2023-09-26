@@ -40,12 +40,14 @@ Install required dependencies
 ```sh
 $ sudo apt update
 $ sudo apt upgrade
-$ sudo apt install git g++-mingw-w64-x86-64-posix
+$ sudo apt install git clang g++-mingw-w64-x86-64-posix
 ```
 
 Clone trin and build.
 ```sh
 $ git clone https://github.com/ethereum/trin.git
 $ cd trin
+$ rustup target add x86_64-pc-windows-gnu
+$ rustup toolchain install stable-x86_64-pc-windows-gnu
 $ cargo build -p trin --target x86_64-pc-windows-gnu
 ```
