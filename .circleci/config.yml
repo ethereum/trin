@@ -177,6 +177,12 @@ jobs:
       - run:
           name: Install g++-mingw-w64-x86-64-posix Windows gnu toolchain for linux
           command: sudo apt install g++-mingw-w64-x86-64-posix
+      - run:
+          name: Add target
+          command: rustup target add x86_64-pc-windows-gnu
+      - run:
+          name: Install target toolchain
+          command: rustup toolchain install stable-x86_64-pc-windows-gnu
       - setup-and-restore-sccache-cache
       - run:
           name: Check Trin workspace
