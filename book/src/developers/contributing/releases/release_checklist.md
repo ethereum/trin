@@ -31,6 +31,22 @@ We no longer use `make release` because it's not worth the effort to release all
 > ⚠️  **TODO**: How do we generate binaries for all target systems, for this
 > release page? Linux, Mac, Windows, ARM, etc
 
+### Build Instructions
+* [Linux](../build_instructions/linux.md)
+* [Mac OS](../build_instructions/mac_os.md)
+* [Raspberry Pi](../build_instructions/raspberry_pi.md)
+* [Windows](../build_instructions/windows.md)
+
+## Create github release page
+
+Go to [trin tags](https://github.com/ethereum/trin/tags).
+
+Find the tag you pushed, and in the `...` menu, select [Create release]
+
+Write up a high-level overview, and link to the generated release notes.
+
+Attach the generated binaries.
+
 ## Deploy
 
 Push these changes out to the nodes we run in the network. See next page for details.
