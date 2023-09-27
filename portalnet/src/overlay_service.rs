@@ -2463,6 +2463,11 @@ where
             return Some(entry.value().clone().enr());
         }
 
+        // Check whether this node id is in our discovery ENR cache
+        if let Some(node_addr) = self.discovery.cached_node_addr(node_id) {
+            return Some(node_addr.enr);
+        }
+
         // Check the existing find node queries for the ENR.
         for (query_info, _) in self.find_node_query_pool.read().iter() {
             if let Some(enr) = query_info
@@ -2677,7 +2682,7 @@ mod tests {
     use rstest::rstest;
 
     use crate::{
-        discovery::Discovery,
+        discovery::{Discovery, NodeAddress},
         overlay::OverlayConfig,
         storage::{DistanceFunction, MemoryContentStore},
         types::messages::PortalnetConfig,
@@ -2691,6 +2696,7 @@ mod tests {
     use discv5::kbucket::Entry;
     use ethereum_types::U256;
     use serial_test::serial;
+    use std::net::SocketAddr;
     use tokio::sync::mpsc::unbounded_channel;
     use tokio_test::{assert_pending, assert_ready, task};
 
@@ -3632,6 +3638,20 @@ mod tests {
 
         let found_enr2 = service.find_enr(&node_id_2).unwrap();
         assert_eq!(found_enr2, enr2);
+
+        // Test discovery node address cache
+        let (_, enr3) = generate_random_remote_enr();
+        let node_id_3 = enr3.node_id();
+
+        let node_addr = NodeAddress {
+            enr: enr3.clone(),
+            socket_addr: SocketAddr::V4(enr3.udp4_socket().unwrap()),
+        };
+
+        service.discovery.put_cached_node_addr(node_addr);
+
+        let found_enr3 = service.find_enr(&node_id_3).unwrap();
+        assert_eq!(found_enr3, enr3);
     }
 
     #[tokio::test]

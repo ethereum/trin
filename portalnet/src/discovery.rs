@@ -264,6 +264,14 @@ impl Discovery {
         self.node_addr_cache.write().get(node_id).cloned()
     }
 
+    /// Put a `NodeAddress` into cache. If the key already exists in the cache, then it updates the key's value and
+    /// returns the old value. Otherwise, `None` is returned.
+    pub fn put_cached_node_addr(&self, node_addr: NodeAddress) -> Option<NodeAddress> {
+        self.node_addr_cache
+            .write()
+            .put(node_addr.enr.node_id(), node_addr)
+    }
+
     /// Sends a TALKREQ message to `enr`.
     pub async fn send_talk_req(
         &self,
