@@ -8,6 +8,7 @@ use crate::consensus::types::{
 use async_trait::async_trait;
 use eyre::Result;
 
+#[derive(Clone, Debug)]
 pub struct MockRpc {
     testdata: PathBuf,
 }

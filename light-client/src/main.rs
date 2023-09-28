@@ -1,5 +1,6 @@
 use eyre::Result;
 use light_client::config::networks;
+use light_client::consensus::rpc::nimbus_rpc::NimbusRpc;
 use light_client::database::FileDB;
 use light_client::{Client, ClientBuilder};
 use std::path::PathBuf;
@@ -35,7 +36,7 @@ async fn main() -> Result<()> {
     builder = builder.load_external_fallback();
 
     // Build the client
-    let mut client: Client<FileDB> = builder.build().unwrap();
+    let mut client: Client<FileDB, NimbusRpc> = builder.build().unwrap();
 
     info!("Starting consensus light client...");
     // Run the client

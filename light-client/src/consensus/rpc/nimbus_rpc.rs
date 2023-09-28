@@ -11,7 +11,7 @@ use crate::consensus::types::{
 };
 use crate::errors::RpcError;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct NimbusRpc {
     rpc: String,
 }

@@ -13,9 +13,9 @@ use super::rpc::ConsensusRpc;
 use super::types::*;
 use super::utils::*;
 
-use super::constants::MAX_REQUEST_LIGHT_CLIENT_UPDATES;
 use super::errors::ConsensusError;
 use crate::config::client_config::Config;
+use crate::consensus::rpc::portal_rpc::expected_current_slot;
 use crate::types::Bytes32;
 use crate::utils::bytes_to_bytes32;
 use ethereum_types::H256;
@@ -68,6 +68,16 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
         })
     }
 
+    pub fn with_custom_rpc(rpc: R, checkpoint_block_root: &[u8], config: Arc<Config>) -> Self {
+        ConsensusLightClient {
+            rpc,
+            store: LightClientStore::default(),
+            last_checkpoint: None,
+            config,
+            initial_checkpoint: checkpoint_block_root.to_vec(),
+        }
+    }
+
     pub async fn check_rpc(&self) -> Result<()> {
         let chain_id = self.rpc.chain_id().await?;
 
@@ -89,11 +99,17 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
     pub async fn sync(&mut self) -> Result<()> {
         self.bootstrap().await?;
 
-        let current_period = calc_sync_period(self.store.finalized_header.slot);
-        let updates = self
-            .rpc
-            .get_updates(current_period, MAX_REQUEST_LIGHT_CLIENT_UPDATES)
-            .await?;
+        let bootstrap_period = calc_sync_period(self.store.finalized_header.slot);
+        let current_perriod = calc_sync_period(expected_current_slot());
+
+        // Create a range of periods to request updates for
+        let periods = bootstrap_period..=current_perriod;
+        let mut updates = Vec::new();
+
+        for period in periods {
+            let mut period_update = self.rpc.get_updates(period, 1).await?;
+            updates.append(&mut period_update);
+        }
 
         for update in updates {
             self.verify_update(&update)?;
@@ -109,8 +125,8 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
         self.apply_optimistic_update(&optimistic_update);
 
         info!(
-            "consensus client in sync with checkpoint: 0x{}",
-            hex::encode(&self.initial_checkpoint)
+            "Light client in sync with checkpoint: {}",
+            hex_encode(&self.initial_checkpoint)
         );
 
         Ok(())
