@@ -4,6 +4,7 @@
 pub mod events;
 mod jsonrpc;
 pub mod network;
+mod sync;
 pub mod validation;
 
 use std::sync::Arc;

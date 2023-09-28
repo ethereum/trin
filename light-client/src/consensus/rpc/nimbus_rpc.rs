@@ -99,6 +99,10 @@ impl ConsensusRpc for NimbusRpc {
 
         Ok(res.data.chain_id)
     }
+
+    fn name(&self) -> String {
+        "nimbus".to_string()
+    }
 }
 
 type UpdateResponse = Vec<UpdateData>;

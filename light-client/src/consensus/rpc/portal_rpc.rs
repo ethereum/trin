@@ -36,7 +36,7 @@ impl PortalRpc {
 #[async_trait]
 impl ConsensusRpc for PortalRpc {
     fn new(_path: &str) -> Self {
-        todo!()
+        unreachable!("PortalRpc does not use path.")
     }
 
     async fn get_bootstrap(
@@ -297,6 +297,10 @@ impl ConsensusRpc for PortalRpc {
 
     async fn chain_id(&self) -> eyre::Result<u64> {
         Ok(1)
+    }
+
+    fn name(&self) -> String {
+        "portal".to_string()
     }
 }
 

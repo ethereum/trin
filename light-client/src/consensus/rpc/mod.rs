@@ -18,4 +18,5 @@ pub trait ConsensusRpc: Send + Sync + Clone {
     async fn get_finality_update(&self) -> Result<LightClientFinalityUpdateCapella>;
     async fn get_optimistic_update(&self) -> Result<LightClientOptimisticUpdateCapella>;
     async fn chain_id(&self) -> Result<u64>;
+    fn name(&self) -> String;
 }

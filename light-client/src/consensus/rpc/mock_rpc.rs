@@ -44,4 +44,8 @@ impl ConsensusRpc for MockRpc {
     async fn chain_id(&self) -> Result<u64> {
         eyre::bail!("not implemented")
     }
+
+    fn name(&self) -> String {
+        "mock".to_string()
+    }
 }

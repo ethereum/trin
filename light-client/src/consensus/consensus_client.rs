@@ -15,6 +15,7 @@ use super::utils::*;
 
 use super::errors::ConsensusError;
 use crate::config::client_config::Config;
+use crate::consensus::constants::MAX_REQUEST_LIGHT_CLIENT_UPDATES;
 use crate::consensus::rpc::portal_rpc::expected_current_slot;
 use crate::types::Bytes32;
 use crate::utils::bytes_to_bytes32;
@@ -100,15 +101,28 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
         self.bootstrap().await?;
 
         let bootstrap_period = calc_sync_period(self.store.finalized_header.slot);
-        let current_perriod = calc_sync_period(expected_current_slot());
 
-        // Create a range of periods to request updates for
-        let periods = bootstrap_period..=current_perriod;
         let mut updates = Vec::new();
 
-        for period in periods {
-            let mut period_update = self.rpc.get_updates(period, 1).await?;
-            updates.append(&mut period_update);
+        // If we are using the portal network, we need to request updates for all periods one by one
+        if &self.rpc.name() == "portal" {
+            // Get expected current period
+            let current_perriod = calc_sync_period(expected_current_slot());
+
+            // Create a range of periods to request updates for
+            let periods = bootstrap_period..=current_perriod;
+
+            for period in periods {
+                let mut period_update = self.rpc.get_updates(period, 1).await?;
+                updates.append(&mut period_update);
+            }
+        } else {
+            let mut result = self
+                .rpc
+                .get_updates(bootstrap_period, MAX_REQUEST_LIGHT_CLIENT_UPDATES)
+                .await?;
+
+            updates.append(&mut result);
         }
 
         for update in updates {
