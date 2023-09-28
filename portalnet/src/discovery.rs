@@ -19,7 +19,7 @@ use ethportal_api::NodeInfo;
 use std::hash::{Hash, Hasher};
 use std::net::Ipv4Addr;
 use std::str::FromStr;
-use std::{convert::TryFrom, fmt, io, net::SocketAddr, sync::Arc};
+use std::{convert::TryFrom, fmt, fs, io, net::SocketAddr, sync::Arc};
 use trin_utils::version::get_trin_version;
 
 /// Size of the buffer of the Discv5 TALKREQ channel.
@@ -89,7 +89,7 @@ impl Discovery {
             CombinedKey::secp256k1_from_bytes(portal_config.private_key.0.clone().as_mut_slice())
                 .map_err(|e| format!("Unable to create enr key: {:?}", e.to_string()))?;
 
-        let enr = {
+        let mut enr = {
             let mut builder = EnrBuilder::new("v4");
             if let Some(ip_address) = enr_address {
                 builder.ip(ip_address);
@@ -105,6 +105,27 @@ impl Discovery {
                 .build(&enr_key)
                 .map_err(|e| format!("When adding key to servers ENR: {e:?}"))?
         };
+
+        // Check if we have an old version of our Enr and if we do, increase our sequence number
+        if let Some(node_data_dir) = portal_config.node_data_dir {
+            let trin_enr = node_data_dir.join("trin.enr");
+            if trin_enr.is_file() {
+                let data = fs::read_to_string(trin_enr).expect("Unable to read Trin Enr from file");
+                let old_enr = Enr::from_str(&data).expect("Expected read trin.enr to be valid");
+
+                // If the old Enr's signature is different then the new one, the Enr has updated, increase sequence by 1
+                if enr.signature() != old_enr.signature() {
+                    enr.set_seq(old_enr.seq() + 1, &enr_key)
+                        .expect("Unable to increase Enr sequence number");
+                } else {
+                    enr.set_seq(old_enr.seq(), &enr_key)
+                        .expect("Unable to set Enr sequence number");
+                }
+            } else {
+                // If the file doesn't exist write it to the file
+                fs::write(trin_enr, enr.to_base64()).expect("Unable to write Trin Enr to file");
+            }
+        }
 
         let listen_config = ListenConfig::Ipv4 {
             ip: Ipv4Addr::UNSPECIFIED,
