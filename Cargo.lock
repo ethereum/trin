@@ -5254,6 +5254,7 @@ dependencies = [
  "hyper",
  "portalnet",
  "reth-ipc",
+ "reth-rpc-types",
  "serde",
  "serde_json",
  "strum 0.24.1",

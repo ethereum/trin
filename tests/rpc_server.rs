@@ -1,18 +1,28 @@
 #![cfg(unix)]
 /// Test that a 3rd-party web3 client can understand our JSON-RPC API
+use std::fs;
 use std::net::{IpAddr, Ipv4Addr};
 
-use ethers_core::types::U256;
+use ethers_core::types::{Bloom, U256};
 use ethers_providers::*;
+use jsonrpsee::async_client::Client;
+use serde_json::Value;
 use serial_test::serial;
+use ssz::Decode;
 
 use ethportal_api::types::cli::{TrinConfig, DEFAULT_WEB3_IPC_PATH};
+use ethportal_api::types::execution::header::HeaderWithProof;
+use ethportal_api::utils::bytes::hex_decode;
+use ethportal_api::{
+    BlockHeaderKey, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
+};
 use rpc::RpcServerHandle;
 
 mod utils;
+use utils::{init_tracing, u256_to_ethers_u256, u64_to_ethers_u256};
 
-async fn setup_web3_server() -> (RpcServerHandle, Provider<Ipc>) {
-    utils::init_tracing();
+async fn setup_web3_server() -> (RpcServerHandle, Provider<Ipc>, Client) {
+    init_tracing();
 
     let test_ip_addr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
     // Use an uncommon port for the peertest to avoid clashes.
@@ -39,16 +49,119 @@ async fn setup_web3_server() -> (RpcServerHandle, Provider<Ipc>) {
 
     let web3_server = trin::run_trin(trin_config).await.unwrap();
     let web3_client = Provider::connect_ipc(DEFAULT_WEB3_IPC_PATH).await.unwrap();
-    (web3_server, web3_client)
+    // Tests that use native client belong in tests/self_peertest.rs, but it is convenient to use
+    // the native client to populate content in the server's database.
+    let native_client = reth_ipc::client::IpcClientBuilder::default()
+        .build(DEFAULT_WEB3_IPC_PATH)
+        .await
+        .unwrap();
+    (web3_server, web3_client, native_client)
 }
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
 async fn test_eth_chain_id() {
-    let (web3_server, web3_client) = setup_web3_server().await;
+    let (web3_server, web3_client, _) = setup_web3_server().await;
     let chain_id = web3_client.get_chainid().await.unwrap();
     web3_server.stop().unwrap();
     // For now, the chain ID is always 1 -- Portal only supports mainnet Ethereum
     // Intentionally testing against the magic number 1 so that a buggy constant value will fail
     assert_eq!(chain_id, U256::from(1));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
+async fn test_eth_get_block_by_hash() {
+    let (web3_server, web3_client, native_client) = setup_web3_server().await;
+
+    let hwp = get_header_with_proof();
+    // Save values for later comparison
+    let (
+        block_number,
+        block_hash,
+        parent_hash,
+        nonce,
+        uncles_hash,
+        logs_bloom,
+        author,
+        state_root,
+        transactions_root,
+        receipts_root,
+        extra_data,
+        mix_hash,
+        gas_used,
+        gas_limit,
+        difficulty,
+        timestamp,
+    ) = (
+        hwp.header.number.into(),
+        hwp.header.hash(),
+        hwp.header.parent_hash.as_fixed_bytes().into(),
+        hwp.header
+            .nonce
+            .expect("nonce must be present")
+            .as_fixed_bytes()
+            .into(),
+        hwp.header.uncles_hash.as_fixed_bytes().into(),
+        Bloom::from(hwp.header.logs_bloom.as_fixed_bytes()),
+        hwp.header.author.as_fixed_bytes().into(),
+        hwp.header.state_root.as_fixed_bytes().into(),
+        hwp.header.transactions_root.as_fixed_bytes().into(),
+        hwp.header.receipts_root.as_fixed_bytes().into(),
+        hwp.header.extra_data.clone(),
+        hwp.header.mix_hash.map(|h| h.as_fixed_bytes().into()),
+        u256_to_ethers_u256(hwp.header.gas_used),
+        u256_to_ethers_u256(hwp.header.gas_limit),
+        u256_to_ethers_u256(hwp.header.difficulty),
+        u64_to_ethers_u256(hwp.header.timestamp),
+    );
+
+    // Store header with proof in server
+    let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
+        block_hash: block_hash.0,
+    });
+    let content_value = HistoryContentValue::BlockHeaderWithProof(hwp);
+    let result = native_client
+        .store(content_key, content_value)
+        .await
+        .unwrap();
+    assert!(result);
+
+    let block_id = ethers_core::types::H256::from(&block_hash.0);
+    let block = web3_client
+        .get_block(block_id)
+        .await
+        .expect("request to get block failed")
+        .expect("specified block not found");
+    web3_server.stop().unwrap();
+
+    let block_hash = block_hash.as_fixed_bytes().into();
+    assert_eq!(block.number.expect("number must be present"), block_number);
+    assert_eq!(block.hash.expect("hash must be present"), block_hash);
+    assert_eq!(block.parent_hash, parent_hash);
+    assert_eq!(block.nonce.expect("nonce must be present"), nonce);
+    assert_eq!(block.uncles_hash, uncles_hash);
+    assert_eq!(block.logs_bloom.expect("bloom must be present"), logs_bloom);
+    assert_eq!(block.author.expect("block author must be present"), author);
+    assert_eq!(block.state_root, state_root);
+    assert_eq!(block.transactions_root, transactions_root);
+    assert_eq!(block.receipts_root, receipts_root);
+    assert_eq!(block.extra_data, extra_data);
+    assert_eq!(block.mix_hash, mix_hash);
+    assert_eq!(block.gas_used, gas_used);
+    assert_eq!(block.gas_limit, gas_limit);
+    assert_eq!(block.difficulty, difficulty);
+    assert_eq!(block.timestamp, timestamp);
+    assert_eq!(block.size, None);
+}
+
+fn get_header_with_proof() -> HeaderWithProof {
+    let file =
+        fs::read_to_string("trin-validation/src/assets/fluffy/header_with_proofs.json").unwrap();
+    let json: Value = serde_json::from_str(&file).unwrap();
+    let json = json.as_object().unwrap();
+    let raw_header = json.get("1000001").unwrap().as_object().unwrap();
+    let raw_header = raw_header.get("value").unwrap().as_str().unwrap();
+    let hwp_ssz = hex_decode(raw_header).unwrap();
+    HeaderWithProof::from_ssz_bytes(&hwp_ssz).unwrap()
 }
