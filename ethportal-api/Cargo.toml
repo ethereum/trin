@@ -33,6 +33,7 @@ rand = "0.8.5"
 reth-rpc-types = { version = "0.1.0-alpha.6", git = "https://github.com/paradigmxyz/reth.git"}
 rlp = "0.5.0"
 rlp-derive = "0.1.0"
+ruint = { version = "1.9.0", features = ["primitive-types"] }
 serde = { version = "1.0.150", features = ["derive"] }
 serde_json = "1.0.89"
 serde-this-or-that = "0.4.2"

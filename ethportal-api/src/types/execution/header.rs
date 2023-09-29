@@ -1,5 +1,7 @@
 use ethereum_types::{Bloom, H160, H256, H64, U256};
+use reth_rpc_types::Header as RpcHeader;
 use rlp::{Decodable, DecoderError, Encodable, Rlp, RlpStream};
+use ruint::Uint;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use ssz::{Encode, SszDecoderBuilder, SszEncoder};
 use ssz_derive::{Decode, Encode};
@@ -193,6 +195,77 @@ impl PartialEq for Header {
             && self.base_fee_per_gas == other.base_fee_per_gas
             && self.withdrawals_root == other.withdrawals_root
     }
+}
+
+/// Convert the standard header into a reth-style header type for RPC.
+///
+/// This allows us to easily prepare a header for an RPC response.
+/// RpcHeader is a field in reth's `Block` RPC type used in eth_getBlockByHash, for example.
+impl From<Header> for RpcHeader {
+    fn from(header: Header) -> Self {
+        let hash = Some(header.hash().to_fixed_bytes().into());
+        let Header {
+            parent_hash,
+            uncles_hash,
+            author,
+            state_root,
+            transactions_root,
+            receipts_root,
+            logs_bloom,
+            difficulty,
+            number,
+            gas_limit,
+            gas_used,
+            timestamp,
+            extra_data,
+            mix_hash,
+            nonce: _,
+            base_fee_per_gas,
+            withdrawals_root,
+        } = header;
+
+        Self {
+            parent_hash: parent_hash.to_fixed_bytes().into(),
+            uncles_hash: uncles_hash.to_fixed_bytes().into(),
+            miner: author.to_fixed_bytes().into(),
+            state_root: state_root.to_fixed_bytes().into(),
+            transactions_root: transactions_root.to_fixed_bytes().into(),
+            receipts_root: receipts_root.to_fixed_bytes().into(),
+            logs_bloom: logs_bloom.to_fixed_bytes().into(),
+            difficulty: u256_to_uint256(difficulty),
+            number: Some(u64_to_uint256(number)),
+            gas_limit: u256_to_uint256(gas_limit),
+            gas_used: u256_to_uint256(gas_used),
+            timestamp: u64_to_uint256(timestamp),
+            extra_data: extra_data.into(),
+            mix_hash: mix_hash
+                .map(|mh| mh.to_fixed_bytes().into())
+                .unwrap_or_default(),
+            nonce: None,
+            base_fee_per_gas: base_fee_per_gas.map(u256_to_uint256),
+            withdrawals_root: withdrawals_root.map(|root| root.to_fixed_bytes().into()),
+            blob_gas_used: None,
+            excess_blob_gas: None,
+            hash,
+            parent_beacon_block_root: None,
+        }
+    }
+}
+
+fn u256_to_uint256(u256: U256) -> Uint<256, 4> {
+    let mut bytes = [0u8; 32];
+    u256.to_big_endian(&mut bytes);
+    Uint::from_be_bytes(bytes)
+}
+
+fn u64_to_uint256(val: u64) -> Uint<256, 4> {
+    let u64_bytes: &[u8] = &val.to_be_bytes();
+    let high_zero_bytes: &[u8] = &[0u8; 24];
+    let bytes: [u8; 32] = [high_zero_bytes, u64_bytes]
+        .concat()
+        .try_into()
+        .expect("8 bytes + 24 bytes should be 32 bytes");
+    Uint::from_be_bytes(bytes)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
