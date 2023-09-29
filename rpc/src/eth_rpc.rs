@@ -1,19 +1,19 @@
-use crate::jsonrpsee::core::{async_trait, RpcResult};
 use ethereum_types::U256;
+use tokio::sync::mpsc;
+
+use ethportal_api::types::jsonrpc::request::HistoryJsonRpcRequest;
 use ethportal_api::EthApiServer;
 use trin_validation::constants::CHAIN_ID;
 
-pub struct EthApi;
+use crate::jsonrpsee::core::{async_trait, RpcResult};
 
-impl EthApi {
-    pub fn new() -> Self {
-        Self
-    }
+pub struct EthApi {
+    _network: mpsc::UnboundedSender<HistoryJsonRpcRequest>,
 }
 
-impl Default for EthApi {
-    fn default() -> Self {
-        Self::new()
+impl EthApi {
+    pub fn new(network: mpsc::UnboundedSender<HistoryJsonRpcRequest>) -> Self {
+        Self { _network: network }
     }
 }
 
