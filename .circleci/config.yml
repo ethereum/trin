@@ -164,7 +164,7 @@ jobs:
     description: |
       Check the crate on Windows (Check will tell us if we can build on Windows without the need to codegen (which is the time consuming part)).
     executor:
-      name: win/server-2022
+      name: win/default
       size: xlarge
     environment:
       RUSTFLAGS: '-D warnings'
