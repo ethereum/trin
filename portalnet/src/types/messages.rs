@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::{
     convert::{TryFrom, TryInto},
     fmt,
@@ -168,6 +169,7 @@ pub struct PortalnetConfig {
     pub internal_ip: bool,
     pub no_stun: bool,
     pub node_addr_cache_capacity: usize,
+    pub enr_file_location: Option<PathBuf>,
 }
 
 impl Default for PortalnetConfig {
@@ -180,6 +182,7 @@ impl Default for PortalnetConfig {
             data_radius: Distance::MAX,
             internal_ip: false,
             no_stun: false,
+            enr_file_location: None,
             node_addr_cache_capacity: NODE_ADDR_CACHE_CAPACITY,
         }
     }
