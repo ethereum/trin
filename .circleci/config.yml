@@ -42,7 +42,7 @@ commands:
           command: sudo apt install clang
 orbs:
   rust: circleci/rust@1.6.0
-  win: circleci/windows@2.2.0
+  win: circleci/windows@5.0
 executors:
   docker-publisher:
     environment:
@@ -164,7 +164,7 @@ jobs:
     description: |
       Check the crate on Windows (Check will tell us if we can build on Windows without the need to codegen (which is the time consuming part)).
     executor:
-      name: win/default
+      name: win/server-2022
       size: xlarge
     environment:
       RUSTFLAGS: '-D warnings'
@@ -172,19 +172,12 @@ jobs:
     steps:
       - checkout
       - run:
-          name: Install rustup and clang
-          # We are installing them at the same time because it is faster
-          # todo: Remove --ignore-checksums flag
-          command: choco install rustup.install llvm -y --ignore-checksums
-      - run:
-          name: Add target
-          command: rustup target add x86_64-pc-windows-msvc
-      - run:
-          name: Install target toolchain
-          command: rustup toolchain install stable-x86_64-pc-windows-msvc
-      - run:
           name: Check Trin workspace
-          command: cargo check --workspace
+          # We are running all these together because this version of circleci windows has an environment variable bug
+          command: |
+            choco uninstall rust
+            choco install rust-ms llvm -y
+            cargo check --workspace
   test:
     description: |
       Run tests.
