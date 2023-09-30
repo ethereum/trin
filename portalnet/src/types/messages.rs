@@ -169,7 +169,7 @@ pub struct PortalnetConfig {
     pub internal_ip: bool,
     pub no_stun: bool,
     pub node_addr_cache_capacity: usize,
-    pub node_data_dir: Option<PathBuf>,
+    pub enr_file_location: Option<PathBuf>,
 }
 
 impl Default for PortalnetConfig {
@@ -182,7 +182,7 @@ impl Default for PortalnetConfig {
             data_radius: Distance::MAX,
             internal_ip: false,
             no_stun: false,
-            node_data_dir: None,
+            enr_file_location: None,
             node_addr_cache_capacity: NODE_ADDR_CACHE_CAPACITY,
         }
     }

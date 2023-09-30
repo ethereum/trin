@@ -1,32 +1,37 @@
+use super::types::messages::{PortalnetConfig, ProtocolId};
+use crate::socket;
 use anyhow::anyhow;
 use async_trait::async_trait;
+use bytes::BytesMut;
+use discv5::enr::EnrPublicKey;
 use discv5::{
     enr::{CombinedKey, EnrBuilder, NodeId},
     ConfigBuilder, Discv5, Event, ListenConfig, RequestError, TalkRequest,
 };
-use lru::LruCache;
-use parking_lot::RwLock;
-use serde_json::{json, Value};
-use tokio::sync::mpsc;
-use tracing::{debug, info, warn};
-use utp_rs::{cid::ConnectionPeer, udp::AsyncUdpSocket};
-
-use super::types::messages::{PortalnetConfig, ProtocolId};
-use crate::socket;
 use ethportal_api::types::enr::Enr;
 use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::NodeInfo;
+use lru::LruCache;
+use parking_lot::RwLock;
+use rlp::RlpStream;
+use serde_json::{json, Value};
 use std::hash::{Hash, Hasher};
 use std::net::Ipv4Addr;
 use std::str::FromStr;
 use std::{convert::TryFrom, fmt, fs, io, net::SocketAddr, sync::Arc};
+use tokio::sync::mpsc;
+use tracing::{debug, info, warn};
 use trin_utils::version::get_trin_version;
+use utp_rs::{cid::ConnectionPeer, udp::AsyncUdpSocket};
 
 /// Size of the buffer of the Discv5 TALKREQ channel.
 const TALKREQ_CHANNEL_BUFFER: usize = 100;
 
 /// ENR key for portal network client version.
 const ENR_PORTAL_CLIENT_KEY: &str = "c";
+
+/// ENR file name saving enr history to disk.
+const ENR_FILE_NAME: &str = "trin.enr";
 
 pub type ProtocolRequest = Vec<u8>;
 
@@ -107,24 +112,27 @@ impl Discovery {
         };
 
         // Check if we have an old version of our Enr and if we do, increase our sequence number
-        if let Some(node_data_dir) = portal_config.node_data_dir {
-            let trin_enr = node_data_dir.join("trin.enr");
-            if trin_enr.is_file() {
-                let data = fs::read_to_string(trin_enr).expect("Unable to read Trin Enr from file");
+        if let Some(enr_file_location) = portal_config.enr_file_location {
+            let trin_enr_file_location = enr_file_location.join(ENR_FILE_NAME);
+            if trin_enr_file_location.is_file() {
+                let data = fs::read_to_string(trin_enr_file_location.clone())
+                    .expect("Unable to read Trin Enr from file");
                 let old_enr = Enr::from_str(&data).expect("Expected read trin.enr to be valid");
 
-                // If the old Enr's signature is different then the new one, the Enr has updated, increase sequence by 1
-                if enr.signature() != old_enr.signature() {
+                enr.set_seq(old_enr.seq(), &enr_key)
+                    .expect("Unable to set Enr sequence number");
+
+                // If the old Enr's signature is different then the new one
+                if !verify_by_signature(&enr, old_enr.signature())
+                    && !verify_by_signature(&old_enr, enr.signature())
+                {
                     enr.set_seq(old_enr.seq() + 1, &enr_key)
                         .expect("Unable to increase Enr sequence number");
-                } else {
-                    enr.set_seq(old_enr.seq(), &enr_key)
-                        .expect("Unable to set Enr sequence number");
                 }
-            } else {
-                // If the file doesn't exist write it to the file
-                fs::write(trin_enr, enr.to_base64()).expect("Unable to write Trin Enr to file");
             }
+            // Write enr to disk
+            fs::write(trin_enr_file_location, enr.to_base64())
+                .expect("Unable to write Trin Enr to file");
         }
 
         let listen_config = ListenConfig::Ipv4 {
@@ -404,5 +412,84 @@ impl AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
             }
             None => Err(io::Error::from(io::ErrorKind::NotConnected)),
         }
+    }
+}
+
+// todo: remove this once sigp/enr implements this for enr's
+// we need this because signatures can be different for the same data but still valid
+fn verify_by_signature(enr: &Enr, signature: &[u8]) -> bool {
+    match enr.id() {
+        Some(ref id) if id == "v4" => {
+            let mut stream = RlpStream::new_with_buffer(BytesMut::with_capacity(300));
+            let count = enr.iter().count();
+            stream.begin_list(count * 2 + 1);
+            stream.append(&enr.seq());
+            for (k, v) in enr.iter() {
+                // Keys are bytes
+                stream.append(k);
+                // Values are raw RLP encoded data
+                stream.append_raw(v, 1);
+            }
+
+            enr.public_key().verify_v4(&stream.out(), signature)
+        }
+        // unsupported identity schemes
+        _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::utils::db::{configure_node_data_dir, configure_trin_data_dir};
+    use ethportal_api::types::bootnodes::Bootnodes;
+
+    #[test]
+    fn test_enr_file() {
+        // Setup temp trin data directory if we're in ephemeral mode
+        let trin_data_dir = configure_trin_data_dir(true).unwrap();
+
+        // Configure node data dir based on the provided private key
+        let (node_data_dir, private_key) = configure_node_data_dir(trin_data_dir, None).unwrap();
+
+        let mut portalnet_config = PortalnetConfig {
+            private_key,
+            bootnodes: Bootnodes::None,
+            enr_file_location: Some(node_data_dir.clone()),
+            ..Default::default()
+        };
+
+        // test file doesn't already exist
+        let trin_enr_file_location = node_data_dir.join(ENR_FILE_NAME);
+        assert!(!trin_enr_file_location.is_file());
+
+        // test trin.enr is made on first run
+        let discovery = Discovery::new(portalnet_config.clone()).unwrap();
+        let data = fs::read_to_string(trin_enr_file_location.clone()).unwrap();
+        let old_enr = Enr::from_str(&data).unwrap();
+        assert_eq!(discovery.local_enr(), old_enr);
+        assert_eq!(old_enr.seq(), 1);
+
+        // test if Enr changes the Enr sequence is increased and if it is written to disk
+        portalnet_config.listen_port = 2424;
+        let discovery = Discovery::new(portalnet_config.clone()).unwrap();
+        assert_ne!(discovery.local_enr(), old_enr);
+        let data = fs::read_to_string(trin_enr_file_location.clone()).unwrap();
+        let old_enr = Enr::from_str(&data).unwrap();
+        assert_eq!(discovery.local_enr().seq(), 2);
+        assert_eq!(old_enr.seq(), 2);
+        assert_eq!(discovery.local_enr(), old_enr);
+
+        // test if the enr isn't changed that it's sequence stays the same
+        let discovery = Discovery::new(portalnet_config).unwrap();
+        assert!(
+            verify_by_signature(&discovery.local_enr(), old_enr.signature())
+                && verify_by_signature(&old_enr, discovery.local_enr().signature())
+        );
+        let data = fs::read_to_string(trin_enr_file_location).unwrap();
+        let old_enr = Enr::from_str(&data).unwrap();
+        assert_eq!(discovery.local_enr().seq(), 2);
+        assert_eq!(old_enr.seq(), 2);
+        assert_eq!(discovery.local_enr(), old_enr);
     }
 }
