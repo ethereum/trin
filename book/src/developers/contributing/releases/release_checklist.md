@@ -12,6 +12,7 @@ Make sure that version follows [semver](https://semver.org/) rules e.g (`0.2.0-a
 - In the tag, type out the version number that the new release bumps to.
 - Github should say "Excellent! This tag will be created from the target when you publish this release."
 - Click "Generate release notes"
+- Select "Set as a pre-release"
 - Add "Trin " to the beginning of the release title
 - Add any clarifying information that's helpful about the release
 
