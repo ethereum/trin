@@ -26,6 +26,7 @@ sudo apt install ansible-core
 ## Each Deployment
 
 ### Prepare
+- Generally we want to cut a new release before deployment, see previous page for instructions.
 - Announce in Discord #trin that you're about to run the deployment
 - Make sure to schedule plenty of time to react to deployment issues
 
