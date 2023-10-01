@@ -30,6 +30,10 @@ Read through the notes, and then generate the new checklist for the week, by [cr
 
 Link the generated checklist into the Flamingo notes for your week. Make sure your status is "online" in Discord. Make sure you're tagged under the `trin-flamingo` role. Put on your favorite pink shirt. Watch a [silly flamingo video](https://www.youtube.com/watch?v=gWNWtbPEWw0). Fly.
 
+### First
+
+Read through the "Setup" section of the [Deployment Instructions](../releases/deployment.md) and follow the steps to make sure that your PGP and SSH keys are in place and ready for a deployment. 
+
 ### Daily
 
 #### Checklist
