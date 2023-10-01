@@ -120,6 +120,8 @@ but none were.
 ```
 It means your key isn't working. Check with `@paulj`.
 
+If using `gpg` and decryption problems persist, see [this potential fix](https://github.com/getsops/sops/issues/304#issuecomment-377195341).
+
 ### What do I do if Ansible says a node is unreachable?
 You might see this during a deployment:
 > fatal: [trin-ams3-18]: UNREACHABLE! => {"changed": false, "msg": "Failed to connect to the host via ssh: ssh: connect to host 178.128.253.26 port 22: Connection timed out", "unreachable": true}
