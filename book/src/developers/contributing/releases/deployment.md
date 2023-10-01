@@ -2,15 +2,17 @@
 
 ## First time Setup
 - Get access to cluster repo (add person to @trin-deployments)
-- Download cluster repo:
-```shell=
-git clone git@github.com:ethereum/cluster.git
-cd cluster
-python3 -m venv venv
-. venv/bin/activate
-pip install ansible
-sudo apt install ansible-core
-```
+- `git clone` the cluster repo: https://github.com/ethereum/cluster.git
+- Install dependencies within `cluster` virtualenv:
+    ```shell=
+    cd cluster
+    python3 -m venv venv
+    . venv/bin/activate
+    pip install ansible
+    sudo apt install ansible-core
+    ```
+    On mac you can do `brew install ansible` instead of `apt`.
+
 - [Install keybase](https://keybase.io/docs/the_app/install_linux)
 - Publish your pgp public key with keybase, using: `keybase pgp select --import`
   - This fails if you don't have a pgp key yet. If so, create one with `gpg --generate-key`
