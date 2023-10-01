@@ -1,3 +1,3 @@
 # Releases
 
-This section covers the process of making a Trin release.
+This section covers the process of making & deploying a Trin release.
