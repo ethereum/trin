@@ -1,5 +1,11 @@
 # Release checklist
 
+## Communicate
+
+Announce in #trin chat the upcoming release. Aim for a day or more notice, but
+announcing a few minutes before releasing is still better than not saying
+anything.
+
 ## Choosing a version
 
 Make sure that version follows [semver](https://semver.org/) rules e.g (`0.2.0-alpha.3`).

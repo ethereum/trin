@@ -56,7 +56,6 @@
             - [Raspberry Pi](developers/contributing/build_instructions/raspberry_pi.md)
             - [Windows](developers/contributing/build_instructions/windows.md)
         - [Releases](developers/contributing/releases/README.md)
-            - [Pre-release checklist](developers/contributing/releases/prerelease_checklist.md)
             - [Release checklist](developers/contributing/releases/release_checklist.md)
             - [Deployment](developers/contributing/releases/deployment.md)
         - [Tests](developers/contributing/tests.md)
