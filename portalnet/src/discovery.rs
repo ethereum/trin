@@ -486,10 +486,7 @@ mod tests {
         // test if Enr changes the Enr sequence is increased and if it is written to disk
         portalnet_config.listen_port = 2424;
         let discovery = Discovery::new(portalnet_config.clone()).unwrap();
-        assert_ne!(
-            get_enr_rlp_content(&discovery.local_enr()),
-            get_enr_rlp_content(&old_enr)
-        );
+        assert_ne!(discovery.local_enr(), old_enr);
         let data = fs::read_to_string(trin_enr_file_location.clone()).unwrap();
         let old_enr = Enr::from_str(&data).unwrap();
         assert_eq!(discovery.local_enr().seq(), 2);
@@ -498,10 +495,7 @@ mod tests {
 
         // test if the enr isn't changed that it's sequence stays the same
         let discovery = Discovery::new(portalnet_config).unwrap();
-        assert_eq!(
-            get_enr_rlp_content(&discovery.local_enr()),
-            get_enr_rlp_content(&old_enr)
-        );
+        assert_eq!(discovery.local_enr(), old_enr);
         let data = fs::read_to_string(trin_enr_file_location).unwrap();
         let old_enr = Enr::from_str(&data).unwrap();
         assert_eq!(discovery.local_enr().seq(), 2);
