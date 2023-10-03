@@ -16,6 +16,7 @@ use rlp::RlpStream;
 use serde_json::{json, Value};
 use std::hash::{Hash, Hasher};
 use std::net::Ipv4Addr;
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::{convert::TryFrom, fmt, fs, io, net::SocketAddr, sync::Arc};
 use tokio::sync::mpsc;
@@ -110,30 +111,33 @@ impl Discovery {
                 .map_err(|e| format!("When adding key to servers ENR: {e:?}"))?
         };
 
-        // Check if we have an old version of our Enr and if we do, increase our sequence number
-        let trin_enr_file_location = portal_config.trin_data_dir.join(ENR_FILE_NAME);
-        if trin_enr_file_location.is_file() {
-            let data = fs::read_to_string(trin_enr_file_location.clone())
-                .expect("Unable to read Trin Enr from file");
-            let old_enr = Enr::from_str(&data).expect("Expected read trin.enr to be valid");
-            enr.set_seq(old_enr.seq(), &enr_key)
-                .expect("Unable to set Enr sequence number");
+        // This should only never run in test cases.
+        if portal_config.trin_data_dir != PathBuf::default() {
+            // Check if we have an old version of our Enr and if we do, increase our sequence number
+            let trin_enr_file_location = portal_config.trin_data_dir.join(ENR_FILE_NAME);
+            if trin_enr_file_location.is_file() {
+                let data = fs::read_to_string(trin_enr_file_location.clone())
+                    .expect("Unable to read Trin Enr from file");
+                let old_enr = Enr::from_str(&data).expect("Expected read trin.enr to be valid");
+                enr.set_seq(old_enr.seq(), &enr_key)
+                    .expect("Unable to set Enr sequence number");
 
-            // If the content is different then increase the sequence number
-            if get_enr_rlp_content(&enr) != get_enr_rlp_content(&old_enr) {
-                enr.set_seq(old_enr.seq() + 1, &enr_key)
-                    .expect("Unable to increase Enr sequence number");
-                fs::write(trin_enr_file_location, enr.to_base64())
-                    .expect("Unable to update Trin Enr to file");
+                // If the content is different then increase the sequence number
+                if get_enr_rlp_content(&enr) != get_enr_rlp_content(&old_enr) {
+                    enr.set_seq(old_enr.seq() + 1, &enr_key)
+                        .expect("Unable to increase Enr sequence number");
+                    fs::write(trin_enr_file_location, enr.to_base64())
+                        .expect("Unable to update Trin Enr to file");
+                } else {
+                    // the content is the same, we don't want to change signatures on restart
+                    // so set enr to old one to keep the same signature per sequence number
+                    enr = old_enr;
+                }
             } else {
-                // the content is the same, we don't want to change signatures on restart
-                // so set enr to old one to keep the same signature per sequence number
-                enr = old_enr;
+                // Write enr to disk
+                fs::write(trin_enr_file_location, enr.to_base64())
+                    .expect("Unable to write Trin Enr to file");
             }
-        } else {
-            // Write enr to disk
-            fs::write(trin_enr_file_location, enr.to_base64())
-                .expect("Unable to write Trin Enr to file");
         }
 
         let listen_config = ListenConfig::Ipv4 {
