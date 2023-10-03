@@ -2,15 +2,17 @@
 
 ## First time Setup
 - Get access to cluster repo (add person to @trin-deployments)
-- Download cluster repo:
-```shell=
-git clone git@github.com:ethereum/cluster.git
-cd cluster
-python3 -m venv venv
-. venv/bin/activate
-pip install ansible
-sudo apt install ansible-core
-```
+- `git clone` the cluster repo: https://github.com/ethereum/cluster.git
+- Install dependencies within `cluster` virtualenv:
+    ```shell=
+    cd cluster
+    python3 -m venv venv
+    . venv/bin/activate
+    pip install ansible
+    sudo apt install ansible-core
+    ```
+    On mac you can do `brew install ansible` instead of `apt`.
+
 - [Install keybase](https://keybase.io/docs/the_app/install_linux)
 - Publish your pgp public key with keybase, using: `keybase pgp select --import`
   - This fails if you don't have a pgp key yet. If so, create one with `gpg --generate-key`
@@ -26,6 +28,7 @@ sudo apt install ansible-core
 ## Each Deployment
 
 ### Prepare
+- Generally we want to cut a new release before deployment, see previous page for instructions.
 - Announce in Discord #trin that you're about to run the deployment
 - Make sure to schedule plenty of time to react to deployment issues
 
@@ -116,6 +119,8 @@ order for SOPS to recover the file, at least one key has to be successful,
 but none were.
 ```
 It means your key isn't working. Check with `@paulj`.
+
+If using `gpg` and decryption problems persist, see [this potential fix](https://github.com/getsops/sops/issues/304#issuecomment-377195341).
 
 ### What do I do if Ansible says a node is unreachable?
 You might see this during a deployment:
