@@ -51,7 +51,7 @@ pub async fn run_trin(
         listen_port: trin_config.discovery_port,
         no_stun: trin_config.no_stun,
         bootnodes: trin_config.bootnodes.clone(),
-        enr_file_location: Some(node_data_dir.clone()),
+        trin_data_dir: node_data_dir.clone(),
         ..Default::default()
     };
 

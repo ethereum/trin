@@ -3,7 +3,6 @@ use crate::socket;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use bytes::BytesMut;
-use discv5::enr::EnrPublicKey;
 use discv5::{
     enr::{CombinedKey, EnrBuilder, NodeId},
     ConfigBuilder, Discv5, Event, ListenConfig, RequestError, TalkRequest,
@@ -112,24 +111,26 @@ impl Discovery {
         };
 
         // Check if we have an old version of our Enr and if we do, increase our sequence number
-        if let Some(enr_file_location) = portal_config.enr_file_location {
-            let trin_enr_file_location = enr_file_location.join(ENR_FILE_NAME);
-            if trin_enr_file_location.is_file() {
-                let data = fs::read_to_string(trin_enr_file_location.clone())
-                    .expect("Unable to read Trin Enr from file");
-                let old_enr = Enr::from_str(&data).expect("Expected read trin.enr to be valid");
+        let trin_enr_file_location = portal_config.trin_data_dir.join(ENR_FILE_NAME);
+        if trin_enr_file_location.is_file() {
+            let data = fs::read_to_string(trin_enr_file_location.clone())
+                .expect("Unable to read Trin Enr from file");
+            let old_enr = Enr::from_str(&data).expect("Expected read trin.enr to be valid");
+            enr.set_seq(old_enr.seq(), &enr_key)
+                .expect("Unable to set Enr sequence number");
 
-                enr.set_seq(old_enr.seq(), &enr_key)
-                    .expect("Unable to set Enr sequence number");
-
-                // If the old Enr's signature is different then the new one
-                if !verify_by_signature(&enr, old_enr.signature())
-                    && !verify_by_signature(&old_enr, enr.signature())
-                {
-                    enr.set_seq(old_enr.seq() + 1, &enr_key)
-                        .expect("Unable to increase Enr sequence number");
-                }
+            // If the content is different then increase the sequence number
+            if get_enr_rlp_content(&enr) != get_enr_rlp_content(&old_enr) {
+                enr.set_seq(old_enr.seq() + 1, &enr_key)
+                    .expect("Unable to increase Enr sequence number");
+                fs::write(trin_enr_file_location, enr.to_base64())
+                    .expect("Unable to update Trin Enr to file");
+            } else {
+                // the content is the same, we don't want to change signatures on restart
+                // so set enr to old one to keep the same signature per sequence number
+                enr = old_enr;
             }
+        } else {
             // Write enr to disk
             fs::write(trin_enr_file_location, enr.to_base64())
                 .expect("Unable to write Trin Enr to file");
@@ -425,7 +426,7 @@ impl AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
 
 // todo: remove this once sigp/enr implements this for enr's
 // we need this because signatures can be different for the same data but still valid
-fn verify_by_signature(enr: &Enr, signature: &[u8]) -> bool {
+fn get_enr_rlp_content(enr: &Enr) -> BytesMut {
     match enr.id() {
         Some(ref id) if id == "v4" => {
             let mut stream = RlpStream::new_with_buffer(BytesMut::with_capacity(300));
@@ -439,10 +440,10 @@ fn verify_by_signature(enr: &Enr, signature: &[u8]) -> bool {
                 stream.append_raw(v, 1);
             }
 
-            enr.public_key().verify_v4(&stream.out(), signature)
+            stream.out()
         }
         // unsupported identity schemes
-        _ => false,
+        _ => BytesMut::with_capacity(0),
     }
 }
 
@@ -463,7 +464,7 @@ mod tests {
         let mut portalnet_config = PortalnetConfig {
             private_key,
             bootnodes: Bootnodes::None,
-            enr_file_location: Some(node_data_dir.clone()),
+            trin_data_dir: node_data_dir.clone(),
             ..Default::default()
         };
 
@@ -481,7 +482,10 @@ mod tests {
         // test if Enr changes the Enr sequence is increased and if it is written to disk
         portalnet_config.listen_port = 2424;
         let discovery = Discovery::new(portalnet_config.clone()).unwrap();
-        assert_ne!(discovery.local_enr(), old_enr);
+        assert_ne!(
+            get_enr_rlp_content(&discovery.local_enr()),
+            get_enr_rlp_content(&old_enr)
+        );
         let data = fs::read_to_string(trin_enr_file_location.clone()).unwrap();
         let old_enr = Enr::from_str(&data).unwrap();
         assert_eq!(discovery.local_enr().seq(), 2);
@@ -490,9 +494,9 @@ mod tests {
 
         // test if the enr isn't changed that it's sequence stays the same
         let discovery = Discovery::new(portalnet_config).unwrap();
-        assert!(
-            verify_by_signature(&discovery.local_enr(), old_enr.signature())
-                && verify_by_signature(&old_enr, discovery.local_enr().signature())
+        assert_eq!(
+            get_enr_rlp_content(&discovery.local_enr()),
+            get_enr_rlp_content(&old_enr)
         );
         let data = fs::read_to_string(trin_enr_file_location).unwrap();
         let old_enr = Enr::from_str(&data).unwrap();
