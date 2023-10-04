@@ -51,12 +51,11 @@ pub async fn run_trin(
         listen_port: trin_config.discovery_port,
         no_stun: trin_config.no_stun,
         bootnodes: trin_config.bootnodes.clone(),
-        trin_data_dir: node_data_dir.clone(),
         ..Default::default()
     };
 
     // Initialize base discovery protocol
-    let mut discovery = Discovery::new(portalnet_config.clone())?;
+    let mut discovery = Discovery::new(portalnet_config.clone(), node_data_dir.clone())?;
     let talk_req_rx = discovery.start().await?;
     let discovery = Arc::new(discovery);
 

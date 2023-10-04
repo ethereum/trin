@@ -612,6 +612,7 @@ mod tests {
     use crate::builder::RpcModuleSelection;
     use crate::{PortalRpcModule, RpcModuleBuilder};
     use portalnet::discovery::Discovery;
+    use portalnet::utils::db::setup_temp_dir;
     use std::io;
     use std::sync::Arc;
 
@@ -633,7 +634,8 @@ mod tests {
     pub fn test_rpc_builder() -> RpcModuleBuilder {
         let (history_tx, _) = tokio::sync::mpsc::unbounded_channel();
         let (beacon_tx, _) = tokio::sync::mpsc::unbounded_channel();
-        let discv5 = Arc::new(Discovery::new(Default::default()).unwrap());
+        let temp_dir = setup_temp_dir().unwrap().into_path();
+        let discv5 = Arc::new(Discovery::new(Default::default(), temp_dir).unwrap());
         RpcModuleBuilder::new(discv5)
             .with_history(history_tx)
             .with_beacon(beacon_tx)
