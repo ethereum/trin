@@ -43,6 +43,7 @@ commands:
 orbs:
   rust: circleci/rust@1.6.0
   win: circleci/windows@5.0
+  commitlint: conventional-changelog/commitlint@1.0.0
 executors:
   docker-publisher:
     environment:
@@ -281,3 +282,4 @@ workflows:
       - test
       - check-windows
       - utp-test
+      - commitlint/lint
