@@ -116,7 +116,7 @@ impl Discovery {
         if trin_enr_path.is_file() {
             let data = fs::read_to_string(trin_enr_path.clone())
                 .expect("Unable to read Trin Enr from file");
-            let old_enr = Enr::from_str(&data).expect("Expected read trin.enr to be valid");
+            let old_enr = Enr::from_str(&data).expect("Expected to read valid Trin Enr from file");
             enr.set_seq(old_enr.seq(), &enr_key)
                 .expect("Unable to set Enr sequence number");
 
