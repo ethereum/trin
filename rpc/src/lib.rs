@@ -6,6 +6,7 @@ mod cors;
 mod discv5_rpc;
 mod errors;
 mod eth_rpc;
+mod fetch;
 mod history_rpc;
 mod rpc_server;
 mod serde;
