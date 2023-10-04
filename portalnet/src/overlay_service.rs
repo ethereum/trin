@@ -2695,17 +2695,17 @@ mod tests {
         types::messages::PortalnetConfig,
     };
 
+    use crate::utils::db::setup_temp_dir;
+    use discv5::kbucket::Entry;
+    use ethereum_types::U256;
     use ethportal_api::types::content_key::overlay::IdentityContentKey;
     use ethportal_api::types::distance::XorMetric;
     use ethportal_api::types::enr::generate_random_remote_enr;
-    use trin_validation::validator::MockValidator;
-
-    use discv5::kbucket::Entry;
-    use ethereum_types::U256;
     use serial_test::serial;
     use std::net::SocketAddr;
     use tokio::sync::mpsc::unbounded_channel;
     use tokio_test::{assert_pending, assert_ready, task};
+    use trin_validation::validator::MockValidator;
 
     macro_rules! poll_command_rx {
         ($service:ident) => {
@@ -2719,7 +2719,8 @@ mod tests {
             no_stun: true,
             ..Default::default()
         };
-        let discovery = Arc::new(Discovery::new(portal_config).unwrap());
+        let temp_dir = setup_temp_dir().unwrap().into_path();
+        let discovery = Arc::new(Discovery::new(portal_config, temp_dir).unwrap());
 
         let (_utp_talk_req_tx, utp_talk_req_rx) = unbounded_channel();
         let discv5_utp =

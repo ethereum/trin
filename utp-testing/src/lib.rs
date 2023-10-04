@@ -12,6 +12,7 @@ use jsonrpsee::proc_macros::rpc;
 use jsonrpsee::server::{Server, ServerHandle};
 use portalnet::discovery::{Discovery, UtpEnr};
 use portalnet::types::messages::{PortalnetConfig, ProtocolId};
+use portalnet::utils::db::setup_temp_dir;
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -148,7 +149,8 @@ pub async fn run_test_app(
         ..Default::default()
     };
 
-    let mut discovery = Discovery::new(config).unwrap();
+    let temp_dir = setup_temp_dir().unwrap().into_path();
+    let mut discovery = Discovery::new(config, temp_dir).unwrap();
     let talk_req_rx = discovery.start().await.unwrap();
     let enr = discovery.local_enr();
     let discovery = Arc::new(discovery);
