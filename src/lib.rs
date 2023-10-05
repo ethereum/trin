@@ -2,12 +2,6 @@
 
 use std::sync::Arc;
 
-use rpc::{launch_jsonrpc_server, RpcServerHandle};
-use tokio::sync::mpsc;
-use tokio::sync::RwLock;
-use tracing::info;
-use utp_rs::socket::UtpSocket;
-
 #[cfg(windows)]
 use ethportal_api::types::cli::Web3TransportType;
 use ethportal_api::types::cli::{TrinConfig, BEACON_NETWORK, HISTORY_NETWORK, STATE_NETWORK};
@@ -18,11 +12,16 @@ use portalnet::{
     storage::PortalStorageConfig,
     utils::db::{configure_node_data_dir, configure_trin_data_dir},
 };
+use rpc::{launch_jsonrpc_server, RpcServerHandle};
+use tokio::sync::mpsc;
+use tokio::sync::RwLock;
+use tracing::info;
 use trin_beacon::initialize_beacon_network;
 use trin_history::initialize_history_network;
 use trin_state::initialize_state_network;
 use trin_utils::version::get_trin_version;
 use trin_validation::{accumulator::MasterAccumulator, oracle::HeaderOracle};
+use utp_rs::socket::UtpSocket;
 
 pub async fn run_trin(
     trin_config: TrinConfig,

@@ -1,7 +1,9 @@
-use crate::execution_api::ExecutionApi;
-use crate::full_header::FullHeader;
-use crate::mode::{BridgeMode, ModeType};
-use crate::utils::{read_test_assets_from_file, TestAssets};
+use std::fs;
+use std::ops::Range;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+use std::time;
+
 use anyhow::{anyhow, bail};
 use ethportal_api::jsonrpsee::http_client::HttpClient;
 use ethportal_api::types::execution::accumulator::EpochAccumulator;
@@ -21,11 +23,6 @@ use ethportal_api::{
 };
 use futures::stream::StreamExt;
 use ssz::Decode;
-use std::fs;
-use std::ops::Range;
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
-use std::time;
 use surf::{
     middleware::{Middleware, Next},
     Body, Client, Request, Response,
@@ -35,6 +32,11 @@ use tracing::{debug, info, warn};
 use trin_validation::accumulator::MasterAccumulator;
 use trin_validation::constants::{EPOCH_SIZE as EPOCH_SIZE_USIZE, MERGE_BLOCK_NUMBER};
 use trin_validation::oracle::HeaderOracle;
+
+use crate::execution_api::ExecutionApi;
+use crate::full_header::FullHeader;
+use crate::mode::{BridgeMode, ModeType};
+use crate::utils::{read_test_assets_from_file, TestAssets};
 
 // todo: calculate / test optimal saturation delay
 const HEADER_SATURATION_DELAY: u64 = 10; // seconds

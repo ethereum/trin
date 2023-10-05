@@ -1,3 +1,7 @@
+use std::ops::Deref;
+use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use anyhow::bail;
 use chrono::Duration;
 use discv5::enr::{CombinedKey, EnrBuilder, NodeId};
@@ -5,9 +9,6 @@ use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::HistoryContentKey;
 use ethportal_api::{BeaconContentKey, BeaconContentValue, HistoryContentValue};
 use serde::{Deserialize, Serialize};
-use std::ops::Deref;
-use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Generates a set of N private keys, with node ids that are equally spaced
 /// around the 256-bit keys space.
@@ -153,16 +154,17 @@ fn slot_timestamp(slot: u64, genesis_time: u64) -> u64 {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use super::*;
-    use crate::constants::{
-        BEACON_GENESIS_TIME, HEADER_WITH_PROOF_CONTENT_KEY, HEADER_WITH_PROOF_CONTENT_VALUE,
-    };
     use chrono::{DateTime, TimeZone, Utc};
     use ethereum_types::U256;
     use ethportal_api::types::distance::{Metric, XorMetric};
     use ethportal_api::utils::bytes::hex_decode;
     use rstest::rstest;
     use serde_json::json;
+
+    use super::*;
+    use crate::constants::{
+        BEACON_GENESIS_TIME, HEADER_WITH_PROOF_CONTENT_KEY, HEADER_WITH_PROOF_CONTENT_VALUE,
+    };
 
     #[rstest]
     #[case(2)]

@@ -435,12 +435,13 @@ impl ssz::Encode for SszNone {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use super::*;
     use std::fs;
 
     use serde_json::{json, Value};
     use ssz::Decode;
     use test_log::test;
+
+    use super::*;
 
     #[test]
     fn decode_and_encode_header() {

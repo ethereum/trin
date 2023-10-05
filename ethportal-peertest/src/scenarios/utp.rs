@@ -1,11 +1,12 @@
-use crate::{
-    constants::{fixture_block_body, fixture_header_with_proof},
-    Peertest,
-};
 use discv5::enr::NodeId;
 use ethportal_api::types::portal::{ContentInfo, TraceContentInfo};
 use ethportal_api::{HistoryNetworkApiClient, PossibleHistoryContentValue};
 use tracing::info;
+
+use crate::{
+    constants::{fixture_block_body, fixture_header_with_proof},
+    Peertest,
+};
 
 pub async fn test_recursive_utp(peertest: &Peertest) {
     info!("Test recursive utp");

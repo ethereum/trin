@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use clap::Parser;
 use ethportal_api::jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
 use portal_bridge::beacon_bridge::BeaconBridge;
@@ -8,7 +10,6 @@ use portal_bridge::execution_api::ExecutionApi;
 use portal_bridge::pandaops::PandaOpsMiddleware;
 use portal_bridge::types::NetworkKind;
 use portal_bridge::utils::generate_spaced_private_keys;
-use std::sync::Arc;
 use tokio::time::{sleep, Duration};
 use trin_utils::log::init_tracing_logger;
 use trin_validation::accumulator::MasterAccumulator;

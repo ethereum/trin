@@ -1,13 +1,10 @@
 use std::sync::Arc;
 
 use eth_trie::EthTrie;
-use parking_lot::RwLock as PLRwLock;
-use tokio::sync::RwLock;
-use utp_rs::socket::UtpSocket;
-
 use ethportal_api::types::distance::XorMetric;
 use ethportal_api::types::enr::Enr;
 use ethportal_api::StateContentKey;
+use parking_lot::RwLock as PLRwLock;
 use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, UtpEnr},
@@ -15,7 +12,9 @@ use portalnet::{
     storage::{PortalStorage, PortalStorageConfig},
     types::messages::ProtocolId,
 };
+use tokio::sync::RwLock;
 use trin_validation::oracle::HeaderOracle;
+use utp_rs::socket::UtpSocket;
 
 use crate::{trie::TrieDB, validation::StateValidator};
 

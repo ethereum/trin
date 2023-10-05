@@ -1,5 +1,3 @@
-use crate::full_header::{FullHeader, FullHeaderBatch};
-use crate::pandaops::PandaOpsMiddleware;
 use anyhow::{anyhow, bail};
 use ethereum_types::H256;
 use ethportal_api::types::jsonrpc::params::Params;
@@ -7,6 +5,9 @@ use ethportal_api::types::jsonrpc::request::JsonRequest;
 use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::{Header, Receipts};
 use serde_json::{json, Value};
+
+use crate::full_header::{FullHeader, FullHeaderBatch};
+use crate::pandaops::PandaOpsMiddleware;
 
 /// Implements endpoints from the Execution API to access data from the execution layer.
 #[derive(Clone, Debug, PartialEq, Eq)]

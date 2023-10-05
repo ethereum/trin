@@ -1,7 +1,8 @@
-use crate::jsonrpsee::core::{async_trait, RpcResult};
 use ethereum_types::U256;
 use ethportal_api::EthApiServer;
 use trin_validation::constants::CHAIN_ID;
+
+use crate::jsonrpsee::core::{async_trait, RpcResult};
 
 pub struct EthApi;
 

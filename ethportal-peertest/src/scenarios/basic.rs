@@ -1,5 +1,3 @@
-use crate::constants::fixture_header_with_proof;
-use crate::Peertest;
 use ethereum_types::{H256, U256};
 use ethportal_api::types::distance::Distance;
 use ethportal_api::{
@@ -10,6 +8,9 @@ use jsonrpsee::async_client::Client;
 use ssz::Encode;
 use tracing::info;
 use trin_utils::version::get_trin_version;
+
+use crate::constants::fixture_header_with_proof;
+use crate::Peertest;
 
 pub async fn test_web3_client_version(target: &Client) {
     info!("Testing web3_clientVersion");

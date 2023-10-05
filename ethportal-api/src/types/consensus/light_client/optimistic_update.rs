@@ -1,13 +1,14 @@
-use crate::types::consensus::body::SyncAggregate;
-use crate::types::consensus::fork::ForkName;
-use crate::types::consensus::light_client::header::{
-    LightClientHeaderBellatrix, LightClientHeaderCapella,
-};
 use serde::{Deserialize, Serialize};
 use serde_this_or_that::as_u64;
 use ssz::Decode;
 use ssz_derive::{Decode, Encode};
 use superstruct::superstruct;
+
+use crate::types::consensus::body::SyncAggregate;
+use crate::types::consensus::fork::ForkName;
+use crate::types::consensus::light_client::header::{
+    LightClientHeaderBellatrix, LightClientHeaderCapella,
+};
 
 /// A LightClientOptimisticUpdate is the update we receive on each slot,
 /// it is based off the current unfinalized epoch and it is verified only against BLS signature.
@@ -49,10 +50,11 @@ impl LightClientOptimisticUpdate {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use super::*;
     use ::ssz::Encode;
     use rstest::rstest;
     use serde_json::Value;
+
+    use super::*;
 
     #[rstest]
     #[case("case_0")]

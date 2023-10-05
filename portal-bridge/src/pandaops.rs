@@ -1,11 +1,12 @@
-use crate::bridge::Retry;
-use crate::constants::{BASE_CL_ENDPOINT, BASE_EL_ENDPOINT};
-use crate::{PANDAOPS_CLIENT_ID, PANDAOPS_CLIENT_SECRET};
 use anyhow::anyhow;
 use ethportal_api::types::jsonrpc::request::JsonRequest;
 use futures::future::join_all;
 use serde_json::{json, Value};
 use tracing::warn;
+
+use crate::bridge::Retry;
+use crate::constants::{BASE_CL_ENDPOINT, BASE_EL_ENDPOINT};
+use crate::{PANDAOPS_CLIENT_ID, PANDAOPS_CLIENT_SECRET};
 
 /// Limit the number of requests in a single batch to avoid exceeding the
 /// provider's batch size limit configuration of 100.

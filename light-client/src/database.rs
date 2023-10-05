@@ -4,8 +4,9 @@ use std::{
     path::PathBuf,
 };
 
-use crate::config::client_config::Config;
 use eyre::Result;
+
+use crate::config::client_config::Config;
 
 pub trait Database {
     fn new(config: &Config) -> Result<Self>

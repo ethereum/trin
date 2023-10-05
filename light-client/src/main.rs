@@ -1,8 +1,9 @@
+use std::path::PathBuf;
+
 use eyre::Result;
 use light_client::config::networks;
 use light_client::database::FileDB;
 use light_client::{Client, ClientBuilder};
-use std::path::PathBuf;
 use tracing::info;
 
 #[tokio::main]

@@ -75,8 +75,9 @@ fn validate_jsonrpc_version(jsonrpc: &str) -> Result<(), ValidationError> {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use super::*;
     use validator::ValidationErrors;
+
+    use super::*;
 
     #[test_log::test]
     fn test_json_validator_accepts_valid_json() {

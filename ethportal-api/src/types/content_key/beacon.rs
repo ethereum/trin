@@ -1,11 +1,13 @@
-use crate::types::content_key::error::ContentKeyError;
-use crate::types::content_key::overlay::OverlayContentKey;
-use crate::utils::bytes::{hex_decode, hex_encode, hex_encode_compact};
+use std::fmt;
+
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest, Sha256};
 use ssz::{Decode, Encode};
 use ssz_derive::{Decode, Encode};
-use std::fmt;
+
+use crate::types::content_key::error::ContentKeyError;
+use crate::types::content_key::overlay::OverlayContentKey;
+use crate::utils::bytes::{hex_decode, hex_encode, hex_encode_compact};
 
 /// A content key in the beacon chain network.
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]

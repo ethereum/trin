@@ -1,3 +1,12 @@
+use std::future::Future;
+use std::{
+    collections::{BTreeMap, HashSet},
+    fmt::{Debug, Display},
+    marker::{PhantomData, Sync},
+    sync::Arc,
+    time::Duration,
+};
+
 use anyhow::anyhow;
 use discv5::{
     enr::NodeId,
@@ -7,22 +16,22 @@ use discv5::{
     },
     ConnectionDirection, ConnectionState, TalkRequest,
 };
+use ethportal_api::types::bootnodes::Bootnode;
+use ethportal_api::types::distance::{Distance, Metric};
+use ethportal_api::types::enr::Enr;
+use ethportal_api::utils::bytes::hex_encode;
+use ethportal_api::OverlayContentKey;
+use ethportal_api::RawContentKey;
 use futures::channel::oneshot;
 use parking_lot::RwLock;
 use ssz::Encode;
-use std::future::Future;
-use std::{
-    collections::{BTreeMap, HashSet},
-    fmt::{Debug, Display},
-    marker::{PhantomData, Sync},
-    sync::Arc,
-    time::Duration,
-};
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::{debug, error, info, warn};
+use trin_validation::validator::Validator;
 use utp_rs::socket::UtpSocket;
 
+use crate::events::EventEnvelope;
 use crate::{
     discovery::{Discovery, UtpEnr},
     find::query_info::{FindContentResult, RecursiveFindContentResult},
@@ -41,15 +50,6 @@ use crate::{
         node::Node,
     },
 };
-use ethportal_api::types::bootnodes::Bootnode;
-use ethportal_api::types::distance::{Distance, Metric};
-use ethportal_api::types::enr::Enr;
-use ethportal_api::utils::bytes::hex_encode;
-use ethportal_api::OverlayContentKey;
-use ethportal_api::RawContentKey;
-use trin_validation::validator::Validator;
-
-use crate::events::EventEnvelope;
 
 /// Configuration parameters for the overlay network.
 #[derive(Clone)]
@@ -784,8 +784,9 @@ fn validate_find_nodes_distances(distances: &Vec<u16>) -> Result<(), OverlayRequ
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     #[rstest]
     #[case(vec![0u16])]

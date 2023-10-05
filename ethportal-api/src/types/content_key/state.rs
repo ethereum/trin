@@ -1,12 +1,14 @@
-use crate::types::content_key::overlay::OverlayContentKey;
-use crate::utils::bytes::hex_encode_compact;
+use std::fmt;
+
 use ethereum_types::{U256, U512};
 use sha2::{Digest as Sha2Digest, Sha256};
 use sha3::{Digest, Keccak256};
 use ssz::{Decode, Encode};
 use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, FixedVector, VariableList};
-use std::fmt;
+
+use crate::types::content_key::overlay::OverlayContentKey;
+use crate::utils::bytes::hex_encode_compact;
 
 /// A content key in the state overlay network.
 #[derive(Clone, Debug, Decode, Encode)]

@@ -1,17 +1,16 @@
-use eyre::Result;
-use log::info;
 use std::{net::SocketAddr, sync::Arc};
-use tokio::sync::RwLock;
 
+use eyre::Result;
 use jsonrpsee::{
     core::{async_trait, RpcResult},
     proc_macros::rpc,
     server::{Server, ServerHandle},
     Methods,
 };
+use log::info;
+use tokio::sync::RwLock;
 
 use crate::node::Node;
-
 use crate::utils::u64_to_hex_string;
 
 pub struct Rpc {

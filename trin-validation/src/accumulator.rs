@@ -1,8 +1,14 @@
-use rust_embed::RustEmbed;
 use std::path::PathBuf;
 
 use anyhow::anyhow;
 use ethereum_types::H256;
+use ethportal_api::types::execution::accumulator::EpochAccumulator;
+use ethportal_api::types::execution::header::{BlockHeaderProof, Header, HeaderWithProof};
+use ethportal_api::types::jsonrpc::endpoints::HistoryEndpoint;
+use ethportal_api::types::jsonrpc::request::HistoryJsonRpcRequest;
+use ethportal_api::utils::bytes::hex_decode;
+use ethportal_api::{EpochAccumulatorKey, HistoryContentKey};
+use rust_embed::RustEmbed;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use ssz::Decode;
@@ -16,12 +22,6 @@ use crate::{
     constants::{EPOCH_SIZE, MERGE_BLOCK_NUMBER},
     merkle::proof::{verify_merkle_proof, MerkleTree},
 };
-use ethportal_api::types::execution::accumulator::EpochAccumulator;
-use ethportal_api::types::execution::header::{BlockHeaderProof, Header, HeaderWithProof};
-use ethportal_api::types::jsonrpc::endpoints::HistoryEndpoint;
-use ethportal_api::types::jsonrpc::request::HistoryJsonRpcRequest;
-use ethportal_api::utils::bytes::hex_decode;
-use ethportal_api::{EpochAccumulatorKey, HistoryContentKey};
 
 /// SSZ List[Hash256, max_length = MAX_HISTORICAL_EPOCHS]
 /// List of historical epoch accumulator merkle roots preceding current epoch.
@@ -238,20 +238,20 @@ fn calculate_generalized_index(header: &Header) -> usize {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use super::*;
     use std::fs;
     use std::str::FromStr;
 
     use ethereum_types::{Bloom, H160, U256};
-    use rstest::*;
-    use serde_json::json;
-    use ssz::Decode;
-
-    use crate::constants::DEFAULT_MASTER_ACC_HASH;
     use ethportal_api::types::execution::header::{
         AccumulatorProof, BlockHeaderProof, HeaderWithProof, SszNone,
     };
     use ethportal_api::utils::bytes::hex_encode;
+    use rstest::*;
+    use serde_json::json;
+    use ssz::Decode;
+
+    use super::*;
+    use crate::constants::DEFAULT_MASTER_ACC_HASH;
 
     #[rstest]
     #[case(1_000_001)]

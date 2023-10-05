@@ -6,6 +6,11 @@ use std::{
 };
 
 use ethereum_types::U256;
+use ethportal_api::types::bytes::ByteList;
+use ethportal_api::types::distance::Distance;
+use ethportal_api::types::enr::{Enr, SszEnr};
+use ethportal_api::utils::bytes::{hex_decode, hex_encode, ByteUtilsError};
+use ethportal_api::RawContentKey;
 use rlp::Encodable;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -14,12 +19,6 @@ use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, BitList};
 use thiserror::Error;
 use validator::ValidationError;
-
-use ethportal_api::types::bytes::ByteList;
-use ethportal_api::types::distance::Distance;
-use ethportal_api::types::enr::{Enr, SszEnr};
-use ethportal_api::utils::bytes::{hex_decode, hex_encode, ByteUtilsError};
-use ethportal_api::RawContentKey;
 
 /// The maximum size of a Discv5 packet.
 pub(crate) const MAX_DISCV5_PACKET_SIZE: usize = 1280;
@@ -553,9 +552,10 @@ impl From<Accept> for Value {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use super::*;
     use ethportal_api::utils::bytes::hex_encode_upper;
     use test_log::test;
+
+    use super::*;
 
     #[test]
     #[should_panic]

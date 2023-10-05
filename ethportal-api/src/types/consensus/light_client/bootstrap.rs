@@ -1,8 +1,3 @@
-use crate::types::consensus::fork::ForkName;
-use crate::types::consensus::light_client::header::{
-    LightClientHeaderBellatrix, LightClientHeaderCapella,
-};
-use crate::types::consensus::sync_committee::SyncCommittee;
 use ethereum_types::H256;
 use serde::{Deserialize, Serialize};
 use ssz::Decode;
@@ -10,6 +5,12 @@ use ssz_derive::{Decode, Encode};
 use ssz_types::typenum::U5;
 use ssz_types::FixedVector;
 use superstruct::superstruct;
+
+use crate::types::consensus::fork::ForkName;
+use crate::types::consensus::light_client::header::{
+    LightClientHeaderBellatrix, LightClientHeaderCapella,
+};
+use crate::types::consensus::sync_committee::SyncCommittee;
 
 pub type CurrentSyncCommitteeProofLen = U5;
 
@@ -52,10 +53,11 @@ impl LightClientBootstrap {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use super::*;
     use ::ssz::Encode;
     use rstest::rstest;
     use serde_json::Value;
+
+    use super::*;
 
     #[rstest]
     #[case("case_0")]

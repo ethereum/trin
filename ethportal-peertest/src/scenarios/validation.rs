@@ -1,7 +1,5 @@
-use crate::{
-    constants::{fixture_block_body, fixture_header_with_proof, fixture_receipts},
-    Peertest,
-};
+use std::str::FromStr;
+
 use ethereum_types::H256;
 use ethportal_api::types::content_key::history::BlockHeaderKey;
 use ethportal_api::types::enr::Enr;
@@ -10,8 +8,12 @@ use ethportal_api::{
     jsonrpsee::async_client::Client, HistoryContentKey, HistoryNetworkApiClient,
     PossibleHistoryContentValue,
 };
-use std::str::FromStr;
 use tracing::info;
+
+use crate::{
+    constants::{fixture_block_body, fixture_header_with_proof, fixture_receipts},
+    Peertest,
+};
 
 pub async fn test_validate_pre_merge_header_with_proof(peertest: &Peertest, target: &Client) {
     info!("Test validating a pre-merge header-with-proof");

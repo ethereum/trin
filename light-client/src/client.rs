@@ -1,24 +1,20 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 
-use eyre::{eyre, Result};
-
-use crate::consensus::ConsensusLightClient;
-use log::{error, info, warn};
-use tokio::sync::RwLock;
-
 use ethportal_api::consensus::header::BeaconBlockHeader;
-use std::path::PathBuf;
+use eyre::{eyre, Result};
+use log::{error, info, warn};
 use tokio::spawn;
+use tokio::sync::RwLock;
 use tokio::time::sleep;
 
 use crate::config::client_config::Config;
 use crate::config::{CheckpointFallback, Network};
 use crate::consensus::errors::ConsensusError;
-
+use crate::consensus::ConsensusLightClient;
 use crate::database::Database;
 use crate::errors::NodeError;
 use crate::node::Node;
-
 use crate::rpc::Rpc;
 
 #[derive(Default)]

@@ -3,23 +3,23 @@
 use std::sync::Arc;
 
 use discv5::TalkRequest;
-use network::StateNetwork;
-use tokio::{
-    sync::{mpsc, RwLock},
-    task::JoinHandle,
-};
-use tracing::info;
-use utp_rs::socket::UtpSocket;
-
-use crate::{events::StateEvents, jsonrpc::StateRequestHandler};
 use ethportal_api::types::enr::Enr;
 use ethportal_api::types::jsonrpc::request::StateJsonRpcRequest;
+use network::StateNetwork;
 use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, UtpEnr},
     storage::PortalStorageConfig,
 };
+use tokio::{
+    sync::{mpsc, RwLock},
+    task::JoinHandle,
+};
+use tracing::info;
 use trin_validation::oracle::HeaderOracle;
+use utp_rs::socket::UtpSocket;
+
+use crate::{events::StateEvents, jsonrpc::StateRequestHandler};
 
 pub mod events;
 mod jsonrpc;

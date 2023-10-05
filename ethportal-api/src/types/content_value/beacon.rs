@@ -1,3 +1,10 @@
+use std::ops::Deref;
+
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use ssz::{Decode, DecodeError, Encode};
+use ssz_types::typenum::U128;
+use ssz_types::VariableList;
+
 use crate::types::consensus::fork::{ForkDigest, ForkName};
 use crate::types::consensus::header_proof::HistoricalSummariesWithProof;
 use crate::types::consensus::light_client::bootstrap::{
@@ -17,11 +24,6 @@ use crate::types::constants::CONTENT_ABSENT;
 use crate::types::content_value::ContentValue;
 use crate::utils::bytes::{hex_decode, hex_encode};
 use crate::ContentValueError;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use ssz::{Decode, DecodeError, Encode};
-use ssz_types::typenum::U128;
-use ssz_types::VariableList;
-use std::ops::Deref;
 
 #[derive(Clone, Debug, PartialEq)]
 #[allow(clippy::large_enum_variant)]
@@ -539,10 +541,12 @@ impl<'de> Deserialize<'de> for BeaconContentValue {
 
 #[cfg(test)]
 mod test {
+    use std::fs;
+
+    use serde_json::Value;
+
     use crate::utils::bytes::hex_decode;
     use crate::{BeaconContentValue, ContentValue, PossibleBeaconContentValue};
-    use serde_json::Value;
-    use std::fs;
 
     #[test]
     fn light_client_bootstrap_encode_decode() {

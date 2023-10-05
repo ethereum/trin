@@ -2,17 +2,11 @@ use std::net::{IpAddr, Ipv4Addr};
 use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
 use discv5::TalkRequest;
-use parking_lot::RwLock;
-use tokio::{
-    sync::{mpsc, mpsc::unbounded_channel},
-    time::{self, Duration},
-};
-use utp_rs::socket::UtpSocket;
-
 use ethportal_api::types::content_key::overlay::IdentityContentKey;
 use ethportal_api::types::distance::XorMetric;
 use ethportal_api::types::enr::{Enr, SszEnr};
 use ethportal_api::utils::bytes::hex_encode_upper;
+use parking_lot::RwLock;
 use portalnet::utils::db::setup_temp_dir;
 use portalnet::{
     config::PortalnetConfig,
@@ -21,7 +15,12 @@ use portalnet::{
     storage::{ContentStore, DistanceFunction, MemoryContentStore},
     types::messages::{Content, Message, ProtocolId},
 };
+use tokio::{
+    sync::{mpsc, mpsc::unbounded_channel},
+    time::{self, Duration},
+};
 use trin_validation::validator::MockValidator;
+use utp_rs::socket::UtpSocket;
 
 async fn init_overlay(
     discovery: Arc<Discovery>,

@@ -1,13 +1,13 @@
+use std::collections::BTreeMap;
+
 use discv5::{
     enr::NodeId,
     kbucket::{ConnectionState, NodeStatus},
 };
-use serde_json::{json, Value};
-use std::collections::BTreeMap;
-
 use ethportal_api::types::distance::Distance;
 use ethportal_api::types::enr::Enr;
 use ethportal_api::utils::bytes::hex_encode;
+use serde_json::{json, Value};
 
 type NodeMap = BTreeMap<String, String>;
 type NodeTuple = (NodeId, Enr, NodeStatus, Distance, Option<String>);
@@ -107,8 +107,9 @@ fn expand_client_name(client_shorthand: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
 
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     #[rstest]
     #[case("f 3", Some("fluffy 3".to_owned()))]

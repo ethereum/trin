@@ -21,11 +21,11 @@
 // This basis of this file has been taken from the rust-libp2p codebase:
 // https://github.com/libp2p/rust-libp2p
 
-use super::super::query_pool::QueryState;
-
 use std::time::{Duration, Instant};
 
 use discv5::kbucket::Key;
+
+use super::super::query_pool::QueryState;
 
 // Configuration for a `Query`.
 #[derive(Debug, Clone)]

@@ -1,3 +1,6 @@
+use discv5::enr::NodeId;
+use jsonrpsee::{core::RpcResult, proc_macros::rpc};
+
 use crate::types::content_key::history::HistoryContentKey;
 use crate::types::enr::Enr;
 use crate::types::portal::FindNodesInfo;
@@ -6,8 +9,6 @@ use crate::types::portal::{
 };
 use crate::RoutingTableInfo;
 use crate::{HistoryContentValue, PossibleHistoryContentValue};
-use discv5::enr::NodeId;
-use jsonrpsee::{core::RpcResult, proc_macros::rpc};
 
 /// Portal History JSON-RPC endpoints
 #[rpc(client, server, namespace = "portal")]

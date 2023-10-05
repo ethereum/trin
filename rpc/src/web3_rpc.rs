@@ -1,6 +1,7 @@
-use crate::jsonrpsee::core::{async_trait, RpcResult};
 use ethportal_api::Web3ApiServer;
 use trin_utils::version::get_trin_version;
+
+use crate::jsonrpsee::core::{async_trait, RpcResult};
 
 pub struct Web3Api;
 

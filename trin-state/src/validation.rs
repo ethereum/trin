@@ -1,9 +1,8 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use tokio::sync::RwLock;
-
 use ethportal_api::StateContentKey;
+use tokio::sync::RwLock;
 use trin_validation::{oracle::HeaderOracle, validator::Validator};
 
 pub struct StateValidator {

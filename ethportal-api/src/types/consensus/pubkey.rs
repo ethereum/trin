@@ -1,7 +1,8 @@
+use std::ops::Deref;
+
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use ssz::{Decode, Encode};
 use ssz_types::{typenum, FixedVector};
-use std::ops::Deref;
 use tree_hash_derive::TreeHash;
 
 use crate::utils::bytes::{hex_decode, hex_encode};

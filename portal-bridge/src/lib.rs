@@ -13,8 +13,9 @@ pub mod pandaops;
 pub mod types;
 pub mod utils;
 
-use lazy_static::lazy_static;
 use std::env;
+
+use lazy_static::lazy_static;
 
 lazy_static! {
     static ref PANDAOPS_CLIENT_ID: String =

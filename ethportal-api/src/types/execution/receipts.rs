@@ -461,7 +461,6 @@ impl DerefMut for Receipt {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use super::*;
     use std::str::FromStr;
 
     use ethereum_types::H160;
@@ -469,6 +468,7 @@ mod tests {
     use ssz::{Decode, Encode};
     use test_log::test;
 
+    use super::*;
     use crate::utils::bytes::hex_encode;
 
     //

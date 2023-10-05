@@ -1,3 +1,6 @@
+use discv5::enr::NodeId;
+use jsonrpsee::{core::RpcResult, proc_macros::rpc};
+
 use crate::types::content_key::beacon::BeaconContentKey;
 use crate::types::enr::Enr;
 use crate::types::portal::FindNodesInfo;
@@ -6,8 +9,6 @@ use crate::types::portal::{
 };
 use crate::RoutingTableInfo;
 use crate::{BeaconContentValue, PossibleBeaconContentValue};
-use discv5::enr::NodeId;
-use jsonrpsee::{core::RpcResult, proc_macros::rpc};
 
 /// Portal Beacon JSON-RPC endpoints
 #[rpc(client, server, namespace = "portal")]

@@ -7,7 +7,6 @@ use eyre::Result;
 use crate::config::client_config::Config;
 use crate::consensus::rpc::nimbus_rpc::NimbusRpc;
 use crate::consensus::ConsensusLightClient;
-
 use crate::errors::NodeError;
 
 pub struct Node {

@@ -1,7 +1,9 @@
+use std::fmt;
+
+use quickcheck::{Arbitrary, Gen};
+
 use crate::types::content_key::error::ContentKeyError;
 use crate::utils::bytes::{hex_encode, hex_encode_compact};
-use quickcheck::{Arbitrary, Gen};
-use std::fmt;
 
 /// Types whose values represent keys to lookup content items in an overlay network.
 /// Keys are serializable.

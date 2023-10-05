@@ -7,7 +7,10 @@ use std::{
 
 use anyhow::anyhow;
 use discv5::enr::NodeId;
+use ethportal_api::types::distance::{Distance, Metric, XorMetric};
 use ethportal_api::types::portal::PaginateLocalContentInfo;
+use ethportal_api::utils::bytes::{hex_decode, hex_encode, ByteUtilsError};
+use ethportal_api::{ContentKeyError, HistoryContentKey, OverlayContentKey};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rocksdb::{Options, DB};
@@ -18,9 +21,6 @@ use tracing::{debug, error, info};
 use crate::metrics::portalnet::PORTALNET_METRICS;
 use crate::metrics::storage::StorageMetricsReporter;
 use crate::types::messages::ProtocolId;
-use ethportal_api::types::distance::{Distance, Metric, XorMetric};
-use ethportal_api::utils::bytes::{hex_decode, hex_encode, ByteUtilsError};
-use ethportal_api::{ContentKeyError, HistoryContentKey, OverlayContentKey};
 
 const BYTES_IN_MB_U64: u64 = 1000 * 1000;
 
@@ -803,15 +803,14 @@ struct EntryCount(u64);
 #[allow(clippy::unwrap_used)]
 pub mod test {
 
-    use super::*;
-
     use discv5::enr::{CombinedKey, EnrBuilder};
+    use ethportal_api::types::content_key::overlay::IdentityContentKey;
     use quickcheck::{quickcheck, QuickCheck, TestResult};
     use rand::RngCore;
     use serial_test::serial;
 
+    use super::*;
     use crate::utils::db::{configure_node_data_dir, setup_temp_dir};
-    use ethportal_api::types::content_key::overlay::IdentityContentKey;
 
     const CAPACITY_MB: u64 = 2;
 

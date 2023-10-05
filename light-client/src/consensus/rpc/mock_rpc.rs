@@ -1,12 +1,13 @@
 use std::{fs::read_to_string, path::PathBuf};
 
+use async_trait::async_trait;
+use eyre::Result;
+
 use super::ConsensusRpc;
 use crate::consensus::types::{
     LightClientBootstrapCapella, LightClientFinalityUpdateCapella,
     LightClientOptimisticUpdateCapella, LightClientUpdateCapella,
 };
-use async_trait::async_trait;
-use eyre::Result;
 
 pub struct MockRpc {
     testdata: PathBuf,

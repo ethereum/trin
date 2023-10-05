@@ -1,9 +1,8 @@
-use tracing::error;
-
 use ethportal_api::{
     BeaconContentKey, BeaconNetworkApiClient, HistoryContentKey, HistoryNetworkApiClient,
     PossibleBeaconContentValue, PossibleHistoryContentValue,
 };
+use tracing::error;
 
 /// Wait for the history content to be transferred
 pub async fn wait_for_history_content<P: HistoryNetworkApiClient + std::marker::Sync>(

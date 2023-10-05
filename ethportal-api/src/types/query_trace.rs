@@ -1,11 +1,11 @@
-use super::enr::Enr;
-use super::node_id::NodeId;
 use std::collections::HashMap;
 use std::time::SystemTime;
 
 use serde::{Deserialize, Serialize};
 
 use super::distance::{Metric, XorMetric};
+use super::enr::Enr;
+use super::node_id::NodeId;
 
 type ContentId = NodeId;
 
@@ -152,7 +152,6 @@ pub struct NodeInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::types::enr::generate_random_remote_enr;
 
     #[test]

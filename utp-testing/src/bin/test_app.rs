@@ -1,11 +1,11 @@
-use clap::Parser;
 use std::net::SocketAddr;
 use std::str::FromStr;
+
+use clap::Parser;
 use tracing::info;
 use trin_utils::log::init_tracing_logger;
-use utp_testing::run_test_app;
-
 use utp_testing::cli::TestAppConfig;
+use utp_testing::run_test_app;
 
 /// uTP test app, used for creation of a `test-app` docker image
 #[tokio::main]

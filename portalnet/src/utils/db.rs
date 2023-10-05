@@ -5,10 +5,9 @@ use anyhow::anyhow;
 use directories::ProjectDirs;
 use discv5::enr::{CombinedKey, EnrBuilder, NodeId};
 use ethereum_types::H256;
+use ethportal_api::utils::bytes::{hex_decode, hex_encode};
 use tempfile::TempDir;
 use tracing::debug;
-
-use ethportal_api::utils::bytes::{hex_decode, hex_encode};
 
 const TRIN_DATA_ENV_VAR: &str = "TRIN_DATA_PATH";
 const TRIN_DATA_DIR: &str = "trin";
@@ -100,9 +99,9 @@ fn get_application_private_key(trin_data_dir: &Path) -> anyhow::Result<CombinedK
 
 #[cfg(test)]
 pub mod test {
-    use super::*;
-
     use serial_test::serial;
+
+    use super::*;
 
     #[test]
     #[serial]

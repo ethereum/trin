@@ -1,11 +1,13 @@
+use std::path::PathBuf;
+use std::str::FromStr;
+
+use clap::{Parser, Subcommand};
+use tokio::process::Child;
+use url::Url;
+
 use crate::client_handles::{fluffy_handle, trin_handle};
 use crate::mode::BridgeMode;
 use crate::types::NetworkKind;
-use clap::{Parser, Subcommand};
-use std::path::PathBuf;
-use std::str::FromStr;
-use tokio::process::Child;
-use url::Url;
 
 // max value of 16 b/c...
 // - reliably calculate spaced private keys in a reasonable time

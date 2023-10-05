@@ -1,10 +1,9 @@
-use super::enr::Enr;
+use discv5::enr::NodeId as EnrNodeId;
 use serde::{Deserialize, Serialize};
 use stremio_serde_hex::{SerHex, StrictPfx};
 
-use discv5::enr::NodeId as EnrNodeId;
-
 use super::distance::{Metric, XorMetric};
+use super::enr::Enr;
 
 type RawNodeId = [u8; 32];
 

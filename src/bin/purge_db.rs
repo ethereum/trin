@@ -2,10 +2,6 @@ use anyhow::Result;
 use clap::{Parser, ValueEnum};
 use discv5::enr::{CombinedKey, EnrBuilder};
 use ethereum_types::H256;
-use rocksdb::IteratorMode;
-use ssz::Decode;
-use tracing::{info, warn};
-
 use ethportal_api::types::execution::accumulator::EpochAccumulator;
 use ethportal_api::types::execution::block_body::BlockBody;
 use ethportal_api::types::execution::header::HeaderWithProof;
@@ -15,6 +11,9 @@ use ethportal_api::HistoryContentKey;
 use portalnet::storage::{PortalStorage, PortalStorageConfig};
 use portalnet::types::messages::ProtocolId;
 use portalnet::utils::db::{configure_node_data_dir, configure_trin_data_dir};
+use rocksdb::IteratorMode;
+use ssz::Decode;
+use tracing::{info, warn};
 use trin_utils::log::init_tracing_logger;
 
 ///
@@ -146,8 +145,9 @@ pub enum PurgeMode {
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use std::str::FromStr;
+
+    use super::*;
 
     #[test]
     fn test_default_purge_config() {

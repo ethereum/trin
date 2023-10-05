@@ -1,9 +1,10 @@
+use std::fmt;
+
 use ethereum_types::H256;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest as Sha2Digest, Sha256};
 use ssz::{self, Decode, Encode};
 use ssz_derive::{Decode, Encode};
-use std::fmt;
 
 use crate::types::content_key::error::ContentKeyError;
 use crate::types::content_key::overlay::OverlayContentKey;

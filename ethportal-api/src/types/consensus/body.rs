@@ -1,10 +1,10 @@
-use crate::types::consensus::execution_payload::ExecutionPayload;
 use ethereum_types::H256;
 use serde::{Deserialize, Serialize};
 use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, BitList, BitVector, VariableList};
 
 use super::{header::BeaconBlockHeader, proof::Proof, pubkey::PubKey, signature::BlsSignature};
+use crate::types::consensus::execution_payload::ExecutionPayload;
 
 /// Types based off specs @
 /// https://github.com/ethereum/consensus-specs/blob/5970ae56a1cd50ea06049d8aad6bed74093d49d3/specs/bellatrix/beacon-chain.md
@@ -114,10 +114,11 @@ pub struct Eth1Data {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use super::*;
     use ::ssz::{Decode, Encode};
     use rstest::rstest;
     use serde_json::Value;
+
+    use super::*;
 
     /// Test vectors sourced from:
     /// https://github.com/ethereum/consensus-spec-tests/commit/c6e69469a75392b35169bc6234d4d3e6c4e288da

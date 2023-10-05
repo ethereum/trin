@@ -1,13 +1,12 @@
 use std::sync::Arc;
 
 use ethereum_types::H256;
-use serde::{Deserialize, Deserializer};
-use serde_json::Value;
-
 use ethportal_api::types::consensus::withdrawal::Withdrawal;
 use ethportal_api::types::execution::accumulator::EpochAccumulator;
 use ethportal_api::types::execution::header::{Header, TxHashes};
 use ethportal_api::types::execution::transaction::Transaction;
+use serde::{Deserialize, Deserializer};
+use serde_json::Value;
 
 /// Helper type to deserialize a response from a batched Header request.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -75,11 +74,12 @@ impl TryFrom<Value> for FullHeader {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use ethportal_api::types::execution::block_body::{
         BlockBody, BlockBodyLegacy, BlockBodyShanghai,
     };
     use serde_json::Value;
+
+    use super::*;
 
     #[test]
     fn full_header_from_get_block_response() {

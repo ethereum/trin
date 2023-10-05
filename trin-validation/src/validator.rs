@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-
 use ethportal_api::types::content_key::overlay::IdentityContentKey;
 
 /// Used by all overlay-network Validators to validate content in the overlay service.

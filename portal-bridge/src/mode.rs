@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 use std::str::FromStr;
+
 use trin_validation::constants::EPOCH_SIZE;
 
 /// Used to help decode cli args identifying the desired bridge mode.
@@ -89,10 +90,11 @@ impl FromStr for ModeType {
 
 #[cfg(test)]
 mod test {
-    use super::*;
-    use crate::cli::BridgeConfig;
     use clap::Parser;
     use rstest::rstest;
+
+    use super::*;
+    use crate::cli::BridgeConfig;
 
     #[rstest]
     #[case("latest", BridgeMode::Latest)]

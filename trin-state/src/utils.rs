@@ -22,8 +22,9 @@ pub fn distance(node_id: U256, content_id: U256) -> U256 {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use super::*;
     use test_log::test;
+
+    use super::*;
 
     // all 7 of these test cases are from
     // https://github.com/ethereum/portal-network-specs/blob/master/state-network.md

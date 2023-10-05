@@ -2,9 +2,8 @@
 
 use ethportal_api::types::cli::TrinConfig;
 use tracing::error;
-use trin_utils::log::init_tracing_logger;
-
 use trin::run_trin;
+use trin_utils::log::init_tracing_logger;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

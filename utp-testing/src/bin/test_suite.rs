@@ -1,11 +1,10 @@
+use std::time::Duration;
+
+use ethportal_api::utils::bytes::hex_encode;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::http_client::HttpClientBuilder;
 use jsonrpsee::rpc_params;
 use rand::{thread_rng, Rng};
-
-use std::time::Duration;
-
-use ethportal_api::utils::bytes::hex_encode;
 
 const SERVER_ADDR: &str = "193.167.100.100:9041";
 const CLIENT_ADDR: &str = "193.167.0.100:9042";

@@ -1,13 +1,9 @@
 use std::sync::Arc;
 
-use parking_lot::RwLock as PLRwLock;
-use tokio::sync::RwLock;
-use utp_rs::socket::UtpSocket;
-
-use crate::validation::BeaconValidator;
 use ethportal_api::types::distance::XorMetric;
 use ethportal_api::types::enr::Enr;
 use ethportal_api::BeaconContentKey;
+use parking_lot::RwLock as PLRwLock;
 use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, UtpEnr},
@@ -15,7 +11,11 @@ use portalnet::{
     storage::{PortalStorage, PortalStorageConfig},
     types::messages::ProtocolId,
 };
+use tokio::sync::RwLock;
 use trin_validation::oracle::HeaderOracle;
+use utp_rs::socket::UtpSocket;
+
+use crate::validation::BeaconValidator;
 
 /// Beacon network layer on top of the overlay protocol. Encapsulates beacon network specific data and logic.
 #[derive(Clone)]

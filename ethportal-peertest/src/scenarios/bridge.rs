@@ -1,6 +1,5 @@
-use crate::constants::fixture_header_with_proof_1000010;
-use crate::utils::{wait_for_beacon_content, wait_for_history_content};
-use crate::Peertest;
+use std::sync::Arc;
+
 use ethportal_api::jsonrpsee::http_client::HttpClient;
 use ethportal_api::{
     BeaconContentKey, BeaconContentValue, PossibleBeaconContentValue, PossibleHistoryContentValue,
@@ -12,10 +11,13 @@ use portal_bridge::execution_api::ExecutionApi;
 use portal_bridge::mode::BridgeMode;
 use portal_bridge::pandaops::PandaOpsMiddleware;
 use serde_json::Value;
-use std::sync::Arc;
 use tokio::time::{sleep, Duration};
 use trin_validation::accumulator::MasterAccumulator;
 use trin_validation::oracle::HeaderOracle;
+
+use crate::constants::fixture_header_with_proof_1000010;
+use crate::utils::{wait_for_beacon_content, wait_for_history_content};
+use crate::Peertest;
 
 pub async fn test_history_bridge(peertest: &Peertest, target: &HttpClient) {
     let master_acc = MasterAccumulator::default();

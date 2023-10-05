@@ -1,6 +1,3 @@
-use crate::types::consensus::execution_payload::ExecutionPayloadHeaderCapella;
-use crate::types::consensus::fork::ForkName;
-use crate::types::consensus::header::BeaconBlockHeader;
 use ethereum_types::H256;
 use serde::{Deserialize, Serialize};
 use ssz::Decode;
@@ -9,6 +6,10 @@ use ssz_types::typenum::U4;
 use ssz_types::FixedVector;
 use superstruct::superstruct;
 use tree_hash_derive::TreeHash;
+
+use crate::types::consensus::execution_payload::ExecutionPayloadHeaderCapella;
+use crate::types::consensus::fork::ForkName;
+use crate::types::consensus::header::BeaconBlockHeader;
 
 pub type ExecutionBranchLen = U4;
 
@@ -60,10 +61,11 @@ impl LightClientHeader {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use super::*;
     use ::ssz::Encode;
     use rstest::rstest;
     use serde_json::Value;
+
+    use super::*;
 
     #[rstest]
     #[case("case_0")]

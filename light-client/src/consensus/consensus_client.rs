@@ -1,33 +1,32 @@
 use std::cmp;
 use std::sync::Arc;
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
 
 use chrono::Duration;
-use eyre::eyre;
-use eyre::Result;
-use log::warn;
-use log::{debug, info};
-use milagro_bls::PublicKey;
-use ssz_rs::prelude::*;
-
-use super::rpc::ConsensusRpc;
-use super::types::*;
-use super::utils::*;
-
-use super::constants::MAX_REQUEST_LIGHT_CLIENT_UPDATES;
-use super::errors::ConsensusError;
-use crate::config::client_config::Config;
-use crate::types::Bytes32;
-use crate::utils::bytes_to_bytes32;
 use ethereum_types::H256;
 use ethportal_api::consensus::header::BeaconBlockHeader;
 use ethportal_api::consensus::signature::BlsSignature;
 use ethportal_api::light_client::bootstrap::CurrentSyncCommitteeProofLen;
 use ethportal_api::light_client::update::FinalizedRootProofLen;
 use ethportal_api::utils::bytes::hex_encode;
+use eyre::eyre;
+use eyre::Result;
+use log::warn;
+use log::{debug, info};
+use milagro_bls::PublicKey;
+use ssz_rs::prelude::*;
 use ssz_types::{typenum, BitVector, FixedVector};
-use std::time::SystemTime;
-use std::time::UNIX_EPOCH;
 use tree_hash::TreeHash;
+
+use super::constants::MAX_REQUEST_LIGHT_CLIENT_UPDATES;
+use super::errors::ConsensusError;
+use super::rpc::ConsensusRpc;
+use super::types::*;
+use super::utils::*;
+use crate::config::client_config::Config;
+use crate::types::Bytes32;
+use crate::utils::bytes_to_bytes32;
 
 // https://github.com/ethereum/consensus-specs/blob/dev/specs/altair/light-client/sync-protocol.md
 // does not implement force updates

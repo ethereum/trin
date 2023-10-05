@@ -1,5 +1,6 @@
-use crate::pandaops::PandaOpsMiddleware;
 use std::fmt::Display;
+
+use crate::pandaops::PandaOpsMiddleware;
 
 /// Implements endpoints from the Beacon API to access data from the consensus layer.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

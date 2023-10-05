@@ -3,7 +3,11 @@ extern crate core;
 pub mod cli;
 pub mod rpc;
 
-use crate::rpc::RpcServer;
+use std::net::SocketAddr;
+use std::str::FromStr;
+use std::sync::Arc;
+use std::time::Duration;
+
 use discv5::TalkRequest;
 use ethportal_api::types::enr::Enr;
 use ethportal_api::utils::bytes::{hex_encode, hex_encode_upper};
@@ -14,13 +18,11 @@ use portalnet::config::PortalnetConfig;
 use portalnet::discovery::{Discovery, UtpEnr};
 use portalnet::types::messages::ProtocolId;
 use portalnet::utils::db::setup_temp_dir;
-use std::net::SocketAddr;
-use std::str::FromStr;
-use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 use utp_rs::{conn::ConnectionConfig, socket::UtpSocket};
+
+use crate::rpc::RpcServer;
 
 /// uTP test app
 pub struct TestApp {

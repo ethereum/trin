@@ -1,8 +1,9 @@
+use std::io;
+
 use crate::jsonrpsee::core::Error as JsonRpseeError;
 use crate::jsonrpsee::types::{ErrorObject, ErrorObjectOwned};
 use crate::rpc_server::ServerKind;
 use crate::PortalRpcModule;
-use std::io;
 
 /// Rpc Errors.
 #[derive(Debug, thiserror::Error)]

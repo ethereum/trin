@@ -15,12 +15,13 @@ pub mod types;
 pub mod utils;
 mod web3;
 
-pub use crate::discv5::{Discv5ApiClient, Discv5ApiServer};
 pub use beacon::{BeaconNetworkApiClient, BeaconNetworkApiServer};
 pub use eth::{EthApiClient, EthApiServer};
 pub use history::{HistoryNetworkApiClient, HistoryNetworkApiServer};
-pub use web3::{Web3ApiClient, Web3ApiServer};
-
+// Re-exports jsonrpsee crate
+pub use jsonrpsee;
+pub use types::consensus;
+pub use types::consensus::light_client;
 pub use types::content_key::{
     beacon::{BeaconContentKey, LightClientBootstrapKey, LightClientUpdatesByRangeKey},
     error::ContentKeyError,
@@ -31,22 +32,18 @@ pub use types::content_key::{
     overlay::{IdentityContentKey, OverlayContentKey},
     state::StateContentKey,
 };
-
-pub use types::consensus;
-pub use types::consensus::light_client;
+pub use types::content_value::ContentValue;
 pub use types::content_value::{
     beacon::{BeaconContentValue, PossibleBeaconContentValue},
     error::ContentValueError,
     history::{HistoryContentValue, PossibleHistoryContentValue},
 };
+pub use types::discv5::*;
+pub use types::enr::*;
 pub use types::execution::block_body::*;
 pub use types::execution::header::*;
 pub use types::execution::receipts::*;
-
-// Re-exports jsonrpsee crate
-pub use jsonrpsee;
-pub use types::content_value::ContentValue;
-
-pub use types::discv5::*;
-pub use types::enr::*;
 pub use types::node_id::*;
+pub use web3::{Web3ApiClient, Web3ApiServer};
+
+pub use crate::discv5::{Discv5ApiClient, Discv5ApiServer};

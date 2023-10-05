@@ -1,7 +1,8 @@
-use crate::metrics::overlay::OverlayMetrics;
-use crate::metrics::storage::StorageMetrics;
 use lazy_static::lazy_static;
 use prometheus_exporter::prometheus::default_registry;
+
+use crate::metrics::overlay::OverlayMetrics;
+use crate::metrics::storage::StorageMetrics;
 
 // We use lazy_static to ensure that the metrics registry is initialized only once, for each
 // runtime. This is important because the registry is a global singleton, and if it is

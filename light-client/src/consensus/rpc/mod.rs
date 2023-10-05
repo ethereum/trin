@@ -1,12 +1,13 @@
 pub mod mock_rpc;
 pub mod nimbus_rpc;
 
+use async_trait::async_trait;
+use eyre::Result;
+
 use super::types::{
     LightClientBootstrapCapella, LightClientFinalityUpdateCapella,
     LightClientOptimisticUpdateCapella, LightClientUpdateCapella,
 };
-use async_trait::async_trait;
-use eyre::Result;
 
 // implements https://github.com/ethereum/beacon-APIs/tree/master/apis/beacon/light_client
 #[async_trait]

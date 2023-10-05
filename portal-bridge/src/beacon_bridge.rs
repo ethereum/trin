@@ -1,9 +1,8 @@
-use crate::consensus_api::ConsensusApi;
-use crate::constants::BEACON_GENESIS_TIME;
-use crate::mode::BridgeMode;
-use crate::utils::{
-    duration_until_next_update, expected_current_slot, read_test_assets_from_file, TestAssets,
-};
+use std::cmp::Ordering;
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::SystemTime;
+
 use anyhow::bail;
 use ethportal_api::types::consensus::fork::ForkName;
 use ethportal_api::types::consensus::light_client::bootstrap::LightClientBootstrapCapella;
@@ -11,6 +10,9 @@ use ethportal_api::types::consensus::light_client::finality_update::LightClientF
 use ethportal_api::types::consensus::light_client::optimistic_update::LightClientOptimisticUpdateCapella;
 use ethportal_api::types::consensus::light_client::update::{
     LightClientUpdate, LightClientUpdateCapella,
+};
+use ethportal_api::types::content_key::beacon::{
+    LightClientFinalityUpdateKey, LightClientOptimisticUpdateKey,
 };
 use ethportal_api::types::content_value::beacon::{
     ForkVersionedLightClientUpdate, LightClientUpdatesByRange,
@@ -23,16 +25,15 @@ use ethportal_api::{
 use jsonrpsee::http_client::HttpClient;
 use serde_json::Value;
 use ssz_types::VariableList;
-use std::cmp::Ordering;
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::time::SystemTime;
+use tokio::time::{interval, sleep, Duration, MissedTickBehavior};
 use tracing::{info, warn};
 
-use ethportal_api::types::content_key::beacon::{
-    LightClientFinalityUpdateKey, LightClientOptimisticUpdateKey,
+use crate::consensus_api::ConsensusApi;
+use crate::constants::BEACON_GENESIS_TIME;
+use crate::mode::BridgeMode;
+use crate::utils::{
+    duration_until_next_update, expected_current_slot, read_test_assets_from_file, TestAssets,
 };
-use tokio::time::{interval, sleep, Duration, MissedTickBehavior};
 
 pub struct BeaconBridge {
     pub api: ConsensusApi,

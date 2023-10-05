@@ -1,10 +1,11 @@
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use ssz::{Decode, Encode};
+
 use crate::types::constants::CONTENT_ABSENT;
 use crate::types::content_value::ContentValue;
 use crate::types::execution::accumulator::EpochAccumulator;
 use crate::utils::bytes::{hex_decode, hex_encode};
 use crate::{BlockBody, ContentValueError, HeaderWithProof, Receipts};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use ssz::{Decode, Encode};
 
 /// A Portal History content value.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -168,12 +169,12 @@ impl<'de> Deserialize<'de> for HistoryContentValue {
 
 #[cfg(test)]
 mod test {
-    use super::*;
+    use std::fs;
 
     use serde_json::Value;
 
+    use super::*;
     use crate::HistoryContentValue;
-    use std::fs;
 
     /// Max number of blocks / epoch = 2 ** 13
     pub const EPOCH_SIZE: usize = 8192;

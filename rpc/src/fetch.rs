@@ -1,9 +1,8 @@
+use ethportal_api::types::jsonrpc::endpoints::HistoryEndpoint;
+use ethportal_api::types::jsonrpc::request::HistoryJsonRpcRequest;
 /// Fetch data from related Portal networks
 use serde_json::Value;
 use tokio::sync::mpsc;
-
-use ethportal_api::types::jsonrpc::endpoints::HistoryEndpoint;
-use ethportal_api::types::jsonrpc::request::HistoryJsonRpcRequest;
 
 use crate::errors::RpcServeError;
 

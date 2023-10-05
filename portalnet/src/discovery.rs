@@ -11,21 +11,21 @@ use discv5::{
     enr::{CombinedKey, EnrBuilder, NodeId},
     ConfigBuilder, Discv5, Event, ListenConfig, RequestError, TalkRequest,
 };
+use ethportal_api::types::enr::Enr;
+use ethportal_api::utils::bytes::hex_encode;
+use ethportal_api::NodeInfo;
 use lru::LruCache;
 use parking_lot::RwLock;
 use rlp::RlpStream;
 use serde_json::{json, Value};
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
+use trin_utils::version::get_trin_version;
 use utp_rs::{cid::ConnectionPeer, udp::AsyncUdpSocket};
 
 use super::config::PortalnetConfig;
 use super::types::messages::ProtocolId;
 use crate::socket;
-use ethportal_api::types::enr::Enr;
-use ethportal_api::utils::bytes::hex_encode;
-use ethportal_api::NodeInfo;
-use trin_utils::version::get_trin_version;
 
 /// Size of the buffer of the Discv5 TALKREQ channel.
 const TALKREQ_CHANNEL_BUFFER: usize = 100;
@@ -452,9 +452,10 @@ fn get_enr_rlp_content(enr: &Enr) -> BytesMut {
 
 #[cfg(test)]
 mod tests {
+    use ethportal_api::types::bootnodes::Bootnodes;
+
     use super::*;
     use crate::utils::db::{configure_node_data_dir, configure_trin_data_dir};
-    use ethportal_api::types::bootnodes::Bootnodes;
 
     #[test]
     fn test_enr_file() {

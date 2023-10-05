@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
+use ethportal_api::types::jsonrpc::request::StateJsonRpcRequest;
 use tokio::sync::mpsc;
 use tracing::error;
 
 use crate::network::StateNetwork;
-use ethportal_api::types::jsonrpc::request::StateJsonRpcRequest;
 
 /// Handles State network JSON-RPC requests
 pub struct StateRequestHandler {

@@ -1,6 +1,7 @@
-use crate::types::Bytes32;
 use eyre::Result;
 use ssz_rs::{Node, Vector};
+
+use crate::types::Bytes32;
 
 pub fn bytes_to_bytes32(bytes: &[u8]) -> Bytes32 {
     Vector::from_iter(bytes.to_vec())

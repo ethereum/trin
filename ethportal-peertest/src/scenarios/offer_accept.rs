@@ -1,12 +1,12 @@
 use std::str::FromStr;
 
-use tracing::info;
-
-use crate::{constants::fixture_header_with_proof, utils::wait_for_history_content, Peertest};
 use ethportal_api::{
     jsonrpsee::async_client::Client, types::enr::Enr, utils::bytes::hex_encode,
     HistoryNetworkApiClient, PossibleHistoryContentValue,
 };
+use tracing::info;
+
+use crate::{constants::fixture_header_with_proof, utils::wait_for_history_content, Peertest};
 
 pub async fn test_unpopulated_offer(peertest: &Peertest, target: &Client) {
     info!("Testing Unpopulated OFFER/ACCEPT flow");

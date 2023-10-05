@@ -1,10 +1,11 @@
-use crate::consensus::types::u64_deserialize;
+use std::cmp;
+
 use async_trait::async_trait;
 use eyre::Result;
-use std::cmp;
 
 use super::ConsensusRpc;
 use crate::consensus::constants::MAX_REQUEST_LIGHT_CLIENT_UPDATES;
+use crate::consensus::types::u64_deserialize;
 use crate::consensus::types::{
     LightClientBootstrapCapella, LightClientFinalityUpdateCapella,
     LightClientOptimisticUpdateCapella, LightClientUpdateCapella,

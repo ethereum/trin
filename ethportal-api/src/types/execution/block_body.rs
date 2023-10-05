@@ -359,11 +359,11 @@ impl ssz::Decode for BlockBodyShanghai {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use super::*;
     use ethereum_types::U256;
     use rstest::rstest;
     use ssz::{Decode, Encode};
 
+    use super::*;
     use crate::utils::bytes::{hex_decode, hex_encode};
 
     // tx data from: https://etherscan.io/txs?block=14764013

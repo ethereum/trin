@@ -1,9 +1,11 @@
-use crate::network::BeaconNetwork;
+use std::sync::Arc;
+
 use discv5::TalkRequest;
 use portalnet::types::messages::Message;
-use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tracing::{error, warn, Instrument};
+
+use crate::network::BeaconNetwork;
 
 pub struct BeaconEvents {
     pub network: Arc<BeaconNetwork>,

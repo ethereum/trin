@@ -19,6 +19,13 @@ use discv5::{
     },
     rpc::RequestId,
 };
+use ethportal_api::generate_random_node_id;
+use ethportal_api::types::distance::{Distance, Metric, XorMetric};
+use ethportal_api::types::enr::{Enr, SszEnr};
+use ethportal_api::types::query_trace::QueryTrace;
+use ethportal_api::utils::bytes::{hex_encode, hex_encode_compact};
+use ethportal_api::OverlayContentKey;
+use ethportal_api::RawContentKey;
 use futures::{channel::oneshot, future::join_all, prelude::*};
 use lazy_static::lazy_static;
 use parking_lot::RwLock;
@@ -32,6 +39,7 @@ use tokio::{
     task::JoinHandle,
 };
 use tracing::{debug, error, info, trace, warn};
+use trin_validation::validator::Validator;
 use utp_rs::{conn::ConnectionConfig, socket::UtpSocket, stream::UtpStream};
 
 use crate::events::EventEnvelope;
@@ -62,14 +70,6 @@ use crate::{
     },
     utils::portal_wire,
 };
-use ethportal_api::generate_random_node_id;
-use ethportal_api::types::distance::{Distance, Metric, XorMetric};
-use ethportal_api::types::enr::{Enr, SszEnr};
-use ethportal_api::types::query_trace::QueryTrace;
-use ethportal_api::utils::bytes::{hex_encode, hex_encode_compact};
-use ethportal_api::OverlayContentKey;
-use ethportal_api::RawContentKey;
-use trin_validation::validator::Validator;
 
 pub const FIND_NODES_MAX_NODES: usize = 32;
 
@@ -2682,18 +2682,21 @@ fn pop_while_ssz_bytes_len_gt(enrs: &mut Vec<SszEnr>, max_size: usize) {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use super::*;
-
     use std::net::SocketAddr;
     use std::time::Instant;
 
     use discv5::kbucket::Entry;
     use ethereum_types::U256;
+    use ethportal_api::types::content_key::overlay::IdentityContentKey;
+    use ethportal_api::types::distance::XorMetric;
+    use ethportal_api::types::enr::generate_random_remote_enr;
     use rstest::*;
     use serial_test::serial;
     use tokio::sync::mpsc::unbounded_channel;
     use tokio_test::{assert_pending, assert_ready, task};
+    use trin_validation::validator::MockValidator;
 
+    use super::*;
     use crate::{
         config::PortalnetConfig,
         discovery::{Discovery, NodeAddress},
@@ -2702,10 +2705,6 @@ mod tests {
         storage::{DistanceFunction, MemoryContentStore},
         utils::db::setup_temp_dir,
     };
-    use ethportal_api::types::content_key::overlay::IdentityContentKey;
-    use ethportal_api::types::distance::XorMetric;
-    use ethportal_api::types::enr::generate_random_remote_enr;
-    use trin_validation::validator::MockValidator;
 
     macro_rules! poll_command_rx {
         ($service:ident) => {

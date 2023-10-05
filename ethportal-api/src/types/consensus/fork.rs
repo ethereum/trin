@@ -1,8 +1,10 @@
-use crate::utils::bytes::hex_encode;
 use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
+
 use thiserror::Error;
+
+use crate::utils::bytes::hex_encode;
 
 /// Error thrown when failed to parse a valid [`ForkName`].
 #[derive(Debug, Clone, PartialEq, Eq, Error)]

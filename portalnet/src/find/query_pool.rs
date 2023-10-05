@@ -21,15 +21,16 @@
 // This basis of this file has been taken from the rust-libp2p codebase:
 // https://github.com/libp2p/rust-libp2p
 
-use super::{iterators::query::Query, query_info::QueryInfo};
-use ethportal_api::OverlayContentKey;
-
-use discv5::kbucket::Key;
-use fnv::FnvHashMap;
 use std::{
     marker::PhantomData,
     time::{Duration, Instant},
 };
+
+use discv5::kbucket::Key;
+use ethportal_api::OverlayContentKey;
+use fnv::FnvHashMap;
+
+use super::{iterators::query::Query, query_info::QueryInfo};
 
 pub trait TargetKey<TNodeId> {
     fn key(&self) -> Key<TNodeId>;

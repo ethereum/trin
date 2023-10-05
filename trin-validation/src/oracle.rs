@@ -1,9 +1,5 @@
 use anyhow::anyhow;
 use ethereum_types::H256;
-use serde_json::Value;
-use tokio::sync::mpsc;
-
-use crate::accumulator::MasterAccumulator;
 use ethportal_api::types::execution::header::HeaderWithProof;
 use ethportal_api::types::jsonrpc::endpoints::HistoryEndpoint;
 use ethportal_api::types::jsonrpc::request::{BeaconJsonRpcRequest, HistoryJsonRpcRequest};
@@ -11,6 +7,10 @@ use ethportal_api::types::portal::ContentInfo;
 use ethportal_api::{
     BlockHeaderKey, HistoryContentKey, HistoryContentValue, PossibleHistoryContentValue,
 };
+use serde_json::Value;
+use tokio::sync::mpsc;
+
+use crate::accumulator::MasterAccumulator;
 
 /// Responsible for dispatching cross-overlay-network requests
 /// for data to perform validation.
@@ -103,13 +103,13 @@ impl HeaderOracle {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use super::*;
     use std::str::FromStr;
 
+    use ethportal_api::types::cli::TrinConfig;
     use tree_hash::TreeHash;
 
+    use super::*;
     use crate::constants::DEFAULT_MASTER_ACC_HASH;
-    use ethportal_api::types::cli::TrinConfig;
 
     #[tokio::test]
     async fn header_oracle_bootstraps_with_default_merge_master_acc() {

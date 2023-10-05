@@ -8,16 +8,6 @@ pub mod validation;
 use std::sync::Arc;
 
 use discv5::TalkRequest;
-use tokio::{
-    sync::{mpsc, Mutex, RwLock},
-    task::JoinHandle,
-    time::{interval, Duration},
-};
-use tracing::info;
-use utp_rs::socket::UtpSocket;
-
-use crate::network::BeaconNetwork;
-use crate::{events::BeaconEvents, jsonrpc::BeaconRequestHandler};
 use ethportal_api::types::enr::Enr;
 use ethportal_api::types::jsonrpc::request::BeaconJsonRpcRequest;
 use portalnet::{
@@ -25,7 +15,17 @@ use portalnet::{
     discovery::{Discovery, UtpEnr},
     storage::PortalStorageConfig,
 };
+use tokio::{
+    sync::{mpsc, Mutex, RwLock},
+    task::JoinHandle,
+    time::{interval, Duration},
+};
+use tracing::info;
 use trin_validation::oracle::HeaderOracle;
+use utp_rs::socket::UtpSocket;
+
+use crate::network::BeaconNetwork;
+use crate::{events::BeaconEvents, jsonrpc::BeaconRequestHandler};
 
 type BeaconHandler = Option<BeaconRequestHandler>;
 type BeaconNetworkTask = Option<JoinHandle<()>>;

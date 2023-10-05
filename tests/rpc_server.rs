@@ -4,10 +4,9 @@ use std::net::{IpAddr, Ipv4Addr};
 
 use ethers_core::types::U256;
 use ethers_providers::*;
-use serial_test::serial;
-
 use ethportal_api::types::cli::{TrinConfig, DEFAULT_WEB3_IPC_PATH};
 use rpc::RpcServerHandle;
+use serial_test::serial;
 
 mod utils;
 

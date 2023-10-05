@@ -1,7 +1,6 @@
 use std::net::SocketAddr;
 
 use ethereum_types::H256;
-
 use ethportal_api::types::bootnodes::Bootnodes;
 use ethportal_api::types::cli::TrinConfig;
 use ethportal_api::types::distance::Distance;

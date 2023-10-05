@@ -1,8 +1,3 @@
-use super::serde::{de_hex_to_txs, de_number_to_u256, se_hex_to_number, se_txs_to_hex};
-use crate::types::consensus::body::Transactions;
-use crate::types::consensus::fork::ForkName;
-use crate::types::wrapped::h160::H160;
-use crate::utils::serde::{hex_fixed_vec, hex_var_list};
 use ethereum_types::{H256, U256};
 use serde::{Deserialize, Serialize};
 use serde_this_or_that::as_u64;
@@ -11,6 +6,12 @@ use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, FixedVector, VariableList};
 use superstruct::superstruct;
 use tree_hash_derive::TreeHash;
+
+use super::serde::{de_hex_to_txs, de_number_to_u256, se_hex_to_number, se_txs_to_hex};
+use crate::types::consensus::body::Transactions;
+use crate::types::consensus::fork::ForkName;
+use crate::types::wrapped::h160::H160;
+use crate::utils::serde::{hex_fixed_vec, hex_var_list};
 
 pub type Bloom = FixedVector<u8, typenum::U256>;
 pub type ExtraData = VariableList<u8, typenum::U32>;
@@ -116,10 +117,11 @@ impl ExecutionPayloadHeader {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use super::*;
     use ::ssz::{Decode, Encode};
     use rstest::rstest;
     use serde_json::Value;
+
+    use super::*;
 
     #[rstest]
     #[case("case_0")]

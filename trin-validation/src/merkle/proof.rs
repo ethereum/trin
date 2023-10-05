@@ -1,11 +1,12 @@
+use eth2_hashing::{hash, hash32_concat, ZERO_HASHES};
+use ethereum_types::H256;
+use lazy_static::lazy_static;
+
 ///
 /// Code sourced from:
 /// https://github.com/sigp/lighthouse/blob/bf533c8e42/consensus/merkle_proof/src/lib.rs
 ///
 use crate::merkle::safe_arith::ArithError;
-use eth2_hashing::{hash, hash32_concat, ZERO_HASHES};
-use ethereum_types::H256;
-use lazy_static::lazy_static;
 
 const MAX_TREE_DEPTH: usize = 32;
 const EMPTY_SLICE: &[H256] = &[];
@@ -407,9 +408,10 @@ impl From<InvalidSnapshot> for MerkleTreeError {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use quickcheck::TestResult;
     use quickcheck_macros::quickcheck;
+
+    use super::*;
 
     /// Check that we can:
     /// 1. Build a MerkleTree from arbitrary leaves and an arbitrary depth.

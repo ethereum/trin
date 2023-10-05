@@ -2,11 +2,11 @@ use std::str::FromStr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use discv5::TalkRequest;
+use ethportal_api::utils::bytes::{hex_encode, hex_encode_upper};
 use tokio::sync::mpsc;
 use tracing::{error, warn};
 
 use super::types::messages::ProtocolId;
-use ethportal_api::utils::bytes::{hex_encode, hex_encode_upper};
 
 /// Main handler for portal network events
 pub struct PortalnetEvents {
@@ -171,8 +171,9 @@ pub fn millis_to_epoch(time: SystemTime) -> i64 {
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use std::time::SystemTime;
+
+    use super::*;
 
     #[test]
     fn test_timestamp_creation() {

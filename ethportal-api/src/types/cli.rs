@@ -1,7 +1,8 @@
+use std::{env, ffi::OsString, fmt, net::SocketAddr, path::PathBuf, str::FromStr};
+
 use clap::error::{Error, ErrorKind};
 use clap::{arg, Args, Parser, Subcommand};
 use ethereum_types::H256;
-use std::{env, ffi::OsString, fmt, net::SocketAddr, path::PathBuf, str::FromStr};
 use url::Url;
 
 use crate::types::bootnodes::Bootnodes;
@@ -290,9 +291,11 @@ pub fn create_dashboard(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use super::*;
     use std::net::{IpAddr, Ipv4Addr};
+
     use test_log::test;
+
+    use super::*;
 
     #[test]
     fn test_default_args() {

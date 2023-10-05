@@ -21,14 +21,15 @@
 // This basis of this file has been taken from the rust-libp2p codebase:
 // https://github.com/libp2p/rust-libp2p
 
-use super::super::query_pool::QueryState;
-use super::query::{Query, QueryConfig, QueryPeer, QueryPeerState, QueryProgress};
-
-use discv5::kbucket::{Distance, Key};
 use std::{
     collections::btree_map::{BTreeMap, Entry},
     time::Instant,
 };
+
+use discv5::kbucket::{Distance, Key};
+
+use super::super::query_pool::QueryState;
+use super::query::{Query, QueryConfig, QueryPeer, QueryPeerState, QueryProgress};
 
 #[derive(Debug, Clone)]
 pub struct FindNodeQuery<TNodeId> {
@@ -320,12 +321,14 @@ where
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use super::*;
+    use std::time::Duration;
+
     use discv5::enr::NodeId;
     use quickcheck::*;
     use rand::{thread_rng, Rng};
-    use std::time::Duration;
     use test_log::test;
+
+    use super::*;
 
     type TestQuery = FindNodeQuery<NodeId>;
 
