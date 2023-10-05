@@ -23,7 +23,7 @@ rocksdb = "0.21.0"
 tracing = "0.1.36"
 tokio = {version = "1.14.0", features = ["full"]}
 trin-validation = { path = "../trin-validation" }
-utp-rs = "0.1.0-alpha.7"
+utp-rs = "0.1.0-alpha.8"
 
 [dev-dependencies]
 env_logger = "0.9.0"
