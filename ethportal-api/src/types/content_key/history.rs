@@ -262,34 +262,35 @@ mod test {
     }
 
     // test values sourced from: https://github.com/ethereum/portal-network-specs/blob/master/content-keys-test-vectors.md
-    #[test]
-    fn epoch_accumulator_key() {
-        let epoch_hash =
-            hex_decode("0xe242814b90ed3950e13aac7e56ce116540c71b41d1516605aada26c6c07cc491")
-                .unwrap();
-        const KEY_STR: &str =
-            "0x03e242814b90ed3950e13aac7e56ce116540c71b41d1516605aada26c6c07cc491";
-        let expected_content_key = hex_decode(KEY_STR).unwrap();
-        let expected_content_id =
-            hex_decode("0x9fb2175e76c6989e0fdac3ee10c40d2a81eb176af32e1c16193e3904fe56896e")
-                .unwrap();
+ #[test]
+fn epoch_accumulator_key() {
+    let epoch_hash =
+        hex_decode("0xe242814b90ed3950e13aac7e56ce116540c71b41d1516605aada26c6c07cc491")
+            .unwrap();
+    const KEY_STR: &str =
+        "0x03e242814b90ed3950e13aac7e56ce116540c71b41d1516605aada26c6c07cc491";
+    let expected_content_key: [u8; 32] = hex_decode(KEY_STR).unwrap().try_into().unwrap();
+    let expected_content_id: [u8; 32] = hex_decode("0x9fb2175e76c6989e0fdac3ee10c40d2a81eb176af32e1c16193e3904fe56896e")
+            .unwrap()
+            .try_into()
+            .unwrap();
 
-        let key = HistoryContentKey::EpochAccumulator(EpochAccumulatorKey {
-            epoch_hash: H256::from_slice(&epoch_hash),
-        });
+    let key = HistoryContentKey::EpochAccumulator(EpochAccumulatorKey {
+        epoch_hash: H256::from_slice(&epoch_hash),
+    });
 
-        // round trip
-        let decoded = HistoryContentKey::try_from(key.to_bytes().to_vec()).unwrap();
-        assert_eq!(decoded, key);
+    // round trip
+    let decoded = HistoryContentKey::try_from(key.to_bytes().to_vec()).unwrap();
+    assert_eq!(decoded, key);
 
-        assert_eq!(key.to_bytes(), expected_content_key);
-        assert_eq!(key.content_id(), expected_content_id.as_ref());
-        assert_eq!(
-            key.to_string(),
-            "EpochAccumulator { epoch_hash: 0xe242..c491 }"
-        );
-        assert_eq!(key.to_hex(), KEY_STR);
-    }
+    assert_eq!(key.to_bytes(), expected_content_key);
+    assert_eq!(key.content_id(), expected_content_id);
+    assert_eq!(
+        key.to_string(),
+        "EpochAccumulator { epoch_hash: 0xe242..c491 }"
+    );
+    assert_eq!(key.to_hex(), KEY_STR);
+}
 
     #[test]
     fn ser_de_block_header() {
