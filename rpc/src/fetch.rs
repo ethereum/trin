@@ -4,6 +4,7 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 
 use ethportal_api::types::constants::CONTENT_ABSENT;
+use ethportal_api::types::execution::block_body::BlockBody;
 use ethportal_api::types::execution::header::Header;
 use ethportal_api::types::jsonrpc::endpoints::HistoryEndpoint;
 use ethportal_api::types::jsonrpc::request::HistoryJsonRpcRequest;
@@ -46,6 +47,23 @@ pub async fn find_header_by_hash(
         HistoryContentValue::BlockHeaderWithProof(h) => Ok(h.header),
         wrong_val => Err(RpcServeError::Message(format!(
             "Internal trin error: got back a non-header from a key that must only point to headers; got {:?}",
+            wrong_val
+        ))),
+    }
+}
+
+pub async fn find_block_body_by_hash(
+    network: &mpsc::UnboundedSender<HistoryJsonRpcRequest>,
+    block_hash: H256,
+) -> Result<BlockBody, RpcServeError> {
+    // Request the block body from the history subnet.
+    let content_key: HistoryContentKey = HistoryContentKey::BlockBody(block_hash.into());
+    let body = find_content_by_hash(network, content_key).await?;
+
+    match body {
+        HistoryContentValue::BlockBody(body) => Ok(body),
+        wrong_val => Err(RpcServeError::Message(format!(
+            "Internal trin error: got back a non-body from a key that must only point to bodies; got {:?}",
             wrong_val
         ))),
     }
