@@ -1,19 +1,22 @@
-use crate::jsonrpsee::core::{async_trait, RpcResult};
-use ethereum_types::U256;
+use ethereum_types::{H256, U256};
+use reth_rpc_types::{Block, BlockTransactions};
+use tokio::sync::mpsc;
+
+use ethportal_api::types::jsonrpc::request::HistoryJsonRpcRequest;
 use ethportal_api::EthApiServer;
 use trin_validation::constants::CHAIN_ID;
 
-pub struct EthApi;
+use crate::errors::RpcServeError;
+use crate::fetch::find_header_by_hash;
+use crate::jsonrpsee::core::{async_trait, RpcResult};
 
-impl EthApi {
-    pub fn new() -> Self {
-        Self
-    }
+pub struct EthApi {
+    network: mpsc::UnboundedSender<HistoryJsonRpcRequest>,
 }
 
-impl Default for EthApi {
-    fn default() -> Self {
-        Self::new()
+impl EthApi {
+    pub fn new(network: mpsc::UnboundedSender<HistoryJsonRpcRequest>) -> Self {
+        Self { network }
     }
 }
 
@@ -21,6 +24,32 @@ impl Default for EthApi {
 impl EthApiServer for EthApi {
     async fn chain_id(&self) -> RpcResult<U256> {
         Ok(U256::from(CHAIN_ID))
+    }
+
+    async fn get_block_by_hash(
+        &self,
+        block_hash: H256,
+        hydrated_transactions: bool,
+    ) -> RpcResult<Block> {
+        if hydrated_transactions {
+            return Err(RpcServeError::Message(
+                "replying with all transaction bodies is not supported yet".into(),
+            )
+            .into());
+        }
+
+        let header = find_header_by_hash(&self.network, block_hash).await?;
+
+        // Combine header and block body into the single json representation of the block.
+        let block = Block {
+            header: header.into(),
+            transactions: BlockTransactions::Uncle,
+            uncles: vec![],
+            size: None,
+            total_difficulty: None,
+            withdrawals: None,
+        };
+        Ok(block)
     }
 }
 

@@ -219,7 +219,7 @@ impl From<Header> for RpcHeader {
             timestamp,
             extra_data,
             mix_hash,
-            nonce: _,
+            nonce,
             base_fee_per_gas,
             withdrawals_root,
         } = header;
@@ -241,7 +241,13 @@ impl From<Header> for RpcHeader {
             mix_hash: mix_hash
                 .map(|mh| mh.to_fixed_bytes().into())
                 .unwrap_or_default(),
-            nonce: None,
+            // A note on nonce:
+            // ethportal-api and reth both use ethereum-types::H64 for nonce. Unfortunately, we use
+            // v0.12.1 of ethereum-types, which is different from reth, so the value can't be
+            // transparently reused.
+            // Further, if we upgrade to 0.14.1, then we lose SSZ encoding, so we are stuck leaving
+            // the versions different and converting here:
+            nonce: nonce.map(|h64| h64.as_fixed_bytes().into()),
             base_fee_per_gas: base_fee_per_gas.map(u256_to_uint256),
             withdrawals_root: withdrawals_root.map(|root| root.to_fixed_bytes().into()),
             blob_gas_used: None,
