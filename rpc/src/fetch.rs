@@ -40,29 +40,7 @@ pub async fn find_header_by_hash(
 ) -> Result<Header, RpcServeError> {
     // Request the block header from the history subnet.
     let content_key: HistoryContentKey = HistoryContentKey::BlockHeaderWithProof(block_hash.into());
-    let endpoint = HistoryEndpoint::RecursiveFindContent(content_key);
-    let mut result = proxy_query_to_history_subnet(network, endpoint).await?;
-    let content = match result["content"].take() {
-        serde_json::Value::String(s) => s,
-        wrong_type => {
-            let message =
-                format!("Invalid internal representation of block header; json: {wrong_type:?}");
-            return Err(RpcServeError::Message(message));
-        }
-    };
-    if content == CONTENT_ABSENT {
-        return Err(RpcServeError::Message("Block not found".into()));
-    };
-    let content: Vec<u8> =
-        hex_decode(&content).expect("decoding the trin hex-encoded data failed, odd");
-    let header = match HistoryContentValue::decode(&content) {
-        Ok(header) => header,
-        Err(err) => {
-            let message =
-                format!("Invalid internal representation of block header; could not decode: {err}");
-            return Err(RpcServeError::Message(message));
-        }
-    };
+    let header = find_content_by_hash(network, content_key).await?;
 
     match header {
         HistoryContentValue::BlockHeaderWithProof(h) => Ok(h.header),
@@ -71,4 +49,30 @@ pub async fn find_header_by_hash(
             wrong_val
         ))),
     }
+}
+
+async fn find_content_by_hash(
+    network: &mpsc::UnboundedSender<HistoryJsonRpcRequest>,
+    content_key: HistoryContentKey,
+) -> Result<HistoryContentValue, RpcServeError> {
+    let endpoint = HistoryEndpoint::RecursiveFindContent(content_key.clone());
+    let mut result = proxy_query_to_history_subnet(network, endpoint).await?;
+    let content = match result["content"].take() {
+        serde_json::Value::String(s) => s,
+        wrong_type => {
+            let message =
+                format!("Invalid internal representation of {content_key:?}; json: {wrong_type:?}");
+            return Err(RpcServeError::Message(message));
+        }
+    };
+    if content == CONTENT_ABSENT {
+        return Err(RpcServeError::Message("Content not found".into()));
+    };
+    let content: Vec<u8> =
+        hex_decode(&content).expect("decoding the trin hex-encoded data failed, odd");
+    HistoryContentValue::decode(&content).map_err(|err| {
+        let message =
+            format!("Invalid internal representation of {content_key:?}; could not decode: {err}");
+        RpcServeError::Message(message)
+    })
 }
