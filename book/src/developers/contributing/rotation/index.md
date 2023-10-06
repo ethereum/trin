@@ -76,6 +76,8 @@ Be sure to update the week's notes as you go, adding: notable incidents, summari
 
 Before handing off the notes on Friday, be sure to read through the notes to cleanly summarize the week's activities. Link to any helpful issues, and delete any text that is only meaningful to you.
 
+Double check the [Flamingo schedule](https://notes.ethereum.org/@njgheorghita/r1angO2lT) and make sure you're available for your next rotation. If not, please switch with somebody asap.
+
 Think through: what kinds of things do you wish were on the notes that you got on Monday?
 
 After a while, everyone should have the Flamingo Notes link. Sending the link anyway helps accomplish a few things:
