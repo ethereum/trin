@@ -1133,7 +1133,7 @@ dependencies = [
 [[package]]
 name = "codecs-derive"
 version = "0.1.0-alpha.10"
-source = "git+https://github.com/paradigmxyz/reth.git#4dbd8835e5f06ddfc5c0987046773d592dbff860"
+source = "git+https://github.com/paradigmxyz/reth.git?tag=v0.1.0-alpha.10#1b16d804ef01f4ec3c25e7986381c22739c105b9"
 dependencies = [
  "convert_case 0.6.0",
  "parity-scale-codec 3.6.5",
@@ -5049,7 +5049,7 @@ dependencies = [
 [[package]]
 name = "reth-codecs"
 version = "0.1.0-alpha.10"
-source = "git+https://github.com/paradigmxyz/reth.git#4dbd8835e5f06ddfc5c0987046773d592dbff860"
+source = "git+https://github.com/paradigmxyz/reth.git?tag=v0.1.0-alpha.10#1b16d804ef01f4ec3c25e7986381c22739c105b9"
 dependencies = [
  "bytes 1.5.0",
  "codecs-derive",
@@ -5059,7 +5059,7 @@ dependencies = [
 [[package]]
 name = "reth-ipc"
 version = "0.1.0-alpha.10"
-source = "git+https://github.com/paradigmxyz/reth.git#4dbd8835e5f06ddfc5c0987046773d592dbff860"
+source = "git+https://github.com/paradigmxyz/reth.git?tag=v0.1.0-alpha.10#1b16d804ef01f4ec3c25e7986381c22739c105b9"
 dependencies = [
  "async-trait",
  "bytes 1.5.0",
@@ -5079,7 +5079,7 @@ dependencies = [
 [[package]]
 name = "reth-primitives"
 version = "0.1.0-alpha.10"
-source = "git+https://github.com/paradigmxyz/reth.git#4dbd8835e5f06ddfc5c0987046773d592dbff860"
+source = "git+https://github.com/paradigmxyz/reth.git?tag=v0.1.0-alpha.10#1b16d804ef01f4ec3c25e7986381c22739c105b9"
 dependencies = [
  "bytes 1.5.0",
  "c-kzg 0.1.0 (git+https://github.com/ethereum/c-kzg-4844?rev=f5f6f863d475847876a2bd5ee252058d37c3a15d)",
@@ -5121,7 +5121,7 @@ dependencies = [
 [[package]]
 name = "reth-rlp"
 version = "0.1.0-alpha.10"
-source = "git+https://github.com/paradigmxyz/reth.git#4dbd8835e5f06ddfc5c0987046773d592dbff860"
+source = "git+https://github.com/paradigmxyz/reth.git?tag=v0.1.0-alpha.10#1b16d804ef01f4ec3c25e7986381c22739c105b9"
 dependencies = [
  "arrayvec",
  "auto_impl",
@@ -5135,7 +5135,7 @@ dependencies = [
 [[package]]
 name = "reth-rlp-derive"
 version = "0.1.0-alpha.10"
-source = "git+https://github.com/paradigmxyz/reth.git#4dbd8835e5f06ddfc5c0987046773d592dbff860"
+source = "git+https://github.com/paradigmxyz/reth.git?tag=v0.1.0-alpha.10#1b16d804ef01f4ec3c25e7986381c22739c105b9"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5145,7 +5145,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-types"
 version = "0.1.0-alpha.10"
-source = "git+https://github.com/paradigmxyz/reth.git#4dbd8835e5f06ddfc5c0987046773d592dbff860"
+source = "git+https://github.com/paradigmxyz/reth.git?tag=v0.1.0-alpha.10#1b16d804ef01f4ec3c25e7986381c22739c105b9"
 dependencies = [
  "itertools 0.11.0",
  "jsonrpsee-types",
