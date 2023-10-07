@@ -22,7 +22,7 @@ hex = "0.4.3"
 hyper = { version = "0.14", features = ["full"] }
 jsonrpsee = {version="0.20.0", features = ["async-client", "client", "macros", "server"]}
 rand = "0.8.4"
-reth-ipc = { version = "0.1.0-alpha.6", git = "https://github.com/paradigmxyz/reth.git"}
+reth-ipc = { tag = "v0.1.0-alpha.10", git = "https://github.com/paradigmxyz/reth.git"}
 rocksdb = "0.21.0"
 rpc = { path = "../rpc" }
 serde_json = "1.0.89"
