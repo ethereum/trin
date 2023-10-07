@@ -3,6 +3,8 @@ use crate::serde::from_value;
 
 use crate::jsonrpsee::core::{async_trait, RpcResult};
 use discv5::enr::NodeId;
+use ethportal_api::network::LocalContentResult;
+use ethportal_api::network::RecursiveFindContentResult;
 use ethportal_api::types::constants::CONTENT_ABSENT;
 use ethportal_api::types::enr::Enr;
 use ethportal_api::types::jsonrpc::endpoints::BeaconEndpoint;
@@ -11,11 +13,10 @@ use ethportal_api::types::portal::{
     AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
     TraceContentInfo,
 };
-use ethportal_api::BeaconContentKey;
 use ethportal_api::BeaconContentValue;
-use ethportal_api::BeaconNetworkApiServer;
 use ethportal_api::PossibleBeaconContentValue;
 use ethportal_api::RoutingTableInfo;
+use ethportal_api::{BeaconContentKey, NetworkApiServer};
 use serde_json::Value;
 use tokio::sync::mpsc;
 
@@ -53,7 +54,7 @@ impl BeaconNetworkApi {
 }
 
 #[async_trait]
-impl BeaconNetworkApiServer for BeaconNetworkApi {
+impl NetworkApiServer<BeaconContentKey, BeaconContentValue> for BeaconNetworkApi {
     /// Returns meta information about overlay routing table.
     async fn routing_table_info(&self) -> RpcResult<RoutingTableInfo> {
         let endpoint = BeaconEndpoint::RoutingTableInfo;
@@ -143,14 +144,18 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
     async fn recursive_find_content(
         &self,
         content_key: BeaconContentKey,
-    ) -> RpcResult<PossibleBeaconContentValue> {
+    ) -> RpcResult<RecursiveFindContentResult> {
         let endpoint = BeaconEndpoint::RecursiveFindContent(content_key);
         let result = self.proxy_query_to_beacon_subnet(endpoint).await?;
         if result == serde_json::Value::String(CONTENT_ABSENT.to_string()) {
-            return Ok(PossibleBeaconContentValue::ContentAbsent);
+            return Ok(RecursiveFindContentResult::BeaconContent(
+                PossibleBeaconContentValue::ContentAbsent,
+            ));
         };
         let result: BeaconContentValue = from_value(result)?;
-        Ok(PossibleBeaconContentValue::ContentPresent(result))
+        Ok(RecursiveFindContentResult::BeaconContent(
+            PossibleBeaconContentValue::ContentPresent(result),
+        ))
     }
 
     /// Lookup a target content key in the network. Return tracing info.
@@ -216,17 +221,18 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
     }
 
     /// Get a content from the local database.
-    async fn local_content(
-        &self,
-        content_key: BeaconContentKey,
-    ) -> RpcResult<PossibleBeaconContentValue> {
+    async fn local_content(&self, content_key: BeaconContentKey) -> RpcResult<LocalContentResult> {
         let endpoint = BeaconEndpoint::LocalContent(content_key);
         let result = self.proxy_query_to_beacon_subnet(endpoint).await?;
         if result == serde_json::Value::String(CONTENT_ABSENT.to_string()) {
-            return Ok(PossibleBeaconContentValue::ContentAbsent);
+            return Ok(LocalContentResult::Beacon(
+                PossibleBeaconContentValue::ContentAbsent,
+            ));
         };
         let content: BeaconContentValue = from_value(result)?;
-        Ok(PossibleBeaconContentValue::ContentPresent(content))
+        Ok(LocalContentResult::Beacon(
+            PossibleBeaconContentValue::ContentPresent(content),
+        ))
     }
 }
 

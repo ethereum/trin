@@ -11,14 +11,16 @@ mod dashboard;
 pub mod discv5;
 mod eth;
 mod history;
+pub mod network;
 pub mod types;
 pub mod utils;
 mod web3;
 
 pub use crate::discv5::{Discv5ApiClient, Discv5ApiServer};
-pub use beacon::{BeaconNetworkApiClient, BeaconNetworkApiServer};
+pub use beacon::BeaconNetworkApiClient;
 pub use eth::{EthApiClient, EthApiServer};
-pub use history::{HistoryNetworkApiClient, HistoryNetworkApiServer};
+pub use history::HistoryNetworkApiClient;
+pub use network::NetworkApiServer;
 pub use web3::{Web3ApiClient, Web3ApiServer};
 
 pub use types::content_key::{
