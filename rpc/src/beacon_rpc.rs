@@ -149,12 +149,12 @@ impl NetworkApiServer<BeaconContentKey, BeaconContentValue> for BeaconNetworkApi
         let result = self.proxy_query_to_beacon_subnet(endpoint).await?;
         if result == serde_json::Value::String(CONTENT_ABSENT.to_string()) {
             return Ok(RecursiveFindContentResult::BeaconContent(
-                PossibleBeaconContentValue::ContentAbsent,
+                Box::new(PossibleBeaconContentValue::ContentAbsent),
             ));
         };
         let result: BeaconContentValue = from_value(result)?;
         Ok(RecursiveFindContentResult::BeaconContent(
-            PossibleBeaconContentValue::ContentPresent(result),
+            Box::new(PossibleBeaconContentValue::ContentPresent(result)),
         ))
     }
 
@@ -226,12 +226,12 @@ impl NetworkApiServer<BeaconContentKey, BeaconContentValue> for BeaconNetworkApi
         let result = self.proxy_query_to_beacon_subnet(endpoint).await?;
         if result == serde_json::Value::String(CONTENT_ABSENT.to_string()) {
             return Ok(LocalContentResult::Beacon(
-                PossibleBeaconContentValue::ContentAbsent,
+                Box::new(PossibleBeaconContentValue::ContentAbsent),
             ));
         };
         let content: BeaconContentValue = from_value(result)?;
         Ok(LocalContentResult::Beacon(
-            PossibleBeaconContentValue::ContentPresent(content),
+            Box::new(PossibleBeaconContentValue::ContentPresent(content)),
         ))
     }
 }

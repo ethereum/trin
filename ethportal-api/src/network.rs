@@ -12,14 +12,14 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub enum RecursiveFindContentResult {
-    BeaconContent(PossibleBeaconContentValue),
+    BeaconContent(Box<PossibleBeaconContentValue>),
     HistoryContent(ContentInfo),
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub enum LocalContentResult {
-    Beacon(PossibleBeaconContentValue),
-    History(PossibleHistoryContentValue),
+    Beacon(Box<PossibleBeaconContentValue>),
+    History(Box<PossibleHistoryContentValue>),
 }
 
 #[rpc(client, server, namespace = "portal")]

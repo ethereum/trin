@@ -202,12 +202,12 @@ impl NetworkApiServer<HistoryContentKey, HistoryContentValue> for HistoryNetwork
         let result = proxy_query_to_history_subnet(&self.network, endpoint).await?;
         if result == serde_json::Value::String(CONTENT_ABSENT.to_string()) {
             return Ok(LocalContentResult::History(
-                PossibleHistoryContentValue::ContentAbsent,
+                Box::new(PossibleHistoryContentValue::ContentAbsent),
             ));
         };
         let content: HistoryContentValue = from_value(result)?;
         Ok(LocalContentResult::History(
-            PossibleHistoryContentValue::ContentPresent(content),
+            Box::new(PossibleHistoryContentValue::ContentPresent(content)),
         ))
     }
 }
