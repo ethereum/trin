@@ -61,8 +61,8 @@ that not all sub-protocols are ready:
 
 ### Networking configuration
 
-Optionally one can specify Trin's network proprties:
-- What sort of network connections (HTPP vs IPC)
+Optionally one can specify Trin's network properties:
+- What sort of network connections (HTTP vs IPC)
 - Port answering Ethereum-related queries
 - Port for connecting to other nodes
 
