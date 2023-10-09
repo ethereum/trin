@@ -319,7 +319,7 @@ impl<DB: Database, R: ConsensusRpc + 'static> Client<DB, R> {
             match err {
                 NodeError::ConsensusSyncError(err) => match err
                     .downcast_ref()
-                    .ok_or(format!("Unable do downcast error: {err}"))
+                    .ok_or(err.to_string())
                     .map_err(|err| eyre!(err))?
                 {
                     ConsensusError::CheckpointTooOld => {

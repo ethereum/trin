@@ -69,7 +69,7 @@ impl ConsensusRpc for PortalRpc {
                 let bootstrap = BeaconContentValue::decode(
                     &result
                         .0
-                        .ok_or("LightClientBootstrap content not found!")
+                        .ok_or("LightClientBootstrap content not found on the network.")
                         .map_err(|err| eyre!("{err}"))?,
                 )?;
 
@@ -128,16 +128,17 @@ impl ConsensusRpc for PortalRpc {
 
         match rx.await {
             Ok(result) => {
-                let updates = BeaconContentValue::decode(
+                let content_value = BeaconContentValue::decode(
                     &result
                         .0
-                        .ok_or("LightClientUpdatesByRange content not found!")
+                        .ok_or("LightClientUpdatesByRange content not found on the network.")
                         .map_err(|err| eyre!("{err}"))?,
                 )?;
 
-                if let BeaconContentValue::LightClientUpdatesByRange(updates) = updates {
+                if let BeaconContentValue::LightClientUpdatesByRange(updates) = content_value {
                     let capella_updates: Vec<LightClientUpdate> = updates
-                        .into_iter()
+                        .as_ref()
+                        .iter()
                         .map(|update| update.update.clone())
                         .collect();
 
@@ -200,7 +201,7 @@ impl ConsensusRpc for PortalRpc {
                 let finality_update = BeaconContentValue::decode(
                     &result
                         .0
-                        .ok_or("LightClientFinalityUpdate content not found!")
+                        .ok_or(format!("LightClientFinalityUpdate content for slot {} not found on the network.", expected_current_slot - 1))
                         .map_err(|err| eyre!("{err}"))?,
                 )?;
 
@@ -262,7 +263,7 @@ impl ConsensusRpc for PortalRpc {
                 let optimistic_update = BeaconContentValue::decode(
                     &result
                         .0
-                        .ok_or("LightClientOptimistic content not found!")
+                        .ok_or(format!("LightClientOptimisticUpdate content for slot {} not found on the network.", expected_current_slot - 1))
                         .map_err(|err| eyre!("{err}"))?,
                 )?;
 

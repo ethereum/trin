@@ -27,7 +27,7 @@ impl BeaconSync {
 
         // Set the checkpoint to the last known checkpoint
         builder = builder
-            .checkpoint("0x8f295cc9b18926859511160afaa8914c91cd33043c3f7f2592268093dabd747d");
+            .checkpoint("0x44389a44d9da9e5e073a7f0bfb19844c2a9aacfafaa81558577ae0e373ec9eb9");
 
         // Set the data dir
         builder = builder.data_dir(PathBuf::from("/tmp/portal-light-client"));
@@ -46,7 +46,7 @@ impl BeaconSync {
             match client.start().await {
                 Ok(_) => break,
                 Err(e) => {
-                    error!("Error syncing portal light client: {:?}! Retrying...", e);
+                    error!("Error syncing portal light client: {e} Retrying...");
                 }
             }
         }

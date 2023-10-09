@@ -17,14 +17,14 @@ async fn main() -> Result<()> {
     builder = builder.network(networks::Network::Mainnet);
 
     // Set the consensus rpc url
-    builder = builder.consensus_rpc("https://www.lightclientdata.org");
+    builder = builder.consensus_rpc("http://testing.mainnet.beacon-api.nimbus.team");
 
     // Set the checkpoint to the last known checkpoint
     builder =
-        builder.checkpoint("0x31c982c923f839527f4be15308d5bcc41930dd4b2db514b8fbc52929509d126f");
+        builder.checkpoint("0x44389a44d9da9e5e073a7f0bfb19844c2a9aacfafaa81558577ae0e373ec9eb9");
 
     // Set the rpc port
-    builder = builder.rpc_port(8545);
+    builder = builder.rpc_port(8544);
 
     // Set the data dir
     builder = builder.data_dir(PathBuf::from("/tmp/light-client"));
