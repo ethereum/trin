@@ -148,14 +148,14 @@ impl NetworkApiServer<BeaconContentKey, BeaconContentValue> for BeaconNetworkApi
         let endpoint = BeaconEndpoint::RecursiveFindContent(content_key);
         let result = self.proxy_query_to_beacon_subnet(endpoint).await?;
         if result == serde_json::Value::String(CONTENT_ABSENT.to_string()) {
-            return Ok(RecursiveFindContentResult::BeaconContent(
-                Box::new(PossibleBeaconContentValue::ContentAbsent),
-            ));
+            return Ok(RecursiveFindContentResult::BeaconContent(Box::new(
+                PossibleBeaconContentValue::ContentAbsent,
+            )));
         };
         let result: BeaconContentValue = from_value(result)?;
-        Ok(RecursiveFindContentResult::BeaconContent(
-            Box::new(PossibleBeaconContentValue::ContentPresent(result)),
-        ))
+        Ok(RecursiveFindContentResult::BeaconContent(Box::new(
+            PossibleBeaconContentValue::ContentPresent(result),
+        )))
     }
 
     /// Lookup a target content key in the network. Return tracing info.
@@ -225,14 +225,14 @@ impl NetworkApiServer<BeaconContentKey, BeaconContentValue> for BeaconNetworkApi
         let endpoint = BeaconEndpoint::LocalContent(content_key);
         let result = self.proxy_query_to_beacon_subnet(endpoint).await?;
         if result == serde_json::Value::String(CONTENT_ABSENT.to_string()) {
-            return Ok(LocalContentResult::Beacon(
-                Box::new(PossibleBeaconContentValue::ContentAbsent),
-            ));
+            return Ok(LocalContentResult::Beacon(Box::new(
+                PossibleBeaconContentValue::ContentAbsent,
+            )));
         };
         let content: BeaconContentValue = from_value(result)?;
-        Ok(LocalContentResult::Beacon(
-            Box::new(PossibleBeaconContentValue::ContentPresent(content)),
-        ))
+        Ok(LocalContentResult::Beacon(Box::new(
+            PossibleBeaconContentValue::ContentPresent(content),
+        )))
     }
 }
 
