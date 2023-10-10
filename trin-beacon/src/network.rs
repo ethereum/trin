@@ -55,13 +55,19 @@ impl BeaconNetwork {
         let overlay_tx = overlay.command_tx.clone();
 
         // Spawn the beacon sync task.
-        tokio::spawn(async move {
-            let beacon_sync = BeaconSync::new(overlay_tx);
-            beacon_sync
-                .start()
-                .await
-                .expect("Beacon sync failed to start");
-        });
+        if portal_config.trusted_block_root.is_some() {
+            tokio::spawn(async move {
+                let beacon_sync = BeaconSync::new(overlay_tx);
+                beacon_sync
+                    .start(
+                        portal_config
+                            .trusted_block_root
+                            .expect("Trusted block root should be available"),
+                    )
+                    .await
+                    .expect("Beacon sync failed to start");
+            });
+        }
 
         Ok(Self {
             overlay: Arc::new(overlay),

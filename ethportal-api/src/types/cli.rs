@@ -113,6 +113,13 @@ pub struct TrinConfig {
     pub private_key: Option<H256>,
 
     #[arg(
+        long,
+        value_parser = check_trusted_block_root,
+        help = "Hex encoded block root from a trusted checkpoint"
+    )]
+    pub trusted_block_root: Option<String>,
+
+    #[arg(
     long = "networks",
         help = "Comma-separated list of which portal subnetworks to activate",
         default_value = DEFAULT_SUBNETWORKS,
@@ -182,6 +189,7 @@ impl Default for TrinConfig {
             external_addr: None,
             no_stun: false,
             private_key: None,
+            trusted_block_root: None,
             networks: DEFAULT_SUBNETWORKS
                 .split(',')
                 .map(|n| n.to_string())
@@ -252,6 +260,20 @@ pub fn check_private_key_length(private_key: &str) -> Result<H256, String> {
     Err(format!(
         "Invalid private key length: {}, expected 66 (0x-prefixed 32 byte hexstring)",
         private_key.len()
+    ))
+}
+
+fn check_trusted_block_root(trusted_root: &str) -> Result<String, String> {
+    if !trusted_root.starts_with("0x") {
+        return Err("Trusted block root must be prefixed with 0x".to_owned());
+    }
+
+    if trusted_root.len() == 66 {
+        return Ok(trusted_root.to_string());
+    }
+    Err(format!(
+        "Invalid trusted block root length: {}, expected 66 (0x-prefixed 32 byte hexstring)",
+        trusted_root.len()
     ))
 }
 
@@ -528,6 +550,36 @@ mod test {
                 "trin",
                 "--unsafe-private-key",
                 "0x01010101010101010101010101010101010101010101010101010101010101",
+            ]
+            .iter(),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Invalid trusted block root length: 64, expected 66 (0x-prefixed 32 byte hexstring)"
+    )]
+    fn test_trusted_block_root_requires_32_bytes() {
+        TrinConfig::new_from(
+            [
+                "trin",
+                "--trusted-block-root",
+                "0x01010101010101010101010101010101010101010101010101010101010101",
+            ]
+            .iter(),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "Trusted block root must be prefixed with 0x")]
+    fn test_trusted_block_root_starts_with_0x() {
+        TrinConfig::new_from(
+            [
+                "trin",
+                "--trusted-block-root",
+                "010101010101010101010101010101010101010101010101010101010101010101",
             ]
             .iter(),
         )

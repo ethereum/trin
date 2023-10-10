@@ -18,7 +18,7 @@ impl BeaconSync {
         Self { overlay_tx }
     }
 
-    pub async fn start(&self) -> anyhow::Result<()> {
+    pub async fn start(&self, trusted_block_root: String) -> anyhow::Result<()> {
         // Create a new Light Client Builder
         let mut builder = ClientBuilder::new();
 
@@ -26,8 +26,7 @@ impl BeaconSync {
         builder = builder.network(networks::Network::Mainnet);
 
         // Set the checkpoint to the last known checkpoint
-        builder = builder
-            .checkpoint("0x44389a44d9da9e5e073a7f0bfb19844c2a9aacfafaa81558577ae0e373ec9eb9");
+        builder = builder.checkpoint(&trusted_block_root);
 
         // Set the data dir
         builder = builder.data_dir(PathBuf::from("/tmp/portal-light-client"));
@@ -42,7 +41,7 @@ impl BeaconSync {
 
         // Run the client
         loop {
-            info!("Starting syncing portal light client...");
+            info!(trusted_block_root = %trusted_block_root, "Starting syncing portal light client ...");
             match client.start().await {
                 Ok(_) => break,
                 Err(e) => {

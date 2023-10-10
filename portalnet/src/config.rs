@@ -22,6 +22,7 @@ pub struct PortalnetConfig {
     pub no_stun: bool,
     pub node_addr_cache_capacity: usize,
     pub disable_poke: bool,
+    pub trusted_block_root: Option<String>,
 }
 
 impl Default for PortalnetConfig {
@@ -36,6 +37,7 @@ impl Default for PortalnetConfig {
             no_stun: false,
             node_addr_cache_capacity: NODE_ADDR_CACHE_CAPACITY,
             disable_poke: false,
+            trusted_block_root: None,
         }
     }
 }
@@ -49,6 +51,7 @@ impl PortalnetConfig {
             no_stun: trin_config.no_stun,
             bootnodes: trin_config.bootnodes.clone(),
             disable_poke: trin_config.disable_poke,
+            trusted_block_root: trin_config.trusted_block_root.clone(),
             ..Default::default()
         }
     }
