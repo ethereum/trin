@@ -10,12 +10,11 @@ use serde_json::Value;
 use serial_test::serial;
 use ssz::Decode;
 
+use ethportal_api::network::NetworkApiClient;
 use ethportal_api::types::cli::{TrinConfig, DEFAULT_WEB3_IPC_PATH};
 use ethportal_api::types::execution::header::HeaderWithProof;
 use ethportal_api::utils::bytes::hex_decode;
-use ethportal_api::{
-    BlockHeaderKey, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
-};
+use ethportal_api::{BlockHeaderKey, HistoryContentKey, HistoryContentValue};
 use rpc::RpcServerHandle;
 
 mod utils;

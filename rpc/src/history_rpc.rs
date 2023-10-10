@@ -3,6 +3,7 @@ use crate::serde::from_value;
 
 use crate::jsonrpsee::core::{async_trait, RpcResult};
 use discv5::enr::NodeId;
+use ethportal_api::network::{LocalContentResult, RecursiveFindContentResult};
 use ethportal_api::types::constants::CONTENT_ABSENT;
 use ethportal_api::types::enr::Enr;
 use ethportal_api::types::jsonrpc::endpoints::HistoryEndpoint;
@@ -11,11 +12,10 @@ use ethportal_api::types::portal::{
     AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
     TraceContentInfo,
 };
-use ethportal_api::HistoryContentKey;
 use ethportal_api::HistoryContentValue;
-use ethportal_api::HistoryNetworkApiServer;
 use ethportal_api::PossibleHistoryContentValue;
 use ethportal_api::RoutingTableInfo;
+use ethportal_api::{HistoryContentKey, NetworkApiServer};
 use tokio::sync::mpsc;
 
 pub struct HistoryNetworkApi {
@@ -29,7 +29,7 @@ impl HistoryNetworkApi {
 }
 
 #[async_trait]
-impl HistoryNetworkApiServer for HistoryNetworkApi {
+impl NetworkApiServer<HistoryContentKey, HistoryContentValue> for HistoryNetworkApi {
     /// Returns meta information about overlay routing table.
     async fn routing_table_info(&self) -> RpcResult<RoutingTableInfo> {
         let endpoint = HistoryEndpoint::RoutingTableInfo;
@@ -119,17 +119,19 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
     async fn recursive_find_content(
         &self,
         content_key: HistoryContentKey,
-    ) -> RpcResult<ContentInfo> {
+    ) -> RpcResult<RecursiveFindContentResult> {
         let endpoint = HistoryEndpoint::RecursiveFindContent(content_key);
         let result = proxy_query_to_history_subnet(&self.network, endpoint).await?;
         if result == serde_json::Value::String(CONTENT_ABSENT.to_string()) {
-            return Ok(ContentInfo::Content {
-                content: PossibleHistoryContentValue::ContentAbsent,
-                utp_transfer: false,
-            });
+            return Ok(RecursiveFindContentResult::HistoryContent(
+                ContentInfo::Content {
+                    content: PossibleHistoryContentValue::ContentAbsent,
+                    utp_transfer: false,
+                },
+            ));
         };
         let result: ContentInfo = from_value(result)?;
-        Ok(result)
+        Ok(RecursiveFindContentResult::HistoryContent(result))
     }
 
     /// Lookup a target content key in the network. Return tracing info.
@@ -195,17 +197,18 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
     }
 
     /// Get a content from the local database.
-    async fn local_content(
-        &self,
-        content_key: HistoryContentKey,
-    ) -> RpcResult<PossibleHistoryContentValue> {
+    async fn local_content(&self, content_key: HistoryContentKey) -> RpcResult<LocalContentResult> {
         let endpoint = HistoryEndpoint::LocalContent(content_key);
         let result = proxy_query_to_history_subnet(&self.network, endpoint).await?;
         if result == serde_json::Value::String(CONTENT_ABSENT.to_string()) {
-            return Ok(PossibleHistoryContentValue::ContentAbsent);
+            return Ok(LocalContentResult::History(Box::new(
+                PossibleHistoryContentValue::ContentAbsent,
+            )));
         };
         let content: HistoryContentValue = from_value(result)?;
-        Ok(PossibleHistoryContentValue::ContentPresent(content))
+        Ok(LocalContentResult::History(Box::new(
+            PossibleHistoryContentValue::ContentPresent(content),
+        )))
     }
 }
 
