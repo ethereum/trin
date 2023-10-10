@@ -67,6 +67,13 @@ pub enum ContentStoreError {
     ContentKey(#[from] ContentKeyError),
 }
 
+#[derive(Debug, PartialEq)]
+pub enum ShouldWeStoreContent {
+    Store,
+    NotWithinRadius,
+    AlreadyStored,
+}
+
 /// A data store for Portal Network content (data).
 pub trait ContentStore {
     /// Looks up a piece of content by `key`.
@@ -84,7 +91,7 @@ pub trait ContentStore {
     fn is_key_within_radius_and_unavailable<K: OverlayContentKey>(
         &self,
         key: &K,
-    ) -> Result<bool, ContentStoreError>;
+    ) -> Result<ShouldWeStoreContent, ContentStoreError>;
 
     /// Returns the radius of the data store.
     fn radius(&self) -> Distance;
@@ -154,13 +161,15 @@ impl ContentStore for MemoryContentStore {
     fn is_key_within_radius_and_unavailable<K: OverlayContentKey>(
         &self,
         key: &K,
-    ) -> Result<bool, ContentStoreError> {
+    ) -> Result<ShouldWeStoreContent, ContentStoreError> {
         let distance = self.distance_to_key(key);
         if distance > self.radius {
-            return Ok(false);
+            return Ok(ShouldWeStoreContent::NotWithinRadius);
         }
-
-        Ok(!self.contains_key(key))
+        if self.contains_key(key) {
+            return Ok(ShouldWeStoreContent::AlreadyStored);
+        }
+        Ok(ShouldWeStoreContent::Store)
     }
 
     fn radius(&self) -> Distance {
@@ -228,15 +237,18 @@ impl ContentStore for PortalStorage {
     fn is_key_within_radius_and_unavailable<K: OverlayContentKey>(
         &self,
         key: &K,
-    ) -> Result<bool, ContentStoreError> {
+    ) -> Result<ShouldWeStoreContent, ContentStoreError> {
         let distance = self.distance_to_key(key);
         if distance > self.radius {
-            return Ok(false);
+            return Ok(ShouldWeStoreContent::NotWithinRadius);
         }
 
         let key = key.content_id();
         let is_key_available = self.db.get_pinned(key)?.is_some();
-        Ok(!is_key_available)
+        if is_key_available {
+            return Ok(ShouldWeStoreContent::AlreadyStored);
+        }
+        Ok(ShouldWeStoreContent::Store)
     }
 
     fn radius(&self) -> Distance {
@@ -1181,15 +1193,21 @@ pub mod test {
 
         // Arbitrary key within radius and unavailable.
         let arb_key = IdentityContentKey::new(node_id.raw());
-        assert!(store
-            .is_key_within_radius_and_unavailable(&arb_key)
-            .unwrap());
+        assert_eq!(
+            store
+                .is_key_within_radius_and_unavailable(&arb_key)
+                .unwrap(),
+            ShouldWeStoreContent::Store
+        );
 
         // Arbitrary key available.
         let _ = store.put(arb_key.clone(), val);
-        assert!(!store
-            .is_key_within_radius_and_unavailable(&arb_key)
-            .unwrap());
+        assert_eq!(
+            store
+                .is_key_within_radius_and_unavailable(&arb_key)
+                .unwrap(),
+            ShouldWeStoreContent::AlreadyStored
+        );
     }
 
     #[test]
