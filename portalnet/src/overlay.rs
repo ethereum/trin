@@ -26,6 +26,7 @@ use utp_rs::socket::UtpSocket;
 use crate::{
     discovery::{Discovery, UtpEnr},
     find::query_info::{FindContentResult, RecursiveFindContentResult},
+    gossip::propagate_gossip_cross_thread,
     metrics::overlay::OverlayMetricsReporter,
     metrics::portalnet::PORTALNET_METRICS,
     overlay_service::{
@@ -220,11 +221,7 @@ where
     /// Propagate gossip accepted content via OFFER/ACCEPT, return number of peers propagated
     pub fn propagate_gossip(&self, content: Vec<(TContentKey, Vec<u8>)>) -> usize {
         let kbuckets = Arc::clone(&self.kbuckets);
-        crate::overlay_service::propagate_gossip_cross_thread(
-            content,
-            kbuckets,
-            self.command_tx.clone(),
-        )
+        propagate_gossip_cross_thread(content, kbuckets, self.command_tx.clone())
     }
 
     /// Returns a vector of all ENR node IDs of nodes currently contained in the routing table.
