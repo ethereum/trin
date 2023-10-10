@@ -35,6 +35,7 @@ use tracing::{debug, error, info, trace, warn};
 use utp_rs::{conn::ConnectionConfig, socket::UtpSocket, stream::UtpStream};
 
 use crate::events::EventEnvelope;
+use crate::storage::ShouldWeStoreContent;
 use crate::{
     discovery::Discovery,
     events::OverlayEvent,
@@ -1203,6 +1204,7 @@ where
                 .store
                 .read()
                 .is_key_within_radius_and_unavailable(key)
+                .map(|value| matches!(value, ShouldWeStoreContent::Store))
                 .map_err(|err| {
                     OverlayRequestError::AcceptError(format!(
                         "Unable to check content availability {err}"
@@ -1630,10 +1632,10 @@ where
                     }
                     metrics.report_validation(true);
 
-                    // Check if data should be stored, and store if true.
+                    // Check if data should be stored, and store if it is within our radius and not already stored.
                     let key_desired = store.read().is_key_within_radius_and_unavailable(&key);
                     match key_desired {
-                        Ok(true) => {
+                        Ok(ShouldWeStoreContent::Store) => {
                             if let Err(err) = store.write().put(key.clone(), &content_value) {
                                 warn!(
                                     error = %err,
@@ -1642,10 +1644,16 @@ where
                                 );
                             }
                         }
-                        Ok(false) => {
+                        Ok(ShouldWeStoreContent::NotWithinRadius) => {
                             warn!(
                                 content.key = %key.to_hex(),
-                                "Accepted content outside radius or already stored"
+                                "Accepted content outside radius"
+                            );
+                        }
+                        Ok(ShouldWeStoreContent::AlreadyStored) => {
+                            warn!(
+                                content.key = %key.to_hex(),
+                                "Accepted content already stored"
                             );
                         }
                         Err(err) => {
@@ -1856,7 +1864,7 @@ where
                 .read()
                 .is_key_within_radius_and_unavailable(&content_key)
             {
-                Ok(val) => val,
+                Ok(val) => matches!(val, ShouldWeStoreContent::Store),
                 Err(msg) => {
                     error!("Unable to read store: {}", msg);
                     false
