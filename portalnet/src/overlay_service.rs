@@ -1632,7 +1632,7 @@ where
                     }
                     metrics.report_validation(true);
 
-                    // Check if data should be stored, and store if true.
+                    // Check if data should be stored, and store if it is within our radius and not already stored.
                     let key_desired = store.read().is_key_within_radius_and_unavailable(&key);
                     match key_desired {
                         Ok(ShouldWeStoreContent::Store) => {

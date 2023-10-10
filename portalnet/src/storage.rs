@@ -67,6 +67,7 @@ pub enum ContentStoreError {
     ContentKey(#[from] ContentKeyError),
 }
 
+/// An enum which tells us if we should store or not store content, and if not why for better errors.
 #[derive(Debug, PartialEq)]
 pub enum ShouldWeStoreContent {
     Store,
