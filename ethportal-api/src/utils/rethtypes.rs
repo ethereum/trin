@@ -1,4 +1,4 @@
-use ethereum_types::U256;
+use ethereum_types::{U256, U64};
 use ruint::Uint;
 
 pub fn u256_to_uint256(u256: U256) -> Uint<256, 4> {
@@ -14,5 +14,11 @@ pub fn u64_to_uint256(val: u64) -> Uint<256, 4> {
         .concat()
         .try_into()
         .expect("8 bytes + 24 bytes should be 32 bytes");
+    Uint::from_be_bytes(bytes)
+}
+
+pub fn ethtype_u64_to_uint256(val: U64) -> Uint<256, 4> {
+    let mut bytes = [0u8; 32];
+    val.to_big_endian(&mut bytes);
     Uint::from_be_bytes(bytes)
 }

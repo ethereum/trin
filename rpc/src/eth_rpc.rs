@@ -1,13 +1,14 @@
-use ethereum_types::{H256, U256};
-use reth_rpc_types::{Block, BlockTransactions};
+use ethereum_types::{H256, U256, U64};
+use reth_rpc_types::{Block, BlockTransactions, Parity, Signature, Transaction as RethTransaction};
 use tokio::sync::mpsc;
 
 use ethportal_api::types::execution::block_body::BlockBody;
+use ethportal_api::types::execution::transaction::Transaction;
 use ethportal_api::types::jsonrpc::request::HistoryJsonRpcRequest;
+use ethportal_api::utils::rethtypes::{ethtype_u64_to_uint256, u256_to_uint256};
 use ethportal_api::EthApiServer;
 use trin_validation::constants::CHAIN_ID;
 
-use crate::errors::RpcServeError;
 use crate::fetch::{find_block_body_by_hash, find_header_by_hash};
 use crate::jsonrpsee::core::{async_trait, RpcResult};
 
@@ -18,6 +19,126 @@ pub struct EthApi {
 impl EthApi {
     pub fn new(network: mpsc::UnboundedSender<HistoryJsonRpcRequest>) -> Self {
         Self { network }
+    }
+}
+
+fn rpc_transaction(
+    transaction: Transaction,
+    block_hash: H256,
+    block_number: u64,
+    transaction_index: usize,
+) -> RethTransaction {
+    // Fields not extractable from the transaction itself
+    let block_hash = block_hash.as_fixed_bytes().into();
+    let block_number = U256::from(block_number);
+    let transaction_index = Some(U256::from(transaction_index));
+
+    // Fields calculated on the full transaction envelope
+    let hash = transaction.hash().as_fixed_bytes().into();
+    let type_id = match transaction.type_id() {
+        0 => None,
+        n => Some(U64::from(n)),
+    };
+    // TODO: generate 'from' address from signature
+    let from = None;
+
+    // Fields internal to the transaction, sometimes varying by transaction type
+    let (
+        nonce,
+        gas_price,
+        gas,
+        to,
+        value,
+        input,
+        v,
+        r,
+        s,
+        max_fee_per_gas,
+        max_priority_fee_per_gas,
+        access_list,
+        y_parity,
+    ) = match transaction {
+        Transaction::Legacy(tx) => (
+            tx.nonce,
+            Some(tx.gas_price),
+            tx.gas,
+            tx.to,
+            tx.value,
+            tx.data,
+            tx.v,
+            tx.r,
+            tx.s,
+            None,
+            None,
+            None,
+            None,
+        ),
+        Transaction::AccessList(tx) => (
+            tx.nonce,
+            Some(tx.gas_price),
+            tx.gas,
+            tx.to,
+            tx.value,
+            tx.data,
+            tx.y_parity,
+            tx.r,
+            tx.s,
+            None,
+            None,
+            Some(tx.access_list),
+            Some(tx.y_parity),
+        ),
+        Transaction::EIP1559(tx) => (
+            tx.nonce,
+            None,
+            tx.gas,
+            tx.to,
+            tx.value,
+            tx.data,
+            tx.y_parity,
+            tx.r,
+            tx.s,
+            Some(tx.max_fee_per_gas),
+            Some(tx.max_priority_fee_per_gas),
+            Some(tx.access_list),
+            Some(tx.y_parity),
+        ),
+    };
+
+    // Convert types
+    let (gas, value) = (u256_to_uint256(gas), u256_to_uint256(value));
+    let signature = Some(Signature {
+        r: u256_to_uint256(r),
+        s: u256_to_uint256(s),
+        v: ethtype_u64_to_uint256(v),
+        y_parity: y_parity.map(|y| Parity(!y.is_zero())),
+    });
+
+    // Fields that are hardcoded, for now
+    let max_fee_per_blob_gas = None;
+    let chain_id = Some(CHAIN_ID.into());
+    let blob_versioned_hashes = vec![];
+
+    RethTransaction {
+        hash,
+        nonce,
+        block_hash,
+        block_number,
+        transaction_index,
+        from,
+        to,
+        value,
+        gas_price,
+        gas,
+        max_fee_per_gas,
+        max_priority_fee_per_gas,
+        max_fee_per_blob_gas,
+        input,
+        signature,
+        chain_id,
+        blob_versioned_hashes,
+        access_list,
+        transaction_type,
     }
 }
 
@@ -32,13 +153,6 @@ impl EthApiServer for EthApi {
         block_hash: H256,
         hydrated_transactions: bool,
     ) -> RpcResult<Block> {
-        if hydrated_transactions {
-            return Err(RpcServeError::Message(
-                "replying with all transaction bodies is not supported yet".into(),
-            )
-            .into());
-        }
-
         let header = find_header_by_hash(&self.network, block_hash).await?;
         let body = find_block_body_by_hash(&self.network, block_hash).await?;
         let transactions = match body {
@@ -46,12 +160,22 @@ impl EthApiServer for EthApi {
             BlockBody::Merge(body) => body.txs,
             BlockBody::Shanghai(body) => body.txs,
         };
-        let transactions = BlockTransactions::Hashes(
-            transactions
-                .into_iter()
-                .map(|tx| tx.hash().as_fixed_bytes().into())
-                .collect(),
-        );
+        let transactions = if hydrated_transactions {
+            BlockTransactions::Full(
+                transactions
+                    .into_iter()
+                    .enumerate()
+                    .map(|(idx, tx)| rpc_transaction(tx, block_hash, header.number, idx))
+                    .collect(),
+            )
+        } else {
+            BlockTransactions::Hashes(
+                transactions
+                    .into_iter()
+                    .map(|tx| tx.hash().as_fixed_bytes().into())
+                    .collect(),
+            )
+        };
 
         // Combine header and block body into the single json representation of the block.
         let block = Block {

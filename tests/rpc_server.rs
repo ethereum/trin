@@ -70,7 +70,10 @@ async fn test_eth_chain_id() {
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
-async fn test_eth_get_block_by_hash() {
+/// Test that a 3rd-party web3 client can understand our JSON-RPC API
+/// for eth_getBlockByHash
+/// Return the transactions as hashes, aka not "hydrated"
+async fn test_eth_get_block_by_hash_dehydrated() {
     let (web3_server, web3_client, native_client) = setup_web3_server().await;
 
     let (hwp, body) = get_full_block();
@@ -181,6 +184,72 @@ async fn test_eth_get_block_by_hash() {
         hex_encode(block.transactions[5]),
         "0x2f678341f550f7073a514c4b34f09824119f31dfbe7cc73ffccb21b7a2ba5710"
     );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
+/// Test that a 3rd-party web3 client can understand our JSON-RPC API
+/// for eth_getBlockByHash
+/// Return the transactions as fully formed, aka "hydrated"
+async fn test_eth_get_block_by_hash_hydrated() {
+    let (web3_server, web3_client, native_client) = setup_web3_server().await;
+
+    let (hwp, body) = get_full_block();
+    // Save values for later comparison
+    let (block_number, block_hash) = (hwp.header.number.into(), hwp.header.hash());
+
+    let BlockBody::Shanghai(shanghai_body) = body.clone() else { panic!("expected shanghai body") };
+
+    // Store header with proof in server
+    let content_key = HistoryContentKey::BlockHeaderWithProof(block_hash.into());
+    let content_value = HistoryContentValue::BlockHeaderWithProof(hwp);
+    let result = native_client
+        .store(content_key, content_value)
+        .await
+        .unwrap();
+    assert!(result);
+
+    // Store block in server
+    let content_key = HistoryContentKey::BlockBody(block_hash.into());
+    let content_value = HistoryContentValue::BlockBody(body);
+    let result = native_client
+        .store(content_key, content_value)
+        .await
+        .unwrap();
+    assert!(result);
+
+    // The meat of the test is here:
+    // Retrieve block over json-rpc
+    let block_id = ethers_core::types::H256::from(&block_hash.0);
+    let block = web3_client
+        .get_block_with_txs(block_id)
+        .await
+        .expect("request to get block failed")
+        .expect("specified block not found");
+    web3_server.stop().unwrap();
+
+    let block_hash = block_hash.as_fixed_bytes().into();
+    assert_eq!(block.number.expect("number must be present"), block_number);
+    assert_eq!(block.hash.expect("hash must be present"), block_hash);
+    assert_eq!(block.transactions.len(), shanghai_body.txs.len());
+
+    // Spot check the fields of a few transactions:
+    // First tx
+    assert_eq!(
+        hex_encode(block.transactions[0].hash),
+        "0xd06a110de42d674a84b2091cbd85ef514fb4e903f9a80dd7b640c48365a1a832"
+    );
+    // Last tx
+    assert_eq!(
+        hex_encode(block.transactions[84].hash),
+        "0x27e9e8fb3745d990c7d775268539fa17bbf06255e24a882c3153bf3b513ced9e"
+    );
+    // Legacy block
+    assert_eq!(
+        hex_encode(block.transactions[5].hash),
+        "0x2f678341f550f7073a514c4b34f09824119f31dfbe7cc73ffccb21b7a2ba5710"
+    );
+    panic!("TODO: Test more fields");
 }
 
 fn get_full_block() -> (HeaderWithProof, BlockBody) {
