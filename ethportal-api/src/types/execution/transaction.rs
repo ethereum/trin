@@ -21,6 +21,15 @@ impl Transaction {
         keccak_hash::keccak(self.encode())
     }
 
+    pub fn type_id(&self) -> u8 {
+        let txn_id = match self {
+            Self::Legacy(_) => TransactionId::Legacy,
+            Self::AccessList(_) => TransactionId::AccessList,
+            Self::EIP1559(_) => TransactionId::EIP1559,
+        };
+        txn_id as u8
+    }
+
     pub fn decode(tx: &[u8]) -> Result<Self, DecoderError> {
         // at least one byte needs to be present
         if tx.is_empty() {
