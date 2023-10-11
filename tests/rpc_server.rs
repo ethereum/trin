@@ -6,7 +6,7 @@ use std::net::{IpAddr, Ipv4Addr};
 use ethers_core::types::{Bloom, U256};
 use ethers_providers::*;
 use jsonrpsee::async_client::Client;
-use serde_json::Value;
+use serde_yaml::Value;
 use serial_test::serial;
 use ssz::Decode;
 
@@ -156,12 +156,16 @@ async fn test_eth_get_block_by_hash() {
 }
 
 fn get_header_with_proof() -> HeaderWithProof {
-    let file =
-        fs::read_to_string("trin-validation/src/assets/fluffy/header_with_proofs.json").unwrap();
-    let json: Value = serde_json::from_str(&file).unwrap();
-    let json = json.as_object().unwrap();
-    let raw_header = json.get("1000001").unwrap().as_object().unwrap();
-    let raw_header = raw_header.get("value").unwrap().as_str().unwrap();
-    let hwp_ssz = hex_decode(raw_header).unwrap();
-    HeaderWithProof::from_ssz_bytes(&hwp_ssz).unwrap()
+    let file = fs::read_to_string("trin-validation/src/assets/hive/blocks.yaml").unwrap();
+    let value: Value = serde_yaml::from_str(&file).unwrap();
+    let all_blocks = value.as_sequence().unwrap();
+    let post_shanghai = all_blocks.last().unwrap();
+    // Why assert the block number? With the current yaml structure, appending a new block into the
+    // yaml file would cause this function to return a different block. This assertion catches the
+    // problem early.
+    assert_eq!(post_shanghai["number"], 17510000);
+    let header_pair = post_shanghai.get("header").unwrap().as_mapping().unwrap();
+    let hex_encoded_header = header_pair.get("content_value").unwrap().as_str().unwrap();
+    let ssz_encoded_header = hex_decode(hex_encoded_header).unwrap();
+    HeaderWithProof::from_ssz_bytes(&ssz_encoded_header).unwrap()
 }

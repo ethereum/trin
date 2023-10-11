@@ -7025,6 +7025,7 @@ dependencies = [
  "rocksdb",
  "rpc",
  "serde_json",
+ "serde_yaml",
  "serial_test",
  "sha3 0.9.1",
  "tempfile",
