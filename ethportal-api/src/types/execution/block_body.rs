@@ -501,6 +501,31 @@ mod tests {
         assert_eq!(encoded, raw);
     }
 
+    #[test_log::test]
+    fn shanghai_block_body_transaction_hashes() {
+        // block 17139055
+        let raw = std::fs::read("../test_assets/mainnet/block_body_17139055.bin").unwrap();
+        let body = BlockBodyShanghai::from_ssz_bytes(&raw).unwrap();
+        assert_eq!(body.txs.len(), 117);
+        // Select a few transactions to compare against hashes from a block explorer:
+        // Test first and last txs
+        assert_eq!(
+            hex_encode(body.txs[0].hash()),
+            "0xd28604b0f3bd36be5db040a675ce277ecaf416f7abcfe6f001b9d5dbab877e16"
+        );
+        assert_eq!(
+            hex_encode(body.txs[116].hash()),
+            "0x632f4acb4fea95e02afe056ed517db9966783eba32a70df0eb095eb229173972"
+        );
+        // Test a legacy tx
+        assert_eq!(
+            hex_encode(body.txs[12].hash()),
+            "0xe820644c796256e0e192b426b9116e98644434ffeb802d9c722ada05098666ca"
+        );
+        // No legacy access list transactions are available in this block, but having tested with
+        // and without the typed transactions seems like a good start for now.
+    }
+
     fn shanghai_withdrawals() -> String {
         r#"[{"index":"0x196f2d","validatorIndex":"0x771aa","address":"0x2c885c22321746ab958980a5d060be90cd3fa79b","amount":"0xbc501e"},{"index":"0x196f2e","validatorIndex":"0x771ab","address":"0xa578c8a6fbddbdff3646ea05a7998bb251c2e972","amount":"0xbcc397"},{"index":"0x196f2f","validatorIndex":"0x771ac","address":"0xa578c8a6fbddbdff3646ea05a7998bb251c2e972","amount":"0xbd2f54"},{"index":"0x196f30","validatorIndex":"0x771ad","address":"0xa578c8a6fbddbdff3646ea05a7998bb251c2e972","amount":"0xbc2316"},{"index":"0x196f31","validatorIndex":"0x771ae","address":"0xa578c8a6fbddbdff3646ea05a7998bb251c2e972","amount":"0xbb358a"},{"index":"0x196f32","validatorIndex":"0x771af","address":"0xa578c8a6fbddbdff3646ea05a7998bb251c2e972","amount":"0xbc4c7e"},{"index":"0x196f33","validatorIndex":"0x771b0","address":"0xa578c8a6fbddbdff3646ea05a7998bb251c2e972","amount":"0xbce826"},{"index":"0x196f34","validatorIndex":"0x771b1","address":"0x2c885c22321746ab958980a5d060be90cd3fa79b","amount":"0xbcb59b"},{"index":"0x196f35","validatorIndex":"0x771b2","address":"0xa578c8a6fbddbdff3646ea05a7998bb251c2e972","amount":"0xbca420"},{"index":"0x196f36","validatorIndex":"0x771b3","address":"0xa578c8a6fbddbdff3646ea05a7998bb251c2e972","amount":"0xbc1dd0"},{"index":"0x196f37","validatorIndex":"0x771b4","address":"0x2c885c22321746ab958980a5d060be90cd3fa79b","amount":"0xbbe0da"},{"index":"0x196f38","validatorIndex":"0x771b5","address":"0xa578c8a6fbddbdff3646ea05a7998bb251c2e972","amount":"0xbb714c"},{"index":"0x196f39","validatorIndex":"0x771b6","address":"0x2c885c22321746ab958980a5d060be90cd3fa79b","amount":"0xbc3c1d"},{"index":"0x196f3a","validatorIndex":"0x771b7","address":"0xa578c8a6fbddbdff3646ea05a7998bb251c2e972","amount":"0xbc2726"},{"index":"0x196f3b","validatorIndex":"0x771b8","address":"0xa1c52afa77d87796b8cd34f4801e062fb54e7df6","amount":"0xad94c3"},{"index":"0x196f3c","validatorIndex":"0x771b9","address":"0xa578c8a6fbddbdff3646ea05a7998bb251c2e972","amount":"0xbad3ed"}]"#.to_string()
     }

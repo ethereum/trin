@@ -16,6 +16,11 @@ pub enum Transaction {
 }
 
 impl Transaction {
+    /// Returns the Keccak-256 hash of the header.
+    pub fn hash(&self) -> H256 {
+        keccak_hash::keccak(self.encode())
+    }
+
     pub fn decode(tx: &[u8]) -> Result<Self, DecoderError> {
         // at least one byte needs to be present
         if tx.is_empty() {
