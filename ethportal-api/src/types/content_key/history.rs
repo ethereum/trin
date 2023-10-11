@@ -82,6 +82,14 @@ pub struct BlockBodyKey {
     pub block_hash: [u8; 32],
 }
 
+impl From<H256> for BlockBodyKey {
+    fn from(block_hash: H256) -> Self {
+        Self {
+            block_hash: block_hash.to_fixed_bytes(),
+        }
+    }
+}
+
 /// A key for the transaction receipts for a block.
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct BlockReceiptsKey {

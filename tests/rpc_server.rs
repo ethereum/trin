@@ -11,11 +11,10 @@ use serial_test::serial;
 use ssz::Decode;
 
 use ethportal_api::types::cli::{TrinConfig, DEFAULT_WEB3_IPC_PATH};
+use ethportal_api::types::execution::block_body::BlockBody;
 use ethportal_api::types::execution::header::HeaderWithProof;
-use ethportal_api::utils::bytes::hex_decode;
-use ethportal_api::{
-    BlockHeaderKey, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
-};
+use ethportal_api::utils::bytes::{hex_decode, hex_encode};
+use ethportal_api::{HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient};
 use rpc::RpcServerHandle;
 
 mod utils;
@@ -74,7 +73,7 @@ async fn test_eth_chain_id() {
 async fn test_eth_get_block_by_hash() {
     let (web3_server, web3_client, native_client) = setup_web3_server().await;
 
-    let hwp = get_header_with_proof();
+    let (hwp, body) = get_full_block();
     // Save values for later comparison
     let (
         block_number,
@@ -116,10 +115,10 @@ async fn test_eth_get_block_by_hash() {
         u64_to_ethers_u256(hwp.header.timestamp),
     );
 
+    let BlockBody::Shanghai(shanghai_body) = body.clone() else { panic!("expected shanghai body") };
+
     // Store header with proof in server
-    let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
-        block_hash: block_hash.0,
-    });
+    let content_key = HistoryContentKey::BlockHeaderWithProof(block_hash.into());
     let content_value = HistoryContentValue::BlockHeaderWithProof(hwp);
     let result = native_client
         .store(content_key, content_value)
@@ -127,6 +126,17 @@ async fn test_eth_get_block_by_hash() {
         .unwrap();
     assert!(result);
 
+    // Store block in server
+    let content_key = HistoryContentKey::BlockBody(block_hash.into());
+    let content_value = HistoryContentValue::BlockBody(body);
+    let result = native_client
+        .store(content_key, content_value)
+        .await
+        .unwrap();
+    assert!(result);
+
+    // The meat of the test is here:
+    // Retrieve block over json-rpc
     let block_id = ethers_core::types::H256::from(&block_hash.0);
     let block = web3_client
         .get_block(block_id)
@@ -153,9 +163,27 @@ async fn test_eth_get_block_by_hash() {
     assert_eq!(block.difficulty, difficulty);
     assert_eq!(block.timestamp, timestamp);
     assert_eq!(block.size, None);
+    assert_eq!(block.transactions.len(), shanghai_body.txs.len());
+
+    // Spot check a few transaction hashes:
+    // First tx
+    assert_eq!(
+        hex_encode(block.transactions[0]),
+        "0xd06a110de42d674a84b2091cbd85ef514fb4e903f9a80dd7b640c48365a1a832"
+    );
+    // Last tx
+    assert_eq!(
+        hex_encode(block.transactions[84]),
+        "0x27e9e8fb3745d990c7d775268539fa17bbf06255e24a882c3153bf3b513ced9e"
+    );
+    // Legacy block
+    assert_eq!(
+        hex_encode(block.transactions[5]),
+        "0x2f678341f550f7073a514c4b34f09824119f31dfbe7cc73ffccb21b7a2ba5710"
+    );
 }
 
-fn get_header_with_proof() -> HeaderWithProof {
+fn get_full_block() -> (HeaderWithProof, BlockBody) {
     let file = fs::read_to_string("trin-validation/src/assets/hive/blocks.yaml").unwrap();
     let value: Value = serde_yaml::from_str(&file).unwrap();
     let all_blocks = value.as_sequence().unwrap();
@@ -164,8 +192,21 @@ fn get_header_with_proof() -> HeaderWithProof {
     // yaml file would cause this function to return a different block. This assertion catches the
     // problem early.
     assert_eq!(post_shanghai["number"], 17510000);
-    let header_pair = post_shanghai.get("header").unwrap().as_mapping().unwrap();
-    let hex_encoded_header = header_pair.get("content_value").unwrap().as_str().unwrap();
-    let ssz_encoded_header = hex_decode(hex_encoded_header).unwrap();
-    HeaderWithProof::from_ssz_bytes(&ssz_encoded_header).unwrap()
+
+    // header
+    let ssz_header = get_ssz_contents(post_shanghai, "header");
+    let hwp = HeaderWithProof::from_ssz_bytes(&ssz_header).unwrap();
+
+    // body
+    let ssz_body = get_ssz_contents(post_shanghai, "body");
+    let body = BlockBody::from_ssz_bytes(&ssz_body).unwrap();
+
+    (hwp, body)
+}
+
+// Panic if content is missing, since we're in a test
+fn get_ssz_contents(value: &Value, field: &str) -> Vec<u8> {
+    let content_pair = value.get(field).unwrap().as_mapping().unwrap();
+    let hex_encoded = content_pair.get("content_value").unwrap().as_str().unwrap();
+    hex_decode(hex_encoded).unwrap()
 }

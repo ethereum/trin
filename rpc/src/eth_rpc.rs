@@ -2,12 +2,13 @@ use ethereum_types::{H256, U256};
 use reth_rpc_types::{Block, BlockTransactions};
 use tokio::sync::mpsc;
 
+use ethportal_api::types::execution::block_body::BlockBody;
 use ethportal_api::types::jsonrpc::request::HistoryJsonRpcRequest;
 use ethportal_api::EthApiServer;
 use trin_validation::constants::CHAIN_ID;
 
 use crate::errors::RpcServeError;
-use crate::fetch::find_header_by_hash;
+use crate::fetch::{find_block_body_by_hash, find_header_by_hash};
 use crate::jsonrpsee::core::{async_trait, RpcResult};
 
 pub struct EthApi {
@@ -39,11 +40,23 @@ impl EthApiServer for EthApi {
         }
 
         let header = find_header_by_hash(&self.network, block_hash).await?;
+        let body = find_block_body_by_hash(&self.network, block_hash).await?;
+        let transactions = match body {
+            BlockBody::Legacy(body) => body.txs,
+            BlockBody::Merge(body) => body.txs,
+            BlockBody::Shanghai(body) => body.txs,
+        };
+        let transactions = BlockTransactions::Hashes(
+            transactions
+                .into_iter()
+                .map(|tx| tx.hash().as_fixed_bytes().into())
+                .collect(),
+        );
 
         // Combine header and block body into the single json representation of the block.
         let block = Block {
             header: header.into(),
-            transactions: BlockTransactions::Uncle,
+            transactions,
             uncles: vec![],
             size: None,
             total_difficulty: None,
