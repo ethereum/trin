@@ -5,7 +5,7 @@ use std::fs;
 use ureq;
 
 pub const DASHBOARD_TEMPLATES: &[&str] =
-    &["./ethportal-api/src/dashboard/collected-metrics-dashboard.json.template"];
+    &["../etc/grafana/dashboards/collected-metrics-dashboard.json.template"];
 
 pub struct GrafanaAPI {
     basic_auth_string: String,
@@ -73,8 +73,7 @@ impl GrafanaAPI {
         template_path: &str,
         prometheus_uid: &str,
     ) -> Result<String, anyhow::Error> {
-        // Open docs/metrics_dashboard.json
-        // Fill in template with uid
+        // Open the metrics dashboard and fill in the prometheus uid
         let template_string = fs::read_to_string(template_path)?;
         let populated_template = template(
             &template_string[..],
