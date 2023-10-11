@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use discv5::enr::NodeId;
 use ethportal_api::types::{
-    constants::CONTENT_ABSENT, jsonrpc::endpoints::HistoryEndpoint,
+    constants::CONTENT_ABSENT, distance::Distance, jsonrpc::endpoints::HistoryEndpoint,
     jsonrpc::request::HistoryJsonRpcRequest, query_trace::QueryTrace,
 };
 use ethportal_api::utils::bytes::hex_encode;
@@ -333,7 +333,7 @@ async fn ping(
     match overlay.send_ping(enr).await {
         Ok(pong) => Ok(json!(PongInfo {
             enr_seq: pong.enr_seq as u32,
-            data_radius: *overlay.data_radius(),
+            data_radius: *Distance::from(pong.custom_payload),
         })),
         Err(msg) => Err(format!("Ping request timeout: {msg:?}")),
     }
