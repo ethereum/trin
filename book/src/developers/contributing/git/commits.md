@@ -18,16 +18,22 @@ written.  Once things are complete, you can `git reset master` to unstage all
 of the changes you've made, and then re-commit them in small chunks using `git
 add -p`.
 
-## Commit Messages
+### Commit Messages
 
-We don't care much about commit messages other than that they be sufficiently
-descriptive of what is being done in the commit.
+We use conventional commits for our commit messages.  This means that your
+commit messages should be of the form:
 
-The *correct* phrasing of a commit message.
+```text
+<type>[optional scope]: <description>
+```
 
-- `fix bug #1234` (correct)
-- `fixes bug #1234` (wrong)
-- `fixing bug #1234` (wrong)
+To learn more about conventional commits please check out the [conventional commits website](https://www.conventionalcommits.org/en/v1.0.0/).
+
+Examples:
+
+- `fix: Update metrics strategy to support multiple subnetworks`
+- `refactor(light-client): Refactor light-client crate to use `ethportal-api` consensus types`
+- `feat(rpc): Return header to eth_getBlockByHash`
 
 One way to test whether you have it right is to complete the following sentence.
 

@@ -129,9 +129,6 @@ jobs:
             - checkout
             - install-depends
             - run:
-                name: Validate release notes entry
-                command: ./newsfragments/validate_files.py
-            - run:
                 name: Run rustfmt
                 command: cargo fmt --all -- --check
             - run:

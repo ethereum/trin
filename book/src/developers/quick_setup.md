@@ -4,8 +4,6 @@ This is a single page that aims to cover everything required to get Trin running
 
 **Trin is currently in unstable alpha, and should not be used in production. If you run into any bugs while using Trin, please file an Issue!**
 
-**Check out the `./newsfragments` directory to see the latest changes.**
-
 ## Building on Debian Based Systems
 
 ### Prerequisites
