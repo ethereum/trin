@@ -141,10 +141,10 @@ impl Bridge {
         };
         let (mut start_block, mut end_block, mut epoch_index) = match mode_type {
             // end block will be same for an epoch in single & backfill modes
-            ModeType::Epoch(block) => (
-                block * EPOCH_SIZE,
-                ((block + 1) * EPOCH_SIZE),
-                block / EPOCH_SIZE,
+            ModeType::Epoch(epoch_number) => (
+                epoch_number * EPOCH_SIZE,
+                ((epoch_number + 1) * EPOCH_SIZE),
+                epoch_number,
             ),
             ModeType::Block(block) => {
                 let epoch_index = block / EPOCH_SIZE;
@@ -155,6 +155,10 @@ impl Bridge {
                 (block, end_block, epoch_index)
             }
         };
+        // check that the end block is not greater than the latest block
+        if end_block > latest_block {
+            end_block = latest_block;
+        }
         if start_block > latest_block {
             panic!(
                 "Starting block/epoch is greater than latest block. 
@@ -167,7 +171,7 @@ impl Bridge {
             end: end_block,
         };
         let gossip_stats = Arc::new(Mutex::new(GossipStats::new(gossip_range.clone())));
-        while epoch_index < current_epoch {
+        while epoch_index <= current_epoch {
             // Using epoch_size chunks & epoch boundaries ensures that every
             // "chunk" shares an epoch accumulator avoiding the need to
             // look up the epoch acc on a header by header basis
