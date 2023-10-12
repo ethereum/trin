@@ -67,12 +67,16 @@ pub enum ContentStoreError {
     ContentKey(#[from] ContentKeyError),
 }
 
-/// An enum which tells us if we should store or not store content, and if not why for better errors.
+/// An enum which tells us whether a piece of content is relevant and whether it is present.
+/// This detailed status information is helpful for investigation and debugging.
 #[derive(Debug, PartialEq)]
-pub enum ShouldWeStoreContent {
-    Store,
-    NotWithinRadius,
-    AlreadyStored,
+pub enum ContentPresence {
+    /// This content is within our radius, but not in our database.
+    Missing,
+    /// This content is outside our radius, so not relevant to this node.
+    OutsideRadius,
+    /// This content is within our radius, and already stored in our database.
+    Present,
 }
 
 /// A data store for Portal Network content (data).
@@ -92,7 +96,7 @@ pub trait ContentStore {
     fn is_key_within_radius_and_unavailable<K: OverlayContentKey>(
         &self,
         key: &K,
-    ) -> Result<ShouldWeStoreContent, ContentStoreError>;
+    ) -> Result<ContentPresence, ContentStoreError>;
 
     /// Returns the radius of the data store.
     fn radius(&self) -> Distance;
@@ -162,15 +166,15 @@ impl ContentStore for MemoryContentStore {
     fn is_key_within_radius_and_unavailable<K: OverlayContentKey>(
         &self,
         key: &K,
-    ) -> Result<ShouldWeStoreContent, ContentStoreError> {
+    ) -> Result<ContentPresence, ContentStoreError> {
         let distance = self.distance_to_key(key);
         if distance > self.radius {
-            return Ok(ShouldWeStoreContent::NotWithinRadius);
+            return Ok(ContentPresence::OutsideRadius);
         }
         if self.contains_key(key) {
-            return Ok(ShouldWeStoreContent::AlreadyStored);
+            return Ok(ContentPresence::Present);
         }
-        Ok(ShouldWeStoreContent::Store)
+        Ok(ContentPresence::Missing)
     }
 
     fn radius(&self) -> Distance {
@@ -238,18 +242,18 @@ impl ContentStore for PortalStorage {
     fn is_key_within_radius_and_unavailable<K: OverlayContentKey>(
         &self,
         key: &K,
-    ) -> Result<ShouldWeStoreContent, ContentStoreError> {
+    ) -> Result<ContentPresence, ContentStoreError> {
         let distance = self.distance_to_key(key);
         if distance > self.radius {
-            return Ok(ShouldWeStoreContent::NotWithinRadius);
+            return Ok(ContentPresence::OutsideRadius);
         }
 
         let key = key.content_id();
         let is_key_available = self.db.get_pinned(key)?.is_some();
         if is_key_available {
-            return Ok(ShouldWeStoreContent::AlreadyStored);
+            return Ok(ContentPresence::Present);
         }
-        Ok(ShouldWeStoreContent::Store)
+        Ok(ContentPresence::Missing)
     }
 
     fn radius(&self) -> Distance {
@@ -1198,7 +1202,7 @@ pub mod test {
             store
                 .is_key_within_radius_and_unavailable(&arb_key)
                 .unwrap(),
-            ShouldWeStoreContent::Store
+            ContentPresence::Missing
         );
 
         // Arbitrary key available.
@@ -1207,7 +1211,7 @@ pub mod test {
             store
                 .is_key_within_radius_and_unavailable(&arb_key)
                 .unwrap(),
-            ShouldWeStoreContent::AlreadyStored
+            ContentPresence::Present
         );
     }
 
