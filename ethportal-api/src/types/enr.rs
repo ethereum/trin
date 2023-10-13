@@ -10,6 +10,12 @@ use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 use validator::ValidationError;
 
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+pub struct GossipTrace {
+    pub ss: usize,
+    pub enr_list: Vec<String>,
+}
+
 pub type Enr = discv5::enr::Enr<CombinedKey>;
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]

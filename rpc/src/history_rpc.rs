@@ -5,6 +5,7 @@ use crate::jsonrpsee::core::{async_trait, RpcResult};
 use discv5::enr::NodeId;
 use ethportal_api::types::constants::CONTENT_ABSENT;
 use ethportal_api::types::enr::Enr;
+use ethportal_api::types::enr::GossipTrace;
 use ethportal_api::types::jsonrpc::endpoints::HistoryEndpoint;
 use ethportal_api::types::jsonrpc::request::HistoryJsonRpcRequest;
 use ethportal_api::types::portal::{
@@ -161,10 +162,10 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
         &self,
         content_key: HistoryContentKey,
         content_value: HistoryContentValue,
-    ) -> RpcResult<u32> {
+    ) -> RpcResult<GossipTrace> {
         let endpoint = HistoryEndpoint::Gossip(content_key, content_value);
         let result = proxy_query_to_history_subnet(&self.network, endpoint).await?;
-        let result: u32 = from_value(result)?;
+        let result: GossipTrace = from_value(result)?;
         Ok(result)
     }
 

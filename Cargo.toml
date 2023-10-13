@@ -40,7 +40,7 @@ trin-history = { path = "trin-history" }
 trin-state = { path = "trin-state" }
 trin-utils = { path = "trin-utils" }
 trin-validation = { path = "trin-validation" }
-utp-rs = "0.1.0-alpha.8"
+utp-rs = { git = "https://github.com/KolbyML/utp", rev="d5c7a66" }
 
 [dev-dependencies]
 ethers-core = { version = "2.0", default-features = false}

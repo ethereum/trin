@@ -25,7 +25,7 @@ tracing = "0.1.36"
 tree_hash = "0.5.2"
 trin-utils = { path = "../trin-utils" }
 trin-validation = { path = "../trin-validation" }
-utp-rs = "0.1.0-alpha.8"
+utp-rs = { git = "https://github.com/KolbyML/utp", rev="d5c7a66" }
 
 [dev-dependencies]
 env_logger = "0.9.0"

@@ -13,8 +13,9 @@ use ethportal_api::types::execution::header::{
     AccumulatorProof, BlockHeaderProof, Header, HeaderWithProof, SszNone,
 };
 use ethportal_api::types::execution::receipts::Receipts;
+use ethportal_api::types::enr::GossipTrace;
 use ethportal_api::utils::bytes::hex_encode;
-use ethportal_api::HistoryContentValue;
+use ethportal_api::{ContentValue, HistoryContentValue, OverlayContentKey};
 use ethportal_api::HistoryNetworkApiClient;
 use ethportal_api::{
     BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey, HistoryContentKey,
@@ -31,7 +32,8 @@ use surf::{
     Body, Client, Request, Response,
 };
 use tokio::time::{sleep, Duration};
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
+use tracing::field::debug;
 use trin_validation::accumulator::MasterAccumulator;
 use trin_validation::constants::{EPOCH_SIZE as EPOCH_SIZE_USIZE, MERGE_BLOCK_NUMBER};
 use trin_validation::oracle::HeaderOracle;
@@ -247,17 +249,30 @@ impl Bridge {
         if full_header.header.number <= MERGE_BLOCK_NUMBER {
             full_header.epoch_acc = epoch_acc;
         }
-        Bridge::gossip_header(&full_header, &portal_clients, &gossip_stats).await?;
+        warn!("yo123321 4");
+        match Bridge::gossip_header(&full_header, &portal_clients, &gossip_stats).await {
+            Ok(GossipTrace { ss, enr_list }) => {
+                debug!("Header wasn't accepted by any peers {:?} ::: {:?}", ss, enr_list);
+            },
+            Err(e) => debug!("Hihihi 6666 {}", e),
+        };
+
+        warn!("yo123321 5");
+
         // Sleep for 10 seconds to allow headers to saturate network,
         // since they must be available for body / receipt validation.
         sleep(Duration::from_secs(HEADER_SATURATION_DELAY)).await;
-        self.construct_and_gossip_block_body(&full_header, &portal_clients, &gossip_stats)
+        let hi = self.construct_and_gossip_block_body(&full_header, &portal_clients, &gossip_stats)
             .await
             .map_err(|err| anyhow!("Error gossiping block body #{height:?}: {err:?}"))?;
+            debug!("Block body wasn't accepted by any peers {:?}", hi);
 
-        self.construct_and_gossip_receipt(&full_header, &portal_clients, &gossip_stats)
-            .await
-            .map_err(|err| anyhow!("Error gossiping receipt #{height:?}: {err:?}"))?;
+
+        // let hi = self.construct_and_gossip_receipt(&full_header, &portal_clients, &gossip_stats)
+        //     .await
+        //     .map_err(|err| anyhow!("Error gossiping receipt #{height:?}: {err:?}"))?;
+        //     debug!("Receipt wasn't accepted by any peers {:?}", hi);
+        sleep(Duration::from_secs(70)).await;
         Ok(())
     }
 
@@ -265,7 +280,7 @@ impl Bridge {
         full_header: &FullHeader,
         portal_clients: &Vec<HttpClient>,
         gossip_stats: &Arc<Mutex<GossipStats>>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<GossipTrace> {
         debug!("Serving header: {}", full_header.header.number);
         if full_header.header.number < MERGE_BLOCK_NUMBER && full_header.epoch_acc.is_none() {
             bail!("Invalid header, expected to have epoch accumulator");
@@ -305,7 +320,9 @@ impl Bridge {
             "Gossip: Block #{:?} HeaderWithProof",
             full_header.header.number
         );
+        warn!("yo123321 1");
         let result = Bridge::gossip_content(portal_clients, content_key, content_value).await;
+        warn!("yo123321 2 {:?}", result);
         if result.is_ok() {
             if let Ok(mut data) = gossip_stats.lock() {
                 data.header_with_proof_count += 1;
@@ -313,6 +330,7 @@ impl Bridge {
                 warn!("Error updating gossip header with proof stats. Unable to acquire lock.");
             }
         }
+        warn!("yo123321 3");
         result
     }
 
@@ -346,7 +364,7 @@ impl Bridge {
         full_header: &FullHeader,
         portal_clients: &Vec<HttpClient>,
         gossip_stats: &Arc<Mutex<GossipStats>>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<GossipTrace> {
         debug!("Serving receipt: {:?}", full_header.header.number);
         let receipts = match full_header.txs.len() {
             0 => Receipts {
@@ -388,7 +406,7 @@ impl Bridge {
         full_header: &FullHeader,
         portal_clients: &Vec<HttpClient>,
         gossip_stats: &Arc<Mutex<GossipStats>>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<GossipTrace> {
         let txs = full_header.txs.clone();
         let block_body = if full_header.header.timestamp > SHANGHAI_TIMESTAMP {
             if !full_header.uncles.is_empty() {
@@ -422,6 +440,16 @@ impl Bridge {
         });
         let content_value = HistoryContentValue::BlockBody(block_body);
         debug!("Gossip: Block #{:?} BlockBody", full_header.header.number);
+        let content_key2 =
+            format!("- content_key: {}\n", content_key.to_hex()).to_string();
+        let content_value2 = format!(
+            "  content_value: {}\n",
+            hex_encode(content_value.encode())
+        )
+            .to_string();
+
+        // Write asset to file
+        warn!("{}", format!("hihihih{content_key2}{content_value2}"));
         let result = Bridge::gossip_content(portal_clients, content_key, content_value).await;
         if result.is_ok() {
             if let Ok(mut data) = gossip_stats.lock() {
@@ -448,13 +476,26 @@ impl Bridge {
         portal_clients: &Vec<HttpClient>,
         content_key: HistoryContentKey,
         content_value: HistoryContentValue,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<GossipTrace> {
+        warn!("yo123321 188");
+        let mut accepted_count = 0;
+        let mut enr_list = vec![];
         for client in portal_clients {
-            client
+            let mut hi = match client
                 .gossip(content_key.clone(), content_value.clone())
-                .await?;
+                .await {
+                Ok(GossipTrace { ss: ee, enr_list }) => GossipTrace { ss: ee, enr_list },
+                Err(e) => {
+                    debug!("hihihihffff bugsbugs");
+                    GossipTrace { ss: 0, enr_list: vec![] }
+                },
+            };
+            accepted_count += hi.ss;
+            enr_list.append(&mut hi.enr_list);
         }
-        Ok(())
+        let bob = GossipTrace { ss: accepted_count, enr_list };
+        debug!("hihihihffff {:?}", bob);
+        Ok(bob)
     }
 }
 

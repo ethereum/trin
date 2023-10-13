@@ -22,7 +22,7 @@ tracing = "0.1.36"
 tracing-subscriber = "0.3.15"
 trin-utils = { path = "../trin-utils" }
 tokio = {version = "1.14.0", features = ["full"]}
-utp-rs = "0.1.0-alpha.8"
+utp-rs = { git = "https://github.com/KolbyML/utp", rev="d5c7a66" }
 
 [[bin]]
 name = "utp-test-app"

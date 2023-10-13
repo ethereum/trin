@@ -44,6 +44,7 @@ use crate::{
 use ethportal_api::types::bootnodes::Bootnode;
 use ethportal_api::types::distance::{Distance, Metric};
 use ethportal_api::types::enr::Enr;
+use ethportal_api::types::enr::GossipTrace;
 use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::OverlayContentKey;
 use ethportal_api::RawContentKey;
@@ -215,13 +216,13 @@ where
     }
 
     /// Propagate gossip accepted content via OFFER/ACCEPT, return number of peers propagated
-    pub fn propagate_gossip(&self, content: Vec<(TContentKey, Vec<u8>)>) -> usize {
+    pub async fn propagate_gossip(&self, content: Vec<(TContentKey, Vec<u8>)>) -> GossipTrace {
         let kbuckets = Arc::clone(&self.kbuckets);
         crate::overlay_service::propagate_gossip_cross_thread(
             content,
             kbuckets,
             self.command_tx.clone(),
-        )
+        ).await
     }
 
     /// Returns a vector of all ENR node IDs of nodes currently contained in the routing table.

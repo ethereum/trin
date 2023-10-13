@@ -73,6 +73,52 @@ pub struct StorageMetricsReporter {
     pub protocol: String,
     pub storage_metrics: StorageMetrics,
 }
+use ethportal_api::types::distance::Metric;
+use ethportal_api::OverlayContentKey;
+#[test]
+fn hi () {
+    let bob = "0x978e003e087fb7f21833fd43136d126ba97e0fffb90b6c04ebea9ba55c877fee";
+    let bob = ethereum_types::U256::from(bob);
+    let ff = Distance::from(ethereum_types::U256::from("0xa8921df06cd85226122df115066de3b7f58e86e745be5dab824546920041c698"));
+    let bob = Distance::from(bob);
+    let radius_high_bytes = [
+        bob.byte(31),
+        bob.byte(30),
+        bob.byte(29),
+        bob.byte(28),
+    ];
+    let radius_int = u32::from_be_bytes(radius_high_bytes);
+    let coverage_ratio = radius_int as f64 / u32::MAX as f64;
+    let distance = ethportal_api::types::distance::XorMetric::distance(&bob.big_endian(), &ff.big_endian());
+    let radius_high_bytes = [
+        distance.byte(31),
+        distance.byte(30),
+        distance.byte(29),
+        distance.byte(28),
+    ];
+    let radius_int = u32::from_be_bytes(radius_high_bytes);
+    let coverage_ratio = radius_int as f64 / u32::MAX as f64;
+
+    let content_key: ethportal_api::HistoryContentKey =
+        serde_json::from_value(serde_json::json!("0x01823def5821988f866db5d2e9400ec9c9df613f299677aa577a0ff9c0ee631c35")).unwrap();
+    let a = Distance::from(ethereum_types::U256::from("0x381cb22dde95c4282adeb5abe2afd87a50400ca92e78c78f4acf348223095c6"));
+    let b = Distance::from(ethereum_types::U256::from("0x3f1c1dce64a7e5d40a1e0c561500f1dc5cf08918fcb531af69afdd375cc6b976"));
+    if b > a {
+        panic!("hi");
+    }
+    panic!("{}", ethportal_api::utils::bytes::hex_encode(content_key.content_id()));
+    // panic!("{}", ethportal_api::utils::bytes::hex_encode(content_key.big_endian()));
+}
+
+use ssz_types::{typenum, BitList};
+
+#[test]
+fn hi2 () {
+    let hi: BitList<typenum::U8> = BitList::with_capacity(5).unwrap();
+    panic!("{}", hi.is_zero());
+    // panic!("{}", ethportal_api::utils::bytes::hex_encode(content_key.big_endian()));
+}
+
 
 impl StorageMetricsReporter {
     pub fn report_content_data_storage_bytes(&self, bytes: f64) {

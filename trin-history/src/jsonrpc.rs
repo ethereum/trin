@@ -290,8 +290,8 @@ async fn gossip(
     let data = content_value.encode();
     let content_values = vec![(content_key, data)];
     let overlay = network.read().await.overlay.clone();
-    let num_peers = overlay.propagate_gossip(content_values);
-    Ok(num_peers.into())
+    let num_peers = overlay.propagate_gossip(content_values).await;
+    Ok(json!(num_peers))
 }
 
 /// Constructs a JSON call for the Offer method.

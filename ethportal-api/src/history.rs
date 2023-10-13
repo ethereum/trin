@@ -1,5 +1,6 @@
 use crate::types::content_key::history::HistoryContentKey;
 use crate::types::enr::Enr;
+use crate::types::enr::GossipTrace;
 use crate::types::portal::FindNodesInfo;
 use crate::types::portal::{
     AcceptInfo, ContentInfo, DataRadius, PaginateLocalContentInfo, PongInfo, TraceContentInfo,
@@ -86,7 +87,7 @@ pub trait HistoryNetworkApi {
         &self,
         content_key: HistoryContentKey,
         content_value: HistoryContentValue,
-    ) -> RpcResult<u32>;
+    ) -> RpcResult<GossipTrace>;
 
     /// Send an OFFER request with given ContentKey, to the designated peer and wait for a response.
     /// Returns the content keys bitlist upon successful content transmission or empty bitlist receive.

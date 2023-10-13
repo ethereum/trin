@@ -5,6 +5,7 @@ use crate::jsonrpsee::core::{async_trait, RpcResult};
 use discv5::enr::NodeId;
 use ethportal_api::types::constants::CONTENT_ABSENT;
 use ethportal_api::types::enr::Enr;
+use ethportal_api::types::enr::GossipTrace;
 use ethportal_api::types::jsonrpc::endpoints::BeaconEndpoint;
 use ethportal_api::types::jsonrpc::request::BeaconJsonRpcRequest;
 use ethportal_api::types::portal::{
@@ -182,10 +183,10 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
         &self,
         content_key: BeaconContentKey,
         content_value: BeaconContentValue,
-    ) -> RpcResult<u32> {
+    ) -> RpcResult<GossipTrace> {
         let endpoint = BeaconEndpoint::Gossip(content_key, content_value);
         let result = self.proxy_query_to_beacon_subnet(endpoint).await?;
-        let result: u32 = from_value(result)?;
+        let result: GossipTrace = from_value(result)?;
         Ok(result)
     }
 

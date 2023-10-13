@@ -7221,9 +7221,8 @@ checksum = "711b9620af191e0cdc7468a8d14e709c3dcdb115b36f838e601583af800a370a"
 
 [[package]]
 name = "utp-rs"
-version = "0.1.0-alpha.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c4ec35d0178f4ccdf5f734af742c264d2c811435ca6e85803b373c6ec077ed33"
+version = "0.1.0-alpha.7"
+source = "git+https://github.com/KolbyML/utp?rev=d5c7a66#d5c7a6677e0e6a03241b820f8acb132361e14bd9"
 dependencies = [
  "async-trait",
  "delay_map 0.3.0",
