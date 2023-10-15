@@ -1703,29 +1703,25 @@ where
                 })
             })
             .collect();
-        // Whether the spawn fails or the content fails validation, we don't want it:
-        let mut validated_content: Vec<(TContentKey, Vec<u8>)> = vec![];
-        for (index, content) in join_all(handles).await.into_iter().enumerate() {
-            match content {
-                Ok(content) => {
-                    if let Some(content) = content {
-                        validated_content.push(content)
-                    }
-                }
-                Err(err) => {
-                    // Extract the error from the thread handle
-                    let err = err.into_panic();
-                    let err = if let Some(err) = err.downcast_ref::<&'static str>() {
-                        err.to_string()
-                    } else if let Some(err) = err.downcast_ref::<String>() {
-                        err.clone()
-                    } else {
-                        format!("?{:?}", err)
-                    };
-                    error!(err, content_key = ?content_keys_string[index], "Process uTP payload tokio task failed to spawn:");
-                }
-            }
-        }
+        let validated_content: Vec<(TContentKey, Vec<u8>)> = join_all(handles)
+            .await
+            .into_iter()
+            .enumerate()
+            // Whether the spawn fails or the content fails validation, we don't want it:
+            .filter_map(|(index, content)| content.unwrap_or_else(|err| {
+                // Extract the error from the thread handle
+                let err = err.into_panic();
+                let err = if let Some(err) = err.downcast_ref::<&'static str>() {
+                    err.to_string()
+                } else if let Some(err) = err.downcast_ref::<String>() {
+                    err.clone()
+                } else {
+                    format!("?{:?}", err)
+                };
+                error!(err, content_key = ?content_keys_string[index], "Process uTP payload tokio task failed:");
+                None
+            }))
+            .collect();
 
         // Propagate all validated content, whether or not it was stored.
         let validated_ids: Vec<String> = validated_content
