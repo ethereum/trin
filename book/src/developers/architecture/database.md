@@ -26,7 +26,7 @@ main content database.
 ## Meta database
 
 This is an SQLite database that stores metadata. For a piece of content, this includes
-the content ID, content key and the size of the content. It makes assess the size of
+the content ID, content key and the size of the content. It makes assessing the size of
 the main database quicker by avoiding the need to repeatedly compute the size of each content.
 
 Database updates occur in tandum with the main database, where if an operation in one database
