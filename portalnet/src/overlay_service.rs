@@ -1232,12 +1232,11 @@ where
             OverlayRequestError::AcceptError("unable to find ENR for NodeId".to_string())
         })?;
         let enr = crate::discovery::UtpEnr(node_addr.enr);
-
-        // avoid memory allocation if trace isn't enabled
-        let mut enr_str = String::new();
-        if enabled!(Level::TRACE) {
-            enr_str = enr.0.to_base64();
-        }
+        let enr_str = if enabled!(Level::TRACE) {
+            enr.0.to_base64()
+        } else {
+            String::with_capacity(0)
+        };
         let cid = self.utp_socket.cid(enr, false);
         let cid_send = cid.send;
         let validator = Arc::clone(&self.validator);
@@ -1707,7 +1706,6 @@ where
             .await
             .into_iter()
             .enumerate()
-            // Whether the spawn fails or the content fails validation, we don't want it:
             .filter_map(|(index, content)| content.unwrap_or_else(|err| {
                 // Extract the error from the thread handle
                 let err = err.into_panic();
@@ -1716,7 +1714,7 @@ where
                 } else if let Some(err) = err.downcast_ref::<String>() {
                     err.clone()
                 } else {
-                    format!("?{:?}", err)
+                    format!("{:?}", err)
                 };
                 error!(err, content_key = ?content_keys_string[index], "Process uTP payload tokio task failed:");
                 None
