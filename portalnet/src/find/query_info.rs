@@ -25,6 +25,7 @@ pub struct QueryInfo<TContentKey> {
 // Content is Option<Vec<u8>> because it can be None if the content is not found
 // in a recursive find content query.
 pub type RecursiveFindContentResult = (Option<Vec<u8>>, bool, Option<QueryTrace>);
+
 // Content, utp_transfer
 // Content is Content type because the response to a simple find content query
 // cannot be None and must be a valid Content response, to account for the

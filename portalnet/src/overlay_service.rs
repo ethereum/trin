@@ -2059,6 +2059,11 @@ where
             }
             if let Some(trace) = &mut query_info.trace {
                 trace.node_responded_with(&source, new_enrs);
+                trace.cancelled = query
+                    .pending_peers(source.node_id())
+                    .into_iter()
+                    .map(|peer| peer.into())
+                    .collect();
             }
             let closest_nodes: Vec<NodeId> = enrs
                 .iter()
@@ -2084,6 +2089,11 @@ where
         if let Some((query_info, query)) = self.find_content_query_pool.write().get_mut(*query_id) {
             if let Some(trace) = &mut query_info.trace {
                 trace.node_responded_with_content(&source);
+                trace.cancelled = query
+                    .pending_peers(source.node_id())
+                    .into_iter()
+                    .map(|peer| peer.into())
+                    .collect();
             }
             // Mark the query successful for the source of the response with the connection id.
             query.on_success(
@@ -2104,6 +2114,11 @@ where
         if let Some((query_info, query)) = pool.get_mut(*query_id) {
             if let Some(trace) = &mut query_info.trace {
                 trace.node_responded_with_content(&source);
+                trace.cancelled = query
+                    .pending_peers(source.node_id())
+                    .into_iter()
+                    .map(|peer| peer.into())
+                    .collect();
             }
             // Mark the query successful for the source of the response with the content.
             query.on_success(
@@ -2447,7 +2462,7 @@ where
 
         let trace: Option<QueryTrace> = {
             if is_trace {
-                let mut trace = QueryTrace::new(&self.local_enr(), target_node_id.into());
+                let mut trace = QueryTrace::new(&self.local_enr(), target_node_id.raw());
                 let local_enr = self.local_enr();
                 trace.node_responded_with(&local_enr, closest_enrs.iter().collect());
                 Some(trace)

@@ -1,36 +1,44 @@
-use super::enr::Enr;
-use super::node_id::NodeId;
 use std::collections::HashMap;
 use std::time::SystemTime;
 
+use ethereum_types::H256;
 use serde::{Deserialize, Serialize};
 
 use super::distance::{Metric, XorMetric};
+use super::enr::Enr;
+use super::node_id::NodeId;
 
-type ContentId = NodeId;
+type ContentId = [u8; 32];
 
 /// Keeps track of query details.
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct QueryTrace {
-    /// None if the content was not found.
-    pub received_content_from_node: Option<NodeId>,
+    /// Node ID from which the content was received. None if the content was not found.
+    pub received_from: Option<NodeId>,
     /// The local node.
     pub origin: NodeId,
     /// Map of a node's ID to its corresponding `QueryResponse`
     pub responses: HashMap<NodeId, QueryResponse>,
-    pub node_metadata: HashMap<NodeId, NodeInfo>,
-    started_at: SystemTime,
-    target_id: ContentId,
+    /// Contains a map from node ID to the metadata object for that node.
+    pub metadata: HashMap<NodeId, NodeInfo>,
+    /// Timestamp when the query was started.
+    pub started_at_ms: SystemTime,
+    /// Target content ID
+    pub target_id: ContentId,
+    /// List of pending requests that were unresolved when the content was found.
+    pub cancelled: Vec<NodeId>,
 }
 
 impl QueryTrace {
     pub fn new(local_enr: &Enr, target_id: ContentId) -> Self {
         QueryTrace {
-            received_content_from_node: None,
+            received_from: None,
             origin: local_enr.into(),
             responses: HashMap::new(),
-            node_metadata: HashMap::new(),
-            started_at: SystemTime::now(),
+            metadata: HashMap::new(),
+            started_at_ms: SystemTime::now(),
+            cancelled: Vec::new(),
             target_id,
         }
     }
@@ -43,7 +51,7 @@ impl QueryTrace {
         let mut responded_with_ids: Vec<NodeId> = responded_with
             .into_iter()
             .map(|received_enr| {
-                self.add_node_metadata(received_enr, false);
+                self.add_metadata(received_enr, false);
                 received_enr.into()
             })
             .collect();
@@ -51,30 +59,30 @@ impl QueryTrace {
             .entry(node_id)
             .or_insert_with(|| {
                 // Entry does not exist, create it and insert it.
-                let timestamp_u64 = QueryTrace::timestamp_millis_u64(self.started_at);
+                let timestamp_u64 = QueryTrace::timestamp_millis_u64(self.started_at_ms);
                 QueryResponse {
-                    timestamp_millis: timestamp_u64,
+                    duration_ms: timestamp_u64,
                     responded_with: vec![],
                 }
             })
             .responded_with
             .append(&mut responded_with_ids);
-        self.add_node_metadata(enr, true);
+        self.add_metadata(enr, true);
     }
 
     /// Mark the node that responded with the content, and when it was received.
     pub fn node_responded_with_content(&mut self, enr: &Enr) {
         let node_id = enr.into();
-        self.received_content_from_node = Some(node_id);
-        let timestamp_u64 = QueryTrace::timestamp_millis_u64(self.started_at);
+        self.received_from = Some(node_id);
+        let timestamp_u64 = QueryTrace::timestamp_millis_u64(self.started_at_ms);
         self.responses.insert(
             node_id,
             QueryResponse {
-                timestamp_millis: timestamp_u64,
+                duration_ms: timestamp_u64,
                 responded_with: vec![],
             },
         );
-        self.add_node_metadata(enr, true);
+        self.add_metadata(enr, true);
     }
 
     /// Returns milliseconds since the time provided.
@@ -87,9 +95,9 @@ impl QueryTrace {
         u64::try_from(timestamp_millis_u128).unwrap_or(u64::MAX)
     }
 
-    fn add_node_metadata(&mut self, enr: &Enr, node_responded: bool) {
+    fn add_metadata(&mut self, enr: &Enr, node_responded: bool) {
         let target = self.target_id;
-        self.node_metadata
+        self.metadata
             .entry(enr.into())
             .and_modify(|node_info| {
                 // If we see a different ENR for a Node ID we've already seen,
@@ -101,52 +109,40 @@ impl QueryTrace {
                 if different_enr
                     && ((same_incoming_seq_number && node_responded) || higher_incoming_seq_number)
                 {
-                    *node_info = QueryTrace::get_node_metadata(enr, &target);
+                    *node_info = QueryTrace::get_metadata(enr, &target);
                 }
             })
-            .or_insert_with(|| -> NodeInfo { QueryTrace::get_node_metadata(enr, &target) });
+            .or_insert_with(|| -> NodeInfo { QueryTrace::get_metadata(enr, &target) });
     }
 
-    fn get_node_metadata(enr: &Enr, target: &ContentId) -> NodeInfo {
+    fn get_metadata(enr: &Enr, target: &ContentId) -> NodeInfo {
         let node_id = enr.node_id();
         let node_id_raw = node_id.raw();
-        let ip = match enr.ip4() {
-            Some(ip) => ip.to_string(),
-            None => "".to_owned(),
-        };
-        let port = enr.udp4().unwrap_or(0).to_string();
-        let distance = XorMetric::distance(&node_id_raw, &target.0);
-        let distance_log2 = distance.log2().unwrap_or(0);
-        let distance: u64 = distance.0[3];
-        let distance = (distance >> 32) as u32;
-
+        let distance = XorMetric::distance(&node_id_raw, target);
+        let distance = distance.big_endian().into();
         NodeInfo {
             enr: enr.clone(),
-            ip,
-            port,
-            distance_to_content: distance,
-            distance_log2,
+            distance,
         }
     }
 }
 
 /// Represents the response from a single node.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct QueryResponse {
     /// Milliseconds since query started.
-    pub timestamp_millis: u64,
+    pub duration_ms: u64,
     /// Node IDs that this node responded with.
     pub responded_with: Vec<NodeId>,
 }
 
 /// Represents additional info for a given node.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NodeInfo {
     pub enr: Enr,
-    pub ip: String,
-    pub port: String,
-    pub distance_to_content: u32,
-    pub distance_log2: usize,
+    pub distance: H256,
 }
 
 #[cfg(test)]
@@ -159,8 +155,7 @@ mod tests {
     fn test_query_trace() {
         let (_, local_enr) = generate_random_remote_enr();
         let local_node_id = &local_enr.node_id().into();
-
-        let mut tracer = QueryTrace::new(&local_enr, local_enr.node_id().into());
+        let mut tracer = QueryTrace::new(&local_enr, local_enr.node_id().raw());
         let (_, enr_a) = generate_random_remote_enr();
         let node_id_a: &NodeId = &enr_a.clone().into();
         let (_, enr_b) = generate_random_remote_enr();
@@ -195,18 +190,18 @@ mod tests {
         // check that content_received_from_node is c
         let c_entry = tracer.responses.get(node_id_c).unwrap();
         assert!(c_entry.responded_with.is_empty());
-        assert_eq!(tracer.received_content_from_node, Some(*node_id_c));
+        assert_eq!(tracer.received_from, Some(*node_id_c));
 
         // check node metatdata
-        let a_data = tracer.node_metadata.get(node_id_a).unwrap();
+        let a_data = tracer.metadata.get(node_id_a).unwrap();
         assert_eq!(a_data.enr, enr_a);
-        let b_data = tracer.node_metadata.get(node_id_b).unwrap();
+        let b_data = tracer.metadata.get(node_id_b).unwrap();
         assert_eq!(b_data.enr, enr_b);
-        let c_data = tracer.node_metadata.get(node_id_c).unwrap();
+        let c_data = tracer.metadata.get(node_id_c).unwrap();
         assert_eq!(c_data.enr, enr_c);
-        let d_data = tracer.node_metadata.get(node_id_d).unwrap();
+        let d_data = tracer.metadata.get(node_id_d).unwrap();
         assert_eq!(d_data.enr, enr_d);
-        let local_data = tracer.node_metadata.get(local_node_id).unwrap();
+        let local_data = tracer.metadata.get(local_node_id).unwrap();
         assert_eq!(local_data.enr, local_enr);
     }
 }

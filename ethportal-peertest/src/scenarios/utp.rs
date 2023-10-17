@@ -97,7 +97,7 @@ pub async fn test_trace_recursive_utp(peertest: &Peertest) {
     assert_eq!(origin, ethportal_api::NodeId::from(query_origin_node));
 
     // Test that `received_content_from_node` is set correctly
-    let received_content_from_node = trace.received_content_from_node.unwrap();
+    let received_content_from_node = trace.received_from.unwrap();
     assert_eq!(
         ethportal_api::NodeId::from(node_with_content),
         received_content_from_node
