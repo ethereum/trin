@@ -31,7 +31,7 @@ use tokio::{
     sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
     task::JoinHandle,
 };
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, enabled, error, info, trace, warn, Level};
 use utp_rs::{conn::ConnectionConfig, socket::UtpSocket, stream::UtpStream};
 
 use crate::events::EventEnvelope;
@@ -1231,6 +1231,7 @@ where
         let node_addr = self.discovery.cached_node_addr(source).ok_or_else(|| {
             OverlayRequestError::AcceptError("unable to find ENR for NodeId".to_string())
         })?;
+        let enr_str = node_addr.enr.to_base64();
         let enr = crate::discovery::UtpEnr(node_addr.enr);
         let cid = self.utp_socket.cid(enr, false);
         let cid_send = cid.send;
@@ -1240,6 +1241,23 @@ where
         let command_tx = self.command_tx.clone();
         let utp = Arc::clone(&self.utp_socket);
         let metrics = self.metrics.clone();
+
+        let mut content_keys_string = vec![];
+        if enabled!(Level::ERROR) {
+            for content_key in content_keys.iter() {
+                content_keys_string.push(content_key.to_hex());
+            }
+        }
+
+        trace!(
+            protocol = %self.protocol,
+            request.source = %source,
+            cid.send = cid.send,
+            cid.recv = cid.recv,
+            enr = enr_str,
+            request.content_keys = ?content_keys_string,
+            "Content keys handled by offer",
+        );
 
         tokio::spawn(async move {
             // Wait for an incoming connection with the given CID. Then, read the data from the uTP
@@ -1252,7 +1270,7 @@ where
                         UtpDirectionLabel::Inbound,
                         UtpOutcomeLabel::FailedConnection,
                     );
-                    error!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), "unable to accept uTP stream");
+                    error!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), content_keys = ?content_keys_string, "unable to accept uTP stream");
                     return;
                 }
             };
@@ -1261,7 +1279,7 @@ where
             if let Err(err) = stream.read_to_eof(&mut data).await {
                 metrics
                     .report_utp_outcome(UtpDirectionLabel::Inbound, UtpOutcomeLabel::FailedDataTx);
-                error!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), "error reading data from uTP stream, while handling an Offer request.");
+                error!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), content_keys = ?content_keys_string, "error reading data from uTP stream, while handling an Offer request.");
                 return;
             }
 
@@ -1279,7 +1297,7 @@ where
             )
             .await
             {
-                error!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), "unable to process uTP payload");
+                error!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), content_keys = ?content_keys_string, "unable to process uTP payload");
             }
         });
 
@@ -1592,6 +1610,18 @@ where
         content_keys: Vec<TContentKey>,
         payload: Vec<u8>,
     ) -> anyhow::Result<()> {
+        let mut content_keys_string = vec![];
+        if enabled!(Level::ERROR) {
+            for content_key in content_keys.iter() {
+                content_keys_string.push(content_key.to_hex());
+            }
+        }
+
+        trace!(
+            request.content_keys = ?content_keys_string,
+            "Processing accepted uTP payload",
+        );
+
         let content_values = portal_wire::decode_content_payload(payload)?;
 
         // Accepted content keys len should match content value len
@@ -1671,9 +1701,22 @@ where
         let validated_content: Vec<(TContentKey, Vec<u8>)> = join_all(handles)
             .await
             .into_iter()
-            // Whether the spawn fails or the content fails validation, we don't want it:
-            .filter_map(|content| content.unwrap_or(None))
+            .enumerate()
+            .filter_map(|(index, content)| content.unwrap_or_else(|err| {
+                // Extract the error from the thread handle
+                let err = err.into_panic();
+                let err = if let Some(err) = err.downcast_ref::<&'static str>() {
+                    err.to_string()
+                } else if let Some(err) = err.downcast_ref::<String>() {
+                    err.clone()
+                } else {
+                    format!("{:?}", err)
+                };
+                error!(err, content_key = ?content_keys_string[index], "Process uTP payload tokio task failed:");
+                None
+            }))
             .collect();
+
         // Propagate all validated content, whether or not it was stored.
         let validated_ids: Vec<String> = validated_content
             .iter()
