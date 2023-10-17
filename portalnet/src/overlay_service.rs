@@ -1231,11 +1231,7 @@ where
         let node_addr = self.discovery.cached_node_addr(source).ok_or_else(|| {
             OverlayRequestError::AcceptError("unable to find ENR for NodeId".to_string())
         })?;
-        let enr_str = if enabled!(Level::TRACE) {
-            node_addr.enr.to_base64()
-        } else {
-            String::with_capacity(0)
-        };
+        let enr_str = node_addr.enr.to_base64();
         let enr = crate::discovery::UtpEnr(node_addr.enr);
         let cid = self.utp_socket.cid(enr, false);
         let cid_send = cid.send;
