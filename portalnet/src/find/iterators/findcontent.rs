@@ -427,6 +427,22 @@ where
             .take(self.config.num_results)
             .collect()
     }
+
+    /// Return a list of peers with whom we have unresolved queries, for use in trace result.
+    /// Do not include the source who returned the content.
+    pub fn pending_peers(&self, source: TNodeId) -> Vec<TNodeId> {
+        self.closest_peers
+            .iter()
+            .filter(|(_, peer)| peer.key().clone().into_preimage() != source)
+            .filter_map(|(_, peer)| {
+                if let QueryPeerState::Waiting(..) = peer.state() {
+                    Some(peer.key().clone().into_preimage())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
 }
 
 #[cfg(test)]

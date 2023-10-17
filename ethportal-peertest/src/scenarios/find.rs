@@ -1,11 +1,14 @@
-use crate::constants::fixture_header_with_proof;
-use crate::Peertest;
+use std::time::SystemTime;
+
 use discv5::enr::NodeId;
-use ethportal_api::types::portal::{ContentInfo, TraceContentInfo};
-use ethportal_api::utils::bytes::hex_decode;
-use ethportal_api::{HistoryNetworkApiClient, PossibleHistoryContentValue};
 use jsonrpsee::async_client::Client;
 use tracing::info;
+
+use crate::constants::fixture_header_with_proof;
+use crate::Peertest;
+use ethportal_api::types::portal::{ContentInfo, TraceContentInfo};
+use ethportal_api::utils::bytes::hex_decode;
+use ethportal_api::{HistoryNetworkApiClient, OverlayContentKey, PossibleHistoryContentValue};
 
 pub async fn test_find_content_return_enr(target: &Client, peertest: &Peertest) {
     info!("Testing find content returns enrs properly");
@@ -97,9 +100,10 @@ pub async fn test_trace_recursive_find_content(peertest: &Peertest) {
 
     assert!(store_result);
 
+    let query_start_time = SystemTime::now();
     let trace_content_info: TraceContentInfo = peertest.nodes[0]
         .ipc_client
-        .trace_recursive_find_content(content_key)
+        .trace_recursive_find_content(content_key.clone())
         .await
         .unwrap();
 
@@ -119,20 +123,27 @@ pub async fn test_trace_recursive_find_content(peertest: &Peertest) {
     let origin = trace.origin;
     assert_eq!(origin, ethportal_api::NodeId::from(query_origin_node));
 
-    // Test that `received_content_from_node` is set correctly
-    let received_content_from_node = trace.received_content_from_node.unwrap();
+    // Test that `received_from` is set correctly
+    let received_from = trace.received_from.unwrap();
     assert_eq!(
         ethportal_api::NodeId::from(node_with_content),
-        received_content_from_node
+        received_from
     );
 
     let responses = trace.responses;
 
     // Test that origin response has `responses` containing `received_content_from_node` node
     let origin_response = responses.get(&origin).unwrap();
-    assert!(origin_response
-        .responded_with
-        .contains(&received_content_from_node));
+    assert!(origin_response.responded_with.contains(&received_from));
+
+    // Test that cancelled is present
+    assert!(trace.cancelled.is_empty());
+    // Test that started_at_ms is correctly set
+    assert!(trace.started_at_ms >= query_start_time);
+    // Test that target_id is correctly set
+    assert_eq!(trace.target_id, content_key.content_id());
+    // Test that metadata is present
+    assert_eq!(trace.metadata.len(), 2)
 }
 
 // This test ensures that when content is not found the correct response is returned.
@@ -176,10 +187,7 @@ pub async fn test_trace_recursive_find_content_local_db(peertest: &Peertest) {
     );
 
     let origin = trace_content_info.trace.origin;
-    assert_eq!(
-        trace_content_info.trace.received_content_from_node.unwrap(),
-        origin
-    );
+    assert_eq!(trace_content_info.trace.received_from.unwrap(), origin);
 
     let expected_origin_id: NodeId = peertest.bootnode.enr.node_id();
     assert_eq!(ethportal_api::NodeId::from(expected_origin_id), origin);
