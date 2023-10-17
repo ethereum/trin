@@ -1873,53 +1873,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "eth2_serde_utils"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "477fffc25490dfc866288273f96344c6879676a1337187fc39245cd422e10825"
-dependencies = [
- "hex",
- "serde",
- "serde_derive",
-]
-
-[[package]]
-name = "eth2_ssz"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "948e343aa022785c07193f41ed37adfd9dd0350368060803b8302c7f798e8306"
-dependencies = [
- "ethereum-types 0.12.1",
- "smallvec 1.11.1",
-]
-
-[[package]]
-name = "eth2_ssz_derive"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "635b86d2c941bb71e7419a571e1763d65c93e51a1bafc400352e3bef6ff59fc9"
-dependencies = [
- "darling 0.13.4",
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "eth2_ssz_types"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a9423ac7fb37037f828a32b724cdfa65ea62290055811731402a90fb8a5bcbb1"
-dependencies = [
- "eth2_serde_utils",
- "eth2_ssz",
- "serde",
- "serde_derive",
- "tree_hash",
- "typenum",
-]
-
-[[package]]
 name = "eth_trie"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1927,7 +1880,7 @@ checksum = "891f5a47ac0f4c111c46c77a3480b1b36da7b3ef7074ea23e4faaad377d6080d"
 dependencies = [
  "ethereum-types 0.12.1",
  "hashbrown 0.14.1",
- "keccak-hash 0.10.0",
+ "keccak-hash",
  "log",
  "parking_lot 0.12.1",
  "rlp",
@@ -2009,6 +1962,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ethereum_hashing"
+version = "1.0.0-beta.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "233dc6f434ce680dbabf4451ee3380cec46cb3c45d66660445a435619710dd35"
+dependencies = [
+ "cpufeatures 0.2.9",
+ "lazy_static",
+ "ring",
+ "sha2 0.10.8",
+]
+
+[[package]]
 name = "ethereum_serde_utils"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2019,6 +1984,29 @@ dependencies = [
  "serde",
  "serde_derive",
  "serde_json",
+]
+
+[[package]]
+name = "ethereum_ssz"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e61ffea29f26e8249d35128a82ec8d3bd4fbc80179ea5f5e5e3daafef6a80fcb"
+dependencies = [
+ "ethereum-types 0.14.1",
+ "itertools 0.10.5",
+ "smallvec 1.11.1",
+]
+
+[[package]]
+name = "ethereum_ssz_derive"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6085d7fd3cf84bd2b8fec150d54c8467fb491d8db9c460607c5534f653a0ee38"
+dependencies = [
+ "darling 0.13.4",
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -2102,16 +2090,15 @@ dependencies = [
  "clap",
  "discv5",
  "env_logger 0.9.3",
- "eth2_ssz",
- "eth2_ssz_derive",
- "eth2_ssz_types",
  "eth_trie",
- "ethereum-types 0.12.1",
+ "ethereum-types 0.14.1",
  "ethereum_serde_utils",
+ "ethereum_ssz",
+ "ethereum_ssz_derive",
  "ethnum",
  "hex",
  "jsonrpsee",
- "keccak-hash 0.8.0",
+ "keccak-hash",
  "lazy_static",
  "nanotemplate",
  "quickcheck",
@@ -2128,6 +2115,7 @@ dependencies = [
  "sha2 0.10.8",
  "sha3 0.9.1",
  "snap",
+ "ssz_types",
  "stremio-serde-hex",
  "superstruct",
  "test-log",
@@ -2148,8 +2136,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "discv5",
- "eth2_ssz",
- "ethereum-types 0.12.1",
+ "ethereum-types 0.14.1",
+ "ethereum_ssz",
  "ethportal-api",
  "futures 0.3.28",
  "hex",
@@ -3469,16 +3457,6 @@ dependencies = [
 
 [[package]]
 name = "keccak-hash"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce2bd4c29270e724d3eaadf7bdc8700af4221fc0ed771b855eadcd1b98d52851"
-dependencies = [
- "primitive-types 0.10.1",
- "tiny-keccak",
-]
-
-[[package]]
-name = "keccak-hash"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4b286e6b663fb926e1eeb68528e69cb70ed46c6d65871a21b2215ae8154c6d3c"
@@ -3638,8 +3616,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
- "eth2_ssz_types",
- "ethereum-types 0.12.1",
+ "ethereum-types 0.14.1",
  "ethportal-api",
  "eyre",
  "figment",
@@ -3653,6 +3630,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "ssz-rs",
+ "ssz_types",
  "strum 0.25.0",
  "thiserror",
  "tokio",
@@ -4452,10 +4430,9 @@ dependencies = [
  "clap",
  "discv5",
  "env_logger 0.9.3",
- "eth2_ssz",
- "eth2_ssz_derive",
- "eth2_ssz_types",
- "ethereum-types 0.12.1",
+ "ethereum-types 0.14.1",
+ "ethereum_ssz",
+ "ethereum_ssz_derive",
  "ethportal-api",
  "futures 0.3.28",
  "jsonrpsee",
@@ -4465,6 +4442,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "ssz_types",
  "surf",
  "test-log",
  "tokio",
@@ -4487,10 +4465,9 @@ dependencies = [
  "directories",
  "discv5",
  "env_logger 0.9.3",
- "eth2_ssz",
- "eth2_ssz_derive",
- "eth2_ssz_types",
- "ethereum-types 0.12.1",
+ "ethereum-types 0.14.1",
+ "ethereum_ssz",
+ "ethereum_ssz_derive",
  "ethportal-api",
  "fnv",
  "futures 0.3.28",
@@ -4511,6 +4488,7 @@ dependencies = [
  "serde_json",
  "serial_test",
  "smallvec 1.11.1",
+ "ssz_types",
  "stunclient",
  "tempfile",
  "test-log",
@@ -5293,7 +5271,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "discv5",
- "ethereum-types 0.12.1",
+ "ethereum-types 0.14.1",
  "ethportal-api",
  "hyper",
  "portalnet",
@@ -6169,6 +6147,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "ssz_types"
+version = "0.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "382939886cb24ee8ac885d09116a60f6262d827c7a9e36012b4f6d3d0116d0b3"
+dependencies = [
+ "derivative",
+ "ethereum_serde_utils",
+ "ethereum_ssz",
+ "itertools 0.10.5",
+ "serde",
+ "serde_derive",
+ "smallvec 1.11.1",
+ "tree_hash",
+ "typenum",
+]
+
+[[package]]
 name = "standback"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7026,20 +7021,20 @@ dependencies = [
 
 [[package]]
 name = "tree_hash"
-version = "0.4.0"
+version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f9c8a86fad3169a65aad2265d3c6a8bc119d0b771046af3c1b2fb0e9b12182b"
+checksum = "5c998ac5fe2b07c025444bdd522e6258110b63861c6698eedc610c071980238d"
 dependencies = [
- "eth2_hashing",
- "ethereum-types 0.12.1",
+ "ethereum-types 0.14.1",
+ "ethereum_hashing",
  "smallvec 1.11.1",
 ]
 
 [[package]]
 name = "tree_hash_derive"
-version = "0.4.0"
+version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3cd22d128157837a4434bb51119aef11103f17bfe8c402ce688cf25aa1e608ad"
+checksum = "84303a9c7cda5f085a3ed9cd241d1e95e04d88aab1d679b02f212e653537ba86"
 dependencies = [
  "darling 0.13.4",
  "quote",
@@ -7053,8 +7048,8 @@ dependencies = [
  "anyhow",
  "clap",
  "discv5",
- "eth2_ssz",
- "ethereum-types 0.12.1",
+ "ethereum-types 0.14.1",
+ "ethereum_ssz",
  "ethers-core",
  "ethers-providers",
  "ethportal-api",
@@ -7093,7 +7088,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "discv5",
- "eth2_ssz",
+ "ethereum_ssz",
  "ethportal-api",
  "parking_lot 0.11.2",
  "portalnet",
@@ -7113,15 +7108,15 @@ dependencies = [
  "async-trait",
  "discv5",
  "env_logger 0.9.3",
- "eth2_ssz",
- "eth2_ssz_types",
- "ethereum-types 0.12.1",
+ "ethereum-types 0.14.1",
+ "ethereum_ssz",
  "ethportal-api",
  "httpmock",
  "parking_lot 0.11.2",
  "portalnet",
  "rstest 0.18.2",
  "serde_json",
+ "ssz_types",
  "test-log",
  "tokio",
  "tracing",
@@ -7142,7 +7137,7 @@ dependencies = [
  "discv5",
  "env_logger 0.9.3",
  "eth_trie",
- "ethereum-types 0.12.1",
+ "ethereum-types 0.14.1",
  "ethportal-api",
  "parking_lot 0.11.2",
  "portalnet",
@@ -7171,10 +7166,9 @@ dependencies = [
  "anyhow",
  "async-trait",
  "eth2_hashing",
- "eth2_ssz",
- "eth2_ssz_derive",
- "eth2_ssz_types",
- "ethereum-types 0.12.1",
+ "ethereum-types 0.14.1",
+ "ethereum_ssz",
+ "ethereum_ssz_derive",
  "ethportal-api",
  "lazy_static",
  "quickcheck",
@@ -7184,6 +7178,7 @@ dependencies = [
  "rust-embed",
  "serde",
  "serde_json",
+ "ssz_types",
  "tokio",
  "tree_hash",
  "tree_hash_derive",

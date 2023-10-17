@@ -10,13 +10,12 @@ categories = ["cryptography::cryptocurrencies"]
 description = "Beacon network subprotocol for Trin."
 authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
-
 [dependencies]
 anyhow = "1.0.68"
 async-trait = "0.1.53"
 discv5 = { git = "https://github.com/njgheorghita/discv5.git", rev = "700bdb97afd87016222e902f844bb95eb0d78d99", features = ["serde"] }
+ethereum_ssz = "0.5.3"
 ethportal-api = {path = "../ethportal-api"}
-eth2_ssz = "0.4.0"
 parking_lot = "0.11.2"
 portalnet = { path = "../portalnet" }
 serde_json = "1.0.89"

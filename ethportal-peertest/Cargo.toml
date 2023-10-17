@@ -13,8 +13,8 @@ authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 [dependencies]
 anyhow = "1.0.68"
 discv5 = { git = "https://github.com/njgheorghita/discv5.git", rev = "700bdb97afd87016222e902f844bb95eb0d78d99", features = ["serde"] }
-eth2_ssz = "0.4.0"
-ethereum-types = "0.12.1"
+ethereum-types = "0.14.1"
+ethereum_ssz = "0.5.3"
 ethportal-api = { path="../ethportal-api"}
 futures = "0.3.21"
 httpmock = "0.6.6"
@@ -31,7 +31,7 @@ tempfile = "3.3.0"
 tokio = {version = "1.14.0", features = ["full"]}
 tracing = "0.1.36"
 tracing-subscriber = "0.3.15"
-tree_hash = "0.4.0"
+tree_hash = "0.5.2"
 trin = { path = ".." }
 portal-bridge = { path = "../portal-bridge" }
 trin-history = { path = "../trin-history" }

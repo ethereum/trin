@@ -138,6 +138,7 @@ impl BlockBody {
         }
 
         trie.root_hash()
+            .map(|root| H256::from_slice(root.as_bytes()))
             .map_err(|err| anyhow!("Error calculating transactions root: {err:?}"))
     }
 
@@ -162,6 +163,7 @@ impl BlockBody {
         }
 
         trie.root_hash()
+            .map(|root| H256::from_slice(root.as_bytes()))
             .map_err(|err| anyhow!("Error calculating withdrawals root: {err:?}"))
     }
 }
