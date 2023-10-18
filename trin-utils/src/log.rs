@@ -1,8 +1,15 @@
+use std::env;
 use tracing_subscriber::EnvFilter;
 
 pub fn init_tracing_logger() {
+    let rust_log = env::var(EnvFilter::DEFAULT_ENV).unwrap_or_default();
+    let env_filter = match rust_log.is_empty() {
+        true => EnvFilter::builder().parse_lossy("info,discv5=error,utp_rs=error"),
+        false => EnvFilter::builder().parse_lossy(rust_log),
+    };
+
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
+        .with_env_filter(env_filter)
         .with_ansi(detect_ansi_support())
         .init();
 }
