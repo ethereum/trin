@@ -171,11 +171,8 @@ impl Discovery {
     }
 
     pub async fn start(&mut self) -> Result<mpsc::Receiver<TalkRequest>, String> {
-        info!(
-            enr.encoded = ?self.local_enr(),
-            enr.decoded = %self.local_enr(),
-            "Starting discv5",
-        );
+        info!(enr = %self.local_enr(), "Starting discv5 with");
+        debug!(enr = ?self.local_enr(), "Discv5 enr details");
 
         self.discv5
             .start()
