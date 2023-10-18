@@ -14,7 +14,7 @@ authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 anyhow = "1.0.68"
 discv5 = { git = "https://github.com/njgheorghita/discv5.git",  rev = "700bdb97afd87016222e902f844bb95eb0d78d99", features = ["serde"] }
 ethportal-api = { path = "../ethportal-api"}
-ethereum-types = "0.12.1"
+ethereum-types = "0.14.1"
 portalnet = { path = "../portalnet"}
 tracing = "0.1.27"
 trin-utils = { path = "../trin-utils"}
