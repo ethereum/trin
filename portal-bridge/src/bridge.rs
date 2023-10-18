@@ -320,6 +320,17 @@ impl Bridge {
             "Gossip: Block #{:?} HeaderWithProof",
             full_header.header.number
         );
+
+        let content_key2 =
+            format!("- content_key: {}\n", content_key.to_hex()).to_string();
+        let content_value2 = format!(
+            "  content_value: {}\n",
+            hex_encode(content_value.encode())
+        )
+            .to_string();
+
+        // Write asset to file
+        warn!("{}", format!("hihihih{content_key2}{content_value2}"));
         warn!("yo123321 1");
         let result = Bridge::gossip_content(portal_clients, content_key, content_value).await;
         warn!("yo123321 2 {:?}", result);

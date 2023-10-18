@@ -75,6 +75,7 @@ pub struct StorageMetricsReporter {
 }
 use ethportal_api::types::distance::Metric;
 use ethportal_api::OverlayContentKey;
+use ethportal_api::types::distance::XorMetric;
 #[test]
 fn hi () {
     let bob = "0x978e003e087fb7f21833fd43136d126ba97e0fffb90b6c04ebea9ba55c877fee";
@@ -101,9 +102,9 @@ fn hi () {
 
     let content_key: ethportal_api::HistoryContentKey =
         serde_json::from_value(serde_json::json!("0x01823def5821988f866db5d2e9400ec9c9df613f299677aa577a0ff9c0ee631c35")).unwrap();
-    let a = Distance::from(ethereum_types::U256::from("0x381cb22dde95c4282adeb5abe2afd87a50400ca92e78c78f4acf348223095c6"));
-    let b = Distance::from(ethereum_types::U256::from("0x3f1c1dce64a7e5d40a1e0c561500f1dc5cf08918fcb531af69afdd375cc6b976"));
-    if b > a {
+    let radius = Distance::from(ethereum_types::U256::from("0xcb878505d1ab04003cfcc57c142da04c66d71f8a52401722a870fdf07f181772"));
+    let node_id = Distance::from(ethereum_types::U256::from("0x8c51e87021ff95f7af423a09d002a2b5448dca2fb5423929881db1cef7419c64"));
+    if XorMetric::distance(&content_key.content_id(), &node_id.big_endian()) > radius {
         panic!("hi");
     }
     panic!("{}", ethportal_api::utils::bytes::hex_encode(content_key.content_id()));
