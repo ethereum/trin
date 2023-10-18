@@ -401,7 +401,7 @@ impl AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
                         let enr = match self.discv5.cached_node_addr(src_node_id) {
                             Some(node_addr) => Ok(node_addr.enr),
                             None => {
-                                warn!(node_id = %src_node_id, "uTP packet from unknown source");
+                                debug!(node_id = %src_node_id, "uTP packet from unknown source");
                                 Err(io::Error::new(
                                     io::ErrorKind::Other,
                                     "ENR not found for talk req destination",

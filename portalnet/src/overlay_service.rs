@@ -815,7 +815,7 @@ where
                         let source = match self.find_enr(&peer) {
                             Some(enr) => enr,
                             _ => {
-                                warn!("Received uTP payload from unknown {peer}");
+                                debug!("Received uTP payload from unknown {peer}");
                                 if let Some(responder) = callback {
                                     let _ = responder.send((None, true, query_info.trace));
                                 };
@@ -843,7 +843,7 @@ where
                                         UtpDirectionLabel::Inbound,
                                         UtpOutcomeLabel::FailedConnection,
                                     );
-                                    warn!(
+                                    debug!(
                                         %err,
                                         cid.send,
                                         cid.recv,
@@ -863,7 +863,7 @@ where
                                     UtpDirectionLabel::Inbound,
                                     UtpOutcomeLabel::FailedDataTx,
                                 );
-                                error!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), "error reading data from uTP stream, while handling a FindContent request.");
+                                debug!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), "error reading data from uTP stream, while handling a FindContent request.");
                                 if let Some(responder) = callback {
                                     let _ = responder.send((None, true, query_info.trace));
                                 };
@@ -1123,7 +1123,7 @@ where
                                     UtpDirectionLabel::Outbound,
                                     UtpOutcomeLabel::FailedConnection,
                                 );
-                                error!(
+                                debug!(
                                     %err,
                                     %cid.send,
                                     %cid.recv,
@@ -1134,7 +1134,7 @@ where
                             }
                         };
                         if let Err(err) = Self::send_utp_content(stream, &content, metrics).await {
-                            warn!(
+                            debug!(
                                 %err,
                                 %cid.send,
                                 %cid.recv,
@@ -1272,7 +1272,7 @@ where
                         UtpDirectionLabel::Inbound,
                         UtpOutcomeLabel::FailedConnection,
                     );
-                    error!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), content_keys = ?content_keys_string, "unable to accept uTP stream");
+                    debug!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), content_keys = ?content_keys_string, "unable to accept uTP stream");
                     return;
                 }
             };
@@ -1281,7 +1281,7 @@ where
             if let Err(err) = stream.read_to_eof(&mut data).await {
                 metrics
                     .report_utp_outcome(UtpDirectionLabel::Inbound, UtpOutcomeLabel::FailedDataTx);
-                error!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), content_keys = ?content_keys_string, "error reading data from uTP stream, while handling an Offer request.");
+                debug!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), content_keys = ?content_keys_string, "error reading data from uTP stream, while handling an Offer request.");
                 return;
             }
 
@@ -1299,7 +1299,7 @@ where
             )
             .await
             {
-                error!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), content_keys = ?content_keys_string, "unable to process uTP payload");
+                debug!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), content_keys = ?content_keys_string, "unable to process uTP payload");
             }
         });
 
@@ -1536,7 +1536,7 @@ where
                         UtpDirectionLabel::Outbound,
                         UtpOutcomeLabel::FailedConnection,
                     );
-                    warn!(
+                    debug!(
                         %err,
                         cid.send,
                         cid.recv,
@@ -1589,7 +1589,7 @@ where
 
             // send the content to the acceptor over a uTP stream
             if let Err(err) = Self::send_utp_content(stream, &content_payload, metrics).await {
-                warn!(
+                debug!(
                     %err,
                     %cid.send,
                     %cid.recv,
@@ -1712,7 +1712,7 @@ where
                 } else {
                     format!("{:?}", err)
                 };
-                error!(err, content_key = ?content_keys_string[index], "Process uTP payload tokio task failed:");
+                debug!(err, content_key = ?content_keys_string[index], "Process uTP payload tokio task failed:");
                 None
             }))
             .collect();
