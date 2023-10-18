@@ -1231,8 +1231,12 @@ where
         let node_addr = self.discovery.cached_node_addr(source).ok_or_else(|| {
             OverlayRequestError::AcceptError("unable to find ENR for NodeId".to_string())
         })?;
-        let enr_str = node_addr.enr.to_base64();
         let enr = crate::discovery::UtpEnr(node_addr.enr);
+        let enr_str = if enabled!(Level::TRACE) {
+            enr.0.to_base64()
+        } else {
+            String::with_capacity(0)
+        };
         let cid = self.utp_socket.cid(enr, false);
         let cid_send = cid.send;
         let validator = Arc::clone(&self.validator);
@@ -1242,12 +1246,10 @@ where
         let utp = Arc::clone(&self.utp_socket);
         let metrics = self.metrics.clone();
 
-        let mut content_keys_string = vec![];
-        if enabled!(Level::ERROR) {
-            for content_key in content_keys.iter() {
-                content_keys_string.push(content_key.to_hex());
-            }
-        }
+        let content_keys_string: Vec<String> = content_keys
+            .iter()
+            .map(|content_key| content_key.to_hex())
+            .collect();
 
         trace!(
             protocol = %self.protocol,
@@ -1610,12 +1612,10 @@ where
         content_keys: Vec<TContentKey>,
         payload: Vec<u8>,
     ) -> anyhow::Result<()> {
-        let mut content_keys_string = vec![];
-        if enabled!(Level::ERROR) {
-            for content_key in content_keys.iter() {
-                content_keys_string.push(content_key.to_hex());
-            }
-        }
+        let content_keys_string: Vec<String> = content_keys
+            .iter()
+            .map(|content_key| content_key.to_hex())
+            .collect();
 
         trace!(
             request.content_keys = ?content_keys_string,
