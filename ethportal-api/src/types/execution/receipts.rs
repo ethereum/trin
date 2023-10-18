@@ -36,7 +36,6 @@ impl Receipts {
         }
 
         trie.root_hash()
-            .map(|root| H256::from_slice(root.as_bytes()))
             .map_err(|err| anyhow!("Error calculating receipts root: {err:?}"))
     }
 }
