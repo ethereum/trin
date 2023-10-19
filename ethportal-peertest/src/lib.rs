@@ -54,7 +54,7 @@ async fn launch_node(trin_config: TrinConfig) -> anyhow::Result<PeertestNode> {
 }
 
 fn generate_trin_config(id: u16, bootnode_enr: Option<&Enr>) -> TrinConfig {
-    let discovery_port: u16 = 9000 + id;
+    let discovery_port: u16 = 9009 + id;
     let discovery_port: String = discovery_port.to_string();
     let web3_ipc_path = PathBuf::from(format!("/tmp/ethportal-peertest-buddy-{id}.ipc"));
     // This specific private key scheme is chosen to enforce that the first peer node will be in

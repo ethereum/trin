@@ -24,7 +24,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut http_addresses = vec![];
     for (i, key) in private_keys.into_iter().enumerate() {
         let web3_http_port = 8545 + i;
-        let discovery_port = 9000 + i;
+        let discovery_port = 9009 + i;
         let handle = bridge_config.client_type.build_handle(
             key,
             web3_http_port as u16,
