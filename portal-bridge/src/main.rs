@@ -1,5 +1,6 @@
 use clap::Parser;
 use ethportal_api::jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
+use ethportal_api::types::cli::{DEFAULT_DISCOVERY_PORT, DEFAULT_WEB3_HTTP_PORT};
 use portal_bridge::beacon_bridge::BeaconBridge;
 use portal_bridge::bridge::Bridge;
 use portal_bridge::cli::BridgeConfig;
@@ -23,12 +24,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut handles = vec![];
     let mut http_addresses = vec![];
     for (i, key) in private_keys.into_iter().enumerate() {
-        let web3_http_port = 8545 + i;
-        let discovery_port = 9009 + i;
+        let web3_http_port = DEFAULT_WEB3_HTTP_PORT + i as u16;
+        let discovery_port = DEFAULT_DISCOVERY_PORT + i as u16;
         let handle = bridge_config.client_type.build_handle(
             key,
-            web3_http_port as u16,
-            discovery_port as u16,
+            web3_http_port,
+            discovery_port,
             bridge_config.clone(),
         );
         let web3_http_address = format!("http://127.0.0.1:{}", web3_http_port);

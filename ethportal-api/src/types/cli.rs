@@ -11,7 +11,7 @@ pub const DEFAULT_WEB3_IPC_PATH: &str = "/tmp/trin-jsonrpc.ipc";
 pub const DEFAULT_WEB3_HTTP_ADDRESS: &str = "http://127.0.0.1:8545/";
 pub const DEFAULT_WEB3_HTTP_PORT: u16 = 8545;
 pub const DEFAULT_WEB3_WS_PORT: u16 = 8546;
-const DEFAULT_DISCOVERY_PORT: &str = "9009";
+pub const DEFAULT_DISCOVERY_PORT: u16 = 9009;
 pub const BEACON_NETWORK: &str = "beacon";
 pub const HISTORY_NETWORK: &str = "history";
 pub const STATE_NETWORK: &str = "state";
@@ -78,7 +78,7 @@ pub struct TrinConfig {
     pub web3_ipc_path: PathBuf,
 
     #[arg(
-        default_value = DEFAULT_DISCOVERY_PORT,
+        default_value_t = DEFAULT_DISCOVERY_PORT,
         long = "discovery-port",
         help = "The UDP port to listen on."
     )]
@@ -166,9 +166,7 @@ impl Default for TrinConfig {
             web3_http_address: Url::parse(DEFAULT_WEB3_HTTP_ADDRESS)
                 .expect("Parsing static DEFAULT_WEB3_HTTP_ADDRESS to work"),
             web3_ipc_path: PathBuf::from(DEFAULT_WEB3_IPC_PATH),
-            discovery_port: DEFAULT_DISCOVERY_PORT
-                .parse()
-                .expect("Parsing static DEFAULT_DISCOVERY_PORT to work"),
+            discovery_port: DEFAULT_DISCOVERY_PORT,
             bootnodes: Bootnodes::Default,
             external_addr: None,
             no_stun: false,
