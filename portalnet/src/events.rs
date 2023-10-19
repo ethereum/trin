@@ -3,7 +3,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use discv5::TalkRequest;
 use tokio::sync::mpsc;
-use tracing::{error, warn};
+use tracing::{error, warn, debug};
 
 use super::types::messages::ProtocolId;
 use ethportal_api::utils::bytes::{hex_encode, hex_encode_upper};
@@ -61,7 +61,7 @@ impl PortalnetEvents {
                                 );
                             }
                         }
-                        None => error!("History event handler not initialized!"),
+                        None => debug!("Received History TALKREQ, but History event handler not initialized."),
                     };
                 }
                 ProtocolId::Beacon => {
@@ -73,7 +73,7 @@ impl PortalnetEvents {
                                 );
                             }
                         }
-                        None => error!("Beacon event handler not initialized!"),
+                        None => debug!("Received Beacon TALKREQ, but Beacon event handler not initialized."),
                     };
                 }
                 ProtocolId::State => {
@@ -83,7 +83,7 @@ impl PortalnetEvents {
                                 error!("Error sending discv5 talk request to state network: {err}");
                             }
                         }
-                        None => error!("State event handler not initialized!"),
+                        None => debug!("Received State TALKREQ, but State event handler not initialized."),
                     };
                 }
                 ProtocolId::Utp => {
