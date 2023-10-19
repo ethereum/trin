@@ -36,6 +36,7 @@ impl HistoryNetwork {
         let bootnode_enrs: Vec<Enr> = portal_config.bootnodes.into();
         let config = OverlayConfig {
             bootnode_enrs,
+            disable_poke: portal_config.disable_poke,
             ..Default::default()
         };
         let storage = Arc::new(PLRwLock::new(PortalStorage::new(
