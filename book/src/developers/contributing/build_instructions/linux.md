@@ -71,12 +71,12 @@ ENR entry for IP blank. Some users report better connections over VPN."
 ### Optional flags for conflicting nodes
 
 The discovery and JSON-RPC ports may conflict with an existing an Ethereum client
-on the same machine.
+or other software on the same machine.
 
-`--discovery-port <port>`. If an Ethereum consensus client is already running, it may be using
-the default port 9000.
+`--discovery-port <port>`. The default port is 9009. Pick something else if in use.
 
-`--web3-http-address <ip_address>:<port>`. If an Ethereum execution client is already running, it may be using the default port 8545. The localhost IP address (127.0.0.1) is recommended here.
+`--web3-http-address <ip_address>:<port>`. If an Ethereum execution client is already running,
+it may be using the default port 8545. The localhost IP address (127.0.0.1) is recommended here.
 
 `--web3-transport http`. If a new http port is specified using `--web3-http-address` (as above),
 the transport must also be changed to http from the default (ipc).
@@ -85,7 +85,7 @@ To pick a new port, select a number in the range 1024–49151 and
 test if it is in use (no response indicates it is ok to use):
 
 ```sh
-$ sudo ss -tulpn | grep ':9009'
+$ sudo ss -tulpn | grep ':9008'
 ```
 
 ## Create the node service
@@ -108,8 +108,8 @@ Type=simple
 Restart=always
 RestartSec=5
 ExecStart=/usr/local/bin/trin \
-    --discovery-port 9009 \
-    --web3-http-address 127.0.0.1:8547 \
+    --discovery-port 9008 \
+    --web3-http-address 127.0.0.1:8543 \
     --web3-transport http \
     --bootnodes default \
     --mb 200 \
@@ -132,7 +132,7 @@ Open the file:
 ```sh
 $ sudo nano /etc/systemd/system/trin.service.d/override.conf
 ```
-Paste the following, replace the Infura ID with your own.
+
 > Tip: The 'info' level of logs is a good starting value.
 ```sh
 [Service]
@@ -143,7 +143,7 @@ Environment="TRIN_DATA_PATH=/var/lib/trin"
 ```
 ## Configure firewall
 
-Ensure that the discovery port (custom or default 9000) is not blocked by the firewall:
+Ensure that the discovery port (custom or default 9009) is not blocked by the firewall:
 ```sh
 $ sudo ufw allow 9009
 ```
@@ -187,7 +187,7 @@ variables during testing.
 ```sh
 $ cargo test --workspace
 $ cargo run -- --discovery-port 9009 \
-    --web3-http-address 127.0.0.1:8547 \
+    --web3-http-address 127.0.0.1:8545 \
     --web3-transport http \
     --bootnodes default \
     --mb 200 \

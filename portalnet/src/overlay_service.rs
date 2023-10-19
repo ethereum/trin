@@ -3007,7 +3007,7 @@ mod tests {
         ));
 
         // Modify first ENR to increment sequence number.
-        let updated_udp: u16 = 9000;
+        let updated_udp: u16 = 9009;
         let _ = enr1.set_udp4(updated_udp, &sk1);
         assert_ne!(1, enr1.seq());
 
