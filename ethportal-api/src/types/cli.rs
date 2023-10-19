@@ -148,6 +148,12 @@ pub struct TrinConfig {
     )]
     pub master_acc_path: PathBuf,
 
+    #[arg(
+        long = "disable-poke",
+        help = "Disables the poke mechanism, which propogates content at the end of a successful content query. Disabling is useful for network analysis purposes."
+    )]
+    pub disable_poke: bool,
+
     #[command(subcommand)]
     pub command: Option<TrinConfigCommands>,
 }
@@ -177,6 +183,7 @@ impl Default for TrinConfig {
             enable_metrics_with_url: None,
             ephemeral: false,
             master_acc_path: PathBuf::from(DEFAULT_MASTER_ACC_PATH.to_string()),
+            disable_poke: false,
             command: None,
         }
     }

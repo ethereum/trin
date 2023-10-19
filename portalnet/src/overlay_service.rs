@@ -308,6 +308,8 @@ pub struct OverlayService<TContentKey, TMetric, TValidator, TStore> {
     validator: Arc<TValidator>,
     /// A channel that the overlay service emits events on.
     event_stream: Option<mpsc::Sender<EventEnvelope>>,
+    /// Disable poke mechanism
+    disable_poke: bool,
 }
 
 impl<
@@ -340,6 +342,7 @@ where
         query_parallelism: usize,
         query_num_results: usize,
         findnodes_query_distances_per_peer: usize,
+        disable_poke: bool,
     ) -> UnboundedSender<OverlayCommand<TContentKey>>
     where
         <TContentKey as TryFrom<Vec<u8>>>::Error: Send,
@@ -381,6 +384,7 @@ where
                 metrics,
                 validator,
                 event_stream: None,
+                disable_poke,
             };
 
             info!(protocol = %overlay_protocol, "Starting overlay service");
@@ -788,6 +792,7 @@ where
                         let kbuckets = self.kbuckets.clone();
                         let command_tx = self.command_tx.clone();
                         let metrics = self.metrics.clone();
+                        let disable_poke = self.disable_poke;
                         tokio::spawn(async move {
                             Self::process_received_content(
                                 kbuckets,
@@ -801,6 +806,7 @@ where
                                 query_info.trace,
                                 nodes_to_poke,
                                 metrics,
+                                disable_poke,
                             )
                             .await;
                         });
@@ -831,6 +837,7 @@ where
                         let store = self.store.clone();
                         let kbuckets = self.kbuckets.clone();
                         let command_tx = self.command_tx.clone();
+                        let disable_poke = self.disable_poke;
                         tokio::spawn(async move {
                             metrics.report_utp_active_inc(UtpDirectionLabel::Inbound);
                             let mut stream = match utp
@@ -890,6 +897,7 @@ where
                                 trace,
                                 nodes_to_poke,
                                 metrics,
+                                disable_poke,
                             )
                             .await;
                         });
@@ -1876,6 +1884,7 @@ where
         trace: Option<QueryTrace>,
         nodes_to_poke: Vec<NodeId>,
         metrics: OverlayMetricsReporter,
+        disable_poke: bool,
     ) {
         let mut content = content;
         // Operate under assumption that all content in the store is valid
@@ -1927,7 +1936,10 @@ where
         if let Some(responder) = responder {
             let _ = responder.send((Some(content.clone()), utp_transfer, trace));
         }
-        Self::poke_content(kbuckets, command_tx, content_key, content, nodes_to_poke);
+
+        if !disable_poke {
+            Self::poke_content(kbuckets, command_tx, content_key, content, nodes_to_poke);
+        }
     }
 
     /// Processes a collection of discovered nodes.
@@ -2830,6 +2842,7 @@ mod tests {
             metrics,
             validator,
             event_stream: None,
+            disable_poke: false,
         }
     }
 

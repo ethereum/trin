@@ -21,6 +21,7 @@ pub struct PortalnetConfig {
     pub internal_ip: bool,
     pub no_stun: bool,
     pub node_addr_cache_capacity: usize,
+    pub disable_poke: bool,
 }
 
 impl Default for PortalnetConfig {
@@ -34,6 +35,7 @@ impl Default for PortalnetConfig {
             internal_ip: false,
             no_stun: false,
             node_addr_cache_capacity: NODE_ADDR_CACHE_CAPACITY,
+            disable_poke: false,
         }
     }
 }
@@ -46,6 +48,7 @@ impl PortalnetConfig {
             listen_port: trin_config.discovery_port,
             no_stun: trin_config.no_stun,
             bootnodes: trin_config.bootnodes.clone(),
+            disable_poke: trin_config.disable_poke,
             ..Default::default()
         }
     }

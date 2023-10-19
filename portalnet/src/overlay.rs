@@ -65,6 +65,7 @@ pub struct OverlayConfig {
     pub query_peer_timeout: Duration,
     pub query_num_results: usize,
     pub findnodes_query_distances_per_peer: usize,
+    pub disable_poke: bool,
 }
 
 impl Default for OverlayConfig {
@@ -81,6 +82,7 @@ impl Default for OverlayConfig {
             query_timeout: Duration::from_secs(60),
             query_num_results: MAX_NODES_PER_BUCKET,
             findnodes_query_distances_per_peer: 3,
+            disable_poke: false,
         }
     }
 }
@@ -161,6 +163,7 @@ where
             config.query_parallelism,
             config.query_num_results,
             config.findnodes_query_distances_per_peer,
+            config.disable_poke,
         )
         .await;
 
