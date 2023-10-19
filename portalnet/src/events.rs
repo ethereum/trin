@@ -3,7 +3,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use discv5::TalkRequest;
 use tokio::sync::mpsc;
-use tracing::{error, warn, debug};
+use tracing::{debug, error, warn};
 
 use super::types::messages::ProtocolId;
 use ethportal_api::utils::bytes::{hex_encode, hex_encode_upper};
@@ -51,9 +51,10 @@ impl PortalnetEvents {
         let protocol_id = ProtocolId::from_str(&hex_encode_upper(request.protocol()));
 
         match protocol_id {
-            Ok(protocol) => match protocol {
-                ProtocolId::History => {
-                    match &self.history_overlay_sender {
+            Ok(protocol) => {
+                match protocol {
+                    ProtocolId::History => {
+                        match &self.history_overlay_sender {
                         Some(tx) => {
                             if let Err(err) = tx.send(request) {
                                 error!(
@@ -63,9 +64,9 @@ impl PortalnetEvents {
                         }
                         None => debug!("Received History TALKREQ, but History event handler not initialized."),
                     };
-                }
-                ProtocolId::Beacon => {
-                    match &self.beacon_overlay_sender {
+                    }
+                    ProtocolId::Beacon => {
+                        match &self.beacon_overlay_sender {
                         Some(tx) => {
                             if let Err(err) = tx.send(request) {
                                 error!(
@@ -75,31 +76,36 @@ impl PortalnetEvents {
                         }
                         None => debug!("Received Beacon TALKREQ, but Beacon event handler not initialized."),
                     };
-                }
-                ProtocolId::State => {
-                    match &self.state_overlay_sender {
-                        Some(tx) => {
-                            if let Err(err) = tx.send(request) {
-                                error!("Error sending discv5 talk request to state network: {err}");
+                    }
+                    ProtocolId::State => {
+                        match &self.state_overlay_sender {
+                            Some(tx) => {
+                                if let Err(err) = tx.send(request) {
+                                    error!(
+                                        "Error sending discv5 talk request to state network: {err}"
+                                    );
+                                }
                             }
+                            None => debug!(
+                                "Received State TALKREQ, but State event handler not initialized."
+                            ),
+                        };
+                    }
+                    ProtocolId::Utp => {
+                        if let Err(err) = self.utp_talk_reqs.send(request) {
+                            error!(%err, "Error forwarding talk request to uTP socket");
                         }
-                        None => debug!("Received State TALKREQ, but State event handler not initialized."),
-                    };
-                }
-                ProtocolId::Utp => {
-                    if let Err(err) = self.utp_talk_reqs.send(request) {
-                        error!(%err, "Error forwarding talk request to uTP socket");
+                    }
+                    _ => {
+                        warn!(
+                            "Received TalkRequest on unknown protocol from={} protocol={} body={}",
+                            request.node_id(),
+                            hex_encode_upper(request.protocol()),
+                            hex_encode(request.body()),
+                        );
                     }
                 }
-                _ => {
-                    warn!(
-                        "Received TalkRequest on unknown protocol from={} protocol={} body={}",
-                        request.node_id(),
-                        hex_encode_upper(request.protocol()),
-                        hex_encode(request.body()),
-                    );
-                }
-            },
+            }
             Err(_) => warn!("Unable to decode protocol id"),
         }
     }
