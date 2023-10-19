@@ -2629,9 +2629,11 @@ mod tests {
         storage::{DistanceFunction, MemoryContentStore},
         utils::db::setup_temp_dir,
     };
-    use ethportal_api::types::content_key::overlay::IdentityContentKey;
     use ethportal_api::types::distance::XorMetric;
     use ethportal_api::types::enr::generate_random_remote_enr;
+    use ethportal_api::types::{
+        cli::DEFAULT_DISCOVERY_PORT, content_key::overlay::IdentityContentKey,
+    };
     use trin_validation::validator::MockValidator;
 
     macro_rules! poll_command_rx {
@@ -3007,7 +3009,7 @@ mod tests {
         ));
 
         // Modify first ENR to increment sequence number.
-        let updated_udp: u16 = 9009;
+        let updated_udp: u16 = DEFAULT_DISCOVERY_PORT;
         let _ = enr1.set_udp4(updated_udp, &sk1);
         assert_ne!(1, enr1.seq());
 
