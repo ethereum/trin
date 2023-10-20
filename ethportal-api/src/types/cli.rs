@@ -150,7 +150,7 @@ pub struct TrinConfig {
 
     #[arg(
         long = "disable-poke",
-        help = "Disables the poke mechanism, which propogates content at the end of a successful content query. Disabling is useful for network analysis purposes."
+        help = "Disables the poke mechanism, which propagates content at the end of a successful content query. Disabling is useful for network analysis purposes."
     )]
     pub disable_poke: bool,
 

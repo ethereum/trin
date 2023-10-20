@@ -3,6 +3,7 @@ use crate::types::enr::Enr;
 use crate::types::portal::FindNodesInfo;
 use crate::types::portal::{
     AcceptInfo, ContentInfo, DataRadius, PaginateLocalContentInfo, PongInfo, TraceContentInfo,
+    TraceGossipInfo,
 };
 use crate::RoutingTableInfo;
 use crate::{HistoryContentValue, PossibleHistoryContentValue};
@@ -87,6 +88,15 @@ pub trait HistoryNetworkApi {
         content_key: HistoryContentKey,
         content_value: HistoryContentValue,
     ) -> RpcResult<u32>;
+
+    /// Send the provided content value to interested peers. Clients may choose to send to some or all peers.
+    /// Return tracing info detailing the gossip propagation.
+    #[method(name = "historyTraceGossip")]
+    async fn trace_gossip(
+        &self,
+        content_key: HistoryContentKey,
+        content_value: HistoryContentValue,
+    ) -> RpcResult<TraceGossipInfo>;
 
     /// Send an OFFER request with given ContentKey, to the designated peer and wait for a response.
     /// Returns the content keys bitlist upon successful content transmission or empty bitlist receive.

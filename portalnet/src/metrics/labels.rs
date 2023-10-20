@@ -66,6 +66,8 @@ impl From<&Request> for MessageLabel {
             Request::Offer(_) => MessageLabel::Offer,
             // Populated offers are the same as regular offers, from a metrics point of view
             Request::PopulatedOffer(_) => MessageLabel::Offer,
+            // Populated offers with result are the same as regular offers, from a metrics point of view
+            Request::PopulatedOfferWithResult(_) => MessageLabel::Offer,
         }
     }
 }

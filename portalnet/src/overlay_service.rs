@@ -1023,10 +1023,12 @@ where
                 id,
             )?)),
             Request::Offer(offer) => Ok(Response::Accept(self.handle_offer(offer, source, id)?)),
-            Request::PopulatedOffer(_) => Err(OverlayRequestError::InvalidRequest(
-                "An offer with content attached is not a valid network message to receive"
-                    .to_owned(),
-            )),
+            Request::PopulatedOffer(_) | Request::PopulatedOfferWithResult(_) => {
+                Err(OverlayRequestError::InvalidRequest(
+                    "An offer with content attached is not a valid network message to receive"
+                        .to_owned(),
+                ))
+            }
         }
     }
 
@@ -1506,9 +1508,13 @@ where
     // Process ACCEPT response
     fn process_accept(&self, response: Accept, enr: Enr, offer: Request) -> anyhow::Result<Accept> {
         // Check that a valid triggering request was sent
+        let mut gossip_result_tx = None;
         match &offer {
             Request::Offer(_) => {}
             Request::PopulatedOffer(_) => {}
+            Request::PopulatedOfferWithResult(req) => {
+                gossip_result_tx = Some(req.result_tx.clone())
+            }
             _ => {
                 return Err(anyhow!("Invalid request message paired with ACCEPT"));
             }
@@ -1516,6 +1522,9 @@ where
 
         // Do not initialize uTP stream if remote node doesn't have interest in the offered content keys
         if response.content_keys.is_zero() {
+            if let Some(tx) = gossip_result_tx {
+                let _ = tx.send(false);
+            }
             return Ok(response);
         }
 
@@ -1549,6 +1558,9 @@ where
                         peer = ?cid.peer.client(),
                         "Unable to establish uTP conn based on Accept",
                     );
+                    if let Some(tx) = gossip_result_tx {
+                        let _ = tx.send(false);
+                    }
                     return;
                 }
             };
@@ -1561,6 +1573,13 @@ where
                     .content_keys
                     .iter()
                     .zip(offer.content_items)
+                    .filter(|(is_accepted, _item)| *is_accepted)
+                    .map(|(_is_accepted, (_key, val))| val)
+                    .collect()),
+                Request::PopulatedOfferWithResult(offer) => Ok(response_clone
+                    .content_keys
+                    .iter()
+                    .zip(vec![offer.content_item])
                     .filter(|(is_accepted, _item)| *is_accepted)
                     .map(|(_is_accepted, (_key, val))| val)
                     .collect()),
@@ -1581,6 +1600,9 @@ where
                         peer = ?cid.peer.client(),
                         "Error decoding previously offered content items"
                     );
+                    if let Some(tx) = gossip_result_tx {
+                        let _ = tx.send(false);
+                    }
                     return;
                 }
             };
@@ -1589,19 +1611,32 @@ where
                 Ok(payload) => payload,
                 Err(err) => {
                     warn!(%err, "Unable to build content payload");
+                    if let Some(tx) = gossip_result_tx {
+                        let _ = tx.send(false);
+                    }
                     return;
                 }
             };
 
             // send the content to the acceptor over a uTP stream
-            if let Err(err) = Self::send_utp_content(stream, &content_payload, metrics).await {
-                debug!(
-                    %err,
-                    %cid.send,
-                    %cid.recv,
-                    peer = ?cid.peer.client(),
-                    "Error sending content over uTP, in response to ACCEPT"
-                );
+            match Self::send_utp_content(stream, &content_payload, metrics).await {
+                Ok(_) => {
+                    if let Some(tx) = gossip_result_tx {
+                        let _ = tx.send(true);
+                    }
+                }
+                Err(err) => {
+                    debug!(
+                        %err,
+                        %cid.send,
+                        %cid.recv,
+                        peer = ?cid.peer.client(),
+                        "Error sending content over uTP, in response to ACCEPT"
+                    );
+                    if let Some(tx) = gossip_result_tx {
+                        let _ = tx.send(false);
+                    }
+                }
             }
         });
 

@@ -3,6 +3,7 @@ use crate::types::enr::Enr;
 use crate::types::portal::FindNodesInfo;
 use crate::types::portal::{
     AcceptInfo, ContentInfo, DataRadius, PaginateLocalContentInfo, PongInfo, TraceContentInfo,
+    TraceGossipInfo,
 };
 use crate::RoutingTableInfo;
 use crate::{BeaconContentValue, PossibleBeaconContentValue};
@@ -84,6 +85,15 @@ pub trait BeaconNetworkApi {
         content_key: BeaconContentKey,
         content_value: BeaconContentValue,
     ) -> RpcResult<u32>;
+
+    /// Send the provided content value to interested peers. Clients may choose to send to some or all peers.
+    /// Return tracing info detailing the gossip propagation.
+    #[method(name = "beaconTraceGossip")]
+    async fn trace_gossip(
+        &self,
+        content_key: BeaconContentKey,
+        content_value: BeaconContentValue,
+    ) -> RpcResult<TraceGossipInfo>;
 
     /// Send an OFFER request with given ContentKey, to the designated peer and wait for a response.
     /// Returns the content keys bitlist upon successful content transmission or empty bitlist receive.
