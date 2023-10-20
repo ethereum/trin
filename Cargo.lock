@@ -5157,6 +5157,7 @@ dependencies = [
  "portalnet",
  "reth-ipc",
  "reth-rpc-types",
+ "ruint",
  "serde",
  "serde_json",
  "strum 0.24.1",

@@ -1,11 +1,12 @@
 use ethereum_types::{H256, U256, U64};
 use reth_rpc_types::{Block, BlockTransactions, Parity, Signature, Transaction as RethTransaction};
+use ruint::Uint;
 use tokio::sync::mpsc;
 
 use ethportal_api::types::execution::block_body::BlockBody;
 use ethportal_api::types::execution::transaction::Transaction;
 use ethportal_api::types::jsonrpc::request::HistoryJsonRpcRequest;
-use ethportal_api::utils::rethtypes::{ethtype_u64_to_uint256, u256_to_uint256};
+use ethportal_api::utils::rethtypes::{ethtype_u64_to_uint256, u256_to_uint128, u256_to_uint256};
 use ethportal_api::EthApiServer;
 use trin_validation::constants::CHAIN_ID;
 
@@ -29,9 +30,9 @@ fn rpc_transaction(
     transaction_index: usize,
 ) -> RethTransaction {
     // Fields not extractable from the transaction itself
-    let block_hash = block_hash.as_fixed_bytes().into();
-    let block_number = U256::from(block_number);
-    let transaction_index = Some(U256::from(transaction_index));
+    let block_hash = Some(block_hash.as_fixed_bytes().into());
+    let block_number = Some(Uint::from(block_number.into()));
+    let transaction_index = Some(Uint::from(transaction_index));
 
     // Fields calculated on the full transaction envelope
     let hash = transaction.hash().as_fixed_bytes().into();
@@ -44,6 +45,7 @@ fn rpc_transaction(
 
     // Fields internal to the transaction, sometimes varying by transaction type
     let (
+        transaction_type,
         nonce,
         gas_price,
         gas,
@@ -59,8 +61,9 @@ fn rpc_transaction(
         y_parity,
     ) = match transaction {
         Transaction::Legacy(tx) => (
+            None,
             tx.nonce,
-            Some(tx.gas_price),
+            Some(u256_to_uint128(tx.gas_price)),
             tx.gas,
             tx.to,
             tx.value,
@@ -74,8 +77,9 @@ fn rpc_transaction(
             None,
         ),
         Transaction::AccessList(tx) => (
+            Some(1.into()),
             tx.nonce,
-            Some(tx.gas_price),
+            Some(u256_to_uint128(tx.gas_price)),
             tx.gas,
             tx.to,
             tx.value,
@@ -89,6 +93,7 @@ fn rpc_transaction(
             Some(tx.y_parity),
         ),
         Transaction::EIP1559(tx) => (
+            Some(2.into()),
             tx.nonce,
             None,
             tx.gas,
@@ -98,15 +103,17 @@ fn rpc_transaction(
             tx.y_parity,
             tx.r,
             tx.s,
-            Some(tx.max_fee_per_gas),
-            Some(tx.max_priority_fee_per_gas),
+            Some(u256_to_uint128(tx.max_fee_per_gas)),
+            Some(u256_to_uint128(tx.max_priority_fee_per_gas)),
             Some(tx.access_list),
             Some(tx.y_parity),
         ),
     };
 
     // Convert types
+    let nonce = nonce.as_u64().into();
     let (gas, value) = (u256_to_uint256(gas), u256_to_uint256(value));
+    let input = input.into();
     let signature = Some(Signature {
         r: u256_to_uint256(r),
         s: u256_to_uint256(s),

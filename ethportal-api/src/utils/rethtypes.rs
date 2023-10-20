@@ -7,6 +7,12 @@ pub fn u256_to_uint256(u256: U256) -> Uint<256, 4> {
     Uint::from_be_bytes(bytes)
 }
 
+pub fn u256_to_uint128(u256: U256) -> Uint<128, 2> {
+    let mut bytes = [0u8; 16];
+    u256.to_big_endian(&mut bytes);
+    Uint::from_be_bytes(bytes)
+}
+
 pub fn u64_to_uint256(val: u64) -> Uint<256, 4> {
     let u64_bytes: &[u8] = &val.to_be_bytes();
     let high_zero_bytes: &[u8] = &[0u8; 24];
