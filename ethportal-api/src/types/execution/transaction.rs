@@ -1,5 +1,6 @@
 use bytes::Bytes;
 use ethereum_types::{H160, H256, U256, U64};
+use reth_primitives::AccessListItem as RethAccessListItem;
 use rlp::{Decodable, DecoderError, Encodable, Rlp, RlpStream};
 use rlp_derive::{RlpDecodable, RlpEncodable};
 use serde::{Deserialize, Deserializer};
@@ -352,4 +353,13 @@ impl Encodable for AccessList {
 pub struct AccessListItem {
     pub address: H160,
     pub storage_keys: Vec<H256>,
+}
+
+impl From<AccessListItem> for RethAccessListItem {
+    fn from(val: AccessListItem) -> Self {
+        Self {
+            address: val.address.into(),
+            storage_keys: val.storage_keys.into_iter().map(Into::into).collect(),
+        }
+    }
 }

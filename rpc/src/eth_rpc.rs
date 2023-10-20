@@ -4,7 +4,7 @@ use ruint::Uint;
 use tokio::sync::mpsc;
 
 use ethportal_api::types::execution::block_body::BlockBody;
-use ethportal_api::types::execution::transaction::Transaction;
+use ethportal_api::types::execution::transaction::{ToAddress, Transaction};
 use ethportal_api::types::jsonrpc::request::HistoryJsonRpcRequest;
 use ethportal_api::utils::rethtypes::{ethtype_u64_to_uint256, u256_to_uint128, u256_to_uint256};
 use ethportal_api::EthApiServer;
@@ -113,6 +113,10 @@ fn rpc_transaction(
     // Convert types
     let nonce = nonce.as_u64().into();
     let (gas, value) = (u256_to_uint256(gas), u256_to_uint256(value));
+    let to = match to {
+        ToAddress::Empty => None,
+        ToAddress::Exists(addr) => Some(addr.into()),
+    };
     let input = input.into();
     let signature = Some(Signature {
         r: u256_to_uint256(r),
@@ -120,6 +124,7 @@ fn rpc_transaction(
         v: ethtype_u64_to_uint256(v),
         y_parity: y_parity.map(|y| Parity(!y.is_zero())),
     });
+    let access_list = access_list.map(|al| al.list.into_iter().map(Into::into).collect());
 
     // Fields that are hardcoded, for now
     let max_fee_per_blob_gas = None;

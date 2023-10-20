@@ -2064,6 +2064,7 @@ dependencies = [
  "nanotemplate",
  "quickcheck",
  "rand 0.8.5",
+ "reth-primitives",
  "reth-rpc-types",
  "rlp",
  "rlp-derive",
