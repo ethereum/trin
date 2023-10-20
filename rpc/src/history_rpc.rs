@@ -9,7 +9,7 @@ use ethportal_api::types::jsonrpc::endpoints::HistoryEndpoint;
 use ethportal_api::types::jsonrpc::request::HistoryJsonRpcRequest;
 use ethportal_api::types::portal::{
     AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
-    TraceContentInfo,
+    TraceContentInfo, TraceGossipInfo,
 };
 use ethportal_api::HistoryContentKey;
 use ethportal_api::HistoryContentValue;
@@ -165,6 +165,19 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
         let endpoint = HistoryEndpoint::Gossip(content_key, content_value);
         let result = proxy_query_to_history_subnet(&self.network, endpoint).await?;
         let result: u32 = from_value(result)?;
+        Ok(result)
+    }
+
+    /// Send the provided content to interested peers. Clients may choose to send to some or all peers.
+    /// Return tracing info.
+    async fn trace_gossip(
+        &self,
+        content_key: HistoryContentKey,
+        content_value: HistoryContentValue,
+    ) -> RpcResult<TraceGossipInfo> {
+        let endpoint = HistoryEndpoint::TraceGossip(content_key, content_value);
+        let result = proxy_query_to_history_subnet(&self.network, endpoint).await?;
+        let result: TraceGossipInfo = from_value(result)?;
         Ok(result)
     }
 

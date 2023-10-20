@@ -257,6 +257,7 @@ impl From<Request> for Message {
             Request::FindContent(find_content) => Message::FindContent(find_content),
             Request::Offer(offer) => Message::Offer(offer),
             Request::PopulatedOffer(offer) => Request::Offer(offer.into()).into(),
+            Request::PopulatedOfferWithResult(offer) => Request::Offer(offer.into()).into(),
         }
     }
 }
@@ -289,6 +290,8 @@ pub enum Request {
     Offer(Offer),
     /// Equivalent to Offer, but with content values supplied, to skip the DB lookup
     PopulatedOffer(PopulatedOffer),
+    /// Equivalent to PopulatedOffer, but with a return channel for the result
+    PopulatedOfferWithResult(PopulatedOfferWithResult),
 }
 
 impl TryFrom<Message> for Request {
@@ -535,6 +538,23 @@ impl From<PopulatedOffer> for Offer {
             .map(|(key, _val)| key)
             .collect();
         Self { content_keys }
+    }
+}
+
+/// The content necessary to make an offer message and return the result of propagation
+#[derive(Debug, Clone)]
+pub struct PopulatedOfferWithResult {
+    /// The offered content key & value
+    pub content_item: (RawContentKey, Vec<u8>),
+    /// The channel to send the result of the offer to
+    pub result_tx: tokio::sync::mpsc::UnboundedSender<bool>,
+}
+
+impl From<PopulatedOfferWithResult> for Offer {
+    fn from(val: PopulatedOfferWithResult) -> Self {
+        Self {
+            content_keys: vec![val.content_item.0],
+        }
     }
 }
 

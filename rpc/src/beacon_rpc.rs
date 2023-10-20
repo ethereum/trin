@@ -9,7 +9,7 @@ use ethportal_api::types::jsonrpc::endpoints::BeaconEndpoint;
 use ethportal_api::types::jsonrpc::request::BeaconJsonRpcRequest;
 use ethportal_api::types::portal::{
     AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
-    TraceContentInfo,
+    TraceContentInfo, TraceGossipInfo,
 };
 use ethportal_api::BeaconContentKey;
 use ethportal_api::BeaconContentValue;
@@ -186,6 +186,19 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
         let endpoint = BeaconEndpoint::Gossip(content_key, content_value);
         let result = self.proxy_query_to_beacon_subnet(endpoint).await?;
         let result: u32 = from_value(result)?;
+        Ok(result)
+    }
+
+    /// Send the provided content to interested peers. Clients may choose to send to some or all peers.
+    /// Return tracing info.
+    async fn trace_gossip(
+        &self,
+        content_key: BeaconContentKey,
+        content_value: BeaconContentValue,
+    ) -> RpcResult<TraceGossipInfo> {
+        let endpoint = BeaconEndpoint::TraceGossip(content_key, content_value);
+        let result = self.proxy_query_to_beacon_subnet(endpoint).await?;
+        let result: TraceGossipInfo = from_value(result)?;
         Ok(result)
     }
 

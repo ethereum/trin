@@ -66,6 +66,15 @@ async fn peertest_unpopulated_offer() {
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
+async fn peertest_gossip_with_trace() {
+    let (peertest, target, handle) = setup_peertest().await;
+    peertest::scenarios::gossip::test_gossip_with_trace(&peertest, &target).await;
+    peertest.exit_all_nodes();
+    handle.stop().unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
 async fn peertest_find_content_return_enr() {
     let (peertest, target, handle) = setup_peertest().await;
     peertest::scenarios::find::test_find_content_return_enr(&target, &peertest).await;

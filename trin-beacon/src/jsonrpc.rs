@@ -65,7 +65,10 @@ async fn complete_request(network: Arc<RwLock<BeaconNetwork>>, request: BeaconJs
         BeaconEndpoint::FindNodes(enr, distances) => find_nodes(network, enr, distances).await,
         BeaconEndpoint::GetEnr(node_id) => get_enr(network, node_id).await,
         BeaconEndpoint::Gossip(content_key, content_value) => {
-            gossip(network, content_key, content_value).await
+            gossip(network, content_key, content_value, false).await
+        }
+        BeaconEndpoint::TraceGossip(content_key, content_value) => {
+            gossip(network, content_key, content_value, true).await
         }
         BeaconEndpoint::LookupEnr(node_id) => lookup_enr(network, node_id).await,
         BeaconEndpoint::Offer(enr, content_key, content_value) => {
@@ -273,12 +276,16 @@ async fn gossip(
     network: Arc<RwLock<BeaconNetwork>>,
     content_key: BeaconContentKey,
     content_value: BeaconContentValue,
+    is_trace: bool,
 ) -> Result<Value, String> {
     let data = content_value.encode();
-    let content_values = vec![(content_key, data)];
     let overlay = network.read().await.overlay.clone();
-    let num_peers = overlay.propagate_gossip(content_values);
-    Ok(num_peers.into())
+    match is_trace {
+        true => Ok(json!(
+            overlay.propagate_gossip_trace(content_key, data).await
+        )),
+        false => Ok(overlay.propagate_gossip(vec![(content_key, data)]).into()),
+    }
 }
 
 /// Constructs a JSON call for the Offer method.

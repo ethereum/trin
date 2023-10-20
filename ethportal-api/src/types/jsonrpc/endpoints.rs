@@ -45,6 +45,8 @@ pub enum HistoryEndpoint {
     LookupEnr(NodeId),
     /// params: [content_key, content_value]
     Gossip(HistoryContentKey, HistoryContentValue),
+    /// params: [content_key, content_value]
+    TraceGossip(HistoryContentKey, HistoryContentValue),
     /// params: [enr, content_key]
     Offer(Enr, HistoryContentKey, Option<HistoryContentValue>),
     /// params: [enr]
@@ -85,6 +87,8 @@ pub enum BeaconEndpoint {
     LookupEnr(NodeId),
     /// params: [content_key, content_value]
     Gossip(BeaconContentKey, BeaconContentValue),
+    /// params: [content_key, content_value]
+    TraceGossip(BeaconContentKey, BeaconContentValue),
     /// params: [enr, content_key]
     Offer(Enr, BeaconContentKey, Option<BeaconContentValue>),
     /// params: enr
