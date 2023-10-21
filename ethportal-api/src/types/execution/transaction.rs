@@ -1,6 +1,6 @@
 use bytes::Bytes;
 use ethereum_types::{H160, H256, U256, U64};
-use reth_primitives::AccessListItem as RethAccessListItem;
+use reth_primitives;
 use rlp::{Decodable, DecoderError, Encodable, Rlp, RlpStream};
 use rlp_derive::{RlpDecodable, RlpEncodable};
 use serde::{Deserialize, Deserializer};
@@ -100,6 +100,24 @@ impl<'de> Deserialize<'de> for Transaction {
     }
 }
 
+impl From<Transaction> for reth_primitives::TransactionSigned {
+    fn from(tx: Transaction) -> Self {
+        let (core_tx, signature) = match tx {
+            Transaction::Legacy(tx) => {
+                let signature = reth_primitives::Signature {
+                    v: tx.v,
+                    r: tx.r.into(),
+                    s: tx.s.into(),
+                };
+                (reth_primitives::Transaction::Legacy(tx.into()), signature)
+            }
+            Transaction::AccessList(tx) => Self::Eip2930(tx.into()),
+            Transaction::EIP1559(tx) => Self::Eip1559(tx.into()),
+        };
+        Self::from_transaction_and_signature(core_tx, signature)
+    }
+}
+
 #[derive(Default, Debug, Clone, PartialEq, Eq, RlpEncodable, RlpDecodable)]
 pub struct LegacyTransaction {
     pub nonce: U256,
@@ -111,6 +129,23 @@ pub struct LegacyTransaction {
     pub v: U64,
     pub r: U256,
     pub s: U256,
+}
+
+impl From<LegacyTransaction> for reth_primitives::TxLegacy {
+    fn from(tx: LegacyTransaction) -> Self {
+        let to = match tx.to {
+            ToAddress::Empty => reth_primitives::TransactionKind::Create,
+            ToAddress::Exists(addr) => reth_primitives::TransactionKind::Call(addr.into()),
+        };
+        Self {
+            nonce: tx.nonce.as_u64(),
+            gas_price: tx.gas_price.as_u128(),
+            gas_limit: tx.gas.as_u64(),
+            to,
+            value: tx.value.as_u128(),
+            input: tx.data.into(),
+        }
+    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -355,7 +390,7 @@ pub struct AccessListItem {
     pub storage_keys: Vec<H256>,
 }
 
-impl From<AccessListItem> for RethAccessListItem {
+impl From<AccessListItem> for reth_primitives::AccessListItem {
     fn from(val: AccessListItem) -> Self {
         Self {
             address: val.address.into(),

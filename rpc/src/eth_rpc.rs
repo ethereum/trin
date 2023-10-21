@@ -1,5 +1,8 @@
 use ethereum_types::{H256, U256, U64};
-use reth_rpc_types::{Block, BlockTransactions, Parity, Signature, Transaction as RethTransaction};
+use reth_primitives::Transaction as RethTransaction;
+use reth_rpc_types::{
+    Block, BlockTransactions, Parity, Signature, Transaction as RethRpcTransaction,
+};
 use ruint::Uint;
 use tokio::sync::mpsc;
 
@@ -28,7 +31,7 @@ fn rpc_transaction(
     block_hash: H256,
     block_number: u64,
     transaction_index: usize,
-) -> RethTransaction {
+) -> RethRpcTransaction {
     // Fields not extractable from the transaction itself
     let block_hash = Some(block_hash.as_fixed_bytes().into());
     let block_number = Some(Uint::from(block_number.into()));
@@ -41,6 +44,10 @@ fn rpc_transaction(
         n => Some(U64::from(n)),
     };
     // TODO: generate 'from' address from signature
+    // Some paths forward:
+    // - reth_primitives::TransactionSigned::decode_enveloped() from the original RLP (should we
+    // send the raw RLP in response to the internal RPC request? it requires the least pre-decoding)
+    // - split transaction into parts, creating the reth Transaction and reth Signature, then into TransactionSigned
     let from = None;
 
     // Fields internal to the transaction, sometimes varying by transaction type
@@ -131,7 +138,7 @@ fn rpc_transaction(
     let chain_id = Some(CHAIN_ID.into());
     let blob_versioned_hashes = vec![];
 
-    RethTransaction {
+    RethRpcTransaction {
         hash,
         nonce,
         block_hash,
