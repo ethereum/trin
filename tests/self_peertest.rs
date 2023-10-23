@@ -156,6 +156,15 @@ async fn peertest_trace_recursive_utp() {
     handle.stop().unwrap();
 }
 
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
+async fn peertest_gossip() {
+    let (peertest, _target, handle) = setup_peertest().await;
+    peertest::scenarios::gossip::test_gossip(&peertest).await;
+    peertest.exit_all_nodes();
+    handle.stop().unwrap();
+}
+
 async fn setup_peertest() -> (peertest::Peertest, Client, RpcServerHandle) {
     utils::init_tracing();
     // Run a client, as a buddy peer for ping tests, etc.
