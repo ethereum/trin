@@ -37,19 +37,19 @@ pub struct LightClientUpdatesByRangeKey {
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct LightClientFinalityUpdateKey {
     /// Finalized slot number
-    pub signature_slot: u64,
+    pub finalized_slot: u64,
 }
 
 impl LightClientFinalityUpdateKey {
-    pub fn new(signature_slot: u64) -> Self {
-        Self { signature_slot }
+    pub fn new(finalized_slot: u64) -> Self {
+        Self { finalized_slot }
     }
 }
 
 /// Key used to identify a light client optimistic update.
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct LightClientOptimisticUpdateKey {
-    /// Optimistic slot number
+    /// Signature slot number
     pub signature_slot: u64,
 }
 
@@ -94,8 +94,8 @@ impl fmt::Display for BeaconContentKey {
                 key.start_period, key.count
             ),
             Self::LightClientFinalityUpdate(key) => format!(
-                "LightClientFinalityUpdate {{ signature_slot: {} }}",
-                key.signature_slot
+                "LightClientFinalityUpdate {{ finalized_slot: {} }}",
+                key.finalized_slot
             ),
             Self::LightClientOptimisticUpdate(key) => format!(
                 "LightClientOptimisticUpdate {{ signature_slot: {} }}",
@@ -129,7 +129,7 @@ impl OverlayContentKey for BeaconContentKey {
             }
             BeaconContentKey::LightClientFinalityUpdate(key) => {
                 bytes.push(0x02);
-                bytes.extend_from_slice(&key.signature_slot.as_ssz_bytes())
+                bytes.extend_from_slice(&key.finalized_slot.as_ssz_bytes())
             }
             BeaconContentKey::LightClientOptimisticUpdate(key) => {
                 bytes.push(0x03);
@@ -237,7 +237,7 @@ mod test {
         assert_eq!(content_key.to_bytes(), expected_content_key);
         assert_eq!(
             content_key.to_string(),
-            "LightClientFinalityUpdate { signature_slot: 7271362 }"
+            "LightClientFinalityUpdate { finalized_slot: 7271362 }"
         );
         assert_eq!(content_key.to_hex(), KEY_STR);
     }
