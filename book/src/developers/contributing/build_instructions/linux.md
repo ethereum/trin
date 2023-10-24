@@ -8,11 +8,11 @@ There's an [AUR package](https://aur.archlinux.org/packages/trin-git) for Trin. 
 yay -S trin-git
 ```
 
-## Trin on Ubuntu
+## Trin as a service on Ubuntu
 
 These steps are for setting up a Trin node as a service on Ubuntu.
 
-## Installation
+### Installation
 ```sh
 $ sudo apt install libssl-dev librocksdb-dev libclang-dev pkg-config build-essential
 ```
@@ -50,25 +50,25 @@ Example response:
 > Launching trin
 > trin 0.0.1
 ```
-## Configuration
+### Configuration
 Before setting up the service, look at the flags that can be set when starting Trin:
 ```sh
 $ /usr/local/bin/trin --help
 ```
 Some selected flags are described below.
 
-### Optional flag for database size
+#### Optional flag for database size
 `--mb 200`. Trin lets you control how much storage the node takes up (e.g., 200MB). The default is
 100 megabytes and can be changed.
 
-### Optional flag for no connection to external server
+#### Optional flag for no connection to external server
 
 `--no-stun`. A third party server connection is configured by default to assist in testing.
 This is a Session Traversal Utilities for NAT (STUN) server and may be disabled
 a flag. The docs state: "Do not use STUN to determine an external IP. Leaves
 ENR entry for IP blank. Some users report better connections over VPN."
 
-### Optional flags for conflicting nodes
+#### Optional flags for conflicting nodes
 
 The discovery and JSON-RPC ports may conflict with an existing an Ethereum client
 or other software on the same machine.
@@ -88,7 +88,7 @@ test if it is in use (no response indicates it is ok to use):
 $ sudo ss -tulpn | grep ':9008'
 ```
 
-## Create the node service
+### Create the node service
 
 Create a service to run the Trin node:
 ```sh
@@ -119,7 +119,11 @@ WantedBy=default.target
 ```
 CTRL-X then CTRL-Y to exit and save.
 
-## Add environment variables
+> Tip: Note that we are not using the default discovery (9009) and HTTP (8545) ports.
+This is done on purpose with the assumption that we will run Trin from the source code as well.
+See [section](#trin-from-the-source) below.
+
+### Add environment variables
 
 The environment variables are going in a different file so they
 are not accidentally copy-pasted to public places. Create the `override.conf`
@@ -141,7 +145,7 @@ Environment="RUST_LOG=info"
 # (optional) This flag sets the data directory to the location we created earlier.
 Environment="TRIN_DATA_PATH=/var/lib/trin"
 ```
-## Configure firewall
+### Configure firewall
 
 Ensure that the discovery port (custom or default 9009) is not blocked by the firewall:
 ```sh
@@ -153,7 +157,7 @@ $ sudo ufw status numbered
 ```
 > Tip: use `sudo ufw delete <number>` to remove a particular rule.
 
-## Start the service
+### Start the service
 
 Start the Trin node service and enable it to start on reboot:
 ```sh
@@ -177,22 +181,8 @@ To stop Trin and disable it from starting on reboot:
 $ sudo systemctl stop trin
 $ sudo systemctl disable trin
 ```
-## Code changes
 
-> Tip: Use a unique discovery-port or disable the Trin service prior to running a second
-`cargo`-based instance of Trin.
-
-See [getting started](getting_started.md) notes for more tips including setting environment
-variables during testing.
-```sh
-$ cargo test --workspace
-$ cargo run -- --discovery-port 9009 \
-    --web3-http-address 127.0.0.1:8545 \
-    --web3-transport http \
-    --bootnodes default \
-    --mb 200 \
-    --no-stun
-```
+### Keeping service up to date
 
 To get upstream updates, sync your fork with upstream on Github. To move any changes
 from the codebase to the service, rebuild and move the binary as before:
@@ -204,8 +194,29 @@ $ cargo build --workspace --release
 $ sudo systemctl stop trin
 $ sudo cp -a ~/trin/target/release/trin /usr/local/bin/trin
 ```
+
 Restart the service to use the new binary:
+
 ```sh
 $ sudo systemctl daemon-reload
 $ sudo systemctl start trin
+```
+
+## Trin from the source
+
+See [getting started](getting_started.md) notes for more tips including setting environment
+variables during testing.
+
+> Tip: If Trin service is using non-default ports (as suggested
+[earlier](#create-the-node-service)), you don't have to set ports now.
+Either way, make sure ports are not already in use.
+
+```sh
+$ cargo test --workspace
+$ cargo run -- --discovery-port 9009 \
+    --web3-http-address 127.0.0.1:8545 \
+    --web3-transport http \
+    --bootnodes default \
+    --mb 200 \
+    --no-stun
 ```
