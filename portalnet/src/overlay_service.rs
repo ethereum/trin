@@ -17,7 +17,7 @@ use discv5::{
         Key, NodeStatus, UpdateResult,
     },
     rpc::RequestId,
-};
+};  
 use futures::{channel::oneshot, future::join_all, prelude::*};
 use lazy_static::lazy_static;
 use parking_lot::RwLock;
@@ -2629,10 +2629,11 @@ mod tests {
         storage::{DistanceFunction, MemoryContentStore},
         utils::db::setup_temp_dir,
     };
-    use ethportal_api::types::distance::XorMetric;
-    use ethportal_api::types::enr::generate_random_remote_enr;
     use ethportal_api::types::{
-        cli::DEFAULT_DISCOVERY_PORT, content_key::overlay::IdentityContentKey,
+        cli::DEFAULT_DISCOVERY_PORT,
+        content_key::overlay::IdentityContentKey,
+        distance::XorMetric,
+        enr::generate_random_remote_enr,
     };
     use trin_validation::validator::MockValidator;
 
