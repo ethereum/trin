@@ -289,9 +289,9 @@ with username: admin, password: admin. Then navigate to the trin-app-metrics das
 
 ## Metrics setup with docker
 1. Install Docker.
-2. Run Prometheus, note that you MUST manually set the absolute path to your copy of Trin's `docs/metrics_config/`:
+2. Run Prometheus, note that you MUST manually set the absolute path to your copy of Trin's `etc/prometheus/`:
 ```sh
-docker run -p 9090:9090 -v /**absolute/path/to/trin/docs/metrics_config**:/etc/prometheus --add-host=host.docker.internal:host-gateway prom/prometheus
+docker run -p 9090:9090 -v /**absolute/path/to/trin/etc/prometheus**:/etc/prometheus --add-host=host.docker.internal:host-gateway prom/prometheus
 ```
 3. Run Grafana:
 ```sh
@@ -303,7 +303,7 @@ cargo run -p trin -- --enable-metrics-with-url 0.0.0.0:9100 --web3-http-address 
 ```
 - The addresses must be bound to 0.0.0.0, because 127.0.0.1 only allows internal requests to
   complete, and requests from docker instances are considered external.
-- The `--enable-metrics-with-url` parameter is the address that Trin exports metrics to, and should be equal to the port to which your Prometheus server is targeting at the bottom of `metrics_config/prometheus.yml`
+- The `--enable-metrics-with-url` parameter is the address that Trin exports metrics to, and should be equal to the port to which your Prometheus server is targeting at the bottom of `prometheus/prometheus.yml`
 - The `--web-transport http` will allow Grafana to request routing table information from Trin via JSON-RPC over HTTP
 5. From the root of the Trin repo, run `cargo run -p trin -- create-dashboard`. If you used different ports than detailed in the above steps, or you are not using docker, then this command's defaults will not work. Run the command with the `-h` flag to see how to provide non-default addresses or credentials.
 6. Upon successful dashboard creation, navigate to the dashboard URL that the `create-dashboard` outputs. Use `admin`/`admin` to login.
