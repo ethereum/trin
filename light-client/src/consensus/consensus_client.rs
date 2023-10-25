@@ -153,9 +153,15 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
     }
 
     pub async fn advance(&mut self) -> Result<()> {
-        let finality_update = self.rpc.get_finality_update().await?;
-        self.verify_finality_update(&finality_update)?;
-        self.apply_finality_update(&finality_update);
+        match self.rpc.get_finality_update().await {
+            Ok(finality_update) => {
+                self.verify_finality_update(&finality_update)?;
+                self.apply_finality_update(&finality_update);
+            }
+            Err(err) => {
+                debug!("Could not fetch finality update: {err}")
+            }
+        }
 
         let optimistic_update = self.rpc.get_optimistic_update().await?;
         self.verify_optimistic_update(&optimistic_update)?;
