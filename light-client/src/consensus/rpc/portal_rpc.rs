@@ -174,9 +174,11 @@ impl ConsensusRpc for PortalRpc {
 
     async fn get_finality_update(&self) -> eyre::Result<LightClientFinalityUpdateCapella> {
         let expected_current_slot = expected_current_slot();
+        let recent_epoch_start = expected_current_slot - (expected_current_slot % 32);
+
         let finality_update_key =
             BeaconContentKey::LightClientFinalityUpdate(LightClientFinalityUpdateKey {
-                signature_slot: expected_current_slot - 1,
+                finalized_slot: recent_epoch_start,
             });
 
         let (tx, rx) = oneshot::channel();
@@ -201,7 +203,7 @@ impl ConsensusRpc for PortalRpc {
                 let finality_update = BeaconContentValue::decode(
                     &result
                         .0
-                        .ok_or(format!("LightClientFinalityUpdate content for slot {} not found on the network.", expected_current_slot - 1))
+                        .ok_or(format!("LightClientFinalityUpdate content for slot {recent_epoch_start} not found on the network."))
                         .map_err(|err| eyre!("{err}"))?,
                 )?;
 
