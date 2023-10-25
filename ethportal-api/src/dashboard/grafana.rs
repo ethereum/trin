@@ -5,7 +5,7 @@ use std::fs;
 use ureq;
 
 pub const DASHBOARD_TEMPLATES: &[&str] =
-    &["../etc/grafana/dashboards/collected-metrics-dashboard.json.template"];
+    &["./etc/grafana/dashboards/collected-metrics-dashboard.json.template"];
 
 pub struct GrafanaAPI {
     basic_auth_string: String,
@@ -45,7 +45,6 @@ impl GrafanaAPI {
                 "url": url,
                 "basicAuth": false,
             }))?;
-
         let response: DatasourceCreationResponse = datasource_creation_response.into_json()?;
         Ok(response.datasource.uid)
     }
@@ -60,6 +59,13 @@ impl GrafanaAPI {
         let dashboard_json: serde_json::Value = serde_json::from_str(&filled_in_template[..])?;
 
         let dashboard_api_url = format!("{}/{}", self.address, "api/dashboards/db/");
+
+        // If this is failing with a 409 error, it means that there is likely a problem with the
+        // template, make sure that ...
+        // - All "uid" fields inside a prometheus datasource object contain `"uid": "{prometheus_id}"`
+        // - The root level `"id"` field is set to `null` (`"id": null`)
+        // - The root level `"title"` field is set to "Trin Metrics" (`"title": "Trin Metrics"`)
+        // - The root level `"uid"` field is set to "trin-metrics" (`"uid": "trin-metrics"`)
         let dashboard_creation_response: DashboardCreationResponse = ureq::post(&dashboard_api_url)
             .set("Authorization", &self.basic_auth_string)
             .send_json(ureq::json!({ "dashboard": dashboard_json }))?
