@@ -200,7 +200,7 @@ impl TrinConfig {
 
         if let Some(TrinConfigCommands::CreateDashboard(dashboard_config)) = config.command {
             if let Err(err) = create_dashboard(dashboard_config) {
-                panic!("Creating dashboard failed {}", err);
+                panic!("Creating dashboard failed {err}");
             }
             // exit program since if the user uses create dashboard this is all we do
             std::process::exit(0);
