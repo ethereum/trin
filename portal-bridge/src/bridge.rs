@@ -76,6 +76,10 @@ impl Bridge {
             BridgeMode::Latest => self.launch_latest().await,
             _ => self.launch_backfill().await,
         }
+        // let test finish uTP transfer before shutting down gossip nodes
+        if let BridgeMode::Test(_) = self.mode.clone() {
+            sleep(Duration::from_secs(2)).await;
+        }
         info!("Bridge mode: {:?} complete.", self.mode);
     }
 
