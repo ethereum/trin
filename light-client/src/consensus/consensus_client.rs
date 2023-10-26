@@ -110,7 +110,7 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
             let current_perriod = calc_sync_period(expected_current_slot());
 
             // Create a range of periods to request updates for
-            let periods = bootstrap_period..=current_perriod;
+            let periods = bootstrap_period..current_perriod;
 
             for period in periods {
                 let mut period_update = self.rpc.get_updates(period, 1).await?;
