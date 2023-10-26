@@ -131,7 +131,7 @@ impl ConsensusRpc for PortalRpc {
                 let content_value = BeaconContentValue::decode(
                     &result
                         .0
-                        .ok_or("LightClientUpdatesByRange content not found on the network.")
+                        .ok_or(format!("LightClientUpdatesByRange period={period}, count={count} not found on the network."))
                         .map_err(|err| eyre!("{err}"))?,
                 )?;
 
@@ -174,7 +174,7 @@ impl ConsensusRpc for PortalRpc {
 
     async fn get_finality_update(&self) -> eyre::Result<LightClientFinalityUpdateCapella> {
         let expected_current_slot = expected_current_slot();
-        let recent_epoch_start = expected_current_slot - (expected_current_slot % 32);
+        let recent_epoch_start = expected_current_slot - (expected_current_slot % 32) + 1;
 
         let finality_update_key =
             BeaconContentKey::LightClientFinalityUpdate(LightClientFinalityUpdateKey {

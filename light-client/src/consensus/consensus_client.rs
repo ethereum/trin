@@ -155,6 +155,10 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
     pub async fn advance(&mut self) -> Result<()> {
         match self.rpc.get_finality_update().await {
             Ok(finality_update) => {
+                debug!(
+                    "Processing finality update with finalized slot {}",
+                    finality_update.finalized_header.beacon.slot
+                );
                 self.verify_finality_update(&finality_update)?;
                 self.apply_finality_update(&finality_update);
             }
