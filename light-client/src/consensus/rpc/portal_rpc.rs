@@ -203,7 +203,7 @@ impl ConsensusRpc for PortalRpc {
                 let finality_update = BeaconContentValue::decode(
                     &result
                         .0
-                        .ok_or(format!("LightClientFinalityUpdate content for slot {recent_epoch_start} not found on the network."))
+                        .ok_or(format!("LightClientFinalityUpdate content with finalized slot {recent_epoch_start} not found on the network."))
                         .map_err(|err| eyre!("{err}"))?,
                 )?;
 
@@ -240,7 +240,7 @@ impl ConsensusRpc for PortalRpc {
         let expected_current_slot = expected_current_slot();
         let optimistic_update_key =
             BeaconContentKey::LightClientOptimisticUpdate(LightClientOptimisticUpdateKey {
-                signature_slot: expected_current_slot - 1,
+                signature_slot: expected_current_slot,
             });
 
         let (tx, rx) = oneshot::channel();
@@ -265,7 +265,7 @@ impl ConsensusRpc for PortalRpc {
                 let optimistic_update = BeaconContentValue::decode(
                     &result
                         .0
-                        .ok_or(format!("LightClientOptimisticUpdate content for slot {} not found on the network.", expected_current_slot - 1))
+                        .ok_or(format!("LightClientOptimisticUpdate content with signature slot {expected_current_slot} not found on the network."))
                         .map_err(|err| eyre!("{err}"))?,
                 )?;
 
