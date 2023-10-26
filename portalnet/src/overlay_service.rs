@@ -2619,7 +2619,7 @@ where
     }
 
     /// Send `OverlayEvent` to the event stream.
-    #[allow(dead_code)]
+    #[allow(dead_code)] // TODO: remove when used
     fn send_event(&self, event: OverlayEvent, to: Option<Vec<ProtocolId>>) {
         trace!(
             "Sending event={:?} to event-stream from protocol {}",

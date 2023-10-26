@@ -115,7 +115,9 @@ async fn test_eth_get_block_by_hash() {
         u64_to_ethers_u256(hwp.header.timestamp),
     );
 
-    let BlockBody::Shanghai(shanghai_body) = body.clone() else { panic!("expected shanghai body") };
+    let BlockBody::Shanghai(shanghai_body) = body.clone() else {
+        panic!("expected shanghai body")
+    };
 
     // Store header with proof in server
     let content_key = HistoryContentKey::BlockHeaderWithProof(block_hash.into());

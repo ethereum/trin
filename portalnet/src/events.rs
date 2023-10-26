@@ -2,10 +2,10 @@ use std::str::FromStr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use discv5::TalkRequest;
-use tracing::{debug, error, warn};
 use futures::stream::{select_all, StreamExt};
 use tokio::sync::{broadcast, mpsc};
 use tokio_stream::wrappers::BroadcastStream;
+use tracing::{debug, error, trace, warn};
 
 use super::types::messages::ProtocolId;
 use ethportal_api::utils::bytes::{hex_encode, hex_encode_upper};
@@ -92,7 +92,7 @@ impl PortalnetEvents {
         }
 
         if receivers.is_empty() {
-            warn!("Fused stream has zero receivers");
+            panic!("No networks are available for requests, trin expects at least one");
         }
 
         let mut event_stream = select_all(receivers.into_iter().map(BroadcastStream::new));
@@ -140,7 +140,7 @@ impl PortalnetEvents {
                         hex_encode(request.body()),
                     );
                 }
-            }
+            },
             Err(_) => warn!("Unable to decode protocol id"),
         }
     }
@@ -156,7 +156,10 @@ impl PortalnetEvents {
             .to_owned();
         recipients.retain(|id| id != &event.from);
 
-        tracing::trace!("Dispatching event {:?} from {} overlay", event, event.from);
+        trace!("Dispatching event {:?} from {} overlay", event, event.from);
+        if recipients.is_empty() {
+            error!("No valid recipients for this event");
+        }
 
         if recipients.contains(&ProtocolId::Beacon) {
             self.send_overlay_request(&self.beacon_handle.tx, Event(event.clone()), "beacon");
@@ -178,9 +181,7 @@ impl PortalnetEvents {
         match tx {
             Some(tx) => {
                 if let Err(err) = tx.send(msg) {
-                    error!(
-                        "Error sending request to {dest} network: {err}"
-                    );
+                    error!("Error sending request to {dest} network: {err}");
                 }
             }
             None => debug!("Received {dest} request, but {dest} event handler not initialized."),
