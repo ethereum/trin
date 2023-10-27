@@ -10,6 +10,7 @@ pub mod execution_api;
 pub mod full_header;
 pub mod mode;
 pub mod pandaops;
+pub mod stats;
 pub mod types;
 pub mod utils;
 

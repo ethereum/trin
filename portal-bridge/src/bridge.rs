@@ -1,40 +1,43 @@
-use crate::execution_api::ExecutionApi;
-use crate::full_header::FullHeader;
-use crate::mode::{BridgeMode, ModeType};
-use crate::utils::{read_test_assets_from_file, TestAssets};
-use anyhow::{anyhow, bail};
-use ethportal_api::jsonrpsee::http_client::HttpClient;
-use ethportal_api::types::execution::accumulator::EpochAccumulator;
-use ethportal_api::types::execution::block_body::{
-    BlockBody, BlockBodyLegacy, BlockBodyMerge, BlockBodyShanghai, MERGE_TIMESTAMP,
-    SHANGHAI_TIMESTAMP,
-};
-use ethportal_api::types::execution::header::{
-    AccumulatorProof, BlockHeaderProof, Header, HeaderWithProof, SszNone,
-};
-use ethportal_api::types::execution::receipts::Receipts;
-use ethportal_api::utils::bytes::hex_encode;
-use ethportal_api::HistoryContentValue;
-use ethportal_api::HistoryNetworkApiClient;
-use ethportal_api::{
-    BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey, HistoryContentKey,
-};
-use futures::stream::StreamExt;
-use ssz::Decode;
 use std::fs;
 use std::ops::Range;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::time;
+
+use anyhow::{anyhow, bail};
+use futures::stream::StreamExt;
+use ssz::Decode;
 use surf::{
     middleware::{Middleware, Next},
     Body, Client, Request, Response,
 };
 use tokio::time::{sleep, Duration};
 use tracing::{debug, info, warn};
-use trin_validation::accumulator::MasterAccumulator;
-use trin_validation::constants::{EPOCH_SIZE as EPOCH_SIZE_USIZE, MERGE_BLOCK_NUMBER};
-use trin_validation::oracle::HeaderOracle;
+
+use crate::execution_api::ExecutionApi;
+use crate::full_header::FullHeader;
+use crate::mode::{BridgeMode, ModeType};
+use crate::stats::{HistoryBlockStats, StatsReporter};
+use crate::utils::{read_test_assets_from_file, TestAssets};
+use ethportal_api::jsonrpsee::http_client::HttpClient;
+use ethportal_api::types::execution::{
+    accumulator::EpochAccumulator,
+    block_body::{
+        BlockBody, BlockBodyLegacy, BlockBodyMerge, BlockBodyShanghai, MERGE_TIMESTAMP,
+        SHANGHAI_TIMESTAMP,
+    },
+    header::{AccumulatorProof, BlockHeaderProof, Header, HeaderWithProof, SszNone},
+    receipts::Receipts,
+};
+use ethportal_api::utils::bytes::hex_encode;
+use ethportal_api::{
+    BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey, HistoryContentKey,
+    HistoryContentValue, HistoryNetworkApiClient,
+};
+use trin_validation::{
+    accumulator::MasterAccumulator,
+    constants::{EPOCH_SIZE as EPOCH_SIZE_USIZE, MERGE_BLOCK_NUMBER},
+    oracle::HeaderOracle,
+};
 
 // todo: calculate / test optimal saturation delay
 const HEADER_SATURATION_DELAY: u64 = 10; // seconds
@@ -85,14 +88,16 @@ impl Bridge {
             .into_history_assets()
             .expect("Error parsing history test assets.");
 
+        // test files have no block number data, so we report all gossiped content at height 0.
+        let block_stats = Arc::new(Mutex::new(HistoryBlockStats::new(0)));
         for asset in assets.0.into_iter() {
             Bridge::gossip_content(
                 &self.portal_clients,
                 asset.content_key.clone(),
                 asset.content_value,
+                block_stats.clone(),
             )
-            .await
-            .expect("Error serving block range in test mode.");
+            .await;
             if let HistoryContentKey::BlockHeaderWithProof(_) = asset.content_key {
                 sleep(Duration::from_millis(50)).await;
             }
@@ -120,9 +125,8 @@ impl Bridge {
                     end: latest_block + 1,
                 };
                 info!("Discovered new blocks to gossip: {gossip_range:?}");
-                let gossip_stats = Arc::new(Mutex::new(GossipStats::new(gossip_range.clone())));
                 let epoch_acc = None;
-                self.serve(gossip_range.clone(), epoch_acc, gossip_stats.clone())
+                self.serve(gossip_range.clone(), epoch_acc)
                     .await
                     .expect("Error serving block range in latest mode.");
                 block_index = gossip_range.end;
@@ -170,7 +174,6 @@ impl Bridge {
             start: start_block,
             end: end_block,
         };
-        let gossip_stats = Arc::new(Mutex::new(GossipStats::new(gossip_range.clone())));
         while epoch_index <= current_epoch {
             // Using epoch_size chunks & epoch boundaries ensures that every
             // "chunk" shares an epoch accumulator avoiding the need to
@@ -187,14 +190,9 @@ impl Bridge {
                 None
             };
             info!("fetching headers in range: {gossip_range:?}");
-            self.serve(gossip_range, epoch_acc, gossip_stats.clone())
+            self.serve(gossip_range, epoch_acc)
                 .await
                 .expect("Error serving headers in backfill mode.");
-            if let Ok(gossip_stats) = gossip_stats.lock() {
-                gossip_stats.display_stats();
-            } else {
-                warn!("Error displaying gossip stats. Unable to acquire lock.");
-            }
             if !looped {
                 break;
             }
@@ -213,25 +211,18 @@ impl Bridge {
         &self,
         gossip_range: Range<u64>,
         epoch_acc: Option<Arc<EpochAccumulator>>,
-        gossip_stats: Arc<Mutex<GossipStats>>,
     ) -> anyhow::Result<()> {
         let futures = futures::stream::iter(gossip_range.into_iter().map(|height| {
             let epoch_acc = epoch_acc.clone();
-            let gossip_stats = gossip_stats.clone();
             async move {
                 let _ = self
-                    .serve_full_block(height, epoch_acc, gossip_stats, self.portal_clients.clone())
+                    .serve_full_block(height, epoch_acc, self.portal_clients.clone())
                     .await;
             }
         }))
         .buffer_unordered(FUTURES_BUFFER_SIZE)
         .collect::<Vec<()>>();
         futures.await;
-        if let Ok(gossip_stats) = gossip_stats.lock() {
-            gossip_stats.display_stats();
-        } else {
-            warn!("Error displaying gossip stats. Unable to acquire lock.");
-        }
         Ok(())
     }
 
@@ -239,7 +230,6 @@ impl Bridge {
         &self,
         height: u64,
         epoch_acc: Option<Arc<EpochAccumulator>>,
-        gossip_stats: Arc<Mutex<GossipStats>>,
         portal_clients: Vec<HttpClient>,
     ) -> anyhow::Result<()> {
         debug!("Serving block: {height}");
@@ -247,24 +237,32 @@ impl Bridge {
         if full_header.header.number <= MERGE_BLOCK_NUMBER {
             full_header.epoch_acc = epoch_acc;
         }
-        Bridge::gossip_header(&full_header, &portal_clients, &gossip_stats).await?;
+        let block_stats = Arc::new(Mutex::new(HistoryBlockStats::new(
+            full_header.header.number,
+        )));
+        Bridge::gossip_header(&full_header, &portal_clients, block_stats.clone()).await?;
         // Sleep for 10 seconds to allow headers to saturate network,
         // since they must be available for body / receipt validation.
         sleep(Duration::from_secs(HEADER_SATURATION_DELAY)).await;
-        self.construct_and_gossip_block_body(&full_header, &portal_clients, &gossip_stats)
+        self.construct_and_gossip_block_body(&full_header, &portal_clients, block_stats.clone())
             .await
             .map_err(|err| anyhow!("Error gossiping block body #{height:?}: {err:?}"))?;
 
-        self.construct_and_gossip_receipt(&full_header, &portal_clients, &gossip_stats)
+        self.construct_and_gossip_receipt(&full_header, &portal_clients, block_stats.clone())
             .await
             .map_err(|err| anyhow!("Error gossiping receipt #{height:?}: {err:?}"))?;
+        if let Ok(stats) = block_stats.lock() {
+            stats.report();
+        } else {
+            warn!("Error displaying history gossip stats. Unable to acquire lock.");
+        }
         Ok(())
     }
 
     async fn gossip_header(
         full_header: &FullHeader,
         portal_clients: &Vec<HttpClient>,
-        gossip_stats: &Arc<Mutex<GossipStats>>,
+        block_stats: Arc<Mutex<HistoryBlockStats>>,
     ) -> anyhow::Result<()> {
         debug!("Serving header: {}", full_header.header.number);
         if full_header.header.number < MERGE_BLOCK_NUMBER && full_header.epoch_acc.is_none() {
@@ -305,15 +303,8 @@ impl Bridge {
             "Gossip: Block #{:?} HeaderWithProof",
             full_header.header.number
         );
-        let result = Bridge::gossip_content(portal_clients, content_key, content_value).await;
-        if result.is_ok() {
-            if let Ok(mut data) = gossip_stats.lock() {
-                data.header_with_proof_count += 1;
-            } else {
-                warn!("Error updating gossip header with proof stats. Unable to acquire lock.");
-            }
-        }
-        result
+        Bridge::gossip_content(portal_clients, content_key, content_value, block_stats).await;
+        Ok(())
     }
 
     /// Attempt to lookup an epoch accumulator from local portal-accumulators path provided via cli
@@ -337,7 +328,15 @@ impl Bridge {
         // Gossip epoch acc to network if found locally
         let content_key = HistoryContentKey::EpochAccumulator(EpochAccumulatorKey { epoch_hash });
         let content_value = HistoryContentValue::EpochAccumulator(local_epoch_acc.clone());
-        let _ = Bridge::gossip_content(&self.portal_clients, content_key, content_value).await;
+        // create unique stats for epoch accumulator, since it's rarely gossiped
+        let block_stats = Arc::new(Mutex::new(HistoryBlockStats::new(epoch_index * EPOCH_SIZE)));
+        Bridge::gossip_content(
+            &self.portal_clients,
+            content_key,
+            content_value,
+            block_stats,
+        )
+        .await;
         Ok(Arc::new(local_epoch_acc))
     }
 
@@ -345,7 +344,7 @@ impl Bridge {
         &self,
         full_header: &FullHeader,
         portal_clients: &Vec<HttpClient>,
-        gossip_stats: &Arc<Mutex<GossipStats>>,
+        block_stats: Arc<Mutex<HistoryBlockStats>>,
     ) -> anyhow::Result<()> {
         debug!("Serving receipt: {:?}", full_header.header.number);
         let receipts = match full_header.txs.len() {
@@ -372,22 +371,15 @@ impl Bridge {
         });
         let content_value = HistoryContentValue::Receipts(receipts);
         debug!("Gossip: Block #{:?} Receipts", full_header.header.number,);
-        let result = Bridge::gossip_content(portal_clients, content_key, content_value).await;
-        if result.is_ok() {
-            if let Ok(mut data) = gossip_stats.lock() {
-                data.receipts_count += 1;
-            } else {
-                warn!("Error updating gossip receipts stats. Unable to acquire lock.");
-            }
-        }
-        result
+        Bridge::gossip_content(portal_clients, content_key, content_value, block_stats).await;
+        Ok(())
     }
 
     async fn construct_and_gossip_block_body(
         &self,
         full_header: &FullHeader,
         portal_clients: &Vec<HttpClient>,
-        gossip_stats: &Arc<Mutex<GossipStats>>,
+        block_stats: Arc<Mutex<HistoryBlockStats>>,
     ) -> anyhow::Result<()> {
         let txs = full_header.txs.clone();
         let block_body = if full_header.header.timestamp > SHANGHAI_TIMESTAMP {
@@ -422,15 +414,8 @@ impl Bridge {
         });
         let content_value = HistoryContentValue::BlockBody(block_body);
         debug!("Gossip: Block #{:?} BlockBody", full_header.header.number);
-        let result = Bridge::gossip_content(portal_clients, content_key, content_value).await;
-        if result.is_ok() {
-            if let Ok(mut data) = gossip_stats.lock() {
-                data.bodies_count += 1;
-            } else {
-                warn!("Error updating gossip bodies stats. Unable to acquire lock.");
-            }
-        }
-        result
+        Bridge::gossip_content(portal_clients, content_key, content_value, block_stats).await;
+        Ok(())
     }
 
     /// Create a proof for the given header / epoch acc
@@ -448,42 +433,20 @@ impl Bridge {
         portal_clients: &Vec<HttpClient>,
         content_key: HistoryContentKey,
         content_value: HistoryContentValue,
-    ) -> anyhow::Result<()> {
+        block_stats: Arc<Mutex<HistoryBlockStats>>,
+    ) {
+        let mut results = vec![];
         for client in portal_clients {
-            client
-                .gossip(content_key.clone(), content_value.clone())
-                .await?;
+            let result = client
+                .trace_gossip(content_key.clone(), content_value.clone())
+                .await;
+            results.push(result);
         }
-        Ok(())
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct GossipStats {
-    pub range: Range<u64>,
-    pub header_with_proof_count: u64,
-    pub bodies_count: u64,
-    pub receipts_count: u64,
-    pub start_time: time::Instant,
-}
-
-impl GossipStats {
-    fn new(range: Range<u64>) -> Self {
-        Self {
-            range,
-            header_with_proof_count: 0,
-            bodies_count: 0,
-            receipts_count: 0,
-            start_time: time::Instant::now(),
+        if let Ok(mut data) = block_stats.lock() {
+            data.update(content_key, results.into());
+        } else {
+            warn!("Error updating history gossip stats. Unable to acquire lock.");
         }
-    }
-
-    fn display_stats(&self) {
-        info!(
-            "Header Group: Range {:?} - Header with proof: {:?} - Bodies: {:?} - Receipts: {:?}",
-            self.range, self.header_with_proof_count, self.bodies_count, self.receipts_count
-        );
-        info!("Group took: {:?}", time::Instant::now() - self.start_time);
     }
 }
 
