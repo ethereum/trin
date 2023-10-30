@@ -16,7 +16,7 @@ Note: If you use a VPN, you should disable it before running Trin.
 Install dependencies (Ubuntu/Debian):
 
 ```sh
-apt install libssl-dev libclang-dev pkg-config build-essential
+apt install libclang-dev pkg-config build-essential
 ```
 
 Environment variables:

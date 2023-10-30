@@ -81,7 +81,7 @@ jobs:
 
       - name: Build trin for ${{ matrix.arch }}
         run: |
-          cargo install cross
+          cargo install cross --git https://github.com/cross-rs/cross
           env PROFILE=${{ matrix.profile }} make build-${{ matrix.arch }}
 
       - name: Move cross-compiled binary
