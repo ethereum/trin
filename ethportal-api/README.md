@@ -41,7 +41,7 @@ async fn main() {
     assert!(result);
 
     // Call portal_historyLocalContent endpoint and deserialize to `HistoryContentValue::BlockHeaderWithProof` type
-    let result: HistoryContentValue = client.local_content(content_key).await.unwrap();
+    let result: PossibleHistoryContentValue = client.local_content(content_key).await.unwrap();
     assert_eq!(result, content_item);
 }
 ```
