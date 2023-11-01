@@ -1,6 +1,6 @@
 use core::time;
 use std::{
-    net::{SocketAddr, UdpSocket},
+    net::{IpAddr, SocketAddr, UdpSocket},
     thread,
 };
 use tracing::{debug, info, warn};
@@ -46,6 +46,27 @@ pub fn stun_for_external(local_socket_addr: &SocketAddr) -> Option<SocketAddr> {
     }
 }
 
+pub fn is_local_addr(external_ip: Option<IpAddr>) -> bool {
+    match external_ip {
+        None => false,
+        Some(external_ip) => {
+            if let Ok(ip) = local_ip_address::local_ip() {
+                if ip == external_ip {
+                    return true;
+                }
+            };
+
+            if let Ok(ip) = local_ip_address::local_ipv6() {
+                if ip == external_ip {
+                    return true;
+                }
+            };
+
+            false
+        }
+    }
+}
+
 pub fn upnp_for_external(listen_addr: SocketAddr) -> Option<SocketAddr> {
     info!("Connecting to UPnP gateway to map local address to external address");
     let gateway = match igd_next::search_gateway(Default::default()) {
@@ -67,7 +88,7 @@ pub fn upnp_for_external(listen_addr: SocketAddr) -> Option<SocketAddr> {
     // Find a local ip to map.
     // UPnP cannot use an unspecified IP (e.g., 0.0.0.0) to map and thus we need to give a specific IP connected to the gateway.
     // TODO: Detect the local IP connected to the gateway.
-    let mut local_addr = listen_addr.clone();
+    let mut local_addr = listen_addr;
     if local_addr.ip().is_unspecified() {
         local_addr = match local_ip_address::local_ip().or(local_ip_address::local_ipv6()) {
             Ok(ip) => SocketAddr::new(ip, listen_addr.port()),
@@ -87,17 +108,14 @@ pub fn upnp_for_external(listen_addr: SocketAddr) -> Option<SocketAddr> {
         Ok(port) => {
             thread::spawn(move || loop {
                 thread::sleep(time::Duration::from_secs(UPNP_MAPPING_TIMEOUT));
-                match gateway.add_port(
+                if let Err(err) = gateway.add_port(
                     igd_next::PortMappingProtocol::UDP,
                     port,
                     local_addr,
                     UPNP_MAPPING_DURATION,
                     "renew_port",
                 ) {
-                    Err(err) => {
-                        warn!(error = %err, "Error renewing NAT port");
-                    }
-                    Ok(()) => {}
+                    warn!(error = %err, "Error renewing NAT port");
                 }
             });
             let external_addr = SocketAddr::new(external_ip, port);
