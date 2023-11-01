@@ -318,6 +318,7 @@ mod test {
         );
         assert_eq!(actual_config.external_addr, expected_config.external_addr);
         assert_eq!(actual_config.no_stun, expected_config.no_stun);
+        assert_eq!(actual_config.no_upnp, expected_config.no_upnp);
         assert_eq!(actual_config.ephemeral, expected_config.ephemeral);
     }
 

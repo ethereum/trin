@@ -50,17 +50,15 @@ pub fn is_local_addr(external_ip: Option<IpAddr>) -> bool {
     match external_ip {
         None => false,
         Some(external_ip) => {
-            if let Ok(ip) = local_ip_address::local_ip() {
-                if ip == external_ip {
-                    return true;
-                }
-            };
+            let network_interfaces = local_ip_address::list_afinet_netifas();
 
-            if let Ok(ip) = local_ip_address::local_ipv6() {
-                if ip == external_ip {
-                    return true;
+            if let Ok(network_interfaces) = network_interfaces {
+                for (_, ip) in network_interfaces.iter() {
+                    if *ip == external_ip {
+                        return true;
+                    }
                 }
-            };
+            }
 
             false
         }
