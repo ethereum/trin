@@ -93,6 +93,27 @@ impl Discovery {
             }
         };
 
+        let (enr_address, enr_port) = if portal_config.no_upnp {
+            (enr_address, enr_port)
+        } else {
+            let external_address = socket::upnp_for_external(listen_all_ips);
+
+            match external_address {
+                Some(socket) => {
+                    match enr_address {
+                        Some(know_external) => {
+                            if know_external != socket.ip() {
+                                warn!("overriding external address with known upnp address");
+                            }
+                            (Some(socket.ip()), socket.port())
+                        }
+                        None => (Some(socket.ip()), socket.port()),
+                    }
+                }
+                None => (enr_address, enr_port),
+            }
+        };
+
         let enr_key =
             CombinedKey::secp256k1_from_bytes(portal_config.private_key.0.clone().as_mut_slice())
                 .map_err(|e| format!("Unable to create enr key: {:?}", e.to_string()))?;

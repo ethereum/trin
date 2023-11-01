@@ -20,6 +20,7 @@ pub struct PortalnetConfig {
     pub data_radius: Distance,
     pub internal_ip: bool,
     pub no_stun: bool,
+    pub no_upnp: bool,
     pub node_addr_cache_capacity: usize,
     pub disable_poke: bool,
 }
@@ -34,6 +35,7 @@ impl Default for PortalnetConfig {
             data_radius: Distance::MAX,
             internal_ip: false,
             no_stun: false,
+            no_upnp: false,
             node_addr_cache_capacity: NODE_ADDR_CACHE_CAPACITY,
             disable_poke: false,
         }
@@ -47,6 +49,7 @@ impl PortalnetConfig {
             private_key,
             listen_port: trin_config.discovery_port,
             no_stun: trin_config.no_stun,
+            no_upnp: trin_config.no_upnp,
             bootnodes: trin_config.bootnodes.clone(),
             disable_poke: trin_config.disable_poke,
             ..Default::default()
