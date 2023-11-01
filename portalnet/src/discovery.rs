@@ -93,7 +93,8 @@ impl Discovery {
             }
         };
 
-        let (enr_address, enr_port) = if socket::is_local_addr(enr_address) || portal_config.no_upnp {
+        let (enr_address, enr_port) = if socket::is_local_addr(enr_address) || portal_config.no_upnp
+        {
             (enr_address, enr_port)
         } else {
             let external_address = socket::upnp_for_external(listen_all_ips);
