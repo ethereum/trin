@@ -196,6 +196,7 @@ Then, in a python shell:
 The client version responds immediately, from the trin client. The block number is retrieved more slowly, by proxying to Infura.
 
 To interact with trin at the lowest possible level, try netcat:
+> The netcat `nc -U` option is available with netcat-openbsd but not with netcat-traditional. On Ubuntu it may be installed with `apt-get install -y netcat-openbsd`
 
 ```sh
 nc -U /tmp/trin-jsonrpc.ipc
