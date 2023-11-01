@@ -32,6 +32,7 @@ use web3_rpc::Web3Api;
 use crate::rpc_server::RpcServerConfig;
 use portalnet::discovery::Discovery;
 use reth_ipc::server::Builder as IpcServerBuilder;
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
@@ -80,24 +81,36 @@ pub async fn launch_jsonrpc_server(
                 .await?
         }
         Web3TransportType::HTTP => {
-            let transport = TransportRpcModuleConfig::default().with_http(modules);
+            let transport = match trin_config.ws {
+                true => TransportRpcModuleConfig::default().with_ws(modules.clone()),
+                false => TransportRpcModuleConfig::default(),
+            };
+            let transport = transport.with_http(modules);
+
             let transport_modules = RpcModuleBuilder::new(discv5)
                 .maybe_with_history(history_handler)
                 .maybe_with_beacon(beacon_handler)
                 .maybe_with_state(state_handler)
                 .build(transport);
 
-            RpcServerConfig::default()
+            let rpc_server_config = RpcServerConfig::default()
                 .with_http_address(
                     trin_config
                         .web3_http_address
                         .socket_addrs(|| None)
                         .expect("Invalid socket address")[0],
                 )
-                .with_http(ServerBuilder::default())
-                .with_ws(ServerBuilder::default())
-                .start(transport_modules)
-                .await?
+                .with_http(ServerBuilder::default());
+            let rpc_server_config = match trin_config.ws {
+                true => rpc_server_config
+                    .with_ws_address(SocketAddr::V4(SocketAddrV4::new(
+                        Ipv4Addr::UNSPECIFIED,
+                        trin_config.ws_port,
+                    )))
+                    .with_ws(ServerBuilder::default()),
+                false => rpc_server_config,
+            };
+            rpc_server_config.start(transport_modules).await?
         }
     };
 
