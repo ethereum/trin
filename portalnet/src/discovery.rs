@@ -93,6 +93,34 @@ impl Discovery {
             }
         };
 
+        let (enr_address, enr_port) = if portal_config.no_upnp {
+            (enr_address, enr_port)
+        } else {
+            let external_address = socket::upnp_for_external(listen_all_ips);
+
+            match external_address {
+                Some(socket) => match enr_address {
+                    Some(known_external) => {
+                        if known_external != socket.ip() {
+                            if portal_config.external_addr.is_some() {
+                                return Err(format!(
+                                    "Mismatched known external address {} vs UPnP found address {}, consider disable --external-addr or --no-upnp",
+                                    known_external,
+                                    socket.ip()
+                                ));
+                            } else {
+                                // STUN address is different from UPnP address.  Use UPnP
+                                warn!("overriding STUN external address with known UPnP external address");
+                            }
+                        }
+                        (Some(socket.ip()), socket.port())
+                    }
+                    None => (Some(socket.ip()), socket.port()),
+                },
+                None => (enr_address, enr_port),
+            }
+        };
+
         let enr_key =
             CombinedKey::secp256k1_from_bytes(portal_config.private_key.0.clone().as_mut_slice())
                 .map_err(|e| format!("Unable to create enr key: {:?}", e.to_string()))?;

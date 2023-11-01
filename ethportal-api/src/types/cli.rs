@@ -106,6 +106,13 @@ pub struct TrinConfig {
     pub no_stun: bool,
 
     #[arg(
+        long = "no-upnp",
+        group = "external-ips",
+        help = "Do not use UPnP to deteremine an external port."
+    )]
+    pub no_upnp: bool,
+
+    #[arg(
         long = "unsafe-private-key",
         value_parser = check_private_key_length,
         help = "Hex encoded 32 byte private key (with 0x prefix) (considered unsafe as it's stored in terminal history - keyfile support coming soon)"
@@ -170,6 +177,7 @@ impl Default for TrinConfig {
             bootnodes: Bootnodes::Default,
             external_addr: None,
             no_stun: false,
+            no_upnp: false,
             private_key: None,
             networks: DEFAULT_SUBNETWORKS
                 .split(',')
