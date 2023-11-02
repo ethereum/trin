@@ -97,18 +97,19 @@ pub fn upnp_for_external(listen_addr: SocketAddr) -> Option<SocketAddr> {
         };
     }
 
-    match gateway.add_any_port(
+    match gateway.add_port(
         igd_next::PortMappingProtocol::UDP,
+        listen_addr.port(),
         local_addr,
         UPNP_MAPPING_DURATION,
         "new_port",
     ) {
-        Ok(port) => {
+        Ok(()) => {
             thread::spawn(move || loop {
                 thread::sleep(time::Duration::from_secs(UPNP_MAPPING_TIMEOUT));
                 if let Err(err) = gateway.add_port(
                     igd_next::PortMappingProtocol::UDP,
-                    port,
+                    listen_addr.port(),
                     local_addr,
                     UPNP_MAPPING_DURATION,
                     "renew_port",
@@ -116,7 +117,7 @@ pub fn upnp_for_external(listen_addr: SocketAddr) -> Option<SocketAddr> {
                     warn!(error = %err, "Error renewing NAT port");
                 }
             });
-            let external_addr = SocketAddr::new(external_ip, port);
+            let external_addr = SocketAddr::new(external_ip, listen_addr.port());
             info!("Mapped local address {local_addr} to external address {external_addr}");
             Some(external_addr)
         }
