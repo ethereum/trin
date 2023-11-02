@@ -43,8 +43,8 @@ pub fn fluffy_handle(
             command.args(["--bootstrap-node", enr]);
         }
     }
-    if !bridge_config.external_ip.is_empty() {
-        command.arg(format!("--nat:extip:{}", bridge_config.external_ip));
+    if let Some(ip) = bridge_config.external_ip {
+        command.arg(format!("--nat:extip:{ip}"));
     }
     Ok(command.spawn()?)
 }
@@ -76,11 +76,8 @@ pub fn trin_handle(
         ])
         .args(["--discovery-port", &format!("{udp_port}")])
         .args(["--bootnodes", &bridge_config.bootnodes]);
-    if !bridge_config.external_ip.is_empty() {
-        command.args([
-            "--external-address",
-            &format!("{}:{}", bridge_config.external_ip, udp_port),
-        ]);
+    if let Some(ip) = bridge_config.external_ip {
+        command.args(["--external-address", &format!("{ip}:{udp_port}")]);
     }
     if let Some(metrics_url) = bridge_config.metrics_url {
         let url: String = metrics_url.into();
