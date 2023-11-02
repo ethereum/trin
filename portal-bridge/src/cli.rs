@@ -61,11 +61,10 @@ pub struct BridgeConfig {
     pub bootnodes: String,
 
     #[arg(
-        default_value = "none",
         long = "external-ip",
         help = "(Only use this if you are behind a NAT) The address which will be advertised to peers (in an ENR). Changing it does not change which address trin binds to, ex: 127.0.0.1"
     )]
-    pub external_ip: String,
+    pub external_ip: Option<String>,
 
     #[command(subcommand)]
     pub client_type: ClientType,
