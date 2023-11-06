@@ -1,6 +1,6 @@
 use core::time;
 use std::{
-    net::{IpAddr, SocketAddr, UdpSocket},
+    net::{IpAddr, SocketAddr, TcpStream, UdpSocket},
     thread,
 };
 use tracing::{debug, info, warn};
@@ -75,6 +75,21 @@ pub fn upnp_for_external(listen_addr: SocketAddr) -> Option<SocketAddr> {
         }
     };
 
+    let local_ip = match TcpStream::connect(gateway.addr) {
+        Ok(stream) => match stream.local_addr() {
+            Ok(addr) => addr.ip(),
+            Err(ref err) => {
+                warn!(error = %err, "Error finding local IP connected to gateway");
+                return None;
+            }
+        },
+        Err(ref err) => {
+            warn!(error = %err, "Error finding gateway");
+            return None;
+        }
+    };
+    let local_addr = SocketAddr::new(local_ip, listen_addr.port());
+
     let external_ip = match gateway.get_external_ip() {
         Ok(external_ip) => external_ip,
         Err(ref err) => {
@@ -82,20 +97,6 @@ pub fn upnp_for_external(listen_addr: SocketAddr) -> Option<SocketAddr> {
             return None;
         }
     };
-
-    // Find a local ip to map.
-    // UPnP cannot use an unspecified IP (e.g., 0.0.0.0) to map and thus we need to give a specific IP connected to the gateway.
-    // TODO: Detect the local IP connected to the gateway.
-    let mut local_addr = listen_addr;
-    if local_addr.ip().is_unspecified() {
-        local_addr = match local_ip_address::local_ip().or(local_ip_address::local_ipv6()) {
-            Ok(ip) => SocketAddr::new(ip, listen_addr.port()),
-            Err(ref err) => {
-                warn!(error = %err, "Error getting a local ip");
-                return None;
-            }
-        };
-    }
 
     match gateway.add_port(
         igd_next::PortMappingProtocol::UDP,
