@@ -2,6 +2,7 @@ use std::hash::{Hash, Hasher};
 use std::net::Ipv4Addr;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::time::Duration;
 use std::{convert::TryFrom, fmt, fs, io, net::SocketAddr, sync::Arc};
 
 use anyhow::anyhow;
@@ -144,7 +145,9 @@ impl Discovery {
             port: portal_config.listen_port,
         };
 
-        let discv5_config = ConfigBuilder::new(listen_config).build();
+        let discv5_config = ConfigBuilder::new(listen_config)
+            .request_timeout(Duration::from_secs(3))
+            .build();
         let discv5 = Discv5::new(enr, enr_key, discv5_config)
             .map_err(|e| format!("Failed to create discv5 instance: {e}"))?;
 
