@@ -39,6 +39,8 @@ FROM ubuntu:22.04
 
 # copy build artifacts from build stage
 COPY --from=builder /trin/target/release/trin /usr/bin/
+COPY --from=builder /trin/target/release/poll_latest /usr/bin/
+COPY --from=builder /trin/target/release/sample_range /usr/bin/
 
 ENV RUST_LOG=debug
 
