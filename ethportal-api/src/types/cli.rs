@@ -245,9 +245,9 @@ impl TrinConfig {
     }
 }
 
-fn check_private_key_length(private_key: &str) -> Result<H256, String> {
+pub fn check_private_key_length(private_key: &str) -> Result<H256, String> {
     if private_key.len() == 66 {
-        return H256::from_str(private_key).map_err(|err| format!("HexError: {}", err));
+        return H256::from_str(private_key).map_err(|err| format!("HexError: {err}"));
     }
     Err(format!(
         "Invalid private key length: {}, expected 66 (0x-prefixed 32 byte hexstring)",
