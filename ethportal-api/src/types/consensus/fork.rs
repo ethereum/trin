@@ -45,7 +45,7 @@ impl FromStr for ForkName {
         Ok(match fork_name.to_lowercase().as_ref() {
             "bellatrix" | "merge" => ForkName::Bellatrix,
             "capella" => ForkName::Capella,
-            _ => return Err(format!("unknown fork name: {}", fork_name)),
+            _ => return Err(format!("unknown fork name: {fork_name}")),
         })
     }
 }

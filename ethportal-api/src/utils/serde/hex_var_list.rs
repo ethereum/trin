@@ -20,5 +20,5 @@ where
 {
     let bytes = deserializer.deserialize_str(PrefixedHexVisitor)?;
     VariableList::new(bytes)
-        .map_err(|e| serde::de::Error::custom(format!("invalid variable list: {:?}", e)))
+        .map_err(|e| serde::de::Error::custom(format!("invalid variable list: {e:?}")))
 }

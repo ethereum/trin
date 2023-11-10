@@ -530,7 +530,7 @@ where
         stream
             .read_to_eof(&mut data)
             .await
-            .map_err(|err| OverlayRequestError::UtpError(format!("{:?}", err)))?;
+            .map_err(|err| OverlayRequestError::UtpError(format!("{err:?}")))?;
 
         Ok(data)
     }

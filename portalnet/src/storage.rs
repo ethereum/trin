@@ -660,7 +660,7 @@ impl PortalStorage {
                     ),
                     // Received data of size other than 32 bytes.
                     length => {
-                        let err = format!("content ID of length {} != 32", length);
+                        let err = format!("content ID of length {length} != 32");
                         return Err(ContentStoreError::InvalidData { message: err });
                     }
                 };
