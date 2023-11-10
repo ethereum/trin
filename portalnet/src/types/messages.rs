@@ -198,7 +198,7 @@ impl fmt::Display for ProtocolId {
             ProtocolId::Beacon => "Beacon",
             ProtocolId::Utp => "uTP",
         };
-        write!(f, "{}", protocol)
+        write!(f, "{protocol}")
     }
 }
 
@@ -389,7 +389,7 @@ impl From<Pong> for Value {
 
                 Value::Object(result)
             }
-            Err(msg) => Value::String(format!("Unable to ssz decode data radius!: {:?}", msg)),
+            Err(msg) => Value::String(format!("Unable to ssz decode data radius!: {msg:?}")),
         }
     }
 }
@@ -434,7 +434,7 @@ impl TryFrom<NodesHelper> for Nodes {
             .into_iter()
             .map(|bytes| {
                 rlp::decode(&bytes)
-                    .map_err(|e| DecodeError::BytesInvalid(format!("rlp decoding failed: {}", e)))
+                    .map_err(|e| DecodeError::BytesInvalid(format!("rlp decoding failed: {e}")))
             })
             .collect::<Result<_, _>>()?;
 

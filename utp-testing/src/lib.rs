@@ -1,3 +1,5 @@
+#![warn(clippy::uninlined_format_args)]
+
 extern crate core;
 
 pub mod cli;

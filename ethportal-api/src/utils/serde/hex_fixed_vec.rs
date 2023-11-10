@@ -19,5 +19,5 @@ where
 {
     let vec = deserializer.deserialize_string(PrefixedHexVisitor)?;
     FixedVector::new(vec)
-        .map_err(|e| serde::de::Error::custom(format!("invalid fixed vector: {:?}", e)))
+        .map_err(|e| serde::de::Error::custom(format!("invalid fixed vector: {e:?}")))
 }

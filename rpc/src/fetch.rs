@@ -46,8 +46,7 @@ pub async fn find_header_by_hash(
     match header {
         HistoryContentValue::BlockHeaderWithProof(h) => Ok(h.header),
         wrong_val => Err(RpcServeError::Message(format!(
-            "Internal trin error: got back a non-header from a key that must only point to headers; got {:?}",
-            wrong_val
+            "Internal trin error: got back a non-header from a key that must only point to headers; got {wrong_val:?}"
         ))),
     }
 }
@@ -63,8 +62,7 @@ pub async fn find_block_body_by_hash(
     match body {
         HistoryContentValue::BlockBody(body) => Ok(body),
         wrong_val => Err(RpcServeError::Message(format!(
-            "Internal trin error: got back a non-body from a key that must only point to bodies; got {:?}",
-            wrong_val
+            "Internal trin error: got back a non-body from a key that must only point to bodies; got {wrong_val:?}"
         ))),
     }
 }

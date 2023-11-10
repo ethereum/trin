@@ -140,7 +140,7 @@ impl fmt::Display for StateContentKey {
             }
         };
 
-        write!(f, "{}", s)
+        write!(f, "{s}")
     }
 }
 

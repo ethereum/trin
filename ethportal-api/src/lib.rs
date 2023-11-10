@@ -2,6 +2,7 @@
 //!
 //! `ethportal_api` is a collection of Portal Network APIs and types.
 #![warn(clippy::unwrap_used)]
+#![warn(clippy::uninlined_format_args)]
 
 #[macro_use]
 extern crate lazy_static;

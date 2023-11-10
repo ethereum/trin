@@ -1758,7 +1758,7 @@ where
                 } else if let Some(err) = err.downcast_ref::<String>() {
                     err.clone()
                 } else {
-                    format!("{:?}", err)
+                    format!("{err:?}")
                 };
                 debug!(err, content_key = ?content_keys_string[index], "Process uTP payload tokio task failed:");
                 None

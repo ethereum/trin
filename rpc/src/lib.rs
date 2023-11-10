@@ -1,4 +1,5 @@
 #![warn(clippy::unwrap_used)]
+#![warn(clippy::uninlined_format_args)]
 
 mod beacon_rpc;
 mod builder;
@@ -56,7 +57,7 @@ pub async fn launch_jsonrpc_server(
                 // not implemented
             }
             BEACON_NETWORK => modules.push(PortalRpcModule::Beacon),
-            _ => panic!("Unexpected network type: {}", network),
+            _ => panic!("Unexpected network type: {network}"),
         }
     }
 

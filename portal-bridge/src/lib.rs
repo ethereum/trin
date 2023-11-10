@@ -1,4 +1,5 @@
 #![warn(clippy::unwrap_used)]
+#![warn(clippy::uninlined_format_args)]
 
 pub mod beacon_bridge;
 pub mod bridge;
