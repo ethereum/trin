@@ -12,6 +12,7 @@ use tracing::{info, warn};
 
 use crate::consensus_api::ConsensusApi;
 use crate::constants::BEACON_GENESIS_TIME;
+use crate::gossip::gossip_beacon_content;
 use crate::mode::BridgeMode;
 use crate::stats::{BeaconSlotStats, StatsReporter};
 use crate::utils::{
@@ -31,7 +32,6 @@ use ethportal_api::types::content_value::beacon::{
     ForkVersionedLightClientUpdate, LightClientUpdatesByRange,
 };
 use ethportal_api::utils::bytes::hex_decode;
-use ethportal_api::BeaconNetworkApiClient;
 use ethportal_api::{
     BeaconContentKey, BeaconContentValue, LightClientBootstrapKey, LightClientUpdatesByRangeKey,
 };
@@ -75,7 +75,7 @@ impl BeaconBridge {
         // test files have no slot number data, so report all gossiped content at height 0.
         let slot_stats = Arc::new(Mutex::new(BeaconSlotStats::new(0)));
         for asset in assets.0.into_iter() {
-            BeaconBridge::gossip_beacon_content(
+            gossip_beacon_content(
                 Arc::clone(&self.portal_clients),
                 asset.content_key,
                 asset.content_value,
@@ -265,7 +265,7 @@ impl BeaconBridge {
         });
 
         // Return the latest finalized block root if we successfully gossiped the latest bootstrap.
-        Self::gossip_beacon_content(portal_clients, content_key, content_value, slot_stats)
+        gossip_beacon_content(portal_clients, content_key, content_value, slot_stats)
             .await
             .map(|_| latest_finalized_block_root)
     }
@@ -327,7 +327,7 @@ impl BeaconBridge {
         );
 
         // Update the current known period if we successfully gossiped the latest data.
-        Self::gossip_beacon_content(portal_clients, content_key, content_value, slot_stats).await?;
+        gossip_beacon_content(portal_clients, content_key, content_value, slot_stats).await?;
 
         Ok(expected_current_period)
     }
@@ -350,7 +350,7 @@ impl BeaconBridge {
             LightClientOptimisticUpdateKey::new(update.signature_slot),
         );
         let content_value = BeaconContentValue::LightClientOptimisticUpdate(update.into());
-        Self::gossip_beacon_content(portal_clients, content_key, content_value, slot_stats).await
+        gossip_beacon_content(portal_clients, content_key, content_value, slot_stats).await
     }
 
     async fn serve_light_client_finality_update(
@@ -389,30 +389,8 @@ impl BeaconBridge {
         );
         let content_value = BeaconContentValue::LightClientFinalityUpdate(update.into());
 
-        Self::gossip_beacon_content(portal_clients, content_key, content_value, slot_stats).await?;
+        gossip_beacon_content(portal_clients, content_key, content_value, slot_stats).await?;
 
         Ok(new_finalized_slot)
-    }
-
-    /// Gossip any given content key / value to the history network.
-    async fn gossip_beacon_content(
-        portal_clients: Arc<Vec<HttpClient>>,
-        content_key: BeaconContentKey,
-        content_value: BeaconContentValue,
-        slot_stats: Arc<Mutex<BeaconSlotStats>>,
-    ) -> anyhow::Result<()> {
-        let mut results = vec![];
-        for client in portal_clients.as_ref() {
-            let result = client
-                .trace_gossip(content_key.clone(), content_value.clone())
-                .await;
-            results.push(result);
-        }
-        if let Ok(mut data) = slot_stats.lock() {
-            data.update(content_key, results.into());
-        } else {
-            warn!("Error updating beacon gossip stats. Unable to acquire lock.");
-        }
-        Ok(())
     }
 }

@@ -9,6 +9,7 @@ pub mod consensus_api;
 pub mod constants;
 pub mod execution_api;
 pub mod full_header;
+pub mod gossip;
 pub mod mode;
 pub mod pandaops;
 pub mod stats;

@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::str::FromStr;
 
 use tracing::{info, trace};
@@ -272,55 +273,59 @@ impl StatsReporter<HistoryContentKey> for HistoryBlockStats {
 
 // Struct to record the gossip stats for a single piece of content (eg key/value pair),
 // consolidating results from jsonrpc requests to 1/many clients.
+//
+// After implementing retries on gossip, it's often the case that we offer the same piece
+// of content to the same peer multiple times, however, we only record unique enrs in these lists.
+// Currently, this is just to simplify, but if there's a use case where it makes sense to record
+// duplicate offers to the same peer, we can change this, by removing the double count check in the
+// From impl below.
 #[derive(Debug, Clone, Default)]
 pub struct ContentStats {
-    pub offered: Vec<Enr>,
-    pub accepted: Vec<Enr>,
-    pub transferred: Vec<Enr>,
+    // use hashset so peers aren't double-counted across clients
+    pub offered: HashSet<Enr>,
+    pub accepted: HashSet<Enr>,
+    pub transferred: HashSet<Enr>,
+    pub retries: u64,
     pub failures: u64,
 }
 
 impl ContentStats {
     pub fn report(&self) -> String {
         format!(
-            "offered: {}, accepted: {}, transferred: {}, failures: {}",
+            "offered: {}, accepted: {}, transferred: {}, retries: {}, failures: {}",
             self.offered.len(),
             self.accepted.len(),
             self.transferred.len(),
+            self.retries,
             self.failures,
         )
     }
 }
 
-impl From<Vec<Result<TraceGossipInfo, Error>>> for ContentStats {
-    fn from(results: Vec<Result<TraceGossipInfo, Error>>) -> Self {
+impl From<Vec<Result<(Vec<TraceGossipInfo>, u64), Error>>> for ContentStats {
+    fn from(results: Vec<Result<(Vec<TraceGossipInfo>, u64), Error>>) -> Self {
         let mut content_stats = ContentStats::default();
         for trace_gossip_info in results.iter() {
             match trace_gossip_info {
-                Ok(info) => {
-                    for enr in info.offered.iter() {
-                        let enr = Enr::from_str(enr)
-                            .expect("ENR from trace gossip response to succesfully decode.");
-                        // don't double count an enr if multiple clients offered the same content
-                        // to a peer
-                        if !content_stats.offered.contains(&enr) {
-                            content_stats.offered.push(enr);
+                Ok((traces, retries)) => {
+                    content_stats.retries += retries;
+                    for trace in traces {
+                        for enr in trace.offered.iter() {
+                            let enr = Enr::from_str(enr)
+                                .expect("ENR from trace gossip response to succesfully decode.");
+                            content_stats.offered.insert(enr);
                         }
-                    }
 
-                    for enr in info.accepted.iter() {
-                        let enr = Enr::from_str(enr)
-                            .expect("ENR from trace gossip response to succesfully decode.");
-                        if !content_stats.accepted.contains(&enr) {
-                            content_stats.accepted.push(enr);
+                        for enr in trace.accepted.iter() {
+                            let enr = Enr::from_str(enr)
+                                .expect("ENR from trace gossip response to succesfully decode.");
+                            content_stats.accepted.insert(enr);
                         }
-                    }
 
-                    for enr in info.transferred.iter() {
-                        let enr = Enr::from_str(enr)
-                            .expect("ENR from trace gossip response to succesfully decode.");
-                        if !content_stats.transferred.contains(&enr) {
-                            content_stats.transferred.push(enr);
+                        for enr in trace.transferred.iter() {
+                            let enr = Enr::from_str(enr)
+                                .expect("ENR from trace gossip response to succesfully decode.");
+                            content_stats.transferred.insert(enr);
                         }
                     }
                 }

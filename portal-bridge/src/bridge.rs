@@ -15,6 +15,7 @@ use tracing::{debug, info, warn};
 
 use crate::execution_api::ExecutionApi;
 use crate::full_header::FullHeader;
+use crate::gossip::gossip_history_content;
 use crate::mode::{BridgeMode, ModeType};
 use crate::stats::{HistoryBlockStats, StatsReporter};
 use crate::utils::{read_test_assets_from_file, TestAssets};
@@ -31,7 +32,7 @@ use ethportal_api::types::execution::{
 use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::{
     BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey, HistoryContentKey,
-    HistoryContentValue, HistoryNetworkApiClient,
+    HistoryContentValue,
 };
 use trin_validation::{
     accumulator::MasterAccumulator,
@@ -91,7 +92,7 @@ impl Bridge {
         // test files have no block number data, so we report all gossiped content at height 0.
         let block_stats = Arc::new(Mutex::new(HistoryBlockStats::new(0)));
         for asset in assets.0.into_iter() {
-            Bridge::gossip_content(
+            let _ = gossip_history_content(
                 &self.portal_clients,
                 asset.content_key.clone(),
                 asset.content_value,
@@ -303,7 +304,8 @@ impl Bridge {
             "Gossip: Block #{:?} HeaderWithProof",
             full_header.header.number
         );
-        Bridge::gossip_content(portal_clients, content_key, content_value, block_stats).await;
+        let _ =
+            gossip_history_content(portal_clients, content_key, content_value, block_stats).await;
         Ok(())
     }
 
@@ -330,7 +332,7 @@ impl Bridge {
         let content_value = HistoryContentValue::EpochAccumulator(local_epoch_acc.clone());
         // create unique stats for epoch accumulator, since it's rarely gossiped
         let block_stats = Arc::new(Mutex::new(HistoryBlockStats::new(epoch_index * EPOCH_SIZE)));
-        Bridge::gossip_content(
+        let _ = gossip_history_content(
             &self.portal_clients,
             content_key,
             content_value,
@@ -371,7 +373,8 @@ impl Bridge {
         });
         let content_value = HistoryContentValue::Receipts(receipts);
         debug!("Gossip: Block #{:?} Receipts", full_header.header.number,);
-        Bridge::gossip_content(portal_clients, content_key, content_value, block_stats).await;
+        let _ =
+            gossip_history_content(portal_clients, content_key, content_value, block_stats).await;
         Ok(())
     }
 
@@ -414,7 +417,8 @@ impl Bridge {
         });
         let content_value = HistoryContentValue::BlockBody(block_body);
         debug!("Gossip: Block #{:?} BlockBody", full_header.header.number);
-        Bridge::gossip_content(portal_clients, content_key, content_value, block_stats).await;
+        let _ =
+            gossip_history_content(portal_clients, content_key, content_value, block_stats).await;
         Ok(())
     }
 
@@ -426,27 +430,6 @@ impl Bridge {
         let proof = MasterAccumulator::construct_proof(&header, epoch_acc)?;
         let proof = BlockHeaderProof::AccumulatorProof(AccumulatorProof { proof });
         Ok(HeaderWithProof { header, proof })
-    }
-
-    /// Gossip any given content key / value to the history network.
-    async fn gossip_content(
-        portal_clients: &Vec<HttpClient>,
-        content_key: HistoryContentKey,
-        content_value: HistoryContentValue,
-        block_stats: Arc<Mutex<HistoryBlockStats>>,
-    ) {
-        let mut results = vec![];
-        for client in portal_clients {
-            let result = client
-                .trace_gossip(content_key.clone(), content_value.clone())
-                .await;
-            results.push(result);
-        }
-        if let Ok(mut data) = block_stats.lock() {
-            data.update(content_key, results.into());
-        } else {
-            warn!("Error updating history gossip stats. Unable to acquire lock.");
-        }
     }
 }
 
