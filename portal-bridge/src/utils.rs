@@ -1,6 +1,7 @@
 use anyhow::bail;
 use chrono::Duration;
 use discv5::enr::{CombinedKey, EnrBuilder, NodeId};
+use ethereum_types::H256;
 use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::HistoryContentKey;
 use ethportal_api::{BeaconContentKey, BeaconContentValue, HistoryContentValue};
@@ -16,9 +17,20 @@ use std::time::{SystemTime, UNIX_EPOCH};
 // stops getting evenly spread, because of how the code spreads the data by
 // inspecting the first byte from the node ID. Also, values between 16 to
 // 256 would be spread, but less and less evenly.
-pub fn generate_spaced_private_keys(count: u8) -> Vec<String> {
+pub fn generate_spaced_private_keys(count: u8, root_private_key: Option<H256>) -> Vec<String> {
     let mut private_keys = vec![];
-    let (root_node_id, root_private_key) = random_node_id();
+    let (root_node_id, root_private_key) = match root_private_key {
+        Some(key) => {
+            let private_key =
+                CombinedKey::secp256k1_from_bytes(key.to_fixed_bytes().as_mut_slice())
+                    .expect("to be able to decode key");
+            let enr = EnrBuilder::new("v4")
+                .build(&private_key)
+                .expect("to be able to build ENR from private key");
+            (enr.node_id(), private_key)
+        }
+        None => random_node_id(),
+    };
     private_keys.push(hex_encode(root_private_key.encode()));
     let mut root_prefix = root_node_id.raw()[0];
 
@@ -169,7 +181,7 @@ mod tests {
     #[case(4)]
     #[case(16)]
     fn test_generate_spaced_private_keys(#[case] count: u8) {
-        let private_keys = generate_spaced_private_keys(count);
+        let private_keys = generate_spaced_private_keys(count, None);
         assert_eq!(private_keys.len() as u8, count);
         let one = EnrBuilder::new("v4")
             .build(

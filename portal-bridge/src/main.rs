@@ -20,7 +20,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     init_tracing_logger();
 
     let bridge_config = BridgeConfig::parse();
-    let private_keys = generate_spaced_private_keys(bridge_config.node_count);
+    let private_keys =
+        generate_spaced_private_keys(bridge_config.node_count, bridge_config.root_private_key);
     let mut handles = vec![];
     let mut http_addresses = vec![];
     for (i, key) in private_keys.into_iter().enumerate() {
