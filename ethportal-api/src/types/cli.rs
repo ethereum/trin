@@ -108,7 +108,7 @@ pub struct TrinConfig {
     #[arg(
         long = "no-upnp",
         group = "external-ips",
-        help = "Do not use UPnP to deteremine an external port."
+        help = "Do not use UPnP to determine an external port."
     )]
     pub no_upnp: bool,
 

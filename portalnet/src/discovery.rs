@@ -80,7 +80,7 @@ impl Discovery {
             portal_config.listen_port,
         );
 
-        let (enr_address, enr_port) = if portal_config.no_stun {
+        let (mut enr_address, mut enr_port) = if portal_config.no_stun {
             (None, portal_config.listen_port)
         } else {
             let known_external = portal_config
@@ -93,32 +93,24 @@ impl Discovery {
             }
         };
 
-        let (enr_address, enr_port) = if socket::is_local_addr(enr_address) || portal_config.no_upnp
-        {
-            (enr_address, enr_port)
-        } else {
-            let external_address = socket::upnp_for_external(listen_all_ips);
-
-            match external_address {
-                Some(socket) => match enr_address {
-                    Some(known_external) => {
-                        if known_external != socket.ip() {
-                            if portal_config.external_addr.is_some() {
-                                return Err(format!(
-                                    "Mismatched known external address {} vs UPnP found address {}, consider disable --external-addr or --no-upnp",
-                                    known_external,
-                                    socket.ip()
-                                ));
-                            } else {
-                                // STUN address is different from UPnP address.  Use UPnP
-                                warn!("overriding STUN external address with known UPnP external address");
-                            }
+        if !portal_config.no_upnp && !socket::is_local_addr(enr_address) {
+            if let Some(socket) = socket::upnp_for_external(listen_all_ips) {
+                if let Some(known_external) = enr_address {
+                    if known_external != socket.ip() {
+                        if portal_config.external_addr.is_some() {
+                            return Err(format!(
+                                "Mismatched known external address {} vs UPnP found address {}, consider disable --external-addr or --no-upnp",
+                                known_external,
+                                socket.ip()
+                            ));
+                        } else {
+                            // STUN address is different from UPnP address. Use UPnP
+                            warn!("overriding STUN address with known UPnP external address");
                         }
-                        (Some(socket.ip()), socket.port())
                     }
-                    None => (Some(socket.ip()), socket.port()),
-                },
-                None => (enr_address, enr_port),
+                };
+                enr_address = Some(socket.ip());
+                enr_port = socket.port();
             }
         };
 
