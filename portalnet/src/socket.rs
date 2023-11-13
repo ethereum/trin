@@ -47,22 +47,18 @@ pub fn stun_for_external(local_socket_addr: &SocketAddr) -> Option<SocketAddr> {
 }
 
 pub fn is_local_addr(external_ip: Option<IpAddr>) -> bool {
-    match external_ip {
-        None => false,
-        Some(external_ip) => {
-            let network_interfaces = local_ip_address::list_afinet_netifas();
+    if let Some(external_ip) = external_ip {
+        let network_interfaces = local_ip_address::list_afinet_netifas();
 
-            if let Ok(network_interfaces) = network_interfaces {
-                for (_, ip) in network_interfaces.iter() {
-                    if *ip == external_ip {
-                        return true;
-                    }
+        if let Ok(network_interfaces) = network_interfaces {
+            for (_, ip) in network_interfaces.iter() {
+                if *ip == external_ip {
+                    return true;
                 }
             }
-
-            false
         }
     }
+    false
 }
 
 pub fn upnp_for_external(listen_addr: SocketAddr) -> Option<SocketAddr> {
