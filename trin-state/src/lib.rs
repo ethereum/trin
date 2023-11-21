@@ -2,10 +2,9 @@
 
 use std::sync::Arc;
 
-use discv5::TalkRequest;
 use network::StateNetwork;
 use tokio::{
-    sync::{mpsc, RwLock},
+    sync::{broadcast, mpsc, RwLock},
     task::JoinHandle,
 };
 use tracing::info;
@@ -17,6 +16,7 @@ use ethportal_api::types::jsonrpc::request::StateJsonRpcRequest;
 use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, UtpEnr},
+    events::{EventEnvelope, OverlayRequest},
     storage::PortalStorageConfig,
 };
 use trin_validation::oracle::HeaderOracle;
@@ -30,8 +30,9 @@ pub mod validation;
 
 type StateHandler = Option<StateRequestHandler>;
 type StateNetworkTask = Option<JoinHandle<()>>;
-type StateEventTx = Option<mpsc::UnboundedSender<TalkRequest>>;
+type StateEventTx = Option<mpsc::UnboundedSender<OverlayRequest>>;
 type StateJsonRpcTx = Option<mpsc::UnboundedSender<StateJsonRpcRequest>>;
+type StateEventStream = Option<broadcast::Receiver<EventEnvelope>>;
 
 pub async fn initialize_state_network(
     discovery: &Arc<Discovery>,
@@ -39,9 +40,15 @@ pub async fn initialize_state_network(
     portalnet_config: PortalnetConfig,
     storage_config: PortalStorageConfig,
     header_oracle: Arc<RwLock<HeaderOracle>>,
-) -> anyhow::Result<(StateHandler, StateNetworkTask, StateEventTx, StateJsonRpcTx)> {
+) -> anyhow::Result<(
+    StateHandler,
+    StateNetworkTask,
+    StateEventTx,
+    StateJsonRpcTx,
+    StateEventStream,
+)> {
     let (state_jsonrpc_tx, state_jsonrpc_rx) = mpsc::unbounded_channel::<StateJsonRpcRequest>();
-    let (state_event_tx, state_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
+    let (state_event_tx, state_event_rx) = mpsc::unbounded_channel::<OverlayRequest>();
     let state_network = StateNetwork::new(
         Arc::clone(discovery),
         utp_socket,
@@ -51,6 +58,7 @@ pub async fn initialize_state_network(
     )
     .await?;
     let state_network = Arc::new(state_network);
+    let state_event_stream = state_network.overlay.event_stream().await?;
     let state_handler = StateRequestHandler {
         network: Arc::clone(&state_network),
         state_rx: state_jsonrpc_rx,
@@ -62,13 +70,14 @@ pub async fn initialize_state_network(
         Some(state_network_task),
         Some(state_event_tx),
         Some(state_jsonrpc_tx),
+        Some(state_event_stream),
     ))
 }
 
 pub fn spawn_state_network(
     network: Arc<StateNetwork>,
     portalnet_config: PortalnetConfig,
-    state_event_rx: mpsc::UnboundedReceiver<TalkRequest>,
+    state_message_rx: mpsc::UnboundedReceiver<OverlayRequest>,
 ) -> JoinHandle<()> {
     let bootnode_enrs: Vec<Enr> = portalnet_config.bootnodes.into();
     info!(
@@ -79,7 +88,7 @@ pub fn spawn_state_network(
     tokio::spawn(async move {
         let state_events = StateEvents {
             network: Arc::clone(&network),
-            event_rx: state_event_rx,
+            message_rx: state_message_rx,
         };
 
         // Spawn state event handler

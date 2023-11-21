@@ -57,13 +57,13 @@ async fn spawn_overlay(
 ) {
     let (overlay_tx, mut overlay_rx) = mpsc::unbounded_channel();
 
-    let overlay_protocol = overlay.protocol().clone();
+    let overlay_protocol = *overlay.protocol();
     tokio::spawn(async move {
         while let Some(talk_req) = talk_req_rx.recv().await {
             let req_protocol = ProtocolId::from_str(&hex_encode_upper(talk_req.protocol()));
 
             if let Ok(req_protocol) = req_protocol {
-                match (req_protocol, overlay_protocol.clone()) {
+                match (req_protocol, overlay_protocol) {
                     (ProtocolId::History, ProtocolId::History)
                     | (ProtocolId::State, ProtocolId::State) => overlay_tx.send(talk_req).unwrap(),
                     _ => panic!("Unexpected protocol"),
@@ -107,7 +107,7 @@ async fn overlay() {
     let mut discovery_one = Discovery::new(portal_config_one, temp_dir_one).unwrap();
     let talk_req_rx_one = discovery_one.start().await.unwrap();
     let discovery_one = Arc::new(discovery_one);
-    let overlay_one = Arc::new(init_overlay(Arc::clone(&discovery_one), protocol.clone()).await);
+    let overlay_one = Arc::new(init_overlay(Arc::clone(&discovery_one), protocol).await);
     spawn_overlay(talk_req_rx_one, Arc::clone(&overlay_one)).await;
     time::sleep(sleep_duration).await;
 
@@ -121,7 +121,7 @@ async fn overlay() {
     let mut discovery_two = Discovery::new(portal_config_two, temp_dir_two).unwrap();
     let talk_req_rx_two = discovery_two.start().await.unwrap();
     let discovery_two = Arc::new(discovery_two);
-    let overlay_two = Arc::new(init_overlay(Arc::clone(&discovery_two), protocol.clone()).await);
+    let overlay_two = Arc::new(init_overlay(Arc::clone(&discovery_two), protocol).await);
     spawn_overlay(talk_req_rx_two, Arc::clone(&overlay_two)).await;
     time::sleep(sleep_duration).await;
 
@@ -135,8 +135,7 @@ async fn overlay() {
     let mut discovery_three = Discovery::new(portal_config_three, temp_dir_three).unwrap();
     let talk_req_rx_three = discovery_three.start().await.unwrap();
     let discovery_three = Arc::new(discovery_three);
-    let overlay_three =
-        Arc::new(init_overlay(Arc::clone(&discovery_three), protocol.clone()).await);
+    let overlay_three = Arc::new(init_overlay(Arc::clone(&discovery_three), protocol).await);
     spawn_overlay(talk_req_rx_three, Arc::clone(&overlay_three)).await;
     time::sleep(sleep_duration).await;
 

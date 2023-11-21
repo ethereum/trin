@@ -127,3 +127,14 @@ You might see this during a deployment:
 > fatal: [trin-ams3-18]: UNREACHABLE! => {"changed": false, "msg": "Failed to connect to the host via ssh: ssh: connect to host 178.128.253.26 port 22: Connection timed out", "unreachable": true}
 
 Retry once more. If it times out again, ask `@paulj` to reboot the machine.
+
+### What if everything breaks and I need to rollback the deployment?
+If you observe things breaking or (significantly) degraded network performance after a deployment, you might want to rollback the changes to a previously working version until the breaking change can be identified and fixed. Keep in mind that you might want to rollback just the bridge nodes, or the backfill nodes, as opposed to every node on the network.
+
+1. Go to the commit from the previously released version tag. Click into the CI workflows for that commit and look for the `docker-publish` or `docker-publish-bridge` flow, depending on what images you want to rollback.
+2. In the logs for these flows, find the sha256 digest from the `Publish docker image to Docker Hub` step.
+3. Pull this specific image locally, using `docker pull portalnetwork/trin@sha256:<HASH>`
+4. Retag the target image to this version, for example, if you want to re-deploy the bridges, do: `docker image tag portalnetwork/trin@sha256:6dc0577a2121b711ae0e43cd387df54c8f69c8671abafb9f83df23ae750b9f14 portalnetwork/trin:bridge`
+5. Push the newly tagged `bridge` image to Docker Hub. eg. `docker push portalnetwork/trin:bridge`
+6. Re-run the ansible script, which will use the newly updated image. Use the `--limit` cli flag if you only want to redeploy a subset of nodes. eg: `ansible-playbook playbook.yml --tags trin --limit backfill_nodes`.
+7. Verify that the network is back to regular operation.

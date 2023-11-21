@@ -79,7 +79,7 @@ pub async fn run_trin(
     let header_oracle = Arc::new(RwLock::new(header_oracle));
 
     // Initialize state sub-network service and event handlers, if selected
-    let (state_handler, state_network_task, state_event_tx, state_jsonrpc_tx) =
+    let (state_handler, state_network_task, state_event_tx, state_jsonrpc_tx, state_event_stream) =
         if trin_config.networks.iter().any(|val| val == STATE_NETWORK) {
             initialize_state_network(
                 &discovery,
@@ -90,42 +90,52 @@ pub async fn run_trin(
             )
             .await?
         } else {
-            (None, None, None, None)
+            (None, None, None, None, None)
         };
 
     // Initialize trin-beacon sub-network service and event handlers, if selected
-    let (beacon_handler, beacon_network_task, beacon_event_tx, beacon_jsonrpc_tx) =
-        if trin_config.networks.iter().any(|val| val == BEACON_NETWORK) {
-            initialize_beacon_network(
-                &discovery,
-                Arc::clone(&utp_socket),
-                portalnet_config.clone(),
-                storage_config.clone(),
-                header_oracle.clone(),
-            )
-            .await?
-        } else {
-            (None, None, None, None)
-        };
+    let (
+        beacon_handler,
+        beacon_network_task,
+        beacon_event_tx,
+        beacon_jsonrpc_tx,
+        beacon_event_stream,
+    ) = if trin_config.networks.iter().any(|val| val == BEACON_NETWORK) {
+        initialize_beacon_network(
+            &discovery,
+            Arc::clone(&utp_socket),
+            portalnet_config.clone(),
+            storage_config.clone(),
+            header_oracle.clone(),
+        )
+        .await?
+    } else {
+        (None, None, None, None, None)
+    };
 
     // Initialize chain history sub-network service and event handlers, if selected
-    let (history_handler, history_network_task, history_event_tx, history_jsonrpc_tx) =
-        if trin_config
-            .networks
-            .iter()
-            .any(|val| val == HISTORY_NETWORK)
-        {
-            initialize_history_network(
-                &discovery,
-                utp_socket,
-                portalnet_config.clone(),
-                storage_config.clone(),
-                header_oracle.clone(),
-            )
-            .await?
-        } else {
-            (None, None, None, None)
-        };
+    let (
+        history_handler,
+        history_network_task,
+        history_event_tx,
+        history_jsonrpc_tx,
+        history_event_stream,
+    ) = if trin_config
+        .networks
+        .iter()
+        .any(|val| val == HISTORY_NETWORK)
+    {
+        initialize_history_network(
+            &discovery,
+            utp_socket,
+            portalnet_config.clone(),
+            storage_config.clone(),
+            header_oracle.clone(),
+        )
+        .await?
+    } else {
+        (None, None, None, None, None)
+    };
 
     // Launch JSON-RPC server
     let jsonrpc_trin_config = trin_config.clone();
@@ -153,9 +163,9 @@ pub async fn run_trin(
     tokio::spawn(async move {
         let events = PortalnetEvents::new(
             talk_req_rx,
-            history_event_tx,
-            state_event_tx,
-            beacon_event_tx,
+            (history_event_tx, history_event_stream),
+            (state_event_tx, state_event_stream),
+            (beacon_event_tx, beacon_event_stream),
             utp_talk_reqs_tx,
         )
         .await;

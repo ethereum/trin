@@ -8,10 +8,9 @@ pub mod validation;
 
 use std::sync::Arc;
 
-use discv5::TalkRequest;
 use network::HistoryNetwork;
 use tokio::{
-    sync::{mpsc, Mutex, RwLock},
+    sync::{broadcast, mpsc, Mutex, RwLock},
     task::JoinHandle,
     time::{interval, Duration},
 };
@@ -24,14 +23,16 @@ use ethportal_api::types::jsonrpc::request::HistoryJsonRpcRequest;
 use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, UtpEnr},
+    events::{EventEnvelope, OverlayRequest},
     storage::PortalStorageConfig,
 };
 use trin_validation::oracle::HeaderOracle;
 
 type HistoryHandler = Option<HistoryRequestHandler>;
 type HistoryNetworkTask = Option<JoinHandle<()>>;
-type HistoryEventTx = Option<mpsc::UnboundedSender<TalkRequest>>;
+type HistoryMessageTx = Option<mpsc::UnboundedSender<OverlayRequest>>;
 type HistoryJsonRpcTx = Option<mpsc::UnboundedSender<HistoryJsonRpcRequest>>;
+type HistoryEventStream = Option<broadcast::Receiver<EventEnvelope>>;
 
 pub async fn initialize_history_network(
     discovery: &Arc<Discovery>,
@@ -43,13 +44,14 @@ pub async fn initialize_history_network(
 ) -> anyhow::Result<(
     HistoryHandler,
     HistoryNetworkTask,
-    HistoryEventTx,
+    HistoryMessageTx,
     HistoryJsonRpcTx,
+    HistoryEventStream,
 )> {
     let (history_jsonrpc_tx, history_jsonrpc_rx) =
         mpsc::unbounded_channel::<HistoryJsonRpcRequest>();
     header_oracle.write().await.history_jsonrpc_tx = Some(history_jsonrpc_tx.clone());
-    let (history_event_tx, history_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
+    let (history_event_tx, history_event_rx) = mpsc::unbounded_channel::<OverlayRequest>();
     let history_network = HistoryNetwork::new(
         Arc::clone(discovery),
         utp_socket,
@@ -58,6 +60,7 @@ pub async fn initialize_history_network(
         header_oracle,
     )
     .await?;
+    let event_stream = history_network.overlay.event_stream().await?;
     let history_handler = HistoryRequestHandler {
         network: Arc::new(RwLock::new(history_network.clone())),
         history_rx: Arc::new(Mutex::new(history_jsonrpc_rx)),
@@ -71,13 +74,14 @@ pub async fn initialize_history_network(
         Some(history_network_task),
         Some(history_event_tx),
         Some(history_jsonrpc_tx),
+        Some(event_stream),
     ))
 }
 
 pub fn spawn_history_network(
     network: Arc<HistoryNetwork>,
     portalnet_config: PortalnetConfig,
-    history_event_rx: mpsc::UnboundedReceiver<TalkRequest>,
+    history_message_rx: mpsc::UnboundedReceiver<OverlayRequest>,
 ) -> JoinHandle<()> {
     let bootnode_enrs: Vec<Enr> = portalnet_config.bootnodes.into();
     info!(
@@ -88,7 +92,7 @@ pub fn spawn_history_network(
     tokio::spawn(async move {
         let history_events = HistoryEvents {
             network: Arc::clone(&network),
-            event_rx: history_event_rx,
+            message_rx: history_message_rx,
         };
 
         // Spawn history event handler

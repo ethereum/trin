@@ -7,9 +7,8 @@ pub mod validation;
 
 use std::sync::Arc;
 
-use discv5::TalkRequest;
 use tokio::{
-    sync::{mpsc, Mutex, RwLock},
+    sync::{broadcast, mpsc, Mutex, RwLock},
     task::JoinHandle,
     time::{interval, Duration},
 };
@@ -23,14 +22,16 @@ use ethportal_api::types::jsonrpc::request::BeaconJsonRpcRequest;
 use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, UtpEnr},
+    events::{EventEnvelope, OverlayRequest},
     storage::PortalStorageConfig,
 };
 use trin_validation::oracle::HeaderOracle;
 
 type BeaconHandler = Option<BeaconRequestHandler>;
 type BeaconNetworkTask = Option<JoinHandle<()>>;
-type BeaconEventTx = Option<mpsc::UnboundedSender<TalkRequest>>;
+type BeaconMessageTx = Option<mpsc::UnboundedSender<OverlayRequest>>;
 type BeaconJsonRpcTx = Option<mpsc::UnboundedSender<BeaconJsonRpcRequest>>;
+type BeaconEventStream = Option<broadcast::Receiver<EventEnvelope>>;
 
 pub async fn initialize_beacon_network(
     discovery: &Arc<Discovery>,
@@ -42,12 +43,13 @@ pub async fn initialize_beacon_network(
 ) -> anyhow::Result<(
     BeaconHandler,
     BeaconNetworkTask,
-    BeaconEventTx,
+    BeaconMessageTx,
     BeaconJsonRpcTx,
+    BeaconEventStream,
 )> {
     let (beacon_jsonrpc_tx, beacon_jsonrpc_rx) = mpsc::unbounded_channel::<BeaconJsonRpcRequest>();
     header_oracle.write().await.beacon_jsonrpc_tx = Some(beacon_jsonrpc_tx.clone());
-    let (beacon_event_tx, beacon_event_rx) = mpsc::unbounded_channel::<TalkRequest>();
+    let (beacon_message_tx, beacon_message_rx) = mpsc::unbounded_channel::<OverlayRequest>();
     let beacon_network = BeaconNetwork::new(
         Arc::clone(discovery),
         utp_socket,
@@ -56,26 +58,28 @@ pub async fn initialize_beacon_network(
         header_oracle,
     )
     .await?;
+    let beacon_event_stream = beacon_network.overlay.event_stream().await?;
     let beacon_handler = BeaconRequestHandler {
         network: Arc::new(RwLock::new(beacon_network.clone())),
         rpc_rx: Arc::new(Mutex::new(beacon_jsonrpc_rx)),
     };
     let beacon_network = Arc::new(beacon_network);
     let beacon_network_task =
-        spawn_beacon_network(beacon_network.clone(), portalnet_config, beacon_event_rx);
+        spawn_beacon_network(beacon_network.clone(), portalnet_config, beacon_message_rx);
     spawn_beacon_heartbeat(beacon_network);
     Ok((
         Some(beacon_handler),
         Some(beacon_network_task),
-        Some(beacon_event_tx),
+        Some(beacon_message_tx),
         Some(beacon_jsonrpc_tx),
+        Some(beacon_event_stream),
     ))
 }
 
 pub fn spawn_beacon_network(
     network: Arc<BeaconNetwork>,
     portalnet_config: PortalnetConfig,
-    beacon_event_rx: mpsc::UnboundedReceiver<TalkRequest>,
+    beacon_message_rx: mpsc::UnboundedReceiver<OverlayRequest>,
 ) -> JoinHandle<()> {
     let bootnode_enrs: Vec<Enr> = portalnet_config.bootnodes.into();
     info!(
@@ -86,7 +90,7 @@ pub fn spawn_beacon_network(
     tokio::spawn(async move {
         let beacon_events = BeaconEvents {
             network: Arc::clone(&network),
-            event_rx: beacon_event_rx,
+            message_rx: beacon_message_rx,
         };
 
         // Spawn beacon event handler

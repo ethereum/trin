@@ -154,6 +154,17 @@ pub struct TrinConfig {
     )]
     pub disable_poke: bool,
 
+    #[arg(long = "ws", help = "Used to enable WebSocket rpc.")]
+    pub ws: bool,
+
+    #[arg(
+        long = "ws-port", 
+        help = "The WebSocket port to listen on.", 
+        default_value_t = DEFAULT_WEB3_WS_PORT,
+        requires = "ws"
+    )]
+    pub ws_port: u16,
+
     #[command(subcommand)]
     pub command: Option<TrinConfigCommands>,
 }
@@ -182,6 +193,8 @@ impl Default for TrinConfig {
             ephemeral: false,
             master_acc_path: PathBuf::from(DEFAULT_MASTER_ACC_PATH.to_string()),
             disable_poke: false,
+            ws: false,
+            ws_port: DEFAULT_WEB3_WS_PORT,
             command: None,
         }
     }
@@ -200,20 +213,32 @@ impl TrinConfig {
 
         if let Some(TrinConfigCommands::CreateDashboard(dashboard_config)) = config.command {
             if let Err(err) = create_dashboard(dashboard_config) {
-                panic!("Creating dashboard failed {}", err);
+                panic!("Creating dashboard failed {err}");
             }
             // exit program since if the user uses create dashboard this is all we do
             std::process::exit(0);
         }
 
         match config.web3_transport {
-            Web3TransportType::HTTP => match &config.web3_ipc_path.as_path().display().to_string()[..] {
-                DEFAULT_WEB3_IPC_PATH => {}
-                _ => return Err(Error::raw(ErrorKind::ArgumentConflict, "Must not supply an ipc path when using http protocol for json-rpc")),
-            },
-            Web3TransportType::IPC => match config.web3_http_address.as_str() {
-                DEFAULT_WEB3_HTTP_ADDRESS => {}
-                p => return Err(Error::raw(ErrorKind::ArgumentConflict,format!("Must not supply an http address when using ipc protocol for json-rpc (received: {p})"))),
+            Web3TransportType::HTTP => {
+                match &config.web3_ipc_path.as_path().display().to_string()[..] {
+                    DEFAULT_WEB3_IPC_PATH => {}
+                    _ => {
+                        return Err(Error::raw(
+                            ErrorKind::ArgumentConflict,
+                            "Must not supply an ipc path when using http protocol for json-rpc",
+                        ))
+                    }
+                }
+            }
+            Web3TransportType::IPC => {
+                match config.web3_http_address.as_str() {
+                    DEFAULT_WEB3_HTTP_ADDRESS => {}
+                    web3_http_address => return Err(Error::raw(ErrorKind::ArgumentConflict,format!("Must not supply an http address when using ipc protocol for json-rpc (received: {web3_http_address})"))),
+                }
+                if config.ws {
+                    return Err(Error::raw(ErrorKind::ArgumentConflict,format!("Must not enable ws when using ipc protocol for json-rpc (received: {})", config.web3_http_address.as_str())));
+                }
             }
         }
         Ok(config)

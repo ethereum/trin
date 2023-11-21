@@ -375,13 +375,6 @@ impl RpcServerConfig {
             ))
         });
 
-        let ws_socket_addr = self.ws_addr.unwrap_or_else(|| {
-            SocketAddr::V4(SocketAddrV4::new(
-                Ipv4Addr::UNSPECIFIED,
-                DEFAULT_WEB3_WS_PORT,
-            ))
-        });
-
         // If both are configured on the same port, we combine them into one server.
         if self.http_addr == self.ws_addr
             && self.http_server_config.is_some()
@@ -431,6 +424,13 @@ impl RpcServerConfig {
         let mut ws_local_addr = None;
         let mut ws_server = None;
         if let Some(builder) = self.ws_server_config.take() {
+            let ws_socket_addr = self.ws_addr.unwrap_or_else(|| {
+                SocketAddr::V4(SocketAddrV4::new(
+                    Ipv4Addr::UNSPECIFIED,
+                    DEFAULT_WEB3_WS_PORT,
+                ))
+            });
+
             let builder = builder.ws_only();
             let (server, addr) = WsHttpServerKind::build(
                 builder,

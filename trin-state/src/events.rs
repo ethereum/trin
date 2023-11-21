@@ -1,5 +1,5 @@
 use crate::network::StateNetwork;
-use discv5::TalkRequest;
+use portalnet::events::OverlayRequest;
 use portalnet::types::messages::Message;
 use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedReceiver;
@@ -7,15 +7,15 @@ use tracing::{error, warn, Instrument};
 
 pub struct StateEvents {
     pub network: Arc<StateNetwork>,
-    pub event_rx: UnboundedReceiver<TalkRequest>,
+    pub message_rx: UnboundedReceiver<OverlayRequest>,
 }
 
 impl StateEvents {
     pub async fn start(mut self) {
         loop {
             tokio::select! {
-                Some(talk_request) = self.event_rx.recv() => {
-                    self.handle_state_talk_request(talk_request);
+                Some(msg) = self.message_rx.recv() => {
+                    self.handle_state_message(msg);
                 } else => {
                     error!("State event channel closed, shutting down");
                     break;
@@ -24,31 +24,43 @@ impl StateEvents {
         }
     }
 
-    /// Handle state network TalkRequest event
-    fn handle_state_talk_request(&self, talk_request: TalkRequest) {
+    /// Handle state network OverlayRequest.
+    fn handle_state_message(&self, msg: OverlayRequest) {
         let network = Arc::clone(&self.network);
-        let talk_request_id = talk_request.id().clone();
         tokio::spawn(async move {
-            let reply = match network
-                .overlay
-                .process_one_request(&talk_request)
-                .instrument(tracing::info_span!("state_network"))
-                .await
-            {
-                Ok(response) => Message::from(response).into(),
-                Err(error) => {
-                    error!(
-                        error = %error,
-                        request.discv5.id = %talk_request_id,
-                        "Error processing portal state request, responding with empty TALKRESP."
-                    );
-                    // Return an empty TALKRESP if there was an error executing the request
-                    "".into()
+            match msg {
+                OverlayRequest::Talk(talk_request) => {
+                    Self::handle_talk_request(talk_request, &network).await
                 }
-            };
-            if let Err(error) = talk_request.respond(reply) {
-                warn!(error = %error, request.discv5.id = %talk_request_id, "Error responding to TALKREQ");
+                OverlayRequest::Event(event) => {
+                    let _ = network.overlay.process_one_event(event).await;
+                }
             }
         });
+    }
+
+    /// Handle state network TALKREQ message.
+    async fn handle_talk_request(request: discv5::TalkRequest, network: &Arc<StateNetwork>) {
+        let talk_request_id = request.id().clone();
+        let reply = match network
+            .overlay
+            .process_one_request(&request)
+            .instrument(tracing::info_span!("state_network", req = %talk_request_id))
+            .await
+        {
+            Ok(response) => Message::from(response).into(),
+            Err(error) => {
+                error!(
+                    error = %error,
+                    request.discv5.id = %talk_request_id,
+                    "Error processing portal state request, responding with empty TALKRESP"
+                );
+                // Return an empty TALKRESP if there was an error executing the request
+                "".into()
+            }
+        };
+        if let Err(error) = request.respond(reply) {
+            warn!(error = %error, request.discv5.id = %talk_request_id, "Error responding to TALKREQ");
+        }
     }
 }

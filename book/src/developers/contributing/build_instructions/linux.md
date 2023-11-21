@@ -88,6 +88,11 @@ test if it is in use (no response indicates it is ok to use):
 $ sudo ss -tulpn | grep ':9008'
 ```
 
+#### Optional flag to enable websocket rpc
+`--ws`. This will allow you to run a websocket on port 8546
+`--ws --ws-port 3334`. A custom websocket port can be configured like this
+
+
 ### Create the node service
 
 Create a service to run the Trin node:

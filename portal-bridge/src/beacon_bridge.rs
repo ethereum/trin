@@ -36,6 +36,9 @@ use ethportal_api::{
     BeaconContentKey, BeaconContentValue, LightClientBootstrapKey, LightClientUpdatesByRangeKey,
 };
 
+/// The number of slots in a sync committee period.
+const SLOTS_PER_PERIOD: u64 = 32 * 256;
+
 pub struct BeaconBridge {
     pub api: ConsensusApi,
     mode: BridgeMode,
@@ -274,7 +277,8 @@ impl BeaconBridge {
         slot_stats: Arc<Mutex<BeaconSlotStats>>,
     ) -> anyhow::Result<u64> {
         let now = SystemTime::now();
-        let expected_current_period = expected_current_slot(BEACON_GENESIS_TIME, now) / (32 * 256);
+        let expected_current_period =
+            expected_current_slot(BEACON_GENESIS_TIME, now) / SLOTS_PER_PERIOD;
         match expected_current_period.cmp(&current_period) {
             Ordering::Equal => {
                 // We already gossiped the latest data from the current period, no need to serve it again.
@@ -292,6 +296,18 @@ impl BeaconBridge {
         let data = api.get_lc_updates(expected_current_period, 1).await?;
         let update: Value = serde_json::from_str(&data)?;
         let update: LightClientUpdateCapella = serde_json::from_value(update[0]["data"].clone())?;
+        let finalized_header_period = update.finalized_header.beacon.slot / SLOTS_PER_PERIOD;
+
+        // We don't serve a `LightClientUpdate` if its finalized header slot is not within the expected current period.
+        if finalized_header_period != expected_current_period {
+            warn!(
+                "LightClientUpdate finalized header is not for the expected period: Expected: {expected_current_period}, Actual: {actual_period}",
+                expected_current_period = expected_current_period,
+                actual_period = finalized_header_period
+            );
+            return Ok(current_period);
+        }
+
         let fork_versioned_update = ForkVersionedLightClientUpdate {
             fork_name: ForkName::Capella,
             update: LightClientUpdate::Capella(update.clone()),
