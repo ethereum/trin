@@ -43,6 +43,7 @@ use crate::{
     },
 };
 use ethportal_api::types::bootnodes::Bootnode;
+use ethportal_api::types::discv5::RoutingTableInfo;
 use ethportal_api::types::distance::{Distance, Metric};
 use ethportal_api::types::enr::Enr;
 use ethportal_api::utils::bytes::hex_encode;
@@ -265,6 +266,14 @@ where
             .iter()
             .map(|entry| entry.node.value.enr())
             .collect()
+    }
+
+    /// Returns the node-id and a nested array of node-ids to represent this node's k-buckets table.
+    pub fn routing_table_info(&self) -> RoutingTableInfo {
+        RoutingTableInfo {
+            local_node_id: hex_encode(self.local_enr().node_id().raw()),
+            buckets: self.kbuckets.read().clone().into(),
+        }
     }
 
     /// Returns a map (BTree for its ordering guarantees) with:
