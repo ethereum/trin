@@ -15,14 +15,11 @@ pub fn fluffy_handle(
     let ip = stun_for_external(&listen_all_ips).expect("to stun for external ip");
     command
         .kill_on_drop(true)
-        .arg("--storage-size:0")
+        .arg("--storage-capacity:0")
         .arg("--rpc")
         .arg(format!("--rpc-port:{rpc_port}"))
         .arg(format!("--udp-port:{udp_port}"))
         .arg(format!("--nat:extip:{}", ip.ip()))
-        .arg("--network:testnet0")
-        .arg("--table-ip-limit:1024")
-        .arg("--bucket-ip-limit:24")
         .arg(format!("--netkey-unsafe:{private_key}"));
     if let Some(metrics_url) = bridge_config.metrics_url {
         let address = match metrics_url.host_str() {
