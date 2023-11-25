@@ -2360,11 +2360,15 @@ where
         }
     }
 
-    /// Returns a vector of all the ENRs of nodes currently contained in the routing table.
+    /// Returns a vector of all the ENRs of nodes currently contained in the routing table which are connected.
     fn table_entries_enr(&self) -> Vec<Enr> {
         self.kbuckets
             .write()
             .iter()
+            .filter(|entry| {
+                // Filter out disconnected nodes.
+                entry.status.is_connected()
+            })
             .map(|entry| entry.node.value.enr())
             .collect()
     }
@@ -2387,6 +2391,10 @@ where
             for node in kbuckets
                 .nodes_by_distances(log2_distances, FIND_NODES_MAX_NODES)
                 .into_iter()
+                .filter(|entry| {
+                    // Filter out disconnected nodes.
+                    entry.status.is_connected()
+                })
                 .map(|entry| entry.node.value.clone())
             {
                 nodes_to_send.push(SszEnr::new(node.enr()));
