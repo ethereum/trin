@@ -1,4 +1,3 @@
-
 # This workflow is borrowed from reth: https://github.com/paradigmxyz/reth/blob/e04292247fff14ea93b4b0f6cf427bc9e4365c75/.github/workflows/dependencies.yml
 # Automatically run `cargo update` periodically
 
