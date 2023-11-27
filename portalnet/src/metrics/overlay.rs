@@ -9,7 +9,7 @@ use prometheus_exporter::{
 use crate::metrics::labels::{
     MessageDirectionLabel, MessageLabel, UtpDirectionLabel, UtpOutcomeLabel,
 };
-use crate::types::messages::{Request, Response};
+use ethportal_api::types::portal_wire::{Request, Response};
 
 /// Contains metrics reporters for use in the overlay network
 /// (eg. `portalnet/src/overlay.rs` & `portalnet/src/overlay_service.rs`).

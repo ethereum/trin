@@ -17,8 +17,8 @@ use tracing::{debug, error, info};
 
 use crate::metrics::portalnet::PORTALNET_METRICS;
 use crate::metrics::storage::StorageMetricsReporter;
-use crate::types::messages::ProtocolId;
 use ethportal_api::types::distance::{Distance, Metric, XorMetric};
+use ethportal_api::types::portal_wire::ProtocolId;
 use ethportal_api::utils::bytes::{hex_decode, hex_encode, ByteUtilsError};
 use ethportal_api::{ContentKeyError, HistoryContentKey, OverlayContentKey};
 

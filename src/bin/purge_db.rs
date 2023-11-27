@@ -10,10 +10,10 @@ use ethportal_api::types::execution::accumulator::EpochAccumulator;
 use ethportal_api::types::execution::block_body::BlockBody;
 use ethportal_api::types::execution::header::HeaderWithProof;
 use ethportal_api::types::execution::receipts::Receipts;
+use ethportal_api::types::portal_wire::ProtocolId;
 use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::HistoryContentKey;
 use portalnet::storage::{PortalStorage, PortalStorageConfig};
-use portalnet::types::messages::ProtocolId;
 use portalnet::utils::db::{configure_node_data_dir, configure_trin_data_dir};
 use trin_utils::log::init_tracing_logger;
 

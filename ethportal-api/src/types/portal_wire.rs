@@ -15,11 +15,11 @@ use ssz_types::{typenum, BitList};
 use thiserror::Error;
 use validator::ValidationError;
 
-use ethportal_api::types::bytes::ByteList;
-use ethportal_api::types::distance::Distance;
-use ethportal_api::types::enr::{Enr, SszEnr};
-use ethportal_api::utils::bytes::{hex_decode, hex_encode, ByteUtilsError};
-use ethportal_api::RawContentKey;
+use crate::types::bytes::ByteList;
+use crate::types::distance::Distance;
+use crate::types::enr::{Enr, SszEnr};
+use crate::utils::bytes::{hex_decode, hex_encode, ByteUtilsError};
+use crate::RawContentKey;
 
 /// The maximum size of a Discv5 packet.
 pub(crate) const MAX_DISCV5_PACKET_SIZE: usize = 1280;
@@ -47,7 +47,7 @@ pub(crate) const MAX_DISCV5_TALK_REQ_PAYLOAD_SIZE: usize =
 ///   * portal message SSZ union selector
 ///   * NODES `total` field: 1
 ///   * NODES SSZ length offset for List `enrs`
-pub(crate) const MAX_PORTAL_NODES_ENRS_SIZE: usize = MAX_DISCV5_TALK_REQ_PAYLOAD_SIZE
+pub const MAX_PORTAL_NODES_ENRS_SIZE: usize = MAX_DISCV5_TALK_REQ_PAYLOAD_SIZE
     - ssz::BYTES_PER_UNION_SELECTOR
     - 1
     - ssz::BYTES_PER_LENGTH_OFFSET;
@@ -59,7 +59,7 @@ pub(crate) const MAX_PORTAL_NODES_ENRS_SIZE: usize = MAX_DISCV5_TALK_REQ_PAYLOAD
 ///   * portal message SSZ union selector
 ///   * CONTENT SSZ union selector
 ///   * CONTENT SSZ length offset for List `enrs` or `content`
-pub(crate) const MAX_PORTAL_CONTENT_PAYLOAD_SIZE: usize = MAX_DISCV5_TALK_REQ_PAYLOAD_SIZE
+pub const MAX_PORTAL_CONTENT_PAYLOAD_SIZE: usize = MAX_DISCV5_TALK_REQ_PAYLOAD_SIZE
     - (ssz::BYTES_PER_UNION_SELECTOR * 2)
     - ssz::BYTES_PER_LENGTH_OFFSET;
 
@@ -574,7 +574,7 @@ impl From<Accept> for Value {
 #[allow(clippy::unwrap_used)]
 mod test {
     use super::*;
-    use ethportal_api::utils::bytes::hex_encode_upper;
+    use crate::utils::bytes::hex_encode_upper;
     use test_log::test;
 
     #[test]

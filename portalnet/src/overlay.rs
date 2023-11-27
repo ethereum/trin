@@ -34,18 +34,16 @@ use crate::{
         UTP_CONN_CFG,
     },
     storage::ContentStore,
-    types::{
-        messages::{
-            Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer, Ping,
-            Pong, PopulatedOffer, ProtocolId, Request, Response,
-        },
-        node::Node,
-    },
+    types::node::Node,
 };
 use ethportal_api::types::bootnodes::Bootnode;
 use ethportal_api::types::discv5::RoutingTableInfo;
 use ethportal_api::types::distance::{Distance, Metric};
 use ethportal_api::types::enr::Enr;
+use ethportal_api::types::portal_wire::{
+    Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer, Ping, Pong,
+    PopulatedOffer, ProtocolId, Request, Response,
+};
 use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::OverlayContentKey;
 use ethportal_api::RawContentKey;

@@ -12,6 +12,7 @@ use utp_rs::socket::UtpSocket;
 use ethportal_api::types::content_key::overlay::IdentityContentKey;
 use ethportal_api::types::distance::XorMetric;
 use ethportal_api::types::enr::{Enr, SszEnr};
+use ethportal_api::types::portal_wire::{Content, Message, ProtocolId};
 use ethportal_api::utils::bytes::hex_encode_upper;
 use portalnet::utils::db::setup_temp_dir;
 use portalnet::{
@@ -19,7 +20,6 @@ use portalnet::{
     discovery::{Discovery, Discv5UdpSocket},
     overlay::{OverlayConfig, OverlayProtocol},
     storage::{ContentStore, DistanceFunction, MemoryContentStore},
-    types::messages::{Content, Message, ProtocolId},
 };
 use trin_validation::validator::MockValidator;
 

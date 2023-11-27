@@ -12,12 +12,12 @@ use tokio::sync::mpsc;
 use tracing::{debug, error, warn};
 
 use crate::overlay_service::{OverlayCommand, OverlayRequest, RequestDirection};
-use crate::types::{
-    messages::{PopulatedOffer, PopulatedOfferWithResult, Request, Response},
-    node::Node,
-};
+use crate::types::node::Node;
 use ethportal_api::types::distance::{Metric, XorMetric};
 use ethportal_api::types::enr::Enr;
+use ethportal_api::types::portal_wire::{
+    PopulatedOffer, PopulatedOfferWithResult, Request, Response,
+};
 use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::OverlayContentKey;
 use ethportal_api::RawContentKey;

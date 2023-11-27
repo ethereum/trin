@@ -1,6 +1,6 @@
 use crate::network::BeaconNetwork;
+use ethportal_api::types::portal_wire::Message;
 use portalnet::events::OverlayRequest;
-use portalnet::types::messages::Message;
 use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tracing::{error, warn, Instrument};

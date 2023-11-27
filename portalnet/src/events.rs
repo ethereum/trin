@@ -7,7 +7,7 @@ use tokio::sync::{broadcast, mpsc};
 use tokio_stream::wrappers::BroadcastStream;
 use tracing::{debug, error, trace, warn};
 
-use super::types::messages::ProtocolId;
+use ethportal_api::types::portal_wire::ProtocolId;
 use ethportal_api::utils::bytes::{hex_encode, hex_encode_upper};
 
 /// Handles for communication between the main event handler and an overlay.
