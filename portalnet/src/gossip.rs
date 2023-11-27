@@ -42,7 +42,7 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
 ) -> usize {
     // Get all connected nodes from overlay routing table
     let kbuckets = kbuckets.read();
-    let mut all_nodes: Vec<&kbucket::Node<NodeId, Node>> = kbuckets
+    let all_nodes: Vec<&kbucket::Node<NodeId, Node>> = kbuckets
         .buckets_iter()
         .flat_map(|kbucket| {
             kbucket
@@ -51,18 +51,6 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
                 .collect::<Vec<&kbucket::Node<NodeId, Node>>>()
         })
         .collect();
-
-    if all_nodes.is_empty() {
-        warn!("No connected nodes, using disconnected nodes for gossip.");
-        all_nodes = kbuckets
-            .buckets_iter()
-            .flat_map(|kbucket| {
-                kbucket
-                    .iter()
-                    .collect::<Vec<&kbucket::Node<NodeId, Node>>>()
-            })
-            .collect();
-    }
 
     if all_nodes.is_empty() {
         // If there are no nodes whatsoever in the routing table the gossip cannot proceed.
@@ -132,7 +120,7 @@ pub async fn trace_propagate_gossip_cross_thread<TContentKey: OverlayContentKey>
     // Get all connected nodes from overlay routing table
     let interested_enrs = {
         let kbuckets = kbuckets.read();
-        let mut all_nodes: Vec<&kbucket::Node<NodeId, Node>> = kbuckets
+        let all_nodes: Vec<&kbucket::Node<NodeId, Node>> = kbuckets
             .buckets_iter()
             .flat_map(|kbucket| {
                 kbucket
@@ -141,18 +129,6 @@ pub async fn trace_propagate_gossip_cross_thread<TContentKey: OverlayContentKey>
                     .collect::<Vec<&kbucket::Node<NodeId, Node>>>()
             })
             .collect();
-
-        if all_nodes.is_empty() {
-            warn!("No connected nodes, using disconnected nodes for gossip.");
-            all_nodes = kbuckets
-                .buckets_iter()
-                .flat_map(|kbucket| {
-                    kbucket
-                        .iter()
-                        .collect::<Vec<&kbucket::Node<NodeId, Node>>>()
-                })
-                .collect();
-        }
 
         if all_nodes.is_empty() {
             // If there are no nodes whatsoever in the routing table the gossip cannot proceed.

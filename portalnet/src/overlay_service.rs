@@ -2527,22 +2527,10 @@ where
             peer_timeout: self.query_peer_timeout,
         };
 
-        let mut closest_enrs = self.closest_connected_nodes(&target_key, query_config.num_results);
+        let closest_enrs = self.closest_connected_nodes(&target_key, query_config.num_results);
         if closest_enrs.is_empty() {
-            // If there are no connected nodes, use the closest nodes regardless of connectivity.
-            warn!("No connected nodes, using disconnected nodes for query.");
-            closest_enrs = self
-                .kbuckets
-                .write()
-                .closest_values(&target_key)
-                .map(|closest| closest.value.enr)
-                .take(query_config.num_results)
-                .collect();
-        }
-
-        if closest_enrs.is_empty() {
-            // If there are no nodes whatsoever in the routing table the query cannot proceed.
-            warn!("No nodes in routing table, query cannot proceed.");
+            // If there are no connected nodes in the routing table the query cannot proceed.
+            warn!("No connected nodes in routing table, find content query cannot proceed.");
             if let Some(callback) = callback {
                 let _ = callback.send((None, false, None));
             }
