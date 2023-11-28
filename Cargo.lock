@@ -3761,6 +3761,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "metrics"
+version = "0.1.0"
+dependencies = [
+ "ethportal-api",
+ "lazy_static",
+ "prometheus_exporter",
+]
+
+[[package]]
 name = "milagro_bls"
 version = "1.5.0"
 source = "git+https://github.com/Snowfork/milagro_bls#7d1776edb42870b006430ece9741c15811e4c9e3"

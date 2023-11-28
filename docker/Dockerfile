@@ -16,7 +16,8 @@ RUN apt-get update && apt-get install clang -y
 COPY ./Cargo.lock ./Cargo.lock
 COPY ./Cargo.toml ./Cargo.toml
 COPY ./ethportal-api ./ethportal-api
-COPY ./ethportal-peertest ./ethportal-peertest 
+COPY ./ethportal-peertest ./ethportal-peertest
+COPY ./metrics ./metrics
 COPY ./portalnet ./portalnet
 COPY ./light-client ./light-client
 COPY ./rpc ./rpc
