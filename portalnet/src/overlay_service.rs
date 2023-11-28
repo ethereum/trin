@@ -49,10 +49,6 @@ use crate::{
         query_pool::{QueryId, QueryPool, QueryPoolState, TargetKey},
     },
     gossip::propagate_gossip_cross_thread,
-    metrics::{
-        labels::{UtpDirectionLabel, UtpOutcomeLabel},
-        overlay::OverlayMetricsReporter,
-    },
     storage::{ContentStore, ShouldWeStoreContent},
     types::node::Node,
     utils::portal_wire,
@@ -69,6 +65,10 @@ use ethportal_api::types::query_trace::QueryTrace;
 use ethportal_api::utils::bytes::{hex_encode, hex_encode_compact};
 use ethportal_api::OverlayContentKey;
 use ethportal_api::RawContentKey;
+use metrics::{
+    labels::{UtpDirectionLabel, UtpOutcomeLabel},
+    overlay::OverlayMetricsReporter,
+};
 use trin_validation::validator::Validator;
 
 pub const FIND_NODES_MAX_NODES: usize = 32;
@@ -2677,7 +2677,6 @@ mod tests {
     use crate::{
         config::PortalnetConfig,
         discovery::{Discovery, NodeAddress},
-        metrics::portalnet::PORTALNET_METRICS,
         overlay::OverlayConfig,
         storage::{DistanceFunction, MemoryContentStore},
         utils::db::setup_temp_dir,
@@ -2686,6 +2685,7 @@ mod tests {
         cli::DEFAULT_DISCOVERY_PORT, content_key::overlay::IdentityContentKey, distance::XorMetric,
         enr::generate_random_remote_enr,
     };
+    use metrics::portalnet::PORTALNET_METRICS;
     use trin_validation::validator::MockValidator;
 
     macro_rules! poll_command_rx {
