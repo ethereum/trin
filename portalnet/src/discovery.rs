@@ -20,10 +20,10 @@ use tracing::{debug, info, warn};
 use utp_rs::{cid::ConnectionPeer, udp::AsyncUdpSocket};
 
 use super::config::PortalnetConfig;
-use super::types::messages::ProtocolId;
 use crate::socket;
 use ethportal_api::types::discv5::RoutingTableInfo;
 use ethportal_api::types::enr::Enr;
+use ethportal_api::types::portal_wire::ProtocolId;
 use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::NodeInfo;
 use trin_utils::version::get_trin_version;

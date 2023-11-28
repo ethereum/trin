@@ -8,11 +8,11 @@ use ethportal_api::types::jsonrpc::request::BeaconJsonRpcRequest;
 use ethportal_api::types::portal::{
     AcceptInfo, ContentInfo, FindNodesInfo, PongInfo, TraceContentInfo,
 };
+use ethportal_api::types::portal_wire::Content;
 use ethportal_api::types::{constants::CONTENT_ABSENT, query_trace::QueryTrace};
 use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::{BeaconContentKey, BeaconContentValue, OverlayContentKey, RawContentKey};
 use portalnet::storage::ContentStore;
-use portalnet::types::messages::Content;
 use serde_json::{json, Value};
 use ssz::Encode;
 use tokio::sync::{mpsc, Mutex, RwLock};

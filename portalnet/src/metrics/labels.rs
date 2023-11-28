@@ -1,4 +1,4 @@
-use crate::types::messages::{ProtocolId, Request, Response};
+use ethportal_api::types::portal_wire::{ProtocolId, Request, Response};
 
 pub type MetricLabel = &'static str;
 

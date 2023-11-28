@@ -2,10 +2,8 @@ use discv5::{enr::NodeId, kbucket::Key, Enr};
 use futures::channel::oneshot;
 use smallvec::SmallVec;
 
-use crate::{
-    find::query_pool::TargetKey,
-    types::messages::{Content, FindContent, FindNodes, Request},
-};
+use crate::find::query_pool::TargetKey;
+use ethportal_api::types::portal_wire::{Content, FindContent, FindNodes, Request};
 use ethportal_api::types::query_trace::QueryTrace;
 use ethportal_api::OverlayContentKey;
 
