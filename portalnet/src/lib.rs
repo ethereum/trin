@@ -6,7 +6,6 @@ pub mod discovery;
 pub mod events;
 pub mod find;
 pub mod gossip;
-pub mod metrics;
 pub mod overlay;
 pub mod overlay_service;
 pub mod socket;

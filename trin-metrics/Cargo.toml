@@ -1,0 +1,16 @@
+[package]
+name = "trin-metrics"
+version = "0.1.0"
+edition = "2021"
+repository = "https://github.com/ethereum/trin"
+license = "GPL-3.0"
+readme = "README.md"
+keywords = ["ethereum", "portal-network"]
+categories = ["cryptography::cryptocurrencies"]
+description = "Trin metrics"
+
+[dependencies]
+anyhow = "1.0.68"
+ethportal-api = { path="../ethportal-api" }
+prometheus_exporter = "0.8.4"
+lazy_static = "1.4.0"

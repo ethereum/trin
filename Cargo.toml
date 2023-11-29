@@ -55,6 +55,7 @@ members = [
     "ethportal-api",
     "ethportal-peertest",
     "light-client",
+    "trin-metrics",
     "portal-bridge",
     "rpc",
     "trin-beacon",

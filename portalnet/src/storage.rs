@@ -15,12 +15,12 @@ use rusqlite::params;
 use thiserror::Error;
 use tracing::{debug, error, info};
 
-use crate::metrics::portalnet::PORTALNET_METRICS;
-use crate::metrics::storage::StorageMetricsReporter;
 use ethportal_api::types::distance::{Distance, Metric, XorMetric};
 use ethportal_api::types::portal_wire::ProtocolId;
 use ethportal_api::utils::bytes::{hex_decode, hex_encode, ByteUtilsError};
 use ethportal_api::{ContentKeyError, HistoryContentKey, OverlayContentKey};
+use trin_metrics::portalnet::PORTALNET_METRICS;
+use trin_metrics::storage::StorageMetricsReporter;
 
 const BYTES_IN_MB_U64: u64 = 1000 * 1000;
 

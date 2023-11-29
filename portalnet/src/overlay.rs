@@ -27,8 +27,6 @@ use crate::{
     discovery::{Discovery, UtpEnr},
     find::query_info::{FindContentResult, RecursiveFindContentResult},
     gossip::{propagate_gossip_cross_thread, trace_propagate_gossip_cross_thread, GossipResult},
-    metrics::overlay::OverlayMetricsReporter,
-    metrics::portalnet::PORTALNET_METRICS,
     overlay_service::{
         OverlayCommand, OverlayRequest, OverlayRequestError, OverlayService, RequestDirection,
         UTP_CONN_CFG,
@@ -47,6 +45,7 @@ use ethportal_api::types::portal_wire::{
 use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::OverlayContentKey;
 use ethportal_api::RawContentKey;
+use trin_metrics::{overlay::OverlayMetricsReporter, portalnet::PORTALNET_METRICS};
 use trin_validation::validator::Validator;
 
 use crate::events::EventEnvelope;

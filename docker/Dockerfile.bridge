@@ -21,7 +21,8 @@ COPY ./src ./src
 COPY ./trin-beacon ./trin-beacon
 COPY ./portal-bridge ./portal-bridge
 COPY ./trin-history ./trin-history
-COPY ./trin-state ./trin-state 
+COPY ./trin-metrics ./trin-metrics
+COPY ./trin-state ./trin-state
 COPY ./trin-utils ./trin-utils
 COPY ./trin-validation ./trin-validation
 COPY ./ethportal-peertest ./ethportal-peertest 
