@@ -102,7 +102,8 @@ pub fn upnp_for_external(listen_addr: SocketAddr) -> Option<SocketAddr> {
         "trin-udp",
     ) {
         Ok(()) => {
-            thread::spawn(move || loop {
+            tokio::spawn(async move { loop {
+                tokio::time::sleep(time::Duration::from_secs(UPNP_MAPPING_TIMEOUT)).await;
                 thread::sleep(time::Duration::from_secs(UPNP_MAPPING_TIMEOUT));
                 if let Err(err) = gateway.add_port(
                     igd_next::PortMappingProtocol::UDP,
