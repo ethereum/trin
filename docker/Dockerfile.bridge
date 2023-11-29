@@ -16,13 +16,13 @@ RUN apt-get update && apt-get install clang -y
 COPY ./Cargo.lock ./Cargo.lock
 COPY ./Cargo.toml ./Cargo.toml
 COPY ./portalnet ./portalnet
-COPY ./metrics ./metrics
 COPY ./light-client ./light-client
 COPY ./src ./src 
 COPY ./trin-beacon ./trin-beacon
 COPY ./portal-bridge ./portal-bridge
 COPY ./trin-history ./trin-history
-COPY ./trin-state ./trin-state 
+COPY ./trin-metrics ./trin-metrics
+COPY ./trin-state ./trin-state
 COPY ./trin-utils ./trin-utils
 COPY ./trin-validation ./trin-validation
 COPY ./ethportal-peertest ./ethportal-peertest 

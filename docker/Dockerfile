@@ -17,7 +17,6 @@ COPY ./Cargo.lock ./Cargo.lock
 COPY ./Cargo.toml ./Cargo.toml
 COPY ./ethportal-api ./ethportal-api
 COPY ./ethportal-peertest ./ethportal-peertest
-COPY ./metrics ./metrics
 COPY ./portalnet ./portalnet
 COPY ./light-client ./light-client
 COPY ./rpc ./rpc
@@ -25,7 +24,8 @@ COPY ./src ./src
 COPY ./trin-beacon ./trin-beacon
 COPY ./portal-bridge ./portal-bridge
 COPY ./trin-history ./trin-history
-COPY ./trin-state ./trin-state 
+COPY ./trin-metrics ./trin-metrics
+COPY ./trin-state ./trin-state
 COPY ./trin-utils ./trin-utils 
 COPY ./trin-validation ./trin-validation 
 COPY ./utp-testing ./utp-testing

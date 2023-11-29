@@ -65,7 +65,7 @@ use ethportal_api::types::query_trace::QueryTrace;
 use ethportal_api::utils::bytes::{hex_encode, hex_encode_compact};
 use ethportal_api::OverlayContentKey;
 use ethportal_api::RawContentKey;
-use metrics::{
+use trin_metrics::{
     labels::{UtpDirectionLabel, UtpOutcomeLabel},
     overlay::OverlayMetricsReporter,
 };
@@ -2685,7 +2685,7 @@ mod tests {
         cli::DEFAULT_DISCOVERY_PORT, content_key::overlay::IdentityContentKey, distance::XorMetric,
         enr::generate_random_remote_enr,
     };
-    use metrics::portalnet::PORTALNET_METRICS;
+    use trin_metrics::portalnet::PORTALNET_METRICS;
     use trin_validation::validator::MockValidator;
 
     macro_rules! poll_command_rx {

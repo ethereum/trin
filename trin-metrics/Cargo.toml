@@ -1,5 +1,5 @@
 [package]
-name = "metrics"
+name = "trin-metrics"
 version = "0.1.0"
 edition = "2021"
 repository = "https://github.com/ethereum/trin"

@@ -45,7 +45,7 @@ use ethportal_api::types::portal_wire::{
 use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::OverlayContentKey;
 use ethportal_api::RawContentKey;
-use metrics::{overlay::OverlayMetricsReporter, portalnet::PORTALNET_METRICS};
+use trin_metrics::{overlay::OverlayMetricsReporter, portalnet::PORTALNET_METRICS};
 use trin_validation::validator::Validator;
 
 use crate::events::EventEnvelope;

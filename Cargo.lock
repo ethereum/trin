@@ -3761,16 +3761,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "metrics"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "ethportal-api",
- "lazy_static",
- "prometheus_exporter",
-]
-
-[[package]]
 name = "milagro_bls"
 version = "1.5.0"
 source = "git+https://github.com/Snowfork/milagro_bls#7d1776edb42870b006430ece9741c15811e4c9e3"
@@ -4492,7 +4482,6 @@ dependencies = [
  "lazy_static",
  "leb128",
  "lru",
- "metrics",
  "parking_lot 0.11.2",
  "quickcheck",
  "r2d2",
@@ -4516,6 +4505,7 @@ dependencies = [
  "tokio-test",
  "tracing",
  "tracing-subscriber",
+ "trin-metrics",
  "trin-utils",
  "trin-validation",
  "uds_windows",
@@ -7170,6 +7160,16 @@ dependencies = [
  "trin-validation",
  "ureq",
  "utp-rs",
+]
+
+[[package]]
+name = "trin-metrics"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "ethportal-api",
+ "lazy_static",
+ "prometheus_exporter",
 ]
 
 [[package]]
