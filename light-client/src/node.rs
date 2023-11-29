@@ -13,7 +13,6 @@ use crate::errors::NodeError;
 pub struct Node<R: ConsensusRpc> {
     pub consensus: ConsensusLightClient<R>,
     pub config: Arc<Config>,
-    pub history_size: usize,
 }
 
 impl<R: ConsensusRpc> Node<R> {
@@ -24,11 +23,7 @@ impl<R: ConsensusRpc> Node<R> {
         let consensus = ConsensusLightClient::new(consensus_rpc, checkpoint_hash, config.clone())
             .map_err(NodeError::ConsensusClientCreationError)?;
 
-        Ok(Node {
-            consensus,
-            config,
-            history_size: 64,
-        })
+        Ok(Node { consensus, config })
     }
 
     pub fn with_portal(config: Arc<Config>, portal_rpc: R) -> Result<Self, NodeError> {
@@ -37,11 +32,7 @@ impl<R: ConsensusRpc> Node<R> {
         let consensus =
             ConsensusLightClient::with_custom_rpc(portal_rpc, checkpoint_hash, config.clone());
 
-        Ok(Node {
-            consensus,
-            config,
-            history_size: 64,
-        })
+        Ok(Node { consensus, config })
     }
 
     pub async fn sync(&mut self) -> Result<(), NodeError> {

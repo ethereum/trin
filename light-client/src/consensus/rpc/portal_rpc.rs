@@ -17,7 +17,7 @@ use ethportal_api::{
 use eyre::eyre;
 use futures::channel::oneshot;
 use portalnet::overlay_service::OverlayCommand;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::warn;
 pub const BEACON_GENESIS_TIME: u64 = 1606824023;
@@ -310,7 +310,7 @@ impl ConsensusRpc for PortalRpc {
 pub fn expected_current_slot() -> u64 {
     let now = SystemTime::now();
     let now = now.duration_since(UNIX_EPOCH).expect("Time went backwards");
-    let since_genesis = now - std::time::Duration::from_secs(BEACON_GENESIS_TIME);
+    let since_genesis = now - Duration::from_secs(BEACON_GENESIS_TIME);
 
     since_genesis.as_secs() / 12
 }
