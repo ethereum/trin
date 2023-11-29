@@ -66,7 +66,7 @@ pub fn upnp_for_external(listen_addr: SocketAddr) -> Option<SocketAddr> {
     let gateway = match igd_next::search_gateway(Default::default()) {
         Ok(gateway) => gateway,
         Err(ref err) => {
-            warn!(error = %err, "Error finding gateway");
+            warn!(error = %err, "Error finding UPnP gateway");
             return None;
         }
     };
