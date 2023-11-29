@@ -99,7 +99,7 @@ pub fn upnp_for_external(listen_addr: SocketAddr) -> Option<SocketAddr> {
         listen_addr.port(),
         local_addr,
         UPNP_MAPPING_DURATION,
-        "new_port",
+        "trin-udp",
     ) {
         Ok(()) => {
             thread::spawn(move || loop {
