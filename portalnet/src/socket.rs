@@ -118,8 +118,8 @@ pub fn upnp_for_external(listen_addr: SocketAddr) -> Option<SocketAddr> {
             info!("Mapped local address {local_addr} to external address {external_addr}");
             Some(external_addr)
         }
-        Err(..) => {
-            warn!("Error mapping NAT port");
+        Err(err) => {
+            warn!(error=%err, "UPnP could not construct discovery port route");
             None
         }
     }
