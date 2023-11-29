@@ -8,7 +8,7 @@ pub mod find;
 pub mod gossip;
 pub mod metrics;
 pub mod overlay;
-mod overlay_service;
+pub mod overlay_service;
 pub mod socket;
 pub mod storage;
 pub mod types;

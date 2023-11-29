@@ -14,6 +14,7 @@ use tokio::time::sleep;
 use crate::config::client_config::Config;
 use crate::config::{CheckpointFallback, Network};
 use crate::consensus::errors::ConsensusError;
+use crate::consensus::rpc::ConsensusRpc;
 
 use crate::database::Database;
 use crate::errors::NodeError;
@@ -86,7 +87,7 @@ impl ClientBuilder {
         self
     }
 
-    pub fn build<DB: Database>(self) -> Result<Client<DB>> {
+    pub fn build<DB: Database, R: ConsensusRpc + 'static>(self) -> Result<Client<DB, R>> {
         let base_config = if let Some(network) = self.network {
             network.to_base_config()
         } else {
@@ -171,17 +172,98 @@ impl ClientBuilder {
 
         Client::new(config)
     }
+
+    pub fn build_with_rpc<DB: Database, R: ConsensusRpc + 'static>(
+        self,
+        portal_rpc: R,
+    ) -> Result<Client<DB, R>> {
+        let base_config = if let Some(network) = self.network {
+            network.to_base_config()
+        } else {
+            let config = self
+                .config
+                .as_ref()
+                .ok_or(eyre!("missing network config"))?;
+            config.to_base_config()
+        };
+
+        let checkpoint = if let Some(checkpoint) = self.checkpoint {
+            Some(checkpoint)
+        } else if let Some(config) = &self.config {
+            config.checkpoint.clone()
+        } else {
+            None
+        };
+
+        let default_checkpoint = if let Some(config) = &self.config {
+            config.default_checkpoint.clone()
+        } else {
+            base_config.default_checkpoint.clone()
+        };
+
+        let rpc_port = if self.rpc_port.is_some() {
+            self.rpc_port
+        } else if let Some(config) = &self.config {
+            config.rpc_port
+        } else {
+            None
+        };
+
+        let data_dir = if self.data_dir.is_some() {
+            self.data_dir
+        } else if let Some(config) = &self.config {
+            config.data_dir.clone()
+        } else {
+            None
+        };
+
+        let fallback = if self.fallback.is_some() {
+            self.fallback
+        } else if let Some(config) = &self.config {
+            config.fallback.clone()
+        } else {
+            None
+        };
+
+        let load_external_fallback = if let Some(config) = &self.config {
+            self.load_external_fallback || config.load_external_fallback
+        } else {
+            self.load_external_fallback
+        };
+
+        let strict_checkpoint_age = if let Some(config) = &self.config {
+            self.strict_checkpoint_age || config.strict_checkpoint_age
+        } else {
+            self.strict_checkpoint_age
+        };
+
+        let config = Config {
+            checkpoint,
+            default_checkpoint,
+            rpc_port,
+            data_dir,
+            chain: base_config.chain,
+            forks: base_config.forks,
+            max_checkpoint_age: base_config.max_checkpoint_age,
+            fallback,
+            load_external_fallback,
+            strict_checkpoint_age,
+            ..Default::default()
+        };
+
+        Client::with_portal(config, portal_rpc)
+    }
 }
 
-pub struct Client<DB: Database> {
-    node: Arc<RwLock<Node>>,
-    rpc: Option<Rpc>,
+pub struct Client<DB: Database, R: ConsensusRpc> {
+    node: Arc<RwLock<Node<R>>>,
+    rpc: Option<Rpc<R>>,
     db: DB,
     fallback: Option<String>,
     load_external_fallback: bool,
 }
 
-impl<DB: Database> Client<DB> {
+impl<DB: Database, R: ConsensusRpc + 'static> Client<DB, R> {
     fn new(mut config: Config) -> Result<Self> {
         let db = DB::new(&config)?;
         if config.checkpoint.is_none() {
@@ -204,6 +286,28 @@ impl<DB: Database> Client<DB> {
         })
     }
 
+    fn with_portal(mut config: Config, portal_rpc: R) -> Result<Self> {
+        let db = DB::new(&config)?;
+        if config.checkpoint.is_none() {
+            let checkpoint = db.load_checkpoint()?;
+            config.checkpoint = Some(checkpoint);
+        }
+
+        let config = Arc::new(config);
+        let node = Node::with_portal(config.clone(), portal_rpc)?;
+        let node = Arc::new(RwLock::new(node));
+
+        let rpc = config.rpc_port.map(|port| Rpc::new(node.clone(), port));
+
+        Ok(Client {
+            node,
+            rpc,
+            db,
+            fallback: config.fallback.clone(),
+            load_external_fallback: config.load_external_fallback,
+        })
+    }
+
     pub async fn start(&mut self) -> Result<()> {
         if let Some(rpc) = &mut self.rpc {
             rpc.start().await?;
@@ -213,7 +317,11 @@ impl<DB: Database> Client<DB> {
 
         if let Err(err) = sync_res {
             match err {
-                NodeError::ConsensusSyncError(err) => match err.downcast_ref().unwrap() {
+                NodeError::ConsensusSyncError(err) => match err
+                    .downcast_ref()
+                    .ok_or(err.to_string())
+                    .map_err(|err| eyre!(err))?
+                {
                     ConsensusError::CheckpointTooOld => {
                         warn!(
                             "failed to sync consensus node with checkpoint: 0x{}",

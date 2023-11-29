@@ -11,7 +11,7 @@ use crate::consensus::types::{
 };
 use crate::errors::RpcError;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct NimbusRpc {
     rpc: String,
 }
@@ -98,6 +98,10 @@ impl ConsensusRpc for NimbusRpc {
             .map_err(|e| RpcError::new("spec", e))?;
 
         Ok(res.data.chain_id)
+    }
+
+    fn name(&self) -> String {
+        "nimbus".to_string()
     }
 }
 

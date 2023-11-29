@@ -3,6 +3,7 @@ use log::info;
 use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::RwLock;
 
+use crate::consensus::rpc::ConsensusRpc;
 use jsonrpsee::{
     core::{async_trait, RpcResult},
     proc_macros::rpc,
@@ -14,14 +15,14 @@ use crate::node::Node;
 
 use crate::utils::u64_to_hex_string;
 
-pub struct Rpc {
-    node: Arc<RwLock<Node>>,
+pub struct Rpc<R: ConsensusRpc> {
+    node: Arc<RwLock<Node<R>>>,
     handle: Option<ServerHandle>,
     port: u16,
 }
 
-impl Rpc {
-    pub fn new(node: Arc<RwLock<Node>>, port: u16) -> Self {
+impl<R: ConsensusRpc + 'static> Rpc<R> {
+    pub fn new(node: Arc<RwLock<Node<R>>>, port: u16) -> Self {
         Rpc {
             node,
             handle: None,
@@ -57,13 +58,13 @@ trait NetRpc {
 }
 
 #[derive(Clone)]
-struct RpcInner {
-    node: Arc<RwLock<Node>>,
+struct RpcInner<R: ConsensusRpc> {
+    node: Arc<RwLock<Node<R>>>,
     port: u16,
 }
 
 #[async_trait]
-impl EthRpcServer for RpcInner {
+impl<R: ConsensusRpc + 'static> EthRpcServer for RpcInner<R> {
     async fn chain_id(&self) -> RpcResult<String> {
         let node = self.node.read().await;
         let id = node.chain_id();
@@ -72,14 +73,14 @@ impl EthRpcServer for RpcInner {
 }
 
 #[async_trait]
-impl NetRpcServer for RpcInner {
+impl<R: ConsensusRpc + 'static> NetRpcServer for RpcInner<R> {
     async fn version(&self) -> RpcResult<String> {
         let node = self.node.read().await;
         Ok(node.chain_id().to_string())
     }
 }
 
-async fn start(rpc: RpcInner) -> Result<(ServerHandle, SocketAddr)> {
+async fn start<R: ConsensusRpc + 'static>(rpc: RpcInner<R>) -> Result<(ServerHandle, SocketAddr)> {
     let addr = format!("127.0.0.1:{}", rpc.port);
     let server = Server::builder().build(addr).await?;
 

@@ -5,18 +5,17 @@ use ethportal_api::consensus::header::BeaconBlockHeader;
 use eyre::Result;
 
 use crate::config::client_config::Config;
-use crate::consensus::rpc::nimbus_rpc::NimbusRpc;
+use crate::consensus::rpc::ConsensusRpc;
 use crate::consensus::ConsensusLightClient;
 
 use crate::errors::NodeError;
 
-pub struct Node {
-    pub consensus: ConsensusLightClient<NimbusRpc>,
+pub struct Node<R: ConsensusRpc> {
+    pub consensus: ConsensusLightClient<R>,
     pub config: Arc<Config>,
-    pub history_size: usize,
 }
 
-impl Node {
+impl<R: ConsensusRpc> Node<R> {
     pub fn new(config: Arc<Config>) -> Result<Self, NodeError> {
         let consensus_rpc = &config.consensus_rpc;
         let checkpoint_hash = &config.checkpoint.as_ref().unwrap();
@@ -24,11 +23,16 @@ impl Node {
         let consensus = ConsensusLightClient::new(consensus_rpc, checkpoint_hash, config.clone())
             .map_err(NodeError::ConsensusClientCreationError)?;
 
-        Ok(Node {
-            consensus,
-            config,
-            history_size: 64,
-        })
+        Ok(Node { consensus, config })
+    }
+
+    pub fn with_portal(config: Arc<Config>, portal_rpc: R) -> Result<Self, NodeError> {
+        let checkpoint_hash = &config.checkpoint.as_ref().unwrap();
+
+        let consensus =
+            ConsensusLightClient::with_custom_rpc(portal_rpc, checkpoint_hash, config.clone());
+
+        Ok(Node { consensus, config })
     }
 
     pub async fn sync(&mut self) -> Result<(), NodeError> {

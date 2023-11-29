@@ -13,9 +13,10 @@ use super::rpc::ConsensusRpc;
 use super::types::*;
 use super::utils::*;
 
-use super::constants::MAX_REQUEST_LIGHT_CLIENT_UPDATES;
 use super::errors::ConsensusError;
 use crate::config::client_config::Config;
+use crate::consensus::constants::MAX_REQUEST_LIGHT_CLIENT_UPDATES;
+use crate::consensus::rpc::portal_rpc::expected_current_slot;
 use crate::types::Bytes32;
 use crate::utils::bytes_to_bytes32;
 use ethereum_types::H256;
@@ -68,6 +69,16 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
         })
     }
 
+    pub fn with_custom_rpc(rpc: R, checkpoint_block_root: &[u8], config: Arc<Config>) -> Self {
+        ConsensusLightClient {
+            rpc,
+            store: LightClientStore::default(),
+            last_checkpoint: None,
+            config,
+            initial_checkpoint: checkpoint_block_root.to_vec(),
+        }
+    }
+
     pub async fn check_rpc(&self) -> Result<()> {
         let chain_id = self.rpc.chain_id().await?;
 
@@ -89,37 +100,72 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
     pub async fn sync(&mut self) -> Result<()> {
         self.bootstrap().await?;
 
-        let current_period = calc_sync_period(self.store.finalized_header.slot);
-        let updates = self
-            .rpc
-            .get_updates(current_period, MAX_REQUEST_LIGHT_CLIENT_UPDATES)
-            .await?;
+        let bootstrap_period = calc_sync_period(self.store.finalized_header.slot);
+
+        let mut updates = Vec::new();
+
+        // If we are using the portal network, we need to request updates for all periods one by one
+        if &self.rpc.name() == "portal" {
+            // Get expected current period
+            let current_perriod = calc_sync_period(expected_current_slot());
+
+            // Create a range of periods to request updates for
+            let periods = bootstrap_period..current_perriod;
+
+            for period in periods {
+                let mut period_update = self.rpc.get_updates(period, 1).await?;
+                updates.append(&mut period_update);
+            }
+        } else {
+            let mut result = self
+                .rpc
+                .get_updates(bootstrap_period, MAX_REQUEST_LIGHT_CLIENT_UPDATES)
+                .await?;
+
+            updates.append(&mut result);
+        }
 
         for update in updates {
             self.verify_update(&update)?;
             self.apply_update(&update);
         }
 
-        let finality_update = self.rpc.get_finality_update().await?;
-        self.verify_finality_update(&finality_update)?;
-        self.apply_finality_update(&finality_update);
+        match self.rpc.get_finality_update().await {
+            Ok(finality_update) => {
+                self.verify_finality_update(&finality_update)?;
+                self.apply_finality_update(&finality_update);
+            }
+            Err(err) => {
+                debug!("Could not fetch finality update: {err}")
+            }
+        }
 
         let optimistic_update = self.rpc.get_optimistic_update().await?;
         self.verify_optimistic_update(&optimistic_update)?;
         self.apply_optimistic_update(&optimistic_update);
 
         info!(
-            "consensus client in sync with checkpoint: 0x{}",
-            hex::encode(&self.initial_checkpoint)
+            "Light client in sync with checkpoint: {}",
+            hex_encode(&self.initial_checkpoint)
         );
 
         Ok(())
     }
 
     pub async fn advance(&mut self) -> Result<()> {
-        let finality_update = self.rpc.get_finality_update().await?;
-        self.verify_finality_update(&finality_update)?;
-        self.apply_finality_update(&finality_update);
+        match self.rpc.get_finality_update().await {
+            Ok(finality_update) => {
+                debug!(
+                    "Processing finality update with finalized slot {}",
+                    finality_update.finalized_header.beacon.slot
+                );
+                self.verify_finality_update(&finality_update)?;
+                self.apply_finality_update(&finality_update);
+            }
+            Err(err) => {
+                debug!("Could not fetch finality update: {err}")
+            }
+        }
 
         let optimistic_update = self.rpc.get_optimistic_update().await?;
         self.verify_optimistic_update(&optimistic_update)?;

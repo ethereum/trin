@@ -4,6 +4,7 @@ use parking_lot::RwLock as PLRwLock;
 use tokio::sync::RwLock;
 use utp_rs::socket::UtpSocket;
 
+use crate::sync::BeaconSync;
 use crate::validation::BeaconValidator;
 use ethportal_api::types::distance::XorMetric;
 use ethportal_api::types::enr::Enr;
@@ -51,7 +52,22 @@ impl BeaconNetwork {
         )
         .await;
 
-        let _ = overlay.event_stream().await?;
+        let overlay_tx = overlay.command_tx.clone();
+
+        // Spawn the beacon sync task.
+        if portal_config.trusted_block_root.is_some() {
+            tokio::spawn(async move {
+                let beacon_sync = BeaconSync::new(overlay_tx);
+                beacon_sync
+                    .start(
+                        portal_config
+                            .trusted_block_root
+                            .expect("Trusted block root should be available"),
+                    )
+                    .await
+                    .expect("Beacon sync failed to start");
+            });
+        }
 
         Ok(Self {
             overlay: Arc::new(overlay),

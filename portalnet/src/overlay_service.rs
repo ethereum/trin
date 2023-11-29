@@ -2521,7 +2521,7 @@ where
         callback: Option<oneshot::Sender<RecursiveFindContentResult>>,
         is_trace: bool,
     ) -> Option<QueryId> {
-        info!("Starting query for content key: {}", target);
+        debug!("Starting query for content key: {}", target);
 
         // Represent the target content ID with a node ID.
         let target_node_id = NodeId::new(&target.content_id());
