@@ -103,19 +103,19 @@ pub fn upnp_for_external(listen_addr: SocketAddr) -> Option<SocketAddr> {
     ) {
         Ok(()) => {
             // Create a thread to periodically renew the mapped port in background.
-            tokio::spawn(async move {
-                loop {
-                    tokio::time::sleep(time::Duration::from_secs(UPNP_MAPPING_TIMEOUT)).await;
-                    thread::sleep(time::Duration::from_secs(UPNP_MAPPING_TIMEOUT));
-                    if let Err(err) = gateway.add_port(
-                        igd_next::PortMappingProtocol::UDP,
-                        listen_addr.port(),
-                        local_addr,
-                        UPNP_MAPPING_DURATION,
-                        "renew_port",
-                    ) {
-                        warn!(error = %err, "Error renewing NAT port");
-                    }
+            thread::spawn(move || loop {
+                thread::sleep(time::Duration::from_secs(UPNP_MAPPING_TIMEOUT));
+                if let Err(err) = gateway.add_port(
+                    igd_next::PortMappingProtocol::UDP,
+                    listen_addr.port(),
+                    local_addr,
+                    UPNP_MAPPING_DURATION,
+                    "renew_port",
+                ) {
+                    warn!(error = %err, "Error renewing NAT port");
+                } else {
+                    let external_addr = SocketAddr::new(external_ip, listen_addr.port());
+                    info!("Renewed UPnP mapping: local {local_addr}, external {external_addr}");
                 }
             });
             let external_addr = SocketAddr::new(external_ip, listen_addr.port());
