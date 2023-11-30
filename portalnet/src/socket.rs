@@ -110,7 +110,7 @@ pub fn upnp_for_external(listen_addr: SocketAddr) -> Option<SocketAddr> {
                     listen_addr.port(),
                     local_addr,
                     UPNP_MAPPING_DURATION,
-                    "renew_port",
+                    "trin_udp",
                 ) {
                     warn!(error = %err, "Error renewing NAT port");
                 } else {
