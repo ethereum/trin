@@ -325,7 +325,7 @@ where
                 data_radius: Distance::MAX,
             },
             NodeStatus {
-                state: ConnectionState::Disconnected,
+                state: ConnectionState::Connected,
                 direction: ConnectionDirection::Incoming,
             },
         ) {
