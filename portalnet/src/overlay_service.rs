@@ -398,6 +398,10 @@ where
         command_tx
     }
 
+    /// Insert a vector of enr's into the routing table
+    /// set_connected: should only be true for tests, false for production code
+    /// Tests what use this function are testing if adding to queue's work not if our connection code
+    /// works.
     fn add_bootnodes(&mut self, bootnode_enrs: Vec<Enr>, set_connected: bool) {
         // Attempt to insert bootnodes into the routing table in a disconnected state.
         // If successful, then add the node to the ping queue. A subsequent successful ping
@@ -409,9 +413,10 @@ where
             // TODO: Decide default data radius, and define a constant. Or if there is an
             // associated database, then look for a radius value there.
             let node = Node::new(enr, Distance::MAX);
-            let state = match set_connected {
-                true => ConnectionState::Connected,
-                false => ConnectionState::Disconnected,
+            let state = if set_connected {
+                ConnectionState::Connected
+            } else {
+                ConnectionState::Disconnected
             };
             let status = NodeStatus {
                 state,
