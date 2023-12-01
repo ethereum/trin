@@ -398,10 +398,9 @@ where
         command_tx
     }
 
-    /// Insert a vector of enr's into the routing table
+    /// Insert a vector of enrs into the routing table
     /// set_connected: should only be true for tests, false for production code
-    /// Tests what use this function are testing if adding to queue's work not if our connection code
-    /// works.
+    /// Tests that use this function are testing if adding to queues work, not if our connection code works.
     fn add_bootnodes(&mut self, bootnode_enrs: Vec<Enr>, set_connected: bool) {
         // Attempt to insert bootnodes into the routing table in a disconnected state.
         // If successful, then add the node to the ping queue. A subsequent successful ping
