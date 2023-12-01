@@ -1,5 +1,10 @@
 # Release checklist
 
+## First
+
+Ensure that the CI for the latest commit to master is passing.
+This ensures that trin itself is working, and that the latest docker image is working and published. 
+
 ## Communicate
 
 Announce in #trin chat the upcoming release. Aim for a day or more notice, but

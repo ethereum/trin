@@ -61,6 +61,9 @@ jobs:
           no_output_timeout: 30m
           command: docker build -f ./docker/Dockerfile -t $IMAGE_NAME:latest --build-arg GIT_HASH=$CIRCLE_SHA1 .
       - run:
+          name: Check that Docker container has no defects
+          command: docker run $IMAGE_NAME:latest -h
+      - run:
           name: Archive Docker image
           command: docker save -o image.tar $IMAGE_NAME
       - persist_to_workspace:
