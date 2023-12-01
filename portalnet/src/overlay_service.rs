@@ -398,7 +398,7 @@ where
         command_tx
     }
 
-    fn add_bootnodes(&mut self, bootnode_enrs: Vec<Enr>) {
+    fn add_bootnodes(&mut self, bootnode_enrs: Vec<Enr>, set_connected: bool) {
         // Attempt to insert bootnodes into the routing table in a disconnected state.
         // If successful, then add the node to the ping queue. A subsequent successful ping
         // will mark the node as connected.
@@ -409,8 +409,12 @@ where
             // TODO: Decide default data radius, and define a constant. Or if there is an
             // associated database, then look for a radius value there.
             let node = Node::new(enr, Distance::MAX);
+            let state = match set_connected {
+                true => ConnectionState::Connected,
+                false => ConnectionState::Disconnected,
+            };
             let status = NodeStatus {
-                state: ConnectionState::Disconnected,
+                state,
                 direction: ConnectionDirection::Outgoing,
             };
 
@@ -444,7 +448,7 @@ where
 
     /// Begins initial FINDNODES query to populate the routing table.
     fn initialize_routing_table(&mut self, bootnodes: Vec<Enr>) {
-        self.add_bootnodes(bootnodes);
+        self.add_bootnodes(bootnodes, false);
         let local_node_id = self.local_enr().node_id();
 
         // Begin request for our local node ID.
@@ -2460,22 +2464,14 @@ where
     ) -> Option<QueryId> {
         let target_key = Key::from(*target);
 
-        let mut closest_enrs = self.closest_connected_nodes(&target_key, self.query_num_results);
-
-        // All nodes may be disconnected at boot, before they respond to pings.
-        // If no connected nodes, use the closest nodes regardless of connectivity.
+        let closest_enrs = self.closest_connected_nodes(&target_key, self.query_num_results);
         if closest_enrs.is_empty() {
-            closest_enrs = self
-                .kbuckets
-                .write()
-                .closest_values(&target_key)
-                .map(|closest| closest.value.enr)
-                .take(self.query_num_results)
-                .collect();
-            // `closest_values` return is empty if querying our own Node ID
-            if closest_enrs.is_empty() {
-                closest_enrs = self.table_entries_enr();
+            // If there are no nodes whatsoever in the routing table the query cannot proceed.
+            warn!("No nodes in routing table, find nodes query cannot proceed.");
+            if let Some(callback) = callback {
+                let _ = callback.send(vec![]);
             }
+            return None;
         }
 
         let query_config = QueryConfig {
@@ -3427,7 +3423,7 @@ mod tests {
 
         assert_eq!(service.find_node_query_pool.read().iter().count(), 0);
 
-        service.add_bootnodes(bootnodes);
+        service.add_bootnodes(bootnodes, true);
 
         // Initialize the query and call `poll` so that it starts
         service.init_find_nodes_query(&target_node_id, None);
@@ -3467,7 +3463,7 @@ mod tests {
         let (_, target_enr) = generate_random_remote_enr();
         let target_node_id = target_enr.node_id();
 
-        service.add_bootnodes(bootnodes);
+        service.add_bootnodes(bootnodes, true);
         service.query_num_results = 3;
         service.init_find_nodes_query(&target_node_id, None);
 
@@ -3588,7 +3584,7 @@ mod tests {
         let (_, target_enr) = generate_random_remote_enr();
         let target_node_id = target_enr.node_id();
 
-        service.add_bootnodes(bootnodes);
+        service.add_bootnodes(bootnodes, true);
 
         service.init_find_nodes_query(&target_node_id, None);
 
