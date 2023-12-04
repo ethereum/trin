@@ -40,11 +40,11 @@ async fn main() -> Result<()> {
     builder = builder.load_external_fallback();
 
     // Build the client
-    let mut client: Client<FileDB, NimbusRpc> = builder.build().unwrap();
+    let mut client: Client<FileDB, NimbusRpc> = builder.build();
 
     info!("Starting consensus light client...");
     // Run the client
-    client.start().await.unwrap();
+    client.start().await;
 
     tokio::signal::ctrl_c()
         .await

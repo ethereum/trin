@@ -16,15 +16,15 @@ async fn setup() -> ConsensusLightClient<MockRpc> {
     };
 
     let checkpoint =
-        hex::decode("c62aa0de55e6f21230fa63713715e1a6c13e73005e89f6389da271955d819bde").unwrap();
+        hex::decode("c62aa0de55e6f21230fa63713715e1a6c13e73005e89f6389da271955d819bde");
 
-    ConsensusLightClient::new("testdata/", &checkpoint, Arc::new(config)).unwrap()
+    ConsensusLightClient::new("testdata/", &checkpoint, Arc::new(config))
 }
 
 #[tokio::test]
 async fn test_sync() {
     let mut client = setup().await;
-    client.sync().await.unwrap();
+    client.sync().await;
 
     let head = client.get_header();
     assert_eq!(head.slot, 7358726);

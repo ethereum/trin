@@ -69,5 +69,5 @@ where
     D: serde::Deserializer<'de>,
 {
     let val: String = serde::Deserialize::deserialize(deserializer)?;
-    Ok(val.parse().unwrap())
+    Ok(val.parse())
 }

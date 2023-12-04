@@ -177,7 +177,7 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
             let mut updates = self.rpc.get_updates(current_period, 1).await?;
 
             if updates.len() == 1 {
-                let update = updates.get_mut(0).unwrap();
+                let update = updates.get_mut(0);
                 let res = self.verify_update(update);
 
                 if res.is_ok() {
@@ -280,8 +280,8 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
         if update.finalized_header.is_some() && update.finality_branch.is_some() {
             let is_valid = is_finality_proof_valid(
                 &update.attested_header,
-                &mut update.finalized_header.clone().unwrap(),
-                &update.finality_branch.clone().unwrap(),
+                &mut update.finalized_header.clone(),
+                &update.finality_branch.clone(),
             );
 
             if !is_valid {
@@ -292,8 +292,8 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
         if update.next_sync_committee.is_some() && update.next_sync_committee_branch.is_some() {
             let is_valid = is_next_committee_proof_valid(
                 &update.attested_header,
-                &mut update.next_sync_committee.clone().unwrap(),
-                &update.next_sync_committee_branch.clone().unwrap(),
+                &mut update.next_sync_committee.clone(),
+                &update.next_sync_committee_branch.clone(),
             );
 
             if !is_valid {
@@ -304,7 +304,7 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
         let sync_committee = if update_sig_period == store_period {
             &self.store.current_sync_committee
         } else {
-            self.store.next_sync_committee.as_ref().unwrap()
+            self.store.next_sync_committee.as_ref()
         };
 
         let pks =
@@ -385,7 +385,7 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
                 self.store.next_sync_committee = update.next_sync_committee.clone();
             } else if update_finalized_period == store_period + 1 {
                 info!("sync committee updated");
-                self.store.current_sync_committee = self.store.next_sync_committee.clone().unwrap();
+                self.store.current_sync_committee = self.store.next_sync_committee.clone();
                 self.store.next_sync_committee = update.next_sync_committee.clone();
                 self.store.previous_max_active_participants =
                     self.store.current_max_active_participants;
@@ -393,7 +393,7 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
             }
 
             if update_finalized_slot > self.store.finalized_header.slot {
-                self.store.finalized_header = update.finalized_header.as_ref().unwrap().clone();
+                self.store.finalized_header = update.finalized_header.as_ref().clone();
                 self.log_finality_update(update);
 
                 if self.store.finalized_header.slot % 32 == 0 {
@@ -495,7 +495,7 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
     }
 
     fn compute_committee_sign_root(&self, header: Bytes32, slot: u64) -> Result<Node> {
-        let genesis_root = self.config.chain.genesis_root.to_vec().try_into().unwrap();
+        let genesis_root = self.config.chain.genesis_root.to_vec().try_into();
 
         let domain_type = &hex::decode("07000000")?[..];
         let fork_version = Vector::from_iter(self.config.fork_version(slot));
@@ -505,13 +505,13 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
 
     fn age(&self, slot: u64) -> Duration {
         let expected_time = self.slot_timestamp(slot);
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+        let now = SystemTime::now().duration_since(UNIX_EPOCH);
         let delay = now - std::time::Duration::from_secs(expected_time);
-        chrono::Duration::from_std(delay).unwrap()
+        chrono::Duration::from_std(delay)
     }
 
     pub fn expected_current_slot(&self) -> u64 {
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+        let now = SystemTime::now().duration_since(UNIX_EPOCH);
         let genesis_time = self.config.chain.genesis_time;
         let since_genesis = now - std::time::Duration::from_secs(genesis_time);
 
@@ -529,10 +529,7 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
         let next_slot = current_slot + 1;
         let next_slot_timestamp = self.slot_timestamp(next_slot);
 
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).as_secs();
 
         let time_to_next_slot = next_slot_timestamp - now;
         let next_update = time_to_next_slot + 4;
@@ -655,12 +652,10 @@ mod tests {
         };
 
         let checkpoint =
-            hex::decode("c62aa0de55e6f21230fa63713715e1a6c13e73005e89f6389da271955d819bde")
-                .unwrap();
+            hex::decode("c62aa0de55e6f21230fa63713715e1a6c13e73005e89f6389da271955d819bde");
 
-        let mut client =
-            ConsensusLightClient::new("testdata/", &checkpoint, Arc::new(config)).unwrap();
-        client.bootstrap().await.unwrap();
+        let mut client = ConsensusLightClient::new("testdata/", &checkpoint, Arc::new(config));
+        client.bootstrap().await;
         client
     }
 
@@ -671,11 +666,10 @@ mod tests {
         let updates = client
             .rpc
             .get_updates(period, MAX_REQUEST_LIGHT_CLIENT_UPDATES)
-            .await
-            .unwrap();
+            .await;
 
         let update = updates[0].clone();
-        client.verify_update(&update).unwrap();
+        client.verify_update(&update);
     }
 
     #[tokio::test]
@@ -685,12 +679,11 @@ mod tests {
         let mut updates = client
             .rpc
             .get_updates(period, MAX_REQUEST_LIGHT_CLIENT_UPDATES)
-            .await
-            .unwrap();
+            .await;
 
         updates[0].next_sync_committee.pubkeys[0] = PubKey::default();
 
-        let err = client.verify_update(&updates[0]).err().unwrap();
+        let err = client.verify_update(&updates[0]).err();
         assert_eq!(
             err.to_string(),
             ConsensusError::InvalidNextSyncCommitteeProof.to_string()
@@ -704,13 +697,12 @@ mod tests {
         let updates = client
             .rpc
             .get_updates(period, MAX_REQUEST_LIGHT_CLIENT_UPDATES)
-            .await
-            .unwrap();
+            .await;
 
         let mut update = updates[0].clone();
         update.finalized_header.beacon = BeaconBlockHeader::default();
 
-        let err = client.verify_update(&update).err().unwrap();
+        let err = client.verify_update(&update).err();
         assert_eq!(
             err.to_string(),
             ConsensusError::InvalidFinalityProof.to_string()
@@ -724,12 +716,11 @@ mod tests {
         let mut updates = client
             .rpc
             .get_updates(period, MAX_REQUEST_LIGHT_CLIENT_UPDATES)
-            .await
-            .unwrap();
+            .await;
 
         updates[0].sync_aggregate.sync_committee_signature = BlsSignature::default();
 
-        let err = client.verify_update(&updates[0]).err().unwrap();
+        let err = client.verify_update(&updates[0]).err();
         assert_eq!(
             err.to_string(),
             ConsensusError::InvalidSignature.to_string()
@@ -739,23 +730,23 @@ mod tests {
     #[tokio::test]
     async fn test_verify_finality() {
         let mut client = get_client(false).await;
-        client.sync().await.unwrap();
+        client.sync().await;
 
-        let update = client.rpc.get_finality_update().await.unwrap();
+        let update = client.rpc.get_finality_update().await;
 
-        client.verify_finality_update(&update).unwrap();
+        client.verify_finality_update(&update);
     }
 
     #[tokio::test]
     async fn test_verify_finality_invalid_finality() {
         let mut client = get_client(false).await;
-        client.sync().await.unwrap();
+        client.sync().await;
 
-        let mut update = client.rpc.get_finality_update().await.unwrap();
+        let mut update = client.rpc.get_finality_update().await;
 
         update.finalized_header.beacon = BeaconBlockHeader::default();
 
-        let err = client.verify_finality_update(&update).err().unwrap();
+        let err = client.verify_finality_update(&update).err();
         assert_eq!(
             err.to_string(),
             ConsensusError::InvalidFinalityProof.to_string()
@@ -765,12 +756,12 @@ mod tests {
     #[tokio::test]
     async fn test_verify_finality_invalid_sig() {
         let mut client = get_client(false).await;
-        client.sync().await.unwrap();
+        client.sync().await;
 
-        let mut update = client.rpc.get_finality_update().await.unwrap();
+        let mut update = client.rpc.get_finality_update().await;
         update.sync_aggregate.sync_committee_signature = BlsSignature::default();
 
-        let err = client.verify_finality_update(&update).err().unwrap();
+        let err = client.verify_finality_update(&update).err();
         assert_eq!(
             err.to_string(),
             ConsensusError::InvalidSignature.to_string()
@@ -780,21 +771,21 @@ mod tests {
     #[tokio::test]
     async fn test_verify_optimistic() {
         let mut client = get_client(false).await;
-        client.sync().await.unwrap();
+        client.sync().await;
 
-        let update = client.rpc.get_optimistic_update().await.unwrap();
-        client.verify_optimistic_update(&update).unwrap();
+        let update = client.rpc.get_optimistic_update().await;
+        client.verify_optimistic_update(&update);
     }
 
     #[tokio::test]
     async fn test_verify_optimistic_invalid_sig() {
         let mut client = get_client(false).await;
-        client.sync().await.unwrap();
+        client.sync().await;
 
-        let mut update = client.rpc.get_optimistic_update().await.unwrap();
+        let mut update = client.rpc.get_optimistic_update().await;
         update.sync_aggregate.sync_committee_signature = BlsSignature::default();
 
-        let err = client.verify_optimistic_update(&update).err().unwrap();
+        let err = client.verify_optimistic_update(&update).err();
         assert_eq!(
             err.to_string(),
             ConsensusError::InvalidSignature.to_string()

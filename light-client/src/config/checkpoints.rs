@@ -293,10 +293,7 @@ mod test {
 
     #[tokio::test]
     async fn test_construct_checkpoints() {
-        let cf = config::checkpoints::CheckpointFallback::new()
-            .build()
-            .await
-            .unwrap();
+        let cf = config::checkpoints::CheckpointFallback::new().build().await;
 
         assert!(cf.services[&networks::Network::Mainnet].len() > 1);
         assert!(cf.services[&networks::Network::Goerli].len() > 1);
@@ -304,28 +301,18 @@ mod test {
 
     #[tokio::test]
     async fn test_fetch_latest_checkpoints() {
-        let cf = config::checkpoints::CheckpointFallback::new()
-            .build()
-            .await
-            .unwrap();
-        let checkpoint = cf
-            .fetch_latest_checkpoint(&networks::Network::Goerli)
-            .await
-            .unwrap();
+        let cf = config::checkpoints::CheckpointFallback::new().build().await;
+        let checkpoint = cf.fetch_latest_checkpoint(&networks::Network::Goerli).await;
         assert_ne!(checkpoint, H256::zero());
         let checkpoint = cf
             .fetch_latest_checkpoint(&networks::Network::Mainnet)
-            .await
-            .unwrap();
+            .await;
         assert_ne!(checkpoint, H256::zero());
     }
 
     #[tokio::test]
     async fn test_get_all_fallback_endpoints() {
-        let cf = config::checkpoints::CheckpointFallback::new()
-            .build()
-            .await
-            .unwrap();
+        let cf = config::checkpoints::CheckpointFallback::new().build().await;
         let urls = cf.get_all_fallback_endpoints(&networks::Network::Mainnet);
         assert!(!urls.is_empty());
         let urls = cf.get_all_fallback_endpoints(&networks::Network::Goerli);
@@ -334,10 +321,7 @@ mod test {
 
     #[tokio::test]
     async fn test_get_healthy_fallback_endpoints() {
-        let cf = config::checkpoints::CheckpointFallback::new()
-            .build()
-            .await
-            .unwrap();
+        let cf = config::checkpoints::CheckpointFallback::new().build().await;
         let urls = cf.get_healthy_fallback_endpoints(&networks::Network::Mainnet);
         assert!(!urls.is_empty());
         let urls = cf.get_healthy_fallback_endpoints(&networks::Network::Goerli);
