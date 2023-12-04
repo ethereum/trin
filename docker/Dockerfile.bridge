@@ -40,7 +40,6 @@ FROM ubuntu:22.04
 # copy build artifacts from build stage
 COPY --from=builder /trin/target/release/trin /usr/bin/
 COPY --from=builder /trin/target/release/portal-bridge /usr/bin/
-COPY --from=builder /trin/target/release/purge_db /usr/bin/
 # These steps copy over the epoch accumulators repo for the bridge to use
 # This data is too large to be kept inside trin-source code
 # It must be downloaded separately and moved to the correct location
