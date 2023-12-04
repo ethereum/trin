@@ -61,7 +61,7 @@ impl<'de> Deserialize<'de> for HistoryContentKey {
 }
 
 /// A key for a block header.
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq, Default)]
 pub struct BlockHeaderKey {
     /// Hash of the block.
     pub block_hash: [u8; 32],

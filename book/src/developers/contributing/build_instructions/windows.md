@@ -9,12 +9,6 @@ If you don't already have Rust install it
 $ winget install Rustlang.Rustup
 ```
 
-Install clang/llvm as it is required to compile rocksdb
-If you don't already have Rust install it
-```sh
-$ winget install LLVM.LLVM
-```
-
 Add Rust's msvc target
 ```sh
 $ rustup target add x86_64-pc-windows-msvc
