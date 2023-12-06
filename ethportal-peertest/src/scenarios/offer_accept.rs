@@ -34,7 +34,7 @@ pub async fn test_unpopulated_offer(peertest: &Peertest, target: &Client) {
     assert_eq!(hex_encode(result.content_keys.into_bytes()), "0x03");
 
     // Check if the stored content value in bootnode's DB matches the offered
-    let response = wait_for_history_content(target, content_key).await;
+    let response = wait_for_history_content(&peertest.bootnode.ipc_client, content_key).await;
     let received_content_value = match response {
         PossibleHistoryContentValue::ContentPresent(c) => c,
         PossibleHistoryContentValue::ContentAbsent => panic!("Expected content to be found"),
