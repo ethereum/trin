@@ -400,7 +400,7 @@ impl PortalStorage {
         // store content key w/o the 0x prefix
         let content_key = hex_encode(content_key).trim_start_matches("0x").to_string();
         if let Err(err) = self.db_insert(&content_id, &content_key, value) {
-            debug!("Error writing content ID {:?} to db: {:?}", content_id, err);
+            debug!("Error writing content ID {content_id:?} to db: {err:?}");
             return Err(err);
         } else {
             self.metrics.increase_entry_count();
@@ -765,10 +765,10 @@ const XOR_FIND_FARTHEST_QUERY: &str = "SELECT
                                     ORDER BY ((?1 | content_id_short) - (?1 & content_id_short)) DESC";
 
 const CONTENT_KEY_LOOKUP_QUERY: &str =
-    "SELECT content_key FROM content_data WHERE content_id_long = (?1)";
+    "SELECT content_key FROM content_data WHERE content_id_long = (?1) LIMIT 1";
 
 const CONTENT_VALUE_LOOKUP_QUERY: &str =
-    "SELECT content_value FROM content_data WHERE content_id_long = (?1)";
+    "SELECT content_value FROM content_data WHERE content_id_long = (?1) LIMIT 1";
 
 const TOTAL_DATA_SIZE_QUERY: &str = "SELECT TOTAL(content_size) FROM content_data";
 
@@ -804,6 +804,7 @@ pub mod test {
 
     use crate::utils::db::{configure_node_data_dir, setup_temp_dir};
     use ethportal_api::types::content_key::overlay::IdentityContentKey;
+    use ethportal_api::BlockHeaderKey;
 
     const CAPACITY_MB: u64 = 2;
 
@@ -869,7 +870,6 @@ pub mod test {
         let storage_config =
             PortalStorageConfig::new(CAPACITY_MB, temp_dir.path().to_path_buf(), node_id).unwrap();
         let mut storage = PortalStorage::new(storage_config, ProtocolId::History)?;
-        use ethportal_api::BlockHeaderKey;
         let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey::default());
         let value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
         storage.store(&content_key, &value)?;

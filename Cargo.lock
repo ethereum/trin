@@ -7148,7 +7148,6 @@ dependencies = [
  "async-trait",
  "discv5",
  "env_logger 0.9.3",
- "eth_trie",
  "ethereum-types",
  "ethportal-api",
  "parking_lot 0.11.2",
