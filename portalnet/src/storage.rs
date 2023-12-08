@@ -209,6 +209,7 @@ pub struct PortalStorage {
     sql_connection_pool: Pool<SqliteConnectionManager>,
     distance_fn: DistanceFunction,
     metrics: StorageMetricsReporter,
+    network: ProtocolId,
 }
 
 impl ContentStore for PortalStorage {
@@ -274,6 +275,7 @@ impl PortalStorage {
             sql_connection_pool: config.sql_connection_pool,
             distance_fn: config.distance_fn,
             metrics,
+            network: protocol,
         };
 
         // Set the metrics to the default radius, to start
@@ -578,6 +580,7 @@ impl PortalStorage {
                 content_id_as_u32,
                 content_key,
                 hex_encode(value),
+                u8::from(self.network),
                 value_size
             ],
         ) {
@@ -635,11 +638,12 @@ impl PortalStorage {
                 let conn = self.sql_connection_pool.get()?;
                 let mut query = conn.prepare(XOR_FIND_FARTHEST_QUERY)?;
 
-                let mut result = query.query_map([node_id_u32], |row| {
-                    Ok(ContentId {
-                        id_long: row.get(0)?,
-                    })
-                })?;
+                let mut result =
+                    query.query_map([node_id_u32, u8::from(self.network).into()], |row| {
+                        Ok(ContentId {
+                            id_long: row.get(0)?,
+                        })
+                    })?;
 
                 let result = match result.next() {
                     Some(row) => row,
@@ -746,15 +750,17 @@ const CREATE_QUERY: &str = "CREATE TABLE IF NOT EXISTS content_data (
                                 content_id_short INTEGER NOT NULL,
                                 content_key TEXT NOT NULL,
                                 content_value TEXT NOT NULL,
+                                network INTEGER NOT NULL DEFAULT 0,
                                 content_size INTEGER
                             );
                             CREATE INDEX content_size_idx ON content_data(content_size);
                             CREATE INDEX content_id_short_idx ON content_data(content_id_short);
-                            CREATE INDEX content_id_long_idx ON content_data(content_id_long);";
+                            CREATE INDEX content_id_long_idx ON content_data(content_id_long);
+                            CREATE INDEX network_idx ON content_data(network);";
 
 const INSERT_QUERY: &str =
-    "INSERT OR IGNORE INTO content_data (content_id_long, content_id_short, content_key, content_value, content_size)
-                            VALUES (?1, ?2, ?3, ?4, ?5)";
+    "INSERT OR IGNORE INTO content_data (content_id_long, content_id_short, content_key, content_value, network, content_size)
+                            VALUES (?1, ?2, ?3, ?4, ?5, ?6)";
 
 const DELETE_QUERY: &str = "DELETE FROM content_data
                             WHERE content_id_long = (?1)";
@@ -762,6 +768,7 @@ const DELETE_QUERY: &str = "DELETE FROM content_data
 const XOR_FIND_FARTHEST_QUERY: &str = "SELECT
                                     content_id_long
                                     FROM content_data
+                                    WHERE network = (?2)
                                     ORDER BY ((?1 | content_id_short) - (?1 & content_id_short)) DESC";
 
 const CONTENT_KEY_LOOKUP_QUERY: &str =
