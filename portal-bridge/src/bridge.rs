@@ -6,10 +6,6 @@ use std::sync::{Arc, Mutex};
 use anyhow::{anyhow, bail};
 use futures::stream::StreamExt;
 use ssz::Decode;
-use surf::{
-    middleware::{Middleware, Next},
-    Body, Client, Request, Response,
-};
 use tokio::time::{sleep, Duration};
 use tracing::{debug, info, warn};
 
@@ -430,53 +426,5 @@ impl Bridge {
         let proof = MasterAccumulator::construct_proof(&header, epoch_acc)?;
         let proof = BlockHeaderProof::AccumulatorProof(AccumulatorProof { proof });
         Ok(HeaderWithProof { header, proof })
-    }
-}
-
-#[derive(Debug)]
-pub struct Retry {
-    attempts: u8,
-}
-
-impl Retry {
-    pub fn new(attempts: u8) -> Self {
-        Retry { attempts }
-    }
-}
-
-#[async_trait::async_trait]
-impl Middleware for Retry {
-    async fn handle(
-        &self,
-        mut req: Request,
-        client: Client,
-        next: Next<'_>,
-    ) -> Result<Response, surf::Error> {
-        let mut retry_count: u8 = 0;
-        let body = req.take_body().into_bytes().await?;
-        while retry_count < self.attempts {
-            if retry_count > 0 {
-                info!("Retrying request");
-            }
-            let mut new_req = req.clone();
-            new_req.set_body(Body::from_bytes(body.clone()));
-            if let Ok(val) = next.run(new_req, client.clone()).await {
-                if val.status().is_success() {
-                    return Ok(val);
-                }
-            };
-            retry_count += 1;
-            sleep(Duration::from_millis(100)).await;
-        }
-        Err(surf::Error::from_str(
-            500,
-            "Unable to fetch batch after 3 retries",
-        ))
-    }
-}
-
-impl Default for Retry {
-    fn default() -> Self {
-        Self { attempts: 3 }
     }
 }

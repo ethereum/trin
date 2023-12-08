@@ -86,11 +86,12 @@ impl<'de> Deserialize<'de> for PossibleBeaconContentValue {
             ));
         }
 
-        Err(ContentValueError::UnknownContent {
-            bytes: s,
-            network: "beacon".to_string(),
-        })
-        .map_err(serde::de::Error::custom)
+        Err(serde::de::Error::custom(
+            ContentValueError::UnknownContent {
+                bytes: s,
+                network: "beacon".to_string(),
+            },
+        ))
     }
 }
 
@@ -529,11 +530,12 @@ impl<'de> Deserialize<'de> for BeaconContentValue {
             return Ok(Self::LightClientFinalityUpdate(value));
         }
 
-        Err(ContentValueError::UnknownContent {
-            bytes: s,
-            network: "beacon".to_string(),
-        })
-        .map_err(serde::de::Error::custom)
+        Err(serde::de::Error::custom(
+            ContentValueError::UnknownContent {
+                bytes: s,
+                network: "beacon".to_string(),
+            },
+        ))
     }
 }
 

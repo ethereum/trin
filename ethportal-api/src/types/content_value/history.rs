@@ -72,11 +72,12 @@ impl<'de> Deserialize<'de> for PossibleHistoryContentValue {
             )));
         }
 
-        Err(ContentValueError::UnknownContent {
-            bytes: s,
-            network: "history".to_string(),
-        })
-        .map_err(serde::de::Error::custom)
+        Err(serde::de::Error::custom(
+            ContentValueError::UnknownContent {
+                bytes: s,
+                network: "history".to_string(),
+            },
+        ))
     }
 }
 
@@ -158,11 +159,12 @@ impl<'de> Deserialize<'de> for HistoryContentValue {
             return Ok(Self::EpochAccumulator(value));
         }
 
-        Err(ContentValueError::UnknownContent {
-            bytes: s,
-            network: "history".to_string(),
-        })
-        .map_err(serde::de::Error::custom)
+        Err(serde::de::Error::custom(
+            ContentValueError::UnknownContent {
+                bytes: s,
+                network: "history".to_string(),
+            },
+        ))
     }
 }
 
