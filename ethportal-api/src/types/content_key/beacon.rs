@@ -3,18 +3,101 @@ use crate::types::content_key::overlay::OverlayContentKey;
 use crate::utils::bytes::{hex_decode, hex_encode, hex_encode_compact};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest, Sha256};
-use ssz::{Decode, Encode};
+use ssz::{Decode, DecodeError, Encode};
 use ssz_derive::{Decode, Encode};
 use std::fmt;
 
+// Prefixes for the different types of beacon content keys:
+// https://github.com/ethereum/portal-network-specs/blob/72327da43c7a199ba2735344ef98f9121aef2f68/beacon-chain/beacon-network.md
+const LIGHT_CLIENT_BOOTSTRAP_KEY_PREFIX: u8 = 0x10;
+const LIGHT_CLIENT_UPDATES_BY_RANGE_KEY_PREFIX: u8 = 0x11;
+const LIGHT_CLIENT_FINALITY_UPDATE_KEY_PREFIX: u8 = 0x12;
+const LIGHT_CLIENT_OPTIMISTIC_UPDATE_KEY_PREFIX: u8 = 0x13;
+
 /// A content key in the beacon chain network.
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
-#[ssz(enum_behaviour = "union")]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum BeaconContentKey {
     LightClientBootstrap(LightClientBootstrapKey),
     LightClientUpdatesByRange(LightClientUpdatesByRangeKey),
     LightClientFinalityUpdate(LightClientFinalityUpdateKey),
     LightClientOptimisticUpdate(LightClientOptimisticUpdateKey),
+}
+
+impl Encode for BeaconContentKey {
+    fn is_ssz_fixed_len() -> bool {
+        false
+    }
+
+    fn ssz_append(&self, buf: &mut Vec<u8>) {
+        let bytes = self.to_bytes();
+        buf.extend_from_slice(&bytes);
+    }
+
+    fn ssz_bytes_len(&self) -> usize {
+        self.to_bytes().len()
+    }
+}
+
+impl Decode for BeaconContentKey {
+    fn is_ssz_fixed_len() -> bool {
+        false
+    }
+
+    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
+        match bytes[0] {
+            LIGHT_CLIENT_BOOTSTRAP_KEY_PREFIX => {
+                let block_hash = <[u8; 32]>::try_from(&bytes[1..33]).map_err(|err| {
+                    DecodeError::BytesInvalid(format!(
+                        "Failed to decode LightClientBootstrapKey: {err:?}"
+                    ))
+                })?;
+                Ok(Self::LightClientBootstrap(LightClientBootstrapKey {
+                    block_hash,
+                }))
+            }
+            LIGHT_CLIENT_UPDATES_BY_RANGE_KEY_PREFIX => {
+                let start_period = u64::from_ssz_bytes(&bytes[1..9]).map_err(|err| {
+                    DecodeError::BytesInvalid(format!(
+                        "Failed to decode LightClientUpdatesByRangeKey: {err:?}"
+                    ))
+                })?;
+                let count = u64::from_ssz_bytes(&bytes[9..17]).map_err(|err| {
+                    DecodeError::BytesInvalid(format!(
+                        "Failed to decode LightClientUpdatesByRangeKey: {err:?}"
+                    ))
+                })?;
+                Ok(Self::LightClientUpdatesByRange(
+                    LightClientUpdatesByRangeKey {
+                        start_period,
+                        count,
+                    },
+                ))
+            }
+            LIGHT_CLIENT_FINALITY_UPDATE_KEY_PREFIX => {
+                let finalized_slot = u64::from_ssz_bytes(&bytes[1..9]).map_err(|err| {
+                    DecodeError::BytesInvalid(format!(
+                        "Failed to decode LightClientFinalityUpdateKey: {err:?}",
+                    ))
+                })?;
+                Ok(Self::LightClientFinalityUpdate(
+                    LightClientFinalityUpdateKey::new(finalized_slot),
+                ))
+            }
+            LIGHT_CLIENT_OPTIMISTIC_UPDATE_KEY_PREFIX => {
+                let signature_slot = u64::from_ssz_bytes(&bytes[1..9]).map_err(|err| {
+                    DecodeError::BytesInvalid(format!(
+                        "Failed to decode LightClientOptimisticUpdateKey: {err:?}",
+                    ))
+                })?;
+                Ok(Self::LightClientOptimisticUpdate(
+                    LightClientOptimisticUpdateKey::new(signature_slot),
+                ))
+            }
+            _ => Err(DecodeError::BytesInvalid(format!(
+                "Failed to decode BeaconContentKey, Unexpected union selector byte: {bytes:?}",
+            ))),
+        }
+    }
 }
 
 /// Key used to identify a light client bootstrap.
@@ -119,20 +202,20 @@ impl OverlayContentKey for BeaconContentKey {
 
         match self {
             BeaconContentKey::LightClientBootstrap(key) => {
-                bytes.push(0x00);
+                bytes.push(LIGHT_CLIENT_BOOTSTRAP_KEY_PREFIX);
                 bytes.extend_from_slice(&key.block_hash);
             }
             BeaconContentKey::LightClientUpdatesByRange(key) => {
-                bytes.push(0x01);
+                bytes.push(LIGHT_CLIENT_UPDATES_BY_RANGE_KEY_PREFIX);
                 bytes.extend_from_slice(&key.start_period.as_ssz_bytes());
                 bytes.extend_from_slice(&key.count.as_ssz_bytes());
             }
             BeaconContentKey::LightClientFinalityUpdate(key) => {
-                bytes.push(0x02);
+                bytes.push(LIGHT_CLIENT_FINALITY_UPDATE_KEY_PREFIX);
                 bytes.extend_from_slice(&key.finalized_slot.as_ssz_bytes())
             }
             BeaconContentKey::LightClientOptimisticUpdate(key) => {
-                bytes.push(0x03);
+                bytes.push(LIGHT_CLIENT_OPTIMISTIC_UPDATE_KEY_PREFIX);
                 bytes.extend_from_slice(&key.signature_slot.as_ssz_bytes())
             }
         }
@@ -180,11 +263,17 @@ impl<'de> Deserialize<'de> for BeaconContentKey {
 mod test {
     use super::*;
 
+    fn test_ssz_encode_decode(content_key: &BeaconContentKey) {
+        let ssz_bytes = content_key.as_ssz_bytes();
+        let decoded_key = BeaconContentKey::from_ssz_bytes(&ssz_bytes).unwrap();
+        assert_eq!(*content_key, decoded_key);
+    }
+
     #[test]
     fn light_client_bootstrap() {
         // Slot 6718368
         const KEY_STR: &str =
-            "0x00bd9f42d9a42d972bdaf4dee84e5b419dd432b52867258acb7bcc7f567b6e3af1";
+            "0x10bd9f42d9a42d972bdaf4dee84e5b419dd432b52867258acb7bcc7f567b6e3af1";
         const BLOCK_HASH: &str =
             "0xbd9f42d9a42d972bdaf4dee84e5b419dd432b52867258acb7bcc7f567b6e3af1";
 
@@ -194,19 +283,21 @@ mod test {
             block_hash: <[u8; 32]>::try_from(hex_decode(BLOCK_HASH).unwrap()).unwrap(),
         };
 
-        let key = BeaconContentKey::LightClientBootstrap(bootstrap);
+        let content_key = BeaconContentKey::LightClientBootstrap(bootstrap);
 
-        assert_eq!(key.to_bytes(), expected_content_key);
+        test_ssz_encode_decode(&content_key);
+
+        assert_eq!(content_key.to_bytes(), expected_content_key);
         assert_eq!(
-            key.to_string(),
+            content_key.to_string(),
             "LightClientBootstrap { block_hash: 0xbd9f..3af1 }"
         );
-        assert_eq!(key.to_hex(), KEY_STR);
+        assert_eq!(content_key.to_hex(), KEY_STR);
     }
 
     #[test]
     fn light_client_updates_by_range() {
-        const KEY_STR: &str = "0x0130030000000000000400000000000000";
+        const KEY_STR: &str = "0x1130030000000000000400000000000000";
         let expected_content_key = hex_decode(KEY_STR).unwrap();
 
         // SLOT / (SLOTS_PER_EPOCH * EPOCHS_PER_SYNC_COMMITTEE_PERIOD)
@@ -219,6 +310,8 @@ mod test {
 
         let content_key = BeaconContentKey::LightClientUpdatesByRange(content_key);
 
+        test_ssz_encode_decode(&content_key);
+
         assert_eq!(content_key.to_bytes(), expected_content_key);
         assert_eq!(
             content_key.to_string(),
@@ -229,10 +322,12 @@ mod test {
 
     #[test]
     fn light_client_finality_update() {
-        const KEY_STR: &str = "0x02c2f36e0000000000";
+        const KEY_STR: &str = "0x12c2f36e0000000000";
         let expected_content_key = hex_decode(KEY_STR).unwrap();
         let content_key =
             BeaconContentKey::LightClientFinalityUpdate(LightClientFinalityUpdateKey::new(7271362));
+
+        test_ssz_encode_decode(&content_key);
 
         assert_eq!(content_key.to_bytes(), expected_content_key);
         assert_eq!(
@@ -244,11 +339,13 @@ mod test {
 
     #[test]
     fn light_client_optimistic_update() {
-        const KEY_STR: &str = "0x03c2f36e0000000000";
+        const KEY_STR: &str = "0x13c2f36e0000000000";
         let expected_content_key = hex_decode(KEY_STR).unwrap();
         let content_key = BeaconContentKey::LightClientOptimisticUpdate(
             LightClientOptimisticUpdateKey::new(7271362),
         );
+
+        test_ssz_encode_decode(&content_key);
 
         assert_eq!(content_key.to_bytes(), expected_content_key);
         assert_eq!(
