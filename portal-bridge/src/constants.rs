@@ -7,8 +7,13 @@ pub const BATCH_SIZE: u64 = 128;
 // These are only intended to be used by core team members who have access to the nodes.
 // If you don't have access to the PANDAOPS nodes, but still want to use the bridge feature, let us
 // know on Discord or Github and we'll prioritize support for any provider.
+//
 /// Execution layer PandaOps endpoint
-pub const BASE_EL_ENDPOINT: &str = "https://archive.mainnet.ethpandaops.io";
+// This endpoint points towards an archive node (erigon) and skips dshackle (by using el-cl url
+// format), shackle is known to be somewhat buggy has caused some invalid responses.
+// Reth's archive node, has also exhibited some problems with the concurrent requests rate we
+// currently use.
+pub const BASE_EL_ENDPOINT: &str = "https://erigon-lighthouse.mainnet.eu1.ethpandaops.io";
 /// Consensus layer PandaOps endpoint
 /// We use Nimbus as the CL client, because it supports light client data by default.
 pub const BASE_CL_ENDPOINT: &str = "https://nimbus.mainnet.ethpandaops.io";
