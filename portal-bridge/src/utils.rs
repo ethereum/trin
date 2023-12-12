@@ -1,6 +1,6 @@
 use anyhow::bail;
 use chrono::Duration;
-use discv5::enr::{CombinedKey, EnrBuilder, NodeId};
+use discv5::enr::{CombinedKey, Enr, NodeId};
 use ethereum_types::H256;
 use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::HistoryContentKey;
@@ -24,9 +24,7 @@ pub fn generate_spaced_private_keys(count: u8, root_private_key: Option<H256>) -
             let private_key =
                 CombinedKey::secp256k1_from_bytes(key.to_fixed_bytes().as_mut_slice())
                     .expect("to be able to decode key");
-            let enr = EnrBuilder::new("v4")
-                .build(&private_key)
-                .expect("to be able to build ENR from private key");
+            let enr = Enr::empty(&private_key).expect("to be able to build ENR from private key");
             (enr.node_id(), private_key)
         }
         None => random_node_id(),
@@ -53,9 +51,7 @@ pub fn generate_spaced_private_keys(count: u8, root_private_key: Option<H256>) -
 
 fn random_node_id() -> (NodeId, CombinedKey) {
     let random_private_key = CombinedKey::generate_secp256k1();
-    let enr = EnrBuilder::new("v4")
-        .build(&random_private_key)
-        .expect("to be able to generate a random node id");
+    let enr = Enr::empty(&random_private_key).expect("to be able to generate a random node id");
     (enr.node_id(), random_private_key)
 }
 
@@ -183,18 +179,14 @@ mod tests {
     fn test_generate_spaced_private_keys(#[case] count: u8) {
         let private_keys = generate_spaced_private_keys(count, None);
         assert_eq!(private_keys.len() as u8, count);
-        let one = EnrBuilder::new("v4")
-            .build(
-                &CombinedKey::secp256k1_from_bytes(&mut hex_decode(&private_keys[0]).unwrap())
-                    .unwrap(),
-            )
-            .unwrap();
-        let two = EnrBuilder::new("v4")
-            .build(
-                &CombinedKey::secp256k1_from_bytes(&mut hex_decode(&private_keys[1]).unwrap())
-                    .unwrap(),
-            )
-            .unwrap();
+        let one = Enr::empty(
+            &CombinedKey::secp256k1_from_bytes(&mut hex_decode(&private_keys[0]).unwrap()).unwrap(),
+        )
+        .unwrap();
+        let two = Enr::empty(
+            &CombinedKey::secp256k1_from_bytes(&mut hex_decode(&private_keys[1]).unwrap()).unwrap(),
+        )
+        .unwrap();
         let distance = XorMetric::distance(&one.node_id().raw(), &two.node_id().raw());
         let min_spread = (U256::MAX / count / 2).into();
         let first_byte1 = one.node_id().raw()[0];

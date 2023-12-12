@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::{Parser, ValueEnum};
-use discv5::enr::{CombinedKey, EnrBuilder};
+use discv5::enr::{CombinedKey, Enr};
 use ethereum_types::H256;
 use rocksdb::IteratorMode;
 use ssz::Decode;
@@ -31,7 +31,7 @@ pub fn main() -> Result<()> {
     let enr_key =
         CombinedKey::secp256k1_from_bytes(purge_config.private_key.0.clone().as_mut_slice())
             .expect("Failed to create ENR key");
-    let enr = EnrBuilder::new("v4").build(&enr_key).unwrap();
+    let enr = Enr::empty(&enr_key).unwrap();
     let node_id = enr.node_id();
     let trin_data_dir = configure_trin_data_dir(false)?;
     let (node_data_dir, _) =

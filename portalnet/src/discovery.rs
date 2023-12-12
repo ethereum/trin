@@ -9,7 +9,7 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use bytes::BytesMut;
 use discv5::{
-    enr::{CombinedKey, EnrBuilder, NodeId},
+    enr::{CombinedKey, Enr as Discv5Enr, NodeId},
     ConfigBuilder, Discv5, Event, ListenConfig, RequestError, TalkRequest,
 };
 use lru::LruCache;
@@ -120,7 +120,7 @@ impl Discovery {
                 .map_err(|e| format!("Unable to create enr key: {:?}", e.to_string()))?;
 
         let mut enr = {
-            let mut builder = EnrBuilder::new("v4");
+            let mut builder = Discv5Enr::builder();
             if let Some(ip_address) = enr_address {
                 builder.ip(ip_address);
             }
