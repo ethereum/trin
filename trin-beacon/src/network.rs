@@ -10,18 +10,19 @@ use ethportal_api::types::distance::XorMetric;
 use ethportal_api::types::enr::Enr;
 use ethportal_api::types::portal_wire::ProtocolId;
 use ethportal_api::BeaconContentKey;
+use portalnet::storage::BeaconStorage;
 use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, UtpEnr},
     overlay::{OverlayConfig, OverlayProtocol},
-    storage::{PortalStorage, PortalStorageConfig},
+    storage::PortalStorageConfig,
 };
 use trin_validation::oracle::HeaderOracle;
 
 /// Beacon network layer on top of the overlay protocol. Encapsulates beacon network specific data and logic.
 #[derive(Clone)]
 pub struct BeaconNetwork {
-    pub overlay: Arc<OverlayProtocol<BeaconContentKey, XorMetric, BeaconValidator, PortalStorage>>,
+    pub overlay: Arc<OverlayProtocol<BeaconContentKey, XorMetric, BeaconValidator, BeaconStorage>>,
 }
 
 impl BeaconNetwork {
@@ -37,10 +38,7 @@ impl BeaconNetwork {
             bootnode_enrs,
             ..Default::default()
         };
-        let storage = Arc::new(PLRwLock::new(PortalStorage::new(
-            storage_config,
-            ProtocolId::Beacon,
-        )?));
+        let storage = Arc::new(PLRwLock::new(BeaconStorage::new(storage_config)?));
         let validator = Arc::new(BeaconValidator { header_oracle });
         let overlay = OverlayProtocol::new(
             config,
