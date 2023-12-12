@@ -3,7 +3,7 @@ use std::{env, fs};
 
 use anyhow::anyhow;
 use directories::ProjectDirs;
-use discv5::enr::{CombinedKey, EnrBuilder, NodeId};
+use discv5::enr::{CombinedKey, Enr, NodeId};
 use ethereum_types::H256;
 use tempfile::TempDir;
 use tracing::debug;
@@ -54,7 +54,7 @@ pub fn configure_node_data_dir(
             .map_err(|e| anyhow!("When building server key pair: {e:?}"))?,
         None => get_application_private_key(&trin_data_dir)?,
     };
-    let node_id = EnrBuilder::new("v4").build(&pk)?.node_id();
+    let node_id = Enr::empty(&pk)?.node_id();
     let node_data_dir = get_node_data_dir(trin_data_dir, node_id);
     fs::create_dir_all(&node_data_dir)?;
     Ok((node_data_dir, H256::from_slice(&pk.encode())))

@@ -818,7 +818,7 @@ pub mod test {
 
     use super::*;
 
-    use discv5::enr::{CombinedKey, EnrBuilder};
+    use discv5::enr::{CombinedKey, Enr as Discv5Enr};
     use quickcheck::{quickcheck, QuickCheck, TestResult};
     use rand::RngCore;
     use serial_test::serial;
@@ -1027,7 +1027,7 @@ pub mod test {
         let (node_data_dir, mut private_key) =
             configure_node_data_dir(temp_dir.path().to_path_buf(), None).unwrap();
         let private_key = CombinedKey::secp256k1_from_bytes(private_key.0.as_mut_slice()).unwrap();
-        let node_id = EnrBuilder::new("v4").build(&private_key).unwrap().node_id();
+        let node_id = Discv5Enr::empty(&private_key).unwrap().node_id();
         let storage_config =
             PortalStorageConfig::new(CAPACITY_MB, node_data_dir.clone(), node_id).unwrap();
         let mut storage = PortalStorage::new(storage_config, ProtocolId::History)?;
@@ -1259,6 +1259,6 @@ pub mod test {
     fn get_active_node_id(temp_dir: PathBuf) -> NodeId {
         let (_, mut pk) = configure_node_data_dir(temp_dir, None).unwrap();
         let pk = CombinedKey::secp256k1_from_bytes(pk.0.as_mut_slice()).unwrap();
-        EnrBuilder::new("v4").build(&pk).unwrap().node_id()
+        Discv5Enr::empty(&pk).unwrap().node_id()
     }
 }

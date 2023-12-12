@@ -1,5 +1,5 @@
 use discv5::enr::CombinedKey;
-use discv5::enr::EnrBuilder;
+use discv5::enr::Enr as Discv5Enr;
 use rand::Rng;
 use rlp::Encodable;
 use serde::{Deserialize, Serialize};
@@ -10,7 +10,7 @@ use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 use validator::ValidationError;
 
-pub type Enr = discv5::enr::Enr<CombinedKey>;
+pub type Enr = Discv5Enr<CombinedKey>;
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct SszEnr(pub Enr);
@@ -88,7 +88,7 @@ pub fn generate_random_remote_enr() -> (CombinedKey, Enr) {
     let mut rng = rand::thread_rng();
     let ip = Ipv4Addr::from(rng.gen::<u32>());
 
-    let enr = EnrBuilder::new("v4")
+    let enr = Discv5Enr::builder()
         .ip(ip.into())
         .udp4(8000)
         .build(&key)
