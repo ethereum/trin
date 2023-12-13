@@ -38,7 +38,6 @@ FROM ubuntu:22.04
 
 # copy build artifacts from build stage
 COPY --from=builder /trin/target/release/trin /usr/bin/
-COPY --from=builder /trin/target/release/purge_db /usr/bin/
 
 ENV RUST_LOG=debug
 

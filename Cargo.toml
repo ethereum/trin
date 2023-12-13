@@ -27,7 +27,6 @@ prometheus_exporter = "0.8.4"
 rand = "0.8.4"
 reth-ipc = { tag = "v0.1.0-alpha.10", git = "https://github.com/paradigmxyz/reth.git"}
 rlp = "0.5.0"
-rocksdb = "0.21.0"
 rpc = { path = "rpc"}
 serde_json = {version = "1.0.89", features = ["preserve_order"]}
 sha3 = "0.9.1"
