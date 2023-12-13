@@ -38,7 +38,7 @@ commands:
           name: Install libssl-dev for openssl-sys
           command: sudo apt install -y libssl-dev
       - run:
-          name: Install libclang for rocksdb
+          name: Install libclang
           command: sudo apt install clang
   install-depends-nightly:
     steps:
@@ -240,7 +240,7 @@ jobs:
           name: Install libssl-dev for openssl-sys
           command: sudo NEEDRESTART_MODE=a apt install -y libssl-dev
       - run:
-          name: Install libclang for rocksdb
+          name: Install libclang
           command: sudo NEEDRESTART_MODE=a apt install clang
       - run:
           name: Install modprobe

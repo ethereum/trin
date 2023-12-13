@@ -24,7 +24,6 @@ use trin_validation::oracle::HeaderOracle;
 pub mod events;
 mod jsonrpc;
 pub mod network;
-mod trie;
 pub mod utils;
 pub mod validation;
 
