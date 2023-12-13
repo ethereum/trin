@@ -1,16 +1,12 @@
 #![warn(clippy::unwrap_used)]
 #![warn(clippy::uninlined_format_args)]
 
-pub mod beacon_bridge;
+pub mod api;
 pub mod bridge;
 pub mod cli;
 pub mod client_handles;
-pub mod consensus_api;
 pub mod constants;
-pub mod execution_api;
-pub mod full_header;
 pub mod gossip;
-pub mod mode;
 pub mod pandaops;
 pub mod stats;
 pub mod types;

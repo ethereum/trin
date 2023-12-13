@@ -1,3 +1,9 @@
+use std::sync::{Arc, Mutex};
+
+use jsonrpsee::http_client::HttpClient;
+use tokio::time::{sleep, Duration};
+use tracing::{debug, warn};
+
 use crate::stats::{BeaconSlotStats, HistoryBlockStats, StatsReporter};
 use ethportal_api::jsonrpsee::core::Error;
 use ethportal_api::types::portal::{ContentInfo, TraceGossipInfo};
@@ -6,10 +12,6 @@ use ethportal_api::{
     HistoryContentValue, HistoryNetworkApiClient, OverlayContentKey, PossibleBeaconContentValue,
     PossibleHistoryContentValue,
 };
-use jsonrpsee::http_client::HttpClient;
-use std::sync::{Arc, Mutex};
-use tokio::time::{sleep, Duration};
-use tracing::{debug, warn};
 
 const GOSSIP_RETRY_COUNT: u64 = 3;
 const RETRY_AFTER: Duration = Duration::from_secs(15);

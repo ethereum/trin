@@ -10,11 +10,11 @@ use ssz_types::VariableList;
 use tokio::time::{interval, sleep, Duration, MissedTickBehavior};
 use tracing::{info, warn};
 
-use crate::consensus_api::ConsensusApi;
+use crate::api::consensus::ConsensusApi;
 use crate::constants::BEACON_GENESIS_TIME;
 use crate::gossip::gossip_beacon_content;
-use crate::mode::BridgeMode;
 use crate::stats::{BeaconSlotStats, StatsReporter};
+use crate::types::mode::BridgeMode;
 use crate::utils::{
     duration_until_next_update, expected_current_slot, read_test_assets_from_file, TestAssets,
 };
