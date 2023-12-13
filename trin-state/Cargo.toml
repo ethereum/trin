@@ -16,10 +16,8 @@ async-trait = "0.1.53"
 discv5 = { version = "0.4.0", features = ["serde"] }
 ethereum-types = "0.14.1"
 ethportal-api = { path = "../ethportal-api" }
-eth_trie = "0.4.0"
 parking_lot = "0.11.2"
 portalnet = { path = "../portalnet" }
-rocksdb = "0.21.0"
 tracing = "0.1.36"
 tokio = {version = "1.14.0", features = ["full"]}
 trin-validation = { path = "../trin-validation" }
