@@ -2160,11 +2160,7 @@ where
             }
             if let Some(trace) = &mut query_info.trace {
                 trace.node_responded_with(&source, new_enrs);
-                trace.cancelled = query
-                    .pending_peers(source.node_id())
-                    .into_iter()
-                    .map(|peer| peer.into())
-                    .collect();
+                trace.cancelled = query.pending_peers(source.node_id()).into_iter().collect();
             }
             let closest_nodes: Vec<NodeId> = enrs
                 .iter()
@@ -2190,11 +2186,7 @@ where
         if let Some((query_info, query)) = self.find_content_query_pool.write().get_mut(*query_id) {
             if let Some(trace) = &mut query_info.trace {
                 trace.node_responded_with_content(&source);
-                trace.cancelled = query
-                    .pending_peers(source.node_id())
-                    .into_iter()
-                    .map(|peer| peer.into())
-                    .collect();
+                trace.cancelled = query.pending_peers(source.node_id()).into_iter().collect();
             }
             // Mark the query successful for the source of the response with the connection id.
             query.on_success(
@@ -2215,11 +2207,7 @@ where
         if let Some((query_info, query)) = pool.get_mut(*query_id) {
             if let Some(trace) = &mut query_info.trace {
                 trace.node_responded_with_content(&source);
-                trace.cancelled = query
-                    .pending_peers(source.node_id())
-                    .into_iter()
-                    .map(|peer| peer.into())
-                    .collect();
+                trace.cancelled = query.pending_peers(source.node_id()).into_iter().collect();
             }
             // Mark the query successful for the source of the response with the content.
             query.on_success(
