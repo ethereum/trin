@@ -12,7 +12,6 @@ use portal_bridge::{
     api::{consensus::ConsensusApi, execution::ExecutionApi},
     bridge::{beacon::BeaconBridge, history::HistoryBridge},
     cli::BridgeConfig,
-    pandaops::PandaOpsMiddleware,
     types::network::NetworkKind,
     utils::generate_spaced_private_keys,
 };
@@ -63,9 +62,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let portal_clients = portal_clients
             .clone()
             .expect("Failed to create beacon JSON-RPC clients");
+        let consensus_api = ConsensusApi::new(bridge_config.cl_provider).await?;
         let bridge_handle = tokio::spawn(async move {
-            let pandaops_middleware = PandaOpsMiddleware::default();
-            let consensus_api = ConsensusApi::new(pandaops_middleware);
             let beacon_bridge =
                 BeaconBridge::new(consensus_api, bridge_mode, Arc::new(portal_clients));
 
@@ -80,11 +78,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Launch History Network portal bridge
     if bridge_config.network.contains(&NetworkKind::History) {
+        let execution_api = ExecutionApi::new(bridge_config.el_provider).await?;
         let bridge_handle = tokio::spawn(async move {
             let master_acc = MasterAccumulator::default();
             let header_oracle = HeaderOracle::new(master_acc);
-            let pandaops_middleware = PandaOpsMiddleware::default();
-            let execution_api = ExecutionApi::new(pandaops_middleware);
 
             let bridge = HistoryBridge::new(
                 bridge_config.mode,

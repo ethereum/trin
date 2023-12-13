@@ -10,7 +10,7 @@ use ethportal_api::{
 use portal_bridge::{
     api::{consensus::ConsensusApi, execution::ExecutionApi},
     bridge::{beacon::BeaconBridge, history::HistoryBridge},
-    pandaops::PandaOpsMiddleware,
+    cli::Provider,
     types::mode::BridgeMode,
 };
 use serde_json::Value;
@@ -24,8 +24,7 @@ pub async fn test_history_bridge(peertest: &Peertest, target: &HttpClient) {
     let portal_clients = vec![target.clone()];
     let epoch_acc_path = "validation_assets/epoch_acc.bin".into();
     let mode = BridgeMode::Test("./test_assets/portalnet/bridge_data.json".into());
-    let pandaops_middleware = PandaOpsMiddleware::default();
-    let execution_api = ExecutionApi::new(pandaops_middleware);
+    let execution_api = ExecutionApi::new(Provider::Test).await.unwrap();
     // Wait for bootnode to start
     sleep(Duration::from_secs(1)).await;
     let bridge = HistoryBridge::new(

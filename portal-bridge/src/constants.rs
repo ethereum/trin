@@ -13,10 +13,10 @@ pub const BATCH_SIZE: u64 = 128;
 // format), shackle is known to be somewhat buggy has caused some invalid responses.
 // Reth's archive node, has also exhibited some problems with the concurrent requests rate we
 // currently use.
-pub const BASE_EL_ENDPOINT: &str = "https://erigon-lighthouse.mainnet.eu1.ethpandaops.io";
+pub const BASE_EL_ENDPOINT: &str = "https://erigon-lighthouse.mainnet.eu1.ethpandaops.io/";
 /// Consensus layer PandaOps endpoint
 /// We use Nimbus as the CL client, because it supports light client data by default.
-pub const BASE_CL_ENDPOINT: &str = "https://nimbus.mainnet.ethpandaops.io";
+pub const BASE_CL_ENDPOINT: &str = "https://nimbus.mainnet.ethpandaops.io/";
 
 /// History * content key & value
 pub const HEADER_WITH_PROOF_CONTENT_KEY: &str =

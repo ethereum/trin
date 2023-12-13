@@ -78,6 +78,20 @@ pub struct BridgeConfig {
         help = "Hex encoded 32 byte private key (with 0x prefix) (used as the root key for generating spaced private keys, if multiple nodes are selected)"
     )]
     pub root_private_key: Option<H256>,
+
+    #[arg(
+        long = "el-provider",
+        default_value_t = Provider::PandaOps,
+        help = "Data provider for execution layer data. (\"pandaops\" / infura url with api key / local node url)"
+    )]
+    pub el_provider: Provider,
+
+    #[arg(
+        long = "cl-provider",
+        default_value_t = Provider::PandaOps,
+        help = "Data provider for consensus layer data. (\"pandaops\" / local node url)"
+    )]
+    pub cl_provider: Provider,
 }
 
 fn check_node_count(val: &str) -> Result<u8, String> {
@@ -90,6 +104,41 @@ fn check_node_count(val: &str) -> Result<u8, String> {
 }
 
 type ParseError = &'static str;
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum Provider {
+    #[default]
+    PandaOps,
+    // the url for a local provider or 3rd party provider (like Infura)
+    Url(Url),
+    // stub provider for use in test mode
+    Test,
+}
+
+impl FromStr for Provider {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "pandaops" => Ok(Provider::PandaOps),
+            "test" => Ok(Provider::Test),
+            _ => match Url::parse(s) {
+                Ok(url) => Ok(Provider::Url(url)),
+                Err(_) => Err("Invalid provider: must be 'pandaops' or a valid url"),
+            },
+        }
+    }
+}
+
+impl ToString for Provider {
+    fn to_string(&self) -> String {
+        match self {
+            Provider::PandaOps => "pandaops".to_string(),
+            Provider::Test => "test".to_string(),
+            Provider::Url(url) => format!("{url}"),
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Subcommand)]
 pub enum ClientType {
@@ -153,6 +202,8 @@ mod test {
         );
         assert_eq!(bridge_config.mode, BridgeMode::Latest);
         assert_eq!(bridge_config.epoch_acc_path, PathBuf::from(EPOCH_ACC_PATH));
+        assert_eq!(bridge_config.el_provider, Provider::PandaOps);
+        assert_eq!(bridge_config.cl_provider, Provider::PandaOps);
         assert_eq!(
             bridge_config.network,
             vec![NetworkKind::History, NetworkKind::Beacon]

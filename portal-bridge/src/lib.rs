@@ -7,7 +7,6 @@ pub mod cli;
 pub mod client_handles;
 pub mod constants;
 pub mod gossip;
-pub mod pandaops;
 pub mod stats;
 pub mod types;
 pub mod utils;
