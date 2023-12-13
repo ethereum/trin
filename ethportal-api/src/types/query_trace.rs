@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 use std::time::SystemTime;
 
+use discv5::enr::NodeId;
 use ethereum_types::H256;
 use serde::{Deserialize, Serialize};
 
 use super::distance::{Metric, XorMetric};
 use super::enr::Enr;
-use super::node_id::NodeId;
 
 type ContentId = [u8; 32];
 
@@ -154,7 +154,7 @@ mod tests {
     #[test]
     fn test_query_trace() {
         let (_, local_enr) = generate_random_remote_enr();
-        let local_node_id = &local_enr.node_id().into();
+        let local_node_id = &local_enr.node_id();
         let mut tracer = QueryTrace::new(&local_enr, local_enr.node_id().raw());
         let (_, enr_a) = generate_random_remote_enr();
         let node_id_a: &NodeId = &enr_a.clone().into();
@@ -168,7 +168,7 @@ mod tests {
         tracer.node_responded_with(&local_enr, vec![&enr_c]);
 
         let (_, enr_d) = generate_random_remote_enr();
-        let node_id_d = &enr_d.node_id().into();
+        let node_id_d = &enr_d.node_id();
 
         tracer.node_responded_with(&enr_a, vec![]);
         tracer.node_responded_with(&enr_b, vec![&enr_d]);
