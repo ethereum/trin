@@ -6,6 +6,19 @@ ex.
 cargo run -p portal-bridge -- --node-count 1 --executable-path ./target/debug/trin --epoch-accumulator-path ./portal-accumulators trin
 ```
 
+## Providers
+`Portal-Bridge` currently supports 3 types of providers...
+- PandaOps (default provider for both execution and consensus layers)
+  - This provider is not publicly accessible. If you don't have access, then you must use another option.
+- Infura (execution layer only)
+  - Running the bridge in `backfill` mode will hit the daily threshold for a free infura account fairly quickly.
+  - To bridge "history" network data from Infura, use the following flag.
+	- eg. `--el-provider https://mainnet.infura.io/v3/insert-api-key-here`
+- Local Client (execution &/or consensus via URL)
+  - This option has not been thoroughly tested against all possible providers, if you are unable to connect to a local client please open an issue.
+  - To bridge "beacon" network data, specify the URL for your Consensus client.
+	- eg. `--cl-provider http://localhost:8551`
+
 ## Must specify a client
 To run Portal-Bridge, you must specify what kind of client exists at the provided executable path.
 Current options include `"trin"` / `"fluffy"`.
