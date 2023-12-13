@@ -5,12 +5,12 @@ use ethportal_api::jsonrpsee::http_client::HttpClient;
 use ethportal_api::{
     BeaconContentKey, BeaconContentValue, PossibleBeaconContentValue, PossibleHistoryContentValue,
 };
-use portal_bridge::beacon_bridge::BeaconBridge;
-use portal_bridge::bridge::Bridge;
-use portal_bridge::consensus_api::ConsensusApi;
-use portal_bridge::execution_api::ExecutionApi;
-use portal_bridge::mode::BridgeMode;
+use portal_bridge::api::consensus::ConsensusApi;
+use portal_bridge::api::execution::ExecutionApi;
+use portal_bridge::bridge::beacon::BeaconBridge;
+use portal_bridge::bridge::history::HistoryBridge;
 use portal_bridge::pandaops::PandaOpsMiddleware;
+use portal_bridge::types::mode::BridgeMode;
 use serde_json::Value;
 use std::sync::Arc;
 use tokio::time::{sleep, Duration};
@@ -27,7 +27,7 @@ pub async fn test_history_bridge(peertest: &Peertest, target: &HttpClient) {
     let execution_api = ExecutionApi::new(pandaops_middleware);
     // Wait for bootnode to start
     sleep(Duration::from_secs(1)).await;
-    let bridge = Bridge::new(
+    let bridge = HistoryBridge::new(
         mode,
         execution_api,
         portal_clients,

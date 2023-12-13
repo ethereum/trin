@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 use std::str::FromStr;
+
 use trin_validation::constants::EPOCH_SIZE;
 
 /// Used to help decode cli args identifying the desired bridge mode.

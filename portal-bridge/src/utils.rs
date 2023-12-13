@@ -1,14 +1,16 @@
+use std::ops::Deref;
+use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use anyhow::bail;
 use chrono::Duration;
 use discv5::enr::{CombinedKey, Enr, NodeId};
 use ethereum_types::H256;
+use serde::{Deserialize, Serialize};
+
 use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::HistoryContentKey;
 use ethportal_api::{BeaconContentKey, BeaconContentValue, HistoryContentValue};
-use serde::{Deserialize, Serialize};
-use std::ops::Deref;
-use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Generates a set of N private keys, with node ids that are equally spaced
 /// around the 256-bit keys space.

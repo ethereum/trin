@@ -9,11 +9,13 @@ use ssz::Decode;
 use tokio::time::{sleep, Duration};
 use tracing::{debug, info, warn};
 
-use crate::execution_api::ExecutionApi;
-use crate::full_header::FullHeader;
+use crate::api::execution::ExecutionApi;
 use crate::gossip::gossip_history_content;
-use crate::mode::{BridgeMode, ModeType};
 use crate::stats::{HistoryBlockStats, StatsReporter};
+use crate::types::{
+    full_header::FullHeader,
+    mode::{BridgeMode, ModeType},
+};
 use crate::utils::{read_test_assets_from_file, TestAssets};
 use ethportal_api::jsonrpsee::http_client::HttpClient;
 use ethportal_api::types::execution::{
@@ -42,7 +44,7 @@ const LATEST_BLOCK_POLL_RATE: u64 = 5; // seconds
 const EPOCH_SIZE: u64 = EPOCH_SIZE_USIZE as u64;
 const FUTURES_BUFFER_SIZE: usize = 32;
 
-pub struct Bridge {
+pub struct HistoryBridge {
     pub mode: BridgeMode,
     pub portal_clients: Vec<HttpClient>,
     pub execution_api: ExecutionApi,
@@ -50,7 +52,7 @@ pub struct Bridge {
     pub epoch_acc_path: PathBuf,
 }
 
-impl Bridge {
+impl HistoryBridge {
     pub fn new(
         mode: BridgeMode,
         execution_api: ExecutionApi,
@@ -68,7 +70,7 @@ impl Bridge {
     }
 }
 
-impl Bridge {
+impl HistoryBridge {
     pub async fn launch(&self) {
         info!("Launching bridge mode: {:?}", self.mode);
         match self.mode.clone() {
@@ -237,7 +239,7 @@ impl Bridge {
         let block_stats = Arc::new(Mutex::new(HistoryBlockStats::new(
             full_header.header.number,
         )));
-        Bridge::gossip_header(&full_header, &portal_clients, block_stats.clone()).await?;
+        HistoryBridge::gossip_header(&full_header, &portal_clients, block_stats.clone()).await?;
         // Sleep for 10 seconds to allow headers to saturate network,
         // since they must be available for body / receipt validation.
         sleep(Duration::from_secs(HEADER_SATURATION_DELAY)).await;
@@ -285,7 +287,7 @@ impl Bridge {
                 }
                 // Construct HeaderWithProof
                 let header_with_proof =
-                    Bridge::construct_proof(full_header.header.clone(), epoch_acc).await?;
+                    HistoryBridge::construct_proof(full_header.header.clone(), epoch_acc).await?;
                 HistoryContentValue::BlockHeaderWithProof(header_with_proof)
             }
             None => {

@@ -1,8 +1,10 @@
-use crate::cli::BridgeConfig;
-use anyhow::bail;
-use portalnet::socket::stun_for_external;
 use std::net::SocketAddr;
+
+use anyhow::bail;
 use tokio::process::{Child, Command};
+
+use crate::cli::BridgeConfig;
+use portalnet::socket::stun_for_external;
 
 pub fn fluffy_handle(
     private_key: String,
