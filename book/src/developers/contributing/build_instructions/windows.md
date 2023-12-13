@@ -9,8 +9,7 @@ If you don't already have Rust install it
 $ winget install Rustlang.Rustup
 ```
 
-Install clang/llvm as it is required to compile rocksdb
-If you don't already have Rust install it
+Install clang/llvm as it is required to compile c-kzg
 ```sh
 $ winget install LLVM.LLVM
 ```

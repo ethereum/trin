@@ -2,15 +2,12 @@ use std::{
     convert::TryInto,
     fs,
     path::{Path, PathBuf},
-    sync::Arc,
 };
 
-use anyhow::anyhow;
 use discv5::enr::NodeId;
 use ethportal_api::types::portal::PaginateLocalContentInfo;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
-use rocksdb::{Options, DB};
 use rusqlite::params;
 use thiserror::Error;
 use tracing::{debug, error, info};
@@ -50,9 +47,6 @@ pub enum ContentStoreError {
     /// Unable to store or retrieve data because it is invalid.
     #[error("data invalid {message}")]
     InvalidData { message: String },
-
-    #[error("rocksdb error {0}")]
-    Rocksdb(#[from] rocksdb::Error),
 
     #[error("rusqlite error {0}")]
     Rusqlite(#[from] rusqlite::Error),
@@ -185,7 +179,6 @@ pub struct PortalStorageConfig {
     pub node_id: NodeId,
     pub node_data_dir: PathBuf,
     pub distance_fn: DistanceFunction,
-    pub db: Arc<rocksdb::DB>,
     pub sql_connection_pool: Pool<SqliteConnectionManager>,
 }
 
@@ -195,14 +188,12 @@ impl PortalStorageConfig {
         node_data_dir: PathBuf,
         node_id: NodeId,
     ) -> anyhow::Result<Self> {
-        let db = Arc::new(PortalStorage::setup_rocksdb(&node_data_dir)?);
         let sql_connection_pool = PortalStorage::setup_sql(&node_data_dir)?;
         Ok(Self {
             storage_capacity_mb,
             node_id,
             node_data_dir,
             distance_fn: DistanceFunction::Xor,
-            db,
             sql_connection_pool,
         })
     }
@@ -215,16 +206,18 @@ pub struct PortalStorage {
     node_data_dir: PathBuf,
     storage_capacity_in_bytes: u64,
     radius: Distance,
-    db: Arc<rocksdb::DB>,
     sql_connection_pool: Pool<SqliteConnectionManager>,
     distance_fn: DistanceFunction,
     metrics: StorageMetricsReporter,
+    network: ProtocolId,
 }
 
 impl ContentStore for PortalStorage {
     fn get<K: OverlayContentKey>(&self, key: &K) -> Result<Option<Vec<u8>>, ContentStoreError> {
         let content_id = key.content_id();
-        Ok(self.db.get(content_id)?)
+        self.lookup_content_value(content_id).map_err(|err| {
+            ContentStoreError::Database(format!("Error looking up content value: {err:?}"))
+        })
     }
 
     fn put<K: OverlayContentKey, V: AsRef<[u8]>>(
@@ -245,7 +238,12 @@ impl ContentStore for PortalStorage {
         }
 
         let key = key.content_id();
-        let is_key_available = self.db.get_pinned(key)?.is_some();
+        let is_key_available = self
+            .lookup_content_key(key)
+            .map_err(|err| {
+                ContentStoreError::Database(format!("Error looking up content key: {err:?}"))
+            })?
+            .is_some();
         if is_key_available {
             return Ok(ShouldWeStoreContent::AlreadyStored);
         }
@@ -274,10 +272,10 @@ impl PortalStorage {
             node_data_dir: config.node_data_dir,
             storage_capacity_in_bytes: config.storage_capacity_mb * BYTES_IN_MB_U64,
             radius: Distance::MAX,
-            db: config.db,
             sql_connection_pool: config.sql_connection_pool,
             distance_fn: config.distance_fn,
             metrics,
+            network: protocol,
         };
 
         // Set the metrics to the default radius, to start
@@ -399,18 +397,12 @@ impl PortalStorage {
             });
         }
 
-        // Store the data in radius db
-        self.db_insert(&content_id, value)?;
+        // Store the data in db
         let content_key: Vec<u8> = key.clone().into();
         // store content key w/o the 0x prefix
         let content_key = hex_encode(content_key).trim_start_matches("0x").to_string();
-        // Revert rocks db action if there's an error with writing to metadata db
-        if let Err(err) = self.meta_db_insert(&content_id, &content_key, value) {
-            debug!(
-                "Error writing content ID {:?} to meta db. Reverting: {:?}",
-                content_id, err
-            );
-            self.db.delete(content_id)?;
+        if let Err(err) = self.db_insert(&content_id, &content_key, value) {
+            debug!("Error writing content ID {content_id:?} to db: {err:?}");
             return Err(err);
         } else {
             self.metrics.increase_entry_count();
@@ -450,7 +442,7 @@ impl PortalStorage {
                 hex_encode(id_to_remove)
             );
             if let Err(err) = self.evict(id_to_remove) {
-                debug!("Error writing content ID {id_to_remove:?} to meta db. Reverted: {err:?}",);
+                debug!("Error writing content ID {id_to_remove:?} to db: {err:?}",);
             } else {
                 num_removed_items += 1;
             }
@@ -506,18 +498,9 @@ impl PortalStorage {
         Ok(byte_size as u64)
     }
 
-    /// Public method for evicting a certain content id. Will revert RocksDB deletion if meta_db
-    /// deletion fails.
+    /// Public method for evicting a certain content id.
     pub fn evict(&self, id: [u8; 32]) -> anyhow::Result<()> {
-        let deleted_value = self.db.get(id)?;
-        self.db.delete(id)?;
-        // Revert rocksdb action if there's an error with writing to metadata db
-        if let Err(err) = self.meta_db_remove(&id) {
-            if let Some(value) = deleted_value {
-                self.db_insert(&id, &value)?;
-            }
-            return Err(anyhow!("failed deletion {err}"));
-        }
+        self.db_remove(&id)?;
         self.metrics.decrease_entry_count();
         Ok(())
     }
@@ -545,6 +528,25 @@ impl PortalStorage {
         }
     }
 
+    /// Public method for looking up a content value by its content id
+    pub fn lookup_content_value(&self, id: [u8; 32]) -> anyhow::Result<Option<Vec<u8>>> {
+        let conn = self.sql_connection_pool.get()?;
+        let mut query = conn.prepare(CONTENT_VALUE_LOOKUP_QUERY)?;
+        let id = id.to_vec();
+        let result: Result<Vec<Vec<u8>>, ContentStoreError> = query
+            .query_map([id], |row| {
+                let row: String = row.get(0)?;
+                Ok(row)
+            })?
+            .map(|row| hex_decode(row?.as_str()).map_err(ContentStoreError::ByteUtilsError))
+            .collect();
+
+        match result?.first() {
+            Some(val) => Ok(Some(val.to_vec())),
+            None => Ok(None),
+        }
+    }
+
     /// Public method for retrieving the node's current radius.
     pub fn radius(&self) -> Distance {
         self.radius
@@ -558,13 +560,7 @@ impl PortalStorage {
     }
 
     /// Internal method for inserting data into the db.
-    fn db_insert(&self, content_id: &[u8; 32], value: &Vec<u8>) -> Result<(), ContentStoreError> {
-        self.db.put(content_id, value)?;
-        Ok(())
-    }
-
-    /// Internal method for inserting data into the meta db.
-    fn meta_db_insert(
+    fn db_insert(
         &self,
         content_id: &[u8; 32],
         content_key: &String,
@@ -583,6 +579,8 @@ impl PortalStorage {
                 content_id.to_vec(),
                 content_id_as_u32,
                 content_key,
+                hex_encode(value),
+                u8::from(self.network),
                 value_size
             ],
         ) {
@@ -591,8 +589,8 @@ impl PortalStorage {
         }
     }
 
-    /// Internal method for removing a given content-id from the meta db.
-    fn meta_db_remove(&self, content_id: &[u8; 32]) -> Result<(), ContentStoreError> {
+    /// Internal method for removing a given content-id from the db.
+    fn db_remove(&self, content_id: &[u8; 32]) -> Result<(), ContentStoreError> {
         self.sql_connection_pool
             .get()?
             .execute(DELETE_QUERY, [content_id.to_vec()])?;
@@ -640,11 +638,12 @@ impl PortalStorage {
                 let conn = self.sql_connection_pool.get()?;
                 let mut query = conn.prepare(XOR_FIND_FARTHEST_QUERY)?;
 
-                let mut result = query.query_map([node_id_u32], |row| {
-                    Ok(ContentId {
-                        id_long: row.get(0)?,
-                    })
-                })?;
+                let mut result =
+                    query.query_map([node_id_u32, u8::from(self.network).into()], |row| {
+                        Ok(ContentId {
+                            id_long: row.get(0)?,
+                        })
+                    })?;
 
                 let result = match result.next() {
                     Some(row) => row,
@@ -726,26 +725,6 @@ impl PortalStorage {
         u32::from_be_bytes(array)
     }
 
-    /// Helper function for opening a RocksDB connection for the radius-constrained db.
-    pub fn setup_rocksdb(node_data_dir: &Path) -> Result<rocksdb::DB, ContentStoreError> {
-        let rocksdb_path = node_data_dir.join("rocksdb");
-        info!(path = %rocksdb_path.display(), "Setting up RocksDB");
-
-        let mut db_opts = Options::default();
-        db_opts.create_if_missing(true);
-        Ok(DB::open(&db_opts, rocksdb_path)?)
-    }
-
-    /// Helper function for opening a RocksDB connection for the trie db.
-    pub fn setup_triedb(node_data_dir: &Path) -> Result<rocksdb::DB, ContentStoreError> {
-        let trie_db_path = node_data_dir.join("triedb");
-        info!(path = %trie_db_path.display(), "Setting up triedb");
-
-        let mut db_opts = Options::default();
-        db_opts.create_if_missing(true);
-        Ok(DB::open(&db_opts, trie_db_path)?)
-    }
-
     /// Helper function for opening a SQLite connection.
     pub fn setup_sql(
         node_data_dir: &Path,
@@ -766,40 +745,47 @@ impl PortalStorage {
 }
 
 // SQLite Statements
-const CREATE_QUERY: &str = "CREATE TABLE IF NOT EXISTS content_metadata (
+const CREATE_QUERY: &str = "CREATE TABLE IF NOT EXISTS content_data (
                                 content_id_long TEXT PRIMARY KEY,
                                 content_id_short INTEGER NOT NULL,
                                 content_key TEXT NOT NULL,
+                                content_value TEXT NOT NULL,
+                                network INTEGER NOT NULL DEFAULT 0,
                                 content_size INTEGER
                             );
-                            CREATE INDEX content_size_idx ON content_metadata(content_size);
-                            CREATE INDEX content_id_short_idx ON content_metadata(content_id_short);
-                            CREATE INDEX content_id_long_idx ON content_metadata(content_id_long);";
+                            CREATE INDEX content_size_idx ON content_data(content_size);
+                            CREATE INDEX content_id_short_idx ON content_data(content_id_short);
+                            CREATE INDEX content_id_long_idx ON content_data(content_id_long);
+                            CREATE INDEX network_idx ON content_data(network);";
 
 const INSERT_QUERY: &str =
-    "INSERT OR IGNORE INTO content_metadata (content_id_long, content_id_short, content_key, content_size)
-                            VALUES (?1, ?2, ?3, ?4)";
+    "INSERT OR IGNORE INTO content_data (content_id_long, content_id_short, content_key, content_value, network, content_size)
+                            VALUES (?1, ?2, ?3, ?4, ?5, ?6)";
 
-const DELETE_QUERY: &str = "DELETE FROM content_metadata
+const DELETE_QUERY: &str = "DELETE FROM content_data
                             WHERE content_id_long = (?1)";
 
 const XOR_FIND_FARTHEST_QUERY: &str = "SELECT
                                     content_id_long
-                                    FROM content_metadata
+                                    FROM content_data
+                                    WHERE network = (?2)
                                     ORDER BY ((?1 | content_id_short) - (?1 & content_id_short)) DESC";
 
 const CONTENT_KEY_LOOKUP_QUERY: &str =
-    "SELECT content_key FROM content_metadata WHERE content_id_long = (?1)";
+    "SELECT content_key FROM content_data WHERE content_id_long = (?1) LIMIT 1";
 
-const TOTAL_DATA_SIZE_QUERY: &str = "SELECT TOTAL(content_size) FROM content_metadata";
+const CONTENT_VALUE_LOOKUP_QUERY: &str =
+    "SELECT content_value FROM content_data WHERE content_id_long = (?1) LIMIT 1";
 
-const TOTAL_ENTRY_COUNT_QUERY: &str = "SELECT COUNT(content_id_long) FROM content_metadata";
+const TOTAL_DATA_SIZE_QUERY: &str = "SELECT TOTAL(content_size) FROM content_data";
+
+const TOTAL_ENTRY_COUNT_QUERY: &str = "SELECT COUNT(content_id_long) FROM content_data";
 
 const PAGINATE_QUERY: &str =
-    "SELECT content_key FROM content_metadata ORDER BY content_key LIMIT :limit OFFSET :offset";
+    "SELECT content_key FROM content_data ORDER BY content_key LIMIT :limit OFFSET :offset";
 
 const CONTENT_SIZE_LOOKUP_QUERY: &str =
-    "SELECT content_size FROM content_metadata WHERE content_id_long = (?1)";
+    "SELECT content_size FROM content_data WHERE content_id_long = (?1)";
 
 // SQLite Result Containers
 struct ContentId {
@@ -825,6 +811,7 @@ pub mod test {
 
     use crate::utils::db::{configure_node_data_dir, setup_temp_dir};
     use ethportal_api::types::content_key::overlay::IdentityContentKey;
+    use ethportal_api::BlockHeaderKey;
 
     const CAPACITY_MB: u64 = 2;
 
@@ -890,7 +877,7 @@ pub mod test {
         let storage_config =
             PortalStorageConfig::new(CAPACITY_MB, temp_dir.path().to_path_buf(), node_id).unwrap();
         let mut storage = PortalStorage::new(storage_config, ProtocolId::History)?;
-        let content_key = generate_random_content_key();
+        let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey::default());
         let value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
         storage.store(&content_key, &value)?;
 
@@ -898,7 +885,7 @@ pub mod test {
 
         assert_eq!(result, value);
 
-        std::mem::drop(storage);
+        drop(storage);
         temp_dir.close()?;
         Ok(())
     }
