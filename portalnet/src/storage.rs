@@ -1,4 +1,5 @@
 use anyhow::Error;
+use discv5::enr::k256::elliptic_curve::consts::U128;
 use std::{
     convert::TryInto,
     fs,
@@ -10,7 +11,8 @@ use ethportal_api::types::portal::PaginateLocalContentInfo;
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::params;
-use ssz::Decode;
+use ssz::{Decode, Encode};
+use ssz_types::VariableList;
 use thiserror::Error;
 use tracing::{debug, error, info};
 
@@ -18,7 +20,9 @@ use ethportal_api::types::content_key::beacon::{
     LIGHT_CLIENT_BOOTSTRAP_KEY_PREFIX, LIGHT_CLIENT_FINALITY_UPDATE_KEY_PREFIX,
     LIGHT_CLIENT_OPTIMISTIC_UPDATE_KEY_PREFIX, LIGHT_CLIENT_UPDATES_BY_RANGE_KEY_PREFIX,
 };
-use ethportal_api::types::content_value::beacon::LightClientUpdatesByRange;
+use ethportal_api::types::content_value::beacon::{
+    ForkVersionedLightClientUpdate, LightClientUpdatesByRange,
+};
 use ethportal_api::types::distance::{Distance, Metric, XorMetric};
 use ethportal_api::types::portal_wire::ProtocolId;
 use ethportal_api::utils::bytes::{hex_decode, hex_encode, ByteUtilsError};
@@ -696,12 +700,45 @@ impl ContentStore for BeaconStorage {
             BeaconContentKey::LightClientBootstrap(_) => {
                 let content_id = key.content_id();
                 self.lookup_content_value(content_id).map_err(|err| {
-                    ContentStoreError::Database(format!("Error looking up content value: {err:?}"))
+                    ContentStoreError::Database(format!(
+                        "Error looking up LightClientBootstrap content value: {err:?}"
+                    ))
                 })
             }
-            BeaconContentKey::LightClientUpdatesByRange(_) => {
-                // TODO: Build LightClientUpdatesByRange response from lc_updates table
-                Ok(None)
+            BeaconContentKey::LightClientUpdatesByRange(content_key) => {
+                let periods =
+                    content_key.start_period..(content_key.start_period + content_key.count);
+
+                let mut content: Vec<ForkVersionedLightClientUpdate> = Vec::new();
+
+                for period in periods {
+                    let result = self.lookup_lc_update_value(period).map_err(|err| {
+                        ContentStoreError::Database(format!(
+                            "Error looking up LightClientUpdate content value: {err:?}"
+                        ))
+                    })?;
+
+                    match result {
+                        Some(result) => content.push(
+                            ForkVersionedLightClientUpdate::from_ssz_bytes(result.as_slice())
+                                .map_err(|err| {
+                                    ContentStoreError::Database(format!(
+                                    "Error ssz decode ForkVersionedLightClientUpdate value: {err:?}"
+                                ))
+                                })?,
+                        ),
+                        None => return Ok(None),
+                    }
+                }
+
+                let result = VariableList::<ForkVersionedLightClientUpdate, U128>::new(content)
+                    .map_err(|err| ContentStoreError::Database(
+                        format!(
+                            "Error building VariableList from ForkVersionedLightClientUpdate data: {err:?}"
+                        ),
+                    ))?;
+
+                Ok(Some(result.as_ssz_bytes()))
             }
             BeaconContentKey::LightClientFinalityUpdate(_) => {
                 // TODO: Get LightClientFinalityUpdate from cache
@@ -948,6 +985,24 @@ impl BeaconStorage {
         lookup_content_value(id, conn)?
     }
 
+    /// Public method for looking up a  light client update value by period number
+    pub fn lookup_lc_update_value(&self, period: u64) -> anyhow::Result<Option<Vec<u8>>> {
+        let conn = self.sql_connection_pool.get()?;
+        let mut query = conn.prepare(LC_UPDATE_LOOKUP_QUERY)?;
+
+        let rows: Result<Vec<Vec<u8>>, rusqlite::Error> = query
+            .query_map([period], |row| {
+                let row: Vec<u8> = row.get(0)?;
+                Ok(row)
+            })?
+            .collect();
+
+        match rows?.first() {
+            Some(val) => Ok(Some(val.to_vec())),
+            None => Ok(None),
+        }
+    }
+
     /// Get a summary of the current state of storage
     pub fn get_summary_info(&self) -> String {
         self.metrics.get_summary()
@@ -1107,6 +1162,8 @@ const CREATE_LC_UPDATE_TABLE: &str = "CREATE TABLE IF NOT EXISTS lc_update (
                                       );
                                      CREATE INDEX update_size_idx ON lc_update(update_size);
                                      CREATE INDEX period_idx ON lc_update(period);";
+
+const LC_UPDATE_LOOKUP_QUERY: &str = "SELECT value FROM lc_update WHERE period = (?1) LIMIT 1";
 
 // SQLite Result Containers
 struct ContentId {
