@@ -759,21 +759,64 @@ impl ContentStore for BeaconStorage {
         self.store(&key, &value.as_ref().to_vec())
     }
 
+    /// The "radius: concept is not applicable for Beacon network
     fn is_key_within_radius_and_unavailable<K: OverlayContentKey>(
         &self,
         key: &K,
     ) -> Result<ShouldWeStoreContent, ContentStoreError> {
-        let key = key.content_id();
-        let is_key_available = self
-            .lookup_content_key(key)
-            .map_err(|err| {
-                ContentStoreError::Database(format!("Error looking up content key: {err:?}"))
-            })?
-            .is_some();
-        if is_key_available {
-            return Ok(ShouldWeStoreContent::AlreadyStored);
+        let content_key: Vec<u8> = key.clone().into();
+        let beacon_content_key =
+            BeaconContentKey::from_ssz_bytes(content_key.as_slice()).map_err(|err| {
+                ContentStoreError::InvalidData {
+                    message: format!("Error deserializing BeaconContentKey value: {err:?}"),
+                }
+            })?;
+
+        match beacon_content_key {
+            BeaconContentKey::LightClientBootstrap(_) => {
+                let key = key.content_id();
+                let is_key_available = self
+                    .lookup_content_key(key)
+                    .map_err(|err| {
+                        ContentStoreError::Database(format!(
+                            "Error looking up content key: {err:?}"
+                        ))
+                    })?
+                    .is_some();
+                if is_key_available {
+                    return Ok(ShouldWeStoreContent::AlreadyStored);
+                }
+                Ok(ShouldWeStoreContent::Store)
+            }
+            BeaconContentKey::LightClientUpdatesByRange(content_key) => {
+                // Check if any of the periods are available, return AlreadyStored if so otherwise Store
+                let periods =
+                    content_key.start_period..(content_key.start_period + content_key.count);
+
+                for period in periods {
+                    let is_period_available = self
+                        .lookup_lc_update_period(period)
+                        .map_err(|err| {
+                            ContentStoreError::Database(format!(
+                                "Error looking up lc update period: {err:?}"
+                            ))
+                        })?
+                        .is_some();
+                    if is_period_available {
+                        return Ok(ShouldWeStoreContent::AlreadyStored);
+                    }
+                }
+                Ok(ShouldWeStoreContent::Store)
+            }
+            BeaconContentKey::LightClientFinalityUpdate(_) => {
+                // TODO: Check content key availability in cache
+                Ok(ShouldWeStoreContent::AlreadyStored)
+            }
+            BeaconContentKey::LightClientOptimisticUpdate(_) => {
+                // TODO: Check content key availability in cache
+                Ok(ShouldWeStoreContent::AlreadyStored)
+            }
         }
-        Ok(ShouldWeStoreContent::Store)
     }
 
     fn radius(&self) -> Distance {
@@ -957,6 +1000,7 @@ impl BeaconStorage {
         Ok(sum as u64)
     }
 
+    /// Public method for looking up a content key by its content id
     pub fn lookup_content_key(&self, id: [u8; 32]) -> anyhow::Result<Option<Vec<u8>>> {
         let conn = self.sql_connection_pool.get()?;
         let mut query = conn.prepare(CONTENT_KEY_LOOKUP_QUERY)?;
@@ -975,6 +1019,24 @@ impl BeaconStorage {
 
         match result?.first() {
             Some(val) => Ok(Some(val.into())),
+            None => Ok(None),
+        }
+    }
+
+    /// Public method for looking up a light client update by period number
+    pub fn lookup_lc_update_period(&self, period: u64) -> anyhow::Result<Option<u64>> {
+        let conn = self.sql_connection_pool.get()?;
+        let mut query = conn.prepare(LC_UPDATE_PERIOD_LOOKUP_QUERY)?;
+
+        let rows: Result<Vec<u64>, rusqlite::Error> = query
+            .query_map([period], |row| {
+                let row: u64 = row.get(0)?;
+                Ok(row)
+            })?
+            .collect();
+
+        match rows?.first() {
+            Some(val) => Ok(Some(*val)),
             None => Ok(None),
         }
     }
@@ -1040,6 +1102,7 @@ fn get_total_size_of_directory_in_bytes(path: impl AsRef<Path>) -> Result<u64, C
     Ok(size)
 }
 
+/// Internal method for looking up a content value by its content id
 fn lookup_content_value(
     id: [u8; 32],
     conn: PooledConnection<SqliteConnectionManager>,
@@ -1164,6 +1227,9 @@ const CREATE_LC_UPDATE_TABLE: &str = "CREATE TABLE IF NOT EXISTS lc_update (
                                      CREATE INDEX period_idx ON lc_update(period);";
 
 const LC_UPDATE_LOOKUP_QUERY: &str = "SELECT value FROM lc_update WHERE period = (?1) LIMIT 1";
+
+const LC_UPDATE_PERIOD_LOOKUP_QUERY: &str =
+    "SELECT period FROM lc_update WHERE period = (?1) LIMIT 1";
 
 // SQLite Result Containers
 struct ContentId {
