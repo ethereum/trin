@@ -223,6 +223,19 @@ impl TryFrom<ProtocolId> for Vec<u8> {
     }
 }
 
+impl From<ProtocolId> for u8 {
+    fn from(protocol_id: ProtocolId) -> Self {
+        match protocol_id {
+            ProtocolId::State => 2,
+            ProtocolId::History => 0,
+            ProtocolId::TransactionGossip => 3,
+            ProtocolId::CanonicalIndices => 4,
+            ProtocolId::Beacon => 1,
+            ProtocolId::Utp => 99,
+        }
+    }
+}
+
 /// A Portal protocol message.
 #[derive(Debug, PartialEq, Clone, Encode, Decode)]
 #[ssz(enum_behaviour = "union")]
@@ -594,6 +607,33 @@ mod test {
         let protocol_id = ProtocolId::from_str(hex).unwrap();
         let expected_hex = hex_encode_upper(Vec::try_from(protocol_id).unwrap());
         assert_eq!(hex, expected_hex);
+    }
+
+    #[test]
+    fn prtocol_id_to_u8() {
+        let protocol_id = ProtocolId::History;
+        let expected_u8 = 0;
+        assert_eq!(expected_u8, u8::from(protocol_id));
+
+        let protocol_id = ProtocolId::Beacon;
+        let expected_u8 = 1;
+        assert_eq!(expected_u8, u8::from(protocol_id));
+
+        let protocol_id = ProtocolId::State;
+        let expected_u8 = 2;
+        assert_eq!(expected_u8, u8::from(protocol_id));
+
+        let protocol_id = ProtocolId::TransactionGossip;
+        let expected_u8 = 3;
+        assert_eq!(expected_u8, u8::from(protocol_id));
+
+        let protocol_id = ProtocolId::CanonicalIndices;
+        let expected_u8 = 4;
+        assert_eq!(expected_u8, u8::from(protocol_id));
+
+        let protocol_id = ProtocolId::Utp;
+        let expected_u8 = 99;
+        assert_eq!(expected_u8, u8::from(protocol_id));
     }
 
     // Wire message test vectors available in Ethereum Portal Network specs repo:
