@@ -10,10 +10,10 @@ use std::fmt;
 
 // Prefixes for the different types of beacon content keys:
 // https://github.com/ethereum/portal-network-specs/blob/72327da43c7a199ba2735344ef98f9121aef2f68/beacon-chain/beacon-network.md
-const LIGHT_CLIENT_BOOTSTRAP_KEY_PREFIX: u8 = 0x10;
-const LIGHT_CLIENT_UPDATES_BY_RANGE_KEY_PREFIX: u8 = 0x11;
-const LIGHT_CLIENT_FINALITY_UPDATE_KEY_PREFIX: u8 = 0x12;
-const LIGHT_CLIENT_OPTIMISTIC_UPDATE_KEY_PREFIX: u8 = 0x13;
+pub const LIGHT_CLIENT_BOOTSTRAP_KEY_PREFIX: u8 = 0x10;
+pub const LIGHT_CLIENT_UPDATES_BY_RANGE_KEY_PREFIX: u8 = 0x11;
+pub const LIGHT_CLIENT_FINALITY_UPDATE_KEY_PREFIX: u8 = 0x12;
+pub const LIGHT_CLIENT_OPTIMISTIC_UPDATE_KEY_PREFIX: u8 = 0x13;
 
 /// A content key in the beacon chain network.
 #[derive(Clone, Debug, Eq, PartialEq)]
