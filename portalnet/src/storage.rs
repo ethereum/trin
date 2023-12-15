@@ -1,3 +1,5 @@
+use anyhow::Error;
+use discv5::enr::k256::elliptic_curve::consts::U128;
 use std::{
     convert::TryInto,
     fs,
@@ -6,19 +8,26 @@ use std::{
 
 use discv5::enr::NodeId;
 use ethportal_api::types::portal::PaginateLocalContentInfo;
-use r2d2::Pool;
+use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::params;
+use ssz::{Decode, Encode};
+use ssz_types::VariableList;
 use thiserror::Error;
 use tracing::{debug, error, info};
 
 use ethportal_api::{
     types::{
+        content_key::beacon::{
+            LIGHT_CLIENT_BOOTSTRAP_KEY_PREFIX, LIGHT_CLIENT_FINALITY_UPDATE_KEY_PREFIX,
+            LIGHT_CLIENT_OPTIMISTIC_UPDATE_KEY_PREFIX, LIGHT_CLIENT_UPDATES_BY_RANGE_KEY_PREFIX,
+        },
+        content_value::beacon::{ForkVersionedLightClientUpdate, LightClientUpdatesByRange},
         distance::{Distance, Metric, XorMetric},
         portal_wire::ProtocolId,
     },
     utils::bytes::{hex_decode, hex_encode, ByteUtilsError},
-    ContentKeyError, HistoryContentKey, OverlayContentKey,
+    BeaconContentKey, ContentKeyError, HistoryContentKey, OverlayContentKey,
 };
 use trin_metrics::{portalnet::PORTALNET_METRICS, storage::StorageMetricsReporter};
 
@@ -366,7 +375,7 @@ impl PortalStorage {
         let conn = self.sql_connection_pool.get()?;
         let mut query = conn.prepare(TOTAL_ENTRY_COUNT_QUERY)?;
         let result: Result<Vec<EntryCount>, rusqlite::Error> = query
-            .query_map([], |row| Ok(EntryCount(row.get(0)?)))?
+            .query_map([u8::from(self.network)], |row| Ok(EntryCount(row.get(0)?)))?
             .collect();
         match result?.first() {
             Some(val) => Ok(val.0),
@@ -535,20 +544,8 @@ impl PortalStorage {
     /// Public method for looking up a content value by its content id
     pub fn lookup_content_value(&self, id: [u8; 32]) -> anyhow::Result<Option<Vec<u8>>> {
         let conn = self.sql_connection_pool.get()?;
-        let mut query = conn.prepare(CONTENT_VALUE_LOOKUP_QUERY)?;
-        let id = id.to_vec();
-        let result: Result<Vec<Vec<u8>>, ContentStoreError> = query
-            .query_map([id], |row| {
-                let row: String = row.get(0)?;
-                Ok(row)
-            })?
-            .map(|row| hex_decode(row?.as_str()).map_err(ContentStoreError::ByteUtilsError))
-            .collect();
 
-        match result?.first() {
-            Some(val) => Ok(Some(val.to_vec())),
-            None => Ok(None),
-        }
+        lookup_content_value(id, conn)?
     }
 
     /// Public method for retrieving the node's current radius.
@@ -560,7 +557,7 @@ impl PortalStorage {
     /// Portal Network data. Intended for analysis purposes. PortalStorage's capacity
     /// decision-making is not based off of this method.
     pub fn get_total_storage_usage_in_bytes_on_disk(&self) -> Result<u64, ContentStoreError> {
-        let storage_usage = Self::get_total_size_of_directory_in_bytes(&self.node_data_dir)?;
+        let storage_usage = get_total_size_of_directory_in_bytes(&self.node_data_dir)?;
         Ok(storage_usage)
     }
 
@@ -571,27 +568,8 @@ impl PortalStorage {
         content_key: &String,
         value: &Vec<u8>,
     ) -> Result<(), ContentStoreError> {
-        let content_id_as_u32: u32 = Self::byte_vector_to_u32(content_id.to_vec());
-        let value_size = value.len();
-        if content_key.starts_with("0x") {
-            return Err(ContentStoreError::InvalidData {
-                message: "Content key should not start with 0x".to_string(),
-            });
-        }
-        match self.sql_connection_pool.get()?.execute(
-            INSERT_QUERY,
-            params![
-                content_id.to_vec(),
-                content_id_as_u32,
-                content_key,
-                hex_encode(value),
-                u8::from(self.network),
-                value_size
-            ],
-        ) {
-            Ok(_) => Ok(()),
-            Err(err) => Err(err.into()),
-        }
+        let conn = self.sql_connection_pool.get()?;
+        insert_value(conn, content_id, content_key, value, u8::from(self.network))
     }
 
     /// Internal method for removing a given content-id from the db.
@@ -639,7 +617,7 @@ impl PortalStorage {
     fn find_farthest_content_id(&self) -> Result<Option<[u8; 32]>, ContentStoreError> {
         let result = match self.distance_fn {
             DistanceFunction::Xor => {
-                let node_id_u32 = Self::byte_vector_to_u32(self.node_id.raw().to_vec());
+                let node_id_u32 = byte_vector_to_u32(self.node_id.raw().to_vec());
 
                 let conn = self.sql_connection_pool.get()?;
                 let mut query = conn.prepare(XOR_FIND_FARTHEST_QUERY)?;
@@ -676,59 +654,11 @@ impl PortalStorage {
         Ok(Some(result))
     }
 
-    /// Internal method used to measure on-disk storage usage.
-    fn get_total_size_of_directory_in_bytes(
-        path: impl AsRef<Path>,
-    ) -> Result<u64, ContentStoreError> {
-        let metadata = match fs::metadata(&path) {
-            Ok(metadata) => metadata,
-            Err(_) => {
-                return Ok(0);
-            }
-        };
-        let mut size = metadata.len();
-
-        if metadata.is_dir() {
-            for entry in fs::read_dir(&path)? {
-                let dir = entry?;
-                let path_string = match dir.path().into_os_string().into_string() {
-                    Ok(path_string) => path_string,
-                    Err(err) => {
-                        let err = format!(
-                            "Unable to convert path {:?} into string {:?}",
-                            path.as_ref(),
-                            err
-                        );
-                        return Err(ContentStoreError::Database(err));
-                    }
-                };
-                size += Self::get_total_size_of_directory_in_bytes(path_string)?;
-            }
-        }
-
-        Ok(size)
-    }
-
     /// Method that returns the distance between our node ID and a given content ID.
     pub fn distance_to_content_id(&self, content_id: &[u8; 32]) -> Distance {
         match self.distance_fn {
             DistanceFunction::Xor => XorMetric::distance(content_id, &self.node_id.raw()),
         }
-    }
-
-    /// Converts most significant 4 bytes of a vector to a u32.
-    fn byte_vector_to_u32(vec: Vec<u8>) -> u32 {
-        if vec.len() < 4 {
-            debug!("Error: XOR returned less than 4 bytes.");
-            return 0;
-        }
-
-        let mut array: [u8; 4] = [0, 0, 0, 0];
-        for (index, byte) in vec.iter().take(4).enumerate() {
-            array[index] = *byte;
-        }
-
-        u32::from_be_bytes(array)
     }
 
     /// Helper function for opening a SQLite connection.
@@ -741,12 +671,508 @@ impl PortalStorage {
         let manager = SqliteConnectionManager::file(sql_path);
         let pool = Pool::new(manager)?;
         pool.get()?.execute(CREATE_QUERY, params![])?;
+        pool.get()?.execute(CREATE_LC_UPDATE_TABLE, params![])?;
         Ok(pool)
     }
 
     /// Get a summary of the current state of storage
     pub fn get_summary_info(&self) -> String {
         self.metrics.get_summary()
+    }
+}
+
+#[derive(Debug)]
+pub struct BeaconStorage {
+    node_data_dir: PathBuf,
+    sql_connection_pool: Pool<SqliteConnectionManager>,
+    storage_capacity_in_bytes: u64,
+    metrics: StorageMetricsReporter,
+    network: ProtocolId,
+}
+
+impl ContentStore for BeaconStorage {
+    fn get<K: OverlayContentKey>(&self, key: &K) -> Result<Option<Vec<u8>>, ContentStoreError> {
+        let content_key: Vec<u8> = key.clone().into();
+        let beacon_content_key =
+            BeaconContentKey::from_ssz_bytes(content_key.as_slice()).map_err(|err| {
+                ContentStoreError::InvalidData {
+                    message: format!("Error deserializing BeaconContentKey value: {err:?}"),
+                }
+            })?;
+
+        match beacon_content_key {
+            BeaconContentKey::LightClientBootstrap(_) => {
+                let content_id = key.content_id();
+                self.lookup_content_value(content_id).map_err(|err| {
+                    ContentStoreError::Database(format!(
+                        "Error looking up LightClientBootstrap content value: {err:?}"
+                    ))
+                })
+            }
+            BeaconContentKey::LightClientUpdatesByRange(content_key) => {
+                let periods =
+                    content_key.start_period..(content_key.start_period + content_key.count);
+
+                let mut content: Vec<ForkVersionedLightClientUpdate> = Vec::new();
+
+                for period in periods {
+                    let result = self.lookup_lc_update_value(period).map_err(|err| {
+                        ContentStoreError::Database(format!(
+                            "Error looking up LightClientUpdate content value: {err:?}"
+                        ))
+                    })?;
+
+                    match result {
+                        Some(result) => content.push(
+                            ForkVersionedLightClientUpdate::from_ssz_bytes(result.as_slice())
+                                .map_err(|err| {
+                                    ContentStoreError::Database(format!(
+                                    "Error ssz decode ForkVersionedLightClientUpdate value: {err:?}"
+                                ))
+                                })?,
+                        ),
+                        None => return Ok(None),
+                    }
+                }
+
+                let result = VariableList::<ForkVersionedLightClientUpdate, U128>::new(content)
+                    .map_err(|err| ContentStoreError::Database(
+                        format!(
+                            "Error building VariableList from ForkVersionedLightClientUpdate data: {err:?}"
+                        ),
+                    ))?;
+
+                Ok(Some(result.as_ssz_bytes()))
+            }
+            BeaconContentKey::LightClientFinalityUpdate(_) => {
+                // TODO: Get LightClientFinalityUpdate from cache
+                Ok(None)
+            }
+            BeaconContentKey::LightClientOptimisticUpdate(_) => {
+                // TODO: Get LightClientOptimisticUpdate from cache
+                Ok(None)
+            }
+        }
+    }
+
+    fn put<K: OverlayContentKey, V: AsRef<[u8]>>(
+        &mut self,
+        key: K,
+        value: V,
+    ) -> Result<(), ContentStoreError> {
+        self.store(&key, &value.as_ref().to_vec())
+    }
+
+    /// The "radius: concept is not applicable for Beacon network
+    fn is_key_within_radius_and_unavailable<K: OverlayContentKey>(
+        &self,
+        key: &K,
+    ) -> Result<ShouldWeStoreContent, ContentStoreError> {
+        let content_key: Vec<u8> = key.clone().into();
+        let beacon_content_key =
+            BeaconContentKey::from_ssz_bytes(content_key.as_slice()).map_err(|err| {
+                ContentStoreError::InvalidData {
+                    message: format!("Error deserializing BeaconContentKey value: {err:?}"),
+                }
+            })?;
+
+        match beacon_content_key {
+            BeaconContentKey::LightClientBootstrap(_) => {
+                let key = key.content_id();
+                let is_key_available = self
+                    .lookup_content_key(key)
+                    .map_err(|err| {
+                        ContentStoreError::Database(format!(
+                            "Error looking up content key: {err:?}"
+                        ))
+                    })?
+                    .is_some();
+                if is_key_available {
+                    return Ok(ShouldWeStoreContent::AlreadyStored);
+                }
+                Ok(ShouldWeStoreContent::Store)
+            }
+            BeaconContentKey::LightClientUpdatesByRange(content_key) => {
+                // Check if any of the periods are available, return AlreadyStored if so otherwise
+                // Store
+                let periods =
+                    content_key.start_period..(content_key.start_period + content_key.count);
+
+                for period in periods {
+                    let is_period_available = self
+                        .lookup_lc_update_period(period)
+                        .map_err(|err| {
+                            ContentStoreError::Database(format!(
+                                "Error looking up lc update period: {err:?}"
+                            ))
+                        })?
+                        .is_some();
+                    if is_period_available {
+                        return Ok(ShouldWeStoreContent::AlreadyStored);
+                    }
+                }
+                Ok(ShouldWeStoreContent::Store)
+            }
+            BeaconContentKey::LightClientFinalityUpdate(_) => {
+                // TODO: Check content key availability in cache
+                Ok(ShouldWeStoreContent::AlreadyStored)
+            }
+            BeaconContentKey::LightClientOptimisticUpdate(_) => {
+                // TODO: Check content key availability in cache
+                Ok(ShouldWeStoreContent::AlreadyStored)
+            }
+        }
+    }
+
+    fn radius(&self) -> Distance {
+        Distance::MAX
+    }
+}
+
+impl BeaconStorage {
+    pub fn new(config: PortalStorageConfig) -> Result<Self, ContentStoreError> {
+        let metrics = StorageMetricsReporter {
+            storage_metrics: PORTALNET_METRICS.storage(),
+            protocol: ProtocolId::Beacon.to_string(),
+        };
+        let storage = Self {
+            node_data_dir: config.node_data_dir,
+            sql_connection_pool: config.sql_connection_pool,
+            storage_capacity_in_bytes: config.storage_capacity_mb * BYTES_IN_MB_U64,
+            metrics,
+            network: ProtocolId::Beacon,
+        };
+
+        // Report current storage capacity.
+        storage
+            .metrics
+            .report_storage_capacity_bytes(storage.storage_capacity_in_bytes as f64);
+
+        // Report current total storage usage.
+        let total_storage_usage = storage.get_total_storage_usage_in_bytes_on_disk()?;
+        storage
+            .metrics
+            .report_total_storage_usage_bytes(total_storage_usage as f64);
+
+        // Report total storage used by network content.
+        let network_content_storage_usage =
+            storage.get_total_storage_usage_in_bytes_from_network()?;
+        storage
+            .metrics
+            .report_content_data_storage_bytes(network_content_storage_usage as f64);
+
+        Ok(storage)
+    }
+
+    fn db_insert(
+        &self,
+        content_id: &[u8; 32],
+        content_key: &String,
+        value: &Vec<u8>,
+    ) -> Result<(), ContentStoreError> {
+        let conn = self.sql_connection_pool.get()?;
+        insert_value(conn, content_id, content_key, value, u8::from(self.network))
+    }
+
+    fn db_insert_lc_update(&self, period: &u64, value: &Vec<u8>) -> Result<(), ContentStoreError> {
+        let conn = self.sql_connection_pool.get()?;
+        let value_size = value.len();
+
+        match conn.execute(
+            INSERT_LC_UPDATE_QUERY,
+            params![period, value, 0, value_size],
+        ) {
+            Ok(_) => Ok(()),
+            Err(err) => Err(err.into()),
+        }
+    }
+
+    pub fn store(
+        &mut self,
+        key: &impl OverlayContentKey,
+        value: &Vec<u8>,
+    ) -> Result<(), ContentStoreError> {
+        let content_id = key.content_id();
+        let content_key: Vec<u8> = key.clone().into();
+
+        match content_key.first() {
+            Some(&LIGHT_CLIENT_BOOTSTRAP_KEY_PREFIX) => {
+                // store content key w/o the 0x prefix
+                let content_key = hex_encode(content_key).trim_start_matches("0x").to_string();
+                if let Err(err) = self.db_insert(&content_id, &content_key, value) {
+                    debug!("Error writing light client bootstrap content ID {content_id:?} to beacon network db: {err:?}");
+                    return Err(err);
+                } else {
+                    self.metrics.increase_entry_count();
+                }
+            }
+            Some(&LIGHT_CLIENT_UPDATES_BY_RANGE_KEY_PREFIX) => {
+                if let Ok(update) = BeaconContentKey::from_ssz_bytes(content_key.as_slice()) {
+                    match update {
+                        BeaconContentKey::LightClientUpdatesByRange(update) => {
+                            // Build a range of values starting with update.start_period and len
+                            // update.count
+                            let periods = update.start_period..(update.start_period + update.count);
+                            let update_values = LightClientUpdatesByRange::from_ssz_bytes(
+                                value.as_slice(),
+                            )
+                            .map_err(|err| {
+                                ContentStoreError::InvalidData {
+                                    message: format!(
+                                        "Error deserializing LightClientUpdatesByRange value: {err:?}"
+                                    ),
+                                }
+                            })?;
+
+                            for (period, value) in periods.zip(update_values.as_ref()) {
+                                if let Err(err) = self.db_insert_lc_update(&period, &value.encode())
+                                {
+                                    debug!("Error writing light client update by range content ID {content_id:?} to beacon network db: {err:?}");
+                                } else {
+                                    self.metrics.increase_entry_count();
+                                }
+                            }
+                        }
+                        _ => {
+                            // Unknown content type
+                            return Err(ContentStoreError::InvalidData {
+                                message: "Unexpected LightClientUpdatesByRange content key"
+                                    .to_string(),
+                            });
+                        }
+                    }
+                }
+            }
+            Some(&LIGHT_CLIENT_FINALITY_UPDATE_KEY_PREFIX) => {
+                // TODO: Store LightClientFinalityUpdate in cache
+            }
+            Some(&LIGHT_CLIENT_OPTIMISTIC_UPDATE_KEY_PREFIX) => {
+                // TODO: Store LightClientOptimisticUpdate in cache
+            }
+            _ => {
+                // Unknown content type
+                return Err(ContentStoreError::InvalidData {
+                    message: "Unknown beacon content key".to_string(),
+                });
+            }
+        }
+
+        let total_bytes_on_disk = self.get_total_storage_usage_in_bytes_on_disk()?;
+        self.metrics
+            .report_total_storage_usage_bytes(total_bytes_on_disk as f64);
+
+        Ok(())
+    }
+
+    pub fn paginate(
+        &self,
+        _offset: &u64,
+        _limit: &u64,
+    ) -> Result<PaginateLocalContentInfo, ContentStoreError> {
+        Err(ContentStoreError::Database(
+            "Paginate not implemented for Beacon storage".to_string(),
+        ))
+    }
+
+    /// Public method for determining how much actual disk space is being used to store this node's
+    /// Portal Network data. Intended for analysis purposes. PortalStorage's capacity
+    /// decision-making is not based off of this method.
+    pub fn get_total_storage_usage_in_bytes_on_disk(&self) -> Result<u64, ContentStoreError> {
+        let storage_usage = get_total_size_of_directory_in_bytes(&self.node_data_dir)?;
+        Ok(storage_usage)
+    }
+
+    /// Internal method for measuring the total amount of requestable data that the node is storing.
+    fn get_total_storage_usage_in_bytes_from_network(&self) -> Result<u64, ContentStoreError> {
+        let conn = self.sql_connection_pool.get()?;
+        let mut query = conn.prepare(TOTAL_DATA_SIZE_QUERY)?;
+
+        let result = query.query_map([], |row| {
+            Ok(DataSize {
+                num_bytes: row.get(0)?,
+            })
+        });
+
+        let sum = match result?.next() {
+            Some(total) => total,
+            None => {
+                let err = "Unable to compute sum over content item sizes".to_string();
+                return Err(ContentStoreError::Database(err));
+            }
+        }?
+        .num_bytes;
+
+        self.metrics.report_content_data_storage_bytes(sum);
+
+        Ok(sum as u64)
+    }
+
+    /// Public method for looking up a content key by its content id
+    pub fn lookup_content_key(&self, id: [u8; 32]) -> anyhow::Result<Option<Vec<u8>>> {
+        let conn = self.sql_connection_pool.get()?;
+        let mut query = conn.prepare(CONTENT_KEY_LOOKUP_QUERY)?;
+        let id = id.to_vec();
+        let result: Result<Vec<BeaconContentKey>, ContentStoreError> = query
+            .query_map([id], |row| {
+                let row: String = row.get(0)?;
+                Ok(row)
+            })?
+            .map(|row| {
+                // value is stored without 0x prefix, so we must add it
+                let bytes: Vec<u8> = hex_decode(&format!("0x{}", row?))?;
+                BeaconContentKey::try_from(bytes).map_err(ContentStoreError::ContentKey)
+            })
+            .collect();
+
+        match result?.first() {
+            Some(val) => Ok(Some(val.into())),
+            None => Ok(None),
+        }
+    }
+
+    /// Public method for looking up a light client update by period number
+    pub fn lookup_lc_update_period(&self, period: u64) -> anyhow::Result<Option<u64>> {
+        let conn = self.sql_connection_pool.get()?;
+        let mut query = conn.prepare(LC_UPDATE_PERIOD_LOOKUP_QUERY)?;
+
+        let rows: Result<Vec<u64>, rusqlite::Error> = query
+            .query_map([period], |row| {
+                let row: u64 = row.get(0)?;
+                Ok(row)
+            })?
+            .collect();
+
+        match rows?.first() {
+            Some(val) => Ok(Some(*val)),
+            None => Ok(None),
+        }
+    }
+
+    /// Public method for looking up a content value by its content id
+    pub fn lookup_content_value(&self, id: [u8; 32]) -> anyhow::Result<Option<Vec<u8>>> {
+        let conn = self.sql_connection_pool.get()?;
+        lookup_content_value(id, conn)?
+    }
+
+    /// Public method for looking up a  light client update value by period number
+    pub fn lookup_lc_update_value(&self, period: u64) -> anyhow::Result<Option<Vec<u8>>> {
+        let conn = self.sql_connection_pool.get()?;
+        let mut query = conn.prepare(LC_UPDATE_LOOKUP_QUERY)?;
+
+        let rows: Result<Vec<Vec<u8>>, rusqlite::Error> = query
+            .query_map([period], |row| {
+                let row: Vec<u8> = row.get(0)?;
+                Ok(row)
+            })?
+            .collect();
+
+        match rows?.first() {
+            Some(val) => Ok(Some(val.to_vec())),
+            None => Ok(None),
+        }
+    }
+
+    /// Get a summary of the current state of storage
+    pub fn get_summary_info(&self) -> String {
+        self.metrics.get_summary()
+    }
+}
+
+/// Internal method used to measure on-disk storage usage.
+fn get_total_size_of_directory_in_bytes(path: impl AsRef<Path>) -> Result<u64, ContentStoreError> {
+    let metadata = match fs::metadata(&path) {
+        Ok(metadata) => metadata,
+        Err(_) => {
+            return Ok(0);
+        }
+    };
+    let mut size = metadata.len();
+
+    if metadata.is_dir() {
+        for entry in fs::read_dir(&path)? {
+            let dir = entry?;
+            let path_string = match dir.path().into_os_string().into_string() {
+                Ok(path_string) => path_string,
+                Err(err) => {
+                    let err = format!(
+                        "Unable to convert path {:?} into string {:?}",
+                        path.as_ref(),
+                        err
+                    );
+                    return Err(ContentStoreError::Database(err));
+                }
+            };
+            size += get_total_size_of_directory_in_bytes(path_string)?;
+        }
+    }
+
+    Ok(size)
+}
+
+/// Internal method for looking up a content value by its content id
+fn lookup_content_value(
+    id: [u8; 32],
+    conn: PooledConnection<SqliteConnectionManager>,
+) -> Result<Result<Option<Vec<u8>>, Error>, Error> {
+    let mut query = conn.prepare(CONTENT_VALUE_LOOKUP_QUERY)?;
+    let id = id.to_vec();
+    let result: Result<Vec<Vec<u8>>, ContentStoreError> = query
+        .query_map([id], |row| {
+            let row: String = row.get(0)?;
+            Ok(row)
+        })?
+        .map(|row| hex_decode(row?.as_str()).map_err(ContentStoreError::ByteUtilsError))
+        .collect();
+
+    Ok(match result?.first() {
+        Some(val) => Ok(Some(val.to_vec())),
+        None => Ok(None),
+    })
+}
+
+/// Converts most significant 4 bytes of a vector to a u32.
+fn byte_vector_to_u32(vec: Vec<u8>) -> u32 {
+    if vec.len() < 4 {
+        debug!("Error: XOR returned less than 4 bytes.");
+        return 0;
+    }
+
+    let mut array: [u8; 4] = [0, 0, 0, 0];
+    for (index, byte) in vec.iter().take(4).enumerate() {
+        array[index] = *byte;
+    }
+
+    u32::from_be_bytes(array)
+}
+
+/// Inserts a content  into the database.
+fn insert_value(
+    conn: PooledConnection<SqliteConnectionManager>,
+    content_id: &[u8; 32],
+    content_key: &String,
+    value: &Vec<u8>,
+    network_id: u8,
+) -> Result<(), ContentStoreError> {
+    let content_id_as_u32: u32 = byte_vector_to_u32(content_id.to_vec());
+    let value_size = value.len();
+    if content_key.starts_with("0x") {
+        return Err(ContentStoreError::InvalidData {
+            message: "Content key should not start with 0x".to_string(),
+        });
+    }
+    match conn.execute(
+        INSERT_QUERY,
+        params![
+            content_id.to_vec(),
+            content_id_as_u32,
+            content_key,
+            hex_encode(value),
+            network_id,
+            value_size
+        ],
+    ) {
+        Ok(_) => Ok(()),
+        Err(err) => Err(err.into()),
     }
 }
 
@@ -768,6 +1194,10 @@ const INSERT_QUERY: &str =
     "INSERT OR IGNORE INTO content_data (content_id_long, content_id_short, content_key, content_value, network, content_size)
                             VALUES (?1, ?2, ?3, ?4, ?5, ?6)";
 
+const INSERT_LC_UPDATE_QUERY: &str =
+    "INSERT OR IGNORE INTO lc_update (period, value, score, update_size)
+                            VALUES (?1, ?2, ?3, ?4)";
+
 const DELETE_QUERY: &str = "DELETE FROM content_data
                             WHERE content_id_long = (?1)";
 
@@ -785,13 +1215,28 @@ const CONTENT_VALUE_LOOKUP_QUERY: &str =
 
 const TOTAL_DATA_SIZE_QUERY: &str = "SELECT TOTAL(content_size) FROM content_data";
 
-const TOTAL_ENTRY_COUNT_QUERY: &str = "SELECT COUNT(content_id_long) FROM content_data";
+const TOTAL_ENTRY_COUNT_QUERY: &str =
+    "SELECT COUNT(content_id_long) FROM content_data WHERE network = (?1)";
 
 const PAGINATE_QUERY: &str =
     "SELECT content_key FROM content_data ORDER BY content_key LIMIT :limit OFFSET :offset";
 
 const CONTENT_SIZE_LOOKUP_QUERY: &str =
     "SELECT content_size FROM content_data WHERE content_id_long = (?1)";
+
+const CREATE_LC_UPDATE_TABLE: &str = "CREATE TABLE IF NOT EXISTS lc_update (
+                                          period INTEGER PRIMARY KEY,
+                                          value BLOB NOT NULL,
+                                          score INTEGER NOT NULL,
+                                          update_size INTEGER
+                                      );
+                                     CREATE INDEX update_size_idx ON lc_update(update_size);
+                                     CREATE INDEX period_idx ON lc_update(period);";
+
+const LC_UPDATE_LOOKUP_QUERY: &str = "SELECT value FROM lc_update WHERE period = (?1) LIMIT 1";
+
+const LC_UPDATE_PERIOD_LOOKUP_QUERY: &str =
+    "SELECT period FROM lc_update WHERE period = (?1) LIMIT 1";
 
 // SQLite Result Containers
 struct ContentId {
@@ -816,8 +1261,7 @@ pub mod test {
     use serial_test::serial;
 
     use crate::utils::db::{configure_node_data_dir, setup_temp_dir};
-    use ethportal_api::types::content_key::overlay::IdentityContentKey;
-    use ethportal_api::BlockHeaderKey;
+    use ethportal_api::{types::content_key::overlay::IdentityContentKey, BlockHeaderKey};
 
     const CAPACITY_MB: u64 = 2;
 
