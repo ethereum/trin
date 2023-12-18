@@ -14,6 +14,7 @@ use tracing::{debug, error, warn};
 use crate::{
     overlay_service::{OverlayCommand, OverlayRequest, RequestDirection},
     types::node::Node,
+    utp_controller::UtpController,
 };
 use ethportal_api::{
     types::{
@@ -42,6 +43,7 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
     content: Vec<(TContentKey, Vec<u8>)>,
     kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
     command_tx: mpsc::UnboundedSender<OverlayCommand<TContentKey>>,
+    utp_controller: Option<Arc<UtpController>>,
 ) -> usize {
     // Get all connected nodes from overlay routing table
     let kbuckets = kbuckets.read();
@@ -82,6 +84,20 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
     let num_propagated_peers = enrs_and_content.len();
     // Create and send OFFER overlay request to the interested nodes
     for (enr_string, interested_content) in enrs_and_content.into_iter() {
+        let permit = match utp_controller {
+            Some(ref utp_controller) => {
+                match utp_controller
+                    .outbound_utp_transfer_semaphore
+                    .clone()
+                    .try_acquire_owned()
+                {
+                    Ok(permit) => Some(permit),
+                    Err(_) => continue,
+                }
+            }
+            None => None,
+        };
+
         let enr = match Enr::from_str(&enr_string) {
             Ok(enr) => enr,
             Err(err) => {
@@ -99,6 +115,7 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
             RequestDirection::Outgoing { destination: enr },
             None,
             None,
+            permit,
         );
 
         if let Err(err) = command_tx.send(OverlayCommand::Request(overlay_request)) {
@@ -160,6 +177,7 @@ pub async fn trace_propagate_gossip_cross_thread<TContentKey: OverlayContentKey>
                 destination: enr.clone(),
             },
             responder,
+            None,
             None,
         );
         if let Err(err) = command_tx.send(OverlayCommand::Request(overlay_request)) {

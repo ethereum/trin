@@ -20,10 +20,9 @@ use std::{
 };
 use tokio::sync::{broadcast, mpsc::UnboundedSender};
 use tracing::{debug, error, info, warn};
-use utp_rs::socket::UtpSocket;
 
 use crate::{
-    discovery::{Discovery, UtpEnr},
+    discovery::Discovery,
     find::query_info::{FindContentResult, RecursiveFindContentResult},
     gossip::{propagate_gossip_cross_thread, trace_propagate_gossip_cross_thread, GossipResult},
     overlay_service::{
@@ -31,6 +30,7 @@ use crate::{
         UTP_CONN_CFG,
     },
     types::node::Node,
+    utp_controller::UtpController,
 };
 use ethportal_api::{
     types::{
@@ -106,8 +106,8 @@ pub struct OverlayProtocol<TContentKey, TMetric, TValidator, TStore> {
     protocol: ProtocolId,
     /// A sender to send commands to the OverlayService.
     pub command_tx: UnboundedSender<OverlayCommand<TContentKey>>,
-    /// uTP socket.
-    utp_socket: Arc<UtpSocket<UtpEnr>>,
+    /// uTP controller.
+    utp_controller: Arc<UtpController>,
     /// Declare the allowed content key types for a given overlay network.
     /// Use a phantom, because we don't store any keys in this struct.
     /// For example, this type is used when decoding a content key received over the network.
@@ -132,7 +132,7 @@ where
     pub async fn new(
         config: OverlayConfig,
         discovery: Arc<Discovery>,
-        utp_socket: Arc<UtpSocket<UtpEnr>>,
+        utp_controller: Arc<UtpController>,
         store: Arc<RwLock<TStore>>,
         protocol: ProtocolId,
         validator: Arc<TValidator>,
@@ -156,7 +156,7 @@ where
             config.bootnode_enrs,
             config.ping_queue_interval,
             protocol,
-            Arc::clone(&utp_socket),
+            Arc::clone(&utp_controller),
             metrics.clone(),
             Arc::clone(&validator),
             config.query_timeout,
@@ -174,7 +174,7 @@ where
             store,
             protocol,
             command_tx,
-            utp_socket,
+            utp_controller,
             phantom_content_key: PhantomData,
             phantom_metric: PhantomData,
             validator,
@@ -234,7 +234,7 @@ where
     /// Propagate gossip accepted content via OFFER/ACCEPT, return number of peers propagated
     pub fn propagate_gossip(&self, content: Vec<(TContentKey, Vec<u8>)>) -> usize {
         let kbuckets = Arc::clone(&self.kbuckets);
-        propagate_gossip_cross_thread(content, kbuckets, self.command_tx.clone())
+        propagate_gossip_cross_thread(content, kbuckets, self.command_tx.clone(), None)
     }
 
     /// Propagate gossip accepted content via OFFER/ACCEPT, returns trace detailing outcome of
@@ -543,7 +543,7 @@ where
             peer: crate::discovery::UtpEnr(enr),
         };
         let mut stream = self
-            .utp_socket
+            .utp_controller
             .connect_with_cid(cid, *UTP_CONN_CFG)
             .await
             .map_err(|err| OverlayRequestError::UtpError(format!("{err:?}")))?;
@@ -693,7 +693,7 @@ where
         direction: RequestDirection,
     ) -> Result<Response, OverlayRequestError> {
         let (tx, rx) = oneshot::channel();
-        let overlay_request = OverlayRequest::new(request, direction, Some(tx), None);
+        let overlay_request = OverlayRequest::new(request, direction, Some(tx), None, None);
         if let Err(error) = self
             .command_tx
             .send(OverlayCommand::Request(overlay_request))
