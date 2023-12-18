@@ -68,6 +68,9 @@ pub fn u64_deserialize<'de, D>(deserializer: D) -> Result<u64, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
+    use serde::de::{Error, Unexpected};
+
     let val: String = serde::Deserialize::deserialize(deserializer)?;
-    Ok(val.parse().unwrap())
+    val.parse()
+        .map_err(|_| Error::invalid_value(Unexpected::Str(&val), &"valid u64"))
 }

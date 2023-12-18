@@ -18,7 +18,13 @@ pub struct Node<R: ConsensusRpc> {
 impl<R: ConsensusRpc> Node<R> {
     pub fn new(config: Arc<Config>) -> Result<Self, NodeError> {
         let consensus_rpc = &config.consensus_rpc;
-        let checkpoint_hash = &config.checkpoint.as_ref().unwrap();
+        let checkpoint_hash =
+            &config
+                .checkpoint
+                .as_ref()
+                .ok_or(NodeError::ConsensusClientCreationError(eyre::Report::msg(
+                    "`config.checkpoint` is None",
+                )))?;
 
         let consensus = ConsensusLightClient::new(consensus_rpc, checkpoint_hash, config.clone())
             .map_err(NodeError::ConsensusClientCreationError)?;
@@ -27,7 +33,13 @@ impl<R: ConsensusRpc> Node<R> {
     }
 
     pub fn with_portal(config: Arc<Config>, portal_rpc: R) -> Result<Self, NodeError> {
-        let checkpoint_hash = &config.checkpoint.as_ref().unwrap();
+        let checkpoint_hash =
+            &config
+                .checkpoint
+                .as_ref()
+                .ok_or(NodeError::ConsensusClientCreationError(eyre::Report::msg(
+                    "`config.checkpoint` is None",
+                )))?;
 
         let consensus =
             ConsensusLightClient::with_custom_rpc(portal_rpc, checkpoint_hash, config.clone());
@@ -58,7 +70,7 @@ impl<R: ConsensusRpc> Node<R> {
         self.consensus
             .duration_until_next_update()
             .to_std()
-            .unwrap()
+            .expect("`duration_until_next_update` gives always positive duration")
     }
 
     pub fn chain_id(&self) -> u64 {

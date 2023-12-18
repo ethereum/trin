@@ -31,7 +31,14 @@ impl CliConfig {
             user_dict.insert("rpc_port", Value::from(port));
         }
 
-        user_dict.insert("data_dir", Value::from(self.data_dir.to_str().unwrap()));
+        user_dict.insert(
+            "data_dir",
+            Value::from(
+                self.data_dir
+                    .to_str()
+                    .expect("data dir path must be a valid UTF-8 str"),
+            ),
+        );
 
         if let Some(fallback) = &self.fallback {
             user_dict.insert("fallback", Value::from(fallback.clone()));

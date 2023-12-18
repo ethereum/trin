@@ -1,9 +1,14 @@
+use serde::de::{Error, Unexpected};
+
+const EXPECTED_HEXSTR_MSG: &str = "`0x` prefixed valid hex str";
+
 pub fn bytes_deserialize<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
     let bytes: String = serde::Deserialize::deserialize(deserializer)?;
-    Ok(hex_str_to_bytes(&bytes).unwrap())
+    hex_str_to_bytes(&bytes)
+        .map_err(|_| Error::invalid_value(Unexpected::Str(&bytes), &EXPECTED_HEXSTR_MSG))
 }
 
 pub fn bytes_serialize<S>(bytes: &Vec<u8>, serializer: S) -> Result<S::Ok, S::Error>
@@ -20,7 +25,13 @@ where
 {
     let bytes_opt: Option<String> = serde::Deserialize::deserialize(deserializer)?;
     if let Some(bytes) = bytes_opt {
-        Ok(Some(hex_str_to_bytes(&bytes).unwrap()))
+        match hex_str_to_bytes(&bytes) {
+            Ok(value) => Ok(Some(value)),
+            Err(_) => Err(Error::invalid_value(
+                Unexpected::Str(&bytes),
+                &EXPECTED_HEXSTR_MSG,
+            )),
+        }
     } else {
         Ok(None)
     }

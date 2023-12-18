@@ -1,4 +1,5 @@
 #![warn(clippy::uninlined_format_args)]
+#![warn(clippy::unwrap_used)]
 mod client;
 pub use crate::client::*;
 

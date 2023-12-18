@@ -177,7 +177,7 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
             let mut updates = self.rpc.get_updates(current_period, 1).await?;
 
             if updates.len() == 1 {
-                let update = updates.get_mut(0).unwrap();
+                let update = updates.get_mut(0).expect("vec must have one element");
                 let res = self.verify_update(update);
 
                 if res.is_ok() {
@@ -280,8 +280,14 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
         if update.finalized_header.is_some() && update.finality_branch.is_some() {
             let is_valid = is_finality_proof_valid(
                 &update.attested_header,
-                &mut update.finalized_header.clone().unwrap(),
-                &update.finality_branch.clone().unwrap(),
+                &mut update
+                    .finalized_header
+                    .clone()
+                    .expect("we know that this is `Some`"),
+                &update
+                    .finality_branch
+                    .clone()
+                    .expect("we know that this is `Some`"),
             );
 
             if !is_valid {
@@ -292,8 +298,14 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
         if update.next_sync_committee.is_some() && update.next_sync_committee_branch.is_some() {
             let is_valid = is_next_committee_proof_valid(
                 &update.attested_header,
-                &mut update.next_sync_committee.clone().unwrap(),
-                &update.next_sync_committee_branch.clone().unwrap(),
+                &mut update
+                    .next_sync_committee
+                    .clone()
+                    .expect("we know that this is `Some`"),
+                &update
+                    .next_sync_committee_branch
+                    .clone()
+                    .expect("we know that this is `Some`"),
             );
 
             if !is_valid {
@@ -304,7 +316,10 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
         let sync_committee = if update_sig_period == store_period {
             &self.store.current_sync_committee
         } else {
-            self.store.next_sync_committee.as_ref().unwrap()
+            self.store
+                .next_sync_committee
+                .as_ref()
+                .expect("we know that this is `Some` because we are in `valid_period`")
         };
 
         let pks =
@@ -385,7 +400,11 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
                 self.store.next_sync_committee = update.next_sync_committee.clone();
             } else if update_finalized_period == store_period + 1 {
                 info!("sync committee updated");
-                self.store.current_sync_committee = self.store.next_sync_committee.clone().unwrap();
+                self.store.current_sync_committee = self
+                    .store
+                    .next_sync_committee
+                    .clone()
+                    .expect("we know that this is `Some`");
                 self.store.next_sync_committee = update.next_sync_committee.clone();
                 self.store.previous_max_active_participants =
                     self.store.current_max_active_participants;
@@ -393,7 +412,11 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
             }
 
             if update_finalized_slot > self.store.finalized_header.slot {
-                self.store.finalized_header = update.finalized_header.as_ref().unwrap().clone();
+                self.store.finalized_header = update
+                    .finalized_header
+                    .as_ref()
+                    .expect("`update_finalized_slot` > 0, so it's expected to exist")
+                    .clone();
                 self.log_finality_update(update);
 
                 if self.store.finalized_header.slot % 32 == 0 {
@@ -495,8 +518,7 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
     }
 
     fn compute_committee_sign_root(&self, header: Bytes32, slot: u64) -> Result<Node> {
-        let genesis_root = self.config.chain.genesis_root.to_vec().try_into().unwrap();
-
+        let genesis_root = self.config.chain.genesis_root.to_vec().try_into()?;
         let domain_type = &hex::decode("07000000")?[..];
         let fork_version = Vector::from_iter(self.config.fork_version(slot));
         let domain = compute_domain(domain_type, fork_version, genesis_root)?;
@@ -505,13 +527,18 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
 
     fn age(&self, slot: u64) -> Duration {
         let expected_time = self.slot_timestamp(slot);
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("`now` is ahead of `UNIX_EPOCH`");
         let delay = now - std::time::Duration::from_secs(expected_time);
-        chrono::Duration::from_std(delay).unwrap()
+        chrono::Duration::from_std(delay)
+            .expect("it's safe to assume that `delay` fits into a `chrono::Duration`")
     }
 
     pub fn expected_current_slot(&self) -> u64 {
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("`now` is ahead of `UNIX_EPOCH`");
         let genesis_time = self.config.chain.genesis_time;
         let since_genesis = now - std::time::Duration::from_secs(genesis_time);
 
@@ -531,7 +558,7 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
 
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("`now` is ahead of `UNIX_EPOCH`")
             .as_secs();
 
         let time_to_next_slot = next_slot_timestamp - now;
