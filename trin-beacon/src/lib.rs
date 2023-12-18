@@ -15,7 +15,6 @@ use tokio::{
     time::{interval, Duration},
 };
 use tracing::info;
-use utp_rs::socket::UtpSocket;
 
 use crate::network::BeaconNetwork;
 use crate::{events::BeaconEvents, jsonrpc::BeaconRequestHandler};
@@ -23,9 +22,10 @@ use ethportal_api::types::enr::Enr;
 use ethportal_api::types::jsonrpc::request::BeaconJsonRpcRequest;
 use portalnet::{
     config::PortalnetConfig,
-    discovery::{Discovery, UtpEnr},
+    discovery::Discovery,
     events::{EventEnvelope, OverlayRequest},
     storage::PortalStorageConfig,
+    utp_controller::UtpController,
 };
 use trin_validation::oracle::HeaderOracle;
 
@@ -37,7 +37,7 @@ type BeaconEventStream = Option<broadcast::Receiver<EventEnvelope>>;
 
 pub async fn initialize_beacon_network(
     discovery: &Arc<Discovery>,
-    utp_socket: Arc<UtpSocket<UtpEnr>>,
+    utp_controller: Arc<UtpController>,
 
     portalnet_config: PortalnetConfig,
     storage_config: PortalStorageConfig,
@@ -54,7 +54,7 @@ pub async fn initialize_beacon_network(
     let (beacon_message_tx, beacon_message_rx) = mpsc::unbounded_channel::<OverlayRequest>();
     let beacon_network = BeaconNetwork::new(
         Arc::clone(discovery),
-        utp_socket,
+        utp_controller,
         storage_config,
         portalnet_config.clone(),
         header_oracle,

@@ -3,6 +3,7 @@ use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
 use discv5::TalkRequest;
 use parking_lot::RwLock;
+use portalnet::utp_controller::UtpController;
 use tokio::{
     sync::{mpsc, mpsc::unbounded_channel},
     time::{self, Duration},
@@ -36,14 +37,15 @@ async fn init_overlay(
     let (_utp_talk_req_tx, utp_talk_req_rx) = unbounded_channel();
     let discv5_utp = Discv5UdpSocket::new(Arc::clone(&discovery), utp_talk_req_rx);
     let utp_socket = UtpSocket::with_socket(discv5_utp);
-    let utp_socket = Arc::new(utp_socket);
+    let utp_controller = UtpController::new(100, 100, utp_socket);
+    let utp_controller = Arc::new(utp_controller);
 
     let validator = Arc::new(MockValidator {});
 
     OverlayProtocol::new(
         overlay_config,
         discovery,
-        utp_socket,
+        utp_controller,
         store,
         protocol,
         validator,

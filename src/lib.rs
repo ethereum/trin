@@ -3,6 +3,7 @@
 
 use std::sync::Arc;
 
+use portalnet::utp_controller::UtpController;
 use rpc::{launch_jsonrpc_server, RpcServerHandle};
 use tokio::sync::mpsc;
 use tokio::sync::RwLock;
@@ -62,7 +63,12 @@ pub async fn run_trin(
     let (utp_talk_reqs_tx, utp_talk_reqs_rx) = mpsc::unbounded_channel();
     let discv5_utp_socket = Discv5UdpSocket::new(Arc::clone(&discovery), utp_talk_reqs_rx);
     let utp_socket = UtpSocket::with_socket(discv5_utp_socket);
-    let utp_socket = Arc::new(utp_socket);
+    let utp_controller = UtpController::new(
+        trin_config.inbound_utp_transfer_limit,
+        trin_config.outbound_utp_transfer_limit,
+        utp_socket,
+    );
+    let utp_controller = Arc::new(utp_controller);
 
     let storage_config = PortalStorageConfig::new(
         trin_config.mb.into(),
@@ -84,7 +90,7 @@ pub async fn run_trin(
         if trin_config.networks.iter().any(|val| val == STATE_NETWORK) {
             initialize_state_network(
                 &discovery,
-                Arc::clone(&utp_socket),
+                Arc::clone(&utp_controller),
                 portalnet_config.clone(),
                 storage_config.clone(),
                 header_oracle.clone(),
@@ -104,7 +110,7 @@ pub async fn run_trin(
     ) = if trin_config.networks.iter().any(|val| val == BEACON_NETWORK) {
         initialize_beacon_network(
             &discovery,
-            Arc::clone(&utp_socket),
+            Arc::clone(&utp_controller),
             portalnet_config.clone(),
             storage_config.clone(),
             header_oracle.clone(),
@@ -128,7 +134,7 @@ pub async fn run_trin(
     {
         initialize_history_network(
             &discovery,
-            utp_socket,
+            utp_controller,
             portalnet_config.clone(),
             storage_config.clone(),
             header_oracle.clone(),

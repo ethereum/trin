@@ -9,16 +9,16 @@ use tokio::{
     task::JoinHandle,
 };
 use tracing::info;
-use utp_rs::socket::UtpSocket;
 
 use crate::{events::StateEvents, jsonrpc::StateRequestHandler};
 use ethportal_api::types::enr::Enr;
 use ethportal_api::types::jsonrpc::request::StateJsonRpcRequest;
 use portalnet::{
     config::PortalnetConfig,
-    discovery::{Discovery, UtpEnr},
+    discovery::Discovery,
     events::{EventEnvelope, OverlayRequest},
     storage::PortalStorageConfig,
+    utp_controller::UtpController,
 };
 use trin_validation::oracle::HeaderOracle;
 
@@ -37,7 +37,7 @@ type StateEventStream = Option<broadcast::Receiver<EventEnvelope>>;
 
 pub async fn initialize_state_network(
     discovery: &Arc<Discovery>,
-    utp_socket: Arc<UtpSocket<UtpEnr>>,
+    utp_controller: Arc<UtpController>,
     portalnet_config: PortalnetConfig,
     storage_config: PortalStorageConfig,
     header_oracle: Arc<RwLock<HeaderOracle>>,
@@ -52,7 +52,7 @@ pub async fn initialize_state_network(
     let (state_event_tx, state_event_rx) = mpsc::unbounded_channel::<OverlayRequest>();
     let state_network = StateNetwork::new(
         Arc::clone(discovery),
-        utp_socket,
+        utp_controller,
         storage_config,
         portalnet_config.clone(),
         header_oracle,

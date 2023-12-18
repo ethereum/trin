@@ -12,6 +12,8 @@ pub const DEFAULT_WEB3_HTTP_ADDRESS: &str = "http://127.0.0.1:8545/";
 pub const DEFAULT_WEB3_HTTP_PORT: u16 = 8545;
 pub const DEFAULT_WEB3_WS_PORT: u16 = 8546;
 pub const DEFAULT_DISCOVERY_PORT: u16 = 9009;
+pub const DEFAULT_INBOUND_UTP_TRANSFER_LIMIT: usize = 50;
+pub const DEFAULT_OUTBOUND_UTP_TRANSFER_LIMIT: usize = 50;
 pub const BEACON_NETWORK: &str = "beacon";
 pub const HISTORY_NETWORK: &str = "history";
 pub const STATE_NETWORK: &str = "state";
@@ -178,6 +180,20 @@ pub struct TrinConfig {
     )]
     pub ws_port: u16,
 
+    #[arg(
+        long = "inbound-utp-transfer-limit", 
+        help = "The limit of inbound uTP transfers", 
+        default_value_t = DEFAULT_INBOUND_UTP_TRANSFER_LIMIT,
+    )]
+    pub inbound_utp_transfer_limit: usize,
+
+    #[arg(
+        long = "outbound-utp-transfer-limit", 
+        help = "The limit of outbound uTP transfers", 
+        default_value_t = DEFAULT_OUTBOUND_UTP_TRANSFER_LIMIT,
+    )]
+    pub outbound_utp_transfer_limit: usize,
+
     #[command(subcommand)]
     pub command: Option<TrinConfigCommands>,
 }
@@ -211,6 +227,8 @@ impl Default for TrinConfig {
             ws: false,
             ws_port: DEFAULT_WEB3_WS_PORT,
             command: None,
+            inbound_utp_transfer_limit: DEFAULT_INBOUND_UTP_TRANSFER_LIMIT,
+            outbound_utp_transfer_limit: DEFAULT_OUTBOUND_UTP_TRANSFER_LIMIT,
         }
     }
 }

@@ -96,6 +96,7 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
             RequestDirection::Outgoing { destination: enr },
             None,
             None,
+            None,
         );
 
         if let Err(err) = command_tx.send(OverlayCommand::Request(overlay_request)) {
@@ -157,6 +158,7 @@ pub async fn trace_propagate_gossip_cross_thread<TContentKey: OverlayContentKey>
                 destination: enr.clone(),
             },
             responder,
+            None,
             None,
         );
         if let Err(err) = command_tx.send(OverlayCommand::Request(overlay_request)) {

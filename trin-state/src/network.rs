@@ -3,7 +3,6 @@ use std::sync::Arc;
 use eth_trie::EthTrie;
 use parking_lot::RwLock as PLRwLock;
 use tokio::sync::RwLock;
-use utp_rs::socket::UtpSocket;
 
 use ethportal_api::types::distance::XorMetric;
 use ethportal_api::types::enr::Enr;
@@ -11,9 +10,10 @@ use ethportal_api::types::portal_wire::ProtocolId;
 use ethportal_api::StateContentKey;
 use portalnet::{
     config::PortalnetConfig,
-    discovery::{Discovery, UtpEnr},
+    discovery::Discovery,
     overlay::{OverlayConfig, OverlayProtocol},
     storage::{PortalStorage, PortalStorageConfig},
+    utp_controller::UtpController,
 };
 use trin_validation::oracle::HeaderOracle;
 
@@ -29,7 +29,7 @@ pub struct StateNetwork {
 impl StateNetwork {
     pub async fn new(
         discovery: Arc<Discovery>,
-        utp_socket: Arc<UtpSocket<UtpEnr>>,
+        utp_controller: Arc<UtpController>,
         storage_config: PortalStorageConfig,
         portal_config: PortalnetConfig,
         header_oracle: Arc<RwLock<HeaderOracle>>,
@@ -50,7 +50,7 @@ impl StateNetwork {
         let overlay = OverlayProtocol::new(
             config,
             discovery,
-            utp_socket,
+            utp_controller,
             storage,
             ProtocolId::State,
             validator,
