@@ -1,5 +1,6 @@
 use bytes::Bytes;
 use ethereum_types::{H160, H256, U256, U64};
+use reth_primitives;
 use rlp::{Decodable, DecoderError, Encodable, Rlp, RlpStream};
 use rlp_derive::{RlpDecodable, RlpEncodable};
 use serde::{Deserialize, Deserializer};
@@ -19,6 +20,15 @@ impl Transaction {
     /// Returns the Keccak-256 hash of the header.
     pub fn hash(&self) -> H256 {
         keccak_hash::keccak(self.encode())
+    }
+
+    pub fn type_id(&self) -> u8 {
+        let txn_id = match self {
+            Self::Legacy(_) => TransactionId::Legacy,
+            Self::AccessList(_) => TransactionId::AccessList,
+            Self::EIP1559(_) => TransactionId::EIP1559,
+        };
+        txn_id as u8
     }
 
     pub fn decode(tx: &[u8]) -> Result<Self, DecoderError> {
@@ -90,6 +100,24 @@ impl<'de> Deserialize<'de> for Transaction {
     }
 }
 
+impl From<Transaction> for reth_primitives::TransactionSigned {
+    fn from(tx: Transaction) -> Self {
+        let (core_tx, signature) = match tx {
+            Transaction::Legacy(tx) => {
+                let signature = reth_primitives::Signature {
+                    v: tx.v,
+                    r: tx.r.into(),
+                    s: tx.s.into(),
+                };
+                (reth_primitives::Transaction::Legacy(tx.into()), signature)
+            }
+            Transaction::AccessList(tx) => Self::Eip2930(tx.into()),
+            Transaction::EIP1559(tx) => Self::Eip1559(tx.into()),
+        };
+        Self::from_transaction_and_signature(core_tx, signature)
+    }
+}
+
 #[derive(Default, Debug, Clone, PartialEq, Eq, RlpEncodable, RlpDecodable)]
 pub struct LegacyTransaction {
     pub nonce: U256,
@@ -101,6 +129,23 @@ pub struct LegacyTransaction {
     pub v: U64,
     pub r: U256,
     pub s: U256,
+}
+
+impl From<LegacyTransaction> for reth_primitives::TxLegacy {
+    fn from(tx: LegacyTransaction) -> Self {
+        let to = match tx.to {
+            ToAddress::Empty => reth_primitives::TransactionKind::Create,
+            ToAddress::Exists(addr) => reth_primitives::TransactionKind::Call(addr.into()),
+        };
+        Self {
+            nonce: tx.nonce.as_u64(),
+            gas_price: tx.gas_price.as_u128(),
+            gas_limit: tx.gas.as_u64(),
+            to,
+            value: tx.value.as_u128(),
+            input: tx.data.into(),
+        }
+    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -140,7 +185,7 @@ pub struct AccessListTransaction {
     pub chain_id: U256,
     pub nonce: U256,
     pub gas_price: U256,
-    pub gas_limit: U256,
+    pub gas: U256,
     pub to: ToAddress,
     pub value: U256,
     pub data: Bytes,
@@ -156,8 +201,7 @@ struct AccessListTransactionHelper {
     pub chain_id: U256,
     pub nonce: U256,
     pub gas_price: U256,
-    #[serde(rename(deserialize = "gas"))]
-    pub gas_limit: U256,
+    pub gas: U256,
     pub to: ToAddress,
     pub value: U256,
     #[serde(rename(deserialize = "input"))]
@@ -176,7 +220,7 @@ impl Into<AccessListTransaction> for AccessListTransactionHelper {
             chain_id: self.chain_id,
             nonce: self.nonce,
             gas_price: self.gas_price,
-            gas_limit: self.gas_limit,
+            gas: self.gas,
             to: self.to,
             value: self.value,
             data: self.data.0,
@@ -196,7 +240,7 @@ pub struct EIP1559Transaction {
     pub nonce: U256,
     pub max_priority_fee_per_gas: U256,
     pub max_fee_per_gas: U256,
-    pub gas_limit: U256,
+    pub gas: U256,
     pub to: ToAddress,
     pub value: U256,
     pub data: Bytes,
@@ -213,8 +257,7 @@ struct EIP1559TransactionHelper {
     pub nonce: U256,
     pub max_priority_fee_per_gas: U256,
     pub max_fee_per_gas: U256,
-    #[serde(rename(deserialize = "gas"))]
-    pub gas_limit: U256,
+    pub gas: U256,
     pub to: ToAddress,
     pub value: U256,
     #[serde(rename(deserialize = "input"))]
@@ -234,7 +277,7 @@ impl Into<EIP1559Transaction> for EIP1559TransactionHelper {
             nonce: self.nonce,
             max_priority_fee_per_gas: self.max_priority_fee_per_gas,
             max_fee_per_gas: self.max_fee_per_gas,
-            gas_limit: self.gas_limit,
+            gas: self.gas,
             to: self.to,
             value: self.value,
             data: self.data.0,
@@ -345,4 +388,13 @@ impl Encodable for AccessList {
 pub struct AccessListItem {
     pub address: H160,
     pub storage_keys: Vec<H256>,
+}
+
+impl From<AccessListItem> for reth_primitives::AccessListItem {
+    fn from(val: AccessListItem) -> Self {
+        Self {
+            address: val.address.into(),
+            storage_keys: val.storage_keys.into_iter().map(Into::into).collect(),
+        }
+    }
 }

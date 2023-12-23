@@ -30,6 +30,7 @@ nanotemplate = "0.3.0"
 quickcheck = "1.0.3"
 rand = "0.8.5"
 reth-rpc-types = { tag = "v0.1.0-alpha.10", git = "https://github.com/paradigmxyz/reth.git"}
+reth-primitives = { tag = "v0.1.0-alpha.10", git = "https://github.com/paradigmxyz/reth.git"}
 rlp = "0.5.0"
 rlp-derive = "0.1.0"
 ruint = { version = "1.9.0", features = ["primitive-types"] }
