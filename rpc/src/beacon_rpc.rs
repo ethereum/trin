@@ -1,21 +1,20 @@
-use crate::errors::RpcServeError;
-use crate::serde::from_value;
+use crate::{errors::RpcServeError, serde::from_value};
 
 use crate::jsonrpsee::core::{async_trait, RpcResult};
 use discv5::enr::NodeId;
-use ethportal_api::types::constants::CONTENT_ABSENT;
-use ethportal_api::types::enr::Enr;
-use ethportal_api::types::jsonrpc::endpoints::BeaconEndpoint;
-use ethportal_api::types::jsonrpc::request::BeaconJsonRpcRequest;
-use ethportal_api::types::portal::{
-    AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
-    TraceContentInfo, TraceGossipInfo,
+use ethportal_api::{
+    types::{
+        constants::CONTENT_ABSENT,
+        enr::Enr,
+        jsonrpc::{endpoints::BeaconEndpoint, request::BeaconJsonRpcRequest},
+        portal::{
+            AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
+            TraceContentInfo, TraceGossipInfo,
+        },
+    },
+    BeaconContentKey, BeaconContentValue, BeaconNetworkApiServer, PossibleBeaconContentValue,
+    RoutingTableInfo,
 };
-use ethportal_api::BeaconContentKey;
-use ethportal_api::BeaconContentValue;
-use ethportal_api::BeaconNetworkApiServer;
-use ethportal_api::PossibleBeaconContentValue;
-use ethportal_api::RoutingTableInfo;
 use serde_json::Value;
 use tokio::sync::mpsc;
 

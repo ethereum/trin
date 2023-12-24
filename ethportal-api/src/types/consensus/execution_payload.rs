@@ -1,7 +1,8 @@
 use super::serde::{de_hex_to_txs, de_number_to_u256, se_hex_to_number, se_txs_to_hex};
-use crate::types::consensus::body::Transactions;
-use crate::types::consensus::fork::ForkName;
-use crate::utils::serde::{hex_fixed_vec, hex_var_list};
+use crate::{
+    types::consensus::{body::Transactions, fork::ForkName},
+    utils::serde::{hex_fixed_vec, hex_var_list},
+};
 use ethereum_types::{H160, H256, U256};
 use serde::{Deserialize, Serialize};
 use serde_this_or_that::as_u64;

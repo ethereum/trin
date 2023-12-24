@@ -2,9 +2,7 @@ use std::net::SocketAddr;
 
 use ethereum_types::H256;
 
-use ethportal_api::types::bootnodes::Bootnodes;
-use ethportal_api::types::cli::TrinConfig;
-use ethportal_api::types::distance::Distance;
+use ethportal_api::types::{bootnodes::Bootnodes, cli::TrinConfig, distance::Distance};
 
 /// Capacity of the cache for observed `NodeAddress` values.
 /// Provides capacity for 32 full k-buckets. This capacity will be shared among all active portal

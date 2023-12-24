@@ -16,12 +16,17 @@ use crate::{
     constants::{EPOCH_SIZE, MERGE_BLOCK_NUMBER},
     merkle::proof::{verify_merkle_proof, MerkleTree},
 };
-use ethportal_api::types::execution::accumulator::EpochAccumulator;
-use ethportal_api::types::execution::header::{BlockHeaderProof, Header, HeaderWithProof};
-use ethportal_api::types::jsonrpc::endpoints::HistoryEndpoint;
-use ethportal_api::types::jsonrpc::request::HistoryJsonRpcRequest;
-use ethportal_api::utils::bytes::hex_decode;
-use ethportal_api::{EpochAccumulatorKey, HistoryContentKey};
+use ethportal_api::{
+    types::{
+        execution::{
+            accumulator::EpochAccumulator,
+            header::{BlockHeaderProof, Header, HeaderWithProof},
+        },
+        jsonrpc::{endpoints::HistoryEndpoint, request::HistoryJsonRpcRequest},
+    },
+    utils::bytes::hex_decode,
+    EpochAccumulatorKey, HistoryContentKey,
+};
 
 /// SSZ List[Hash256, max_length = MAX_HISTORICAL_EPOCHS]
 /// List of historical epoch accumulator merkle roots preceding current epoch.
@@ -239,8 +244,7 @@ fn calculate_generalized_index(header: &Header) -> usize {
 #[allow(clippy::unwrap_used)]
 mod test {
     use super::*;
-    use std::fs;
-    use std::str::FromStr;
+    use std::{fs, str::FromStr};
 
     use ethereum_types::{Bloom, H160, U256};
     use rstest::*;
@@ -248,10 +252,10 @@ mod test {
     use ssz::Decode;
 
     use crate::constants::DEFAULT_MASTER_ACC_HASH;
-    use ethportal_api::types::execution::header::{
-        AccumulatorProof, BlockHeaderProof, HeaderWithProof, SszNone,
+    use ethportal_api::{
+        types::execution::header::{AccumulatorProof, BlockHeaderProof, HeaderWithProof, SszNone},
+        utils::bytes::hex_encode,
     };
-    use ethportal_api::utils::bytes::hex_encode;
 
     #[rstest]
     #[case(1_000_001)]

@@ -1,21 +1,20 @@
-use crate::fetch::proxy_query_to_history_subnet;
-use crate::serde::from_value;
+use crate::{fetch::proxy_query_to_history_subnet, serde::from_value};
 
 use crate::jsonrpsee::core::{async_trait, RpcResult};
 use discv5::enr::NodeId;
-use ethportal_api::types::constants::CONTENT_ABSENT;
-use ethportal_api::types::enr::Enr;
-use ethportal_api::types::jsonrpc::endpoints::HistoryEndpoint;
-use ethportal_api::types::jsonrpc::request::HistoryJsonRpcRequest;
-use ethportal_api::types::portal::{
-    AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
-    TraceContentInfo, TraceGossipInfo,
+use ethportal_api::{
+    types::{
+        constants::CONTENT_ABSENT,
+        enr::Enr,
+        jsonrpc::{endpoints::HistoryEndpoint, request::HistoryJsonRpcRequest},
+        portal::{
+            AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
+            TraceContentInfo, TraceGossipInfo,
+        },
+    },
+    HistoryContentKey, HistoryContentValue, HistoryNetworkApiServer, PossibleHistoryContentValue,
+    RoutingTableInfo,
 };
-use ethportal_api::HistoryContentKey;
-use ethportal_api::HistoryContentValue;
-use ethportal_api::HistoryNetworkApiServer;
-use ethportal_api::PossibleHistoryContentValue;
-use ethportal_api::RoutingTableInfo;
 use tokio::sync::mpsc;
 
 pub struct HistoryNetworkApi {

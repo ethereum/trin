@@ -1,14 +1,16 @@
 use ethereum_types::H256;
-pub use ethportal_api::consensus::body::SyncAggregate;
-use ethportal_api::consensus::header::BeaconBlockHeader;
-pub use ethportal_api::consensus::sync_committee::SyncCommittee;
-use ethportal_api::light_client::bootstrap::CurrentSyncCommitteeProofLen;
-pub use ethportal_api::light_client::bootstrap::LightClientBootstrapCapella;
-pub use ethportal_api::light_client::finality_update::LightClientFinalityUpdateCapella;
-pub use ethportal_api::light_client::header::LightClientHeaderCapella;
-pub use ethportal_api::light_client::optimistic_update::LightClientOptimisticUpdateCapella;
-use ethportal_api::light_client::update::FinalizedRootProofLen;
-pub use ethportal_api::light_client::update::LightClientUpdateCapella;
+use ethportal_api::{
+    consensus::header::BeaconBlockHeader,
+    light_client::{bootstrap::CurrentSyncCommitteeProofLen, update::FinalizedRootProofLen},
+};
+pub use ethportal_api::{
+    consensus::{body::SyncAggregate, sync_committee::SyncCommittee},
+    light_client::{
+        bootstrap::LightClientBootstrapCapella, finality_update::LightClientFinalityUpdateCapella,
+        header::LightClientHeaderCapella, optimistic_update::LightClientOptimisticUpdateCapella,
+        update::LightClientUpdateCapella,
+    },
+};
 use eyre::Result;
 use ssz_types::FixedVector;
 

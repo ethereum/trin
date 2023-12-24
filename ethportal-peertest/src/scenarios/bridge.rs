@@ -1,21 +1,22 @@
-use crate::constants::fixture_header_with_proof_1000010;
-use crate::utils::{wait_for_beacon_content, wait_for_history_content};
-use crate::Peertest;
-use ethportal_api::jsonrpsee::http_client::HttpClient;
-use ethportal_api::{
-    BeaconContentKey, BeaconContentValue, PossibleBeaconContentValue, PossibleHistoryContentValue,
+use crate::{
+    constants::fixture_header_with_proof_1000010,
+    utils::{wait_for_beacon_content, wait_for_history_content},
+    Peertest,
 };
-use portal_bridge::api::consensus::ConsensusApi;
-use portal_bridge::api::execution::ExecutionApi;
-use portal_bridge::bridge::beacon::BeaconBridge;
-use portal_bridge::bridge::history::HistoryBridge;
-use portal_bridge::pandaops::PandaOpsMiddleware;
-use portal_bridge::types::mode::BridgeMode;
+use ethportal_api::{
+    jsonrpsee::http_client::HttpClient, BeaconContentKey, BeaconContentValue,
+    PossibleBeaconContentValue, PossibleHistoryContentValue,
+};
+use portal_bridge::{
+    api::{consensus::ConsensusApi, execution::ExecutionApi},
+    bridge::{beacon::BeaconBridge, history::HistoryBridge},
+    pandaops::PandaOpsMiddleware,
+    types::mode::BridgeMode,
+};
 use serde_json::Value;
 use std::sync::Arc;
 use tokio::time::{sleep, Duration};
-use trin_validation::accumulator::MasterAccumulator;
-use trin_validation::oracle::HeaderOracle;
+use trin_validation::{accumulator::MasterAccumulator, oracle::HeaderOracle};
 
 pub async fn test_history_bridge(peertest: &Peertest, target: &HttpClient) {
     let master_acc = MasterAccumulator::default();

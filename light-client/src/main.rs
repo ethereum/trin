@@ -1,8 +1,8 @@
 use eyre::Result;
-use light_client::config::networks;
-use light_client::consensus::rpc::nimbus_rpc::NimbusRpc;
-use light_client::database::FileDB;
-use light_client::{Client, ClientBuilder};
+use light_client::{
+    config::networks, consensus::rpc::nimbus_rpc::NimbusRpc, database::FileDB, Client,
+    ClientBuilder,
+};
 use std::path::PathBuf;
 use tracing::info;
 

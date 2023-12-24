@@ -1,16 +1,18 @@
 use crate::consensus::rpc::ConsensusRpc;
 use async_trait::async_trait;
-use ethportal_api::consensus::light_client::bootstrap::LightClientBootstrap;
-use ethportal_api::light_client::bootstrap::LightClientBootstrapCapella;
-use ethportal_api::light_client::finality_update::LightClientFinalityUpdateCapella;
-use ethportal_api::light_client::optimistic_update::LightClientOptimisticUpdateCapella;
-use ethportal_api::light_client::update::LightClientUpdateCapella;
-use ethportal_api::types::consensus::light_client::finality_update::LightClientFinalityUpdate;
-use ethportal_api::types::consensus::light_client::optimistic_update::LightClientOptimisticUpdate;
-use ethportal_api::types::consensus::light_client::update::LightClientUpdate;
-use ethportal_api::types::content_key::beacon::LightClientFinalityUpdateKey;
-use ethportal_api::types::content_key::beacon::LightClientOptimisticUpdateKey;
 use ethportal_api::{
+    consensus::light_client::bootstrap::LightClientBootstrap,
+    light_client::{
+        bootstrap::LightClientBootstrapCapella, finality_update::LightClientFinalityUpdateCapella,
+        optimistic_update::LightClientOptimisticUpdateCapella, update::LightClientUpdateCapella,
+    },
+    types::{
+        consensus::light_client::{
+            finality_update::LightClientFinalityUpdate,
+            optimistic_update::LightClientOptimisticUpdate, update::LightClientUpdate,
+        },
+        content_key::beacon::{LightClientFinalityUpdateKey, LightClientOptimisticUpdateKey},
+    },
     BeaconContentKey, BeaconContentValue, ContentValue, LightClientBootstrapKey,
     LightClientUpdatesByRangeKey,
 };

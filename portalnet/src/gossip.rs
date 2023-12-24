@@ -11,16 +11,19 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use tracing::{debug, error, warn};
 
-use crate::overlay_service::{OverlayCommand, OverlayRequest, RequestDirection};
-use crate::types::node::Node;
-use ethportal_api::types::distance::{Metric, XorMetric};
-use ethportal_api::types::enr::Enr;
-use ethportal_api::types::portal_wire::{
-    PopulatedOffer, PopulatedOfferWithResult, Request, Response,
+use crate::{
+    overlay_service::{OverlayCommand, OverlayRequest, RequestDirection},
+    types::node::Node,
 };
-use ethportal_api::utils::bytes::hex_encode;
-use ethportal_api::OverlayContentKey;
-use ethportal_api::RawContentKey;
+use ethportal_api::{
+    types::{
+        distance::{Metric, XorMetric},
+        enr::Enr,
+        portal_wire::{PopulatedOffer, PopulatedOfferWithResult, Request, Response},
+    },
+    utils::bytes::hex_encode,
+    OverlayContentKey, RawContentKey,
+};
 
 /// Datatype to store the result of a gossip request.
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, Default)]

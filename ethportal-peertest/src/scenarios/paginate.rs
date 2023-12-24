@@ -1,5 +1,4 @@
-use ethportal_api::HistoryNetworkApiClient;
-use ethportal_api::{BlockHeaderKey, HistoryContentKey};
+use ethportal_api::{BlockHeaderKey, HistoryContentKey, HistoryNetworkApiClient};
 
 use crate::{constants::fixture_header_with_proof, Peertest};
 

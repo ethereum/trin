@@ -1,12 +1,13 @@
-use std::collections::HashMap;
-use std::time::SystemTime;
+use std::{collections::HashMap, time::SystemTime};
 
 use discv5::enr::NodeId;
 use ethereum_types::H256;
 use serde::{Deserialize, Serialize};
 
-use super::distance::{Metric, XorMetric};
-use super::enr::Enr;
+use super::{
+    distance::{Metric, XorMetric},
+    enr::Enr,
+};
 
 type ContentId = [u8; 32];
 

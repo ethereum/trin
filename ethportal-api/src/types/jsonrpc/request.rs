@@ -3,8 +3,10 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 use validator::{Validate, ValidationError};
 
-use super::endpoints::{BeaconEndpoint, HistoryEndpoint, StateEndpoint};
-use super::params::Params;
+use super::{
+    endpoints::{BeaconEndpoint, HistoryEndpoint, StateEndpoint},
+    params::Params,
+};
 
 type Responder<T, E> = mpsc::UnboundedSender<Result<T, E>>;
 

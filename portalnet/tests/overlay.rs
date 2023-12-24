@@ -1,5 +1,8 @@
-use std::net::{IpAddr, Ipv4Addr};
-use std::{net::SocketAddr, str::FromStr, sync::Arc};
+use std::{
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    str::FromStr,
+    sync::Arc,
+};
 
 use discv5::TalkRequest;
 use parking_lot::RwLock;
@@ -9,17 +12,21 @@ use tokio::{
 };
 use utp_rs::socket::UtpSocket;
 
-use ethportal_api::types::content_key::overlay::IdentityContentKey;
-use ethportal_api::types::distance::XorMetric;
-use ethportal_api::types::enr::{Enr, SszEnr};
-use ethportal_api::types::portal_wire::{Content, Message, ProtocolId};
-use ethportal_api::utils::bytes::hex_encode_upper;
-use portalnet::utils::db::setup_temp_dir;
+use ethportal_api::{
+    types::{
+        content_key::overlay::IdentityContentKey,
+        distance::XorMetric,
+        enr::{Enr, SszEnr},
+        portal_wire::{Content, Message, ProtocolId},
+    },
+    utils::bytes::hex_encode_upper,
+};
 use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, Discv5UdpSocket},
     overlay::{OverlayConfig, OverlayProtocol},
     storage::{ContentStore, DistanceFunction, MemoryContentStore},
+    utils::db::setup_temp_dir,
 };
 use trin_validation::validator::MockValidator;
 

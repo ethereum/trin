@@ -1,18 +1,23 @@
-use crate::builder::TransportRpcModules;
-use crate::cors;
-use crate::errors::WsHttpSamePortError;
-use crate::jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
-use crate::jsonrpsee::server::{IdProvider, Server, ServerBuilder, ServerHandle};
-use crate::jsonrpsee::ws_client::{WsClient, WsClientBuilder};
-use crate::jsonrpsee::RpcModule;
-use crate::{RpcError, TransportRpcModuleConfig};
+use crate::{
+    builder::TransportRpcModules,
+    cors,
+    errors::WsHttpSamePortError,
+    jsonrpsee::{
+        http_client::{HttpClient, HttpClientBuilder},
+        server::{IdProvider, Server, ServerBuilder, ServerHandle},
+        ws_client::{WsClient, WsClientBuilder},
+        RpcModule,
+    },
+    RpcError, TransportRpcModuleConfig,
+};
 use ethportal_api::types::cli::{
     DEFAULT_WEB3_HTTP_PORT, DEFAULT_WEB3_IPC_PATH, DEFAULT_WEB3_WS_PORT,
 };
-use reth_ipc::server::Builder as IpcServerBuilder;
-use reth_ipc::server::{Endpoint, IpcServer};
-use std::fmt;
-use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+use reth_ipc::server::{Builder as IpcServerBuilder, Endpoint, IpcServer};
+use std::{
+    fmt,
+    net::{Ipv4Addr, SocketAddr, SocketAddrV4},
+};
 use tower::layer::util::{Identity, Stack};
 use tower_http::cors::CorsLayer;
 use tracing::instrument;
@@ -609,12 +614,9 @@ impl WsHttpServerKind {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use crate::builder::RpcModuleSelection;
-    use crate::{PortalRpcModule, RpcModuleBuilder};
-    use portalnet::discovery::Discovery;
-    use portalnet::utils::db::setup_temp_dir;
-    use std::io;
-    use std::sync::Arc;
+    use crate::{builder::RpcModuleSelection, PortalRpcModule, RpcModuleBuilder};
+    use portalnet::{discovery::Discovery, utils::db::setup_temp_dir};
+    use std::{io, sync::Arc};
 
     /// Localhost with port 0 so a free port is used.
     pub fn test_address() -> SocketAddr {

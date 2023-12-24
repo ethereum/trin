@@ -5,9 +5,9 @@ use tokio::time::{sleep, Duration};
 use tracing::{debug, warn};
 
 use crate::stats::{BeaconSlotStats, HistoryBlockStats, StatsReporter};
-use ethportal_api::jsonrpsee::core::Error;
-use ethportal_api::types::portal::{ContentInfo, TraceGossipInfo};
 use ethportal_api::{
+    jsonrpsee::core::Error,
+    types::portal::{ContentInfo, TraceGossipInfo},
     BeaconContentKey, BeaconContentValue, BeaconNetworkApiClient, HistoryContentKey,
     HistoryContentValue, HistoryNetworkApiClient, OverlayContentKey, PossibleBeaconContentValue,
     PossibleHistoryContentValue,

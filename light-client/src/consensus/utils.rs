@@ -1,7 +1,5 @@
-use crate::types::Bytes32;
-use crate::utils::bytes32_to_node;
-use ethportal_api::consensus::header::BeaconBlockHeader;
-use ethportal_api::consensus::signature::BlsSignature;
+use crate::{types::Bytes32, utils::bytes32_to_node};
+use ethportal_api::consensus::{header::BeaconBlockHeader, signature::BlsSignature};
 use eyre::Result;
 use milagro_bls::{AggregateSignature, PublicKey};
 use ssz_rs::prelude::*;

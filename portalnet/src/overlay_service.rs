@@ -53,18 +53,21 @@ use crate::{
     types::node::Node,
     utils::portal_wire,
 };
-use ethportal_api::generate_random_node_id;
-use ethportal_api::types::distance::{Distance, Metric};
-use ethportal_api::types::enr::{Enr, SszEnr};
-use ethportal_api::types::portal_wire::{
-    Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer, Ping, Pong,
-    PopulatedOffer, ProtocolId, Request, Response, MAX_PORTAL_CONTENT_PAYLOAD_SIZE,
-    MAX_PORTAL_NODES_ENRS_SIZE,
+use ethportal_api::{
+    generate_random_node_id,
+    types::{
+        distance::{Distance, Metric},
+        enr::{Enr, SszEnr},
+        portal_wire::{
+            Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer, Ping,
+            Pong, PopulatedOffer, ProtocolId, Request, Response, MAX_PORTAL_CONTENT_PAYLOAD_SIZE,
+            MAX_PORTAL_NODES_ENRS_SIZE,
+        },
+        query_trace::QueryTrace,
+    },
+    utils::bytes::{hex_encode, hex_encode_compact},
+    OverlayContentKey, RawContentKey,
 };
-use ethportal_api::types::query_trace::QueryTrace;
-use ethportal_api::utils::bytes::{hex_encode, hex_encode_compact};
-use ethportal_api::OverlayContentKey;
-use ethportal_api::RawContentKey;
 use trin_metrics::{
     labels::{UtpDirectionLabel, UtpOutcomeLabel},
     overlay::OverlayMetricsReporter,
@@ -2640,8 +2643,7 @@ fn pop_while_ssz_bytes_len_gt(enrs: &mut Vec<SszEnr>, max_size: usize) {
 mod tests {
     use super::*;
 
-    use std::net::SocketAddr;
-    use std::time::Instant;
+    use std::{net::SocketAddr, time::Instant};
 
     use discv5::kbucket::Entry;
     use ethereum_types::U256;

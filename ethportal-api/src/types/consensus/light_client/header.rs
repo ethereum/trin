@@ -1,12 +1,11 @@
-use crate::types::consensus::execution_payload::ExecutionPayloadHeaderCapella;
-use crate::types::consensus::fork::ForkName;
-use crate::types::consensus::header::BeaconBlockHeader;
+use crate::types::consensus::{
+    execution_payload::ExecutionPayloadHeaderCapella, fork::ForkName, header::BeaconBlockHeader,
+};
 use ethereum_types::H256;
 use serde::{Deserialize, Serialize};
 use ssz::Decode;
 use ssz_derive::{Decode, Encode};
-use ssz_types::typenum::U4;
-use ssz_types::FixedVector;
+use ssz_types::{typenum::U4, FixedVector};
 use superstruct::superstruct;
 use tree_hash_derive::TreeHash;
 

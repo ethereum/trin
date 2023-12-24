@@ -1,5 +1,7 @@
-use crate::types::discv5::{NodeInfo, RoutingTableInfo};
-use crate::types::enr::Enr;
+use crate::types::{
+    discv5::{NodeInfo, RoutingTableInfo},
+    enr::Enr,
+};
 use discv5::enr::NodeId;
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
 

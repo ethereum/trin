@@ -1,14 +1,14 @@
-use std::path::PathBuf;
-use std::str::FromStr;
+use std::{path::PathBuf, str::FromStr};
 
 use clap::{Parser, Subcommand};
 use ethereum_types::H256;
 use tokio::process::Child;
 use url::Url;
 
-use crate::client_handles::{fluffy_handle, trin_handle};
-use crate::types::mode::BridgeMode;
-use crate::types::network::NetworkKind;
+use crate::{
+    client_handles::{fluffy_handle, trin_handle},
+    types::{mode::BridgeMode, network::NetworkKind},
+};
 use ethportal_api::types::cli::check_private_key_length;
 
 // max value of 16 b/c...

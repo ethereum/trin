@@ -1,13 +1,14 @@
 #![cfg(unix)]
 use rpc::RpcServerHandle;
-use std::env;
-use std::net::{IpAddr, Ipv4Addr};
+use std::{
+    env,
+    net::{IpAddr, Ipv4Addr},
+};
 
 use ethportal_api::types::cli::{TrinConfig, DEFAULT_WEB3_HTTP_ADDRESS, DEFAULT_WEB3_IPC_PATH};
 use ethportal_peertest as peertest;
 use ethportal_peertest::Peertest;
-use jsonrpsee::async_client::Client;
-use jsonrpsee::http_client::HttpClient;
+use jsonrpsee::{async_client::Client, http_client::HttpClient};
 use serial_test::serial;
 use tokio::time::{sleep, Duration};
 

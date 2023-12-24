@@ -1,12 +1,14 @@
-use crate::types::content_key::beacon::BeaconContentKey;
-use crate::types::enr::Enr;
-use crate::types::portal::FindNodesInfo;
-use crate::types::portal::{
-    AcceptInfo, ContentInfo, DataRadius, PaginateLocalContentInfo, PongInfo, TraceContentInfo,
-    TraceGossipInfo,
+use crate::{
+    types::{
+        content_key::beacon::BeaconContentKey,
+        enr::Enr,
+        portal::{
+            AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
+            TraceContentInfo, TraceGossipInfo,
+        },
+    },
+    BeaconContentValue, PossibleBeaconContentValue, RoutingTableInfo,
 };
-use crate::RoutingTableInfo;
-use crate::{BeaconContentValue, PossibleBeaconContentValue};
 use discv5::enr::NodeId;
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
 

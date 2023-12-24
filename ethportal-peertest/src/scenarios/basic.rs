@@ -1,10 +1,8 @@
-use crate::constants::fixture_header_with_proof;
-use crate::Peertest;
+use crate::{constants::fixture_header_with_proof, Peertest};
 use ethereum_types::{H256, U256};
-use ethportal_api::types::distance::Distance;
 use ethportal_api::{
-    BlockHeaderKey, Discv5ApiClient, HistoryContentKey, HistoryNetworkApiClient,
-    PossibleHistoryContentValue, Web3ApiClient,
+    types::distance::Distance, BlockHeaderKey, Discv5ApiClient, HistoryContentKey,
+    HistoryNetworkApiClient, PossibleHistoryContentValue, Web3ApiClient,
 };
 use jsonrpsee::async_client::Client;
 use ssz::Encode;

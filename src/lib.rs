@@ -4,8 +4,7 @@
 use std::sync::Arc;
 
 use rpc::{launch_jsonrpc_server, RpcServerHandle};
-use tokio::sync::mpsc;
-use tokio::sync::RwLock;
+use tokio::sync::{mpsc, RwLock};
 use tracing::info;
 use utp_rs::socket::UtpSocket;
 

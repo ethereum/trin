@@ -4,10 +4,14 @@ use ethereum_types::H256;
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 
-use ethportal_api::types::consensus::withdrawal::Withdrawal;
-use ethportal_api::types::execution::accumulator::EpochAccumulator;
-use ethportal_api::types::execution::header::{Header, TxHashes};
-use ethportal_api::types::execution::transaction::Transaction;
+use ethportal_api::types::{
+    consensus::withdrawal::Withdrawal,
+    execution::{
+        accumulator::EpochAccumulator,
+        header::{Header, TxHashes},
+        transaction::Transaction,
+    },
+};
 
 /// Helper type to deserialize a response from a batched Header request.
 #[derive(Debug, Clone, PartialEq, Eq)]

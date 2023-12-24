@@ -1,8 +1,7 @@
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumIter};
 
-use crate::config::utils::hex_str_to_bytes;
-use crate::config::{BaseConfig, ChainConfig, Fork, Forks};
+use crate::config::{utils::hex_str_to_bytes, BaseConfig, ChainConfig, Fork, Forks};
 
 #[derive(
     Debug,

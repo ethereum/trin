@@ -4,10 +4,10 @@ use parking_lot::RwLock as PLRwLock;
 use tokio::sync::RwLock;
 use utp_rs::socket::UtpSocket;
 
-use ethportal_api::types::distance::XorMetric;
-use ethportal_api::types::enr::Enr;
-use ethportal_api::types::portal_wire::ProtocolId;
-use ethportal_api::HistoryContentKey;
+use ethportal_api::{
+    types::{distance::XorMetric, enr::Enr, portal_wire::ProtocolId},
+    HistoryContentKey,
+};
 use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, UtpEnr},

@@ -5,8 +5,11 @@ use figment::{
 use serde::Deserialize;
 use std::{path::PathBuf, process::exit};
 
-use crate::config::utils::{bytes_deserialize, bytes_opt_deserialize};
-use crate::config::{networks, BaseConfig, ChainConfig, CliConfig, Forks};
+use crate::config::{
+    networks,
+    utils::{bytes_deserialize, bytes_opt_deserialize},
+    BaseConfig, ChainConfig, CliConfig, Forks,
+};
 
 #[derive(Deserialize, Debug, Default)]
 pub struct Config {

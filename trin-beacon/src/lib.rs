@@ -17,10 +17,8 @@ use tokio::{
 use tracing::info;
 use utp_rs::socket::UtpSocket;
 
-use crate::network::BeaconNetwork;
-use crate::{events::BeaconEvents, jsonrpc::BeaconRequestHandler};
-use ethportal_api::types::enr::Enr;
-use ethportal_api::types::jsonrpc::request::BeaconJsonRpcRequest;
+use crate::{events::BeaconEvents, jsonrpc::BeaconRequestHandler, network::BeaconNetwork};
+use ethportal_api::types::{enr::Enr, jsonrpc::request::BeaconJsonRpcRequest};
 use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, UtpEnr},

@@ -1,13 +1,14 @@
-use discv5::enr::CombinedKey;
-use discv5::enr::Enr as Discv5Enr;
+use discv5::enr::{CombinedKey, Enr as Discv5Enr};
 use rand::Rng;
 use rlp::Encodable;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use ssz::DecodeError;
-use std::net::Ipv4Addr;
-use std::ops::{Deref, DerefMut};
-use std::str::FromStr;
+use std::{
+    net::Ipv4Addr,
+    ops::{Deref, DerefMut},
+    str::FromStr,
+};
 use validator::ValidationError;
 
 pub type Enr = Discv5Enr<CombinedKey>;
@@ -99,8 +100,10 @@ pub fn generate_random_remote_enr() -> (CombinedKey, Enr) {
 
 #[cfg(test)]
 mod test {
-    use crate::generate_random_node_id;
-    use crate::types::distance::{Metric, XorMetric};
+    use crate::{
+        generate_random_node_id,
+        types::distance::{Metric, XorMetric},
+    };
     use discv5::enr::NodeId;
     use test_log::test;
 

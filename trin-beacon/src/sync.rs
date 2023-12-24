@@ -1,8 +1,8 @@
 use ethportal_api::BeaconContentKey;
-use light_client::config::networks;
-use light_client::consensus::rpc::portal_rpc::PortalRpc;
-use light_client::database::FileDB;
-use light_client::{Client, ClientBuilder};
+use light_client::{
+    config::networks, consensus::rpc::portal_rpc::PortalRpc, database::FileDB, Client,
+    ClientBuilder,
+};
 use portalnet::overlay_service::OverlayCommand;
 use std::path::PathBuf;
 use tokio::sync::mpsc::UnboundedSender;

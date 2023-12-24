@@ -4,11 +4,12 @@ use discv5::enr::NodeId;
 use jsonrpsee::async_client::Client;
 use tracing::info;
 
-use crate::constants::fixture_header_with_proof;
-use crate::Peertest;
-use ethportal_api::types::portal::{ContentInfo, TraceContentInfo};
-use ethportal_api::utils::bytes::hex_decode;
-use ethportal_api::{HistoryNetworkApiClient, OverlayContentKey, PossibleHistoryContentValue};
+use crate::{constants::fixture_header_with_proof, Peertest};
+use ethportal_api::{
+    types::portal::{ContentInfo, TraceContentInfo},
+    utils::bytes::hex_decode,
+    HistoryNetworkApiClient, OverlayContentKey, PossibleHistoryContentValue,
+};
 
 pub async fn test_find_content_return_enr(target: &Client, peertest: &Peertest) {
     info!("Testing find content returns enrs properly");

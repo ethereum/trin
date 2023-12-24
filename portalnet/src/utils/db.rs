@@ -1,5 +1,7 @@
-use std::path::{Path, PathBuf};
-use std::{env, fs};
+use std::{
+    env, fs,
+    path::{Path, PathBuf},
+};
 
 use anyhow::anyhow;
 use directories::ProjectDirs;

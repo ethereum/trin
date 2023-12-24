@@ -1,9 +1,14 @@
-use std::hash::{Hash, Hasher};
-use std::net::Ipv4Addr;
-use std::path::PathBuf;
-use std::str::FromStr;
-use std::time::Duration;
-use std::{convert::TryFrom, fmt, fs, io, net::SocketAddr, sync::Arc};
+use std::{
+    convert::TryFrom,
+    fmt, fs,
+    hash::{Hash, Hasher},
+    io,
+    net::{Ipv4Addr, SocketAddr},
+    path::PathBuf,
+    str::FromStr,
+    sync::Arc,
+    time::Duration,
+};
 
 use anyhow::anyhow;
 use async_trait::async_trait;
@@ -21,11 +26,11 @@ use utp_rs::{cid::ConnectionPeer, udp::AsyncUdpSocket};
 
 use super::config::PortalnetConfig;
 use crate::socket;
-use ethportal_api::types::discv5::RoutingTableInfo;
-use ethportal_api::types::enr::Enr;
-use ethportal_api::types::portal_wire::ProtocolId;
-use ethportal_api::utils::bytes::hex_encode;
-use ethportal_api::NodeInfo;
+use ethportal_api::{
+    types::{discv5::RoutingTableInfo, enr::Enr, portal_wire::ProtocolId},
+    utils::bytes::hex_encode,
+    NodeInfo,
+};
 use trin_utils::version::get_trin_version;
 
 /// Size of the buffer of the Discv5 TALKREQ channel.

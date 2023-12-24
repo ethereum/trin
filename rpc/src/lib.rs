@@ -20,12 +20,12 @@ pub use builder::{PortalRpcModule, RpcModuleBuilder, TransportRpcModuleConfig};
 use discv5_rpc::Discv5Api;
 use errors::RpcError;
 use eth_rpc::EthApi;
-use ethportal_api::jsonrpsee;
-use ethportal_api::types::cli::{
-    TrinConfig, Web3TransportType, BEACON_NETWORK, HISTORY_NETWORK, STATE_NETWORK,
-};
-use ethportal_api::types::jsonrpc::request::{
-    BeaconJsonRpcRequest, HistoryJsonRpcRequest, StateJsonRpcRequest,
+use ethportal_api::{
+    jsonrpsee,
+    types::{
+        cli::{TrinConfig, Web3TransportType, BEACON_NETWORK, HISTORY_NETWORK, STATE_NETWORK},
+        jsonrpc::request::{BeaconJsonRpcRequest, HistoryJsonRpcRequest, StateJsonRpcRequest},
+    },
 };
 use history_rpc::HistoryNetworkApi;
 use web3_rpc::Web3Api;
@@ -33,8 +33,10 @@ use web3_rpc::Web3Api;
 use crate::rpc_server::RpcServerConfig;
 use portalnet::discovery::Discovery;
 use reth_ipc::server::Builder as IpcServerBuilder;
-use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
-use std::sync::Arc;
+use std::{
+    net::{Ipv4Addr, SocketAddr, SocketAddrV4},
+    sync::Arc,
+};
 use tokio::sync::mpsc;
 
 pub async fn launch_jsonrpc_server(

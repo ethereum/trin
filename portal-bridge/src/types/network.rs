@@ -1,5 +1,4 @@
-use std::fmt;
-use std::str::FromStr;
+use std::{fmt, str::FromStr};
 
 /// The different subnetworks that can be used to run the bridge
 #[derive(Debug, PartialEq, Clone)]

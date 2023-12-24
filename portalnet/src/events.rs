@@ -1,5 +1,7 @@
-use std::str::FromStr;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{
+    str::FromStr,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 use discv5::TalkRequest;
 use futures::stream::{select_all, StreamExt};
@@ -7,8 +9,10 @@ use tokio::sync::{broadcast, mpsc};
 use tokio_stream::wrappers::BroadcastStream;
 use tracing::{debug, error, trace, warn};
 
-use ethportal_api::types::portal_wire::ProtocolId;
-use ethportal_api::utils::bytes::{hex_encode, hex_encode_upper};
+use ethportal_api::{
+    types::portal_wire::ProtocolId,
+    utils::bytes::{hex_encode, hex_encode_upper},
+};
 
 /// Handles for communication between the main event handler and an overlay.
 pub struct OverlayHandle {

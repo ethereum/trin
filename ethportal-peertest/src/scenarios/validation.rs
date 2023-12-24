@@ -3,12 +3,10 @@ use crate::{
     Peertest,
 };
 use ethereum_types::H256;
-use ethportal_api::types::content_key::history::BlockHeaderKey;
-use ethportal_api::types::enr::Enr;
-use ethportal_api::types::portal::ContentInfo;
 use ethportal_api::{
-    jsonrpsee::async_client::Client, HistoryContentKey, HistoryNetworkApiClient,
-    PossibleHistoryContentValue,
+    jsonrpsee::async_client::Client,
+    types::{content_key::history::BlockHeaderKey, enr::Enr, portal::ContentInfo},
+    HistoryContentKey, HistoryNetworkApiClient, PossibleHistoryContentValue,
 };
 use std::str::FromStr;
 use tracing::info;

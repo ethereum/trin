@@ -1,7 +1,9 @@
-use std::fs;
-use std::ops::Range;
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::{
+    fs,
+    ops::Range,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
 use anyhow::{anyhow, bail};
 use futures::stream::StreamExt;
@@ -9,26 +11,28 @@ use ssz::Decode;
 use tokio::time::{sleep, Duration};
 use tracing::{debug, info, warn};
 
-use crate::api::execution::ExecutionApi;
-use crate::gossip::gossip_history_content;
-use crate::stats::{HistoryBlockStats, StatsReporter};
-use crate::types::{
-    full_header::FullHeader,
-    mode::{BridgeMode, ModeType},
-};
-use crate::utils::{read_test_assets_from_file, TestAssets};
-use ethportal_api::jsonrpsee::http_client::HttpClient;
-use ethportal_api::types::execution::{
-    accumulator::EpochAccumulator,
-    block_body::{
-        BlockBody, BlockBodyLegacy, BlockBodyMerge, BlockBodyShanghai, MERGE_TIMESTAMP,
-        SHANGHAI_TIMESTAMP,
+use crate::{
+    api::execution::ExecutionApi,
+    gossip::gossip_history_content,
+    stats::{HistoryBlockStats, StatsReporter},
+    types::{
+        full_header::FullHeader,
+        mode::{BridgeMode, ModeType},
     },
-    header::{AccumulatorProof, BlockHeaderProof, Header, HeaderWithProof, SszNone},
-    receipts::Receipts,
+    utils::{read_test_assets_from_file, TestAssets},
 };
-use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::{
+    jsonrpsee::http_client::HttpClient,
+    types::execution::{
+        accumulator::EpochAccumulator,
+        block_body::{
+            BlockBody, BlockBodyLegacy, BlockBodyMerge, BlockBodyShanghai, MERGE_TIMESTAMP,
+            SHANGHAI_TIMESTAMP,
+        },
+        header::{AccumulatorProof, BlockHeaderProof, Header, HeaderWithProof, SszNone},
+        receipts::Receipts,
+    },
+    utils::bytes::hex_encode,
     BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey, HistoryContentKey,
     HistoryContentValue,
 };

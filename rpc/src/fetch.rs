@@ -3,13 +3,15 @@ use ethereum_types::H256;
 use serde_json::Value;
 use tokio::sync::mpsc;
 
-use ethportal_api::types::constants::CONTENT_ABSENT;
-use ethportal_api::types::execution::block_body::BlockBody;
-use ethportal_api::types::execution::header::Header;
-use ethportal_api::types::jsonrpc::endpoints::HistoryEndpoint;
-use ethportal_api::types::jsonrpc::request::HistoryJsonRpcRequest;
-use ethportal_api::utils::bytes::hex_decode;
-use ethportal_api::{ContentValue, HistoryContentKey, HistoryContentValue};
+use ethportal_api::{
+    types::{
+        constants::CONTENT_ABSENT,
+        execution::{block_body::BlockBody, header::Header},
+        jsonrpc::{endpoints::HistoryEndpoint, request::HistoryJsonRpcRequest},
+    },
+    utils::bytes::hex_decode,
+    ContentValue, HistoryContentKey, HistoryContentValue,
+};
 
 use crate::errors::RpcServeError;
 

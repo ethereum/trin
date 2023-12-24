@@ -276,8 +276,7 @@ impl CheckpointFallback {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::config;
-    use crate::config::networks;
+    use crate::{config, config::networks};
 
     #[tokio::test]
     async fn test_checkpoint_fallback() {

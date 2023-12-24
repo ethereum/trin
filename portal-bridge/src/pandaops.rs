@@ -8,8 +8,10 @@ use surf::{
 use tokio::time::{sleep, Duration};
 use tracing::{info, warn};
 
-use crate::constants::{BASE_CL_ENDPOINT, BASE_EL_ENDPOINT};
-use crate::{PANDAOPS_CLIENT_ID, PANDAOPS_CLIENT_SECRET};
+use crate::{
+    constants::{BASE_CL_ENDPOINT, BASE_EL_ENDPOINT},
+    PANDAOPS_CLIENT_ID, PANDAOPS_CLIENT_SECRET,
+};
 use ethportal_api::types::jsonrpc::request::JsonRequest;
 
 /// Limit the number of requests in a single batch to avoid exceeding the

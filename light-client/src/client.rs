@@ -8,17 +8,14 @@ use tokio::sync::RwLock;
 
 use ethportal_api::consensus::header::BeaconBlockHeader;
 use std::path::PathBuf;
-use tokio::spawn;
-use tokio::time::sleep;
+use tokio::{spawn, time::sleep};
 
-use crate::config::client_config::Config;
-use crate::config::{CheckpointFallback, Network};
-use crate::consensus::errors::ConsensusError;
-use crate::consensus::rpc::ConsensusRpc;
+use crate::{
+    config::{client_config::Config, CheckpointFallback, Network},
+    consensus::{errors::ConsensusError, rpc::ConsensusRpc},
+};
 
-use crate::database::Database;
-use crate::errors::NodeError;
-use crate::node::Node;
+use crate::{database::Database, errors::NodeError, node::Node};
 
 use crate::rpc::Rpc;
 

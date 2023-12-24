@@ -1,12 +1,14 @@
-use crate::types::content_key::history::HistoryContentKey;
-use crate::types::enr::Enr;
-use crate::types::portal::FindNodesInfo;
-use crate::types::portal::{
-    AcceptInfo, ContentInfo, DataRadius, PaginateLocalContentInfo, PongInfo, TraceContentInfo,
-    TraceGossipInfo,
+use crate::{
+    types::{
+        content_key::history::HistoryContentKey,
+        enr::Enr,
+        portal::{
+            AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
+            TraceContentInfo, TraceGossipInfo,
+        },
+    },
+    HistoryContentValue, PossibleHistoryContentValue, RoutingTableInfo,
 };
-use crate::RoutingTableInfo;
-use crate::{HistoryContentValue, PossibleHistoryContentValue};
 use discv5::enr::NodeId;
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
 
