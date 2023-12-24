@@ -2,7 +2,7 @@
 name = "portal-bridge"
 version = "0.1.0"
 edition = "2021"
-repository = "https://github.com/ethereum/trin/tree/main/portal-bridge"
+repository = "https://github.com/ethereum/trin/tree/master/portal-bridge"
 license = "GPL-3.0"
 readme = "README.md"
 keywords = ["ethereum", "portal-network"]
@@ -22,7 +22,12 @@ ethereum-types = "0.14.1"
 ethereum_ssz = "0.5.3"
 ethereum_ssz_derive = "0.5.3"
 futures = "0.3.21"
-jsonrpsee = {version="0.20.0", features = ["async-client", "client", "macros", "server"]}
+jsonrpsee = { version = "0.20.0", features = [
+  "async-client",
+  "client",
+  "macros",
+  "server",
+] }
 lazy_static = "1.4.0"
 portalnet = { path = "../portalnet" }
 serde = { version = "1.0.150", features = ["derive", "rc"] }
