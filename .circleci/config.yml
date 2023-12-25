@@ -51,7 +51,7 @@ executors:
       - image: cimg/rust:1.71.1
   docker-nightly:
     docker:
-      - image: rustlang/rust:nightly-slim
+      - image: rustlang/rust:nightly
 jobs:
   docker-build:
     resource_class: xlarge
