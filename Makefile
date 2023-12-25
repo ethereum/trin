@@ -6,13 +6,13 @@ help:
 		@echo "create-docker-image - create docker image"
 		@echo "push-docker-image - push docker image"
 
-lint:	
+lint:
 		cargo clippy --all --all-targets --all-features --no-deps -- --deny warnings
-		cargo fmt --all -- --check
+		cargo +nightly fmt --all -- --check
 
 lint-unstable:
 		cargo clippy --all --all-targets --all-features --no-deps -- -Wclippy::cargo
-		cargo fmt --all -- --check
+		cargo +nightly fmt --all -- --check
 		RUSTFLAGS="-W unused_crate_dependencies" cargo build
 
 create-docker-image:
