@@ -2,10 +2,8 @@ use crate::{
     types::{
         content_key::history::HistoryContentKey,
         enr::Enr,
-        portal::{
-            AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
-            TraceContentInfo, TraceGossipInfo,
-        },
+        history::{ContentInfo, PaginateLocalContentInfo, TraceContentInfo},
+        portal::{AcceptInfo, DataRadius, FindNodesInfo, PongInfo, TraceGossipInfo},
     },
     HistoryContentValue, PossibleHistoryContentValue, RoutingTableInfo,
 };

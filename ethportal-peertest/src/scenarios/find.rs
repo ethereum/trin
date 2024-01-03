@@ -6,7 +6,7 @@ use tracing::info;
 
 use crate::{constants::fixture_header_with_proof, Peertest};
 use ethportal_api::{
-    types::portal::{ContentInfo, TraceContentInfo},
+    types::history::{ContentInfo, TraceContentInfo},
     utils::bytes::hex_decode,
     HistoryNetworkApiClient, OverlayContentKey, PossibleHistoryContentValue,
 };

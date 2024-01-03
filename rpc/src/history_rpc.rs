@@ -6,11 +6,9 @@ use ethportal_api::{
     types::{
         constants::CONTENT_ABSENT,
         enr::Enr,
+        history::{ContentInfo, PaginateLocalContentInfo, TraceContentInfo},
         jsonrpc::{endpoints::HistoryEndpoint, request::HistoryJsonRpcRequest},
-        portal::{
-            AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
-            TraceContentInfo, TraceGossipInfo,
-        },
+        portal::{AcceptInfo, DataRadius, FindNodesInfo, PongInfo, TraceGossipInfo},
     },
     HistoryContentKey, HistoryContentValue, HistoryNetworkApiServer, PossibleHistoryContentValue,
     RoutingTableInfo,

@@ -7,11 +7,11 @@ use crate::accumulator::MasterAccumulator;
 use ethportal_api::{
     types::{
         execution::header::HeaderWithProof,
+        history::ContentInfo,
         jsonrpc::{
             endpoints::HistoryEndpoint,
             request::{BeaconJsonRpcRequest, HistoryJsonRpcRequest},
         },
-        portal::ContentInfo,
     },
     BlockHeaderKey, HistoryContentKey, HistoryContentValue, PossibleHistoryContentValue,
 };

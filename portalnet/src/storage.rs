@@ -7,7 +7,7 @@ use std::{
 
 use anyhow::anyhow;
 use discv5::enr::NodeId;
-use ethportal_api::types::portal::PaginateLocalContentInfo;
+use ethportal_api::types::history::PaginateLocalContentInfo;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rocksdb::{Options, DB};

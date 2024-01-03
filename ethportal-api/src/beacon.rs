@@ -1,11 +1,9 @@
 use crate::{
     types::{
+        beacon::{ContentInfo, PaginateLocalContentInfo, TraceContentInfo},
         content_key::beacon::BeaconContentKey,
         enr::Enr,
-        portal::{
-            AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
-            TraceContentInfo, TraceGossipInfo,
-        },
+        portal::{AcceptInfo, DataRadius, FindNodesInfo, PongInfo, TraceGossipInfo},
     },
     BeaconContentValue, PossibleBeaconContentValue, RoutingTableInfo,
 };
@@ -59,10 +57,8 @@ pub trait BeaconNetworkApi {
 
     /// Lookup a target content key in the network
     #[method(name = "beaconRecursiveFindContent")]
-    async fn recursive_find_content(
-        &self,
-        content_key: BeaconContentKey,
-    ) -> RpcResult<PossibleBeaconContentValue>;
+    async fn recursive_find_content(&self, content_key: BeaconContentKey)
+        -> RpcResult<ContentInfo>;
 
     /// Lookup a target content key in the network. Return tracing info.
     #[method(name = "beaconTraceRecursiveFindContent")]
