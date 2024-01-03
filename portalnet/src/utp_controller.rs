@@ -5,6 +5,7 @@ use tokio::sync::Semaphore;
 use utp_rs::{cid::ConnectionId, conn::ConnectionConfig, socket::UtpSocket, stream::UtpStream};
 
 pub struct UtpController {
+    pub unique_transferring_content_limit: u8,
     pub inbound_utp_transfer_semaphore: Arc<Semaphore>,
     pub outbound_utp_transfer_semaphore: Arc<Semaphore>,
     /// uTP socket.
@@ -21,6 +22,7 @@ impl UtpController {
             utp_socket,
             inbound_utp_transfer_semaphore: Arc::new(Semaphore::new(inbound_utp_transfer_limit)),
             outbound_utp_transfer_semaphore: Arc::new(Semaphore::new(outbound_utp_transfer_limit)),
+            unique_transferring_content_limit: 3,
         }
     }
 
