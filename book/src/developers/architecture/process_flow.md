@@ -24,11 +24,10 @@ stateDiagram-v2
 ```
 Where for each sub-protocol implemented (History, State, Etc.,), a new thread is started.
 
-Here are some of the major components of trin-core that are called on startup within `./trin-core/src/lib.rs`.
+Here are some of the major components that are called on startup within `./src/lib.rs`.
 
 ```mermaid
 stateDiagram-v2
-    trincore: trin-core
     collection: configs and services
 
     state trin {
@@ -42,25 +41,22 @@ stateDiagram-v2
 
     }
 
-    state trincore {
-        portalnet_config --> collection
-        storage_config --> collection
-        discovery() --> collection
-        header_oracle() --> collection
-        utp_listener() --> collection
+    portalnet_config --> collection
+    storage_config --> collection
+    discovery() --> collection
+    header_oracle() --> collection
+    utp_listener() --> collection
 
-
-        state portalnet {
-            portalnet_config
-            storage_config
-            discovery()
-        }
-        state utp {
-            utp_listener()
-        }
-        state validation {
-            header_oracle()
-        }
+    state portalnet {
+        portalnet_config
+        storage_config
+        discovery()
+    }
+    state utp {
+        utp_listener()
+    }
+    state validation {
+        header_oracle()
     }
 ```
 
@@ -71,7 +67,6 @@ used to start the JSON-RPC server.
 An events listener awaits network activity that can be actioned.
 ```mermaid
 stateDiagram-v2
-    trincore: trin-core
     trinhistory: trin-history
     jsonrpchistory: JSON-RPC History details
     historyhandler: History handler
@@ -87,12 +82,10 @@ stateDiagram-v2
         historyhandler --> events()
     }
 
-    state trincore {
-        state portalnet {
-            events()
-        }
-
+    state portalnet {
+        events()
     }
+
     state trinhistory {
         initialize_history_network()
         state jsonrpc {
@@ -104,6 +97,6 @@ stateDiagram-v2
     }
 ```
 
-Then `./trin-core/portalnet/events.rs` is handles events at the level of the Portal Wire Protocol.
+Then `./portalnet/events.rs` is handles events at the level of the Portal Wire Protocol.
 These are defined messages that are compliant with the Discv5 protocol, and specific
 to the Portal Network.

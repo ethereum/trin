@@ -1,6 +1,6 @@
 # Database
 
-The database related code is located in `./trin-core/src/portalnet/storage.rs`.
+The database related code is located in `./portalnet/storage.rs`.
 
 There are three main database kinds:
 

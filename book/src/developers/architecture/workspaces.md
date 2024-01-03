@@ -18,7 +18,7 @@ This crate is responsible for the operation of the Trin node functionality.
 - Starting threads for different important functions such as uTP, Discovery & JSON-RPC.
 - These threads perform tasks such as listening for peers or requests from a user.
 
-## `trin-core`
+## `portalnet`
 
 This crate is responsible for the code that defines the main functions and data structures required for the operation of a Trin node. This includes code for:
 
