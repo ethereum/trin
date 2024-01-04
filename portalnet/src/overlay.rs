@@ -788,7 +788,7 @@ where
     }
 }
 
-fn validate_find_nodes_distances(distances: &[u16]) -> Result<(), OverlayRequestError> {
+fn validate_find_nodes_distances(distances: &Vec<u16>) -> Result<(), OverlayRequestError> {
     if distances.is_empty() {
         return Err(OverlayRequestError::InvalidRequest(
             "Invalid distances: Empty list".to_string(),

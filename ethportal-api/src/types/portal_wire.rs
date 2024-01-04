@@ -86,9 +86,10 @@ impl TryFrom<&Value> for CustomPayload {
                 "Unable to decode hex payload into bytes",
             ))?,
         };
-        Ok(Self {
-            payload: ByteList::from(payload),
-        })
+        match ByteList::try_from(payload) {
+            Ok(payload) => Ok(Self { payload }),
+            Err(_) => Err(ValidationError::new("Invalid custom payload value")),
+        }
     }
 }
 
