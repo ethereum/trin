@@ -196,13 +196,14 @@ pub async fn trace_propagate_gossip_cross_thread<TContentKey: OverlayContentKey>
 /// Filter all nodes from overlay routing table where XOR_distance(content_id, nodeId) < node radius
 fn calculate_interested_enrs<TContentKey: OverlayContentKey>(
     content_key: &TContentKey,
-    all_nodes: &Vec<&kbucket::Node<NodeId, Node>>,
+    all_nodes: &[&kbucket::Node<NodeId, Node>],
 ) -> Vec<Enr> {
     // HashMap to temporarily store all interested ENRs and the content.
     // Key is base64 string of node's ENR.
 
     // Filter all nodes from overlay routing table where XOR_distance(content_id, nodeId) < node radius
     let mut interested_enrs: Vec<Enr> = all_nodes
+        .to_owned()
         .clone()
         .into_iter()
         .filter(|node| {

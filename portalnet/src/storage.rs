@@ -571,7 +571,7 @@ impl PortalStorage {
         &self,
         content_id: &[u8; 32],
         content_key: &String,
-        value: &Vec<u8>,
+        value: &[u8],
     ) -> Result<(), ContentStoreError> {
         let content_id_as_u32: u32 = Self::byte_vector_to_u32(content_id.to_vec());
         let value_size = value.len();
