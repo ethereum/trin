@@ -132,9 +132,9 @@ jobs:
           command: |
             echo "$DOCKERHUB_PASS" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
             docker push $IMAGE_NAME:latest-bridge
-  lint:
+  cargo-fmt:
     description: |
-      Check linting with Clippy and rustfmt.
+      Check linting with rustfmt.
     resource_class: xlarge
     executor: docker-nightly
     environment:
@@ -146,6 +146,19 @@ jobs:
       - run:
           name: Run rustfmt
           command: cargo +nightly fmt --all -- --check
+  cargo-clippy:
+    description: |
+      Check linting with Clippy.
+    resource_class: xlarge
+    executor:
+      name: rust/default
+      tag: 1.71.1
+    environment:
+      RUSTFLAGS: "-D warnings"
+      RUST_LOG: "debug"
+    steps:
+      - checkout
+      - install-depends
       - run:
           name: Install Clippy
           command: rustup component add clippy
@@ -288,7 +301,8 @@ workflows:
           filters:
             branches:
               only: master
-      - lint
+      - cargo-fmt
+      - cargo-clippy
       - build
       - test
       - check-windows
