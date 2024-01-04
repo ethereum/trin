@@ -46,7 +46,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .iter()
         .map(|address| {
             HttpClientBuilder::default()
-                // increase default timeout to allow for trace_gossip requests that can take a long time
+                // increase default timeout to allow for trace_gossip requests that can take a long
+                // time
                 .request_timeout(Duration::from_secs(120))
                 .build(address)
                 .map_err(|e| e.to_string())

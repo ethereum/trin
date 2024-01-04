@@ -77,8 +77,8 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
         Ok(result)
     }
 
-    /// Send a FINDNODES request for nodes that fall within the given set of distances, to the designated
-    /// peer and wait for a response
+    /// Send a FINDNODES request for nodes that fall within the given set of distances, to the
+    /// designated peer and wait for a response
     async fn find_nodes(&self, enr: Enr, distances: Vec<u16>) -> RpcResult<FindNodesInfo> {
         let endpoint = HistoryEndpoint::FindNodes(enr, distances);
         let result = proxy_query_to_history_subnet(&self.network, endpoint).await?;
@@ -154,8 +154,8 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
         Ok(result)
     }
 
-    /// Send the provided content to interested peers. Clients may choose to send to some or all peers.
-    /// Return the number of peers that the content was gossiped to.
+    /// Send the provided content to interested peers. Clients may choose to send to some or all
+    /// peers. Return the number of peers that the content was gossiped to.
     async fn gossip(
         &self,
         content_key: HistoryContentKey,
@@ -167,8 +167,8 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
         Ok(result)
     }
 
-    /// Send the provided content to interested peers. Clients may choose to send to some or all peers.
-    /// Return tracing info.
+    /// Send the provided content to interested peers. Clients may choose to send to some or all
+    /// peers. Return tracing info.
     async fn trace_gossip(
         &self,
         content_key: HistoryContentKey,
@@ -181,7 +181,8 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
     }
 
     /// Send an OFFER request with given ContentKey, to the designated peer and wait for a response.
-    /// Returns the content keys bitlist upon successful content transmission or empty bitlist receive.
+    /// Returns the content keys bitlist upon successful content transmission or empty bitlist
+    /// receive.
     async fn offer(
         &self,
         enr: Enr,

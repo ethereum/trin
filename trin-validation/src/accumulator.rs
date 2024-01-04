@@ -193,9 +193,9 @@ impl MasterAccumulator {
         }
 
         // Create a merkle tree from epoch accumulator.
-        // To construct a valid proof for the header hash, we add both the hash and the total difficulty
-        // as individual leaves for each header record. This will ensure that the total difficulty
-        // is included as the first element in the proof.
+        // To construct a valid proof for the header hash, we add both the hash and the total
+        // difficulty as individual leaves for each header record. This will ensure that the
+        // total difficulty is included as the first element in the proof.
         let mut leaves = vec![];
         // iterate over every header record in the epoch acc
         for record in epoch_acc.into_iter() {

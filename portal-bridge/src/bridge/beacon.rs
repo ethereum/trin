@@ -285,7 +285,8 @@ impl BeaconBridge {
             expected_current_slot(BEACON_GENESIS_TIME, now) / SLOTS_PER_PERIOD;
         match expected_current_period.cmp(&current_period) {
             Ordering::Equal => {
-                // We already gossiped the latest data from the current period, no need to serve it again.
+                // We already gossiped the latest data from the current period, no need to serve it
+                // again.
                 return Ok(current_period);
             }
             Ordering::Less => {
@@ -302,7 +303,8 @@ impl BeaconBridge {
         let update: LightClientUpdateCapella = serde_json::from_value(update[0]["data"].clone())?;
         let finalized_header_period = update.finalized_header.beacon.slot / SLOTS_PER_PERIOD;
 
-        // We don't serve a `LightClientUpdate` if its finalized header slot is not within the expected current period.
+        // We don't serve a `LightClientUpdate` if its finalized header slot is not within the
+        // expected current period.
         if finalized_header_period != expected_current_period {
             warn!(
                 "LightClientUpdate finalized header is not for the expected period: Expected: {expected_current_period}, Actual: {actual_period}",
@@ -376,7 +378,8 @@ impl BeaconBridge {
 
         match new_finalized_slot.cmp(&finalized_slot) {
             Ordering::Equal => {
-                // We already gossiped the latest finality updated with the same finalized slot, no need to serve it again.
+                // We already gossiped the latest finality updated with the same finalized slot, no
+                // need to serve it again.
                 return Ok(finalized_slot);
             }
             Ordering::Less => {

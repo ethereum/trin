@@ -43,8 +43,8 @@ pub trait BeaconNetworkApi {
     #[method(name = "beaconPing")]
     async fn ping(&self, enr: Enr) -> RpcResult<PongInfo>;
 
-    /// Send a FINDNODES request for nodes that fall within the given set of distances, to the designated
-    /// peer and wait for a response
+    /// Send a FINDNODES request for nodes that fall within the given set of distances, to the
+    /// designated peer and wait for a response
     #[method(name = "beaconFindNodes")]
     async fn find_nodes(&self, enr: Enr, distances: Vec<u16>) -> RpcResult<FindNodesInfo>;
 
@@ -79,8 +79,8 @@ pub trait BeaconNetworkApi {
         limit: u64,
     ) -> RpcResult<PaginateLocalContentInfo>;
 
-    /// Send the provided content value to interested peers. Clients may choose to send to some or all peers.
-    /// Return the number of peers that the content was gossiped to.
+    /// Send the provided content value to interested peers. Clients may choose to send to some or
+    /// all peers. Return the number of peers that the content was gossiped to.
     #[method(name = "beaconGossip")]
     async fn gossip(
         &self,
@@ -88,8 +88,8 @@ pub trait BeaconNetworkApi {
         content_value: BeaconContentValue,
     ) -> RpcResult<u32>;
 
-    /// Send the provided content value to interested peers. Clients may choose to send to some or all peers.
-    /// Return tracing info detailing the gossip propagation.
+    /// Send the provided content value to interested peers. Clients may choose to send to some or
+    /// all peers. Return tracing info detailing the gossip propagation.
     #[method(name = "beaconTraceGossip")]
     async fn trace_gossip(
         &self,
@@ -98,7 +98,8 @@ pub trait BeaconNetworkApi {
     ) -> RpcResult<TraceGossipInfo>;
 
     /// Send an OFFER request with given ContentKey, to the designated peer and wait for a response.
-    /// Returns the content keys bitlist upon successful content transmission or empty bitlist receive.
+    /// Returns the content keys bitlist upon successful content transmission or empty bitlist
+    /// receive.
     #[method(name = "beaconOffer")]
     async fn offer(
         &self,

@@ -201,7 +201,8 @@ fn calculate_interested_enrs<TContentKey: OverlayContentKey>(
     // HashMap to temporarily store all interested ENRs and the content.
     // Key is base64 string of node's ENR.
 
-    // Filter all nodes from overlay routing table where XOR_distance(content_id, nodeId) < node radius
+    // Filter all nodes from overlay routing table where XOR_distance(content_id, nodeId) < node
+    // radius
     let mut interested_enrs: Vec<Enr> = all_nodes
         .to_owned()
         .clone()
@@ -249,7 +250,8 @@ const NUM_FARTHER_NODES: usize = 4;
 /// Selects gossip recipients from a vec of sorted interested ENRs.
 /// Returned vec is a concatenation of, at most:
 /// 1. First `NUM_CLOSEST_NODES` elements of `interested_sorted_enrs`.
-/// 2. `NUM_FARTHER_NODES` elements randomly selected from `interested_sorted_enrs[NUM_CLOSEST_NODES..]`
+/// 2. `NUM_FARTHER_NODES` elements randomly selected from
+///    `interested_sorted_enrs[NUM_CLOSEST_NODES..]`
 fn select_gossip_recipients(interested_sorted_enrs: Vec<Enr>) -> Vec<Enr> {
     let mut gossip_recipients: Vec<Enr> = vec![];
 

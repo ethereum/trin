@@ -62,7 +62,8 @@ impl GrafanaAPI {
 
         // If this is failing with a 409 error, it means that there is likely a problem with the
         // template, make sure that ...
-        // - All "uid" fields inside a prometheus datasource object contain `"uid": "{prometheus_id}"`
+        // - All "uid" fields inside a prometheus datasource object contain `"uid":
+        //   "{prometheus_id}"`
         // - The root level `"id"` field is set to `null` (`"id": null`)
         // - The root level `"title"` field is set to "Trin Metrics" (`"title": "Trin Metrics"`)
         // - The root level `"uid"` field is set to "trin-metrics" (`"uid": "trin-metrics"`)
@@ -85,8 +86,9 @@ impl GrafanaAPI {
             &template_string[..],
             [
                 ("prometheus_uid", prometheus_uid),
-                ("", "{}"), // The templating library picks up an empty json object as a placeholder,
-                            // so replace it with another empty json object.
+                ("", "{}"), /* The templating library picks up an empty json object as a
+                             * placeholder, so replace it with
+                             * another empty json object. */
             ],
         )?;
         Ok(populated_template)

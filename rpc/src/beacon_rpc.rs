@@ -101,8 +101,8 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
         Ok(result)
     }
 
-    /// Send a FINDNODES request for nodes that fall within the given set of distances, to the designated
-    /// peer and wait for a response
+    /// Send a FINDNODES request for nodes that fall within the given set of distances, to the
+    /// designated peer and wait for a response
     async fn find_nodes(&self, enr: Enr, distances: Vec<u16>) -> RpcResult<FindNodesInfo> {
         let endpoint = BeaconEndpoint::FindNodes(enr, distances);
         let result = self.proxy_query_to_beacon_subnet(endpoint).await?;
@@ -175,8 +175,8 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
         Ok(result)
     }
 
-    /// Send the provided content to interested peers. Clients may choose to send to some or all peers.
-    /// Return the number of peers that the content was gossiped to.
+    /// Send the provided content to interested peers. Clients may choose to send to some or all
+    /// peers. Return the number of peers that the content was gossiped to.
     async fn gossip(
         &self,
         content_key: BeaconContentKey,
@@ -188,8 +188,8 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
         Ok(result)
     }
 
-    /// Send the provided content to interested peers. Clients may choose to send to some or all peers.
-    /// Return tracing info.
+    /// Send the provided content to interested peers. Clients may choose to send to some or all
+    /// peers. Return tracing info.
     async fn trace_gossip(
         &self,
         content_key: BeaconContentKey,
@@ -202,7 +202,8 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
     }
 
     /// Send an OFFER request with given ContentKey, to the designated peer and wait for a response.
-    /// Returns the content keys bitlist upon successful content transmission or empty bitlist receive.
+    /// Returns the content keys bitlist upon successful content transmission or empty bitlist
+    /// receive.
     async fn offer(
         &self,
         enr: Enr,

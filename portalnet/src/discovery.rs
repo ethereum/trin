@@ -275,7 +275,8 @@ impl Discovery {
         })
     }
 
-    /// Returns the local node-id and a nested array of node-ids contained in each of this node's k-buckets.
+    /// Returns the local node-id and a nested array of node-ids contained in each of this node's
+    /// k-buckets.
     pub fn routing_table_info(&self) -> RoutingTableInfo {
         RoutingTableInfo {
             local_node_id: hex_encode(self.discv5.local_enr().node_id().raw()),
@@ -308,8 +309,8 @@ impl Discovery {
         self.node_addr_cache.write().get(node_id).cloned()
     }
 
-    /// Put a `NodeAddress` into cache. If the key already exists in the cache, then it updates the key's value and
-    /// returns the old value. Otherwise, `None` is returned.
+    /// Put a `NodeAddress` into cache. If the key already exists in the cache, then it updates the
+    /// key's value and returns the old value. Otherwise, `None` is returned.
     pub fn put_cached_node_addr(&self, node_addr: NodeAddress) -> Option<NodeAddress> {
         self.node_addr_cache
             .write()
@@ -362,10 +363,11 @@ impl UtpEnr {
 // UtpEnr is used as an element of the key for a Connections HashTable in our uTP library.
 // Enr's can change and are not stable, so if we initiate a ``connect_with_cid`` we are inserting
 // our known Enr for the peer, but if the peer has a more upto date Enr, values will be different
-// and the Hash for the old Enr and New Enr will be different, along with equating the two structs will return false.
-// This leads us to a situation where our peer sends us a uTP messages back and our code thinks the same peer
-// is instead 2 different peers causing uTP to ignore the messages. We fixed this by implementing Eq and
-// Hash only using the NodeId of the Enr as it is the only stable non-updatable field in the Enr.
+// and the Hash for the old Enr and New Enr will be different, along with equating the two structs
+// will return false. This leads us to a situation where our peer sends us a uTP messages back and
+// our code thinks the same peer is instead 2 different peers causing uTP to ignore the messages. We
+// fixed this by implementing Eq and Hash only using the NodeId of the Enr as it is the only stable
+// non-updatable field in the Enr.
 impl Hash for UtpEnr {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.0.node_id().hash(state);

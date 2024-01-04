@@ -128,8 +128,8 @@ mod tests {
 
     #[test_log::test]
     fn full_header_batch() {
-        // this block (15573637) was chosen since it contains all tx types (legacy, access list, eip1559)
-        // as well as contract creation txs
+        // this block (15573637) was chosen since it contains all tx types (legacy, access list,
+        // eip1559) as well as contract creation txs
         let expected: String =
             std::fs::read_to_string("../test_assets/geth_batch/headers.json").unwrap();
         let full_headers: FullHeaderBatch = serde_json::from_str(&expected).unwrap();

@@ -70,7 +70,8 @@ pub enum ContentStoreError {
     ContentKey(#[from] ContentKeyError),
 }
 
-/// An enum which tells us if we should store or not store content, and if not why for better errors.
+/// An enum which tells us if we should store or not store content, and if not why for better
+/// errors.
 #[derive(Debug, PartialEq)]
 pub enum ShouldWeStoreContent {
     Store,
@@ -553,8 +554,9 @@ impl PortalStorage {
         self.radius
     }
 
-    /// Public method for determining how much actual disk space is being used to store this node's Portal Network data.
-    /// Intended for analysis purposes. PortalStorage's capacity decision-making is not based off of this method.
+    /// Public method for determining how much actual disk space is being used to store this node's
+    /// Portal Network data. Intended for analysis purposes. PortalStorage's capacity
+    /// decision-making is not based off of this method.
     pub fn get_total_storage_usage_in_bytes_on_disk(&self) -> Result<u64, ContentStoreError> {
         let storage_usage = Self::get_total_size_of_directory_in_bytes(&self.node_data_dir)?;
         Ok(storage_usage)
@@ -633,8 +635,9 @@ impl PortalStorage {
         Ok(sum as u64)
     }
 
-    /// Internal method for finding the piece of stored data that has the farthest content id from our
-    /// node id, according to xor distance. Used to determine which data to drop when at a capacity.
+    /// Internal method for finding the piece of stored data that has the farthest content id from
+    /// our node id, according to xor distance. Used to determine which data to drop when at a
+    /// capacity.
     fn find_farthest_content_id(&self) -> Result<Option<[u8; 32]>, ContentStoreError> {
         let result = match self.distance_fn {
             DistanceFunction::Xor => {

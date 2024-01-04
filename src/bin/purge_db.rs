@@ -29,7 +29,6 @@ use trin_utils::log::init_tracing_logger;
 /// non-history network content. Since we only support history network content, this
 /// shouldn't be a problem, but as we add support for more sub-networks this script will
 /// need to be updated to avoid panicking.
-///
 pub fn main() -> Result<()> {
     init_tracing_logger();
     let purge_config = PurgeConfig::parse();
@@ -45,7 +44,8 @@ pub fn main() -> Result<()> {
     info!("Purging data for NodeID: {node_id}");
     info!("DB Path: {node_data_dir:?}");
 
-    // Capacity is 0 since it (eg. for data radius calculation) is irrelevant when only removing data.
+    // Capacity is 0 since it (eg. for data radius calculation) is irrelevant when only removing
+    // data.
     let capacity = 0;
     let protocol = ProtocolId::History;
     let config = PortalStorageConfig::new(capacity, node_data_dir, node_id)?;

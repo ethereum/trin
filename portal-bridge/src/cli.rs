@@ -13,8 +13,7 @@ use ethportal_api::types::cli::check_private_key_length;
 
 // max value of 16 b/c...
 // - reliably calculate spaced private keys in a reasonable time
-// - for values b/w 16 - 256, calculated spaced private keys are
-//   less and less evenly spread
+// - for values b/w 16 - 256, calculated spaced private keys are less and less evenly spread
 // - running more than 16 nodes simultaneously is not thoroughly tested
 pub const MAX_NODE_COUNT: u8 = 16;
 const DEFAULT_SUBNETWORK: &str = "history";

@@ -80,7 +80,8 @@ pub const FIND_NODES_MAX_NODES: usize = 32;
 pub const FIND_CONTENT_MAX_NODES: usize = 32;
 
 /// With even distribution assumptions, 2**17 is enough to put each node (estimating 100k nodes,
-/// which is more than 10x the ethereum mainnet node count) into a unique bucket by the 17th bucket index.
+/// which is more than 10x the ethereum mainnet node count) into a unique bucket by the 17th bucket
+/// index.
 const EXPECTED_NON_EMPTY_BUCKETS: usize = 17;
 
 /// Bucket refresh lookup interval in seconds
@@ -403,7 +404,8 @@ where
 
     /// Insert a vector of enrs into the routing table
     /// set_connected: should only be true for tests, false for production code
-    /// Tests that use this function are testing if adding to queues work, not if our connection code works.
+    /// Tests that use this function are testing if adding to queues work, not if our connection
+    /// code works.
     fn add_bootnodes(&mut self, bootnode_enrs: Vec<Enr>, set_connected: bool) {
         // Attempt to insert bootnodes into the routing table in a disconnected state.
         // If successful, then add the node to the ping queue. A subsequent successful ping
@@ -888,7 +890,8 @@ where
                                 return;
                             }
 
-                            // report utp tx as successful, even if we go on to fail to process the payload
+                            // report utp tx as successful, even if we go on to fail to process the
+                            // payload
                             metrics.report_utp_outcome(
                                 UtpDirectionLabel::Inbound,
                                 UtpOutcomeLabel::Success,
@@ -1425,8 +1428,8 @@ where
             // network, so there may need to be some way to parameterize the update for a
             // ping/pong.
 
-            // If the ENR sequence number in pong is less than the ENR sequence number for the routing
-            // table entry, then request the node.
+            // If the ENR sequence number in pong is less than the ENR sequence number for the
+            // routing table entry, then request the node.
             if node.enr().seq() < ping.enr_seq {
                 self.request_node(&node.enr());
             }
@@ -1536,7 +1539,8 @@ where
             }
         };
 
-        // Do not initialize uTP stream if remote node doesn't have interest in the offered content keys
+        // Do not initialize uTP stream if remote node doesn't have interest in the offered content
+        // keys
         if response.content_keys.is_zero() {
             if let Some(tx) = gossip_result_tx {
                 let _ = tx.send(false);
@@ -1719,7 +1723,8 @@ where
                     }
                     metrics.report_validation(true);
 
-                    // Check if data should be stored, and store if it is within our radius and not already stored.
+                    // Check if data should be stored, and store if it is within our radius and not
+                    // already stored.
                     let key_desired = store.read().is_key_within_radius_and_unavailable(&key);
                     match key_desired {
                         Ok(ShouldWeStoreContent::Store) => {
@@ -2017,8 +2022,8 @@ where
 
             // If the node is in the routing table, then check to see if we should update its entry.
             // If the node is not in the routing table, then add the node in a disconnected state.
-            // A subsequent ping will establish connectivity with the node. If the insertion succeeds,
-            // then add the node to the ping queue. Ignore insertion failures.
+            // A subsequent ping will establish connectivity with the node. If the insertion
+            // succeeds, then add the node to the ping queue. Ignore insertion failures.
             if let Some(node) = optional_node {
                 if node.enr().seq() < enr.seq() {
                     let updated_node = Node {
@@ -2026,8 +2031,9 @@ where
                         data_radius: node.data_radius(),
                     };
 
-                    // The update removed the node because it would violate the incoming peers condition
-                    // or a bucket/table filter. Remove the node from the ping queue.
+                    // The update removed the node because it would violate the incoming peers
+                    // condition or a bucket/table filter. Remove the node from
+                    // the ping queue.
                     if let UpdateResult::Failed(reason) =
                         kbuckets.update_node(&key, updated_node, None)
                     {
@@ -2116,7 +2122,8 @@ where
     }
 
     /// Advances a find node query (if one is active for the node) using the received ENRs.
-    /// Does nothing if called with a node_id that does not have a corresponding active query request.
+    /// Does nothing if called with a node_id that does not have a corresponding active query
+    /// request.
     fn advance_find_node_query(&mut self, source: Enr, enrs: Vec<Enr>, query_id: QueryId) {
         // Check whether this request was sent on behalf of a query.
         // If so, advance the query with the returned data.
@@ -2357,7 +2364,8 @@ where
         }
     }
 
-    /// Returns a vector of all the ENRs of nodes currently contained in the routing table which are connected.
+    /// Returns a vector of all the ENRs of nodes currently contained in the routing table which are
+    /// connected.
     fn table_entries_enr(&self) -> Vec<Enr> {
         self.kbuckets
             .write()
@@ -2424,7 +2432,8 @@ where
         Ok(closest_nodes)
     }
 
-    /// Returns a vector of ENRs of the `max_nodes` closest connected nodes to the target from our routing table.
+    /// Returns a vector of ENRs of the `max_nodes` closest connected nodes to the target from our
+    /// routing table.
     fn closest_connected_nodes(&self, target_key: &Key<NodeId>, max_nodes: usize) -> Vec<Enr> {
         // Filter out all disconnected nodes
         let kbuckets = self.kbuckets.read();

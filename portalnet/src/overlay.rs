@@ -92,8 +92,8 @@ type BucketEntry = (NodeId, Enr, NodeStatus, Distance, Option<String>);
 
 /// Overlay protocol is a layer on top of discv5 that handles all requests from the overlay networks
 /// (state, history etc.) and dispatch them to the discv5 protocol TalkReq. Each network should
-/// implement the overlay protocol and the overlay protocol is where we can encapsulate the logic for
-/// handling common network requests/responses.
+/// implement the overlay protocol and the overlay protocol is where we can encapsulate the logic
+/// for handling common network requests/responses.
 #[derive(Clone)]
 pub struct OverlayProtocol<TContentKey, TMetric, TValidator, TStore> {
     /// Reference to the underlying discv5 protocol

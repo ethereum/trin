@@ -76,7 +76,8 @@ lazy_static! {
 pub enum Bootnodes {
     #[default]
     Default,
-    // use explicit None here instead of Option<Bootnodes>, since default value is DEFAULT_BOOTNODES
+    // use explicit None here instead of Option<Bootnodes>, since default value is
+    // DEFAULT_BOOTNODES
     None,
     Custom(Vec<Bootnode>),
 }

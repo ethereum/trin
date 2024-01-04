@@ -17,7 +17,8 @@ use portalnet::{
 };
 use trin_validation::oracle::HeaderOracle;
 
-/// Beacon network layer on top of the overlay protocol. Encapsulates beacon network specific data and logic.
+/// Beacon network layer on top of the overlay protocol. Encapsulates beacon network specific data
+/// and logic.
 #[derive(Clone)]
 pub struct BeaconNetwork {
     pub overlay: Arc<OverlayProtocol<BeaconContentKey, XorMetric, BeaconValidator, PortalStorage>>,

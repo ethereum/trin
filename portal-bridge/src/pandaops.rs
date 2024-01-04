@@ -55,8 +55,8 @@ impl Default for PandaOpsMiddleware {
 
 impl PandaOpsMiddleware {
     /// Used the "surf" library here instead of "ureq" since "surf" is much more capable of handling
-    /// multiple async requests. Using "ureq" consistently resulted in errors as soon as the number of
-    /// concurrent tasks increased significantly.
+    /// multiple async requests. Using "ureq" consistently resulted in errors as soon as the number
+    /// of concurrent tasks increased significantly.
     pub async fn batch_requests(&self, obj: Vec<JsonRequest>) -> anyhow::Result<String> {
         let batched_request_futures = obj
             .chunks(BATCH_LIMIT)

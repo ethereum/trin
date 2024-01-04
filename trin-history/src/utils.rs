@@ -46,7 +46,8 @@ pub fn bucket_entries_to_json(bucket_entries: BTreeMap<usize, Vec<NodeTuple>>) -
                             };
                         } else {
                             // Include address (IP:port) for convenience.
-                            // TODO: Can be removed once a portal dashboard does UI-side ENR decoding.
+                            // TODO: Can be removed once a portal dashboard does UI-side ENR
+                            // decoding.
                             let port = match enr.udp4_socket() {
                                 Some(port) => format!("{port}"),
                                 None => "None".to_string(),
