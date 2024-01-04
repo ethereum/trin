@@ -50,7 +50,7 @@ commands:
           command: apt install -y libssl-dev
       - run:
           name: Install libclang for rocksdb
-          command: apt install clang
+          command: apt install -y clang
 orbs:
   rust: circleci/rust@1.6.0
   win: circleci/windows@5.0
