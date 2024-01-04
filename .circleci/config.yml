@@ -40,6 +40,17 @@ commands:
       - run:
           name: Install libclang for rocksdb
           command: sudo apt install clang
+  install-depends-nightly:
+    steps:
+      - run:
+          name: Prepare for apt upgrades
+          command: apt update
+      - run:
+          name: Install libssl-dev for openssl-sys
+          command: apt install -y libssl-dev
+      - run:
+          name: Install libclang for rocksdb
+          command: apt install clang
 orbs:
   rust: circleci/rust@1.6.0
   win: circleci/windows@5.0
@@ -131,7 +142,7 @@ jobs:
       RUST_LOG: "debug"
     steps:
       - checkout
-      - install-depends
+      - install-depends-nightly
       - run:
           name: Run rustfmt
           command: cargo +nightly fmt --all -- --check
