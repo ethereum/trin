@@ -7,13 +7,16 @@ use ssz::Decode;
 use tokio::sync::RwLock;
 use tree_hash::TreeHash;
 
-use ethportal_api::types::execution::{
-    accumulator::EpochAccumulator,
-    block_body::BlockBody,
-    header::{Header, HeaderWithProof},
-    receipts::Receipts,
+use ethportal_api::{
+    types::execution::{
+        accumulator::EpochAccumulator,
+        block_body::BlockBody,
+        header::{Header, HeaderWithProof},
+        receipts::Receipts,
+    },
+    utils::bytes::hex_encode,
+    HistoryContentKey,
 };
-use ethportal_api::{utils::bytes::hex_encode, HistoryContentKey};
 use trin_validation::{oracle::HeaderOracle, validator::Validator};
 
 pub struct ChainHistoryValidator {
@@ -128,17 +131,17 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use std::fs;
-    use std::path::PathBuf;
+    use std::{fs, path::PathBuf};
 
     use ethereum_types::U256;
     use serde_json::Value;
     use ssz::Encode;
 
-    use ethportal_api::types::cli::DEFAULT_MASTER_ACC_PATH;
-    use ethportal_api::types::execution::accumulator::HeaderRecord;
-    use ethportal_api::utils::bytes::hex_decode;
-    use ethportal_api::{BlockHeaderKey, EpochAccumulatorKey};
+    use ethportal_api::{
+        types::{cli::DEFAULT_MASTER_ACC_PATH, execution::accumulator::HeaderRecord},
+        utils::bytes::hex_decode,
+        BlockHeaderKey, EpochAccumulatorKey,
+    };
     use trin_validation::accumulator::MasterAccumulator;
 
     fn get_hwp_ssz() -> Vec<u8> {

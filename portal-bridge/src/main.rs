@@ -3,17 +3,20 @@ use std::sync::Arc;
 use clap::Parser;
 use tokio::time::{sleep, Duration};
 
-use ethportal_api::jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
-use ethportal_api::types::cli::{DEFAULT_DISCOVERY_PORT, DEFAULT_WEB3_HTTP_PORT};
-use portal_bridge::api::{consensus::ConsensusApi, execution::ExecutionApi};
-use portal_bridge::bridge::{beacon::BeaconBridge, history::HistoryBridge};
-use portal_bridge::cli::BridgeConfig;
-use portal_bridge::pandaops::PandaOpsMiddleware;
-use portal_bridge::types::network::NetworkKind;
-use portal_bridge::utils::generate_spaced_private_keys;
+use ethportal_api::{
+    jsonrpsee::http_client::{HttpClient, HttpClientBuilder},
+    types::cli::{DEFAULT_DISCOVERY_PORT, DEFAULT_WEB3_HTTP_PORT},
+};
+use portal_bridge::{
+    api::{consensus::ConsensusApi, execution::ExecutionApi},
+    bridge::{beacon::BeaconBridge, history::HistoryBridge},
+    cli::BridgeConfig,
+    pandaops::PandaOpsMiddleware,
+    types::network::NetworkKind,
+    utils::generate_spaced_private_keys,
+};
 use trin_utils::log::init_tracing_logger;
-use trin_validation::accumulator::MasterAccumulator;
-use trin_validation::oracle::HeaderOracle;
+use trin_validation::{accumulator::MasterAccumulator, oracle::HeaderOracle};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -43,7 +46,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .iter()
         .map(|address| {
             HttpClientBuilder::default()
-                // increase default timeout to allow for trace_gossip requests that can take a long time
+                // increase default timeout to allow for trace_gossip requests that can take a long
+                // time
                 .request_timeout(Duration::from_secs(120))
                 .build(address)
                 .map_err(|e| e.to_string())

@@ -7,21 +7,22 @@ pub mod rpc;
 
 use crate::rpc::RpcServer;
 use discv5::TalkRequest;
-use ethportal_api::types::enr::Enr;
-use ethportal_api::types::portal_wire::ProtocolId;
-use ethportal_api::utils::bytes::{hex_encode, hex_encode_upper};
-use jsonrpsee::core::{async_trait, RpcResult};
-use jsonrpsee::proc_macros::rpc;
-use jsonrpsee::server::{Server, ServerHandle};
-use portalnet::config::PortalnetConfig;
-use portalnet::discovery::{Discovery, UtpEnr};
-use portalnet::utils::db::setup_temp_dir;
-use std::net::SocketAddr;
-use std::str::FromStr;
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::sync::mpsc;
-use tokio::sync::RwLock;
+use ethportal_api::{
+    types::{enr::Enr, portal_wire::ProtocolId},
+    utils::bytes::{hex_encode, hex_encode_upper},
+};
+use jsonrpsee::{
+    core::{async_trait, RpcResult},
+    proc_macros::rpc,
+    server::{Server, ServerHandle},
+};
+use portalnet::{
+    config::PortalnetConfig,
+    discovery::{Discovery, UtpEnr},
+    utils::db::setup_temp_dir,
+};
+use std::{net::SocketAddr, str::FromStr, sync::Arc, time::Duration};
+use tokio::sync::{mpsc, RwLock};
 use utp_rs::{conn::ConnectionConfig, socket::UtpSocket};
 
 /// uTP test app

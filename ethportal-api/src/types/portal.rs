@@ -2,9 +2,7 @@ use serde::{Deserialize, Serialize};
 use ssz_types::{typenum, BitList};
 
 use super::query_trace::QueryTrace;
-use crate::types::enr::Enr;
-use crate::HistoryContentKey;
-use crate::PossibleHistoryContentValue;
+use crate::{types::enr::Enr, HistoryContentKey, PossibleHistoryContentValue};
 
 pub type DataRadius = ethereum_types::U256;
 pub type Distance = ethereum_types::U256;

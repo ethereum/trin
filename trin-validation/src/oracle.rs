@@ -4,11 +4,15 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 
 use crate::accumulator::MasterAccumulator;
-use ethportal_api::types::execution::header::HeaderWithProof;
-use ethportal_api::types::jsonrpc::endpoints::HistoryEndpoint;
-use ethportal_api::types::jsonrpc::request::{BeaconJsonRpcRequest, HistoryJsonRpcRequest};
-use ethportal_api::types::portal::ContentInfo;
 use ethportal_api::{
+    types::{
+        execution::header::HeaderWithProof,
+        jsonrpc::{
+            endpoints::HistoryEndpoint,
+            request::{BeaconJsonRpcRequest, HistoryJsonRpcRequest},
+        },
+        portal::ContentInfo,
+    },
     BlockHeaderKey, HistoryContentKey, HistoryContentValue, PossibleHistoryContentValue,
 };
 

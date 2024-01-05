@@ -5,9 +5,10 @@ use ssz::{self, Decode, Encode};
 use ssz_derive::{Decode, Encode};
 use std::fmt;
 
-use crate::types::content_key::error::ContentKeyError;
-use crate::types::content_key::overlay::OverlayContentKey;
-use crate::utils::bytes::{hex_decode, hex_encode, hex_encode_compact};
+use crate::{
+    types::content_key::{error::ContentKeyError, overlay::OverlayContentKey},
+    utils::bytes::{hex_decode, hex_encode, hex_encode_compact},
+};
 
 /// SSZ encoded overlay content key as bytes
 pub type RawContentKey = Vec<u8>;

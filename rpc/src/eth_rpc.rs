@@ -2,14 +2,17 @@ use ethereum_types::{H256, U256};
 use reth_rpc_types::{Block, BlockTransactions};
 use tokio::sync::mpsc;
 
-use ethportal_api::types::execution::block_body::BlockBody;
-use ethportal_api::types::jsonrpc::request::HistoryJsonRpcRequest;
-use ethportal_api::EthApiServer;
+use ethportal_api::{
+    types::{execution::block_body::BlockBody, jsonrpc::request::HistoryJsonRpcRequest},
+    EthApiServer,
+};
 use trin_validation::constants::CHAIN_ID;
 
-use crate::errors::RpcServeError;
-use crate::fetch::{find_block_body_by_hash, find_header_by_hash};
-use crate::jsonrpsee::core::{async_trait, RpcResult};
+use crate::{
+    errors::RpcServeError,
+    fetch::{find_block_body_by_hash, find_header_by_hash},
+    jsonrpsee::core::{async_trait, RpcResult},
+};
 
 pub struct EthApi {
     network: mpsc::UnboundedSender<HistoryJsonRpcRequest>,

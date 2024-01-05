@@ -1,6 +1,7 @@
-use crate::types::content_key::error::ContentKeyError;
-use crate::types::content_key::overlay::OverlayContentKey;
-use crate::utils::bytes::{hex_decode, hex_encode, hex_encode_compact};
+use crate::{
+    types::content_key::{error::ContentKeyError, overlay::OverlayContentKey},
+    utils::bytes::{hex_decode, hex_encode, hex_encode_compact},
+};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest, Sha256};
 use ssz::{Decode, DecodeError, Encode};

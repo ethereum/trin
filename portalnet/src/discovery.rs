@@ -1,9 +1,14 @@
-use std::hash::{Hash, Hasher};
-use std::net::Ipv4Addr;
-use std::path::PathBuf;
-use std::str::FromStr;
-use std::time::Duration;
-use std::{convert::TryFrom, fmt, fs, io, net::SocketAddr, sync::Arc};
+use std::{
+    convert::TryFrom,
+    fmt, fs,
+    hash::{Hash, Hasher},
+    io,
+    net::{Ipv4Addr, SocketAddr},
+    path::PathBuf,
+    str::FromStr,
+    sync::Arc,
+    time::Duration,
+};
 
 use anyhow::anyhow;
 use async_trait::async_trait;
@@ -21,11 +26,11 @@ use utp_rs::{cid::ConnectionPeer, udp::AsyncUdpSocket};
 
 use super::config::PortalnetConfig;
 use crate::socket;
-use ethportal_api::types::discv5::RoutingTableInfo;
-use ethportal_api::types::enr::Enr;
-use ethportal_api::types::portal_wire::ProtocolId;
-use ethportal_api::utils::bytes::hex_encode;
-use ethportal_api::NodeInfo;
+use ethportal_api::{
+    types::{discv5::RoutingTableInfo, enr::Enr, portal_wire::ProtocolId},
+    utils::bytes::hex_encode,
+    NodeInfo,
+};
 use trin_utils::version::get_trin_version;
 
 /// Size of the buffer of the Discv5 TALKREQ channel.
@@ -270,7 +275,8 @@ impl Discovery {
         })
     }
 
-    /// Returns the local node-id and a nested array of node-ids contained in each of this node's k-buckets.
+    /// Returns the local node-id and a nested array of node-ids contained in each of this node's
+    /// k-buckets.
     pub fn routing_table_info(&self) -> RoutingTableInfo {
         RoutingTableInfo {
             local_node_id: hex_encode(self.discv5.local_enr().node_id().raw()),
@@ -303,8 +309,8 @@ impl Discovery {
         self.node_addr_cache.write().get(node_id).cloned()
     }
 
-    /// Put a `NodeAddress` into cache. If the key already exists in the cache, then it updates the key's value and
-    /// returns the old value. Otherwise, `None` is returned.
+    /// Put a `NodeAddress` into cache. If the key already exists in the cache, then it updates the
+    /// key's value and returns the old value. Otherwise, `None` is returned.
     pub fn put_cached_node_addr(&self, node_addr: NodeAddress) -> Option<NodeAddress> {
         self.node_addr_cache
             .write()
@@ -357,10 +363,11 @@ impl UtpEnr {
 // UtpEnr is used as an element of the key for a Connections HashTable in our uTP library.
 // Enr's can change and are not stable, so if we initiate a ``connect_with_cid`` we are inserting
 // our known Enr for the peer, but if the peer has a more upto date Enr, values will be different
-// and the Hash for the old Enr and New Enr will be different, along with equating the two structs will return false.
-// This leads us to a situation where our peer sends us a uTP messages back and our code thinks the same peer
-// is instead 2 different peers causing uTP to ignore the messages. We fixed this by implementing Eq and
-// Hash only using the NodeId of the Enr as it is the only stable non-updatable field in the Enr.
+// and the Hash for the old Enr and New Enr will be different, along with equating the two structs
+// will return false. This leads us to a situation where our peer sends us a uTP messages back and
+// our code thinks the same peer is instead 2 different peers causing uTP to ignore the messages. We
+// fixed this by implementing Eq and Hash only using the NodeId of the Enr as it is the only stable
+// non-updatable field in the Enr.
 impl Hash for UtpEnr {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.0.node_id().hash(state);

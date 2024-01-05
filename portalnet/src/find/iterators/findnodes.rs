@@ -21,8 +21,10 @@
 // This basis of this file has been taken from the rust-libp2p codebase:
 // https://github.com/libp2p/rust-libp2p
 
-use super::super::query_pool::QueryState;
-use super::query::{Query, QueryConfig, QueryPeer, QueryPeerState, QueryProgress};
+use super::{
+    super::query_pool::QueryState,
+    query::{Query, QueryConfig, QueryPeer, QueryPeerState, QueryProgress},
+};
 
 use discv5::kbucket::{Distance, Key};
 use std::{

@@ -1,7 +1,6 @@
 ///
 /// Code sourced from:
 /// https://github.com/sigp/lighthouse/blob/bf533c8e42/consensus/merkle_proof/src/lib.rs
-///
 use crate::merkle::safe_arith::ArithError;
 use eth2_hashing::{hash, hash32_concat, ZERO_HASHES};
 use ethereum_types::H256;
@@ -136,7 +135,8 @@ impl MerkleTree {
                     (Leaf(_), Zero(_)) | (Finalized(_), Zero(_)) => {
                         *right = MerkleTree::create(&[elem], depth - 1);
                     }
-                    // Try inserting on the left node -> if it fails because it is full, insert in right side.
+                    // Try inserting on the left node -> if it fails because it is full, insert in
+                    // right side.
                     (Node(_, _, _), Zero(_)) => {
                         match left.push_leaf(elem, depth - 1) {
                             Ok(_) => (),

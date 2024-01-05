@@ -4,12 +4,16 @@ use eyre::Result;
 use std::cmp;
 
 use super::ConsensusRpc;
-use crate::consensus::constants::MAX_REQUEST_LIGHT_CLIENT_UPDATES;
-use crate::consensus::types::{
-    LightClientBootstrapCapella, LightClientFinalityUpdateCapella,
-    LightClientOptimisticUpdateCapella, LightClientUpdateCapella,
+use crate::{
+    consensus::{
+        constants::MAX_REQUEST_LIGHT_CLIENT_UPDATES,
+        types::{
+            LightClientBootstrapCapella, LightClientFinalityUpdateCapella,
+            LightClientOptimisticUpdateCapella, LightClientUpdateCapella,
+        },
+    },
+    errors::RpcError,
 };
-use crate::errors::RpcError;
 
 #[derive(Clone, Debug)]
 pub struct NimbusRpc {

@@ -15,11 +15,15 @@ use ssz_types::{typenum, BitList};
 use thiserror::Error;
 use validator::ValidationError;
 
-use crate::types::bytes::ByteList;
-use crate::types::distance::Distance;
-use crate::types::enr::{Enr, SszEnr};
-use crate::utils::bytes::{hex_decode, hex_encode, ByteUtilsError};
-use crate::RawContentKey;
+use crate::{
+    types::{
+        bytes::ByteList,
+        distance::Distance,
+        enr::{Enr, SszEnr},
+    },
+    utils::bytes::{hex_decode, hex_encode, ByteUtilsError},
+    RawContentKey,
+};
 
 /// The maximum size of a Discv5 packet.
 pub(crate) const MAX_DISCV5_PACKET_SIZE: usize = 1280;

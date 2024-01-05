@@ -1,18 +1,20 @@
-use crate::errors::{RpcError, WsHttpSamePortError};
-use crate::jsonrpsee::{Methods, RpcModule};
-use crate::rpc_server::{RpcServerConfig, RpcServerHandle};
-use crate::{BeaconNetworkApi, Discv5Api, EthApi, HistoryNetworkApi, Web3Api};
-use ethportal_api::types::jsonrpc::request::{
-    BeaconJsonRpcRequest, HistoryJsonRpcRequest, StateJsonRpcRequest,
+use crate::{
+    errors::{RpcError, WsHttpSamePortError},
+    jsonrpsee::{Methods, RpcModule},
+    rpc_server::{RpcServerConfig, RpcServerHandle},
+    BeaconNetworkApi, Discv5Api, EthApi, HistoryNetworkApi, Web3Api,
 };
 use ethportal_api::{
+    types::jsonrpc::request::{BeaconJsonRpcRequest, HistoryJsonRpcRequest, StateJsonRpcRequest},
     BeaconNetworkApiServer, Discv5ApiServer, EthApiServer, HistoryNetworkApiServer, Web3ApiServer,
 };
 use portalnet::discovery::Discovery;
 use serde::Deserialize;
-use std::collections::{HashMap, HashSet};
-use std::fmt;
-use std::sync::Arc;
+use std::{
+    collections::{HashMap, HashSet},
+    fmt,
+    sync::Arc,
+};
 use strum::{AsRefStr, EnumString, EnumVariantNames, VariantNames};
 use tokio::sync::mpsc;
 

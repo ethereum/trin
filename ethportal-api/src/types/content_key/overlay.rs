@@ -1,5 +1,7 @@
-use crate::types::content_key::error::ContentKeyError;
-use crate::utils::bytes::{hex_encode, hex_encode_compact};
+use crate::{
+    types::content_key::error::ContentKeyError,
+    utils::bytes::{hex_encode, hex_encode_compact},
+};
 use quickcheck::{Arbitrary, Gen};
 use std::fmt;
 

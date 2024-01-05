@@ -40,6 +40,17 @@ commands:
       - run:
           name: Install libclang for rocksdb
           command: sudo apt install clang
+  install-depends-nightly:
+    steps:
+      - run:
+          name: Prepare for apt upgrades
+          command: apt update
+      - run:
+          name: Install libssl-dev for openssl-sys
+          command: apt install -y libssl-dev
+      - run:
+          name: Install libclang for rocksdb
+          command: apt install -y clang
 orbs:
   rust: circleci/rust@1.6.0
   win: circleci/windows@5.0
@@ -49,6 +60,9 @@ executors:
       IMAGE_NAME: portalnetwork/trin
     docker:
       - image: cimg/rust:1.71.1
+  docker-nightly:
+    docker:
+      - image: rustlang/rust:nightly
 jobs:
   docker-build:
     resource_class: xlarge
@@ -118,30 +132,41 @@ jobs:
           command: |
             echo "$DOCKERHUB_PASS" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
             docker push $IMAGE_NAME:latest-bridge
-  lint:
-        description: |
-            Check linting with Clippy and rustfmt.
-        resource_class: xlarge
-        executor:
-            name: rust/default
-            tag: 1.71.1
-        environment:
-            RUSTFLAGS: '-D warnings'
-            RUST_LOG: 'debug'
-        steps:
-            - checkout
-            - install-depends
-            - run:
-                name: Run rustfmt
-                command: cargo fmt --all -- --check
-            - run:
-                name: Install Clippy
-                command: rustup component add clippy
-            - setup-and-restore-sccache-cache
-            - run:
-                name: Run Clippy
-                command: cargo clippy --all --all-targets --all-features --no-deps -- --deny warnings
-            - save-sccache-cache
+  cargo-fmt:
+    description: |
+      Check linting with rustfmt.
+    resource_class: xlarge
+    executor: docker-nightly
+    environment:
+      RUSTFLAGS: "-D warnings"
+      RUST_LOG: "debug"
+    steps:
+      - checkout
+      - install-depends-nightly
+      - run:
+          name: Run rustfmt
+          command: cargo +nightly fmt --all -- --check
+  cargo-clippy:
+    description: |
+      Check linting with Clippy.
+    resource_class: xlarge
+    executor:
+      name: rust/default
+      tag: 1.71.1
+    environment:
+      RUSTFLAGS: "-D warnings"
+      RUST_LOG: "debug"
+    steps:
+      - checkout
+      - install-depends
+      - run:
+          name: Install Clippy
+          command: rustup component add clippy
+      - setup-and-restore-sccache-cache
+      - run:
+          name: Run Clippy
+          command: cargo clippy --all --all-targets --all-features --no-deps -- --deny warnings
+      - save-sccache-cache
   build:
     description: |
       Build the crate.
@@ -150,8 +175,8 @@ jobs:
       name: rust/default
       tag: 1.71.1
     environment:
-      RUSTFLAGS: '-D warnings'
-      RUST_LOG: 'debug'
+      RUSTFLAGS: "-D warnings"
+      RUST_LOG: "debug"
     steps:
       - checkout
       - install-depends
@@ -167,8 +192,8 @@ jobs:
       name: win/default
       size: xlarge
     environment:
-      RUSTFLAGS: '-D warnings'
-      RUST_LOG: 'debug'
+      RUSTFLAGS: "-D warnings"
+      RUST_LOG: "debug"
     steps:
       - checkout
       - run:
@@ -187,8 +212,8 @@ jobs:
       name: rust/default
       tag: 1.71.1
     environment:
-      RUSTFLAGS: '-D warnings'
-      RUST_LOG: 'debug'
+      RUSTFLAGS: "-D warnings"
+      RUST_LOG: "debug"
     steps:
       - checkout
       - install-depends
@@ -204,8 +229,8 @@ jobs:
       image: ubuntu-2204:current
     resource_class: xlarge
     environment:
-      RUSTFLAGS: '-D warnings'
-      RUST_LOG: 'debug'
+      RUSTFLAGS: "-D warnings"
+      RUST_LOG: "debug"
     steps:
       - checkout
       - run:
@@ -276,7 +301,8 @@ workflows:
           filters:
             branches:
               only: master
-      - lint
+      - cargo-fmt
+      - cargo-clippy
       - build
       - test
       - check-windows

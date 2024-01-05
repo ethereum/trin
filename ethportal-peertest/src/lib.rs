@@ -4,14 +4,20 @@ pub mod constants;
 pub mod scenarios;
 pub mod utils;
 
-use std::net::{IpAddr, Ipv4Addr};
-use std::path::PathBuf;
-use std::{thread, time};
+use std::{
+    net::{IpAddr, Ipv4Addr},
+    path::PathBuf,
+    thread, time,
+};
 
-use ethportal_api::types::cli::{TrinConfig, DEFAULT_DISCOVERY_PORT};
-use ethportal_api::types::enr::Enr;
-use ethportal_api::utils::bytes::hex_encode;
-use ethportal_api::Discv5ApiClient;
+use ethportal_api::{
+    types::{
+        cli::{TrinConfig, DEFAULT_DISCOVERY_PORT},
+        enr::Enr,
+    },
+    utils::bytes::hex_encode,
+    Discv5ApiClient,
+};
 use futures::future;
 use jsonrpsee::async_client::Client;
 use rpc::RpcServerHandle;

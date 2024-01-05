@@ -5,9 +5,10 @@ use discv5::{
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
-use ethportal_api::types::distance::Distance;
-use ethportal_api::types::enr::Enr;
-use ethportal_api::utils::bytes::hex_encode;
+use ethportal_api::{
+    types::{distance::Distance, enr::Enr},
+    utils::bytes::hex_encode,
+};
 
 type NodeMap = BTreeMap<String, String>;
 type NodeTuple = (NodeId, Enr, NodeStatus, Distance, Option<String>);
@@ -45,7 +46,8 @@ pub fn bucket_entries_to_json(bucket_entries: BTreeMap<usize, Vec<NodeTuple>>) -
                             };
                         } else {
                             // Include address (IP:port) for convenience.
-                            // TODO: Can be removed once a portal dashboard does UI-side ENR decoding.
+                            // TODO: Can be removed once a portal dashboard does UI-side ENR
+                            // decoding.
                             let port = match enr.udp4_socket() {
                                 Some(port) => format!("{port}"),
                                 None => "None".to_string(),

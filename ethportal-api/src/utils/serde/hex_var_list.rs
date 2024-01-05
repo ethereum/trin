@@ -2,8 +2,7 @@
 
 use serde::{Deserializer, Serializer};
 use serde_utils::hex::{self, PrefixedHexVisitor};
-use ssz_types::typenum::Unsigned;
-use ssz_types::VariableList;
+use ssz_types::{typenum::Unsigned, VariableList};
 
 pub fn serialize<S, N>(bytes: &VariableList<u8, N>, serializer: S) -> Result<S::Ok, S::Error>
 where

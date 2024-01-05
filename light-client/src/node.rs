@@ -1,12 +1,12 @@
-use std::sync::Arc;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use ethportal_api::consensus::header::BeaconBlockHeader;
 use eyre::Result;
 
-use crate::config::client_config::Config;
-use crate::consensus::rpc::ConsensusRpc;
-use crate::consensus::ConsensusLightClient;
+use crate::{
+    config::client_config::Config,
+    consensus::{rpc::ConsensusRpc, ConsensusLightClient},
+};
 
 use crate::errors::NodeError;
 

@@ -10,16 +10,15 @@ use discv5::{
 use futures::channel::oneshot;
 use parking_lot::RwLock;
 use ssz::Encode;
-use std::future::Future;
 use std::{
     collections::{BTreeMap, HashSet},
     fmt::{Debug, Display},
+    future::Future,
     marker::{PhantomData, Sync},
     sync::Arc,
     time::Duration,
 };
-use tokio::sync::broadcast;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::{broadcast, mpsc::UnboundedSender};
 use tracing::{debug, error, info, warn};
 use utp_rs::socket::UtpSocket;
 
@@ -34,17 +33,20 @@ use crate::{
     storage::ContentStore,
     types::node::Node,
 };
-use ethportal_api::types::bootnodes::Bootnode;
-use ethportal_api::types::discv5::RoutingTableInfo;
-use ethportal_api::types::distance::{Distance, Metric};
-use ethportal_api::types::enr::Enr;
-use ethportal_api::types::portal_wire::{
-    Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer, Ping, Pong,
-    PopulatedOffer, ProtocolId, Request, Response,
+use ethportal_api::{
+    types::{
+        bootnodes::Bootnode,
+        discv5::RoutingTableInfo,
+        distance::{Distance, Metric},
+        enr::Enr,
+        portal_wire::{
+            Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer, Ping,
+            Pong, PopulatedOffer, ProtocolId, Request, Response,
+        },
+    },
+    utils::bytes::hex_encode,
+    OverlayContentKey, RawContentKey,
 };
-use ethportal_api::utils::bytes::hex_encode;
-use ethportal_api::OverlayContentKey;
-use ethportal_api::RawContentKey;
 use trin_metrics::{overlay::OverlayMetricsReporter, portalnet::PORTALNET_METRICS};
 use trin_validation::validator::Validator;
 
@@ -90,8 +92,8 @@ type BucketEntry = (NodeId, Enr, NodeStatus, Distance, Option<String>);
 
 /// Overlay protocol is a layer on top of discv5 that handles all requests from the overlay networks
 /// (state, history etc.) and dispatch them to the discv5 protocol TalkReq. Each network should
-/// implement the overlay protocol and the overlay protocol is where we can encapsulate the logic for
-/// handling common network requests/responses.
+/// implement the overlay protocol and the overlay protocol is where we can encapsulate the logic
+/// for handling common network requests/responses.
 #[derive(Clone)]
 pub struct OverlayProtocol<TContentKey, TMetric, TValidator, TStore> {
     /// Reference to the underlying discv5 protocol

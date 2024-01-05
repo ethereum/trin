@@ -13,7 +13,8 @@ impl ConsensusApi {
         Self { middleware }
     }
 
-    /// Requests the `LightClientBootstrap` structure corresponding to a given post-Altair beacon block root.
+    /// Requests the `LightClientBootstrap` structure corresponding to a given post-Altair beacon
+    /// block root.
     pub async fn get_lc_bootstrap<S: AsRef<str> + Display>(
         &self,
         block_root: S,

@@ -1,9 +1,11 @@
-use crate::types::consensus::body::SyncAggregate;
-use crate::types::consensus::fork::ForkName;
-use crate::types::consensus::light_client::header::{
-    LightClientHeaderBellatrix, LightClientHeaderCapella,
+use crate::types::consensus::{
+    body::SyncAggregate,
+    fork::ForkName,
+    light_client::{
+        header::{LightClientHeaderBellatrix, LightClientHeaderCapella},
+        update::FinalizedRootProofLen,
+    },
 };
-use crate::types::consensus::light_client::update::FinalizedRootProofLen;
 use ethereum_types::H256;
 use serde::{Deserialize, Serialize};
 use serde_this_or_that::as_u64;

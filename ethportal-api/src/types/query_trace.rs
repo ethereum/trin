@@ -1,12 +1,13 @@
-use std::collections::HashMap;
-use std::time::SystemTime;
+use std::{collections::HashMap, time::SystemTime};
 
 use discv5::enr::NodeId;
 use ethereum_types::H256;
 use serde::{Deserialize, Serialize};
 
-use super::distance::{Metric, XorMetric};
-use super::enr::Enr;
+use super::{
+    distance::{Metric, XorMetric},
+    enr::Enr,
+};
 
 type ContentId = [u8; 32];
 
@@ -91,7 +92,8 @@ impl QueryTrace {
             .duration_since(since)
             .unwrap_or_default()
             .as_millis();
-        // JSON serialization does not support u128. u64 can hold a few million years worth of milliseconds.
+        // JSON serialization does not support u128. u64 can hold a few million years worth of
+        // milliseconds.
         u64::try_from(timestamp_millis_u128).unwrap_or(u64::MAX)
     }
 

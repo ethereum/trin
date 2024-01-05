@@ -1,5 +1,7 @@
-use std::ops::{Deref, DerefMut};
-use std::sync::Arc;
+use std::{
+    ops::{Deref, DerefMut},
+    sync::Arc,
+};
 
 use anyhow::anyhow;
 use bytes::Bytes;
@@ -731,8 +733,8 @@ mod tests {
 
     #[test_log::test]
     fn receipts_batch() {
-        // this block (15573637) was chosen since it contains all tx types (legacy, access list, eip1559)
-        // as well as contract creation txs
+        // this block (15573637) was chosen since it contains all tx types (legacy, access list,
+        // eip1559) as well as contract creation txs
         let expected: String =
             std::fs::read_to_string("../test_assets/geth_batch/receipts.json").unwrap();
         let receipts: Receipts = serde_json::from_str(&expected).unwrap();

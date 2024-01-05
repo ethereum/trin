@@ -19,8 +19,7 @@ use tracing::info;
 use utp_rs::socket::UtpSocket;
 
 use crate::{events::HistoryEvents, jsonrpc::HistoryRequestHandler};
-use ethportal_api::types::enr::Enr;
-use ethportal_api::types::jsonrpc::request::HistoryJsonRpcRequest;
+use ethportal_api::types::{enr::Enr, jsonrpc::request::HistoryJsonRpcRequest};
 use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, UtpEnr},

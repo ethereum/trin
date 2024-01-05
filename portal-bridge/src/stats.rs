@@ -1,12 +1,12 @@
-use std::collections::HashSet;
-use std::str::FromStr;
+use std::{collections::HashSet, str::FromStr};
 
 use tracing::{info, trace};
 
-use ethportal_api::jsonrpsee::core::Error;
-use ethportal_api::types::enr::Enr;
-use ethportal_api::types::portal::TraceGossipInfo;
-use ethportal_api::{BeaconContentKey, HistoryContentKey};
+use ethportal_api::{
+    jsonrpsee::core::Error,
+    types::{enr::Enr, portal::TraceGossipInfo},
+    BeaconContentKey, HistoryContentKey,
+};
 
 // Trait for tracking / reporting gossip stats
 pub trait StatsReporter<TContentKey> {

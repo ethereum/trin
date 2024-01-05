@@ -1,5 +1,8 @@
-use clap::error::{Error, ErrorKind};
-use clap::{arg, Args, Parser, Subcommand};
+use clap::{
+    arg,
+    error::{Error, ErrorKind},
+    Args, Parser, Subcommand,
+};
 use ethereum_types::H256;
 use std::{env, ffi::OsString, fmt, net::SocketAddr, path::PathBuf, str::FromStr};
 use url::Url;

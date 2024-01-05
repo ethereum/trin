@@ -1,15 +1,17 @@
 use std::sync::Arc;
 
 use discv5::enr::NodeId;
-use ethportal_api::types::portal_wire::Content;
-use ethportal_api::types::{
-    constants::CONTENT_ABSENT, distance::Distance, jsonrpc::endpoints::HistoryEndpoint,
-    jsonrpc::request::HistoryJsonRpcRequest, query_trace::QueryTrace,
-};
-use ethportal_api::utils::bytes::hex_encode;
 use ethportal_api::{
-    types::portal::{AcceptInfo, ContentInfo, FindNodesInfo, PongInfo, TraceContentInfo},
-    ContentValue, {HistoryContentKey, OverlayContentKey, RawContentKey},
+    types::{
+        constants::CONTENT_ABSENT,
+        distance::Distance,
+        jsonrpc::{endpoints::HistoryEndpoint, request::HistoryJsonRpcRequest},
+        portal::{AcceptInfo, ContentInfo, FindNodesInfo, PongInfo, TraceContentInfo},
+        portal_wire::Content,
+        query_trace::QueryTrace,
+    },
+    utils::bytes::hex_encode,
+    ContentValue, HistoryContentKey, OverlayContentKey, RawContentKey,
 };
 use portalnet::storage::ContentStore;
 use serde_json::{json, Value};

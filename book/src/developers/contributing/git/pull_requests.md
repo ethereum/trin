@@ -9,7 +9,7 @@ through github via pull requests.
 * Mark unfinished pull requests with the "Work in Progress" label.
 * Before submitting a pr for review, you should run the following commands
   locally and make sure they are passing, otherwise CI will raise an error.
-  * `cargo fmt --all -- --check` and `cargo clippy --all --all-targets --all-features -- --deny warnings` for linting checks
+  * `cargo +nightly fmt --all -- --check` and `cargo clippy --all --all-targets --all-features -- --deny warnings` for linting checks
   * `RUSTFLAGS='-D warnings' cargo test --workspace` to run all tests
 * Pull requests **should** always be reviewed by another member of the team
   prior to being merged.

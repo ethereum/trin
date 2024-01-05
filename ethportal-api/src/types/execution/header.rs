@@ -6,8 +6,10 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use ssz::{Encode, SszDecoderBuilder, SszEncoder};
 use ssz_derive::{Decode, Encode};
 
-use crate::types::bytes::ByteList;
-use crate::utils::bytes::{hex_decode, hex_encode};
+use crate::{
+    types::bytes::ByteList,
+    utils::bytes::{hex_decode, hex_encode},
+};
 
 const LONDON_BLOCK_NUMBER: u64 = 12965000;
 const SHANGHAI_BLOCK_NUMBER: u64 = 17034871;

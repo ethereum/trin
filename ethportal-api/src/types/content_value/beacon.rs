@@ -1,26 +1,33 @@
-use crate::types::consensus::fork::{ForkDigest, ForkName};
-use crate::types::consensus::header_proof::HistoricalSummariesWithProof;
-use crate::types::consensus::light_client::bootstrap::{
-    LightClientBootstrap, LightClientBootstrapBellatrix, LightClientBootstrapCapella,
+use crate::{
+    types::{
+        consensus::{
+            fork::{ForkDigest, ForkName},
+            header_proof::HistoricalSummariesWithProof,
+            light_client::{
+                bootstrap::{
+                    LightClientBootstrap, LightClientBootstrapBellatrix,
+                    LightClientBootstrapCapella,
+                },
+                finality_update::{
+                    LightClientFinalityUpdate, LightClientFinalityUpdateBellatrix,
+                    LightClientFinalityUpdateCapella,
+                },
+                optimistic_update::{
+                    LightClientOptimisticUpdate, LightClientOptimisticUpdateBellatrix,
+                    LightClientOptimisticUpdateCapella,
+                },
+                update::{LightClientUpdate, LightClientUpdateBellatrix, LightClientUpdateCapella},
+            },
+        },
+        constants::CONTENT_ABSENT,
+        content_value::ContentValue,
+    },
+    utils::bytes::{hex_decode, hex_encode},
+    ContentValueError,
 };
-use crate::types::consensus::light_client::finality_update::{
-    LightClientFinalityUpdate, LightClientFinalityUpdateBellatrix, LightClientFinalityUpdateCapella,
-};
-use crate::types::consensus::light_client::optimistic_update::{
-    LightClientOptimisticUpdate, LightClientOptimisticUpdateBellatrix,
-    LightClientOptimisticUpdateCapella,
-};
-use crate::types::consensus::light_client::update::{
-    LightClientUpdate, LightClientUpdateBellatrix, LightClientUpdateCapella,
-};
-use crate::types::constants::CONTENT_ABSENT;
-use crate::types::content_value::ContentValue;
-use crate::utils::bytes::{hex_decode, hex_encode};
-use crate::ContentValueError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use ssz::{Decode, DecodeError, Encode};
-use ssz_types::typenum::U128;
-use ssz_types::VariableList;
+use ssz_types::{typenum::U128, VariableList};
 use std::ops::Deref;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -541,8 +548,9 @@ impl<'de> Deserialize<'de> for BeaconContentValue {
 
 #[cfg(test)]
 mod test {
-    use crate::utils::bytes::hex_decode;
-    use crate::{BeaconContentValue, ContentValue, PossibleBeaconContentValue};
+    use crate::{
+        utils::bytes::hex_decode, BeaconContentValue, ContentValue, PossibleBeaconContentValue,
+    };
     use serde_json::Value;
     use std::fs;
 

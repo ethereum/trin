@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use light_client::config::client_config::Config;
-use light_client::config::networks;
-use light_client::consensus::rpc::mock_rpc::MockRpc;
-use light_client::consensus::ConsensusLightClient;
+use light_client::{
+    config::{client_config::Config, networks},
+    consensus::{rpc::mock_rpc::MockRpc, ConsensusLightClient},
+};
 
 async fn setup() -> ConsensusLightClient<MockRpc> {
     let base_config = networks::mainnet();

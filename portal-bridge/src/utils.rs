@@ -1,6 +1,8 @@
-use std::ops::Deref;
-use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    ops::Deref,
+    path::PathBuf,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use anyhow::bail;
 use chrono::Duration;
@@ -8,9 +10,10 @@ use discv5::enr::{CombinedKey, Enr, NodeId};
 use ethereum_types::H256;
 use serde::{Deserialize, Serialize};
 
-use ethportal_api::utils::bytes::hex_encode;
-use ethportal_api::HistoryContentKey;
-use ethportal_api::{BeaconContentKey, BeaconContentValue, HistoryContentValue};
+use ethportal_api::{
+    utils::bytes::hex_encode, BeaconContentKey, BeaconContentValue, HistoryContentKey,
+    HistoryContentValue,
+};
 
 /// Generates a set of N private keys, with node ids that are equally spaced
 /// around the 256-bit keys space.
@@ -169,8 +172,10 @@ mod tests {
     };
     use chrono::{DateTime, TimeZone, Utc};
     use ethereum_types::U256;
-    use ethportal_api::types::distance::{Metric, XorMetric};
-    use ethportal_api::utils::bytes::hex_decode;
+    use ethportal_api::{
+        types::distance::{Metric, XorMetric},
+        utils::bytes::hex_decode,
+    };
     use rstest::rstest;
     use serde_json::json;
 

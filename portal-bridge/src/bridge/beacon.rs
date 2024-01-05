@@ -1,7 +1,9 @@
-use std::cmp::Ordering;
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
-use std::time::SystemTime;
+use std::{
+    cmp::Ordering,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+    time::SystemTime,
+};
 
 use anyhow::bail;
 use jsonrpsee::http_client::HttpClient;
@@ -10,29 +12,31 @@ use ssz_types::VariableList;
 use tokio::time::{interval, sleep, Duration, MissedTickBehavior};
 use tracing::{info, warn};
 
-use crate::api::consensus::ConsensusApi;
-use crate::constants::BEACON_GENESIS_TIME;
-use crate::gossip::gossip_beacon_content;
-use crate::stats::{BeaconSlotStats, StatsReporter};
-use crate::types::mode::BridgeMode;
-use crate::utils::{
-    duration_until_next_update, expected_current_slot, read_test_assets_from_file, TestAssets,
+use crate::{
+    api::consensus::ConsensusApi,
+    constants::BEACON_GENESIS_TIME,
+    gossip::gossip_beacon_content,
+    stats::{BeaconSlotStats, StatsReporter},
+    types::mode::BridgeMode,
+    utils::{
+        duration_until_next_update, expected_current_slot, read_test_assets_from_file, TestAssets,
+    },
 };
-use ethportal_api::types::consensus::fork::ForkName;
-use ethportal_api::types::consensus::light_client::bootstrap::LightClientBootstrapCapella;
-use ethportal_api::types::consensus::light_client::finality_update::LightClientFinalityUpdateCapella;
-use ethportal_api::types::consensus::light_client::optimistic_update::LightClientOptimisticUpdateCapella;
-use ethportal_api::types::consensus::light_client::update::{
-    LightClientUpdate, LightClientUpdateCapella,
-};
-use ethportal_api::types::content_key::beacon::{
-    LightClientFinalityUpdateKey, LightClientOptimisticUpdateKey,
-};
-use ethportal_api::types::content_value::beacon::{
-    ForkVersionedLightClientUpdate, LightClientUpdatesByRange,
-};
-use ethportal_api::utils::bytes::hex_decode;
 use ethportal_api::{
+    types::{
+        consensus::{
+            fork::ForkName,
+            light_client::{
+                bootstrap::LightClientBootstrapCapella,
+                finality_update::LightClientFinalityUpdateCapella,
+                optimistic_update::LightClientOptimisticUpdateCapella,
+                update::{LightClientUpdate, LightClientUpdateCapella},
+            },
+        },
+        content_key::beacon::{LightClientFinalityUpdateKey, LightClientOptimisticUpdateKey},
+        content_value::beacon::{ForkVersionedLightClientUpdate, LightClientUpdatesByRange},
+    },
+    utils::bytes::hex_decode,
     BeaconContentKey, BeaconContentValue, LightClientBootstrapKey, LightClientUpdatesByRangeKey,
 };
 
@@ -281,7 +285,8 @@ impl BeaconBridge {
             expected_current_slot(BEACON_GENESIS_TIME, now) / SLOTS_PER_PERIOD;
         match expected_current_period.cmp(&current_period) {
             Ordering::Equal => {
-                // We already gossiped the latest data from the current period, no need to serve it again.
+                // We already gossiped the latest data from the current period, no need to serve it
+                // again.
                 return Ok(current_period);
             }
             Ordering::Less => {
@@ -298,7 +303,8 @@ impl BeaconBridge {
         let update: LightClientUpdateCapella = serde_json::from_value(update[0]["data"].clone())?;
         let finalized_header_period = update.finalized_header.beacon.slot / SLOTS_PER_PERIOD;
 
-        // We don't serve a `LightClientUpdate` if its finalized header slot is not within the expected current period.
+        // We don't serve a `LightClientUpdate` if its finalized header slot is not within the
+        // expected current period.
         if finalized_header_period != expected_current_period {
             warn!(
                 "LightClientUpdate finalized header is not for the expected period: Expected: {expected_current_period}, Actual: {actual_period}",
@@ -372,7 +378,8 @@ impl BeaconBridge {
 
         match new_finalized_slot.cmp(&finalized_slot) {
             Ordering::Equal => {
-                // We already gossiped the latest finality updated with the same finalized slot, no need to serve it again.
+                // We already gossiped the latest finality updated with the same finalized slot, no
+                // need to serve it again.
                 return Ok(finalized_slot);
             }
             Ordering::Less => {

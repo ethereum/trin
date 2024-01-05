@@ -1,8 +1,11 @@
-use crate::types::constants::CONTENT_ABSENT;
-use crate::types::content_value::ContentValue;
-use crate::types::execution::accumulator::EpochAccumulator;
-use crate::utils::bytes::{hex_decode, hex_encode};
-use crate::{BlockBody, ContentValueError, HeaderWithProof, Receipts};
+use crate::{
+    types::{
+        constants::CONTENT_ABSENT, content_value::ContentValue,
+        execution::accumulator::EpochAccumulator,
+    },
+    utils::bytes::{hex_decode, hex_encode},
+    BlockBody, ContentValueError, HeaderWithProof, Receipts,
+};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use ssz::{Decode, Encode};
 

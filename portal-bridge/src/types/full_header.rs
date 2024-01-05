@@ -4,10 +4,14 @@ use ethereum_types::H256;
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 
-use ethportal_api::types::consensus::withdrawal::Withdrawal;
-use ethportal_api::types::execution::accumulator::EpochAccumulator;
-use ethportal_api::types::execution::header::{Header, TxHashes};
-use ethportal_api::types::execution::transaction::Transaction;
+use ethportal_api::types::{
+    consensus::withdrawal::Withdrawal,
+    execution::{
+        accumulator::EpochAccumulator,
+        header::{Header, TxHashes},
+        transaction::Transaction,
+    },
+};
 
 /// Helper type to deserialize a response from a batched Header request.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -124,8 +128,8 @@ mod tests {
 
     #[test_log::test]
     fn full_header_batch() {
-        // this block (15573637) was chosen since it contains all tx types (legacy, access list, eip1559)
-        // as well as contract creation txs
+        // this block (15573637) was chosen since it contains all tx types (legacy, access list,
+        // eip1559) as well as contract creation txs
         let expected: String =
             std::fs::read_to_string("../test_assets/geth_batch/headers.json").unwrap();
         let full_headers: FullHeaderBatch = serde_json::from_str(&expected).unwrap();

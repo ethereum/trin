@@ -1,7 +1,7 @@
-use crate::types::consensus::body::SyncAggregate;
-use crate::types::consensus::fork::ForkName;
-use crate::types::consensus::light_client::header::{
-    LightClientHeaderBellatrix, LightClientHeaderCapella,
+use crate::types::consensus::{
+    body::SyncAggregate,
+    fork::ForkName,
+    light_client::header::{LightClientHeaderBellatrix, LightClientHeaderCapella},
 };
 use serde::{Deserialize, Serialize};
 use serde_this_or_that::as_u64;

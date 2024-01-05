@@ -6,15 +6,21 @@ use rocksdb::IteratorMode;
 use ssz::Decode;
 use tracing::{info, warn};
 
-use ethportal_api::types::execution::accumulator::EpochAccumulator;
-use ethportal_api::types::execution::block_body::BlockBody;
-use ethportal_api::types::execution::header::HeaderWithProof;
-use ethportal_api::types::execution::receipts::Receipts;
-use ethportal_api::types::portal_wire::ProtocolId;
-use ethportal_api::utils::bytes::hex_encode;
-use ethportal_api::HistoryContentKey;
-use portalnet::storage::{PortalStorage, PortalStorageConfig};
-use portalnet::utils::db::{configure_node_data_dir, configure_trin_data_dir};
+use ethportal_api::{
+    types::{
+        execution::{
+            accumulator::EpochAccumulator, block_body::BlockBody, header::HeaderWithProof,
+            receipts::Receipts,
+        },
+        portal_wire::ProtocolId,
+    },
+    utils::bytes::hex_encode,
+    HistoryContentKey,
+};
+use portalnet::{
+    storage::{PortalStorage, PortalStorageConfig},
+    utils::db::{configure_node_data_dir, configure_trin_data_dir},
+};
 use trin_utils::log::init_tracing_logger;
 
 ///
@@ -23,7 +29,6 @@ use trin_utils::log::init_tracing_logger;
 /// non-history network content. Since we only support history network content, this
 /// shouldn't be a problem, but as we add support for more sub-networks this script will
 /// need to be updated to avoid panicking.
-///
 pub fn main() -> Result<()> {
     init_tracing_logger();
     let purge_config = PurgeConfig::parse();
@@ -39,7 +44,8 @@ pub fn main() -> Result<()> {
     info!("Purging data for NodeID: {node_id}");
     info!("DB Path: {node_data_dir:?}");
 
-    // Capacity is 0 since it (eg. for data radius calculation) is irrelevant when only removing data.
+    // Capacity is 0 since it (eg. for data radius calculation) is irrelevant when only removing
+    // data.
     let capacity = 0;
     let protocol = ProtocolId::History;
     let config = PortalStorageConfig::new(capacity, node_data_dir, node_id)?;

@@ -33,21 +33,19 @@ pub use types::content_key::{
     state::StateContentKey,
 };
 
-pub use types::consensus;
-pub use types::consensus::light_client;
-pub use types::content_value::{
-    beacon::{BeaconContentValue, PossibleBeaconContentValue},
-    error::ContentValueError,
-    history::{HistoryContentValue, PossibleHistoryContentValue},
+pub use types::{
+    consensus,
+    consensus::light_client,
+    content_value::{
+        beacon::{BeaconContentValue, PossibleBeaconContentValue},
+        error::ContentValueError,
+        history::{HistoryContentValue, PossibleHistoryContentValue},
+    },
+    execution::{block_body::*, header::*, receipts::*},
 };
-pub use types::execution::block_body::*;
-pub use types::execution::header::*;
-pub use types::execution::receipts::*;
 
 // Re-exports jsonrpsee crate
 pub use jsonrpsee;
 pub use types::content_value::ContentValue;
 
-pub use types::discv5::*;
-pub use types::enr::*;
-pub use types::node_id::*;
+pub use types::{discv5::*, enr::*, node_id::*};

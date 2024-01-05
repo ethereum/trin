@@ -1,21 +1,20 @@
-use crate::errors::RpcServeError;
-use crate::serde::from_value;
+use crate::{errors::RpcServeError, serde::from_value};
 
 use crate::jsonrpsee::core::{async_trait, RpcResult};
 use discv5::enr::NodeId;
-use ethportal_api::types::constants::CONTENT_ABSENT;
-use ethportal_api::types::enr::Enr;
-use ethportal_api::types::jsonrpc::endpoints::BeaconEndpoint;
-use ethportal_api::types::jsonrpc::request::BeaconJsonRpcRequest;
-use ethportal_api::types::portal::{
-    AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
-    TraceContentInfo, TraceGossipInfo,
+use ethportal_api::{
+    types::{
+        constants::CONTENT_ABSENT,
+        enr::Enr,
+        jsonrpc::{endpoints::BeaconEndpoint, request::BeaconJsonRpcRequest},
+        portal::{
+            AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
+            TraceContentInfo, TraceGossipInfo,
+        },
+    },
+    BeaconContentKey, BeaconContentValue, BeaconNetworkApiServer, PossibleBeaconContentValue,
+    RoutingTableInfo,
 };
-use ethportal_api::BeaconContentKey;
-use ethportal_api::BeaconContentValue;
-use ethportal_api::BeaconNetworkApiServer;
-use ethportal_api::PossibleBeaconContentValue;
-use ethportal_api::RoutingTableInfo;
 use serde_json::Value;
 use tokio::sync::mpsc;
 
@@ -102,8 +101,8 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
         Ok(result)
     }
 
-    /// Send a FINDNODES request for nodes that fall within the given set of distances, to the designated
-    /// peer and wait for a response
+    /// Send a FINDNODES request for nodes that fall within the given set of distances, to the
+    /// designated peer and wait for a response
     async fn find_nodes(&self, enr: Enr, distances: Vec<u16>) -> RpcResult<FindNodesInfo> {
         let endpoint = BeaconEndpoint::FindNodes(enr, distances);
         let result = self.proxy_query_to_beacon_subnet(endpoint).await?;
@@ -176,8 +175,8 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
         Ok(result)
     }
 
-    /// Send the provided content to interested peers. Clients may choose to send to some or all peers.
-    /// Return the number of peers that the content was gossiped to.
+    /// Send the provided content to interested peers. Clients may choose to send to some or all
+    /// peers. Return the number of peers that the content was gossiped to.
     async fn gossip(
         &self,
         content_key: BeaconContentKey,
@@ -189,8 +188,8 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
         Ok(result)
     }
 
-    /// Send the provided content to interested peers. Clients may choose to send to some or all peers.
-    /// Return tracing info.
+    /// Send the provided content to interested peers. Clients may choose to send to some or all
+    /// peers. Return tracing info.
     async fn trace_gossip(
         &self,
         content_key: BeaconContentKey,
@@ -203,7 +202,8 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
     }
 
     /// Send an OFFER request with given ContentKey, to the designated peer and wait for a response.
-    /// Returns the content keys bitlist upon successful content transmission or empty bitlist receive.
+    /// Returns the content keys bitlist upon successful content transmission or empty bitlist
+    /// receive.
     async fn offer(
         &self,
         enr: Enr,

@@ -1,5 +1,4 @@
-use crate::overlay::OverlayMetrics;
-use crate::storage::StorageMetrics;
+use crate::{overlay::OverlayMetrics, storage::StorageMetrics};
 use lazy_static::lazy_static;
 use prometheus_exporter::prometheus::default_registry;
 

@@ -1,5 +1,4 @@
-use crate::types::content_key::overlay::OverlayContentKey;
-use crate::utils::bytes::hex_encode_compact;
+use crate::{types::content_key::overlay::OverlayContentKey, utils::bytes::hex_encode_compact};
 use ethereum_types::{U256, U512};
 use sha2::{Digest as Sha2Digest, Sha256};
 use sha3::{Digest, Keccak256};

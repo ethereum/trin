@@ -1,7 +1,6 @@
 use serde::Serialize;
 
-use crate::config::utils::bytes_serialize;
-use crate::config::{ChainConfig, Forks};
+use crate::config::{utils::bytes_serialize, ChainConfig, Forks};
 
 /// The base configuration for a network.
 #[derive(Serialize, Default)]

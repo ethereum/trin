@@ -1,33 +1,30 @@
-use std::cmp;
-use std::sync::Arc;
+use std::{cmp, sync::Arc};
 
 use chrono::Duration;
-use eyre::eyre;
-use eyre::Result;
-use log::warn;
-use log::{debug, info};
+use eyre::{eyre, Result};
+use log::{debug, info, warn};
 use milagro_bls::PublicKey;
 use ssz_rs::prelude::*;
 
-use super::rpc::ConsensusRpc;
-use super::types::*;
-use super::utils::*;
+use super::{rpc::ConsensusRpc, types::*, utils::*};
 
 use super::errors::ConsensusError;
-use crate::config::client_config::Config;
-use crate::consensus::constants::MAX_REQUEST_LIGHT_CLIENT_UPDATES;
-use crate::consensus::rpc::portal_rpc::expected_current_slot;
-use crate::types::Bytes32;
-use crate::utils::bytes_to_bytes32;
+use crate::{
+    config::client_config::Config,
+    consensus::{
+        constants::MAX_REQUEST_LIGHT_CLIENT_UPDATES, rpc::portal_rpc::expected_current_slot,
+    },
+    types::Bytes32,
+    utils::bytes_to_bytes32,
+};
 use ethereum_types::H256;
-use ethportal_api::consensus::header::BeaconBlockHeader;
-use ethportal_api::consensus::signature::BlsSignature;
-use ethportal_api::light_client::bootstrap::CurrentSyncCommitteeProofLen;
-use ethportal_api::light_client::update::FinalizedRootProofLen;
-use ethportal_api::utils::bytes::hex_encode;
+use ethportal_api::{
+    consensus::{header::BeaconBlockHeader, signature::BlsSignature},
+    light_client::{bootstrap::CurrentSyncCommitteeProofLen, update::FinalizedRootProofLen},
+    utils::bytes::hex_encode,
+};
 use ssz_types::{typenum, BitVector, FixedVector};
-use std::time::SystemTime;
-use std::time::UNIX_EPOCH;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tree_hash::TreeHash;
 
 // https://github.com/ethereum/consensus-specs/blob/dev/specs/altair/light-client/sync-protocol.md
@@ -658,18 +655,20 @@ fn is_current_committee_proof_valid(
 mod tests {
     use std::sync::Arc;
 
-    use ethportal_api::consensus::header::BeaconBlockHeader;
-    use ethportal_api::consensus::pubkey::PubKey;
-    use ethportal_api::consensus::signature::BlsSignature;
+    use ethportal_api::consensus::{
+        header::BeaconBlockHeader, pubkey::PubKey, signature::BlsSignature,
+    };
 
-    use crate::config::client_config::Config;
-    use crate::config::networks;
-    use crate::consensus::consensus_client::ConsensusLightClient;
-    use crate::consensus::constants::MAX_REQUEST_LIGHT_CLIENT_UPDATES;
-    use crate::consensus::errors::ConsensusError;
-    use crate::consensus::rpc::mock_rpc::MockRpc;
-    use crate::consensus::rpc::ConsensusRpc;
-    use crate::consensus::utils::calc_sync_period;
+    use crate::{
+        config::{client_config::Config, networks},
+        consensus::{
+            consensus_client::ConsensusLightClient,
+            constants::MAX_REQUEST_LIGHT_CLIENT_UPDATES,
+            errors::ConsensusError,
+            rpc::{mock_rpc::MockRpc, ConsensusRpc},
+            utils::calc_sync_period,
+        },
+    };
 
     async fn get_client(strict_checkpoint_age: bool) -> ConsensusLightClient<MockRpc> {
         let base_config = networks::mainnet();

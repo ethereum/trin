@@ -2,8 +2,8 @@ use anyhow::anyhow;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::io::{Read, Write};
 
-/// Decode content values from uTP payload. All content values are encoded with a LEB128 varint prefix
-/// which indicates the length in bytes of the consecutive content item.
+/// Decode content values from uTP payload. All content values are encoded with a LEB128 varint
+/// prefix which indicates the length in bytes of the consecutive content item.
 pub fn decode_content_payload(payload: Vec<u8>) -> anyhow::Result<Vec<Vec<u8>>> {
     let mut payload = BytesMut::from(&payload[..]).reader();
 
@@ -52,7 +52,8 @@ pub fn encode_content_payload(content_items: &[Bytes]) -> anyhow::Result<BytesMu
     Ok(content_payload.into_inner())
 }
 
-/// Try to read up to five LEB128 bytes (The maximum content size allowed for this application is limited to `uint32`).
+/// Try to read up to five LEB128 bytes (The maximum content size allowed for this application is
+/// limited to `uint32`).
 pub fn read_varint(buf: &[u8]) -> anyhow::Result<(usize, u32)> {
     for i in 1..6 {
         match leb128::read::unsigned(&mut &buf[0..i]) {
