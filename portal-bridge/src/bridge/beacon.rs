@@ -8,7 +8,7 @@ use jsonrpsee::http_client::HttpClient;
 use serde_json::Value;
 use ssz_types::VariableList;
 use tokio::time::{interval, sleep, Duration, MissedTickBehavior};
-use tracing::{info, warn};
+use tracing::{info, warn, Instrument};
 
 use crate::api::consensus::ConsensusApi;
 use crate::constants::BEACON_GENESIS_TIME;
@@ -153,6 +153,7 @@ impl BeaconBridge {
                 &finalized_block_root,
                 slot_stats_clone,
             )
+            .in_current_span()
             .await
             .or_else(|err| {
                 warn!("Failed to serve light client bootstrap: {err}");
@@ -173,6 +174,7 @@ impl BeaconBridge {
                 current_period,
                 slot_stats_clone,
             )
+            .in_current_span()
             .await
             .or_else(|err| {
                 warn!("Failed to serve light client update: {err}");
@@ -192,6 +194,7 @@ impl BeaconBridge {
                 finalized_slot,
                 slot_stats_clone,
             )
+            .in_current_span()
             .await
             .or_else(|err| {
                 warn!("Failed to serve light client finality update: {err}");
@@ -205,6 +208,7 @@ impl BeaconBridge {
         let optimistic_update = tokio::spawn(async move {
             if let Err(err) =
                 Self::serve_light_client_optimistic_update(api, portal_clients, slot_stats_clone)
+                    .in_current_span()
                     .await
             {
                 warn!("Failed to serve light client optimistic update: {err}");

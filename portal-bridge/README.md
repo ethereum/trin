@@ -2,7 +2,8 @@
 Process to feed the portal network by gossiping data retrieved from a trusted provider. Currently, this is only compatible with `Trin` & `Fluffy` clients.
 
 ex.
-```
+```sh
+git clone https://github.com/ethereum/portal-accumulators.git
 cargo run -p portal-bridge -- --node-count 1 --executable-path ./target/debug/trin --epoch-accumulator-path ./portal-accumulators trin
 ```
 
