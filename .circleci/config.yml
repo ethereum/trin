@@ -251,11 +251,9 @@ jobs:
       - run:
           name: Install Rust
           command: curl https://sh.rustup.rs -sSf | sh -s -- -y
-      - setup-and-restore-sccache-cache
       - run:
           name: Build utp-testing package
           command: cargo build --workspace --release
-      - save-sccache-cache
       - run:
           name: Move docker artifacts
           command: mv -t utp-testing/docker/circleci/ target/release/utp-test-app utp-testing/docker/run_endpoint.sh utp-testing/docker/setup.sh
