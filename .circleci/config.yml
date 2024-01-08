@@ -272,7 +272,7 @@ jobs:
           command: docker ps -a
       - run:
           name: Run test suite
-          command: RUST_LOG=debug ./target/release/utp-test-suite
+          command: RUST_LOG=trace ./target/release/utp-test-suite
       - run:
           name: Stop containers
           command: docker-compose -f utp-testing/docker/docker-compose.yml down
