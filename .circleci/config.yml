@@ -255,9 +255,6 @@ jobs:
           name: Build utp-testing package
           command: cargo build --workspace --release
       - run:
-          name: Move docker artifacts
-          command: mv -t utp-testing/docker/circleci/ target/release/utp-test-app utp-testing/docker/run_endpoint.sh utp-testing/docker/setup.sh
-      - run:
           name: Build uTP Test App container
           command: docker build -t test-utp --no-cache utp-testing/docker/circleci/
       - run:
