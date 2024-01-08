@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use jsonrpsee::http_client::HttpClient;
 use tokio::time::{sleep, Duration};
-use tracing::{debug, warn};
+use tracing::{debug, warn, Instrument};
 
 use crate::stats::{BeaconSlotStats, HistoryBlockStats, StatsReporter};
 use ethportal_api::{
@@ -28,7 +28,9 @@ pub async fn gossip_beacon_content(
         let client = client.clone();
         let content_key = content_key.clone();
         let content_value = content_value.clone();
-        let result = tokio::spawn(beacon_trace_gossip(client, content_key, content_value)).await?;
+        let result =
+            tokio::spawn(beacon_trace_gossip(client, content_key, content_value).in_current_span())
+                .await?;
         results.push(result);
     }
     if let Ok(mut data) = slot_stats.lock() {
@@ -91,7 +93,10 @@ pub async fn gossip_history_content(
         let client = client.clone();
         let content_key = content_key.clone();
         let content_value = content_value.clone();
-        let result = tokio::spawn(history_trace_gossip(client, content_key, content_value)).await?;
+        let result = tokio::spawn(
+            history_trace_gossip(client, content_key, content_value).in_current_span(),
+        )
+        .await?;
         results.push(result);
     }
     if let Ok(mut data) = block_stats.lock() {

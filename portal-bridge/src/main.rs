@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use clap::Parser;
 use tokio::time::{sleep, Duration};
+use tracing::Instrument;
 
 use ethportal_api::{
     jsonrpsee::http_client::{HttpClient, HttpClientBuilder},
@@ -68,7 +69,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let beacon_bridge =
                 BeaconBridge::new(consensus_api, bridge_mode, Arc::new(portal_clients));
 
-            beacon_bridge.launch().await;
+            beacon_bridge
+                .launch()
+                .instrument(tracing::info_span!("beacon"))
+                .await;
         });
 
         bridge_tasks.push(bridge_handle);
@@ -90,7 +94,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 bridge_config.epoch_acc_path,
             );
 
-            bridge.launch().await;
+            bridge
+                .launch()
+                .instrument(tracing::info_span!("history"))
+                .await;
         });
 
         bridge_tasks.push(bridge_handle);
