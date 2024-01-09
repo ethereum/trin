@@ -34,6 +34,7 @@ pub async fn test_history_bridge(peertest: &Peertest, target: &HttpClient) {
         portal_clients,
         header_oracle,
         epoch_acc_path,
+        2,
     );
     bridge.launch().await;
     let (content_key, content_value) = fixture_header_with_proof_1000010();

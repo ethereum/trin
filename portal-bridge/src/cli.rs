@@ -7,6 +7,7 @@ use url::Url;
 
 use crate::{
     client_handles::{fluffy_handle, trin_handle},
+    constants::DEFAULT_HISTORY_BACKFILL_RATE_LIMIT_SECONDS,
     types::{mode::BridgeMode, network::NetworkKind},
 };
 use ethportal_api::types::cli::check_private_key_length;
@@ -78,6 +79,13 @@ pub struct BridgeConfig {
         help = "Hex encoded 32 byte private key (with 0x prefix) (used as the root key for generating spaced private keys, if multiple nodes are selected)"
     )]
     pub root_private_key: Option<H256>,
+
+    #[arg(
+        default_value_t = DEFAULT_HISTORY_BACKFILL_RATE_LIMIT_SECONDS,
+        long,
+        help = "Lets you choose the rate you want to backfill so if you choose 2s 60s/2s=30 you will gossip 30 blocks a minute"
+    )]
+    pub history_backfill_rate_limit_seconds: u64,
 }
 
 fn check_node_count(val: &str) -> Result<u8, String> {

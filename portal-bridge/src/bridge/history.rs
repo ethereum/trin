@@ -8,6 +8,7 @@ use std::{
 use anyhow::{anyhow, bail};
 use ssz::Decode;
 use tokio::time::{sleep, Duration};
+use tokio_utils::RateLimiter;
 use tracing::{debug, info, warn, Instrument};
 
 use crate::{
@@ -53,6 +54,7 @@ pub struct HistoryBridge {
     pub execution_api: ExecutionApi,
     pub header_oracle: HeaderOracle,
     pub epoch_acc_path: PathBuf,
+    pub history_backfill_rate_limit_seconds: u64,
 }
 
 impl HistoryBridge {
@@ -62,6 +64,7 @@ impl HistoryBridge {
         portal_clients: Vec<HttpClient>,
         header_oracle: HeaderOracle,
         epoch_acc_path: PathBuf,
+        history_backfill_rate_limit_seconds: u64,
     ) -> Self {
         Self {
             mode,
@@ -69,6 +72,7 @@ impl HistoryBridge {
             execution_api,
             header_oracle,
             epoch_acc_path,
+            history_backfill_rate_limit_seconds,
         }
     }
 }
@@ -185,6 +189,9 @@ impl HistoryBridge {
             start: start_block,
             end: end_block,
         };
+        let rate_limiter = RateLimiter::new(Duration::from_secs(
+            self.history_backfill_rate_limit_seconds,
+        ));
         while epoch_index <= current_epoch {
             // Using epoch_size chunks & epoch boundaries ensures that every
             // "chunk" shares an epoch accumulator avoiding the need to
@@ -204,16 +211,20 @@ impl HistoryBridge {
             for height in gossip_range.clone() {
                 let cloned_self = self.clone();
                 let epoch_acc = epoch_acc.clone();
-                tokio::spawn(async move {
-                    let _ = Self::serve_full_block(
-                        &cloned_self,
-                        height,
-                        epoch_acc,
-                        cloned_self.portal_clients.clone(),
-                    )
-                    .in_current_span()
+                let _ = rate_limiter
+                    .throttle(|| {
+                        tokio::spawn(async move {
+                            let _ = Self::serve_full_block(
+                                &cloned_self,
+                                height,
+                                epoch_acc,
+                                cloned_self.portal_clients.clone(),
+                            )
+                            .in_current_span()
+                            .await;
+                        })
+                    })
                     .await;
-                });
             }
             if !looped {
                 break;

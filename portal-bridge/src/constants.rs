@@ -26,3 +26,7 @@ pub const HEADER_WITH_PROOF_CONTENT_VALUE: &str =
 
 // Beacon chain mainnet genesis time: Tue Dec 01 2020 12:00:23 GMT+0000
 pub const BEACON_GENESIS_TIME: u64 = 1606824023;
+
+// This rate limits how long we wait to gossip a new block
+// with this default setting of 2 seconds, we will gossip 30 blocks a minute
+pub const DEFAULT_HISTORY_BACKFILL_RATE_LIMIT_SECONDS: u64 = 2;

@@ -92,6 +92,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 portal_clients.expect("Failed to create history JSON-RPC clients"),
                 header_oracle,
                 bridge_config.epoch_acc_path,
+                bridge_config.history_backfill_rate_limit_seconds,
             );
 
             bridge
