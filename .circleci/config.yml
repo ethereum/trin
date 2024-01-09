@@ -271,9 +271,6 @@ jobs:
           name: Check containers
           command: docker ps -a      
       - run:
-          name: Why no workie
-          command: docker logs martenseemann/quic-network-simulator
-      - run:
           name: Run test suite
           command: RUST_LOG=trace ./target/release/utp-test-suite
       - run:
