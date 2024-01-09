@@ -3,11 +3,12 @@ use std::sync::Arc;
 use discv5::enr::NodeId;
 use ethportal_api::{
     types::{
+        beacon::{ContentInfo, TraceContentInfo},
         constants::CONTENT_ABSENT,
         content_value::ContentValue,
         distance::Distance,
         jsonrpc::{endpoints::BeaconEndpoint, request::BeaconJsonRpcRequest},
-        portal::{AcceptInfo, ContentInfo, FindNodesInfo, PongInfo, TraceContentInfo},
+        portal::{AcceptInfo, FindNodesInfo, PongInfo},
         portal_wire::Content,
         query_trace::QueryTrace,
     },

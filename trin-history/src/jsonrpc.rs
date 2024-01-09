@@ -5,8 +5,9 @@ use ethportal_api::{
     types::{
         constants::CONTENT_ABSENT,
         distance::Distance,
+        history::{ContentInfo, TraceContentInfo},
         jsonrpc::{endpoints::HistoryEndpoint, request::HistoryJsonRpcRequest},
-        portal::{AcceptInfo, ContentInfo, FindNodesInfo, PongInfo, TraceContentInfo},
+        portal::{AcceptInfo, FindNodesInfo, PongInfo},
         portal_wire::Content,
         query_trace::QueryTrace,
     },

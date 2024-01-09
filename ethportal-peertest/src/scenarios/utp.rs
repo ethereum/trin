@@ -4,7 +4,7 @@ use crate::{
 };
 use discv5::enr::NodeId;
 use ethportal_api::{
-    types::portal::{ContentInfo, TraceContentInfo},
+    types::history::{ContentInfo, TraceContentInfo},
     HistoryNetworkApiClient, PossibleHistoryContentValue,
 };
 use tracing::info;

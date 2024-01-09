@@ -4,13 +4,11 @@ use crate::jsonrpsee::core::{async_trait, RpcResult};
 use discv5::enr::NodeId;
 use ethportal_api::{
     types::{
+        beacon::{ContentInfo, PaginateLocalContentInfo, TraceContentInfo},
         constants::CONTENT_ABSENT,
         enr::Enr,
         jsonrpc::{endpoints::BeaconEndpoint, request::BeaconJsonRpcRequest},
-        portal::{
-            AcceptInfo, ContentInfo, DataRadius, FindNodesInfo, PaginateLocalContentInfo, PongInfo,
-            TraceContentInfo, TraceGossipInfo,
-        },
+        portal::{AcceptInfo, DataRadius, FindNodesInfo, PongInfo, TraceGossipInfo},
     },
     BeaconContentKey, BeaconContentValue, BeaconNetworkApiServer, PossibleBeaconContentValue,
     RoutingTableInfo,
@@ -142,14 +140,17 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
     async fn recursive_find_content(
         &self,
         content_key: BeaconContentKey,
-    ) -> RpcResult<PossibleBeaconContentValue> {
+    ) -> RpcResult<ContentInfo> {
         let endpoint = BeaconEndpoint::RecursiveFindContent(content_key);
         let result = self.proxy_query_to_beacon_subnet(endpoint).await?;
         if result == serde_json::Value::String(CONTENT_ABSENT.to_string()) {
-            return Ok(PossibleBeaconContentValue::ContentAbsent);
+            return Ok(ContentInfo::Content {
+                content: PossibleBeaconContentValue::ContentAbsent,
+                utp_transfer: false,
+            });
         };
-        let result: BeaconContentValue = from_value(result)?;
-        Ok(PossibleBeaconContentValue::ContentPresent(result))
+        let result: ContentInfo = from_value(result)?;
+        Ok(result)
     }
 
     /// Lookup a target content key in the network. Return tracing info.

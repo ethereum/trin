@@ -5,7 +5,7 @@ use crate::{
 use ethereum_types::H256;
 use ethportal_api::{
     jsonrpsee::async_client::Client,
-    types::{content_key::history::BlockHeaderKey, enr::Enr, portal::ContentInfo},
+    types::{content_key::history::BlockHeaderKey, enr::Enr, history::ContentInfo},
     HistoryContentKey, HistoryNetworkApiClient, PossibleHistoryContentValue,
 };
 use std::str::FromStr;
