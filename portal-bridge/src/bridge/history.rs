@@ -46,7 +46,6 @@ const HEADER_SATURATION_DELAY: u64 = 10; // seconds
 const LATEST_BLOCK_POLL_RATE: u64 = 5; // seconds
 const EPOCH_SIZE: u64 = EPOCH_SIZE_USIZE as u64;
 
-#[derive(Clone)]
 pub struct HistoryBridge {
     pub mode: BridgeMode,
     pub portal_clients: Vec<HttpClient>,
@@ -128,16 +127,12 @@ impl HistoryBridge {
                 };
                 info!("Discovered new blocks to gossip: {gossip_range:?}");
                 for height in gossip_range.clone() {
-                    let cloned_self = self.clone();
+                    let portal_clients = self.portal_clients.clone();
+                    let execution_api = self.execution_api.clone();
                     tokio::spawn(async move {
-                        let _ = Self::serve_full_block(
-                            &cloned_self,
-                            height,
-                            None,
-                            cloned_self.portal_clients.clone(),
-                        )
-                        .in_current_span()
-                        .await;
+                        let _ = Self::serve_full_block(height, None, portal_clients, execution_api)
+                            .in_current_span()
+                            .await;
                     });
                 }
                 block_index = gossip_range.end;
@@ -202,17 +197,14 @@ impl HistoryBridge {
             };
             info!("fetching headers in range: {gossip_range:?}");
             for height in gossip_range.clone() {
-                let cloned_self = self.clone();
                 let epoch_acc = epoch_acc.clone();
+                let portal_clients = self.portal_clients.clone();
+                let execution_api = self.execution_api.clone();
                 tokio::spawn(async move {
-                    let _ = Self::serve_full_block(
-                        &cloned_self,
-                        height,
-                        epoch_acc,
-                        cloned_self.portal_clients.clone(),
-                    )
-                    .in_current_span()
-                    .await;
+                    let _ =
+                        Self::serve_full_block(height, epoch_acc, portal_clients, execution_api)
+                            .in_current_span()
+                            .await;
                 });
             }
             if !looped {
@@ -230,13 +222,13 @@ impl HistoryBridge {
     }
 
     async fn serve_full_block(
-        &self,
         height: u64,
         epoch_acc: Option<Arc<EpochAccumulator>>,
         portal_clients: Vec<HttpClient>,
+        execution_api: ExecutionApi,
     ) -> anyhow::Result<()> {
         info!("Serving block: {height}");
-        let mut full_header = self.execution_api.get_header(height).await?;
+        let mut full_header = execution_api.get_header(height).await?;
         if full_header.header.number <= MERGE_BLOCK_NUMBER {
             full_header.epoch_acc = epoch_acc;
         }
@@ -247,13 +239,23 @@ impl HistoryBridge {
         // Sleep for 10 seconds to allow headers to saturate network,
         // since they must be available for body / receipt validation.
         sleep(Duration::from_secs(HEADER_SATURATION_DELAY)).await;
-        self.construct_and_gossip_block_body(&full_header, &portal_clients, block_stats.clone())
-            .await
-            .map_err(|err| anyhow!("Error gossiping block body #{height:?}: {err:?}"))?;
+        HistoryBridge::construct_and_gossip_block_body(
+            &full_header,
+            &portal_clients,
+            &execution_api,
+            block_stats.clone(),
+        )
+        .await
+        .map_err(|err| anyhow!("Error gossiping block body #{height:?}: {err:?}"))?;
 
-        self.construct_and_gossip_receipt(&full_header, &portal_clients, block_stats.clone())
-            .await
-            .map_err(|err| anyhow!("Error gossiping receipt #{height:?}: {err:?}"))?;
+        HistoryBridge::construct_and_gossip_receipt(
+            &full_header,
+            &portal_clients,
+            &execution_api,
+            block_stats.clone(),
+        )
+        .await
+        .map_err(|err| anyhow!("Error gossiping receipt #{height:?}: {err:?}"))?;
         if let Ok(stats) = block_stats.lock() {
             stats.report();
         } else {
@@ -345,9 +347,9 @@ impl HistoryBridge {
     }
 
     async fn construct_and_gossip_receipt(
-        &self,
         full_header: &FullHeader,
         portal_clients: &Vec<HttpClient>,
+        execution_api: &ExecutionApi,
         block_stats: Arc<Mutex<HistoryBlockStats>>,
     ) -> anyhow::Result<()> {
         debug!("Serving receipt: {:?}", full_header.header.number);
@@ -356,7 +358,7 @@ impl HistoryBridge {
                 receipt_list: vec![],
             },
             _ => {
-                self.execution_api
+                execution_api
                     .get_trusted_receipts(&full_header.tx_hashes.hashes)
                     .await?
             }
@@ -381,9 +383,9 @@ impl HistoryBridge {
     }
 
     async fn construct_and_gossip_block_body(
-        &self,
         full_header: &FullHeader,
         portal_clients: &Vec<HttpClient>,
+        execution_api: &ExecutionApi,
         block_stats: Arc<Mutex<HistoryBlockStats>>,
     ) -> anyhow::Result<()> {
         let txs = full_header.txs.clone();
@@ -405,7 +407,7 @@ impl HistoryBridge {
             let uncles = match full_header.uncles.len() {
                 0 => vec![],
                 _ => {
-                    self.execution_api
+                    execution_api
                         .get_trusted_uncles(&full_header.uncles)
                         .await?
                 }
