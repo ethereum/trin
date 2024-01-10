@@ -7131,6 +7131,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "trin-storage"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "discv5",
+ "ethportal-api",
+ "r2d2",
+ "r2d2_sqlite",
+ "rusqlite",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
 name = "trin-utils"
 version = "0.1.1-alpha.1"
 dependencies = [

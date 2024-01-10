@@ -60,6 +60,7 @@ members = [
     "trin-beacon",
     "trin-history",
     "trin-state",
+    "trin-storage",
     "trin-utils",
     "trin-validation",
     "utp-testing",

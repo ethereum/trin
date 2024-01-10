@@ -4,6 +4,7 @@ use parking_lot::RwLock as PLRwLock;
 use tokio::sync::RwLock;
 use utp_rs::socket::UtpSocket;
 
+use crate::storage::HistoryStorage;
 use ethportal_api::{
     types::{distance::XorMetric, enr::Enr, portal_wire::ProtocolId},
     HistoryContentKey,
@@ -12,7 +13,7 @@ use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, UtpEnr},
     overlay::{OverlayConfig, OverlayProtocol},
-    storage::{HistoryStorage, PortalStorageConfig},
+    storage::PortalStorageConfig,
 };
 use trin_validation::oracle::HeaderOracle;
 

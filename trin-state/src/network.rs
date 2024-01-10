@@ -11,8 +11,9 @@ use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, UtpEnr},
     overlay::{OverlayConfig, OverlayProtocol},
-    storage::{HistoryStorage, PortalStorageConfig},
+    storage::PortalStorageConfig,
 };
+use trin_history::storage::HistoryStorage;
 use trin_validation::oracle::HeaderOracle;
 
 use crate::validation::StateValidator;

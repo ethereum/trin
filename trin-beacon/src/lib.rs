@@ -4,6 +4,7 @@
 pub mod events;
 mod jsonrpc;
 pub mod network;
+mod storage;
 mod sync;
 pub mod validation;
 
