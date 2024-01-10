@@ -22,7 +22,10 @@ use ethportal_api::{
             LIGHT_CLIENT_BOOTSTRAP_KEY_PREFIX, LIGHT_CLIENT_FINALITY_UPDATE_KEY_PREFIX,
             LIGHT_CLIENT_OPTIMISTIC_UPDATE_KEY_PREFIX, LIGHT_CLIENT_UPDATES_BY_RANGE_KEY_PREFIX,
         },
-        content_value::beacon::{ForkVersionedLightClientUpdate, LightClientUpdatesByRange},
+        content_value::beacon::{
+            ForkVersionedLightClientFinalityUpdate, ForkVersionedLightClientOptimisticUpdate,
+            ForkVersionedLightClientUpdate, LightClientUpdatesByRange,
+        },
         distance::{Distance, Metric, XorMetric},
         portal_wire::ProtocolId,
     },
@@ -681,6 +684,81 @@ impl PortalStorage {
     }
 }
 
+/// Store ephemeral light client data in memory
+#[derive(Debug)]
+pub struct BeaconStorageCache {
+    optimistic_update: Option<ForkVersionedLightClientOptimisticUpdate>,
+    finality_update: Option<ForkVersionedLightClientFinalityUpdate>,
+}
+
+impl Default for BeaconStorageCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl BeaconStorageCache {
+    pub fn new() -> Self {
+        Self {
+            optimistic_update: None,
+            finality_update: None,
+        }
+    }
+
+    /// Returns the optimistic update if it exists and matches the given signature slot.
+    pub fn get_optimistic_update(
+        &self,
+        signature_slot: u64,
+    ) -> Option<ForkVersionedLightClientOptimisticUpdate> {
+        if self.optimistic_update.is_some() {
+            let optimistic_update = self.optimistic_update.clone().expect("Can't be None");
+            if optimistic_update.update.signature_slot() == &signature_slot {
+                return Some(optimistic_update);
+            }
+        };
+
+        None
+    }
+
+    /// Returns the finality update if it exists and matches the given finalized slot.
+    pub fn get_finality_update(
+        &self,
+        finalized_slot: u64,
+    ) -> Option<ForkVersionedLightClientFinalityUpdate> {
+        if self.finality_update.is_some() {
+            let finality_update = self.finality_update.clone().expect("Can't be None");
+            // Returns the current finality update if it's finality slot is bigger or equal to the
+            // requested slot.
+            if finality_update
+                .update
+                .finalized_header_capella()
+                .ok()?
+                .beacon
+                .slot
+                >= finalized_slot
+            {
+                return Some(finality_update);
+            }
+        };
+
+        None
+    }
+
+    /// Sets the light client optimistic update
+    pub fn set_optimistic_update(
+        &mut self,
+        optimistic_update: ForkVersionedLightClientOptimisticUpdate,
+    ) {
+        self.optimistic_update = Some(optimistic_update);
+    }
+
+    /// Sets the light client finality update
+    pub fn set_finality_update(&mut self, finality_update: ForkVersionedLightClientFinalityUpdate) {
+        self.finality_update = Some(finality_update);
+    }
+}
+
+/// A data store for Beacon Network content.
 #[derive(Debug)]
 pub struct BeaconStorage {
     node_data_dir: PathBuf,
@@ -688,6 +766,7 @@ pub struct BeaconStorage {
     storage_capacity_in_bytes: u64,
     metrics: StorageMetricsReporter,
     network: ProtocolId,
+    cache: BeaconStorageCache,
 }
 
 impl ContentStore for BeaconStorage {
@@ -744,13 +823,17 @@ impl ContentStore for BeaconStorage {
 
                 Ok(Some(result.as_ssz_bytes()))
             }
-            BeaconContentKey::LightClientFinalityUpdate(_) => {
-                // TODO: Get LightClientFinalityUpdate from cache
-                Ok(None)
+            BeaconContentKey::LightClientFinalityUpdate(content_key) => {
+                match self.cache.get_finality_update(content_key.finalized_slot) {
+                    Some(finality_update) => Ok(Some(finality_update.as_ssz_bytes())),
+                    None => Ok(None),
+                }
             }
-            BeaconContentKey::LightClientOptimisticUpdate(_) => {
-                // TODO: Get LightClientOptimisticUpdate from cache
-                Ok(None)
+            BeaconContentKey::LightClientOptimisticUpdate(content_key) => {
+                match self.cache.get_optimistic_update(content_key.signature_slot) {
+                    Some(optimistic_update) => Ok(Some(optimistic_update.as_ssz_bytes())),
+                    None => Ok(None),
+                }
             }
         }
     }
@@ -813,17 +896,23 @@ impl ContentStore for BeaconStorage {
                 }
                 Ok(ShouldWeStoreContent::Store)
             }
-            BeaconContentKey::LightClientFinalityUpdate(_) => {
-                // TODO: Check content key availability in cache
-                Ok(ShouldWeStoreContent::AlreadyStored)
+            BeaconContentKey::LightClientFinalityUpdate(content_key) => {
+                match self.cache.get_finality_update(content_key.finalized_slot) {
+                    Some(_) => Ok(ShouldWeStoreContent::AlreadyStored),
+                    None => Ok(ShouldWeStoreContent::Store),
+                }
             }
-            BeaconContentKey::LightClientOptimisticUpdate(_) => {
-                // TODO: Check content key availability in cache
-                Ok(ShouldWeStoreContent::AlreadyStored)
+            BeaconContentKey::LightClientOptimisticUpdate(content_key) => {
+                match self.cache.get_optimistic_update(content_key.signature_slot) {
+                    Some(_) => Ok(ShouldWeStoreContent::AlreadyStored),
+                    None => Ok(ShouldWeStoreContent::Store),
+                }
             }
         }
     }
 
+    /// The "radius: concept is not applicable for Beacon network, this is why we always return the
+    /// max radius.
     fn radius(&self) -> Distance {
         Distance::MAX
     }
@@ -841,6 +930,7 @@ impl BeaconStorage {
             storage_capacity_in_bytes: config.storage_capacity_mb * BYTES_IN_MB_U64,
             metrics,
             network: ProtocolId::Beacon,
+            cache: BeaconStorageCache::new(),
         };
 
         // Report current storage capacity.
@@ -944,10 +1034,25 @@ impl BeaconStorage {
                 }
             }
             Some(&LIGHT_CLIENT_FINALITY_UPDATE_KEY_PREFIX) => {
-                // TODO: Store LightClientFinalityUpdate in cache
+                self.cache.set_finality_update(
+                    ForkVersionedLightClientFinalityUpdate::from_ssz_bytes(value.as_slice())
+                        .map_err(|err| ContentStoreError::InvalidData {
+                            message: format!(
+                                "Error deserializing ForkVersionedLightClientFinalityUpdate value: {err:?}"
+                            ),
+                        })?,
+                );
             }
             Some(&LIGHT_CLIENT_OPTIMISTIC_UPDATE_KEY_PREFIX) => {
-                // TODO: Store LightClientOptimisticUpdate in cache
+                self.cache.set_optimistic_update(
+                    ForkVersionedLightClientOptimisticUpdate::from_ssz_bytes(value.as_slice()).map_err(
+                        |err| ContentStoreError::InvalidData {
+                            message: format!(
+                                "Error deserializing ForkVersionedLightClientOptimisticUpdate value: {err:?}"
+                            ),
+                        },
+                    )?,
+                );
             }
             _ => {
                 // Unknown content type
