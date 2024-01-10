@@ -12,7 +12,7 @@ use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, UtpEnr},
     overlay::{OverlayConfig, OverlayProtocol},
-    storage::{PortalStorage, PortalStorageConfig},
+    storage::{HistoryStorage, PortalStorageConfig},
 };
 use trin_validation::oracle::HeaderOracle;
 
@@ -23,7 +23,7 @@ use crate::validation::ChainHistoryValidator;
 #[derive(Clone)]
 pub struct HistoryNetwork {
     pub overlay:
-        Arc<OverlayProtocol<HistoryContentKey, XorMetric, ChainHistoryValidator, PortalStorage>>,
+        Arc<OverlayProtocol<HistoryContentKey, XorMetric, ChainHistoryValidator, HistoryStorage>>,
 }
 
 impl HistoryNetwork {
@@ -40,7 +40,7 @@ impl HistoryNetwork {
             disable_poke: portal_config.disable_poke,
             ..Default::default()
         };
-        let storage = Arc::new(PLRwLock::new(PortalStorage::new(
+        let storage = Arc::new(PLRwLock::new(HistoryStorage::new(
             storage_config,
             ProtocolId::History,
         )?));

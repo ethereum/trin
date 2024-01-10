@@ -204,7 +204,7 @@ impl PortalStorageConfig {
         node_data_dir: PathBuf,
         node_id: NodeId,
     ) -> anyhow::Result<Self> {
-        let sql_connection_pool = PortalStorage::setup_sql(&node_data_dir)?;
+        let sql_connection_pool = HistoryStorage::setup_sql(&node_data_dir)?;
         Ok(Self {
             storage_capacity_mb,
             node_id,
@@ -217,7 +217,7 @@ impl PortalStorageConfig {
 
 /// Struct whose public methods abstract away Kademlia-based store behavior.
 #[derive(Debug)]
-pub struct PortalStorage {
+pub struct HistoryStorage {
     node_id: NodeId,
     node_data_dir: PathBuf,
     storage_capacity_in_bytes: u64,
@@ -228,7 +228,7 @@ pub struct PortalStorage {
     network: ProtocolId,
 }
 
-impl ContentStore for PortalStorage {
+impl ContentStore for HistoryStorage {
     fn get<K: OverlayContentKey>(&self, key: &K) -> Result<Option<Vec<u8>>, ContentStoreError> {
         let content_id = key.content_id();
         self.lookup_content_value(content_id).map_err(|err| {
@@ -271,7 +271,7 @@ impl ContentStore for PortalStorage {
     }
 }
 
-impl PortalStorage {
+impl HistoryStorage {
     /// Public constructor for building a `PortalStorage` object.
     /// Checks whether a populated database already exists vs a fresh instance.
     pub fn new(
@@ -1384,7 +1384,7 @@ pub mod test {
 
         let storage_config =
             PortalStorageConfig::new(CAPACITY_MB, temp_dir.path().to_path_buf(), node_id).unwrap();
-        let storage = PortalStorage::new(storage_config, ProtocolId::History)?;
+        let storage = HistoryStorage::new(storage_config, ProtocolId::History)?;
 
         // Assert that configs match the storage object's fields
         assert_eq!(storage.node_id, node_id);
@@ -1408,7 +1408,7 @@ pub mod test {
             let storage_config =
                 PortalStorageConfig::new(CAPACITY_MB, temp_dir.path().to_path_buf(), node_id)
                     .unwrap();
-            let mut storage = PortalStorage::new(storage_config, ProtocolId::History).unwrap();
+            let mut storage = HistoryStorage::new(storage_config, ProtocolId::History).unwrap();
             let content_key = generate_random_content_key();
             let mut value = [0u8; 32];
             rand::thread_rng().fill_bytes(&mut value);
@@ -1431,7 +1431,7 @@ pub mod test {
         let node_id = get_active_node_id(temp_dir.path().to_path_buf());
         let storage_config =
             PortalStorageConfig::new(CAPACITY_MB, temp_dir.path().to_path_buf(), node_id).unwrap();
-        let mut storage = PortalStorage::new(storage_config, ProtocolId::History)?;
+        let mut storage = HistoryStorage::new(storage_config, ProtocolId::History)?;
         let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey::default());
         let value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
         storage.store(&content_key, &value)?;
@@ -1452,7 +1452,7 @@ pub mod test {
         let node_id = get_active_node_id(temp_dir.path().to_path_buf());
         let storage_config =
             PortalStorageConfig::new(CAPACITY_MB, temp_dir.path().to_path_buf(), node_id).unwrap();
-        let mut storage = PortalStorage::new(storage_config, ProtocolId::History)?;
+        let mut storage = HistoryStorage::new(storage_config, ProtocolId::History)?;
 
         let content_key = generate_random_content_key();
         let value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
@@ -1474,7 +1474,7 @@ pub mod test {
         let node_id = get_active_node_id(temp_dir.path().to_path_buf());
         let storage_config =
             PortalStorageConfig::new(CAPACITY_MB, temp_dir.path().to_path_buf(), node_id).unwrap();
-        let mut storage = PortalStorage::new(storage_config, ProtocolId::History)?;
+        let mut storage = HistoryStorage::new(storage_config, ProtocolId::History)?;
 
         for _ in 0..50 {
             let content_key = generate_random_content_key();
@@ -1490,7 +1490,7 @@ pub mod test {
         // test with 1mb capacity
         let new_storage_config =
             PortalStorageConfig::new(1, temp_dir.path().to_path_buf(), node_id).unwrap();
-        let new_storage = PortalStorage::new(new_storage_config, ProtocolId::History)?;
+        let new_storage = HistoryStorage::new(new_storage_config, ProtocolId::History)?;
 
         // test that previously set value has been pruned
         let bytes = new_storage.get_total_storage_usage_in_bytes_from_network()?;
@@ -1504,7 +1504,7 @@ pub mod test {
         // test with 0mb capacity
         let new_storage_config =
             PortalStorageConfig::new(0, temp_dir.path().to_path_buf(), node_id).unwrap();
-        let new_storage = PortalStorage::new(new_storage_config, ProtocolId::History)?;
+        let new_storage = HistoryStorage::new(new_storage_config, ProtocolId::History)?;
 
         // test that previously set value has been pruned
         assert_eq!(new_storage.storage_capacity_in_bytes, 0);
@@ -1526,7 +1526,7 @@ pub mod test {
         // Use a tiny storage capacity, to fill up as quickly as possible
         let storage_config =
             PortalStorageConfig::new(min_capacity, temp_dir.path().to_path_buf(), node_id).unwrap();
-        let mut storage = PortalStorage::new(storage_config.clone(), ProtocolId::History)?;
+        let mut storage = HistoryStorage::new(storage_config.clone(), ProtocolId::History)?;
 
         // Fill up the storage.
         for _ in 0..32 {
@@ -1547,7 +1547,7 @@ pub mod test {
         assert!(radius < Distance::MAX);
 
         // Restart a filled-up store with the same capacity
-        let new_storage = PortalStorage::new(storage_config, ProtocolId::History)?;
+        let new_storage = HistoryStorage::new(storage_config, ProtocolId::History)?;
 
         // The restarted store should have the same number of items
         assert_eq!(total_entry_count, new_storage.total_entry_count().unwrap());
@@ -1572,7 +1572,7 @@ pub mod test {
         let node_id = Discv5Enr::empty(&private_key).unwrap().node_id();
         let storage_config =
             PortalStorageConfig::new(CAPACITY_MB, node_data_dir.clone(), node_id).unwrap();
-        let mut storage = PortalStorage::new(storage_config, ProtocolId::History)?;
+        let mut storage = HistoryStorage::new(storage_config, ProtocolId::History)?;
 
         for _ in 0..50 {
             let content_key = generate_random_content_key();
@@ -1590,7 +1590,7 @@ pub mod test {
         // test with increased capacity
         let new_storage_config =
             PortalStorageConfig::new(2 * CAPACITY_MB, node_data_dir, node_id).unwrap();
-        let new_storage = PortalStorage::new(new_storage_config, ProtocolId::History)?;
+        let new_storage = HistoryStorage::new(new_storage_config, ProtocolId::History)?;
 
         // test that previously set value has not been pruned
         let bytes = new_storage.get_total_storage_usage_in_bytes_from_network()?;
@@ -1615,7 +1615,7 @@ pub mod test {
         let node_id = get_active_node_id(temp_dir.path().to_path_buf());
         let storage_config =
             PortalStorageConfig::new(0, temp_dir.path().to_path_buf(), node_id).unwrap();
-        let mut storage = PortalStorage::new(storage_config, ProtocolId::History)?;
+        let mut storage = HistoryStorage::new(storage_config, ProtocolId::History)?;
 
         let content_key = generate_random_content_key();
         let value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
@@ -1638,7 +1638,7 @@ pub mod test {
         let node_id = get_active_node_id(temp_dir.path().to_path_buf());
         let storage_config =
             PortalStorageConfig::new(CAPACITY_MB, temp_dir.path().to_path_buf(), node_id).unwrap();
-        let storage = PortalStorage::new(storage_config, ProtocolId::History)?;
+        let storage = HistoryStorage::new(storage_config, ProtocolId::History)?;
 
         let result = storage.find_farthest_content_id()?;
         assert!(result.is_none());
@@ -1659,7 +1659,7 @@ pub mod test {
             let storage_config =
                 PortalStorageConfig::new(CAPACITY_MB, temp_dir.path().to_path_buf(), node_id)
                     .unwrap();
-            let mut storage = PortalStorage::new(storage_config, ProtocolId::History).unwrap();
+            let mut storage = HistoryStorage::new(storage_config, ProtocolId::History).unwrap();
             storage.store(&x, &val).unwrap();
             storage.store(&y, &val).unwrap();
 
