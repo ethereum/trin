@@ -17,13 +17,14 @@ use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, UtpEnr},
     events::{EventEnvelope, OverlayRequest},
-    storage::PortalStorageConfig,
 };
+use trin_storage::PortalStorageConfig;
 use trin_validation::oracle::HeaderOracle;
 
 pub mod events;
 mod jsonrpc;
 pub mod network;
+mod storage;
 pub mod utils;
 pub mod validation;
 

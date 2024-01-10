@@ -25,9 +25,9 @@ use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, Discv5UdpSocket},
     overlay::{OverlayConfig, OverlayProtocol},
-    storage::{ContentStore, DistanceFunction, MemoryContentStore},
     utils::db::setup_temp_dir,
 };
+use trin_storage::{ContentStore, DistanceFunction, MemoryContentStore};
 use trin_validation::validator::MockValidator;
 
 async fn init_overlay(

@@ -2672,8 +2672,8 @@ mod tests {
         enr::generate_random_remote_enr,
     };
     use trin_metrics::portalnet::PORTALNET_METRICS;
-    use trin_validation::validator::MockValidator;
     use trin_storage::{DistanceFunction, MemoryContentStore};
+    use trin_validation::validator::MockValidator;
 
     macro_rules! poll_command_rx {
         ($service:ident) => {
