@@ -2665,7 +2665,6 @@ mod tests {
         config::PortalnetConfig,
         discovery::{Discovery, NodeAddress},
         overlay::OverlayConfig,
-        storage::{DistanceFunction, MemoryContentStore},
         utils::db::setup_temp_dir,
     };
     use ethportal_api::types::{
@@ -2674,6 +2673,7 @@ mod tests {
     };
     use trin_metrics::portalnet::PORTALNET_METRICS;
     use trin_validation::validator::MockValidator;
+    use trin_storage::{DistanceFunction, MemoryContentStore};
 
     macro_rules! poll_command_rx {
         ($service:ident) => {

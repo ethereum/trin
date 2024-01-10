@@ -15,11 +15,11 @@ use ethportal_api::{
     utils::bytes::hex_encode,
     BeaconContentKey, BeaconContentValue, OverlayContentKey, RawContentKey,
 };
-use portalnet::storage::ContentStore;
 use serde_json::{json, Value};
 use ssz::Encode;
 use tokio::sync::{mpsc, Mutex, RwLock};
 use tracing::error;
+use trin_storage::ContentStore;
 
 use crate::network::BeaconNetwork;
 

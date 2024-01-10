@@ -15,13 +15,22 @@ use ethportal_api::{
     BeaconContentKey, OverlayContentKey,
 };
 use r2d2::Pool;
-use r2d2_sqlite::SqliteConnectionManager;
+use r2d2_sqlite::{rusqlite, SqliteConnectionManager};
 use rusqlite::params;
 use ssz::{Decode, Encode};
-use ssz_types::variable_list::VariableList;
+use ssz_types::{typenum::U128, VariableList};
 use std::path::PathBuf;
 use tracing::debug;
 use trin_metrics::{portalnet::PORTALNET_METRICS, storage::StorageMetricsReporter};
+use trin_storage::{
+    error::ContentStoreError,
+    sql::{
+        CONTENT_KEY_LOOKUP_QUERY, INSERT_LC_UPDATE_QUERY, LC_UPDATE_LOOKUP_QUERY,
+        LC_UPDATE_PERIOD_LOOKUP_QUERY, TOTAL_DATA_SIZE_QUERY,
+    },
+    utils::{get_total_size_of_directory_in_bytes, insert_value, lookup_content_value},
+    ContentStore, DataSize, PortalStorageConfig, ShouldWeStoreContent, BYTES_IN_MB_U64,
+};
 
 /// Store ephemeral light client data in memory
 #[derive(Debug)]
