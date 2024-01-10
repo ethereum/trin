@@ -171,3 +171,81 @@ pub struct DataSize {
 }
 
 pub struct EntryCount(pub u64);
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+pub mod test {
+    use super::*;
+    use ethportal_api::IdentityContentKey;
+
+    #[test]
+    fn memory_store_contains_key() {
+        let node_id = NodeId::random();
+        let mut store = MemoryContentStore::new(node_id, DistanceFunction::Xor);
+
+        let val = vec![0xef];
+
+        // Arbitrary key not available.
+        let arb_key = IdentityContentKey::new(node_id.raw());
+        assert!(!store.contains_key(&arb_key));
+
+        // Arbitrary key available.
+        let _ = store.put(arb_key.clone(), val);
+        assert!(store.contains_key(&arb_key));
+    }
+
+    #[test]
+    fn memory_store_get() {
+        let node_id = NodeId::random();
+        let mut store = MemoryContentStore::new(node_id, DistanceFunction::Xor);
+
+        let val = vec![0xef];
+
+        // Arbitrary key not available.
+        let arb_key = IdentityContentKey::new(node_id.raw());
+        assert!(store.get(&arb_key).unwrap().is_none());
+
+        // Arbitrary key available and equal to assigned value.
+        let _ = store.put(arb_key.clone(), val.clone());
+        assert_eq!(store.get(&arb_key).unwrap(), Some(val));
+    }
+
+    #[test]
+    fn memory_store_put() {
+        let node_id = NodeId::random();
+        let mut store = MemoryContentStore::new(node_id, DistanceFunction::Xor);
+
+        let val = vec![0xef];
+
+        // Store content
+        let arb_key = IdentityContentKey::new(node_id.raw());
+        let _ = store.put(arb_key.clone(), val.clone());
+        assert_eq!(store.get(&arb_key).unwrap(), Some(val));
+    }
+
+    #[test]
+    fn memory_store_is_within_radius_and_unavailable() {
+        let node_id = NodeId::random();
+        let mut store = MemoryContentStore::new(node_id, DistanceFunction::Xor);
+
+        let val = vec![0xef];
+
+        // Arbitrary key within radius and unavailable.
+        let arb_key = IdentityContentKey::new(node_id.raw());
+        assert_eq!(
+            store
+                .is_key_within_radius_and_unavailable(&arb_key)
+                .unwrap(),
+            ShouldWeStoreContent::Store
+        );
+
+        // Arbitrary key available.
+        let _ = store.put(arb_key.clone(), val);
+        assert_eq!(
+            store
+                .is_key_within_radius_and_unavailable(&arb_key)
+                .unwrap(),
+            ShouldWeStoreContent::AlreadyStored
+        );
+    }
+}

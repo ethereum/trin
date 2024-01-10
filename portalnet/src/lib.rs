@@ -9,6 +9,5 @@ pub mod gossip;
 pub mod overlay;
 pub mod overlay_service;
 pub mod socket;
-pub mod storage;
 pub mod types;
 pub mod utils;
