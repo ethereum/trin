@@ -77,7 +77,7 @@ pub fn lookup_content_value(
 }
 
 /// Converts most significant 4 bytes of a vector to a u32.
-fn byte_vector_to_u32(vec: Vec<u8>) -> u32 {
+pub fn byte_vector_to_u32(vec: Vec<u8>) -> u32 {
     if vec.len() < 4 {
         debug!("Error: XOR returned less than 4 bytes.");
         return 0;

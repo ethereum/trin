@@ -13,11 +13,11 @@ use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, UtpEnr},
     overlay::{OverlayConfig, OverlayProtocol},
-    storage::PortalStorageConfig,
 };
 use trin_validation::oracle::HeaderOracle;
 
 use crate::validation::ChainHistoryValidator;
+use trin_storage::PortalStorageConfig;
 
 /// History network layer on top of the overlay protocol. Encapsulates history network specific data
 /// and logic.

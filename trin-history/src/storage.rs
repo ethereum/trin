@@ -1,15 +1,31 @@
 use discv5::enr::NodeId;
 use ethportal_api::{
-    types::{distance::Distance, portal_wire::ProtocolId},
+    types::{
+        distance::{Distance, Metric, XorMetric},
+        history::PaginateLocalContentInfo,
+        portal_wire::ProtocolId,
+    },
     utils::bytes::{hex_decode, hex_encode},
     HistoryContentKey, OverlayContentKey,
 };
 use r2d2::Pool;
-use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::params;
-use std::path::{Path, PathBuf};
+use r2d2_sqlite::{rusqlite, SqliteConnectionManager};
+use std::path::PathBuf;
 use tracing::debug;
 use trin_metrics::{portalnet::PORTALNET_METRICS, storage::StorageMetricsReporter};
+use trin_storage::{
+    error::ContentStoreError,
+    sql::{
+        CONTENT_KEY_LOOKUP_QUERY, CONTENT_SIZE_LOOKUP_QUERY, DELETE_QUERY, PAGINATE_QUERY,
+        TOTAL_DATA_SIZE_QUERY, TOTAL_ENTRY_COUNT_QUERY, XOR_FIND_FARTHEST_QUERY,
+    },
+    utils::{
+        byte_vector_to_u32, get_total_size_of_directory_in_bytes, insert_value,
+        lookup_content_value,
+    },
+    ContentId, ContentStore, DataSize, DistanceFunction, EntryCount, PortalStorageConfig,
+    ShouldWeStoreContent, BYTES_IN_MB_U64,
+};
 
 /// Struct whose public methods abstract away Kademlia-based store behavior.
 #[derive(Debug)]

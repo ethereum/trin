@@ -49,7 +49,6 @@ use crate::{
         query_pool::{QueryId, QueryPool, QueryPoolState, TargetKey},
     },
     gossip::propagate_gossip_cross_thread,
-    storage::{ContentStore, ShouldWeStoreContent},
     types::node::Node,
     utils::portal_wire,
 };
@@ -72,6 +71,7 @@ use trin_metrics::{
     labels::{UtpDirectionLabel, UtpOutcomeLabel},
     overlay::OverlayMetricsReporter,
 };
+use trin_storage::{ContentStore, ShouldWeStoreContent};
 use trin_validation::validator::Validator;
 
 pub const FIND_NODES_MAX_NODES: usize = 32;

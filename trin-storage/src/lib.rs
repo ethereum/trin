@@ -163,11 +163,11 @@ impl PortalStorageConfig {
 
 // SQLite Result Containers
 pub struct ContentId {
-    id_long: Vec<u8>,
+    pub id_long: Vec<u8>,
 }
 
 pub struct DataSize {
-    num_bytes: f64,
+    pub num_bytes: f64,
 }
 
-pub struct EntryCount(u64);
+pub struct EntryCount(pub u64);

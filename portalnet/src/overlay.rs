@@ -30,7 +30,6 @@ use crate::{
         OverlayCommand, OverlayRequest, OverlayRequestError, OverlayService, RequestDirection,
         UTP_CONN_CFG,
     },
-    storage::ContentStore,
     types::node::Node,
 };
 use ethportal_api::{
@@ -48,6 +47,7 @@ use ethportal_api::{
     OverlayContentKey, RawContentKey,
 };
 use trin_metrics::{overlay::OverlayMetricsReporter, portalnet::PORTALNET_METRICS};
+use trin_storage::ContentStore;
 use trin_validation::validator::Validator;
 
 use crate::events::EventEnvelope;
