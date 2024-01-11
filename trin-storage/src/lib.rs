@@ -13,6 +13,7 @@ use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use std::path::PathBuf;
 
+pub const DATABASE_NAME: &str = "trin.sqlite";
 pub const BYTES_IN_MB_U64: u64 = 1000 * 1000;
 
 // TODO: Replace enum with generic type parameter. This will require that we have a way to

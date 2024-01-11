@@ -25,8 +25,8 @@ use trin_metrics::{portalnet::PORTALNET_METRICS, storage::StorageMetricsReporter
 use trin_storage::{
     error::ContentStoreError,
     sql::{
-        CONTENT_KEY_LOOKUP_QUERY, INSERT_LC_UPDATE_QUERY, LC_UPDATE_LOOKUP_QUERY,
-        LC_UPDATE_PERIOD_LOOKUP_QUERY, TOTAL_DATA_SIZE_QUERY,
+        CONTENT_KEY_LOOKUP_QUERY_DB, INSERT_LC_UPDATE_QUERY, LC_UPDATE_LOOKUP_QUERY,
+        LC_UPDATE_PERIOD_LOOKUP_QUERY, TOTAL_DATA_SIZE_QUERY_DB,
     },
     utils::{get_total_size_of_directory_in_bytes, insert_value, lookup_content_value},
     ContentStore, DataSize, PortalStorageConfig, ShouldWeStoreContent, BYTES_IN_MB_U64,
@@ -58,12 +58,11 @@ impl BeaconStorageCache {
         &self,
         signature_slot: u64,
     ) -> Option<ForkVersionedLightClientOptimisticUpdate> {
-        if self.optimistic_update.is_some() {
-            let optimistic_update = self.optimistic_update.clone().expect("Can't be None");
+        if let Some(optimistic_update) = &self.optimistic_update {
             if optimistic_update.update.signature_slot() == &signature_slot {
-                return Some(optimistic_update);
+                return Some(optimistic_update.clone());
             }
-        };
+        }
 
         None
     }
@@ -73,8 +72,7 @@ impl BeaconStorageCache {
         &self,
         finalized_slot: u64,
     ) -> Option<ForkVersionedLightClientFinalityUpdate> {
-        if self.finality_update.is_some() {
-            let finality_update = self.finality_update.clone().expect("Can't be None");
+        if let Some(finality_update) = &self.finality_update {
             // Returns the current finality update if it's finality slot is bigger or equal to the
             // requested slot.
             if finality_update
@@ -85,9 +83,9 @@ impl BeaconStorageCache {
                 .slot
                 >= finalized_slot
             {
-                return Some(finality_update);
+                return Some(finality_update.clone());
             }
-        };
+        }
 
         None
     }
@@ -106,7 +104,7 @@ impl BeaconStorageCache {
     }
 }
 
-/// A data store for Beacon Network content.
+/// Storage layer for the state network. Encapsulates beacon network specific data and logic.
 #[derive(Debug)]
 pub struct BeaconStorage {
     node_data_dir: PathBuf,
@@ -194,7 +192,7 @@ impl ContentStore for BeaconStorage {
         self.store(&key, &value.as_ref().to_vec())
     }
 
-    /// The "radius: concept is not applicable for Beacon network
+    /// The "radius" concept is not applicable for Beacon network
     fn is_key_within_radius_and_unavailable<K: OverlayContentKey>(
         &self,
         key: &K,
@@ -259,7 +257,7 @@ impl ContentStore for BeaconStorage {
         }
     }
 
-    /// The "radius: concept is not applicable for Beacon network, this is why we always return the
+    /// The "radius" concept is not applicable for Beacon network, this is why we always return the
     /// max radius.
     fn radius(&self) -> Distance {
         Distance::MAX
@@ -438,7 +436,7 @@ impl BeaconStorage {
     /// Internal method for measuring the total amount of requestable data that the node is storing.
     fn get_total_storage_usage_in_bytes_from_network(&self) -> Result<u64, ContentStoreError> {
         let conn = self.sql_connection_pool.get()?;
-        let mut query = conn.prepare(TOTAL_DATA_SIZE_QUERY)?;
+        let mut query = conn.prepare(TOTAL_DATA_SIZE_QUERY_DB)?;
 
         let result = query.query_map([], |row| {
             Ok(DataSize {
@@ -463,7 +461,7 @@ impl BeaconStorage {
     /// Public method for looking up a content key by its content id
     pub fn lookup_content_key(&self, id: [u8; 32]) -> anyhow::Result<Option<Vec<u8>>> {
         let conn = self.sql_connection_pool.get()?;
-        let mut query = conn.prepare(CONTENT_KEY_LOOKUP_QUERY)?;
+        let mut query = conn.prepare(CONTENT_KEY_LOOKUP_QUERY_DB)?;
         let id = id.to_vec();
         let result: Result<Vec<BeaconContentKey>, ContentStoreError> = query
             .query_map([id], |row| {

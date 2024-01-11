@@ -16,8 +16,9 @@ use trin_metrics::{portalnet::PORTALNET_METRICS, storage::StorageMetricsReporter
 use trin_storage::{
     error::ContentStoreError,
     sql::{
-        CONTENT_KEY_LOOKUP_QUERY, CONTENT_SIZE_LOOKUP_QUERY, DELETE_QUERY, PAGINATE_QUERY,
-        TOTAL_DATA_SIZE_QUERY, TOTAL_ENTRY_COUNT_QUERY, XOR_FIND_FARTHEST_QUERY,
+        CONTENT_KEY_LOOKUP_QUERY_DB, CONTENT_SIZE_LOOKUP_QUERY_DB, DELETE_QUERY_DB,
+        PAGINATE_QUERY_DB, TOTAL_DATA_SIZE_QUERY_DB, TOTAL_ENTRY_COUNT_QUERY_NETWORK,
+        XOR_FIND_FARTHEST_QUERY_NETWORK,
     },
     utils::{
         byte_vector_to_u32, get_total_size_of_directory_in_bytes, insert_value,
@@ -27,7 +28,7 @@ use trin_storage::{
     ShouldWeStoreContent, BYTES_IN_MB_U64,
 };
 
-/// Struct whose public methods abstract away Kademlia-based store behavior.
+/// Storage layer for the history network. Encapsulates history network specific data and logic.
 #[derive(Debug)]
 pub struct HistoryStorage {
     node_id: NodeId,
@@ -84,7 +85,7 @@ impl ContentStore for HistoryStorage {
 }
 
 impl HistoryStorage {
-    /// Public constructor for building a `PortalStorage` object.
+    /// Public constructor for building a `HistoryStorage` object.
     /// Checks whether a populated database already exists vs a fresh instance.
     pub fn new(
         config: PortalStorageConfig,
@@ -160,7 +161,7 @@ impl HistoryStorage {
         limit: &u64,
     ) -> Result<PaginateLocalContentInfo, ContentStoreError> {
         let conn = self.sql_connection_pool.get()?;
-        let mut query = conn.prepare(PAGINATE_QUERY)?;
+        let mut query = conn.prepare(PAGINATE_QUERY_DB)?;
 
         let content_keys: Result<Vec<HistoryContentKey>, ContentStoreError> = query
             .query_map(
@@ -188,7 +189,7 @@ impl HistoryStorage {
 
     fn total_entry_count(&self) -> Result<u64, ContentStoreError> {
         let conn = self.sql_connection_pool.get()?;
-        let mut query = conn.prepare(TOTAL_ENTRY_COUNT_QUERY)?;
+        let mut query = conn.prepare(TOTAL_ENTRY_COUNT_QUERY_NETWORK)?;
         let result: Result<Vec<EntryCount>, rusqlite::Error> = query
             .query_map([u8::from(self.network)], |row| Ok(EntryCount(row.get(0)?)))?
             .collect();
@@ -306,7 +307,7 @@ impl HistoryStorage {
     /// Raises an error if there is a problem accessing the database.
     fn get_content_size(&self, id: &[u8; 32]) -> Result<u64, ContentStoreError> {
         let conn = self.sql_connection_pool.get()?;
-        let mut query = conn.prepare(CONTENT_SIZE_LOOKUP_QUERY)?;
+        let mut query = conn.prepare(CONTENT_SIZE_LOOKUP_QUERY_DB)?;
         let id_vec = id.to_vec();
         let result = query.query_map([id_vec], |row| {
             Ok(DataSize {
@@ -336,7 +337,7 @@ impl HistoryStorage {
     /// Public method for looking up a content key by its content id
     pub fn lookup_content_key(&self, id: [u8; 32]) -> anyhow::Result<Option<Vec<u8>>> {
         let conn = self.sql_connection_pool.get()?;
-        let mut query = conn.prepare(CONTENT_KEY_LOOKUP_QUERY)?;
+        let mut query = conn.prepare(CONTENT_KEY_LOOKUP_QUERY_DB)?;
         let id = id.to_vec();
         let result: Result<Vec<HistoryContentKey>, ContentStoreError> = query
             .query_map([id], |row| {
@@ -391,7 +392,7 @@ impl HistoryStorage {
     fn db_remove(&self, content_id: &[u8; 32]) -> Result<(), ContentStoreError> {
         self.sql_connection_pool
             .get()?
-            .execute(DELETE_QUERY, [content_id.to_vec()])?;
+            .execute(DELETE_QUERY_DB, [content_id.to_vec()])?;
         Ok(())
     }
 
@@ -404,7 +405,7 @@ impl HistoryStorage {
     /// Internal method for measuring the total amount of requestable data that the node is storing.
     fn get_total_storage_usage_in_bytes_from_network(&self) -> Result<u64, ContentStoreError> {
         let conn = self.sql_connection_pool.get()?;
-        let mut query = conn.prepare(TOTAL_DATA_SIZE_QUERY)?;
+        let mut query = conn.prepare(TOTAL_DATA_SIZE_QUERY_DB)?;
 
         let result = query.query_map([], |row| {
             Ok(DataSize {
@@ -435,7 +436,7 @@ impl HistoryStorage {
                 let node_id_u32 = byte_vector_to_u32(self.node_id.raw().to_vec());
 
                 let conn = self.sql_connection_pool.get()?;
-                let mut query = conn.prepare(XOR_FIND_FARTHEST_QUERY)?;
+                let mut query = conn.prepare(XOR_FIND_FARTHEST_QUERY_NETWORK)?;
 
                 let mut result =
                     query.query_map([node_id_u32, u8::from(self.network).into()], |row| {

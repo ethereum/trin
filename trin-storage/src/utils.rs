@@ -1,6 +1,10 @@
 use crate::{
     error::ContentStoreError,
-    sql::{CONTENT_VALUE_LOOKUP_QUERY, CREATE_LC_UPDATE_TABLE, CREATE_QUERY, INSERT_QUERY},
+    sql::{
+        CONTENT_VALUE_LOOKUP_QUERY_DB, CREATE_QUERY_DB, INSERT_QUERY_NETWORK,
+        LC_UPDATE_CREATE_TABLE,
+    },
+    DATABASE_NAME,
 };
 use anyhow::Error;
 use ethportal_api::utils::bytes::{hex_decode, hex_encode};
@@ -12,13 +16,13 @@ use tracing::{debug, info};
 
 /// Helper function for opening a SQLite connection.
 pub fn setup_sql(node_data_dir: &Path) -> Result<Pool<SqliteConnectionManager>, ContentStoreError> {
-    let sql_path = node_data_dir.join("trin.sqlite");
+    let sql_path = node_data_dir.join(DATABASE_NAME);
     info!(path = %sql_path.display(), "Setting up SqliteDB");
 
     let manager = SqliteConnectionManager::file(sql_path);
     let pool = Pool::new(manager)?;
-    pool.get()?.execute(CREATE_QUERY, params![])?;
-    pool.get()?.execute(CREATE_LC_UPDATE_TABLE, params![])?;
+    pool.get()?.execute(CREATE_QUERY_DB, params![])?;
+    pool.get()?.execute(LC_UPDATE_CREATE_TABLE, params![])?;
     Ok(pool)
 }
 
@@ -60,7 +64,7 @@ pub fn lookup_content_value(
     id: [u8; 32],
     conn: PooledConnection<SqliteConnectionManager>,
 ) -> Result<Result<Option<Vec<u8>>, Error>, Error> {
-    let mut query = conn.prepare(CONTENT_VALUE_LOOKUP_QUERY)?;
+    let mut query = conn.prepare(CONTENT_VALUE_LOOKUP_QUERY_DB)?;
     let id = id.to_vec();
     let result: Result<Vec<Vec<u8>>, ContentStoreError> = query
         .query_map([id], |row| {
@@ -107,7 +111,7 @@ pub fn insert_value(
         });
     }
     match conn.execute(
-        INSERT_QUERY,
+        INSERT_QUERY_NETWORK,
         params![
             content_id.to_vec(),
             content_id_as_u32,
