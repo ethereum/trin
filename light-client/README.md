@@ -1,6 +1,6 @@
 # Consensus Light client
 
-Most of the code in this crate is fork of [Helios](https://github.com/a16z/helios) but it doesn't require running 
+Most of the code in this crate is fork of [Helios](https://github.com/a16z/helios) but it doesn't require running
 an execution client alongside the light client.
 
 This light client is modified in a way to be compatible with Portal Network.
@@ -17,7 +17,7 @@ cargo run -p light-client
 ### Using light-client crate as a Library
 
 ```rust
-use eyre::Result;
+use anyhow::Result;
 use light_client::config::networks;
 use light_client::database::FileDB;
 use light_client::{Client, ClientBuilder};

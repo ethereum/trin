@@ -1,4 +1,4 @@
-use eyre::Report;
+use anyhow::Error as AnyhowError;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -24,11 +24,11 @@ pub enum NodeError {
     OutOfSync(u64),
 
     #[error("consensus client creation error: {0}")]
-    ConsensusClientCreationError(Report),
+    ConsensusClientCreationError(AnyhowError),
 
     #[error("consensus advance error: {0}")]
-    ConsensusAdvanceError(Report),
+    ConsensusAdvanceError(AnyhowError),
 
     #[error("consensus sync error: {0}")]
-    ConsensusSyncError(Report),
+    ConsensusSyncError(AnyhowError),
 }

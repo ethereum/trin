@@ -1,6 +1,6 @@
 use crate::{types::Bytes32, utils::bytes32_to_node};
+use anyhow::Result;
 use ethportal_api::consensus::{header::BeaconBlockHeader, signature::BlsSignature};
-use eyre::Result;
 use milagro_bls::{AggregateSignature, PublicKey};
 use ssz_rs::prelude::*;
 use tree_hash::TreeHash;

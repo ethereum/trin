@@ -1,4 +1,4 @@
-use eyre::Result;
+use anyhow::Result;
 use light_client::{
     config::networks, consensus::rpc::nimbus_rpc::NimbusRpc, database::FileDB, Client,
     ClientBuilder,

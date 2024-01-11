@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::config::client_config::Config;
-use eyre::Result;
+use anyhow::Result;
 
 pub trait Database {
     fn new(config: &Config) -> Result<Self>
@@ -29,7 +29,7 @@ impl Database for FileDB {
             });
         }
 
-        eyre::bail!("data dir not in config")
+        anyhow::bail!("data dir not in config")
     }
 
     fn save_checkpoint(&self, checkpoint: Vec<u8>) -> Result<()> {

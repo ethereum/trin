@@ -5,8 +5,8 @@ use crate::consensus::types::{
     LightClientBootstrapCapella, LightClientFinalityUpdateCapella,
     LightClientOptimisticUpdateCapella, LightClientUpdateCapella,
 };
+use anyhow::Result;
 use async_trait::async_trait;
-use eyre::Result;
 
 #[derive(Clone, Debug)]
 pub struct MockRpc {
@@ -42,7 +42,7 @@ impl ConsensusRpc for MockRpc {
     }
 
     async fn chain_id(&self) -> Result<u64> {
-        eyre::bail!("not implemented")
+        anyhow::bail!("not implemented")
     }
 
     fn name(&self) -> String {

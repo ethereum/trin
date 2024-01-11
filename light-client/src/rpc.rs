@@ -1,4 +1,4 @@
-use eyre::Result;
+use anyhow::Result;
 use log::info;
 use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::RwLock;
