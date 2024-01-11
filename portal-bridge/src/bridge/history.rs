@@ -7,8 +7,11 @@ use std::{
 
 use anyhow::{anyhow, bail};
 use ssz::Decode;
-use tokio::time::{sleep, Duration};
-use tracing::{debug, info, warn, Instrument};
+use tokio::{
+    sync::Semaphore,
+    time::{sleep, timeout, Duration},
+};
+use tracing::{debug, error, info, warn, Instrument};
 
 use crate::{
     api::execution::ExecutionApi,
@@ -45,6 +48,8 @@ use trin_validation::{
 const HEADER_SATURATION_DELAY: u64 = 10; // seconds
 const LATEST_BLOCK_POLL_RATE: u64 = 5; // seconds
 const EPOCH_SIZE: u64 = EPOCH_SIZE_USIZE as u64;
+const GOSSIP_LIMIT: usize = 32;
+const GOSSIP_TIMEOUT: u64 = 10 * 60; // seconds
 
 pub struct HistoryBridge {
     pub mode: BridgeMode,
@@ -180,6 +185,7 @@ impl HistoryBridge {
             start: start_block,
             end: end_block,
         };
+        let gossip_send_semaphore = Arc::new(Semaphore::new(GOSSIP_LIMIT));
         while epoch_index <= current_epoch {
             // Using epoch_size chunks & epoch boundaries ensures that every
             // "chunk" shares an epoch accumulator avoiding the need to
@@ -200,11 +206,27 @@ impl HistoryBridge {
                 let epoch_acc = epoch_acc.clone();
                 let portal_clients = self.portal_clients.clone();
                 let execution_api = self.execution_api.clone();
+                let permit = match gossip_send_semaphore.clone().acquire_owned().await {
+                    Ok(permit) => permit,
+                    Err(_) => {
+                        error!("acquire_owned() can only error on semaphore close, this should be impossible");
+                        continue;
+                    }
+                };
                 tokio::spawn(async move {
-                    let _ =
+                    if (timeout(
+                        Duration::from_secs(GOSSIP_TIMEOUT),
                         Self::serve_full_block(height, epoch_acc, portal_clients, execution_api)
-                            .in_current_span()
-                            .await;
+                            .in_current_span(),
+                    )
+                    .await)
+                        .is_err()
+                    {
+                        error!(
+                            "serve_full_block() timedout: this is an indication a bug is present"
+                        )
+                    };
+                    drop(permit);
                 });
             }
             if !looped {
