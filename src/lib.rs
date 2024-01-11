@@ -48,7 +48,11 @@ pub async fn run_trin(
     let portalnet_config = PortalnetConfig::new(&trin_config, private_key);
 
     // Initialize base discovery protocol
-    let mut discovery = Discovery::new(portalnet_config.clone(), node_data_dir.clone())?;
+    let mut discovery = Discovery::new(
+        portalnet_config.clone(),
+        node_data_dir.clone(),
+        trin_config.network.clone(),
+    )?;
     let talk_req_rx = discovery.start().await?;
     let discovery = Arc::new(discovery);
 
@@ -80,7 +84,11 @@ pub async fn run_trin(
 
     // Initialize state sub-network service and event handlers, if selected
     let (state_handler, state_network_task, state_event_tx, state_jsonrpc_tx, state_event_stream) =
-        if trin_config.networks.iter().any(|val| val == STATE_NETWORK) {
+        if trin_config
+            .portal_subnetworks
+            .iter()
+            .any(|val| val == STATE_NETWORK)
+        {
             initialize_state_network(
                 &discovery,
                 Arc::clone(&utp_socket),
@@ -100,7 +108,11 @@ pub async fn run_trin(
         beacon_event_tx,
         beacon_jsonrpc_tx,
         beacon_event_stream,
-    ) = if trin_config.networks.iter().any(|val| val == BEACON_NETWORK) {
+    ) = if trin_config
+        .portal_subnetworks
+        .iter()
+        .any(|val| val == BEACON_NETWORK)
+    {
         initialize_beacon_network(
             &discovery,
             Arc::clone(&utp_socket),
@@ -121,7 +133,7 @@ pub async fn run_trin(
         history_jsonrpc_tx,
         history_event_stream,
     ) = if trin_config
-        .networks
+        .portal_subnetworks
         .iter()
         .any(|val| val == HISTORY_NETWORK)
     {
@@ -167,6 +179,7 @@ pub async fn run_trin(
             (state_event_tx, state_event_stream),
             (beacon_event_tx, beacon_event_stream),
             utp_talk_reqs_tx,
+            trin_config.network.clone(),
         )
         .await;
         events.start().await;

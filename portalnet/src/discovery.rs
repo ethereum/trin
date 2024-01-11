@@ -1,5 +1,4 @@
 use std::{
-    convert::TryFrom,
     fmt, fs,
     hash::{Hash, Hasher},
     io,
@@ -27,8 +26,12 @@ use utp_rs::{cid::ConnectionPeer, udp::AsyncUdpSocket};
 use super::config::PortalnetConfig;
 use crate::socket;
 use ethportal_api::{
-    types::{discv5::RoutingTableInfo, enr::Enr, portal_wire::ProtocolId},
-    utils::bytes::hex_encode,
+    types::{
+        discv5::RoutingTableInfo,
+        enr::Enr,
+        portal_wire::{NetworkSpec, ProtocolId},
+    },
+    utils::bytes::{hex_decode, hex_encode},
     NodeInfo,
 };
 use trin_utils::version::get_trin_version;
@@ -63,6 +66,8 @@ pub struct Discovery {
     pub started: bool,
     /// The socket address that the Discv5 service listens on.
     pub listen_socket: SocketAddr,
+    /// The Portal Network to Protocal Id Map etc MAINNET, TESTNET
+    network_spec: Arc<NetworkSpec>,
 }
 
 impl fmt::Debug for Discovery {
@@ -78,7 +83,11 @@ impl fmt::Debug for Discovery {
 }
 
 impl Discovery {
-    pub fn new(portal_config: PortalnetConfig, node_data_dir: PathBuf) -> Result<Self, String> {
+    pub fn new(
+        portal_config: PortalnetConfig,
+        node_data_dir: PathBuf,
+        network_spec: Arc<NetworkSpec>,
+    ) -> Result<Self, String> {
         let listen_all_ips = SocketAddr::new(
             "0.0.0.0"
                 .parse()
@@ -196,6 +205,7 @@ impl Discovery {
             node_addr_cache,
             started: false,
             listen_socket: listen_all_ips,
+            network_spec,
         })
     }
 
@@ -325,7 +335,12 @@ impl Discovery {
         request: ProtocolRequest,
     ) -> Result<Vec<u8>, RequestError> {
         // Send empty protocol id if unable to convert it to bytes
-        let protocol = Vec::try_from(protocol).unwrap_or_default();
+        let protocol = match self.network_spec.portal_networks.get_by_left(&protocol) {
+            Some(protocol_id) => hex_decode(protocol_id).unwrap_or_default(),
+            None => {
+                unreachable!("send_talk_req() should never receive an invalid ProtocolId protocol")
+            }
+        };
 
         let response = self.discv5.talk_req(enr, protocol, request).await?;
         Ok(response)
@@ -467,7 +482,7 @@ fn get_enr_rlp_content(enr: &Enr) -> BytesMut {
 mod tests {
     use super::*;
     use crate::utils::db::{configure_node_data_dir, configure_trin_data_dir};
-    use ethportal_api::types::bootnodes::Bootnodes;
+    use ethportal_api::types::{bootnodes::Bootnodes, portal_wire::MAINNET};
 
     #[test]
     fn test_enr_file() {
@@ -488,7 +503,12 @@ mod tests {
         assert!(!trin_enr_file_location.is_file());
 
         // test trin.enr is made on first run
-        let discovery = Discovery::new(portalnet_config.clone(), node_data_dir.clone()).unwrap();
+        let discovery = Discovery::new(
+            portalnet_config.clone(),
+            node_data_dir.clone(),
+            MAINNET.clone(),
+        )
+        .unwrap();
         let data = fs::read_to_string(trin_enr_file_location.clone()).unwrap();
         let old_enr = Enr::from_str(&data).unwrap();
         assert_eq!(discovery.local_enr(), old_enr);
@@ -496,7 +516,12 @@ mod tests {
 
         // test if Enr changes the Enr sequence is increased and if it is written to disk
         portalnet_config.listen_port = 2424;
-        let discovery = Discovery::new(portalnet_config.clone(), node_data_dir.clone()).unwrap();
+        let discovery = Discovery::new(
+            portalnet_config.clone(),
+            node_data_dir.clone(),
+            MAINNET.clone(),
+        )
+        .unwrap();
         assert_ne!(discovery.local_enr(), old_enr);
         let data = fs::read_to_string(trin_enr_file_location.clone()).unwrap();
         let old_enr = Enr::from_str(&data).unwrap();
@@ -505,7 +530,7 @@ mod tests {
         assert_eq!(discovery.local_enr(), old_enr);
 
         // test if the enr isn't changed that it's sequence stays the same
-        let discovery = Discovery::new(portalnet_config, node_data_dir).unwrap();
+        let discovery = Discovery::new(portalnet_config, node_data_dir, MAINNET.clone()).unwrap();
         assert_eq!(discovery.local_enr(), old_enr);
         let data = fs::read_to_string(trin_enr_file_location).unwrap();
         let old_enr = Enr::from_str(&data).unwrap();
