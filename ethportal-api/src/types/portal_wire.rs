@@ -2,10 +2,12 @@ use std::{
     convert::{TryFrom, TryInto},
     fmt,
     ops::Deref,
-    str::FromStr,
+    sync::Arc,
 };
 
 use alloy_primitives::U256;
+use bimap::BiHashMap;
+use once_cell::sync::Lazy;
 use rlp::Encodable;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -164,7 +166,7 @@ pub enum ProtocolIdError {
 }
 
 /// Protocol identifiers
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum ProtocolId {
     State,
     History,
@@ -174,22 +176,41 @@ pub enum ProtocolId {
     Utp,
 }
 
-/// Encode hex string to protocol id
-impl FromStr for ProtocolId {
-    type Err = ProtocolIdError;
-
-    fn from_str(input: &str) -> Result<ProtocolId, Self::Err> {
-        match input {
-            "0x500A" => Ok(ProtocolId::State),
-            "0x500B" => Ok(ProtocolId::History),
-            "0x500C" => Ok(ProtocolId::TransactionGossip),
-            "0x500D" => Ok(ProtocolId::CanonicalIndices),
-            "0x501A" => Ok(ProtocolId::Beacon),
-            "0x757470" => Ok(ProtocolId::Utp),
-            _ => Err(ProtocolIdError::Invalid),
-        }
-    }
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NetworkSpec {
+    pub network_name: String,
+    pub portal_networks: BiHashMap<ProtocolId, String>,
 }
+
+pub static MAINNET: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
+    let mut portal_networks = BiHashMap::new();
+    portal_networks.insert(ProtocolId::State, "0x500A".to_string());
+    portal_networks.insert(ProtocolId::History, "0x500B".to_string());
+    portal_networks.insert(ProtocolId::TransactionGossip, "0x500C".to_string());
+    portal_networks.insert(ProtocolId::CanonicalIndices, "0x500D".to_string());
+    portal_networks.insert(ProtocolId::Beacon, "0x501A".to_string());
+    portal_networks.insert(ProtocolId::Utp, "0x757470".to_string());
+    NetworkSpec {
+        portal_networks,
+        network_name: "mainnet".to_string(),
+    }
+    .into()
+});
+
+pub static TESTNET: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
+    let mut portal_networks = BiHashMap::new();
+    portal_networks.insert(ProtocolId::State, "0x501A".to_string());
+    portal_networks.insert(ProtocolId::History, "0x501B".to_string());
+    portal_networks.insert(ProtocolId::TransactionGossip, "0x501C".to_string());
+    portal_networks.insert(ProtocolId::CanonicalIndices, "0x501D".to_string());
+    portal_networks.insert(ProtocolId::Beacon, "0x502A".to_string());
+    portal_networks.insert(ProtocolId::Utp, "0x757470".to_string());
+    NetworkSpec {
+        portal_networks,
+        network_name: "testnet".to_string(),
+    }
+    .into()
+});
 
 impl fmt::Display for ProtocolId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -590,21 +611,20 @@ impl From<Accept> for Value {
 #[allow(clippy::unwrap_used)]
 mod test {
     use super::*;
-    use crate::utils::bytes::hex_encode_upper;
+    use std::str::FromStr;
     use test_log::test;
 
     #[test]
-    #[should_panic]
     fn protocol_id_invalid() {
         let hex = "0x500F";
-        ProtocolId::from_str(hex).unwrap();
+        assert!(!MAINNET.portal_networks.contains_right(hex));
     }
 
     #[test]
     fn protocol_id_encoding() {
         let hex = "0x500A";
-        let protocol_id = ProtocolId::from_str(hex).unwrap();
-        let expected_hex = hex_encode_upper(Vec::try_from(protocol_id).unwrap());
+        let protocol_id = MAINNET.portal_networks.get_by_right(hex).unwrap();
+        let expected_hex = MAINNET.portal_networks.get_by_left(protocol_id).unwrap();
         assert_eq!(hex, expected_hex);
     }
 

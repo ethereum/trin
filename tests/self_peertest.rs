@@ -26,7 +26,7 @@ async fn peertest_stateless() {
     // without needing to reset the database between tests.
     // If a scenario is testing the state of the content database,
     // it should be added to its own test function.
-    let (peertest, target, handle) = setup_peertest().await;
+    let (peertest, target, handle) = setup_peertest(None).await;
 
     peertest::scenarios::paginate::test_paginate_local_storage(&peertest).await;
     peertest::scenarios::basic::test_web3_client_version(&target).await;
@@ -59,7 +59,7 @@ async fn peertest_stateless() {
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
 async fn peertest_populated_offer() {
-    let (peertest, target, handle) = setup_peertest().await;
+    let (peertest, target, handle) = setup_peertest(None).await;
     peertest::scenarios::offer_accept::test_populated_offer(&peertest, &target).await;
     peertest.exit_all_nodes();
     handle.stop().unwrap();
@@ -68,7 +68,7 @@ async fn peertest_populated_offer() {
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
 async fn peertest_unpopulated_offer() {
-    let (peertest, target, handle) = setup_peertest().await;
+    let (peertest, target, handle) = setup_peertest(None).await;
     peertest::scenarios::offer_accept::test_unpopulated_offer(&peertest, &target).await;
     peertest.exit_all_nodes();
     handle.stop().unwrap();
@@ -77,7 +77,7 @@ async fn peertest_unpopulated_offer() {
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
 async fn peertest_gossip_with_trace() {
-    let (peertest, target, handle) = setup_peertest().await;
+    let (peertest, target, handle) = setup_peertest(None).await;
     peertest::scenarios::gossip::test_gossip_with_trace(&peertest, &target).await;
     peertest.exit_all_nodes();
     handle.stop().unwrap();
@@ -86,7 +86,7 @@ async fn peertest_gossip_with_trace() {
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
 async fn peertest_find_content_return_enr() {
-    let (peertest, target, handle) = setup_peertest().await;
+    let (peertest, target, handle) = setup_peertest(None).await;
     peertest::scenarios::find::test_find_content_return_enr(&target, &peertest).await;
     peertest.exit_all_nodes();
     handle.stop().unwrap();
@@ -95,7 +95,7 @@ async fn peertest_find_content_return_enr() {
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
 async fn peertest_trace_recursive_find_content_local_db() {
-    let (peertest, _target, handle) = setup_peertest().await;
+    let (peertest, _target, handle) = setup_peertest(None).await;
     peertest::scenarios::find::test_trace_recursive_find_content_local_db(&peertest).await;
     peertest.exit_all_nodes();
     handle.stop().unwrap();
@@ -104,7 +104,7 @@ async fn peertest_trace_recursive_find_content_local_db() {
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
 async fn peertest_trace_recursive_find_content_for_absent_content() {
-    let (peertest, _target, handle) = setup_peertest().await;
+    let (peertest, _target, handle) = setup_peertest(None).await;
     peertest::scenarios::find::test_trace_recursive_find_content_for_absent_content(&peertest)
         .await;
     peertest.exit_all_nodes();
@@ -114,7 +114,7 @@ async fn peertest_trace_recursive_find_content_for_absent_content() {
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
 async fn peertest_trace_recursive_find_content() {
-    let (peertest, _target, handle) = setup_peertest().await;
+    let (peertest, _target, handle) = setup_peertest(None).await;
     peertest::scenarios::find::test_trace_recursive_find_content(&peertest).await;
     peertest.exit_all_nodes();
     handle.stop().unwrap();
@@ -123,7 +123,7 @@ async fn peertest_trace_recursive_find_content() {
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
 async fn peertest_validate_pre_merge_header_with_proof() {
-    let (peertest, target, handle) = setup_peertest().await;
+    let (peertest, target, handle) = setup_peertest(None).await;
     peertest::scenarios::validation::test_validate_pre_merge_header_with_proof(&peertest, &target)
         .await;
     peertest.exit_all_nodes();
@@ -133,7 +133,7 @@ async fn peertest_validate_pre_merge_header_with_proof() {
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
 async fn peertest_invalidate_header_by_hash() {
-    let (peertest, target, handle) = setup_peertest().await;
+    let (peertest, target, handle) = setup_peertest(None).await;
     peertest::scenarios::validation::test_invalidate_header_by_hash(&peertest, &target).await;
     peertest.exit_all_nodes();
     handle.stop().unwrap();
@@ -142,7 +142,7 @@ async fn peertest_invalidate_header_by_hash() {
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
 async fn peertest_validate_block_body() {
-    let (peertest, target, handle) = setup_peertest().await;
+    let (peertest, target, handle) = setup_peertest(None).await;
     peertest::scenarios::validation::test_validate_pre_merge_block_body(&peertest, &target).await;
     peertest.exit_all_nodes();
     handle.stop().unwrap();
@@ -151,7 +151,7 @@ async fn peertest_validate_block_body() {
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
 async fn peertest_validate_receipts() {
-    let (peertest, target, handle) = setup_peertest().await;
+    let (peertest, target, handle) = setup_peertest(None).await;
     peertest::scenarios::validation::test_validate_pre_merge_receipts(&peertest, &target).await;
     peertest.exit_all_nodes();
     handle.stop().unwrap();
@@ -160,7 +160,7 @@ async fn peertest_validate_receipts() {
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
 async fn peertest_recursive_utp() {
-    let (peertest, _target, handle) = setup_peertest().await;
+    let (peertest, _target, handle) = setup_peertest(None).await;
     peertest::scenarios::utp::test_recursive_utp(&peertest).await;
     peertest.exit_all_nodes();
     handle.stop().unwrap();
@@ -169,7 +169,7 @@ async fn peertest_recursive_utp() {
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
 async fn peertest_trace_recursive_utp() {
-    let (peertest, _target, handle) = setup_peertest().await;
+    let (peertest, _target, handle) = setup_peertest(None).await;
     peertest::scenarios::utp::test_trace_recursive_utp(&peertest).await;
     peertest.exit_all_nodes();
     handle.stop().unwrap();
@@ -178,7 +178,7 @@ async fn peertest_trace_recursive_utp() {
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
 async fn peertest_state_offer_account_trie_node() {
-    let (peertest, target, handle) = setup_peertest().await;
+    let (peertest, target, handle) = setup_peertest(None).await;
     peertest::scenarios::state::test_state_offer_account_trie_node(&peertest, &target).await;
     peertest.exit_all_nodes();
     handle.stop().unwrap();
@@ -187,7 +187,7 @@ async fn peertest_state_offer_account_trie_node() {
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
 async fn peertest_state_offer_contract_storage_trie_node() {
-    let (peertest, target, handle) = setup_peertest().await;
+    let (peertest, target, handle) = setup_peertest(None).await;
     peertest::scenarios::state::test_state_gossip_contract_storage_trie_node(&peertest, &target)
         .await;
     peertest.exit_all_nodes();
@@ -197,7 +197,7 @@ async fn peertest_state_offer_contract_storage_trie_node() {
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
 async fn peertest_state_offer_contract_bytecode() {
-    let (peertest, target, handle) = setup_peertest().await;
+    let (peertest, target, handle) = setup_peertest(None).await;
     peertest::scenarios::state::test_state_gossip_contract_bytecode(&peertest, &target).await;
     peertest.exit_all_nodes();
     handle.stop().unwrap();
@@ -206,13 +206,22 @@ async fn peertest_state_offer_contract_bytecode() {
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
 async fn peertest_state_recursive_gossip() {
-    let (peertest, target, handle) = setup_peertest().await;
+    let (peertest, target, handle) = setup_peertest(None).await;
     peertest::scenarios::state::test_state_recursive_gossip(&peertest, &target).await;
     peertest.exit_all_nodes();
     handle.stop().unwrap();
 }
 
-async fn setup_peertest() -> (peertest::Peertest, Client, RpcServerHandle) {
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
+async fn peertest_ping_cross_discv5_protocol_id() {
+    let (peertest, target, handle) = setup_peertest(Some("testnet".to_string())).await;
+    peertest::scenarios::basic::test_ping_cross_network(&target, &peertest).await;
+    peertest.exit_all_nodes();
+    handle.stop().unwrap();
+}
+
+async fn setup_peertest(network: Option<String>) -> (peertest::Peertest, Client, RpcServerHandle) {
     utils::init_tracing();
     // Run a client, as a buddy peer for ping tests, etc.
     let peertest = peertest::launch_peertest_nodes(2).await;
@@ -224,11 +233,16 @@ async fn setup_peertest() -> (peertest::Peertest, Client, RpcServerHandle) {
     let test_discovery_port = 8999;
     let external_addr = format!("{test_ip_addr}:{test_discovery_port}");
 
+    let network = match network {
+        Some(network) => network,
+        None => "mainnet".to_string(),
+    };
+
     // Run a client, to be tested
     let trin_config = TrinConfig::new_from(
         [
             "trin",
-            "--networks",
+            "--portal-subnetworks",
             "history,beacon,state",
             "--external-address",
             external_addr.as_str(),
@@ -239,6 +253,8 @@ async fn setup_peertest() -> (peertest::Peertest, Client, RpcServerHandle) {
             test_discovery_port.to_string().as_ref(),
             "--bootnodes",
             "none",
+            "--network",
+            network.as_ref(),
         ]
         .iter(),
     )
@@ -271,7 +287,7 @@ async fn setup_peertest_bridge() -> (Peertest, HttpClient, RpcServerHandle) {
     let trin_config = TrinConfig::new_from(
         [
             "trin",
-            "--networks",
+            "--portal-subnetworks",
             "history,beacon,state",
             "--external-address",
             external_addr.as_str(),

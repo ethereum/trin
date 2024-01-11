@@ -10,7 +10,10 @@ use discv5::enr::{CombinedKey, Enr, NodeId};
 use tempfile::TempDir;
 use tracing::debug;
 
-use ethportal_api::utils::bytes::{hex_decode, hex_encode};
+use ethportal_api::{
+    types::cli::DEFAULT_NETWORK,
+    utils::bytes::{hex_decode, hex_encode},
+};
 
 const TRIN_DATA_ENV_VAR: &str = "TRIN_DATA_PATH";
 const TRIN_DATA_DIR: &str = "trin";
@@ -49,6 +52,7 @@ pub fn configure_trin_data_dir(ephemeral: bool) -> anyhow::Result<PathBuf> {
 pub fn configure_node_data_dir(
     trin_data_dir: PathBuf,
     private_key: Option<B256>,
+    network_name: String,
 ) -> anyhow::Result<(PathBuf, B256)> {
     let pk = match private_key {
         // user has provided a custom private key...
@@ -57,15 +61,20 @@ pub fn configure_node_data_dir(
         None => get_application_private_key(&trin_data_dir)?,
     };
     let node_id = Enr::empty(&pk)?.node_id();
-    let node_data_dir = get_node_data_dir(trin_data_dir, node_id);
+    let node_data_dir = get_node_data_dir(trin_data_dir, node_id, network_name);
     fs::create_dir_all(&node_data_dir)?;
     Ok((node_data_dir, B256::from_slice(&pk.encode())))
 }
 
 /// Returns the node data directory associated with the provided node id.
-fn get_node_data_dir(trin_data_dir: PathBuf, node_id: NodeId) -> PathBuf {
+fn get_node_data_dir(trin_data_dir: PathBuf, node_id: NodeId, network_name: String) -> PathBuf {
     // Append first 8 characters of Node ID
-    let mut application_string = "trin_".to_owned();
+    let mut application_string = "".to_owned();
+    if network_name != DEFAULT_NETWORK {
+        application_string.push_str(&network_name);
+        application_string.push('_');
+    }
+    application_string.push_str("trin_");
     let node_id_string = hex::encode(node_id.raw());
     let suffix = &node_id_string[..8];
     application_string.push_str(suffix);
@@ -110,7 +119,9 @@ pub mod test {
     #[serial]
     fn app_private_key() {
         let temp_dir = setup_temp_dir().unwrap();
-        let (_, active_pk) = configure_node_data_dir(temp_dir.path().to_path_buf(), None).unwrap();
+        let (_, active_pk) =
+            configure_node_data_dir(temp_dir.path().to_path_buf(), None, "test".to_string())
+                .unwrap();
         let app_pk = get_application_private_key(temp_dir.path()).unwrap();
         let app_pk = B256::from_slice(&app_pk.encode());
         temp_dir.close().unwrap();
@@ -124,7 +135,8 @@ pub mod test {
         let pk = CombinedKey::generate_secp256k1();
         let pk = B256::from_slice(&pk.encode());
         let (_, active_pk) =
-            configure_node_data_dir(temp_dir.path().to_path_buf(), Some(pk)).unwrap();
+            configure_node_data_dir(temp_dir.path().to_path_buf(), Some(pk), "test".to_string())
+                .unwrap();
         temp_dir.close().unwrap();
         assert_eq!(pk, active_pk);
     }
@@ -133,15 +145,21 @@ pub mod test {
     #[serial]
     fn activated_private_key_persists_over_reconfigurations() {
         let temp_dir = setup_temp_dir().unwrap();
-        let (_, app_pk) = configure_node_data_dir(temp_dir.path().to_path_buf(), None).unwrap();
+        let (_, app_pk) =
+            configure_node_data_dir(temp_dir.path().to_path_buf(), None, "test".to_string())
+                .unwrap();
 
         // configure data dir to use a custom pk
         let pk = CombinedKey::generate_secp256k1();
         let pk = B256::from_slice(&pk.encode());
-        let _ = configure_node_data_dir(temp_dir.path().to_path_buf(), Some(pk)).unwrap();
+        let _ =
+            configure_node_data_dir(temp_dir.path().to_path_buf(), Some(pk), "test".to_string())
+                .unwrap();
 
         // reconfigure data dir with no pk, should use the original app pk
-        let (_, app_pk_2) = configure_node_data_dir(temp_dir.path().to_path_buf(), None).unwrap();
+        let (_, app_pk_2) =
+            configure_node_data_dir(temp_dir.path().to_path_buf(), None, "test".to_string())
+                .unwrap();
         temp_dir.close().unwrap();
         assert_eq!(app_pk, app_pk_2);
     }

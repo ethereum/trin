@@ -60,7 +60,7 @@ pub fn trin_handle(
         .args(["--ephemeral"])
         .args(["--mb", "0"])
         .args(["--web3-transport", "http"])
-        .args(["--networks", &networks])
+        .args(["--portal-subnetworks", &networks])
         .args(["--unsafe-private-key", &private_key])
         .args([
             "--web3-http-address",
