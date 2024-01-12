@@ -198,21 +198,6 @@ pub static MAINNET: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
     .into()
 });
 
-pub static TESTNET: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
-    let mut portal_networks = BiHashMap::new();
-    portal_networks.insert(ProtocolId::State, "0x501A".to_string());
-    portal_networks.insert(ProtocolId::History, "0x501B".to_string());
-    portal_networks.insert(ProtocolId::TransactionGossip, "0x501C".to_string());
-    portal_networks.insert(ProtocolId::CanonicalIndices, "0x501D".to_string());
-    portal_networks.insert(ProtocolId::Beacon, "0x502A".to_string());
-    portal_networks.insert(ProtocolId::Utp, "0x757470".to_string());
-    NetworkSpec {
-        portal_networks,
-        network_name: "testnet".to_string(),
-    }
-    .into()
-});
-
 impl fmt::Display for ProtocolId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let protocol = match self {
