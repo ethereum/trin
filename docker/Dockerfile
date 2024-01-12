@@ -26,7 +26,8 @@ COPY ./portal-bridge ./portal-bridge
 COPY ./trin-history ./trin-history
 COPY ./trin-metrics ./trin-metrics
 COPY ./trin-state ./trin-state
-COPY ./trin-utils ./trin-utils 
+COPY ./trin-storage ./trin-storage
+COPY ./trin-utils ./trin-utils
 COPY ./trin-validation ./trin-validation 
 COPY ./utp-testing ./utp-testing
 

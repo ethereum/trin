@@ -4,6 +4,7 @@
 pub mod events;
 mod jsonrpc;
 pub mod network;
+mod storage;
 mod sync;
 pub mod validation;
 
@@ -23,8 +24,8 @@ use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, UtpEnr},
     events::{EventEnvelope, OverlayRequest},
-    storage::PortalStorageConfig,
 };
+use trin_storage::PortalStorageConfig;
 use trin_validation::oracle::HeaderOracle;
 
 type BeaconHandler = Option<BeaconRequestHandler>;

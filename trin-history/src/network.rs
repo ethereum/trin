@@ -4,6 +4,7 @@ use parking_lot::RwLock as PLRwLock;
 use tokio::sync::RwLock;
 use utp_rs::socket::UtpSocket;
 
+use crate::storage::HistoryStorage;
 use ethportal_api::{
     types::{distance::XorMetric, enr::Enr, portal_wire::ProtocolId},
     HistoryContentKey,
@@ -12,18 +13,18 @@ use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, UtpEnr},
     overlay::{OverlayConfig, OverlayProtocol},
-    storage::{PortalStorage, PortalStorageConfig},
 };
 use trin_validation::oracle::HeaderOracle;
 
 use crate::validation::ChainHistoryValidator;
+use trin_storage::PortalStorageConfig;
 
 /// History network layer on top of the overlay protocol. Encapsulates history network specific data
 /// and logic.
 #[derive(Clone)]
 pub struct HistoryNetwork {
     pub overlay:
-        Arc<OverlayProtocol<HistoryContentKey, XorMetric, ChainHistoryValidator, PortalStorage>>,
+        Arc<OverlayProtocol<HistoryContentKey, XorMetric, ChainHistoryValidator, HistoryStorage>>,
 }
 
 impl HistoryNetwork {
@@ -40,7 +41,7 @@ impl HistoryNetwork {
             disable_poke: portal_config.disable_poke,
             ..Default::default()
         };
-        let storage = Arc::new(PLRwLock::new(PortalStorage::new(
+        let storage = Arc::new(PLRwLock::new(HistoryStorage::new(
             storage_config,
             ProtocolId::History,
         )?));

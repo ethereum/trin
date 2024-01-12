@@ -49,7 +49,6 @@ use crate::{
         query_pool::{QueryId, QueryPool, QueryPoolState, TargetKey},
     },
     gossip::propagate_gossip_cross_thread,
-    storage::{ContentStore, ShouldWeStoreContent},
     types::node::Node,
     utils::portal_wire,
 };
@@ -72,6 +71,7 @@ use trin_metrics::{
     labels::{UtpDirectionLabel, UtpOutcomeLabel},
     overlay::OverlayMetricsReporter,
 };
+use trin_storage::{ContentStore, ShouldWeStoreContent};
 use trin_validation::validator::Validator;
 
 pub const FIND_NODES_MAX_NODES: usize = 32;
@@ -2665,7 +2665,6 @@ mod tests {
         config::PortalnetConfig,
         discovery::{Discovery, NodeAddress},
         overlay::OverlayConfig,
-        storage::{DistanceFunction, MemoryContentStore},
         utils::db::setup_temp_dir,
     };
     use ethportal_api::types::{
@@ -2673,6 +2672,7 @@ mod tests {
         enr::generate_random_remote_enr,
     };
     use trin_metrics::portalnet::PORTALNET_METRICS;
+    use trin_storage::{DistanceFunction, MemoryContentStore};
     use trin_validation::validator::MockValidator;
 
     macro_rules! poll_command_rx {

@@ -15,12 +15,12 @@ use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, Discv5UdpSocket},
     events::PortalnetEvents,
-    storage::PortalStorageConfig,
     utils::db::{configure_node_data_dir, configure_trin_data_dir},
 };
 use trin_beacon::initialize_beacon_network;
 use trin_history::initialize_history_network;
 use trin_state::initialize_state_network;
+use trin_storage::PortalStorageConfig;
 use trin_utils::version::get_trin_version;
 use trin_validation::{accumulator::MasterAccumulator, oracle::HeaderOracle};
 
