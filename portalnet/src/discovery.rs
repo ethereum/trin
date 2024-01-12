@@ -490,7 +490,8 @@ mod tests {
         let trin_data_dir = configure_trin_data_dir(true).unwrap();
 
         // Configure node data dir based on the provided private key
-        let (node_data_dir, private_key) = configure_node_data_dir(trin_data_dir, None).unwrap();
+        let (node_data_dir, private_key) =
+            configure_node_data_dir(trin_data_dir, None, "test".to_string()).unwrap();
 
         let mut portalnet_config = PortalnetConfig {
             private_key,

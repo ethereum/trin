@@ -42,8 +42,11 @@ pub async fn run_trin(
     let trin_data_dir = configure_trin_data_dir(trin_config.ephemeral)?;
 
     // Configure node data dir based on the provided private key
-    let (node_data_dir, private_key) =
-        configure_node_data_dir(trin_data_dir, trin_config.private_key)?;
+    let (node_data_dir, private_key) = configure_node_data_dir(
+        trin_data_dir,
+        trin_config.private_key,
+        trin_config.network.network_name.clone(),
+    )?;
 
     let portalnet_config = PortalnetConfig::new(&trin_config, private_key);
 

@@ -39,8 +39,11 @@ pub fn main() -> Result<()> {
     let enr = Enr::empty(&enr_key).unwrap();
     let node_id = enr.node_id();
     let trin_data_dir = configure_trin_data_dir(false)?;
-    let (node_data_dir, _) =
-        configure_node_data_dir(trin_data_dir, Some(purge_config.private_key))?;
+    let (node_data_dir, _) = configure_node_data_dir(
+        trin_data_dir,
+        Some(purge_config.private_key),
+        "mainnet".to_string(),
+    )?;
     info!("Purging data for NodeID: {node_id}");
     info!("DB Path: {node_data_dir:?}");
 
