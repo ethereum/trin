@@ -1031,7 +1031,8 @@ pub mod test {
     async fn test_restarting_storage_with_increased_capacity() -> Result<(), ContentStoreError> {
         let temp_dir = setup_temp_dir().unwrap();
         let (node_data_dir, mut private_key) =
-            configure_node_data_dir(temp_dir.path().to_path_buf(), None).unwrap();
+            configure_node_data_dir(temp_dir.path().to_path_buf(), None, "test".to_string())
+                .unwrap();
         let private_key = CombinedKey::secp256k1_from_bytes(private_key.0.as_mut_slice()).unwrap();
         let node_id = Discv5Enr::empty(&private_key).unwrap().node_id();
         let storage_config =
@@ -1263,7 +1264,7 @@ pub mod test {
     }
 
     fn get_active_node_id(temp_dir: PathBuf) -> NodeId {
-        let (_, mut pk) = configure_node_data_dir(temp_dir, None).unwrap();
+        let (_, mut pk) = configure_node_data_dir(temp_dir, None, "test".to_string()).unwrap();
         let pk = CombinedKey::secp256k1_from_bytes(pk.0.as_mut_slice()).unwrap();
         Discv5Enr::empty(&pk).unwrap().node_id()
     }

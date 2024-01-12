@@ -4,7 +4,7 @@ use clap::{
     Args, Parser, Subcommand,
 };
 use ethereum_types::H256;
-use std::{env, ffi::OsString, fmt, net::SocketAddr, path::PathBuf, str::FromStr};
+use std::{env, ffi::OsString, fmt, net::SocketAddr, path::PathBuf, str::FromStr, sync::Arc};
 use url::Url;
 
 use crate::types::bootnodes::Bootnodes;
@@ -19,10 +19,13 @@ pub const BEACON_NETWORK: &str = "beacon";
 pub const HISTORY_NETWORK: &str = "history";
 pub const STATE_NETWORK: &str = "state";
 const DEFAULT_SUBNETWORKS: &str = "history";
+const DEFAULT_NETWORK: &str = "mainnet";
 pub const DEFAULT_STORAGE_CAPACITY_MB: &str = "100";
 pub const DEFAULT_WEB3_TRANSPORT: &str = "ipc";
 
 use crate::dashboard::grafana::{GrafanaAPI, DASHBOARD_TEMPLATES};
+
+use super::portal_wire::{NetworkSpec, MAINNET};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Web3TransportType {
@@ -129,12 +132,20 @@ pub struct TrinConfig {
     pub trusted_block_root: Option<String>,
 
     #[arg(
-    long = "networks",
+    long = "portal-subnetworks",
         help = "Comma-separated list of which portal subnetworks to activate",
         default_value = DEFAULT_SUBNETWORKS,
         use_value_delimiter = true
     )]
-    pub networks: Vec<String>,
+    pub portal_subnetworks: Vec<String>,
+
+    #[arg(
+        long = "network",
+            help = "Choose mainnet or testnet",
+            default_value = DEFAULT_NETWORK,
+            value_parser = network_parser
+        )]
+    pub network: Arc<NetworkSpec>,
 
     /// Storage capacity specified in megabytes.
     #[arg(
@@ -200,7 +211,7 @@ impl Default for TrinConfig {
             no_upnp: false,
             private_key: None,
             trusted_block_root: None,
-            networks: DEFAULT_SUBNETWORKS
+            portal_subnetworks: DEFAULT_SUBNETWORKS
                 .split(',')
                 .map(|n| n.to_string())
                 .collect(),
@@ -214,6 +225,7 @@ impl Default for TrinConfig {
             ws: false,
             ws_port: DEFAULT_WEB3_WS_PORT,
             command: None,
+            network: MAINNET.clone(),
         }
     }
 }
@@ -273,6 +285,13 @@ pub fn check_private_key_length(private_key: &str) -> Result<H256, String> {
     ))
 }
 
+fn network_parser(network_string: &str) -> Result<Arc<NetworkSpec>, String> {
+    match network_string {
+        "mainnet" => Ok(MAINNET.clone()),
+        _ => Err(format!("Not a valid network: {network_string}")),
+    }
+}
+
 fn check_trusted_block_root(trusted_root: &str) -> Result<String, String> {
     if !trusted_root.starts_with("0x") {
         return Err("Trusted block root must be prefixed with 0x".to_owned());
@@ -298,7 +317,7 @@ impl fmt::Display for TrinConfig {
         write!(
             f,
             "TrinConfig {{ networks: {:?}, capacity_mb: {}, ephemeral: {}, json_rpc_url: {}, metrics_enabled: {} }}",
-            self.networks, self.mb, self.ephemeral, json_rpc_url, self.enable_metrics_with_url.is_some()
+            self.portal_subnetworks, self.mb, self.ephemeral, json_rpc_url, self.enable_metrics_with_url.is_some()
         )
     }
 }

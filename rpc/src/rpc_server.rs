@@ -615,6 +615,7 @@ impl WsHttpServerKind {
 mod tests {
     use super::*;
     use crate::{builder::RpcModuleSelection, PortalRpcModule, RpcModuleBuilder};
+    use ethportal_api::types::portal_wire::MAINNET;
     use portalnet::{discovery::Discovery, utils::db::setup_temp_dir};
     use std::{io, sync::Arc};
 
@@ -637,7 +638,8 @@ mod tests {
         let (history_tx, _) = tokio::sync::mpsc::unbounded_channel();
         let (beacon_tx, _) = tokio::sync::mpsc::unbounded_channel();
         let temp_dir = setup_temp_dir().unwrap().into_path();
-        let discv5 = Arc::new(Discovery::new(Default::default(), temp_dir).unwrap());
+        let discv5 =
+            Arc::new(Discovery::new(Default::default(), temp_dir, MAINNET.clone()).unwrap());
         RpcModuleBuilder::new(discv5)
             .with_history(history_tx)
             .with_beacon(beacon_tx)

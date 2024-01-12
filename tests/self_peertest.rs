@@ -182,7 +182,7 @@ async fn setup_peertest() -> (peertest::Peertest, Client, RpcServerHandle) {
     let trin_config = TrinConfig::new_from(
         [
             "trin",
-            "--networks",
+            "--portal-subnetworks",
             "history,state",
             "--external-address",
             external_addr.as_str(),
@@ -225,7 +225,7 @@ async fn setup_peertest_bridge() -> (Peertest, HttpClient, RpcServerHandle) {
     let trin_config = TrinConfig::new_from(
         [
             "trin",
-            "--networks",
+            "--portal-subnetworks",
             "history,beacon",
             "--external-address",
             external_addr.as_str(),
