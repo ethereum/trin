@@ -154,21 +154,22 @@ impl HistoryBridge {
             BridgeMode::Single(val) => (false, val),
             _ => panic!("Invalid backfill mode"),
         };
-        let (mut start_block, mut end_block, mut epoch_index) = match mode_type {
-            // end block will be same for an epoch in single & backfill modes
-            ModeType::Epoch(epoch_number) => (
-                epoch_number * EPOCH_SIZE,
-                ((epoch_number + 1) * EPOCH_SIZE),
-                epoch_number,
-            ),
-            ModeType::Block(block) => {
-                let epoch_index = block / EPOCH_SIZE;
+        let (start_block, mut end_block) = match mode_type {
+            ModeType::Epoch(epoch_number) => {
                 let end_block = match looped {
-                    true => (epoch_index + 1) * EPOCH_SIZE,
+                    true => latest_block,
+                    false => (epoch_number + 1) * EPOCH_SIZE,
+                };
+                (epoch_number * EPOCH_SIZE, end_block)
+            }
+            ModeType::Block(block) => {
+                let end_block = match looped {
+                    true => latest_block,
                     false => block + 1,
                 };
-                (block, end_block, epoch_index)
+                (block, end_block)
             }
+            ModeType::BlockRange(start_block, end_block) => (start_block, end_block),
         };
         // check that the end block is not greater than the latest block
         if end_block > latest_block {
@@ -180,53 +181,46 @@ impl HistoryBridge {
                         Please specify a starting block/epoch that begins before the current block."
             );
         }
-        let current_epoch = latest_block / EPOCH_SIZE;
-        let mut gossip_range = Range {
+        let mut epoch_index_currently_on = start_block / EPOCH_SIZE;
+        let gossip_range = Range {
             start: start_block,
             end: end_block,
         };
+
         // We are using a semaphore to limit the amount of active gossip transfers to make sure we
         // don't overwhelm the trin client
         let gossip_send_semaphore = Arc::new(Semaphore::new(GOSSIP_LIMIT));
-        while epoch_index <= current_epoch {
+
+        info!("fetching headers in range: {gossip_range:?}");
+        let mut epoch_acc = None;
+        for height in gossip_range.clone() {
             // Using epoch_size chunks & epoch boundaries ensures that every
             // "chunk" shares an epoch accumulator avoiding the need to
             // look up the epoch acc on a header by header basis
-            let epoch_acc = if gossip_range.end <= MERGE_BLOCK_NUMBER {
-                match self.get_epoch_acc(epoch_index).await {
+            if gossip_range.end <= MERGE_BLOCK_NUMBER
+                && epoch_index_currently_on != height / EPOCH_SIZE
+            {
+                epoch_index_currently_on = height / EPOCH_SIZE;
+                epoch_acc = match self.get_epoch_acc(epoch_index_currently_on).await {
                     Ok(val) => Some(val),
                     Err(msg) => {
                         warn!("Unable to find epoch acc for gossip range: {gossip_range:?}. Skipping iteration: {msg:?}");
                         continue;
                     }
-                }
-            } else {
-                None
-            };
-            info!("fetching headers in range: {gossip_range:?}");
-            for height in gossip_range.clone() {
-                let permit = gossip_send_semaphore.clone().acquire_owned().await.expect(
-                    "acquire_owned() can only error on semaphore close, this should be impossible",
-                );
-                Self::spawn_serve_full_block(
-                    height,
-                    epoch_acc.clone(),
-                    self.portal_clients.clone(),
-                    self.execution_api.clone(),
-                    Some(permit),
-                );
+                };
+            } else if gossip_range.end > MERGE_BLOCK_NUMBER {
+                epoch_acc = None;
             }
-            if !looped {
-                break;
-            }
-            // update index values if we're looping
-            epoch_index += 1;
-            start_block = epoch_index * EPOCH_SIZE;
-            end_block = start_block + EPOCH_SIZE;
-            gossip_range = Range {
-                start: start_block,
-                end: end_block,
-            };
+            let permit = gossip_send_semaphore.clone().acquire_owned().await.expect(
+                "acquire_owned() can only error on semaphore close, this should be impossible",
+            );
+            Self::spawn_serve_full_block(
+                height,
+                epoch_acc.clone(),
+                self.portal_clients.clone(),
+                self.execution_api.clone(),
+                Some(permit),
+            );
         }
     }
 
