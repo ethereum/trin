@@ -1,7 +1,7 @@
 use std::{cmp, sync::Arc};
 
+use anyhow::{anyhow, Result};
 use chrono::Duration;
-use eyre::{eyre, Result};
 use log::{debug, info, warn};
 use milagro_bls::PublicKey;
 use ssz_rs::prelude::*;
@@ -192,7 +192,7 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
             .rpc
             .get_bootstrap(&self.initial_checkpoint)
             .await
-            .map_err(|err| eyre!("could not fetch bootstrap: {err}"))?;
+            .map_err(|err| anyhow!("could not fetch bootstrap: {err}"))?;
 
         let is_valid = self.is_valid_checkpoint(bootstrap.header.beacon.slot);
 

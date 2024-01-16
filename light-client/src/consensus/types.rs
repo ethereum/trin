@@ -1,3 +1,4 @@
+use anyhow::Result;
 use ethereum_types::H256;
 use ethportal_api::{
     consensus::header::BeaconBlockHeader,
@@ -11,7 +12,6 @@ pub use ethportal_api::{
         update::LightClientUpdateCapella,
     },
 };
-use eyre::Result;
 use ssz_types::FixedVector;
 
 pub struct GenericUpdate {

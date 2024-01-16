@@ -1,6 +1,6 @@
 use crate::consensus::types::u64_deserialize;
+use anyhow::Result;
 use async_trait::async_trait;
-use eyre::Result;
 use std::cmp;
 
 use super::ConsensusRpc;

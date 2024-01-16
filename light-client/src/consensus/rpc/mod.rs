@@ -6,8 +6,8 @@ use super::types::{
     LightClientBootstrapCapella, LightClientFinalityUpdateCapella,
     LightClientOptimisticUpdateCapella, LightClientUpdateCapella,
 };
+use anyhow::Result;
 use async_trait::async_trait;
-use eyre::Result;
 
 // implements https://github.com/ethereum/beacon-APIs/tree/master/apis/beacon/light_client
 #[async_trait]

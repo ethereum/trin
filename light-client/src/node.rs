@@ -1,7 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
+use anyhow::{Error, Result};
 use ethportal_api::consensus::header::BeaconBlockHeader;
-use eyre::Result;
 
 use crate::{
     config::client_config::Config,
@@ -22,7 +22,7 @@ impl<R: ConsensusRpc> Node<R> {
             &config
                 .checkpoint
                 .as_ref()
-                .ok_or(NodeError::ConsensusClientCreationError(eyre::Report::msg(
+                .ok_or(NodeError::ConsensusClientCreationError(Error::msg(
                     "`config.checkpoint` is None",
                 )))?;
 
@@ -37,7 +37,7 @@ impl<R: ConsensusRpc> Node<R> {
             &config
                 .checkpoint
                 .as_ref()
-                .ok_or(NodeError::ConsensusClientCreationError(eyre::Report::msg(
+                .ok_or(NodeError::ConsensusClientCreationError(Error::msg(
                     "`config.checkpoint` is None",
                 )))?;
 

@@ -15,8 +15,7 @@ anyhow = "1.0.68"
 async-trait = "0.1.53"
 discv5 = { version = "0.4.0", features = ["serde"] }
 ethereum_ssz = "0.5.3"
-ethportal-api = {path = "../ethportal-api"}
-eyre = "0.6.8"
+ethportal-api = { path = "../ethportal-api" }
 parking_lot = "0.11.2"
 portalnet = { path = "../portalnet" }
 r2d2 = "0.8.9"
@@ -25,7 +24,7 @@ rusqlite = { version = "0.26.3", features = ["bundled"] }
 light-client = { path = "../light-client" }
 serde_json = "1.0.89"
 ssz_types = "0.5.4"
-tokio = {version = "1.14.0", features = ["full"]}
+tokio = { version = "1.14.0", features = ["full"] }
 tracing = "0.1.36"
 trin-metrics = { path = "../trin-metrics" }
 trin-storage = { path = "../trin-storage" }

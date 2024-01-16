@@ -1,4 +1,5 @@
 use crate::consensus::rpc::ConsensusRpc;
+use anyhow::anyhow;
 use async_trait::async_trait;
 use ethportal_api::{
     consensus::light_client::bootstrap::LightClientBootstrap,
@@ -16,7 +17,6 @@ use ethportal_api::{
     BeaconContentKey, BeaconContentValue, ContentValue, LightClientBootstrapKey,
     LightClientUpdatesByRangeKey,
 };
-use eyre::eyre;
 use futures::channel::oneshot;
 use portalnet::overlay_service::OverlayCommand;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -44,7 +44,7 @@ impl ConsensusRpc for PortalRpc {
     async fn get_bootstrap(
         &self,
         block_root: &'_ [u8],
-    ) -> eyre::Result<LightClientBootstrapCapella> {
+    ) -> anyhow::Result<LightClientBootstrapCapella> {
         let bootstrap_key = BeaconContentKey::LightClientBootstrap(LightClientBootstrapKey {
             block_hash: <[u8; 32]>::try_from(block_root)?,
         });
@@ -72,19 +72,19 @@ impl ConsensusRpc for PortalRpc {
                     &result
                         .0
                         .ok_or("LightClientBootstrap content not found on the network.")
-                        .map_err(|err| eyre!("{err}"))?,
+                        .map_err(|err| anyhow!("{err}"))?,
                 )?;
 
                 if let BeaconContentValue::LightClientBootstrap(bootstrap) = bootstrap {
                     if let LightClientBootstrap::Capella(bootstrap_capella) = bootstrap.bootstrap {
                         Ok(bootstrap_capella)
                     } else {
-                        return Err(eyre!(
+                        return Err(anyhow!(
                             "Error converting LightClientBootstrap to LightClientBootstrapCapella"
                         ));
                     }
                 } else {
-                    return Err(eyre!(
+                    return Err(anyhow!(
                         "Error converting BeaconContentValue to LightClientBootstrap"
                     ));
                 }
@@ -104,7 +104,7 @@ impl ConsensusRpc for PortalRpc {
         &self,
         period: u64,
         count: u8,
-    ) -> eyre::Result<Vec<LightClientUpdateCapella>> {
+    ) -> anyhow::Result<Vec<LightClientUpdateCapella>> {
         let updates_key =
             BeaconContentKey::LightClientUpdatesByRange(LightClientUpdatesByRangeKey {
                 start_period: period,
@@ -134,7 +134,7 @@ impl ConsensusRpc for PortalRpc {
                     &result
                         .0
                         .ok_or(format!("LightClientUpdatesByRange period={period}, count={count} not found on the network."))
-                        .map_err(|err| eyre!("{err}"))?,
+                        .map_err(|err| anyhow!("{err}"))?,
                 )?;
 
                 if let BeaconContentValue::LightClientUpdatesByRange(updates) = content_value {
@@ -151,14 +151,14 @@ impl ConsensusRpc for PortalRpc {
                         if let LightClientUpdate::Capella(update_capella) = update {
                             result.push(update_capella);
                         } else {
-                            return Err(eyre!(
+                            return Err(anyhow!(
                                 "Error converting LightClientUpdate to LightClientUpdateCapella"
                             ));
                         }
                     }
                     Ok(result)
                 } else {
-                    return Err(eyre!(
+                    return Err(anyhow!(
                         "Error converting BeaconContentValue to LightClientUpdatesByRange"
                     ));
                 }
@@ -174,7 +174,7 @@ impl ConsensusRpc for PortalRpc {
         }
     }
 
-    async fn get_finality_update(&self) -> eyre::Result<LightClientFinalityUpdateCapella> {
+    async fn get_finality_update(&self) -> anyhow::Result<LightClientFinalityUpdateCapella> {
         let expected_current_slot = expected_current_slot();
         let recent_epoch_start = expected_current_slot - (expected_current_slot % 32) + 1;
 
@@ -206,7 +206,7 @@ impl ConsensusRpc for PortalRpc {
                     &result
                         .0
                         .ok_or(format!("LightClientFinalityUpdate content with finalized slot {recent_epoch_start} not found on the network."))
-                        .map_err(|err| eyre!("{err}"))?,
+                        .map_err(|err| anyhow!("{err}"))?,
                 )?;
 
                 if let BeaconContentValue::LightClientFinalityUpdate(finality_update) =
@@ -217,12 +217,12 @@ impl ConsensusRpc for PortalRpc {
                     {
                         Ok(finality_update_capella)
                     } else {
-                        return Err(eyre!(
+                        return Err(anyhow!(
                             "Error converting LightClientFinalityUpdate to LightClientFinalityUpdateCapella"
                         ));
                     }
                 } else {
-                    return Err(eyre!(
+                    return Err(anyhow!(
                         "Error converting BeaconContentValue to LightClientFinalityUpdate"
                     ));
                 }
@@ -238,7 +238,7 @@ impl ConsensusRpc for PortalRpc {
         }
     }
 
-    async fn get_optimistic_update(&self) -> eyre::Result<LightClientOptimisticUpdateCapella> {
+    async fn get_optimistic_update(&self) -> anyhow::Result<LightClientOptimisticUpdateCapella> {
         let expected_current_slot = expected_current_slot();
         let optimistic_update_key =
             BeaconContentKey::LightClientOptimisticUpdate(LightClientOptimisticUpdateKey {
@@ -268,7 +268,7 @@ impl ConsensusRpc for PortalRpc {
                     &result
                         .0
                         .ok_or(format!("LightClientOptimisticUpdate content with signature slot {expected_current_slot} not found on the network."))
-                        .map_err(|err| eyre!("{err}"))?,
+                        .map_err(|err| anyhow!("{err}"))?,
                 )?;
 
                 if let BeaconContentValue::LightClientOptimisticUpdate(optimistic_update) =
@@ -279,12 +279,12 @@ impl ConsensusRpc for PortalRpc {
                     {
                         Ok(optimistic_update_capella)
                     } else {
-                        return Err(eyre!(
+                        return Err(anyhow!(
                             "Error converting LightClientOptimisticUpdate to LightClientOptimisticUpdateCapella"
                         ));
                     }
                 } else {
-                    return Err(eyre!(
+                    return Err(anyhow!(
                         "Error converting BeaconContentValue to LightClientOptimisticUpdate"
                     ));
                 }
@@ -300,7 +300,7 @@ impl ConsensusRpc for PortalRpc {
         }
     }
 
-    async fn chain_id(&self) -> eyre::Result<u64> {
+    async fn chain_id(&self) -> anyhow::Result<u64> {
         Ok(1)
     }
 

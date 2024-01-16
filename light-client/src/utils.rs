@@ -1,5 +1,5 @@
 use crate::types::Bytes32;
-use eyre::Result;
+use anyhow::Result;
 use ssz_rs::{Node, Vector};
 
 pub fn bytes_to_bytes32(bytes: &[u8]) -> Bytes32 {

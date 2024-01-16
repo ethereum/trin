@@ -10,11 +10,11 @@ categories = ["cryptography::cryptocurrencies"]
 description = "Beacon chain light client implementation"
 
 [dependencies]
+anyhow = "1.0.68"
 async-trait = "0.1.57"
 chrono = "0.4.22"
 ethereum-types = "0.14.1"
 ethportal-api = { path = "../ethportal-api" }
-eyre = "0.6.8"
 figment = { version = "0.10.7", features = ["toml", "env"] }
 futures = "0.3.23"
 hex = "0.4.3"

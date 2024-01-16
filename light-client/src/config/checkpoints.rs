@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use anyhow::anyhow;
 use ethereum_types::H256;
 use serde::{Deserialize, Serialize};
 
@@ -85,7 +86,7 @@ impl CheckpointFallback {
     /// Build the checkpoint fallback service from the community-maintained list by [ethPandaOps](https://github.com/ethpandaops).
     ///
     /// The list is defined in [ethPandaOps/checkpoint-fallback-service](https://github.com/ethpandaops/checkpoint-sync-health-checks/blob/master/_data/endpoints.yaml).
-    pub async fn build(mut self) -> eyre::Result<Self> {
+    pub async fn build(mut self) -> anyhow::Result<Self> {
         // Fetch the services
         let client = reqwest::Client::new();
         let res = client.get(CHECKPOINT_SYNC_SERVICES_LIST).send().await?;
@@ -101,7 +102,7 @@ impl CheckpointFallback {
             let service_list = list
                 .get(network.to_string().to_lowercase())
                 .ok_or_else(|| {
-                    eyre::eyre!(format!("missing {network} fallback checkpoint services"))
+                    anyhow!(format!("missing {network} fallback checkpoint services"))
                 })?;
             let parsed: Vec<CheckpointFallbackService> =
                 serde_yaml::from_value(service_list.clone())?;
@@ -113,7 +114,10 @@ impl CheckpointFallback {
     }
 
     /// Fetch the latest checkpoint from the checkpoint fallback service.
-    pub async fn fetch_latest_checkpoint(&self, network: &networks::Network) -> eyre::Result<H256> {
+    pub async fn fetch_latest_checkpoint(
+        &self,
+        network: &networks::Network,
+    ) -> anyhow::Result<H256> {
         let services = &self.get_healthy_fallback_services(network);
         Self::fetch_latest_checkpoint_from_services(&services[..]).await
     }
@@ -129,7 +133,7 @@ impl CheckpointFallback {
     /// Fetch the latest checkpoint from a list of checkpoint fallback services.
     pub async fn fetch_latest_checkpoint_from_services(
         services: &[CheckpointFallbackService],
-    ) -> eyre::Result<H256> {
+    ) -> anyhow::Result<H256> {
         // Iterate over all mainnet checkpoint sync services and get the latest checkpoint slot for
         // each.
         let tasks: Vec<_> = services
@@ -139,7 +143,7 @@ impl CheckpointFallback {
                 match Self::query_service(&service.endpoint).await {
                     Some(raw) => {
                         if raw.data.slots.is_empty() {
-                            return Err(eyre::eyre!("no slots"));
+                            return Err(anyhow!("no slots"));
                         }
 
                         let slot = raw
@@ -147,11 +151,11 @@ impl CheckpointFallback {
                             .slots
                             .iter()
                             .find(|s| s.block_root.is_some())
-                            .ok_or(eyre::eyre!("no valid slots"))?;
+                            .ok_or(anyhow!("no valid slots"))?;
 
                         Ok(slot.clone())
                     }
-                    None => Err(eyre::eyre!("failed to query service")),
+                    None => Err(anyhow!("failed to query service")),
                 }
             })
             .collect();
@@ -167,9 +171,10 @@ impl CheckpointFallback {
             .collect::<Vec<_>>();
 
         // Get the max epoch
-        let max_epoch_slot = slots.iter().max_by_key(|x| x.epoch).ok_or(eyre::eyre!(
-            "Failed to find max epoch from checkpoint slots"
-        ))?;
+        let max_epoch_slot = slots
+            .iter()
+            .max_by_key(|x| x.epoch)
+            .ok_or(anyhow!("Failed to find max epoch from checkpoint slots"))?;
         let max_epoch = max_epoch_slot.epoch;
 
         // Filter out all the slots that are not the max epoch.
@@ -190,12 +195,12 @@ impl CheckpointFallback {
         let most_common = m.into_iter().max_by_key(|(_, v)| *v).map(|(k, _)| k);
 
         // Return the most commonly verified checkpoint for the latest epoch.
-        most_common.ok_or_else(|| eyre::eyre!("No checkpoint found"))
+        most_common.ok_or_else(|| anyhow!("No checkpoint found"))
     }
 
     /// Associated function to fetch the latest checkpoint from a specific checkpoint sync fallback
     /// service api url.
-    pub async fn fetch_checkpoint_from_api(url: &str) -> eyre::Result<H256> {
+    pub async fn fetch_checkpoint_from_api(url: &str) -> anyhow::Result<H256> {
         // Fetch the url
         let client = reqwest::Client::new();
         let constructed_url = Self::construct_url(url);
@@ -203,7 +208,7 @@ impl CheckpointFallback {
         let raw: RawSlotResponse = res.json().await?;
         let slot = raw.data.slots[0].clone();
         slot.block_root
-            .ok_or_else(|| eyre::eyre!("Checkpoint not in returned slot"))
+            .ok_or_else(|| anyhow!("Checkpoint not in returned slot"))
     }
 
     /// Constructs the checkpoint fallback service url for fetching a slot.
