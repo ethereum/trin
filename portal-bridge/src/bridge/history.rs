@@ -49,7 +49,7 @@ const HEADER_SATURATION_DELAY: u64 = 10; // seconds
 const LATEST_BLOCK_POLL_RATE: u64 = 5; // seconds
 const EPOCH_SIZE: u64 = EPOCH_SIZE_USIZE as u64;
 const GOSSIP_LIMIT: usize = 32;
-const SERVE_BLOCK_TIMEOUT: u64 = 120; // seconds
+const SERVE_BLOCK_TIMEOUT: Duration = Duration::from_secs(120);
 
 pub struct HistoryBridge {
     pub mode: BridgeMode,
@@ -136,7 +136,7 @@ impl HistoryBridge {
                     let execution_api = self.execution_api.clone();
                     tokio::spawn(async move {
                         if (timeout(
-                            Duration::from_secs(SERVE_BLOCK_TIMEOUT),
+                            SERVE_BLOCK_TIMEOUT,
                             Self::serve_full_block(height, None, portal_clients, execution_api)
                                 .in_current_span(),
                         )
@@ -194,6 +194,7 @@ impl HistoryBridge {
             start: start_block,
             end: end_block,
         };
+        // We are using a semaphore to limit the amount of active gossip transfers
         let gossip_send_semaphore = Arc::new(Semaphore::new(GOSSIP_LIMIT));
         while epoch_index <= current_epoch {
             // Using epoch_size chunks & epoch boundaries ensures that every
@@ -215,16 +216,12 @@ impl HistoryBridge {
                 let epoch_acc = epoch_acc.clone();
                 let portal_clients = self.portal_clients.clone();
                 let execution_api = self.execution_api.clone();
-                let permit = match gossip_send_semaphore.clone().acquire_owned().await {
-                    Ok(permit) => permit,
-                    Err(_) => {
-                        error!("acquire_owned() can only error on semaphore close, this should be impossible");
-                        continue;
-                    }
-                };
+                let permit = gossip_send_semaphore.clone().acquire_owned().await.expect(
+                    "acquire_owned() can only error on semaphore close, this should be impossible",
+                );
                 tokio::spawn(async move {
                     if (timeout(
-                        Duration::from_secs(SERVE_BLOCK_TIMEOUT),
+                        SERVE_BLOCK_TIMEOUT,
                         Self::serve_full_block(height, epoch_acc, portal_clients, execution_api)
                             .in_current_span(),
                     )
