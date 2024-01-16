@@ -8,7 +8,7 @@ use std::{
 use anyhow::{anyhow, bail};
 use ssz::Decode;
 use tokio::{
-    sync::Semaphore,
+    sync::{OwnedSemaphorePermit, Semaphore},
     time::{sleep, timeout, Duration},
 };
 use tracing::{debug, error, info, warn, Instrument};
@@ -132,22 +132,13 @@ impl HistoryBridge {
                 };
                 info!("Discovered new blocks to gossip: {gossip_range:?}");
                 for height in gossip_range.clone() {
-                    let portal_clients = self.portal_clients.clone();
-                    let execution_api = self.execution_api.clone();
-                    tokio::spawn(async move {
-                        if (timeout(
-                            SERVE_BLOCK_TIMEOUT,
-                            Self::serve_full_block(height, None, portal_clients, execution_api)
-                                .in_current_span(),
-                        )
-                        .await)
-                            .is_err()
-                        {
-                            error!(
-                                "serve_full_block() timed out: this is an indication a bug is present"
-                            )
-                        };
-                    });
+                    Self::spawn_serve_full_block(
+                        height,
+                        None,
+                        self.portal_clients.clone(),
+                        self.execution_api.clone(),
+                        None,
+                    );
                 }
                 block_index = gossip_range.end;
             }
@@ -213,27 +204,16 @@ impl HistoryBridge {
             };
             info!("fetching headers in range: {gossip_range:?}");
             for height in gossip_range.clone() {
-                let epoch_acc = epoch_acc.clone();
-                let portal_clients = self.portal_clients.clone();
-                let execution_api = self.execution_api.clone();
                 let permit = gossip_send_semaphore.clone().acquire_owned().await.expect(
                     "acquire_owned() can only error on semaphore close, this should be impossible",
                 );
-                tokio::spawn(async move {
-                    if (timeout(
-                        SERVE_BLOCK_TIMEOUT,
-                        Self::serve_full_block(height, epoch_acc, portal_clients, execution_api)
-                            .in_current_span(),
-                    )
-                    .await)
-                        .is_err()
-                    {
-                        error!(
-                            "serve_full_block() timed out: this is an indication a bug is present"
-                        )
-                    };
-                    drop(permit);
-                });
+                Self::spawn_serve_full_block(
+                    height,
+                    epoch_acc.clone(),
+                    self.portal_clients.clone(),
+                    self.execution_api.clone(),
+                    Some(permit),
+                );
             }
             if !looped {
                 break;
@@ -247,6 +227,30 @@ impl HistoryBridge {
                 end: end_block,
             };
         }
+    }
+
+    fn spawn_serve_full_block(
+        height: u64,
+        epoch_acc: Option<Arc<EpochAccumulator>>,
+        portal_clients: Vec<HttpClient>,
+        execution_api: ExecutionApi,
+        permit: Option<OwnedSemaphorePermit>,
+    ) {
+        tokio::spawn(async move {
+            if (timeout(
+                SERVE_BLOCK_TIMEOUT,
+                Self::serve_full_block(height, epoch_acc, portal_clients, execution_api)
+                    .in_current_span(),
+            )
+            .await)
+                .is_err()
+            {
+                error!("serve_full_block() timed out: this is an indication a bug is present")
+            };
+            if let Some(permit) = permit {
+                drop(permit);
+            }
+        });
     }
 
     async fn serve_full_block(
