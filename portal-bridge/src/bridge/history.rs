@@ -49,7 +49,7 @@ const HEADER_SATURATION_DELAY: u64 = 10; // seconds
 const LATEST_BLOCK_POLL_RATE: u64 = 5; // seconds
 const EPOCH_SIZE: u64 = EPOCH_SIZE_USIZE as u64;
 const GOSSIP_LIMIT: usize = 32;
-const GOSSIP_TIMEOUT: u64 = 10 * 60; // seconds
+const SERVE_BLOCK_TIMEOUT: u64 = 120; // seconds
 
 pub struct HistoryBridge {
     pub mode: BridgeMode,
@@ -135,9 +135,18 @@ impl HistoryBridge {
                     let portal_clients = self.portal_clients.clone();
                     let execution_api = self.execution_api.clone();
                     tokio::spawn(async move {
-                        let _ = Self::serve_full_block(height, None, portal_clients, execution_api)
-                            .in_current_span()
-                            .await;
+                        if (timeout(
+                            Duration::from_secs(SERVE_BLOCK_TIMEOUT),
+                            Self::serve_full_block(height, None, portal_clients, execution_api)
+                                .in_current_span(),
+                        )
+                        .await)
+                            .is_err()
+                        {
+                            error!(
+                                "serve_full_block() timed out: this is an indication a bug is present"
+                            )
+                        };
                     });
                 }
                 block_index = gossip_range.end;
@@ -215,7 +224,7 @@ impl HistoryBridge {
                 };
                 tokio::spawn(async move {
                     if (timeout(
-                        Duration::from_secs(GOSSIP_TIMEOUT),
+                        Duration::from_secs(SERVE_BLOCK_TIMEOUT),
                         Self::serve_full_block(height, epoch_acc, portal_clients, execution_api)
                             .in_current_span(),
                     )
@@ -223,7 +232,7 @@ impl HistoryBridge {
                         .is_err()
                     {
                         error!(
-                            "serve_full_block() timedout: this is an indication a bug is present"
+                            "serve_full_block() timed out: this is an indication a bug is present"
                         )
                     };
                     drop(permit);
