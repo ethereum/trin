@@ -6,9 +6,10 @@ use std::{
 };
 
 use anyhow::{anyhow, bail};
+use futures::stream::StreamExt;
 use ssz::Decode;
-use tokio::time::{sleep, Duration};
-use tracing::{debug, info, warn, Instrument};
+use tokio::time::{sleep, timeout, Duration};
+use tracing::{debug, info, warn};
 
 use crate::{
     api::execution::ExecutionApi,
@@ -45,6 +46,8 @@ use trin_validation::{
 const HEADER_SATURATION_DELAY: u64 = 10; // seconds
 const LATEST_BLOCK_POLL_RATE: u64 = 5; // seconds
 const EPOCH_SIZE: u64 = EPOCH_SIZE_USIZE as u64;
+const FUTURES_BUFFER_SIZE: usize = 32;
+const SERVE_BLOCK_TIMEOUT: u64 = 60; // seconds
 
 pub struct HistoryBridge {
     pub mode: BridgeMode,
@@ -126,15 +129,9 @@ impl HistoryBridge {
                     end: latest_block + 1,
                 };
                 info!("Discovered new blocks to gossip: {gossip_range:?}");
-                for height in gossip_range.clone() {
-                    let portal_clients = self.portal_clients.clone();
-                    let execution_api = self.execution_api.clone();
-                    tokio::spawn(async move {
-                        let _ = Self::serve_full_block(height, None, portal_clients, execution_api)
-                            .in_current_span()
-                            .await;
-                    });
-                }
+                if let Err(msg) = self.serve(gossip_range.clone(), None).await {
+                    warn!("Error serving latest blocks: {msg:?}");
+                };
                 block_index = gossip_range.end;
             }
         }
@@ -196,17 +193,9 @@ impl HistoryBridge {
                 None
             };
             info!("fetching headers in range: {gossip_range:?}");
-            for height in gossip_range.clone() {
-                let epoch_acc = epoch_acc.clone();
-                let portal_clients = self.portal_clients.clone();
-                let execution_api = self.execution_api.clone();
-                tokio::spawn(async move {
-                    let _ =
-                        Self::serve_full_block(height, epoch_acc, portal_clients, execution_api)
-                            .in_current_span()
-                            .await;
-                });
-            }
+            if let Err(msg) = self.serve(gossip_range, epoch_acc).await {
+                warn!("Error serving backfill blocks: {msg:?}");
+            };
             if !looped {
                 break;
             }
@@ -221,13 +210,38 @@ impl HistoryBridge {
         }
     }
 
+    async fn serve(
+        &self,
+        gossip_range: Range<u64>,
+        epoch_acc: Option<Arc<EpochAccumulator>>,
+    ) -> anyhow::Result<()> {
+        let futures = futures::stream::iter(gossip_range.into_iter().map(|height| {
+            let epoch_acc = epoch_acc.clone();
+            async move {
+                if let Err(msg) = timeout(
+                    Duration::from_secs(SERVE_BLOCK_TIMEOUT),
+                    self.serve_full_block(height, epoch_acc, self.portal_clients.clone()),
+                )
+                .await
+                {
+                    warn!("Error serving full block #{height}: {msg:?}");
+                }
+            }
+        }))
+        .buffer_unordered(FUTURES_BUFFER_SIZE)
+        .collect::<Vec<()>>();
+        futures.await;
+        Ok(())
+    }
+
     async fn serve_full_block(
+        &self,
         height: u64,
         epoch_acc: Option<Arc<EpochAccumulator>>,
         portal_clients: Vec<HttpClient>,
-        execution_api: ExecutionApi,
     ) -> anyhow::Result<()> {
         info!("Serving block: {height}");
+        let execution_api = self.execution_api.clone();
         let mut full_header = execution_api.get_header(height).await?;
         if full_header.header.number <= MERGE_BLOCK_NUMBER {
             full_header.epoch_acc = epoch_acc;
