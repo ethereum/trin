@@ -23,6 +23,7 @@ r2d2_sqlite = "0.19.0"
 rusqlite = { version = "0.26.3", features = ["bundled"] }
 light-client = { path = "../light-client" }
 serde_json = "1.0.89"
+ssz_types = "0.5.4"
 tokio = { version = "1.14.0", features = ["full"] }
 tracing = "0.1.36"
 trin-metrics = { path = "../trin-metrics" }

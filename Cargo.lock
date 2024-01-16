@@ -7066,6 +7066,7 @@ dependencies = [
  "r2d2_sqlite",
  "rusqlite",
  "serde_json",
+ "ssz_types",
  "tokio",
  "tracing",
  "trin-metrics",
