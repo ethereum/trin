@@ -1,7 +1,5 @@
 use std::{path::PathBuf, str::FromStr};
 
-use trin_validation::constants::EPOCH_SIZE;
-
 /// Used to help decode cli args identifying the desired bridge mode.
 /// - Latest: tracks the latest header
 /// - StartFromEpoch: starts at the given epoch
@@ -9,7 +7,7 @@ use trin_validation::constants::EPOCH_SIZE;
 /// - Single: executes a single block
 ///   - ex: "b123" executes block 123
 /// - BlockRange: generates test data from block x to y
-///   - ex: "r10-12" starts from block 10 and goes till 12
+///   - ex: "r10-12" backfills a block range from #10 to #12 (inclusive)
 #[derive(Clone, Debug, PartialEq, Default, Eq)]
 pub enum BridgeMode {
     #[default]
@@ -60,16 +58,6 @@ pub enum ModeType {
     BlockRange(u64, u64),
 }
 
-impl ModeType {
-    pub fn block_number(&self) -> u64 {
-        match self {
-            ModeType::Epoch(epoch) => epoch * EPOCH_SIZE as u64,
-            ModeType::Block(block) => *block,
-            ModeType::BlockRange(_, end_block) => *end_block,
-        }
-    }
-}
-
 impl FromStr for ModeType {
     type Err = ParseError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -89,9 +77,10 @@ impl FromStr for ModeType {
             "r" => {
                 let range_vec = s[1..]
                     .split('-')
-                    .map(|x| {
-                        x.parse()
-                            .expect("Invalid bridge mode arg: range format invalid expected (x:y)")
+                    .map(|range_input| {
+                        range_input.parse().expect(
+                            "Range format invalid, expected backfill:rX-Y (eg. backfill:r10-100)",
+                        )
                     })
                     .collect::<Vec<u64>>();
 

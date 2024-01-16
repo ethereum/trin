@@ -149,23 +149,23 @@ impl HistoryBridge {
         let latest_block = self.execution_api.get_latest_block_number().await.expect(
             "Error launching bridge in backfill mode. Unable to get latest block from provider.",
         );
-        let (looped, mode_type) = match self.mode.clone() {
+        let (is_single_mode, mode_type) = match self.mode.clone() {
             BridgeMode::Backfill(val) => (true, val),
             BridgeMode::Single(val) => (false, val),
             _ => panic!("Invalid backfill mode"),
         };
         let (start_block, mut end_block) = match mode_type {
             ModeType::Epoch(epoch_number) => {
-                let end_block = match looped {
-                    true => latest_block,
-                    false => (epoch_number + 1) * EPOCH_SIZE,
+                let end_block = match is_single_mode {
+                    true => (epoch_number + 1) * EPOCH_SIZE,
+                    false => latest_block,
                 };
                 (epoch_number * EPOCH_SIZE, end_block)
             }
             ModeType::Block(block) => {
-                let end_block = match looped {
-                    true => latest_block,
-                    false => block + 1,
+                let end_block = match is_single_mode {
+                    true => block + 1,
+                    false => latest_block,
                 };
                 (block, end_block)
             }
@@ -181,7 +181,9 @@ impl HistoryBridge {
                         Please specify a starting block/epoch that begins before the current block."
             );
         }
-        let mut current_epoch_index = start_block / EPOCH_SIZE;
+        // initialize current_epoch_index as an impossible value u64::MAX so that
+        // epoch_acc gets set on the first iteration of the loop
+        let mut current_epoch_index = u64::MAX;
         let gossip_range = Range {
             start: start_block,
             end: end_block,
