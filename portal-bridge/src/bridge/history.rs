@@ -169,7 +169,7 @@ impl HistoryBridge {
                 };
                 (block, end_block)
             }
-            ModeType::BlockRange(start_block, end_block) => (start_block, end_block),
+            ModeType::BlockRange(start_block, end_block) => (start_block, end_block + 1),
         };
         // check that the end block is not greater than the latest block
         if end_block > latest_block {
@@ -181,7 +181,7 @@ impl HistoryBridge {
                         Please specify a starting block/epoch that begins before the current block."
             );
         }
-        let mut epoch_index_currently_on = start_block / EPOCH_SIZE;
+        let mut current_epoch_index = start_block / EPOCH_SIZE;
         let gossip_range = Range {
             start: start_block,
             end: end_block,
@@ -193,22 +193,20 @@ impl HistoryBridge {
 
         info!("fetching headers in range: {gossip_range:?}");
         let mut epoch_acc = None;
-        for height in gossip_range.clone() {
+        for height in gossip_range {
             // Using epoch_size chunks & epoch boundaries ensures that every
             // "chunk" shares an epoch accumulator avoiding the need to
             // look up the epoch acc on a header by header basis
-            if gossip_range.end <= MERGE_BLOCK_NUMBER
-                && epoch_index_currently_on != height / EPOCH_SIZE
-            {
-                epoch_index_currently_on = height / EPOCH_SIZE;
-                epoch_acc = match self.get_epoch_acc(epoch_index_currently_on).await {
+            if height <= MERGE_BLOCK_NUMBER && current_epoch_index != height / EPOCH_SIZE {
+                current_epoch_index = height / EPOCH_SIZE;
+                epoch_acc = match self.get_epoch_acc(current_epoch_index).await {
                     Ok(val) => Some(val),
                     Err(msg) => {
-                        warn!("Unable to find epoch acc for gossip range: {gossip_range:?}. Skipping iteration: {msg:?}");
+                        warn!("Unable to find epoch acc for gossip range: {current_epoch_index}. Skipping iteration: {msg:?}");
                         continue;
                     }
                 };
-            } else if gossip_range.end > MERGE_BLOCK_NUMBER {
+            } else if height > MERGE_BLOCK_NUMBER {
                 epoch_acc = None;
             }
             let permit = gossip_send_semaphore.clone().acquire_owned().await.expect(
