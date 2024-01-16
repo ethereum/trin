@@ -185,7 +185,8 @@ impl HistoryBridge {
             start: start_block,
             end: end_block,
         };
-        // We are using a semaphore to limit the amount of active gossip transfers
+        // We are using a semaphore to limit the amount of active gossip transfers to make sure we
+        // don't overwhelm the trin client
         let gossip_send_semaphore = Arc::new(Semaphore::new(GOSSIP_LIMIT));
         while epoch_index <= current_epoch {
             // Using epoch_size chunks & epoch boundaries ensures that every
