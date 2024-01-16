@@ -7,8 +7,11 @@ use std::{
 
 use anyhow::{anyhow, bail};
 use ssz::Decode;
-use tokio::time::{sleep, Duration};
-use tracing::{debug, info, warn, Instrument};
+use tokio::{
+    sync::{OwnedSemaphorePermit, Semaphore},
+    time::{sleep, timeout, Duration},
+};
+use tracing::{debug, error, info, warn, Instrument};
 
 use crate::{
     api::execution::ExecutionApi,
@@ -45,6 +48,8 @@ use trin_validation::{
 const HEADER_SATURATION_DELAY: u64 = 10; // seconds
 const LATEST_BLOCK_POLL_RATE: u64 = 5; // seconds
 const EPOCH_SIZE: u64 = EPOCH_SIZE_USIZE as u64;
+const GOSSIP_LIMIT: usize = 32;
+const SERVE_BLOCK_TIMEOUT: Duration = Duration::from_secs(120);
 
 pub struct HistoryBridge {
     pub mode: BridgeMode,
@@ -127,13 +132,13 @@ impl HistoryBridge {
                 };
                 info!("Discovered new blocks to gossip: {gossip_range:?}");
                 for height in gossip_range.clone() {
-                    let portal_clients = self.portal_clients.clone();
-                    let execution_api = self.execution_api.clone();
-                    tokio::spawn(async move {
-                        let _ = Self::serve_full_block(height, None, portal_clients, execution_api)
-                            .in_current_span()
-                            .await;
-                    });
+                    Self::spawn_serve_full_block(
+                        height,
+                        None,
+                        self.portal_clients.clone(),
+                        self.execution_api.clone(),
+                        None,
+                    );
                 }
                 block_index = gossip_range.end;
             }
@@ -180,6 +185,9 @@ impl HistoryBridge {
             start: start_block,
             end: end_block,
         };
+        // We are using a semaphore to limit the amount of active gossip transfers to make sure we
+        // don't overwhelm the trin client
+        let gossip_send_semaphore = Arc::new(Semaphore::new(GOSSIP_LIMIT));
         while epoch_index <= current_epoch {
             // Using epoch_size chunks & epoch boundaries ensures that every
             // "chunk" shares an epoch accumulator avoiding the need to
@@ -197,15 +205,16 @@ impl HistoryBridge {
             };
             info!("fetching headers in range: {gossip_range:?}");
             for height in gossip_range.clone() {
-                let epoch_acc = epoch_acc.clone();
-                let portal_clients = self.portal_clients.clone();
-                let execution_api = self.execution_api.clone();
-                tokio::spawn(async move {
-                    let _ =
-                        Self::serve_full_block(height, epoch_acc, portal_clients, execution_api)
-                            .in_current_span()
-                            .await;
-                });
+                let permit = gossip_send_semaphore.clone().acquire_owned().await.expect(
+                    "acquire_owned() can only error on semaphore close, this should be impossible",
+                );
+                Self::spawn_serve_full_block(
+                    height,
+                    epoch_acc.clone(),
+                    self.portal_clients.clone(),
+                    self.execution_api.clone(),
+                    Some(permit),
+                );
             }
             if !looped {
                 break;
@@ -219,6 +228,30 @@ impl HistoryBridge {
                 end: end_block,
             };
         }
+    }
+
+    fn spawn_serve_full_block(
+        height: u64,
+        epoch_acc: Option<Arc<EpochAccumulator>>,
+        portal_clients: Vec<HttpClient>,
+        execution_api: ExecutionApi,
+        permit: Option<OwnedSemaphorePermit>,
+    ) {
+        tokio::spawn(async move {
+            if (timeout(
+                SERVE_BLOCK_TIMEOUT,
+                Self::serve_full_block(height, epoch_acc, portal_clients, execution_api)
+                    .in_current_span(),
+            )
+            .await)
+                .is_err()
+            {
+                error!("serve_full_block() timed out: this is an indication a bug is present")
+            };
+            if let Some(permit) = permit {
+                drop(permit);
+            }
+        });
     }
 
     async fn serve_full_block(
