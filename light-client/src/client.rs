@@ -317,7 +317,7 @@ impl<DB: Database, R: ConsensusRpc + 'static> Client<DB, R> {
                 NodeError::ConsensusSyncError(err) => match err
                     .downcast_ref()
                     .ok_or(err.to_string())
-                    .map_err(|err| anyhow::anyhow!(err))?
+                    .map_err(|err| anyhow!(err))?
                 {
                     ConsensusError::CheckpointTooOld => {
                         warn!(
@@ -378,7 +378,7 @@ impl<DB: Database, R: ConsensusRpc + 'static> Client<DB, R> {
             let checkpoint = CheckpointFallback::fetch_checkpoint_from_api(fallback)
                 .await
                 .map_err(|_| {
-                    anyhow::anyhow!("Failed to fetch checkpoint from fallback \"{}\"", fallback)
+                    anyhow!("Failed to fetch checkpoint from fallback \"{}\"", fallback)
                 })?;
 
             info!(
@@ -399,32 +399,29 @@ impl<DB: Database, R: ConsensusRpc + 'static> Client<DB, R> {
 
             Ok(())
         } else {
-            Err(anyhow::anyhow!("no explicit fallback specified"))
+            Err(anyhow!("no explicit fallback specified"))
         }
     }
 
     async fn boot_from_external_fallbacks(&self) -> anyhow::Result<()> {
         info!("attempting to fetch checkpoint from external fallbacks...");
         // Build the list of external checkpoint fallback services
-        let list = CheckpointFallback::new().build().await.map_err(|_| {
-            anyhow::anyhow!("Failed to construct external checkpoint sync fallbacks")
-        })?;
+        let list = CheckpointFallback::new()
+            .build()
+            .await
+            .map_err(|_| anyhow!("Failed to construct external checkpoint sync fallbacks"))?;
 
         let checkpoint = if self.node.read().await.config.chain.chain_id == 5 {
             list.fetch_latest_checkpoint(&Network::Goerli)
                 .await
                 .map_err(|_| {
-                    anyhow::anyhow!(
-                        "Failed to fetch latest goerli checkpoint from external fallbacks"
-                    )
+                    anyhow!("Failed to fetch latest goerli checkpoint from external fallbacks")
                 })?
         } else {
             list.fetch_latest_checkpoint(&Network::Mainnet)
                 .await
                 .map_err(|_| {
-                    anyhow::anyhow!(
-                        "Failed to fetch latest mainnet checkpoint from external fallbacks"
-                    )
+                    anyhow!("Failed to fetch latest mainnet checkpoint from external fallbacks")
                 })?
         };
 

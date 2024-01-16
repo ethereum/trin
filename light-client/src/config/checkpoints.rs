@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use anyhow::anyhow;
 use ethereum_types::H256;
 use serde::{Deserialize, Serialize};
 
@@ -101,7 +102,7 @@ impl CheckpointFallback {
             let service_list = list
                 .get(network.to_string().to_lowercase())
                 .ok_or_else(|| {
-                    anyhow::anyhow!(format!("missing {network} fallback checkpoint services"))
+                    anyhow!(format!("missing {network} fallback checkpoint services"))
                 })?;
             let parsed: Vec<CheckpointFallbackService> =
                 serde_yaml::from_value(service_list.clone())?;
@@ -142,7 +143,7 @@ impl CheckpointFallback {
                 match Self::query_service(&service.endpoint).await {
                     Some(raw) => {
                         if raw.data.slots.is_empty() {
-                            return Err(anyhow::anyhow!("no slots"));
+                            return Err(anyhow!("no slots"));
                         }
 
                         let slot = raw
@@ -150,11 +151,11 @@ impl CheckpointFallback {
                             .slots
                             .iter()
                             .find(|s| s.block_root.is_some())
-                            .ok_or(anyhow::anyhow!("no valid slots"))?;
+                            .ok_or(anyhow!("no valid slots"))?;
 
                         Ok(slot.clone())
                     }
-                    None => Err(anyhow::anyhow!("failed to query service")),
+                    None => Err(anyhow!("failed to query service")),
                 }
             })
             .collect();
@@ -170,9 +171,10 @@ impl CheckpointFallback {
             .collect::<Vec<_>>();
 
         // Get the max epoch
-        let max_epoch_slot = slots.iter().max_by_key(|x| x.epoch).ok_or(anyhow::anyhow!(
-            "Failed to find max epoch from checkpoint slots"
-        ))?;
+        let max_epoch_slot = slots
+            .iter()
+            .max_by_key(|x| x.epoch)
+            .ok_or(anyhow!("Failed to find max epoch from checkpoint slots"))?;
         let max_epoch = max_epoch_slot.epoch;
 
         // Filter out all the slots that are not the max epoch.
@@ -193,7 +195,7 @@ impl CheckpointFallback {
         let most_common = m.into_iter().max_by_key(|(_, v)| *v).map(|(k, _)| k);
 
         // Return the most commonly verified checkpoint for the latest epoch.
-        most_common.ok_or_else(|| anyhow::anyhow!("No checkpoint found"))
+        most_common.ok_or_else(|| anyhow!("No checkpoint found"))
     }
 
     /// Associated function to fetch the latest checkpoint from a specific checkpoint sync fallback
@@ -206,7 +208,7 @@ impl CheckpointFallback {
         let raw: RawSlotResponse = res.json().await?;
         let slot = raw.data.slots[0].clone();
         slot.block_root
-            .ok_or_else(|| anyhow::anyhow!("Checkpoint not in returned slot"))
+            .ok_or_else(|| anyhow!("Checkpoint not in returned slot"))
     }
 
     /// Constructs the checkpoint fallback service url for fetching a slot.
