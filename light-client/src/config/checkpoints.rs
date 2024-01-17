@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use anyhow::anyhow;
 use ethereum_types::H256;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::config::networks;
 
@@ -21,11 +21,29 @@ pub struct RawSlotResponseData {
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Slot {
+    #[serde(deserialize_with = "str_or_u64")]
     pub slot: u64,
     pub block_root: Option<H256>,
     pub state_root: Option<H256>,
     pub epoch: u64,
     pub time: StartEndTime,
+}
+
+fn str_or_u64<'de, D>(deserializer: D) -> Result<u64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum StrOrU64<'a> {
+        Str(&'a str),
+        U64(u64),
+    }
+
+    Ok(match StrOrU64::deserialize(deserializer)? {
+        StrOrU64::Str(v) => v.parse().unwrap_or(0), // Ignoring parsing errors
+        StrOrU64::U64(v) => v,
+    })
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -126,7 +144,7 @@ impl CheckpointFallback {
         let client = reqwest::Client::new();
         let constructed_url = Self::construct_url(endpoint);
         let res = client.get(&constructed_url).send().await.ok()?;
-        let raw: RawSlotResponse = res.json().await.ok()?;
+        let raw = res.json().await.ok()?;
         Some(raw)
     }
 
@@ -225,6 +243,8 @@ impl CheckpointFallback {
     /// );
     /// ```
     pub fn construct_url(endpoint: &str) -> String {
+        // some endpoints have trailing slashes
+        let endpoint = endpoint.trim_end_matches('/');
         format!("{endpoint}/checkpointz/v1/beacon/slots")
     }
 
