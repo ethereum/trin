@@ -29,6 +29,7 @@ Current options include `"trin"` / `"fluffy"`.
 - `"--mode test:/path/to/test_data.json"`: gossip content keys & values found in test file.
 - `"--mode backfill:b100"`: start backfill at block #100
 - `"--mode backfill:e100"`: start backfill at epoch #100
+- `"--mode backfill:r10-12"`: backfill a block range from #10 to #12 (inclusive)
 - `"--mode single:b100"`: gossip a single block #100
 - `"--mode single:e100"`: gossip a single epoch #100
 

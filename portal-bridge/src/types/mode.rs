@@ -1,13 +1,13 @@
 use std::{path::PathBuf, str::FromStr};
 
-use trin_validation::constants::EPOCH_SIZE;
-
 /// Used to help decode cli args identifying the desired bridge mode.
 /// - Latest: tracks the latest header
 /// - StartFromEpoch: starts at the given epoch
 ///   - ex: "e123" starts at epoch 123
 /// - Single: executes a single block
 ///   - ex: "b123" executes block 123
+/// - BlockRange: generates test data from block x to y
+///   - ex: "r10-12" backfills a block range from #10 to #12 (inclusive)
 #[derive(Clone, Debug, PartialEq, Default, Eq)]
 pub enum BridgeMode {
     #[default]
@@ -55,15 +55,7 @@ impl FromStr for BridgeMode {
 pub enum ModeType {
     Epoch(u64),
     Block(u64),
-}
-
-impl ModeType {
-    pub fn block_number(&self) -> u64 {
-        match self {
-            ModeType::Epoch(epoch) => epoch * EPOCH_SIZE as u64,
-            ModeType::Block(block) => *block,
-        }
-    }
+    BlockRange(u64, u64),
 }
 
 impl FromStr for ModeType {
@@ -81,6 +73,29 @@ impl FromStr for ModeType {
                     .parse()
                     .map_err(|_| "Invalid bridge mode arg: block number")?;
                 Ok(ModeType::Block(block))
+            }
+            "r" => {
+                let range_vec = s[1..]
+                    .split('-')
+                    .map(|range_input| {
+                        range_input.parse().expect(
+                            "Range format invalid, expected backfill:rX-Y (eg. backfill:r10-100)",
+                        )
+                    })
+                    .collect::<Vec<u64>>();
+
+                if range_vec.len() != 2 {
+                    return Err("Invalid bridge mode arg: expected 2 numbers in range");
+                }
+
+                let start_block = range_vec[0].to_owned();
+                let end_block = range_vec[1].to_owned();
+
+                if start_block > end_block {
+                    return Err("Invalid bridge mode arg: end_block is less than start_block");
+                }
+
+                Ok(ModeType::BlockRange(start_block, end_block))
             }
             _ => Err("Invalid bridge mode arg: type prefix"),
         }
