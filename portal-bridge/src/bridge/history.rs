@@ -150,8 +150,8 @@ impl HistoryBridge {
             "Error launching bridge in backfill mode. Unable to get latest block from provider.",
         );
         let (is_single_mode, mode_type) = match self.mode.clone() {
-            BridgeMode::Backfill(val) => (true, val),
-            BridgeMode::Single(val) => (false, val),
+            BridgeMode::Backfill(val) => (false, val),
+            BridgeMode::Single(val) => (true, val),
             _ => panic!("Invalid backfill mode"),
         };
         let (start_block, mut end_block) = match mode_type {
@@ -240,7 +240,7 @@ impl HistoryBridge {
             .await)
                 .is_err()
             {
-                error!("serve_full_block() timed out: this is an indication a bug is present")
+                error!("serve_full_block() timed out on height {height}: this is an indication a bug is present")
             };
             if let Some(permit) = permit {
                 drop(permit);
