@@ -17,10 +17,7 @@ use crate::{
     api::execution::ExecutionApi,
     gossip::gossip_history_content,
     stats::{HistoryBlockStats, StatsReporter},
-    types::{
-        full_header::FullHeader,
-        mode::{BridgeMode, ModeType},
-    },
+    types::{full_header::FullHeader, mode::BridgeMode},
     utils::{read_test_assets_from_file, TestAssets},
 };
 use ethportal_api::{
@@ -149,45 +146,13 @@ impl HistoryBridge {
         let latest_block = self.execution_api.get_latest_block_number().await.expect(
             "Error launching bridge in backfill mode. Unable to get latest block from provider.",
         );
-        let (is_single_mode, mode_type) = match self.mode.clone() {
-            BridgeMode::Backfill(val) => (false, val),
-            BridgeMode::Single(val) => (true, val),
-            _ => panic!("Invalid backfill mode"),
-        };
-        let (start_block, mut end_block) = match mode_type {
-            ModeType::Epoch(epoch_number) => {
-                let end_block = match is_single_mode {
-                    true => (epoch_number + 1) * EPOCH_SIZE,
-                    false => latest_block,
-                };
-                (epoch_number * EPOCH_SIZE, end_block)
-            }
-            ModeType::Block(block) => {
-                let end_block = match is_single_mode {
-                    true => block + 1,
-                    false => latest_block,
-                };
-                (block, end_block)
-            }
-            ModeType::BlockRange(start_block, end_block) => (start_block, end_block + 1),
-        };
-        // check that the end block is not greater than the latest block
-        if end_block > latest_block {
-            end_block = latest_block;
-        }
-        if start_block > latest_block {
-            panic!(
-                "Starting block/epoch is greater than latest block. 
-                        Please specify a starting block/epoch that begins before the current block."
-            );
-        }
+        let gossip_range = self
+            .mode
+            .get_block_range(latest_block)
+            .expect("Error launching bridge in backfill mode: Invalid block range.");
         // initialize current_epoch_index as an impossible value u64::MAX so that
         // epoch_acc gets set on the first iteration of the loop
         let mut current_epoch_index = u64::MAX;
-        let gossip_range = Range {
-            start: start_block,
-            end: end_block,
-        };
 
         // We are using a semaphore to limit the amount of active gossip transfers to make sure we
         // don't overwhelm the trin client

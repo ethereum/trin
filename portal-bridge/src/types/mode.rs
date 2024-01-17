@@ -1,4 +1,8 @@
-use std::{path::PathBuf, str::FromStr};
+use std::{ops::Range, path::PathBuf, str::FromStr};
+
+use anyhow::anyhow;
+
+use trin_validation::constants::EPOCH_SIZE;
 
 /// Used to help decode cli args identifying the desired bridge mode.
 /// - Latest: tracks the latest header
@@ -15,6 +19,46 @@ pub enum BridgeMode {
     Backfill(ModeType),
     Single(ModeType),
     Test(PathBuf),
+}
+
+impl BridgeMode {
+    // Returns *exclusive* block range to gossip based on the mode & latest block.
+    // Returns an error if the block range contains a block that is greater than latest_block.
+    pub fn get_block_range(&self, latest_block: u64) -> anyhow::Result<Range<u64>> {
+        let (is_single_mode, mode_type) = match self {
+            BridgeMode::Backfill(val) => (false, val),
+            BridgeMode::Single(val) => (true, val),
+            BridgeMode::Latest => {
+                return Err(anyhow!("BridgeMode `latest` does not have a block range"))
+            }
+            BridgeMode::Test(_) => {
+                return Err(anyhow!("BridgeMode `test` does not have a block range"))
+            }
+        };
+        let (start, end) = match mode_type.clone() {
+            ModeType::Epoch(epoch_number) => {
+                let end_block = match is_single_mode {
+                    true => (epoch_number + 1) * EPOCH_SIZE as u64,
+                    false => latest_block + 1,
+                };
+                (epoch_number * EPOCH_SIZE as u64, end_block)
+            }
+            ModeType::Block(block) => {
+                let end_block = match is_single_mode {
+                    true => block,
+                    false => latest_block,
+                };
+                (block, end_block + 1)
+            }
+            ModeType::BlockRange(start_block, end_block) => (start_block, end_block + 1),
+        };
+        if end > (latest_block + 1) {
+            return Err(anyhow!(
+                "Invalid bridge mode range: block range contains block that is greater than latest_block"
+            ));
+        }
+        Ok(Range { start, end })
+    }
 }
 
 type ParseError = &'static str;
@@ -139,5 +183,49 @@ mod test {
             "trin",
         ]);
         assert_eq!(bridge_config.mode, expected);
+    }
+
+    #[rstest]
+    // backfill
+    #[case(BridgeMode::Backfill(ModeType::Epoch(0)), 1_000, (0, 1_001))]
+    #[case(BridgeMode::Backfill(ModeType::Epoch(1)), 10_000, (8_192, 10_001))]
+    #[case(BridgeMode::Backfill(ModeType::Block(0)), 1_000, (0, 1_001))]
+    #[case(BridgeMode::Backfill(ModeType::Block(100)), 10_000, (100, 10_001))]
+    #[case(BridgeMode::Backfill(ModeType::BlockRange(100_000, 100_001)), 100_002, (100_000, 100_002))]
+    #[case(BridgeMode::Backfill(ModeType::BlockRange(100, 200)), 100_001, (100, 201))]
+    #[case(BridgeMode::Backfill(ModeType::BlockRange(100, 100_000)), 100_001, (100, 100_001))]
+    // backfill across epoch boundaries
+    #[case(BridgeMode::Backfill(ModeType::Epoch(0)), 10_000, (0, 10_001))]
+    #[case(BridgeMode::Backfill(ModeType::Block(0)), 10_000, (0, 10_001))]
+    #[case(BridgeMode::Backfill(ModeType::BlockRange(8_000, 9_000)), 10_000, (8_000, 9_001))]
+    // single
+    #[case(BridgeMode::Single(ModeType::Epoch(0)), 10_000, (0, 8192))]
+    #[case(BridgeMode::Single(ModeType::Epoch(0)), 8191, (0, 8192))]
+    #[case(BridgeMode::Single(ModeType::Epoch(10)), 100_000, (81_920, 90_112))]
+    #[case(BridgeMode::Single(ModeType::Block(100)), 10_000, (100, 101))]
+    #[case(BridgeMode::Single(ModeType::Block(10_000)), 10_001, (10_000, 10_001))]
+    fn test_get_block_range(
+        #[case] mode: BridgeMode,
+        #[case] latest_block: u64,
+        #[case] expected: (u64, u64),
+    ) {
+        let actual = mode.get_block_range(latest_block).unwrap();
+        let expected = Range {
+            start: expected.0,
+            end: expected.1,
+        };
+        assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    #[case(BridgeMode::Single(ModeType::Epoch(0)), 8_190)]
+    #[case(BridgeMode::Single(ModeType::Epoch(1)), 1_000)]
+    #[case(BridgeMode::Single(ModeType::Block(1_001)), 1_000)]
+    #[case(BridgeMode::Single(ModeType::BlockRange(1_000, 2_000)), 1_000)]
+    #[case(BridgeMode::Latest, 1_000)]
+    #[case(BridgeMode::Test(PathBuf::from("./data.json")), 1_000)]
+    fn test_get_block_range_invalid(#[case] mode: BridgeMode, #[case] latest_block: u64) {
+        let actual = mode.get_block_range(latest_block);
+        assert!(actual.is_err());
     }
 }
