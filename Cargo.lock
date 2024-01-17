@@ -4429,6 +4429,7 @@ dependencies = [
  "ethportal-api",
  "fnv",
  "futures 0.3.30",
+ "hex",
  "igd-next",
  "lazy_static",
  "leb128",

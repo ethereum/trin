@@ -66,7 +66,7 @@ pub fn configure_node_data_dir(
 fn get_node_data_dir(trin_data_dir: PathBuf, node_id: NodeId) -> PathBuf {
     // Append first 8 characters of Node ID
     let mut application_string = "trin_".to_owned();
-    let node_id_string = hex_encode(node_id.raw());
+    let node_id_string = hex::encode(node_id.raw());
     let suffix = &node_id_string[..8];
     application_string.push_str(suffix);
     trin_data_dir.join(application_string)
