@@ -24,6 +24,7 @@ ethereum_ssz_derive = "0.5.3"
 ethportal-api = { path = "../ethportal-api" }
 fnv = "1.0.7"
 futures = "0.3.21"
+hex = "0.4.3"
 igd-next = "0.14.2"
 lazy_static = "1.4.0"
 leb128 = "0.2.1"
