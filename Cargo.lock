@@ -4057,6 +4057,7 @@ dependencies = [
  "portalnet",
  "reqwest",
  "serde",
+ "serde-this-or-that",
  "serde_json",
  "serde_yaml",
  "ssz-rs",

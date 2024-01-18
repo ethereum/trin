@@ -2,7 +2,8 @@ use std::collections::HashMap;
 
 use anyhow::anyhow;
 use ethereum_types::H256;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
+use serde_this_or_that::as_u64;
 
 use crate::config::networks;
 
@@ -21,29 +22,13 @@ pub struct RawSlotResponseData {
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Slot {
-    #[serde(deserialize_with = "str_or_u64")]
+    #[serde(deserialize_with = "as_u64")]
     pub slot: u64,
     pub block_root: Option<H256>,
     pub state_root: Option<H256>,
+    #[serde(deserialize_with = "as_u64")]
     pub epoch: u64,
     pub time: StartEndTime,
-}
-
-fn str_or_u64<'de, D>(deserializer: D) -> Result<u64, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum StrOrU64<'a> {
-        Str(&'a str),
-        U64(u64),
-    }
-
-    Ok(match StrOrU64::deserialize(deserializer)? {
-        StrOrU64::Str(v) => v.parse().unwrap_or(0), // Ignoring parsing errors
-        StrOrU64::U64(v) => v,
-    })
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
