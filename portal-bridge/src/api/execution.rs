@@ -17,7 +17,13 @@ use crate::{
     PANDAOPS_CLIENT_ID, PANDAOPS_CLIENT_SECRET,
 };
 use ethportal_api::{
-    types::jsonrpc::{params::Params, request::JsonRequest},
+    types::{
+        execution::block_body::{
+            BlockBody, BlockBodyLegacy, BlockBodyMerge, BlockBodyShanghai, MERGE_TIMESTAMP,
+            SHANGHAI_TIMESTAMP,
+        },
+        jsonrpc::{params::Params, request::JsonRequest},
+    },
     utils::bytes::hex_encode,
     Header, Receipts,
 };
@@ -61,6 +67,36 @@ impl ExecutionApi {
         Ok(Self { client })
     }
 
+    /// Returns an unvalidated block body for the given FullHeader.
+    pub async fn get_trusted_block_body(
+        &self,
+        full_header: &FullHeader,
+    ) -> anyhow::Result<BlockBody> {
+        let txs = full_header.txs.clone();
+        if full_header.header.timestamp > SHANGHAI_TIMESTAMP {
+            if !full_header.uncles.is_empty() {
+                bail!("Invalid block: Shanghai block contains uncles");
+            }
+            let withdrawals = match full_header.withdrawals.clone() {
+                Some(val) => val,
+                None => bail!("Invalid block: Shanghai block missing withdrawals"),
+            };
+            Ok(BlockBody::Shanghai(BlockBodyShanghai { txs, withdrawals }))
+        } else if full_header.header.timestamp > MERGE_TIMESTAMP {
+            if !full_header.uncles.is_empty() {
+                bail!("Invalid block: Merge block contains uncles");
+            }
+            Ok(BlockBody::Merge(BlockBodyMerge { txs }))
+        } else {
+            let uncles = match full_header.uncles.len() {
+                0 => vec![],
+                _ => self.get_trusted_uncles(&full_header.uncles).await?,
+            };
+            Ok(BlockBody::Legacy(BlockBodyLegacy { txs, uncles }))
+        }
+    }
+
+    /// Returns unvalidated receipts for the given transaction hashes.
     pub async fn get_trusted_receipts(&self, tx_hashes: &[H256]) -> anyhow::Result<Receipts> {
         let request: Vec<JsonRequest> = tx_hashes
             .iter()
@@ -89,7 +125,8 @@ impl ExecutionApi {
         Ok(header.number)
     }
 
-    pub async fn get_trusted_uncles(&self, hashes: &[H256]) -> anyhow::Result<Vec<Header>> {
+    /// Returns unvalidated uncles for the given uncle hashes.
+    async fn get_trusted_uncles(&self, hashes: &[H256]) -> anyhow::Result<Vec<Header>> {
         let batch_request = hashes
             .iter()
             .enumerate()

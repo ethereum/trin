@@ -24,10 +24,6 @@ use ethportal_api::{
     jsonrpsee::http_client::HttpClient,
     types::execution::{
         accumulator::EpochAccumulator,
-        block_body::{
-            BlockBody, BlockBodyLegacy, BlockBodyMerge, BlockBodyShanghai, MERGE_TIMESTAMP,
-            SHANGHAI_TIMESTAMP,
-        },
         header::{AccumulatorProof, BlockHeaderProof, Header, HeaderWithProof, SszNone},
         receipts::Receipts,
     },
@@ -380,32 +376,7 @@ impl HistoryBridge {
         execution_api: &ExecutionApi,
         block_stats: Arc<Mutex<HistoryBlockStats>>,
     ) -> anyhow::Result<()> {
-        let txs = full_header.txs.clone();
-        let block_body = if full_header.header.timestamp > SHANGHAI_TIMESTAMP {
-            if !full_header.uncles.is_empty() {
-                bail!("Invalid block: Shanghai block contains uncles");
-            }
-            let withdrawals = match full_header.withdrawals.clone() {
-                Some(val) => val,
-                None => bail!("Invalid block: Shanghai block missing withdrawals"),
-            };
-            BlockBody::Shanghai(BlockBodyShanghai { txs, withdrawals })
-        } else if full_header.header.timestamp > MERGE_TIMESTAMP {
-            if !full_header.uncles.is_empty() {
-                bail!("Invalid block: Merge block contains uncles");
-            }
-            BlockBody::Merge(BlockBodyMerge { txs })
-        } else {
-            let uncles = match full_header.uncles.len() {
-                0 => vec![],
-                _ => {
-                    execution_api
-                        .get_trusted_uncles(&full_header.uncles)
-                        .await?
-                }
-            };
-            BlockBody::Legacy(BlockBodyLegacy { txs, uncles })
-        };
+        let block_body = execution_api.get_trusted_block_body(full_header).await?;
         block_body.validate_against_header(&full_header.header)?;
 
         let content_key = HistoryContentKey::BlockBody(BlockBodyKey {
