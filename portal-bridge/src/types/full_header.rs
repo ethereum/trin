@@ -1,9 +1,11 @@
 use std::sync::Arc;
 
+use anyhow::{anyhow, ensure};
 use ethereum_types::H256;
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 
+use crate::bridge::history::EPOCH_SIZE;
 use ethportal_api::types::{
     consensus::withdrawal::Withdrawal,
     execution::{
@@ -12,6 +14,7 @@ use ethportal_api::types::{
         transaction::Transaction,
     },
 };
+use trin_validation::constants::MERGE_BLOCK_NUMBER;
 
 /// Helper type to deserialize a response from a batched Header request.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -74,6 +77,39 @@ impl TryFrom<Value> for FullHeader {
             withdrawals,
             epoch_acc: None,
         })
+    }
+}
+
+impl FullHeader {
+    pub fn validate(&self) -> anyhow::Result<()> {
+        // validation for pre-merge blocks
+        if self.header.number < MERGE_BLOCK_NUMBER {
+            let epoch_acc = self
+                .epoch_acc
+                .as_ref()
+                .ok_or_else(|| anyhow!("epoch_acc is missing for pre-merge block"))?;
+
+            // Fetch HeaderRecord from EpochAccumulator for validation
+            let header_index = self.header.number % EPOCH_SIZE;
+            let header_record = &epoch_acc[header_index as usize];
+
+            // Validate Header
+            let actual_header_hash = self.header.hash();
+
+            ensure!(
+                header_record.block_hash == actual_header_hash,
+                "Header hash doesn't match record in local accumulator: {:?} - {:?}",
+                actual_header_hash,
+                header_record.block_hash
+            );
+        }
+        ensure!(
+            self.txs.len() == self.tx_hashes.hashes.len(),
+            "txs.len() != tx_hashes.hashes.len(): {} != {}",
+            self.txs.len(),
+            self.tx_hashes.hashes.len()
+        );
+        Ok(())
     }
 }
 

@@ -5,7 +5,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use anyhow::{anyhow, bail};
+use anyhow::anyhow;
 use ssz::Decode;
 use tokio::{
     sync::{OwnedSemaphorePermit, Semaphore},
@@ -21,18 +21,10 @@ use crate::{
     utils::{read_test_assets_from_file, TestAssets},
 };
 use ethportal_api::{
-    jsonrpsee::http_client::HttpClient,
-    types::execution::{
-        accumulator::EpochAccumulator,
-        header::{AccumulatorProof, BlockHeaderProof, Header, HeaderWithProof, SszNone},
-        receipts::Receipts,
-    },
-    utils::bytes::hex_encode,
-    BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey, HistoryContentKey,
-    HistoryContentValue,
+    jsonrpsee::http_client::HttpClient, types::execution::accumulator::EpochAccumulator,
+    utils::bytes::hex_encode, EpochAccumulatorKey, HistoryContentKey, HistoryContentValue,
 };
 use trin_validation::{
-    accumulator::MasterAccumulator,
     constants::{EPOCH_SIZE as EPOCH_SIZE_USIZE, MERGE_BLOCK_NUMBER},
     oracle::HeaderOracle,
 };
@@ -40,7 +32,7 @@ use trin_validation::{
 // todo: calculate / test optimal saturation delay
 const HEADER_SATURATION_DELAY: u64 = 10; // seconds
 const LATEST_BLOCK_POLL_RATE: u64 = 5; // seconds
-const EPOCH_SIZE: u64 = EPOCH_SIZE_USIZE as u64;
+pub const EPOCH_SIZE: u64 = EPOCH_SIZE_USIZE as u64;
 const GOSSIP_LIMIT: usize = 32;
 const SERVE_BLOCK_TIMEOUT: Duration = Duration::from_secs(120);
 
@@ -218,14 +210,24 @@ impl HistoryBridge {
         execution_api: ExecutionApi,
     ) -> anyhow::Result<()> {
         info!("Serving block: {height}");
-        let mut full_header = execution_api.get_header(height).await?;
-        if full_header.header.number <= MERGE_BLOCK_NUMBER {
-            full_header.epoch_acc = epoch_acc;
-        }
+        let (full_header, header_content_key, header_content_value) =
+            execution_api.get_header(height, epoch_acc).await?;
         let block_stats = Arc::new(Mutex::new(HistoryBlockStats::new(
             full_header.header.number,
         )));
-        HistoryBridge::gossip_header(&full_header, &portal_clients, block_stats.clone()).await?;
+
+        debug!("Built and validated HeaderWithProof for Block #{height:?}: now gossiping.");
+        if let Err(msg) = gossip_history_content(
+            &portal_clients,
+            header_content_key,
+            header_content_value,
+            block_stats.clone(),
+        )
+        .await
+        {
+            warn!("Error gossiping HeaderWithProof #{height:?}: {msg:?}");
+        };
+
         // Sleep for 10 seconds to allow headers to saturate network,
         // since they must be available for body / receipt validation.
         sleep(Duration::from_secs(HEADER_SATURATION_DELAY)).await;
@@ -259,55 +261,6 @@ impl HistoryBridge {
         Ok(())
     }
 
-    async fn gossip_header(
-        full_header: &FullHeader,
-        portal_clients: &Vec<HttpClient>,
-        block_stats: Arc<Mutex<HistoryBlockStats>>,
-    ) -> anyhow::Result<()> {
-        debug!("Serving header: {}", full_header.header.number);
-        if full_header.header.number < MERGE_BLOCK_NUMBER && full_header.epoch_acc.is_none() {
-            bail!("Invalid header, expected to have epoch accumulator");
-        }
-        let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
-            block_hash: full_header.header.hash().to_fixed_bytes(),
-        });
-        // validate pre-merge
-        let content_value = match &full_header.epoch_acc {
-            Some(epoch_acc) => {
-                // Fetch HeaderRecord from EpochAccumulator for validation
-                let header_index = full_header.header.number % EPOCH_SIZE;
-                let header_record = &epoch_acc[header_index as usize];
-
-                // Validate Header
-                if header_record.block_hash != full_header.header.hash() {
-                    bail!(
-                        "Header hash doesn't match record in local accumulator: {:?} - {:?}",
-                        full_header.header.hash(),
-                        header_record.block_hash
-                    );
-                }
-                // Construct HeaderWithProof
-                let header_with_proof =
-                    HistoryBridge::construct_proof(full_header.header.clone(), epoch_acc).await?;
-                HistoryContentValue::BlockHeaderWithProof(header_with_proof)
-            }
-            None => {
-                let header_with_proof = HeaderWithProof {
-                    header: full_header.header.clone(),
-                    proof: BlockHeaderProof::None(SszNone { value: None }),
-                };
-                HistoryContentValue::BlockHeaderWithProof(header_with_proof)
-            }
-        };
-        debug!(
-            "Gossip: Block #{:?} HeaderWithProof",
-            full_header.header.number
-        );
-        let _ =
-            gossip_history_content(portal_clients, content_key, content_value, block_stats).await;
-        Ok(())
-    }
-
     /// Attempt to lookup an epoch accumulator from local portal-accumulators path provided via cli
     /// arg. Gossip the epoch accumulator if found.
     async fn get_epoch_acc(&self, epoch_index: u64) -> anyhow::Result<Arc<EpochAccumulator>> {
@@ -331,6 +284,7 @@ impl HistoryBridge {
         let content_value = HistoryContentValue::EpochAccumulator(local_epoch_acc.clone());
         // create unique stats for epoch accumulator, since it's rarely gossiped
         let block_stats = Arc::new(Mutex::new(HistoryBlockStats::new(epoch_index * EPOCH_SIZE)));
+        debug!("Built EpochAccumulator for Epoch #{epoch_index:?}: now gossiping.");
         let _ = gossip_history_content(
             &self.portal_clients,
             content_key,
@@ -347,34 +301,12 @@ impl HistoryBridge {
         execution_api: &ExecutionApi,
         block_stats: Arc<Mutex<HistoryBlockStats>>,
     ) -> anyhow::Result<()> {
-        debug!("Serving receipt: {:?}", full_header.header.number);
-        let receipts = match full_header.txs.len() {
-            0 => Receipts {
-                receipt_list: vec![],
-            },
-            _ => {
-                execution_api
-                    .get_trusted_receipts(&full_header.tx_hashes.hashes)
-                    .await?
-            }
-        };
-
-        // Validate Receipts
-        let receipts_root = receipts.root()?;
-        if receipts_root != full_header.header.receipts_root {
-            bail!(
-                "Receipts root doesn't match header receipts root: {receipts_root:?} - {:?}",
-                full_header.header.receipts_root
-            );
-        }
-        let content_key = HistoryContentKey::BlockReceipts(BlockReceiptsKey {
-            block_hash: full_header.header.hash().to_fixed_bytes(),
-        });
-        let content_value = HistoryContentValue::Receipts(receipts);
-        debug!("Gossip: Block #{:?} Receipts", full_header.header.number,);
-        let _ =
-            gossip_history_content(portal_clients, content_key, content_value, block_stats).await;
-        Ok(())
+        let (content_key, content_value) = execution_api.get_receipts(full_header).await?;
+        debug!(
+            "Built and validated Receipts for Block #{:?}: now gossiping.",
+            full_header.header.number
+        );
+        gossip_history_content(portal_clients, content_key, content_value, block_stats).await
     }
 
     async fn construct_and_gossip_block_body(
@@ -383,26 +315,11 @@ impl HistoryBridge {
         execution_api: &ExecutionApi,
         block_stats: Arc<Mutex<HistoryBlockStats>>,
     ) -> anyhow::Result<()> {
-        let block_body = execution_api.get_trusted_block_body(full_header).await?;
-        block_body.validate_against_header(&full_header.header)?;
-
-        let content_key = HistoryContentKey::BlockBody(BlockBodyKey {
-            block_hash: full_header.header.hash().to_fixed_bytes(),
-        });
-        let content_value = HistoryContentValue::BlockBody(block_body);
-        debug!("Gossip: Block #{:?} BlockBody", full_header.header.number);
-        let _ =
-            gossip_history_content(portal_clients, content_key, content_value, block_stats).await;
-        Ok(())
-    }
-
-    /// Create a proof for the given header / epoch acc
-    async fn construct_proof(
-        header: Header,
-        epoch_acc: &EpochAccumulator,
-    ) -> anyhow::Result<HeaderWithProof> {
-        let proof = MasterAccumulator::construct_proof(&header, epoch_acc)?;
-        let proof = BlockHeaderProof::AccumulatorProof(AccumulatorProof { proof });
-        Ok(HeaderWithProof { header, proof })
+        let (content_key, content_value) = execution_api.get_block_body(full_header).await?;
+        debug!(
+            "Built and validated BlockBody for Block #{:?}: now gossiping.",
+            full_header.header.number
+        );
+        gossip_history_content(portal_clients, content_key, content_value, block_stats).await
     }
 }

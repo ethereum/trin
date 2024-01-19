@@ -348,11 +348,13 @@ impl TryFrom<Value> for TransactionId {
     type Error = DecoderError;
 
     fn try_from(val: Value) -> Result<Self, Self::Error> {
-        let id = val.as_str().ok_or(DecoderError::Custom("Invalid tx id."))?;
+        let id = val.as_str().ok_or(DecoderError::Custom(
+            "Invalid tx id: unable to decode as string.",
+        ))?;
         let id = id.trim_start_matches("0x");
         let id = id
             .parse::<u8>()
-            .map_err(|_| DecoderError::Custom("Invalid tx id."))?;
+            .map_err(|_| DecoderError::Custom("Invalid tx id: unable to parse u8"))?;
         Self::try_from(id)
     }
 }
@@ -431,6 +433,9 @@ impl<'de> Deserialize<'de> for Receipt {
         D: Deserializer<'de>,
     {
         let obj: Value = Deserialize::deserialize(deserializer)?;
+        if obj.is_null() {
+            return Err(anyhow!("Null receipt found.")).map_err(serde::de::Error::custom);
+        }
         let tx_id =
             TransactionId::try_from(obj["type"].clone()).map_err(serde::de::Error::custom)?;
         match tx_id {
