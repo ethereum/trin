@@ -12,8 +12,11 @@ use url::Url;
 
 use crate::{
     cli::Provider,
-    constants::BASE_EL_ENDPOINT,
-    types::full_header::{FullHeader, FullHeaderBatch},
+    constants::{BASE_EL_ARCHIVE_ENDPOINT, BASE_EL_ENDPOINT},
+    types::{
+        full_header::{FullHeader, FullHeaderBatch},
+        mode::BridgeMode,
+    },
     PANDAOPS_CLIENT_ID, PANDAOPS_CLIENT_SECRET,
 };
 use ethportal_api::{
@@ -33,11 +36,15 @@ pub struct ExecutionApi {
 }
 
 impl ExecutionApi {
-    pub async fn new(provider: Provider) -> Result<Self, surf::Error> {
+    pub async fn new(provider: Provider, mode: BridgeMode) -> Result<Self, surf::Error> {
         let client = match &provider {
             Provider::PandaOps => {
-                let base_el_endpoint = Url::parse(BASE_EL_ENDPOINT)
-                    .expect("to be able to parse static base el endpoint url");
+                let endpoint = match mode {
+                    BridgeMode::Backfill(_) => BASE_EL_ARCHIVE_ENDPOINT,
+                    _ => BASE_EL_ENDPOINT,
+                };
+                let base_el_endpoint =
+                    Url::parse(endpoint).expect("to be able to parse static base el endpoint url");
                 Config::new()
                     .add_header("Content-Type", "application/json")?
                     .add_header("CF-Access-Client-Id", PANDAOPS_CLIENT_ID.to_string())?
