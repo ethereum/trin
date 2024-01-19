@@ -24,7 +24,9 @@ pub async fn test_history_bridge(peertest: &Peertest, target: &HttpClient) {
     let portal_clients = vec![target.clone()];
     let epoch_acc_path = "validation_assets/epoch_acc.bin".into();
     let mode = BridgeMode::Test("./test_assets/portalnet/bridge_data.json".into());
-    let execution_api = ExecutionApi::new(Provider::Test).await.unwrap();
+    let execution_api = ExecutionApi::new(Provider::Test, mode.clone())
+        .await
+        .unwrap();
     // Wait for bootnode to start
     sleep(Duration::from_secs(1)).await;
     let bridge = HistoryBridge::new(
