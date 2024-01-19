@@ -27,6 +27,8 @@ use trin_validation::constants::MERGE_BLOCK_NUMBER;
 // cargo run --bin sample_range -- --sample-size 50 --range since:100000
 // to sample 5 blocks from the latest 500 blocks:
 // cargo run --bin sample_range -- --sample-size 5 --range latest:500
+// with a custom node ip:
+// cargo run --bin sample_range -- --sample-size 1 --range range:1-2 --node-ip http://127.0.0.1:50933
 
 #[derive(Default)]
 struct Metrics {
@@ -39,9 +41,9 @@ impl Metrics {
     fn display_stats(&self) {
         info!(
             "Headers {:?}% // Bodies {:?}% // Receipts {:?}%",
-            (self.header.success_count * 100) / self.header.total_count(),
-            (self.block_body.success_count * 100) / self.block_body.total_count(),
-            (self.receipts.success_count * 100) / self.receipts.total_count()
+            self.header.success_rate(),
+            self.block_body.success_rate(),
+            self.receipts.success_rate(),
         );
         debug!(
             "Headers: {:?}/{:?} // Bodies: {:?}/{:?} // Receipts: {:?}/{:?}",
@@ -69,6 +71,14 @@ impl Details {
     fn total_count(&self) -> u32 {
         self.success_count + self.failure_count
     }
+
+    fn success_rate(&self) -> u32 {
+        if self.total_count() == 0 {
+            0
+        } else {
+            (self.success_count * 100) / self.total_count()
+        }
+    }
 }
 
 #[tokio::main]
@@ -87,6 +97,7 @@ pub async fn main() -> Result<()> {
         SampleRange::FourFours => Uniform::new_inclusive(0, MERGE_BLOCK_NUMBER),
         SampleRange::Since(since) => Uniform::new_inclusive(since, latest_block),
         SampleRange::Latest(latest) => Uniform::from(latest_block - latest..latest_block),
+        SampleRange::Range(start, end) => Uniform::from(start..end),
     };
     info!(
         "Sampling {} Blocks from Range: {:?}",
@@ -179,7 +190,7 @@ async fn audit_block(
 pub struct SampleConfig {
     #[arg(
         long,
-        help = "Range to sample blocks from (shanghai, fourfours, since:123, latest:123)"
+        help = "Range to sample blocks from (shanghai, fourfours, since:123, latest:123, range:123-456)"
     )]
     pub range: SampleRange,
 
@@ -196,6 +207,7 @@ pub enum SampleRange {
     Shanghai,
     Since(u64),
     Latest(u64),
+    Range(u64, u64),
 }
 
 type ParseError = &'static str;
@@ -211,12 +223,30 @@ impl FromStr for SampleRange {
                 let index = val.find(':').ok_or("Invalid sample range, missing `:`")?;
                 let (mode, val) = val.split_at(index);
                 let val = val.trim_start_matches(':');
-                let block = val
-                    .parse::<u64>()
-                    .map_err(|_| "Invalid sample range: unable to parse block number")?;
                 match mode {
-                    "since" => Ok(Self::Since(block)),
-                    "latest" => Ok(Self::Latest(block)),
+                    "since" => {
+                        let block = val
+                            .parse::<u64>()
+                            .map_err(|_| "Invalid sample range: unable to parse block number")?;
+                        Ok(Self::Since(block))
+                    }
+                    "latest" => {
+                        let block = val
+                            .parse::<u64>()
+                            .map_err(|_| "Invalid sample range: unable to parse block number")?;
+                        Ok(Self::Latest(block))
+                    }
+                    "range" => {
+                        let index = val.find('-').ok_or("Invalid sample range, missing `-`")?;
+                        let (start, end) = val.split_at(index);
+                        let start = start.parse::<u64>().map_err(|_| {
+                            "Invalid sample range: unable to parse start block number"
+                        })?;
+                        let end = end.trim_start_matches('-').parse::<u64>().map_err(|_| {
+                            "Invalid sample range: unable to parse end block number"
+                        })?;
+                        Ok(Self::Range(start, end))
+                    }
                     _ => Err("Invalid sample range: invalid mode"),
                 }
             }

@@ -1,4 +1,14 @@
-pub const MERGE_BLOCK_NUMBER: u64 = 15_537_393u64;
+// Execution Layer hard forks https://ethereum.org/en/history/
+pub const SHANGHAI_BLOCK_NUMBER: u64 = 17_034_870;
+pub const MERGE_BLOCK_NUMBER: u64 = 15_537_394;
+pub const LONDON_BLOCK_NUMBER: u64 = 12_965_000;
+pub const BERLIN_BLOCK_NUMBER: u64 = 12_244_000;
+pub const ISTANBUL_BLOCK_NUMBER: u64 = 9_069_000;
+pub const CONSTANTINOPLE_BLOCK_NUMBER: u64 = 7_280_000;
+pub const BYZANTIUM_BLOCK_NUMBER: u64 = 4_370_000;
+pub const HOMESTEAD_BLOCK_NUMBER: u64 = 1_150_000;
+
+// todo docstring
 pub const DEFAULT_MASTER_ACC_HASH: &str =
     "0x8eac399e24480dce3cfe06f4bdecba51c6e5d0c46200e3e8611a0b44a3a69ff9";
 
