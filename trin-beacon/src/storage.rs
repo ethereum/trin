@@ -26,7 +26,7 @@ use trin_storage::{
     error::ContentStoreError,
     sql::{
         CONTENT_KEY_LOOKUP_QUERY_DB, INSERT_LC_UPDATE_QUERY, LC_UPDATE_LOOKUP_QUERY,
-        LC_UPDATE_PERIOD_LOOKUP_QUERY, TOTAL_DATA_SIZE_QUERY_DB,
+        LC_UPDATE_PERIOD_LOOKUP_QUERY, LC_UPDATE_TOTAL_SIZE_QUERY, TOTAL_DATA_SIZE_QUERY_DB,
     },
     utils::{get_total_size_of_directory_in_bytes, insert_value, lookup_content_value},
     ContentStore, DataSize, PortalStorageConfig, ShouldWeStoreContent, BYTES_IN_MB_U64,
@@ -436,15 +436,14 @@ impl BeaconStorage {
     /// Internal method for measuring the total amount of requestable data that the node is storing.
     fn get_total_storage_usage_in_bytes_from_network(&self) -> Result<u64, ContentStoreError> {
         let conn = self.sql_connection_pool.get()?;
-        let mut query = conn.prepare(TOTAL_DATA_SIZE_QUERY_DB)?;
 
-        let result = query.query_map([], |row| {
+        let mut content_data_stmt = conn.prepare(TOTAL_DATA_SIZE_QUERY_DB)?;
+        let content_data_result = content_data_stmt.query_map([ProtocolId::Beacon], |row| {
             Ok(DataSize {
                 num_bytes: row.get(0)?,
             })
         });
-
-        let sum = match result?.next() {
+        let content_data_sum = match content_data_result?.next() {
             Some(total) => total,
             None => {
                 let err = "Unable to compute sum over content item sizes".to_string();
@@ -453,6 +452,22 @@ impl BeaconStorage {
         }?
         .num_bytes;
 
+        let mut lc_update_stmt = conn.prepare(LC_UPDATE_TOTAL_SIZE_QUERY)?;
+        let lc_update_result = lc_update_stmt.query_map([], |row| {
+            Ok(DataSize {
+                num_bytes: row.get(0)?,
+            })
+        });
+        let lc_update_sum = match lc_update_result?.next() {
+            Some(total) => total,
+            None => {
+                let err = "Unable to compute sum over lc update item sizes".to_string();
+                return Err(ContentStoreError::Database(err));
+            }
+        }?
+        .num_bytes;
+
+        let sum = content_data_sum + lc_update_sum;
         self.metrics.report_content_data_storage_bytes(sum);
 
         Ok(sum as u64)

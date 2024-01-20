@@ -36,7 +36,8 @@ pub const CONTENT_KEY_LOOKUP_QUERY_DB: &str =
 pub const CONTENT_VALUE_LOOKUP_QUERY_DB: &str =
     "SELECT content_value FROM content_data WHERE content_id_long = (?1) LIMIT 1";
 
-pub const TOTAL_DATA_SIZE_QUERY_DB: &str = "SELECT TOTAL(content_size) FROM content_data";
+pub const TOTAL_DATA_SIZE_QUERY_DB: &str =
+    "SELECT TOTAL(content_size) FROM content_data WHERE network = (?1)";
 
 pub const TOTAL_ENTRY_COUNT_QUERY_NETWORK: &str =
     "SELECT COUNT(content_id_long) FROM content_data WHERE network = (?1)";
@@ -60,3 +61,5 @@ pub const LC_UPDATE_LOOKUP_QUERY: &str = "SELECT value FROM lc_update WHERE peri
 
 pub const LC_UPDATE_PERIOD_LOOKUP_QUERY: &str =
     "SELECT period FROM lc_update WHERE period = (?1) LIMIT 1";
+
+pub const LC_UPDATE_TOTAL_SIZE_QUERY: &str = "SELECT TOTAL(update_size) FROM lc_update";
