@@ -407,7 +407,7 @@ impl HistoryStorage {
         let conn = self.sql_connection_pool.get()?;
         let mut query = conn.prepare(TOTAL_DATA_SIZE_QUERY_DB)?;
 
-        let result = query.query_map([], |row| {
+        let result = query.query_map([u8::from(ProtocolId::History)], |row| {
             Ok(DataSize {
                 num_bytes: row.get(0)?,
             })
