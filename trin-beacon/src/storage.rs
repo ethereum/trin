@@ -438,11 +438,12 @@ impl BeaconStorage {
         let conn = self.sql_connection_pool.get()?;
 
         let mut content_data_stmt = conn.prepare(TOTAL_DATA_SIZE_QUERY_DB)?;
-        let content_data_result = content_data_stmt.query_map([ProtocolId::Beacon], |row| {
-            Ok(DataSize {
-                num_bytes: row.get(0)?,
-            })
-        });
+        let content_data_result =
+            content_data_stmt.query_map([u8::from(ProtocolId::Beacon)], |row| {
+                Ok(DataSize {
+                    num_bytes: row.get(0)?,
+                })
+            });
         let content_data_sum = match content_data_result?.next() {
             Some(total) => total,
             None => {
