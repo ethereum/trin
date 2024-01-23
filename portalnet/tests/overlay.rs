@@ -44,7 +44,7 @@ async fn init_overlay(
     let (_utp_talk_req_tx, utp_talk_req_rx) = unbounded_channel();
     let discv5_utp = Discv5UdpSocket::new(Arc::clone(&discovery), utp_talk_req_rx);
     let utp_socket = UtpSocket::with_socket(discv5_utp);
-    let utp_controller = UtpController::new(50, utp_socket);
+    let utp_controller = UtpController::new(50, Arc::new(utp_socket));
     let utp_controller = Arc::new(utp_controller);
 
     let validator = Arc::new(MockValidator {});

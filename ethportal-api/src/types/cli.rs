@@ -184,7 +184,7 @@ pub struct TrinConfig {
 
     #[arg(
         long = "utp-transfer-limit", 
-        help = "The limit of max inbound and max outbound uTP transfers", 
+        help = "The limit of max background uTP transfers for any given channel (inbound or outbound) for each subnetwork", 
         default_value_t = DEFAULT_UTP_TRANSFER_LIMIT,
     )]
     pub utp_transfer_limit: usize,

@@ -16,11 +16,11 @@ pub struct UtpController {
     pub inbound_utp_transfer_semaphore: Arc<Semaphore>,
     pub outbound_utp_transfer_semaphore: Arc<Semaphore>,
     /// uTP socket.
-    utp_socket: UtpSocket<UtpEnr>,
+    utp_socket: Arc<UtpSocket<UtpEnr>>,
 }
 
 impl UtpController {
-    pub fn new(utp_transfer_limit: usize, utp_socket: UtpSocket<UtpEnr>) -> Self {
+    pub fn new(utp_transfer_limit: usize, utp_socket: Arc<UtpSocket<UtpEnr>>) -> Self {
         Self {
             utp_socket,
             inbound_utp_transfer_semaphore: Arc::new(Semaphore::new(utp_transfer_limit)),
