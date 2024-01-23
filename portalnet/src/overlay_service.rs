@@ -2751,7 +2751,9 @@ mod tests {
         utils::db::setup_temp_dir,
     };
     use ethportal_api::types::{
-        cli::DEFAULT_DISCOVERY_PORT, content_key::overlay::IdentityContentKey, distance::XorMetric,
+        cli::{DEFAULT_DISCOVERY_PORT, DEFAULT_UTP_TRANSFER_LIMIT},
+        content_key::overlay::IdentityContentKey,
+        distance::XorMetric,
         enr::generate_random_remote_enr,
     };
     use trin_metrics::portalnet::PORTALNET_METRICS;
@@ -2777,7 +2779,7 @@ mod tests {
         let discv5_utp =
             crate::discovery::Discv5UdpSocket::new(Arc::clone(&discovery), utp_talk_req_rx);
         let utp_socket = utp_rs::socket::UtpSocket::with_socket(discv5_utp);
-        let utp_controller = UtpController::new(50, Arc::new(utp_socket));
+        let utp_controller = UtpController::new(DEFAULT_UTP_TRANSFER_LIMIT, Arc::new(utp_socket));
         let utp_controller = Arc::new(utp_controller);
 
         let node_id = discovery.local_enr().node_id();
