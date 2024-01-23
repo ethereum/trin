@@ -14,8 +14,8 @@ pub const BATCH_SIZE: u64 = 128;
 // Reth's archive node, has also exhibited some problems with the concurrent requests rate we
 // currently use.
 pub const BASE_EL_ENDPOINT: &str = "https://erigon-lighthouse.mainnet.eu1.ethpandaops.io/";
-// The `archive` endpoint appears to perform much better for backfill requests.
-pub const BASE_EL_ARCHIVE_ENDPOINT: &str = "https://archive.mainnet.ethpandaops.io/";
+// The `erigon` endpoint appears to perform much better for backfill requests.
+pub const BASE_EL_ARCHIVE_ENDPOINT: &str = "https://erigon-lighthouse.mainnet.eu1.ethpandaops.io/";
 /// Consensus layer PandaOps endpoint
 /// We use Nimbus as the CL client, because it supports light client data by default.
 pub const BASE_CL_ENDPOINT: &str = "https://nimbus.mainnet.ethpandaops.io/";
