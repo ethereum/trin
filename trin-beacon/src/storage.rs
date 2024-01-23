@@ -467,7 +467,7 @@ impl BeaconStorage {
         }?
         .num_bytes;
 
-        let sum = content_data_sum.saturating_add(lc_update_sum);
+        let sum = content_data_sum + lc_update_sum;
         self.metrics.report_content_data_storage_bytes(sum);
 
         Ok(sum as u64)
