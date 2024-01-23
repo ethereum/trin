@@ -193,15 +193,17 @@ impl HistoryBridge {
         permit: Option<OwnedSemaphorePermit>,
     ) {
         tokio::spawn(async move {
-            if (timeout(
+            match timeout(
                 SERVE_BLOCK_TIMEOUT,
                 Self::serve_full_block(height, epoch_acc, portal_clients, execution_api)
                     .in_current_span(),
             )
-            .await)
-                .is_err()
-            {
-                error!("serve_full_block() timed out on height {height}: this is an indication a bug is present")
+            .await {
+                Ok(result) => match result {
+                    Ok(_) => debug!("Successfully served block: {height}"),
+                    Err(msg) => warn!("Error serving block: {height}: {msg:?}"),
+                },
+                Err(_) => error!("serve_full_block() timed out on height {height}: this is an indication a bug is present")
             };
             if let Some(permit) = permit {
                 drop(permit);
@@ -227,23 +229,28 @@ impl HistoryBridge {
         // Sleep for 10 seconds to allow headers to saturate network,
         // since they must be available for body / receipt validation.
         sleep(Duration::from_secs(HEADER_SATURATION_DELAY)).await;
-        HistoryBridge::construct_and_gossip_block_body(
+        if let Err(msg) = HistoryBridge::construct_and_gossip_block_body(
             &full_header,
             &portal_clients,
             &execution_api,
             block_stats.clone(),
         )
         .await
-        .map_err(|err| anyhow!("Error gossiping block body #{height:?}: {err:?}"))?;
+        {
+            warn!("Error gossiping block body #{height:?}: {msg:?}");
+        };
 
-        HistoryBridge::construct_and_gossip_receipt(
+        if let Err(msg) = HistoryBridge::construct_and_gossip_receipt(
             &full_header,
             &portal_clients,
             &execution_api,
             block_stats.clone(),
         )
         .await
-        .map_err(|err| anyhow!("Error gossiping receipt #{height:?}: {err:?}"))?;
+        {
+            warn!("Error gossiping block receipt #{height:?}: {msg:?}");
+        };
+
         if let Ok(stats) = block_stats.lock() {
             stats.report();
         } else {
