@@ -9,7 +9,6 @@ use ssz::{Decode, DecodeError, Encode};
 use ssz_derive::{Decode, Encode};
 use std::fmt;
 
-// TODO(morph): replace with correct link once PR is merged.
 // Prefixes for the different types of state content keys:
 // https://github.com/ethereum/portal-network-specs/blob/655f3e1cac7450888023aec1fc6f339cd679ffdd/state-network.md
 pub const STATE_ACCOUNT_TRIE_NODE_KEY_PREFIX: u8 = 0x20;
@@ -176,7 +175,7 @@ mod test {
         0x27, 0x80, 0x74, 0x32, 0x80,
     ];
 
-    const HODE_HASH: [u8; 32] = [
+    const NODE_HASH: [u8; 32] = [
         0xc5, 0xd2, 0x46, 0x01, 0x86, 0xf7, 0x23, 0x3c, 0x92, 0x7e, 0x7d, 0xb2, 0xdc, 0xc7, 0x03,
         0xc0, 0xe5, 0x00, 0xb6, 0x53, 0xca, 0x82, 0x27, 0x3b, 0x7b, 0xfa, 0xd8, 0x04, 0x5d, 0x85,
         0xa4, 0x70,
@@ -190,7 +189,7 @@ mod test {
 
         let key = StateContentKey::AccountTrieNode(AccountTrieNodeKey {
             path: Nibbles::try_from_unpacked_nibbles(&NIBBLES).unwrap(),
-            node_hash: H256::from(HODE_HASH),
+            node_hash: H256::from(NODE_HASH),
         });
 
         assert_encode_decode(&key);
@@ -206,7 +205,7 @@ mod test {
         let key = StateContentKey::ContractStorageTrieNode(ContractStorageTrieNodeKey {
             address: Address::from(ADDRESS),
             path: Nibbles::try_from_unpacked_nibbles(&NIBBLES).unwrap(),
-            node_hash: H256::from(HODE_HASH),
+            node_hash: H256::from(NODE_HASH),
         });
 
         assert_encode_decode(&key);
@@ -246,7 +245,8 @@ mod test {
             StateContentKey::try_from(hex_decode(invalid_selector_content_key).unwrap())
                 .unwrap_err()
                 .to_string(),
-            "Unable to decode key SSZ bytes 0x0024000000c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a4700005000000 due to UnionSelectorInvalid(0)",
+            format!("Unable to decode key SSZ bytes {invalid_selector_content_key} due to UnionSelectorInvalid(0)"),
+            
         );
     }
 
