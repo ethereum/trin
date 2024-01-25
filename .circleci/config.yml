@@ -59,7 +59,7 @@ executors:
     environment:
       IMAGE_NAME: portalnetwork/trin
     docker:
-      - image: cimg/rust:1.71.1
+      - image: cimg/rust:1.75.0
   docker-nightly:
     docker:
       - image: rustlang/rust:nightly
@@ -152,7 +152,7 @@ jobs:
     resource_class: xlarge
     executor:
       name: rust/default
-      tag: 1.71.1
+      tag: 1.75.0
     environment:
       RUSTFLAGS: "-D warnings"
       RUST_LOG: "debug"
@@ -173,7 +173,7 @@ jobs:
     resource_class: xlarge
     executor:
       name: rust/default
-      tag: 1.71.1
+      tag: 1.75.0
     environment:
       RUSTFLAGS: "-D warnings"
       RUST_LOG: "debug"
@@ -210,7 +210,7 @@ jobs:
     resource_class: 2xlarge
     executor:
       name: rust/default
-      tag: 1.71.1
+      tag: 1.75.0
     environment:
       RUSTFLAGS: "-D warnings"
       RUST_LOG: "debug"
