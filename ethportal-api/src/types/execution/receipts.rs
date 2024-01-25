@@ -207,13 +207,15 @@ impl<'de> Deserialize<'de> for TransactionOutcome {
         D: Deserializer<'de>,
     {
         let s: String = Deserialize::deserialize(deserializer)?;
-        let s = s.trim_start_matches("0x");
         match s.len() {
-            1 => Ok(Self::StatusCode(
-                s.parse::<u8>().map_err(serde::de::Error::custom)?,
-            )),
-            64 => Ok(Self::StateRoot(H256::from_slice(
-                &hex_decode(s).map_err(serde::de::Error::custom)?,
+            3 => {
+                let s = s.trim_start_matches("0x");
+                Ok(Self::StatusCode(
+                    s.parse::<u8>().map_err(serde::de::Error::custom)?,
+                ))
+            }
+            66 => Ok(Self::StateRoot(H256::from_slice(
+                &hex_decode(&s).map_err(serde::de::Error::custom)?,
             ))),
             _ => Err(serde::de::Error::custom("Invalid transaction outcome")),
         }
@@ -244,7 +246,7 @@ struct LegacyReceiptHelper {
     pub cumulative_gas_used: U256,
     pub logs_bloom: Bloom,
     pub logs: Vec<LogEntryHelper>,
-    #[serde(rename(deserialize = "status"))]
+    #[serde(alias = "root", alias = "status")]
     pub outcome: TransactionOutcome,
 }
 
@@ -740,6 +742,20 @@ mod tests {
         let receipts: Receipts = serde_json::from_str(&expected).unwrap();
         let expected_receipts_root: H256 = H256::from_slice(
             &hex_decode("0xc9e543effd8c9708acc53249157c54b0c6aecd69285044bcb9df91cedc6437ad")
+                .unwrap(),
+        );
+        assert_eq!(receipts.root().unwrap(), expected_receipts_root);
+    }
+
+    #[test_log::test]
+    fn pre_byzantium_receipts_batch() {
+        // batched group of pre-byzantium receipts, containing the "root" field instead of "status"
+        // sourced from infura.
+        let expected: String =
+            std::fs::read_to_string("../test_assets/infura_batch/receipts-1114271.json").unwrap();
+        let receipts: Receipts = serde_json::from_str(&expected).unwrap();
+        let expected_receipts_root: H256 = H256::from_slice(
+            &hex_decode("0xd262fe545cec9ec04f4246334d05437fac8d8dfe201a1f6476fab545878cb251")
                 .unwrap(),
         );
         assert_eq!(receipts.root().unwrap(), expected_receipts_root);
