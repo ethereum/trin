@@ -71,49 +71,48 @@ impl fmt::Display for Nibbles {
 #[cfg(test)]
 mod test {
     use crate::utils::bytes::hex_decode;
+    use rstest::rstest;
     use ssz::{Decode, Encode};
-    use test_case::test_case;
 
     use super::*;
 
-    #[test_case(
+    #[rstest]
+    #[case::empty_nibbles(
         &[],
         Nibbles {
             is_odd_length: false,
             packed_nibbles: VariableList::default(),
-        } ;
-        "when there are no nibbles"
+        }
     )]
-    #[test_case(
+    #[case::single_nibble(
         &[10],
         Nibbles {
             is_odd_length: true,
             packed_nibbles: VariableList::from(vec![0x0a]),
-        } ;
-        "when there is single nibble"
+        }
     )]
-    #[test_case(
+    #[case::even_number_of_nibbles(
         &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
         Nibbles {
             is_odd_length: false,
             packed_nibbles: VariableList::from(vec![0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc]),
-        } ;
-        "when there is even number of nibbles")]
-    #[test_case(
+        }
+    )]
+    #[case::odd_number_of_nibbles(
         &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
         Nibbles {
             is_odd_length: true,
             packed_nibbles: VariableList::from(vec![0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd]),
-        } ;
-        "when there is odd number of nibbles")]
-    #[test_case(
-        &[10; 32],
+        }
+    )]
+    #[case::max_number_of_nibbles(
+        &[10; 64],
         Nibbles {
             is_odd_length: false,
-            packed_nibbles: VariableList::from(vec![0xaa; 16]),
-        } ;
-        "when there is max number of nibbles")]
-    fn packing_unpacking(unpacked_nibbles: &[u8], nibbles: Nibbles) -> Result<()> {
+            packed_nibbles: VariableList::from(vec![0xaa; 32]),
+        }
+    )]
+    fn packing_unpacking(#[case] unpacked_nibbles: &[u8], #[case] nibbles: Nibbles) -> Result<()> {
         assert_eq!(
             Nibbles::try_from_unpacked_nibbles(unpacked_nibbles)?,
             nibbles
@@ -123,44 +122,43 @@ mod test {
         Ok(())
     }
 
-    #[test_case(
+    #[rstest]
+    #[case::empty_nibbles(
         "0x0005000000",
         Nibbles {
             is_odd_length: false,
             packed_nibbles: VariableList::default(),
-        } ;
-        "when there are no nibbles"
+        }
     )]
-    #[test_case(
+    #[case::single_nibble(
         "0x01050000000a",
         Nibbles {
             is_odd_length: true,
             packed_nibbles: VariableList::from(vec![0x0a]),
-        } ;
-        "when there is single nibble"
+        }
     )]
-    #[test_case(
+    #[case::even_number_of_nibbles(
         "0x0005000000123456789abc",
         Nibbles {
             is_odd_length: false,
             packed_nibbles: VariableList::from(vec![0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc]),
-        } ;
-        "when there is even number of nibbles")]
-    #[test_case(
+        }
+    )]
+    #[case::odd_number_of_nibbles(
         "0x01050000000123456789abcd",
         Nibbles {
             is_odd_length: true,
             packed_nibbles: VariableList::from(vec![0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd]),
-        } ;
-        "when there is odd number of nibbles")]
-    #[test_case(
+        }
+    )]
+    #[case::max_number_of_nibbles(
         "0x0005000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         Nibbles {
             is_odd_length: false,
             packed_nibbles: VariableList::from(vec![0xaa; 32]),
-        } ;
-        "when there is max number of nibbles")]
-    fn ssz_encode_decode(ssz_bytes: &str, nibbles: Nibbles) -> Result<()> {
+        }
+    )]
+    fn ssz_encode_decode(#[case] ssz_bytes: &str, #[case] nibbles: Nibbles) -> Result<()> {
         let ssz_bytes = hex_decode(ssz_bytes)?;
         assert_eq!(Nibbles::from_ssz_bytes(&ssz_bytes).unwrap(), nibbles);
         assert_eq!(nibbles.as_ssz_bytes(), ssz_bytes);
