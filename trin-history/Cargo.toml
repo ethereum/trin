@@ -29,7 +29,7 @@ trin-metrics = { path = "../trin-metrics" }
 trin-storage = { path = "../trin-storage" }
 trin-utils = { path = "../trin-utils" }
 trin-validation = { path = "../trin-validation" }
-utp-rs = { git="https://github.com/KolbyML/utp", rev="9cfc7158a1c3010370b4b89b9ddb77b26a1edef0"}
+utp-rs = { git = "https://github.com/ethereum/utp", tag = "v0.1.0-alpha.9" }
 
 [dev-dependencies]
 env_logger = "0.9.0"

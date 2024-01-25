@@ -8032,7 +8032,7 @@ checksum = "711b9620af191e0cdc7468a8d14e709c3dcdb115b36f838e601583af800a370a"
 [[package]]
 name = "utp-rs"
 version = "0.1.0-alpha.8"
-source = "git+https://github.com/KolbyML/utp?rev=9cfc7158a1c3010370b4b89b9ddb77b26a1edef0#9cfc7158a1c3010370b4b89b9ddb77b26a1edef0"
+source = "git+https://github.com/ethereum/utp?tag=v0.1.0-alpha.9#a5194267293711e4fd187b09091fbc7188426903"
 dependencies = [
  "async-trait",
  "delay_map 0.3.0",

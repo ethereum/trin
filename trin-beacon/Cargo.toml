@@ -30,4 +30,4 @@ trin-metrics = { path = "../trin-metrics" }
 trin-storage = { path = "../trin-storage" }
 trin-validation = { path = "../trin-validation" }
 trin-utils = { path = "../trin-utils" }
-utp-rs = { git="https://github.com/KolbyML/utp", rev="9cfc7158a1c3010370b4b89b9ddb77b26a1edef0"}
+utp-rs = { git = "https://github.com/ethereum/utp", tag = "v0.1.0-alpha.9" }
