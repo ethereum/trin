@@ -17,14 +17,14 @@ use tokio::{
     time::{interval, Duration},
 };
 use tracing::info;
-use utp_rs::socket::UtpSocket;
 
 use crate::{events::HistoryEvents, jsonrpc::HistoryRequestHandler};
 use ethportal_api::types::{enr::Enr, jsonrpc::request::HistoryJsonRpcRequest};
 use portalnet::{
     config::PortalnetConfig,
-    discovery::{Discovery, UtpEnr},
+    discovery::Discovery,
     events::{EventEnvelope, OverlayRequest},
+    utp_controller::UtpController,
 };
 use trin_storage::PortalStorageConfig;
 use trin_validation::oracle::HeaderOracle;
@@ -37,8 +37,7 @@ type HistoryEventStream = Option<broadcast::Receiver<EventEnvelope>>;
 
 pub async fn initialize_history_network(
     discovery: &Arc<Discovery>,
-    utp_socket: Arc<UtpSocket<UtpEnr>>,
-
+    utp_controller: Arc<UtpController>,
     portalnet_config: PortalnetConfig,
     storage_config: PortalStorageConfig,
     header_oracle: Arc<RwLock<HeaderOracle>>,
@@ -55,7 +54,7 @@ pub async fn initialize_history_network(
     let (history_event_tx, history_event_rx) = mpsc::unbounded_channel::<OverlayRequest>();
     let history_network = HistoryNetwork::new(
         Arc::clone(discovery),
-        utp_socket,
+        utp_controller,
         storage_config,
         portalnet_config.clone(),
         header_oracle,

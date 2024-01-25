@@ -30,14 +30,15 @@ use tokio::{
     sync::{
         broadcast,
         mpsc::{self, UnboundedReceiver, UnboundedSender},
+        OwnedSemaphorePermit,
     },
     task::JoinHandle,
 };
 use tracing::{debug, enabled, error, info, trace, warn, Level};
-use utp_rs::{conn::ConnectionConfig, socket::UtpSocket, stream::UtpStream};
+use utp_rs::{cid::ConnectionId, conn::ConnectionConfig, stream::UtpStream};
 
 use crate::{
-    discovery::Discovery,
+    discovery::{Discovery, UtpEnr},
     events::{EventEnvelope, OverlayEvent},
     find::{
         iterators::{
@@ -51,6 +52,7 @@ use crate::{
     gossip::propagate_gossip_cross_thread,
     types::node::Node,
     utils::portal_wire,
+    utp_controller::UtpController,
 };
 use ethportal_api::{
     generate_random_node_id,
@@ -226,6 +228,8 @@ pub struct OverlayRequest {
     /// ID of query that request's response will advance.
     /// Will be None for requests that are not associated with a query.
     pub query_id: Option<QueryId>,
+    /// An optional permit to allow for transfer caps
+    pub request_permit: Option<OwnedSemaphorePermit>,
 }
 
 impl OverlayRequest {
@@ -235,6 +239,7 @@ impl OverlayRequest {
         direction: RequestDirection,
         responder: Option<OverlayResponder>,
         query_id: Option<QueryId>,
+        request_permit: Option<OwnedSemaphorePermit>,
     ) -> Self {
         OverlayRequest {
             id: rand::random(),
@@ -242,6 +247,7 @@ impl OverlayRequest {
             direction,
             responder,
             query_id,
+            request_permit,
         }
     }
 }
@@ -255,6 +261,8 @@ struct ActiveOutgoingRequest {
     pub request: Request,
     /// An optional QueryID for the query that this request is associated with.
     pub query_id: Option<QueryId>,
+    /// An optional permit to allow for transfer caps
+    pub request_permit: Option<OwnedSemaphorePermit>,
 }
 
 /// A response for a particular overlay request.
@@ -304,8 +312,8 @@ pub struct OverlayService<TContentKey, TMetric, TValidator, TStore> {
     response_rx: UnboundedReceiver<OverlayResponse>,
     /// The sender half of a channel for responses to outgoing requests.
     response_tx: UnboundedSender<OverlayResponse>,
-    /// uTP socket.
-    utp_socket: Arc<UtpSocket<crate::discovery::UtpEnr>>,
+    /// uTP controller.
+    utp_controller: Arc<UtpController>,
     /// Phantom content key.
     phantom_content_key: PhantomData<TContentKey>,
     /// Phantom metric (distance function).
@@ -342,7 +350,7 @@ where
         bootnode_enrs: Vec<Enr>,
         ping_queue_interval: Option<Duration>,
         protocol: ProtocolId,
-        utp_socket: Arc<UtpSocket<crate::discovery::UtpEnr>>,
+        utp_controller: Arc<UtpController>,
         metrics: OverlayMetricsReporter,
         validator: Arc<TValidator>,
         query_timeout: Duration,
@@ -385,7 +393,7 @@ where
                 findnodes_query_distances_per_peer,
                 response_rx,
                 response_tx,
-                utp_socket,
+                utp_controller,
                 phantom_content_key: PhantomData,
                 phantom_metric: PhantomData,
                 metrics,
@@ -533,7 +541,7 @@ where
                         match response.response {
                             Ok(response) => {
                                 self.metrics.report_inbound_response(&response);
-                                self.process_response(response, request.destination, request.request, request.query_id)
+                                self.process_response(response, request.destination, request.request, request.query_id, request.request_permit)
                             }
                             Err(error) => self.process_request_failure(response.request_id, request.destination, error),
                         }
@@ -684,6 +692,7 @@ where
                         RequestDirection::Outgoing { destination: enr },
                         None,
                         Some(query_id),
+                        None,
                     );
                     let _ = self.command_tx.send(OverlayCommand::Request(request));
                 } else {
@@ -761,6 +770,7 @@ where
                         RequestDirection::Outgoing { destination: enr },
                         None,
                         Some(query_id),
+                        None,
                     );
                     let _ = self.command_tx.send(OverlayCommand::Request(request));
                 } else {
@@ -805,6 +815,7 @@ where
                         let kbuckets = self.kbuckets.clone();
                         let command_tx = self.command_tx.clone();
                         let metrics = self.metrics.clone();
+                        let utp = self.utp_controller.clone();
                         let disable_poke = self.disable_poke;
                         tokio::spawn(async move {
                             Self::process_received_content(
@@ -820,6 +831,7 @@ where
                                 nodes_to_poke,
                                 metrics,
                                 disable_poke,
+                                utp,
                             )
                             .await;
                         });
@@ -830,7 +842,7 @@ where
                         nodes_to_poke,
                     } => {
                         let metrics = self.metrics.clone();
-                        let utp = self.utp_socket.clone();
+                        let utp = self.utp_controller.clone();
                         let source = match self.find_enr(&peer) {
                             Some(enr) => enr,
                             _ => {
@@ -844,7 +856,7 @@ where
                         let cid = utp_rs::cid::ConnectionId {
                             recv: connection_id,
                             send: connection_id.wrapping_add(1),
-                            peer: crate::discovery::UtpEnr(source),
+                            peer: UtpEnr(source),
                         };
                         let validator = self.validator.clone();
                         let store = self.store.clone();
@@ -912,6 +924,7 @@ where
                                 nodes_to_poke,
                                 metrics,
                                 disable_poke,
+                                utp,
                             )
                             .await;
                         });
@@ -929,6 +942,7 @@ where
         content_key: TContentKey,
         content: Vec<u8>,
         nodes_to_poke: Vec<NodeId>,
+        utp_controller: Arc<UtpController>,
     ) {
         let content_id = content_key.content_id();
 
@@ -950,6 +964,17 @@ where
                 let content_items = vec![(content_key.clone().into(), content.clone())];
                 let offer_request = Request::PopulatedOffer(PopulatedOffer { content_items });
 
+                // if we have met the max outbound utp transfer limit continue the loop as we aren't
+                // allow to generate another utp stream
+                let permit = match utp_controller
+                    .outbound_utp_transfer_semaphore
+                    .clone()
+                    .try_acquire_owned()
+                {
+                    Ok(permit) => permit,
+                    Err(_) => continue,
+                };
+
                 let request = OverlayRequest::new(
                     offer_request,
                     RequestDirection::Outgoing {
@@ -957,6 +982,7 @@ where
                     },
                     None,
                     None,
+                    Some(permit),
                 );
 
                 match command_tx.send(OverlayCommand::Request(request)) {
@@ -1013,6 +1039,7 @@ where
                         responder: request.responder,
                         request: request.request.clone(),
                         query_id: request.query_id,
+                        request_permit: request.request_permit,
                     },
                 );
                 self.metrics.report_outbound_request(&request.request);
@@ -1122,8 +1149,14 @@ where
                 ))
             }
         };
-        match self.store.read().get(&content_key) {
-            Ok(Some(content)) => {
+        match (
+            self.store.read().get(&content_key),
+            self.utp_controller
+                .outbound_utp_transfer_semaphore
+                .clone()
+                .try_acquire_owned(),
+        ) {
+            (Ok(Some(content)), Ok(permit)) => {
                 if content.len() <= MAX_PORTAL_CONTENT_PAYLOAD_SIZE {
                     Ok(Content::Content(content))
                 } else {
@@ -1133,13 +1166,13 @@ where
                             "unable to find ENR for NodeId".to_string(),
                         )
                     })?;
-                    let enr = crate::discovery::UtpEnr(node_addr.enr);
-                    let cid = self.utp_socket.cid(enr, false);
+                    let enr = UtpEnr(node_addr.enr);
+                    let cid = self.utp_controller.cid(enr, false);
                     let cid_send = cid.send;
 
                     // Wait for an incoming connection with the given CID. Then, write the data
                     // over the uTP stream.
-                    let utp = Arc::clone(&self.utp_socket);
+                    let utp = Arc::clone(&self.utp_controller);
                     let metrics = self.metrics.clone();
                     tokio::spawn(async move {
                         metrics.report_utp_active_inc(UtpDirectionLabel::Outbound);
@@ -1170,13 +1203,16 @@ where
                                 "Error sending content over uTP, in response to FindContent"
                             );
                         }
+                        drop(permit);
                     });
 
                     // Connection id is send as BE because uTP header values are stored also as BE
                     Ok(Content::ConnectionId(cid_send.to_be()))
                 }
             }
-            Ok(None) => {
+            // If we don't have data to send back or can't obtain a permit, send the requester a
+            // list of closer ENR
+            (Ok(Some(_)), _) | (Ok(None), _) => {
                 let enrs = self.find_nodes_close_to_content(content_key);
                 match enrs {
                     Ok(mut val) => {
@@ -1187,7 +1223,7 @@ where
                     Err(msg) => Err(OverlayRequestError::InvalidRequest(msg.to_string())),
                 }
             }
-            Err(msg) => Err(OverlayRequestError::Failure(format!(
+            (Err(msg), _) => Err(OverlayRequestError::Failure(format!(
                 "Unable to respond to FindContent: {msg}",
             ))),
         }
@@ -1213,6 +1249,22 @@ where
                     "Unable to initialize bitlist for requested keys.".to_owned(),
                 )
             })?;
+
+        // Attempt to get semaphore permit if fails we return an empty accept
+        let permit = match self
+            .utp_controller
+            .inbound_utp_transfer_semaphore
+            .clone()
+            .try_acquire_owned()
+        {
+            Ok(permit) => permit,
+            Err(_) => {
+                return Ok(Accept {
+                    connection_id: 0,
+                    content_keys: requested_keys,
+                });
+            }
+        };
 
         let content_keys: Vec<TContentKey> = request
             .content_keys
@@ -1258,19 +1310,19 @@ where
         let node_addr = self.discovery.cached_node_addr(source).ok_or_else(|| {
             OverlayRequestError::AcceptError("unable to find ENR for NodeId".to_string())
         })?;
-        let enr = crate::discovery::UtpEnr(node_addr.enr);
+        let enr = UtpEnr(node_addr.enr);
         let enr_str = if enabled!(Level::TRACE) {
             enr.0.to_base64()
         } else {
             String::with_capacity(0)
         };
-        let cid = self.utp_socket.cid(enr, false);
+        let cid: ConnectionId<UtpEnr> = self.utp_controller.cid(enr, false);
         let cid_send = cid.send;
         let validator = Arc::clone(&self.validator);
         let store = Arc::clone(&self.store);
         let kbuckets = Arc::clone(&self.kbuckets);
         let command_tx = self.command_tx.clone();
-        let utp = Arc::clone(&self.utp_socket);
+        let utp = Arc::clone(&self.utp_controller);
         let metrics = self.metrics.clone();
 
         let content_keys_string: Vec<String> = content_keys
@@ -1323,11 +1375,14 @@ where
                 command_tx,
                 content_keys,
                 data,
+                utp.clone(),
             )
             .await
             {
                 debug!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), content_keys = ?content_keys_string, "unable to process uTP payload");
             }
+            // explictically drop semaphore permit in thread so the permit is moved into the thread
+            drop(permit);
         });
 
         let accept = Accept {
@@ -1470,6 +1525,7 @@ where
         source: Enr,
         request: Request,
         query_id: Option<QueryId>,
+        request_permit: Option<OwnedSemaphorePermit>,
     ) {
         // If the node is present in the routing table, but the node is not connected, then
         // use the existing entry's value and direction. Otherwise, build a new entry from
@@ -1517,7 +1573,7 @@ where
             Response::Nodes(nodes) => self.process_nodes(nodes, source, query_id),
             Response::Content(content) => self.process_content(content, source, query_id),
             Response::Accept(accept) => {
-                if let Err(err) = self.process_accept(accept, source, request) {
+                if let Err(err) = self.process_accept(accept, source, request, request_permit) {
                     error!(response.error = %err, "Error processing ACCEPT message")
                 }
             }
@@ -1525,7 +1581,13 @@ where
     }
 
     // Process ACCEPT response
-    fn process_accept(&self, response: Accept, enr: Enr, offer: Request) -> anyhow::Result<Accept> {
+    fn process_accept(
+        &self,
+        response: Accept,
+        enr: Enr,
+        offer: Request,
+        request_permit: Option<OwnedSemaphorePermit>,
+    ) -> anyhow::Result<Accept> {
         // Check that a valid triggering request was sent
         let mut gossip_result_tx = None;
         match &offer {
@@ -1553,13 +1615,13 @@ where
         let cid = utp_rs::cid::ConnectionId {
             recv: conn_id,
             send: conn_id.wrapping_add(1),
-            peer: crate::discovery::UtpEnr(enr),
+            peer: UtpEnr(enr),
         };
 
         let store = Arc::clone(&self.store);
         let response_clone = response.clone();
 
-        let utp = Arc::clone(&self.utp_socket);
+        let utp = Arc::clone(&self.utp_controller);
         let metrics = self.metrics.clone();
 
         tokio::spawn(async move {
@@ -1658,12 +1720,17 @@ where
                     }
                 }
             }
+            // explicitly drop permit in the thread so the permit is included in the thread
+            if let Some(permit) = request_permit {
+                drop(permit);
+            }
         });
 
         Ok(response)
     }
 
     /// Process accepted uTP payload of the OFFER/ACCEPT stream
+    #[allow(clippy::too_many_arguments)]
     async fn process_accept_utp_payload(
         validator: Arc<TValidator>,
         store: Arc<RwLock<TStore>>,
@@ -1672,6 +1739,7 @@ where
         command_tx: UnboundedSender<OverlayCommand<TContentKey>>,
         content_keys: Vec<TContentKey>,
         payload: Vec<u8>,
+        utp_controller: Arc<UtpController>,
     ) -> anyhow::Result<()> {
         let content_keys_string: Vec<String> = content_keys
             .iter()
@@ -1785,13 +1853,18 @@ where
             .map(|(k, _)| hex_encode_compact(k.content_id()))
             .collect();
         debug!(ids = ?validated_ids, "propagating validated content");
-        propagate_gossip_cross_thread(validated_content, kbuckets, command_tx.clone());
+        propagate_gossip_cross_thread(
+            validated_content,
+            kbuckets,
+            command_tx.clone(),
+            Some(utp_controller),
+        );
 
         Ok(())
     }
 
     async fn send_utp_content(
-        mut stream: UtpStream<crate::discovery::UtpEnr>,
+        mut stream: UtpStream<UtpEnr>,
         content: &[u8],
         metrics: OverlayMetricsReporter,
     ) -> anyhow::Result<()> {
@@ -1939,6 +2012,7 @@ where
         nodes_to_poke: Vec<NodeId>,
         metrics: OverlayMetricsReporter,
         disable_poke: bool,
+        utp_controller: Arc<UtpController>,
     ) {
         let mut content = content;
         // Operate under assumption that all content in the store is valid
@@ -1992,7 +2066,14 @@ where
         }
 
         if !disable_poke {
-            Self::poke_content(kbuckets, command_tx, content_key, content, nodes_to_poke);
+            Self::poke_content(
+                kbuckets,
+                command_tx,
+                content_key,
+                content,
+                nodes_to_poke,
+                utp_controller,
+            );
         }
     }
 
@@ -2249,6 +2330,7 @@ where
             },
             None,
             None,
+            None,
         );
         let _ = self.command_tx.send(OverlayCommand::Request(request));
     }
@@ -2261,6 +2343,7 @@ where
             RequestDirection::Outgoing {
                 destination: destination.clone(),
             },
+            None,
             None,
             None,
         );
@@ -2668,7 +2751,9 @@ mod tests {
         utils::db::setup_temp_dir,
     };
     use ethportal_api::types::{
-        cli::DEFAULT_DISCOVERY_PORT, content_key::overlay::IdentityContentKey, distance::XorMetric,
+        cli::{DEFAULT_DISCOVERY_PORT, DEFAULT_UTP_TRANSFER_LIMIT},
+        content_key::overlay::IdentityContentKey,
+        distance::XorMetric,
         enr::generate_random_remote_enr,
     };
     use trin_metrics::portalnet::PORTALNET_METRICS;
@@ -2694,7 +2779,8 @@ mod tests {
         let discv5_utp =
             crate::discovery::Discv5UdpSocket::new(Arc::clone(&discovery), utp_talk_req_rx);
         let utp_socket = utp_rs::socket::UtpSocket::with_socket(discv5_utp);
-        let utp_socket = Arc::new(utp_socket);
+        let utp_controller = UtpController::new(DEFAULT_UTP_TRANSFER_LIMIT, Arc::new(utp_socket));
+        let utp_controller = Arc::new(utp_controller);
 
         let node_id = discovery.local_enr().node_id();
         let store = MemoryContentStore::new(node_id, DistanceFunction::Xor);
@@ -2722,7 +2808,7 @@ mod tests {
 
         OverlayService {
             discovery,
-            utp_socket,
+            utp_controller,
             store,
             kbuckets,
             protocol,
@@ -3107,6 +3193,7 @@ mod tests {
             content_key,
             content,
             peer_node_ids,
+            service.utp_controller.clone(),
         );
         let cmd = assert_ready!(poll_command_rx!(service));
         let cmd = cmd.unwrap();
@@ -3144,6 +3231,7 @@ mod tests {
             content_key,
             content,
             peer_node_ids,
+            service.utp_controller.clone(),
         );
         assert_pending!(poll_command_rx!(service));
     }
@@ -3195,6 +3283,7 @@ mod tests {
             content_key,
             content,
             peer_node_ids,
+            service.utp_controller.clone(),
         );
         let cmd = assert_ready!(poll_command_rx!(service));
         let cmd = cmd.unwrap();

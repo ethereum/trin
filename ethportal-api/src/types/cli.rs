@@ -15,6 +15,7 @@ pub const DEFAULT_WEB3_HTTP_ADDRESS: &str = "http://127.0.0.1:8545/";
 pub const DEFAULT_WEB3_HTTP_PORT: u16 = 8545;
 pub const DEFAULT_WEB3_WS_PORT: u16 = 8546;
 pub const DEFAULT_DISCOVERY_PORT: u16 = 9009;
+pub const DEFAULT_UTP_TRANSFER_LIMIT: usize = 50;
 pub const BEACON_NETWORK: &str = "beacon";
 pub const HISTORY_NETWORK: &str = "history";
 pub const STATE_NETWORK: &str = "state";
@@ -181,6 +182,13 @@ pub struct TrinConfig {
     )]
     pub ws_port: u16,
 
+    #[arg(
+        long = "utp-transfer-limit", 
+        help = "The limit of max background uTP transfers for any given channel (inbound or outbound) for each subnetwork", 
+        default_value_t = DEFAULT_UTP_TRANSFER_LIMIT,
+    )]
+    pub utp_transfer_limit: usize,
+
     #[command(subcommand)]
     pub command: Option<TrinConfigCommands>,
 }
@@ -214,6 +222,7 @@ impl Default for TrinConfig {
             ws: false,
             ws_port: DEFAULT_WEB3_WS_PORT,
             command: None,
+            utp_transfer_limit: DEFAULT_UTP_TRANSFER_LIMIT,
         }
     }
 }
