@@ -246,7 +246,6 @@ mod test {
                 .unwrap_err()
                 .to_string(),
             format!("Unable to decode key SSZ bytes {invalid_selector_content_key} due to UnionSelectorInvalid(0)"),
-            
         );
     }
 
