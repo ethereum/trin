@@ -8032,8 +8032,7 @@ checksum = "711b9620af191e0cdc7468a8d14e709c3dcdb115b36f838e601583af800a370a"
 [[package]]
 name = "utp-rs"
 version = "0.1.0-alpha.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c4ec35d0178f4ccdf5f734af742c264d2c811435ca6e85803b373c6ec077ed33"
+source = "git+https://github.com/ethereum/utp?tag=v0.1.0-alpha.9#a5194267293711e4fd187b09091fbc7188426903"
 dependencies = [
  "async-trait",
  "delay_map 0.3.0",

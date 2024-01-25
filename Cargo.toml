@@ -44,7 +44,7 @@ trin-storage = { path = "trin-storage" }
 trin-utils = { path = "trin-utils" }
 trin-validation = { path = "trin-validation" }
 url = "2.3.1"
-utp-rs = "0.1.0-alpha.8"
+utp-rs = { git = "https://github.com/ethereum/utp", tag = "v0.1.0-alpha.9" }
 
 [dev-dependencies]
 ethers-core = { version = "2.0", default-features = false}
