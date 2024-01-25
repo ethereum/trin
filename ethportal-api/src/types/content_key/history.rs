@@ -7,7 +7,7 @@ use std::fmt;
 
 use crate::{
     types::content_key::{error::ContentKeyError, overlay::OverlayContentKey},
-    utils::bytes::{hex_decode, hex_encode, hex_encode_compact},
+    utils::bytes::{hex_decode, hex_encode_compact},
 };
 
 /// SSZ encoded overlay content key as bytes
@@ -53,10 +53,7 @@ impl<'de> Deserialize<'de> for HistoryContentKey {
         let ssz_bytes = hex_decode(&data).map_err(de::Error::custom)?;
 
         HistoryContentKey::from_ssz_bytes(&ssz_bytes)
-            .map_err(|e| ContentKeyError::DecodeSsz {
-                decode_error: e,
-                input: hex_encode(ssz_bytes),
-            })
+            .map_err(|e| ContentKeyError::from_decode_error(e, ssz_bytes))
             .map_err(serde::de::Error::custom)
     }
 }
@@ -120,10 +117,8 @@ impl TryFrom<Vec<u8>> for HistoryContentKey {
     type Error = ContentKeyError;
 
     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-        HistoryContentKey::from_ssz_bytes(&value).map_err(|e| ContentKeyError::DecodeSsz {
-            decode_error: e,
-            input: hex_encode(value),
-        })
+        HistoryContentKey::from_ssz_bytes(&value)
+            .map_err(|e| ContentKeyError::from_decode_error(e, value))
     }
 }
 
@@ -330,7 +325,7 @@ mod test {
         // Test the error Display representation
         assert_eq!(
             content_key_result.as_ref().unwrap_err().to_string(),
-            "unable to decode key SSZ bytes 0x0123456789 due to InvalidByteLength { len: 4, expected: 32 }"
+            "Unable to decode key SSZ bytes 0x0123456789 due to InvalidByteLength { len: 4, expected: 32 }"
         );
     }
 

@@ -16,3 +16,4 @@ pub mod node_id;
 pub mod portal;
 pub mod portal_wire;
 pub mod query_trace;
+pub mod state_trie;
