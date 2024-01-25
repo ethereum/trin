@@ -115,7 +115,7 @@ mod test {
         "when there is max number of nibbles")]
     fn packing_unpacking(unpacked_nibbles: &[u8], nibbles: Nibbles) -> Result<()> {
         assert_eq!(
-            Nibbles::try_from_unpacked_nibbles(&unpacked_nibbles)?,
+            Nibbles::try_from_unpacked_nibbles(unpacked_nibbles)?,
             nibbles
         );
         assert_eq!(nibbles.unpack_nibbles(), Vec::from(unpacked_nibbles));
@@ -163,14 +163,14 @@ mod test {
     fn ssz_encode_decode(ssz_bytes: &str, nibbles: Nibbles) -> Result<()> {
         let ssz_bytes = hex_decode(ssz_bytes)?;
         assert_eq!(Nibbles::from_ssz_bytes(&ssz_bytes).unwrap(), nibbles);
-        assert_eq!(nibbles.as_ssz_bytes(), Vec::from(ssz_bytes));
+        assert_eq!(nibbles.as_ssz_bytes(), ssz_bytes);
 
         Ok(())
     }
 
     #[test]
     fn from_unpacked_should_fail_for_invalid_nibbles() {
-        for invalid_nibbles in vec![
+        for invalid_nibbles in [
             vec![0x10],
             vec![0x11, 0x01],
             vec![0x01, 0x12],
@@ -179,8 +179,7 @@ mod test {
             vec![0x15, 0x01, 0x02],
         ] {
             Nibbles::try_from_unpacked_nibbles(&invalid_nibbles).expect_err(&format!(
-                "Expected to fail for invalid nibbles: {:02x?}",
-                invalid_nibbles
+                "Expected to fail for invalid nibbles: {invalid_nibbles:02x?}"
             ));
         }
     }
