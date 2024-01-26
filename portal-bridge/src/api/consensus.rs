@@ -4,9 +4,7 @@ use anyhow::anyhow;
 use surf::{Client, Config};
 use url::Url;
 
-use crate::{
-    cli::Provider, constants::BASE_CL_ENDPOINT, PANDAOPS_CLIENT_ID, PANDAOPS_CLIENT_SECRET,
-};
+use crate::{cli::Provider, BASE_CL_ENDPOINT, PANDAOPS_CLIENT_ID, PANDAOPS_CLIENT_SECRET};
 
 /// Implements endpoints from the Beacon API to access data from the consensus layer.
 #[derive(Clone, Debug, Default)]
@@ -18,7 +16,7 @@ impl ConsensusApi {
     pub async fn new(provider: Provider) -> Result<Self, surf::Error> {
         let client = match provider {
             Provider::PandaOps => {
-                let base_cl_endpoint = Url::parse(BASE_CL_ENDPOINT)
+                let base_cl_endpoint = Url::parse(&BASE_CL_ENDPOINT)
                     .expect("to be able to parse static base cl endpoint url");
                 Config::new()
                     .add_header("CF-Access-Client-Id", PANDAOPS_CLIENT_ID.to_string())?

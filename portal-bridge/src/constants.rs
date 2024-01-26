@@ -3,23 +3,6 @@
 // successful response rate. This number may change in the future.
 pub const BATCH_SIZE: u64 = 128;
 
-// PANDAOPS refers to the group of clients provisioned by the EF devops team.
-// These are only intended to be used by core team members who have access to the nodes.
-// If you don't have access to the PANDAOPS nodes, but still want to use the bridge feature, let us
-// know on Discord or Github and we'll prioritize support for any provider.
-//
-/// Execution layer PandaOps endpoint
-// This endpoint points towards an archive node (erigon) and skips dshackle (by using el-cl url
-// format), shackle is known to be somewhat buggy has caused some invalid responses.
-// Reth's archive node, has also exhibited some problems with the concurrent requests rate we
-// currently use.
-pub const BASE_EL_ENDPOINT: &str = "https://erigon-lighthouse.mainnet.eu1.ethpandaops.io/";
-// The `erigon` endpoint appears to perform much better for backfill requests.
-pub const BASE_EL_ARCHIVE_ENDPOINT: &str = "https://erigon-lighthouse.mainnet.eu1.ethpandaops.io/";
-/// Consensus layer PandaOps endpoint
-/// We use Nimbus as the CL client, because it supports light client data by default.
-pub const BASE_CL_ENDPOINT: &str = "https://nimbus.mainnet.ethpandaops.io/";
-
 /// History * content key & value
 pub const HEADER_WITH_PROOF_CONTENT_KEY: &str =
     "0x006251d65b8a8668efabe2f89c96a5b6332d83b3bbe585089ea6b2ab9b6754f5e9";
