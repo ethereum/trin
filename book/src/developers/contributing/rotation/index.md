@@ -47,7 +47,7 @@ As long as there aren't any major incidents, you should finish the checklist wit
 When you get to the end of your checklist, here are ideas for what to work on next:
 - Respond to [Github Participating Notifications](https://github.com/notifications?query=reason%3Aparticipating)
 - Review PRs that have been stuck for >24 hours
-- Find a [Flamingo Issue](https://github.com/ethereum/trin/issues?q=is%3Aopen+is%3Aissue+label%3Aflamingo) that seems promising, and assign it to yourself (and the project dashbord)
+- Find a [Flamingo Issue](https://github.com/ethereum/trin/issues?q=is%3Aopen+is%3Aissue+label%3Aflamingo) that seems promising, and assign it to yourself (and the project dashboard)
 - grep code for `TODO`s. For each one you find:
   - write up issue to explain what needs to be done, and a plan
   - link to the TODO in the code, and any relevant context

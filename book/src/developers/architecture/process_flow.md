@@ -7,7 +7,7 @@ stateDiagram-v2
     trin: trin
 
     state trin {
-        utplistner: UTP listner
+        utplistner: UTP listener
         subprotocolhandler: sub-protocol handler
         subprotocolnetworktask: sub-protocol network task
         portaleventshandler: portal events handler

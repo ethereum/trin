@@ -369,7 +369,7 @@ pub enum Receipt {
 impl Receipt {
     /// Create a new receipt.
     pub fn new(type_id: TransactionId, legacy_receipt: LegacyReceipt) -> Self {
-        //curently we are using same receipt for both legacy and typed transaction
+        //currently we are using same receipt for both legacy and typed transaction
         match type_id {
             TransactionId::EIP1559 => Self::EIP1559(legacy_receipt),
             TransactionId::AccessList => Self::AccessList(legacy_receipt),

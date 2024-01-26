@@ -9,7 +9,7 @@ Highly based on tools developed to test QUIC protocol:
 
 [quic-network-simulator](https://github.com/marten-seemann/quic-network-simulator)
 
-## Prerequisities
+## Prerequisites
 
 - Machine with docker and docker-compose installed
 - trin set-up to run `cargo build -p utp-testing --release`
@@ -27,7 +27,7 @@ Test setup uses docker compose to start 3 docker containers:
 - sim - which is instance with ns3 network simulator with several pre-compiled scenarios
 
 The networking is setup in such way that network traffic is routed from client to server
-and server to client thorugh sim which decideds what to do with flowing packets
+and server to client through sim which decides what to do with flowing packets
 
 Explanation from [quic-network-simulator](https://github.com/marten-seemann/quic-network-simulator):
 
@@ -51,7 +51,7 @@ To run integration testing scenarios with different network conditions
 
 For example:
 SCENARIO="drop-rate --delay=15ms --bandwidth=10Mbps --queue=25 --rate_to_client=0 --rate_to_server=0" docker-compose -f utp-testing/docker/docker-compose.yml up
-would start `drop-rate` scenario with specified delay, bandwith, and different drop rates
+would start `drop-rate` scenario with specified delay, bandwidth, and different drop rates
 
 4. cargo build -p utp-testing --release
 5. ./target/release/utp-test-suite

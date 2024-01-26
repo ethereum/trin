@@ -194,7 +194,7 @@ mod tests {
         assert!(c_entry.responded_with.is_empty());
         assert_eq!(tracer.received_from, Some(*node_id_c));
 
-        // check node metatdata
+        // check node metadata
         let a_data = tracer.metadata.get(node_id_a).unwrap();
         assert_eq!(a_data.enr, enr_a);
         let b_data = tracer.metadata.get(node_id_b).unwrap();

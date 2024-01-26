@@ -203,7 +203,7 @@ pub async fn trace_propagate_gossip_cross_thread<TContentKey: OverlayContentKey>
         }
         if let Some(result) = result_rx.recv().await {
             if result {
-                // update gossip result with peer marked as succesfully transferring the content
+                // update gossip result with peer marked as successfully transferring the content
                 gossip_result.transferred.push(enr);
             }
         }

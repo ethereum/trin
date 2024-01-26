@@ -22,7 +22,7 @@ pub trait OverlayContentKey:
 }
 
 /// A content key type whose content id is the inner value. Allows for the construction
-/// of a content key with an arbitary content ID.
+/// of a content key with an arbitrary content ID.
 #[derive(Clone, Debug)]
 pub struct IdentityContentKey {
     value: [u8; 32],
