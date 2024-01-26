@@ -4,6 +4,7 @@ pub mod beacon;
 pub mod constants;
 pub mod error;
 pub mod history;
+pub mod state;
 
 /// An encodable portal network content value.
 pub trait ContentValue: Sized {
