@@ -312,19 +312,19 @@ impl From<Vec<Result<(Vec<TraceGossipInfo>, u64), Error>>> for ContentStats {
                     for trace in traces {
                         for enr in trace.offered.iter() {
                             let enr = Enr::from_str(enr)
-                                .expect("ENR from trace gossip response to succesfully decode.");
+                                .expect("ENR from trace gossip response to successfully decode.");
                             content_stats.offered.insert(enr);
                         }
 
                         for enr in trace.accepted.iter() {
                             let enr = Enr::from_str(enr)
-                                .expect("ENR from trace gossip response to succesfully decode.");
+                                .expect("ENR from trace gossip response to successfully decode.");
                             content_stats.accepted.insert(enr);
                         }
 
                         for enr in trace.transferred.iter() {
                             let enr = Enr::from_str(enr)
-                                .expect("ENR from trace gossip response to succesfully decode.");
+                                .expect("ENR from trace gossip response to successfully decode.");
                             content_stats.transferred.insert(enr);
                         }
                     }

@@ -30,7 +30,7 @@ or to none.
 
 Trin can be tuned to control how much disk space is used:
 
-|Selected size|Data acess|Network contribution|
+|Selected size|Data access|Network contribution|
 |-|-|-|
 |Smaller|Slower|Less|
 |Larger|Faster|More|

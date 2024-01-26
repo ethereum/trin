@@ -3,7 +3,7 @@
 A cryptographic accumulator is a structure that allows verification of a specific
 block header in the past is part of the canonical chain.
 
-The History sub-protocol is reponsible for accumulator-related data.
+The History sub-protocol is responsible for accumulator-related data.
 
 An accumulator has been constructed for the Portal Network, because it is too burdensome to
 keep all the headers on disk. This applies to pre-merge blocks. For post-merge blocks, the Beacon Chain already maintains an accumulator that Trin can use via a Beacon Chain light client.
@@ -100,7 +100,7 @@ refers to them with the terms: `epoch_accumulator` and `epoch_accumulator_key`
 ## Master accumulator details
 The Master Accumulator consists of:
 - 1895 complete epoch roots
-- 1 incomplete epoch root (a partial epoch witht 5362 records (block headers))
+- 1 incomplete epoch root (a partial epoch with 5362 records (block headers))
 
 ```csv
 epoch,index

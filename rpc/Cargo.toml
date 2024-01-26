@@ -7,7 +7,7 @@ license = "GPL-3.0"
 readme = "README.md"
 keywords = ["ethereum", "portal-network"]
 categories = ["cryptography::cryptocurrencies"]
-description = "Implemenations of jsonrpsee server API traits for Trin and server interface"
+description = "Implementations of jsonrpsee server API traits for Trin and server interface"
 authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 [dependencies]

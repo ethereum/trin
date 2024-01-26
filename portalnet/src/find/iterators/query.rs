@@ -40,7 +40,7 @@ pub struct QueryConfig {
     /// Number of results to produce.
     ///
     /// The number of closest peers that a query must obtain successful results
-    /// for before it terminates. Kademlia paper specifices that this should be equal
+    /// for before it terminates. Kademlia paper specifies that this should be equal
     /// to k, the max number of entries in a k-bucket. Currently defaults to `20`.
     pub num_results: usize,
 

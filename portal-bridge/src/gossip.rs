@@ -76,7 +76,7 @@ async fn beacon_trace_gossip(
         sleep(RETRY_AFTER).await;
     }
     warn!(
-        "Failed to gossip beacon content, without succesfully locating data on network, after {} attempts: content key={:?}",
+        "Failed to gossip beacon content, without successfully locating data on network, after {} attempts: content key={:?}",
         GOSSIP_RETRY_COUNT,
         content_key.to_hex(),
     );
@@ -147,7 +147,7 @@ async fn history_trace_gossip(
         sleep(RETRY_AFTER).await;
     }
     warn!(
-        "Failed to gossip history content, without succesfully locating data on network, after {} attempts: content key={:?}",
+        "Failed to gossip history content, without successfully locating data on network, after {} attempts: content key={:?}",
         GOSSIP_RETRY_COUNT,
         content_key.to_hex(),
     );

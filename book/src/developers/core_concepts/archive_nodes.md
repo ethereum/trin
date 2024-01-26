@@ -26,9 +26,8 @@ Consider an archive node that is going to trace the 100th transaction in an old
 block.
 
 - The transaction may call a contract, which may in turn call another contract (etc., ). The state of the contracts must be known (balance, nonce, bytecode, storage)
-- The transaction may reference the hash of a preceeding block (up to depth of 256 blocks)
-- The transaction may modify state that has already been modified in in the preceeding 99
-transactions.
+- The transaction may reference the hash of a preceding block (up to depth of 256 blocks)
+- The transaction may modify state that has already been modified in the preceding 99 transactions.
 
 ## Would an Archive sub-protocol be of use?
 
@@ -37,7 +36,7 @@ Archival nodes are great for data science because they allow traversing a large 
 of sequential blocks and tracking changes over time.
 
 A portal node would not be suited for this activity because it requires sequential blocks
-rather than posession of data based on the nodes ID. Hence a Portal Node has a disperse subset of
+rather than possession of data based on the nodes ID. Hence a Portal Node has a disperse subset of
 content and would need to ask peers for data for sequential blocks. Asking for all sequential
 blocks would cause an infeasible burden on peers.
 
@@ -58,7 +57,7 @@ function of a non-tracing node. Some considerations are explored below.
 
 ### Intra-block state
 
-To trace the last transaction in a block, all preceeding transaction final states
+To trace the last transaction in a block, all preceding transaction final states
 must be known. Hence single request for a transaction trace could result in requiring
 many transactions in a single block to be obtained. This applies to popular contracts
 that appear frequently in a block (e.g., exchanges, and popular tokens).

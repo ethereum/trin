@@ -3,7 +3,7 @@
 If a peer is in a network behind a NAT (Network Address Translation) table, the process for
 finding a peer is more complicated.
 
-These diagrams are indended as a rough-guide.
+These diagrams are intended as a rough-guide.
 
 ## Non-NAT simple case
 
@@ -61,7 +61,7 @@ If Alice knows she is behind a NAT, she can pass a message which goes:
 
 ### Part 1: NAT detection
 
-Alice can suspect that she is behind a NAT probabalitically.
+Alice can suspect that she is behind a NAT probabilistically.
 If 2 minutes after connecting with a bootnode, no strangers (like Charlie)
 have reached out, a NAT is likely.
 
