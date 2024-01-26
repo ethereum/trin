@@ -1,6 +1,6 @@
 use crate::{
     types::content_key::{error::ContentKeyError, overlay::OverlayContentKey},
-    utils::bytes::{hex_decode, hex_encode, hex_encode_compact},
+    utils::bytes::{hex_decode, hex_encode_compact},
 };
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest, Sha256};
@@ -159,10 +159,8 @@ impl TryFrom<Vec<u8>> for BeaconContentKey {
     type Error = ContentKeyError;
 
     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-        BeaconContentKey::from_ssz_bytes(&value).map_err(|e| ContentKeyError::DecodeSsz {
-            decode_error: e,
-            input: hex_encode(value),
-        })
+        BeaconContentKey::from_ssz_bytes(&value)
+            .map_err(|e| ContentKeyError::from_decode_error(e, value))
     }
 }
 
@@ -251,10 +249,7 @@ impl<'de> Deserialize<'de> for BeaconContentKey {
         let ssz_bytes = hex_decode(&data).map_err(de::Error::custom)?;
 
         Self::from_ssz_bytes(&ssz_bytes)
-            .map_err(|e| ContentKeyError::DecodeSsz {
-                decode_error: e,
-                input: hex_encode(ssz_bytes),
-            })
+            .map_err(|e| ContentKeyError::from_decode_error(e, ssz_bytes))
             .map_err(serde::de::Error::custom)
     }
 }
