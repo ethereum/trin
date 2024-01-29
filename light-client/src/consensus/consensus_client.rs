@@ -322,7 +322,7 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
         let pks =
             get_participating_keys(sync_committee, &update.sync_aggregate.sync_committee_bits)?;
 
-        let is_valid_sig = self.verify_sync_committee_signture(
+        let is_valid_sig = self.verify_sync_committee_signature(
             &pks,
             &update.attested_header,
             &update.sync_aggregate.sync_committee_signature,
@@ -492,7 +492,7 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
         ) / 2
     }
 
-    fn verify_sync_committee_signture(
+    fn verify_sync_committee_signature(
         &self,
         pks: &[PublicKey],
         attested_header: &BeaconBlockHeader,
