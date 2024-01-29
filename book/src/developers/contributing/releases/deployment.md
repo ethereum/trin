@@ -53,6 +53,9 @@ This step directs Ansible to use the current master version of trin. Read [about
 - Make sure you've pulled the latest master branch of the deployment scripts, to include any recent changes: `git pull origin master`
 - Go into Portal section of Ansible: `cd portal-network/trin/ansible/`
 - Run the deployment: `ansible-playbook playbook.yml --tags trin`
+- Run Glados deployment: updates glados + portal client (currently configured as trin, but this could change)
+  - `cd ../../glados/ansible`
+  - `ansible-playbook playbook.yml --tags glados`
 - Wait for completion
 - Launch a fresh trin node, check it against the bootnodes
 - ssh into random nodes, one of each kind, to check the logs:
@@ -65,7 +68,6 @@ This step directs Ansible to use the current master version of trin. Read [about
 		- regular nodes: all remaining ips
   - check logs, ignoring DEBUG: `sudo docker logs trin -n 1000 | grep -v DEBUG`
 - Check monitoring tools to see if network health is the same or better as before deployment. Glados might lag for 10-15 minutes, so keep checking back.
-- ?? Also release glados, to use the latest trin ??
 
 ### Communicate
 
