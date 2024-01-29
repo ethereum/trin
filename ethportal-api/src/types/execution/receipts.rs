@@ -91,9 +91,9 @@ impl<'de> Deserialize<'de> for Receipts {
 }
 
 #[derive(Debug)]
-struct EncodedReceiptList {
+pub struct EncodedReceiptList {
     // list ( rlp receipts )
-    encoded_receipts: Vec<Vec<u8>>,
+    pub encoded_receipts: Vec<Vec<u8>>,
 }
 
 impl ssz::Encode for EncodedReceiptList {
@@ -316,6 +316,25 @@ impl Encodable for LegacyReceipt {
         s.append(&self.cumulative_gas_used);
         s.append(&self.log_bloom);
         s.append_list(&self.logs);
+    }
+}
+
+impl Encodable for Receipt {
+    fn rlp_append(&self, s: &mut RlpStream) {
+        match self {
+            Receipt::Legacy(receipt) => receipt.rlp_append(s),
+            Receipt::AccessList(receipt) => receipt.rlp_append(s),
+            Receipt::EIP1559(receipt) => receipt.rlp_append(s),
+        }
+    }
+}
+
+impl Encodable for Receipts {
+    fn rlp_append(&self, s: &mut RlpStream) {
+        s.begin_list(self.receipt_list.len());
+        for receipt in self.receipt_list.clone() {
+            receipt.rlp_append(s);
+        }
     }
 }
 

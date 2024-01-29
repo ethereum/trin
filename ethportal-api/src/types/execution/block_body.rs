@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::{anyhow, bail};
 use eth_trie::{EthTrie, MemoryDB, Trie};
 use ethereum_types::H256;
-use rlp::RlpStream;
+use rlp::{Decodable, DecoderError, Encodable, Rlp, RlpStream};
 use serde::Deserialize;
 use sha3::{Digest, Keccak256};
 use ssz::{Decode, Encode, SszDecoderBuilder, SszEncoder};
@@ -22,6 +22,30 @@ pub enum BlockBody {
     Legacy(BlockBodyLegacy),
     Merge(BlockBodyMerge),
     Shanghai(BlockBodyShanghai),
+}
+
+impl Encodable for BlockBody {
+    fn rlp_append(&self, s: &mut RlpStream) {
+        match self {
+            BlockBody::Legacy(body) => s.append(body),
+            BlockBody::Merge(body) => s.append(body),
+            BlockBody::Shanghai(body) => s.append(body),
+        };
+    }
+}
+
+impl Decodable for BlockBody {
+    fn decode(rlp: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
+        if let Ok(val) = BlockBodyLegacy::decode(rlp) {
+            Ok(BlockBody::Legacy(val))
+        } else if let Ok(val) = BlockBodyMerge::decode(rlp) {
+            Ok(BlockBody::Merge(val))
+        } else if let Ok(val) = BlockBodyShanghai::decode(rlp) {
+            Ok(BlockBody::Shanghai(val))
+        } else {
+            Err(rlp::DecoderError::Custom("Invalid block body rlp"))
+        }
+    }
 }
 
 impl ssz::Decode for BlockBody {
@@ -172,6 +196,22 @@ pub struct BlockBodyLegacy {
     pub uncles: Vec<Header>,
 }
 
+impl Encodable for BlockBodyLegacy {
+    fn rlp_append(&self, s: &mut RlpStream) {
+        s.begin_list(2);
+        s.append_list(&self.txs);
+        s.append_list(&self.uncles);
+    }
+}
+
+impl Decodable for BlockBodyLegacy {
+    fn decode(rlp: &Rlp) -> Result<Self, DecoderError> {
+        let txs: Vec<Transaction> = rlp.list_at(0)?;
+        let uncles: Vec<Header> = rlp.list_at(1)?;
+        Ok(Self { txs, uncles })
+    }
+}
+
 impl ssz::Encode for BlockBodyLegacy {
     // note: MAX_LENGTH attributes (defined in portal history spec) are not currently enforced
     fn is_ssz_fixed_len() -> bool {
@@ -278,6 +318,24 @@ impl ssz::Decode for BlockBodyMerge {
     }
 }
 
+impl Encodable for BlockBodyMerge {
+    fn rlp_append(&self, s: &mut RlpStream) {
+        s.begin_list(1);
+        s.begin_list(self.txs.len());
+        for tx in &self.txs {
+            let encoded = tx.encode();
+            s.append_raw(&encoded, encoded.len());
+        }
+    }
+}
+
+impl Decodable for BlockBodyMerge {
+    fn decode(rlp: &Rlp) -> Result<Self, DecoderError> {
+        let txs: Vec<Transaction> = rlp.list_at(0)?;
+        Ok(Self { txs })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct BlockBodyShanghai {
     pub txs: Vec<Transaction>,
@@ -352,6 +410,40 @@ impl ssz::Decode for BlockBodyShanghai {
                     "Shanghai block body contains invalid withdrawals: {e:?}",
                 ))
             })?;
+        Ok(Self { txs, withdrawals })
+    }
+}
+
+impl Encodable for BlockBodyShanghai {
+    fn rlp_append(&self, s: &mut RlpStream) {
+        s.begin_list(2);
+        s.begin_list(self.txs.len());
+        for tx in &self.txs {
+            let encoded = tx.encode();
+            s.append_raw(&encoded, encoded.len());
+        }
+        s.begin_list(self.withdrawals.len());
+        for withdrawal in &self.withdrawals {
+            let encoded = rlp::encode(withdrawal).to_vec();
+            s.append_raw(&encoded, encoded.len());
+        }
+    }
+}
+
+impl Decodable for BlockBodyShanghai {
+    fn decode(rlp: &Rlp) -> Result<Self, DecoderError> {
+        let txs: Vec<Transaction> = rlp.list_at(0)?;
+        let withdrawals: Vec<Vec<u8>> = rlp.at(1)?.as_list()?;
+        let withdrawals: Vec<Withdrawal> = withdrawals
+            .iter()
+            .map(|bytes| rlp::decode(bytes))
+            .collect::<Result<Vec<Withdrawal>, _>>()
+            .map_err(|e| {
+                ssz::DecodeError::BytesInvalid(format!(
+                    "Shanghai block body contains invalid withdrawals: {e:?}",
+                ))
+            })
+            .expect("Failed to decode withdrawals for Shanghai block body.");
         Ok(Self { txs, withdrawals })
     }
 }

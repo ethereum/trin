@@ -54,6 +54,32 @@ impl Transaction {
     }
 }
 
+impl Encodable for Transaction {
+    fn rlp_append(&self, s: &mut RlpStream) {
+        match self {
+            Self::Legacy(tx) => tx.rlp_append(s),
+            Self::AccessList(tx) => tx.rlp_append(s),
+            Self::EIP1559(tx) => tx.rlp_append(s),
+        }
+    }
+}
+
+impl Decodable for Transaction {
+    fn decode(rlp: &Rlp) -> Result<Self, DecoderError> {
+        // at least one byte needs to be present
+        if rlp.as_raw().is_empty() {
+            return Err(DecoderError::RlpIncorrectListLen);
+        }
+        let id = TransactionId::try_from(rlp.as_raw()[0])
+            .map_err(|_| DecoderError::Custom("Unknown transaction id"))?;
+        match id {
+            TransactionId::EIP1559 => Ok(Self::EIP1559(rlp::decode(&rlp.as_raw()[1..])?)),
+            TransactionId::AccessList => Ok(Self::AccessList(rlp::decode(&rlp.as_raw()[1..])?)),
+            TransactionId::Legacy => Ok(Self::Legacy(rlp::decode(rlp.as_raw())?)),
+        }
+    }
+}
+
 impl<'de> Deserialize<'de> for Transaction {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
