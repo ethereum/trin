@@ -64,7 +64,7 @@ impl From<RpcServeError> for ErrorObjectOwned {
             // -32099 is a custom error code for a server error
             // see: https://www.jsonrpc.org/specification#error_object
             // It's a bit of a cop-out, until we implement more specific errors, being
-            // sure not to confilct with the standard Ethereum error codes:
+            // sure not to conflict with the standard Ethereum error codes:
             // https://docs.infura.io/networks/ethereum/json-rpc-methods#error-codes
             RpcServeError::Message(msg) => ErrorObject::owned(-32099, msg, None::<()>),
             RpcServeError::MethodNotFound(method) => ErrorObject::owned(-32601, method, None::<()>),
