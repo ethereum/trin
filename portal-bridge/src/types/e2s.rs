@@ -5,8 +5,8 @@ const _SLOTS_PER_HISTORICAL_ROOT: usize = 8192;
 const HEADER_SIZE: u16 = 8;
 const VALUE_SIZE_LIMIT: usize = 1024 * 1024 * 50; // 50 MB
 
-struct File {
-    entries: Vec<Entry>,
+pub struct File {
+    pub entries: Vec<Entry>,
 }
 
 #[allow(dead_code)]
@@ -18,7 +18,7 @@ impl File {
         Ok(buf)
     }
 
-    fn write(&self, buf: &mut [u8]) -> anyhow::Result<()> {
+    pub fn write(&self, buf: &mut [u8]) -> anyhow::Result<()> {
         let mut offset = 0;
         for entry in &self.entries {
             let entry_length = entry.length();
@@ -28,7 +28,11 @@ impl File {
         Ok(())
     }
 
-    fn read(buf: &[u8]) -> anyhow::Result<Self> {
+    pub fn length(&self) -> usize {
+        self.entries.iter().map(|e| e.length()).sum()
+    }
+
+    pub fn read(buf: &[u8]) -> anyhow::Result<Self> {
         let mut entries = Vec::new();
         let mut offset = 0;
         while offset < buf.len() {
@@ -54,14 +58,26 @@ impl File {
     }
 }
 
-struct Entry {
-    header: Header,
-    value: Vec<u8>,
+#[derive(Default, Debug, Eq, PartialEq, Clone)]
+pub struct Entry {
+    pub header: Header,
+    pub value: Vec<u8>,
 }
 
 #[allow(dead_code)]
 impl Entry {
-    fn length(&self) -> usize {
+    pub fn new(type_: u16, value: Vec<u8>) -> Self {
+        Self {
+            header: Header {
+                type_,
+                length: value.len() as u32,
+                reserved: 0,
+            },
+            value,
+        }
+    }
+
+    pub fn length(&self) -> usize {
         HEADER_SIZE as usize + self.header.length as usize
     }
 
@@ -92,7 +108,7 @@ impl Entry {
         Ok(())
     }
 
-    fn read(buf: &[u8]) -> anyhow::Result<Self> {
+    pub fn read(buf: &[u8]) -> anyhow::Result<Self> {
         let header = Header::read(&buf[0..8])?;
         if header.length as usize + HEADER_SIZE as usize != buf.len() {
             return Err(anyhow!(
@@ -108,16 +124,16 @@ impl Entry {
     }
 }
 
-#[derive(Decode, Encode)]
-struct Header {
-    entry_type: u16,
-    length: u32,
-    reserved: u16,
+#[derive(Clone, Debug, Decode, Encode, Default, Eq, PartialEq)]
+pub struct Header {
+    pub type_: u16,
+    pub length: u32,
+    pub reserved: u16,
 }
 
 impl Header {
     fn write(&self, buf: &mut [u8]) {
-        buf[0..2].copy_from_slice(&self.entry_type.to_le_bytes());
+        buf[0..2].copy_from_slice(&self.type_.to_le_bytes());
         buf[2..6].copy_from_slice(&self.length.to_le_bytes());
         buf[6..8].copy_from_slice(&self.reserved.to_le_bytes());
     }
@@ -126,14 +142,14 @@ impl Header {
         if buf.len() != HEADER_SIZE as usize {
             return Err(anyhow!("invalid header size: {}", buf.len()));
         }
-        let entry_type = u16::from_le_bytes([buf[0], buf[1]]);
+        let type_ = u16::from_le_bytes([buf[0], buf[1]]);
         let length = u32::from_le_bytes([buf[2], buf[3], buf[4], buf[5]]);
         let reserved = u16::from_le_bytes([buf[6], buf[7]]);
         if reserved != 0 {
             return Err(anyhow!("invalid reserved value: {} - expected 0", reserved));
         }
         Ok(Self {
-            entry_type,
+            type_,
             length,
             reserved,
         })
@@ -151,7 +167,7 @@ mod test {
     fn test_entry_empty() {
         let expected = "0xffff000000000000";
         let entry = Entry::read(&hex_decode(expected).unwrap()).unwrap();
-        assert_eq!(entry.header.entry_type, 0xffff);
+        assert_eq!(entry.header.type_, 0xffff);
         assert_eq!(entry.header.length, 0);
         assert_eq!(entry.header.reserved, 0);
         assert_eq!(entry.value.len(), 0);
@@ -163,7 +179,7 @@ mod test {
     fn test_entry_beef() {
         let expected = "0x2a00020000000000beef";
         let entry = Entry::read(&hex_decode(expected).unwrap()).unwrap();
-        assert_eq!(entry.header.entry_type, 0x2a); // 42
+        assert_eq!(entry.header.type_, 0x2a); // 42
         assert_eq!(entry.header.length, 2);
         assert_eq!(entry.header.reserved, 0);
         assert_eq!(entry.value, vec![0xbe, 0xef]);
@@ -176,11 +192,11 @@ mod test {
         let expected = "0x2a00020000000000beef0900040000000000abcdabcd";
         let file = File::read(&hex_decode(expected).unwrap()).unwrap();
         assert_eq!(file.entries.len(), 2);
-        assert_eq!(file.entries[0].header.entry_type, 0x2a); // 42
+        assert_eq!(file.entries[0].header.type_, 0x2a); // 42
         assert_eq!(file.entries[0].header.length, 2);
         assert_eq!(file.entries[0].header.reserved, 0);
         assert_eq!(file.entries[0].value, vec![0xbe, 0xef]);
-        assert_eq!(file.entries[1].header.entry_type, 0x09); // 9
+        assert_eq!(file.entries[1].header.type_, 0x09); // 9
         assert_eq!(file.entries[1].header.length, 4);
         assert_eq!(file.entries[1].header.reserved, 0);
         assert_eq!(file.entries[1].value, vec![0xab, 0xcd, 0xab, 0xcd]);
