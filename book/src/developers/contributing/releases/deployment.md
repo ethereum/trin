@@ -53,9 +53,9 @@ This step directs Ansible to use the current master version of trin. Read [about
 - Make sure you've pulled the latest master branch of the deployment scripts, to include any recent changes: `git pull origin master`
 - Go into Portal section of Ansible: `cd portal-network/trin/ansible/`
 - Run the deployment: `ansible-playbook playbook.yml --tags trin`
-- Run Glados deployment
+- Run Glados deployment: updates glados + portal client (currently configured as trin, but this could change)
   - `cd ../../glados/ansible`
-  - `ansible-playbook playbook.yml --tags trin`
+  - `ansible-playbook playbook.yml --tags glados`
 - Wait for completion
 - Launch a fresh trin node, check it against the bootnodes
 - ssh into random nodes, one of each kind, to check the logs:
