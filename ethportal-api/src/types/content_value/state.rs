@@ -1,12 +1,11 @@
 use ethereum_types::H256;
 use ssz::{Decode, Encode};
 use ssz_derive::{Decode, Encode};
-use ssz_types::{typenum, VariableList};
 
 use crate::{
     types::{
         constants::CONTENT_ABSENT,
-        state_trie::witness::{AccountTrieWitness, ContractStorageTrieWitness, EncodedTrieNode},
+        state_trie::{ByteCode, EncodedTrieNode, TrieProof},
     },
     utils::bytes::hex_encode,
     ContentValue, ContentValueError,
@@ -68,7 +67,7 @@ impl ContentValue for StateContentValue {
     }
 }
 
-/// A content value type, used when retriving a trie node.
+/// A content value type, used when retrieving a trie node.
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct TrieNode {
     pub node: EncodedTrieNode,
@@ -77,24 +76,23 @@ pub struct TrieNode {
 /// A content value type, used when offering a trie node from the account trie.
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct AccountTrieNodeWithProof {
-    /// An account trie node with a proof.
-    pub proof: AccountTrieWitness,
+    /// An proof for the account trie node.
+    pub proof: TrieProof,
     /// A block at which the proof is anchored.
     pub block_hash: H256,
 }
-
 /// A content value type, used when offering a trie node from the contract storage trie.
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct ContractStorageTrieNodeWithProof {
-    /// A contract storage trie node with a proof.
-    pub proof: ContractStorageTrieWitness,
+    /// A proof for the contract storage trie node.
+    pub storage_proof: TrieProof,
+    /// A proof for the account state.
+    pub account_proof: TrieProof,
     /// A block at which the proof is anchored.
     pub block_hash: H256,
 }
 
-pub type ByteCode = VariableList<u8, typenum::U65536>;
-
-/// A content value type, used when retriving contract's bytecode.
+/// A content value type, used when retrieving contract's bytecode.
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct ContractBytecode {
     pub code: ByteCode,
@@ -105,8 +103,8 @@ pub struct ContractBytecode {
 pub struct ContractBytecodeWithProof {
     /// A contract's bytecode.
     pub code: ByteCode,
-    /// A proof for the account of the corresponding contract.
-    pub account_proof: AccountTrieWitness,
+    /// A proof for the account state of the corresponding contract.
+    pub account_proof: TrieProof,
     /// A block at which the proof is anchored.
     pub block_hash: H256,
 }
@@ -119,10 +117,7 @@ mod test {
     use rstest::rstest;
     use serde_json::Value;
 
-    use crate::{
-        types::state_trie::{nibbles::Nibbles, witness::TrieWitness},
-        utils::bytes::hex_decode,
-    };
+    use crate::utils::bytes::hex_decode;
 
     use super::*;
 
@@ -152,10 +147,7 @@ mod test {
 
         let expected_content_value =
             StateContentValue::AccountTrieNodeWithProof(AccountTrieNodeWithProof {
-                proof: AccountTrieWitness {
-                    path: json_as_nibbles(&json["nibbles"]),
-                    proof: json_as_proof(&json["proof"]),
-                },
+                proof: json_as_proof(&json["proof"]),
                 block_hash: json_as_h256(&json["block_hash"]),
             });
         let content_value = StateContentValue::decode(&json_as_hex(&json["content_value"]))?;
@@ -175,16 +167,11 @@ mod test {
 
         let expected_content_value =
             StateContentValue::ContractStorageTrieNodeWithProof(ContractStorageTrieNodeWithProof {
-                proof: ContractStorageTrieWitness {
-                    path: json_as_nibbles(&json["nibbles"]),
-                    proof: json_as_proof(&json["proof"]),
-                    account_witness: AccountTrieWitness {
-                        path: json_as_nibbles(&json["account_nibbles"]),
-                        proof: json_as_proof(&json["account_proof"]),
-                    },
-                },
+                storage_proof: json_as_proof(&json["storage_proof"]),
+                account_proof: json_as_proof(&json["account_proof"]),
                 block_hash: json_as_h256(&json["block_hash"]),
             });
+        dbg!(hex_encode(expected_content_value.encode()));
         let content_value = StateContentValue::decode(&json_as_hex(&json["content_value"]))?;
 
         assert_eq!(content_value, expected_content_value);
@@ -220,10 +207,7 @@ mod test {
         let expected_content_value =
             StateContentValue::ContractBytecodeWithProof(ContractBytecodeWithProof {
                 code: ByteCode::from(json_as_hex(&json["bytecode"])),
-                account_proof: AccountTrieWitness {
-                    path: json_as_nibbles(&json["nibbles"]),
-                    proof: json_as_proof(&json["proof"]),
-                },
+                account_proof: json_as_proof(&json["account_proof"]),
                 block_hash: json_as_h256(&json["block_hash"]),
             });
         let content_value = StateContentValue::decode(&json_as_hex(&json["content_value"]))?;
@@ -262,18 +246,8 @@ mod test {
         hex_decode(value.as_str().unwrap()).unwrap()
     }
 
-    fn json_as_nibbles(value: &Value) -> Nibbles {
-        let nibbles: Vec<u8> = value
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|v| v.as_u64().unwrap() as u8)
-            .collect();
-        Nibbles::try_from_unpacked_nibbles(&nibbles).unwrap()
-    }
-
-    fn json_as_proof(value: &Value) -> TrieWitness {
-        TrieWitness::from(
+    fn json_as_proof(value: &Value) -> TrieProof {
+        TrieProof::from(
             value
                 .as_array()
                 .unwrap()
