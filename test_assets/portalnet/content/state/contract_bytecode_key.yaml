@@ -1,0 +1,9 @@
+# Test data for the Contract bytecode key
+
+# Data is extracted from:
+# https://github.com/ethereum/portal-network-specs/blob/638aca50c913a749d0d762264d9a4ac72f1a9966/state-network-test-vectors.md
+
+address: '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2'
+code_hash: '0xd0a06b12ac47863b5c7be4185c2deaad1c61557033f56c7d4ea74429cbb25e23'
+content_key: '0x22c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2d0a06b12ac47863b5c7be4185c2deaad1c61557033f56c7d4ea74429cbb25e23'
+content_id: '0x142f9d1bc05985f5316144e465a62bd646bb51128d8361fef49ae5de397eca99'

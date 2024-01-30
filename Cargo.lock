@@ -2514,6 +2514,7 @@ dependencies = [
  "keccak-hash",
  "lazy_static",
  "nanotemplate",
+ "portal-spec-test-utils-rs",
  "quickcheck",
  "rand 0.8.5",
  "reth-rpc-types",
@@ -4960,6 +4961,11 @@ dependencies = [
  "trin-validation",
  "url",
 ]
+
+[[package]]
+name = "portal-spec-test-utils-rs"
+version = "0.1.0"
+source = "git+https://github.com/ethereum/portal-spec-tests?rev=a225ba102d66938659a52bb62fd6cbe8f042a845#a225ba102d66938659a52bb62fd6cbe8f042a845"
 
 [[package]]
 name = "portalnet"

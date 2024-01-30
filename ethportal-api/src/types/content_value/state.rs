@@ -115,7 +115,7 @@ mod test {
 
     use anyhow::Result;
     use rstest::rstest;
-    use serde_json::Value;
+    use serde_yaml::Value;
 
     use crate::utils::bytes::hex_decode;
 
@@ -123,14 +123,14 @@ mod test {
 
     #[test]
     fn trie_node() -> Result<()> {
-        let file = fs::read_to_string("../test_assets/portalnet/content/state/trie_node.json")?;
-        let value: Value = serde_json::from_str(&file)?;
-        let json = value.as_object().unwrap();
+        let file = fs::read_to_string("../test_assets/portalnet/content/state/trie_node.yaml")?;
+        let value: Value = serde_yaml::from_str(&file)?;
+        let value = value.as_mapping().unwrap();
 
         let expected_content_value = StateContentValue::TrieNode(TrieNode {
-            node: EncodedTrieNode::from(json_as_hex(&json["trie_node"])),
+            node: EncodedTrieNode::from(yaml_as_hex(&value["trie_node"])),
         });
-        let content_value = StateContentValue::decode(&json_as_hex(&json["content_value"]))?;
+        let content_value = StateContentValue::decode(&yaml_as_hex(&value["content_value"]))?;
 
         assert_eq!(content_value, expected_content_value);
 
@@ -140,17 +140,17 @@ mod test {
     #[test]
     fn account_trie_node_with_proof() -> Result<()> {
         let file = fs::read_to_string(
-            "../test_assets/portalnet/content/state/account_trie_node_with_proof.json",
+            "../test_assets/portalnet/content/state/account_trie_node_with_proof.yaml",
         )?;
-        let value: Value = serde_json::from_str(&file)?;
-        let json = value.as_object().unwrap();
+        let value: Value = serde_yaml::from_str(&file)?;
+        let value = value.as_mapping().unwrap();
 
         let expected_content_value =
             StateContentValue::AccountTrieNodeWithProof(AccountTrieNodeWithProof {
-                proof: json_as_proof(&json["proof"]),
-                block_hash: json_as_h256(&json["block_hash"]),
+                proof: yaml_as_proof(&value["proof"]),
+                block_hash: yaml_as_h256(&value["block_hash"]),
             });
-        let content_value = StateContentValue::decode(&json_as_hex(&json["content_value"]))?;
+        let content_value = StateContentValue::decode(&yaml_as_hex(&value["content_value"]))?;
 
         assert_eq!(content_value, expected_content_value);
 
@@ -160,19 +160,19 @@ mod test {
     #[test]
     fn contract_storage_trie_node_with_proof() -> Result<()> {
         let file = fs::read_to_string(
-            "../test_assets/portalnet/content/state/contract_storage_trie_node_with_proof.json",
+            "../test_assets/portalnet/content/state/contract_storage_trie_node_with_proof.yaml",
         )?;
-        let value: Value = serde_json::from_str(&file)?;
-        let json = value.as_object().unwrap();
+        let value: Value = serde_yaml::from_str(&file)?;
+        let value = value.as_mapping().unwrap();
 
         let expected_content_value =
             StateContentValue::ContractStorageTrieNodeWithProof(ContractStorageTrieNodeWithProof {
-                storage_proof: json_as_proof(&json["storage_proof"]),
-                account_proof: json_as_proof(&json["account_proof"]),
-                block_hash: json_as_h256(&json["block_hash"]),
+                storage_proof: yaml_as_proof(&value["storage_proof"]),
+                account_proof: yaml_as_proof(&value["account_proof"]),
+                block_hash: yaml_as_h256(&value["block_hash"]),
             });
         dbg!(hex_encode(expected_content_value.encode()));
-        let content_value = StateContentValue::decode(&json_as_hex(&json["content_value"]))?;
+        let content_value = StateContentValue::decode(&yaml_as_hex(&value["content_value"]))?;
 
         assert_eq!(content_value, expected_content_value);
 
@@ -182,14 +182,14 @@ mod test {
     #[test]
     fn contract_bytecode() -> Result<()> {
         let file =
-            fs::read_to_string("../test_assets/portalnet/content/state/contract_bytecode.json")?;
-        let value: Value = serde_json::from_str(&file)?;
-        let json = value.as_object().unwrap();
+            fs::read_to_string("../test_assets/portalnet/content/state/contract_bytecode.yaml")?;
+        let value: Value = serde_yaml::from_str(&file)?;
+        let value = value.as_mapping().unwrap();
 
         let expected_content_value = StateContentValue::ContractBytecode(ContractBytecode {
-            code: ByteCode::from(json_as_hex(&json["bytecode"])),
+            code: ByteCode::from(yaml_as_hex(&value["bytecode"])),
         });
-        let content_value = StateContentValue::decode(&json_as_hex(&json["content_value"]))?;
+        let content_value = StateContentValue::decode(&yaml_as_hex(&value["content_value"]))?;
 
         assert_eq!(content_value, expected_content_value);
 
@@ -199,18 +199,18 @@ mod test {
     #[test]
     fn contract_bytecode_with_proof() -> Result<()> {
         let file = fs::read_to_string(
-            "../test_assets/portalnet/content/state/contract_bytecode_with_proof.json",
+            "../test_assets/portalnet/content/state/contract_bytecode_with_proof.yaml",
         )?;
-        let value: Value = serde_json::from_str(&file)?;
-        let json = value.as_object().unwrap();
+        let value: Value = serde_yaml::from_str(&file)?;
+        let value = value.as_mapping().unwrap();
 
         let expected_content_value =
             StateContentValue::ContractBytecodeWithProof(ContractBytecodeWithProof {
-                code: ByteCode::from(json_as_hex(&json["bytecode"])),
-                account_proof: json_as_proof(&json["account_proof"]),
-                block_hash: json_as_h256(&json["block_hash"]),
+                code: ByteCode::from(yaml_as_hex(&value["bytecode"])),
+                account_proof: yaml_as_proof(&value["account_proof"]),
+                block_hash: yaml_as_h256(&value["block_hash"]),
             });
-        let content_value = StateContentValue::decode(&json_as_hex(&json["content_value"]))?;
+        let content_value = StateContentValue::decode(&yaml_as_hex(&value["content_value"]))?;
 
         assert_eq!(content_value, expected_content_value);
 
@@ -218,18 +218,18 @@ mod test {
     }
 
     #[rstest]
-    #[case::trie_node("trie_node.json")]
-    #[case::account_trie_node_with_proof("account_trie_node_with_proof.json")]
-    #[case::contract_storage_trie_node_with_proof("contract_storage_trie_node_with_proof.json")]
-    #[case::contract_bytecode("contract_bytecode.json")]
-    #[case::contract_bytecode_with_proof("contract_bytecode_with_proof.json")]
+    #[case::trie_node("trie_node.yaml")]
+    #[case::account_trie_node_with_proof("account_trie_node_with_proof.yaml")]
+    #[case::contract_storage_trie_node_with_proof("contract_storage_trie_node_with_proof.yaml")]
+    #[case::contract_bytecode("contract_bytecode.yaml")]
+    #[case::contract_bytecode_with_proof("contract_bytecode_with_proof.yaml")]
     fn encode_decode(#[case] filename: &str) -> Result<()> {
         let file =
             fs::read_to_string(format!("../test_assets/portalnet/content/state/{filename}"))?;
-        let value: Value = serde_json::from_str(&file)?;
-        let json = value.as_object().unwrap();
+        let value: Value = serde_yaml::from_str(&file)?;
+        let value = value.as_mapping().unwrap();
 
-        let content_value_bytes = hex_decode(json["content_value"].as_str().unwrap())?;
+        let content_value_bytes = hex_decode(value["content_value"].as_str().unwrap())?;
 
         let content_value = StateContentValue::decode(&content_value_bytes)?;
 
@@ -238,21 +238,21 @@ mod test {
         Ok(())
     }
 
-    fn json_as_h256(value: &Value) -> H256 {
+    fn yaml_as_h256(value: &Value) -> H256 {
         H256::from_str(value.as_str().unwrap()).unwrap()
     }
 
-    fn json_as_hex(value: &Value) -> Vec<u8> {
+    fn yaml_as_hex(value: &Value) -> Vec<u8> {
         hex_decode(value.as_str().unwrap()).unwrap()
     }
 
-    fn json_as_proof(value: &Value) -> TrieProof {
+    fn yaml_as_proof(value: &Value) -> TrieProof {
         TrieProof::from(
             value
-                .as_array()
+                .as_sequence()
                 .unwrap()
                 .iter()
-                .map(|v| EncodedTrieNode::from(json_as_hex(v)))
+                .map(|v| EncodedTrieNode::from(yaml_as_hex(v)))
                 .collect::<Vec<EncodedTrieNode>>(),
         )
     }
