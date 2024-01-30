@@ -3,6 +3,7 @@
 
 use std::sync::Arc;
 
+use ethportal_api::types::cli::DEFAULT_DISCOVERY_PORT;
 use portalnet::utp_controller::UtpController;
 use rpc::{launch_jsonrpc_server, RpcServerHandle};
 use tokio::sync::{mpsc, RwLock};
@@ -18,6 +19,7 @@ use portalnet::{
     events::PortalnetEvents,
     utils::db::{configure_node_data_dir, configure_trin_data_dir},
 };
+use rand::Rng;
 use trin_beacon::initialize_beacon_network;
 use trin_history::initialize_history_network;
 use trin_state::initialize_state_network;
@@ -46,7 +48,16 @@ pub async fn run_trin(
     let (node_data_dir, private_key) =
         configure_node_data_dir(trin_data_dir, trin_config.private_key)?;
 
-    let portalnet_config = PortalnetConfig::new(&trin_config, private_key);
+    // Determine discovery port based on ephemeral mode and configuration, using a random port if in
+    // ephemeral mode with default discovery port.
+    let discovery_port =
+        if trin_config.ephemeral && trin_config.discovery_port == DEFAULT_DISCOVERY_PORT {
+            rand::thread_rng().gen_range(30000..60000)
+        } else {
+            trin_config.discovery_port
+        };
+
+    let portalnet_config = PortalnetConfig::new(&trin_config, private_key, discovery_port);
 
     // Initialize base discovery protocol
     let mut discovery = Discovery::new(portalnet_config.clone(), node_data_dir.clone())?;
