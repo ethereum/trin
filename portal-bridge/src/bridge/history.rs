@@ -6,9 +6,11 @@ use std::{
 };
 
 use anyhow::anyhow;
+use futures::future::join_all;
 use ssz::Decode;
 use tokio::{
     sync::{OwnedSemaphorePermit, Semaphore},
+    task::JoinHandle,
     time::{sleep, timeout, Duration},
 };
 use tracing::{debug, error, info, warn, Instrument};
@@ -148,6 +150,7 @@ impl HistoryBridge {
 
         info!("fetching headers in range: {gossip_range:?}");
         let mut epoch_acc = None;
+        let mut vec_of_serve_full_block_handles = vec![];
         for height in gossip_range {
             // Using epoch_size chunks & epoch boundaries ensures that every
             // "chunk" shares an epoch accumulator avoiding the need to
@@ -167,14 +170,18 @@ impl HistoryBridge {
             let permit = gossip_send_semaphore.clone().acquire_owned().await.expect(
                 "acquire_owned() can only error on semaphore close, this should be impossible",
             );
-            Self::spawn_serve_full_block(
+            vec_of_serve_full_block_handles.push(Self::spawn_serve_full_block(
                 height,
                 epoch_acc.clone(),
                 self.portal_clients.clone(),
                 self.execution_api.clone(),
                 Some(permit),
-            );
+            ));
         }
+
+        // wait till all blocks are done gossiping. This can't deadlock, because the tokio::spawn
+        // has a timeout
+        join_all(vec_of_serve_full_block_handles).await;
     }
 
     fn spawn_serve_full_block(
@@ -183,7 +190,7 @@ impl HistoryBridge {
         portal_clients: Vec<HttpClient>,
         execution_api: ExecutionApi,
         permit: Option<OwnedSemaphorePermit>,
-    ) {
+    ) -> JoinHandle<()> {
         tokio::spawn(async move {
             match timeout(
                 SERVE_BLOCK_TIMEOUT,
@@ -200,7 +207,7 @@ impl HistoryBridge {
             if let Some(permit) = permit {
                 drop(permit);
             }
-        });
+        })
     }
 
     async fn serve_full_block(
