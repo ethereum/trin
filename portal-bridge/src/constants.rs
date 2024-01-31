@@ -11,3 +11,5 @@ pub const HEADER_WITH_PROOF_CONTENT_VALUE: &str =
 
 // Beacon chain mainnet genesis time: Tue Dec 01 2020 12:00:23 GMT+0000
 pub const BEACON_GENESIS_TIME: u64 = 1606824023;
+
+pub const EL_PROVIDER_REQUEST_LIMIT: f64 = 1_000_000.0;

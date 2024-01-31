@@ -8,6 +8,7 @@ use surf::{
     middleware::{Middleware, Next},
     Body, Client, Config, Request, Response,
 };
+use surf_governor::GovernorMiddleware;
 use tokio::time::{sleep, Duration};
 use tracing::warn;
 use url::Url;
@@ -48,7 +49,15 @@ pub struct ExecutionApi {
 }
 
 impl ExecutionApi {
-    pub async fn new(provider: Provider, mode: BridgeMode) -> Result<Self, surf::Error> {
+    pub async fn new(
+        provider: Provider,
+        mode: BridgeMode,
+        requests_allowed_per_day: f64,
+    ) -> Result<Self, surf::Error> {
+        // Limits requests to no more then requests_allowed_per_day / 86400.0 per a second
+        let period = Duration::from_secs_f64(requests_allowed_per_day / 86400.0);
+        let rate_limit = GovernorMiddleware::with_period(period)
+            .expect("Expect GovnernorMiddleware should have received a valid Duration");
         let client = match &provider {
             Provider::PandaOps => {
                 let endpoint = match mode {
@@ -57,7 +66,7 @@ impl ExecutionApi {
                 };
                 let base_el_endpoint =
                     Url::parse(&endpoint).expect("to be able to parse static base el endpoint url");
-                Config::new()
+                let client: Client = Config::new()
                     .add_header("Content-Type", "application/json")?
                     .add_header("CF-Access-Client-Id", PANDAOPS_CLIENT_ID.to_string())?
                     .add_header(
@@ -65,13 +74,20 @@ impl ExecutionApi {
                         PANDAOPS_CLIENT_SECRET.to_string(),
                     )?
                     .set_base_url(base_el_endpoint)
-                    .try_into()?
+                    .try_into()?;
+                client.with(rate_limit).with(Retry::default())
             }
-            Provider::Url(url) => Config::new()
-                .add_header("Content-Type", "application/json")?
-                .set_base_url(url.clone())
-                .try_into()?,
-            Provider::Test => Config::new().try_into()?,
+            Provider::Url(url) => {
+                let client: Client = Config::new()
+                    .add_header("Content-Type", "application/json")?
+                    .set_base_url(url.clone())
+                    .try_into()?;
+                client.with(rate_limit).with(Retry::default())
+            }
+            Provider::Test => {
+                let client: Client = Config::new().try_into()?;
+                client.with(rate_limit).with(Retry::default())
+            }
         };
         // Only check that provider is connected & available if not using a test provider.
         if provider != Provider::Test {
@@ -289,7 +305,6 @@ impl ExecutionApi {
         let result = self
             .client
             .post("")
-            .middleware(Retry::default())
             .body_json(&json!(requests))
             .map_err(|e| anyhow!("Unable to construct json post request: {e:?}"))?
             .recv_string()
@@ -303,7 +318,6 @@ impl ExecutionApi {
         let result = self
             .client
             .post("")
-            .middleware(Retry::default())
             .body_json(&request)
             .map_err(|e| anyhow!("Unable to construct json post request: {e:?}"))?
             .recv_string()

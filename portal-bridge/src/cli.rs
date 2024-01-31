@@ -7,6 +7,7 @@ use url::Url;
 
 use crate::{
     client_handles::{fluffy_handle, trin_handle},
+    constants::EL_PROVIDER_REQUEST_LIMIT,
     types::{mode::BridgeMode, network::NetworkKind},
 };
 use ethportal_api::types::cli::check_private_key_length;
@@ -92,6 +93,13 @@ pub struct BridgeConfig {
         help = "Data provider for consensus layer data. (\"pandaops\" / local node url)"
     )]
     pub cl_provider: Provider,
+
+    #[arg(
+        long = "el-provider-request-limit",
+        help = "Limits the amount of EL provider requests request day_limit / 86400 seconds. Ex. if set to 86400 we will only send EL 1 request a second",
+        default_value_t = EL_PROVIDER_REQUEST_LIMIT,
+    )]
+    pub el_provider_request_limit: f64,
 }
 
 fn check_node_count(val: &str) -> Result<u8, String> {

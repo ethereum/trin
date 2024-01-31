@@ -78,8 +78,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Launch History Network portal bridge
     if bridge_config.network.contains(&NetworkKind::History) {
-        let execution_api =
-            ExecutionApi::new(bridge_config.el_provider, bridge_config.mode.clone()).await?;
+        let execution_api = ExecutionApi::new(
+            bridge_config.el_provider,
+            bridge_config.mode.clone(),
+            bridge_config.el_provider_request_limit,
+        )
+        .await?;
         let bridge_handle = tokio::spawn(async move {
             let master_acc = MasterAccumulator::default();
             let header_oracle = HeaderOracle::new(master_acc);
