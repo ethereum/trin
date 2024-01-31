@@ -3,7 +3,7 @@ use crate::{
         constants::CONTENT_ABSENT, content_value::ContentValue,
         execution::accumulator::EpochAccumulator,
     },
-    utils::bytes::{hex_decode, hex_encode},
+    utils::bytes::hex_encode,
     BlockBody, ContentValueError, HeaderWithProof, Receipts,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -49,38 +49,13 @@ impl<'de> Deserialize<'de> for PossibleHistoryContentValue {
     {
         let s = String::deserialize(deserializer)?;
 
-        if s.as_str() == CONTENT_ABSENT {
-            return Ok(PossibleHistoryContentValue::ContentAbsent);
+        if s == CONTENT_ABSENT {
+            Ok(PossibleHistoryContentValue::ContentAbsent)
+        } else {
+            HistoryContentValue::from_hex(&s)
+                .map(PossibleHistoryContentValue::ContentPresent)
+                .map_err(serde::de::Error::custom)
         }
-
-        let content_bytes = hex_decode(&s).map_err(serde::de::Error::custom)?;
-
-        if let Ok(value) = HeaderWithProof::from_ssz_bytes(&content_bytes) {
-            return Ok(Self::ContentPresent(
-                HistoryContentValue::BlockHeaderWithProof(value),
-            ));
-        }
-
-        if let Ok(value) = BlockBody::from_ssz_bytes(&content_bytes) {
-            return Ok(Self::ContentPresent(HistoryContentValue::BlockBody(value)));
-        }
-
-        if let Ok(value) = Receipts::from_ssz_bytes(&content_bytes) {
-            return Ok(Self::ContentPresent(HistoryContentValue::Receipts(value)));
-        }
-
-        if let Ok(value) = EpochAccumulator::from_ssz_bytes(&content_bytes) {
-            return Ok(Self::ContentPresent(HistoryContentValue::EpochAccumulator(
-                value,
-            )));
-        }
-
-        Err(serde::de::Error::custom(
-            ContentValueError::UnknownContent {
-                bytes: s,
-                network: "history".to_string(),
-            },
-        ))
     }
 }
 
@@ -127,13 +102,7 @@ impl Serialize for HistoryContentValue {
     where
         S: Serializer,
     {
-        let encoded = match self {
-            Self::BlockHeaderWithProof(value) => value.as_ssz_bytes(),
-            Self::BlockBody(value) => value.as_ssz_bytes(),
-            Self::Receipts(value) => value.as_ssz_bytes(),
-            Self::EpochAccumulator(value) => value.as_ssz_bytes(),
-        };
-        serializer.serialize_str(&hex_encode(encoded))
+        serializer.serialize_str(&self.to_hex())
     }
 }
 
@@ -143,31 +112,7 @@ impl<'de> Deserialize<'de> for HistoryContentValue {
         D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        let content_bytes = hex_decode(&s).map_err(serde::de::Error::custom)?;
-
-        if let Ok(value) = HeaderWithProof::from_ssz_bytes(&content_bytes) {
-            return Ok(Self::BlockHeaderWithProof(value));
-        }
-
-        if let Ok(value) = BlockBody::from_ssz_bytes(&content_bytes) {
-            return Ok(Self::BlockBody(value));
-        }
-
-        // all "0x" values will return as empty receipts here
-        if let Ok(value) = Receipts::from_ssz_bytes(&content_bytes) {
-            return Ok(Self::Receipts(value));
-        }
-
-        if let Ok(value) = EpochAccumulator::from_ssz_bytes(&content_bytes) {
-            return Ok(Self::EpochAccumulator(value));
-        }
-
-        Err(serde::de::Error::custom(
-            ContentValueError::UnknownContent {
-                bytes: s,
-                network: "history".to_string(),
-            },
-        ))
+        Self::from_hex(&s).map_err(serde::de::Error::custom)
     }
 }
 
@@ -177,7 +122,7 @@ mod test {
 
     use serde_json::Value;
 
-    use crate::HistoryContentValue;
+    use crate::{utils::bytes::hex_decode, HistoryContentValue};
     use std::fs;
 
     /// Max number of blocks / epoch = 2 ** 13

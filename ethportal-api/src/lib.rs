@@ -40,6 +40,7 @@ pub use types::{
         beacon::{BeaconContentValue, PossibleBeaconContentValue},
         error::ContentValueError,
         history::{HistoryContentValue, PossibleHistoryContentValue},
+        state::{PossibleStateContentValue, StateContentValue},
     },
     execution::{block_body::*, header::*, receipts::*},
 };

@@ -4,13 +4,14 @@ use crate::{
     ContentKeyError,
 };
 use ethereum_types::{Address, H256};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest as Sha2Digest, Sha256};
 use ssz::{Decode, DecodeError, Encode};
 use ssz_derive::{Decode, Encode};
 use std::fmt;
 
 // Prefixes for the different types of state content keys:
-// https://github.com/ethereum/portal-network-specs/blob/655f3e1cac7450888023aec1fc6f339cd679ffdd/state-network.md
+// https://github.com/ethereum/portal-network-specs/blob/638aca50c913a749d0d762264d9a4ac72f1a9966/state-network.md
 pub const STATE_ACCOUNT_TRIE_NODE_KEY_PREFIX: u8 = 0x20;
 pub const STATE_STORAGE_TRIE_NODE_KEY_PREFIX: u8 = 0x21;
 pub const STATE_CONTRACT_BYTECODE_KEY_PREFIX: u8 = 0x22;
@@ -98,32 +99,50 @@ impl From<StateContentKey> for Vec<u8> {
 
 impl TryFrom<Vec<u8>> for StateContentKey {
     type Error = ContentKeyError;
-
-    fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
-        let Some((&selector, key)) = bytes.split_first() else {
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        let Some((&selector, key)) = value.split_first() else {
             return Err(ContentKeyError::from_decode_error(
                 DecodeError::InvalidLengthPrefix {
-                    len: bytes.len(),
+                    len: value.len(),
                     expected: 1,
                 },
-                bytes,
+                value,
             ));
         };
         match selector {
             STATE_ACCOUNT_TRIE_NODE_KEY_PREFIX => AccountTrieNodeKey::from_ssz_bytes(key)
-                .map(StateContentKey::AccountTrieNode)
-                .map_err(|e| ContentKeyError::from_decode_error(e, key)),
+                .map(Self::AccountTrieNode)
+                .map_err(|e| ContentKeyError::from_decode_error(e, value)),
             STATE_STORAGE_TRIE_NODE_KEY_PREFIX => ContractStorageTrieNodeKey::from_ssz_bytes(key)
-                .map(StateContentKey::ContractStorageTrieNode)
-                .map_err(|e| ContentKeyError::from_decode_error(e, key)),
+                .map(Self::ContractStorageTrieNode)
+                .map_err(|e| ContentKeyError::from_decode_error(e, value)),
             STATE_CONTRACT_BYTECODE_KEY_PREFIX => ContractBytecodeKey::from_ssz_bytes(key)
-                .map(StateContentKey::ContractBytecode)
-                .map_err(|e| ContentKeyError::from_decode_error(e, key)),
+                .map(Self::ContractBytecode)
+                .map_err(|e| ContentKeyError::from_decode_error(e, value)),
             _ => Err(ContentKeyError::from_decode_error(
                 DecodeError::UnionSelectorInvalid(selector),
-                bytes,
+                value,
             )),
         }
+    }
+}
+
+impl Serialize for StateContentKey {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_hex())
+    }
+}
+
+impl<'de> Deserialize<'de> for StateContentKey {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Self::from_hex(&s).map_err(serde::de::Error::custom)
     }
 }
 

@@ -1,15 +1,15 @@
 use crate::{
     types::content_key::{error::ContentKeyError, overlay::OverlayContentKey},
-    utils::bytes::{hex_decode, hex_encode_compact},
+    utils::bytes::hex_encode_compact,
 };
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest, Sha256};
 use ssz::{Decode, DecodeError, Encode};
 use ssz_derive::{Decode, Encode};
 use std::fmt;
 
 // Prefixes for the different types of beacon content keys:
-// https://github.com/ethereum/portal-network-specs/blob/72327da43c7a199ba2735344ef98f9121aef2f68/beacon-chain/beacon-network.md
+// https://github.com/ethereum/portal-network-specs/blob/638aca50c913a749d0d762264d9a4ac72f1a9966/beacon-chain/beacon-network.md
 pub const LIGHT_CLIENT_BOOTSTRAP_KEY_PREFIX: u8 = 0x10;
 pub const LIGHT_CLIENT_UPDATES_BY_RANGE_KEY_PREFIX: u8 = 0x11;
 pub const LIGHT_CLIENT_FINALITY_UPDATE_KEY_PREFIX: u8 = 0x12;
@@ -22,83 +22,6 @@ pub enum BeaconContentKey {
     LightClientUpdatesByRange(LightClientUpdatesByRangeKey),
     LightClientFinalityUpdate(LightClientFinalityUpdateKey),
     LightClientOptimisticUpdate(LightClientOptimisticUpdateKey),
-}
-
-impl Encode for BeaconContentKey {
-    fn is_ssz_fixed_len() -> bool {
-        false
-    }
-
-    fn ssz_append(&self, buf: &mut Vec<u8>) {
-        let bytes = self.to_bytes();
-        buf.extend_from_slice(&bytes);
-    }
-
-    fn ssz_bytes_len(&self) -> usize {
-        self.to_bytes().len()
-    }
-}
-
-impl Decode for BeaconContentKey {
-    fn is_ssz_fixed_len() -> bool {
-        false
-    }
-
-    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
-        match bytes[0] {
-            LIGHT_CLIENT_BOOTSTRAP_KEY_PREFIX => {
-                let block_hash = <[u8; 32]>::try_from(&bytes[1..33]).map_err(|err| {
-                    DecodeError::BytesInvalid(format!(
-                        "Failed to decode LightClientBootstrapKey: {err:?}"
-                    ))
-                })?;
-                Ok(Self::LightClientBootstrap(LightClientBootstrapKey {
-                    block_hash,
-                }))
-            }
-            LIGHT_CLIENT_UPDATES_BY_RANGE_KEY_PREFIX => {
-                let start_period = u64::from_ssz_bytes(&bytes[1..9]).map_err(|err| {
-                    DecodeError::BytesInvalid(format!(
-                        "Failed to decode LightClientUpdatesByRangeKey: {err:?}"
-                    ))
-                })?;
-                let count = u64::from_ssz_bytes(&bytes[9..17]).map_err(|err| {
-                    DecodeError::BytesInvalid(format!(
-                        "Failed to decode LightClientUpdatesByRangeKey: {err:?}"
-                    ))
-                })?;
-                Ok(Self::LightClientUpdatesByRange(
-                    LightClientUpdatesByRangeKey {
-                        start_period,
-                        count,
-                    },
-                ))
-            }
-            LIGHT_CLIENT_FINALITY_UPDATE_KEY_PREFIX => {
-                let finalized_slot = u64::from_ssz_bytes(&bytes[1..9]).map_err(|err| {
-                    DecodeError::BytesInvalid(format!(
-                        "Failed to decode LightClientFinalityUpdateKey: {err:?}",
-                    ))
-                })?;
-                Ok(Self::LightClientFinalityUpdate(
-                    LightClientFinalityUpdateKey::new(finalized_slot),
-                ))
-            }
-            LIGHT_CLIENT_OPTIMISTIC_UPDATE_KEY_PREFIX => {
-                let signature_slot = u64::from_ssz_bytes(&bytes[1..9]).map_err(|err| {
-                    DecodeError::BytesInvalid(format!(
-                        "Failed to decode LightClientOptimisticUpdateKey: {err:?}",
-                    ))
-                })?;
-                Ok(Self::LightClientOptimisticUpdate(
-                    LightClientOptimisticUpdateKey::new(signature_slot),
-                ))
-            }
-            _ => Err(DecodeError::BytesInvalid(format!(
-                "Failed to decode BeaconContentKey, Unexpected union selector byte: {bytes:?}",
-            ))),
-        }
-    }
 }
 
 /// Key used to identify a light client bootstrap.
@@ -145,13 +68,13 @@ impl LightClientOptimisticUpdateKey {
 
 impl From<&BeaconContentKey> for Vec<u8> {
     fn from(val: &BeaconContentKey) -> Self {
-        val.as_ssz_bytes()
+        val.to_bytes()
     }
 }
 
 impl From<BeaconContentKey> for Vec<u8> {
     fn from(val: BeaconContentKey) -> Self {
-        val.as_ssz_bytes()
+        val.to_bytes()
     }
 }
 
@@ -159,8 +82,36 @@ impl TryFrom<Vec<u8>> for BeaconContentKey {
     type Error = ContentKeyError;
 
     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-        BeaconContentKey::from_ssz_bytes(&value)
-            .map_err(|e| ContentKeyError::from_decode_error(e, value))
+        let Some((&selector, key)) = value.split_first() else {
+            return Err(ContentKeyError::InvalidLength {
+                received: value.len(),
+                expected: 1,
+            });
+        };
+        match selector {
+            LIGHT_CLIENT_BOOTSTRAP_KEY_PREFIX => LightClientBootstrapKey::from_ssz_bytes(key)
+                .map(Self::LightClientBootstrap)
+                .map_err(|e| ContentKeyError::from_decode_error(e, value)),
+            LIGHT_CLIENT_UPDATES_BY_RANGE_KEY_PREFIX => {
+                LightClientUpdatesByRangeKey::from_ssz_bytes(key)
+                    .map(Self::LightClientUpdatesByRange)
+                    .map_err(|e| ContentKeyError::from_decode_error(e, value))
+            }
+            LIGHT_CLIENT_FINALITY_UPDATE_KEY_PREFIX => {
+                LightClientFinalityUpdateKey::from_ssz_bytes(key)
+                    .map(Self::LightClientFinalityUpdate)
+                    .map_err(|e| ContentKeyError::from_decode_error(e, value))
+            }
+            LIGHT_CLIENT_OPTIMISTIC_UPDATE_KEY_PREFIX => {
+                LightClientOptimisticUpdateKey::from_ssz_bytes(key)
+                    .map(Self::LightClientOptimisticUpdate)
+                    .map_err(|e| ContentKeyError::from_decode_error(e, value))
+            }
+            _ => Err(ContentKeyError::from_decode_error(
+                DecodeError::UnionSelectorInvalid(selector),
+                value,
+            )),
+        }
     }
 }
 
@@ -192,7 +143,7 @@ impl fmt::Display for BeaconContentKey {
 impl OverlayContentKey for BeaconContentKey {
     fn content_id(&self) -> [u8; 32] {
         let mut sha256 = Sha256::new();
-        sha256.update(self.as_ssz_bytes());
+        sha256.update(self.to_bytes());
         sha256.finalize().into()
     }
 
@@ -202,20 +153,19 @@ impl OverlayContentKey for BeaconContentKey {
         match self {
             BeaconContentKey::LightClientBootstrap(key) => {
                 bytes.push(LIGHT_CLIENT_BOOTSTRAP_KEY_PREFIX);
-                bytes.extend_from_slice(&key.block_hash);
+                bytes.extend_from_slice(&key.as_ssz_bytes());
             }
             BeaconContentKey::LightClientUpdatesByRange(key) => {
                 bytes.push(LIGHT_CLIENT_UPDATES_BY_RANGE_KEY_PREFIX);
-                bytes.extend_from_slice(&key.start_period.as_ssz_bytes());
-                bytes.extend_from_slice(&key.count.as_ssz_bytes());
+                bytes.extend_from_slice(&key.as_ssz_bytes());
             }
             BeaconContentKey::LightClientFinalityUpdate(key) => {
                 bytes.push(LIGHT_CLIENT_FINALITY_UPDATE_KEY_PREFIX);
-                bytes.extend_from_slice(&key.finalized_slot.as_ssz_bytes())
+                bytes.extend_from_slice(&key.as_ssz_bytes())
             }
             BeaconContentKey::LightClientOptimisticUpdate(key) => {
                 bytes.push(LIGHT_CLIENT_OPTIMISTIC_UPDATE_KEY_PREFIX);
-                bytes.extend_from_slice(&key.signature_slot.as_ssz_bytes())
+                bytes.extend_from_slice(&key.as_ssz_bytes())
             }
         }
 
@@ -237,31 +187,21 @@ impl<'de> Deserialize<'de> for BeaconContentKey {
     where
         D: Deserializer<'de>,
     {
-        let data = String::deserialize(deserializer)?.to_lowercase();
-
-        if !data.starts_with("0x") {
-            return Err(de::Error::custom(format!(
-                "Hex strings must start with 0x, but found {}",
-                &data[..2]
-            )));
-        }
-
-        let ssz_bytes = hex_decode(&data).map_err(de::Error::custom)?;
-
-        Self::from_ssz_bytes(&ssz_bytes)
-            .map_err(|e| ContentKeyError::from_decode_error(e, ssz_bytes))
-            .map_err(serde::de::Error::custom)
+        let s = String::deserialize(deserializer)?;
+        Self::from_hex(&s).map_err(serde::de::Error::custom)
     }
 }
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
+    use crate::utils::bytes::hex_decode;
+
     use super::*;
 
-    fn test_ssz_encode_decode(content_key: &BeaconContentKey) {
-        let ssz_bytes = content_key.as_ssz_bytes();
-        let decoded_key = BeaconContentKey::from_ssz_bytes(&ssz_bytes).unwrap();
+    fn test_encode_decode(content_key: &BeaconContentKey) {
+        let bytes = content_key.to_bytes();
+        let decoded_key = BeaconContentKey::try_from(bytes).unwrap();
         assert_eq!(*content_key, decoded_key);
     }
 
@@ -281,7 +221,7 @@ mod test {
 
         let content_key = BeaconContentKey::LightClientBootstrap(bootstrap);
 
-        test_ssz_encode_decode(&content_key);
+        test_encode_decode(&content_key);
 
         assert_eq!(content_key.to_bytes(), expected_content_key);
         assert_eq!(
@@ -306,7 +246,7 @@ mod test {
 
         let content_key = BeaconContentKey::LightClientUpdatesByRange(content_key);
 
-        test_ssz_encode_decode(&content_key);
+        test_encode_decode(&content_key);
 
         assert_eq!(content_key.to_bytes(), expected_content_key);
         assert_eq!(
@@ -323,7 +263,7 @@ mod test {
         let content_key =
             BeaconContentKey::LightClientFinalityUpdate(LightClientFinalityUpdateKey::new(7271362));
 
-        test_ssz_encode_decode(&content_key);
+        test_encode_decode(&content_key);
 
         assert_eq!(content_key.to_bytes(), expected_content_key);
         assert_eq!(
@@ -341,7 +281,7 @@ mod test {
             LightClientOptimisticUpdateKey::new(7271362),
         );
 
-        test_ssz_encode_decode(&content_key);
+        test_encode_decode(&content_key);
 
         assert_eq!(content_key.to_bytes(), expected_content_key);
         assert_eq!(

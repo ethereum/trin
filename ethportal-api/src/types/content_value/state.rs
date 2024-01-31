@@ -1,4 +1,5 @@
 use ethereum_types::H256;
+use serde::{Deserialize, Serialize};
 use ssz::{Decode, Encode};
 use ssz_derive::{Decode, Encode};
 
@@ -16,6 +17,35 @@ use crate::{
 pub enum PossibleStateContentValue {
     ContentPresent(StateContentValue),
     ContentAbsent,
+}
+
+impl Serialize for PossibleStateContentValue {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            Self::ContentPresent(content) => content.serialize(serializer),
+            Self::ContentAbsent => serializer.serialize_str(CONTENT_ABSENT),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for PossibleStateContentValue {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+
+        if s == CONTENT_ABSENT {
+            Ok(PossibleStateContentValue::ContentAbsent)
+        } else {
+            StateContentValue::from_hex(&s)
+                .map(PossibleStateContentValue::ContentPresent)
+                .map_err(serde::de::Error::custom)
+        }
+    }
 }
 
 /// A Portal State content value.
@@ -64,6 +94,25 @@ impl ContentValue for StateContentValue {
                 network: "state".to_string(),
             })
         }
+    }
+}
+
+impl Serialize for StateContentValue {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.to_hex())
+    }
+}
+
+impl<'de> Deserialize<'de> for StateContentValue {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Self::from_hex(&s).map_err(serde::de::Error::custom)
     }
 }
 
@@ -130,9 +179,8 @@ mod test {
         let expected_content_value = StateContentValue::TrieNode(TrieNode {
             node: EncodedTrieNode::from(yaml_as_hex(&value["trie_node"])),
         });
-        let content_value = StateContentValue::decode(&yaml_as_hex(&value["content_value"]))?;
 
-        assert_eq!(content_value, expected_content_value);
+        assert_content_value(&value["content_value"], expected_content_value);
 
         Ok(())
     }
@@ -150,9 +198,8 @@ mod test {
                 proof: yaml_as_proof(&value["proof"]),
                 block_hash: yaml_as_h256(&value["block_hash"]),
             });
-        let content_value = StateContentValue::decode(&yaml_as_hex(&value["content_value"]))?;
 
-        assert_eq!(content_value, expected_content_value);
+        assert_content_value(&value["content_value"], expected_content_value);
 
         Ok(())
     }
@@ -171,10 +218,8 @@ mod test {
                 account_proof: yaml_as_proof(&value["account_proof"]),
                 block_hash: yaml_as_h256(&value["block_hash"]),
             });
-        dbg!(hex_encode(expected_content_value.encode()));
-        let content_value = StateContentValue::decode(&yaml_as_hex(&value["content_value"]))?;
 
-        assert_eq!(content_value, expected_content_value);
+        assert_content_value(&value["content_value"], expected_content_value);
 
         Ok(())
     }
@@ -189,9 +234,8 @@ mod test {
         let expected_content_value = StateContentValue::ContractBytecode(ContractBytecode {
             code: ByteCode::from(yaml_as_hex(&value["bytecode"])),
         });
-        let content_value = StateContentValue::decode(&yaml_as_hex(&value["content_value"]))?;
 
-        assert_eq!(content_value, expected_content_value);
+        assert_content_value(&value["content_value"], expected_content_value);
 
         Ok(())
     }
@@ -210,9 +254,8 @@ mod test {
                 account_proof: yaml_as_proof(&value["account_proof"]),
                 block_hash: yaml_as_h256(&value["block_hash"]),
             });
-        let content_value = StateContentValue::decode(&yaml_as_hex(&value["content_value"]))?;
 
-        assert_eq!(content_value, expected_content_value);
+        assert_content_value(&value["content_value"], expected_content_value);
 
         Ok(())
     }
@@ -229,11 +272,33 @@ mod test {
         let value: Value = serde_yaml::from_str(&file)?;
         let value = value.as_mapping().unwrap();
 
-        let content_value_bytes = hex_decode(value["content_value"].as_str().unwrap())?;
+        let content_value_bytes = yaml_as_hex(&value["content_value"]);
 
         let content_value = StateContentValue::decode(&content_value_bytes)?;
 
         assert_eq!(content_value.encode(), content_value_bytes);
+
+        Ok(())
+    }
+
+    #[rstest]
+    #[case::trie_node("trie_node.yaml")]
+    #[case::account_trie_node_with_proof("account_trie_node_with_proof.yaml")]
+    #[case::contract_storage_trie_node_with_proof("contract_storage_trie_node_with_proof.yaml")]
+    #[case::contract_bytecode("contract_bytecode.yaml")]
+    #[case::contract_bytecode_with_proof("contract_bytecode_with_proof.yaml")]
+    fn serde(#[case] filename: &str) -> Result<()> {
+        let file =
+            fs::read_to_string(format!("../test_assets/portalnet/content/state/{filename}"))?;
+        let value: Value = serde_yaml::from_str(&file)?;
+        let value = value.as_mapping().unwrap();
+
+        let content_value = StateContentValue::deserialize(&value["content_value"])?;
+
+        assert_eq!(
+            serde_yaml::to_value(content_value).unwrap(),
+            value["content_value"]
+        );
 
         Ok(())
     }
@@ -255,5 +320,18 @@ mod test {
                 .map(|v| EncodedTrieNode::from(yaml_as_hex(v)))
                 .collect::<Vec<EncodedTrieNode>>(),
         )
+    }
+
+    fn assert_content_value(value: &Value, expected_content_value: StateContentValue) {
+        assert_eq!(
+            StateContentValue::decode(&yaml_as_hex(value)).unwrap(),
+            expected_content_value,
+            "decoding from bytes {value:?} didn't match expected value {expected_content_value:?}"
+        );
+
+        assert_eq!(
+            StateContentValue::deserialize(value).unwrap(),
+            expected_content_value,
+            "deserialization from string {value:?} didn't match expected value {expected_content_value:?}");
     }
 }
