@@ -14,7 +14,7 @@ These steps are for setting up a Trin node as a service on Ubuntu.
 
 ### Installation
 ```sh
-$ sudo apt install libssl-dev libclang-dev pkg-config build-essential
+$ sudo apt install libclang-dev pkg-config build-essential
 ```
 Install Trin:
 > Tip: If you intend to submit code changes to trin, first fork the repo and

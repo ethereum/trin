@@ -34,7 +34,7 @@ rlp = "0.5.0"
 rpc = { path = "rpc"}
 serde_json = {version = "1.0.89", features = ["preserve_order"]}
 sha3 = "0.9.1"
-surf = "2.3.2"
+surf = { version = "2.3.2", default-features = false, features = ["h1-client-rustls", "middleware-logger", "encoding"] } # we use rustils because OpenSSL cause issues compiling on aarch64
 tempfile = "3.3.0"
 tokio = { version = "1.14.0", features = ["full"] }
 tracing = "0.1.36"
