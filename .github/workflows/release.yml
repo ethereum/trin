@@ -38,19 +38,19 @@ jobs:
         include:
           - arch: aarch64-unknown-linux-gnu
             platform: ubuntu-20.04
-            profile: maxperf
+            profile: release
           - arch: x86_64-unknown-linux-gnu
             platform: ubuntu-20.04
-            profile: maxperf
+            profile: release
           - arch: x86_64-apple-darwin
             platform: macos-latest
-            profile: maxperf
+            profile: release
           - arch: aarch64-apple-darwin
             platform: macos-latest
-            profile: maxperf
+            profile: release
           - arch: x86_64-pc-windows-gnu
             platform: ubuntu-20.04
-            profile: maxperf
+            profile: release
 
     runs-on: ${{ matrix.platform }}
     needs: extract-version
