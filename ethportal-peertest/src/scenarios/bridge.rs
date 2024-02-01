@@ -1,6 +1,5 @@
 use crate::{
-    constants::fixture_header_with_proof_1000010,
-    utils::{wait_for_beacon_content, wait_for_history_content},
+    utils::{fixture_header_with_proof_1000010, wait_for_beacon_content, wait_for_history_content},
     Peertest,
 };
 use ethportal_api::{

@@ -1,6 +1,5 @@
 #![warn(clippy::uninlined_format_args)]
 #![cfg(unix)]
-pub mod constants;
 pub mod scenarios;
 pub mod utils;
 

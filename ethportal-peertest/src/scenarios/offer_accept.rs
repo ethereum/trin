@@ -2,7 +2,10 @@ use std::str::FromStr;
 
 use tracing::info;
 
-use crate::{constants::fixture_header_with_proof, utils::wait_for_history_content, Peertest};
+use crate::{
+    utils::{fixture_header_with_proof, wait_for_history_content},
+    Peertest,
+};
 use ethportal_api::{
     jsonrpsee::async_client::Client, types::enr::Enr, utils::bytes::hex_encode,
     HistoryNetworkApiClient, PossibleHistoryContentValue,

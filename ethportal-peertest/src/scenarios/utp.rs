@@ -1,5 +1,5 @@
 use crate::{
-    constants::{fixture_block_body, fixture_header_with_proof},
+    utils::{fixture_block_body, fixture_header_with_proof},
     Peertest,
 };
 use discv5::enr::NodeId;
