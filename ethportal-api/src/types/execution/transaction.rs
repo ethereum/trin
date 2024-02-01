@@ -18,39 +18,7 @@ pub enum Transaction {
 impl Transaction {
     /// Returns the Keccak-256 hash of the header.
     pub fn hash(&self) -> H256 {
-        keccak_hash::keccak(self.encode())
-    }
-
-    pub fn decode(tx: &[u8]) -> Result<Self, DecoderError> {
-        // at least one byte needs to be present
-        if tx.is_empty() {
-            return Err(DecoderError::RlpIncorrectListLen);
-        }
-        let id = TransactionId::try_from(tx[0])
-            .map_err(|_| DecoderError::Custom("Unknown transaction id"))?;
-        match id {
-            TransactionId::EIP1559 => Ok(Self::EIP1559(rlp::decode(&tx[1..])?)),
-            TransactionId::AccessList => Ok(Self::AccessList(rlp::decode(&tx[1..])?)),
-            TransactionId::Legacy => Ok(Self::Legacy(rlp::decode(tx)?)),
-        }
-    }
-
-    pub fn encode(&self) -> Vec<u8> {
-        let mut stream = RlpStream::new();
-        match self {
-            Self::Legacy(tx) => {
-                tx.rlp_append(&mut stream);
-                stream.out().freeze().to_vec()
-            }
-            Self::AccessList(tx) => {
-                tx.rlp_append(&mut stream);
-                [&[TransactionId::AccessList as u8], stream.as_raw()].concat()
-            }
-            Self::EIP1559(tx) => {
-                tx.rlp_append(&mut stream);
-                [&[TransactionId::EIP1559 as u8], stream.as_raw()].concat()
-            }
-        }
+        keccak_hash::keccak(rlp::encode(self))
     }
 }
 
@@ -58,8 +26,18 @@ impl Encodable for Transaction {
     fn rlp_append(&self, s: &mut RlpStream) {
         match self {
             Self::Legacy(tx) => tx.rlp_append(s),
-            Self::AccessList(tx) => tx.rlp_append(s),
-            Self::EIP1559(tx) => tx.rlp_append(s),
+            Self::AccessList(tx) => {
+                let mut stream = RlpStream::new();
+                tx.rlp_append(&mut stream);
+                let encoded = [&[TransactionId::AccessList as u8], stream.as_raw()].concat();
+                s.append_raw(&encoded, 1);
+            }
+            Self::EIP1559(tx) => {
+                let mut stream = RlpStream::new();
+                tx.rlp_append(&mut stream);
+                let encoded = [&[TransactionId::EIP1559 as u8], stream.as_raw()].concat();
+                s.append_raw(&encoded, 1);
+            }
         }
     }
 }
