@@ -156,7 +156,7 @@ impl BlockBody {
         // Insert txs into tx tree
         for (index, tx) in self.transactions()?.iter().enumerate() {
             let path = rlp::encode(&index).freeze().to_vec();
-            let encoded_tx = tx.encode();
+            let encoded_tx = rlp::encode(tx);
             trie.insert(&path, &encoded_tx)
                 .map_err(|err| anyhow!("Error calculating transactions root: {err:?}"))?;
         }
@@ -222,7 +222,7 @@ impl ssz::Encode for BlockBodyLegacy {
         let offset =
             <Vec<Vec<u8>> as Encode>::ssz_fixed_len() + <Vec<u8> as Encode>::ssz_fixed_len();
         let mut encoder = SszEncoder::container(buf, offset);
-        let encoded_txs: Vec<Vec<u8>> = self.txs.iter().map(|tx| tx.encode()).collect();
+        let encoded_txs: Vec<Vec<u8>> = self.txs.iter().map(|tx| rlp::encode(tx).into()).collect();
         let rlp_uncles: Vec<u8> = rlp::encode_list(&self.uncles).to_vec();
         encoder.append(&encoded_txs);
         encoder.append(&rlp_uncles);
@@ -248,7 +248,7 @@ impl ssz::Decode for BlockBodyLegacy {
         let uncles: Vec<u8> = decoder.decode_next()?;
         let txs: Vec<Transaction> = txs
             .iter()
-            .map(|bytes| Transaction::decode(bytes))
+            .map(|bytes| rlp::decode(bytes))
             .collect::<Result<Vec<Transaction>, _>>()
             .map_err(|e| {
                 ssz::DecodeError::BytesInvalid(format!(
@@ -275,7 +275,7 @@ impl ssz::Encode for BlockBodyMerge {
         let offset =
             <Vec<Vec<u8>> as Encode>::ssz_fixed_len() + <Vec<u8> as Encode>::ssz_fixed_len();
         let mut encoder = SszEncoder::container(buf, offset);
-        let encoded_txs: Vec<Vec<u8>> = self.txs.iter().map(|tx| tx.encode()).collect();
+        let encoded_txs: Vec<Vec<u8>> = self.txs.iter().map(|tx| rlp::encode(tx).into()).collect();
         let empty_uncles: Vec<Header> = vec![];
         let rlp_uncles: Vec<u8> = rlp::encode_list(&empty_uncles).to_vec();
         encoder.append(&encoded_txs);
@@ -301,7 +301,7 @@ impl ssz::Decode for BlockBodyMerge {
         let uncles: Vec<u8> = decoder.decode_next()?;
         let txs: Vec<Transaction> = txs
             .iter()
-            .map(|bytes| Transaction::decode(bytes))
+            .map(|bytes| rlp::decode(bytes))
             .collect::<Result<Vec<Transaction>, _>>()
             .map_err(|e| {
                 ssz::DecodeError::BytesInvalid(format!(
@@ -323,7 +323,7 @@ impl Encodable for BlockBodyMerge {
         s.begin_list(1);
         s.begin_list(self.txs.len());
         for tx in &self.txs {
-            let encoded = tx.encode();
+            let encoded = rlp::encode(tx);
             s.append_raw(&encoded, encoded.len());
         }
     }
@@ -353,7 +353,7 @@ impl ssz::Encode for BlockBodyShanghai {
             + <Vec<u8> as Encode>::ssz_fixed_len()
             + <Vec<Vec<u8>> as Encode>::ssz_fixed_len();
         let mut encoder = SszEncoder::container(buf, offset);
-        let encoded_txs: Vec<Vec<u8>> = self.txs.iter().map(|tx| tx.encode()).collect();
+        let encoded_txs: Vec<Vec<u8>> = self.txs.iter().map(|tx| rlp::encode(tx).into()).collect();
         let empty_uncles: Vec<Header> = vec![];
         let rlp_uncles: Vec<u8> = rlp::encode_list(&empty_uncles).to_vec();
         let encoded_withdrawals: Vec<Vec<u8>> = self
@@ -388,7 +388,7 @@ impl ssz::Decode for BlockBodyShanghai {
         let withdrawals: Vec<Vec<u8>> = decoder.decode_next()?;
         let txs: Vec<Transaction> = txs
             .iter()
-            .map(|bytes| Transaction::decode(bytes))
+            .map(|bytes| rlp::decode(bytes))
             .collect::<Result<Vec<Transaction>, _>>()
             .map_err(|e| {
                 ssz::DecodeError::BytesInvalid(format!(
@@ -419,7 +419,7 @@ impl Encodable for BlockBodyShanghai {
         s.begin_list(2);
         s.begin_list(self.txs.len());
         for tx in &self.txs {
-            let encoded = tx.encode();
+            let encoded = rlp::encode(tx);
             s.append_raw(&encoded, encoded.len());
         }
         s.begin_list(self.withdrawals.len());
@@ -472,14 +472,14 @@ mod tests {
     #[case(TX6, 41942)]
     fn encode_and_decode_txs(#[case] tx: &str, #[case] expected_nonce: u32) {
         let tx_rlp = hex_decode(tx).unwrap();
-        let tx = Transaction::decode(&tx_rlp).expect("error decoding tx");
+        let tx = rlp::decode(&tx_rlp).expect("error decoding tx");
         let expected_nonce = U256::from(expected_nonce);
         match &tx {
             Transaction::Legacy(tx) => assert_eq!(tx.nonce, expected_nonce),
             Transaction::AccessList(tx) => assert_eq!(tx.nonce, expected_nonce),
             Transaction::EIP1559(tx) => assert_eq!(tx.nonce, expected_nonce),
         }
-        let encoded_tx = tx.encode();
+        let encoded_tx = rlp::encode(&tx);
         assert_eq!(hex_encode(tx_rlp), hex_encode(encoded_tx));
     }
 
@@ -624,25 +624,25 @@ mod tests {
 
     fn get_14764013_block_body() -> BlockBody {
         let txs: Vec<Transaction> = vec![
-            Transaction::decode(&hex_decode(TX1).unwrap()).unwrap(),
-            Transaction::decode(&hex_decode(TX2).unwrap()).unwrap(),
-            Transaction::decode(&hex_decode(TX3).unwrap()).unwrap(),
-            Transaction::decode(&hex_decode(TX4).unwrap()).unwrap(),
-            Transaction::decode(&hex_decode(TX5).unwrap()).unwrap(),
-            Transaction::decode(&hex_decode(TX6).unwrap()).unwrap(),
-            Transaction::decode(&hex_decode(TX7).unwrap()).unwrap(),
-            Transaction::decode(&hex_decode(TX8).unwrap()).unwrap(),
-            Transaction::decode(&hex_decode(TX9).unwrap()).unwrap(),
-            Transaction::decode(&hex_decode(TX10).unwrap()).unwrap(),
-            Transaction::decode(&hex_decode(TX11).unwrap()).unwrap(),
-            Transaction::decode(&hex_decode(TX12).unwrap()).unwrap(),
-            Transaction::decode(&hex_decode(TX13).unwrap()).unwrap(),
-            Transaction::decode(&hex_decode(TX14).unwrap()).unwrap(),
-            Transaction::decode(&hex_decode(TX15).unwrap()).unwrap(),
-            Transaction::decode(&hex_decode(TX16).unwrap()).unwrap(),
-            Transaction::decode(&hex_decode(TX17).unwrap()).unwrap(),
-            Transaction::decode(&hex_decode(TX18).unwrap()).unwrap(),
-            Transaction::decode(&hex_decode(TX19).unwrap()).unwrap(),
+            rlp::decode(&hex_decode(TX1).unwrap()).unwrap(),
+            rlp::decode(&hex_decode(TX2).unwrap()).unwrap(),
+            rlp::decode(&hex_decode(TX3).unwrap()).unwrap(),
+            rlp::decode(&hex_decode(TX4).unwrap()).unwrap(),
+            rlp::decode(&hex_decode(TX5).unwrap()).unwrap(),
+            rlp::decode(&hex_decode(TX6).unwrap()).unwrap(),
+            rlp::decode(&hex_decode(TX7).unwrap()).unwrap(),
+            rlp::decode(&hex_decode(TX8).unwrap()).unwrap(),
+            rlp::decode(&hex_decode(TX9).unwrap()).unwrap(),
+            rlp::decode(&hex_decode(TX10).unwrap()).unwrap(),
+            rlp::decode(&hex_decode(TX11).unwrap()).unwrap(),
+            rlp::decode(&hex_decode(TX12).unwrap()).unwrap(),
+            rlp::decode(&hex_decode(TX13).unwrap()).unwrap(),
+            rlp::decode(&hex_decode(TX14).unwrap()).unwrap(),
+            rlp::decode(&hex_decode(TX15).unwrap()).unwrap(),
+            rlp::decode(&hex_decode(TX16).unwrap()).unwrap(),
+            rlp::decode(&hex_decode(TX17).unwrap()).unwrap(),
+            rlp::decode(&hex_decode(TX18).unwrap()).unwrap(),
+            rlp::decode(&hex_decode(TX19).unwrap()).unwrap(),
         ];
         let uncles_rlp = &hex_decode(UNCLE).unwrap();
         let uncles: Vec<Header> = rlp::decode_list(uncles_rlp);
