@@ -62,7 +62,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let portal_clients = portal_clients
             .clone()
             .expect("Failed to create beacon JSON-RPC clients");
-        let consensus_api = ConsensusApi::new(bridge_config.cl_provider).await?;
+        let consensus_api = ConsensusApi::new(
+            bridge_config.cl_provider,
+            bridge_config.provider_daily_request_limit,
+        )
+        .await?;
         let bridge_handle = tokio::spawn(async move {
             let beacon_bridge =
                 BeaconBridge::new(consensus_api, bridge_mode, Arc::new(portal_clients));
@@ -81,7 +85,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let execution_api = ExecutionApi::new(
             bridge_config.el_provider,
             bridge_config.mode.clone(),
-            bridge_config.el_provider_request_limit,
+            bridge_config.provider_daily_request_limit,
         )
         .await?;
         let bridge_handle = tokio::spawn(async move {

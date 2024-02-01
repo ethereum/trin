@@ -1,10 +1,14 @@
-use std::fmt::Display;
+use std::{fmt::Display, time::Duration};
 
 use anyhow::anyhow;
 use surf::{Client, Config};
+use surf_governor::GovernorMiddleware;
 use url::Url;
 
-use crate::{cli::Provider, BASE_CL_ENDPOINT, PANDAOPS_CLIENT_ID, PANDAOPS_CLIENT_SECRET};
+use crate::{
+    cli::Provider, constants::SECONDS_IN_A_DAY, BASE_CL_ENDPOINT, PANDAOPS_CLIENT_ID,
+    PANDAOPS_CLIENT_SECRET,
+};
 
 /// Implements endpoints from the Beacon API to access data from the consensus layer.
 #[derive(Clone, Debug, Default)]
@@ -13,8 +17,8 @@ pub struct ConsensusApi {
 }
 
 impl ConsensusApi {
-    pub async fn new(provider: Provider) -> Result<Self, surf::Error> {
-        let client = match provider {
+    pub async fn new(provider: Provider, daily_request_limit: f64) -> Result<Self, surf::Error> {
+        let client: Client = match provider {
             Provider::PandaOps => {
                 let base_cl_endpoint = Url::parse(&BASE_CL_ENDPOINT)
                     .expect("to be able to parse static base cl endpoint url");
@@ -38,6 +42,11 @@ impl ConsensusApi {
                 )))
             }
         };
+        // Limits requests to no more then daily_request_limit / SECONDS_IN_A_DAY per a second
+        let period = Duration::from_secs_f64(daily_request_limit / SECONDS_IN_A_DAY);
+        let rate_limit = GovernorMiddleware::with_period(period)
+            .expect("Expect GovernerMiddleware should have received a valid Duration");
+        let client = client.with(rate_limit);
         check_provider(&client).await?;
         Ok(Self { client })
     }
