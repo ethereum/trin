@@ -160,20 +160,21 @@ pub struct ContractBytecodeWithProof {
 
 #[cfg(test)]
 mod test {
-    use std::{fs, str::FromStr};
+    use std::{path::PathBuf, str::FromStr};
 
     use anyhow::Result;
     use rstest::rstest;
     use serde_yaml::Value;
 
-    use crate::utils::bytes::hex_decode;
+    use crate::{test_utils::read_file_from_tests_submodule, utils::bytes::hex_decode};
 
     use super::*;
 
+    const TEST_DATA_DIRECTORY: &str = "tests/mainnet/state/serialization";
+
     #[test]
     fn trie_node() -> Result<()> {
-        let file = fs::read_to_string("../test_assets/portalnet/content/state/trie_node.yaml")?;
-        let value: Value = serde_yaml::from_str(&file)?;
+        let value = read_yaml_file("trie_node.yaml")?;
         let value = value.as_mapping().unwrap();
 
         let expected_content_value = StateContentValue::TrieNode(TrieNode {
@@ -187,10 +188,7 @@ mod test {
 
     #[test]
     fn account_trie_node_with_proof() -> Result<()> {
-        let file = fs::read_to_string(
-            "../test_assets/portalnet/content/state/account_trie_node_with_proof.yaml",
-        )?;
-        let value: Value = serde_yaml::from_str(&file)?;
+        let value = read_yaml_file("account_trie_node_with_proof.yaml")?;
         let value = value.as_mapping().unwrap();
 
         let expected_content_value =
@@ -206,10 +204,7 @@ mod test {
 
     #[test]
     fn contract_storage_trie_node_with_proof() -> Result<()> {
-        let file = fs::read_to_string(
-            "../test_assets/portalnet/content/state/contract_storage_trie_node_with_proof.yaml",
-        )?;
-        let value: Value = serde_yaml::from_str(&file)?;
+        let value = read_yaml_file("contract_storage_trie_node_with_proof.yaml")?;
         let value = value.as_mapping().unwrap();
 
         let expected_content_value =
@@ -226,9 +221,7 @@ mod test {
 
     #[test]
     fn contract_bytecode() -> Result<()> {
-        let file =
-            fs::read_to_string("../test_assets/portalnet/content/state/contract_bytecode.yaml")?;
-        let value: Value = serde_yaml::from_str(&file)?;
+        let value = read_yaml_file("contract_bytecode.yaml")?;
         let value = value.as_mapping().unwrap();
 
         let expected_content_value = StateContentValue::ContractBytecode(ContractBytecode {
@@ -242,10 +235,7 @@ mod test {
 
     #[test]
     fn contract_bytecode_with_proof() -> Result<()> {
-        let file = fs::read_to_string(
-            "../test_assets/portalnet/content/state/contract_bytecode_with_proof.yaml",
-        )?;
-        let value: Value = serde_yaml::from_str(&file)?;
+        let value = read_yaml_file("contract_bytecode_with_proof.yaml")?;
         let value = value.as_mapping().unwrap();
 
         let expected_content_value =
@@ -267,9 +257,7 @@ mod test {
     #[case::contract_bytecode("contract_bytecode.yaml")]
     #[case::contract_bytecode_with_proof("contract_bytecode_with_proof.yaml")]
     fn encode_decode(#[case] filename: &str) -> Result<()> {
-        let file =
-            fs::read_to_string(format!("../test_assets/portalnet/content/state/{filename}"))?;
-        let value: Value = serde_yaml::from_str(&file)?;
+        let value = read_yaml_file(filename)?;
         let value = value.as_mapping().unwrap();
 
         let content_value_bytes = yaml_as_hex(&value["content_value"]);
@@ -288,9 +276,7 @@ mod test {
     #[case::contract_bytecode("contract_bytecode.yaml")]
     #[case::contract_bytecode_with_proof("contract_bytecode_with_proof.yaml")]
     fn serde(#[case] filename: &str) -> Result<()> {
-        let file =
-            fs::read_to_string(format!("../test_assets/portalnet/content/state/{filename}"))?;
-        let value: Value = serde_yaml::from_str(&file)?;
+        let value = read_yaml_file(filename)?;
         let value = value.as_mapping().unwrap();
 
         let content_value = StateContentValue::deserialize(&value["content_value"])?;
@@ -301,6 +287,12 @@ mod test {
         );
 
         Ok(())
+    }
+
+    fn read_yaml_file(filename: &str) -> Result<Value> {
+        let path = PathBuf::from(TEST_DATA_DIRECTORY).join(filename);
+        let file = read_file_from_tests_submodule(path)?;
+        Ok(serde_yaml::from_str(&file)?)
     }
 
     fn yaml_as_h256(value: &Value) -> H256 {

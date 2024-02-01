@@ -12,6 +12,8 @@ mod dashboard;
 pub mod discv5;
 mod eth;
 mod history;
+#[cfg(test)]
+mod test_utils;
 pub mod types;
 pub mod utils;
 mod web3;

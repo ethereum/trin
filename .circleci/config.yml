@@ -29,6 +29,13 @@ commands:
           key: sccache-cache-stable-{{ arch }}-{{ .Environment.CIRCLE_JOB }}-{{ epoch }}
           paths:
             - "~/.cache/sccache"
+  checkout-submodules:
+    steps:
+      - run: 
+          name: Checkout submodules
+          command: |
+            git submodule sync
+            git submodule update --init
   install-depends:
     steps:
       - run:
@@ -210,6 +217,7 @@ jobs:
       RUST_LOG: "debug"
     steps:
       - checkout
+      - checkout-submodules
       - install-depends
       - setup-and-restore-sccache-cache
       - run:
