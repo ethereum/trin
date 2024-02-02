@@ -2,7 +2,8 @@ use std::fmt;
 
 use anyhow::{bail, ensure, Result};
 use ssz_derive::{Decode, Encode};
-use ssz_types::{typenum, VariableList};
+
+use crate::types::bytes::ByteList32;
 
 /// Packed representation of a path in a trie.
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
@@ -11,7 +12,7 @@ pub struct Nibbles {
     pub is_odd_length: bool,
     /// List of pairs of nibbles packed together in single byte. If length is odd, then the highest
     /// bits of the first byte are zero.
-    pub packed_nibbles: VariableList<u8, typenum::U32>,
+    pub packed_nibbles: ByteList32,
 }
 
 impl Nibbles {
@@ -25,7 +26,7 @@ impl Nibbles {
             .collect::<Result<Vec<u8>>>()?;
         Ok(Self {
             is_odd_length: nibbles.len() % 2 == 1,
-            packed_nibbles: VariableList::new(packed_nibbles)
+            packed_nibbles: ByteList32::new(packed_nibbles)
                 .map_err(|e| anyhow::anyhow!("Error while packing nibbles: {e:?}"))?,
         })
     }
@@ -81,35 +82,35 @@ mod test {
         &[],
         Nibbles {
             is_odd_length: false,
-            packed_nibbles: VariableList::default(),
+            packed_nibbles: ByteList32::default(),
         }
     )]
     #[case::single_nibble(
         &[10],
         Nibbles {
             is_odd_length: true,
-            packed_nibbles: VariableList::from(vec![0x0a]),
+            packed_nibbles: ByteList32::from(vec![0x0a]),
         }
     )]
     #[case::even_number_of_nibbles(
         &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
         Nibbles {
             is_odd_length: false,
-            packed_nibbles: VariableList::from(vec![0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc]),
+            packed_nibbles: ByteList32::from(vec![0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc]),
         }
     )]
     #[case::odd_number_of_nibbles(
         &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
         Nibbles {
             is_odd_length: true,
-            packed_nibbles: VariableList::from(vec![0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd]),
+            packed_nibbles: ByteList32::from(vec![0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd]),
         }
     )]
     #[case::max_number_of_nibbles(
         &[10; 64],
         Nibbles {
             is_odd_length: false,
-            packed_nibbles: VariableList::from(vec![0xaa; 32]),
+            packed_nibbles: ByteList32::from(vec![0xaa; 32]),
         }
     )]
     fn packing_unpacking(#[case] unpacked_nibbles: &[u8], #[case] nibbles: Nibbles) -> Result<()> {
@@ -127,35 +128,35 @@ mod test {
         "0x0005000000",
         Nibbles {
             is_odd_length: false,
-            packed_nibbles: VariableList::default(),
+            packed_nibbles: ByteList32::default(),
         }
     )]
     #[case::single_nibble(
         "0x01050000000a",
         Nibbles {
             is_odd_length: true,
-            packed_nibbles: VariableList::from(vec![0x0a]),
+            packed_nibbles: ByteList32::from(vec![0x0a]),
         }
     )]
     #[case::even_number_of_nibbles(
         "0x0005000000123456789abc",
         Nibbles {
             is_odd_length: false,
-            packed_nibbles: VariableList::from(vec![0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc]),
+            packed_nibbles: ByteList32::from(vec![0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc]),
         }
     )]
     #[case::odd_number_of_nibbles(
         "0x01050000000123456789abcd",
         Nibbles {
             is_odd_length: true,
-            packed_nibbles: VariableList::from(vec![0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd]),
+            packed_nibbles: ByteList32::from(vec![0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd]),
         }
     )]
     #[case::max_number_of_nibbles(
         "0x0005000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         Nibbles {
             is_odd_length: false,
-            packed_nibbles: VariableList::from(vec![0xaa; 32]),
+            packed_nibbles: ByteList32::from(vec![0xaa; 32]),
         }
     )]
     fn ssz_encode_decode(#[case] ssz_bytes: &str, #[case] nibbles: Nibbles) -> Result<()> {
