@@ -7642,6 +7642,7 @@ dependencies = [
  "portalnet",
  "r2d2",
  "r2d2_sqlite",
+ "serde_json",
  "test-log",
  "tokio",
  "tracing",

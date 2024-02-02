@@ -1,5 +1,6 @@
 use crate::{
     types::enr::Enr, BeaconContentKey, BeaconContentValue, HistoryContentKey, HistoryContentValue,
+    StateContentKey, StateContentValue,
 };
 use discv5::enr::NodeId;
 
@@ -13,15 +14,42 @@ pub enum Discv5Endpoint {
 /// State network JSON-RPC endpoints. Start with "portal_state" prefix
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum StateEndpoint {
+    /// params: [enr]
+    AddEnr(Enr),
+    /// params: None
     DataRadius,
-    FindContent,
-    FindNodes,
-    LocalContent,
-    SendOffer,
-    Store,
-    Ping,
-    RecursiveFindContent,
+    /// params: [node_id]
+    DeleteEnr(NodeId),
+    /// params: [enr, content_key]
+    FindContent(Enr, StateContentKey),
+    /// params: [enr, distances]
+    FindNodes(Enr, Vec<u16>),
+    /// params: [node_id]
+    GetEnr(NodeId),
+    /// params: content_key
+    LocalContent(StateContentKey),
+    /// params: [node_id]
+    LookupEnr(NodeId),
+    /// params: [content_key, content_value]
+    Gossip(StateContentKey, StateContentValue),
+    /// params: [content_key, content_value]
+    TraceGossip(StateContentKey, StateContentValue),
+    /// params: [enr, content_key]
+    Offer(Enr, StateContentKey, Option<StateContentValue>),
+    /// params: [enr]
+    Ping(Enr),
+    /// params: content_key
+    RecursiveFindContent(StateContentKey),
+    /// params: content_key
+    TraceRecursiveFindContent(StateContentKey),
+    /// params: [content_key, content_value]
+    Store(StateContentKey, StateContentValue),
+    /// params: None
     RoutingTableInfo,
+    /// params: [offset, limit]
+    PaginateLocalContentKeys(u64, u64),
+    /// params: [node_id]
+    RecursiveFindNodes(NodeId),
 }
 
 /// History network JSON-RPC endpoints. Start with "portal_history" prefix

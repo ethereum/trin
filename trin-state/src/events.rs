@@ -30,7 +30,7 @@ impl StateEvents {
         tokio::spawn(async move {
             match msg {
                 OverlayRequest::Talk(talk_request) => {
-                    Self::handle_talk_request(talk_request, &network).await
+                    Self::handle_talk_request(talk_request, network).await;
                 }
                 OverlayRequest::Event(event) => {
                     let _ = network.overlay.process_one_event(event).await;
@@ -40,7 +40,7 @@ impl StateEvents {
     }
 
     /// Handle state network TALKREQ message.
-    async fn handle_talk_request(request: discv5::TalkRequest, network: &Arc<StateNetwork>) {
+    async fn handle_talk_request(request: discv5::TalkRequest, network: Arc<StateNetwork>) {
         let talk_request_id = request.id().clone();
         let reply = match network
             .overlay
