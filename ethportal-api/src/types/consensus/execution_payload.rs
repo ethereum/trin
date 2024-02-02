@@ -1,6 +1,9 @@
 use super::serde::{de_hex_to_txs, de_number_to_u256, se_hex_to_number, se_txs_to_hex};
 use crate::{
-    types::consensus::{body::Transactions, fork::ForkName},
+    types::{
+        bytes::ByteList32,
+        consensus::{body::Transactions, fork::ForkName},
+    },
     utils::serde::{hex_fixed_vec, hex_var_list},
 };
 use ethereum_types::{H160, H256, U256};
@@ -8,12 +11,12 @@ use serde::{Deserialize, Serialize};
 use serde_this_or_that::as_u64;
 use ssz::Decode;
 use ssz_derive::{Decode, Encode};
-use ssz_types::{typenum, FixedVector, VariableList};
+use ssz_types::{typenum, FixedVector};
 use superstruct::superstruct;
 use tree_hash_derive::TreeHash;
 
 pub type Bloom = FixedVector<u8, typenum::U256>;
-pub type ExtraData = VariableList<u8, typenum::U32>;
+pub type ExtraData = ByteList32;
 
 #[derive(Debug, PartialEq, Clone, Deserialize, Serialize, Encode, Decode)]
 pub struct ExecutionPayload {

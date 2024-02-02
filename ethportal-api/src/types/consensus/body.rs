@@ -1,4 +1,4 @@
-use crate::types::consensus::execution_payload::ExecutionPayload;
+use crate::types::{bytes::ByteList1G, consensus::execution_payload::ExecutionPayload};
 use ethereum_types::H256;
 use serde::{Deserialize, Serialize};
 use ssz_derive::{Decode, Encode};
@@ -28,7 +28,7 @@ pub struct SyncAggregate {
     pub sync_committee_signature: BlsSignature,
 }
 
-pub type Transaction = VariableList<u8, typenum::U1073741824>;
+pub type Transaction = ByteList1G;
 pub type Transactions = VariableList<Transaction, typenum::U1048576>;
 
 #[derive(Debug, PartialEq, Clone, Deserialize, Serialize, Decode, Encode)]

@@ -45,7 +45,7 @@ where
     let mut txs: Transactions = VariableList::empty();
     for r in result {
         let tx = hex_decode(&r).map_err(serde::de::Error::custom)?;
-        let tx: Transaction = VariableList::from(tx);
+        let tx = Transaction::from(tx);
         if txs.push(tx).is_err() {
             return Err(serde::de::Error::custom("Unable to deserialize txs"));
         }

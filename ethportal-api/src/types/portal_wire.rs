@@ -17,7 +17,7 @@ use validator::ValidationError;
 
 use crate::{
     types::{
-        bytes::ByteList,
+        bytes::ByteList2048,
         distance::Distance,
         enr::{Enr, SszEnr},
     },
@@ -70,7 +70,7 @@ pub const MAX_PORTAL_CONTENT_PAYLOAD_SIZE: usize = MAX_DISCV5_TALK_REQ_PAYLOAD_S
 /// Custom payload element of Ping and Pong overlay messages
 #[derive(Debug, PartialEq, Clone)]
 pub struct CustomPayload {
-    payload: ByteList,
+    payload: ByteList2048,
 }
 
 impl TryFrom<&Value> for CustomPayload {
@@ -87,7 +87,7 @@ impl TryFrom<&Value> for CustomPayload {
             ))?,
         };
         Ok(Self {
-            payload: ByteList::from(payload),
+            payload: ByteList2048::from(payload),
         })
     }
 }
@@ -95,7 +95,7 @@ impl TryFrom<&Value> for CustomPayload {
 impl From<Vec<u8>> for CustomPayload {
     fn from(ssz_bytes: Vec<u8>) -> Self {
         Self {
-            payload: ByteList::from(ssz_bytes),
+            payload: ByteList2048::from(ssz_bytes),
         }
     }
 }
@@ -114,7 +114,7 @@ impl ssz::Decode for CustomPayload {
 
     fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
         Ok(Self {
-            payload: ByteList::from(bytes.to_vec()),
+            payload: ByteList2048::from(bytes.to_vec()),
         })
     }
 }

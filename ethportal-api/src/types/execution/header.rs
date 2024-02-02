@@ -7,7 +7,7 @@ use ssz::{Encode, SszDecoderBuilder, SszEncoder};
 use ssz_derive::{Decode, Encode};
 
 use crate::{
-    types::bytes::ByteList,
+    types::bytes::ByteList2048,
     utils::bytes::{hex_decode, hex_encode},
 };
 
@@ -314,9 +314,9 @@ impl ssz::Encode for HeaderWithProof {
 
     fn ssz_append(&self, buf: &mut Vec<u8>) {
         let header = rlp::encode(&self.header).to_vec();
-        let header: ByteList = ByteList::from(header);
-        let offset =
-            <ByteList as Encode>::ssz_fixed_len() + <AccumulatorProof as Encode>::ssz_fixed_len();
+        let header = ByteList2048::from(header);
+        let offset = <ByteList2048 as Encode>::ssz_fixed_len()
+            + <AccumulatorProof as Encode>::ssz_fixed_len();
         let mut encoder = SszEncoder::container(buf, offset);
         encoder.append(&header);
         encoder.append(&self.proof);
@@ -325,7 +325,7 @@ impl ssz::Encode for HeaderWithProof {
 
     fn ssz_bytes_len(&self) -> usize {
         let header = rlp::encode(&self.header).to_vec();
-        let header: ByteList = ByteList::from(header);
+        let header = ByteList2048::from(header);
         header.len() + self.proof.ssz_bytes_len()
     }
 }
@@ -352,7 +352,7 @@ impl ssz::Decode for HeaderWithProof {
     fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
         let mut builder = SszDecoderBuilder::new(bytes);
 
-        builder.register_type::<ByteList>()?;
+        builder.register_type::<ByteList2048>()?;
         builder.register_type::<BlockHeaderProof>()?;
 
         let mut decoder = builder.build()?;
