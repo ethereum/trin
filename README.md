@@ -14,6 +14,8 @@ Trin currently only runs on Unix-based platforms (Linux, macOS). We plan to even
 
 Check out the [Trin book](https://ethereum.github.io/trin) to quickly get up and running with Trin.
 
+> **NOTE**: This project uses [Git Submodules](https://git-scm.com/book/en/v2/Git-Tools-Submodules). If you just cloned the project, be sure to run: `git submodule update --init`. See our dedicated [page](https://ethereum.github.io/trin/developers/contributing/git/submodules.html) for more info.
+
 ## Experimental Status
 
 Trin is a prototype Portal Network client. This implementation and the Portal Network specifications will continue to co-evolve.

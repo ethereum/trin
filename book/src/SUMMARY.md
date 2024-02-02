@@ -39,6 +39,7 @@
             - [Style](developers/contributing/rust/style.md)
         - [Git](developers/contributing/git/README.md)
             - [Commits](developers/contributing/git/commits.md)
+            - [Submodules](developers/contributing/git/submodules.md)
             - [Rebasing](developers/contributing/git/rebasing.md)
             - [Release notes](developers/contributing/git/release_notes.md)
             - [Pull requests](developers/contributing/git/pull_requests.md)
