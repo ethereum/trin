@@ -22,7 +22,7 @@ use crate::{
         constants::CONTENT_ABSENT,
         content_value::ContentValue,
     },
-    utils::bytes::{hex_decode, hex_encode},
+    utils::bytes::hex_encode,
     ContentValueError,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -56,49 +56,13 @@ impl<'de> Deserialize<'de> for PossibleBeaconContentValue {
     {
         let s = String::deserialize(deserializer)?;
 
-        if s.as_str() == CONTENT_ABSENT {
-            return Ok(PossibleBeaconContentValue::ContentAbsent);
+        if s == CONTENT_ABSENT {
+            Ok(PossibleBeaconContentValue::ContentAbsent)
+        } else {
+            BeaconContentValue::from_hex(&s)
+                .map(PossibleBeaconContentValue::ContentPresent)
+                .map_err(serde::de::Error::custom)
         }
-
-        let content_bytes = hex_decode(&s).map_err(serde::de::Error::custom)?;
-
-        if let Ok(value) = HistoricalSummariesWithProof::from_ssz_bytes(&content_bytes) {
-            return Ok(Self::ContentPresent(
-                BeaconContentValue::HistoricalSummariesWithProof(value),
-            ));
-        }
-
-        if let Ok(value) = ForkVersionedLightClientBootstrap::from_ssz_bytes(&content_bytes) {
-            return Ok(Self::ContentPresent(
-                BeaconContentValue::LightClientBootstrap(value),
-            ));
-        }
-
-        if let Ok(value) = LightClientUpdatesByRange::from_ssz_bytes(&content_bytes) {
-            return Ok(Self::ContentPresent(
-                BeaconContentValue::LightClientUpdatesByRange(value),
-            ));
-        }
-
-        if let Ok(value) = ForkVersionedLightClientOptimisticUpdate::from_ssz_bytes(&content_bytes)
-        {
-            return Ok(Self::ContentPresent(
-                BeaconContentValue::LightClientOptimisticUpdate(value),
-            ));
-        }
-
-        if let Ok(value) = ForkVersionedLightClientFinalityUpdate::from_ssz_bytes(&content_bytes) {
-            return Ok(Self::ContentPresent(
-                BeaconContentValue::LightClientFinalityUpdate(value),
-            ));
-        }
-
-        Err(serde::de::Error::custom(
-            ContentValueError::UnknownContent {
-                bytes: s,
-                network: "beacon".to_string(),
-            },
-        ))
     }
 }
 
@@ -492,23 +456,7 @@ impl Serialize for BeaconContentValue {
     where
         S: Serializer,
     {
-        match self {
-            Self::HistoricalSummariesWithProof(value) => {
-                serializer.serialize_str(&hex_encode(value.as_ssz_bytes()))
-            }
-            Self::LightClientBootstrap(value) => {
-                serializer.serialize_str(&hex_encode(value.as_ssz_bytes()))
-            }
-            Self::LightClientUpdatesByRange(value) => {
-                serializer.serialize_str(&hex_encode(value.as_ssz_bytes()))
-            }
-            Self::LightClientOptimisticUpdate(value) => {
-                serializer.serialize_str(&hex_encode(value.as_ssz_bytes()))
-            }
-            Self::LightClientFinalityUpdate(value) => {
-                serializer.serialize_str(&hex_encode(value.as_ssz_bytes()))
-            }
-        }
+        serializer.serialize_str(&self.to_hex())
     }
 }
 
@@ -518,31 +466,7 @@ impl<'de> Deserialize<'de> for BeaconContentValue {
         D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        let content_bytes = hex_decode(&s).map_err(serde::de::Error::custom)?;
-
-        if let Ok(value) = HistoricalSummariesWithProof::from_ssz_bytes(&content_bytes) {
-            return Ok(Self::HistoricalSummariesWithProof(value));
-        }
-        if let Ok(value) = ForkVersionedLightClientBootstrap::from_ssz_bytes(&content_bytes) {
-            return Ok(Self::LightClientBootstrap(value));
-        }
-        if let Ok(value) = LightClientUpdatesByRange::from_ssz_bytes(&content_bytes) {
-            return Ok(Self::LightClientUpdatesByRange(value));
-        }
-        if let Ok(value) = ForkVersionedLightClientOptimisticUpdate::from_ssz_bytes(&content_bytes)
-        {
-            return Ok(Self::LightClientOptimisticUpdate(value));
-        }
-        if let Ok(value) = ForkVersionedLightClientFinalityUpdate::from_ssz_bytes(&content_bytes) {
-            return Ok(Self::LightClientFinalityUpdate(value));
-        }
-
-        Err(serde::de::Error::custom(
-            ContentValueError::UnknownContent {
-                bytes: s,
-                network: "beacon".to_string(),
-            },
-        ))
+        Self::from_hex(&s).map_err(serde::de::Error::custom)
     }
 }
 

@@ -26,7 +26,7 @@ pub fn hex_decode(data: &str) -> Result<Vec<u8>, ByteUtilsError> {
         data: data.to_string(),
     })?;
 
-    if first_two != "0x" {
+    if first_two.to_lowercase() != "0x" {
         return Err(ByteUtilsError::WrongPrefix {
             first_two: first_two.to_string(),
         });

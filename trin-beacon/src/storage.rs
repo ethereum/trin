@@ -118,12 +118,11 @@ pub struct BeaconStorage {
 impl ContentStore for BeaconStorage {
     fn get<K: OverlayContentKey>(&self, key: &K) -> Result<Option<Vec<u8>>, ContentStoreError> {
         let content_key: Vec<u8> = key.clone().into();
-        let beacon_content_key =
-            BeaconContentKey::from_ssz_bytes(content_key.as_slice()).map_err(|err| {
-                ContentStoreError::InvalidData {
-                    message: format!("Error deserializing BeaconContentKey value: {err:?}"),
-                }
-            })?;
+        let beacon_content_key = BeaconContentKey::try_from(content_key).map_err(|err| {
+            ContentStoreError::InvalidData {
+                message: format!("Error deserializing BeaconContentKey value: {err:?}"),
+            }
+        })?;
 
         match beacon_content_key {
             BeaconContentKey::LightClientBootstrap(_) => {
@@ -198,12 +197,11 @@ impl ContentStore for BeaconStorage {
         key: &K,
     ) -> Result<ShouldWeStoreContent, ContentStoreError> {
         let content_key: Vec<u8> = key.clone().into();
-        let beacon_content_key =
-            BeaconContentKey::from_ssz_bytes(content_key.as_slice()).map_err(|err| {
-                ContentStoreError::InvalidData {
-                    message: format!("Error deserializing BeaconContentKey value: {err:?}"),
-                }
-            })?;
+        let beacon_content_key = BeaconContentKey::try_from(content_key).map_err(|err| {
+            ContentStoreError::InvalidData {
+                message: format!("Error deserializing BeaconContentKey value: {err:?}"),
+            }
+        })?;
 
         match beacon_content_key {
             BeaconContentKey::LightClientBootstrap(_) => {
@@ -343,7 +341,7 @@ impl BeaconStorage {
                 }
             }
             Some(&LIGHT_CLIENT_UPDATES_BY_RANGE_KEY_PREFIX) => {
-                if let Ok(update) = BeaconContentKey::from_ssz_bytes(content_key.as_slice()) {
+                if let Ok(update) = BeaconContentKey::try_from(content_key) {
                     match update {
                         BeaconContentKey::LightClientUpdatesByRange(update) => {
                             // Build a range of values starting with update.start_period and len

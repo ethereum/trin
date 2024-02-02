@@ -1,6 +1,6 @@
 use crate::{
     types::content_key::error::ContentKeyError,
-    utils::bytes::{hex_encode, hex_encode_compact},
+    utils::bytes::{hex_decode, hex_encode, hex_encode_compact},
 };
 use quickcheck::{Arbitrary, Gen};
 use std::fmt;
@@ -8,16 +8,22 @@ use std::fmt;
 /// Types whose values represent keys to lookup content items in an overlay network.
 /// Keys are serializable.
 pub trait OverlayContentKey:
-    Into<Vec<u8>> + TryFrom<Vec<u8>> + Clone + fmt::Debug + fmt::Display
+    Into<Vec<u8>> + TryFrom<Vec<u8>, Error = ContentKeyError> + Clone + fmt::Debug + fmt::Display
 {
     /// Returns the identifier for the content referred to by the key.
     /// The identifier locates the content in the overlay.
     fn content_id(&self) -> [u8; 32];
     /// Returns the bytes of the content key.
     fn to_bytes(&self) -> Vec<u8>;
+
     /// Returns the content key as a hex encoded "0x"-prefixed string.
     fn to_hex(&self) -> String {
         hex_encode(self.to_bytes())
+    }
+    /// Returns the content key from a hex encoded "0x"-prefixed string.
+    fn from_hex(data: &str) -> anyhow::Result<Self> {
+        let bytes = hex_decode(&data.to_lowercase())?;
+        Ok(Self::try_from(bytes)?)
     }
 }
 

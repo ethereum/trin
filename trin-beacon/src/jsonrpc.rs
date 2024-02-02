@@ -16,7 +16,6 @@ use ethportal_api::{
     BeaconContentKey, BeaconContentValue, OverlayContentKey, RawContentKey,
 };
 use serde_json::{json, Value};
-use ssz::Encode;
 use tokio::sync::{mpsc, Mutex, RwLock};
 use tracing::error;
 use trin_storage::ContentStore;
@@ -314,7 +313,7 @@ async fn offer(
             Err(msg) => Err(format!("Populated Offer request timeout: {msg:?}")),
         }
     } else {
-        let content_key: Vec<RawContentKey> = vec![content_key.as_ssz_bytes()];
+        let content_key: Vec<RawContentKey> = vec![content_key.to_bytes()];
         match overlay.send_offer(content_key, enr).await {
             Ok(accept) => Ok(json!(AcceptInfo {
                 content_keys: accept.content_keys,
