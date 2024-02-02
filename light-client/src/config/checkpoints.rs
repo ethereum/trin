@@ -1,7 +1,8 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 
 use anyhow::anyhow;
 use ethereum_types::H256;
+use reqwest::Response;
 use serde::{Deserialize, Serialize};
 use serde_this_or_that::as_u64;
 
@@ -9,6 +10,8 @@ use crate::config::networks;
 
 /// The location where the list of checkpoint services are stored.
 pub const CHECKPOINT_SYNC_SERVICES_LIST: &str = "https://raw.githubusercontent.com/ethpandaops/checkpoint-sync-health-checks/master/_data/endpoints.yaml";
+
+const REQUEST_TIMEOUT_SEC: u64 = 5;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RawSlotResponse {
@@ -91,8 +94,7 @@ impl CheckpointFallback {
     /// The list is defined in [ethPandaOps/checkpoint-fallback-service](https://github.com/ethpandaops/checkpoint-sync-health-checks/blob/master/_data/endpoints.yaml).
     pub async fn build(mut self) -> anyhow::Result<Self> {
         // Fetch the services
-        let client = reqwest::Client::new();
-        let res = client.get(CHECKPOINT_SYNC_SERVICES_LIST).send().await?;
+        let res = Self::send_request(CHECKPOINT_SYNC_SERVICES_LIST).await?;
         let yaml = res.text().await?;
 
         // Parse the yaml content results.
@@ -126,9 +128,8 @@ impl CheckpointFallback {
     }
 
     async fn query_service(endpoint: &str) -> Option<RawSlotResponse> {
-        let client = reqwest::Client::new();
         let constructed_url = Self::construct_url(endpoint);
-        let res = client.get(&constructed_url).send().await.ok()?;
+        let res = Self::send_request(&constructed_url).await.ok()?;
         let raw = res.json().await.ok()?;
         Some(raw)
     }
@@ -205,9 +206,8 @@ impl CheckpointFallback {
     /// service api url.
     pub async fn fetch_checkpoint_from_api(url: &str) -> anyhow::Result<H256> {
         // Fetch the url
-        let client = reqwest::Client::new();
         let constructed_url = Self::construct_url(url);
-        let res = client.get(constructed_url).send().await?;
+        let res = Self::send_request(&constructed_url).await?;
         let raw: RawSlotResponse = res.json().await?;
         let slot = raw.data.slots[0].clone();
         slot.block_root
@@ -285,6 +285,15 @@ impl CheckpointFallback {
         network: &networks::Network,
     ) -> &Vec<CheckpointFallbackService> {
         self.services[network].as_ref()
+    }
+
+    async fn send_request(url: &str) -> anyhow::Result<Response> {
+        let client = reqwest::Client::new();
+        Ok(client
+            .get(url)
+            .timeout(Duration::from_secs(REQUEST_TIMEOUT_SEC))
+            .send()
+            .await?)
     }
 }
 
