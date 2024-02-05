@@ -1,4 +1,4 @@
-use crate::types::e2s::{Entry, E2storeFile};
+use crate::types::e2s::{E2storeFile, Entry};
 use anyhow::ensure;
 use ethereum_types::{H256, U256};
 use ethportal_api::types::execution::{
@@ -38,11 +38,11 @@ struct Era1 {
 impl Era1 {
     fn read_from_file(path: String) -> anyhow::Result<Self> {
         let buf = fs::read(path)?;
-        Self::read(&buf)
+        Self::deserialize(&buf)
     }
 
-    fn read(buf: &[u8]) -> anyhow::Result<Self> {
-        let file = E2storeFile::read(buf)?;
+    fn deserialize(buf: &[u8]) -> anyhow::Result<Self> {
+        let file = E2storeFile::deserialize(buf)?;
         ensure!(
             file.entries.len() == ERA1_ENTRY_COUNT,
             "invalid era1 file: incorrect entry count"
