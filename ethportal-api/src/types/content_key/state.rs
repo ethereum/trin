@@ -1,14 +1,16 @@
-use crate::{
-    types::{content_key::overlay::OverlayContentKey, state_trie::nibbles::Nibbles},
-    utils::bytes::hex_encode_compact,
-    ContentKeyError,
-};
+use std::fmt;
+
 use ethereum_types::{Address, H256};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest as Sha2Digest, Sha256};
 use ssz::{Decode, DecodeError, Encode};
 use ssz_derive::{Decode, Encode};
-use std::fmt;
+
+use crate::{
+    types::{content_key::overlay::OverlayContentKey, state_trie::nibbles::Nibbles},
+    utils::bytes::hex_encode_compact,
+    ContentKeyError,
+};
 
 // Prefixes for the different types of state content keys:
 // https://github.com/ethereum/portal-network-specs/blob/638aca50c913a749d0d762264d9a4ac72f1a9966/state-network.md
@@ -178,75 +180,57 @@ impl fmt::Display for StateContentKey {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
-    use std::str::FromStr;
+    use std::{path::PathBuf, str::FromStr};
+
+    use anyhow::Result;
+    use rstest::rstest;
+    use serde_yaml::Value;
+
+    use crate::{test_utils::read_file_from_tests_submodule, utils::bytes::hex_decode};
 
     use super::*;
-    use crate::utils::bytes::hex_decode;
 
-    //
-    // State Network Content Key Tests
-    //
-
-    const NIBBLES: [u8; 12] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
-
-    const ADDRESS: [u8; 20] = [
-        0x00, 0x0d, 0x83, 0x62, 0x01, 0x31, 0x8e, 0xc6, 0x89, 0x9a, 0x67, 0x54, 0x06, 0x90, 0x38,
-        0x27, 0x80, 0x74, 0x32, 0x80,
-    ];
-
-    const NODE_HASH: [u8; 32] = [
-        0xc5, 0xd2, 0x46, 0x01, 0x86, 0xf7, 0x23, 0x3c, 0x92, 0x7e, 0x7d, 0xb2, 0xdc, 0xc7, 0x03,
-        0xc0, 0xe5, 0x00, 0xb6, 0x53, 0xca, 0x82, 0x27, 0x3b, 0x7b, 0xfa, 0xd8, 0x04, 0x5d, 0x85,
-        0xa4, 0x70,
-    ];
+    const TEST_DATA_DIRECTORY: &str = "tests/mainnet/state/serialization";
 
     #[test]
-    fn account_trie_node_key() {
-        let expected_content_key = "0x2024000000c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a4700005000000123456789abc";
-        let expected_content_id =
-            "0x3df20af256c940a5a01d50714027fe9ed51037e994dc50a5e8f097e08136db0e";
+    fn account_trie_node_key() -> Result<()> {
+        let yaml = read_yaml_file("account_trie_node_key.yaml")?;
+        let yaml = yaml.as_mapping().unwrap();
 
-        let key = StateContentKey::AccountTrieNode(AccountTrieNodeKey {
-            path: Nibbles::try_from_unpacked_nibbles(&NIBBLES).unwrap(),
-            node_hash: H256::from(NODE_HASH),
+        let expected_content_key = StateContentKey::AccountTrieNode(AccountTrieNodeKey {
+            path: yaml_as_nibbles(&yaml["path"]),
+            node_hash: yaml_as_h256(&yaml["node_hash"]),
         });
 
-        assert_encode_decode(&key);
-        assert_content_key_and_id(&key, expected_content_key, expected_content_id);
+        assert_content_key(&yaml["content_key"], expected_content_key)
     }
 
     #[test]
-    fn contract_storage_trie_node_key() {
-        let expected_content_key = "0x21000d836201318ec6899a6754069038278074328038000000c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a4700005000000123456789abc";
-        let expected_content_id =
-            "0x0e6a9b9555ea4dbe10b9ce953a8ed8d60bb143393a963f137eb77d65f39c42c0";
+    fn contract_storage_trie_node_key() -> Result<()> {
+        let yaml = read_yaml_file("contract_storage_trie_node_key.yaml")?;
+        let yaml = yaml.as_mapping().unwrap();
 
-        let key = StateContentKey::ContractStorageTrieNode(ContractStorageTrieNodeKey {
-            address: Address::from(ADDRESS),
-            path: Nibbles::try_from_unpacked_nibbles(&NIBBLES).unwrap(),
-            node_hash: H256::from(NODE_HASH),
-        });
+        let expected_content_key =
+            StateContentKey::ContractStorageTrieNode(ContractStorageTrieNodeKey {
+                address: yaml_as_address(&yaml["address"]),
+                path: yaml_as_nibbles(&yaml["path"]),
+                node_hash: yaml_as_h256(&yaml["node_hash"]),
+            });
 
-        assert_encode_decode(&key);
-        assert_content_key_and_id(&key, expected_content_key, expected_content_id);
+        assert_content_key(&yaml["content_key"], expected_content_key)
     }
 
     #[test]
-    fn contract_bytecode_key() {
-        const CODE_HASH: &str =
-            "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470";
+    fn contract_bytecode_key() -> Result<()> {
+        let yaml = read_yaml_file("contract_bytecode_key.yaml")?;
+        let yaml = yaml.as_mapping().unwrap();
 
-        let expected_content_key = "0x22000d836201318ec6899a67540690382780743280c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470";
-        let expected_content_id =
-            "0x7c2aea10dc819ba9f0754e9f85c7f702cdc317a1acef6b6a7739739b0c7176ec";
-
-        let key = StateContentKey::ContractBytecode(ContractBytecodeKey {
-            address: Address::from(ADDRESS),
-            code_hash: H256::from_str(CODE_HASH).unwrap(),
+        let expected_content_key = StateContentKey::ContractBytecode(ContractBytecodeKey {
+            address: yaml_as_address(&yaml["address"]),
+            code_hash: yaml_as_h256(&yaml["code_hash"]),
         });
 
-        assert_encode_decode(&key);
-        assert_content_key_and_id(&key, expected_content_key, expected_content_id);
+        assert_content_key(&yaml["content_key"], expected_content_key)
     }
 
     #[test]
@@ -268,24 +252,95 @@ mod test {
         );
     }
 
-    /// Asserts that encoding and decoding returns the same key.
-    fn assert_encode_decode(key: &StateContentKey) {
-        let bytes = key.to_bytes();
-        let decoded_key = StateContentKey::try_from(bytes).unwrap();
-        assert_eq!(key, &decoded_key);
+    #[rstest]
+    #[case::account_trie_node_key("account_trie_node_key.yaml")]
+    #[case::contract_storage_trie_node_key("contract_storage_trie_node_key.yaml")]
+    #[case::contract_bytecode_key("contract_bytecode_key.yaml")]
+    fn encode_decode(#[case] filename: &str) -> Result<()> {
+        let yaml = read_yaml_file(filename)?;
+        let yaml = yaml.as_mapping().unwrap();
+
+        let content_key_bytes = hex_decode(yaml["content_key"].as_str().unwrap())?;
+        let content_key = StateContentKey::try_from(content_key_bytes.clone())?;
+
+        assert_eq!(content_key.to_bytes(), content_key_bytes);
+        Ok(())
     }
 
-    fn assert_content_key_and_id(
-        key: &StateContentKey,
-        expected_content_key: &str,
-        expected_content_id: &str,
-    ) {
-        assert_eq!(key.to_bytes(), hex_decode(expected_content_key).unwrap());
-        assert_eq!(key.to_hex(), expected_content_key);
+    #[rstest]
+    #[case::account_trie_node_key("account_trie_node_key.yaml")]
+    #[case::contract_storage_trie_node_key("contract_storage_trie_node_key.yaml")]
+    #[case::contract_bytecode_key("contract_bytecode_key.yaml")]
+    fn serde(#[case] filename: &str) -> Result<()> {
+        let yaml = read_yaml_file(filename)?;
+        let yaml = yaml.as_mapping().unwrap();
+
+        let content_key = StateContentKey::deserialize(&yaml["content_key"])?;
 
         assert_eq!(
-            key.content_id(),
-            &hex_decode(expected_content_id).unwrap()[..]
+            serde_yaml::to_value(content_key).unwrap(),
+            yaml["content_key"]
         );
+
+        Ok(())
+    }
+
+    #[rstest]
+    #[case::account_trie_node_key("account_trie_node_key.yaml")]
+    #[case::contract_storage_trie_node_key("contract_storage_trie_node_key.yaml")]
+    #[case::contract_bytecode_key("contract_bytecode_key.yaml")]
+    fn content_id(#[case] filename: &str) -> Result<()> {
+        let yaml = read_yaml_file(filename)?;
+        let yaml = yaml.as_mapping().unwrap();
+
+        let content_key_bytes = hex_decode(yaml["content_key"].as_str().unwrap())?;
+        let content_key = StateContentKey::try_from(content_key_bytes)?;
+        let expected_content_id = yaml_as_h256(&yaml["content_id"]);
+
+        assert_eq!(H256::from(content_key.content_id()), expected_content_id);
+        Ok(())
+    }
+
+    fn read_yaml_file(filename: &str) -> anyhow::Result<Value> {
+        let path = PathBuf::from(TEST_DATA_DIRECTORY).join(filename);
+        let file = read_file_from_tests_submodule(path)?;
+        Ok(serde_yaml::from_str(&file)?)
+    }
+
+    fn yaml_as_address(value: &Value) -> Address {
+        Address::from_str(value.as_str().unwrap()).unwrap()
+    }
+
+    fn yaml_as_h256(value: &Value) -> H256 {
+        H256::from_str(value.as_str().unwrap()).unwrap()
+    }
+
+    fn yaml_as_hex(value: &Value) -> Vec<u8> {
+        hex_decode(value.as_str().unwrap()).unwrap()
+    }
+
+    fn yaml_as_nibbles(value: &Value) -> Nibbles {
+        let nibbles: Vec<u8> = value
+            .as_sequence()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_u64().unwrap() as u8)
+            .collect();
+        Nibbles::try_from_unpacked_nibbles(&nibbles).unwrap()
+    }
+
+    fn assert_content_key(value: &Value, expected_content_key: StateContentKey) -> Result<()> {
+        assert_eq!(
+            StateContentKey::try_from(yaml_as_hex(value))?,
+            expected_content_key,
+            "decoding from bytes {value:?} didn't match expected key {expected_content_key:?}"
+        );
+
+        assert_eq!(
+            StateContentKey::deserialize(value)?,
+            expected_content_key,
+            "deserialization from string {value:?} didn't match expected key {expected_content_key:?}");
+
+        Ok(())
     }
 }
