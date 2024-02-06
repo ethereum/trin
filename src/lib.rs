@@ -160,7 +160,7 @@ pub async fn run_trin(
     .await?;
 
     if let Some(handler) = state_handler {
-        tokio::spawn(handler.handle_client_queries());
+        tokio::spawn(async move { handler.handle_client_queries().await });
     }
     if let Some(handler) = history_handler {
         tokio::spawn(async move { handler.handle_client_queries().await });

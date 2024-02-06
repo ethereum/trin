@@ -4,7 +4,7 @@ use tokio::sync::RwLock;
 
 use crate::storage::StateStorage;
 use ethportal_api::{
-    types::{distance::XorMetric, enr::Enr, portal_wire::ProtocolId},
+    types::{distance::XorMetric, portal_wire::ProtocolId},
     StateContentKey,
 };
 use portalnet::{
@@ -33,16 +33,16 @@ impl StateNetwork {
         portal_config: PortalnetConfig,
         header_oracle: Arc<RwLock<HeaderOracle>>,
     ) -> anyhow::Result<Self> {
+        let config = OverlayConfig {
+            bootnode_enrs: portal_config.bootnodes.into(),
+            disable_poke: portal_config.disable_poke,
+            ..Default::default()
+        };
         let storage = Arc::new(PLRwLock::new(StateStorage::new(
             storage_config,
             ProtocolId::State,
         )?));
         let validator = Arc::new(StateValidator { header_oracle });
-        let bootnode_enrs: Vec<Enr> = portal_config.bootnodes.into();
-        let config = OverlayConfig {
-            bootnode_enrs,
-            ..Default::default()
-        };
         let overlay = OverlayProtocol::new(
             config,
             discovery,

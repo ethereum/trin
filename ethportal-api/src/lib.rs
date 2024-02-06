@@ -12,6 +12,7 @@ mod dashboard;
 pub mod discv5;
 mod eth;
 mod history;
+pub mod state;
 #[cfg(test)]
 mod test_utils;
 pub mod types;
@@ -22,6 +23,7 @@ pub use crate::discv5::{Discv5ApiClient, Discv5ApiServer};
 pub use beacon::{BeaconNetworkApiClient, BeaconNetworkApiServer};
 pub use eth::{EthApiClient, EthApiServer};
 pub use history::{HistoryNetworkApiClient, HistoryNetworkApiServer};
+pub use state::{StateNetworkApiClient, StateNetworkApiServer};
 pub use web3::{Web3ApiClient, Web3ApiServer};
 
 pub use types::content_key::{

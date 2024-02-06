@@ -72,4 +72,9 @@ impl StateStorage {
             network: protocol,
         })
     }
+
+    /// Get a summary of the current state of storage
+    pub fn get_summary_info(&self) -> String {
+        self.metrics.get_summary()
+    }
 }

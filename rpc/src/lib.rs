@@ -11,6 +11,7 @@ mod fetch;
 mod history_rpc;
 mod rpc_server;
 mod serde;
+mod state_rpc;
 mod web3_rpc;
 
 use crate::jsonrpsee::server::ServerBuilder;
@@ -28,6 +29,7 @@ use ethportal_api::{
     },
 };
 use history_rpc::HistoryNetworkApi;
+use state_rpc::StateNetworkApi;
 use web3_rpc::Web3Api;
 
 use crate::rpc_server::RpcServerConfig;
@@ -55,9 +57,7 @@ pub async fn launch_jsonrpc_server(
                 modules.push(PortalRpcModule::History);
                 modules.push(PortalRpcModule::Eth);
             }
-            STATE_NETWORK => {
-                // not implemented
-            }
+            STATE_NETWORK => modules.push(PortalRpcModule::State),
             BEACON_NETWORK => modules.push(PortalRpcModule::Beacon),
             _ => panic!("Unexpected network type: {network}"),
         }
