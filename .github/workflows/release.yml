@@ -178,10 +178,8 @@ jobs:
 
           ## Release Checklist (DELETE ME)
 
-          - [ ] Ensure all crates have had their versions bumped.
           - [ ] Write the summary.
           - [ ] Ensure all binaries have been added.
-          - [ ] Prepare release posts (Discord, ...).
 
           ## Summary
 
@@ -197,7 +195,7 @@ jobs:
 
           ## Binaries
 
-          The binaries are signed with the PGP key: `A3AE 097C 8909 3A12 4049  DF1F 5391 A3C4 1005 30B4`
+          The binaries are signed with the PGP key: `4003 D3C2 C88C 3FF8 A8C5  ABE8 91E6 F404 B740 8EEF`
 
           | System | Architecture | Binary | PGP Signature |
           |:---:|:---:|:---:|:---|
@@ -216,4 +214,4 @@ jobs:
               assets+=("-a" "$asset/$asset")
           done
           tag_name="${{ env.VERSION }}"
-          echo "$body" | gh release create --draft "${assets[@]}" -F "-" "$tag_name"
+          echo "$body" | gh release create --draft -t "Trin $tag_name" -F "-" "$tag_name" "${assets[@]}" 
