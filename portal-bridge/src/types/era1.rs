@@ -26,17 +26,15 @@ use std::{
 
 const ERA1_ENTRY_COUNT: usize = 8192 * 4 + 3;
 
-#[allow(dead_code)]
-struct Era1 {
-    version: VersionEntry,
-    block_tuples: Vec<BlockTuple>,
-    accumulator: AccumulatorEntry,
-    block_index: BlockIndexEntry,
+pub struct Era1 {
+    pub version: VersionEntry,
+    pub block_tuples: Vec<BlockTuple>,
+    pub accumulator: AccumulatorEntry,
+    pub block_index: BlockIndexEntry,
 }
 
-#[allow(dead_code)]
 impl Era1 {
-    fn read_from_file(path: String) -> anyhow::Result<Self> {
+    pub fn read_from_file(path: String) -> anyhow::Result<Self> {
         let buf = fs::read(path)?;
         Self::read(&buf)
     }
@@ -67,6 +65,7 @@ impl Era1 {
         })
     }
 
+    #[allow(dead_code)]
     fn write(&self) -> anyhow::Result<Vec<u8>> {
         let mut entries: Vec<Entry> = vec![];
         let version_entry: Entry = self.version.clone().try_into()?;
@@ -91,13 +90,12 @@ impl Era1 {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Clone, Eq, PartialEq, Debug)]
-struct BlockTuple {
-    header: HeaderEntry,
-    body: BodyEntry,
-    receipts: ReceiptsEntry,
-    total_difficulty: TotalDifficultyEntry,
+pub struct BlockTuple {
+    pub header: HeaderEntry,
+    pub body: BodyEntry,
+    pub receipts: ReceiptsEntry,
+    pub total_difficulty: TotalDifficultyEntry,
 }
 
 impl TryFrom<&[Entry; 4]> for BlockTuple {
@@ -131,7 +129,7 @@ impl TryInto<[Entry; 4]> for BlockTuple {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct VersionEntry {
+pub struct VersionEntry {
     version: Entry,
 }
 
@@ -170,8 +168,8 @@ impl TryInto<Entry> for VersionEntry {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
-struct HeaderEntry {
-    header: Header,
+pub struct HeaderEntry {
+    pub header: Header,
 }
 
 impl TryFrom<&Entry> for HeaderEntry {
@@ -208,8 +206,8 @@ impl TryInto<Entry> for HeaderEntry {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
-struct BodyEntry {
-    body: BlockBody,
+pub struct BodyEntry {
+    pub body: BlockBody,
 }
 
 impl TryFrom<&Entry> for BodyEntry {
@@ -246,8 +244,8 @@ impl TryInto<Entry> for BodyEntry {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
-struct ReceiptsEntry {
-    receipts: Receipts,
+pub struct ReceiptsEntry {
+    pub receipts: Receipts,
 }
 
 impl TryFrom<&Entry> for ReceiptsEntry {
@@ -289,7 +287,7 @@ impl TryInto<Entry> for ReceiptsEntry {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
-struct TotalDifficultyEntry {
+pub struct TotalDifficultyEntry {
     total_difficulty: U256,
 }
 
@@ -329,7 +327,7 @@ impl TryInto<Entry> for TotalDifficultyEntry {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
-struct AccumulatorEntry {
+pub struct AccumulatorEntry {
     accumulator: H256,
 }
 
@@ -370,7 +368,7 @@ impl TryInto<Entry> for AccumulatorEntry {
 //   block-index := starting-number | index | index | index ... | count
 
 #[derive(Clone, Eq, PartialEq, Debug)]
-struct BlockIndexEntry {
+pub struct BlockIndexEntry {
     block_index: BlockIndex,
 }
 

@@ -12,10 +12,13 @@ use trin_validation::constants::EPOCH_SIZE;
 ///   - ex: "b123" executes block 123
 /// - BlockRange: generates test data from block x to y
 ///   - ex: "r10-12" backfills a block range from #10 to #12 (inclusive)
+/// - FourFours: gossips randomly sequenced era1 files
+///   - ex: "fourfours"
 #[derive(Clone, Debug, PartialEq, Default, Eq)]
 pub enum BridgeMode {
     #[default]
     Latest,
+    FourFours,
     Backfill(ModeType),
     Single(ModeType),
     Test(PathBuf),
@@ -28,6 +31,11 @@ impl BridgeMode {
         let (is_single_mode, mode_type) = match self {
             BridgeMode::Backfill(val) => (false, val),
             BridgeMode::Single(val) => (true, val),
+            BridgeMode::FourFours => {
+                return Err(anyhow!(
+                    "BridgeMode `fourfours` does not have a block range"
+                ))
+            }
             BridgeMode::Latest => {
                 return Err(anyhow!("BridgeMode `latest` does not have a block range"))
             }
@@ -69,6 +77,7 @@ impl FromStr for BridgeMode {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "latest" => Ok(BridgeMode::Latest),
+            "fourfours" => Ok(BridgeMode::FourFours),
             val => {
                 let index = val
                     .find(':')

@@ -1,13 +1,10 @@
 use std::{
-    fs,
     ops::Range,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
 
-use anyhow::anyhow;
 use futures::future::join_all;
-use ssz::Decode;
 use tokio::{
     sync::{OwnedSemaphorePermit, Semaphore},
     task::JoinHandle,
@@ -17,6 +14,7 @@ use tracing::{debug, error, info, warn, Instrument};
 
 use crate::{
     api::execution::ExecutionApi,
+    bridge::utils::lookup_epoch_acc,
     gossip::gossip_history_content,
     stats::{HistoryBlockStats, StatsReporter},
     types::{full_header::FullHeader, mode::BridgeMode},
@@ -24,7 +22,7 @@ use crate::{
 };
 use ethportal_api::{
     jsonrpsee::http_client::HttpClient, types::execution::accumulator::EpochAccumulator,
-    utils::bytes::hex_encode, EpochAccumulatorKey, HistoryContentKey, HistoryContentValue,
+    EpochAccumulatorKey, HistoryContentKey, HistoryContentValue,
 };
 use trin_validation::{
     constants::{EPOCH_SIZE as EPOCH_SIZE_USIZE, MERGE_BLOCK_NUMBER},
@@ -35,8 +33,8 @@ use trin_validation::{
 const HEADER_SATURATION_DELAY: u64 = 10; // seconds
 const LATEST_BLOCK_POLL_RATE: u64 = 5; // seconds
 pub const EPOCH_SIZE: u64 = EPOCH_SIZE_USIZE as u64;
-const GOSSIP_LIMIT: usize = 32;
-const SERVE_BLOCK_TIMEOUT: Duration = Duration::from_secs(120);
+pub const GOSSIP_LIMIT: usize = 32;
+pub const SERVE_BLOCK_TIMEOUT: Duration = Duration::from_secs(120);
 
 pub struct HistoryBridge {
     pub mode: BridgeMode,
@@ -70,6 +68,7 @@ impl HistoryBridge {
         match self.mode.clone() {
             BridgeMode::Test(path) => self.launch_test(path).await,
             BridgeMode::Latest => self.launch_latest().await,
+            BridgeMode::FourFours => panic!("4444s mode not supported in HistoryBridge."),
             _ => self.launch_backfill().await,
         }
         info!("Bridge mode: {:?} complete.", self.mode);
@@ -150,14 +149,17 @@ impl HistoryBridge {
 
         info!("fetching headers in range: {gossip_range:?}");
         let mut epoch_acc = None;
-        let mut vec_of_serve_full_block_handles = vec![];
+        let mut serve_full_block_handles = vec![];
         for height in gossip_range {
             // Using epoch_size chunks & epoch boundaries ensures that every
             // "chunk" shares an epoch accumulator avoiding the need to
             // look up the epoch acc on a header by header basis
             if height <= MERGE_BLOCK_NUMBER && current_epoch_index != height / EPOCH_SIZE {
                 current_epoch_index = height / EPOCH_SIZE;
-                epoch_acc = match self.get_epoch_acc(current_epoch_index).await {
+                epoch_acc = match self
+                    .construct_and_gossip_epoch_acc(current_epoch_index)
+                    .await
+                {
                     Ok(val) => Some(val),
                     Err(msg) => {
                         warn!("Unable to find epoch acc for gossip range: {current_epoch_index}. Skipping iteration: {msg:?}");
@@ -170,7 +172,7 @@ impl HistoryBridge {
             let permit = gossip_send_semaphore.clone().acquire_owned().await.expect(
                 "acquire_owned() can only error on semaphore close, this should be impossible",
             );
-            vec_of_serve_full_block_handles.push(Self::spawn_serve_full_block(
+            serve_full_block_handles.push(Self::spawn_serve_full_block(
                 height,
                 epoch_acc.clone(),
                 self.portal_clients.clone(),
@@ -179,9 +181,9 @@ impl HistoryBridge {
             ));
         }
 
-        // wait till all blocks are done gossiping. This can't deadlock, because the tokio::spawn
-        // has a timeout
-        join_all(vec_of_serve_full_block_handles).await;
+        // Wait till all blocks are done gossiping.
+        // This can't deadlock, because the tokio::spawn has a timeout.
+        join_all(serve_full_block_handles).await;
     }
 
     fn spawn_serve_full_block(
@@ -270,25 +272,19 @@ impl HistoryBridge {
 
     /// Attempt to lookup an epoch accumulator from local portal-accumulators path provided via cli
     /// arg. Gossip the epoch accumulator if found.
-    async fn get_epoch_acc(&self, epoch_index: u64) -> anyhow::Result<Arc<EpochAccumulator>> {
-        let epoch_hash = self.header_oracle.master_acc.historical_epochs[epoch_index as usize];
-        let epoch_hash_pretty = hex_encode(epoch_hash);
-        let epoch_hash_pretty = epoch_hash_pretty.trim_start_matches("0x");
-        let epoch_acc_path = format!(
-            "{}/bridge_content/0x03{epoch_hash_pretty}.portalcontent",
-            self.epoch_acc_path.display(),
-        );
-        let local_epoch_acc = match fs::read(&epoch_acc_path) {
-            Ok(val) => EpochAccumulator::from_ssz_bytes(&val).map_err(|err| anyhow!("{err:?}"))?,
-            Err(_) => {
-                return Err(anyhow!(
-                    "Unable to find local epoch acc at path: {epoch_acc_path:?}"
-                ))
-            }
-        };
+    async fn construct_and_gossip_epoch_acc(
+        &self,
+        epoch_index: u64,
+    ) -> anyhow::Result<Arc<EpochAccumulator>> {
+        let (epoch_hash, epoch_acc) = lookup_epoch_acc(
+            epoch_index,
+            &self.header_oracle.master_acc,
+            &self.epoch_acc_path,
+        )
+        .await?;
         // Gossip epoch acc to network if found locally
         let content_key = HistoryContentKey::EpochAccumulator(EpochAccumulatorKey { epoch_hash });
-        let content_value = HistoryContentValue::EpochAccumulator(local_epoch_acc.clone());
+        let content_value = HistoryContentValue::EpochAccumulator(epoch_acc.clone());
         // create unique stats for epoch accumulator, since it's rarely gossiped
         let block_stats = Arc::new(Mutex::new(HistoryBlockStats::new(epoch_index * EPOCH_SIZE)));
         debug!("Built EpochAccumulator for Epoch #{epoch_index:?}: now gossiping.");
@@ -299,7 +295,7 @@ impl HistoryBridge {
             block_stats,
         )
         .await;
-        Ok(Arc::new(local_epoch_acc))
+        Ok(Arc::new(epoch_acc))
     }
 
     async fn construct_and_gossip_receipt(

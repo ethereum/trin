@@ -10,9 +10,9 @@ use ethportal_api::{
 };
 use portal_bridge::{
     api::{consensus::ConsensusApi, execution::ExecutionApi},
-    bridge::{beacon::BeaconBridge, history::HistoryBridge},
+    bridge::{beacon::BeaconBridge, era1::Era1Bridge, history::HistoryBridge},
     cli::BridgeConfig,
-    types::network::NetworkKind,
+    types::{mode::BridgeMode, network::NetworkKind},
     utils::generate_spaced_private_keys,
 };
 use trin_utils::log::init_tracing_logger;
@@ -82,31 +82,52 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Launch History Network portal bridge
     if bridge_config.network.contains(&NetworkKind::History) {
-        let execution_api = ExecutionApi::new(
-            bridge_config.el_provider,
-            bridge_config.mode.clone(),
-            bridge_config.el_provider_daily_request_limit,
-        )
-        .await?;
-        let bridge_handle = tokio::spawn(async move {
-            let master_acc = MasterAccumulator::default();
-            let header_oracle = HeaderOracle::new(master_acc);
+        match bridge_config.mode {
+            BridgeMode::FourFours => {
+                let master_acc = MasterAccumulator::default();
+                let header_oracle = HeaderOracle::new(master_acc);
+                let era1_bridge = Era1Bridge::new(
+                    portal_clients.expect("Failed to create history JSON-RPC clients"),
+                    header_oracle,
+                    bridge_config.epoch_acc_path,
+                )
+                .unwrap();
+                let bridge_handle = tokio::spawn(async move {
+                    era1_bridge
+                        .launch()
+                        .instrument(tracing::info_span!("history(era1)"))
+                        .await;
+                });
+                bridge_tasks.push(bridge_handle);
+            }
+            _ => {
+                let execution_api = ExecutionApi::new(
+                    bridge_config.el_provider,
+                    bridge_config.mode.clone(),
+                    bridge_config.el_provider_daily_request_limit,
+                )
+                .await?;
+                let bridge_handle = tokio::spawn(async move {
+                    let master_acc = MasterAccumulator::default();
+                    let header_oracle = HeaderOracle::new(master_acc);
 
-            let bridge = HistoryBridge::new(
-                bridge_config.mode,
-                execution_api,
-                portal_clients.expect("Failed to create history JSON-RPC clients"),
-                header_oracle,
-                bridge_config.epoch_acc_path,
-            );
+                    let bridge = HistoryBridge::new(
+                        bridge_config.mode,
+                        execution_api,
+                        portal_clients.expect("Failed to create history JSON-RPC clients"),
+                        header_oracle,
+                        bridge_config.epoch_acc_path,
+                    );
 
-            bridge
-                .launch()
-                .instrument(tracing::info_span!("history"))
-                .await;
-        });
+                    bridge
+                        .launch()
+                        .instrument(tracing::info_span!("history"))
+                        .await;
+                });
 
-        bridge_tasks.push(bridge_handle);
+                bridge_tasks.push(bridge_handle);
+            }
+        }
     }
 
     futures::future::join_all(bridge_tasks).await;
