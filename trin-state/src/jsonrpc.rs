@@ -1,10 +1,19 @@
 use std::sync::Arc;
 
-use serde_json::Value;
+use discv5::{enr::NodeId, Enr};
+use portalnet::overlay_service::OverlayRequestError;
+use serde_json::{json, Value};
 use tokio::sync::mpsc;
 
 use crate::network::StateNetwork;
-use ethportal_api::types::jsonrpc::request::StateJsonRpcRequest;
+use ethportal_api::{
+    jsonrpsee::core::Serialize,
+    types::{
+        distance::Distance,
+        jsonrpc::{endpoints::StateEndpoint, request::StateJsonRpcRequest},
+        portal::{FindNodesInfo, PongInfo},
+    },
+};
 
 /// Handles State network JSON-RPC requests
 pub struct StateRequestHandler {
@@ -20,8 +29,90 @@ impl StateRequestHandler {
         }
     }
 
-    async fn handle_request(_network: Arc<StateNetwork>, request: StateJsonRpcRequest) {
-        let response: Result<Value, String> = Err("Not implemented".to_string());
+    async fn handle_request(network: Arc<StateNetwork>, request: StateJsonRpcRequest) {
+        let response: Result<Value, String> = match request.endpoint {
+            StateEndpoint::RoutingTableInfo => routing_table_info(network).await,
+            StateEndpoint::Ping(enr) => ping(network, enr).await,
+            StateEndpoint::AddEnr(enr) => add_enr(network, enr).await,
+            StateEndpoint::DeleteEnr(node_id) => delete_enr(network, node_id).await,
+            StateEndpoint::GetEnr(node_id) => get_enr(network, node_id).await,
+            StateEndpoint::LookupEnr(node_id) => lookup_enr(network, node_id).await,
+            StateEndpoint::FindNodes(enr, distances) => find_nodes(network, enr, distances).await,
+            StateEndpoint::RecursiveFindNodes(node_id) => {
+                recursive_find_nodes(network, node_id).await
+            }
+            _ => Err("Not implemented".to_string()),
+        };
+
         let _ = request.resp.send(response);
     }
+}
+
+async fn routing_table_info(network: Arc<StateNetwork>) -> Result<Value, String> {
+    serde_json::to_value(network.overlay.routing_table_info()).map_err(|err| err.to_string())
+}
+
+async fn ping(network: Arc<StateNetwork>, enr: Enr) -> Result<Value, String> {
+    to_json_result(
+        "Ping",
+        network.overlay.send_ping(enr).await.map(|pong| PongInfo {
+            enr_seq: pong.enr_seq as u32,
+            data_radius: *Distance::from(pong.custom_payload),
+        }),
+    )
+}
+
+async fn add_enr(network: Arc<StateNetwork>, enr: Enr) -> Result<Value, String> {
+    to_json_result("AddEnr", network.overlay.add_enr(enr).map(|_| true))
+}
+
+async fn delete_enr(network: Arc<StateNetwork>, node_id: NodeId) -> Result<Value, String> {
+    let is_deleted = network.overlay.delete_enr(node_id);
+    Ok(json!(is_deleted))
+}
+
+async fn get_enr(network: Arc<StateNetwork>, node_id: NodeId) -> Result<Value, String> {
+    to_json_result("GetEnr", network.overlay.get_enr(node_id))
+}
+
+async fn lookup_enr(network: Arc<StateNetwork>, node_id: NodeId) -> Result<Value, String> {
+    to_json_result("LookupEnr", network.overlay.lookup_enr(node_id).await)
+}
+
+async fn find_nodes(
+    network: Arc<StateNetwork>,
+    enr: Enr,
+    distances: Vec<u16>,
+) -> Result<Value, String> {
+    to_json_result(
+        "FindNodes",
+        network
+            .overlay
+            .send_find_nodes(enr, distances)
+            .await
+            .map(|nodes| {
+                nodes
+                    .enrs
+                    .into_iter()
+                    .map(Enr::from)
+                    .collect::<FindNodesInfo>()
+            }),
+    )
+}
+
+async fn recursive_find_nodes(
+    network: Arc<StateNetwork>,
+    node_id: NodeId,
+) -> Result<Value, String> {
+    let nodes = network.overlay.lookup_node(node_id).await;
+    Ok(json!(nodes))
+}
+
+fn to_json_result(
+    request: &str,
+    result: Result<impl Serialize, OverlayRequestError>,
+) -> Result<Value, String> {
+    result
+        .map(|value| json!(value))
+        .map_err(|err| format!("{request} failed: {err:?}"))
 }

@@ -38,10 +38,7 @@ impl StateNetwork {
             disable_poke: portal_config.disable_poke,
             ..Default::default()
         };
-        let storage = Arc::new(PLRwLock::new(StateStorage::new(
-            storage_config,
-            ProtocolId::State,
-        )?));
+        let storage = Arc::new(PLRwLock::new(StateStorage::new(storage_config)?));
         let validator = Arc::new(StateValidator { header_oracle });
         let overlay = OverlayProtocol::new(
             config,
