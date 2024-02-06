@@ -170,7 +170,6 @@ jobs:
         # https://github.com/openethereum/openethereum/blob/main/.github/workflows/build.yml
         run: |
           body=$(cat <<- "ENDBODY"
-          <Release Name>
 
           ## Testing Checklist (DELETE ME)
 
@@ -211,7 +210,7 @@ jobs:
           )
           assets=()
           for asset in ./trin-*.tar.gz*; do
-              assets+=("-a" "$asset/$asset")
+              assets+=("$asset/$asset")
           done
           tag_name="${{ env.VERSION }}"
           echo "$body" | gh release create --draft -t "Trin $tag_name" -F "-" "$tag_name" "${assets[@]}" 
