@@ -324,7 +324,7 @@ impl ExecutionApi {
 }
 
 /// Create a proof for the given header / epoch acc
-async fn construct_proof(
+pub async fn construct_proof(
     header: Header,
     epoch_acc: &EpochAccumulator,
 ) -> anyhow::Result<HeaderWithProof> {
