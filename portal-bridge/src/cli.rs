@@ -2,14 +2,15 @@ use std::{path::PathBuf, str::FromStr};
 
 use clap::{Parser, Subcommand};
 use ethereum_types::H256;
+use ethportal_api::types::cli::check_private_key_length;
 use tokio::process::Child;
 use url::Url;
 
 use crate::{
     client_handles::{fluffy_handle, trin_handle},
+    constants::PROVIDER_DAILY_REQUEST_LIMIT,
     types::{mode::BridgeMode, network::NetworkKind},
 };
-use ethportal_api::types::cli::check_private_key_length;
 
 // max value of 16 b/c...
 // - reliably calculate spaced private keys in a reasonable time
@@ -92,6 +93,20 @@ pub struct BridgeConfig {
         help = "Data provider for consensus layer data. (\"pandaops\" / local node url)"
     )]
     pub cl_provider: Provider,
+
+    #[arg(
+        long = "el-provider-daily-request-limit",
+        help = "Maximum number of requests execution layer sent to the provider in a day.",
+        default_value_t = PROVIDER_DAILY_REQUEST_LIMIT,
+    )]
+    pub el_provider_daily_request_limit: f64,
+
+    #[arg(
+        long = "cl-provider-daily-request-limit",
+        help = "Maximum number of requests consensus layer sent to the provider in a day.",
+        default_value_t = PROVIDER_DAILY_REQUEST_LIMIT,
+    )]
+    pub cl_provider_daily_request_limit: f64,
 }
 
 fn check_node_count(val: &str) -> Result<u8, String> {

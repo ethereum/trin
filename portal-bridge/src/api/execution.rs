@@ -8,12 +8,14 @@ use surf::{
     middleware::{Middleware, Next},
     Body, Client, Config, Request, Response,
 };
+use surf_governor::GovernorMiddleware;
 use tokio::time::{sleep, Duration};
 use tracing::warn;
 use url::Url;
 
 use crate::{
     cli::Provider,
+    constants::SECONDS_IN_A_DAY,
     types::{full_header::FullHeader, mode::BridgeMode},
     BASE_EL_ARCHIVE_ENDPOINT, BASE_EL_ENDPOINT, PANDAOPS_CLIENT_ID, PANDAOPS_CLIENT_SECRET,
 };
@@ -48,8 +50,12 @@ pub struct ExecutionApi {
 }
 
 impl ExecutionApi {
-    pub async fn new(provider: Provider, mode: BridgeMode) -> Result<Self, surf::Error> {
-        let client = match &provider {
+    pub async fn new(
+        provider: Provider,
+        mode: BridgeMode,
+        daily_request_limit: f64,
+    ) -> Result<Self, surf::Error> {
+        let client: Client = match &provider {
             Provider::PandaOps => {
                 let endpoint = match mode {
                     BridgeMode::Backfill(_) => BASE_EL_ARCHIVE_ENDPOINT.to_string(),
@@ -73,6 +79,11 @@ impl ExecutionApi {
                 .try_into()?,
             Provider::Test => Config::new().try_into()?,
         };
+        // Limits the number of requests sent to the EL provider in a day
+        let period = Duration::from_secs_f64(daily_request_limit / SECONDS_IN_A_DAY);
+        let rate_limit = GovernorMiddleware::with_period(period)
+            .expect("Expect GovernerMiddleware should have received a valid Duration");
+        let client = client.with(rate_limit).with(Retry::default());
         // Only check that provider is connected & available if not using a test provider.
         if provider != Provider::Test {
             check_provider(&client).await?;
@@ -289,7 +300,6 @@ impl ExecutionApi {
         let result = self
             .client
             .post("")
-            .middleware(Retry::default())
             .body_json(&json!(requests))
             .map_err(|e| anyhow!("Unable to construct json post request: {e:?}"))?
             .recv_string()
@@ -303,7 +313,6 @@ impl ExecutionApi {
         let result = self
             .client
             .post("")
-            .middleware(Retry::default())
             .body_json(&request)
             .map_err(|e| anyhow!("Unable to construct json post request: {e:?}"))?
             .recv_string()
