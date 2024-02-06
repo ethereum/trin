@@ -337,7 +337,7 @@ async fn construct_proof(
 pub struct Retry {
     attempts: u8,
 }
-code
+
 impl Retry {
     pub fn new(attempts: u8) -> Self {
         Retry { attempts }
