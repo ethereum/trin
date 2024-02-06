@@ -79,7 +79,7 @@ impl ExecutionApi {
                 .try_into()?,
             Provider::Test => Config::new().try_into()?,
         };
-        // Limits requests to no more then daily_request_limit / SECONDS_IN_A_DAY per a second
+        // Limits the number of requests sent to the EL provider in a day
         let period = Duration::from_secs_f64(daily_request_limit / SECONDS_IN_A_DAY);
         let rate_limit = GovernorMiddleware::with_period(period)
             .expect("Expect GovernerMiddleware should have received a valid Duration");
@@ -337,7 +337,7 @@ async fn construct_proof(
 pub struct Retry {
     attempts: u8,
 }
-
+code
 impl Retry {
     pub fn new(attempts: u8) -> Self {
         Retry { attempts }
