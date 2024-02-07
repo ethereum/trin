@@ -1,6 +1,6 @@
 use ethportal_api::{BlockHeaderKey, HistoryContentKey, HistoryNetworkApiClient};
 
-use crate::{constants::fixture_header_with_proof, Peertest};
+use crate::{utils::fixture_header_with_proof, Peertest};
 
 pub async fn test_paginate_local_storage(peertest: &Peertest) {
     let ipc_client = &peertest.bootnode.ipc_client;

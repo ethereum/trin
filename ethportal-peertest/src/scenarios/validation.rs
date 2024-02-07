@@ -1,5 +1,5 @@
 use crate::{
-    constants::{fixture_block_body, fixture_header_with_proof, fixture_receipts},
+    utils::{fixture_block_body, fixture_header_with_proof, fixture_receipts},
     Peertest,
 };
 use ethereum_types::H256;

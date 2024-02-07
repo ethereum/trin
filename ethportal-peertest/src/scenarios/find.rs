@@ -4,7 +4,7 @@ use discv5::enr::NodeId;
 use jsonrpsee::async_client::Client;
 use tracing::info;
 
-use crate::{constants::fixture_header_with_proof, Peertest};
+use crate::{utils::fixture_header_with_proof, Peertest};
 use ethportal_api::{
     types::history::{ContentInfo, TraceContentInfo},
     utils::bytes::hex_decode,

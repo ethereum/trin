@@ -1,4 +1,4 @@
-use crate::{constants::fixture_header_with_proof, Peertest};
+use crate::{utils::fixture_header_with_proof, Peertest};
 use ethereum_types::{H256, U256};
 use ethportal_api::{
     types::distance::Distance, BlockHeaderKey, Discv5ApiClient, HistoryContentKey,
