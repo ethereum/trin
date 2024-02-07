@@ -81,7 +81,7 @@ fn generate_trin_config(id: u16, bootnode_enr: Option<&Enr>) -> TrinConfig {
             let trin_config_args = vec![
                 "trin",
                 "--networks",
-                "history,beacon",
+                "history,beacon,state",
                 "--external-address",
                 external_addr.as_str(),
                 "--bootnodes",
@@ -103,7 +103,7 @@ fn generate_trin_config(id: u16, bootnode_enr: Option<&Enr>) -> TrinConfig {
             let trin_config_args = vec![
                 "trin",
                 "--networks",
-                "history,beacon",
+                "history,beacon,state",
                 "--external-address",
                 external_addr.as_str(),
                 "--bootnodes",

@@ -31,16 +31,17 @@ impl StateRequestHandler {
 
     async fn handle_request(network: Arc<StateNetwork>, request: StateJsonRpcRequest) {
         let response: Result<Value, String> = match request.endpoint {
-            StateEndpoint::RoutingTableInfo => routing_table_info(network).await,
+            StateEndpoint::RoutingTableInfo => routing_table_info(network),
             StateEndpoint::Ping(enr) => ping(network, enr).await,
-            StateEndpoint::AddEnr(enr) => add_enr(network, enr).await,
-            StateEndpoint::DeleteEnr(node_id) => delete_enr(network, node_id).await,
-            StateEndpoint::GetEnr(node_id) => get_enr(network, node_id).await,
+            StateEndpoint::AddEnr(enr) => add_enr(network, enr),
+            StateEndpoint::DeleteEnr(node_id) => delete_enr(network, node_id),
+            StateEndpoint::GetEnr(node_id) => get_enr(network, node_id),
             StateEndpoint::LookupEnr(node_id) => lookup_enr(network, node_id).await,
             StateEndpoint::FindNodes(enr, distances) => find_nodes(network, enr, distances).await,
             StateEndpoint::RecursiveFindNodes(node_id) => {
                 recursive_find_nodes(network, node_id).await
             }
+            StateEndpoint::DataRadius => radius(network),
             _ => Err("Not implemented".to_string()),
         };
 
@@ -48,7 +49,7 @@ impl StateRequestHandler {
     }
 }
 
-async fn routing_table_info(network: Arc<StateNetwork>) -> Result<Value, String> {
+fn routing_table_info(network: Arc<StateNetwork>) -> Result<Value, String> {
     serde_json::to_value(network.overlay.routing_table_info()).map_err(|err| err.to_string())
 }
 
@@ -62,21 +63,26 @@ async fn ping(network: Arc<StateNetwork>, enr: Enr) -> Result<Value, String> {
     )
 }
 
-async fn add_enr(network: Arc<StateNetwork>, enr: Enr) -> Result<Value, String> {
+fn add_enr(network: Arc<StateNetwork>, enr: Enr) -> Result<Value, String> {
     to_json_result("AddEnr", network.overlay.add_enr(enr).map(|_| true))
 }
 
-async fn delete_enr(network: Arc<StateNetwork>, node_id: NodeId) -> Result<Value, String> {
+fn delete_enr(network: Arc<StateNetwork>, node_id: NodeId) -> Result<Value, String> {
     let is_deleted = network.overlay.delete_enr(node_id);
     Ok(json!(is_deleted))
 }
 
-async fn get_enr(network: Arc<StateNetwork>, node_id: NodeId) -> Result<Value, String> {
+fn get_enr(network: Arc<StateNetwork>, node_id: NodeId) -> Result<Value, String> {
     to_json_result("GetEnr", network.overlay.get_enr(node_id))
 }
 
 async fn lookup_enr(network: Arc<StateNetwork>, node_id: NodeId) -> Result<Value, String> {
     to_json_result("LookupEnr", network.overlay.lookup_enr(node_id).await)
+}
+
+fn radius(network: Arc<StateNetwork>) -> Result<Value, String> {
+    let radius = network.overlay.data_radius();
+    Ok(json!(*radius))
 }
 
 async fn find_nodes(
