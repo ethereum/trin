@@ -1,8 +1,9 @@
 use crate::{utils::fixture_header_with_proof, Peertest};
 use ethereum_types::{H256, U256};
 use ethportal_api::{
-    types::distance::Distance, BlockHeaderKey, Discv5ApiClient, HistoryContentKey,
-    HistoryNetworkApiClient, PossibleHistoryContentValue, Web3ApiClient,
+    types::{distance::Distance, portal_wire::ProtocolId},
+    BeaconNetworkApiClient, BlockHeaderKey, Discv5ApiClient, HistoryContentKey,
+    HistoryNetworkApiClient, PossibleHistoryContentValue, StateNetworkApiClient, Web3ApiClient,
 };
 use jsonrpsee::async_client::Client;
 use ssz::Encode;
@@ -28,53 +29,103 @@ pub async fn test_discv5_routing_table_info(target: &Client) {
     assert!(result.local_node_id.starts_with("0x"));
 }
 
-pub async fn test_history_radius(target: &Client) {
-    info!("Testing portal_historyRadius");
-    let result = target.radius().await.unwrap();
+pub async fn test_routing_table_info(protocol: ProtocolId, target: &Client) {
+    info!("Testing routing_table_info for {protocol}");
+    let result = match protocol {
+        ProtocolId::Beacon => BeaconNetworkApiClient::routing_table_info(target),
+        ProtocolId::History => HistoryNetworkApiClient::routing_table_info(target),
+        ProtocolId::State => StateNetworkApiClient::routing_table_info(target),
+        _ => panic!("Unexpected protocol: {protocol}"),
+    }
+    .await
+    .unwrap();
+    assert!(result.local_node_id.starts_with("0x"));
+}
+
+pub async fn test_radius(protocol: ProtocolId, target: &Client) {
+    info!("Testing radius for {protocol}");
+    let result = match protocol {
+        ProtocolId::Beacon => BeaconNetworkApiClient::radius(target),
+        ProtocolId::History => HistoryNetworkApiClient::radius(target),
+        ProtocolId::State => StateNetworkApiClient::radius(target),
+        _ => panic!("Unexpected protocol: {protocol}"),
+    }
+    .await
+    .unwrap();
     assert_eq!(
         result,
         U256::from_big_endian(Distance::MAX.as_ssz_bytes().as_slice())
     );
 }
 
-pub async fn test_history_add_enr(target: &Client, peertest: &Peertest) {
-    info!("Testing portal_historyAddEnr");
-    let result = HistoryNetworkApiClient::add_enr(target, peertest.bootnode.enr.clone())
-        .await
-        .unwrap();
+pub async fn test_add_enr(protocol: ProtocolId, target: &Client, peertest: &Peertest) {
+    info!("Testing add_enr for {protocol}");
+    let bootnode_enr = peertest.bootnode.enr.clone();
+    let result = match protocol {
+        ProtocolId::Beacon => BeaconNetworkApiClient::add_enr(target, bootnode_enr),
+        ProtocolId::History => HistoryNetworkApiClient::add_enr(target, bootnode_enr),
+        ProtocolId::State => StateNetworkApiClient::add_enr(target, bootnode_enr),
+        _ => panic!("Unexpected protocol: {protocol}"),
+    }
+    .await
+    .unwrap();
     assert!(result);
 }
 
-pub async fn test_history_get_enr(target: &Client, peertest: &Peertest) {
-    info!("Testing portal_historyGetEnr");
-    let result = HistoryNetworkApiClient::get_enr(target, peertest.bootnode.enr.node_id())
-        .await
-        .unwrap();
+pub async fn test_get_enr(protocol: ProtocolId, target: &Client, peertest: &Peertest) {
+    info!("Testing get_enr for {protocol}");
+    let node_id = peertest.bootnode.enr.node_id();
+    let result = match protocol {
+        ProtocolId::Beacon => BeaconNetworkApiClient::get_enr(target, node_id),
+        ProtocolId::History => HistoryNetworkApiClient::get_enr(target, node_id),
+        ProtocolId::State => StateNetworkApiClient::get_enr(target, node_id),
+        _ => panic!("Unexpected protocol: {protocol}"),
+    }
+    .await
+    .unwrap();
     assert_eq!(result, peertest.bootnode.enr);
 }
 
-pub async fn test_history_delete_enr(target: &Client, peertest: &Peertest) {
-    info!("Testing portal_historyDeleteEnr");
-    let result = HistoryNetworkApiClient::delete_enr(target, peertest.bootnode.enr.node_id())
-        .await
-        .unwrap();
+pub async fn test_delete_enr(protocol: ProtocolId, target: &Client, peertest: &Peertest) {
+    info!("Testing delete_enr for {protocol}");
+    let node_id = peertest.bootnode.enr.node_id();
+    let result = match protocol {
+        ProtocolId::Beacon => BeaconNetworkApiClient::delete_enr(target, node_id),
+        ProtocolId::History => HistoryNetworkApiClient::delete_enr(target, node_id),
+        ProtocolId::State => StateNetworkApiClient::delete_enr(target, node_id),
+        _ => panic!("Unexpected protocol: {protocol}"),
+    }
+    .await
+    .unwrap();
     assert!(result);
 }
 
-pub async fn test_history_lookup_enr(peertest: &Peertest) {
-    info!("Testing portal_historyLookupEnr");
-    let result = HistoryNetworkApiClient::lookup_enr(
-        &peertest.bootnode.ipc_client,
-        peertest.nodes[0].enr.node_id(),
-    )
+pub async fn test_lookup_enr(protocol: ProtocolId, peertest: &Peertest) {
+    info!("Testing lookup_enr for {protocol}");
+    let target = &peertest.bootnode.ipc_client;
+    let node_id = peertest.nodes[0].enr.node_id();
+    let result = match protocol {
+        ProtocolId::Beacon => BeaconNetworkApiClient::lookup_enr(target, node_id),
+        ProtocolId::History => HistoryNetworkApiClient::lookup_enr(target, node_id),
+        ProtocolId::State => StateNetworkApiClient::lookup_enr(target, node_id),
+        _ => panic!("Unexpected protocol: {protocol}"),
+    }
     .await
     .unwrap();
     assert_eq!(result, peertest.nodes[0].enr);
 }
 
-pub async fn test_history_ping(target: &Client, peertest: &Peertest) {
-    info!("Testing portal_historyPing");
-    let result = target.ping(peertest.bootnode.enr.clone()).await.unwrap();
+pub async fn test_ping(protocol: ProtocolId, target: &Client, peertest: &Peertest) {
+    info!("Testing ping for {protocol}");
+    let bootnode_enr = peertest.bootnode.enr.clone();
+    let result = match protocol {
+        ProtocolId::Beacon => BeaconNetworkApiClient::ping(target, bootnode_enr),
+        ProtocolId::History => HistoryNetworkApiClient::ping(target, bootnode_enr),
+        ProtocolId::State => StateNetworkApiClient::ping(target, bootnode_enr),
+        _ => panic!("Unexpected protocol: {protocol}"),
+    }
+    .await
+    .unwrap();
     assert_eq!(
         result.data_radius,
         U256::from_big_endian(Distance::MAX.as_ssz_bytes().as_slice())
@@ -82,37 +133,45 @@ pub async fn test_history_ping(target: &Client, peertest: &Peertest) {
     assert_eq!(result.enr_seq, 1);
 }
 
-pub async fn test_history_find_nodes(target: &Client, peertest: &Peertest) {
-    info!("Testing portal_historyFindNodes");
-    let result = target
-        .find_nodes(peertest.bootnode.enr.clone(), vec![256])
-        .await
-        .unwrap();
+pub async fn test_find_nodes(protocol: ProtocolId, target: &Client, peertest: &Peertest) {
+    info!("Testing find_nodes for {protocol}");
+    let bootnode_enr = peertest.bootnode.enr.clone();
+    let result = match protocol {
+        ProtocolId::Beacon => BeaconNetworkApiClient::find_nodes(target, bootnode_enr, vec![256]),
+        ProtocolId::History => HistoryNetworkApiClient::find_nodes(target, bootnode_enr, vec![256]),
+        ProtocolId::State => StateNetworkApiClient::find_nodes(target, bootnode_enr, vec![256]),
+        _ => panic!("Unexpected protocol: {protocol}"),
+    }
+    .await
+    .unwrap();
     assert!(result.contains(&peertest.nodes[0].enr));
 }
 
-pub async fn test_history_find_nodes_zero_distance(target: &Client, peertest: &Peertest) {
-    info!("Testing portal_historyFindNodes with zero distance");
-    let result = target
-        .find_nodes(peertest.bootnode.enr.clone(), vec![0])
-        .await
-        .unwrap();
+pub async fn test_find_nodes_zero_distance(
+    protocol: ProtocolId,
+    target: &Client,
+    peertest: &Peertest,
+) {
+    info!("Testing find_nodes with zero distance for {protocol}");
+    let bootnode_enr = peertest.bootnode.enr.clone();
+    let result = match protocol {
+        ProtocolId::Beacon => BeaconNetworkApiClient::find_nodes(target, bootnode_enr, vec![0]),
+        ProtocolId::History => HistoryNetworkApiClient::find_nodes(target, bootnode_enr, vec![0]),
+        ProtocolId::State => StateNetworkApiClient::find_nodes(target, bootnode_enr, vec![0]),
+        _ => panic!("Unexpected protocol: {protocol}"),
+    }
+    .await
+    .unwrap();
     assert!(result.contains(&peertest.bootnode.enr));
 }
 
 pub async fn test_history_store(target: &Client) {
     info!("Testing portal_historyStore");
     let (content_key, content_value) = fixture_header_with_proof();
-    let result = target.store(content_key, content_value).await.unwrap();
-    assert!(result);
-}
-
-pub async fn test_history_routing_table_info(target: &Client) {
-    info!("Testing portal_historyRoutingTableInfo");
-    let result = HistoryNetworkApiClient::routing_table_info(target)
+    let result = HistoryNetworkApiClient::store(target, content_key, content_value)
         .await
         .unwrap();
-    assert!(result.local_node_id.starts_with("0x"));
+    assert!(result);
 }
 
 pub async fn test_history_local_content_absent(target: &Client) {
@@ -120,7 +179,9 @@ pub async fn test_history_local_content_absent(target: &Client) {
     let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
         block_hash: H256::random().into(),
     });
-    let result = target.local_content(content_key).await.unwrap();
+    let result = HistoryNetworkApiClient::local_content(target, content_key)
+        .await
+        .unwrap();
 
     if let PossibleHistoryContentValue::ContentPresent(_) = result {
         panic!("Expected absent content");

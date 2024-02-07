@@ -6,10 +6,41 @@ use tracing::info;
 
 use crate::{utils::fixture_header_with_proof, Peertest};
 use ethportal_api::{
-    types::history::{ContentInfo, TraceContentInfo},
+    types::{history::ContentInfo, portal_wire::ProtocolId},
     utils::bytes::hex_decode,
-    HistoryNetworkApiClient, OverlayContentKey, PossibleHistoryContentValue,
+    BeaconNetworkApiClient, Enr, HistoryNetworkApiClient, OverlayContentKey,
+    PossibleHistoryContentValue, StateNetworkApiClient,
 };
+
+pub async fn test_recursive_find_nodes_self(protocol: ProtocolId, peertest: &Peertest) {
+    info!("Testing recursive find nodes self for {protocol}");
+    let target_enr = peertest.bootnode.enr.clone();
+    let target_node_id = NodeId::from(target_enr.node_id().raw());
+    let result =
+        call_recursive_find_nodes(protocol, &peertest.bootnode.ipc_client, target_node_id).await;
+    assert_eq!(result, vec![target_enr]);
+}
+
+pub async fn test_recursive_find_nodes_peer(protocol: ProtocolId, peertest: &Peertest) {
+    info!("Testing recursive find nodes peer for {protocol}");
+    let target_enr = peertest.nodes[0].enr.clone();
+    let target_node_id = NodeId::from(target_enr.node_id().raw());
+    let result =
+        call_recursive_find_nodes(protocol, &peertest.bootnode.ipc_client, target_node_id).await;
+    assert_eq!(result, vec![target_enr]);
+}
+
+pub async fn test_recursive_find_nodes_random(protocol: ProtocolId, peertest: &Peertest) {
+    info!("Testing recursive find nodes random for {protocol}");
+    let mut bytes = [0u8; 32];
+    let random_node_id =
+        hex_decode("0xcac75e7e776d84fba55a3104bdccfd716537bca3ad8465113f67f04d62694183").unwrap();
+    bytes.copy_from_slice(&random_node_id);
+    let target_node_id = NodeId::from(bytes);
+    let result =
+        call_recursive_find_nodes(protocol, &peertest.bootnode.ipc_client, target_node_id).await;
+    assert_eq!(result.len(), 2);
+}
 
 pub async fn test_find_content_return_enr(target: &Client, peertest: &Peertest) {
     info!("Testing find content returns enrs properly");
@@ -31,9 +62,12 @@ pub async fn test_find_content_return_enr(target: &Client, peertest: &Peertest) 
         Err(err) => panic!("{err}"),
     }
 
-    let result = target
-        .find_content(peertest.bootnode.enr.clone(), content_key.clone())
-        .await;
+    let result = HistoryNetworkApiClient::find_content(
+        target,
+        peertest.bootnode.enr.clone(),
+        content_key.clone(),
+    )
+    .await;
 
     let enrs = if let Ok(ContentInfo::Enrs { enrs }) = result {
         enrs
@@ -47,66 +81,26 @@ pub async fn test_find_content_return_enr(target: &Client, peertest: &Peertest) 
     }
 }
 
-pub async fn test_recursive_find_nodes_self(peertest: &Peertest) {
-    info!("Testing recursive find nodes self");
-    let target_enr = peertest.bootnode.enr.clone();
-    let target_node_id = NodeId::from(target_enr.node_id().raw());
-    let result = peertest
-        .bootnode
-        .ipc_client
-        .recursive_find_nodes(target_node_id)
-        .await
-        .unwrap();
-    assert_eq!(result, vec![target_enr]);
-}
-
-pub async fn test_recursive_find_nodes_peer(peertest: &Peertest) {
-    info!("Testing recursive find nodes peer");
-    let target_enr = peertest.nodes[0].enr.clone();
-    let target_node_id = NodeId::from(target_enr.node_id().raw());
-    let result = peertest
-        .bootnode
-        .ipc_client
-        .recursive_find_nodes(target_node_id)
-        .await
-        .unwrap();
-    assert_eq!(result, vec![target_enr]);
-}
-
-pub async fn test_recursive_find_nodes_random(peertest: &Peertest) {
-    info!("Testing recursive find nodes random");
-    let mut bytes = [0u8; 32];
-    let random_node_id =
-        hex_decode("0xcac75e7e776d84fba55a3104bdccfd716537bca3ad8465113f67f04d62694183").unwrap();
-    bytes.copy_from_slice(&random_node_id);
-    let target_node_id = NodeId::from(bytes);
-    let result = peertest
-        .bootnode
-        .ipc_client
-        .recursive_find_nodes(target_node_id)
-        .await
-        .unwrap();
-    assert_eq!(result.len(), 2);
-}
-
 pub async fn test_trace_recursive_find_content(peertest: &Peertest) {
     info!("Testing trace recursive find content");
     let (content_key, content_value) = fixture_header_with_proof();
-    let store_result = peertest
-        .bootnode
-        .ipc_client
-        .store(content_key.clone(), content_value.clone())
-        .await
-        .unwrap();
+    let store_result = HistoryNetworkApiClient::store(
+        &peertest.bootnode.ipc_client,
+        content_key.clone(),
+        content_value.clone(),
+    )
+    .await
+    .unwrap();
 
     assert!(store_result);
 
     let query_start_time = SystemTime::now();
-    let trace_content_info: TraceContentInfo = peertest.nodes[0]
-        .ipc_client
-        .trace_recursive_find_content(content_key.clone())
-        .await
-        .unwrap();
+    let trace_content_info = HistoryNetworkApiClient::trace_recursive_find_content(
+        &peertest.nodes[0].ipc_client,
+        content_key.clone(),
+    )
+    .await
+    .unwrap();
 
     assert!(!trace_content_info.utp_transfer);
     let content = trace_content_info.content;
@@ -149,8 +143,7 @@ pub async fn test_trace_recursive_find_content_for_absent_content(peertest: &Pee
     let client = &peertest.nodes[0].ipc_client;
     let (content_key, _) = fixture_header_with_proof();
 
-    let result = client
-        .trace_recursive_find_content(content_key)
+    let result = HistoryNetworkApiClient::trace_recursive_find_content(client, content_key)
         .await
         .unwrap();
 
@@ -163,21 +156,22 @@ pub async fn test_trace_recursive_find_content_for_absent_content(peertest: &Pee
 pub async fn test_trace_recursive_find_content_local_db(peertest: &Peertest) {
     let (content_key, content_value) = fixture_header_with_proof();
 
-    let store_result = peertest
-        .bootnode
-        .ipc_client
-        .store(content_key.clone(), content_value.clone())
-        .await
-        .unwrap();
+    let store_result = HistoryNetworkApiClient::store(
+        &peertest.bootnode.ipc_client,
+        content_key.clone(),
+        content_value.clone(),
+    )
+    .await
+    .unwrap();
 
     assert!(store_result);
 
-    let trace_content_info: TraceContentInfo = peertest
-        .bootnode
-        .ipc_client
-        .trace_recursive_find_content(content_key)
-        .await
-        .unwrap();
+    let trace_content_info = HistoryNetworkApiClient::trace_recursive_find_content(
+        &peertest.bootnode.ipc_client,
+        content_key,
+    )
+    .await
+    .unwrap();
     assert!(!trace_content_info.utp_transfer);
     assert_eq!(
         trace_content_info.content,
@@ -189,4 +183,19 @@ pub async fn test_trace_recursive_find_content_local_db(peertest: &Peertest) {
 
     let expected_origin_id: NodeId = peertest.bootnode.enr.node_id();
     assert_eq!(expected_origin_id, origin);
+}
+
+async fn call_recursive_find_nodes(
+    protocol: ProtocolId,
+    client: &Client,
+    node_id: NodeId,
+) -> Vec<Enr> {
+    match protocol {
+        ProtocolId::Beacon => BeaconNetworkApiClient::recursive_find_nodes(client, node_id),
+        ProtocolId::History => HistoryNetworkApiClient::recursive_find_nodes(client, node_id),
+        ProtocolId::State => StateNetworkApiClient::recursive_find_nodes(client, node_id),
+        _ => panic!("Unexpected protocol: {protocol}"),
+    }
+    .await
+    .unwrap()
 }

@@ -5,7 +5,10 @@ use std::{
     net::{IpAddr, Ipv4Addr},
 };
 
-use ethportal_api::types::cli::{TrinConfig, DEFAULT_WEB3_HTTP_ADDRESS, DEFAULT_WEB3_IPC_PATH};
+use ethportal_api::types::{
+    cli::{TrinConfig, DEFAULT_WEB3_HTTP_ADDRESS, DEFAULT_WEB3_IPC_PATH},
+    portal_wire::ProtocolId,
+};
 use ethportal_peertest as peertest;
 use ethportal_peertest::Peertest;
 use jsonrpsee::{async_client::Client, http_client::HttpClient};
@@ -24,25 +27,31 @@ async fn peertest_stateless() {
     // If a scenario is testing the state of the content database,
     // it should be added to its own test function.
     let (peertest, target, handle) = setup_peertest().await;
+
     peertest::scenarios::paginate::test_paginate_local_storage(&peertest).await;
     peertest::scenarios::basic::test_web3_client_version(&target).await;
     peertest::scenarios::basic::test_discv5_node_info(&peertest).await;
     peertest::scenarios::basic::test_discv5_routing_table_info(&target).await;
-    peertest::scenarios::basic::test_history_radius(&target).await;
-    peertest::scenarios::basic::test_history_add_enr(&target, &peertest).await;
-    peertest::scenarios::basic::test_history_get_enr(&target, &peertest).await;
-    peertest::scenarios::basic::test_history_delete_enr(&target, &peertest).await;
-    peertest::scenarios::basic::test_history_lookup_enr(&peertest).await;
-    peertest::scenarios::basic::test_history_ping(&target, &peertest).await;
-    peertest::scenarios::basic::test_history_find_nodes(&target, &peertest).await;
-    peertest::scenarios::basic::test_history_find_nodes_zero_distance(&target, &peertest).await;
-    peertest::scenarios::basic::test_history_store(&target).await;
-    peertest::scenarios::basic::test_history_routing_table_info(&target).await;
-    peertest::scenarios::basic::test_history_local_content_absent(&target).await;
-    peertest::scenarios::find::test_recursive_find_nodes_self(&peertest).await;
-    peertest::scenarios::find::test_recursive_find_nodes_peer(&peertest).await;
-    peertest::scenarios::find::test_recursive_find_nodes_random(&peertest).await;
     peertest::scenarios::eth_rpc::test_eth_chain_id(&peertest).await;
+
+    for protocol in [ProtocolId::History, ProtocolId::Beacon, ProtocolId::State] {
+        peertest::scenarios::basic::test_routing_table_info(protocol, &target).await;
+        peertest::scenarios::basic::test_radius(protocol, &target).await;
+        peertest::scenarios::basic::test_add_enr(protocol, &target, &peertest).await;
+        peertest::scenarios::basic::test_get_enr(protocol, &target, &peertest).await;
+        peertest::scenarios::basic::test_delete_enr(protocol, &target, &peertest).await;
+        peertest::scenarios::basic::test_lookup_enr(protocol, &peertest).await;
+        peertest::scenarios::basic::test_ping(protocol, &target, &peertest).await;
+        peertest::scenarios::basic::test_find_nodes(protocol, &target, &peertest).await;
+        peertest::scenarios::basic::test_find_nodes_zero_distance(protocol, &target, &peertest)
+            .await;
+        peertest::scenarios::find::test_recursive_find_nodes_self(protocol, &peertest).await;
+        peertest::scenarios::find::test_recursive_find_nodes_peer(protocol, &peertest).await;
+        peertest::scenarios::find::test_recursive_find_nodes_random(protocol, &peertest).await;
+    }
+
+    peertest::scenarios::basic::test_history_store(&target).await;
+    peertest::scenarios::basic::test_history_local_content_absent(&target).await;
     peertest.exit_all_nodes();
     handle.stop().unwrap();
 }
@@ -183,7 +192,7 @@ async fn setup_peertest() -> (peertest::Peertest, Client, RpcServerHandle) {
         [
             "trin",
             "--networks",
-            "history,state",
+            "history,beacon,state",
             "--external-address",
             external_addr.as_str(),
             "--web3-ipc-path",
@@ -226,7 +235,7 @@ async fn setup_peertest_bridge() -> (Peertest, HttpClient, RpcServerHandle) {
         [
             "trin",
             "--networks",
-            "history,beacon",
+            "history,beacon,state",
             "--external-address",
             external_addr.as_str(),
             // Run bridge test with http, since bridge doesn't support ipc yet.
