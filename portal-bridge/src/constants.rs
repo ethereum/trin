@@ -17,6 +17,6 @@ pub const BEACON_GENESIS_TIME: u64 = 1606824023;
 pub const PROVIDER_DAILY_REQUEST_LIMIT: f64 = 1_000_000.0;
 pub const SECONDS_IN_A_DAY: f64 = 86400.0;
 
-// This is a very conservative timeout if a provider takes longer then even 1 second it is probably
+// This is a very conservative timeout if a provider takes longer than even 1 second it is probably
 // overloaded and not performing well
 pub const HTTP_REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
