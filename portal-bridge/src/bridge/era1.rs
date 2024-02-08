@@ -1,5 +1,4 @@
 use std::{
-    fs,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
@@ -7,6 +6,7 @@ use std::{
 use anyhow::ensure;
 use futures::future::join_all;
 use rand::{seq::SliceRandom, thread_rng};
+use surf::{Client, Config};
 use tokio::{
     sync::{OwnedSemaphorePermit, Semaphore},
     task::JoinHandle,
@@ -33,50 +33,66 @@ use trin_validation::{
     accumulator::MasterAccumulator, constants::EPOCH_SIZE, oracle::HeaderOracle,
 };
 
+const ERA1_DIR_URL: &str = "https://era1.ethportal.net/";
+
 pub struct Era1Bridge {
     pub portal_clients: Vec<HttpClient>,
     pub header_oracle: HeaderOracle,
     pub epoch_acc_path: PathBuf,
-    pub era1_files: Vec<PathBuf>,
+    pub era1_files: Vec<String>,
+    pub http_client: Client,
 }
 
-// todo: fetch era1 files from pandaops source
 // todo: validate via checksum, so we don't have to validate content on a per-value basis
 impl Era1Bridge {
-    pub fn new(
+    pub async fn new(
         portal_clients: Vec<HttpClient>,
         header_oracle: HeaderOracle,
         epoch_acc_path: PathBuf,
     ) -> anyhow::Result<Self> {
-        let era1_dir: Result<Vec<std::fs::DirEntry>, std::io::Error> =
-            fs::read_dir(PathBuf::from("./test_assets/era1"))?.collect();
-        let era1_files: Vec<PathBuf> = era1_dir?.into_iter().map(|entry| entry.path()).collect();
+        let http_client: Client = Config::new()
+            .add_header("Content-Type", "application/xml")
+            .expect("to be able to add header")
+            .try_into()?;
+        let directory = http_client
+            .get(ERA1_DIR_URL)
+            .recv_string()
+            .await
+            .expect("to be able to read era1 file directory");
+        let xml = roxmltree::Document::parse(&directory)?;
+        let mut era1_files: Vec<String> = xml
+            .descendants()
+            .filter(|n| n.tag_name().name() == "Key")
+            .map(|n| {
+                let key = n.text().expect("to be able to get text");
+                format!("{ERA1_DIR_URL}{key}")
+            })
+            .collect();
+        era1_files.shuffle(&mut thread_rng());
         Ok(Self {
             portal_clients,
             header_oracle,
             epoch_acc_path,
             era1_files,
+            http_client,
         })
     }
 
     pub async fn launch(&self) {
         info!("Launching era1 bridge");
-        let mut era1_files = self.era1_files.clone();
-        era1_files.shuffle(&mut thread_rng());
-        for era1_path in era1_files.into_iter() {
+        for era1_path in self.era1_files.clone().into_iter() {
             info!("Processing era1 file at path: {:?}", era1_path);
             // We are using a semaphore to limit the amount of active gossip transfers to make sure
             // we don't overwhelm the trin client
             let gossip_send_semaphore = Arc::new(Semaphore::new(GOSSIP_LIMIT));
 
-            let era1 = Era1::read_from_file(
-                era1_path
-                    .clone()
-                    .into_os_string()
-                    .into_string()
-                    .expect("to be able to convert era1 path into string"),
-            )
-            .unwrap_or_else(|_| panic!("to be able to read era1 file from path: {era1_path:?}"));
+            let raw_era1 = self
+                .http_client
+                .get(era1_path.clone())
+                .recv_bytes()
+                .await
+                .unwrap_or_else(|_| panic!("unable to read era1 file at path: {era1_path:?}"));
+            let era1 = Era1::deserialize(&raw_era1).expect("to be able to deserialize era1 file");
             let epoch_index = era1.block_tuples[0].header.header.number / EPOCH_SIZE as u64;
             info!("Era1 file read successfully, gossiping block tuples for epoch: {epoch_index}");
             let epoch_acc = match self.get_epoch_acc(epoch_index).await {
@@ -192,6 +208,11 @@ impl Era1Bridge {
                 "Error serving block tuple header at height: {:?} - {:?}",
                 block_tuple.header.header.number, msg
             );
+            // we actually do want to cut off the gossip for body / receipts if header fails,
+            // since the header might fail validation and we don't want to serve the rest of the
+            // block a future improvement would be to have a more fine-grained error
+            // handling and only cut off gossip if header fails validation
+            return Ok(());
         }
 
         if let Err(msg) = Self::construct_and_gossip_block_body(
