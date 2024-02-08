@@ -6,8 +6,9 @@ use surf_governor::GovernorMiddleware;
 use url::Url;
 
 use crate::{
-    cli::Provider, constants::SECONDS_IN_A_DAY, BASE_CL_ENDPOINT, PANDAOPS_CLIENT_ID,
-    PANDAOPS_CLIENT_SECRET,
+    cli::Provider,
+    constants::{HTTP_REQUEST_TIMEOUT, SECONDS_IN_A_DAY},
+    BASE_CL_ENDPOINT, PANDAOPS_CLIENT_ID, PANDAOPS_CLIENT_SECRET,
 };
 
 /// Implements endpoints from the Beacon API to access data from the consensus layer.
@@ -30,11 +31,13 @@ impl ConsensusApi {
                     )?
                     .add_header("Content-Type", "application/json")?
                     .set_base_url(base_cl_endpoint)
+                    .set_timeout(Some(HTTP_REQUEST_TIMEOUT))
                     .try_into()?
             }
             Provider::Url(url) => Config::new()
                 .add_header("Content-Type", "application/json")?
                 .set_base_url(url)
+                .set_timeout(Some(HTTP_REQUEST_TIMEOUT))
                 .try_into()?,
             Provider::Test => {
                 return Err(surf::Error::from(anyhow!(

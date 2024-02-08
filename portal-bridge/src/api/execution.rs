@@ -15,7 +15,7 @@ use url::Url;
 
 use crate::{
     cli::Provider,
-    constants::SECONDS_IN_A_DAY,
+    constants::{HTTP_REQUEST_TIMEOUT, SECONDS_IN_A_DAY},
     types::{full_header::FullHeader, mode::BridgeMode},
     BASE_EL_ARCHIVE_ENDPOINT, BASE_EL_ENDPOINT, PANDAOPS_CLIENT_ID, PANDAOPS_CLIENT_SECRET,
 };
@@ -71,11 +71,13 @@ impl ExecutionApi {
                         PANDAOPS_CLIENT_SECRET.to_string(),
                     )?
                     .set_base_url(base_el_endpoint)
+                    .set_timeout(Some(HTTP_REQUEST_TIMEOUT))
                     .try_into()?
             }
             Provider::Url(url) => Config::new()
                 .add_header("Content-Type", "application/json")?
                 .set_base_url(url.clone())
+                .set_timeout(Some(HTTP_REQUEST_TIMEOUT))
                 .try_into()?,
             Provider::Test => Config::new().try_into()?,
         };
