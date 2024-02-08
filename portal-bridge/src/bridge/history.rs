@@ -102,6 +102,10 @@ impl HistoryBridge {
         let mut block_index = self.execution_api.get_latest_block_number().await.expect(
             "Error launching bridge in latest mode. Unable to get latest block from provider.",
         );
+        // If a provider returns the same block number and doesn't time out over and over.
+        // this indicates the provider is no longer in sync with the chain so we want to long an
+        // error
+        let mut last_seen_block_counter = 0;
         loop {
             sleep(Duration::from_secs(LATEST_BLOCK_POLL_RATE)).await;
             let latest_block = match self.execution_api.get_latest_block_number().await {
@@ -111,7 +115,9 @@ impl HistoryBridge {
                     continue;
                 }
             };
+            last_seen_block_counter += 1;
             if latest_block > block_index {
+                last_seen_block_counter = 0;
                 let gossip_range = Range {
                     start: block_index,
                     end: latest_block + 1,
@@ -127,6 +133,11 @@ impl HistoryBridge {
                     );
                 }
                 block_index = gossip_range.end;
+            }
+            // Ethereum mainnet creates a new block every 15 seconds, if we don't get a new block
+            // within 1 minute. There is a problem with the provider so throw an error.
+            if last_seen_block_counter > 60 / LATEST_BLOCK_POLL_RATE {
+                tracing::error!("History Latest: Haven't received a new block in over 60 seconds. EL provider could be out of sync.");
             }
         }
     }
