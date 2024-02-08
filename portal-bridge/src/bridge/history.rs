@@ -103,9 +103,9 @@ impl HistoryBridge {
             "Error launching bridge in latest mode. Unable to get latest block from provider.",
         );
         // If a provider returns the same block number and doesn't time out over and over.
-        // this indictates the provider is no longer in sync with the chain so we want to long an
+        // this indicates the provider is no longer in sync with the chain so we want to long an
         // error
-        let mut seen_old_latest_block_index = 0;
+        let mut last_seen_block_counter = 0;
         loop {
             sleep(Duration::from_secs(LATEST_BLOCK_POLL_RATE)).await;
             let latest_block = match self.execution_api.get_latest_block_number().await {
@@ -115,9 +115,9 @@ impl HistoryBridge {
                     continue;
                 }
             };
-            seen_old_latest_block_index += 1;
+            last_seen_block_counter += 1;
             if latest_block > block_index {
-                seen_old_latest_block_index = 0;
+                last_seen_block_counter = 0;
                 let gossip_range = Range {
                     start: block_index,
                     end: latest_block + 1,
@@ -134,11 +134,10 @@ impl HistoryBridge {
                 }
                 block_index = gossip_range.end;
             }
-            // Ethereum mainnet creates a new block every 15 seconds, if we don't get 1 new block in
-            // the time period 4 new blocks should exist report an error something is
-            // wrong with the EL provider
-            if seen_old_latest_block_index > 60 / LATEST_BLOCK_POLL_RATE {
-                tracing::error!("History Latest: Haven't receieved a new block in over 60 seconds EL provider could be out of sync");
+            // Ethereum mainnet creates a new block every 15 seconds, if we don't get a new block
+            // within 1 minute. There is a problem with the provider so throw an error.
+            if last_seen_block_counter > 60 / LATEST_BLOCK_POLL_RATE {
+                tracing::error!("History Latest: Haven't received a new block in over 60 seconds. EL provider could be out of sync.");
             }
         }
     }
