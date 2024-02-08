@@ -3,6 +3,7 @@ use ethereum_types::H256;
 use serde::{Deserialize, Serialize};
 use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, BitList, BitVector, VariableList};
+use tree_hash_derive::TreeHash;
 
 use super::{header::BeaconBlockHeader, proof::Proof, pubkey::PubKey, signature::BlsSignature};
 
@@ -77,7 +78,7 @@ pub struct IndexedAttestation {
     pub signature: BlsSignature,
 }
 
-#[derive(Debug, PartialEq, Clone, Deserialize, Serialize, Decode, Encode)]
+#[derive(Debug, PartialEq, Clone, Deserialize, Serialize, Decode, Encode, TreeHash)]
 pub struct AttestationData {
     pub slot: u64,
     pub index: u64,
@@ -86,7 +87,7 @@ pub struct AttestationData {
     pub target: Checkpoint,
 }
 
-#[derive(Debug, PartialEq, Clone, Deserialize, Serialize, Decode, Encode)]
+#[derive(Debug, PartialEq, Clone, Copy, Deserialize, Serialize, Decode, Encode, TreeHash)]
 pub struct Checkpoint {
     pub epoch: u64,
     pub root: H256,
@@ -104,7 +105,7 @@ pub struct VoluntaryExit {
     pub validator_index: u64,
 }
 
-#[derive(Debug, PartialEq, Clone, Default, Deserialize, Serialize, Decode, Encode)]
+#[derive(Debug, PartialEq, Clone, Default, Deserialize, Serialize, Decode, Encode, TreeHash)]
 pub struct Eth1Data {
     pub deposit_root: H256,
     pub deposit_count: u64,
