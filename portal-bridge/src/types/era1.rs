@@ -39,7 +39,7 @@ impl Era1 {
         Self::deserialize(&buf)
     }
 
-    fn deserialize(buf: &[u8]) -> anyhow::Result<Self> {
+    pub fn deserialize(buf: &[u8]) -> anyhow::Result<Self> {
         let file = E2storeFile::deserialize(buf)?;
         ensure!(
             file.entries.len() == ERA1_ENTRY_COUNT,

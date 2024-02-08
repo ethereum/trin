@@ -91,6 +91,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     header_oracle,
                     bridge_config.epoch_acc_path,
                 )
+                .await
                 .unwrap();
                 let bridge_handle = tokio::spawn(async move {
                     era1_bridge

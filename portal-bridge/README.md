@@ -32,6 +32,7 @@ Current options include `"trin"` / `"fluffy"`.
 - `"--mode backfill:r10-12"`: backfill a block range from #10 to #12 (inclusive)
 - `"--mode single:b100"`: gossip a single block #100
 - `"--mode single:e100"`: gossip a single epoch #100
+- `"--mode fourfours`: will randomly select era1 files from `era1.ethportal.net` and gossip them
 
 ### Network
 You can specify the `--network` flag for which network to run the bridge for

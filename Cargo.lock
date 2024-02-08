@@ -4855,6 +4855,7 @@ dependencies = [
  "portalnet",
  "rand 0.8.5",
  "rlp",
+ "roxmltree",
  "rstest 0.18.2",
  "serde",
  "serde_json",
@@ -5729,6 +5730,12 @@ name = "route-recognizer"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "afab94fb28594581f62d981211a9a4d53cc8130bbcbbb89a0440d9b8e81a7746"
+
+[[package]]
+name = "roxmltree"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3cd14fd5e3b777a7422cca79358c57a8f6e3a703d9ac187448d0daf220c2407f"
 
 [[package]]
 name = "rpc"

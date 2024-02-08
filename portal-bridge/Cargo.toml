@@ -32,6 +32,7 @@ lazy_static = "1.4.0"
 portalnet = { path = "../portalnet" }
 rand = "0.8.4"
 rlp = "0.5.0"
+roxmltree = "0.19.0"
 serde = { version = "1.0.150", features = ["derive", "rc"] }
 serde_json = "1.0.89"
 serde_yaml = "0.9"
