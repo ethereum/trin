@@ -1,3 +1,5 @@
+use tokio::time::Duration;
+
 // This number was chosen after some experimentation with different batch sizes.
 // It was found that a batch size of 128 was the best compromise between speed and
 // successful response rate. This number may change in the future.
@@ -14,3 +16,7 @@ pub const BEACON_GENESIS_TIME: u64 = 1606824023;
 
 pub const PROVIDER_DAILY_REQUEST_LIMIT: f64 = 1_000_000.0;
 pub const SECONDS_IN_A_DAY: f64 = 86400.0;
+
+// This is a very conservative timeout if a provider takes longer than even 1 second it is probably
+// overloaded and not performing well
+pub const HTTP_REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
