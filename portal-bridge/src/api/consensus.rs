@@ -1,14 +1,14 @@
-use std::{fmt::Display, time::Duration};
+use std::{fmt::Display, num::NonZeroU32};
 
 use anyhow::anyhow;
 use surf::{Client, Config};
 use surf_governor::GovernorMiddleware;
+use tracing::debug;
 use url::Url;
 
 use crate::{
-    cli::Provider,
-    constants::{HTTP_REQUEST_TIMEOUT, SECONDS_IN_A_DAY},
-    BASE_CL_ENDPOINT, PANDAOPS_CLIENT_ID, PANDAOPS_CLIENT_SECRET,
+    cli::Provider, constants::HTTP_REQUEST_TIMEOUT, BASE_CL_ENDPOINT, PANDAOPS_CLIENT_ID,
+    PANDAOPS_CLIENT_SECRET,
 };
 
 /// Implements endpoints from the Beacon API to access data from the consensus layer.
@@ -18,7 +18,7 @@ pub struct ConsensusApi {
 }
 
 impl ConsensusApi {
-    pub async fn new(provider: Provider, daily_request_limit: f64) -> Result<Self, surf::Error> {
+    pub async fn new(provider: Provider, daily_request_limit: u64) -> Result<Self, surf::Error> {
         let client: Client = match provider {
             Provider::PandaOps => {
                 let base_cl_endpoint = Url::parse(&BASE_CL_ENDPOINT)
@@ -46,10 +46,16 @@ impl ConsensusApi {
             }
         };
         // Limits the number of requests sent to the CL provider in a day
-        let period = Duration::from_secs_f64(daily_request_limit / SECONDS_IN_A_DAY);
-        let rate_limit = GovernorMiddleware::with_period(period)
+        let hourly_request_limit = NonZeroU32::new(daily_request_limit as u32 / 24_u32).ok_or(
+            anyhow!("Invalid daily request limit, must be greater than 0"),
+        )?;
+        let rate_limit = GovernorMiddleware::per_hour(hourly_request_limit)
             .expect("Expect GovernerMiddleware should have received a valid Duration");
         let client = client.with(rate_limit);
+        debug!(
+            "Starting ConsensusApi with provider at url: {:?}",
+            client.config().base_url
+        );
         check_provider(&client).await?;
         Ok(Self { client })
     }

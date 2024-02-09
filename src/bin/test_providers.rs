@@ -13,8 +13,8 @@ use url::Url;
 
 use ethportal_api::{types::execution::accumulator::EpochAccumulator, utils::bytes::hex_encode};
 use portal_bridge::{
-    api::execution::ExecutionApi, bridge::history::EPOCH_SIZE, PANDAOPS_CLIENT_ID,
-    PANDAOPS_CLIENT_SECRET,
+    api::execution::ExecutionApi, bridge::history::EPOCH_SIZE, cli::Provider,
+    types::mode::BridgeMode, PANDAOPS_CLIENT_ID, PANDAOPS_CLIENT_SECRET,
 };
 use trin_utils::log::init_tracing_logger;
 use trin_validation::{
@@ -30,7 +30,6 @@ use trin_validation::{
 // Randomly samples X blocks from every hard fork range.
 // Validates that each provider is able to return valid
 // headers, receipts, and block bodies for each randomly sampled block.
-//
 // Tested Providers:
 // - Infura
 // - PandaOps-Erigon
@@ -44,13 +43,9 @@ use trin_validation::{
 pub async fn main() -> Result<()> {
     init_tracing_logger();
     let config = ProviderConfig::parse();
-    let all_providers: Vec<Providers> = Providers::into_vec();
-    let client = all_providers.first().unwrap().get_client();
-    let master_acc = MasterAccumulator::default();
-    let api = ExecutionApi {
-        client,
-        master_acc: master_acc.clone(),
-    };
+    let api = ExecutionApi::new(Provider::PandaOps, BridgeMode::Latest, 100000)
+        .await
+        .unwrap();
     let latest_block = api.get_latest_block_number().await?;
     let mut all_ranges = Ranges::into_vec(config.sample_size, latest_block);
     let mut all_providers: Vec<Providers> = Providers::into_vec();
@@ -60,7 +55,7 @@ pub async fn main() -> Result<()> {
         let client = provider.get_client();
         let api = ExecutionApi {
             client,
-            master_acc: master_acc.clone(),
+            master_acc: MasterAccumulator::default(),
         };
         for gossip_range in all_ranges.iter_mut() {
             debug!("Testing range: {gossip_range:?}");
