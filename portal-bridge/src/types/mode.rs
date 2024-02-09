@@ -14,11 +14,13 @@ use trin_validation::constants::EPOCH_SIZE;
 ///   - ex: "r10-12" backfills a block range from #10 to #12 (inclusive)
 /// - FourFours: gossips randomly sequenced era1 files
 ///   - ex: "fourfours"
+/// - FourFours: gossips single era1 file
+///  - ex: "fourfours:mainnet-00000-5ec1ffb8.era1"
 #[derive(Clone, Debug, PartialEq, Default, Eq)]
 pub enum BridgeMode {
     #[default]
     Latest,
-    FourFours,
+    FourFours(Option<String>),
     Backfill(ModeType),
     Single(ModeType),
     Test(PathBuf),
@@ -31,13 +33,13 @@ impl BridgeMode {
         let (is_single_mode, mode_type) = match self {
             BridgeMode::Backfill(val) => (false, val),
             BridgeMode::Single(val) => (true, val),
-            BridgeMode::FourFours => {
+            BridgeMode::Latest => {
+                return Err(anyhow!("BridgeMode `latest` does not have a block range"))
+            }
+            BridgeMode::FourFours(_) => {
                 return Err(anyhow!(
                     "BridgeMode `fourfours` does not have a block range"
                 ))
-            }
-            BridgeMode::Latest => {
-                return Err(anyhow!("BridgeMode `latest` does not have a block range"))
             }
             BridgeMode::Test(_) => {
                 return Err(anyhow!("BridgeMode `test` does not have a block range"))
@@ -77,8 +79,18 @@ impl FromStr for BridgeMode {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "latest" => Ok(BridgeMode::Latest),
-            "fourfours" => Ok(BridgeMode::FourFours),
             val => {
+                // parse fourfours mode
+                if val.starts_with("fourfours") {
+                    match val.find(':') {
+                        Some(index) => {
+                            let path = &val[index + 1..];
+                            return Ok(BridgeMode::FourFours(Some(path.to_string())));
+                        }
+                        None => return Ok(BridgeMode::FourFours(None)),
+                    }
+                }
+                // parse backfill, single, and test modes
                 let index = val
                     .find(':')
                     .ok_or("Invalid bridge mode arg: missing ':'")?;
@@ -172,6 +184,11 @@ mod test {
     #[case("backfill:b1000", BridgeMode::Backfill(ModeType::Block(1000)))]
     #[case("backfill:e0", BridgeMode::Backfill(ModeType::Epoch(0)))]
     #[case("backfill:e1000", BridgeMode::Backfill(ModeType::Epoch(1000)))]
+    #[case("fourfours", BridgeMode::FourFours(None))]
+    #[case(
+        "fourfours:mainnet-00000-5ec1ffb8.era1",
+        BridgeMode::FourFours(Some("mainnet-00000-5ec1ffb8.era1".to_string()))
+    )]
     #[case(
         "test:/usr/eth/test.json",
         BridgeMode::Test(PathBuf::from("/usr/eth/test.json"))

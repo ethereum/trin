@@ -68,7 +68,7 @@ impl HistoryBridge {
         match self.mode.clone() {
             BridgeMode::Test(path) => self.launch_test(path).await,
             BridgeMode::Latest => self.launch_latest().await,
-            BridgeMode::FourFours => panic!("4444s mode not supported in HistoryBridge."),
+            BridgeMode::FourFours(_) => panic!("4444s mode not supported in HistoryBridge."),
             _ => self.launch_backfill().await,
         }
         info!("Bridge mode: {:?} complete.", self.mode);

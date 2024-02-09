@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use anyhow::ensure;
+use anyhow::{anyhow, ensure};
 use futures::future::join_all;
 use rand::{seq::SliceRandom, thread_rng};
 use surf::{Client, Config};
@@ -49,26 +49,13 @@ impl Era1Bridge {
         portal_clients: Vec<HttpClient>,
         header_oracle: HeaderOracle,
         epoch_acc_path: PathBuf,
+        era1_path: Option<String>,
     ) -> anyhow::Result<Self> {
-        let http_client: Client = Config::new()
-            .add_header("Content-Type", "application/xml")
-            .expect("to be able to add header")
-            .try_into()?;
-        let directory = http_client
-            .get(ERA1_DIR_URL)
-            .recv_string()
-            .await
-            .expect("to be able to read era1 file directory");
-        let xml = roxmltree::Document::parse(&directory)?;
-        let mut era1_files: Vec<String> = xml
-            .descendants()
-            .filter(|n| n.tag_name().name() == "Key")
-            .map(|n| {
-                let key = n.text().expect("to be able to get text");
-                format!("{ERA1_DIR_URL}{key}")
-            })
-            .collect();
-        era1_files.shuffle(&mut thread_rng());
+        let http_client: Client = Config::new().try_into()?;
+        let era1_files = match era1_path {
+            Some(path) => get_single_era1_file(&http_client, &path).await?,
+            None => get_randomly_shuffled_era1_files(&http_client).await?,
+        };
         Ok(Self {
             portal_clients,
             header_oracle,
@@ -91,7 +78,7 @@ impl Era1Bridge {
                 .get(era1_path.clone())
                 .recv_bytes()
                 .await
-                .unwrap_or_else(|_| panic!("unable to read era1 file at path: {era1_path:?}"));
+                .unwrap_or_else(|e| panic!("unable to read era1 file at path: {era1_path:?}: {e}"));
             let era1 = Era1::deserialize(&raw_era1).expect("to be able to deserialize era1 file");
             let epoch_index = era1.block_tuples[0].header.header.number / EPOCH_SIZE as u64;
             info!("Era1 file read successfully, gossiping block tuples for epoch: {epoch_index}");
@@ -123,6 +110,7 @@ impl Era1Bridge {
             // This can't deadlock, because the tokio::spawn has a timeout.
             join_all(serve_block_tuple_handles).await;
         }
+        info!("Era1 bridge has finished processing all selected era1 files");
     }
 
     async fn get_epoch_acc(&self, epoch_index: u64) -> anyhow::Result<Arc<EpochAccumulator>> {
@@ -315,4 +303,42 @@ impl Era1Bridge {
         let content_value = HistoryContentValue::Receipts(block_tuple.receipts.receipts);
         gossip_history_content(&portal_clients, content_key, content_value, block_stats).await
     }
+}
+
+async fn get_single_era1_file(http_client: &Client, file: &str) -> anyhow::Result<Vec<String>> {
+    let path = format!("{ERA1_DIR_URL}{file}");
+    let response = http_client
+        .get(path.clone())
+        .recv_bytes()
+        .await
+        .expect("to be able to make era1 file request");
+    // There's probably a better way to do this, but the surf library is finicky.
+    // If the response is short, that means the user entered an invalid era file path
+    if response.len() < 300 {
+        return Err(anyhow!(
+            "Failed to fetch valid era1 file from path, please make sure you've entered a valid path: {:?}",
+            path,
+        ));
+    }
+    Ok(vec![path])
+}
+
+async fn get_randomly_shuffled_era1_files(http_client: &Client) -> anyhow::Result<Vec<String>> {
+    let directory = http_client
+        .get(ERA1_DIR_URL)
+        .header("Content-Type", "application/xml")
+        .recv_string()
+        .await
+        .expect("to be able to read era1 file directory");
+    let xml = roxmltree::Document::parse(&directory)?;
+    let mut era1_files: Vec<String> = xml
+        .descendants()
+        .filter(|n| n.tag_name().name() == "Key")
+        .map(|n| {
+            let key = n.text().expect("to be able to get text");
+            format!("{ERA1_DIR_URL}{key}")
+        })
+        .collect();
+    era1_files.shuffle(&mut thread_rng());
+    Ok(era1_files)
 }

@@ -36,7 +36,7 @@ pub struct BridgeConfig {
     #[arg(
         long,
         default_value = "latest",
-        help = "['latest', 'backfill', <u64> to provide the starting epoch]"
+        help = "['latest', 'backfill', 'fourfours']"
     )]
     pub mode: BridgeMode,
 

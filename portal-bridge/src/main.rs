@@ -83,13 +83,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Launch History Network portal bridge
     if bridge_config.network.contains(&NetworkKind::History) {
         match bridge_config.mode {
-            BridgeMode::FourFours => {
+            BridgeMode::FourFours(path) => {
                 let master_acc = MasterAccumulator::default();
                 let header_oracle = HeaderOracle::new(master_acc);
                 let era1_bridge = Era1Bridge::new(
                     portal_clients.expect("Failed to create history JSON-RPC clients"),
                     header_oracle,
                     bridge_config.epoch_acc_path,
+                    path,
                 )
                 .await
                 .unwrap();
