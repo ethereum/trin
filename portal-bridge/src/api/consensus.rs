@@ -1,8 +1,7 @@
-use std::{fmt::Display, num::NonZeroU32};
+use std::fmt::Display;
 
 use anyhow::anyhow;
 use surf::{Client, Config};
-use surf_governor::GovernorMiddleware;
 use tracing::debug;
 use url::Url;
 
@@ -18,7 +17,7 @@ pub struct ConsensusApi {
 }
 
 impl ConsensusApi {
-    pub async fn new(provider: Provider, daily_request_limit: u64) -> Result<Self, surf::Error> {
+    pub async fn new(provider: Provider) -> Result<Self, surf::Error> {
         let client: Client = match provider {
             Provider::PandaOps => {
                 let base_cl_endpoint = Url::parse(&BASE_CL_ENDPOINT)
@@ -45,13 +44,6 @@ impl ConsensusApi {
                 )))
             }
         };
-        // Limits the number of requests sent to the CL provider in a day
-        let hourly_request_limit = NonZeroU32::new(daily_request_limit as u32 / 24_u32).ok_or(
-            anyhow!("Invalid daily request limit, must be greater than 0"),
-        )?;
-        let rate_limit = GovernorMiddleware::per_hour(hourly_request_limit)
-            .expect("Expect GovernerMiddleware should have received a valid Duration");
-        let client = client.with(rate_limit);
         debug!(
             "Starting ConsensusApi with provider at url: {:?}",
             client.config().base_url

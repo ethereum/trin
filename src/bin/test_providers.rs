@@ -43,7 +43,7 @@ use trin_validation::{
 pub async fn main() -> Result<()> {
     init_tracing_logger();
     let config = ProviderConfig::parse();
-    let api = ExecutionApi::new(Provider::PandaOps, BridgeMode::Latest, 100000)
+    let api = ExecutionApi::new(Provider::PandaOps, BridgeMode::Latest)
         .await
         .unwrap();
     let latest_block = api.get_latest_block_number().await?;
