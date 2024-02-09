@@ -4,12 +4,10 @@ use anyhow::{anyhow, bail};
 use ethereum_types::H256;
 use futures::future::join_all;
 use serde_json::{json, Value};
-use surf::{
-    middleware::{Middleware, Next},
-    Body, Client, Config, Request, Response,
-};
+use surf::{Client, Config};
 use surf_governor::GovernorMiddleware;
-use tokio::time::{sleep, Duration};
+use surf_retry::RetryMiddleware;
+use tokio::time::Duration;
 use tracing::warn;
 use url::Url;
 
@@ -85,7 +83,7 @@ impl ExecutionApi {
         let period = Duration::from_secs_f64(daily_request_limit / SECONDS_IN_A_DAY);
         let rate_limit = GovernorMiddleware::with_period(period)
             .expect("Expect GovernerMiddleware should have received a valid Duration");
-        let client = client.with(rate_limit).with(Retry::default());
+        let client = client.with(rate_limit).with(RetryMiddleware::default());
         // Only check that provider is connected & available if not using a test provider.
         if provider != Provider::Test {
             check_provider(&client).await?;
@@ -333,54 +331,6 @@ pub async fn construct_proof(
     let proof = MasterAccumulator::construct_proof(&header, epoch_acc)?;
     let proof = BlockHeaderProof::AccumulatorProof(AccumulatorProof { proof });
     Ok(HeaderWithProof { header, proof })
-}
-
-#[derive(Debug)]
-pub struct Retry {
-    attempts: u8,
-}
-
-impl Retry {
-    pub fn new(attempts: u8) -> Self {
-        Retry { attempts }
-    }
-}
-
-#[async_trait::async_trait]
-impl Middleware for Retry {
-    async fn handle(
-        &self,
-        mut req: Request,
-        client: Client,
-        next: Next<'_>,
-    ) -> Result<Response, surf::Error> {
-        let mut retry_count: u8 = 0;
-        let body = req.take_body().into_bytes().await?;
-        while retry_count < self.attempts {
-            if retry_count > 0 {
-                warn!("Retrying request");
-            }
-            let mut new_req = req.clone();
-            new_req.set_body(Body::from_bytes(body.clone()));
-            if let Ok(val) = next.run(new_req, client.clone()).await {
-                if val.status().is_success() {
-                    return Ok(val);
-                }
-            };
-            retry_count += 1;
-            sleep(Duration::from_millis(100)).await;
-        }
-        Err(surf::Error::from_str(
-            500,
-            "Unable to fetch batch after 3 retries",
-        ))
-    }
-}
-
-impl Default for Retry {
-    fn default() -> Self {
-        Self { attempts: 3 }
-    }
 }
 
 /// Check that provider is valid and accessible.

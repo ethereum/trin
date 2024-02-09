@@ -4863,6 +4863,7 @@ dependencies = [
  "ssz_types",
  "surf",
  "surf-governor",
+ "surf-retry",
  "test-log",
  "tokio",
  "tracing",
@@ -5628,6 +5629,17 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
+]
+
+[[package]]
+name = "retry-policies"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "17dd00bff1d737c40dbcd47d4375281bf4c17933f9eef0a185fc7bacca23ecbd"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "rand 0.8.5",
 ]
 
 [[package]]
@@ -6879,6 +6891,20 @@ dependencies = [
  "governor",
  "http-types",
  "lazy_static",
+ "surf",
+]
+
+[[package]]
+name = "surf-retry"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f2e3978e963c08fdff9eb3f074227b47bedbf7be064dffa7ec356fce25298081"
+dependencies = [
+ "async-std",
+ "chrono",
+ "http-types",
+ "httpdate",
+ "retry-policies",
  "surf",
 ]
 

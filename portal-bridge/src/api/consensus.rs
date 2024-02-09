@@ -3,6 +3,7 @@ use std::{fmt::Display, time::Duration};
 use anyhow::anyhow;
 use surf::{Client, Config};
 use surf_governor::GovernorMiddleware;
+use surf_retry::RetryMiddleware;
 use url::Url;
 
 use crate::{
@@ -49,7 +50,7 @@ impl ConsensusApi {
         let period = Duration::from_secs_f64(daily_request_limit / SECONDS_IN_A_DAY);
         let rate_limit = GovernorMiddleware::with_period(period)
             .expect("Expect GovernerMiddleware should have received a valid Duration");
-        let client = client.with(rate_limit);
+        let client = client.with(rate_limit).with(RetryMiddleware::default());
         check_provider(&client).await?;
         Ok(Self { client })
     }
