@@ -53,7 +53,7 @@ impl ExecutionApi {
     pub async fn new(
         provider: Provider,
         mode: BridgeMode,
-        daily_request_limit: f64,
+        daily_request_limit: Option<f64>,
     ) -> Result<Self, surf::Error> {
         let client: Client = match &provider {
             Provider::PandaOps => {
@@ -79,11 +79,16 @@ impl ExecutionApi {
                 .try_into()?,
             Provider::Test => Config::new().try_into()?,
         };
-        // Limits the number of requests sent to the EL provider in a day
-        let period = Duration::from_secs_f64(daily_request_limit / SECONDS_IN_A_DAY);
-        let rate_limit = GovernorMiddleware::with_period(period)
-            .expect("Expect GovernerMiddleware should have received a valid Duration");
-        let client = client.with(rate_limit).with(Retry::default());
+        let client = match daily_request_limit {
+            Some(daily_request_limit) => {
+                // Limits the number of requests sent to the EL provider in a day
+                let period = Duration::from_secs_f64(daily_request_limit / SECONDS_IN_A_DAY);
+                let rate_limit = GovernorMiddleware::with_period(period)
+                    .expect("Expect GovernerMiddleware should have received a valid Duration");
+                client.with(rate_limit).with(Retry::default())
+            }
+            None => client.with(Retry::default()),
+        };
         // Only check that provider is connected & available if not using a test provider.
         if provider != Provider::Test {
             check_provider(&client).await?;

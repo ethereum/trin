@@ -17,7 +17,10 @@ pub struct ConsensusApi {
 }
 
 impl ConsensusApi {
-    pub async fn new(provider: Provider, daily_request_limit: f64) -> Result<Self, surf::Error> {
+    pub async fn new(
+        provider: Provider,
+        daily_request_limit: Option<f64>,
+    ) -> Result<Self, surf::Error> {
         let client: Client = match provider {
             Provider::PandaOps => {
                 let base_cl_endpoint = Url::parse(&BASE_CL_ENDPOINT)
@@ -42,11 +45,16 @@ impl ConsensusApi {
                 )))
             }
         };
-        // Limits the number of requests sent to the CL provider in a day
-        let period = Duration::from_secs_f64(daily_request_limit / SECONDS_IN_A_DAY);
-        let rate_limit = GovernorMiddleware::with_period(period)
-            .expect("Expect GovernerMiddleware should have received a valid Duration");
-        let client = client.with(rate_limit);
+        let client = match daily_request_limit {
+            Some(daily_request_limit) => {
+                // Limits the number of requests sent to the CL provider in a day
+                let period = Duration::from_secs_f64(daily_request_limit / SECONDS_IN_A_DAY);
+                let rate_limit = GovernorMiddleware::with_period(period)
+                    .expect("Expect GovernerMiddleware should have received a valid Duration");
+                client.with(rate_limit)
+            }
+            None => client,
+        };
         check_provider(&client).await?;
         Ok(Self { client })
     }

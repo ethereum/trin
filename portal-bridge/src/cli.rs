@@ -8,7 +8,6 @@ use url::Url;
 
 use crate::{
     client_handles::{fluffy_handle, trin_handle},
-    constants::PROVIDER_DAILY_REQUEST_LIMIT,
     types::{mode::BridgeMode, network::NetworkKind},
 };
 
@@ -97,16 +96,16 @@ pub struct BridgeConfig {
     #[arg(
         long = "el-provider-daily-request-limit",
         help = "Maximum number of requests execution layer sent to the provider in a day.",
-        default_value_t = PROVIDER_DAILY_REQUEST_LIMIT,
+        default_value = None,
     )]
-    pub el_provider_daily_request_limit: f64,
+    pub el_provider_daily_request_limit: Option<f64>,
 
     #[arg(
         long = "cl-provider-daily-request-limit",
         help = "Maximum number of requests consensus layer sent to the provider in a day.",
-        default_value_t = PROVIDER_DAILY_REQUEST_LIMIT,
+        default_value = None,
     )]
-    pub cl_provider_daily_request_limit: f64,
+    pub cl_provider_daily_request_limit: Option<f64>,
 }
 
 fn check_node_count(val: &str) -> Result<u8, String> {

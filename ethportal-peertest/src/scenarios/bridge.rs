@@ -10,7 +10,6 @@ use portal_bridge::{
     api::{consensus::ConsensusApi, execution::ExecutionApi},
     bridge::{beacon::BeaconBridge, history::HistoryBridge},
     cli::Provider,
-    constants::PROVIDER_DAILY_REQUEST_LIMIT,
     types::mode::BridgeMode,
 };
 use serde_json::Value;
@@ -24,10 +23,9 @@ pub async fn test_history_bridge(peertest: &Peertest, target: &HttpClient) {
     let portal_clients = vec![target.clone()];
     let epoch_acc_path = "validation_assets/epoch_acc.bin".into();
     let mode = BridgeMode::Test("./test_assets/portalnet/bridge_data.json".into());
-    let execution_api =
-        ExecutionApi::new(Provider::Test, mode.clone(), PROVIDER_DAILY_REQUEST_LIMIT)
-            .await
-            .unwrap();
+    let execution_api = ExecutionApi::new(Provider::Test, mode.clone(), None)
+        .await
+        .unwrap();
     // Wait for bootnode to start
     sleep(Duration::from_secs(1)).await;
     let bridge = HistoryBridge::new(
