@@ -48,7 +48,9 @@ impl ConsensusApi {
             "Starting ConsensusApi with provider at url: {:?}",
             client.config().base_url
         );
-        check_provider(&client).await?;
+        check_provider(&client)
+            .await
+            .map_err(|err| anyhow!("Check CL provider failed. Provider may be offline: {err:?}"))?;
         Ok(Self { client })
     }
 

@@ -83,7 +83,9 @@ impl ExecutionApi {
             client.config().base_url
         );
         if provider != Provider::Test {
-            check_provider(&client).await?;
+            check_provider(&client).await.map_err(|err| {
+                anyhow!("Check EL provider failed. Provider may be offline: {err:?}")
+            })?;
         }
         let master_acc = MasterAccumulator::default();
         Ok(Self { client, master_acc })
@@ -298,12 +300,14 @@ impl ExecutionApi {
             .client
             .post("")
             .body_json(&json!(requests))
-            .map_err(|e| anyhow!("Unable to construct json post request: {e:?}"))?
+            .map_err(|e| anyhow!("Unable to construct json post request: {e:?}"))?;
+        let response = result
             .recv_string()
             .await
-            .map_err(|err| anyhow!("Unable to request execution batch from provider: {err:?}"));
-        serde_json::from_str::<Vec<Value>>(&result?)
-            .map_err(|err| anyhow!("Unable to parse execution batch from provider: {err:?}"))
+            .map_err(|err| anyhow!("Unable to request execution batch from provider: {err:?}"))?;
+        serde_json::from_str::<Vec<Value>>(&response).map_err(|err| {
+            anyhow!("Unable to parse execution batch from provider: {err:?} response: {response:?}")
+        })
     }
 
     async fn send_request(&self, request: JsonRequest) -> anyhow::Result<Value> {
@@ -311,12 +315,16 @@ impl ExecutionApi {
             .client
             .post("")
             .body_json(&request)
-            .map_err(|e| anyhow!("Unable to construct json post request: {e:?}"))?
+            .map_err(|e| anyhow!("Unable to construct json post request: {e:?}"))?;
+        let response = result
             .recv_string()
             .await
-            .map_err(|err| anyhow!("Unable to request execution payload from provider: {err:?}"));
-        serde_json::from_str::<Value>(&result?)
-            .map_err(|err| anyhow!("Unable to parse execution response from provider: {err:?}"))
+            .map_err(|err| anyhow!("Unable to request execution payload from provider: {err:?}"))?;
+        serde_json::from_str::<Value>(&response).map_err(|err| {
+            anyhow!(
+                "Unable to parse execution response from provider: {err:?} response: {response:?}"
+            )
+        })
     }
 }
 
@@ -390,7 +398,7 @@ async fn check_provider(client: &Client) -> anyhow::Result<()> {
         .recv_string()
         .await
         .map_err(|err| anyhow!("Unable to request execution batch from provider: {err:?}"))?;
-    let response: Value = serde_json::from_str(&response).map_err(|err| anyhow!("Unable to parse json response from execution provider, it's likely unavailable/configured incorrectly: {err:?}"))?;
+    let response: Value = serde_json::from_str(&response).map_err(|err| anyhow!("Unable to parse json response from execution provider, it's likely unavailable/configured incorrectly: {err:?} response: {response:?}"))?;
     if response["result"].as_str().is_none() {
         bail!("Invalid response from execution provider check, it's likely unavailable/configured incorrectly");
     }
