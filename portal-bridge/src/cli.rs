@@ -99,14 +99,14 @@ pub struct BridgeConfig {
         help = "Maximum number of requests execution layer sent to the provider in a day.",
         default_value_t = PROVIDER_DAILY_REQUEST_LIMIT,
     )]
-    pub el_provider_daily_request_limit: f64,
+    pub el_provider_daily_request_limit: u64,
 
     #[arg(
         long = "cl-provider-daily-request-limit",
         help = "Maximum number of requests consensus layer sent to the provider in a day.",
         default_value_t = PROVIDER_DAILY_REQUEST_LIMIT,
     )]
-    pub cl_provider_daily_request_limit: f64,
+    pub cl_provider_daily_request_limit: u64,
 }
 
 fn check_node_count(val: &str) -> Result<u8, String> {

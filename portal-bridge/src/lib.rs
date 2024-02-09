@@ -22,7 +22,7 @@ use std::env;
 // format), shackle is known to be somewhat buggy has caused some invalid responses.
 // Reth's archive node, has also exhibited some problems with the concurrent requests rate we
 // currently use.
-const DEFAULT_BASE_EL_ENDPOINT: &str = "https://erigon-lighthouse.mainnet.eu1.ethpandaops.io/";
+const DEFAULT_BASE_EL_ENDPOINT: &str = "https://geth-lighthouse.mainnet.eu1.ethpandaops.io/";
 // The `erigon` endpoint appears to perform much better for backfill requests.
 const DEFAULT_BASE_EL_ARCHIVE_ENDPOINT: &str =
     "https://erigon-lighthouse.mainnet.eu1.ethpandaops.io/";
