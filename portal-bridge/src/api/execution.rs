@@ -1,4 +1,4 @@
-use std::{num::NonZeroU32, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::{anyhow, bail};
 use ethereum_types::H256;
@@ -8,7 +8,6 @@ use surf::{
     middleware::{Middleware, Next},
     Body, Client, Config, Request, Response,
 };
-use surf_governor::GovernorMiddleware;
 use tokio::time::{sleep, Duration};
 use tracing::{debug, warn};
 use url::Url;
@@ -50,11 +49,7 @@ pub struct ExecutionApi {
 }
 
 impl ExecutionApi {
-    pub async fn new(
-        provider: Provider,
-        mode: BridgeMode,
-        daily_request_limit: u64,
-    ) -> Result<Self, surf::Error> {
+    pub async fn new(provider: Provider, mode: BridgeMode) -> Result<Self, surf::Error> {
         let client: Client = match &provider {
             Provider::PandaOps => {
                 let endpoint = match mode {
@@ -81,13 +76,7 @@ impl ExecutionApi {
                 .try_into()?,
             Provider::Test => Config::new().try_into()?,
         };
-        // Limits the number of requests sent to the EL provider in a day
-        let hourly_request_limit = NonZeroU32::new(daily_request_limit as u32 / 24_u32).ok_or(
-            anyhow!("Invalid daily request limit, must be greater than 0"),
-        )?;
-        let rate_limit = GovernorMiddleware::per_hour(hourly_request_limit)
-            .expect("Expect GovernerMiddleware should have received a valid Duration");
-        let client = client.with(rate_limit).with(Retry::default());
+        let client = client.with(Retry::default());
         // Only check that provider is connected & available if not using a test provider.
         debug!(
             "Starting ExecutionApi with provider at url: {:?}",
