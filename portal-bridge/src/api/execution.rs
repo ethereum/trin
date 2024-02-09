@@ -300,7 +300,7 @@ impl ExecutionApi {
             .client
             .post("")
             .body_json(&json!(requests))
-            .map_err(|e| anyhow!("Unable to construct json post request: {e:?}"))?;
+            .map_err(|e| anyhow!("Unable to construct json post for batched requests: {e:?}"))?;
         let response = result
             .recv_string()
             .await
@@ -315,7 +315,7 @@ impl ExecutionApi {
             .client
             .post("")
             .body_json(&request)
-            .map_err(|e| anyhow!("Unable to construct json post request: {e:?}"))?;
+            .map_err(|e| anyhow!("Unable to construct json post for single request: {e:?}"))?;
         let response = result
             .recv_string()
             .await
