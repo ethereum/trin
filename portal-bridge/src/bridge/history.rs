@@ -15,6 +15,7 @@ use tracing::{debug, error, info, warn, Instrument};
 use crate::{
     api::execution::ExecutionApi,
     bridge::utils::lookup_epoch_acc,
+    constants::HTTP_REQUEST_TIMEOUT,
     gossip::gossip_history_content,
     stats::{HistoryBlockStats, StatsReporter},
     types::{full_header::FullHeader, mode::BridgeMode},
@@ -108,10 +109,21 @@ impl HistoryBridge {
         let mut last_seen_block_counter = 0;
         loop {
             sleep(Duration::from_secs(LATEST_BLOCK_POLL_RATE)).await;
-            let latest_block = match self.execution_api.get_latest_block_number().await {
-                Ok(val) => val,
-                Err(msg) => {
-                    warn!("error getting latest block, skipping iteration: {msg:?}");
+            let latest_block = match timeout(
+                HTTP_REQUEST_TIMEOUT * 3,
+                self.execution_api.get_latest_block_number(),
+            )
+            .await
+            {
+                Ok(result) => match result {
+                    Ok(val) => val,
+                    Err(msg) => {
+                        error!("error getting latest block, skipping iteration: {msg:?}");
+                        continue;
+                    }
+                },
+                Err(_) => {
+                    error!("launch_latest() get_latest_block_number() timedout something is wrong");
                     continue;
                 }
             };
