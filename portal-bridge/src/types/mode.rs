@@ -18,7 +18,7 @@ use trin_validation::constants::EPOCH_SIZE;
 pub enum BridgeMode {
     #[default]
     Latest,
-    FourFours,
+    FourFours(FourFoursModeType),
     Backfill(ModeType),
     Single(ModeType),
     Test(PathBuf),
@@ -31,7 +31,7 @@ impl BridgeMode {
         let (is_single_mode, mode_type) = match self {
             BridgeMode::Backfill(val) => (false, val),
             BridgeMode::Single(val) => (true, val),
-            BridgeMode::FourFours => {
+            BridgeMode::FourFours(_) => {
                 return Err(anyhow!(
                     "BridgeMode `fourfours` does not have a block range"
                 ))
@@ -77,7 +77,7 @@ impl FromStr for BridgeMode {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "latest" => Ok(BridgeMode::Latest),
-            "fourfours" => Ok(BridgeMode::FourFours),
+            "fourfours" => Ok(BridgeMode::FourFours(FourFoursModeType::Random)),
             val => {
                 let index = val
                     .find(':')
@@ -87,6 +87,10 @@ impl FromStr for BridgeMode {
                     "backfill" => {
                         let mode_type = ModeType::from_str(&val[1..])?;
                         Ok(BridgeMode::Backfill(mode_type))
+                    }
+                    "fourfours" => {
+                        let mode_type = FourFoursModeType::from_str(&val[1..])?;
+                        Ok(BridgeMode::FourFours(mode_type))
                     }
                     "single" => {
                         let mode_type = ModeType::from_str(&val[1..])?;
@@ -149,6 +153,30 @@ impl FromStr for ModeType {
                 }
 
                 Ok(ModeType::BlockRange(start_block, end_block))
+            }
+            _ => Err("Invalid bridge mode arg: type prefix"),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FourFoursModeType {
+    Random,
+    Epoch(u64),
+}
+
+impl FromStr for FourFoursModeType {
+    type Err = ParseError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match &s[..1] {
+            "e" => {
+                let epoch = s[1..]
+                    .parse()
+                    .map_err(|_| "Invalid bridge mode arg: epoch number")?;
+                if epoch > 1896 {
+                    return Err("Invalid bridge mode arg: Four Fours only contains up to epoch 1896 was given: {epoch}");
+                }
+                Ok(FourFoursModeType::Epoch(epoch))
             }
             _ => Err("Invalid bridge mode arg: type prefix"),
         }
