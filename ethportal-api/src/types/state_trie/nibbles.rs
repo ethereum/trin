@@ -1,186 +1,173 @@
 use std::fmt;
 
-use anyhow::{bail, ensure, Result};
-use ssz_derive::{Decode, Encode};
+use anyhow::{bail, ensure};
+use bytes::BufMut;
+use ssz::{Decode, DecodeError, Encode};
 
-use crate::types::bytes::ByteList32;
-
-/// Packed representation of a path in a trie.
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+/// Path in a trie. Maximum number of nibbles is 64 and nibble is in the range [0, 1, .., 15].
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Nibbles {
-    /// Whether path has an odd length.
-    pub is_odd_length: bool,
-    /// List of pairs of nibbles packed together in single byte. If length is odd, then the highest
-    /// bits of the first byte are zero.
-    pub packed_nibbles: ByteList32,
+    nibbles: Vec<u8>,
 }
 
 impl Nibbles {
     /// Tries to pack nibbles. It fails when nibbles have invalid value (outside [0, 15] range) or
     /// when there are too many nibbles (more than 64)
-    pub fn try_from_unpacked_nibbles(nibbles: &[u8]) -> Result<Self> {
-        let packed_nibbles = nibbles
-            .rchunks(2)
-            .map(Self::try_pack_nibbles)
-            .rev()
-            .collect::<Result<Vec<u8>>>()?;
+    pub fn try_from_unpacked_nibbles(nibbles: &[u8]) -> anyhow::Result<Self> {
+        if nibbles.len() > 64 {
+            bail!("Nibbles {nibbles:?} exceed maximum length");
+        }
+        for &nibble in nibbles {
+            ensure!(nibble <= 0xF, "Invalid nibble: {}", nibble);
+        }
         Ok(Self {
-            is_odd_length: nibbles.len() % 2 == 1,
-            packed_nibbles: ByteList32::new(packed_nibbles)
-                .map_err(|e| anyhow::anyhow!("Error while packing nibbles: {e:?}"))?,
+            nibbles: Vec::from(nibbles),
         })
     }
 
-    /// Unpacks nibbles into a vector.
-    pub fn unpack_nibbles(&self) -> Vec<u8> {
-        self.packed_nibbles
-            .iter()
-            .flat_map(Self::unpack_nibble_pair)
-            .skip(if self.is_odd_length { 1 } else { 0 })
-            .collect()
+    pub fn nibbles(&self) -> &[u8] {
+        &self.nibbles
     }
 
-    fn try_pack_nibbles(nibbles: &[u8]) -> Result<u8> {
-        if let [a, b] = nibbles {
-            ensure!(*a <= 0xF, "Invalid nibble: {}", a);
-            ensure!(*b <= 0xF, "Invalid nibble: {}", b);
-            Ok(a << 4 | b)
-        } else if let [a] = nibbles {
-            ensure!(*a <= 0xF, "Invalid nibble: {}", a);
-            Ok(*a)
+    fn unpack_nibble_pair(packed_nibbles: &u8) -> [u8; 2] {
+        [packed_nibbles >> 4, packed_nibbles & 0xF]
+    }
+}
+
+impl Encode for Nibbles {
+    fn is_ssz_fixed_len() -> bool {
+        false
+    }
+
+    fn ssz_append(&self, buf: &mut Vec<u8>) {
+        if self.nibbles.len() % 2 == 0 {
+            buf.push(0);
+            self.nibbles
+                .chunks_exact(2)
+                .for_each(|x| buf.push(x[0] << 4 | x[1]));
         } else {
-            bail!("Expected one or two nibbles, got {}", nibbles.len())
+            buf.push(0x10 | self.nibbles[0]);
+            self.nibbles[1..]
+                .chunks_exact(2)
+                .for_each(|x| buf.push(x[0] << 4 | x[1]));
         }
     }
 
-    fn unpack_nibble_pair(packed: &u8) -> [u8; 2] {
-        [packed >> 4, packed & 0xF]
+    fn ssz_bytes_len(&self) -> usize {
+        1 + self.nibbles.len() / 2
+    }
+}
+
+impl Decode for Nibbles {
+    fn is_ssz_fixed_len() -> bool {
+        false
+    }
+
+    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
+        let (first_byte, packed_nibbles) =
+            bytes.split_first().ok_or(DecodeError::InvalidByteLength {
+                len: 0,
+                expected: 1,
+            })?;
+
+        let [flag, potential_first_nibble] = Self::unpack_nibble_pair(first_byte);
+        let mut nibbles = Vec::with_capacity(1 + 2 * packed_nibbles.len());
+
+        match flag {
+            // Even length, potential_first_nibble should be 0
+            0 => {
+                if potential_first_nibble != 0 {
+                    return Err(DecodeError::BytesInvalid(format!(
+                        "Nibbles: The lowest 4 bits of the first byte must be 0, but was: 0x{potential_first_nibble:x}"
+                    )));
+                };
+            }
+            // Odd length, potential_first_nibble is first nibble
+            1 => {
+                nibbles.push(potential_first_nibble);
+            }
+            _ => {
+                return Err(DecodeError::BytesInvalid(format!(
+                    "Nibbles: The highest 4 bits must be 0x0 or 0x1, but was: 0x{flag:x}"
+                )));
+            }
+        }
+
+        for packed_nibble in packed_nibbles {
+            nibbles.put_slice(&Self::unpack_nibble_pair(packed_nibble));
+        }
+        Self::try_from_unpacked_nibbles(&nibbles)
+            .map_err(|err| DecodeError::BytesInvalid(err.to_string()))
     }
 }
 
 impl fmt::Display for Nibbles {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let path = hex::encode(self.packed_nibbles.as_ref());
-        if self.is_odd_length {
-            write!(f, "Nibbles {{ path: {} }}", &path[1..])
-        } else {
-            write!(f, "Nibbles {{ path: {} }}", &path)
-        }
+        write!(f, "Nibbles {{ {:?} }}", self.nibbles)
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::utils::bytes::hex_decode;
+    use anyhow::Result;
     use rstest::rstest;
     use ssz::{Decode, Encode};
 
     use super::*;
+    use crate::utils::bytes::{hex_decode, hex_encode};
 
     #[rstest]
     #[case::empty_nibbles(
         &[],
-        Nibbles {
-            is_odd_length: false,
-            packed_nibbles: ByteList32::default(),
-        }
+        "0x00",
     )]
     #[case::single_nibble(
-        &[10],
-        Nibbles {
-            is_odd_length: true,
-            packed_nibbles: ByteList32::from(vec![0x0a]),
-        }
+        &[10], "0x1a",
     )]
     #[case::even_number_of_nibbles(
         &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
-        Nibbles {
-            is_odd_length: false,
-            packed_nibbles: ByteList32::from(vec![0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc]),
-        }
+        "0x00123456789abc"
     )]
     #[case::odd_number_of_nibbles(
         &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
-        Nibbles {
-            is_odd_length: true,
-            packed_nibbles: ByteList32::from(vec![0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd]),
-        }
+        "0x1123456789abcd"
     )]
     #[case::max_number_of_nibbles(
         &[10; 64],
-        Nibbles {
-            is_odd_length: false,
-            packed_nibbles: ByteList32::from(vec![0xaa; 32]),
-        }
+        "0x00aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     )]
-    fn packing_unpacking(#[case] unpacked_nibbles: &[u8], #[case] nibbles: Nibbles) -> Result<()> {
+    fn ssz_encode_decode(#[case] unpacked_nibbles: &[u8], #[case] encoded: &str) -> Result<()> {
+        let nibbles = Nibbles::try_from_unpacked_nibbles(unpacked_nibbles)?;
+
+        assert_eq!(hex_encode(nibbles.as_ssz_bytes()), encoded);
+
         assert_eq!(
-            Nibbles::try_from_unpacked_nibbles(unpacked_nibbles)?,
+            Nibbles::from_ssz_bytes(&hex_decode(encoded)?).unwrap(),
             nibbles
         );
-        assert_eq!(nibbles.unpack_nibbles(), Vec::from(unpacked_nibbles));
 
         Ok(())
     }
 
     #[rstest]
-    #[case::empty_nibbles(
-        "0x0005000000",
-        Nibbles {
-            is_odd_length: false,
-            packed_nibbles: ByteList32::default(),
-        }
-    )]
-    #[case::single_nibble(
-        "0x01050000000a",
-        Nibbles {
-            is_odd_length: true,
-            packed_nibbles: ByteList32::from(vec![0x0a]),
-        }
-    )]
-    #[case::even_number_of_nibbles(
-        "0x0005000000123456789abc",
-        Nibbles {
-            is_odd_length: false,
-            packed_nibbles: ByteList32::from(vec![0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc]),
-        }
-    )]
-    #[case::odd_number_of_nibbles(
-        "0x01050000000123456789abcd",
-        Nibbles {
-            is_odd_length: true,
-            packed_nibbles: ByteList32::from(vec![0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd]),
-        }
-    )]
-    #[case::max_number_of_nibbles(
-        "0x0005000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        Nibbles {
-            is_odd_length: false,
-            packed_nibbles: ByteList32::from(vec![0xaa; 32]),
-        }
-    )]
-    fn ssz_encode_decode(#[case] ssz_bytes: &str, #[case] nibbles: Nibbles) -> Result<()> {
-        let ssz_bytes = hex_decode(ssz_bytes)?;
-        assert_eq!(Nibbles::from_ssz_bytes(&ssz_bytes).unwrap(), nibbles);
-        assert_eq!(nibbles.as_ssz_bytes(), ssz_bytes);
-
+    #[case::empty("0x")]
+    #[case::invalid_flag("0x20")]
+    #[case::low_bits_not_empty_for_even_length("0x01")]
+    #[case::too_long("0x1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
+    fn decode_should_fail_for_invalid_bytes(#[case] invalid_nibbles: &str) -> Result<()> {
+        assert!(Nibbles::from_ssz_bytes(&hex_decode(invalid_nibbles)?).is_err());
         Ok(())
     }
 
-    #[test]
-    fn from_unpacked_should_fail_for_invalid_nibbles() {
-        for invalid_nibbles in [
-            vec![0x10],
-            vec![0x11, 0x01],
-            vec![0x01, 0x12],
-            vec![0x01, 0x02, 0x13],
-            vec![0x01, 0x14, 0x02],
-            vec![0x15, 0x01, 0x02],
-        ] {
-            Nibbles::try_from_unpacked_nibbles(&invalid_nibbles).expect_err(&format!(
-                "Expected to fail for invalid nibbles: {invalid_nibbles:02x?}"
-            ));
-        }
+    #[rstest]
+    #[case::single_nibble(&[0x10])]
+    #[case::first_out_of_two(&[0x11, 0x01])]
+    #[case::second_out_of_two(&[0x01, 0x12])]
+    #[case::first_out_of_three(&[0x11, 0x02, 0x03])]
+    #[case::second_out_of_three(&[0x01, 0x12, 0x03])]
+    #[case::third_out_of_three(&[0x01, 0x02, 0x13])]
+    fn from_unpacked_should_fail_for_invalid_nibble(#[case] invalid_nibbles: &[u8]) {
+        assert!(Nibbles::try_from_unpacked_nibbles(invalid_nibbles).is_err());
     }
 
     #[test]
