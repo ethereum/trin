@@ -101,11 +101,10 @@ impl Era1Bridge {
     }
 
     pub async fn launch_single(&self, epoch: u64) {
-        let era1_path = self.era1_files.clone().into_iter().find(|file| {
-            file.contains("mainnet-")
-                && file.contains(&format!("{epoch}-"))
-                && file.contains(".era1")
-        });
+        let era1_path =
+            self.era1_files.clone().into_iter().find(|file| {
+                file.contains(&format!("mainnet-{epoch:05}-")) && file.contains(".era1")
+            });
         match era1_path {
             Some(path) => self.gossip_era1(path).await,
             None => panic!("4444s bridge couldn't find request epoch on era1 file server"),
