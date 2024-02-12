@@ -1,3 +1,14 @@
+# init final base
+FROM ubuntu:22.04 AS final_base
+# These steps copy over the epoch accumulators repo for the bridge to use
+# This data is too large to be kept inside trin-source code
+# It must be downloaded separately and moved to the correct location
+# https://github.com/njgheorghita/portal-accumulators
+#
+# We do this step initially to cache the download of the accumulators
+RUN mkdir /portal-accumulators
+COPY ./portal-accumulators /portal-accumulators
+
 # select build image
 FROM rust:1.75.0 AS builder
 
@@ -29,26 +40,19 @@ COPY ./trin-validation ./trin-validation
 COPY ./ethportal-peertest ./ethportal-peertest 
 COPY ./utp-testing ./utp-testing
 COPY ./ethportal-api ./ethportal-api
-COPY ./portal-accumulators ./portal-accumulators
 COPY ./rpc ./rpc
 
 # build for release
 RUN cargo build -p trin -p portal-bridge --release
 
 # final base
-FROM ubuntu:22.04
+FROM final_base
 
 # copy build artifacts from build stage
 COPY --from=builder /trin/target/release/trin /usr/bin/
 COPY --from=builder /trin/target/release/portal-bridge /usr/bin/
 COPY --from=builder /trin/target/release/sample_range /usr/bin/
 COPY --from=builder /trin/target/release/poll_latest /usr/bin/
-# These steps copy over the epoch accumulators repo for the bridge to use
-# This data is too large to be kept inside trin-source code
-# It must be downloaded separately and moved to the correct location
-# https://github.com/njgheorghita/portal-accumulators
-RUN mkdir /portal-accumulators
-COPY --from=builder /trin/portal-accumulators /portal-accumulators
 
 RUN apt-get update && apt-get install libcurl4 -y
 
