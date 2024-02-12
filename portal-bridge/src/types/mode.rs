@@ -69,7 +69,7 @@ impl BridgeMode {
     }
 }
 
-type ParseError = &'static str;
+type ParseError = String;
 
 impl FromStr for BridgeMode {
     type Err = ParseError;
@@ -101,7 +101,7 @@ impl FromStr for BridgeMode {
                             PathBuf::from_str(&val[1..]).map_err(|_| "Invalid test asset path")?;
                         Ok(BridgeMode::Test(path))
                     }
-                    _ => Err("Invalid bridge mode arg: type prefix"),
+                    _ => Err("Invalid bridge mode arg: type prefix".to_string()),
                 }
             }
         }
@@ -142,19 +142,21 @@ impl FromStr for ModeType {
                     .collect::<Vec<u64>>();
 
                 if range_vec.len() != 2 {
-                    return Err("Invalid bridge mode arg: expected 2 numbers in range");
+                    return Err("Invalid bridge mode arg: expected 2 numbers in range".to_string());
                 }
 
                 let start_block = range_vec[0].to_owned();
                 let end_block = range_vec[1].to_owned();
 
                 if start_block > end_block {
-                    return Err("Invalid bridge mode arg: end_block is less than start_block");
+                    return Err(
+                        "Invalid bridge mode arg: end_block is less than start_block".to_string(),
+                    );
                 }
 
                 Ok(ModeType::BlockRange(start_block, end_block))
             }
-            _ => Err("Invalid bridge mode arg: type prefix"),
+            _ => Err("Invalid bridge mode arg: type prefix".to_string()),
         }
     }
 }
@@ -175,11 +177,11 @@ impl FromStr for FourFoursMode {
                     .parse()
                     .map_err(|_| "Invalid 4444s bridge mode arg: era1 epoch number")?;
                 if epoch > 1896 {
-                    return Err("Invalid 4444s bridge mode arg: era1 epoch greater than 1896 was given: {epoch}");
+                    return Err(format!("Invalid 4444s bridge mode arg: era1 epoch greater than 1896 was given: {epoch}"));
                 }
                 Ok(FourFoursMode::Single(epoch))
             }
-            _ => Err("Invalid 4444s bridge mode arg: type prefix"),
+            _ => Err("Invalid 4444s bridge mode arg: type prefix".to_string()),
         }
     }
 }
