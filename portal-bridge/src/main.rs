@@ -69,7 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             beacon_bridge
                 .launch()
-                .instrument(tracing::info_span!("beacon"))
+                .instrument(tracing::trace_span!("beacon"))
                 .await;
         });
 
@@ -92,7 +92,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let bridge_handle = tokio::spawn(async move {
                     era1_bridge
                         .launch()
-                        .instrument(tracing::info_span!("history(era1)"))
+                        .instrument(tracing::trace_span!("history(era1)"))
                         .await;
                 });
                 bridge_tasks.push(bridge_handle);
@@ -115,7 +115,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     bridge
                         .launch()
-                        .instrument(tracing::info_span!("history"))
+                        .instrument(tracing::trace_span!("history"))
                         .await;
                 });
 
