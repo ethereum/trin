@@ -33,6 +33,7 @@ Current options include `"trin"` / `"fluffy"`.
 - `"--mode single:b100"`: gossip a single block #100
 - `"--mode single:e100"`: gossip a single epoch #100
 - `"--mode fourfours`: will randomly select era1 files from `era1.ethportal.net` and gossip them
+- `"--mode fourfours:e600`: will select era1 file 600 from `era1.ethportal.net` and gossip it
 
 ### Network
 You can specify the `--network` flag for which network to run the bridge for

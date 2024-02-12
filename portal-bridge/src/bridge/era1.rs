@@ -22,7 +22,10 @@ use crate::{
     },
     gossip::gossip_history_content,
     stats::{HistoryBlockStats, StatsReporter},
-    types::era1::{BlockTuple, Era1},
+    types::{
+        era1::{BlockTuple, Era1},
+        mode::{BridgeMode, FourFoursMode},
+    },
 };
 use ethportal_api::{
     jsonrpsee::http_client::HttpClient, types::execution::accumulator::EpochAccumulator,
@@ -36,6 +39,7 @@ use trin_validation::{
 const ERA1_DIR_URL: &str = "https://era1.ethportal.net/";
 
 pub struct Era1Bridge {
+    pub mode: BridgeMode,
     pub portal_clients: Vec<HttpClient>,
     pub header_oracle: HeaderOracle,
     pub epoch_acc_path: PathBuf,
@@ -46,6 +50,7 @@ pub struct Era1Bridge {
 // todo: validate via checksum, so we don't have to validate content on a per-value basis
 impl Era1Bridge {
     pub async fn new(
+        mode: BridgeMode,
         portal_clients: Vec<HttpClient>,
         header_oracle: HeaderOracle,
         epoch_acc_path: PathBuf,
@@ -70,6 +75,7 @@ impl Era1Bridge {
             .collect();
         era1_files.shuffle(&mut thread_rng());
         Ok(Self {
+            mode,
             portal_clients,
             header_oracle,
             epoch_acc_path,
@@ -79,50 +85,74 @@ impl Era1Bridge {
     }
 
     pub async fn launch(&self) {
-        info!("Launching era1 bridge");
-        for era1_path in self.era1_files.clone().into_iter() {
-            info!("Processing era1 file at path: {:?}", era1_path);
-            // We are using a semaphore to limit the amount of active gossip transfers to make sure
-            // we don't overwhelm the trin client
-            let gossip_send_semaphore = Arc::new(Semaphore::new(GOSSIP_LIMIT));
-
-            let raw_era1 = self
-                .http_client
-                .get(era1_path.clone())
-                .recv_bytes()
-                .await
-                .unwrap_or_else(|_| panic!("unable to read era1 file at path: {era1_path:?}"));
-            let era1 = Era1::deserialize(&raw_era1).expect("to be able to deserialize era1 file");
-            let epoch_index = era1.block_tuples[0].header.header.number / EPOCH_SIZE as u64;
-            info!("Era1 file read successfully, gossiping block tuples for epoch: {epoch_index}");
-            let epoch_acc = match self.get_epoch_acc(epoch_index).await {
-                Ok(epoch_acc) => epoch_acc,
-                Err(e) => {
-                    error!("Failed to get epoch acc for epoch: {epoch_index}, error: {e}");
-                    continue;
-                }
-            };
-            let master_acc = Arc::new(self.header_oracle.master_acc.clone());
-            let mut serve_block_tuple_handles = vec![];
-            for block_tuple in era1.block_tuples {
-                let permit = gossip_send_semaphore
-                    .clone()
-                    .acquire_owned()
-                    .await
-                    .expect("to be able to acquire semaphore");
-                let serve_block_tuple_handle = Self::spawn_serve_block_tuple(
-                    self.portal_clients.clone(),
-                    block_tuple,
-                    epoch_acc.clone(),
-                    master_acc.clone(),
-                    permit,
-                );
-                serve_block_tuple_handles.push(serve_block_tuple_handle);
-            }
-            // Wait till all block tuples are done gossiping.
-            // This can't deadlock, because the tokio::spawn has a timeout.
-            join_all(serve_block_tuple_handles).await;
+        info!("Launching era1 bridge: {:?}", self.mode);
+        match self.mode.clone() {
+            BridgeMode::FourFours(FourFoursMode::Random) => self.launch_random().await,
+            BridgeMode::FourFours(FourFoursMode::Single(epoch)) => self.launch_single(epoch).await,
+            _ => panic!("4444s bridge only supports 4444s modes."),
         }
+        info!("Bridge mode: {:?} complete.", self.mode);
+    }
+
+    pub async fn launch_random(&self) {
+        for era1_path in self.era1_files.clone().into_iter() {
+            self.gossip_era1(era1_path).await;
+        }
+    }
+
+    pub async fn launch_single(&self, epoch: u64) {
+        let era1_path =
+            self.era1_files.clone().into_iter().find(|file| {
+                file.contains(&format!("mainnet-{epoch:05}-")) && file.contains(".era1")
+            });
+        match era1_path {
+            Some(path) => self.gossip_era1(path).await,
+            None => panic!("4444s bridge couldn't find request epoch on era1 file server"),
+        }
+    }
+
+    pub async fn gossip_era1(&self, era1_path: String) {
+        info!("Processing era1 file at path: {era1_path:?}");
+        // We are using a semaphore to limit the amount of active gossip transfers to make sure
+        // we don't overwhelm the trin client
+        let gossip_send_semaphore = Arc::new(Semaphore::new(GOSSIP_LIMIT));
+
+        let raw_era1 = self
+            .http_client
+            .get(era1_path.clone())
+            .recv_bytes()
+            .await
+            .unwrap_or_else(|_| panic!("unable to read era1 file at path: {era1_path:?}"));
+        let era1 = Era1::deserialize(&raw_era1).expect("to be able to deserialize era1 file");
+        let epoch_index = era1.block_tuples[0].header.header.number / EPOCH_SIZE as u64;
+        info!("Era1 file read successfully, gossiping block tuples for epoch: {epoch_index}");
+        let epoch_acc = match self.get_epoch_acc(epoch_index).await {
+            Ok(epoch_acc) => epoch_acc,
+            Err(e) => {
+                error!("Failed to get epoch acc for epoch: {epoch_index}, error: {e}");
+                return;
+            }
+        };
+        let master_acc = Arc::new(self.header_oracle.master_acc.clone());
+        let mut serve_block_tuple_handles = vec![];
+        for block_tuple in era1.block_tuples {
+            let permit = gossip_send_semaphore
+                .clone()
+                .acquire_owned()
+                .await
+                .expect("to be able to acquire semaphore");
+            let serve_block_tuple_handle = Self::spawn_serve_block_tuple(
+                self.portal_clients.clone(),
+                block_tuple,
+                epoch_acc.clone(),
+                master_acc.clone(),
+                permit,
+            );
+            serve_block_tuple_handles.push(serve_block_tuple_handle);
+        }
+        // Wait till all block tuples are done gossiping.
+        // This can't deadlock, because the tokio::spawn has a timeout.
+        join_all(serve_block_tuple_handles).await;
     }
 
     async fn get_epoch_acc(&self, epoch_index: u64) -> anyhow::Result<Arc<EpochAccumulator>> {

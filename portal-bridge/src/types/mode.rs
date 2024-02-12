@@ -18,7 +18,7 @@ use trin_validation::constants::EPOCH_SIZE;
 pub enum BridgeMode {
     #[default]
     Latest,
-    FourFours,
+    FourFours(FourFoursMode),
     Backfill(ModeType),
     Single(ModeType),
     Test(PathBuf),
@@ -31,7 +31,7 @@ impl BridgeMode {
         let (is_single_mode, mode_type) = match self {
             BridgeMode::Backfill(val) => (false, val),
             BridgeMode::Single(val) => (true, val),
-            BridgeMode::FourFours => {
+            BridgeMode::FourFours(_) => {
                 return Err(anyhow!(
                     "BridgeMode `fourfours` does not have a block range"
                 ))
@@ -69,7 +69,7 @@ impl BridgeMode {
     }
 }
 
-type ParseError = &'static str;
+type ParseError = String;
 
 impl FromStr for BridgeMode {
     type Err = ParseError;
@@ -77,7 +77,7 @@ impl FromStr for BridgeMode {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "latest" => Ok(BridgeMode::Latest),
-            "fourfours" => Ok(BridgeMode::FourFours),
+            "fourfours" => Ok(BridgeMode::FourFours(FourFoursMode::Random)),
             val => {
                 let index = val
                     .find(':')
@@ -88,6 +88,10 @@ impl FromStr for BridgeMode {
                         let mode_type = ModeType::from_str(&val[1..])?;
                         Ok(BridgeMode::Backfill(mode_type))
                     }
+                    "fourfours" => {
+                        let mode_type = FourFoursMode::from_str(&val[1..])?;
+                        Ok(BridgeMode::FourFours(mode_type))
+                    }
                     "single" => {
                         let mode_type = ModeType::from_str(&val[1..])?;
                         Ok(BridgeMode::Single(mode_type))
@@ -97,7 +101,7 @@ impl FromStr for BridgeMode {
                             PathBuf::from_str(&val[1..]).map_err(|_| "Invalid test asset path")?;
                         Ok(BridgeMode::Test(path))
                     }
-                    _ => Err("Invalid bridge mode arg: type prefix"),
+                    _ => Err("Invalid bridge mode arg: type prefix".to_string()),
                 }
             }
         }
@@ -138,19 +142,46 @@ impl FromStr for ModeType {
                     .collect::<Vec<u64>>();
 
                 if range_vec.len() != 2 {
-                    return Err("Invalid bridge mode arg: expected 2 numbers in range");
+                    return Err("Invalid bridge mode arg: expected 2 numbers in range".to_string());
                 }
 
                 let start_block = range_vec[0].to_owned();
                 let end_block = range_vec[1].to_owned();
 
                 if start_block > end_block {
-                    return Err("Invalid bridge mode arg: end_block is less than start_block");
+                    return Err(
+                        "Invalid bridge mode arg: end_block is less than start_block".to_string(),
+                    );
                 }
 
                 Ok(ModeType::BlockRange(start_block, end_block))
             }
-            _ => Err("Invalid bridge mode arg: type prefix"),
+            _ => Err("Invalid bridge mode arg: type prefix".to_string()),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FourFoursMode {
+    Random,
+    // Gossips a single epoch
+    Single(u64),
+}
+
+impl FromStr for FourFoursMode {
+    type Err = ParseError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match &s[..1] {
+            "e" => {
+                let epoch = s[1..]
+                    .parse()
+                    .map_err(|_| "Invalid 4444s bridge mode arg: era1 epoch number")?;
+                if epoch > 1896 {
+                    return Err(format!("Invalid 4444s bridge mode arg: era1 epoch greater than 1896 was given: {epoch}"));
+                }
+                Ok(FourFoursMode::Single(epoch))
+            }
+            _ => Err("Invalid 4444s bridge mode arg: type prefix".to_string()),
         }
     }
 }
@@ -172,6 +203,8 @@ mod test {
     #[case("backfill:b1000", BridgeMode::Backfill(ModeType::Block(1000)))]
     #[case("backfill:e0", BridgeMode::Backfill(ModeType::Epoch(0)))]
     #[case("backfill:e1000", BridgeMode::Backfill(ModeType::Epoch(1000)))]
+    #[case("fourfours", BridgeMode::FourFours(FourFoursMode::Random))]
+    #[case("fourfours:e1", BridgeMode::FourFours(FourFoursMode::Single(1)))]
     #[case(
         "test:/usr/eth/test.json",
         BridgeMode::Test(PathBuf::from("/usr/eth/test.json"))
