@@ -24,7 +24,7 @@ use crate::{
     stats::{HistoryBlockStats, StatsReporter},
     types::{
         era1::{BlockTuple, Era1},
-        mode::{BridgeMode, FourFoursModeType},
+        mode::{BridgeMode, FourFoursMode},
     },
 };
 use ethportal_api::{
@@ -87,10 +87,8 @@ impl Era1Bridge {
     pub async fn launch(&self) {
         info!("Launching era1 bridge: {:?}", self.mode);
         match self.mode.clone() {
-            BridgeMode::FourFours(FourFoursModeType::Random) => self.launch_random().await,
-            BridgeMode::FourFours(FourFoursModeType::Epoch(epoch)) => {
-                self.launch_epoch(epoch).await
-            }
+            BridgeMode::FourFours(FourFoursMode::Random) => self.launch_random().await,
+            BridgeMode::FourFours(FourFoursMode::Single(epoch)) => self.launch_single(epoch).await,
             _ => panic!("4444s bridge only supports 4444s modes."),
         }
         info!("Bridge mode: {:?} complete.", self.mode);
@@ -102,19 +100,21 @@ impl Era1Bridge {
         }
     }
 
-    pub async fn launch_epoch(&self, epoch: u64) {
-        let epoch_string = epoch.to_string() + "-";
-        for era1_path in self.era1_files.clone().into_iter() {
-            if era1_path.contains(&epoch_string) {
-                self.gossip_era1(era1_path).await;
-                return;
-            }
+    pub async fn launch_single(&self, epoch: u64) {
+        let epoch_string = format!("{epoch}-");
+        let era1_path = self
+            .era1_files
+            .clone()
+            .into_iter()
+            .find(|file| file.contains(&epoch_string));
+        match era1_path {
+            Some(path) => self.gossip_era1(path).await,
+            None => panic!("4444s bridge couldn't find request epoch on era1 file server"),
         }
-        panic!("4444s bridge couldn't find request epoch on era1 file server")
     }
 
     pub async fn gossip_era1(&self, era1_path: String) {
-        info!("Processing era1 file at path: {:?}", era1_path);
+        info!("Processing era1 file at path: {era1_path:?}");
         // We are using a semaphore to limit the amount of active gossip transfers to make sure
         // we don't overwhelm the trin client
         let gossip_send_semaphore = Arc::new(Semaphore::new(GOSSIP_LIMIT));

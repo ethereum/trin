@@ -18,7 +18,7 @@ use trin_validation::constants::EPOCH_SIZE;
 pub enum BridgeMode {
     #[default]
     Latest,
-    FourFours(FourFoursModeType),
+    FourFours(FourFoursMode),
     Backfill(ModeType),
     Single(ModeType),
     Test(PathBuf),
@@ -77,7 +77,7 @@ impl FromStr for BridgeMode {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "latest" => Ok(BridgeMode::Latest),
-            "fourfours" => Ok(BridgeMode::FourFours(FourFoursModeType::Random)),
+            "fourfours" => Ok(BridgeMode::FourFours(FourFoursMode::Random)),
             val => {
                 let index = val
                     .find(':')
@@ -89,7 +89,7 @@ impl FromStr for BridgeMode {
                         Ok(BridgeMode::Backfill(mode_type))
                     }
                     "fourfours" => {
-                        let mode_type = FourFoursModeType::from_str(&val[1..])?;
+                        let mode_type = FourFoursMode::from_str(&val[1..])?;
                         Ok(BridgeMode::FourFours(mode_type))
                     }
                     "single" => {
@@ -160,25 +160,26 @@ impl FromStr for ModeType {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum FourFoursModeType {
+pub enum FourFoursMode {
     Random,
-    Epoch(u64),
+    // Gossips a single epoch
+    Single(u64),
 }
 
-impl FromStr for FourFoursModeType {
+impl FromStr for FourFoursMode {
     type Err = ParseError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match &s[..1] {
             "e" => {
                 let epoch = s[1..]
                     .parse()
-                    .map_err(|_| "Invalid bridge mode arg: epoch number")?;
+                    .map_err(|_| "Invalid 4444s bridge mode arg: era1 epoch number")?;
                 if epoch > 1896 {
-                    return Err("Invalid bridge mode arg: Four Fours only contains up to epoch 1896 was given: {epoch}");
+                    return Err("Invalid 4444s bridge mode arg: era1 epoch greater than 1896 was given: {epoch}");
                 }
-                Ok(FourFoursModeType::Epoch(epoch))
+                Ok(FourFoursMode::Single(epoch))
             }
-            _ => Err("Invalid bridge mode arg: type prefix"),
+            _ => Err("Invalid 4444s bridge mode arg: type prefix"),
         }
     }
 }
@@ -200,6 +201,8 @@ mod test {
     #[case("backfill:b1000", BridgeMode::Backfill(ModeType::Block(1000)))]
     #[case("backfill:e0", BridgeMode::Backfill(ModeType::Epoch(0)))]
     #[case("backfill:e1000", BridgeMode::Backfill(ModeType::Epoch(1000)))]
+    #[case("fourfours", BridgeMode::FourFours(FourFoursMode::Random))]
+    #[case("fourfours:e1", BridgeMode::FourFours(FourFoursMode::Single(1)))]
     #[case(
         "test:/usr/eth/test.json",
         BridgeMode::Test(PathBuf::from("/usr/eth/test.json"))
