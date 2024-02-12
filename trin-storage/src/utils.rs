@@ -21,8 +21,8 @@ pub fn setup_sql(node_data_dir: &Path) -> Result<Pool<SqliteConnectionManager>, 
 
     let manager = SqliteConnectionManager::file(sql_path);
     let pool = Pool::new(manager)?;
-    pool.get()?.execute(CREATE_QUERY_DB, params![])?;
-    pool.get()?.execute(LC_UPDATE_CREATE_TABLE, params![])?;
+    pool.get()?.execute_batch(CREATE_QUERY_DB)?;
+    pool.get()?.execute_batch(LC_UPDATE_CREATE_TABLE)?;
     Ok(pool)
 }
 
