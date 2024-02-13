@@ -1,10 +1,6 @@
 use discv5::enr::NodeId;
 use ethportal_api::{
-    types::{
-        distance::{Distance, Metric, XorMetric},
-        history::PaginateLocalContentInfo,
-        portal_wire::ProtocolId,
-    },
+    types::{distance::Distance, history::PaginateLocalContentInfo, portal_wire::ProtocolId},
     utils::bytes::{hex_decode, hex_encode},
     HistoryContentKey, OverlayContentKey,
 };
@@ -21,8 +17,7 @@ use trin_storage::{
         XOR_FIND_FARTHEST_QUERY_NETWORK,
     },
     utils::{
-        byte_vector_to_u32, get_total_size_of_directory_in_bytes, insert_value,
-        lookup_content_value,
+        byte_slice_to_u32, get_total_size_of_directory_in_bytes, insert_value, lookup_content_value,
     },
     ContentId, ContentStore, DataSize, DistanceFunction, EntryCount, PortalStorageConfig,
     ShouldWeStoreContent, BYTES_IN_MB_U64,
@@ -61,7 +56,7 @@ impl ContentStore for HistoryStorage {
         &self,
         key: &K,
     ) -> Result<ShouldWeStoreContent, ContentStoreError> {
-        let distance = self.distance_to_key(key);
+        let distance = self.distance_to_content_id(&key.content_id());
         if distance > self.radius {
             return Ok(ShouldWeStoreContent::NotWithinRadius);
         }
@@ -198,13 +193,6 @@ impl HistoryStorage {
             None => Err(ContentStoreError::InvalidData {
                 message: "Invalid total entries count returned from sql query.".to_string(),
             }),
-        }
-    }
-
-    /// Returns the distance to `key` from the local `NodeId` according to the distance function.
-    fn distance_to_key<K: OverlayContentKey>(&self, key: &K) -> Distance {
-        match self.distance_fn {
-            DistanceFunction::Xor => XorMetric::distance(&key.content_id(), &self.node_id.raw()),
         }
     }
 
@@ -433,16 +421,15 @@ impl HistoryStorage {
     fn find_farthest_content_id(&self) -> Result<Option<[u8; 32]>, ContentStoreError> {
         let result = match self.distance_fn {
             DistanceFunction::Xor => {
-                let node_id_u32 = byte_vector_to_u32(self.node_id.raw().to_vec());
+                let node_id_u32 = byte_slice_to_u32(&self.node_id.raw());
 
                 let conn = self.sql_connection_pool.get()?;
                 let mut query = conn.prepare(XOR_FIND_FARTHEST_QUERY_NETWORK)?;
 
                 let mut result =
                     query.query_map([node_id_u32, u8::from(self.network).into()], |row| {
-                        Ok(ContentId {
-                            id_long: row.get(0)?,
-                        })
+                        let content_id: ContentId = row.get(0)?;
+                        Ok(content_id)
                     })?;
 
                 let result = match result.next() {
@@ -451,19 +438,7 @@ impl HistoryStorage {
                         return Ok(None);
                     }
                 };
-                let result = result?.id_long;
-                let result_vec: [u8; 32] = match result.len() {
-                    // If exact data size, safe to expect conversion.
-                    32 => result.try_into().expect(
-                        "Unexpectedly failed to convert 32 element vec to 32 element array.",
-                    ),
-                    // Received data of size other than 32 bytes.
-                    length => {
-                        let err = format!("content ID of length {length} != 32");
-                        return Err(ContentStoreError::InvalidData { message: err });
-                    }
-                };
-                result_vec
+                result?.to_fixed_bytes()
             }
         };
 
@@ -472,9 +447,7 @@ impl HistoryStorage {
 
     /// Method that returns the distance between our node ID and a given content ID.
     pub fn distance_to_content_id(&self, content_id: &[u8; 32]) -> Distance {
-        match self.distance_fn {
-            DistanceFunction::Xor => XorMetric::distance(content_id, &self.node_id.raw()),
-        }
+        self.distance_fn.distance(&self.node_id, content_id)
     }
 
     /// Get a summary of the current state of storage

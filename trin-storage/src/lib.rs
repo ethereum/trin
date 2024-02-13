@@ -5,13 +5,15 @@ pub mod utils;
 use crate::utils::setup_sql;
 use discv5::enr::NodeId;
 use error::ContentStoreError;
+use ethereum_types::H256;
 use ethportal_api::types::{
     content_key::overlay::OverlayContentKey,
     distance::{Distance, Metric, XorMetric},
 };
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
-use std::path::PathBuf;
+use rusqlite::types::{FromSql, FromSqlError, ValueRef};
+use std::{ops::Deref, path::PathBuf, str::FromStr};
 
 pub const DATABASE_NAME: &str = "trin.sqlite";
 pub const BYTES_IN_MB_U64: u64 = 1000 * 1000;
@@ -21,6 +23,14 @@ pub const BYTES_IN_MB_U64: u64 = 1000 * 1000;
 #[derive(Copy, Clone, Debug)]
 pub enum DistanceFunction {
     Xor,
+}
+
+impl DistanceFunction {
+    pub fn distance(&self, node_id: &NodeId, other: &[u8; 32]) -> Distance {
+        match self {
+            DistanceFunction::Xor => XorMetric::distance(&node_id.raw(), other),
+        }
+    }
 }
 
 /// An enum which tells us if we should store or not store content, and if not why for better
@@ -85,9 +95,7 @@ impl MemoryContentStore {
 
     /// Returns the distance to `key` from the local `NodeId` according to the distance function.
     fn distance_to_key<K: OverlayContentKey>(&self, key: &K) -> Distance {
-        match self.distance_fn {
-            DistanceFunction::Xor => XorMetric::distance(&key.content_id(), &self.node_id.raw()),
-        }
+        self.distance_fn.distance(&self.node_id, &key.content_id())
     }
 
     /// Returns `true` if the content store contains data for `key`.
@@ -162,9 +170,48 @@ impl PortalStorageConfig {
     }
 }
 
-// SQLite Result Containers
-pub struct ContentId {
-    pub id_long: Vec<u8>,
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ContentId(H256);
+
+impl<T: Into<H256>> From<T> for ContentId {
+    fn from(value: T) -> Self {
+        Self(value.into())
+    }
+}
+
+impl FromSql for ContentId {
+    fn column_result(value: ValueRef<'_>) -> Result<Self, FromSqlError> {
+        match value {
+            ValueRef::Blob(bytes) => {
+                if bytes.len() == H256::len_bytes() {
+                    Ok(ContentId(H256::from_slice(bytes)))
+                } else {
+                    Err(FromSqlError::Other(
+                        format!(
+                            "ContentId is not possible from a blob of length {}",
+                            bytes.len()
+                        )
+                        .into(),
+                    ))
+                }
+            }
+            ValueRef::Text(_) => {
+                let hex_text = value.as_str()?;
+                H256::from_str(hex_text)
+                    .map(ContentId)
+                    .map_err(|err| FromSqlError::Other(err.into()))
+            }
+            _ => Err(FromSqlError::InvalidType),
+        }
+    }
+}
+
+impl Deref for ContentId {
+    type Target = H256;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 pub struct DataSize {
@@ -177,6 +224,7 @@ pub struct EntryCount(pub u64);
 #[allow(clippy::unwrap_used)]
 pub mod test {
     use super::*;
+    use ethereum_types::H512;
     use ethportal_api::IdentityContentKey;
 
     #[test]
@@ -248,5 +296,42 @@ pub mod test {
                 .unwrap(),
             ShouldWeStoreContent::AlreadyStored
         );
+    }
+
+    #[test]
+    fn content_id_from_blob() {
+        let content_id = ContentId(H256::random());
+        let sql_value = ValueRef::from(content_id.as_bytes());
+        assert_eq!(ContentId::column_result(sql_value), Ok(content_id));
+    }
+
+    #[test]
+    #[should_panic(expected = "ContentId is not possible from a blob of length 31")]
+    fn content_id_from_blob_less_bytes() {
+        let bytes = H256::random().to_fixed_bytes();
+        ContentId::column_result(ValueRef::from(&bytes[..31])).unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "ContentId is not possible from a blob of length 33")]
+    fn content_id_from_blob_more_bytes() {
+        let bytes = H512::random().to_fixed_bytes();
+        ContentId::column_result(ValueRef::from(&bytes[..33])).unwrap();
+    }
+
+    #[test]
+    fn content_id_from_text() {
+        let content_id_str = "0123456789abcdef0123456789ABCDEF0123456789abcdef0123456789ABCDEF";
+        let content_id = ContentId(H256::from_str(content_id_str).unwrap());
+        let sql_value = ValueRef::from(content_id_str);
+        assert_eq!(ContentId::column_result(sql_value), Ok(content_id));
+    }
+
+    #[test]
+    fn content_id_from_text_with_0x_prefix() {
+        let content_id_str = "0x0123456789abcdef0123456789ABCDEF0123456789abcdef0123456789ABCDEF";
+        let content_id = ContentId(H256::from_str(content_id_str).unwrap());
+        let sql_value = ValueRef::from(content_id_str);
+        assert_eq!(ContentId::column_result(sql_value), Ok(content_id));
     }
 }
