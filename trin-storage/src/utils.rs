@@ -7,12 +7,15 @@ use crate::{
     DATABASE_NAME,
 };
 use anyhow::Error;
-use ethportal_api::utils::bytes::{hex_decode, hex_encode};
+use ethportal_api::{
+    types::distance::Distance,
+    utils::bytes::{hex_decode, hex_encode},
+};
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::params;
 use std::{fs, path::Path};
-use tracing::{debug, info};
+use tracing::info;
 
 /// Helper function for opening a SQLite connection.
 pub fn setup_sql(node_data_dir: &Path) -> Result<Pool<SqliteConnectionManager>, ContentStoreError> {
@@ -80,19 +83,16 @@ pub fn lookup_content_value(
     })
 }
 
-/// Converts most significant 4 bytes of a vector to a u32.
-pub fn byte_vector_to_u32(vec: Vec<u8>) -> u32 {
-    if vec.len() < 4 {
-        debug!("Error: XOR returned less than 4 bytes.");
-        return 0;
-    }
+/// Converts 4 most significant bytes of a byte slice to a u32.
+pub fn byte_slice_to_u32(slice: &[u8; 32]) -> u32 {
+    let mut be_bytes = [0u8; 4];
+    be_bytes.copy_from_slice(&slice[..4]);
+    u32::from_be_bytes(be_bytes)
+}
 
-    let mut array: [u8; 4] = [0, 0, 0, 0];
-    for (index, byte) in vec.iter().take(4).enumerate() {
-        array[index] = *byte;
-    }
-
-    u32::from_be_bytes(array)
+/// Converts 4 most significant bytes of distance to a u32.
+pub fn distance_to_u32(distance: &Distance) -> u32 {
+    byte_slice_to_u32(&distance.big_endian())
 }
 
 /// Inserts a content  into the database.
@@ -103,7 +103,7 @@ pub fn insert_value(
     value: &Vec<u8>,
     network_id: u8,
 ) -> Result<(), ContentStoreError> {
-    let content_id_as_u32: u32 = byte_vector_to_u32(content_id.to_vec());
+    let content_id_as_u32: u32 = byte_slice_to_u32(content_id);
     let value_size = value.len();
     if content_key.starts_with("0x") {
         return Err(ContentStoreError::InvalidData {
