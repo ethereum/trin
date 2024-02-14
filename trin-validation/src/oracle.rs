@@ -13,7 +13,7 @@ use ethportal_api::{
             request::{BeaconJsonRpcRequest, HistoryJsonRpcRequest},
         },
     },
-    BlockHeaderKey, HistoryContentKey, HistoryContentValue, PossibleHistoryContentValue,
+    BlockHeaderKey, HistoryContentKey, HistoryContentValue,
 };
 
 /// Responsible for dispatching cross-overlay-network requests
@@ -78,14 +78,7 @@ impl HeaderOracle {
                 ))
             }
         };
-        let content = match content {
-            PossibleHistoryContentValue::ContentPresent(header) => header,
-            PossibleHistoryContentValue::ContentAbsent => {
-                return Err(anyhow!(
-                    "ContentAbsent received from HeaderWithProof lookup"
-                ))
-            }
-        };
+
         match content {
             HistoryContentValue::BlockHeaderWithProof(content) => Ok(content),
             _ => Err(anyhow!(

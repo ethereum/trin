@@ -134,6 +134,8 @@ pub enum OverlayCommand<TContentKey> {
 
 /// An overlay request error.
 #[derive(Clone, Error, Debug)]
+// required for the ContentNotFound error response
+#[allow(clippy::large_enum_variant)]
 pub enum OverlayRequestError {
     /// A failure to transmit or receive a message on a channel.
     #[error("Channel failure: {0}")]
@@ -184,6 +186,13 @@ pub enum OverlayRequestError {
 
     #[error("Received invalid remote discv5 packet")]
     InvalidRemoteDiscv5Packet,
+
+    #[error("Content wasn't found on the network: {message}")]
+    ContentNotFound {
+        message: String,
+        utp: bool,
+        trace: Option<QueryTrace>,
+    },
 }
 
 impl From<discv5::RequestError> for OverlayRequestError {
@@ -803,7 +812,11 @@ where
                 match query.into_result() {
                     FindContentQueryResult::ClosestNodes(_closest_nodes) => {
                         if let Some(responder) = callback {
-                            let _ = responder.send((None, false, query_info.trace));
+                            let _ = responder.send(Err(OverlayRequestError::ContentNotFound {
+                                message: "Content not found".to_string(),
+                                utp: false,
+                                trace: query_info.trace,
+                            }));
                         }
                     }
                     FindContentQueryResult::Content {
@@ -848,7 +861,13 @@ where
                             _ => {
                                 debug!("Received uTP payload from unknown {peer}");
                                 if let Some(responder) = callback {
-                                    let _ = responder.send((None, true, query_info.trace));
+                                    let _ =
+                                        responder.send(Err(OverlayRequestError::ContentNotFound {
+                                            message: "Content not found: received utp payload from unknown peer"
+                                                .to_string(),
+                                            utp: true,
+                                            trace: query_info.trace,
+                                        }));
                                 };
                                 return;
                             }
@@ -883,7 +902,14 @@ where
                                         "Unable to establish uTP conn based on Content response",
                                     );
                                     if let Some(responder) = callback {
-                                        let _ = responder.send((None, true, query_info.trace));
+                                        let _ = responder
+                                            .send(Err(OverlayRequestError::ContentNotFound {
+                                            message:
+                                                "Content not found: unable to establish utp conn"
+                                                    .to_string(),
+                                            utp: true,
+                                            trace: query_info.trace,
+                                        }));
                                     };
                                     return;
                                 }
@@ -897,7 +923,14 @@ where
                                 );
                                 debug!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), "error reading data from uTP stream, while handling a FindContent request.");
                                 if let Some(responder) = callback {
-                                    let _ = responder.send((None, true, query_info.trace));
+                                    let _ = responder
+                                        .send(Err(OverlayRequestError::ContentNotFound {
+                                        message:
+                                            "Content not found: error reading data from utp stream"
+                                                .to_string(),
+                                        utp: true,
+                                        trace: query_info.trace,
+                                    }));
                                 };
                                 return;
                             }
@@ -1052,6 +1085,7 @@ where
     fn process_event(&mut self, _event: EventEnvelope) {}
 
     /// Attempts to build a response for a request.
+    #[allow(clippy::result_large_err)]
     fn handle_request(
         &mut self,
         request: Request,
@@ -1128,6 +1162,7 @@ where
     }
 
     /// Attempts to build a `Content` response for a `FindContent` request.
+    #[allow(clippy::result_large_err)]
     fn handle_find_content(
         &self,
         request: FindContent,
@@ -1213,15 +1248,10 @@ where
             // If we don't have data to send back or can't obtain a permit, send the requester a
             // list of closer ENR
             (Ok(Some(_)), _) | (Ok(None), _) => {
-                let enrs = self.find_nodes_close_to_content(content_key);
-                match enrs {
-                    Ok(mut val) => {
-                        val.retain(|x| source != &x.node_id());
-                        pop_while_ssz_bytes_len_gt(&mut val, MAX_PORTAL_CONTENT_PAYLOAD_SIZE);
-                        Ok(Content::Enrs(val))
-                    }
-                    Err(msg) => Err(OverlayRequestError::InvalidRequest(msg.to_string())),
-                }
+                let mut enrs = self.find_nodes_close_to_content(content_key);
+                enrs.retain(|enr| source != &enr.node_id());
+                pop_while_ssz_bytes_len_gt(&mut enrs, MAX_PORTAL_CONTENT_PAYLOAD_SIZE);
+                Ok(Content::Enrs(enrs))
             }
             (Err(msg), _) => Err(OverlayRequestError::Failure(format!(
                 "Unable to respond to FindContent: {msg}",
@@ -1230,6 +1260,7 @@ where
     }
 
     /// Attempts to build an `Accept` response for an `Offer` request.
+    #[allow(clippy::result_large_err)]
     fn handle_offer(
         &self,
         request: Offer,
@@ -2032,7 +2063,11 @@ where
                     "Error validating content"
                 );
                 if let Some(responder) = responder {
-                    let _ = responder.send((None, utp_transfer, trace));
+                    let _ = responder.send(Err(OverlayRequestError::ContentNotFound {
+                        message: "Content not found: error validating content".to_string(),
+                        utp: utp_transfer,
+                        trace,
+                    }));
                 }
                 return;
             };
@@ -2062,7 +2097,7 @@ where
             }
         }
         if let Some(responder) = responder {
-            let _ = responder.send((Some(content.clone()), utp_transfer, trace));
+            let _ = responder.send(Ok((content.clone(), utp_transfer, trace)));
         }
 
         if !disable_poke {
@@ -2492,10 +2527,7 @@ where
     }
 
     /// Returns list of nodes closest to content, sorted by distance.
-    fn find_nodes_close_to_content(
-        &self,
-        content_key: impl OverlayContentKey,
-    ) -> Result<Vec<SszEnr>, OverlayRequestError> {
+    fn find_nodes_close_to_content(&self, content_key: impl OverlayContentKey) -> Vec<SszEnr> {
         let content_id = content_key.content_id();
 
         let mut nodes_with_distance: Vec<(Distance, Enr)> = self
@@ -2506,13 +2538,11 @@ where
 
         nodes_with_distance.sort_by(|a, b| a.0.cmp(&b.0));
 
-        let closest_nodes = nodes_with_distance
+        nodes_with_distance
             .into_iter()
             .take(FIND_CONTENT_MAX_NODES)
             .map(|node_record| SszEnr::new(node_record.1))
-            .collect();
-
-        Ok(closest_nodes)
+            .collect()
     }
 
     /// Returns a vector of ENRs of the `max_nodes` closest connected nodes to the target from our
@@ -2621,7 +2651,12 @@ where
             // If there are no connected nodes in the routing table the query cannot proceed.
             warn!("No connected nodes in routing table, find content query cannot proceed.");
             if let Some(callback) = callback {
-                let _ = callback.send((None, false, None));
+                let _ = callback.send(Err(OverlayRequestError::ContentNotFound {
+                    message: "Content not found: no connected nodes in the routing table"
+                        .to_string(),
+                    utp: false,
+                    trace: None,
+                }));
             }
             return None;
         }
@@ -3788,7 +3823,7 @@ mod tests {
         let query_id = service.init_find_content_query(target_content_key.clone(), Some(tx), false);
 
         assert!(query_id.is_none());
-        assert_eq!(rx.await.unwrap(), (None, false, None));
+        assert!(rx.await.unwrap().is_err());
     }
 
     #[tokio::test]
@@ -4076,7 +4111,7 @@ mod tests {
             .await
             .expect("Expected result on callback channel receiver")
         {
-            (Some(result_content), utp_transfer, _) => {
+            Ok((result_content, utp_transfer, _)) => {
                 assert_eq!(result_content, content);
                 assert!(!utp_transfer);
             }

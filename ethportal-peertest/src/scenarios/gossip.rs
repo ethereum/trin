@@ -8,7 +8,7 @@ use crate::{
 };
 use ethportal_api::{
     jsonrpsee::async_client::Client, types::cli::TrinConfig, Discv5ApiClient,
-    HistoryNetworkApiClient, PossibleHistoryContentValue,
+    HistoryNetworkApiClient,
 };
 
 pub async fn test_gossip_with_trace(peertest: &Peertest, target: &Client) {
@@ -26,12 +26,8 @@ pub async fn test_gossip_with_trace(peertest: &Peertest, target: &Client) {
     assert_eq!(result.transferred.len(), 1);
 
     // Check if the stored content value in bootnode's DB matches the offered
-    let response =
+    let received_content_value =
         wait_for_history_content(&peertest.bootnode.ipc_client, content_key.clone()).await;
-    let received_content_value = match response {
-        PossibleHistoryContentValue::ContentPresent(c) => c,
-        PossibleHistoryContentValue::ContentAbsent => panic!("Expected content to be found"),
-    };
     assert_eq!(
         content_value, received_content_value,
         "The received content {received_content_value:?}, must match the expected {content_value:?}",
@@ -83,11 +79,7 @@ pub async fn test_gossip_with_trace(peertest: &Peertest, target: &Client) {
     assert_eq!(result.transferred.len(), 1);
 
     // Check if the stored content value in fresh node's DB matches the offered
-    let response = wait_for_history_content(&fresh_target, content_key.clone()).await;
-    let received_content_value = match response {
-        PossibleHistoryContentValue::ContentPresent(c) => c,
-        PossibleHistoryContentValue::ContentAbsent => panic!("Expected content to be found"),
-    };
+    let received_content_value = wait_for_history_content(&fresh_target, content_key.clone()).await;
     assert_eq!(
         content_value, received_content_value,
         "The received content {received_content_value:?}, must match the expected {content_value:?}",

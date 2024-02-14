@@ -4,14 +4,12 @@ use crate::jsonrpsee::core::{async_trait, RpcResult};
 use discv5::enr::NodeId;
 use ethportal_api::{
     types::{
-        constants::CONTENT_ABSENT,
         enr::Enr,
         history::{ContentInfo, PaginateLocalContentInfo, TraceContentInfo},
         jsonrpc::{endpoints::HistoryEndpoint, request::HistoryJsonRpcRequest},
         portal::{AcceptInfo, DataRadius, FindNodesInfo, PongInfo, TraceGossipInfo},
     },
-    HistoryContentKey, HistoryContentValue, HistoryNetworkApiServer, PossibleHistoryContentValue,
-    RoutingTableInfo,
+    HistoryContentKey, HistoryContentValue, HistoryNetworkApiServer, RoutingTableInfo,
 };
 use tokio::sync::mpsc;
 
@@ -119,14 +117,7 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
     ) -> RpcResult<ContentInfo> {
         let endpoint = HistoryEndpoint::RecursiveFindContent(content_key);
         let result = proxy_query_to_history_subnet(&self.network, endpoint).await?;
-        if result == serde_json::Value::String(CONTENT_ABSENT.to_string()) {
-            return Ok(ContentInfo::Content {
-                content: PossibleHistoryContentValue::ContentAbsent,
-                utp_transfer: false,
-            });
-        };
-        let result: ContentInfo = from_value(result)?;
-        Ok(result)
+        Ok(from_value(result)?)
     }
 
     /// Lookup a target content key in the network. Return tracing info.
@@ -209,14 +200,10 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
     async fn local_content(
         &self,
         content_key: HistoryContentKey,
-    ) -> RpcResult<PossibleHistoryContentValue> {
+    ) -> RpcResult<HistoryContentValue> {
         let endpoint = HistoryEndpoint::LocalContent(content_key);
         let result = proxy_query_to_history_subnet(&self.network, endpoint).await?;
-        if result == serde_json::Value::String(CONTENT_ABSENT.to_string()) {
-            return Ok(PossibleHistoryContentValue::ContentAbsent);
-        };
-        let content: HistoryContentValue = from_value(result)?;
-        Ok(PossibleHistoryContentValue::ContentPresent(content))
+        Ok(from_value(result)?)
     }
 }
 

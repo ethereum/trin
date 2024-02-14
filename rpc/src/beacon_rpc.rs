@@ -5,13 +5,11 @@ use discv5::enr::NodeId;
 use ethportal_api::{
     types::{
         beacon::{ContentInfo, PaginateLocalContentInfo, TraceContentInfo},
-        constants::CONTENT_ABSENT,
         enr::Enr,
         jsonrpc::{endpoints::BeaconEndpoint, request::BeaconJsonRpcRequest},
         portal::{AcceptInfo, DataRadius, FindNodesInfo, PongInfo, TraceGossipInfo},
     },
-    BeaconContentKey, BeaconContentValue, BeaconNetworkApiServer, PossibleBeaconContentValue,
-    RoutingTableInfo,
+    BeaconContentKey, BeaconContentValue, BeaconNetworkApiServer, RoutingTableInfo,
 };
 use serde_json::Value;
 use tokio::sync::mpsc;
@@ -40,7 +38,35 @@ impl BeaconNetworkApi {
         match resp_rx.recv().await {
             Some(val) => match val {
                 Ok(result) => Ok(result),
-                Err(msg) => Err(RpcServeError::Message(msg)),
+                Err(msg) => {
+                    if msg.contains("Content not found") {
+                        let error_details: Value = serde_json::from_str(&msg).map_err(|e| {
+                            RpcServeError::Message(format!(
+                                "Failed to parse error message from history subnet: {e:?}",
+                            ))
+                        })?;
+                        let message = error_details["message"]
+                            .as_str()
+                            .ok_or_else(|| {
+                                RpcServeError::Message(
+                                    "Failed to parse error message, invalid `message` field"
+                                        .to_string(),
+                                )
+                            })?
+                            .to_string();
+                        let trace = match error_details.get("trace") {
+                            Some(trace) => serde_json::from_value(trace.clone()).map_err(|e| {
+                                RpcServeError::Message(format!(
+                                    "Failed to parse error message, invalid trace: {e:?}",
+                                ))
+                            })?,
+                            None => None,
+                        };
+                        Err(RpcServeError::ContentNotFound { message, trace })
+                    } else {
+                        Err(RpcServeError::Message(msg))
+                    }
+                }
             },
             None => Err(RpcServeError::Message(
                 "Internal error: No response from chain beacon subnetwork".to_string(),
@@ -143,14 +169,7 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
     ) -> RpcResult<ContentInfo> {
         let endpoint = BeaconEndpoint::RecursiveFindContent(content_key);
         let result = self.proxy_query_to_beacon_subnet(endpoint).await?;
-        if result == serde_json::Value::String(CONTENT_ABSENT.to_string()) {
-            return Ok(ContentInfo::Content {
-                content: PossibleBeaconContentValue::ContentAbsent,
-                utp_transfer: false,
-            });
-        };
-        let result: ContentInfo = from_value(result)?;
-        Ok(result)
+        Ok(from_value(result)?)
     }
 
     /// Lookup a target content key in the network. Return tracing info.
@@ -230,17 +249,10 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
     }
 
     /// Get a content from the local database.
-    async fn local_content(
-        &self,
-        content_key: BeaconContentKey,
-    ) -> RpcResult<PossibleBeaconContentValue> {
+    async fn local_content(&self, content_key: BeaconContentKey) -> RpcResult<BeaconContentValue> {
         let endpoint = BeaconEndpoint::LocalContent(content_key);
         let result = self.proxy_query_to_beacon_subnet(endpoint).await?;
-        if result == serde_json::Value::String(CONTENT_ABSENT.to_string()) {
-            return Ok(PossibleBeaconContentValue::ContentAbsent);
-        };
-        let content: BeaconContentValue = from_value(result)?;
-        Ok(PossibleBeaconContentValue::ContentPresent(content))
+        Ok(from_value(result)?)
     }
 }
 

@@ -41,10 +41,8 @@ pub use types::{
     consensus,
     consensus::light_client,
     content_value::{
-        beacon::{BeaconContentValue, PossibleBeaconContentValue},
-        error::ContentValueError,
-        history::{HistoryContentValue, PossibleHistoryContentValue},
-        state::{PossibleStateContentValue, StateContentValue},
+        beacon::BeaconContentValue, error::ContentValueError, history::HistoryContentValue,
+        state::StateContentValue,
     },
     execution::{block_body::*, header::*, receipts::*},
 };

@@ -243,15 +243,13 @@ async fn overlay() {
         .write()
         .put(content_key.clone(), &content)
         .expect("Unable to store content");
-    match overlay_one.lookup_content(content_key, false).await {
-        (Some(found_content), utp_transfer, _) => {
-            assert_eq!(found_content, content);
-            assert!(!utp_transfer);
-        }
-        (None, _, _) => {
-            panic!("Unable to find content stored with peer");
-        }
-    }
+    let (found_content, utp_transfer, _) = overlay_one
+        .lookup_content(content_key, false)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(found_content, content);
+    assert!(!utp_transfer);
 }
 
 #[tokio::test]

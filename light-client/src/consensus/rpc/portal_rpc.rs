@@ -1,5 +1,5 @@
 use crate::consensus::rpc::ConsensusRpc;
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use async_trait::async_trait;
 use ethportal_api::{
     consensus::light_client::bootstrap::LightClientBootstrap,
@@ -68,25 +68,22 @@ impl ConsensusRpc for PortalRpc {
 
         match rx.await {
             Ok(result) => {
-                let bootstrap = BeaconContentValue::decode(
-                    &result
-                        .0
-                        .ok_or("LightClientBootstrap content not found on the network.")
-                        .map_err(|err| anyhow!("{err}"))?,
-                )?;
-
+                let bootstrap = match result {
+                    Ok(result) => BeaconContentValue::decode(&result.0)?,
+                    Err(err) => {
+                        bail!("LightClientBootstrap content not found on the network: {err}")
+                    }
+                };
                 if let BeaconContentValue::LightClientBootstrap(bootstrap) = bootstrap {
                     if let LightClientBootstrap::Capella(bootstrap_capella) = bootstrap.bootstrap {
                         Ok(bootstrap_capella)
                     } else {
-                        return Err(anyhow!(
+                        bail!(
                             "Error converting LightClientBootstrap to LightClientBootstrapCapella"
-                        ));
+                        )
                     }
                 } else {
-                    return Err(anyhow!(
-                        "Error converting BeaconContentValue to LightClientBootstrap"
-                    ));
+                    bail!("Error converting BeaconContentValue to LightClientBootstrap");
                 }
             }
             Err(err) => {
@@ -130,13 +127,12 @@ impl ConsensusRpc for PortalRpc {
 
         match rx.await {
             Ok(result) => {
-                let content_value = BeaconContentValue::decode(
-                    &result
-                        .0
-                        .ok_or(format!("LightClientUpdatesByRange period={period}, count={count} not found on the network."))
-                        .map_err(|err| anyhow!("{err}"))?,
-                )?;
-
+                let content_value = match result {
+                    Ok(result) => BeaconContentValue::decode(&result.0)?,
+                    Err(err) => {
+                        return Err(anyhow!("LightClientUpdatesByRange period={period}, count={count} not found on the network: {err}"));
+                    }
+                };
                 if let BeaconContentValue::LightClientUpdatesByRange(updates) = content_value {
                     let capella_updates: Vec<LightClientUpdate> = updates
                         .as_ref()
@@ -202,13 +198,12 @@ impl ConsensusRpc for PortalRpc {
 
         match rx.await {
             Ok(result) => {
-                let finality_update = BeaconContentValue::decode(
-                    &result
-                        .0
-                        .ok_or(format!("LightClientFinalityUpdate content with finalized slot {recent_epoch_start} not found on the network."))
-                        .map_err(|err| anyhow!("{err}"))?,
-                )?;
-
+                let finality_update = match result {
+                    Ok(result) => BeaconContentValue::decode(&result.0)?,
+                    Err(err) => {
+                        return Err(anyhow!("LightClientFinalityUpdate content with finalized slot {recent_epoch_start} not found on the network: {err}"));
+                    }
+                };
                 if let BeaconContentValue::LightClientFinalityUpdate(finality_update) =
                     finality_update
                 {
@@ -264,13 +259,12 @@ impl ConsensusRpc for PortalRpc {
 
         match rx.await {
             Ok(result) => {
-                let optimistic_update = BeaconContentValue::decode(
-                    &result
-                        .0
-                        .ok_or(format!("LightClientOptimisticUpdate content with signature slot {expected_current_slot} not found on the network."))
-                        .map_err(|err| anyhow!("{err}"))?,
-                )?;
-
+                let optimistic_update = match result {
+                    Ok(result) => BeaconContentValue::decode(&result.0)?,
+                    Err(err) => {
+                        return Err(anyhow!("LightClientOptimisticUpdate content with signature slot {expected_current_slot} not found on the network: {err}"));
+                    }
+                };
                 if let BeaconContentValue::LightClientOptimisticUpdate(optimistic_update) =
                     optimistic_update
                 {
