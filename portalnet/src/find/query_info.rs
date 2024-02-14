@@ -67,10 +67,13 @@ impl<TContentKey: OverlayContentKey> QueryInfo<TContentKey> {
                 target,
                 distances_to_request,
                 ..
-            } => {
+            } if distances_to_request > 0 && distances_to_request <= 127 => {
                 let distances = findnode_log2distance(target, peer, distances_to_request)
-                    .ok_or("Requested a node find itself")?;
+                    .ok_or("Could not calculate distances")?;
                 Request::FindNodes(FindNodes { distances })
+            }
+            QueryType::FindNode { .. } => {
+                return Err("Invalid distances_to_request: must be between 1 and 127");
             }
             QueryType::FindContent { ref target, .. } => Request::FindContent(FindContent {
                 content_key: target.clone().into(),
