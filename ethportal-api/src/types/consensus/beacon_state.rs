@@ -1,8 +1,7 @@
-#[cfg(test)]
-use crate::consensus::fork::ForkName;
 use crate::consensus::{
     body::{Checkpoint, Eth1Data},
     execution_payload::{ExecutionPayloadHeaderBellatrix, ExecutionPayloadHeaderCapella},
+    fork::ForkName,
     header::BeaconBlockHeader,
     header_proof::HistoricalSummary,
     participation_flags::ParticipationFlags,
@@ -35,11 +34,20 @@ type JustificationBitsLength = U4;
 #[superstruct(
     variants(Bellatrix, Capella),
     variant_attributes(
-        derive(Debug, PartialEq, Serialize, Deserialize, Encode, Decode, TreeHash,),
+        derive(
+            Clone,
+            Debug,
+            PartialEq,
+            Serialize,
+            Deserialize,
+            Encode,
+            Decode,
+            TreeHash,
+        ),
         serde(deny_unknown_fields),
     )
 )]
-#[derive(Debug, PartialEq, Serialize, Deserialize, Encode, TreeHash)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Encode, TreeHash)]
 #[serde(untagged)]
 #[tree_hash(enum_behaviour = "transparent")]
 #[ssz(enum_behaviour = "transparent")]
@@ -129,7 +137,6 @@ pub struct BeaconState {
 }
 
 impl BeaconState {
-    #[cfg(test)]
     pub fn from_ssz_bytes(bytes: &[u8], fork_name: ForkName) -> Result<Self, DecodeError> {
         match fork_name {
             ForkName::Bellatrix => BeaconStateBellatrix::from_ssz_bytes(bytes).map(Self::Bellatrix),
