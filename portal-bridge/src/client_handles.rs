@@ -39,7 +39,7 @@ pub fn fluffy_handle(
     }
     if bridge_config.bootnodes != "default" {
         for enr in bridge_config.bootnodes.split(',') {
-            command.args(["--bootstrap-node", enr]);
+            command.arg(format!("--bootstrap-node:{enr}"));
         }
     }
     if let Some(ip) = bridge_config.external_ip {

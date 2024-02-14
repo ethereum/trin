@@ -45,6 +45,14 @@ COPY ./rpc ./rpc
 # build for release
 RUN cargo build -p trin -p portal-bridge --release
 
+# Get the fluffy executable.
+# If you're building on a different architecture,
+# you'll need to include the `--platform linux/amd64` flag
+# to the `docker build` command.
+# This isn't an issue for our ci pipeline, as it's already
+# building on an amd64 machine.
+FROM statusim/nimbus-fluffy:amd64-master-latest AS fluffy
+
 # final base
 FROM final_base
 
@@ -53,6 +61,7 @@ COPY --from=builder /trin/target/release/trin /usr/bin/
 COPY --from=builder /trin/target/release/portal-bridge /usr/bin/
 COPY --from=builder /trin/target/release/sample_range /usr/bin/
 COPY --from=builder /trin/target/release/poll_latest /usr/bin/
+COPY --from=fluffy /usr/bin/fluffy /usr/bin/
 
 RUN apt-get update && apt-get install libcurl4 -y
 
