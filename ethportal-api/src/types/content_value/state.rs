@@ -4,49 +4,10 @@ use ssz::{Decode, Encode};
 use ssz_derive::{Decode, Encode};
 
 use crate::{
-    types::{
-        constants::CONTENT_ABSENT,
-        state_trie::{ByteCode, EncodedTrieNode, TrieProof},
-    },
+    types::state_trie::{ByteCode, EncodedTrieNode, TrieProof},
     utils::bytes::hex_encode,
     ContentValue, ContentValueError,
 };
-
-/// A potential portal state content value. It can be absent if deserialization failed.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum PossibleStateContentValue {
-    ContentPresent(StateContentValue),
-    ContentAbsent,
-}
-
-impl Serialize for PossibleStateContentValue {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        match self {
-            Self::ContentPresent(content) => content.serialize(serializer),
-            Self::ContentAbsent => serializer.serialize_str(CONTENT_ABSENT),
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for PossibleStateContentValue {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-
-        if s == CONTENT_ABSENT {
-            Ok(PossibleStateContentValue::ContentAbsent)
-        } else {
-            StateContentValue::from_hex(&s)
-                .map(PossibleStateContentValue::ContentPresent)
-                .map_err(serde::de::Error::custom)
-        }
-    }
-}
 
 /// A Portal State content value.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -75,10 +36,7 @@ impl ContentValue for StateContentValue {
     }
 
     fn decode(buf: &[u8]) -> Result<Self, ContentValueError> {
-        // Catch any attempt to construct a content value from "0x" improperly.
-        if buf == CONTENT_ABSENT.to_string().as_bytes() {
-            Err(ContentValueError::DecodeAbsentContent)
-        } else if let Ok(value) = TrieNode::from_ssz_bytes(buf) {
+        if let Ok(value) = TrieNode::from_ssz_bytes(buf) {
             Ok(Self::TrieNode(value))
         } else if let Ok(value) = AccountTrieNodeWithProof::from_ssz_bytes(buf) {
             Ok(Self::AccountTrieNodeWithProof(value))

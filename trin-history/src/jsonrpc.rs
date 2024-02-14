@@ -3,7 +3,6 @@ use std::sync::Arc;
 use discv5::enr::NodeId;
 use ethportal_api::{
     types::{
-        constants::CONTENT_ABSENT,
         distance::Distance,
         history::{ContentInfo, TraceContentInfo},
         jsonrpc::{endpoints::HistoryEndpoint, request::HistoryJsonRpcRequest},
@@ -14,6 +13,7 @@ use ethportal_api::{
     utils::bytes::hex_encode,
     ContentValue, HistoryContentKey, OverlayContentKey, RawContentKey,
 };
+use portalnet::overlay_service::OverlayRequestError;
 use serde_json::{json, Value};
 use tokio::sync::{mpsc, Mutex, RwLock};
 use tracing::error;
@@ -107,21 +107,46 @@ async fn recursive_find_content(
             None
         }
     };
-    let (possible_content_bytes, utp_transfer, trace) = match local_content {
+    let (content_bytes, utp_transfer, trace) = match local_content {
         Some(val) => {
             let local_enr = overlay.local_enr();
             let mut trace = QueryTrace::new(&overlay.local_enr(), content_key.content_id());
             trace.node_responded_with_content(&local_enr);
-            (Some(val), false, if is_trace { Some(trace) } else { None })
+            (val, false, if is_trace { Some(trace) } else { None })
         }
-        None => overlay.lookup_content(content_key.clone(), is_trace).await,
+        // data is not available locally, make network request
+        None => match overlay
+            .lookup_content(content_key.clone(), is_trace)
+            .await
+            .map_err(|err| err.to_string())?
+        {
+            Ok((content_bytes, utp_transfer, trace)) => (content_bytes, utp_transfer, trace),
+            Err(err) => match err.clone() {
+                OverlayRequestError::ContentNotFound {
+                    message,
+                    utp,
+                    trace,
+                } => {
+                    let err = json!({
+                        "message": format!("{message}: utp: {utp}"),
+                        "trace": trace
+                    });
+                    return Err(err.to_string());
+                }
+                _ => {
+                    error!(
+                        error = %err,
+                        content.key = %content_key,
+                        "Error looking up content",
+                    );
+                    return Err(err.to_string());
+                }
+            },
+        },
     };
 
     // Format as string.
-    let content_response_string = match possible_content_bytes {
-        Some(bytes) => Value::String(hex_encode(bytes)),
-        None => Value::String(CONTENT_ABSENT.to_string()), // "0x"
-    };
+    let content_response_string = Value::String(hex_encode(content_bytes));
 
     // If tracing is not required, return content.
     if !is_trace {
@@ -154,7 +179,10 @@ async fn local_content(
                     Ok(Value::String(hex_encode(val)))
                 }
                 None => {
-                    Ok(Value::String(CONTENT_ABSENT.to_string()))
+                    let err = json!({
+                        "message": "Content not found in local storage",
+                    });
+                    return Err(err.to_string());
                 }
             },
             Err(err) => Err(format!(

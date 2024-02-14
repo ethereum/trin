@@ -14,7 +14,6 @@ use url::Url;
 
 use ethportal_api::{
     jsonrpsee::http_client::{HttpClient, HttpClientBuilder},
-    types::{content_value::history::PossibleHistoryContentValue, history::ContentInfo},
     BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, HistoryContentKey, HistoryNetworkApiClient,
 };
 use trin_utils::log::init_tracing_logger;
@@ -145,38 +144,32 @@ async fn audit_block(
     let receipts_ck = HistoryContentKey::BlockReceipts(BlockReceiptsKey {
         block_hash: hash.to_fixed_bytes(),
     });
-    match client.recursive_find_content(header_ck).await? {
-        ContentInfo::Content { content, .. } => {
-            if let PossibleHistoryContentValue::ContentPresent(_) = content {
-                metrics.lock().unwrap().header.success_count += 1;
-            } else {
-                warn!("Header not found for block {hash}");
-                metrics.lock().unwrap().header.failure_count += 1;
-            }
+    match client.recursive_find_content(header_ck).await {
+        Ok(_) => {
+            metrics.lock().unwrap().header.success_count += 1;
         }
-        _ => metrics.lock().unwrap().header.failure_count += 1,
+        Err(e) => {
+            warn!("Header not found for block {hash}: {:?}", e);
+            metrics.lock().unwrap().header.failure_count += 1;
+        }
     }
-    match client.recursive_find_content(body_ck).await? {
-        ContentInfo::Content { content, .. } => {
-            if let PossibleHistoryContentValue::ContentPresent(_) = content {
-                metrics.lock().unwrap().block_body.success_count += 1;
-            } else {
-                warn!("Body not found for block {hash}");
-                metrics.lock().unwrap().block_body.failure_count += 1;
-            }
+    match client.recursive_find_content(body_ck).await {
+        Ok(_) => {
+            metrics.lock().unwrap().block_body.success_count += 1;
         }
-        _ => metrics.lock().unwrap().block_body.failure_count += 1,
+        Err(e) => {
+            warn!("Body not found for block {hash}: {:?}", e);
+            metrics.lock().unwrap().block_body.failure_count += 1;
+        }
     }
-    match client.recursive_find_content(receipts_ck).await? {
-        ContentInfo::Content { content, .. } => {
-            if let PossibleHistoryContentValue::ContentPresent(_) = content {
-                metrics.lock().unwrap().receipts.success_count += 1;
-            } else {
-                warn!("Receipts not found for block {hash}");
-                metrics.lock().unwrap().receipts.failure_count += 1;
-            }
+    match client.recursive_find_content(receipts_ck).await {
+        Ok(_) => {
+            metrics.lock().unwrap().receipts.success_count += 1;
         }
-        _ => metrics.lock().unwrap().receipts.failure_count += 1,
+        Err(e) => {
+            warn!("Receipts not found for block {hash}: {:?}", e);
+            metrics.lock().unwrap().receipts.failure_count += 1;
+        }
     }
     Ok(())
 }

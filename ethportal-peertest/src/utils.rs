@@ -5,15 +5,15 @@ use serde_yaml::Value;
 use std::fs;
 
 use ethportal_api::{
-    BeaconContentKey, BeaconNetworkApiClient, HistoryContentKey, HistoryContentValue,
-    HistoryNetworkApiClient, PossibleBeaconContentValue, PossibleHistoryContentValue,
+    BeaconContentKey, BeaconContentValue, BeaconNetworkApiClient, HistoryContentKey,
+    HistoryContentValue, HistoryNetworkApiClient,
 };
 
 /// Wait for the history content to be transferred
 pub async fn wait_for_history_content<P: HistoryNetworkApiClient + std::marker::Sync>(
     ipc_client: &P,
     content_key: HistoryContentKey,
-) -> PossibleHistoryContentValue {
+) -> HistoryContentValue {
     let mut received_content_value = ipc_client.local_content(content_key.clone()).await;
 
     let mut counter = 0;
@@ -21,10 +21,7 @@ pub async fn wait_for_history_content<P: HistoryNetworkApiClient + std::marker::
     // If content is absent an error will be returned.
     while counter < 5 {
         let message = match received_content_value {
-            Ok(cp @ PossibleHistoryContentValue::ContentPresent(_)) => return cp,
-            Ok(PossibleHistoryContentValue::ContentAbsent) => {
-                "absent history content response received".to_string()
-            }
+            Ok(val) => return val,
             Err(e) => format!("received an error {e}"),
         };
         error!("Retrying after 0.5s, because {message}");
@@ -40,7 +37,7 @@ pub async fn wait_for_history_content<P: HistoryNetworkApiClient + std::marker::
 pub async fn wait_for_beacon_content<P: BeaconNetworkApiClient + std::marker::Sync>(
     ipc_client: &P,
     content_key: BeaconContentKey,
-) -> PossibleBeaconContentValue {
+) -> BeaconContentValue {
     let mut received_content_value = ipc_client.local_content(content_key.clone()).await;
 
     let mut counter = 0;
@@ -48,10 +45,7 @@ pub async fn wait_for_beacon_content<P: BeaconNetworkApiClient + std::marker::Sy
     // If content is absent an error will be returned.
     while counter < 60 {
         let message = match received_content_value {
-            Ok(cp @ PossibleBeaconContentValue::ContentPresent(_)) => return cp,
-            Ok(PossibleBeaconContentValue::ContentAbsent) => {
-                "absent beacon content response received".to_string()
-            }
+            Ok(val) => return val,
             Err(e) => format!("received an error {e}"),
         };
         counter += 1;

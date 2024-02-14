@@ -6,7 +6,7 @@ use ethereum_types::H256;
 use ethportal_api::{
     jsonrpsee::async_client::Client,
     types::{content_key::history::BlockHeaderKey, enr::Enr, history::ContentInfo},
-    HistoryContentKey, HistoryNetworkApiClient, PossibleHistoryContentValue,
+    HistoryContentKey, HistoryNetworkApiClient,
 };
 use std::str::FromStr;
 use tracing::info;
@@ -40,10 +40,7 @@ pub async fn test_validate_pre_merge_header_with_proof(peertest: &Peertest, targ
             content,
             utp_transfer,
         } => {
-            assert_eq!(
-                content,
-                PossibleHistoryContentValue::ContentPresent(content_value)
-            );
+            assert_eq!(content, content_value);
             assert!(!utp_transfer);
         }
         _ => panic!("Content values should match"),
@@ -114,10 +111,7 @@ pub async fn test_validate_pre_merge_block_body(peertest: &Peertest, target: &Cl
             content,
             utp_transfer,
         } => {
-            assert_eq!(
-                content,
-                PossibleHistoryContentValue::ContentPresent(content_value)
-            );
+            assert_eq!(content, content_value);
             assert!(utp_transfer);
         }
         _ => panic!("Content values should match"),
@@ -157,10 +151,7 @@ pub async fn test_validate_pre_merge_receipts(peertest: &Peertest, target: &Clie
             content,
             utp_transfer,
         } => {
-            assert_eq!(
-                content,
-                PossibleHistoryContentValue::ContentPresent(content_value)
-            );
+            assert_eq!(content, content_value);
             assert!(utp_transfer);
         }
         _ => panic!("Content values should match"),

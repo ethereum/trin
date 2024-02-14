@@ -1,3 +1,14 @@
+#![allow(clippy::result_large_err)]
+
+use std::{
+    collections::{BTreeMap, HashSet},
+    fmt::{Debug, Display},
+    future::Future,
+    marker::{PhantomData, Sync},
+    sync::Arc,
+    time::Duration,
+};
+
 use anyhow::anyhow;
 use discv5::{
     enr::NodeId,
@@ -10,14 +21,6 @@ use discv5::{
 use futures::channel::oneshot;
 use parking_lot::RwLock;
 use ssz::Encode;
-use std::{
-    collections::{BTreeMap, HashSet},
-    fmt::{Debug, Display},
-    future::Future,
-    marker::{PhantomData, Sync},
-    sync::Arc,
-    time::Duration,
-};
 use tokio::sync::{broadcast, mpsc::UnboundedSender};
 use tracing::{debug, error, info, warn};
 
@@ -657,7 +660,7 @@ where
         &self,
         target: TContentKey,
         is_trace: bool,
-    ) -> RecursiveFindContentResult {
+    ) -> Result<RecursiveFindContentResult, OverlayRequestError> {
         let (tx, rx) = oneshot::channel();
         let content_id = target.content_id();
 
@@ -672,17 +675,18 @@ where
                 content.id = %hex_encode(content_id),
                 "Error submitting FindContent query to service"
             );
-            return (None, false, None);
+            return Err(OverlayRequestError::ChannelFailure(err.to_string()));
         }
 
-        rx.await.unwrap_or_else(|err| {
+        // Wait on the response.
+        rx.await.map_err(|err| {
             warn!(
                 protocol = %self.protocol,
                 error = %err,
                 content.id = %hex_encode(content_id),
-                "Error receiving content from service",
+                "Error receiving FindContent query response"
             );
-            (None, false, None)
+            OverlayRequestError::ChannelFailure(err.to_string())
         })
     }
 

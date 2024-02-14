@@ -5,10 +5,7 @@ use ethers::prelude::*;
 use ethers_providers::Ws;
 use ethportal_api::{
     jsonrpsee::http_client::{HttpClient, HttpClientBuilder},
-    types::{
-        content_key::overlay::OverlayContentKey,
-        content_value::history::PossibleHistoryContentValue, history::ContentInfo,
-    },
+    types::{content_key::overlay::OverlayContentKey, history::ContentInfo},
     BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, HistoryContentKey, HistoryNetworkApiClient,
 };
 use std::{
@@ -216,11 +213,11 @@ async fn audit_content_key(
 ) -> anyhow::Result<Instant> {
     let mut attempts = 0;
     while Instant::now() - timestamp < timeout {
-        let content = client.recursive_find_content(content_key.clone()).await?;
-        if let ContentInfo::Content { content, .. } = content {
-            if let PossibleHistoryContentValue::ContentPresent(_) = content {
+        match client.recursive_find_content(content_key.clone()).await? {
+            ContentInfo::Content { .. } => {
                 return Ok(Instant::now());
-            } else {
+            }
+            _ => {
                 attempts += 1;
                 let sleep_time = match backoff {
                     Backoff::Exponential => attempts * 2,

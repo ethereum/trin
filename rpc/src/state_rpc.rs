@@ -1,14 +1,12 @@
 use discv5::enr::NodeId;
 use ethportal_api::{
     types::{
-        constants::CONTENT_ABSENT,
         enr::Enr,
         jsonrpc::{endpoints::StateEndpoint, request::StateJsonRpcRequest},
         portal::{AcceptInfo, DataRadius, FindNodesInfo, PongInfo, TraceGossipInfo},
         state::{ContentInfo, PaginateLocalContentInfo, TraceContentInfo},
     },
-    PossibleStateContentValue, RoutingTableInfo, StateContentKey, StateContentValue,
-    StateNetworkApiServer,
+    RoutingTableInfo, StateContentKey, StateContentValue, StateNetworkApiServer,
 };
 use serde_json::Value;
 use tokio::sync::mpsc;
@@ -138,12 +136,6 @@ impl StateNetworkApiServer for StateNetworkApi {
     async fn recursive_find_content(&self, content_key: StateContentKey) -> RpcResult<ContentInfo> {
         let endpoint = StateEndpoint::RecursiveFindContent(content_key);
         let result = self.proxy_query_to_state_subnet(endpoint).await?;
-        if result == serde_json::Value::String(CONTENT_ABSENT.to_string()) {
-            return Ok(ContentInfo::Content {
-                content: PossibleStateContentValue::ContentAbsent,
-                utp_transfer: false,
-            });
-        };
         let result: ContentInfo = from_value(result)?;
         Ok(result)
     }
@@ -225,17 +217,10 @@ impl StateNetworkApiServer for StateNetworkApi {
     }
 
     /// Get a content from the local database.
-    async fn local_content(
-        &self,
-        content_key: StateContentKey,
-    ) -> RpcResult<PossibleStateContentValue> {
+    async fn local_content(&self, content_key: StateContentKey) -> RpcResult<StateContentValue> {
         let endpoint = StateEndpoint::LocalContent(content_key);
         let result = self.proxy_query_to_state_subnet(endpoint).await?;
-        if result == serde_json::Value::String(CONTENT_ABSENT.to_string()) {
-            return Ok(PossibleStateContentValue::ContentAbsent);
-        };
-        let content: StateContentValue = from_value(result)?;
-        Ok(PossibleStateContentValue::ContentPresent(content))
+        Ok(from_value(result)?)
     }
 }
 

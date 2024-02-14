@@ -1,5 +1,5 @@
 use super::query_trace::QueryTrace;
-use crate::{types::enr::Enr, HistoryContentKey, PossibleHistoryContentValue};
+use crate::{types::enr::Enr, HistoryContentKey, HistoryContentValue};
 use serde::{Deserialize, Serialize};
 
 /// Response for FindContent & RecursiveFindContent endpoints
@@ -10,7 +10,7 @@ pub enum ContentInfo {
     ConnectionId { connection_id: u16 },
     #[serde(rename_all = "camelCase")]
     Content {
-        content: PossibleHistoryContentValue,
+        content: HistoryContentValue,
         utp_transfer: bool,
     },
     #[serde(rename_all = "camelCase")]
@@ -19,12 +19,12 @@ pub enum ContentInfo {
 
 /// Parsed response for TraceRecursiveFindContent endpoint
 ///
-/// The RPC response encodes absent content as "0x". This struct
-/// represents the content info, using None for absent content.
+/// This struct represents the content info, and is only used
+/// when the content is found locally or on the network.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TraceContentInfo {
-    pub content: PossibleHistoryContentValue,
+    pub content: HistoryContentValue,
     pub utp_transfer: bool,
     pub trace: QueryTrace,
 }

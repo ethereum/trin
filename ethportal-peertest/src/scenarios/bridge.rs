@@ -2,10 +2,7 @@ use crate::{
     utils::{fixture_header_with_proof_1000010, wait_for_beacon_content, wait_for_history_content},
     Peertest,
 };
-use ethportal_api::{
-    jsonrpsee::http_client::HttpClient, BeaconContentKey, BeaconContentValue,
-    PossibleBeaconContentValue, PossibleHistoryContentValue,
-};
+use ethportal_api::{jsonrpsee::http_client::HttpClient, BeaconContentKey, BeaconContentValue};
 use portal_bridge::{
     api::{consensus::ConsensusApi, execution::ExecutionApi},
     bridge::{beacon::BeaconBridge, history::HistoryBridge},
@@ -38,11 +35,8 @@ pub async fn test_history_bridge(peertest: &Peertest, target: &HttpClient) {
     bridge.launch().await;
     let (content_key, content_value) = fixture_header_with_proof_1000010();
     // Check if the stored content value in bootnode's DB matches the offered
-    let response = wait_for_history_content(&peertest.bootnode.ipc_client, content_key).await;
-    let received_content_value = match response {
-        PossibleHistoryContentValue::ContentPresent(c) => c,
-        PossibleHistoryContentValue::ContentAbsent => panic!("Expected content to be found"),
-    };
+    let received_content_value =
+        wait_for_history_content(&peertest.bootnode.ipc_client, content_key).await;
     assert_eq!(
         content_value, received_content_value,
         "The received content {received_content_value:?}, must match the expected {content_value:?}",
@@ -67,11 +61,8 @@ pub async fn test_beacon_bridge(peertest: &Peertest, target: &HttpClient) {
         serde_json::from_value(value[0].get("content_value").unwrap().clone()).unwrap();
 
     // Check if the stored content value in bootnode's DB matches the offered
-    let response = wait_for_beacon_content(&peertest.bootnode.ipc_client, content_key).await;
-    let received_content_value = match response {
-        PossibleBeaconContentValue::ContentPresent(c) => c,
-        PossibleBeaconContentValue::ContentAbsent => panic!("Expected beacon content to be found"),
-    };
+    let received_content_value =
+        wait_for_beacon_content(&peertest.bootnode.ipc_client, content_key).await;
     assert_eq!(
         content_value, received_content_value,
         "The received beacon content {received_content_value:?}, must match the expected {content_value:?}",

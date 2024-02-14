@@ -6,6 +6,7 @@ use crate::{
     rpc_server::ServerKind,
     PortalRpcModule,
 };
+use ethportal_api::types::query_trace::QueryTrace;
 use std::io;
 
 /// Rpc Errors.
@@ -51,11 +52,17 @@ impl RpcError {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 pub enum RpcServeError {
     /// A generic error with no data
     Message(String),
     /// Method not available
     MethodNotFound(String),
+    /// ContentNotFound
+    ContentNotFound {
+        message: String,
+        trace: Option<QueryTrace>,
+    },
 }
 
 impl From<RpcServeError> for ErrorObjectOwned {
@@ -68,6 +75,9 @@ impl From<RpcServeError> for ErrorObjectOwned {
             // https://docs.infura.io/networks/ethereum/json-rpc-methods#error-codes
             RpcServeError::Message(msg) => ErrorObject::owned(-32099, msg, None::<()>),
             RpcServeError::MethodNotFound(method) => ErrorObject::owned(-32601, method, None::<()>),
+            RpcServeError::ContentNotFound { message, trace } => {
+                ErrorObject::owned(-32001, message, Some(trace))
+            }
         }
     }
 }
