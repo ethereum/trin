@@ -234,7 +234,7 @@ impl Era1Bridge {
                 )).await
                 {
                 Ok(result) => match result {
-                    Ok(_) => debug!("Successfully served block: {number}"),
+                    Ok(_) => debug!("Done serving block: {number} - {:?}", block_stats),
                     Err(msg) => warn!("Error serving block: {number}: {msg:?}"),
                 },
                 Err(_) => error!("serve_full_block() timed out on height {number}: this is an indication a bug is present")
