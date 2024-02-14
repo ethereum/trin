@@ -1,4 +1,5 @@
 use std::{
+    ops::Range,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
@@ -89,6 +90,9 @@ impl Era1Bridge {
         match self.mode.clone() {
             BridgeMode::FourFours(FourFoursMode::Random) => self.launch_random().await,
             BridgeMode::FourFours(FourFoursMode::Single(epoch)) => self.launch_single(epoch).await,
+            BridgeMode::FourFours(FourFoursMode::Range(start, end)) => {
+                self.launch_range(start, end).await;
+            }
             _ => panic!("4444s bridge only supports 4444s modes."),
         }
         info!("Bridge mode: {:?} complete.", self.mode);
@@ -96,7 +100,7 @@ impl Era1Bridge {
 
     pub async fn launch_random(&self) {
         for era1_path in self.era1_files.clone().into_iter() {
-            self.gossip_era1(era1_path).await;
+            self.gossip_era1(era1_path, None).await;
         }
     }
 
@@ -106,12 +110,25 @@ impl Era1Bridge {
                 file.contains(&format!("mainnet-{epoch:05}-")) && file.contains(".era1")
             });
         match era1_path {
-            Some(path) => self.gossip_era1(path).await,
-            None => panic!("4444s bridge couldn't find request epoch on era1 file server"),
+            Some(path) => self.gossip_era1(path, None).await,
+            None => panic!("4444s bridge couldn't find requested epoch on era1 file server"),
         }
     }
 
-    pub async fn gossip_era1(&self, era1_path: String) {
+    pub async fn launch_range(&self, start: u64, end: u64) {
+        let epoch = start / EPOCH_SIZE as u64;
+        let era1_path =
+            self.era1_files.clone().into_iter().find(|file| {
+                file.contains(&format!("mainnet-{epoch:05}-")) && file.contains(".era1")
+            });
+        let gossip_range = Some(Range { start, end });
+        match era1_path {
+            Some(path) => self.gossip_era1(path, gossip_range).await,
+            None => panic!("4444s bridge couldn't find requested epoch on era1 file server"),
+        }
+    }
+
+    pub async fn gossip_era1(&self, era1_path: String, gossip_range: Option<Range<u64>>) {
         info!("Processing era1 file at path: {era1_path:?}");
         // We are using a semaphore to limit the amount of active gossip transfers to make sure
         // we don't overwhelm the trin client
@@ -135,7 +152,19 @@ impl Era1Bridge {
         };
         let master_acc = Arc::new(self.header_oracle.master_acc.clone());
         let mut serve_block_tuple_handles = vec![];
-        for block_tuple in era1.block_tuples {
+        let block_tuples = match gossip_range {
+            Some(range) => era1
+                .block_tuples
+                .clone()
+                .into_iter()
+                .filter(|block_tuple| {
+                    let block_number = block_tuple.header.header.number;
+                    block_number >= range.start && block_number <= range.end
+                })
+                .collect(),
+            None => era1.block_tuples,
+        };
+        for block_tuple in block_tuples {
             let permit = gossip_send_semaphore
                 .clone()
                 .acquire_owned()
@@ -225,7 +254,7 @@ impl Era1Bridge {
             "Serving block tuple at height: {}",
             block_tuple.header.header.number
         );
-        if let Err(msg) = Self::construct_and_gossip_header(
+        match Self::construct_and_gossip_header(
             portal_clients.clone(),
             block_tuple.clone(),
             epoch_acc,
@@ -234,41 +263,55 @@ impl Era1Bridge {
         )
         .await
         {
-            warn!(
-                "Error serving block tuple header at height: {:?} - {:?}",
-                block_tuple.header.header.number, msg
-            );
-            // we actually do want to cut off the gossip for body / receipts if header fails,
-            // since the header might fail validation and we don't want to serve the rest of the
-            // block a future improvement would be to have a more fine-grained error
-            // handling and only cut off gossip if header fails validation
-            return Ok(());
+            Ok(_) => debug!(
+                "Successfully served block tuple header at height: {:?}",
+                block_tuple.header.header.number
+            ),
+            Err(msg) => {
+                warn!(
+                    "Error serving block tuple header at height, will not gossip remaining block content: {:?} - {:?}",
+                    block_tuple.header.header.number, msg
+                );
+                // We actually do want to cut off the gossip for body / receipts if header fails,
+                // since the header might fail validation and we don't want to serve the rest of the
+                // block. A future improvement would be to have a more fine-grained error
+                // handling and only cut off gossip if header fails validation
+                return Ok(());
+            }
         }
 
-        if let Err(msg) = Self::construct_and_gossip_block_body(
+        match Self::construct_and_gossip_block_body(
             portal_clients.clone(),
             block_tuple.clone(),
             block_stats.clone(),
         )
         .await
         {
-            warn!(
-                "Error serving block tuple block body at height: {:?} - {:?}",
+            Ok(_) => debug!(
+                "Successfully served block body at height: {:?}",
+                block_tuple.header.header.number
+            ),
+            Err(msg) => warn!(
+                "Error serving block body at height: {:?} - {:?}",
                 block_tuple.header.header.number, msg
-            );
+            ),
         }
 
-        if let Err(msg) = Self::construct_and_gossip_receipts(
+        match Self::construct_and_gossip_receipts(
             portal_clients.clone(),
             block_tuple.clone(),
             block_stats.clone(),
         )
         .await
         {
-            warn!(
-                "Error serving block tuple receipts at height: {:?} - {:?}",
+            Ok(_) => debug!(
+                "Successfully served block receipts at height: {:?}",
+                block_tuple.header.header.number
+            ),
+            Err(msg) => warn!(
+                "Error serving block receipts at height: {:?} - {:?}",
                 block_tuple.header.header.number, msg
-            );
+            ),
         }
         Ok(())
     }
@@ -280,6 +323,10 @@ impl Era1Bridge {
         master_acc: Arc<MasterAccumulator>,
         block_stats: Arc<Mutex<HistoryBlockStats>>,
     ) -> anyhow::Result<()> {
+        debug!(
+            "Serving block header at height: {}",
+            block_tuple.header.header.number
+        );
         let header = block_tuple.header.header;
         // Fetch HeaderRecord from EpochAccumulator for validation
         let header_index = header.number % EPOCH_SIZE as u64;
@@ -321,6 +368,10 @@ impl Era1Bridge {
         block_tuple: BlockTuple,
         block_stats: Arc<Mutex<HistoryBlockStats>>,
     ) -> anyhow::Result<()> {
+        debug!(
+            "Serving block body at height: {}",
+            block_tuple.header.header.number
+        );
         let header = block_tuple.header.header;
         // Construct HistoryContentKey
         let content_key = HistoryContentKey::BlockBody(BlockBodyKey {
@@ -336,6 +387,10 @@ impl Era1Bridge {
         block_tuple: BlockTuple,
         block_stats: Arc<Mutex<HistoryBlockStats>>,
     ) -> anyhow::Result<()> {
+        debug!(
+            "Serving block receipts at height: {}",
+            block_tuple.header.header.number
+        );
         let header = block_tuple.header.header;
         // Construct HistoryContentKey
         let content_key = HistoryContentKey::BlockReceipts(BlockReceiptsKey {
