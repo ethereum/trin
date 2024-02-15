@@ -1,4 +1,3 @@
-pub mod memory;
 pub mod sql;
 pub mod store;
 mod utils;
@@ -20,9 +19,8 @@ pub enum ContentType {
 #[derive(Copy, Clone, Debug, Display, Eq, PartialEq, EnumString, AsRefStr, EnumIter)]
 #[strum(serialize_all = "snake_case")]
 pub enum StoreVersion {
-    InMemory,
     LegacyContentData,
-    LegacyLcUpdate,
+    IdIndexed,
 }
 
 impl FromSql for StoreVersion {

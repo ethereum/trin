@@ -43,4 +43,10 @@ pub enum ContentStoreError {
         content_type: ContentType,
         version: StoreVersion,
     },
+
+    #[error("Store migration from {old_version} to {new_version} is not supported")]
+    UnsupportedStoreMigration {
+        old_version: StoreVersion,
+        new_version: StoreVersion,
+    },
 }

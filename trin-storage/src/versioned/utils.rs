@@ -79,7 +79,7 @@ pub mod test {
     use anyhow::Result;
     use discv5::enr::NodeId;
 
-    use crate::{utils::setup_test_sql, versioned::memory::MemoryContentStore};
+    use crate::utils::setup_test_sql;
 
     use super::*;
 
@@ -100,11 +100,11 @@ pub mod test {
     fn insert_store_verion() -> Result<()> {
         let conn = setup_test_sql()?.get()?;
 
-        update_store_info(ContentType::State, StoreVersion::InMemory, &conn)?;
+        update_store_info(ContentType::State, StoreVersion::IdIndexed, &conn)?;
 
         assert_eq!(
             lookup_store_version(ContentType::State, &conn)?,
-            Some(StoreVersion::InMemory)
+            Some(StoreVersion::IdIndexed)
         );
         Ok(())
     }
@@ -113,17 +113,18 @@ pub mod test {
     fn update_store_verion() -> Result<()> {
         let conn = setup_test_sql()?.get()?;
 
+        // Set store version
         update_store_info(ContentType::State, StoreVersion::LegacyContentData, &conn)?;
         assert_eq!(
             lookup_store_version(ContentType::State, &conn)?,
             Some(StoreVersion::LegacyContentData)
         );
 
-        // Update store version to `InMemory`
-        update_store_info(ContentType::State, StoreVersion::InMemory, &conn)?;
+        // Update store version
+        update_store_info(ContentType::State, StoreVersion::IdIndexed, &conn)?;
         assert_eq!(
             lookup_store_version(ContentType::State, &conn)?,
-            Some(StoreVersion::InMemory)
+            Some(StoreVersion::IdIndexed)
         );
 
         Ok(())
@@ -134,11 +135,11 @@ pub mod test {
         let config = setup_config();
 
         // Should be successful
-        create_store::<MemoryContentStore>(ContentType::State, ProtocolId::State, config.clone())?;
+        create_store::<DummyContentStore>(ContentType::State, ProtocolId::State, config.clone())?;
 
         assert_eq!(
             lookup_store_version(ContentType::State, &config.sql_connection_pool.get()?)?,
-            Some(StoreVersion::InMemory)
+            Some(StoreVersion::IdIndexed)
         );
 
         Ok(())
@@ -150,23 +151,23 @@ pub mod test {
 
         update_store_info(
             ContentType::State,
-            StoreVersion::InMemory,
+            StoreVersion::IdIndexed,
             &config.sql_connection_pool.get()?,
         )?;
 
         // Should be successful
-        create_store::<MemoryContentStore>(ContentType::State, ProtocolId::State, config.clone())?;
+        create_store::<DummyContentStore>(ContentType::State, ProtocolId::State, config.clone())?;
 
         assert_eq!(
             lookup_store_version(ContentType::State, &config.sql_connection_pool.get()?)?,
-            Some(StoreVersion::InMemory)
+            Some(StoreVersion::IdIndexed)
         );
 
         Ok(())
     }
 
     #[test]
-    #[should_panic = "Migration to MemoryContentStore not supported!"]
+    #[should_panic = "UnsupportedStoreMigration"]
     fn create_store_different_old_version() {
         let config = setup_config();
 
@@ -177,7 +178,38 @@ pub mod test {
         )
         .unwrap();
 
-        // Should panic - MemoryContentStore doesn't support migration.
-        create_store::<MemoryContentStore>(ContentType::State, ProtocolId::State, config).unwrap();
+        // Should panic - DummyContentStore doesn't support migration.
+        create_store::<DummyContentStore>(ContentType::State, ProtocolId::State, config).unwrap();
+    }
+
+    pub struct DummyContentStore;
+
+    impl VersionedContentStore for DummyContentStore {
+        fn version() -> StoreVersion {
+            StoreVersion::IdIndexed
+        }
+
+        fn migrate_from(
+            _content_type: ContentType,
+            old_version: StoreVersion,
+            _config: &PortalStorageConfig,
+        ) -> Result<(), ContentStoreError> {
+            Err(ContentStoreError::UnsupportedStoreMigration {
+                old_version,
+                new_version: Self::version(),
+            })
+        }
+
+        fn create(
+            _content_type: ContentType,
+            _config: PortalStorageConfig,
+            _metrics: StorageMetricsReporter,
+        ) -> Result<Self, ContentStoreError> {
+            Ok(Self {})
+        }
+
+        fn get_summary_info(&self) -> String {
+            "DummyVersionedContentStore summary".to_string()
+        }
     }
 }
