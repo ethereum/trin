@@ -1,5 +1,6 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use ssz::{Decode, Encode};
+use tree_hash::{merkle_root, Hash256, PackedEncoding, TreeHash, TreeHashType};
 
 use crate::utils::bytes::{hex_decode, hex_encode};
 
@@ -69,5 +70,23 @@ impl Serialize for BlsSignature {
     {
         let val = hex_encode(self.signature);
         serializer.serialize_str(&val)
+    }
+}
+
+impl TreeHash for BlsSignature {
+    fn tree_hash_type() -> tree_hash::TreeHashType {
+        TreeHashType::Vector
+    }
+
+    fn tree_hash_packed_encoding(&self) -> PackedEncoding {
+        PackedEncoding::from_vec(self.signature.to_vec())
+    }
+
+    fn tree_hash_packing_factor() -> usize {
+        1
+    }
+
+    fn tree_hash_root(&self) -> Hash256 {
+        merkle_root(&self.signature, 1)
     }
 }

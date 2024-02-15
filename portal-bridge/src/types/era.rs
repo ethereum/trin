@@ -3,8 +3,10 @@ use crate::types::{
     era1::VersionEntry,
 };
 use anyhow::{anyhow, ensure};
-use ethportal_api::consensus::{beacon_state::BeaconState, body::BeaconBlockBody, fork::ForkName};
-use ssz::{Decode, Encode};
+use ethportal_api::consensus::{
+    beacon_block::SignedBeaconBlock, beacon_state::BeaconState, fork::ForkName,
+};
+use ssz::Encode;
 use std::{
     fs,
     io::{Read, Write},
@@ -15,6 +17,9 @@ const SLOTS_PER_HISTORICAL_ROOT: usize = 8192;
 /// group := Version | block* | era-state | other-entries* | slot-index(block)? | slot-index(state)
 /// block := CompressedSignedBeaconBlock
 /// era-state := CompressedBeaconState
+/// slot-index-block := starting-slot | index | index | index ... | count
+/// slot-index-state := starting-slot | index | 1
+#[derive(Clone, PartialEq, Debug)]
 pub struct Era {
     pub version: VersionEntry,
     pub blocks: Vec<CompressedSignedBeaconBlock>,
@@ -32,15 +37,17 @@ impl Era {
     pub fn deserialize(buf: &[u8]) -> anyhow::Result<Self> {
         let file = E2storeFile::deserialize(buf)?;
         let version = VersionEntry::try_from(&file.entries[0])?;
+        let entries_length = file.entries.len();
         let mut blocks = vec![];
-        for count in 0..SLOTS_PER_HISTORICAL_ROOT {
-            let entry: Entry = file.entries[count + 1].clone();
+        // Iterate over the block entries. Skip the first and last 3 entries.
+        for idx in 1..entries_length - 4 {
+            let entry: Entry = file.entries[idx].clone();
             let beacon_block = CompressedSignedBeaconBlock::try_from(&entry)?;
             blocks.push(beacon_block);
         }
-        let era_state = CompressedBeaconState::try_from(&file.entries[8193])?;
-        let slot_index_block = SlotIndexBlockEntry::try_from(&file.entries[8194])?;
-        let slot_index_state = SlotIndexStateEntry::try_from(&file.entries[8195])?;
+        let era_state = CompressedBeaconState::try_from(&file.entries[entries_length - 3])?;
+        let slot_index_block = SlotIndexBlockEntry::try_from(&file.entries[entries_length - 2])?;
+        let slot_index_state = SlotIndexStateEntry::try_from(&file.entries[entries_length - 1])?;
 
         Ok(Self {
             version,
@@ -77,7 +84,7 @@ impl Era {
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct CompressedSignedBeaconBlock {
-    pub block: BeaconBlockBody,
+    pub block: SignedBeaconBlock,
 }
 
 impl TryFrom<&Entry> for CompressedSignedBeaconBlock {
@@ -85,7 +92,7 @@ impl TryFrom<&Entry> for CompressedSignedBeaconBlock {
 
     fn try_from(entry: &Entry) -> Result<Self, Self::Error> {
         ensure!(
-            entry.header.type_ == 0x0001,
+            entry.header.type_ == 0x01,
             "invalid compressed signed beacon block entry: incorrect header type"
         );
 
@@ -93,7 +100,7 @@ impl TryFrom<&Entry> for CompressedSignedBeaconBlock {
         let mut buf: Vec<u8> = vec![];
         decoder.read_to_end(&mut buf)?;
 
-        let block = BeaconBlockBody::from_ssz_bytes(&buf)
+        let block = SignedBeaconBlock::from_ssz_bytes(&buf, ForkName::Capella)
             .map_err(|_| anyhow!("Unable to ssz decode beacon block body"))?;
         Ok(Self { block })
     }
@@ -109,7 +116,7 @@ impl TryInto<Entry> for CompressedSignedBeaconBlock {
         let _ = snappy_encoder.write(&ssz_encoded)?;
         let snappy_encoded = snappy_encoder.into_inner()?;
 
-        let header = 0x0001;
+        let header = 0x01;
         Ok(Entry::new(header, snappy_encoded))
     }
 }
@@ -124,7 +131,7 @@ impl TryFrom<&Entry> for CompressedBeaconState {
 
     fn try_from(entry: &Entry) -> Result<Self, Self::Error> {
         ensure!(
-            entry.header.type_ == 0x0002,
+            entry.header.type_ == 0x02,
             "invalid compressed beacon state entry: incorrect header type"
         );
 
@@ -148,7 +155,7 @@ impl TryInto<Entry> for CompressedBeaconState {
         let _ = snappy_encoder.write(&ssz_encoded)?;
         let snappy_encoded = snappy_encoder.into_inner()?;
 
-        let header = 0x0002;
+        let header = 0x02;
         Ok(Entry::new(header, snappy_encoded))
     }
 }
@@ -243,18 +250,18 @@ impl TryFrom<&Entry> for SlotIndexStateEntry {
             entry.header.type_ == 0x3269,
             "invalid slot index entry: incorrect header type"
         );
-        // ensure!(
-        //     entry.header.length == 65552,
-        //     "invalid slot index entry: incorrect header length"
-        // );
-        // ensure!(
-        //     entry.header.reserved == 0,
-        //     "invalid slot index entry: incorrect header reserved bytes"
-        // );
-        // ensure!(
-        //     entry.value.len() == 65552,
-        //     "invalid slot index entry: incorrect value length"
-        // );
+        ensure!(
+            entry.header.length == 24,
+            "invalid slot index entry: incorrect header length"
+        );
+        ensure!(
+            entry.header.reserved == 0,
+            "invalid slot index entry: incorrect header reserved bytes"
+        );
+        ensure!(
+            entry.value.len() == 24,
+            "invalid slot index entry: incorrect value length"
+        );
         Ok(Self {
             slot_index: SlotIndexState::try_from(entry.clone())?,
         })
