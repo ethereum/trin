@@ -4,6 +4,7 @@ use crate::{
         CONTENT_VALUE_LOOKUP_QUERY_DB, CREATE_QUERY_DB, INSERT_QUERY_NETWORK,
         LC_UPDATE_CREATE_TABLE,
     },
+    versioned::sql::STORE_INFO_CREATE_TABLE,
     DATABASE_NAME,
 };
 use anyhow::Error;
@@ -23,9 +24,23 @@ pub fn setup_sql(node_data_dir: &Path) -> Result<Pool<SqliteConnectionManager>, 
     info!(path = %sql_path.display(), "Setting up SqliteDB");
 
     let manager = SqliteConnectionManager::file(sql_path);
+    initialize_sql(manager)
+}
+
+/// Helper function for creating in memory SQLite connection.
+#[cfg(test)]
+pub fn setup_test_sql() -> Result<Pool<SqliteConnectionManager>, ContentStoreError> {
+    initialize_sql(SqliteConnectionManager::memory())
+}
+
+fn initialize_sql(
+    manager: SqliteConnectionManager,
+) -> Result<Pool<SqliteConnectionManager>, ContentStoreError> {
     let pool = Pool::new(manager)?;
-    pool.get()?.execute_batch(CREATE_QUERY_DB)?;
-    pool.get()?.execute_batch(LC_UPDATE_CREATE_TABLE)?;
+    let conn = pool.get()?;
+    conn.execute_batch(CREATE_QUERY_DB)?;
+    conn.execute_batch(LC_UPDATE_CREATE_TABLE)?;
+    conn.execute_batch(STORE_INFO_CREATE_TABLE)?;
     Ok(pool)
 }
 
