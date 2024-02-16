@@ -303,7 +303,7 @@ impl BeaconStorage {
         content_id: &[u8; 32],
         content_key: &String,
         value: &Vec<u8>,
-    ) -> Result<(), ContentStoreError> {
+    ) -> Result<usize, ContentStoreError> {
         let conn = self.sql_connection_pool.get()?;
         insert_value(conn, content_id, content_key, value, u8::from(self.network))
     }

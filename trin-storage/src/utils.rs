@@ -102,7 +102,7 @@ pub fn insert_value(
     content_key: &String,
     value: &Vec<u8>,
     network_id: u8,
-) -> Result<(), ContentStoreError> {
+) -> Result<usize, ContentStoreError> {
     let content_id_as_u32: u32 = byte_slice_to_u32(content_id);
     let value_size = value.len();
     if content_key.starts_with("0x") {
@@ -121,7 +121,7 @@ pub fn insert_value(
             value_size
         ],
     ) {
-        Ok(_) => Ok(()),
+        Ok(result) => Ok(result),
         Err(err) => Err(err.into()),
     }
 }

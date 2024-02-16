@@ -29,6 +29,7 @@ pub struct HistoryStorage {
     node_id: NodeId,
     node_data_dir: PathBuf,
     storage_capacity_in_bytes: u64,
+    storage_occupied_in_bytes: u64,
     radius: Distance,
     sql_connection_pool: Pool<SqliteConnectionManager>,
     distance_fn: DistanceFunction,
@@ -100,10 +101,15 @@ impl HistoryStorage {
             distance_fn: config.distance_fn,
             metrics,
             network: protocol,
+            storage_occupied_in_bytes: 0,
         };
 
         // Set the metrics to the default radius, to start
         storage.metrics.report_radius(storage.radius);
+
+        // Set the network content storage used at start
+        storage.storage_occupied_in_bytes =
+            storage.get_total_storage_usage_in_bytes_from_network()?;
 
         // Check whether we already have data, and use it to set radius
         match storage.total_entry_count()? {
@@ -131,13 +137,6 @@ impl HistoryStorage {
         storage
             .metrics
             .report_total_storage_usage_bytes(total_storage_usage as f64);
-
-        // Report total storage used by network content.
-        let network_content_storage_usage =
-            storage.get_total_storage_usage_in_bytes_from_network()?;
-        storage
-            .metrics
-            .report_content_data_storage_bytes(network_content_storage_usage as f64);
 
         Ok(storage)
     }
@@ -218,11 +217,21 @@ impl HistoryStorage {
         let content_key: Vec<u8> = key.clone().into();
         // store content key w/o the 0x prefix
         let content_key = hex_encode(content_key).trim_start_matches("0x").to_string();
-        if let Err(err) = self.db_insert(&content_id, &content_key, value) {
-            debug!("Error writing content ID {content_id:?} to db: {err:?}");
-            return Err(err);
-        } else {
-            self.metrics.increase_entry_count();
+        let value_size = value.len() as u64;
+        match self.db_insert(&content_id, &content_key, value) {
+            Ok(result) => {
+                // Insertion successful, increase total network storage count
+                if result == 1 {
+                    self.storage_occupied_in_bytes += value_size;
+                    self.metrics
+                        .report_content_data_storage_bytes(self.storage_occupied_in_bytes as f64);
+                    self.metrics.increase_entry_count();
+                }
+            }
+            Err(err) => {
+                debug!("Error writing content ID {content_id:?} to db: {err:?}");
+                return Err(err);
+            }
         }
         self.prune_db()?;
         let total_bytes_on_disk = self.get_total_storage_usage_in_bytes_on_disk()?;
@@ -239,13 +248,14 @@ impl HistoryStorage {
         let mut farthest_content_id: Option<[u8; 32]> = self.find_farthest_content_id()?;
         let mut num_removed_items = 0;
         // Delete furthest data until our data usage is less than capacity.
-        while self.capacity_reached()? {
+        while self.capacity_reached() {
             // If the database were empty, then `capacity_reached()` would be false, because the
             // amount of content (zero) would not be greater than capacity.
             let id_to_remove =
                 farthest_content_id.expect("Capacity reached, but no farthest id found!");
             // Test if removing the item would put us under capacity
-            if self.does_eviction_cause_under_capacity(&id_to_remove)? {
+            let bytes_to_remove = self.get_content_size(&id_to_remove)?;
+            if self.storage_occupied_in_bytes - bytes_to_remove < self.storage_capacity_in_bytes {
                 // If so, we're done pruning
                 debug!(
                     "Removing item would drop us below capacity. We target slight overfilling. {}",
@@ -261,6 +271,10 @@ impl HistoryStorage {
             if let Err(err) = self.evict(id_to_remove) {
                 debug!("Error writing content ID {id_to_remove:?} to db: {err:?}",);
             } else {
+                // Eviction successful, decrease total network storage count
+                self.storage_occupied_in_bytes -= bytes_to_remove;
+                self.metrics
+                    .report_content_data_storage_bytes(self.storage_occupied_in_bytes as f64);
                 num_removed_items += 1;
             }
             // Calculate new farthest_content_id and reset radius
@@ -278,16 +292,6 @@ impl HistoryStorage {
             }
         }
         Ok(num_removed_items)
-    }
-
-    /// Internal method for testing if an eviction would cause the store to fall under capacity.
-    /// Returns true if the store would fall under capacity, false otherwise.
-    /// Raises an error if there is a problem accessing the database.
-    fn does_eviction_cause_under_capacity(&self, id: &[u8; 32]) -> Result<bool, ContentStoreError> {
-        let total_bytes_on_disk = self.get_total_storage_usage_in_bytes_from_network()?;
-        // Get the size of the content we're about to remove
-        let bytes_to_remove = self.get_content_size(id)?;
-        Ok(total_bytes_on_disk - bytes_to_remove < self.storage_capacity_in_bytes)
     }
 
     /// Internal method for getting the size of a content item in bytes.
@@ -371,7 +375,7 @@ impl HistoryStorage {
         content_id: &[u8; 32],
         content_key: &String,
         value: &Vec<u8>,
-    ) -> Result<(), ContentStoreError> {
+    ) -> Result<usize, ContentStoreError> {
         let conn = self.sql_connection_pool.get()?;
         insert_value(conn, content_id, content_key, value, u8::from(self.network))
     }
@@ -385,9 +389,8 @@ impl HistoryStorage {
     }
 
     /// Internal method for determining whether the node is over-capacity.
-    fn capacity_reached(&self) -> Result<bool, ContentStoreError> {
-        let storage_usage = self.get_total_storage_usage_in_bytes_from_network()?;
-        Ok(storage_usage > self.storage_capacity_in_bytes)
+    fn capacity_reached(&self) -> bool {
+        self.storage_occupied_in_bytes > self.storage_capacity_in_bytes
     }
 
     /// Internal method for measuring the total amount of requestable data that the node is storing.
@@ -588,6 +591,10 @@ pub mod test {
             let content_key = generate_random_content_key();
             let value: Vec<u8> = vec![0; 32000];
             storage.store(&content_key, &value)?;
+            assert_eq!(
+                storage.storage_occupied_in_bytes,
+                storage.get_total_storage_usage_in_bytes_from_network()?
+            );
         }
 
         let bytes = storage.get_total_storage_usage_in_bytes_from_network()?;
@@ -625,6 +632,71 @@ pub mod test {
 
     #[test_log::test(tokio::test)]
     #[serial]
+    async fn test_inserting_same_key() -> Result<(), ContentStoreError> {
+        let temp_dir = setup_temp_dir().unwrap();
+        let node_id = get_active_node_id(temp_dir.path().to_path_buf());
+        let storage_config =
+            PortalStorageConfig::new(CAPACITY_MB, temp_dir.path().to_path_buf(), node_id).unwrap();
+        let mut storage = HistoryStorage::new(storage_config, ProtocolId::History)?;
+
+        let content_key = generate_random_content_key();
+        let value: Vec<u8> = vec![0; 32000];
+        storage.store(&content_key, &value)?;
+        assert_eq!(
+            storage.storage_occupied_in_bytes,
+            storage.get_total_storage_usage_in_bytes_from_network()?
+        );
+
+        storage.store(&content_key, &value)?;
+        assert_eq!(
+            storage.storage_occupied_in_bytes,
+            storage.get_total_storage_usage_in_bytes_from_network()?
+        );
+
+        std::mem::drop(storage);
+        Ok(())
+    }
+
+    #[test_log::test(tokio::test)]
+    #[serial]
+    async fn test_evict_content_keys_and_check_we_track_the_right_number(
+    ) -> Result<(), ContentStoreError> {
+        let temp_dir = setup_temp_dir().unwrap();
+        let node_id = get_active_node_id(temp_dir.path().to_path_buf());
+        let storage_config =
+            PortalStorageConfig::new(CAPACITY_MB, temp_dir.path().to_path_buf(), node_id).unwrap();
+        let mut storage = HistoryStorage::new(storage_config, ProtocolId::History)?;
+
+        for _ in 0..50 {
+            let content_key = generate_random_content_key();
+            let value: Vec<u8> = vec![0; 32000];
+            storage.store(&content_key, &value)?;
+            assert_eq!(
+                storage.storage_occupied_in_bytes,
+                storage.get_total_storage_usage_in_bytes_from_network()?
+            );
+        }
+
+        storage.storage_capacity_in_bytes = 1;
+        let num_removed_items = storage.prune_db().unwrap();
+        assert_eq!(49, num_removed_items);
+
+        let bytes = storage.get_total_storage_usage_in_bytes_from_network()?;
+        assert_eq!(32000, bytes);
+
+        storage.storage_capacity_in_bytes = 0;
+        let num_removed_items = storage.prune_db().unwrap();
+        assert_eq!(1, num_removed_items);
+
+        let bytes = storage.get_total_storage_usage_in_bytes_from_network()?;
+        assert_eq!(0, bytes);
+        std::mem::drop(storage);
+        temp_dir.close()?;
+        Ok(())
+    }
+
+    #[test_log::test(tokio::test)]
+    #[serial]
     async fn test_restarting_full_storage_with_same_capacity() -> Result<(), ContentStoreError> {
         // test a node that gets full and then restarts with the same capacity
         let temp_dir = setup_temp_dir().unwrap();
@@ -641,12 +713,16 @@ pub mod test {
             let content_key = generate_random_content_key();
             let value: Vec<u8> = vec![0; 32000];
             storage.store(&content_key, &value)?;
+            assert_eq!(
+                storage.storage_occupied_in_bytes,
+                storage.get_total_storage_usage_in_bytes_from_network()?
+            );
             // Speed up the test by ending the loop as soon as possible
-            if storage.capacity_reached()? {
+            if storage.capacity_reached() {
                 break;
             }
         }
-        assert!(storage.capacity_reached()?);
+        assert!(storage.capacity_reached());
 
         // Save the number of items, to compare with the restarted storage
         let total_entry_count = storage.total_entry_count().unwrap();
@@ -660,7 +736,7 @@ pub mod test {
         // The restarted store should have the same number of items
         assert_eq!(total_entry_count, new_storage.total_entry_count().unwrap());
         // The restarted store should be full
-        assert!(new_storage.capacity_reached()?);
+        assert!(new_storage.capacity_reached());
         // The restarted store should have the same radius as the original
         assert_eq!(radius, new_storage.radius);
 
