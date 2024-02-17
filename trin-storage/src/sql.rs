@@ -13,10 +13,11 @@ pub const CREATE_QUERY_DB: &str = "CREATE TABLE IF NOT EXISTS content_data (
                             DROP INDEX IF EXISTS content_size_idx;
                             CREATE INDEX IF NOT EXISTS content_size_idx_2 ON content_data(network, content_size);
                             DROP INDEX IF EXISTS content_id_short_idx;
-                            CREATE INDEX IF NOT EXISTS content_id_short_idx_2 ON content_data(network, content_id_short);
+                            CREATE INDEX IF NOT EXISTS content_id_short_idx_2 ON content_data(network, content_id_short, content_id_long);
                             DROP INDEX IF EXISTS content_id_long_idx;
                             CREATE INDEX IF NOT EXISTS content_id_long_idx_2 ON content_data(network, content_id_long);
-                            CREATE INDEX IF NOT EXISTS network_idx ON content_data(network);";
+                            CREATE INDEX IF NOT EXISTS network_idx ON content_data(network);
+                            CREATE INDEX IF NOT EXISTS content_key_idx ON content_data(content_key);";
 
 pub const INSERT_QUERY_NETWORK: &str =
     "INSERT OR IGNORE INTO content_data (content_id_long, content_id_short, content_key, content_value, network, content_size)
@@ -60,7 +61,7 @@ pub const LC_UPDATE_CREATE_TABLE: &str = "CREATE TABLE IF NOT EXISTS lc_update (
                                           update_size INTEGER
                                       );
                                      CREATE INDEX IF NOT EXISTS update_size_idx ON lc_update(update_size);
-                                     CREATE INDEX IF NOT EXISTS period_idx ON lc_update(period);";
+                                     DROP INDEX IF EXISTS period_idx;";
 
 pub const LC_UPDATE_LOOKUP_QUERY: &str = "SELECT value FROM lc_update WHERE period = (?1) LIMIT 1";
 
