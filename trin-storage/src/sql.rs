@@ -1,7 +1,7 @@
 // SQLite Statements
 
-// NOTE: The indices `content_size_idx`, `content_id_short_idx` and `content_id_long_idx` didn't
-// have `network` column in them and weren't very helpful with the queries.
+// NOTE: The indices `content_size_idx`, `content_id_short_idx` and `content_id_long_idx` weren't
+// felpful mostly because they didn't have `network` column in them.
 pub const CREATE_QUERY_DB: &str = "CREATE TABLE IF NOT EXISTS content_data (
                                 content_id_long TEXT PRIMARY KEY,
                                 content_id_short INTEGER NOT NULL,
@@ -15,7 +15,6 @@ pub const CREATE_QUERY_DB: &str = "CREATE TABLE IF NOT EXISTS content_data (
                             DROP INDEX IF EXISTS content_id_short_idx;
                             CREATE INDEX IF NOT EXISTS content_id_short_idx_2 ON content_data(network, content_id_short, content_id_long);
                             DROP INDEX IF EXISTS content_id_long_idx;
-                            CREATE INDEX IF NOT EXISTS content_id_long_idx_2 ON content_data(network, content_id_long);
                             CREATE INDEX IF NOT EXISTS network_idx ON content_data(network);
                             CREATE INDEX IF NOT EXISTS content_key_idx ON content_data(content_key);";
 
@@ -46,7 +45,7 @@ pub const TOTAL_DATA_SIZE_QUERY_DB: &str =
     "SELECT TOTAL(content_size) FROM content_data WHERE network = (?1)";
 
 pub const TOTAL_ENTRY_COUNT_QUERY_NETWORK: &str =
-    "SELECT COUNT(content_id_long) FROM content_data WHERE network = (?1)";
+    "SELECT COUNT(*) FROM content_data WHERE network = (?1)";
 
 pub const PAGINATE_QUERY_DB: &str =
     "SELECT content_key FROM content_data ORDER BY content_key LIMIT :limit OFFSET :offset";
