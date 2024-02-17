@@ -1,7 +1,7 @@
 // SQLite Statements
 
 // NOTE: The indices `content_size_idx`, `content_id_short_idx` and `content_id_long_idx` weren't
-// felpful mostly because they didn't have `network` column in them.
+// helpful mostly because they didn't have `network` column in them.
 pub const CREATE_QUERY_DB: &str = "CREATE TABLE IF NOT EXISTS content_data (
                                 content_id_long TEXT PRIMARY KEY,
                                 content_id_short INTEGER NOT NULL,
