@@ -9,7 +9,7 @@ pub use store::VersionedContentStore;
 pub use utils::create_store;
 
 /// The type of the content that is stored.
-/// 
+///
 /// Types don't have to be compatible (e.g. portal network content key/value
 /// vs. light clients updates). Compatible types might be able to use the same
 /// `StoreVersion` while not compatible might not.
@@ -23,7 +23,7 @@ pub enum ContentType {
 
 /// The version of the store. There should be exactly one implementation of the
 /// `VersionedContentStore` for each version (referenced in the comment).
-/// 
+///
 /// Versions don't have to be compatible with one another, because they can store
 /// completely different type of content (e.g. portal network content key/value
 /// vs. light client updates). Compatible versions might implement logic for
