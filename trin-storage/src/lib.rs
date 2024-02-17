@@ -169,20 +169,9 @@ impl PortalStorageConfig {
             sql_connection_pool,
         })
     }
-
-    #[cfg(test)]
-    pub fn new_for_testing(node_id: NodeId, storage_capacity_mb: u64) -> anyhow::Result<Self> {
-        Ok(Self {
-            storage_capacity_mb,
-            node_id,
-            node_data_dir: PathBuf::default(),
-            distance_fn: DistanceFunction::Xor,
-            sql_connection_pool: utils::setup_test_sql()?,
-        })
-    }
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ContentId(H256);
 
 impl<T: Into<H256>> From<T> for ContentId {

@@ -24,18 +24,6 @@ pub fn setup_sql(node_data_dir: &Path) -> Result<Pool<SqliteConnectionManager>, 
     info!(path = %sql_path.display(), "Setting up SqliteDB");
 
     let manager = SqliteConnectionManager::file(sql_path);
-    initialize_sql(manager)
-}
-
-/// Helper function for creating in memory SQLite connection.
-#[cfg(test)]
-pub fn setup_test_sql() -> Result<Pool<SqliteConnectionManager>, ContentStoreError> {
-    initialize_sql(SqliteConnectionManager::memory())
-}
-
-fn initialize_sql(
-    manager: SqliteConnectionManager,
-) -> Result<Pool<SqliteConnectionManager>, ContentStoreError> {
     let pool = Pool::new(manager)?;
     let conn = pool.get()?;
     conn.execute_batch(CREATE_QUERY_DB)?;

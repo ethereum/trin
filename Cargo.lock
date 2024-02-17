@@ -7674,6 +7674,7 @@ dependencies = [
  "r2d2_sqlite",
  "rusqlite",
  "strum 0.26.1",
+ "tempfile",
  "thiserror",
  "tracing",
  "trin-metrics",

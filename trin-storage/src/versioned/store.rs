@@ -12,7 +12,7 @@ pub trait VersionedContentStore: Sized {
 
     /// Migrates content from previous version to the new version.
     fn migrate_from(
-        content_type: ContentType,
+        content_type: &ContentType,
         old_version: StoreVersion,
         config: &PortalStorageConfig,
     ) -> Result<(), ContentStoreError>;
