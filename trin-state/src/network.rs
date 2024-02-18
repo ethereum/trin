@@ -1,6 +1,7 @@
 use parking_lot::RwLock as PLRwLock;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tracing::debug;
 
 use crate::storage::StateStorage;
 use ethportal_api::{
@@ -25,6 +26,10 @@ pub struct StateNetwork {
     pub overlay: Arc<OverlayProtocol<StateContentKey, XorMetric, StateValidator, StateStorage>>,
 }
 
+/// Poke is disabled for state network because Offer/Accept and Find/Found Content are different,
+/// and recipient of the poke wouldn't be able to verify that content is canonical.
+const DISABLE_POKE: bool = true;
+
 impl StateNetwork {
     pub async fn new(
         discovery: Arc<Discovery>,
@@ -33,9 +38,12 @@ impl StateNetwork {
         portal_config: PortalnetConfig,
         header_oracle: Arc<RwLock<HeaderOracle>>,
     ) -> anyhow::Result<Self> {
+        if !portal_config.disable_poke {
+            debug!("Poke is not supported by the State Network")
+        }
         let config = OverlayConfig {
             bootnode_enrs: portal_config.bootnodes.into(),
-            disable_poke: portal_config.disable_poke,
+            disable_poke: DISABLE_POKE,
             ..Default::default()
         };
         let storage = Arc::new(PLRwLock::new(StateStorage::new(storage_config)?));

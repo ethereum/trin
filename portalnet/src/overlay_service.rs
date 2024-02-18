@@ -74,7 +74,7 @@ use trin_metrics::{
     overlay::OverlayMetricsReporter,
 };
 use trin_storage::{ContentStore, ShouldWeStoreContent};
-use trin_validation::validator::Validator;
+use trin_validation::validator::{ValidationResult, Validator};
 
 pub const FIND_NODES_MAX_NODES: usize = 32;
 
@@ -1806,21 +1806,32 @@ where
                 let store = Arc::clone(&store);
                 let metrics = metrics.clone();
                 tokio::spawn(async move {
-                    // Validated received content
-                    if let Err(err) = validator
-                        .validate_content(&key, &content_value.to_vec())
-                        .await
-                    {
-                        // Skip storing & propagating content if it's not valid
-                        metrics.report_validation(false);
+                    // Validate received content
+                    let validation_result = validator.validate_content(&key, &content_value).await;
+                    metrics.report_validation(validation_result.is_ok());
+
+                    let validation_result = match validation_result {
+                        Ok(validation_result) => validation_result,
+                        Err(err) => {
+                            // Skip storing & propagating content if it's not valid
+                            warn!(
+                                error = %err,
+                                content.key = %key.to_hex(),
+                                "Error validating accepted content"
+                            );
+                            return None;
+                        }
+                    };
+
+                    if !validation_result.valid_for_storing {
+                        // Content received via Offer/Accept should be valid for storing.
+                        // If it isn't, don't store it and don't propagate it.
                         warn!(
-                            error = %err,
                             content.key = %key.to_hex(),
-                            "Error validating accepted content"
+                            "Error validating accepted content - not valid for storing"
                         );
                         return None;
                     }
-                    metrics.report_validation(true);
 
                     // Check if data should be stored, and store if it is within our radius and not
                     // already stored.
@@ -1855,11 +1866,11 @@ where
                             );
                         }
                     }
-                    Some((key, content_value))
+                    Some((key, content_value, validation_result))
                 })
             })
             .collect();
-        let validated_content: Vec<(TContentKey, Vec<u8>)> = join_all(handles)
+        let validated_content: Vec<(TContentKey, Vec<u8>, ValidationResult<TContentKey>)> = join_all(handles)
             .await
             .into_iter()
             .enumerate()
@@ -1879,13 +1890,25 @@ where
             .collect();
 
         // Propagate all validated content, whether or not it was stored.
-        let validated_ids: Vec<String> = validated_content
+        let content_to_propagate: Vec<(TContentKey, Vec<u8>)> = validated_content
+            .into_iter()
+            .flat_map(|(content_key, content_value, validation_result)| {
+                match validation_result.additional_content_to_propagate {
+                    Some(additional_content_to_propagate) => vec![
+                        (content_key, content_value),
+                        additional_content_to_propagate,
+                    ],
+                    None => vec![(content_key, content_value)],
+                }
+            })
+            .collect();
+        let ids_to_propagate: Vec<String> = content_to_propagate
             .iter()
             .map(|(k, _)| hex_encode_compact(k.content_id()))
             .collect();
-        debug!(ids = ?validated_ids, "propagating validated content");
+        debug!(ids = ?ids_to_propagate, "propagating validated content");
         propagate_gossip_cross_thread(
-            validated_content,
+            content_to_propagate,
             kbuckets,
             command_tx.clone(),
             Some(utp_controller),
@@ -2054,37 +2077,42 @@ where
             content = val;
         } else {
             let content_id = content_key.content_id();
-            if let Err(err) = validator.validate_content(&content_key, &content).await {
-                metrics.report_validation(false);
-                warn!(
-                    error = ?err,
-                    content.id = %hex_encode_compact(content_id),
-                    content.key = %content_key,
-                    "Error validating content"
-                );
-                if let Some(responder) = responder {
-                    let _ = responder.send(Err(OverlayRequestError::ContentNotFound {
-                        message: "Content not found: error validating content".to_string(),
-                        utp: utp_transfer,
-                        trace,
-                    }));
-                }
-                return;
-            };
-            metrics.report_validation(true);
+            let validation_result = validator.validate_content(&content_key, &content).await;
+            metrics.report_validation(validation_result.is_ok());
 
-            // skip storing if the content is already stored
-            // or if there's an error reading the store
-            let should_store = match store
-                .read()
-                .is_key_within_radius_and_unavailable(&content_key)
-            {
-                Ok(val) => matches!(val, ShouldWeStoreContent::Store),
-                Err(msg) => {
-                    error!("Unable to read store: {}", msg);
-                    false
+            let validation_result = match validation_result {
+                Ok(validation_result) => validation_result,
+                Err(err) => {
+                    warn!(
+                        error = ?err,
+                        content.id = %hex_encode_compact(content_id),
+                        content.key = %content_key,
+                        "Error validating content"
+                    );
+                    if let Some(responder) = responder {
+                        let _ = responder.send(Err(OverlayRequestError::ContentNotFound {
+                            message: "Content not found: error validating content".to_string(),
+                            utp: utp_transfer,
+                            trace,
+                        }));
+                    }
+                    return;
                 }
             };
+
+            // skip storing if content is not valid for storing, the content
+            // is already stored or if there's an error reading the store
+            let should_store = validation_result.valid_for_storing
+                && store
+                    .read()
+                    .is_key_within_radius_and_unavailable(&content_key)
+                    .map_or_else(
+                        |err| {
+                            error!("Unable to read store: {err}");
+                            false
+                        },
+                        |val| matches!(val, ShouldWeStoreContent::Store),
+                    );
             if should_store {
                 if let Err(err) = store.write().put(content_key.clone(), content.clone()) {
                     error!(
