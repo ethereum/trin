@@ -51,7 +51,7 @@ use ethportal_api::{
 };
 use trin_metrics::{overlay::OverlayMetricsReporter, portalnet::PORTALNET_METRICS};
 use trin_storage::ContentStore;
-use trin_validation::validator::Validator;
+use trin_validation::validator::{ValidationResult, Validator};
 
 use crate::events::EventEnvelope;
 
@@ -517,21 +517,13 @@ where
         &self,
         content_key: &TContentKey,
         content: &[u8],
-    ) -> anyhow::Result<()> {
-        match self.validator.validate_content(content_key, content).await {
-            Ok(_) => {
-                self.metrics.report_validation(true);
-                Ok(())
-            }
-            Err(msg) => {
-                self.metrics.report_validation(false);
-                Err(anyhow!(
-                    "Content validation failed for content key {:?} with error: {:?}",
-                    content_key,
-                    msg
-                ))
-            }
-        }
+    ) -> anyhow::Result<ValidationResult<TContentKey>> {
+        let validation_result = self.validator.validate_content(content_key, content).await;
+        self.metrics.report_validation(validation_result.is_ok());
+
+        validation_result.map_err(|err| {
+            anyhow!("Content validation failed for content key {content_key:?} with error: {err:?}")
+        })
     }
 
     /// Initialize FindContent uTP stream with remote node
