@@ -43,11 +43,11 @@ impl Default for PortalnetConfig {
 }
 
 impl PortalnetConfig {
-    pub fn new(trin_config: &TrinConfig, private_key: H256) -> Self {
+    pub fn new(trin_config: &TrinConfig, private_key: H256, discovery_port: u16) -> Self {
         Self {
             external_addr: trin_config.external_addr,
             private_key,
-            listen_port: trin_config.discovery_port,
+            listen_port: discovery_port,
             no_stun: trin_config.no_stun,
             no_upnp: trin_config.no_upnp,
             bootnodes: trin_config.bootnodes.clone(),
