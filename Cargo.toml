@@ -49,9 +49,11 @@ url = "2.3.1"
 utp-rs = { git = "https://github.com/ethereum/utp", tag = "v0.1.0-alpha.9" }
 
 [dev-dependencies]
+criterion = "0.5.1"
 ethers-core = { version = "2.0", default-features = false}
 ethers-providers = { version = "2.0", default-features = false, features = ["ipc"] }
 ethportal-peertest = { path = "ethportal-peertest" }
+pprof = { version = "0.13", features = ["flamegraph", "criterion"] }
 serde_yaml = "0.9.25"
 serial_test = "0.5.1"
 ureq = { version = "2.5.0", features = ["json"] }
@@ -72,3 +74,10 @@ members = [
     "trin-validation",
     "utp-testing",
 ]
+
+[profile.bench]
+debug = true
+
+[[bench]]
+name = "history-storage"
+harness = false

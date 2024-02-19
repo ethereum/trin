@@ -4,7 +4,7 @@
 pub mod events;
 mod jsonrpc;
 pub mod network;
-mod storage;
+pub mod storage;
 pub mod utils;
 pub mod validation;
 
