@@ -11,7 +11,7 @@ use prometheus_exporter::{
 /// Contains metrics reporters for portalnet storage.
 #[derive(Clone, Debug)]
 pub struct StorageMetrics {
-    pub storage_process_time: HistogramVec,
+    pub process_timer: HistogramVec,
     pub content_storage_usage_bytes: GaugeVec,
     pub total_storage_usage_bytes: GaugeVec,
     pub storage_capacity_bytes: GaugeVec,
@@ -23,12 +23,12 @@ const BYTES_IN_MB_F64: f64 = 1000.0 * 1000.0;
 
 impl StorageMetrics {
     pub fn new(registry: &Registry) -> anyhow::Result<Self> {
-        let storage_process_time = register_histogram_vec_with_registry!(
+        let process_timer = register_histogram_vec_with_registry!(
             histogram_opts!(
-                "trin_storage_process_time",
+                "trin_storage_process_timer",
                 "the process time of various storage functions"
             ),
-            &["protocol", "storageFunction"],
+            &["protocol", "function"],
             registry
         )?;
         let content_storage_usage_bytes = register_gauge_vec_with_registry!(
@@ -69,7 +69,7 @@ impl StorageMetrics {
             registry
         )?;
         Ok(Self {
-            storage_process_time,
+            process_timer,
             content_storage_usage_bytes,
             total_storage_usage_bytes,
             storage_capacity_bytes,
@@ -86,14 +86,14 @@ pub struct StorageMetricsReporter {
 }
 
 impl StorageMetricsReporter {
-    pub fn start_storage_process_timer(&self, storage_function: &str) -> HistogramTimer {
+    pub fn start_process_timer(&self, storage_function: &str) -> HistogramTimer {
         self.storage_metrics
-            .storage_process_time
+            .process_timer
             .with_label_values(&[&self.protocol, storage_function])
             .start_timer()
     }
 
-    pub fn stop_storage_process_timer(&self, timer: HistogramTimer) {
+    pub fn stop_process_timer(&self, timer: HistogramTimer) {
         timer.observe_duration()
     }
 
