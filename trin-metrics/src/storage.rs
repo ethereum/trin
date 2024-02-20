@@ -4,9 +4,11 @@ use prometheus_exporter::{
     prometheus::{
         histogram_opts, opts, register_gauge_vec_with_registry,
         register_histogram_vec_with_registry, register_int_gauge_vec_with_registry, GaugeVec,
-        HistogramTimer, HistogramVec, IntGaugeVec, Registry,
+        HistogramVec, IntGaugeVec, Registry,
     },
 };
+
+use crate::utils::CustomHistogramTimer;
 
 /// Contains metrics reporters for portalnet storage.
 #[derive(Clone, Debug)]
@@ -86,14 +88,16 @@ pub struct StorageMetricsReporter {
 }
 
 impl StorageMetricsReporter {
-    pub fn start_process_timer(&self, storage_function: &str) -> HistogramTimer {
-        self.storage_metrics
-            .process_timer
-            .with_label_values(&[&self.protocol, storage_function])
-            .start_timer()
+    pub fn start_process_timer(&self, storage_function: &str) -> CustomHistogramTimer {
+        CustomHistogramTimer::new(
+            self.storage_metrics
+                .process_timer
+                .with_label_values(&[&self.protocol, storage_function])
+                .clone(),
+        )
     }
 
-    pub fn stop_process_timer(&self, timer: HistogramTimer) {
+    pub fn stop_process_timer(&self, timer: CustomHistogramTimer) {
         timer.observe_duration()
     }
 
