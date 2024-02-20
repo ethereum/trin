@@ -44,14 +44,6 @@ commands:
       - run:
           name: Install libclang
           command: sudo apt install clang
-  install-depends-nightly:
-    steps:
-      - run:
-          name: Prepare for apt upgrades
-          command: apt update
-      - run:
-          name: Install libclang
-          command: apt install -y clang
 orbs:
   rust: circleci/rust@1.6.0
   win: circleci/windows@5.0
@@ -143,7 +135,15 @@ jobs:
       RUST_LOG: "debug"
     steps:
       - checkout
-      - install-depends-nightly
+      - run:
+          name: Prepare for apt upgrades
+          command: apt update
+      - run:
+          name: Install libclang
+          command: apt install -y clang
+      - run:
+          name: Install rustfmt
+          command: rustup component add rustfmt     
       - run:
           name: Run rustfmt
           command: cargo +nightly fmt --all -- --check
