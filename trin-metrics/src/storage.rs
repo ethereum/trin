@@ -2,14 +2,18 @@ use ethportal_api::types::distance::Distance;
 use prometheus_exporter::{
     self,
     prometheus::{
-        opts, register_gauge_vec_with_registry, register_int_gauge_vec_with_registry, GaugeVec,
-        IntGaugeVec, Registry,
+        histogram_opts, opts, register_gauge_vec_with_registry,
+        register_histogram_vec_with_registry, register_int_gauge_vec_with_registry, GaugeVec,
+        HistogramVec, IntGaugeVec, Registry,
     },
 };
+
+use crate::timer::DiscardOnDropHistogramTimer;
 
 /// Contains metrics reporters for portalnet storage.
 #[derive(Clone, Debug)]
 pub struct StorageMetrics {
+    pub process_timer: HistogramVec,
     pub content_storage_usage_bytes: GaugeVec,
     pub total_storage_usage_bytes: GaugeVec,
     pub storage_capacity_bytes: GaugeVec,
@@ -21,6 +25,14 @@ const BYTES_IN_MB_F64: f64 = 1000.0 * 1000.0;
 
 impl StorageMetrics {
     pub fn new(registry: &Registry) -> anyhow::Result<Self> {
+        let process_timer = register_histogram_vec_with_registry!(
+            histogram_opts!(
+                "trin_storage_process_timer",
+                "the process time of various storage functions"
+            ),
+            &["protocol", "function"],
+            registry
+        )?;
         let content_storage_usage_bytes = register_gauge_vec_with_registry!(
             opts!(
                 "trin_content_storage_usage_bytes",
@@ -59,6 +71,7 @@ impl StorageMetrics {
             registry
         )?;
         Ok(Self {
+            process_timer,
             content_storage_usage_bytes,
             total_storage_usage_bytes,
             storage_capacity_bytes,
@@ -75,6 +88,19 @@ pub struct StorageMetricsReporter {
 }
 
 impl StorageMetricsReporter {
+    pub fn start_process_timer(&self, storage_function: &str) -> DiscardOnDropHistogramTimer {
+        DiscardOnDropHistogramTimer::new(
+            self.storage_metrics
+                .process_timer
+                .with_label_values(&[&self.protocol, storage_function])
+                .clone(),
+        )
+    }
+
+    pub fn stop_process_timer(&self, timer: DiscardOnDropHistogramTimer) {
+        timer.observe_duration()
+    }
+
     pub fn report_content_data_storage_bytes(&self, bytes: f64) {
         self.storage_metrics
             .content_storage_usage_bytes

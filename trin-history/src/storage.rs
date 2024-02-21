@@ -142,7 +142,7 @@ impl HistoryStorage {
     }
 
     /// Sets the radius of the store to `radius`.
-    pub fn set_radius(&mut self, radius: Distance) {
+    fn set_radius(&mut self, radius: Distance) {
         self.radius = radius;
         self.metrics.report_radius(radius);
     }
@@ -182,11 +182,13 @@ impl HistoryStorage {
     }
 
     fn total_entry_count(&self) -> Result<u64, ContentStoreError> {
+        let timer = self.metrics.start_process_timer("total_entry_count");
         let conn = self.sql_connection_pool.get()?;
         let mut query = conn.prepare(TOTAL_ENTRY_COUNT_QUERY_NETWORK)?;
         let result: Result<Vec<EntryCount>, rusqlite::Error> = query
             .query_map([u8::from(self.network)], |row| Ok(EntryCount(row.get(0)?)))?
             .collect();
+        self.metrics.stop_process_timer(timer);
         match result?.first() {
             Some(val) => Ok(val.0),
             None => Err(ContentStoreError::InvalidData {
@@ -201,6 +203,7 @@ impl HistoryStorage {
         key: &impl OverlayContentKey,
         value: &Vec<u8>,
     ) -> Result<(), ContentStoreError> {
+        let store_timer = self.metrics.start_process_timer("store");
         let content_id = key.content_id();
         let distance_to_content_id = self.distance_to_content_id(&content_id);
 
@@ -233,6 +236,7 @@ impl HistoryStorage {
                 return Err(err);
             }
         }
+        self.metrics.stop_process_timer(store_timer);
         self.prune_db()?;
         let total_bytes_on_disk = self.get_total_storage_usage_in_bytes_on_disk()?;
         self.metrics
@@ -245,6 +249,7 @@ impl HistoryStorage {
     /// Resets the data radius if it prunes any data. Does nothing if the store is empty.
     /// Returns the number of items removed during pruning
     fn prune_db(&mut self) -> Result<usize, ContentStoreError> {
+        let timer = self.metrics.start_process_timer("prune_db");
         let mut farthest_content_id: Option<[u8; 32]> = self.find_farthest_content_id()?;
         let mut num_removed_items = 0;
         // Delete furthest data until our data usage is less than capacity.
@@ -268,8 +273,8 @@ impl HistoryStorage {
                 "Capacity reached, deleting farthest: {}",
                 hex_encode(id_to_remove)
             );
-            if let Err(err) = self.evict(id_to_remove) {
-                debug!("Error writing content ID {id_to_remove:?} to db: {err:?}",);
+            if let Err(err) = self.db_remove(&id_to_remove) {
+                debug!("Error removing content ID {id_to_remove:?} from db: {err:?}");
             } else {
                 // Eviction successful, decrease total network storage count
                 self.storage_occupied_in_bytes -= bytes_to_remove;
@@ -291,6 +296,7 @@ impl HistoryStorage {
                 }
             }
         }
+        self.metrics.stop_process_timer(timer);
         Ok(num_removed_items)
     }
 
@@ -298,6 +304,7 @@ impl HistoryStorage {
     /// Returns the size of the content item in bytes.
     /// Raises an error if there is a problem accessing the database.
     fn get_content_size(&self, id: &[u8; 32]) -> Result<u64, ContentStoreError> {
+        let timer = self.metrics.start_process_timer("get_content_size");
         let conn = self.sql_connection_pool.get()?;
         let mut query = conn.prepare(CONTENT_SIZE_LOOKUP_QUERY_DB)?;
         let id_vec = id.to_vec();
@@ -315,19 +322,13 @@ impl HistoryStorage {
             }
         }?
         .num_bytes;
-
+        self.metrics.stop_process_timer(timer);
         Ok(byte_size as u64)
     }
 
-    /// Public method for evicting a certain content id.
-    pub fn evict(&self, id: [u8; 32]) -> anyhow::Result<()> {
-        self.db_remove(&id)?;
-        self.metrics.decrease_entry_count();
-        Ok(())
-    }
-
-    /// Public method for looking up a content key by its content id
-    pub fn lookup_content_key(&self, id: [u8; 32]) -> anyhow::Result<Option<Vec<u8>>> {
+    /// Internal method for looking up a content key by its content id
+    fn lookup_content_key(&self, id: [u8; 32]) -> anyhow::Result<Option<Vec<u8>>> {
+        let timer = self.metrics.start_process_timer("lookup_content_key");
         let conn = self.sql_connection_pool.get()?;
         let mut query = conn.prepare(CONTENT_KEY_LOOKUP_QUERY_DB)?;
         let id = id.to_vec();
@@ -342,18 +343,20 @@ impl HistoryStorage {
                 HistoryContentKey::try_from(bytes).map_err(ContentStoreError::ContentKey)
             })
             .collect();
-
+        self.metrics.stop_process_timer(timer);
         match result?.first() {
             Some(val) => Ok(Some(val.into())),
             None => Ok(None),
         }
     }
 
-    /// Public method for looking up a content value by its content id
-    pub fn lookup_content_value(&self, id: [u8; 32]) -> anyhow::Result<Option<Vec<u8>>> {
+    /// Internal method for looking up a content value by its content id
+    fn lookup_content_value(&self, id: [u8; 32]) -> anyhow::Result<Option<Vec<u8>>> {
+        let timer = self.metrics.start_process_timer("lookup_content_value");
         let conn = self.sql_connection_pool.get()?;
-
-        lookup_content_value(id, conn)?
+        let result = lookup_content_value(id, conn)?;
+        self.metrics.stop_process_timer(timer);
+        result
     }
 
     /// Public method for retrieving the node's current radius.
@@ -361,11 +364,15 @@ impl HistoryStorage {
         self.radius
     }
 
-    /// Public method for determining how much actual disk space is being used to store this node's
-    /// Portal Network data. Intended for analysis purposes. PortalStorage's capacity
+    /// Internal Method for determining how much actual disk space is being used to store this
+    /// node's Portal Network data. Intended for analysis purposes. PortalStorage's capacity
     /// decision-making is not based off of this method.
-    pub fn get_total_storage_usage_in_bytes_on_disk(&self) -> Result<u64, ContentStoreError> {
+    fn get_total_storage_usage_in_bytes_on_disk(&self) -> Result<u64, ContentStoreError> {
+        let timer = self
+            .metrics
+            .start_process_timer("get_total_storage_usage_in_bytes_on_disk");
         let storage_usage = get_total_size_of_directory_in_bytes(&self.node_data_dir)?;
+        self.metrics.stop_process_timer(timer);
         Ok(storage_usage)
     }
 
@@ -376,15 +383,21 @@ impl HistoryStorage {
         content_key: &String,
         value: &Vec<u8>,
     ) -> Result<usize, ContentStoreError> {
+        let timer = self.metrics.start_process_timer("db_insert");
         let conn = self.sql_connection_pool.get()?;
-        insert_value(conn, content_id, content_key, value, u8::from(self.network))
+        let result = insert_value(conn, content_id, content_key, value, u8::from(self.network));
+        self.metrics.stop_process_timer(timer);
+        result
     }
 
     /// Internal method for removing a given content-id from the db.
     fn db_remove(&self, content_id: &[u8; 32]) -> Result<(), ContentStoreError> {
+        let timer = self.metrics.start_process_timer("db_remove");
         self.sql_connection_pool
             .get()?
             .execute(DELETE_QUERY_DB, [content_id.to_vec()])?;
+        self.metrics.stop_process_timer(timer);
+        self.metrics.decrease_entry_count();
         Ok(())
     }
 
@@ -395,6 +408,9 @@ impl HistoryStorage {
 
     /// Internal method for measuring the total amount of requestable data that the node is storing.
     fn get_total_storage_usage_in_bytes_from_network(&self) -> Result<u64, ContentStoreError> {
+        let timer = self
+            .metrics
+            .start_process_timer("get_total_storage_usage_in_bytes_from_network");
         let conn = self.sql_connection_pool.get()?;
         let mut query = conn.prepare(TOTAL_DATA_SIZE_QUERY_DB)?;
 
@@ -414,7 +430,7 @@ impl HistoryStorage {
         .num_bytes;
 
         self.metrics.report_content_data_storage_bytes(sum);
-
+        self.metrics.stop_process_timer(timer);
         Ok(sum as u64)
     }
 
@@ -422,6 +438,7 @@ impl HistoryStorage {
     /// our node id, according to xor distance. Used to determine which data to drop when at a
     /// capacity.
     fn find_farthest_content_id(&self) -> Result<Option<[u8; 32]>, ContentStoreError> {
+        let timer = self.metrics.start_process_timer("find_farthest_content_id");
         let result = match self.distance_fn {
             DistanceFunction::Xor => {
                 let node_id_u32 = byte_slice_to_u32(&self.node_id.raw());
@@ -445,11 +462,12 @@ impl HistoryStorage {
             }
         };
 
+        self.metrics.stop_process_timer(timer);
         Ok(Some(result))
     }
 
     /// Method that returns the distance between our node ID and a given content ID.
-    pub fn distance_to_content_id(&self, content_id: &[u8; 32]) -> Distance {
+    fn distance_to_content_id(&self, content_id: &[u8; 32]) -> Distance {
         self.distance_fn.distance(&self.node_id, content_id)
     }
 
@@ -682,6 +700,7 @@ pub mod test {
         assert_eq!(49, num_removed_items);
 
         let bytes = storage.get_total_storage_usage_in_bytes_from_network()?;
+        assert_eq!(32000, storage.storage_occupied_in_bytes);
         assert_eq!(32000, bytes);
 
         storage.storage_capacity_in_bytes = 0;
@@ -689,6 +708,7 @@ pub mod test {
         assert_eq!(1, num_removed_items);
 
         let bytes = storage.get_total_storage_usage_in_bytes_from_network()?;
+        assert_eq!(0, storage.storage_occupied_in_bytes);
         assert_eq!(0, bytes);
         std::mem::drop(storage);
         temp_dir.close()?;
