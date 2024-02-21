@@ -75,12 +75,11 @@ impl Drop for CustomHistogramTimer {
 
 #[cfg(test)]
 mod tests {
-    use std::f64::{EPSILON, INFINITY};
-    use std::thread;
-    use std::time::Duration;
+    use std::{f64::EPSILON, thread, time::Duration};
 
-    use prometheus_exporter::prometheus::core::Collector;
-    use prometheus_exporter::prometheus::{Histogram, HistogramOpts, DEFAULT_BUCKETS};
+    use prometheus_exporter::prometheus::{
+        core::Collector, Histogram, HistogramOpts, DEFAULT_BUCKETS,
+    };
 
     use crate::utils::CustomHistogramTimer;
 
@@ -110,7 +109,7 @@ mod tests {
         assert_eq!(mfs.len(), 1);
 
         let mf = mfs.pop().unwrap();
-        let m = mf.get_metric().get(0).unwrap();
+        let m = mf.get_metric().first().unwrap();
         // result is 2 because the 3rd timer was dropped and hence not counted
         assert_eq!(m.get_label().len(), 2);
         let proto_histogram = m.get_histogram();
@@ -126,7 +125,7 @@ mod tests {
         assert_eq!(mfs.len(), 1);
 
         let mf = mfs.pop().unwrap();
-        let m = mf.get_metric().get(0).unwrap();
+        let m = mf.get_metric().first().unwrap();
         assert_eq!(m.get_label().len(), 0);
         let proto_histogram = m.get_histogram();
         assert_eq!(proto_histogram.get_sample_count(), 0);
