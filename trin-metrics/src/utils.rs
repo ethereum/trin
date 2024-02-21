@@ -72,3 +72,65 @@ impl Drop for CustomHistogramTimer {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::f64::{EPSILON, INFINITY};
+    use std::thread;
+    use std::time::Duration;
+
+    use prometheus_exporter::prometheus::core::Collector;
+    use prometheus_exporter::prometheus::{Histogram, HistogramOpts, DEFAULT_BUCKETS};
+
+    use crate::utils::CustomHistogramTimer;
+
+    /// Test taken from https://docs.rs/prometheus/0.13.3/src/prometheus/histogram.rs.html#1217-1260
+    /// Modified to work with CustomHistogramTimer
+    #[test]
+    fn test_histogram() {
+        let opts = HistogramOpts::new("test1", "test help")
+            .const_label("a", "1")
+            .const_label("b", "2");
+        let histogram = Histogram::with_opts(opts).unwrap();
+        histogram.observe(1.0);
+
+        let timer = CustomHistogramTimer::new(histogram.clone());
+        thread::sleep(Duration::from_millis(100));
+        timer.observe_duration();
+
+        // In this thread the timer isn't manually closed so its result will be dropped
+        let timer = CustomHistogramTimer::new(histogram.clone());
+        let handler = thread::spawn(move || {
+            let _timer = timer;
+            thread::sleep(Duration::from_millis(400));
+        });
+        assert!(handler.join().is_ok());
+
+        let mut mfs = histogram.collect();
+        assert_eq!(mfs.len(), 1);
+
+        let mf = mfs.pop().unwrap();
+        let m = mf.get_metric().get(0).unwrap();
+        // result is 2 because the 3rd timer was dropped and hence not counted
+        assert_eq!(m.get_label().len(), 2);
+        let proto_histogram = m.get_histogram();
+        assert_eq!(proto_histogram.get_sample_count(), 2);
+        // only 1.1+ seconds was observed because the 3rd timer was dropped and hence not counted
+        assert!(proto_histogram.get_sample_sum() >= 1.1);
+        assert_eq!(proto_histogram.get_bucket().len(), DEFAULT_BUCKETS.len());
+
+        let buckets = vec![1.0, 2.0, 3.0];
+        let opts = HistogramOpts::new("test2", "test help").buckets(buckets.clone());
+        let histogram = Histogram::with_opts(opts).unwrap();
+        let mut mfs = histogram.collect();
+        assert_eq!(mfs.len(), 1);
+
+        let mf = mfs.pop().unwrap();
+        let m = mf.get_metric().get(0).unwrap();
+        assert_eq!(m.get_label().len(), 0);
+        let proto_histogram = m.get_histogram();
+        assert_eq!(proto_histogram.get_sample_count(), 0);
+        assert!((proto_histogram.get_sample_sum() - 0.0) < EPSILON);
+        assert_eq!(proto_histogram.get_bucket().len(), buckets.len())
+    }
+}
