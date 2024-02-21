@@ -4,6 +4,7 @@ use crate::{
         CONTENT_VALUE_LOOKUP_QUERY_DB, CREATE_QUERY_DB, INSERT_QUERY_NETWORK,
         LC_UPDATE_CREATE_TABLE,
     },
+    versioned::sql::STORE_INFO_CREATE_TABLE,
     DATABASE_NAME,
 };
 use anyhow::Error;
@@ -24,8 +25,10 @@ pub fn setup_sql(node_data_dir: &Path) -> Result<Pool<SqliteConnectionManager>, 
 
     let manager = SqliteConnectionManager::file(sql_path);
     let pool = Pool::new(manager)?;
-    pool.get()?.execute_batch(CREATE_QUERY_DB)?;
-    pool.get()?.execute_batch(LC_UPDATE_CREATE_TABLE)?;
+    let conn = pool.get()?;
+    conn.execute_batch(CREATE_QUERY_DB)?;
+    conn.execute_batch(LC_UPDATE_CREATE_TABLE)?;
+    conn.execute_batch(STORE_INFO_CREATE_TABLE)?;
     Ok(pool)
 }
 

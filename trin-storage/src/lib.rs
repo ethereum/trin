@@ -1,6 +1,7 @@
 pub mod error;
 pub mod sql;
 pub mod utils;
+pub mod versioned;
 
 use crate::utils::setup_sql;
 use discv5::enr::NodeId;

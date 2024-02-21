@@ -4,6 +4,8 @@ use ethportal_api::{
 };
 use thiserror::Error;
 
+use crate::versioned::{ContentType, StoreVersion};
+
 /// An error from an operation on a `ContentStore`.
 #[derive(Debug, Error)]
 pub enum ContentStoreError {
@@ -35,4 +37,16 @@ pub enum ContentStoreError {
 
     #[error("unable to use content key {0}")]
     ContentKey(#[from] ContentKeyError),
+
+    #[error("Invalid store version '{version}' for table '{content_type}'")]
+    InvalidStoreVersion {
+        content_type: ContentType,
+        version: StoreVersion,
+    },
+
+    #[error("Store migration from {old_version} to {new_version} is not supported")]
+    UnsupportedStoreMigration {
+        old_version: StoreVersion,
+        new_version: StoreVersion,
+    },
 }
