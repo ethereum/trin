@@ -8,7 +8,7 @@ use prometheus_exporter::{
     },
 };
 
-use crate::utils::CustomHistogramTimer;
+use crate::timer::DiscardOnDropHistogramTimer;
 
 /// Contains metrics reporters for portalnet storage.
 #[derive(Clone, Debug)]
@@ -88,8 +88,8 @@ pub struct StorageMetricsReporter {
 }
 
 impl StorageMetricsReporter {
-    pub fn start_process_timer(&self, storage_function: &str) -> CustomHistogramTimer {
-        CustomHistogramTimer::new(
+    pub fn start_process_timer(&self, storage_function: &str) -> DiscardOnDropHistogramTimer {
+        DiscardOnDropHistogramTimer::new(
             self.storage_metrics
                 .process_timer
                 .with_label_values(&[&self.protocol, storage_function])
@@ -97,7 +97,7 @@ impl StorageMetricsReporter {
         )
     }
 
-    pub fn stop_process_timer(&self, timer: CustomHistogramTimer) {
+    pub fn stop_process_timer(&self, timer: DiscardOnDropHistogramTimer) {
         timer.observe_duration()
     }
 

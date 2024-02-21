@@ -274,7 +274,7 @@ impl HistoryStorage {
                 hex_encode(id_to_remove)
             );
             if let Err(err) = self.db_remove(&id_to_remove) {
-                debug!("Error writing content ID {id_to_remove:?} to db: {err:?}",);
+                debug!("Error removing content ID {id_to_remove:?} from db: {err:?}");
             } else {
                 // Eviction successful, decrease total network storage count
                 self.storage_occupied_in_bytes -= bytes_to_remove;
