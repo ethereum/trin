@@ -198,8 +198,8 @@ mod tests {
     }
 
     #[test]
-    fn test_discard_through_explict_drop() {
-        let opts = HistogramOpts::new("test_discard_through_explict_drop", "testing")
+    fn test_discard_through_explicit_drop() {
+        let opts = HistogramOpts::new("test_discard_through_explicit_drop", "testing")
             .const_label("defense", "1");
         let histogram = Histogram::with_opts(opts).unwrap();
 
@@ -219,8 +219,8 @@ mod tests {
     }
 
     #[test]
-    fn test_discard_through_implict_drop() {
-        let opts = HistogramOpts::new("test_discard_through_implict_drop", "testing")
+    fn test_discard_through_implicit_drop() {
+        let opts = HistogramOpts::new("test_discard_through_implicit_drop", "testing")
             .const_label("defense", "1");
         let histogram = Histogram::with_opts(opts).unwrap();
 
@@ -241,8 +241,8 @@ mod tests {
     }
 
     #[test]
-    fn test_discard_through_implict_drop_in_thread() {
-        let opts = HistogramOpts::new("test_discard_through_implict_drop_in_thread", "testing")
+    fn test_discard_through_implicit_drop_in_thread() {
+        let opts = HistogramOpts::new("test_discard_through_implicit_drop_in_thread", "testing")
             .const_label("defense", "1");
         let histogram = Histogram::with_opts(opts).unwrap();
 
