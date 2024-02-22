@@ -1308,6 +1308,8 @@ where
                 )
             })?;
 
+        let mut accepted_keys: Vec<TContentKey> = Vec::default();
+
         for (i, key) in content_keys.iter().enumerate() {
             // Accept content if within radius and not already present in the data store.
             let accept = self
@@ -1320,6 +1322,9 @@ where
                         "Unable to check content availability {err}"
                     ))
                 })?;
+            if accept {
+                accepted_keys.push(key.clone());
+            }
             requested_keys.set(i, accept).map_err(|err| {
                 OverlayRequestError::AcceptError(format!(
                     "Unable to set requested keys bits: {err:?}"
@@ -1404,7 +1409,7 @@ where
                 metrics,
                 kbuckets,
                 command_tx,
-                content_keys,
+                accepted_keys,
                 data,
                 utp.clone(),
             )
