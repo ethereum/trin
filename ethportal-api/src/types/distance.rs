@@ -38,6 +38,15 @@ impl Distance {
         self.0.to_big_endian(&mut be);
         be
     }
+
+    /// Returns the top 4 bytes representation of `self`.
+    pub fn big_endian_u32(&self) -> u32 {
+        let mut be: [u8; 32] = [0; 32];
+        self.0.to_big_endian(&mut be);
+        let mut be_bytes = [0u8; 4];
+        be_bytes.copy_from_slice(&be[..4]);
+        u32::from_be_bytes(be_bytes)
+    }
 }
 
 impl From<U256> for Distance {

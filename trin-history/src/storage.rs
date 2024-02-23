@@ -1,7 +1,8 @@
+use crate::storage::rusqlite::params;
 use discv5::enr::NodeId;
 use ethportal_api::{
     types::{distance::Distance, history::PaginateLocalContentInfo, portal_wire::ProtocolId},
-    utils::bytes::{hex_decode, hex_encode},
+    utils::bytes::hex_encode,
     HistoryContentKey, OverlayContentKey,
 };
 use r2d2::Pool;
@@ -12,13 +13,12 @@ use trin_metrics::{portalnet::PORTALNET_METRICS, storage::StorageMetricsReporter
 use trin_storage::{
     error::ContentStoreError,
     sql::{
-        CONTENT_KEY_LOOKUP_QUERY_DB, CONTENT_SIZE_LOOKUP_QUERY_DB, DELETE_QUERY_DB,
-        PAGINATE_QUERY_DB, TOTAL_DATA_SIZE_QUERY_DB, TOTAL_ENTRY_COUNT_QUERY_NETWORK,
-        XOR_FIND_FARTHEST_QUERY_NETWORK,
+        CONTENT_KEY_LOOKUP_QUERY_HISTORY, CONTENT_SIZE_LOOKUP_QUERY_HISTORY,
+        CONTENT_VALUE_LOOKUP_QUERY_HISTORY, DELETE_QUERY_HISTORY, INSERT_QUERY_HISTORY,
+        PAGINATE_QUERY_HISTORY, TOTAL_DATA_SIZE_QUERY_HISTORY, TOTAL_ENTRY_COUNT_QUERY_HISTORY,
+        XOR_FIND_FARTHEST_QUERY_HISTORY,
     },
-    utils::{
-        byte_slice_to_u32, get_total_size_of_directory_in_bytes, insert_value, lookup_content_value,
-    },
+    utils::get_total_size_of_directory_in_bytes,
     ContentId, ContentStore, DataSize, DistanceFunction, EntryCount, PortalStorageConfig,
     ShouldWeStoreContent, BYTES_IN_MB_U64,
 };
@@ -34,7 +34,6 @@ pub struct HistoryStorage {
     sql_connection_pool: Pool<SqliteConnectionManager>,
     distance_fn: DistanceFunction,
     metrics: StorageMetricsReporter,
-    network: ProtocolId,
 }
 
 impl ContentStore for HistoryStorage {
@@ -100,7 +99,6 @@ impl HistoryStorage {
             sql_connection_pool: config.sql_connection_pool,
             distance_fn: config.distance_fn,
             metrics,
-            network: protocol,
             storage_occupied_in_bytes: 0,
         };
 
@@ -155,25 +153,14 @@ impl HistoryStorage {
         limit: &u64,
     ) -> Result<PaginateLocalContentInfo, ContentStoreError> {
         let conn = self.sql_connection_pool.get()?;
-        let mut query = conn.prepare(PAGINATE_QUERY_DB)?;
+        let mut query = conn.prepare(PAGINATE_QUERY_HISTORY)?;
 
         let content_keys: Result<Vec<HistoryContentKey>, ContentStoreError> = query
-            .query_map(
-                &[
-                    (":offset", offset.to_string().as_str()),
-                    (":limit", limit.to_string().as_str()),
-                ],
-                |row| {
-                    let row: String = row.get(0)?;
-                    Ok(row)
-                },
-            )?
-            .map(|row| {
-                // value is stored without 0x prefix, so we must add it
-                let bytes: Vec<u8> = hex_decode(&format!("0x{}", row?))
-                    .map_err(ContentStoreError::ByteUtilsError)?;
-                HistoryContentKey::try_from(bytes).map_err(ContentStoreError::ContentKey)
-            })
+            .query_map([limit, offset], |row| {
+                let row: Vec<u8> = row.get(0)?;
+                Ok(row)
+            })?
+            .map(|row| HistoryContentKey::try_from(row?).map_err(ContentStoreError::ContentKey))
             .collect();
         Ok(PaginateLocalContentInfo {
             content_keys: content_keys?,
@@ -184,9 +171,9 @@ impl HistoryStorage {
     fn total_entry_count(&self) -> Result<u64, ContentStoreError> {
         let timer = self.metrics.start_process_timer("total_entry_count");
         let conn = self.sql_connection_pool.get()?;
-        let mut query = conn.prepare(TOTAL_ENTRY_COUNT_QUERY_NETWORK)?;
+        let mut query = conn.prepare(TOTAL_ENTRY_COUNT_QUERY_HISTORY)?;
         let result: Result<Vec<EntryCount>, rusqlite::Error> = query
-            .query_map([u8::from(self.network)], |row| Ok(EntryCount(row.get(0)?)))?
+            .query_map([], |row| Ok(EntryCount(row.get(0)?)))?
             .collect();
         self.metrics.stop_process_timer(timer);
         match result?.first() {
@@ -218,8 +205,6 @@ impl HistoryStorage {
 
         // Store the data in db
         let content_key: Vec<u8> = key.clone().into();
-        // store content key w/o the 0x prefix
-        let content_key = hex_encode(content_key).trim_start_matches("0x").to_string();
         let value_size = value.len() as u64;
         match self.db_insert(&content_id, &content_key, value) {
             Ok(result) => {
@@ -306,7 +291,7 @@ impl HistoryStorage {
     fn get_content_size(&self, id: &[u8; 32]) -> Result<u64, ContentStoreError> {
         let timer = self.metrics.start_process_timer("get_content_size");
         let conn = self.sql_connection_pool.get()?;
-        let mut query = conn.prepare(CONTENT_SIZE_LOOKUP_QUERY_DB)?;
+        let mut query = conn.prepare(CONTENT_SIZE_LOOKUP_QUERY_HISTORY)?;
         let id_vec = id.to_vec();
         let result = query.query_map([id_vec], |row| {
             Ok(DataSize {
@@ -330,18 +315,14 @@ impl HistoryStorage {
     fn lookup_content_key(&self, id: [u8; 32]) -> anyhow::Result<Option<Vec<u8>>> {
         let timer = self.metrics.start_process_timer("lookup_content_key");
         let conn = self.sql_connection_pool.get()?;
-        let mut query = conn.prepare(CONTENT_KEY_LOOKUP_QUERY_DB)?;
+        let mut query = conn.prepare(CONTENT_KEY_LOOKUP_QUERY_HISTORY)?;
         let id = id.to_vec();
         let result: Result<Vec<HistoryContentKey>, ContentStoreError> = query
             .query_map([id], |row| {
-                let row: String = row.get(0)?;
+                let row: Vec<u8> = row.get(0)?;
                 Ok(row)
             })?
-            .map(|row| {
-                // value is stored without 0x prefix, so we must add it
-                let bytes: Vec<u8> = hex_decode(&format!("0x{}", row?))?;
-                HistoryContentKey::try_from(bytes).map_err(ContentStoreError::ContentKey)
-            })
+            .map(|row| HistoryContentKey::try_from(row?).map_err(ContentStoreError::ContentKey))
             .collect();
         self.metrics.stop_process_timer(timer);
         match result?.first() {
@@ -354,7 +335,20 @@ impl HistoryStorage {
     fn lookup_content_value(&self, id: [u8; 32]) -> anyhow::Result<Option<Vec<u8>>> {
         let timer = self.metrics.start_process_timer("lookup_content_value");
         let conn = self.sql_connection_pool.get()?;
-        let result = lookup_content_value(id, conn)?;
+        let mut query = conn.prepare(CONTENT_VALUE_LOOKUP_QUERY_HISTORY)?;
+        let id = id.to_vec();
+        let result: Result<Vec<Vec<u8>>, ContentStoreError> = query
+            .query_map([id], |row| {
+                let row: Vec<u8> = row.get(0)?;
+                Ok(row)
+            })?
+            .map(|row| row.map_err(ContentStoreError::Rusqlite))
+            .collect();
+
+        let result: Result<Option<Vec<u8>>, _> = match result?.first() {
+            Some(val) => Ok(Some(val.to_vec())),
+            None => Ok(None),
+        };
         self.metrics.stop_process_timer(timer);
         result
     }
@@ -380,12 +374,24 @@ impl HistoryStorage {
     fn db_insert(
         &self,
         content_id: &[u8; 32],
-        content_key: &String,
+        content_key: &Vec<u8>,
         value: &Vec<u8>,
     ) -> Result<usize, ContentStoreError> {
         let timer = self.metrics.start_process_timer("db_insert");
         let conn = self.sql_connection_pool.get()?;
-        let result = insert_value(conn, content_id, content_key, value, u8::from(self.network));
+        let result = match conn.execute(
+            INSERT_QUERY_HISTORY,
+            params![
+                content_id.to_vec(),
+                content_key,
+                value,
+                self.distance_to_content_id(content_id).big_endian_u32(),
+                value.len()
+            ],
+        ) {
+            Ok(result) => Ok(result),
+            Err(err) => Err(err.into()),
+        };
         self.metrics.stop_process_timer(timer);
         result
     }
@@ -395,7 +401,7 @@ impl HistoryStorage {
         let timer = self.metrics.start_process_timer("db_remove");
         self.sql_connection_pool
             .get()?
-            .execute(DELETE_QUERY_DB, [content_id.to_vec()])?;
+            .execute(DELETE_QUERY_HISTORY, [content_id.to_vec()])?;
         self.metrics.stop_process_timer(timer);
         self.metrics.decrease_entry_count();
         Ok(())
@@ -412,9 +418,9 @@ impl HistoryStorage {
             .metrics
             .start_process_timer("get_total_storage_usage_in_bytes_from_network");
         let conn = self.sql_connection_pool.get()?;
-        let mut query = conn.prepare(TOTAL_DATA_SIZE_QUERY_DB)?;
+        let mut query = conn.prepare(TOTAL_DATA_SIZE_QUERY_HISTORY)?;
 
-        let result = query.query_map([u8::from(self.network)], |row| {
+        let result = query.query_map([], |row| {
             Ok(DataSize {
                 num_bytes: row.get(0)?,
             })
@@ -441,16 +447,13 @@ impl HistoryStorage {
         let timer = self.metrics.start_process_timer("find_farthest_content_id");
         let result = match self.distance_fn {
             DistanceFunction::Xor => {
-                let node_id_u32 = byte_slice_to_u32(&self.node_id.raw());
-
                 let conn = self.sql_connection_pool.get()?;
-                let mut query = conn.prepare(XOR_FIND_FARTHEST_QUERY_NETWORK)?;
+                let mut query = conn.prepare(XOR_FIND_FARTHEST_QUERY_HISTORY)?;
 
-                let mut result =
-                    query.query_map([node_id_u32, u8::from(self.network).into()], |row| {
-                        let content_id: ContentId = row.get(0)?;
-                        Ok(content_id)
-                    })?;
+                let mut result = query.query_map([], |row| {
+                    let content_id: ContentId = row.get(0)?;
+                    Ok(content_id)
+                })?;
 
                 let result = match result.next() {
                     Some(row) => row,

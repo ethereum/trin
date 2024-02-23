@@ -11,7 +11,6 @@ use ethportal_api::{
         distance::Distance,
         portal_wire::ProtocolId,
     },
-    utils::bytes::{hex_decode, hex_encode},
     BeaconContentKey, OverlayContentKey,
 };
 use r2d2::Pool;
@@ -25,10 +24,11 @@ use trin_metrics::{portalnet::PORTALNET_METRICS, storage::StorageMetricsReporter
 use trin_storage::{
     error::ContentStoreError,
     sql::{
-        CONTENT_KEY_LOOKUP_QUERY_DB, INSERT_LC_UPDATE_QUERY, LC_UPDATE_LOOKUP_QUERY,
-        LC_UPDATE_PERIOD_LOOKUP_QUERY, LC_UPDATE_TOTAL_SIZE_QUERY, TOTAL_DATA_SIZE_QUERY_DB,
+        CONTENT_KEY_LOOKUP_QUERY_BEACON, CONTENT_VALUE_LOOKUP_QUERY_BEACON, INSERT_LC_UPDATE_QUERY,
+        INSERT_QUERY_BEACON, LC_UPDATE_LOOKUP_QUERY, LC_UPDATE_PERIOD_LOOKUP_QUERY,
+        LC_UPDATE_TOTAL_SIZE_QUERY, TOTAL_DATA_SIZE_QUERY_BEACON,
     },
-    utils::{get_total_size_of_directory_in_bytes, insert_value, lookup_content_value},
+    utils::get_total_size_of_directory_in_bytes,
     ContentStore, DataSize, PortalStorageConfig, ShouldWeStoreContent, BYTES_IN_MB_U64,
 };
 
@@ -111,7 +111,6 @@ pub struct BeaconStorage {
     sql_connection_pool: Pool<SqliteConnectionManager>,
     storage_capacity_in_bytes: u64,
     metrics: StorageMetricsReporter,
-    network: ProtocolId,
     cache: BeaconStorageCache,
 }
 
@@ -273,7 +272,6 @@ impl BeaconStorage {
             sql_connection_pool: config.sql_connection_pool,
             storage_capacity_in_bytes: config.storage_capacity_mb * BYTES_IN_MB_U64,
             metrics,
-            network: ProtocolId::Beacon,
             cache: BeaconStorageCache::new(),
         };
 
@@ -301,11 +299,17 @@ impl BeaconStorage {
     fn db_insert(
         &self,
         content_id: &[u8; 32],
-        content_key: &String,
+        content_key: &Vec<u8>,
         value: &Vec<u8>,
     ) -> Result<usize, ContentStoreError> {
         let conn = self.sql_connection_pool.get()?;
-        insert_value(conn, content_id, content_key, value, u8::from(self.network))
+        match conn.execute(
+            INSERT_QUERY_BEACON,
+            params![content_id.to_vec(), content_key, value, value.len()],
+        ) {
+            Ok(result) => Ok(result),
+            Err(err) => Err(err.into()),
+        }
     }
 
     fn db_insert_lc_update(&self, period: &u64, value: &Vec<u8>) -> Result<(), ContentStoreError> {
@@ -332,7 +336,6 @@ impl BeaconStorage {
         match content_key.first() {
             Some(&LIGHT_CLIENT_BOOTSTRAP_KEY_PREFIX) => {
                 // store content key w/o the 0x prefix
-                let content_key = hex_encode(content_key).trim_start_matches("0x").to_string();
                 if let Err(err) = self.db_insert(&content_id, &content_key, value) {
                     debug!("Error writing light client bootstrap content ID {content_id:?} to beacon network db: {err:?}");
                     return Err(err);
@@ -435,8 +438,8 @@ impl BeaconStorage {
     fn get_total_storage_usage_in_bytes_from_network(&self) -> Result<u64, ContentStoreError> {
         let conn = self.sql_connection_pool.get()?;
 
-        let mut content_data_stmt = conn.prepare(TOTAL_DATA_SIZE_QUERY_DB)?;
-        let content_data_result = content_data_stmt.query_map([u8::from(self.network)], |row| {
+        let mut content_data_stmt = conn.prepare(TOTAL_DATA_SIZE_QUERY_BEACON)?;
+        let content_data_result = content_data_stmt.query_map([], |row| {
             Ok(DataSize {
                 num_bytes: row.get(0)?,
             })
@@ -474,18 +477,14 @@ impl BeaconStorage {
     /// Public method for looking up a content key by its content id
     pub fn lookup_content_key(&self, id: [u8; 32]) -> anyhow::Result<Option<Vec<u8>>> {
         let conn = self.sql_connection_pool.get()?;
-        let mut query = conn.prepare(CONTENT_KEY_LOOKUP_QUERY_DB)?;
+        let mut query = conn.prepare(CONTENT_KEY_LOOKUP_QUERY_BEACON)?;
         let id = id.to_vec();
         let result: Result<Vec<BeaconContentKey>, ContentStoreError> = query
             .query_map([id], |row| {
-                let row: String = row.get(0)?;
+                let row: Vec<u8> = row.get(0)?;
                 Ok(row)
             })?
-            .map(|row| {
-                // value is stored without 0x prefix, so we must add it
-                let bytes: Vec<u8> = hex_decode(&format!("0x{}", row?))?;
-                BeaconContentKey::try_from(bytes).map_err(ContentStoreError::ContentKey)
-            })
+            .map(|row| BeaconContentKey::try_from(row?).map_err(ContentStoreError::ContentKey))
             .collect();
 
         match result?.first() {
@@ -515,7 +514,20 @@ impl BeaconStorage {
     /// Public method for looking up a content value by its content id
     pub fn lookup_content_value(&self, id: [u8; 32]) -> anyhow::Result<Option<Vec<u8>>> {
         let conn = self.sql_connection_pool.get()?;
-        lookup_content_value(id, conn)?
+        let mut query = conn.prepare(CONTENT_VALUE_LOOKUP_QUERY_BEACON)?;
+        let id = id.to_vec();
+        let result: Result<Vec<Vec<u8>>, ContentStoreError> = query
+            .query_map([id], |row| {
+                let row: Vec<u8> = row.get(0)?;
+                Ok(row)
+            })?
+            .map(|row| row.map_err(ContentStoreError::Rusqlite))
+            .collect();
+
+        match result?.first() {
+            Some(val) => Ok(Some(val.to_vec())),
+            None => Ok(None),
+        }
     }
 
     /// Public method for looking up a  light client update value by period number
