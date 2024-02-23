@@ -303,13 +303,15 @@ impl BeaconStorage {
         value: &Vec<u8>,
     ) -> Result<usize, ContentStoreError> {
         let conn = self.sql_connection_pool.get()?;
-        match conn.execute(
+        Ok(conn.execute(
             INSERT_QUERY_BEACON,
-            params![content_id.to_vec(), content_key, value, value.len()],
-        ) {
-            Ok(result) => Ok(result),
-            Err(err) => Err(err.into()),
-        }
+            params![
+                content_id.to_vec(),
+                content_key,
+                value,
+                32 + content_key.len() + value.len()
+            ],
+        )?)
     }
 
     fn db_insert_lc_update(&self, period: &u64, value: &Vec<u8>) -> Result<(), ContentStoreError> {

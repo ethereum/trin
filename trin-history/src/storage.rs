@@ -210,7 +210,8 @@ impl HistoryStorage {
             Ok(result) => {
                 // Insertion successful, increase total network storage count
                 if result == 1 {
-                    self.storage_occupied_in_bytes += value_size;
+                    // adding 32 bytes for content_id and 32 for content_key
+                    self.storage_occupied_in_bytes += value_size + 64;
                     self.metrics
                         .report_content_data_storage_bytes(self.storage_occupied_in_bytes as f64);
                     self.metrics.increase_entry_count();
@@ -379,21 +380,18 @@ impl HistoryStorage {
     ) -> Result<usize, ContentStoreError> {
         let timer = self.metrics.start_process_timer("db_insert");
         let conn = self.sql_connection_pool.get()?;
-        let result = match conn.execute(
+        let result = conn.execute(
             INSERT_QUERY_HISTORY,
             params![
                 content_id.to_vec(),
                 content_key,
                 value,
                 self.distance_to_content_id(content_id).big_endian_u32(),
-                value.len()
+                32 + content_key.len() + value.len()
             ],
-        ) {
-            Ok(result) => Ok(result),
-            Err(err) => Err(err.into()),
-        };
+        )?;
         self.metrics.stop_process_timer(timer);
-        result
+        Ok(result)
     }
 
     /// Internal method for removing a given content-id from the db.
@@ -592,7 +590,7 @@ pub mod test {
 
         let bytes = storage.get_total_storage_usage_in_bytes_from_network()?;
 
-        assert_eq!(32, bytes);
+        assert_eq!(96, bytes);
 
         std::mem::drop(storage);
         temp_dir.close()?;
@@ -619,7 +617,7 @@ pub mod test {
         }
 
         let bytes = storage.get_total_storage_usage_in_bytes_from_network()?;
-        assert_eq!(1600000, bytes); // 32kb * 50
+        assert_eq!(1603200, bytes); // 32kb * 50 + 64 * 50
         assert_eq!(storage.radius, Distance::MAX);
         std::mem::drop(storage);
 
@@ -630,7 +628,7 @@ pub mod test {
 
         // test that previously set value has been pruned
         let bytes = new_storage.get_total_storage_usage_in_bytes_from_network()?;
-        assert_eq!(1024000, bytes);
+        assert_eq!(1026048, bytes);
         assert_eq!(32, new_storage.total_entry_count().unwrap());
         assert_eq!(new_storage.storage_capacity_in_bytes, BYTES_IN_MB_U64);
         // test that radius has decreased now that we're at capacity
@@ -703,8 +701,8 @@ pub mod test {
         assert_eq!(49, num_removed_items);
 
         let bytes = storage.get_total_storage_usage_in_bytes_from_network()?;
-        assert_eq!(32000, storage.storage_occupied_in_bytes);
-        assert_eq!(32000, bytes);
+        assert_eq!(32064, storage.storage_occupied_in_bytes);
+        assert_eq!(32064, bytes);
 
         storage.storage_capacity_in_bytes = 0;
         let num_removed_items = storage.prune_db().unwrap();
@@ -788,7 +786,7 @@ pub mod test {
         }
 
         let bytes = storage.get_total_storage_usage_in_bytes_from_network()?;
-        assert_eq!(1600000, bytes); // 32kb * 50
+        assert_eq!(1603200, bytes); // 32kb * 50 + 64 * 50
         assert_eq!(storage.radius, Distance::MAX);
         // Save the number of items, to compare with the restarted storage
         let total_entry_count = storage.total_entry_count().unwrap();
@@ -801,7 +799,7 @@ pub mod test {
 
         // test that previously set value has not been pruned
         let bytes = new_storage.get_total_storage_usage_in_bytes_from_network()?;
-        assert_eq!(1600000, bytes);
+        assert_eq!(1603200, bytes);
         assert_eq!(new_storage.total_entry_count().unwrap(), total_entry_count);
         assert_eq!(
             new_storage.storage_capacity_in_bytes,

@@ -22,9 +22,9 @@ pub fn setup_sql(node_data_dir: &Path) -> Result<Pool<SqliteConnectionManager>, 
     let conn = pool.get()?;
     conn.execute_batch(CREATE_QUERY_DB_HISTORY)?;
     conn.execute_batch(CREATE_QUERY_DB_BEACON)?;
-    conn.execute_batch(DROP_CONTENT_DATA_QUERY_DB)?;
     conn.execute_batch(LC_UPDATE_CREATE_TABLE)?;
     conn.execute_batch(STORE_INFO_CREATE_TABLE)?;
+    conn.execute_batch(DROP_CONTENT_DATA_QUERY_DB)?;
     Ok(pool)
 }
 
