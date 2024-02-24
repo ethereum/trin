@@ -13,7 +13,8 @@ pub const CREATE_QUERY_DB: &str = "CREATE TABLE IF NOT EXISTS content_data (
                             DROP INDEX IF EXISTS content_size_idx;
                             CREATE INDEX IF NOT EXISTS content_size_idx_2 ON content_data(network, content_size);
                             DROP INDEX IF EXISTS content_id_short_idx;
-                            CREATE INDEX IF NOT EXISTS content_id_short_idx_2 ON content_data(network, content_id_short, content_id_long);
+                            DROP INDEX IF EXISTS content_id_short_idx_2;
+                            CREATE INDEX IF NOT EXISTS content_id_short_idxf_2 ON content_data(network, content_id_short);
                             DROP INDEX IF EXISTS content_id_long_idx;
                             CREATE INDEX IF NOT EXISTS network_idx ON content_data(network);
                             CREATE INDEX IF NOT EXISTS content_key_idx ON content_data(content_key);";
@@ -33,7 +34,7 @@ pub const XOR_FIND_FARTHEST_QUERY_NETWORK: &str = "SELECT
                                     content_id_long
                                     FROM content_data
                                     WHERE network = (?2)
-                                    ORDER BY ((?1 | content_id_short) - (?1 & content_id_short)) DESC";
+                                    ORDER BY ((?1 | content_id_short) - (?1 & content_id_short)) DESC LIMIT 1";
 
 pub const CONTENT_KEY_LOOKUP_QUERY_DB: &str =
     "SELECT content_key FROM content_data WHERE content_id_long = (?1) LIMIT 1";
