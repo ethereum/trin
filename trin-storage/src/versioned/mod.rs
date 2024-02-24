@@ -1,3 +1,4 @@
+mod id_indexed_v1;
 pub mod sql;
 pub mod store;
 mod utils;
@@ -5,6 +6,7 @@ mod utils;
 use rusqlite::types::{FromSql, FromSqlError, ValueRef};
 use strum::{AsRefStr, Display, EnumString};
 
+pub use id_indexed_v1::{IdIndexedV1Store, IdIndexedV1StoreConfig};
 pub use store::VersionedContentStore;
 pub use utils::create_store;
 
@@ -16,7 +18,6 @@ pub use utils::create_store;
 #[derive(Clone, Debug, Display, Eq, PartialEq, AsRefStr)]
 #[strum(serialize_all = "snake_case")]
 pub enum ContentType {
-    Beacon,
     History,
     State,
 }

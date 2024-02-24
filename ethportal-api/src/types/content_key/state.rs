@@ -42,20 +42,20 @@ pub struct AccountTrieNodeKey {
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct ContractStorageTrieNodeKey {
     /// Address of the account.
-    address: Address,
+    pub address: Address,
     /// Trie path of the node.
-    path: Nibbles,
+    pub path: Nibbles,
     /// Hash of the node.
-    node_hash: H256,
+    pub node_hash: H256,
 }
 
 /// A key for an account's contract bytecode.
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct ContractBytecodeKey {
     /// Address of the account.
-    address: Address,
+    pub address: Address,
     /// Hash of the bytecode.
-    code_hash: H256,
+    pub code_hash: H256,
 }
 
 impl OverlayContentKey for StateContentKey {

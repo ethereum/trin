@@ -3,7 +3,7 @@ use crate::{
     utils::bytes::{hex_decode, hex_encode, hex_encode_compact},
 };
 use quickcheck::{Arbitrary, Gen};
-use std::fmt;
+use std::{fmt, ops::Deref};
 
 /// Types whose values represent keys to lookup content items in an overlay network.
 /// Keys are serializable.
@@ -29,7 +29,7 @@ pub trait OverlayContentKey:
 
 /// A content key type whose content id is the inner value. Allows for the construction
 /// of a content key with an arbitrary content ID.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IdentityContentKey {
     value: [u8; 32],
 }
@@ -38,6 +38,10 @@ impl IdentityContentKey {
     /// Constructs a new `IdentityContentKey` with the specified value.
     pub fn new(value: [u8; 32]) -> Self {
         Self { value }
+    }
+
+    pub fn random() -> Self {
+        Self::new(rand::random())
     }
 }
 
@@ -85,6 +89,14 @@ impl fmt::Display for IdentityContentKey {
 impl Into<Vec<u8>> for IdentityContentKey {
     fn into(self) -> Vec<u8> {
         self.value.into()
+    }
+}
+
+impl Deref for IdentityContentKey {
+    type Target = [u8; 32];
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
     }
 }
 
