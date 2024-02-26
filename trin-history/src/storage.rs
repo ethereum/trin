@@ -208,13 +208,14 @@ impl HistoryStorage {
 
         // Store the data in db
         let content_key: Vec<u8> = key.clone().into();
-        let value_size = value.len() as u64;
+        let value_size = value.len();
         match self.db_insert(&content_id, &content_key, value) {
             Ok(result) => {
                 // Insertion successful, increase total network storage count
                 if result == 1 {
                     // adding 32 bytes for content_id and 32 for content_key
-                    self.storage_occupied_in_bytes += value_size + CONTENT_ID_AND_KEY_LENGTH as u64;
+                    self.storage_occupied_in_bytes +=
+                        (value_size + CONTENT_ID_AND_KEY_LENGTH) as u64;
                     self.metrics
                         .report_content_data_storage_bytes(self.storage_occupied_in_bytes as f64);
                     self.metrics.increase_entry_count();
