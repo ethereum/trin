@@ -337,7 +337,6 @@ impl BeaconStorage {
 
         match content_key.first() {
             Some(&LIGHT_CLIENT_BOOTSTRAP_KEY_PREFIX) => {
-                // store content key w/o the 0x prefix
                 if let Err(err) = self.db_insert(&content_id, &content_key, value) {
                     debug!("Error writing light client bootstrap content ID {content_id:?} to beacon network db: {err:?}");
                     return Err(err);

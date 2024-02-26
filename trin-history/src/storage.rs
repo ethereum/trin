@@ -24,7 +24,7 @@ use trin_storage::{
 };
 
 // The length of content_id and content_key
-const CONTENT_ID_AND_KEY_LENGTH: u64 = 64;
+const CONTENT_ID_AND_KEY_LENGTH: usize = 64;
 
 /// Storage layer for the history network. Encapsulates history network specific data and logic.
 #[derive(Debug)]
@@ -214,7 +214,7 @@ impl HistoryStorage {
                 // Insertion successful, increase total network storage count
                 if result == 1 {
                     // adding 32 bytes for content_id and 32 for content_key
-                    self.storage_occupied_in_bytes += value_size + CONTENT_ID_AND_KEY_LENGTH;
+                    self.storage_occupied_in_bytes += value_size + CONTENT_ID_AND_KEY_LENGTH as u64;
                     self.metrics
                         .report_content_data_storage_bytes(self.storage_occupied_in_bytes as f64);
                     self.metrics.increase_entry_count();
@@ -385,7 +385,7 @@ impl HistoryStorage {
                 content_key,
                 value,
                 self.distance_to_content_id(content_id).big_endian_u32(),
-                32 + content_key.len() + value.len()
+                CONTENT_ID_AND_KEY_LENGTH + value.len()
             ],
         )?;
         self.metrics.stop_process_timer(timer);
@@ -615,7 +615,7 @@ pub mod test {
         }
 
         let bytes = storage.get_total_storage_usage_in_bytes_from_network()?;
-        assert_eq!(1603200, bytes); // 32kb * 50 + 64 * 50
+        assert_eq!(1603200, bytes); // (32kb + CONTENT_ID_AND_KEY_LENGTH) * 50
         assert_eq!(storage.radius, Distance::MAX);
         std::mem::drop(storage);
 
@@ -784,7 +784,7 @@ pub mod test {
         }
 
         let bytes = storage.get_total_storage_usage_in_bytes_from_network()?;
-        assert_eq!(1603200, bytes); // 32kb * 50 + 64 * 50
+        assert_eq!(1603200, bytes); // (32kb + CONTENT_ID_AND_KEY_LENGTH) * 50
         assert_eq!(storage.radius, Distance::MAX);
         // Save the number of items, to compare with the restarted storage
         let total_entry_count = storage.total_entry_count().unwrap();
