@@ -160,7 +160,7 @@ impl PortalStorageConfig {
         node_data_dir: PathBuf,
         node_id: NodeId,
     ) -> anyhow::Result<Self> {
-        let sql_connection_pool = setup_sql(&node_data_dir)?;
+        let sql_connection_pool: Pool<SqliteConnectionManager> = setup_sql(&node_data_dir)?;
         Ok(Self {
             storage_capacity_mb,
             node_id,
