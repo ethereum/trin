@@ -23,6 +23,9 @@ use trin_storage::{
     ShouldWeStoreContent, BYTES_IN_MB_U64,
 };
 
+// The length of content_id and content_key
+const CONTENT_ID_AND_KEY_LENGTH: u64 = 64;
+
 /// Storage layer for the history network. Encapsulates history network specific data and logic.
 #[derive(Debug)]
 pub struct HistoryStorage {
@@ -211,7 +214,7 @@ impl HistoryStorage {
                 // Insertion successful, increase total network storage count
                 if result == 1 {
                     // adding 32 bytes for content_id and 32 for content_key
-                    self.storage_occupied_in_bytes += value_size + 64;
+                    self.storage_occupied_in_bytes += value_size + CONTENT_ID_AND_KEY_LENGTH;
                     self.metrics
                         .report_content_data_storage_bytes(self.storage_occupied_in_bytes as f64);
                     self.metrics.increase_entry_count();
@@ -317,9 +320,8 @@ impl HistoryStorage {
         let timer = self.metrics.start_process_timer("lookup_content_key");
         let conn = self.sql_connection_pool.get()?;
         let mut query = conn.prepare(CONTENT_KEY_LOOKUP_QUERY_HISTORY)?;
-        let id = id.to_vec();
         let result: Result<Vec<HistoryContentKey>, ContentStoreError> = query
-            .query_map([id], |row| {
+            .query_map([id.as_slice()], |row| {
                 let row: Vec<u8> = row.get(0)?;
                 Ok(row)
             })?
@@ -337,21 +339,17 @@ impl HistoryStorage {
         let timer = self.metrics.start_process_timer("lookup_content_value");
         let conn = self.sql_connection_pool.get()?;
         let mut query = conn.prepare(CONTENT_VALUE_LOOKUP_QUERY_HISTORY)?;
-        let id = id.to_vec();
         let result: Result<Vec<Vec<u8>>, ContentStoreError> = query
-            .query_map([id], |row| {
+            .query_map([id.as_slice()], |row| {
                 let row: Vec<u8> = row.get(0)?;
                 Ok(row)
             })?
             .map(|row| row.map_err(ContentStoreError::Rusqlite))
             .collect();
 
-        let result: Result<Option<Vec<u8>>, _> = match result?.first() {
-            Some(val) => Ok(Some(val.to_vec())),
-            None => Ok(None),
-        };
+        let result = result?.first().map(|val| val.to_vec());
         self.metrics.stop_process_timer(timer);
-        result
+        Ok(result)
     }
 
     /// Public method for retrieving the node's current radius.
@@ -383,7 +381,7 @@ impl HistoryStorage {
         let result = conn.execute(
             INSERT_QUERY_HISTORY,
             params![
-                content_id.to_vec(),
+                content_id.as_slice(),
                 content_key,
                 value,
                 self.distance_to_content_id(content_id).big_endian_u32(),
@@ -399,7 +397,7 @@ impl HistoryStorage {
         let timer = self.metrics.start_process_timer("db_remove");
         self.sql_connection_pool
             .get()?
-            .execute(DELETE_QUERY_HISTORY, [content_id.to_vec()])?;
+            .execute(DELETE_QUERY_HISTORY, [content_id.as_slice()])?;
         self.metrics.stop_process_timer(timer);
         self.metrics.decrease_entry_count();
         Ok(())

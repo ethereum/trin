@@ -94,12 +94,4 @@ pub const LC_UPDATE_PERIOD_LOOKUP_QUERY: &str =
 pub const LC_UPDATE_TOTAL_SIZE_QUERY: &str = "SELECT TOTAL(update_size) FROM lc_update";
 
 // todo: remove this in the future
-pub const DROP_CONTENT_DATA_QUERY_DB: &str = "DROP TABLE IF EXISTS content_data;
-    DROP INDEX IF EXISTS content_size_idx;
-    DROP INDEX IF EXISTS content_size_idx_2;
-    DROP INDEX IF EXISTS content_id_short_idx;
-    DROP INDEX IF EXISTS content_id_short_idx_2;
-    DROP INDEX IF EXISTS content_id_short_idx_3;
-    DROP INDEX IF EXISTS content_id_long_idx;
-    DROP INDEX IF EXISTS network_idx;
-    DROP INDEX IF EXISTS content_key_idx;";
+pub const DROP_CONTENT_DATA_QUERY_DB: &str = "DROP TABLE IF EXISTS content_data;";

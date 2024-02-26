@@ -306,7 +306,7 @@ impl BeaconStorage {
         Ok(conn.execute(
             INSERT_QUERY_BEACON,
             params![
-                content_id.to_vec(),
+                content_id.as_slice(),
                 content_key,
                 value,
                 32 + content_key.len() + value.len()
@@ -480,9 +480,8 @@ impl BeaconStorage {
     pub fn lookup_content_key(&self, id: [u8; 32]) -> anyhow::Result<Option<Vec<u8>>> {
         let conn = self.sql_connection_pool.get()?;
         let mut query = conn.prepare(CONTENT_KEY_LOOKUP_QUERY_BEACON)?;
-        let id = id.to_vec();
         let result: Result<Vec<BeaconContentKey>, ContentStoreError> = query
-            .query_map([id], |row| {
+            .query_map([id.as_slice()], |row| {
                 let row: Vec<u8> = row.get(0)?;
                 Ok(row)
             })?
@@ -517,19 +516,15 @@ impl BeaconStorage {
     pub fn lookup_content_value(&self, id: [u8; 32]) -> anyhow::Result<Option<Vec<u8>>> {
         let conn = self.sql_connection_pool.get()?;
         let mut query = conn.prepare(CONTENT_VALUE_LOOKUP_QUERY_BEACON)?;
-        let id = id.to_vec();
         let result: Result<Vec<Vec<u8>>, ContentStoreError> = query
-            .query_map([id], |row| {
+            .query_map([id.as_slice()], |row| {
                 let row: Vec<u8> = row.get(0)?;
                 Ok(row)
             })?
             .map(|row| row.map_err(ContentStoreError::Rusqlite))
             .collect();
 
-        match result?.first() {
-            Some(val) => Ok(Some(val.to_vec())),
-            None => Ok(None),
-        }
+        Ok(result?.first().map(|val| val.to_vec()))
     }
 
     /// Public method for looking up a  light client update value by period number
