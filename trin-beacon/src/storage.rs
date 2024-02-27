@@ -20,7 +20,7 @@ use ssz::{Decode, Encode};
 use ssz_types::{typenum::U128, VariableList};
 use std::path::PathBuf;
 use tracing::debug;
-use trin_metrics::{portalnet::PORTALNET_METRICS, storage::StorageMetricsReporter};
+use trin_metrics::storage::StorageMetricsReporter;
 use trin_storage::{
     error::ContentStoreError,
     sql::{
@@ -263,15 +263,11 @@ impl ContentStore for BeaconStorage {
 
 impl BeaconStorage {
     pub fn new(config: PortalStorageConfig) -> Result<Self, ContentStoreError> {
-        let metrics = StorageMetricsReporter {
-            storage_metrics: PORTALNET_METRICS.storage(),
-            protocol: ProtocolId::Beacon.to_string(),
-        };
         let storage = Self {
             node_data_dir: config.node_data_dir,
             sql_connection_pool: config.sql_connection_pool,
             storage_capacity_in_bytes: config.storage_capacity_mb * BYTES_IN_MB_U64,
-            metrics,
+            metrics: StorageMetricsReporter::new(ProtocolId::Beacon),
             cache: BeaconStorageCache::new(),
         };
 

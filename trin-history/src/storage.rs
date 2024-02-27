@@ -9,7 +9,7 @@ use r2d2::Pool;
 use r2d2_sqlite::{rusqlite, SqliteConnectionManager};
 use std::path::PathBuf;
 use tracing::debug;
-use trin_metrics::{portalnet::PORTALNET_METRICS, storage::StorageMetricsReporter};
+use trin_metrics::storage::StorageMetricsReporter;
 use trin_storage::{
     error::ContentStoreError,
     sql::{
@@ -89,11 +89,6 @@ impl HistoryStorage {
         config: PortalStorageConfig,
         protocol: ProtocolId,
     ) -> Result<Self, ContentStoreError> {
-        // Initialize the instance
-        let metrics = StorageMetricsReporter {
-            storage_metrics: PORTALNET_METRICS.storage(),
-            protocol: protocol.to_string(),
-        };
         let mut storage = Self {
             node_id: config.node_id,
             node_data_dir: config.node_data_dir,
@@ -101,7 +96,7 @@ impl HistoryStorage {
             radius: Distance::MAX,
             sql_connection_pool: config.sql_connection_pool,
             distance_fn: config.distance_fn,
-            metrics,
+            metrics: StorageMetricsReporter::new(protocol),
             storage_occupied_in_bytes: 0,
         };
 
@@ -493,12 +488,6 @@ pub mod test {
 
     const CAPACITY_MB: u64 = 2;
 
-    fn generate_random_content_key() -> IdentityContentKey {
-        let mut key = [0u8; 32];
-        rand::thread_rng().fill_bytes(&mut key);
-        IdentityContentKey::new(key)
-    }
-
     fn get_active_node_id(temp_dir: PathBuf) -> NodeId {
         let (_, mut pk) = configure_node_data_dir(temp_dir, None).unwrap();
         let pk = CombinedKey::secp256k1_from_bytes(pk.0.as_mut_slice()).unwrap();
@@ -538,7 +527,7 @@ pub mod test {
                 PortalStorageConfig::new(CAPACITY_MB, temp_dir.path().to_path_buf(), node_id)
                     .unwrap();
             let mut storage = HistoryStorage::new(storage_config, ProtocolId::History).unwrap();
-            let content_key = generate_random_content_key();
+            let content_key = IdentityContentKey::random();
             let mut value = [0u8; 32];
             rand::thread_rng().fill_bytes(&mut value);
             storage.store(&content_key, &value.to_vec()).unwrap();
@@ -583,7 +572,7 @@ pub mod test {
             PortalStorageConfig::new(CAPACITY_MB, temp_dir.path().to_path_buf(), node_id).unwrap();
         let mut storage = HistoryStorage::new(storage_config, ProtocolId::History)?;
 
-        let content_key = generate_random_content_key();
+        let content_key = IdentityContentKey::random();
         let value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
         storage.store(&content_key, &value)?;
 
@@ -606,7 +595,7 @@ pub mod test {
         let mut storage = HistoryStorage::new(storage_config, ProtocolId::History)?;
 
         for _ in 0..50 {
-            let content_key = generate_random_content_key();
+            let content_key = IdentityContentKey::random();
             let value: Vec<u8> = vec![0; 32000];
             storage.store(&content_key, &value)?;
             assert_eq!(
@@ -657,7 +646,7 @@ pub mod test {
             PortalStorageConfig::new(CAPACITY_MB, temp_dir.path().to_path_buf(), node_id).unwrap();
         let mut storage = HistoryStorage::new(storage_config, ProtocolId::History)?;
 
-        let content_key = generate_random_content_key();
+        let content_key = IdentityContentKey::random();
         let value: Vec<u8> = vec![0; 32000];
         storage.store(&content_key, &value)?;
         assert_eq!(
@@ -686,7 +675,7 @@ pub mod test {
         let mut storage = HistoryStorage::new(storage_config, ProtocolId::History)?;
 
         for _ in 0..50 {
-            let content_key = generate_random_content_key();
+            let content_key = IdentityContentKey::random();
             let value: Vec<u8> = vec![0; 32000];
             storage.store(&content_key, &value)?;
             assert_eq!(
@@ -730,7 +719,7 @@ pub mod test {
 
         // Fill up the storage.
         for _ in 0..32 {
-            let content_key = generate_random_content_key();
+            let content_key = IdentityContentKey::random();
             let value: Vec<u8> = vec![0; 32000];
             storage.store(&content_key, &value)?;
             assert_eq!(
@@ -779,7 +768,7 @@ pub mod test {
         let mut storage = HistoryStorage::new(storage_config, ProtocolId::History)?;
 
         for _ in 0..50 {
-            let content_key = generate_random_content_key();
+            let content_key = IdentityContentKey::random();
             let value: Vec<u8> = vec![0; 32000];
             storage.store(&content_key, &value)?;
         }
@@ -821,7 +810,7 @@ pub mod test {
             PortalStorageConfig::new(0, temp_dir.path().to_path_buf(), node_id).unwrap();
         let mut storage = HistoryStorage::new(storage_config, ProtocolId::History)?;
 
-        let content_key = generate_random_content_key();
+        let content_key = IdentityContentKey::random();
         let value: Vec<u8> = "OGFWs179fWnqmjvHQFGHszXloc3Wzdb4".into();
         assert!(storage.store(&content_key, &value).is_err());
 

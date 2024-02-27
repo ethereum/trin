@@ -1,4 +1,4 @@
-use ethportal_api::types::distance::Distance;
+use ethportal_api::types::{distance::Distance, portal_wire::ProtocolId};
 use prometheus_exporter::{
     self,
     prometheus::{
@@ -8,7 +8,7 @@ use prometheus_exporter::{
     },
 };
 
-use crate::timer::DiscardOnDropHistogramTimer;
+use crate::{portalnet::PORTALNET_METRICS, timer::DiscardOnDropHistogramTimer};
 
 /// Contains metrics reporters for portalnet storage.
 #[derive(Clone, Debug)]
@@ -88,6 +88,13 @@ pub struct StorageMetricsReporter {
 }
 
 impl StorageMetricsReporter {
+    pub fn new(protocol_id: ProtocolId) -> Self {
+        Self {
+            storage_metrics: PORTALNET_METRICS.storage(),
+            protocol: protocol_id.to_string(),
+        }
+    }
+
     pub fn start_process_timer(&self, storage_function: &str) -> DiscardOnDropHistogramTimer {
         DiscardOnDropHistogramTimer::new(
             self.storage_metrics

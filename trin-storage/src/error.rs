@@ -1,6 +1,7 @@
 use ethportal_api::{
     types::{content_key::error::ContentKeyError, distance::Distance},
     utils::bytes::ByteUtilsError,
+    ContentValueError,
 };
 use thiserror::Error;
 
@@ -37,6 +38,9 @@ pub enum ContentStoreError {
 
     #[error("unable to use content key {0}")]
     ContentKey(#[from] ContentKeyError),
+
+    #[error("unable to use content value {0}")]
+    ContentValue(#[from] ContentValueError),
 
     #[error("Invalid store version '{version}' for table '{content_type}'")]
     InvalidStoreVersion {

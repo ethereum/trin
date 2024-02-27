@@ -1,5 +1,6 @@
 pub mod error;
 pub mod sql;
+pub mod test_utils;
 pub mod utils;
 pub mod versioned;
 
@@ -159,8 +160,8 @@ impl PortalStorageConfig {
         storage_capacity_mb: u64,
         node_data_dir: PathBuf,
         node_id: NodeId,
-    ) -> anyhow::Result<Self> {
-        let sql_connection_pool: Pool<SqliteConnectionManager> = setup_sql(&node_data_dir)?;
+    ) -> Result<Self, ContentStoreError> {
+        let sql_connection_pool = setup_sql(&node_data_dir)?;
         Ok(Self {
             storage_capacity_mb,
             node_id,
