@@ -167,17 +167,24 @@ impl FromStr for ModeType {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FourFoursMode {
     Random,
-    // Gossips a single epoch
+    // Gossips a single, randomly selected epoch
+    RandomSingle,
+    // Gossips the single epoch given
     Single(u64),
     // Gossips a block range from within a single epoch
     Range(u64, u64),
 }
+
+const RANDOM_SINGLE_MODE: &str = "random_epoch";
 
 impl FromStr for FourFoursMode {
     type Err = ParseError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.is_empty() {
             return Err("Invalid bridge fourfours mode arg: empty string".to_string());
+        }
+        if s == RANDOM_SINGLE_MODE {
+            return Ok(FourFoursMode::RandomSingle);
         }
         match &s[..1] {
             "e" => {
@@ -247,6 +254,9 @@ mod test {
     #[case("backfill:e0", BridgeMode::Backfill(ModeType::Epoch(0)))]
     #[case("backfill:e1000", BridgeMode::Backfill(ModeType::Epoch(1000)))]
     #[case("fourfours", BridgeMode::FourFours(FourFoursMode::Random))]
+    #[case(format!("fourfours:{RANDOM_SINGLE_MODE}"), 
+        BridgeMode::FourFours(FourFoursMode::RandomSingle)
+    )]
     #[case("fourfours:e1", BridgeMode::FourFours(FourFoursMode::Single(1)))]
     #[case("fourfours:r1-10", BridgeMode::FourFours(FourFoursMode::Range(1, 10)))]
     #[case(
