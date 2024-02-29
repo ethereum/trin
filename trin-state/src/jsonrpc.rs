@@ -100,7 +100,7 @@ async fn ping(network: Arc<StateNetwork>, enr: Enr) -> Result<Value, String> {
     to_json_result(
         "Ping",
         network.overlay.send_ping(enr).await.map(|pong| PongInfo {
-            enr_seq: pong.enr_seq as u32,
+            enr_seq: pong.enr_seq,
             data_radius: *Distance::from(pong.custom_payload),
         }),
     )

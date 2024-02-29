@@ -373,7 +373,7 @@ async fn ping(
     let overlay = network.read().await.overlay.clone();
     match overlay.send_ping(enr).await {
         Ok(pong) => Ok(json!(PongInfo {
-            enr_seq: pong.enr_seq as u32,
+            enr_seq: pong.enr_seq,
             data_radius: *Distance::from(pong.custom_payload),
         })),
         Err(msg) => Err(format!("Ping request timeout: {msg:?}")),
