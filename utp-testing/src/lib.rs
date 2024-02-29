@@ -21,7 +21,7 @@ use portalnet::{
     discovery::{Discovery, UtpEnr},
     utils::db::setup_temp_dir,
 };
-use std::{net::SocketAddr, str::FromStr, sync::Arc, time::Duration};
+use std::{io::ErrorKind, net::SocketAddr, str::FromStr, sync::Arc, time::Duration};
 use tokio::sync::{mpsc, RwLock};
 use utp_rs::{conn::ConnectionConfig, socket::UtpSocket};
 
@@ -79,7 +79,16 @@ impl RpcServer for TestApp {
 
             tracing::info!("read {n} bytes from uTP stream");
 
-            conn.close().await.unwrap();
+            // Since switching to one-way FIN-ACK, closing after reading is not allowed. We only explicitly
+            // close after write() now, and close after reading should error.
+            match conn.close().await {
+                Ok(_) => panic!("Closing after reading should have errored, but succeeded"),
+                Err(e) => {
+                    // The stream will already be disconnected by the read_to_eof() call, so we expect a
+                    // NotConnected error here.
+                    assert_eq!(e.kind(), ErrorKind::NotConnected);
+                }
+            }
 
             payload_store.write().await.push(data);
         });
