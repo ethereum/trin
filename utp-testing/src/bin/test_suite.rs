@@ -1,5 +1,6 @@
 use jsonrpsee::{core::client::ClientT, http_client::HttpClientBuilder, rpc_params};
 use rand::{thread_rng, Rng};
+use trin_utils::log::init_tracing_logger;
 
 use std::time::Duration;
 
@@ -11,6 +12,7 @@ const CLIENT_ADDR: &str = "193.167.0.100:9042";
 /// Test suite for testing uTP protocol with network simulator
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    init_tracing_logger();
     send_10k_bytes().await?;
 
     Ok(())
