@@ -79,13 +79,13 @@ impl RpcServer for TestApp {
 
             tracing::info!("read {n} bytes from uTP stream");
 
-            // Since switching to one-way FIN-ACK, closing after reading is not allowed. We only explicitly
-            // close after write() now, and close after reading should error.
+            // Since switching to one-way FIN-ACK, closing after reading is not allowed. We only
+            // explicitly close after write() now, and close after reading should error.
             match conn.close().await {
                 Ok(_) => panic!("Closing after reading should have errored, but succeeded"),
                 Err(e) => {
-                    // The stream will already be disconnected by the read_to_eof() call, so we expect a
-                    // NotConnected error here.
+                    // The stream will already be disconnected by the read_to_eof() call, so we
+                    // expect a NotConnected error here.
                     assert_eq!(e.kind(), ErrorKind::NotConnected);
                 }
             }
