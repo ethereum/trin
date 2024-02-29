@@ -1,11 +1,59 @@
-pub mod nibbles;
+use std::ops::Deref;
 
+use eth_trie::{decode_node, node::Node, TrieError};
+use keccak_hash::{keccak, H256};
+use serde::{Deserialize, Serialize};
+use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, VariableList};
 
 use super::bytes::{ByteList1024, ByteList32K};
 
+pub mod account_state;
+pub mod nibbles;
+mod utils;
+
 /// The RLP encoding of a trie node.
-pub type EncodedTrieNode = ByteList1024;
+#[derive(Clone, Debug, Eq, PartialEq, Decode, Encode, Serialize, Deserialize)]
+#[ssz(struct_behaviour = "transparent")]
+pub struct EncodedTrieNode(ByteList1024);
+
+impl EncodedTrieNode {
+    pub fn node_hash(&self) -> H256 {
+        keccak(&self[..])
+    }
+
+    pub fn as_trie_node(&self) -> Result<Node, TrieError> {
+        decode_node(&self[..])
+    }
+}
+
+impl Deref for EncodedTrieNode {
+    type Target = ByteList1024;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl From<Vec<u8>> for EncodedTrieNode {
+    fn from(value: Vec<u8>) -> Self {
+        Self(value.into())
+    }
+}
+
+impl TryFrom<EncodedTrieNode> for Node {
+    type Error = TrieError;
+
+    fn try_from(value: EncodedTrieNode) -> Result<Self, Self::Error> {
+        value.as_trie_node()
+    }
+}
+
+impl From<&Node> for EncodedTrieNode {
+    fn from(node: &Node) -> Self {
+        Self::from(utils::encode_node(node))
+    }
+}
 
 /// The ordered list of trie nodes. Together they make the path in a trie, first node being the
 /// root, last node being the node whose inclusion we are proving.

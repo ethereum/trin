@@ -29,7 +29,7 @@ impl Nibbles {
         &self.nibbles
     }
 
-    fn unpack_nibble_pair(packed_nibbles: &u8) -> [u8; 2] {
+    pub fn unpack_nibble_pair(packed_nibbles: &u8) -> [u8; 2] {
         [packed_nibbles >> 4, packed_nibbles & 0xF]
     }
 }

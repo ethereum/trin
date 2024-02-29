@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use ethportal_api::types::content_key::overlay::IdentityContentKey;
 
 /// The result of the content key/value validation.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct ValidationResult<TContentKey> {
     /// Whether validation proved that content is canonical, in which case it's safe to store it.
     ///
