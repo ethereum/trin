@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use parking_lot::RwLock as PLRwLock;
 use tokio::sync::RwLock;
 
 use crate::{storage::BeaconStorage, sync::BeaconSync, validation::BeaconValidator};
@@ -37,7 +36,7 @@ impl BeaconNetwork {
             bootnode_enrs,
             ..Default::default()
         };
-        let storage = Arc::new(PLRwLock::new(BeaconStorage::new(storage_config)?));
+        let storage = Arc::new(RwLock::new(BeaconStorage::new(storage_config).await?));
         let validator = Arc::new(BeaconValidator { header_oracle });
         let overlay = OverlayProtocol::new(
             config,

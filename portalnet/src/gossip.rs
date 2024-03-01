@@ -5,10 +5,9 @@ use discv5::{
     kbucket::{self, KBucketsTable},
 };
 use futures::channel::oneshot;
-use parking_lot::RwLock;
 use rand::seq::IteratorRandom;
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, RwLock};
 use tracing::{debug, error, warn};
 
 use crate::{
@@ -39,14 +38,14 @@ pub struct GossipResult {
 
 /// Propagate gossip in a way that can be used across threads, without &self.
 /// Doesn't trace gossip results
-pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
+pub async fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
     content: Vec<(TContentKey, Vec<u8>)>,
     kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
     command_tx: mpsc::UnboundedSender<OverlayCommand<TContentKey>>,
     utp_controller: Option<Arc<UtpController>>,
 ) -> usize {
     // Get all connected nodes from overlay routing table
-    let kbuckets = kbuckets.read();
+    let kbuckets = kbuckets.read().await;
     let all_nodes: Vec<&kbucket::Node<NodeId, Node>> = kbuckets
         .buckets_iter()
         .flat_map(|kbucket| {
@@ -139,7 +138,7 @@ pub async fn trace_propagate_gossip_cross_thread<TContentKey: OverlayContentKey>
     let mut gossip_result = GossipResult::default();
     // Get all connected nodes from overlay routing table
     let interested_enrs = {
-        let kbuckets = kbuckets.read();
+        let kbuckets = kbuckets.read().await;
         let all_nodes: Vec<&kbucket::Node<NodeId, Node>> = kbuckets
             .buckets_iter()
             .flat_map(|kbucket| {

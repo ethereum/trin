@@ -19,9 +19,8 @@ use discv5::{
     ConnectionDirection, ConnectionState, TalkRequest,
 };
 use futures::channel::oneshot;
-use parking_lot::RwLock;
 use ssz::Encode;
-use tokio::sync::{broadcast, mpsc::UnboundedSender};
+use tokio::sync::{broadcast, mpsc::UnboundedSender, RwLock};
 use tracing::{debug, error, info, warn};
 
 use crate::{
@@ -196,8 +195,8 @@ where
     }
 
     /// Returns the data radius of the local node.
-    pub fn data_radius(&self) -> Distance {
-        self.store.read().radius()
+    pub async fn data_radius(&self) -> Distance {
+        self.store.read().await.radius()
     }
 
     /// Processes a single Discovery v5 TALKREQ message.
@@ -235,9 +234,9 @@ where
     }
 
     /// Propagate gossip accepted content via OFFER/ACCEPT, return number of peers propagated
-    pub fn propagate_gossip(&self, content: Vec<(TContentKey, Vec<u8>)>) -> usize {
+    pub async fn propagate_gossip(&self, content: Vec<(TContentKey, Vec<u8>)>) -> usize {
         let kbuckets = Arc::clone(&self.kbuckets);
-        propagate_gossip_cross_thread(content, kbuckets, self.command_tx.clone(), None)
+        propagate_gossip_cross_thread(content, kbuckets, self.command_tx.clone(), None).await
     }
 
     /// Propagate gossip accepted content via OFFER/ACCEPT, returns trace detailing outcome of
@@ -253,37 +252,39 @@ where
     }
 
     /// Returns a vector of all ENR node IDs of nodes currently contained in the routing table.
-    pub fn table_entries_id(&self) -> Vec<NodeId> {
+    pub async fn table_entries_id(&self) -> Vec<NodeId> {
         self.kbuckets
             .write()
+            .await
             .iter()
             .map(|entry| *entry.node.key.preimage())
             .collect()
     }
 
     /// Returns a vector of all the ENRs of nodes currently contained in the routing table.
-    pub fn table_entries_enr(&self) -> Vec<Enr> {
+    pub async fn table_entries_enr(&self) -> Vec<Enr> {
         self.kbuckets
             .write()
+            .await
             .iter()
             .map(|entry| entry.node.value.enr())
             .collect()
     }
 
     /// Returns the node-id and a nested array of node-ids to represent this node's k-buckets table.
-    pub fn routing_table_info(&self) -> RoutingTableInfo {
+    pub async fn routing_table_info(&self) -> RoutingTableInfo {
         RoutingTableInfo {
             local_node_id: hex_encode(self.local_enr().node_id().raw()),
-            buckets: self.kbuckets.read().clone().into(),
+            buckets: self.kbuckets.read().await.clone().into(),
         }
     }
 
     /// Returns a map (BTree for its ordering guarantees) with:
     ///     key: usize representing bucket index
     ///     value: Vec of tuples, each tuple represents a node
-    pub fn bucket_entries(&self) -> BTreeMap<usize, Vec<BucketEntry>> {
+    pub async fn bucket_entries(&self) -> BTreeMap<usize, Vec<BucketEntry>> {
         self.kbuckets
-            .read()
+            .read().await
             .buckets_iter()
             .enumerate()
             .filter(|(_, bucket)| bucket.num_entries() > 0)
@@ -321,9 +322,9 @@ where
     }
 
     /// `AddEnr` adds requested `enr` to our kbucket.
-    pub fn add_enr(&self, enr: Enr) -> Result<(), OverlayRequestError> {
+    pub async fn add_enr(&self, enr: Enr) -> Result<(), OverlayRequestError> {
         let key = Key::from(enr.node_id());
-        match self.kbuckets.write().insert_or_update(
+        match self.kbuckets.write().await.insert_or_update(
             &key,
             Node {
                 enr,
@@ -359,21 +360,21 @@ where
     }
 
     /// `GetEnr` gets requested `enr` from our kbucket.
-    pub fn get_enr(&self, node_id: NodeId) -> Result<Enr, OverlayRequestError> {
+    pub async fn get_enr(&self, node_id: NodeId) -> Result<Enr, OverlayRequestError> {
         if node_id == self.local_enr().node_id() {
             return Ok(self.local_enr());
         }
         let key = Key::from(node_id);
-        if let Entry::Present(entry, _) = self.kbuckets.write().entry(&key) {
+        if let Entry::Present(entry, _) = self.kbuckets.write().await.entry(&key) {
             return Ok(entry.value().enr());
         }
         Err(OverlayRequestError::Failure("Couldn't get ENR".into()))
     }
 
     /// `DeleteEnr` deletes requested `enr` from our kbucket.
-    pub fn delete_enr(&self, node_id: NodeId) -> bool {
+    pub async fn delete_enr(&self, node_id: NodeId) -> bool {
         let key = &Key::from(node_id);
-        self.kbuckets.write().remove(key)
+        self.kbuckets.write().await.remove(key)
     }
 
     /// `LookupEnr` finds requested `enr` from our kbucket, FindNode, and RecursiveFindNode.
@@ -382,7 +383,7 @@ where
             return Ok(self.local_enr());
         }
 
-        let enr = self.get_enr(node_id);
+        let enr = self.get_enr(node_id).await;
 
         // try to find more up to date enr
         if let Ok(enr) = enr.clone() {
@@ -416,7 +417,7 @@ where
     pub async fn send_ping(&self, enr: Enr) -> Result<Pong, OverlayRequestError> {
         // Construct the request.
         let enr_seq = self.discovery.local_enr().seq();
-        let data_radius = self.data_radius();
+        let data_radius = self.data_radius().await;
         let custom_payload = CustomPayload::from(data_radius.as_ssz_bytes());
         let request = Ping {
             enr_seq,
@@ -608,6 +609,7 @@ where
         let connected_peer = self
             .kbuckets
             .write()
+            .await
             .iter()
             .filter(|entry| entry.status.is_connected())
             .map(|entry| *entry.node.key.preimage())

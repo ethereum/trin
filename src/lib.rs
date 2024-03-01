@@ -68,7 +68,8 @@ pub async fn run_trin(
         trin_config.mb.into(),
         node_data_dir,
         discovery.local_enr().node_id(),
-    )?;
+    )
+    .await?;
 
     // Initialize validation oracle
     let master_accumulator = MasterAccumulator::try_from_file(trin_config.master_acc_path.clone())?;

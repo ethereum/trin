@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use parking_lot::RwLock as PLRwLock;
 use tokio::sync::RwLock;
 
 use crate::storage::HistoryStorage;
@@ -41,10 +40,9 @@ impl HistoryNetwork {
             disable_poke: portal_config.disable_poke,
             ..Default::default()
         };
-        let storage = Arc::new(PLRwLock::new(HistoryStorage::new(
-            storage_config,
-            ProtocolId::History,
-        )?));
+        let storage = Arc::new(RwLock::new(
+            HistoryStorage::new(storage_config, ProtocolId::History).await?,
+        ));
         let validator = Arc::new(ChainHistoryValidator { header_oracle });
         let overlay = OverlayProtocol::new(
             config,

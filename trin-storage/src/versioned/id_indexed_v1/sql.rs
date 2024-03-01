@@ -33,11 +33,11 @@ pub fn insert(content_type: &ContentType) -> String {
             content_size
         )
         VALUES (
-            :content_id,
-            :content_key,
-            :content_value,
-            :distance_short,
-            :content_size
+            ?,
+            ?,
+            ?,
+            ?,
+            ?
         )",
         table_name(content_type)
     )
@@ -45,21 +45,21 @@ pub fn insert(content_type: &ContentType) -> String {
 
 pub fn delete(content_type: &ContentType) -> String {
     format!(
-        "DELETE FROM {} WHERE content_id = :content_id",
+        "DELETE FROM {} WHERE content_id = ?",
         table_name(content_type)
     )
 }
 
 pub fn lookup_key(content_type: &ContentType) -> String {
     format!(
-        "SELECT content_key FROM {} WHERE content_id = :content_id LIMIT 1",
+        "SELECT content_key FROM {} WHERE content_id = ? LIMIT 1",
         table_name(content_type)
     )
 }
 
 pub fn lookup_value(content_type: &ContentType) -> String {
     format!(
-        "SELECT content_value FROM {} WHERE content_id = :content_id LIMIT 1",
+        "SELECT content_value FROM {} WHERE content_id = ? LIMIT 1",
         table_name(content_type)
     )
 }
@@ -67,7 +67,7 @@ pub fn lookup_value(content_type: &ContentType) -> String {
 pub fn delete_farthest(content_type: &ContentType) -> String {
     format!(
         "DELETE FROM {0} WHERE rowid IN (
-            SELECT rowid FROM {0} ORDER BY distance_short DESC LIMIT :limit)",
+            SELECT rowid FROM {0} ORDER BY distance_short DESC LIMIT ?)",
         table_name(content_type)
     )
 }
@@ -76,7 +76,7 @@ pub fn lookup_farthest(content_type: &ContentType) -> String {
     format!(
         "SELECT content_id, distance_short FROM {}
         ORDER BY distance_short DESC
-        LIMIT :limit",
+        LIMIT ?",
         table_name(content_type)
     )
 }

@@ -57,7 +57,7 @@ async fn complete_request(network: Arc<RwLock<BeaconNetwork>>, request: BeaconJs
         }
         BeaconEndpoint::AddEnr(enr) => add_enr(network, enr).await,
         BeaconEndpoint::DataRadius => {
-            let radius = network.read().await.overlay.data_radius();
+            let radius = network.read().await.overlay.data_radius().await;
             Ok(json!(*radius))
         }
         BeaconEndpoint::DeleteEnr(node_id) => delete_enr(network, node_id).await,
@@ -78,7 +78,7 @@ async fn complete_request(network: Arc<RwLock<BeaconNetwork>>, request: BeaconJs
         }
         BeaconEndpoint::Ping(enr) => ping(network, enr).await,
         BeaconEndpoint::RoutingTableInfo => {
-            serde_json::to_value(network.read().await.overlay.routing_table_info())
+            serde_json::to_value(network.read().await.overlay.routing_table_info().await)
                 .map_err(|err| err.to_string())
         }
         BeaconEndpoint::RecursiveFindNodes(node_id) => recursive_find_nodes(network, node_id).await,
@@ -94,7 +94,7 @@ async fn recursive_find_content(
 ) -> Result<Value, String> {
     // Check whether we have the data locally.
     let overlay = network.read().await.overlay.clone();
-    let local_content: Option<Vec<u8>> = match overlay.store.read().get(&content_key) {
+    let local_content: Option<Vec<u8>> = match overlay.store.read().await.get(&content_key).await {
         Ok(Some(data)) => Some(data),
         Ok(None) => None,
         Err(err) => {
@@ -170,8 +170,7 @@ async fn local_content(
     network: Arc<RwLock<BeaconNetwork>>,
     content_key: BeaconContentKey,
 ) -> Result<Value, String> {
-    let store = network.read().await.overlay.store.clone();
-    let response = match store.read().get(&content_key)
+    match network.read().await.overlay.store.read().await.get(&content_key).await
         {
             Ok(val) => match val {
                 Some(val) => {
@@ -182,8 +181,7 @@ async fn local_content(
             Err(err) => Err(format!(
                 "Database error while looking for content key in local storage: {content_key:?}, with error: {err}",
             )),
-        };
-    response
+        }
 }
 
 /// Constructs a JSON call for the PaginateLocalContentKeys method.
@@ -192,15 +190,13 @@ async fn paginate_local_content_keys(
     offset: u64,
     limit: u64,
 ) -> Result<Value, String> {
-    let store = network.read().await.overlay.store.clone();
-    let response = match store.read().paginate(&offset, &limit)
+    match network.read().await.overlay.store.read().await.paginate(&offset, &limit)
         {
             Ok(val) => Ok(json!(val)),
             Err(err) => Err(format!(
                 "Database error while paginating local content keys with offset: {offset:?}, limit: {limit:?}. Error message: {err}"
             )),
-        };
-    response
+        }
 }
 
 /// Constructs a JSON call for the Store method.
@@ -210,15 +206,19 @@ async fn store(
     content_value: BeaconContentValue,
 ) -> Result<Value, String> {
     let data = content_value.encode();
-    let store = network.read().await.overlay.store.clone();
-    let response = match store
+    match network
+        .read()
+        .await
+        .overlay
+        .store
         .write()
-        .put::<BeaconContentKey, Vec<u8>>(content_key, data)
+        .await
+        .put::<BeaconContentKey>(content_key, data)
+        .await
     {
         Ok(_) => Ok(Value::Bool(true)),
         Err(msg) => Ok(Value::String(msg.to_string())),
-    };
-    response
+    }
 }
 
 /// Constructs a JSON call for the AddEnr method.
@@ -227,7 +227,7 @@ async fn add_enr(
     enr: discv5::enr::Enr<discv5::enr::CombinedKey>,
 ) -> Result<Value, String> {
     let overlay = network.read().await.overlay.clone();
-    match overlay.add_enr(enr) {
+    match overlay.add_enr(enr).await {
         Ok(_) => Ok(json!(true)),
         Err(err) => Err(format!("AddEnr failed: {err:?}")),
     }
@@ -236,7 +236,7 @@ async fn add_enr(
 /// Constructs a JSON call for the GetEnr method.
 async fn get_enr(network: Arc<RwLock<BeaconNetwork>>, node_id: NodeId) -> Result<Value, String> {
     let overlay = network.read().await.overlay.clone();
-    match overlay.get_enr(node_id) {
+    match overlay.get_enr(node_id).await {
         Ok(enr) => Ok(json!(enr)),
         Err(err) => Err(format!("GetEnr failed: {err:?}")),
     }
@@ -245,7 +245,7 @@ async fn get_enr(network: Arc<RwLock<BeaconNetwork>>, node_id: NodeId) -> Result
 /// Constructs a JSON call for the deleteEnr method.
 async fn delete_enr(network: Arc<RwLock<BeaconNetwork>>, node_id: NodeId) -> Result<Value, String> {
     let overlay = network.read().await.overlay.clone();
-    let is_deleted = overlay.delete_enr(node_id);
+    let is_deleted = overlay.delete_enr(node_id).await;
     Ok(json!(is_deleted))
 }
 
@@ -312,7 +312,10 @@ async fn gossip(
         true => Ok(json!(
             overlay.propagate_gossip_trace(content_key, data).await
         )),
-        false => Ok(overlay.propagate_gossip(vec![(content_key, data)]).into()),
+        false => Ok(overlay
+            .propagate_gossip(vec![(content_key, data)])
+            .await
+            .into()),
     }
 }
 

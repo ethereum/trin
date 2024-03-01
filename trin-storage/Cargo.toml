@@ -15,10 +15,8 @@ anyhow = "1.0.68"
 discv5 = { version = "0.4.0", features = ["serde"] }
 ethereum-types = "0.14.1"
 ethportal-api = {path = "../ethportal-api"}
-r2d2 = "0.8.9"
-r2d2_sqlite = "0.24.0"
+sqlx = { version = "0.7", features = [ "runtime-tokio", "sqlite" ] }
 rand = "0.8.4"
-rusqlite = { version = "0.31.0", features = ["bundled"] }
 strum = { version = "0.26.1", features = ["derive"] }
 tempfile = "3.3.0"
 thiserror = "1.0.57"

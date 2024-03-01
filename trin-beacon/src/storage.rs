@@ -13,9 +13,7 @@ use ethportal_api::{
     },
     BeaconContentKey, OverlayContentKey,
 };
-use r2d2::Pool;
-use r2d2_sqlite::{rusqlite, SqliteConnectionManager};
-use rusqlite::params;
+use sqlx::{query, sqlite::SqliteRow, Row, SqlitePool};
 use ssz::{Decode, Encode};
 use ssz_types::{typenum::U128, VariableList};
 use std::path::PathBuf;
@@ -29,7 +27,7 @@ use trin_storage::{
         LC_UPDATE_TOTAL_SIZE_QUERY, TOTAL_DATA_SIZE_QUERY_BEACON,
     },
     utils::get_total_size_of_directory_in_bytes,
-    ContentStore, DataSize, PortalStorageConfig, ShouldWeStoreContent, BYTES_IN_MB_U64,
+    ContentStore, PortalStorageConfig, ShouldWeStoreContent, BYTES_IN_MB_U64,
 };
 
 /// Store ephemeral light client data in memory
@@ -108,14 +106,17 @@ impl BeaconStorageCache {
 #[derive(Debug)]
 pub struct BeaconStorage {
     node_data_dir: PathBuf,
-    sql_connection_pool: Pool<SqliteConnectionManager>,
+    sql_connection_pool: SqlitePool,
     storage_capacity_in_bytes: u64,
     metrics: StorageMetricsReporter,
     cache: BeaconStorageCache,
 }
 
 impl ContentStore for BeaconStorage {
-    fn get<K: OverlayContentKey>(&self, key: &K) -> Result<Option<Vec<u8>>, ContentStoreError> {
+    async fn get<K: OverlayContentKey>(
+        &self,
+        key: &K,
+    ) -> Result<Option<Vec<u8>>, ContentStoreError> {
         let content_key: Vec<u8> = key.clone().into();
         let beacon_content_key = BeaconContentKey::try_from(content_key).map_err(|err| {
             ContentStoreError::InvalidData {
@@ -126,7 +127,7 @@ impl ContentStore for BeaconStorage {
         match beacon_content_key {
             BeaconContentKey::LightClientBootstrap(_) => {
                 let content_id = key.content_id();
-                self.lookup_content_value(content_id).map_err(|err| {
+                self.lookup_content_value(content_id).await.map_err(|err| {
                     ContentStoreError::Database(format!(
                         "Error looking up LightClientBootstrap content value: {err:?}"
                     ))
@@ -139,7 +140,7 @@ impl ContentStore for BeaconStorage {
                 let mut content: Vec<ForkVersionedLightClientUpdate> = Vec::new();
 
                 for period in periods {
-                    let result = self.lookup_lc_update_value(period).map_err(|err| {
+                    let result = self.lookup_lc_update_value(period).await.map_err(|err| {
                         ContentStoreError::Database(format!(
                             "Error looking up LightClientUpdate content value: {err:?}"
                         ))
@@ -182,16 +183,16 @@ impl ContentStore for BeaconStorage {
         }
     }
 
-    fn put<K: OverlayContentKey, V: AsRef<[u8]>>(
+    async fn put<K: OverlayContentKey>(
         &mut self,
         key: K,
-        value: V,
+        value: Vec<u8>,
     ) -> Result<(), ContentStoreError> {
-        self.store(&key, &value.as_ref().to_vec())
+        self.store(&key, &value).await
     }
 
     /// The "radius" concept is not applicable for Beacon network
-    fn is_key_within_radius_and_unavailable<K: OverlayContentKey>(
+    async fn is_key_within_radius_and_unavailable<K: OverlayContentKey>(
         &self,
         key: &K,
     ) -> Result<ShouldWeStoreContent, ContentStoreError> {
@@ -207,6 +208,7 @@ impl ContentStore for BeaconStorage {
                 let key = key.content_id();
                 let is_key_available = self
                     .lookup_content_key(key)
+                    .await
                     .map_err(|err| {
                         ContentStoreError::Database(format!(
                             "Error looking up content key: {err:?}"
@@ -227,6 +229,7 @@ impl ContentStore for BeaconStorage {
                 for period in periods {
                     let is_period_available = self
                         .lookup_lc_update_period(period)
+                        .await
                         .map_err(|err| {
                             ContentStoreError::Database(format!(
                                 "Error looking up lc update period: {err:?}"
@@ -262,7 +265,7 @@ impl ContentStore for BeaconStorage {
 }
 
 impl BeaconStorage {
-    pub fn new(config: PortalStorageConfig) -> Result<Self, ContentStoreError> {
+    pub async fn new(config: PortalStorageConfig) -> Result<Self, ContentStoreError> {
         let storage = Self {
             node_data_dir: config.node_data_dir,
             sql_connection_pool: config.sql_connection_pool,
@@ -283,8 +286,9 @@ impl BeaconStorage {
             .report_total_storage_usage_bytes(total_storage_usage as f64);
 
         // Report total storage used by network content.
-        let network_content_storage_usage =
-            storage.get_total_storage_usage_in_bytes_from_network()?;
+        let network_content_storage_usage = storage
+            .get_total_storage_usage_in_bytes_from_network()
+            .await?;
         storage
             .metrics
             .report_content_data_storage_bytes(network_content_storage_usage as f64);
@@ -292,38 +296,38 @@ impl BeaconStorage {
         Ok(storage)
     }
 
-    fn db_insert(
+    async fn db_insert(
         &self,
         content_id: &[u8; 32],
         content_key: &Vec<u8>,
         value: &Vec<u8>,
-    ) -> Result<usize, ContentStoreError> {
-        let conn = self.sql_connection_pool.get()?;
-        Ok(conn.execute(
-            INSERT_QUERY_BEACON,
-            params![
-                content_id.as_slice(),
-                content_key,
-                value,
-                32 + content_key.len() + value.len()
-            ],
-        )?)
+    ) -> Result<u64, ContentStoreError> {
+        Ok(query(INSERT_QUERY_BEACON)
+            .bind(content_id.as_slice())
+            .bind(content_key)
+            .bind(value)
+            .bind((32 + content_key.len() + value.len()) as i64)
+            .execute(&self.sql_connection_pool)
+            .await?
+            .rows_affected())
     }
 
-    fn db_insert_lc_update(&self, period: &u64, value: &Vec<u8>) -> Result<(), ContentStoreError> {
-        let conn = self.sql_connection_pool.get()?;
-        let value_size = value.len();
-
-        match conn.execute(
-            INSERT_LC_UPDATE_QUERY,
-            params![period, value, 0, value_size],
-        ) {
-            Ok(_) => Ok(()),
-            Err(err) => Err(err.into()),
-        }
+    async fn db_insert_lc_update(
+        &self,
+        period: u64,
+        value: &Vec<u8>,
+    ) -> Result<(), ContentStoreError> {
+        query(INSERT_LC_UPDATE_QUERY)
+            .bind(period as i64)
+            .bind(value)
+            .bind(0)
+            .bind(value.len() as i64)
+            .execute(&self.sql_connection_pool)
+            .await?;
+        Ok(())
     }
 
-    pub fn store(
+    pub async fn store(
         &mut self,
         key: &impl OverlayContentKey,
         value: &Vec<u8>,
@@ -333,7 +337,7 @@ impl BeaconStorage {
 
         match content_key.first() {
             Some(&LIGHT_CLIENT_BOOTSTRAP_KEY_PREFIX) => {
-                if let Err(err) = self.db_insert(&content_id, &content_key, value) {
+                if let Err(err) = self.db_insert(&content_id, &content_key, value).await {
                     debug!("Error writing light client bootstrap content ID {content_id:?} to beacon network db: {err:?}");
                     return Err(err);
                 } else {
@@ -359,7 +363,8 @@ impl BeaconStorage {
                             })?;
 
                             for (period, value) in periods.zip(update_values.as_ref()) {
-                                if let Err(err) = self.db_insert_lc_update(&period, &value.encode())
+                                if let Err(err) =
+                                    self.db_insert_lc_update(period, &value.encode()).await
                                 {
                                     debug!("Error writing light client update by range content ID {content_id:?} to beacon network db: {err:?}");
                                 } else {
@@ -432,112 +437,101 @@ impl BeaconStorage {
     }
 
     /// Internal method for measuring the total amount of requestable data that the node is storing.
-    fn get_total_storage_usage_in_bytes_from_network(&self) -> Result<u64, ContentStoreError> {
-        let conn = self.sql_connection_pool.get()?;
-
-        let mut content_data_stmt = conn.prepare(TOTAL_DATA_SIZE_QUERY_BEACON)?;
-        let content_data_result = content_data_stmt.query_map([], |row| {
-            Ok(DataSize {
-                num_bytes: row.get(0)?,
+    async fn get_total_storage_usage_in_bytes_from_network(
+        &self,
+    ) -> Result<u64, ContentStoreError> {
+        let content_data_result = query(TOTAL_DATA_SIZE_QUERY_BEACON)
+            .map(|row: SqliteRow| {
+                let num_bytes: f32 = row.get(0);
+                num_bytes
             })
-        });
-        let content_data_sum = match content_data_result?.next() {
+            .fetch_optional(&self.sql_connection_pool)
+            .await?;
+        let content_data_sum = match content_data_result {
             Some(total) => total,
             None => {
                 let err = "Unable to compute sum over content item sizes".to_string();
                 return Err(ContentStoreError::Database(err));
             }
-        }?
-        .num_bytes;
+        };
 
-        let mut lc_update_stmt = conn.prepare(LC_UPDATE_TOTAL_SIZE_QUERY)?;
-        let lc_update_result = lc_update_stmt.query_map([], |row| {
-            Ok(DataSize {
-                num_bytes: row.get(0)?,
+        let lc_update_result = query(LC_UPDATE_TOTAL_SIZE_QUERY)
+            .map(|row: SqliteRow| {
+                let num_bytes: f32 = row.get(0);
+                num_bytes
             })
-        });
-        let lc_update_sum = match lc_update_result?.next() {
+            .fetch_optional(&self.sql_connection_pool)
+            .await?;
+        let lc_update_sum = match lc_update_result {
             Some(total) => total,
             None => {
                 let err = "Unable to compute sum over lc update item sizes".to_string();
                 return Err(ContentStoreError::Database(err));
             }
-        }?
-        .num_bytes;
+        };
 
         let sum = content_data_sum + lc_update_sum;
-        self.metrics.report_content_data_storage_bytes(sum);
+        self.metrics.report_content_data_storage_bytes(sum.into());
 
         Ok(sum as u64)
     }
 
     /// Public method for looking up a content key by its content id
-    pub fn lookup_content_key(&self, id: [u8; 32]) -> anyhow::Result<Option<Vec<u8>>> {
-        let conn = self.sql_connection_pool.get()?;
-        let mut query = conn.prepare(CONTENT_KEY_LOOKUP_QUERY_BEACON)?;
-        let result: Result<Vec<BeaconContentKey>, ContentStoreError> = query
-            .query_map([id.as_slice()], |row| {
-                let row: Vec<u8> = row.get(0)?;
-                Ok(row)
-            })?
-            .map(|row| BeaconContentKey::try_from(row?).map_err(ContentStoreError::ContentKey))
-            .collect();
-
-        match result?.first() {
-            Some(val) => Ok(Some(val.into())),
+    pub async fn lookup_content_key(&self, id: [u8; 32]) -> anyhow::Result<Option<Vec<u8>>> {
+        let result = query(CONTENT_KEY_LOOKUP_QUERY_BEACON)
+            .bind(id.as_slice())
+            .map(|row: SqliteRow| {
+                let row: Vec<u8> = row.get(0);
+                row
+            })
+            .fetch_optional(&self.sql_connection_pool)
+            .await?;
+        let key = match result {
+            Some(bytes) => match BeaconContentKey::try_from(bytes) {
+                Ok(key) => Ok(Some(key.into())),
+                Err(err) => Err(ContentStoreError::ContentKey(err)),
+            },
             None => Ok(None),
-        }
+        };
+        Ok(key?)
     }
 
     /// Public method for looking up a light client update by period number
-    pub fn lookup_lc_update_period(&self, period: u64) -> anyhow::Result<Option<u64>> {
-        let conn = self.sql_connection_pool.get()?;
-        let mut query = conn.prepare(LC_UPDATE_PERIOD_LOOKUP_QUERY)?;
-
-        let rows: Result<Vec<u64>, rusqlite::Error> = query
-            .query_map([period], |row| {
-                let row: u64 = row.get(0)?;
-                Ok(row)
-            })?
-            .collect();
-
-        match rows?.first() {
-            Some(val) => Ok(Some(*val)),
-            None => Ok(None),
-        }
+    pub async fn lookup_lc_update_period(&self, period: u64) -> anyhow::Result<Option<u64>> {
+        Ok(query(LC_UPDATE_PERIOD_LOOKUP_QUERY)
+            .bind(period as i64)
+            .map(|row: SqliteRow| {
+                let bytes: i64 = row.get(0);
+                bytes as u64
+            })
+            .fetch_optional(&self.sql_connection_pool)
+            .await?)
     }
 
     /// Public method for looking up a content value by its content id
-    pub fn lookup_content_value(&self, id: [u8; 32]) -> anyhow::Result<Option<Vec<u8>>> {
-        let conn = self.sql_connection_pool.get()?;
-        let mut query = conn.prepare(CONTENT_VALUE_LOOKUP_QUERY_BEACON)?;
-        let result: Result<Vec<Vec<u8>>, ContentStoreError> = query
-            .query_map([id.as_slice()], |row| {
-                let row: Vec<u8> = row.get(0)?;
-                Ok(row)
-            })?
-            .map(|row| row.map_err(ContentStoreError::Rusqlite))
-            .collect();
-
-        Ok(result?.first().map(|val| val.to_vec()))
+    pub async fn lookup_content_value(&self, id: [u8; 32]) -> anyhow::Result<Option<Vec<u8>>> {
+        let result = query(CONTENT_VALUE_LOOKUP_QUERY_BEACON)
+            .bind(id.as_slice())
+            .map(|row: SqliteRow| {
+                let bytes: Vec<u8> = row.get(0);
+                bytes
+            })
+            .fetch_optional(&self.sql_connection_pool)
+            .await?;
+        Ok(result)
     }
 
     /// Public method for looking up a  light client update value by period number
-    pub fn lookup_lc_update_value(&self, period: u64) -> anyhow::Result<Option<Vec<u8>>> {
-        let conn = self.sql_connection_pool.get()?;
-        let mut query = conn.prepare(LC_UPDATE_LOOKUP_QUERY)?;
-
-        let rows: Result<Vec<Vec<u8>>, rusqlite::Error> = query
-            .query_map([period], |row| {
-                let row: Vec<u8> = row.get(0)?;
-                Ok(row)
-            })?
-            .collect();
-
-        match rows?.first() {
-            Some(val) => Ok(Some(val.to_vec())),
-            None => Ok(None),
-        }
+    pub async fn lookup_lc_update_value(&self, period: u64) -> anyhow::Result<Option<Vec<u8>>> {
+        let result = query(LC_UPDATE_LOOKUP_QUERY)
+            .bind(period as i64)
+            .map(|row: SqliteRow| {
+                let bytes: Vec<u8> = row.get(0);
+                bytes
+            })
+            .fetch_optional(&self.sql_connection_pool)
+            .await?;
+        Ok(result)
     }
 
     /// Get a summary of the current state of storage

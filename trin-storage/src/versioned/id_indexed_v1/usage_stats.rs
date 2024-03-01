@@ -73,10 +73,9 @@ mod tests {
     use std::path::PathBuf;
 
     use discv5::enr::NodeId;
-    use ethportal_api::types::portal_wire::ProtocolId;
-    use r2d2::Pool;
-    use r2d2_sqlite::SqliteConnectionManager;
+    use ethportal_api::{jsonrpsee::tokio, types::portal_wire::ProtocolId};
     use rstest::rstest;
+    use sqlx::sqlite::SqlitePoolOptions;
 
     use crate::{versioned::ContentType, DistanceFunction};
 
@@ -84,14 +83,17 @@ mod tests {
 
     const STORAGE_CAPACITY_BYTES: u64 = 1000;
 
-    fn create_config() -> IdIndexedV1StoreConfig {
+    async fn create_config() -> IdIndexedV1StoreConfig {
         IdIndexedV1StoreConfig {
             content_type: ContentType::State,
             network: ProtocolId::State,
             node_id: NodeId::random(),
             node_data_dir: PathBuf::default(),
             storage_capacity_bytes: STORAGE_CAPACITY_BYTES,
-            sql_connection_pool: Pool::new(SqliteConnectionManager::memory()).unwrap(),
+            sql_connection_pool: SqlitePoolOptions::new()
+                .connect("sqlite::memory:")
+                .await
+                .unwrap(),
             distance_fn: DistanceFunction::Xor,
         }
     }
@@ -106,13 +108,14 @@ mod tests {
     #[case::between_pruning_and_full(97, 970, true, true)]
     #[case::full(100, 1000, true, true)]
     #[case::above_full(110, 1100, true, true)]
-    fn is_above_capacity(
+    #[tokio::test]
+    async fn is_above_capacity(
         #[case] content_count: u64,
         #[case] used_storage_bytes: u64,
         #[case] is_above_pruning_capacity_threshold: bool,
         #[case] is_above_target_capacity: bool,
     ) {
-        let config = create_config();
+        let config = create_config().await;
         let usage_stats = UsageStats {
             content_count,
             used_storage_bytes,
@@ -130,9 +133,9 @@ mod tests {
         );
     }
 
-    #[test]
-    fn estimate_capacity_count_no_usage() {
-        let config = create_config();
+    #[tokio::test]
+    async fn estimate_capacity_count_no_usage() {
+        let config = create_config().await;
         let usage_stats = UsageStats {
             content_count: 0,
             used_storage_bytes: 0,
@@ -166,13 +169,14 @@ mod tests {
     #[case::above_full_1(10, 1050, 9, 8)]
     #[case::above_full_2(20, 1050, 19, 17)]
     #[case::above_full_3(50, 1050, 47, 42)]
-    fn estimate_capacity_count(
+    #[tokio::test]
+    async fn estimate_capacity_count(
         #[case] content_count: u64,
         #[case] used_storage_bytes: u64,
         #[case] estimated_full_capacity_count: u64,
         #[case] estimated_target_capacity_count: u64,
     ) {
-        let config = create_config();
+        let config = create_config().await;
         let usage_stats = UsageStats {
             content_count,
             used_storage_bytes,
@@ -209,12 +213,13 @@ mod tests {
     #[case::above_full_1(10, 1050, 0)]
     #[case::above_full_2(20, 1050, 0)]
     #[case::above_full_3(50, 1050, 0)]
-    fn insert_until_full(
+    #[tokio::test]
+    async fn insert_until_full(
         #[case] content_count: u64,
         #[case] used_storage_bytes: u64,
         #[case] expected_insert_until_full: u64,
     ) {
-        let config = create_config();
+        let config = create_config().await;
         let usage_stats = UsageStats {
             content_count,
             used_storage_bytes,
@@ -244,12 +249,13 @@ mod tests {
     #[case::above_full_1(10, 1050, 2)]
     #[case::above_full_2(20, 1050, 3)]
     #[case::above_full_3(50, 1050, 8)]
-    fn delete_until_target(
+    #[tokio::test]
+    async fn delete_until_target(
         #[case] content_count: u64,
         #[case] used_storage_bytes: u64,
         #[case] expected_delete_until_target: u64,
     ) {
-        let config = create_config();
+        let config = create_config().await;
         let usage_stats = UsageStats {
             content_count,
             used_storage_bytes,

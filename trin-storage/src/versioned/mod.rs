@@ -3,7 +3,6 @@ pub mod sql;
 pub mod store;
 mod utils;
 
-use rusqlite::types::{FromSql, FromSqlError, ValueRef};
 use strum::{AsRefStr, Display, EnumString};
 
 pub use id_indexed_v1::{IdIndexedV1Store, IdIndexedV1StoreConfig};
@@ -29,7 +28,8 @@ pub enum ContentType {
 /// completely different type of content (e.g. portal network content key/value
 /// vs. light client updates). Compatible versions might implement logic for
 /// transitioning from one version to another (towards newer version).
-#[derive(Clone, Debug, Display, Eq, PartialEq, EnumString, AsRefStr)]
+#[derive(Clone, Debug, Display, Eq, PartialEq, EnumString, AsRefStr, sqlx::Type)]
+#[sqlx(type_name = "version", rename_all = "snake_case")]
 #[strum(serialize_all = "snake_case")]
 pub enum StoreVersion {
     /// The original SQLite version of the store. Main issue that it had was
@@ -40,11 +40,4 @@ pub enum StoreVersion {
     /// The content from different subnetwork (expressed with `ContentType`)
     /// uses different table. NOTE: implementation is in progress.
     IdIndexedV1,
-}
-
-impl FromSql for StoreVersion {
-    fn column_result(value: ValueRef<'_>) -> Result<Self, FromSqlError> {
-        let text = value.as_str()?;
-        StoreVersion::try_from(text).map_err(|err| FromSqlError::Other(err.into()))
-    }
 }

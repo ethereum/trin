@@ -6,9 +6,8 @@ use std::path::PathBuf;
 
 use discv5::enr::NodeId;
 use ethportal_api::types::portal_wire::ProtocolId;
-use r2d2::Pool;
-use r2d2_sqlite::SqliteConnectionManager;
 
+use sqlx::SqlitePool;
 pub use store::IdIndexedV1Store;
 
 use crate::DistanceFunction;
@@ -29,7 +28,7 @@ pub struct IdIndexedV1StoreConfig {
     pub node_id: NodeId,
     pub node_data_dir: PathBuf,
     pub storage_capacity_bytes: u64,
-    pub sql_connection_pool: Pool<SqliteConnectionManager>,
+    pub sql_connection_pool: SqlitePool,
     pub distance_fn: DistanceFunction,
 }
 

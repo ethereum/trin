@@ -1,4 +1,3 @@
-use parking_lot::RwLock as PLRwLock;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::debug;
@@ -46,7 +45,7 @@ impl StateNetwork {
             disable_poke: DISABLE_POKE,
             ..Default::default()
         };
-        let storage = Arc::new(PLRwLock::new(StateStorage::new(storage_config)?));
+        let storage = Arc::new(RwLock::new(StateStorage::new(storage_config).await?));
         let validator = Arc::new(StateValidator { header_oracle });
         let overlay = OverlayProtocol::new(
             config,

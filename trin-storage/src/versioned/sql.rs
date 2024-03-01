@@ -6,9 +6,9 @@ pub const STORE_INFO_CREATE_TABLE: &str = "
 
 pub const STORE_INFO_UPDATE: &str = "
     INSERT OR REPLACE INTO store_info (content_type, version)
-    VALUES (:content_type, :version)";
+    VALUES (?, ?)";
 
 pub const STORE_INFO_LOOKUP: &str = "
     SELECT version
     FROM store_info
-    WHERE content_type = :content_type LIMIT 1";
+    WHERE content_type = ? LIMIT 1";

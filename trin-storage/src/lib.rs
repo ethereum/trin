@@ -12,10 +12,8 @@ use ethportal_api::types::{
     content_key::overlay::OverlayContentKey,
     distance::{Distance, Metric, XorMetric},
 };
-use r2d2::Pool;
-use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::types::{FromSql, FromSqlError, ValueRef};
-use std::{ops::Deref, path::PathBuf, str::FromStr};
+use sqlx::{sqlite::SqliteValueRef, Database, Decode, Sqlite, SqlitePool, Type};
+use std::{error::Error, ops::Deref, path::PathBuf};
 
 pub const DATABASE_NAME: &str = "trin.sqlite";
 pub const BYTES_IN_MB_U64: u64 = 1000 * 1000;
@@ -47,21 +45,24 @@ pub enum ShouldWeStoreContent {
 /// A data store for Portal Network content (data).
 pub trait ContentStore {
     /// Looks up a piece of content by `key`.
-    fn get<K: OverlayContentKey>(&self, key: &K) -> Result<Option<Vec<u8>>, ContentStoreError>;
+    fn get<K: OverlayContentKey>(
+        &self,
+        key: &K,
+    ) -> impl std::future::Future<Output = Result<Option<Vec<u8>>, ContentStoreError>> + Send;
 
     /// Puts a piece of content into the store.
-    fn put<K: OverlayContentKey, V: AsRef<[u8]>>(
+    fn put<K: OverlayContentKey>(
         &mut self,
         key: K,
-        value: V,
-    ) -> Result<(), ContentStoreError>;
+        value: Vec<u8>,
+    ) -> impl std::future::Future<Output = Result<(), ContentStoreError>> + Send;
 
     /// Returns whether the content denoted by `key` is within the radius of the data store and not
     /// already stored within the data store.
     fn is_key_within_radius_and_unavailable<K: OverlayContentKey>(
         &self,
         key: &K,
-    ) -> Result<ShouldWeStoreContent, ContentStoreError>;
+    ) -> impl std::future::Future<Output = Result<ShouldWeStoreContent, ContentStoreError>> + Send;
 
     /// Returns the radius of the data store.
     fn radius(&self) -> Distance;
@@ -108,25 +109,27 @@ impl MemoryContentStore {
 }
 
 impl ContentStore for MemoryContentStore {
-    fn get<K: OverlayContentKey>(&self, key: &K) -> Result<Option<Vec<u8>>, ContentStoreError> {
+    async fn get<K: OverlayContentKey>(
+        &self,
+        key: &K,
+    ) -> Result<Option<Vec<u8>>, ContentStoreError> {
         let key = key.content_id();
         let val = self.store.get(&key.to_vec()).cloned();
         Ok(val)
     }
 
-    fn put<K: OverlayContentKey, V: AsRef<[u8]>>(
+    async fn put<K: OverlayContentKey>(
         &mut self,
         key: K,
-        value: V,
+        value: Vec<u8>,
     ) -> Result<(), ContentStoreError> {
         let content_id = key.content_id();
-        let value: &[u8] = value.as_ref();
-        self.store.insert(content_id.to_vec(), value.to_vec());
+        self.store.insert(content_id.to_vec(), value);
 
         Ok(())
     }
 
-    fn is_key_within_radius_and_unavailable<K: OverlayContentKey>(
+    async fn is_key_within_radius_and_unavailable<K: OverlayContentKey>(
         &self,
         key: &K,
     ) -> Result<ShouldWeStoreContent, ContentStoreError> {
@@ -152,16 +155,16 @@ pub struct PortalStorageConfig {
     pub node_id: NodeId,
     pub node_data_dir: PathBuf,
     pub distance_fn: DistanceFunction,
-    pub sql_connection_pool: Pool<SqliteConnectionManager>,
+    pub sql_connection_pool: SqlitePool,
 }
 
 impl PortalStorageConfig {
-    pub fn new(
+    pub async fn new(
         storage_capacity_mb: u64,
         node_data_dir: PathBuf,
         node_id: NodeId,
     ) -> Result<Self, ContentStoreError> {
-        let sql_connection_pool = setup_sql(&node_data_dir)?;
+        let sql_connection_pool = setup_sql(&node_data_dir).await?;
         Ok(Self {
             storage_capacity_mb,
             node_id,
@@ -175,36 +178,33 @@ impl PortalStorageConfig {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ContentId(H256);
 
-impl<T: Into<H256>> From<T> for ContentId {
-    fn from(value: T) -> Self {
-        Self(value.into())
+impl Type<Sqlite> for ContentId {
+    fn type_info() -> <Sqlite as Database>::TypeInfo {
+        <Vec<u8> as Type<Sqlite>>::type_info()
     }
 }
 
-impl FromSql for ContentId {
-    fn column_result(value: ValueRef<'_>) -> Result<Self, FromSqlError> {
-        match value {
-            ValueRef::Blob(bytes) => {
-                if bytes.len() == H256::len_bytes() {
-                    Ok(ContentId(H256::from_slice(bytes)))
-                } else {
-                    Err(FromSqlError::Other(
-                        format!(
-                            "ContentId is not possible from a blob of length {}",
-                            bytes.len()
-                        )
-                        .into(),
-                    ))
-                }
-            }
-            ValueRef::Text(_) => {
-                let hex_text = value.as_str()?;
-                H256::from_str(hex_text)
-                    .map(ContentId)
-                    .map_err(|err| FromSqlError::Other(err.into()))
-            }
-            _ => Err(FromSqlError::InvalidType),
+impl<'r> Decode<'r, Sqlite> for ContentId {
+    fn decode(
+        value: SqliteValueRef<'r>,
+    ) -> Result<ContentId, Box<dyn Error + 'static + Send + Sync>> {
+        let bytes: &[u8] = Decode::<Sqlite>::decode(value)?;
+
+        if bytes.len() == H256::len_bytes() {
+            Ok(ContentId(H256::from_slice(bytes)))
+        } else {
+            Err(format!(
+                "ContentId is not possible from a blob of length {}",
+                bytes.len()
+            )
+            .into())
         }
+    }
+}
+
+impl<T: Into<H256>> From<T> for ContentId {
+    fn from(value: T) -> Self {
+        Self(value.into())
     }
 }
 
@@ -216,21 +216,16 @@ impl Deref for ContentId {
     }
 }
 
-pub struct DataSize {
-    pub num_bytes: f64,
-}
-
-pub struct EntryCount(pub u64);
+pub struct EntryCount(pub i64);
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 pub mod test {
     use super::*;
-    use ethereum_types::H512;
-    use ethportal_api::IdentityContentKey;
+    use ethportal_api::{jsonrpsee::tokio, IdentityContentKey};
 
-    #[test]
-    fn memory_store_contains_key() {
+    #[tokio::test]
+    async fn memory_store_contains_key() {
         let node_id = NodeId::random();
         let mut store = MemoryContentStore::new(node_id, DistanceFunction::Xor);
 
@@ -241,12 +236,12 @@ pub mod test {
         assert!(!store.contains_key(&arb_key));
 
         // Arbitrary key available.
-        let _ = store.put(arb_key.clone(), val);
+        let _ = store.put(arb_key.clone(), val).await;
         assert!(store.contains_key(&arb_key));
     }
 
-    #[test]
-    fn memory_store_get() {
+    #[tokio::test]
+    async fn memory_store_get() {
         let node_id = NodeId::random();
         let mut store = MemoryContentStore::new(node_id, DistanceFunction::Xor);
 
@@ -254,15 +249,16 @@ pub mod test {
 
         // Arbitrary key not available.
         let arb_key = IdentityContentKey::new(node_id.raw());
-        assert!(store.get(&arb_key).unwrap().is_none());
+        assert!(store.get(&arb_key).await.unwrap().is_none());
+        assert!(store.get(&arb_key).await.unwrap().is_none());
 
         // Arbitrary key available and equal to assigned value.
-        let _ = store.put(arb_key.clone(), val.clone());
-        assert_eq!(store.get(&arb_key).unwrap(), Some(val));
+        let _ = store.put(arb_key.clone(), val.clone()).await;
+        assert_eq!(store.get(&arb_key).await.unwrap(), Some(val));
     }
 
-    #[test]
-    fn memory_store_put() {
+    #[tokio::test]
+    async fn memory_store_put() {
         let node_id = NodeId::random();
         let mut store = MemoryContentStore::new(node_id, DistanceFunction::Xor);
 
@@ -270,12 +266,12 @@ pub mod test {
 
         // Store content
         let arb_key = IdentityContentKey::new(node_id.raw());
-        let _ = store.put(arb_key.clone(), val.clone());
-        assert_eq!(store.get(&arb_key).unwrap(), Some(val));
+        let _ = store.put(arb_key.clone(), val.clone()).await;
+        assert_eq!(store.get(&arb_key).await.unwrap(), Some(val));
     }
 
-    #[test]
-    fn memory_store_is_within_radius_and_unavailable() {
+    #[tokio::test]
+    async fn memory_store_is_within_radius_and_unavailable() {
         let node_id = NodeId::random();
         let mut store = MemoryContentStore::new(node_id, DistanceFunction::Xor);
 
@@ -286,54 +282,19 @@ pub mod test {
         assert_eq!(
             store
                 .is_key_within_radius_and_unavailable(&arb_key)
+                .await
                 .unwrap(),
             ShouldWeStoreContent::Store
         );
 
         // Arbitrary key available.
-        let _ = store.put(arb_key.clone(), val);
+        let _ = store.put(arb_key.clone(), val).await;
         assert_eq!(
             store
                 .is_key_within_radius_and_unavailable(&arb_key)
+                .await
                 .unwrap(),
             ShouldWeStoreContent::AlreadyStored
         );
-    }
-
-    #[test]
-    fn content_id_from_blob() {
-        let content_id = ContentId(H256::random());
-        let sql_value = ValueRef::from(content_id.as_bytes());
-        assert_eq!(ContentId::column_result(sql_value), Ok(content_id));
-    }
-
-    #[test]
-    #[should_panic(expected = "ContentId is not possible from a blob of length 31")]
-    fn content_id_from_blob_less_bytes() {
-        let bytes = H256::random().to_fixed_bytes();
-        ContentId::column_result(ValueRef::from(&bytes[..31])).unwrap();
-    }
-
-    #[test]
-    #[should_panic(expected = "ContentId is not possible from a blob of length 33")]
-    fn content_id_from_blob_more_bytes() {
-        let bytes = H512::random().to_fixed_bytes();
-        ContentId::column_result(ValueRef::from(&bytes[..33])).unwrap();
-    }
-
-    #[test]
-    fn content_id_from_text() {
-        let content_id_str = "0123456789abcdef0123456789ABCDEF0123456789abcdef0123456789ABCDEF";
-        let content_id = ContentId(H256::from_str(content_id_str).unwrap());
-        let sql_value = ValueRef::from(content_id_str);
-        assert_eq!(ContentId::column_result(sql_value), Ok(content_id));
-    }
-
-    #[test]
-    fn content_id_from_text_with_0x_prefix() {
-        let content_id_str = "0x0123456789abcdef0123456789ABCDEF0123456789abcdef0123456789ABCDEF";
-        let content_id = ContentId(H256::from_str(content_id_str).unwrap());
-        let sql_value = ValueRef::from(content_id_str);
-        assert_eq!(ContentId::column_result(sql_value), Ok(content_id));
     }
 }

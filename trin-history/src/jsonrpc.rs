@@ -56,7 +56,7 @@ async fn complete_request(network: Arc<RwLock<HistoryNetwork>>, request: History
         }
         HistoryEndpoint::AddEnr(enr) => add_enr(network, enr).await,
         HistoryEndpoint::DataRadius => {
-            let radius = network.read().await.overlay.data_radius();
+            let radius = network.read().await.overlay.data_radius().await;
             Ok(json!(*radius))
         }
         HistoryEndpoint::DeleteEnr(node_id) => delete_enr(network, node_id).await,
@@ -77,7 +77,7 @@ async fn complete_request(network: Arc<RwLock<HistoryNetwork>>, request: History
         }
         HistoryEndpoint::Ping(enr) => ping(network, enr).await,
         HistoryEndpoint::RoutingTableInfo => {
-            serde_json::to_value(network.read().await.overlay.routing_table_info())
+            serde_json::to_value(network.read().await.overlay.routing_table_info().await)
                 .map_err(|err| err.to_string())
         }
         HistoryEndpoint::RecursiveFindNodes(node_id) => {
@@ -95,7 +95,7 @@ async fn recursive_find_content(
 ) -> Result<Value, String> {
     // Check whether we have the data locally.
     let overlay = network.read().await.overlay.clone();
-    let local_content: Option<Vec<u8>> = match overlay.store.read().get(&content_key) {
+    let local_content: Option<Vec<u8>> = match overlay.store.read().await.get(&content_key).await {
         Ok(Some(data)) => Some(data),
         Ok(None) => None,
         Err(err) => {
@@ -171,25 +171,23 @@ async fn local_content(
     network: Arc<RwLock<HistoryNetwork>>,
     content_key: HistoryContentKey,
 ) -> Result<Value, String> {
-    let store = network.read().await.overlay.store.clone();
-    let response = match store.read().get(&content_key)
-        {
-            Ok(val) => match val {
-                Some(val) => {
-                    Ok(Value::String(hex_encode(val)))
-                }
-                None => {
-                    let err = json!({
-                        "message": "Content not found in local storage",
-                    });
-                    return Err(err.to_string());
-                }
-            },
-            Err(err) => Err(format!(
-                "Database error while looking for content key in local storage: {content_key:?}, with error: {err}",
-            )),
-        };
-    response
+    match network.read().await.overlay.store.read().await.get(&content_key).await
+         {
+             Ok(val) => match val {
+                 Some(val) => {
+                     Ok(Value::String(hex_encode(val)))
+                 }
+                 None => {
+                     let err = json!({
+                         "message": "Content not found in local storage",
+                     });
+                     Err(err.to_string())
+                 }
+             },
+             Err(err) => Err(format!(
+                 "Database error while looking for content key in local storage: {content_key:?}, with error: {err}",
+             )),
+         }
 }
 
 /// Constructs a JSON call for the PaginateLocalContentKeys method.
@@ -198,15 +196,13 @@ async fn paginate_local_content_keys(
     offset: u64,
     limit: u64,
 ) -> Result<Value, String> {
-    let store = network.read().await.overlay.store.clone();
-    let response = match store.read().paginate(&offset, &limit)
-        {
-            Ok(val) => Ok(json!(val)),
-            Err(err) => Err(format!(
-                "Database error while paginating local content keys with offset: {offset:?}, limit: {limit:?}. Error message: {err}"
-            )),
-        };
-    response
+    match network.read().await.overlay.store.read().await.paginate(offset, limit).await
+         {
+             Ok(val) => Ok(json!(val)),
+             Err(err) => Err(format!(
+                 "Database error while paginating local content keys with offset: {offset:?}, limit: {limit:?}. Error message: {err}"
+             )),
+         }
 }
 
 /// Constructs a JSON call for the Store method.
@@ -216,15 +212,19 @@ async fn store(
     content_value: ethportal_api::HistoryContentValue,
 ) -> Result<Value, String> {
     let data = content_value.encode();
-    let store = network.read().await.overlay.store.clone();
-    let response = match store
+    match network
+        .read()
+        .await
+        .overlay
+        .store
         .write()
-        .put::<HistoryContentKey, Vec<u8>>(content_key, data)
+        .await
+        .put::<HistoryContentKey>(content_key, data)
+        .await
     {
         Ok(_) => Ok(Value::Bool(true)),
         Err(err) => Ok(Value::String(err.to_string())),
-    };
-    response
+    }
 }
 
 /// Constructs a JSON call for the AddEnr method.
@@ -233,7 +233,7 @@ async fn add_enr(
     enr: discv5::enr::Enr<discv5::enr::CombinedKey>,
 ) -> Result<Value, String> {
     let overlay = network.read().await.overlay.clone();
-    match overlay.add_enr(enr) {
+    match overlay.add_enr(enr).await {
         Ok(_) => Ok(json!(true)),
         Err(err) => Err(format!("AddEnr failed: {err:?}")),
     }
@@ -242,7 +242,7 @@ async fn add_enr(
 /// Constructs a JSON call for the GetEnr method.
 async fn get_enr(network: Arc<RwLock<HistoryNetwork>>, node_id: NodeId) -> Result<Value, String> {
     let overlay = network.read().await.overlay.clone();
-    match overlay.get_enr(node_id) {
+    match overlay.get_enr(node_id).await {
         Ok(enr) => Ok(json!(enr)),
         Err(err) => Err(format!("GetEnr failed: {err:?}")),
     }
@@ -254,7 +254,7 @@ async fn delete_enr(
     node_id: NodeId,
 ) -> Result<Value, String> {
     let overlay = network.read().await.overlay.clone();
-    let is_deleted = overlay.delete_enr(node_id);
+    let is_deleted = overlay.delete_enr(node_id).await;
     Ok(json!(is_deleted))
 }
 
@@ -319,7 +319,10 @@ async fn gossip(
 ) -> Result<Value, String> {
     let data = content_value.encode();
     let overlay = network.read().await.overlay.clone();
-    Ok(overlay.propagate_gossip(vec![(content_key, data)]).into())
+    Ok(overlay
+        .propagate_gossip(vec![(content_key, data)])
+        .await
+        .into())
 }
 
 /// Constructs a JSON call for the Gossip method, with tracing enabled.

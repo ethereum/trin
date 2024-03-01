@@ -27,14 +27,14 @@ pub enum ContentStoreError {
     #[error("data invalid {message}")]
     InvalidData { message: String },
 
-    #[error("rusqlite error {0}")]
-    Rusqlite(#[from] rusqlite::Error),
-
-    #[error("r2d2 error {0}")]
-    R2D2(#[from] r2d2::Error),
-
     #[error("unable to use byte utils {0}")]
     ByteUtilsError(#[from] ByteUtilsError),
+
+    #[error("sqlx error {0}")]
+    Sqlx(#[from] sqlx::Error),
+
+    #[error("Generic Decode error {0}")]
+    GenerticDecode(#[from] anyhow::Error),
 
     #[error("unable to use content key {0}")]
     ContentKey(#[from] ContentKeyError),

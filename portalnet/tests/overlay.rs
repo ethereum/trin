@@ -5,10 +5,9 @@ use std::{
 };
 
 use discv5::TalkRequest;
-use parking_lot::RwLock;
 use portalnet::utp_controller::UtpController;
 use tokio::{
-    sync::{mpsc, mpsc::unbounded_channel},
+    sync::{mpsc, mpsc::unbounded_channel, RwLock},
     time::{self, Duration},
 };
 use utp_rs::socket::UtpSocket;
@@ -150,9 +149,9 @@ async fn overlay() {
     time::sleep(sleep_duration).await;
 
     // All routing tables are empty.
-    assert!(overlay_one.table_entries_enr().is_empty());
-    assert!(overlay_two.table_entries_enr().is_empty());
-    assert!(overlay_three.table_entries_enr().is_empty());
+    assert!(overlay_one.table_entries_enr().await.is_empty());
+    assert!(overlay_two.table_entries_enr().await.is_empty());
+    assert!(overlay_three.table_entries_enr().await.is_empty());
 
     // Ping node two from node one.
     // Node two should be in node one's routing table.
@@ -163,7 +162,7 @@ async fn overlay() {
         Err(err) => panic!("Unable to respond to ping: {err}"),
     }
     time::sleep(sleep_duration).await;
-    let overlay_one_peers = overlay_one.table_entries_enr();
+    let overlay_one_peers = overlay_one.table_entries_enr().await;
     assert_eq!(1, overlay_one_peers.len());
     assert!(overlay_one_peers.contains(&overlay_two.local_enr()));
 
@@ -181,7 +180,7 @@ async fn overlay() {
         Err(err) => panic!("Unable to respond to find nodes: {err}"),
     }
     time::sleep(sleep_duration).await;
-    let overlay_one_peers = overlay_one.table_entries_enr();
+    let overlay_one_peers = overlay_one.table_entries_enr().await;
     assert_eq!(2, overlay_one_peers.len());
     assert!(overlay_one_peers.contains(&overlay_three.local_enr()));
 
@@ -202,7 +201,7 @@ async fn overlay() {
         Err(err) => panic!("Unable to respond to find nodes: {err}"),
     }
     time::sleep(sleep_duration).await;
-    let overlay_three_peers = overlay_three.table_entries_enr();
+    let overlay_three_peers = overlay_three.table_entries_enr().await;
     assert_eq!(2, overlay_three_peers.len());
     assert!(overlay_three_peers.contains(&overlay_one.local_enr()));
     assert!(overlay_three_peers.contains(&overlay_two.local_enr()));
@@ -226,7 +225,7 @@ async fn overlay() {
         Err(err) => panic!("Unable to respond to find content: {err}"),
     };
     time::sleep(sleep_duration).await;
-    let overlay_two_peers = overlay_two.table_entries_enr();
+    let overlay_two_peers = overlay_two.table_entries_enr().await;
     assert!(overlay_two_peers.contains(&overlay_one.local_enr()));
     for enr in content_enrs {
         if Into::<Enr>::into(enr.clone()) == overlay_two.local_enr() {
@@ -241,7 +240,9 @@ async fn overlay() {
     overlay_three
         .store
         .write()
-        .put(content_key.clone(), &content)
+        .await
+        .put(content_key.clone(), content.clone())
+        .await
         .expect("Unable to store content");
     let (found_content, utp_transfer, _) = overlay_one
         .lookup_content(content_key, false)

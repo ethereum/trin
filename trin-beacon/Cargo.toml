@@ -16,13 +16,10 @@ async-trait = "0.1.53"
 discv5 = { version = "0.4.0", features = ["serde"] }
 ethereum_ssz = "0.5.3"
 ethportal-api = { path = "../ethportal-api" }
-parking_lot = "0.11.2"
 portalnet = { path = "../portalnet" }
-r2d2 = "0.8.9"
-r2d2_sqlite = "0.24.0"
-rusqlite = { version = "0.31.0", features = ["bundled"] }
 light-client = { path = "../light-client" }
 serde_json = "1.0.89"
+sqlx = { version = "0.7", features = [ "runtime-tokio", "sqlite" ] }
 ssz_types = "0.5.4"
 tokio = { version = "1.14.0", features = ["full"] }
 tracing = "0.1.36"

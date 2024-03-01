@@ -38,17 +38,17 @@ impl StateRequestHandler {
 
     async fn handle_request(network: Arc<StateNetwork>, request: StateJsonRpcRequest) {
         let response: Result<Value, String> = match request.endpoint {
-            StateEndpoint::RoutingTableInfo => routing_table_info(network),
+            StateEndpoint::RoutingTableInfo => routing_table_info(network).await,
             StateEndpoint::Ping(enr) => ping(network, enr).await,
-            StateEndpoint::AddEnr(enr) => add_enr(network, enr),
-            StateEndpoint::DeleteEnr(node_id) => delete_enr(network, node_id),
-            StateEndpoint::GetEnr(node_id) => get_enr(network, node_id),
+            StateEndpoint::AddEnr(enr) => add_enr(network, enr).await,
+            StateEndpoint::DeleteEnr(node_id) => delete_enr(network, node_id).await,
+            StateEndpoint::GetEnr(node_id) => get_enr(network, node_id).await,
             StateEndpoint::LookupEnr(node_id) => lookup_enr(network, node_id).await,
             StateEndpoint::FindNodes(enr, distances) => find_nodes(network, enr, distances).await,
             StateEndpoint::RecursiveFindNodes(node_id) => {
                 recursive_find_nodes(network, node_id).await
             }
-            StateEndpoint::DataRadius => radius(network),
+            StateEndpoint::DataRadius => radius(network).await,
             StateEndpoint::LocalContent(content_key) => local_content(network, content_key).await,
             StateEndpoint::FindContent(enr, content_key) => {
                 find_content(network, enr, content_key).await
@@ -92,8 +92,8 @@ impl StateRequestHandler {
     }
 }
 
-fn routing_table_info(network: Arc<StateNetwork>) -> Result<Value, String> {
-    serde_json::to_value(network.overlay.routing_table_info()).map_err(|err| err.to_string())
+async fn routing_table_info(network: Arc<StateNetwork>) -> Result<Value, String> {
+    serde_json::to_value(network.overlay.routing_table_info().await).map_err(|err| err.to_string())
 }
 
 async fn ping(network: Arc<StateNetwork>, enr: Enr) -> Result<Value, String> {
@@ -106,25 +106,25 @@ async fn ping(network: Arc<StateNetwork>, enr: Enr) -> Result<Value, String> {
     )
 }
 
-fn add_enr(network: Arc<StateNetwork>, enr: Enr) -> Result<Value, String> {
-    to_json_result("AddEnr", network.overlay.add_enr(enr).map(|_| true))
+async fn add_enr(network: Arc<StateNetwork>, enr: Enr) -> Result<Value, String> {
+    to_json_result("AddEnr", network.overlay.add_enr(enr).await.map(|_| true))
 }
 
-fn delete_enr(network: Arc<StateNetwork>, node_id: NodeId) -> Result<Value, String> {
-    let is_deleted = network.overlay.delete_enr(node_id);
+async fn delete_enr(network: Arc<StateNetwork>, node_id: NodeId) -> Result<Value, String> {
+    let is_deleted = network.overlay.delete_enr(node_id).await;
     Ok(json!(is_deleted))
 }
 
-fn get_enr(network: Arc<StateNetwork>, node_id: NodeId) -> Result<Value, String> {
-    to_json_result("GetEnr", network.overlay.get_enr(node_id))
+async fn get_enr(network: Arc<StateNetwork>, node_id: NodeId) -> Result<Value, String> {
+    to_json_result("GetEnr", network.overlay.get_enr(node_id).await)
 }
 
 async fn lookup_enr(network: Arc<StateNetwork>, node_id: NodeId) -> Result<Value, String> {
     to_json_result("LookupEnr", network.overlay.lookup_enr(node_id).await)
 }
 
-fn radius(network: Arc<StateNetwork>) -> Result<Value, String> {
-    let radius = network.overlay.data_radius();
+async fn radius(network: Arc<StateNetwork>) -> Result<Value, String> {
+    let radius = network.overlay.data_radius().await;
     Ok(json!(*radius))
 }
 
@@ -157,7 +157,7 @@ async fn recursive_find_nodes(
     Ok(json!(nodes))
 }
 
-fn local_storage_lookup(
+async fn local_storage_lookup(
     network: &Arc<StateNetwork>,
     content_key: &StateContentKey,
 ) -> Result<Option<Vec<u8>>, String> {
@@ -165,7 +165,9 @@ fn local_storage_lookup(
         .overlay
         .store
         .read()
+        .await
         .get(content_key)
+        .await
         .map_err(|err| err.to_string())
 }
 
@@ -173,7 +175,7 @@ async fn local_content(
     network: Arc<StateNetwork>,
     content_key: StateContentKey,
 ) -> Result<Value, String> {
-    match local_storage_lookup(&network, &content_key) {
+    match local_storage_lookup(&network, &content_key).await {
         Ok(Some(content)) => Ok(Value::String(hex_encode(content))),
         Ok(None) => {
             let err = json!({
@@ -216,7 +218,7 @@ async fn recursive_find_content(
     content_key: StateContentKey,
     is_trace: bool,
 ) -> Result<Value, String> {
-    let local_content = match local_storage_lookup(&network, &content_key) {
+    let local_content = match local_storage_lookup(&network, &content_key).await {
         Ok(data) => data,
         Err(err) => {
             error!(
@@ -295,7 +297,9 @@ async fn store(
             .overlay
             .store
             .write()
+            .await
             .put(content_key, content_value.encode())
+            .await
             .map(|_| true)
             .map_err(|err| OverlayRequestError::Failure(err.to_string())),
     )
@@ -349,6 +353,7 @@ async fn gossip(
         Ok(network
             .overlay
             .propagate_gossip(vec![(content_key, content_value.encode())])
+            .await
             .into())
     }
 }

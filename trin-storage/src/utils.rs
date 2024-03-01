@@ -7,24 +7,29 @@ use crate::{
     versioned::sql::STORE_INFO_CREATE_TABLE,
     DATABASE_NAME,
 };
-use r2d2::Pool;
-use r2d2_sqlite::SqliteConnectionManager;
-use std::{fs, path::Path};
+use sqlx::{query, sqlite::SqlitePoolOptions, SqlitePool};
+use std::{
+    fs::{self, OpenOptions},
+    path::Path,
+};
 use tracing::info;
 
 /// Helper function for opening a SQLite connection.
-pub fn setup_sql(node_data_dir: &Path) -> Result<Pool<SqliteConnectionManager>, ContentStoreError> {
+pub async fn setup_sql(node_data_dir: &Path) -> Result<SqlitePool, ContentStoreError> {
     let sql_path = node_data_dir.join(DATABASE_NAME);
+    let sql_str_path = &sql_path.as_path().display().to_string()[..];
     info!(path = %sql_path.display(), "Setting up SqliteDB");
 
-    let manager = SqliteConnectionManager::file(sql_path);
-    let pool = Pool::new(manager)?;
-    let conn = pool.get()?;
-    conn.execute_batch(CREATE_QUERY_DB_HISTORY)?;
-    conn.execute_batch(CREATE_QUERY_DB_BEACON)?;
-    conn.execute_batch(LC_UPDATE_CREATE_TABLE)?;
-    conn.execute_batch(STORE_INFO_CREATE_TABLE)?;
-    conn.execute_batch(DROP_CONTENT_DATA_QUERY_DB)?;
+    let _ = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(sql_str_path);
+    let pool = SqlitePoolOptions::new().connect(sql_str_path).await?;
+    query(CREATE_QUERY_DB_HISTORY).execute(&pool).await?;
+    query(CREATE_QUERY_DB_BEACON).execute(&pool).await?;
+    query(LC_UPDATE_CREATE_TABLE).execute(&pool).await?;
+    query(STORE_INFO_CREATE_TABLE).execute(&pool).await?;
+    query(DROP_CONTENT_DATA_QUERY_DB).execute(&pool).await?;
     Ok(pool)
 }
 

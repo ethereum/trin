@@ -1,7 +1,5 @@
 use ethportal_api::types::distance::Distance;
-use r2d2::Pool;
-use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::{named_params, types::Type, OptionalExtension};
+use sqlx::{query, sqlite::SqliteRow, Row, SqlitePool};
 use tracing::{debug, error, warn};
 use trin_metrics::storage::StorageMetricsReporter;
 
@@ -54,29 +52,32 @@ impl VersionedContentStore for IdIndexedV1Store {
         })
     }
 
-    fn create(content_type: ContentType, config: Self::Config) -> Result<Self, ContentStoreError> {
-        maybe_create_table_and_indexes(&content_type, &config.sql_connection_pool)?;
+    async fn create(
+        content_type: ContentType,
+        config: Self::Config,
+    ) -> Result<Self, ContentStoreError> {
+        maybe_create_table_and_indexes(&content_type, &config.sql_connection_pool).await?;
 
         let protocol_id = config.network;
 
-        let mut store = Self {
+        let mut store: IdIndexedV1Store = Self {
             config,
             inserts_until_pruning: 0,
             radius: Distance::MAX,
             metrics: StorageMetricsReporter::new(protocol_id),
         };
-        store.init()?;
+        store.init().await?;
         Ok(store)
     }
 }
 
 impl IdIndexedV1Store {
     /// Initializes variables and metrics, and runs necessary checks.
-    fn init(&mut self) -> Result<(), ContentStoreError> {
+    async fn init(&mut self) -> Result<(), ContentStoreError> {
         self.metrics
             .report_storage_capacity_bytes(self.config.storage_capacity_bytes as f64);
 
-        let usage_stats = self.get_usage_stats()?;
+        let usage_stats = self.get_usage_stats().await?;
 
         if usage_stats.is_above_target_capacity(&self.config) {
             debug!(
@@ -85,7 +86,7 @@ impl IdIndexedV1Store {
                 usage_stats.used_storage_bytes,
                 self.config.target_capacity()
             );
-            self.prune(usage_stats)?;
+            self.prune(usage_stats).await?;
         } else {
             debug!(
                 Db = %self.config.content_type,
@@ -100,7 +101,7 @@ impl IdIndexedV1Store {
 
         // Check that distance to the farthest content is what is stored. This is a simple check
         // that the NodeId didn't change.
-        let farthest = self.lookup_farthest()?;
+        let farthest = self.lookup_farthest().await?;
         if let Some(farthest) = farthest {
             let distance = self.distance_to_content_id(&farthest.content_id);
             if farthest.distance_u32 != distance.big_endian_u32() {
@@ -129,70 +130,60 @@ impl IdIndexedV1Store {
     }
 
     /// Returns whether data associated with the content id is already stored.
-    pub fn has_content(&self, content_id: &ContentId) -> Result<bool, ContentStoreError> {
+    pub async fn has_content(&self, content_id: &ContentId) -> Result<bool, ContentStoreError> {
         let timer = self.metrics.start_process_timer("has_content");
 
-        let has_content = self
-            .config
-            .sql_connection_pool
-            .get()?
-            .prepare(&sql::lookup_key(&self.config.content_type))?
-            .exists(named_params! {
-                ":content_id": content_id.as_fixed_bytes().to_vec(),
-            })?;
+        let has_content = query(&sql::lookup_key(&self.config.content_type))
+            .bind(content_id.as_fixed_bytes().as_slice())
+            .fetch_optional(&self.config.sql_connection_pool)
+            .await?
+            .map_or(false, |_| true);
 
         self.metrics.stop_process_timer(timer);
         Ok(has_content)
     }
 
     /// Returns content key data is stored.
-    pub fn lookup_content_key<K: ethportal_api::OverlayContentKey>(
+    pub async fn lookup_content_key<K: ethportal_api::OverlayContentKey>(
         &self,
         content_id: &ContentId,
     ) -> Result<Option<K>, ContentStoreError> {
         let timer = self.metrics.start_process_timer("lookup_content_key");
 
-        let key = self
-            .config
-            .sql_connection_pool
-            .get()?
-            .query_row(
-                &sql::lookup_key(&self.config.content_type),
-                named_params! {
-                    ":content_id": content_id.as_fixed_bytes().to_vec(),
-                },
-                |row| {
-                    let bytes: Vec<u8> = row.get("content_key")?;
-                    K::try_from(bytes).map_err(|e| {
-                        rusqlite::Error::FromSqlConversionFailure(0, Type::Blob, e.into())
-                    })
-                },
-            )
-            .optional()?;
+        let bytes = query(&sql::lookup_key(&self.config.content_type))
+            .bind(content_id.as_fixed_bytes().as_slice())
+            .map(|row: SqliteRow| {
+                let bytes: Vec<u8> = row.get("content_key");
+                bytes
+            })
+            .fetch_optional(&self.config.sql_connection_pool)
+            .await?;
+        let key = match bytes {
+            Some(bytes) => match K::try_from(bytes) {
+                Ok(key) => Ok(Some(key)),
+                Err(err) => Err(ContentStoreError::ContentKey(err)),
+            },
+            None => Ok(None),
+        };
 
         self.metrics.stop_process_timer(timer);
-        Ok(key)
+        key
     }
 
     /// Returns content value data is stored.
-    pub fn lookup_content_value(
+    pub async fn lookup_content_value(
         &self,
         content_id: &ContentId,
     ) -> Result<Option<Vec<u8>>, ContentStoreError> {
         let timer = self.metrics.start_process_timer("lookup_content_value");
-
-        let value = self
-            .config
-            .sql_connection_pool
-            .get()?
-            .query_row(
-                &sql::lookup_value(&self.config.content_type),
-                named_params! {
-                    ":content_id": content_id.as_fixed_bytes().to_vec(),
-                },
-                |row| row.get::<&str, Vec<u8>>("content_value"),
-            )
-            .optional()?;
+        let value = query(&sql::lookup_value(&self.config.content_type))
+            .bind(content_id.as_fixed_bytes().as_slice())
+            .map(|row: SqliteRow| {
+                let value: Vec<u8> = row.get("content_value");
+                value
+            })
+            .fetch_optional(&self.config.sql_connection_pool)
+            .await?;
 
         self.metrics.stop_process_timer(timer);
         Ok(value)
@@ -200,7 +191,7 @@ impl IdIndexedV1Store {
 
     /// Inserts content key/value pair into storage and prunes the db if necessary. It will return
     /// `InsufficientRadius` error if content is outside radius.
-    pub fn insert<K: ethportal_api::OverlayContentKey>(
+    pub async fn insert<K: ethportal_api::OverlayContentKey>(
         &mut self,
         content_key: &K,
         content_value: Vec<u8>,
@@ -217,30 +208,28 @@ impl IdIndexedV1Store {
             });
         }
 
-        let content_id = content_id.to_vec();
+        let content_id = content_id.as_slice();
         let content_key = content_key.to_bytes();
-        let content_size = content_id.len() + content_key.len() + content_value.len();
+        let content_size = (content_id.len() + content_key.len() + content_value.len()) as i64;
 
         let insert_timer = self.metrics.start_process_timer("insert");
-        self.config.sql_connection_pool.get()?.execute(
-            &sql::insert(&self.config.content_type),
-            named_params! {
-                ":content_id": content_id,
-                ":content_key": content_key,
-                ":content_value": content_value,
-                ":distance_short": distance.big_endian_u32(),
-                ":content_size": content_size,
-            },
-        )?;
+        query(&sql::insert(&self.config.content_type))
+            .bind(content_id)
+            .bind(content_key)
+            .bind(content_value)
+            .bind(distance.big_endian_u32())
+            .bind(content_size)
+            .execute(&self.config.sql_connection_pool)
+            .await?;
         self.metrics.stop_process_timer(insert_timer);
         self.metrics.increase_entry_count();
 
         if self.inserts_until_pruning > 1 {
             self.inserts_until_pruning -= 1;
         } else {
-            let usage_stats = self.get_usage_stats()?;
+            let usage_stats = self.get_usage_stats().await?;
             if usage_stats.is_above_pruning_capacity_threshold(&self.config) {
-                self.prune(usage_stats)?
+                self.prune(usage_stats).await?
             } else {
                 self.update_inserts_until_pruning(&usage_stats);
             }
@@ -251,14 +240,12 @@ impl IdIndexedV1Store {
     }
 
     /// Deletes content with the given content id.
-    pub fn delete(&mut self, content_id: &ContentId) -> Result<(), ContentStoreError> {
+    pub async fn delete(&mut self, content_id: &ContentId) -> Result<(), ContentStoreError> {
         let timer = self.metrics.start_process_timer("delete");
-        self.config.sql_connection_pool.get()?.execute(
-            &sql::delete(&self.config.content_type),
-            named_params! {
-                ":content_id": content_id.as_fixed_bytes().to_vec(),
-            },
-        )?;
+        query(&sql::delete(&self.config.content_type))
+            .bind(content_id.as_fixed_bytes().as_slice())
+            .execute(&self.config.sql_connection_pool)
+            .await?;
         self.metrics.decrease_entry_count();
 
         self.metrics.stop_process_timer(timer);
@@ -266,9 +253,9 @@ impl IdIndexedV1Store {
     }
 
     /// Updates metrics and returns summary.
-    pub fn get_summary_info(&self) -> String {
+    pub async fn get_summary_info(&self) -> String {
         // Call `get_usage_stats` to update metrics.
-        if let Err(err) = self.get_usage_stats() {
+        if let Err(err) = self.get_usage_stats().await {
             warn!(Db = %self.config.content_type, "Error while getting summary info: {err}");
         }
         self.metrics.get_summary()
@@ -277,21 +264,20 @@ impl IdIndexedV1Store {
     // INTERNAL FUNCTIONS
 
     /// Returns usage stats and updates relevant metrics.
-    fn get_usage_stats(&self) -> Result<UsageStats, ContentStoreError> {
+    async fn get_usage_stats(&self) -> Result<UsageStats, ContentStoreError> {
         let timer = self.metrics.start_process_timer("get_usage_stats");
 
-        let conn = self.config.sql_connection_pool.get()?;
-        let usage_stats = conn.query_row(
-            &sql::entry_count_and_size(&self.config.content_type),
-            [],
-            |row| {
-                let used_capacity: f64 = row.get("used_capacity")?;
-                Ok(UsageStats {
-                    content_count: row.get("count")?,
+        let usage_stats = query(&sql::entry_count_and_size(&self.config.content_type))
+            .map(|row: SqliteRow| {
+                let used_capacity: f64 = row.get("used_capacity");
+                let count: i64 = row.get("count");
+                UsageStats {
+                    content_count: count as u64,
                     used_storage_bytes: used_capacity.round() as u64,
-                })
-            },
-        )?;
+                }
+            })
+            .fetch_one(&self.config.sql_connection_pool)
+            .await?;
 
         self.metrics.report_entry_count(usage_stats.content_count);
         self.metrics
@@ -308,32 +294,24 @@ impl IdIndexedV1Store {
     }
 
     /// Returns the farthest content in the table.
-    fn lookup_farthest(&self) -> Result<Option<FarthestQueryResult>, ContentStoreError> {
+    async fn lookup_farthest(&self) -> Result<Option<FarthestQueryResult>, ContentStoreError> {
         let timer = self.metrics.start_process_timer("lookup_farthest");
-        let farthest = self
-            .config
-            .sql_connection_pool
-            .get()?
-            .query_row(
-                &sql::lookup_farthest(&self.config.content_type),
-                named_params! {
-                    ":limit": 1,
-                },
-                |row| {
-                    Ok(FarthestQueryResult {
-                        content_id: row.get("content_id")?,
-                        distance_u32: row.get("distance_short")?,
-                    })
-                },
-            )
-            .optional()?;
+        let farthest: Option<FarthestQueryResult> =
+            query(&sql::lookup_farthest(&self.config.content_type))
+                .bind(1)
+                .map(|row: SqliteRow| FarthestQueryResult {
+                    content_id: row.get("content_id"),
+                    distance_u32: row.get("distance_short"),
+                })
+                .fetch_optional(&self.config.sql_connection_pool)
+                .await?;
 
         self.metrics.stop_process_timer(timer);
         Ok(farthest)
     }
 
     /// Prunes database, and updates radius and inserts_until_pruning.
-    fn prune(&mut self, usage_stats: UsageStats) -> Result<(), ContentStoreError> {
+    async fn prune(&mut self, usage_stats: UsageStats) -> Result<(), ContentStoreError> {
         let timer = self.metrics.start_process_timer("prune");
 
         if !usage_stats.is_above_target_capacity(&self.config) {
@@ -341,8 +319,7 @@ impl IdIndexedV1Store {
             return Ok(());
         }
 
-        let conn = self.config.sql_connection_pool.get()?;
-        let mut delete_query = conn.prepare(&sql::delete_farthest(&self.config.content_type))?;
+        let delete_query = sql::delete_farthest(&self.config.content_type);
 
         let mut usage_stats = usage_stats;
         while usage_stats.is_above_pruning_capacity_threshold(&self.config) {
@@ -353,25 +330,26 @@ impl IdIndexedV1Store {
                 return Ok(());
             }
 
-            let deleted = delete_query.execute(named_params! {
-               ":limit": to_delete
-            })? as u64;
+            let deleted = query(&delete_query)
+                .bind(to_delete as i64)
+                .execute(&self.config.sql_connection_pool)
+                .await?
+                .rows_affected();
 
             if to_delete != deleted {
-                error!(Db = %self.config.content_type, "Attempted to delete {to_delete} but deleted {deleted}");
+                error!(Db = %self.config.content_type, "Attempted to delete {to_delete} but deleted {}", deleted);
                 break;
             }
 
-            usage_stats = self.get_usage_stats()?;
+            usage_stats = self.get_usage_stats().await?;
         }
         // Free connection.
         drop(delete_query);
-        drop(conn);
 
         self.update_inserts_until_pruning(&usage_stats);
 
         // Update radius to the current farthest content
-        match self.lookup_farthest()? {
+        match self.lookup_farthest().await? {
             None => {
                 error!(Db = %self.config.content_type, "Farthest not found after pruning!");
             }
@@ -393,12 +371,13 @@ impl IdIndexedV1Store {
 }
 
 /// Creates table and indexes if they don't already exist.
-fn maybe_create_table_and_indexes(
+async fn maybe_create_table_and_indexes(
     content_type: &ContentType,
-    pool: &Pool<SqliteConnectionManager>,
+    pool: &SqlitePool,
 ) -> Result<(), ContentStoreError> {
-    let conn = pool.get()?;
-    conn.execute_batch(&sql::create_table(content_type))?;
+    query(&sql::create_table(content_type))
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
@@ -406,7 +385,9 @@ fn maybe_create_table_and_indexes(
 mod tests {
     use anyhow::Result;
     use discv5::enr::NodeId;
-    use ethportal_api::{types::portal_wire::ProtocolId, IdentityContentKey, OverlayContentKey};
+    use ethportal_api::{
+        jsonrpsee::tokio, types::portal_wire::ProtocolId, IdentityContentKey, OverlayContentKey,
+    };
     use tempfile::TempDir;
 
     use crate::{test_utils::generate_random_bytes, utils::setup_sql, DistanceFunction};
@@ -416,14 +397,14 @@ mod tests {
     const STORAGE_CAPACITY_10KB_IN_BYTES: u64 = 10_000;
     const CONTENT_SIZE_100_BYTES: u64 = STORAGE_CAPACITY_10KB_IN_BYTES / 100;
 
-    fn create_config(temp_dir: &TempDir) -> IdIndexedV1StoreConfig {
+    async fn create_config(temp_dir: &TempDir) -> IdIndexedV1StoreConfig {
         IdIndexedV1StoreConfig {
             content_type: ContentType::State,
             network: ProtocolId::State,
             node_id: NodeId::random(),
             node_data_dir: temp_dir.path().to_path_buf(),
             distance_fn: DistanceFunction::Xor,
-            sql_connection_pool: setup_sql(temp_dir.path()).unwrap(),
+            sql_connection_pool: setup_sql(temp_dir.path()).await.unwrap(),
             storage_capacity_bytes: STORAGE_CAPACITY_10KB_IN_BYTES,
         }
     }
@@ -453,46 +434,49 @@ mod tests {
     }
 
     // Creates table and content at approximate middle distance (first byte distance is 0.80).
-    fn create_and_populate_table(config: &IdIndexedV1StoreConfig, count: u64) -> Result<()> {
-        maybe_create_table_and_indexes(&config.content_type, &config.sql_connection_pool)?;
+    async fn create_and_populate_table(config: &IdIndexedV1StoreConfig, count: u64) -> Result<()> {
+        maybe_create_table_and_indexes(&config.content_type, &config.sql_connection_pool).await?;
         for _ in 0..count {
             let (key, value) = generate_key_value(config, 0x80);
             let id = key.content_id();
             let content_size = id.len() + key.to_bytes().len() + value.len();
-            config
-                .sql_connection_pool
-                .get()?
-                .execute(&sql::insert(&config.content_type), named_params! {
-                    ":content_id": id.as_slice(),
-                    ":content_key": key.to_bytes(),
-                    ":content_value": value,
-                    ":distance_short": config.distance_fn.distance(&config.node_id, &id).big_endian_u32(),
-                    ":content_size": content_size,
-                })?;
+            query(&sql::insert(&config.content_type))
+                .bind(id.as_slice())
+                .bind(key.to_bytes())
+                .bind(value)
+                .bind(
+                    config
+                        .distance_fn
+                        .distance(&config.node_id, &id)
+                        .big_endian_u32(),
+                )
+                .bind(content_size as i64)
+                .execute(&config.sql_connection_pool)
+                .await?;
         }
         Ok(())
     }
 
-    #[test]
-    fn create_empty() -> Result<()> {
+    #[tokio::test]
+    async fn create_empty() -> Result<()> {
         let temp_dir = TempDir::new()?;
-        let config = create_config(&temp_dir);
-        let store = IdIndexedV1Store::create(ContentType::State, config)?;
+        let config = create_config(&temp_dir).await;
+        let store = IdIndexedV1Store::create(ContentType::State, config).await?;
         assert_eq!(store.radius(), Distance::MAX);
         assert_eq!(store.inserts_until_pruning, 0);
         Ok(())
     }
 
-    #[test]
-    fn create_low_usage_full() -> Result<()> {
+    #[tokio::test]
+    async fn create_low_usage_full() -> Result<()> {
         let temp_dir = TempDir::new()?;
-        let config = create_config(&temp_dir);
+        let config = create_config(&temp_dir).await;
 
         let item_count = 20;
-        create_and_populate_table(&config, item_count)?;
+        create_and_populate_table(&config, item_count).await?;
 
-        let store = IdIndexedV1Store::create(ContentType::State, config)?;
-        let usage_stats = store.get_usage_stats()?;
+        let store = IdIndexedV1Store::create(ContentType::State, config).await?;
+        let usage_stats = store.get_usage_stats().await?;
 
         assert_eq!(usage_stats.content_count, item_count);
         assert_eq!(
@@ -504,16 +488,16 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn create_half_full() -> Result<()> {
+    #[tokio::test]
+    async fn create_half_full() -> Result<()> {
         let temp_dir = TempDir::new()?;
-        let config = create_config(&temp_dir);
+        let config = create_config(&temp_dir).await;
 
         let item_count = 50;
-        create_and_populate_table(&config, item_count)?;
+        create_and_populate_table(&config, item_count).await?;
 
-        let store = IdIndexedV1Store::create(ContentType::State, config)?;
-        let usage_stats = store.get_usage_stats()?;
+        let store = IdIndexedV1Store::create(ContentType::State, config).await?;
+        let usage_stats = store.get_usage_stats().await?;
 
         assert_eq!(usage_stats.content_count, item_count);
         assert_eq!(
@@ -525,16 +509,16 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn create_at_target_capacity() -> Result<()> {
+    #[tokio::test]
+    async fn create_at_target_capacity() -> Result<()> {
         let temp_dir = TempDir::new()?;
-        let config = create_config(&temp_dir);
+        let config = create_config(&temp_dir).await;
 
         let target_capacity_count = config.target_capacity() / CONTENT_SIZE_100_BYTES;
-        create_and_populate_table(&config, target_capacity_count)?;
+        create_and_populate_table(&config, target_capacity_count).await?;
 
-        let store = IdIndexedV1Store::create(ContentType::State, config)?;
-        let usage_stats = store.get_usage_stats()?;
+        let store = IdIndexedV1Store::create(ContentType::State, config).await?;
+        let usage_stats = store.get_usage_stats().await?;
         assert_eq!(usage_stats.content_count, target_capacity_count);
         assert_eq!(
             usage_stats.used_storage_bytes,
@@ -545,16 +529,16 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn create_at_pruning_capacity() -> Result<()> {
+    #[tokio::test]
+    async fn create_at_pruning_capacity() -> Result<()> {
         let temp_dir = TempDir::new()?;
-        let config = create_config(&temp_dir);
+        let config = create_config(&temp_dir).await;
 
         let pruning_capacity_count = config.pruning_capacity_threshold() / CONTENT_SIZE_100_BYTES;
-        create_and_populate_table(&config, pruning_capacity_count)?;
+        create_and_populate_table(&config, pruning_capacity_count).await?;
 
-        let store = IdIndexedV1Store::create(ContentType::State, config)?;
-        let usage_stats = store.get_usage_stats()?;
+        let store = IdIndexedV1Store::create(ContentType::State, config).await?;
+        let usage_stats = store.get_usage_stats().await?;
 
         // no pruning should happen
         assert_eq!(usage_stats.content_count, pruning_capacity_count);
@@ -567,19 +551,19 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn create_above_pruning_capacity() -> Result<()> {
+    #[tokio::test]
+    async fn create_above_pruning_capacity() -> Result<()> {
         let temp_dir = TempDir::new()?;
-        let config = create_config(&temp_dir);
+        let config = create_config(&temp_dir).await;
 
         let above_pruning_capacity_count =
             1 + config.pruning_capacity_threshold() / CONTENT_SIZE_100_BYTES;
         let target_capacity_count = config.target_capacity() / CONTENT_SIZE_100_BYTES;
 
-        create_and_populate_table(&config, above_pruning_capacity_count)?;
+        create_and_populate_table(&config, above_pruning_capacity_count).await?;
 
-        let store = IdIndexedV1Store::create(ContentType::State, config)?;
-        let usage_stats = store.get_usage_stats()?;
+        let store = IdIndexedV1Store::create(ContentType::State, config).await?;
+        let usage_stats = store.get_usage_stats().await?;
 
         // should prune until target capacity
         assert_eq!(usage_stats.content_count, target_capacity_count);
@@ -592,18 +576,18 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn create_above_full_capacity() -> Result<()> {
+    #[tokio::test]
+    async fn create_above_full_capacity() -> Result<()> {
         let temp_dir = TempDir::new()?;
-        let config = create_config(&temp_dir);
+        let config = create_config(&temp_dir).await;
 
         let above_full_capacity_count = 10 + config.storage_capacity_bytes / CONTENT_SIZE_100_BYTES;
         let target_capacity_count = config.target_capacity() / CONTENT_SIZE_100_BYTES;
 
-        create_and_populate_table(&config, above_full_capacity_count)?;
+        create_and_populate_table(&config, above_full_capacity_count).await?;
 
-        let store = IdIndexedV1Store::create(ContentType::State, config)?;
-        let usage_stats = store.get_usage_stats()?;
+        let store = IdIndexedV1Store::create(ContentType::State, config).await?;
+        let usage_stats = store.get_usage_stats().await?;
 
         // should prune until target capacity
         assert_eq!(usage_stats.content_count, target_capacity_count);
@@ -616,126 +600,141 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn simple_insert_and_lookup() -> Result<()> {
+    #[tokio::test]
+    async fn simple_insert_and_lookup() -> Result<()> {
         let temp_dir = TempDir::new()?;
-        let config = create_config(&temp_dir);
-        let mut store = IdIndexedV1Store::create(ContentType::State, config.clone())?;
+        let config = create_config(&temp_dir).await;
+        let mut store = IdIndexedV1Store::create(ContentType::State, config.clone()).await?;
 
         let (key, value) = generate_key_value(&config, 0);
         let id = ContentId::from(key.content_id());
 
-        assert!(!store.has_content(&id)?);
+        assert!(!store.has_content(&id).await?);
 
-        store.insert(&key, value.clone())?;
+        store.insert(&key, value.clone()).await?;
 
-        assert!(store.has_content(&id)?);
-        assert_eq!(store.lookup_content_key(&id)?, Some(key));
-        assert_eq!(store.lookup_content_value(&id)?, Some(value));
+        assert!(store.has_content(&id).await?);
+        assert_eq!(store.lookup_content_key(&id).await?, Some(key));
+        assert_eq!(store.lookup_content_value(&id).await?, Some(value));
 
         Ok(())
     }
 
-    #[test]
-    fn simple_insert_and_delete() -> Result<()> {
+    #[tokio::test]
+    async fn simple_insert_and_delete() -> Result<()> {
         let temp_dir = TempDir::new()?;
-        let config = create_config(&temp_dir);
-        let mut store = IdIndexedV1Store::create(ContentType::State, config.clone())?;
+        let config = create_config(&temp_dir).await;
+        let mut store = IdIndexedV1Store::create(ContentType::State, config.clone()).await?;
 
         let (key, value) = generate_key_value(&config, 0);
         let id = ContentId::from(key.content_id());
 
-        assert!(!store.has_content(&id)?);
+        assert!(!store.has_content(&id).await?);
 
-        store.insert(&key, value)?;
-        assert!(store.has_content(&id)?);
+        store.insert(&key, value).await?;
+        assert!(store.has_content(&id).await?);
 
-        store.delete(&id)?;
-        assert!(!store.has_content(&id)?);
+        store.delete(&id).await?;
+        assert!(!store.has_content(&id).await?);
 
         Ok(())
     }
 
-    #[test]
-    fn inserts_until_pruning_from_empty_to_full() -> Result<()> {
+    async fn insert_and_check(
+        insert_count: u64,
+        expected_count: u64,
+        expected_inserts_until_pruning: u64,
+        mut store: IdIndexedV1Store,
+        config: &IdIndexedV1StoreConfig,
+    ) -> IdIndexedV1Store {
+        for _ in 0..insert_count {
+            let (key, value) = generate_key_value(config, 0);
+            store.insert(&key, value).await.unwrap();
+        }
+        let usage_stats = store.get_usage_stats().await.unwrap();
+        assert_eq!(
+            usage_stats.content_count, expected_count,
+            "UsageStats: {usage_stats:?}. Testing count"
+        );
+        assert_eq!(
+            store.inserts_until_pruning, expected_inserts_until_pruning,
+            "UsageStats: {usage_stats:?}. Testing inserts_until_pruning"
+        );
+        store
+    }
+
+    #[tokio::test]
+    async fn inserts_until_pruning_from_empty_to_full() -> Result<()> {
         let temp_dir = TempDir::new()?;
-        let config = create_config(&temp_dir);
-        let mut store = IdIndexedV1Store::create(ContentType::State, config.clone())?;
+        let config = create_config(&temp_dir).await;
+        let store = IdIndexedV1Store::create(ContentType::State, config.clone()).await?;
 
         assert_eq!(store.inserts_until_pruning, 0);
 
-        let mut insert_and_check =
-            |insert_count: u64, expected_count: u64, expected_inserts_until_pruning: u64| {
-                for _ in 0..insert_count {
-                    let (key, value) = generate_key_value(&config, 0);
-                    store.insert(&key, value).unwrap();
-                }
-                let usage_stats = store.get_usage_stats().unwrap();
-                assert_eq!(
-                    usage_stats.content_count, expected_count,
-                    "UsageStats: {usage_stats:?}. Testing count"
-                );
-                assert_eq!(
-                    store.inserts_until_pruning, expected_inserts_until_pruning,
-                    "UsageStats: {usage_stats:?}. Testing inserts_until_pruning"
-                );
-            };
-
         // The inserts_until_pruning shouldn't be bigger that stored count
-        insert_and_check(
+        let store = insert_and_check(
             /* insert_count= */ 1, /* expected_count= */ 1,
-            /* expected_inserts_until_pruning= */ 1,
-        );
-        insert_and_check(
+            /* expected_inserts_until_pruning= */ 1, store, &config,
+        )
+        .await;
+        let store = insert_and_check(
             /* insert_count= */ 1, /* expected_count= */ 2,
-            /* expected_inserts_until_pruning= */ 2,
-        );
-        insert_and_check(
+            /* expected_inserts_until_pruning= */ 2, store, &config,
+        )
+        .await;
+        let store = insert_and_check(
             /* insert_count= */ 2, /* expected_count= */ 4,
-            /* expected_inserts_until_pruning= */ 4,
-        );
-        insert_and_check(
+            /* expected_inserts_until_pruning= */ 4, store, &config,
+        )
+        .await;
+        let store = insert_and_check(
             /* insert_count= */ 4, /* expected_count= */ 8,
-            /* expected_inserts_until_pruning= */ 8,
-        );
-        insert_and_check(
+            /* expected_inserts_until_pruning= */ 8, store, &config,
+        )
+        .await;
+        let store = insert_and_check(
             /* insert_count= */ 8, /* expected_count= */ 16,
-            /* expected_inserts_until_pruning= */ 16,
-        );
-        insert_and_check(
+            /* expected_inserts_until_pruning= */ 16, store, &config,
+        )
+        .await;
+        let store = insert_and_check(
             /* insert_count= */ 16, /* expected_count= */ 32,
-            /* expected_inserts_until_pruning= */ 32,
-        );
+            /* expected_inserts_until_pruning= */ 32, store, &config,
+        )
+        .await;
 
         // The inserts_until_pruning should estimate when we reach full capacity
-        insert_and_check(
+        let store = insert_and_check(
             /* insert_count= */ 32, /* expected_count= */ 64,
-            /* expected_inserts_until_pruning= */ 36,
-        );
+            /* expected_inserts_until_pruning= */ 36, store, &config,
+        )
+        .await;
 
         // We shouldn't trigger pruning for next `inserts_until_pruning - 1` inserts.
-        insert_and_check(
+        let store = insert_and_check(
             /* insert_count= */ 35, /* expected_count= */ 99,
-            /* expected_inserts_until_pruning= */ 1,
-        );
+            /* expected_inserts_until_pruning= */ 1, store, &config,
+        )
+        .await;
 
         // Inserting one more should trigger pruning and we should be down to target capacity.
-        insert_and_check(
+        let _ = insert_and_check(
             /* insert_count= */ 1, /* expected_count= */ 90,
-            /* expected_inserts_until_pruning= */ 10,
-        );
+            /* expected_inserts_until_pruning= */ 10, store, &config,
+        )
+        .await;
 
         Ok(())
     }
 
-    #[test]
-    fn pruning_with_one_large_item() -> Result<()> {
+    #[tokio::test]
+    async fn pruning_with_one_large_item() -> Result<()> {
         let temp_dir = TempDir::new()?;
-        let config = create_config(&temp_dir);
+        let config = create_config(&temp_dir).await;
 
         // fill 50% of storage with 50 items, 1% each
-        create_and_populate_table(&config, 50)?;
-        let mut store = IdIndexedV1Store::create(ContentType::State, config.clone())?;
+        create_and_populate_table(&config, 50).await?;
+        let mut store = IdIndexedV1Store::create(ContentType::State, config.clone()).await?;
         assert_eq!(store.inserts_until_pruning, 50);
 
         // Insert key/value such that:
@@ -746,18 +745,18 @@ mod tests {
             /* distance = */ 0,
             STORAGE_CAPACITY_10KB_IN_BYTES / 2,
         );
-        store.insert(&big_value_key, value)?;
+        store.insert(&big_value_key, value).await?;
 
         // Add another 48 small items (1% each) and check that:
         // - we didn't prune
         // - we are at 148% total capacity
         for _ in 0..48 {
             let (key, value) = generate_key_value(&config, 0x80);
-            store.insert(&key, value).unwrap();
+            store.insert(&key, value).await.unwrap();
         }
         assert_eq!(store.inserts_until_pruning, 1);
         assert_eq!(
-            store.get_usage_stats()?.used_storage_bytes,
+            store.get_usage_stats().await?.used_storage_bytes,
             STORAGE_CAPACITY_10KB_IN_BYTES * 148 / 100
         );
 
@@ -766,22 +765,29 @@ mod tests {
         // - the big_value_key is still stored
         // - inserts_until_pruning is set to correct value
         let (key, value) = generate_key_value(&config, 1);
-        store.insert(&key, value).unwrap();
-        assert!(store.get_usage_stats()?.used_storage_bytes <= config.pruning_capacity_threshold());
-        assert!(store.has_content(&big_value_key.content_id().into())?);
+        store.insert(&key, value).await.unwrap();
+        assert!(
+            store.get_usage_stats().await?.used_storage_bytes
+                <= config.pruning_capacity_threshold()
+        );
+        assert!(
+            store
+                .has_content(&big_value_key.content_id().into())
+                .await?
+        );
         assert_eq!(store.inserts_until_pruning, 2);
 
         Ok(())
     }
 
-    #[test]
-    fn pruning_with_many_close_large_item() -> Result<()> {
+    #[tokio::test]
+    async fn pruning_with_many_close_large_item() -> Result<()> {
         let temp_dir = TempDir::new()?;
-        let config = create_config(&temp_dir);
+        let config = create_config(&temp_dir).await;
 
         // Fill 50% of storage with 50 items, 1% each
-        create_and_populate_table(&config, 50)?;
-        let mut store = IdIndexedV1Store::create(ContentType::State, config.clone())?;
+        create_and_populate_table(&config, 50).await?;
+        let mut store = IdIndexedV1Store::create(ContentType::State, config.clone()).await?;
         assert_eq!(store.inserts_until_pruning, 50);
 
         // Add 49 items with small distance and large size (50% total storage each) and check that:
@@ -793,11 +799,11 @@ mod tests {
                 /* distance = */ 0,
                 STORAGE_CAPACITY_10KB_IN_BYTES / 2,
             );
-            store.insert(&key, value)?;
+            store.insert(&key, value).await?;
         }
         assert_eq!(store.inserts_until_pruning, 1);
         assert_eq!(
-            store.get_usage_stats()?.used_storage_bytes,
+            store.get_usage_stats().await?.used_storage_bytes,
             25 * STORAGE_CAPACITY_10KB_IN_BYTES
         );
 
@@ -809,9 +815,9 @@ mod tests {
             /* distance = */ 0,
             STORAGE_CAPACITY_10KB_IN_BYTES / 2,
         );
-        store.insert(&key, value)?;
+        store.insert(&key, value).await?;
         assert_eq!(
-            store.get_usage_stats()?,
+            store.get_usage_stats().await?,
             UsageStats {
                 content_count: 1,
                 used_storage_bytes: STORAGE_CAPACITY_10KB_IN_BYTES / 2

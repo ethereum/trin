@@ -19,5 +19,8 @@ pub trait VersionedContentStore: Sized {
 
     /// Creates the instance of the store. This shouldn't be used directly. Store should be
     /// created using `create_store` function.
-    fn create(content_type: ContentType, config: Self::Config) -> Result<Self, ContentStoreError>;
+    fn create(
+        content_type: ContentType,
+        config: Self::Config,
+    ) -> impl std::future::Future<Output = Result<Self, ContentStoreError>> + Send;
 }
