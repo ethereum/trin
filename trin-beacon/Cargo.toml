@@ -30,4 +30,4 @@ trin-metrics = { path = "../trin-metrics" }
 trin-storage = { path = "../trin-storage" }
 trin-validation = { path = "../trin-validation" }
 trin-utils = { path = "../trin-utils" }
-utp-rs = { git = "https://github.com/ethereum/utp", tag = "v0.1.0-alpha.10" }
+utp-rs = { git = "https://github.com/ethereum/utp", tag = "v0.1.0-alpha.11" }
