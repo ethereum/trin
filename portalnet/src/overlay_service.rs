@@ -19,6 +19,7 @@ use discv5::{
     rpc::RequestId,
 };
 use futures::{channel::oneshot, future::join_all, prelude::*};
+use itertools::Itertools;
 use lazy_static::lazy_static;
 use parking_lot::RwLock;
 use rand::seq::SliceRandom;
@@ -1906,7 +1907,9 @@ where
                     None => vec![(content_key, content_value)],
                 }
             })
+            .unique_by(|(key, _)| key.content_id())
             .collect();
+
         let ids_to_propagate: Vec<String> = content_to_propagate
             .iter()
             .map(|(k, _)| hex_encode_compact(k.content_id()))

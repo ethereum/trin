@@ -26,6 +26,7 @@ fnv = "1.0.7"
 futures = "0.3.21"
 hex = "0.4.3"
 igd-next = "0.14.2"
+itertools = "0.12.1"
 lazy_static = "1.4.0"
 leb128 = "0.2.1"
 local-ip-address = "0.5.6"
@@ -41,15 +42,15 @@ stunclient = "0.1.2"
 tempfile = "3.3.0"
 thiserror = "1.0.29"
 tokio = { version = "1.14.0", features = ["full"] }
+tokio-stream = { version = "0.1.14", features = ["sync"] }
 tracing = "0.1.36"
 trin-metrics = { path = "../trin-metrics" }
 trin-storage = { path = "../trin-storage" }
 trin-utils = { path = "../trin-utils" }
 trin-validation = { path = "../trin-validation" }
-validator = { version = "0.13.0", features = ["derive"] }
 url = "2.3.1"
 utp-rs = { git = "https://github.com/ethereum/utp", tag = "v0.1.0-alpha.11" }
-tokio-stream = { version = "0.1.14", features = ["sync"] }
+validator = { version = "0.13.0", features = ["derive"] }
 
 [target.'cfg(windows)'.dependencies]
 uds_windows = "1.0.1"
