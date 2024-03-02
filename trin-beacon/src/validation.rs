@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use ethportal_api::BeaconContentKey;
 use tokio::sync::RwLock;
 
@@ -14,16 +13,12 @@ pub struct BeaconValidator {
     pub header_oracle: Arc<RwLock<HeaderOracle>>,
 }
 
-#[async_trait]
 impl Validator<BeaconContentKey> for BeaconValidator {
     async fn validate_content(
         &self,
         _content_key: &BeaconContentKey,
         _content: &[u8],
-    ) -> anyhow::Result<ValidationResult<BeaconContentKey>>
-    where
-        BeaconContentKey: 'async_trait,
-    {
+    ) -> anyhow::Result<ValidationResult<BeaconContentKey>> {
         // todo: implement beacon network validation
         Ok(ValidationResult::new(true))
     }
