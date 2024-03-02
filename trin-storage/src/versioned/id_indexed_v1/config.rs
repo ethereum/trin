@@ -1,57 +1,71 @@
-use super::IdIndexedV1StoreConfig;
+use std::path::PathBuf;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct UsageStats {
-    /// The total count of the content items stored.
-    pub content_count: u64,
-    /// The sum of the `content_size` of all stored content items.
-    pub used_storage_bytes: u64,
+use discv5::enr::NodeId;
+use ethportal_api::types::portal_wire::ProtocolId;
+use r2d2::Pool;
+use r2d2_sqlite::SqliteConnectionManager;
+
+use crate::{
+    versioned::{usage_stats::UsageStats, ContentType},
+    DistanceFunction,
+};
+
+/// The fraction of the storage capacity that we should aim for when pruning.
+const TARGET_CAPACITY_FRACTION: f64 = 0.9;
+
+/// The fraction of the storage capacity that we need to pass in order to start pruning.
+const PRUNING_CAPACITY_THRESHOLD_FRACTION: f64 = 0.95;
+
+/// The config for the IdIndexedV1Store
+#[derive(Debug, Clone)]
+pub struct IdIndexedV1StoreConfig {
+    pub content_type: ContentType,
+    pub network: ProtocolId,
+    pub node_id: NodeId,
+    pub node_data_dir: PathBuf,
+    pub storage_capacity_bytes: u64,
+    pub sql_connection_pool: Pool<SqliteConnectionManager>,
+    pub distance_fn: DistanceFunction,
 }
 
-impl UsageStats {
-    pub fn is_above_pruning_capacity_threshold(&self, config: &IdIndexedV1StoreConfig) -> bool {
-        self.used_storage_bytes > config.pruning_capacity_threshold()
+impl IdIndexedV1StoreConfig {
+    pub fn target_capacity(&self) -> u64 {
+        (self.storage_capacity_bytes as f64 * TARGET_CAPACITY_FRACTION).round() as u64
     }
 
-    pub fn is_above_target_capacity(&self, config: &IdIndexedV1StoreConfig) -> bool {
-        self.used_storage_bytes > config.target_capacity()
-    }
-
-    pub fn estimated_full_capacity_count(&self, config: &IdIndexedV1StoreConfig) -> Option<u64> {
-        self.average_content_size_bytes()
-            .map(|average_content_size_bytes| {
-                (config.storage_capacity_bytes as f64 / average_content_size_bytes).floor() as u64
-            })
-    }
-
-    pub fn estimated_target_capacity_count(&self, config: &IdIndexedV1StoreConfig) -> Option<u64> {
-        self.average_content_size_bytes()
-            .map(|average_content_size_bytes| {
-                (config.target_capacity() as f64 / average_content_size_bytes).floor() as u64
-            })
+    pub fn pruning_capacity_threshold(&self) -> u64 {
+        (self.storage_capacity_bytes as f64 * PRUNING_CAPACITY_THRESHOLD_FRACTION).round() as u64
     }
 
     /// Returns the estimated number of items to insert to reach full capacity. This value will not
     /// exceed the number of currently stored items.
-    pub fn estimate_insert_until_full(&self, config: &IdIndexedV1StoreConfig) -> u64 {
-        self.estimated_full_capacity_count(config)
+    pub fn estimate_to_insert_until_full(&self, usage_stats: &UsageStats) -> u64 {
+        self.estimated_full_capacity_count(usage_stats)
             .map(|full_capacity_count| {
-                if full_capacity_count > self.content_count {
-                    (full_capacity_count - self.content_count).min(self.content_count)
+                if full_capacity_count > usage_stats.entry_count {
+                    (full_capacity_count - usage_stats.entry_count).min(usage_stats.entry_count)
                 } else {
                     0
                 }
             })
             .unwrap_or(0)
+    }
+
+    fn estimated_full_capacity_count(&self, usage_stats: &UsageStats) -> Option<u64> {
+        usage_stats
+            .average_entry_size_bytes()
+            .map(|average_entry_size_bytes| {
+                (self.storage_capacity_bytes as f64 / average_entry_size_bytes).floor() as u64
+            })
     }
 
     /// Returns the estimated number of items to delete to reach target capacity. If we are below
     /// target capacity, it will return 0.
-    pub fn delete_until_target(&self, config: &IdIndexedV1StoreConfig) -> u64 {
-        self.estimated_target_capacity_count(config)
+    pub fn estimate_to_delete_until_target(&self, usage_stats: &UsageStats) -> u64 {
+        self.estimated_target_capacity_count(usage_stats)
             .map(|target_capacity_count| {
-                if self.content_count > target_capacity_count {
-                    self.content_count - target_capacity_count
+                if usage_stats.entry_count > target_capacity_count {
+                    usage_stats.entry_count - target_capacity_count
                 } else {
                     0
                 }
@@ -59,12 +73,12 @@ impl UsageStats {
             .unwrap_or(0)
     }
 
-    fn average_content_size_bytes(&self) -> Option<f64> {
-        if self.content_count == 0 {
-            Option::None
-        } else {
-            Option::Some(self.used_storage_bytes as f64 / self.content_count as f64)
-        }
+    fn estimated_target_capacity_count(&self, usage_stats: &UsageStats) -> Option<u64> {
+        usage_stats
+            .average_entry_size_bytes()
+            .map(|average_entry_size_bytes| {
+                (self.target_capacity() as f64 / average_entry_size_bytes).floor() as u64
+            })
     }
 }
 
@@ -107,26 +121,26 @@ mod tests {
     #[case::full(100, 1000, true, true)]
     #[case::above_full(110, 1100, true, true)]
     fn is_above_capacity(
-        #[case] content_count: u64,
-        #[case] used_storage_bytes: u64,
+        #[case] entry_count: u64,
+        #[case] total_entry_size_bytes: u64,
         #[case] is_above_pruning_capacity_threshold: bool,
         #[case] is_above_target_capacity: bool,
     ) {
         let config = create_config();
         let usage_stats = UsageStats {
-            content_count,
-            used_storage_bytes,
+            entry_count,
+            total_entry_size_bytes,
         };
 
         assert_eq!(
-            usage_stats.is_above_pruning_capacity_threshold(&config),
+            usage_stats.is_above(config.pruning_capacity_threshold()),
             is_above_pruning_capacity_threshold,
             "testing is_above_pruning_capacity_threshold"
         );
         assert_eq!(
-            usage_stats.is_above_target_capacity(&config),
+            usage_stats.is_above(config.target_capacity()),
             is_above_target_capacity,
-            "is_above_target_capacity"
+            "testing is_above_target_capacity"
         );
     }
 
@@ -134,19 +148,19 @@ mod tests {
     fn estimate_capacity_count_no_usage() {
         let config = create_config();
         let usage_stats = UsageStats {
-            content_count: 0,
-            used_storage_bytes: 0,
+            entry_count: 0,
+            total_entry_size_bytes: 0,
         };
 
         assert_eq!(
-            usage_stats.estimated_full_capacity_count(&config),
+            config.estimated_full_capacity_count(&usage_stats),
             None,
             "testing estimated_full_capacity_count"
         );
         assert_eq!(
-            usage_stats.estimated_target_capacity_count(&config),
+            config.estimated_target_capacity_count(&usage_stats),
             None,
-            "estimated_target_capacity_count"
+            "testing estimated_target_capacity_count"
         );
     }
 
@@ -167,26 +181,26 @@ mod tests {
     #[case::above_full_2(20, 1050, 19, 17)]
     #[case::above_full_3(50, 1050, 47, 42)]
     fn estimate_capacity_count(
-        #[case] content_count: u64,
-        #[case] used_storage_bytes: u64,
+        #[case] entry_count: u64,
+        #[case] total_entry_size_bytes: u64,
         #[case] estimated_full_capacity_count: u64,
         #[case] estimated_target_capacity_count: u64,
     ) {
         let config = create_config();
         let usage_stats = UsageStats {
-            content_count,
-            used_storage_bytes,
+            entry_count,
+            total_entry_size_bytes,
         };
 
         assert_eq!(
-            usage_stats.estimated_full_capacity_count(&config),
+            config.estimated_full_capacity_count(&usage_stats),
             Some(estimated_full_capacity_count),
             "testing estimated_full_capacity_count"
         );
         assert_eq!(
-            usage_stats.estimated_target_capacity_count(&config),
+            config.estimated_target_capacity_count(&usage_stats),
             Some(estimated_target_capacity_count),
-            "estimated_target_capacity_count"
+            "testing estimated_target_capacity_count"
         );
     }
 
@@ -209,20 +223,20 @@ mod tests {
     #[case::above_full_1(10, 1050, 0)]
     #[case::above_full_2(20, 1050, 0)]
     #[case::above_full_3(50, 1050, 0)]
-    fn insert_until_full(
-        #[case] content_count: u64,
-        #[case] used_storage_bytes: u64,
-        #[case] expected_insert_until_full: u64,
+    fn to_insert_until_full(
+        #[case] entry_count: u64,
+        #[case] total_entry_size_bytes: u64,
+        #[case] expected_to_insert_until_full: u64,
     ) {
         let config = create_config();
         let usage_stats = UsageStats {
-            content_count,
-            used_storage_bytes,
+            entry_count,
+            total_entry_size_bytes,
         };
 
         assert_eq!(
-            usage_stats.estimate_insert_until_full(&config),
-            expected_insert_until_full
+            config.estimate_to_insert_until_full(&usage_stats),
+            expected_to_insert_until_full
         );
     }
 
@@ -244,20 +258,20 @@ mod tests {
     #[case::above_full_1(10, 1050, 2)]
     #[case::above_full_2(20, 1050, 3)]
     #[case::above_full_3(50, 1050, 8)]
-    fn delete_until_target(
-        #[case] content_count: u64,
-        #[case] used_storage_bytes: u64,
-        #[case] expected_delete_until_target: u64,
+    fn to_delete_until_target(
+        #[case] entry_count: u64,
+        #[case] total_entry_size_bytes: u64,
+        #[case] expected_to_delete_until_target: u64,
     ) {
         let config = create_config();
         let usage_stats = UsageStats {
-            content_count,
-            used_storage_bytes,
+            entry_count,
+            total_entry_size_bytes,
         };
 
         assert_eq!(
-            usage_stats.delete_until_target(&config),
-            expected_delete_until_target
+            config.estimate_to_delete_until_target(&usage_stats),
+            expected_to_delete_until_target
         );
     }
 }

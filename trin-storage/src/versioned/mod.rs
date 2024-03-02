@@ -1,6 +1,7 @@
 mod id_indexed_v1;
 pub mod sql;
 pub mod store;
+mod usage_stats;
 mod utils;
 
 use rusqlite::types::{FromSql, FromSqlError, ValueRef};
