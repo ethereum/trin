@@ -5,7 +5,7 @@ use keccak_hash::H256;
 use rlp::DecoderError;
 use thiserror::Error;
 
-// An error that happened
+// An error that happened while validating state content
 #[derive(Debug, Error)]
 pub enum StateValidationError {
     #[error("Reached empty node while traversing the trie")]
@@ -42,15 +42,12 @@ pub enum StateValidationError {
         bytecode_hash: H256,
         expected_bytecode_hash: H256,
     },
-
     #[error("Invalid content type for content key: {0}")]
     InvalidContentValueType(&'static str),
-
     #[error("Unable to decode node: {0}")]
     DecodingNode(#[from] TrieError),
     #[error("Unable to decode account state: {0}")]
     DecodingAccountState(#[from] DecoderError),
-
     #[error("Error while validating: {0}")]
     Custom(String),
 }

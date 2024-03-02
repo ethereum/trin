@@ -52,10 +52,11 @@ pub fn validate_account_state(
     account: &Address,
     proof: &TrieProof,
 ) -> Result<AccountState, StateValidationError> {
-    let mut path = [0u8; 64];
-    for (i, byte) in keccak(account).as_bytes().iter().enumerate() {
-        [path[2 * i], path[2 * i + 1]] = Nibbles::unpack_nibble_pair(byte);
-    }
+    let path: Vec<u8> = keccak(account)
+        .as_bytes()
+        .iter()
+        .flat_map(Nibbles::unpack_nibble_pair)
+        .collect();
 
     let validation_info = validate_trie_proof(root_hash, &path, proof)?;
 
@@ -110,7 +111,7 @@ fn validate_trie_proof<'nodes, 'path>(
             }
         }
 
-        // Traveres the node
+        // Traverse the node
         let node = node.as_trie_node()?;
         let traversal_info = traverse_node(&node, remaining_path)?;
         expected_node_hash = Some(traversal_info.next_node);
@@ -146,7 +147,7 @@ struct NodeTraversalInfo<'path> {
     remaining_path: &'path [u8],
 }
 
-/// For a given trie `node` and path, consumes beggining of the `path` to reach the next trie node.
+/// For a given trie `node` and path, consumes beginning of the `path` to reach the next trie node.
 /// Returns error if next node doesn't exist along given path.
 fn traverse_node<'path>(
     node: &Node,

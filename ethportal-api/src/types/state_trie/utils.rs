@@ -70,6 +70,6 @@ fn encode_raw(node: &Node) -> Vec<u8> {
             };
             stream.out().to_vec()
         }
-        Node::Hash(_hash) => unreachable!(),
+        Node::Hash(_hash) => unreachable!("encode_raw shouldn't be called for the Node::Hash (it should be handled by write_node logic)"),
     }
 }

@@ -11,7 +11,7 @@ use ethportal_api::{
 };
 use keccak_hash::{keccak, H256};
 use tokio::sync::RwLock;
-use tracing::error;
+use tracing::{debug, error};
 use trin_validation::{
     oracle::HeaderOracle,
     validator::{ValidationResult, Validator},
@@ -32,12 +32,12 @@ impl Validator<StateContentKey> for StateValidator {
     async fn validate_content(
         &self,
         content_key: &StateContentKey,
-        content: &[u8],
+        content_value: &[u8],
     ) -> anyhow::Result<ValidationResult<StateContentKey>>
     where
         StateContentKey: 'async_trait,
     {
-        let content_value = StateContentValue::decode(content)
+        let content_value = StateContentValue::decode(content_value)
             .map_err(|err| anyhow!("Error decoding StateContentValue: {err}"))?;
 
         match content_key {
@@ -220,6 +220,7 @@ impl StateValidator {
 
     async fn get_state_root(&self, _block_hash: H256) -> Option<H256> {
         // Currently not implemented as history network is not reliable
+        debug!("Fetching state root is not yet implemented");
         None
     }
 }
@@ -229,9 +230,7 @@ mod tests {
     use std::path::PathBuf;
 
     use anyhow::Result;
-    use ethportal_api::{
-        types::cli::DEFAULT_MASTER_ACC_PATH, utils::bytes::hex_decode, OverlayContentKey,
-    };
+    use ethportal_api::{utils::bytes::hex_decode, OverlayContentKey};
     use serde::Deserialize;
     use serde_yaml::Value;
     use trin_utils::submodules::read_portal_spec_tests_file;
@@ -242,9 +241,7 @@ mod tests {
     const TEST_DIRECTORY: &str = "tests/mainnet/state/validation";
 
     fn create_validator() -> StateValidator {
-        let master_acc =
-            MasterAccumulator::try_from_file(PathBuf::from(DEFAULT_MASTER_ACC_PATH.to_string()))
-                .unwrap();
+        let master_acc = MasterAccumulator::default();
         let header_oracle = Arc::new(RwLock::new(HeaderOracle::new(master_acc)));
         StateValidator { header_oracle }
     }
