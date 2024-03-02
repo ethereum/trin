@@ -21,7 +21,7 @@ rand = "0.8.4"
 rusqlite = { version = "0.31.0", features = ["bundled"] }
 strum = { version = "0.26.1", features = ["derive"] }
 tempfile = "3.3.0"
-thiserror = "1.0.29"
+thiserror = "1.0.57"
 tracing = "0.1.36"
 trin-metrics = { path = "../trin-metrics" }
 

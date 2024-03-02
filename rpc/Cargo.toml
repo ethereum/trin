@@ -29,4 +29,4 @@ strum = { version = "0.26.1", features = ["derive"] }
 tower-http = { version = "0.4", features = ["full"] }
 tower = { version = "0.4", features = ["full"] }
 trin-validation = { path="../trin-validation" }
-thiserror = "1.0"
+thiserror = "1.0.57"
