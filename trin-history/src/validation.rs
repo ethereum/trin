@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use anyhow::anyhow;
-use async_trait::async_trait;
 use ethereum_types::H256;
 use ssz::Decode;
 use tokio::sync::RwLock;
@@ -26,16 +25,12 @@ pub struct ChainHistoryValidator {
     pub header_oracle: Arc<RwLock<HeaderOracle>>,
 }
 
-#[async_trait]
 impl Validator<HistoryContentKey> for ChainHistoryValidator {
     async fn validate_content(
         &self,
         content_key: &HistoryContentKey,
         content: &[u8],
-    ) -> anyhow::Result<ValidationResult<HistoryContentKey>>
-    where
-        HistoryContentKey: 'async_trait,
-    {
+    ) -> anyhow::Result<ValidationResult<HistoryContentKey>> {
         match content_key {
             HistoryContentKey::BlockHeaderWithProof(key) => {
                 let header_with_proof =

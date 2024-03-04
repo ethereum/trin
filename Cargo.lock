@@ -7739,7 +7739,6 @@ name = "trin-beacon"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "discv5",
  "ethereum_ssz",
  "ethportal-api",
@@ -7765,7 +7764,6 @@ name = "trin-history"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "discv5",
  "env_logger 0.9.3",
  "ethereum-types",
@@ -7810,7 +7808,6 @@ name = "trin-state"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "discv5",
  "env_logger 0.9.3",
  "eth_trie",
@@ -7869,7 +7866,6 @@ name = "trin-validation"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "eth2_hashing",
  "ethereum-types",
  "ethereum_ssz",

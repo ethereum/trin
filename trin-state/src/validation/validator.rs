@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use anyhow::anyhow;
-use async_trait::async_trait;
 use ethportal_api::{
     types::{
         content_key::state::{AccountTrieNodeKey, ContractBytecodeKey, ContractStorageTrieNodeKey},
@@ -27,16 +26,12 @@ pub struct StateValidator {
     pub header_oracle: Arc<RwLock<HeaderOracle>>,
 }
 
-#[async_trait]
 impl Validator<StateContentKey> for StateValidator {
     async fn validate_content(
         &self,
         content_key: &StateContentKey,
         content_value: &[u8],
-    ) -> anyhow::Result<ValidationResult<StateContentKey>>
-    where
-        StateContentKey: 'async_trait,
-    {
+    ) -> anyhow::Result<ValidationResult<StateContentKey>> {
         let content_value = StateContentValue::decode(content_value)
             .map_err(|err| anyhow!("Error decoding StateContentValue: {err}"))?;
 

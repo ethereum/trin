@@ -12,7 +12,6 @@ authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 [dependencies]
 anyhow = "1.0.68"
-async-trait = "0.1.53"
 eth2_hashing = "0.2.0"
 ethereum-types = "0.14.1"
 ethereum_ssz = "0.5.3"

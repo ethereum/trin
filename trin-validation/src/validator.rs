@@ -1,5 +1,3 @@
-use async_trait::async_trait;
-
 use ethportal_api::types::content_key::overlay::IdentityContentKey;
 
 /// The result of the content key/value validation.
@@ -42,35 +40,28 @@ impl<TContentKey> ValidationResult<TContentKey> {
 }
 
 /// Used by all overlay-network Validators to validate content in the overlay service.
-#[async_trait]
-pub trait Validator<TContentKey> {
+pub trait Validator<TContentKey: Send> {
     /// The `Ok` indicates that `content` corresponds to the `content_key`, but not necessarily
     /// that content is canonical. See `ValidationResult` for details.
     ///
     /// The `Err` indicates that either content is not valid or that validation failed for some
     /// other reason.
-    async fn validate_content(
+    fn validate_content(
         &self,
         content_key: &TContentKey,
         content: &[u8],
-    ) -> anyhow::Result<ValidationResult<TContentKey>>
-    where
-        TContentKey: 'async_trait;
+    ) -> impl std::future::Future<Output = anyhow::Result<ValidationResult<TContentKey>>> + Send;
 }
 
 /// For use in tests where no validation needs to be performed.
 pub struct MockValidator {}
 
-#[async_trait]
 impl Validator<IdentityContentKey> for MockValidator {
     async fn validate_content(
         &self,
         _content_key: &IdentityContentKey,
         _content: &[u8],
-    ) -> anyhow::Result<ValidationResult<IdentityContentKey>>
-    where
-        IdentityContentKey: 'async_trait,
-    {
+    ) -> anyhow::Result<ValidationResult<IdentityContentKey>> {
         Ok(ValidationResult::new(true))
     }
 }
