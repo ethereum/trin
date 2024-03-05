@@ -1282,6 +1282,31 @@ where
                 )
             })?;
 
+        // Attempt to get semaphore permit if fails we return an empty accept
+        // `try_acquire_owned()` isn't blocking and will instantly return with
+        // `Some(TryAcquireError::NoPermits)` error if there isn't a permit avaliable
+        // The reason we get the permit before checking if we can store it is because
+        // * checking if a semaphore is avaliable is basically free it doesn't block and will return
+        //   instantly
+        // * filling the `requested_keys` is expensive because it requires calls to disk which
+        //   should be avoided.
+        // so by trying to acquire the semaphore before the storage call we avoid unnecessary work
+        // **Note:** if we are not accepting any content `requested_keys` should be empty
+        let permit = match self
+            .utp_controller
+            .inbound_utp_transfer_semaphore
+            .clone()
+            .try_acquire_owned()
+        {
+            Ok(permit) => permit,
+            Err(_) => {
+                return Ok(Accept {
+                    connection_id: 0,
+                    content_keys: requested_keys,
+                });
+            }
+        };
+
         let content_keys: Vec<TContentKey> = request
             .content_keys
             .into_iter()
@@ -1325,22 +1350,6 @@ where
                 content_keys: requested_keys,
             });
         }
-
-        // Attempt to get semaphore permit, if this fails we return an empty accept
-        let permit = match self
-            .utp_controller
-            .inbound_utp_transfer_semaphore
-            .clone()
-            .try_acquire_owned()
-        {
-            Ok(permit) => permit,
-            Err(_) => {
-                return Ok(Accept {
-                    connection_id: 0,
-                    content_keys: requested_keys,
-                });
-            }
-        };
 
         // Generate a connection ID for the uTP connection if there is data we would like to
         // accept.
