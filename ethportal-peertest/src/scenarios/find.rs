@@ -143,7 +143,7 @@ pub async fn test_trace_recursive_find_content_for_absent_content(peertest: &Pee
         .await
         .unwrap_err()
         .to_string();
-    assert!(error.contains("Content not found"));
+    assert!(error.contains("Unable to locate content on the network"));
     // test that trace is present
     assert!(error.contains("respondedWith"));
     assert!(error.contains("-39001"));

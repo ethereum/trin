@@ -39,7 +39,7 @@ impl BeaconNetworkApi {
             Some(val) => match val {
                 Ok(result) => Ok(result),
                 Err(msg) => {
-                    if msg.contains("Content not found") {
+                    if msg.contains("Unable to locate content on the network") {
                         let error_details: Value = serde_json::from_str(&msg).map_err(|e| {
                             RpcServeError::Message(format!(
                                 "Failed to parse error message from history subnet: {e:?}",
