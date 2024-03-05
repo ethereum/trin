@@ -814,7 +814,7 @@ where
                     FindContentQueryResult::ClosestNodes(_closest_nodes) => {
                         if let Some(responder) = callback {
                             let _ = responder.send(Err(OverlayRequestError::ContentNotFound {
-                                message: "Content not found".to_string(),
+                                message: "Unable to locate content on the network".to_string(),
                                 utp: false,
                                 trace: query_info.trace,
                             }));
@@ -864,7 +864,7 @@ where
                                 if let Some(responder) = callback {
                                     let _ =
                                         responder.send(Err(OverlayRequestError::ContentNotFound {
-                                            message: "Content not found: received utp payload from unknown peer"
+                                            message: "Unable to locate content on the network: received utp payload from unknown peer"
                                                 .to_string(),
                                             utp: true,
                                             trace: query_info.trace,
@@ -906,7 +906,7 @@ where
                                         let _ = responder
                                             .send(Err(OverlayRequestError::ContentNotFound {
                                             message:
-                                                "Content not found: unable to establish utp conn"
+                                                "Unable to locate content on the network: unable to establish utp conn"
                                                     .to_string(),
                                             utp: true,
                                             trace: query_info.trace,
@@ -927,7 +927,7 @@ where
                                     let _ = responder
                                         .send(Err(OverlayRequestError::ContentNotFound {
                                         message:
-                                            "Content not found: error reading data from utp stream"
+                                            "Unable to locate content on the network: error reading data from utp stream"
                                                 .to_string(),
                                         utp: true,
                                         trace: query_info.trace,
@@ -2099,7 +2099,9 @@ where
                     );
                     if let Some(responder) = responder {
                         let _ = responder.send(Err(OverlayRequestError::ContentNotFound {
-                            message: "Content not found: error validating content".to_string(),
+                            message:
+                                "Unable to locate content on the network: error validating content"
+                                    .to_string(),
                             utp: utp_transfer,
                             trace,
                         }));
@@ -2688,7 +2690,7 @@ where
             warn!("No connected nodes in routing table, find content query cannot proceed.");
             if let Some(callback) = callback {
                 let _ = callback.send(Err(OverlayRequestError::ContentNotFound {
-                    message: "Content not found: no connected nodes in the routing table"
+                    message: "Unable to locate content on the network: no connected nodes in the routing table"
                         .to_string(),
                     utp: false,
                     trace: None,
