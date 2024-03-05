@@ -146,7 +146,7 @@ pub async fn test_trace_recursive_find_content_for_absent_content(peertest: &Pee
     assert!(error.contains("Content not found"));
     // test that trace is present
     assert!(error.contains("respondedWith"));
-    assert!(error.contains("-32001"));
+    assert!(error.contains("-39001"));
 }
 
 pub async fn test_trace_recursive_find_content_local_db(peertest: &Peertest) {

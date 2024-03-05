@@ -76,7 +76,7 @@ impl From<RpcServeError> for ErrorObjectOwned {
             RpcServeError::Message(msg) => ErrorObject::owned(-32099, msg, None::<()>),
             RpcServeError::MethodNotFound(method) => ErrorObject::owned(-32601, method, None::<()>),
             RpcServeError::ContentNotFound { message, trace } => {
-                ErrorObject::owned(-32001, message, Some(trace))
+                ErrorObject::owned(-39001, message, Some(trace))
             }
         }
     }
