@@ -81,9 +81,11 @@ impl IdIndexedV1Store {
         self.metrics
             .report_storage_capacity_bytes(self.config.storage_capacity_bytes as f64);
 
-        // query real usage stats and update "usage_stats" table to match.
         let conn = self.config.sql_connection_pool.get()?;
-        let usage_stats = conn.query_row(
+        let mut usage_stats = get_usage_stats(&conn, &self.config.content_type)?;
+
+        // query real usage stats and update "usage_stats" table to match.
+        let real_usage_stats = conn.query_row(
             &sql::entry_count_and_size(&self.config.content_type),
             [],
             |row| {
@@ -94,8 +96,17 @@ impl IdIndexedV1Store {
                 })
             },
         )?;
+        if usage_stats != real_usage_stats {
+            error!(
+                Db = %self.config.content_type,
+                "Usage stats don't match. Usage stats: {:?}. Real usage_stats: {:?}",
+                usage_stats,
+                real_usage_stats,
+            );
+            update_usage_stats(&conn, &self.config.content_type, &real_usage_stats)?;
+            usage_stats = real_usage_stats;
+        }
         usage_stats.report_metrics(&self.metrics);
-        update_usage_stats(&conn, &self.config.content_type, &usage_stats)?;
         drop(conn);
 
         if usage_stats.is_above(self.config.target_capacity()) {
