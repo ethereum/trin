@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use parking_lot::RwLock as PLRwLock;
 use tokio::sync::RwLock;
+use utp_rs::socket::UtpSocket;
 
 use crate::storage::HistoryStorage;
 use ethportal_api::{
@@ -10,9 +11,8 @@ use ethportal_api::{
 };
 use portalnet::{
     config::PortalnetConfig,
-    discovery::Discovery,
+    discovery::{Discovery, UtpEnr},
     overlay::{OverlayConfig, OverlayProtocol},
-    utp_controller::UtpController,
 };
 use trin_validation::oracle::HeaderOracle;
 
@@ -30,7 +30,7 @@ pub struct HistoryNetwork {
 impl HistoryNetwork {
     pub async fn new(
         discovery: Arc<Discovery>,
-        utp_controller: Arc<UtpController>,
+        utp_socket: Arc<UtpSocket<UtpEnr>>,
         storage_config: PortalStorageConfig,
         portal_config: PortalnetConfig,
         header_oracle: Arc<RwLock<HeaderOracle>>,
@@ -39,6 +39,7 @@ impl HistoryNetwork {
         let config = OverlayConfig {
             bootnode_enrs,
             disable_poke: portal_config.disable_poke,
+            utp_transfer_limit: portal_config.utp_transfer_limit,
             ..Default::default()
         };
         let storage = Arc::new(PLRwLock::new(HistoryStorage::new(
@@ -49,7 +50,7 @@ impl HistoryNetwork {
         let overlay = OverlayProtocol::new(
             config,
             discovery,
-            utp_controller,
+            utp_socket,
             storage,
             ProtocolId::History,
             validator,

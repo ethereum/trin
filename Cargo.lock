@@ -7833,6 +7833,7 @@ dependencies = [
  "trin-storage",
  "trin-utils",
  "trin-validation",
+ "utp-rs",
 ]
 
 [[package]]

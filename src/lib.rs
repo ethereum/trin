@@ -3,7 +3,6 @@
 
 use std::sync::Arc;
 
-use portalnet::utp_controller::UtpController;
 use rpc::{launch_jsonrpc_server, RpcServerHandle};
 use tokio::sync::{mpsc, RwLock};
 use tracing::info;
@@ -84,10 +83,7 @@ pub async fn run_trin(
         if trin_config.networks.iter().any(|val| val == STATE_NETWORK) {
             initialize_state_network(
                 &discovery,
-                Arc::new(UtpController::new(
-                    trin_config.utp_transfer_limit,
-                    utp_socket.clone(),
-                )),
+                utp_socket.clone(),
                 portalnet_config.clone(),
                 storage_config.clone(),
                 header_oracle.clone(),
@@ -107,10 +103,7 @@ pub async fn run_trin(
     ) = if trin_config.networks.iter().any(|val| val == BEACON_NETWORK) {
         initialize_beacon_network(
             &discovery,
-            Arc::new(UtpController::new(
-                trin_config.utp_transfer_limit,
-                utp_socket.clone(),
-            )),
+            utp_socket.clone(),
             portalnet_config.clone(),
             storage_config.clone(),
             header_oracle.clone(),
@@ -134,10 +127,7 @@ pub async fn run_trin(
     {
         initialize_history_network(
             &discovery,
-            Arc::new(UtpController::new(
-                trin_config.utp_transfer_limit,
-                utp_socket.clone(),
-            )),
+            utp_socket.clone(),
             portalnet_config.clone(),
             storage_config.clone(),
             header_oracle.clone(),
