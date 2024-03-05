@@ -7695,6 +7695,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "dirs",
  "discv5",
  "ethereum-types",
  "ethereum_ssz",
@@ -7711,6 +7712,7 @@ dependencies = [
  "portalnet",
  "prometheus_exporter",
  "rand 0.8.5",
+ "regex",
  "reth-ipc",
  "rlp",
  "rpc",
@@ -7723,6 +7725,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "tree_hash",
  "trin-beacon",
  "trin-history",
  "trin-state",

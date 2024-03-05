@@ -5,19 +5,19 @@ const _SLOTS_PER_HISTORICAL_ROOT: usize = 8192;
 const HEADER_SIZE: u16 = 8;
 const VALUE_SIZE_LIMIT: usize = 1024 * 1024 * 50; // 50 MB
 
-pub struct E2storeFile {
+pub struct E2StoreFile {
     pub entries: Vec<Entry>,
 }
 
-impl TryFrom<E2storeFile> for Vec<u8> {
+impl TryFrom<E2StoreFile> for Vec<u8> {
     type Error = anyhow::Error;
-    fn try_from(e2store_file: E2storeFile) -> Result<Vec<u8>, Self::Error> {
+    fn try_from(e2store_file: E2StoreFile) -> Result<Vec<u8>, Self::Error> {
         e2store_file.serialize()
     }
 }
 
 #[allow(dead_code)]
-impl E2storeFile {
+impl E2StoreFile {
     /// Serialize to a byte vector.
     fn serialize(&self) -> anyhow::Result<Vec<u8>> {
         let length = self.entries.iter().map(|e| e.length() as u32).sum::<u32>() as usize;
@@ -207,7 +207,7 @@ mod test {
     #[test]
     fn test_entry_multiple() {
         let expected = "0x2a00020000000000beef0900040000000000abcdabcd";
-        let file = E2storeFile::deserialize(&hex_decode(expected).unwrap()).unwrap();
+        let file = E2StoreFile::deserialize(&hex_decode(expected).unwrap()).unwrap();
         assert_eq!(file.entries.len(), 2);
         assert_eq!(file.entries[0].header.type_, 0x2a); // 42
         assert_eq!(file.entries[0].header.length, 2);
@@ -226,6 +226,6 @@ mod test {
     #[case("0xbeef010000000000")] // length exceeds buffer
     fn test_entry_invalid_decoding(#[case] input: &str) {
         let buf = hex_decode(input).unwrap();
-        assert!(E2storeFile::deserialize(&buf).is_err());
+        assert!(E2StoreFile::deserialize(&buf).is_err());
     }
 }

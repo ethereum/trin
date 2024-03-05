@@ -239,6 +239,12 @@ pub struct Validator {
     pub withdrawable_epoch: Epoch,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Encode, Decode, TreeHash)]
+pub struct HistoricalBatch {
+    pub block_roots: FixedVector<H256, SlotsPerHistoricalRoot>,
+    pub state_roots: FixedVector<H256, SlotsPerHistoricalRoot>,
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
