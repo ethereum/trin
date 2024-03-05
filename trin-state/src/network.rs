@@ -2,6 +2,7 @@ use parking_lot::RwLock as PLRwLock;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::debug;
+use utp_rs::socket::UtpSocket;
 
 use crate::storage::StateStorage;
 use ethportal_api::{
@@ -10,9 +11,8 @@ use ethportal_api::{
 };
 use portalnet::{
     config::PortalnetConfig,
-    discovery::Discovery,
+    discovery::{Discovery, UtpEnr},
     overlay::{OverlayConfig, OverlayProtocol},
-    utp_controller::UtpController,
 };
 use trin_validation::oracle::HeaderOracle;
 
@@ -33,7 +33,7 @@ const DISABLE_POKE: bool = true;
 impl StateNetwork {
     pub async fn new(
         discovery: Arc<Discovery>,
-        utp_controller: Arc<UtpController>,
+        utp_socket: Arc<UtpSocket<UtpEnr>>,
         storage_config: PortalStorageConfig,
         portal_config: PortalnetConfig,
         header_oracle: Arc<RwLock<HeaderOracle>>,
@@ -44,6 +44,7 @@ impl StateNetwork {
         let config = OverlayConfig {
             bootnode_enrs: portal_config.bootnodes.into(),
             disable_poke: DISABLE_POKE,
+            utp_transfer_limit: portal_config.utp_transfer_limit,
             ..Default::default()
         };
         let storage = Arc::new(PLRwLock::new(StateStorage::new(storage_config)?));
@@ -51,7 +52,7 @@ impl StateNetwork {
         let overlay = OverlayProtocol::new(
             config,
             discovery,
-            utp_controller,
+            utp_socket,
             storage,
             ProtocolId::State,
             validator,

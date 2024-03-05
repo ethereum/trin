@@ -10,14 +10,14 @@ use tokio::{
     time::interval,
 };
 use tracing::info;
+use utp_rs::socket::UtpSocket;
 
 use crate::{events::StateEvents, jsonrpc::StateRequestHandler};
 use ethportal_api::types::{enr::Enr, jsonrpc::request::StateJsonRpcRequest};
 use portalnet::{
     config::PortalnetConfig,
-    discovery::Discovery,
+    discovery::{Discovery, UtpEnr},
     events::{EventEnvelope, OverlayRequest},
-    utp_controller::UtpController,
 };
 use trin_storage::PortalStorageConfig;
 use trin_validation::oracle::HeaderOracle;
@@ -36,7 +36,7 @@ type StateEventStream = Option<broadcast::Receiver<EventEnvelope>>;
 
 pub async fn initialize_state_network(
     discovery: &Arc<Discovery>,
-    utp_controller: Arc<UtpController>,
+    utp_socket: Arc<UtpSocket<UtpEnr>>,
     portalnet_config: PortalnetConfig,
     storage_config: PortalStorageConfig,
     header_oracle: Arc<RwLock<HeaderOracle>>,
@@ -52,7 +52,7 @@ pub async fn initialize_state_network(
 
     let state_network = StateNetwork::new(
         Arc::clone(discovery),
-        utp_controller,
+        utp_socket,
         storage_config,
         portalnet_config.clone(),
         header_oracle,

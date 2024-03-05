@@ -20,7 +20,6 @@ use discv5::{
 };
 use futures::{channel::oneshot, future::join_all, prelude::*};
 use itertools::Itertools;
-use lazy_static::lazy_static;
 use parking_lot::RwLock;
 use rand::seq::SliceRandom;
 use smallvec::SmallVec;
@@ -36,7 +35,7 @@ use tokio::{
     task::JoinHandle,
 };
 use tracing::{debug, enabled, error, info, trace, warn, Level};
-use utp_rs::{cid::ConnectionId, conn::ConnectionConfig, stream::UtpStream};
+use utp_rs::cid::ConnectionId;
 
 use crate::{
     discovery::{Discovery, UtpEnr},
@@ -67,13 +66,10 @@ use ethportal_api::{
         },
         query_trace::QueryTrace,
     },
-    utils::bytes::{hex_encode, hex_encode_compact},
+    utils::bytes::hex_encode_compact,
     OverlayContentKey, RawContentKey,
 };
-use trin_metrics::{
-    labels::{UtpDirectionLabel, UtpOutcomeLabel},
-    overlay::OverlayMetricsReporter,
-};
+use trin_metrics::overlay::OverlayMetricsReporter;
 use trin_storage::{ContentStore, ShouldWeStoreContent};
 use trin_validation::validator::{ValidationResult, Validator};
 
@@ -92,11 +88,6 @@ const BUCKET_REFRESH_INTERVAL_SECS: u64 = 60;
 
 /// The capacity of the event-stream's broadcast channel.
 const EVENT_STREAM_CHANNEL_CAPACITY: usize = 10;
-
-lazy_static! {
-    /// The default configuration to use for uTP connections.
-    pub static ref UTP_CONN_CFG: ConnectionConfig = ConnectionConfig { max_packet_size: 1024, ..Default::default()};
-}
 
 /// A network-based action that the overlay may perform.
 ///
@@ -855,8 +846,6 @@ where
                         peer,
                         nodes_to_poke,
                     } => {
-                        let metrics = self.metrics.clone();
-                        let utp = self.utp_controller.clone();
                         let source = match self.find_enr(&peer) {
                             Some(enr) => enr,
                             _ => {
@@ -873,78 +862,27 @@ where
                                 return;
                             }
                         };
-                        let cid = utp_rs::cid::ConnectionId {
-                            recv: connection_id,
-                            send: connection_id.wrapping_add(1),
-                            peer: UtpEnr(source),
-                        };
                         let validator = self.validator.clone();
                         let store = self.store.clone();
                         let kbuckets = self.kbuckets.clone();
                         let command_tx = self.command_tx.clone();
                         let disable_poke = self.disable_poke;
+                        let metrics = self.metrics.clone();
+                        let utp_controller = self.utp_controller.clone();
                         tokio::spawn(async move {
-                            metrics.report_utp_active_inc(UtpDirectionLabel::Inbound);
-                            let mut stream = match utp
-                                .connect_with_cid(cid.clone(), *UTP_CONN_CFG)
+                            let trace = query_info.trace;
+                            let data = match utp_controller
+                                .connect_inbound_stream(connection_id, source, trace.clone())
                                 .await
                             {
-                                Ok(stream) => stream,
-                                Err(err) => {
-                                    metrics.report_utp_outcome(
-                                        UtpDirectionLabel::Inbound,
-                                        UtpOutcomeLabel::FailedConnection,
-                                    );
-                                    debug!(
-                                        %err,
-                                        cid.send,
-                                        cid.recv,
-                                        peer = ?cid.peer.client(),
-                                        "Unable to establish uTP conn based on Content response",
-                                    );
+                                Ok(data) => data,
+                                Err(e) => {
                                     if let Some(responder) = callback {
-                                        let _ = responder
-                                            .send(Err(OverlayRequestError::ContentNotFound {
-                                            message:
-                                                "Unable to locate content on the network: unable to establish utp conn"
-                                                    .to_string(),
-                                            utp: true,
-                                            trace: query_info.trace,
-                                        }));
-                                    };
+                                        let _ = responder.send(Err(e));
+                                    }
                                     return;
                                 }
                             };
-
-                            let mut data = vec![];
-                            if let Err(err) = stream.read_to_eof(&mut data).await {
-                                metrics.report_utp_outcome(
-                                    UtpDirectionLabel::Inbound,
-                                    UtpOutcomeLabel::FailedDataTx,
-                                );
-                                debug!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), "error reading data from uTP stream, while handling a FindContent request.");
-                                if let Some(responder) = callback {
-                                    let _ = responder
-                                        .send(Err(OverlayRequestError::ContentNotFound {
-                                        message:
-                                            "Unable to locate content on the network: error reading data from utp stream"
-                                                .to_string(),
-                                        utp: true,
-                                        trace: query_info.trace,
-                                    }));
-                                };
-                                return;
-                            }
-
-                            // report utp tx as successful, even if we go on to fail to process the
-                            // payload
-                            metrics.report_utp_outcome(
-                                UtpDirectionLabel::Inbound,
-                                UtpOutcomeLabel::Success,
-                            );
-
-                            let trace = query_info.trace;
-                            let metrics = metrics.clone();
                             Self::process_received_content(
                                 kbuckets,
                                 command_tx,
@@ -958,7 +896,7 @@ where
                                 nodes_to_poke,
                                 metrics,
                                 disable_poke,
-                                utp,
+                                utp_controller,
                             )
                             .await;
                         });
@@ -1209,36 +1147,9 @@ where
                     // Wait for an incoming connection with the given CID. Then, write the data
                     // over the uTP stream.
                     let utp = Arc::clone(&self.utp_controller);
-                    let metrics = self.metrics.clone();
                     tokio::spawn(async move {
-                        metrics.report_utp_active_inc(UtpDirectionLabel::Outbound);
-                        let stream = match utp.accept_with_cid(cid.clone(), *UTP_CONN_CFG).await {
-                            Ok(stream) => stream,
-                            Err(err) => {
-                                metrics.report_utp_outcome(
-                                    UtpDirectionLabel::Outbound,
-                                    UtpOutcomeLabel::FailedConnection,
-                                );
-                                debug!(
-                                    %err,
-                                    %cid.send,
-                                    %cid.recv,
-                                    peer = ?cid.peer.client(),
-                                    "unable to accept uTP stream for CID"
-                                );
-                                return;
-                            }
-                        };
-                        if let Err(err) = Self::send_utp_content(stream, &content, metrics).await {
-                            debug!(
-                                %err,
-                                %cid.send,
-                                %cid.recv,
-                                peer = ?cid.peer.client(),
-                                content_id = %hex_encode(content_key.content_id()),
-                                "Error sending content over uTP, in response to FindContent"
-                            );
-                        }
+                        utp.accept_outbound_stream(cid, content_key.content_id(), content)
+                            .await;
                         drop(permit);
                     });
 
@@ -1368,7 +1279,6 @@ where
         let store = Arc::clone(&self.store);
         let kbuckets = Arc::clone(&self.kbuckets);
         let command_tx = self.command_tx.clone();
-        let utp = Arc::clone(&self.utp_controller);
         let metrics = self.metrics.clone();
 
         let content_keys_string: Vec<String> = content_keys
@@ -1386,32 +1296,19 @@ where
             "Content keys handled by offer",
         );
 
+        let utp_controller = Arc::clone(&self.utp_controller);
         tokio::spawn(async move {
-            // Wait for an incoming connection with the given CID. Then, read the data from the uTP
-            // stream.
-            metrics.report_utp_active_inc(UtpDirectionLabel::Inbound);
-            let mut stream = match utp.accept_with_cid(cid.clone(), *UTP_CONN_CFG).await {
-                Ok(stream) => stream,
+            let data = match utp_controller
+                .accept_inbound_stream(cid.clone(), content_keys_string.clone())
+                .await
+            {
+                Ok(data) => data,
                 Err(err) => {
-                    metrics.report_utp_outcome(
-                        UtpDirectionLabel::Inbound,
-                        UtpOutcomeLabel::FailedConnection,
-                    );
                     debug!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), content_keys = ?content_keys_string, "unable to accept uTP stream");
+                    drop(permit);
                     return;
                 }
             };
-
-            let mut data = vec![];
-            if let Err(err) = stream.read_to_eof(&mut data).await {
-                metrics
-                    .report_utp_outcome(UtpDirectionLabel::Inbound, UtpOutcomeLabel::FailedDataTx);
-                debug!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), content_keys = ?content_keys_string, "error reading data from uTP stream, while handling an Offer request.");
-                return;
-            }
-
-            // report utp tx as successful, even if we go on to fail to process the payload
-            metrics.report_utp_outcome(UtpDirectionLabel::Inbound, UtpOutcomeLabel::Success);
 
             if let Err(err) = Self::process_accept_utp_payload(
                 validator,
@@ -1421,7 +1318,7 @@ where
                 command_tx,
                 accepted_keys,
                 data,
-                utp.clone(),
+                utp_controller.clone(),
             )
             .await
             {
@@ -1663,36 +1560,11 @@ where
             send: conn_id.wrapping_add(1),
             peer: UtpEnr(enr),
         };
-
         let store = Arc::clone(&self.store);
         let response_clone = response.clone();
 
-        let utp = Arc::clone(&self.utp_controller);
-        let metrics = self.metrics.clone();
-
+        let utp_controller = Arc::clone(&self.utp_controller);
         tokio::spawn(async move {
-            metrics.report_utp_active_inc(UtpDirectionLabel::Outbound);
-            let stream = match utp.connect_with_cid(cid.clone(), *UTP_CONN_CFG).await {
-                Ok(stream) => stream,
-                Err(err) => {
-                    metrics.report_utp_outcome(
-                        UtpDirectionLabel::Outbound,
-                        UtpOutcomeLabel::FailedConnection,
-                    );
-                    debug!(
-                        %err,
-                        cid.send,
-                        cid.recv,
-                        peer = ?cid.peer.client(),
-                        "Unable to establish uTP conn based on Accept",
-                    );
-                    if let Some(tx) = gossip_result_tx {
-                        let _ = tx.send(false);
-                    }
-                    return;
-                }
-            };
-
             let content_items = match offer {
                 Request::Offer(offer) => {
                     Self::provide_requested_content(store, &response_clone, offer.content_keys)
@@ -1745,26 +1617,11 @@ where
                     return;
                 }
             };
-
-            // send the content to the acceptor over a uTP stream
-            match Self::send_utp_content(stream, &content_payload, metrics).await {
-                Ok(_) => {
-                    if let Some(tx) = gossip_result_tx {
-                        let _ = tx.send(true);
-                    }
-                }
-                Err(err) => {
-                    debug!(
-                        %err,
-                        %cid.send,
-                        %cid.recv,
-                        peer = ?cid.peer.client(),
-                        "Error sending content over uTP, in response to ACCEPT"
-                    );
-                    if let Some(tx) = gossip_result_tx {
-                        let _ = tx.send(false);
-                    }
-                }
+            let result = utp_controller
+                .connect_outbound_stream(cid, content_payload.to_vec())
+                .await;
+            if let Some(tx) = gossip_result_tx {
+                let _ = tx.send(result);
             }
             // explicitly drop permit in the thread so the permit is included in the thread
             if let Some(permit) = request_permit {
@@ -1930,42 +1787,6 @@ where
             command_tx.clone(),
             Some(utp_controller),
         );
-
-        Ok(())
-    }
-
-    async fn send_utp_content(
-        mut stream: UtpStream<UtpEnr>,
-        content: &[u8],
-        metrics: OverlayMetricsReporter,
-    ) -> anyhow::Result<()> {
-        match stream.write(content).await {
-            Ok(write_size) => {
-                if write_size != content.len() {
-                    metrics.report_utp_outcome(
-                        UtpDirectionLabel::Outbound,
-                        UtpOutcomeLabel::FailedDataTx,
-                    );
-                    return Err(anyhow!(
-                        "uTP write exited before sending all content: {write_size} bytes written, {} bytes expected",
-                        content.len()
-                    ));
-                }
-            }
-            Err(err) => {
-                metrics
-                    .report_utp_outcome(UtpDirectionLabel::Outbound, UtpOutcomeLabel::FailedDataTx);
-                return Err(anyhow!("Error writing content to uTP stream: {err}"));
-            }
-        }
-
-        // close uTP connection
-        if let Err(err) = stream.close().await {
-            metrics
-                .report_utp_outcome(UtpDirectionLabel::Outbound, UtpOutcomeLabel::FailedShutdown);
-            return Err(anyhow!("Error closing uTP connection: {err}"));
-        };
-        metrics.report_utp_outcome(UtpDirectionLabel::Outbound, UtpOutcomeLabel::Success);
         Ok(())
     }
 
@@ -2861,7 +2682,15 @@ mod tests {
         let discv5_utp =
             crate::discovery::Discv5UdpSocket::new(Arc::clone(&discovery), utp_talk_req_rx);
         let utp_socket = utp_rs::socket::UtpSocket::with_socket(discv5_utp);
-        let utp_controller = UtpController::new(DEFAULT_UTP_TRANSFER_LIMIT, Arc::new(utp_socket));
+        let metrics = OverlayMetricsReporter {
+            overlay_metrics: PORTALNET_METRICS.overlay(),
+            protocol: "test".to_string(),
+        };
+        let utp_controller = UtpController::new(
+            DEFAULT_UTP_TRANSFER_LIMIT,
+            Arc::new(utp_socket),
+            metrics.clone(),
+        );
         let utp_controller = Arc::new(utp_controller);
 
         let node_id = discovery.local_enr().node_id();
@@ -2882,10 +2711,6 @@ mod tests {
         let peers_to_ping = HashSetDelay::default();
         let (command_tx, command_rx) = mpsc::unbounded_channel();
         let (response_tx, response_rx) = mpsc::unbounded_channel();
-        let metrics = OverlayMetricsReporter {
-            overlay_metrics: PORTALNET_METRICS.overlay(),
-            protocol: "test".to_string(),
-        };
         let validator = Arc::new(MockValidator {});
 
         OverlayService {

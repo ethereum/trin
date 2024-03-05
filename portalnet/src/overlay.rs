@@ -23,14 +23,14 @@ use parking_lot::RwLock;
 use ssz::Encode;
 use tokio::sync::{broadcast, mpsc::UnboundedSender};
 use tracing::{debug, error, info, warn};
+use utp_rs::socket::UtpSocket;
 
 use crate::{
-    discovery::Discovery,
+    discovery::{Discovery, UtpEnr},
     find::query_info::{FindContentResult, RecursiveFindContentResult},
     gossip::{propagate_gossip_cross_thread, trace_propagate_gossip_cross_thread, GossipResult},
     overlay_service::{
         OverlayCommand, OverlayRequest, OverlayRequestError, OverlayService, RequestDirection,
-        UTP_CONN_CFG,
     },
     types::node::Node,
     utp_controller::UtpController,
@@ -38,6 +38,7 @@ use crate::{
 use ethportal_api::{
     types::{
         bootnodes::Bootnode,
+        cli::DEFAULT_UTP_TRANSFER_LIMIT,
         discv5::RoutingTableInfo,
         distance::{Distance, Metric},
         enr::Enr,
@@ -70,6 +71,7 @@ pub struct OverlayConfig {
     pub query_num_results: usize,
     pub findnodes_query_distances_per_peer: usize,
     pub disable_poke: bool,
+    pub utp_transfer_limit: usize,
 }
 
 impl Default for OverlayConfig {
@@ -87,6 +89,7 @@ impl Default for OverlayConfig {
             query_num_results: MAX_NODES_PER_BUCKET,
             findnodes_query_distances_per_peer: 3,
             disable_poke: false,
+            utp_transfer_limit: DEFAULT_UTP_TRANSFER_LIMIT,
         }
     }
 }
@@ -135,7 +138,7 @@ where
     pub async fn new(
         config: OverlayConfig,
         discovery: Arc<Discovery>,
-        utp_controller: Arc<UtpController>,
+        utp_socket: Arc<UtpSocket<UtpEnr>>,
         store: Arc<RwLock<TStore>>,
         protocol: ProtocolId,
         validator: Arc<TValidator>,
@@ -152,6 +155,11 @@ where
             overlay_metrics: PORTALNET_METRICS.overlay(),
             protocol: protocol.to_string(),
         };
+        let utp_controller = Arc::new(UtpController::new(
+            config.utp_transfer_limit,
+            utp_socket,
+            metrics.clone(),
+        ));
         let command_tx = OverlayService::<TContentKey, TMetric, TValidator, TStore>::spawn(
             Arc::clone(&discovery),
             Arc::clone(&store),
@@ -532,23 +540,9 @@ where
         enr: Enr,
         conn_id: u16,
     ) -> Result<Vec<u8>, OverlayRequestError> {
-        let cid = utp_rs::cid::ConnectionId {
-            recv: conn_id,
-            send: conn_id.wrapping_add(1),
-            peer: crate::discovery::UtpEnr(enr),
-        };
-        let mut stream = self
-            .utp_controller
-            .connect_with_cid(cid, *UTP_CONN_CFG)
+        self.utp_controller
+            .connect_inbound_stream(conn_id, enr, /* query_trace */ None)
             .await
-            .map_err(|err| OverlayRequestError::UtpError(format!("{err:?}")))?;
-        let mut data = vec![];
-        stream
-            .read_to_eof(&mut data)
-            .await
-            .map_err(|err| OverlayRequestError::UtpError(format!("{err:?}")))?;
-
-        Ok(data)
     }
 
     /// Offer is sent in order to store content to k nodes with radii that contain content-id
