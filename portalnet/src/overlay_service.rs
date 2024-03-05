@@ -1282,6 +1282,22 @@ where
                 )
             })?;
 
+        // Attempt to get semaphore permit if fails we return an empty accept
+        let permit = match self
+            .utp_controller
+            .inbound_utp_transfer_semaphore
+            .clone()
+            .try_acquire_owned()
+        {
+            Ok(permit) => permit,
+            Err(_) => {
+                return Ok(Accept {
+                    connection_id: 0,
+                    content_keys: requested_keys,
+                });
+            }
+        };
+
         let content_keys: Vec<TContentKey> = request
             .content_keys
             .into_iter()
@@ -1325,22 +1341,6 @@ where
                 content_keys: requested_keys,
             });
         }
-
-        // Attempt to get semaphore permit, if this fails we return an empty accept
-        let permit = match self
-            .utp_controller
-            .inbound_utp_transfer_semaphore
-            .clone()
-            .try_acquire_owned()
-        {
-            Ok(permit) => permit,
-            Err(_) => {
-                return Ok(Accept {
-                    connection_id: 0,
-                    content_keys: requested_keys,
-                });
-            }
-        };
 
         // Generate a connection ID for the uTP connection if there is data we would like to
         // accept.
