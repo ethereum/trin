@@ -1,5 +1,5 @@
 use crate::types::{
-    e2s::{E2storeFile, Entry},
+    e2s::{E2StoreFile, Entry},
     era1::VersionEntry,
 };
 use anyhow::{anyhow, ensure};
@@ -34,8 +34,13 @@ impl Era {
         Self::deserialize(&buf)
     }
 
+    pub fn read_beacon_state_from_file(file_path: &str) -> Result<BeaconState, anyhow::Error> {
+        let buf = fs::read(file_path)?;
+        Self::deserialize_to_beacon_state(&buf)
+    }
+
     pub fn deserialize(buf: &[u8]) -> anyhow::Result<Self> {
-        let file = E2storeFile::deserialize(buf)?;
+        let file = E2StoreFile::deserialize(buf)?;
         let version = VersionEntry::try_from(&file.entries[0])?;
         let entries_length = file.entries.len();
         let mut blocks = vec![];
@@ -58,6 +63,14 @@ impl Era {
         })
     }
 
+    /// Deserialize the `BeaconState` from the `Era` file.
+    pub fn deserialize_to_beacon_state(buf: &[u8]) -> anyhow::Result<BeaconState> {
+        let file = E2StoreFile::deserialize(buf)?;
+        // The compressed `BeaconState` is the second to last entry in the file.
+        let era_state = CompressedBeaconState::try_from(&file.entries[file.entries.len() - 3])?;
+        Ok(era_state.state)
+    }
+
     #[allow(dead_code)]
     fn write(&self) -> anyhow::Result<Vec<u8>> {
         let mut entries: Vec<Entry> = vec![];
@@ -73,7 +86,7 @@ impl Era {
         entries.push(slot_index_block_entry);
         let slot_index_state_entry: Entry = self.slot_index_state.clone().try_into()?;
         entries.push(slot_index_state_entry);
-        let file = E2storeFile { entries };
+        let file = E2StoreFile { entries };
 
         let file_length = file.length();
         let mut buf = vec![0; file_length];
@@ -100,7 +113,7 @@ impl TryFrom<&Entry> for CompressedSignedBeaconBlock {
         let mut buf: Vec<u8> = vec![];
         decoder.read_to_end(&mut buf)?;
 
-        let block = SignedBeaconBlock::from_ssz_bytes(&buf, ForkName::Capella)
+        let block = SignedBeaconBlock::from_ssz_bytes(&buf, ForkName::Bellatrix)
             .map_err(|_| anyhow!("Unable to ssz decode beacon block body"))?;
         Ok(Self { block })
     }
@@ -139,7 +152,7 @@ impl TryFrom<&Entry> for CompressedBeaconState {
         let mut buf: Vec<u8> = vec![];
         decoder.read_to_end(&mut buf)?;
 
-        let state = BeaconState::from_ssz_bytes(&buf, ForkName::Capella)
+        let state = BeaconState::from_ssz_bytes(&buf, ForkName::Bellatrix)
             .map_err(|_| anyhow!("Unable to decode beacon state from ssz bytes"))?;
         Ok(Self { state })
     }
@@ -163,7 +176,7 @@ impl TryInto<Entry> for CompressedBeaconState {
 // slot-index := starting-slot | index | index | index ... | count
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SlotIndexBlockEntry {
-    slot_index: SlotIndexBlock,
+    pub slot_index: SlotIndexBlock,
 }
 
 impl TryFrom<&Entry> for SlotIndexBlockEntry {
@@ -210,9 +223,9 @@ impl TryInto<Entry> for SlotIndexBlockEntry {
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SlotIndexBlock {
-    starting_slot: u64,
-    indices: [u64; SLOTS_PER_HISTORICAL_ROOT],
-    count: u64,
+    pub starting_slot: u64,
+    pub indices: [u64; SLOTS_PER_HISTORICAL_ROOT],
+    pub count: u64,
 }
 
 impl TryFrom<Entry> for SlotIndexBlock {
