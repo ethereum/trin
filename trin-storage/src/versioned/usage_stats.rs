@@ -40,6 +40,7 @@ impl UsageStats {
 
 /// Sets the usage stats for the given content type. This can be done during startup to make sure
 /// that values are up to date.
+#[allow(dead_code)] // this is currently not used but it can be useful
 pub fn update_usage_stats(
     conn: &PooledConnection<SqliteConnectionManager>,
     content_type: &ContentType,

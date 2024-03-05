@@ -10,9 +10,7 @@ use crate::{
     error::ContentStoreError,
     utils::get_total_size_of_directory_in_bytes,
     versioned::{
-        usage_stats::{
-            create_usage_stats_triggers, get_usage_stats, update_usage_stats, UsageStats,
-        },
+        usage_stats::{create_usage_stats_triggers, get_usage_stats, UsageStats},
         ContentType, StoreVersion, VersionedContentStore,
     },
     ContentId,
@@ -82,9 +80,9 @@ impl IdIndexedV1Store {
             .report_storage_capacity_bytes(self.config.storage_capacity_bytes as f64);
 
         let conn = self.config.sql_connection_pool.get()?;
-        let mut usage_stats = get_usage_stats(&conn, &self.config.content_type)?;
+        let usage_stats = get_usage_stats(&conn, &self.config.content_type)?;
 
-        // query real usage stats and update "usage_stats" table to match.
+        // Query real usage stats and return Err if they don't match
         let real_usage_stats = conn.query_row(
             &sql::entry_count_and_size(&self.config.content_type),
             [],
@@ -97,14 +95,9 @@ impl IdIndexedV1Store {
             },
         )?;
         if usage_stats != real_usage_stats {
-            error!(
-                Db = %self.config.content_type,
-                "Usage stats don't match. Usage stats: {:?}. Real usage_stats: {:?}",
-                usage_stats,
-                real_usage_stats,
-            );
-            update_usage_stats(&conn, &self.config.content_type, &real_usage_stats)?;
-            usage_stats = real_usage_stats;
+            return Err(ContentStoreError::Database(format!(
+                "Usage stats don't match. Usage stats: {usage_stats:?}. Real usage_stats: {real_usage_stats:?}"
+            )));
         }
         usage_stats.report_metrics(&self.metrics);
         drop(conn);
