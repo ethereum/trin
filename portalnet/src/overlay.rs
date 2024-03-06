@@ -541,8 +541,13 @@ where
         conn_id: u16,
     ) -> Result<Vec<u8>, OverlayRequestError> {
         self.utp_controller
-            .connect_inbound_stream(conn_id, enr, /* query_trace */ None)
+            .connect_inbound_stream(conn_id, enr)
             .await
+            .map_err(|err| OverlayRequestError::ContentNotFound {
+                message: format!("Unable to locate content on the network: {err:?}"),
+                utp: true,
+                trace: None,
+            })
     }
 
     /// Offer is sent in order to store content to k nodes with radii that contain content-id
