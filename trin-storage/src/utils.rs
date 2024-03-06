@@ -4,7 +4,7 @@ use crate::{
         CREATE_QUERY_DB_BEACON, CREATE_QUERY_DB_HISTORY, DROP_CONTENT_DATA_QUERY_DB,
         LC_UPDATE_CREATE_TABLE,
     },
-    versioned::sql::STORE_INFO_CREATE_TABLE,
+    versioned::sql::{STORE_INFO_CREATE_TABLE, USAGE_STATS_CREATE_TABLE},
     DATABASE_NAME,
 };
 use r2d2::Pool;
@@ -24,6 +24,7 @@ pub fn setup_sql(node_data_dir: &Path) -> Result<Pool<SqliteConnectionManager>, 
     conn.execute_batch(CREATE_QUERY_DB_BEACON)?;
     conn.execute_batch(LC_UPDATE_CREATE_TABLE)?;
     conn.execute_batch(STORE_INFO_CREATE_TABLE)?;
+    conn.execute_batch(USAGE_STATS_CREATE_TABLE)?;
     conn.execute_batch(DROP_CONTENT_DATA_QUERY_DB)?;
     Ok(pool)
 }

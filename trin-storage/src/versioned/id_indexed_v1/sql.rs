@@ -1,7 +1,7 @@
 use crate::versioned::ContentType;
 
 /// The name of the sql table. The `ii1` stands for `id_indexed_v1`.
-fn table_name(content_type: &ContentType) -> String {
+pub fn table_name(content_type: &ContentType) -> String {
     format!("ii1_{content_type}")
 }
 
