@@ -1,9 +1,6 @@
-use crate::{discovery::UtpEnr, overlay_service::OverlayRequestError};
+use crate::discovery::UtpEnr;
 use anyhow::anyhow;
-use ethportal_api::{
-    types::{enr::Enr, query_trace::QueryTrace},
-    utils::bytes::hex_encode,
-};
+use ethportal_api::types::enr::Enr;
 use lazy_static::lazy_static;
 use std::{io, sync::Arc};
 use tokio::sync::Semaphore;
@@ -53,8 +50,7 @@ impl UtpController {
         &self,
         connection_id: u16,
         peer: Enr,
-        trace: Option<QueryTrace>,
-    ) -> Result<Vec<u8>, OverlayRequestError> {
+    ) -> anyhow::Result<Vec<u8>> {
         self.metrics
             .report_utp_active_inc(UtpDirectionLabel::Inbound);
         let cid = utp_rs::cid::ConnectionId {
@@ -62,7 +58,7 @@ impl UtpController {
             send: connection_id.wrapping_add(1),
             peer: UtpEnr(peer),
         };
-        let mut stream = match self.connect_with_cid(cid.clone(), *UTP_CONN_CFG).await {
+        let stream = match self.connect_with_cid(cid.clone(), *UTP_CONN_CFG).await {
             Ok(stream) => stream,
             Err(err) => {
                 self.metrics.report_utp_outcome(
@@ -76,35 +72,18 @@ impl UtpController {
                     peer = ?cid.peer.client(),
                     "Unable to establish uTP conn based on Content response",
                 );
-                return Err(OverlayRequestError::ContentNotFound {
-                    message:
-                        "Unable to locate content on the network: unable to establish utp conn"
-                            .to_string(),
-                    utp: true,
-                    trace,
-                });
+                return Err(anyhow!("unable to establish utp conn"));
             }
         };
 
-        let mut data = vec![];
-        if let Err(err) = stream.read_to_eof(&mut data).await {
-            self.metrics
-                .report_utp_outcome(UtpDirectionLabel::Inbound, UtpOutcomeLabel::FailedDataTx);
-            debug!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), "error reading data from uTP stream, while handling a FindContent request.");
-            return Err(OverlayRequestError::ContentNotFound {
-                message:
-                    "Unable to locate content on the network: error reading data from utp stream"
-                        .to_string(),
-                utp: true,
-                trace,
-            });
+        // receive_utp_content handles metrics reporting of successful & failed rx
+        match Self::receive_utp_content(stream, self.metrics.clone()).await {
+            Ok(data) => Ok(data),
+            Err(err) => {
+                debug!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), "error reading data from uTP stream, while handling a FindContent request.");
+                Err(anyhow!("error reading data from uTP stream"))
+            }
         }
-
-        // report utp tx as successful, even if we go on to fail to process the
-        // payload
-        self.metrics
-            .report_utp_outcome(UtpDirectionLabel::Inbound, UtpOutcomeLabel::Success);
-        Ok(data)
     }
 
     /// Connect with a peer given the connection id, and transfer the data to the peer.
@@ -146,12 +125,7 @@ impl UtpController {
     }
 
     /// Accept an outbound stream given the connection id, and transfer the data to the peer.
-    pub async fn accept_outbound_stream(
-        &self,
-        cid: ConnectionId<UtpEnr>,
-        content_id: [u8; 32],
-        data: Vec<u8>,
-    ) {
+    pub async fn accept_outbound_stream(&self, cid: ConnectionId<UtpEnr>, data: Vec<u8>) {
         self.metrics
             .report_utp_active_inc(UtpDirectionLabel::Outbound);
         let stream = match self.accept_with_cid(cid.clone(), *UTP_CONN_CFG).await {
@@ -178,7 +152,6 @@ impl UtpController {
                 %cid.send,
                 %cid.recv,
                 peer = ?cid.peer.client(),
-                content_id = %hex_encode(content_id),
                 "Error sending content over uTP, in response to FindContent"
             );
         };
@@ -189,36 +162,27 @@ impl UtpController {
     pub async fn accept_inbound_stream(
         &self,
         cid: ConnectionId<UtpEnr>,
-        content_keys_string: Vec<String>,
     ) -> anyhow::Result<Vec<u8>> {
         // Wait for an incoming connection with the given CID. Then, read the data from the uTP
         // stream.
         self.metrics
             .report_utp_active_inc(UtpDirectionLabel::Inbound);
-        let mut stream = match self.accept_with_cid(cid.clone(), *UTP_CONN_CFG).await {
+        let stream = match self.accept_with_cid(cid.clone(), *UTP_CONN_CFG).await {
             Ok(stream) => stream,
-            Err(err) => {
+            Err(_) => {
                 self.metrics.report_utp_outcome(
                     UtpDirectionLabel::Inbound,
                     UtpOutcomeLabel::FailedConnection,
                 );
-                debug!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), content_keys = ?content_keys_string, "unable to accept uTP stream");
                 return Err(anyhow!("unable to accept uTP stream"));
             }
         };
 
-        let mut data = vec![];
-        if let Err(err) = stream.read_to_eof(&mut data).await {
-            self.metrics
-                .report_utp_outcome(UtpDirectionLabel::Inbound, UtpOutcomeLabel::FailedDataTx);
-            debug!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), content_keys = ?content_keys_string, "error reading data from uTP stream, while handling an Offer request.");
-            return Err(anyhow!("error reading data from uTP stream"));
+        // receive_utp_content handles metrics reporting of successful & failed rx
+        match Self::receive_utp_content(stream, self.metrics.clone()).await {
+            Ok(data) => Ok(data),
+            Err(_) => Err(anyhow!("error reading data from uTP stream")),
         }
-
-        // report utp tx as successful, even if we go on to fail to process the payload
-        self.metrics
-            .report_utp_outcome(UtpDirectionLabel::Inbound, UtpOutcomeLabel::Success);
-        Ok(data)
     }
 
     async fn send_utp_content(
@@ -254,6 +218,21 @@ impl UtpController {
         };
         metrics.report_utp_outcome(UtpDirectionLabel::Outbound, UtpOutcomeLabel::Success);
         Ok(())
+    }
+
+    async fn receive_utp_content(
+        mut stream: UtpStream<UtpEnr>,
+        metrics: OverlayMetricsReporter,
+    ) -> anyhow::Result<Vec<u8>> {
+        let mut data = vec![];
+        if let Err(err) = stream.read_to_eof(&mut data).await {
+            metrics.report_utp_outcome(UtpDirectionLabel::Inbound, UtpOutcomeLabel::FailedDataTx);
+            return Err(anyhow!("Error reading data from uTP stream: {err}"));
+        }
+
+        // report utp tx as successful, even if we go on to fail to process the payload
+        metrics.report_utp_outcome(UtpDirectionLabel::Inbound, UtpOutcomeLabel::Success);
+        Ok(data)
     }
 
     async fn connect_with_cid(

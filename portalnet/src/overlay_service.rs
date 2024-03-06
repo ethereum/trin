@@ -872,13 +872,21 @@ where
                         tokio::spawn(async move {
                             let trace = query_info.trace;
                             let data = match utp_controller
-                                .connect_inbound_stream(connection_id, source, trace.clone())
+                                .connect_inbound_stream(connection_id, source)
                                 .await
                             {
                                 Ok(data) => data,
                                 Err(e) => {
                                     if let Some(responder) = callback {
-                                        let _ = responder.send(Err(e));
+                                        let _ = responder.send(Err(
+                                            OverlayRequestError::ContentNotFound {
+                                                message: format!(
+                                                    "Unable to locate content on the network: {e}"
+                                                ),
+                                                utp: true,
+                                                trace,
+                                            },
+                                        ));
                                     }
                                     return;
                                 }
@@ -1148,8 +1156,7 @@ where
                     // over the uTP stream.
                     let utp = Arc::clone(&self.utp_controller);
                     tokio::spawn(async move {
-                        utp.accept_outbound_stream(cid, content_key.content_id(), content)
-                            .await;
+                        utp.accept_outbound_stream(cid, content).await;
                         drop(permit);
                     });
 
@@ -1298,13 +1305,10 @@ where
 
         let utp_controller = Arc::clone(&self.utp_controller);
         tokio::spawn(async move {
-            let data = match utp_controller
-                .accept_inbound_stream(cid.clone(), content_keys_string.clone())
-                .await
-            {
+            let data = match utp_controller.accept_inbound_stream(cid.clone()).await {
                 Ok(data) => data,
                 Err(err) => {
-                    debug!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), content_keys = ?content_keys_string, "unable to accept uTP stream");
+                    debug!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), content_keys = ?content_keys_string, "unable to complete uTP transfer");
                     drop(permit);
                     return;
                 }
