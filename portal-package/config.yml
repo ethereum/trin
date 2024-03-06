@@ -1,0 +1,48 @@
+# - only the defined types below will be run for each kurtosis test
+# - running with no bootnodes will automatically connect participants to the main network
+# - if you're supplying a custom image, make sure it matches the client_type
+# - min_mem and max_mem are in MB, and also applied to the node via cli flags
+#
+participants:
+  - client_type: trin
+    image: "portalnetwork/trin:latest"
+    min_cpu: 0
+    max_cpu: 100
+    min_mem: 0
+    max_mem: 10000
+    private_key: "0x0101010101010101010101010101010101010101010101010101010101010101"
+  - client_type: trin
+    min_cpu: 0
+    max_cpu: 100
+    min_mem: 0
+    max_mem: 10000
+    private_key: "0x0801010101010101010101010101010101010101010101010101010101010101"
+  - client_type: fluffy
+    min_cpu: 0
+    max_cpu: 100
+    min_mem: 0
+    max_mem: 10000
+    private_key: "0x1101010101010101010101010101010101010101010101010101010101010101"
+bridges:
+  - client_type: bridge
+    mode: latest
+    min_cpu: 0
+    max_cpu: 100
+    min_mem: 0
+    max_mem: 10000
+    private_key: "0x5101010101010101010101010101010101010101010101010101010101010101"
+bootnodes:
+  - client_type: trin
+    min_cpu: 0
+    max_cpu: 100
+    min_mem: 0
+    max_mem: 10000
+    private_key: "0x2101010101010101010101010101010101010101010101010101010101010101"
+  - client_type: fluffy
+    min_cpu: 0
+    max_cpu: 100
+    min_mem: 0
+    max_mem: 10000
+    private_key: "0x3101010101010101010101010101010101010101010101010101010101010101"
+glados:
+  - client_type: trin

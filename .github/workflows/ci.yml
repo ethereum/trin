@@ -25,3 +25,12 @@ jobs:
 
       - name: Validate PR commits with commitlint
         run: sudo npx commitlint --from ${{ github.event.pull_request.head.sha }}~${{ github.event.pull_request.commits }} --to ${{ github.event.pull_request.head.sha }} --verbose
+  kurtosis-test:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Kurtosis Tests
+        uses: kurtosis-tech/kurtosis-github-action@v2
+        with:
+          path: './portal-package'
+          args-file: './portal-package/config.yml'

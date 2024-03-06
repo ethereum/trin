@@ -1,0 +1,5 @@
+# Most operating systems require venv to use python libraries.
+venv
+
+# we don't want to share our secrets
+.secrets.json
