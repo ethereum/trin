@@ -25,7 +25,6 @@ use rand::seq::SliceRandom;
 use smallvec::SmallVec;
 use ssz::Encode;
 use ssz_types::BitList;
-use thiserror::Error;
 use tokio::{
     sync::{
         broadcast,
@@ -50,6 +49,14 @@ use crate::{
         query_pool::{QueryId, QueryPool, QueryPoolState, TargetKey},
     },
     gossip::propagate_gossip_cross_thread,
+    overlay::{
+        command::OverlayCommand,
+        errors::OverlayRequestError,
+        request::{
+            ActiveOutgoingRequest, OverlayRequest, OverlayRequestId, OverlayResponse,
+            RequestDirection,
+        },
+    },
     types::node::Node,
     utils::portal_wire,
     utp_controller::UtpController,
@@ -88,191 +95,6 @@ const BUCKET_REFRESH_INTERVAL_SECS: u64 = 60;
 
 /// The capacity of the event-stream's broadcast channel.
 const EVENT_STREAM_CHANNEL_CAPACITY: usize = 10;
-
-/// A network-based action that the overlay may perform.
-///
-/// The overlay performs network-based actions on behalf of the command issuer. The issuer may be
-/// the overlay itself. The overlay manages network requests and responses and sends the result
-/// back to the issuer upon completion.
-#[derive(Debug)]
-pub enum OverlayCommand<TContentKey> {
-    /// Send a single portal request through the overlay.
-    ///
-    /// A `Request` corresponds to a single request message defined in the portal wire spec.
-    Request(OverlayRequest),
-    /// Perform a find content query through the overlay.
-    ///
-    /// A `FindContentQuery` issues multiple requests to find the content identified by `target`.
-    /// The result is sent to the issuer over `callback`.
-    FindContentQuery {
-        /// The query target.
-        target: TContentKey,
-        /// A callback channel to transmit the result of the query.
-        callback: oneshot::Sender<RecursiveFindContentResult>,
-        /// Whether or not a trace for the content query should be kept and returned.
-        is_trace: bool,
-    },
-    FindNodeQuery {
-        /// The query target.
-        target: NodeId,
-        /// A callback channel to transmit the result of the query.
-        callback: oneshot::Sender<Vec<Enr>>,
-    },
-    /// Sets up an event stream where the overlay server will return various events.
-    RequestEventStream(oneshot::Sender<broadcast::Receiver<EventEnvelope>>),
-    /// Handle an event sent from another overlay.
-    Event(EventEnvelope),
-}
-
-/// An overlay request error.
-#[derive(Clone, Error, Debug)]
-// required for the ContentNotFound error response
-#[allow(clippy::large_enum_variant)]
-pub enum OverlayRequestError {
-    /// A failure to transmit or receive a message on a channel.
-    #[error("Channel failure: {0}")]
-    ChannelFailure(String),
-
-    /// An invalid request was received.
-    #[error("Invalid request: {0}")]
-    InvalidRequest(String),
-
-    /// An invalid response was received.
-    #[error("Invalid response")]
-    InvalidResponse,
-
-    /// Received content failed validation for a response.
-    #[error("Response content failed validation: {0}")]
-    FailedValidation(String),
-
-    #[error("The request returned an empty response")]
-    EmptyResponse,
-
-    /// A failure to decode a message.
-    #[error("The message was unable to be decoded")]
-    DecodeError,
-
-    /// The request timed out.
-    #[error("The request timed out")]
-    Timeout,
-
-    /// The request was unable to be served.
-    #[error("Failure to serve request: {0}")]
-    Failure(String),
-
-    /// The request  Discovery v5 request error.
-    #[error("Internal Discovery v5 error: {0}")]
-    Discv5Error(discv5::RequestError),
-
-    /// Error types resulting from building ACCEPT message
-    #[error("Error while building accept message: {0}")]
-    AcceptError(String),
-
-    /// Error types resulting from building ACCEPT message
-    #[error("Error while sending offer message: {0}")]
-    OfferError(String),
-
-    /// uTP request error
-    #[error("uTP request error: {0}")]
-    UtpError(String),
-
-    #[error("Received invalid remote discv5 packet")]
-    InvalidRemoteDiscv5Packet,
-
-    #[error("Content wasn't found on the network: {message}")]
-    ContentNotFound {
-        message: String,
-        utp: bool,
-        trace: Option<QueryTrace>,
-    },
-}
-
-impl From<discv5::RequestError> for OverlayRequestError {
-    fn from(err: discv5::RequestError) -> Self {
-        match err {
-            discv5::RequestError::Timeout => Self::Timeout,
-            discv5::RequestError::InvalidRemotePacket => Self::InvalidRemoteDiscv5Packet,
-            err => Self::Discv5Error(err),
-        }
-    }
-}
-
-/// An incoming or outgoing request.
-#[derive(Debug, PartialEq)]
-pub enum RequestDirection {
-    /// An incoming request from `source`.
-    Incoming { id: RequestId, source: NodeId },
-    /// An outgoing request to `destination`.
-    Outgoing { destination: Enr },
-}
-
-/// An identifier for an overlay network request. The ID is used to track active outgoing requests.
-// We only have visibility on the request IDs for incoming Discovery v5 talk requests. Here we use
-// a separate identifier to track outgoing talk requests.
-type OverlayRequestId = u128;
-
-/// An overlay request response channel.
-type OverlayResponder = oneshot::Sender<Result<Response, OverlayRequestError>>;
-
-/// A request to pass through the overlay.
-#[derive(Debug)]
-pub struct OverlayRequest {
-    /// The request identifier.
-    pub id: OverlayRequestId,
-    /// The inner request.
-    pub request: Request,
-    /// The direction of the request.
-    pub direction: RequestDirection,
-    /// An optional responder to send a result of the request.
-    /// The responder may be None if the request was initiated internally.
-    pub responder: Option<OverlayResponder>,
-    /// ID of query that request's response will advance.
-    /// Will be None for requests that are not associated with a query.
-    pub query_id: Option<QueryId>,
-    /// An optional permit to allow for transfer caps
-    pub request_permit: Option<OwnedSemaphorePermit>,
-}
-
-impl OverlayRequest {
-    /// Creates a new overlay request.
-    pub fn new(
-        request: Request,
-        direction: RequestDirection,
-        responder: Option<OverlayResponder>,
-        query_id: Option<QueryId>,
-        request_permit: Option<OwnedSemaphorePermit>,
-    ) -> Self {
-        OverlayRequest {
-            id: rand::random(),
-            request,
-            direction,
-            responder,
-            query_id,
-            request_permit,
-        }
-    }
-}
-
-/// An active outgoing overlay request.
-struct ActiveOutgoingRequest {
-    /// The ENR of the destination (target) node.
-    pub destination: Enr,
-    /// An optional responder to send the result of the associated request.
-    pub responder: Option<OverlayResponder>,
-    pub request: Request,
-    /// An optional QueryID for the query that this request is associated with.
-    pub query_id: Option<QueryId>,
-    /// An optional permit to allow for transfer caps
-    pub request_permit: Option<OwnedSemaphorePermit>,
-}
-
-/// A response for a particular overlay request.
-struct OverlayResponse {
-    /// The identifier of the associated request.
-    pub request_id: OverlayRequestId,
-    /// The result of the associated request.
-    pub response: Result<Response, OverlayRequestError>,
-}
 
 /// The overlay service.
 pub struct OverlayService<TContentKey, TMetric, TValidator, TStore> {
@@ -2656,7 +2478,7 @@ mod tests {
     use crate::{
         config::PortalnetConfig,
         discovery::{Discovery, NodeAddress},
-        overlay::OverlayConfig,
+        overlay::config::OverlayConfig,
         utils::db::setup_temp_dir,
     };
     use ethportal_api::types::{

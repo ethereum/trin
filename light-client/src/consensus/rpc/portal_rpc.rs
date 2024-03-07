@@ -18,7 +18,7 @@ use ethportal_api::{
     LightClientUpdatesByRangeKey,
 };
 use futures::channel::oneshot;
-use portalnet::overlay_service::OverlayCommand;
+use portalnet::overlay::command::OverlayCommand;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::warn;

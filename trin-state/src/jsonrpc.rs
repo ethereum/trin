@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use discv5::{enr::NodeId, Enr};
-use portalnet::overlay_service::OverlayRequestError;
+use portalnet::overlay::errors::OverlayRequestError;
 use serde_json::{json, Value};
 use tokio::sync::mpsc;
 use tracing::error;

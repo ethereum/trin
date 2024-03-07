@@ -6,16 +6,12 @@ use std::{
     future::Future,
     marker::{PhantomData, Sync},
     sync::Arc,
-    time::Duration,
 };
 
 use anyhow::anyhow;
 use discv5::{
     enr::NodeId,
-    kbucket::{
-        Entry, FailureReason, Filter, InsertResult, KBucketsTable, Key, NodeStatus,
-        MAX_NODES_PER_BUCKET,
-    },
+    kbucket::{Entry, FailureReason, InsertResult, KBucketsTable, Key, NodeStatus},
     ConnectionDirection, ConnectionState, TalkRequest,
 };
 use futures::channel::oneshot;
@@ -29,8 +25,12 @@ use crate::{
     discovery::{Discovery, UtpEnr},
     find::query_info::{FindContentResult, RecursiveFindContentResult},
     gossip::{propagate_gossip_cross_thread, trace_propagate_gossip_cross_thread, GossipResult},
-    overlay_service::{
-        OverlayCommand, OverlayRequest, OverlayRequestError, OverlayService, RequestDirection,
+    overlay::{
+        command::OverlayCommand,
+        config::OverlayConfig,
+        errors::OverlayRequestError,
+        request::{OverlayRequest, RequestDirection},
+        service::OverlayService,
     },
     types::node::Node,
     utp_controller::UtpController,
@@ -38,7 +38,6 @@ use crate::{
 use ethportal_api::{
     types::{
         bootnodes::Bootnode,
-        cli::DEFAULT_UTP_TRANSFER_LIMIT,
         discv5::RoutingTableInfo,
         distance::{Distance, Metric},
         enr::Enr,
@@ -55,44 +54,6 @@ use trin_storage::ContentStore;
 use trin_validation::validator::{ValidationResult, Validator};
 
 use crate::events::EventEnvelope;
-
-/// Configuration parameters for the overlay network.
-#[derive(Clone)]
-pub struct OverlayConfig {
-    pub bootnode_enrs: Vec<Enr>,
-    pub bucket_pending_timeout: Duration,
-    pub max_incoming_per_bucket: usize,
-    pub table_filter: Option<Box<dyn Filter<Node>>>,
-    pub bucket_filter: Option<Box<dyn Filter<Node>>>,
-    pub ping_queue_interval: Option<Duration>,
-    pub query_parallelism: usize,
-    pub query_timeout: Duration,
-    pub query_peer_timeout: Duration,
-    pub query_num_results: usize,
-    pub findnodes_query_distances_per_peer: usize,
-    pub disable_poke: bool,
-    pub utp_transfer_limit: usize,
-}
-
-impl Default for OverlayConfig {
-    fn default() -> Self {
-        Self {
-            bootnode_enrs: vec![],
-            bucket_pending_timeout: Duration::from_secs(60),
-            max_incoming_per_bucket: 16,
-            table_filter: None,
-            bucket_filter: None,
-            ping_queue_interval: None,
-            query_parallelism: 3, // (recommended α from kademlia paper)
-            query_peer_timeout: Duration::from_secs(2),
-            query_timeout: Duration::from_secs(60),
-            query_num_results: MAX_NODES_PER_BUCKET,
-            findnodes_query_distances_per_peer: 3,
-            disable_poke: false,
-            utp_transfer_limit: DEFAULT_UTP_TRANSFER_LIMIT,
-        }
-    }
-}
 
 type BucketEntry = (NodeId, Enr, NodeStatus, Distance, Option<String>);
 

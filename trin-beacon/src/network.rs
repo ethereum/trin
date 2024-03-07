@@ -12,7 +12,7 @@ use ethportal_api::{
 use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, UtpEnr},
-    overlay::{OverlayConfig, OverlayProtocol},
+    overlay::{config::OverlayConfig, protocol::OverlayProtocol},
 };
 use trin_storage::PortalStorageConfig;
 use trin_validation::oracle::HeaderOracle;

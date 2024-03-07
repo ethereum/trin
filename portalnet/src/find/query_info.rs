@@ -2,7 +2,7 @@ use discv5::{enr::NodeId, kbucket::Key, Enr};
 use futures::channel::oneshot;
 use smallvec::SmallVec;
 
-use crate::{find::query_pool::TargetKey, overlay_service::OverlayRequestError};
+use crate::{find::query_pool::TargetKey, overlay::errors::OverlayRequestError};
 use ethportal_api::{
     types::{
         portal_wire::{Content, FindContent, FindNodes, Request},

@@ -24,7 +24,7 @@ use ethportal_api::{
 use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, Discv5UdpSocket},
-    overlay::{OverlayConfig, OverlayProtocol},
+    overlay::{config::OverlayConfig, protocol::OverlayProtocol},
     utils::db::setup_temp_dir,
 };
 use trin_storage::{ContentStore, DistanceFunction, MemoryContentStore};
