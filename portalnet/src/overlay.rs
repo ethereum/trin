@@ -540,8 +540,13 @@ where
         enr: Enr,
         conn_id: u16,
     ) -> Result<Vec<u8>, OverlayRequestError> {
+        let cid = utp_rs::cid::ConnectionId {
+            recv: conn_id,
+            send: conn_id.wrapping_add(1),
+            peer: UtpEnr(enr),
+        };
         self.utp_controller
-            .connect_inbound_stream(conn_id, enr)
+            .connect_inbound_stream(cid)
             .await
             .map_err(|err| OverlayRequestError::ContentNotFound {
                 message: format!("Unable to locate content on the network: {err:?}"),

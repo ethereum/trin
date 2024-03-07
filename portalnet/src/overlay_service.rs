@@ -871,10 +871,12 @@ where
                         let utp_controller = self.utp_controller.clone();
                         tokio::spawn(async move {
                             let trace = query_info.trace;
-                            let data = match utp_controller
-                                .connect_inbound_stream(connection_id, source)
-                                .await
-                            {
+                            let cid = utp_rs::cid::ConnectionId {
+                                recv: connection_id,
+                                send: connection_id.wrapping_add(1),
+                                peer: UtpEnr(source),
+                            };
+                            let data = match utp_controller.connect_inbound_stream(cid).await {
                                 Ok(data) => data,
                                 Err(e) => {
                                     if let Some(responder) = callback {
