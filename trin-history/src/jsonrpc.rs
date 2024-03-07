@@ -13,7 +13,7 @@ use ethportal_api::{
     utils::bytes::hex_encode,
     ContentValue, HistoryContentKey, OverlayContentKey, RawContentKey,
 };
-use portalnet::overlay_service::OverlayRequestError;
+use portalnet::overlay::errors::OverlayRequestError;
 use serde_json::{json, Value};
 use tokio::sync::{mpsc, Mutex, RwLock};
 use tracing::error;

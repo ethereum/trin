@@ -7,7 +7,6 @@ pub mod events;
 pub mod find;
 pub mod gossip;
 pub mod overlay;
-pub mod overlay_service;
 pub mod socket;
 pub mod types;
 pub mod utils;

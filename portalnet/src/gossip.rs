@@ -12,7 +12,10 @@ use tokio::sync::mpsc;
 use tracing::{debug, error, warn};
 
 use crate::{
-    overlay_service::{OverlayCommand, OverlayRequest, RequestDirection},
+    overlay::{
+        command::OverlayCommand,
+        request::{OverlayRequest, RequestDirection},
+    },
     types::node::Node,
     utp_controller::UtpController,
 };
