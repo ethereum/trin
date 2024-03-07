@@ -1,4 +1,4 @@
-use std::{path::PathBuf, str::FromStr};
+use std::{net::SocketAddr, path::PathBuf, str::FromStr};
 
 use clap::{Parser, Subcommand};
 use ethereum_types::H256;
@@ -53,8 +53,11 @@ pub struct BridgeConfig {
     )]
     pub network: Vec<NetworkKind>,
 
-    #[arg(long, help = "Url for metrics reporting")]
-    pub metrics_url: Option<Url>,
+    #[arg(
+        long,
+        help = "Socket address for metrics reporting, ex: 127.0.0.1:9090"
+    )]
+    pub metrics_url: Option<SocketAddr>,
 
     #[arg(
         default_value = "default",
