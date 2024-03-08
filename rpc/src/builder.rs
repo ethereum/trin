@@ -16,12 +16,12 @@ use std::{
     fmt,
     sync::Arc,
 };
-use strum::{AsRefStr, EnumString, EnumVariantNames, VariantNames};
+use strum::{AsRefStr, EnumString, VariantNames};
 use tokio::sync::mpsc;
 
 /// Represents RPC modules that are supported by Trin
 #[derive(
-    Debug, Clone, Copy, Eq, PartialEq, Hash, AsRefStr, EnumVariantNames, EnumString, Deserialize,
+    Debug, Clone, Copy, Eq, PartialEq, Hash, AsRefStr, VariantNames, EnumString, Deserialize,
 )]
 #[serde(rename_all = "snake_case")]
 #[strum(serialize_all = "kebab-case")]

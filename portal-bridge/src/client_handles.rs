@@ -1,6 +1,5 @@
 use std::net::SocketAddr;
 
-use anyhow::bail;
 use tokio::process::{Child, Command};
 
 use crate::cli::BridgeConfig;
@@ -24,14 +23,8 @@ pub fn fluffy_handle(
         .arg(format!("--nat:extip:{}", ip.ip()))
         .arg(format!("--netkey-unsafe:{private_key}"));
     if let Some(metrics_url) = bridge_config.metrics_url {
-        let address = match metrics_url.host_str() {
-            Some(address) => address,
-            None => bail!("Invalid metrics url address"),
-        };
-        let port = match metrics_url.port() {
-            Some(port) => port,
-            None => bail!("Invalid metrics url port"),
-        };
+        let address = metrics_url.ip().to_string();
+        let port = metrics_url.port();
         command
             .arg("--metrics")
             .arg(format!("--metrics-address:{address}"))
@@ -79,7 +72,7 @@ pub fn trin_handle(
         command.args(["--external-address", &format!("{ip}:{udp_port}")]);
     }
     if let Some(metrics_url) = bridge_config.metrics_url {
-        let url: String = metrics_url.into();
+        let url: String = metrics_url.to_string();
         command.args(["--enable-metrics-with-url", &url]);
     }
     Ok(command.spawn()?)

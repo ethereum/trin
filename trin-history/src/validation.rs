@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use anyhow::anyhow;
-use async_trait::async_trait;
 use ethereum_types::H256;
 use ssz::Decode;
 use tokio::sync::RwLock;
@@ -17,22 +16,21 @@ use ethportal_api::{
     utils::bytes::hex_encode,
     HistoryContentKey,
 };
-use trin_validation::{oracle::HeaderOracle, validator::Validator};
+use trin_validation::{
+    oracle::HeaderOracle,
+    validator::{ValidationResult, Validator},
+};
 
 pub struct ChainHistoryValidator {
     pub header_oracle: Arc<RwLock<HeaderOracle>>,
 }
 
-#[async_trait]
 impl Validator<HistoryContentKey> for ChainHistoryValidator {
     async fn validate_content(
         &self,
         content_key: &HistoryContentKey,
         content: &[u8],
-    ) -> anyhow::Result<()>
-    where
-        HistoryContentKey: 'async_trait,
-    {
+    ) -> anyhow::Result<ValidationResult<HistoryContentKey>> {
         match content_key {
             HistoryContentKey::BlockHeaderWithProof(key) => {
                 let header_with_proof =
@@ -50,7 +48,9 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                     .read()
                     .await
                     .master_acc
-                    .validate_header_with_proof(&header_with_proof)
+                    .validate_header_with_proof(&header_with_proof)?;
+
+                Ok(ValidationResult::new(true))
             }
             HistoryContentKey::BlockBody(key) => {
                 let block_body = BlockBody::from_ssz_bytes(content)
@@ -78,7 +78,7 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                         trusted_header.transactions_root
                     ));
                 }
-                Ok(())
+                Ok(ValidationResult::new(true))
             }
             HistoryContentKey::BlockReceipts(key) => {
                 let receipts = Receipts::from_ssz_bytes(content).map_err(|msg| {
@@ -99,7 +99,7 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                         trusted_header.receipts_root
                     ));
                 }
-                Ok(())
+                Ok(ValidationResult::new(true))
             }
             HistoryContentKey::EpochAccumulator(key) => {
                 let epoch_acc = EpochAccumulator::from_ssz_bytes(content).map_err(|msg| {
@@ -121,7 +121,7 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                         "Content validation failed: Invalid epoch accumulator, missing from master accumulator."
                     ));
                 }
-                Ok(())
+                Ok(ValidationResult::new(true))
             }
         }
     }

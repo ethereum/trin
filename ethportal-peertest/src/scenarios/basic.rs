@@ -3,7 +3,7 @@ use ethereum_types::{H256, U256};
 use ethportal_api::{
     types::{distance::Distance, portal_wire::ProtocolId},
     BeaconNetworkApiClient, BlockHeaderKey, Discv5ApiClient, HistoryContentKey,
-    HistoryNetworkApiClient, PossibleHistoryContentValue, StateNetworkApiClient, Web3ApiClient,
+    HistoryNetworkApiClient, StateNetworkApiClient, Web3ApiClient,
 };
 use jsonrpsee::async_client::Client;
 use ssz::Encode;
@@ -179,11 +179,10 @@ pub async fn test_history_local_content_absent(target: &Client) {
     let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
         block_hash: H256::random().into(),
     });
-    let result = HistoryNetworkApiClient::local_content(target, content_key)
+    let error = HistoryNetworkApiClient::local_content(target, content_key)
         .await
-        .unwrap();
-
-    if let PossibleHistoryContentValue::ContentPresent(_) = result {
-        panic!("Expected absent content");
-    };
+        .unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("Content not found in local storage"));
 }

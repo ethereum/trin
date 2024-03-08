@@ -118,6 +118,9 @@ pub enum ModeType {
 impl FromStr for ModeType {
     type Err = ParseError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.is_empty() {
+            return Err("Invalid bridge mode arg: empty string".to_string());
+        }
         match &s[..1] {
             "e" => {
                 let epoch = s[1..]
@@ -164,13 +167,25 @@ impl FromStr for ModeType {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FourFoursMode {
     Random,
-    // Gossips a single epoch
+    // Gossips a single, randomly selected epoch
+    RandomSingle,
+    // Gossips the single epoch given
     Single(u64),
+    // Gossips a block range from within a single epoch
+    Range(u64, u64),
 }
+
+const RANDOM_SINGLE_MODE: &str = "random_epoch";
 
 impl FromStr for FourFoursMode {
     type Err = ParseError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.is_empty() {
+            return Err("Invalid bridge fourfours mode arg: empty string".to_string());
+        }
+        if s == RANDOM_SINGLE_MODE {
+            return Ok(FourFoursMode::RandomSingle);
+        }
         match &s[..1] {
             "e" => {
                 let epoch = s[1..]
@@ -181,6 +196,43 @@ impl FromStr for FourFoursMode {
                 }
                 Ok(FourFoursMode::Single(epoch))
             }
+            "r" => {
+                let range_vec = s[1..]
+                    .split('-')
+                    .map(|range_input| {
+                        range_input.parse().expect(
+                            "Range format invalid, expected fourfours:rX-Y (eg. fourfours:r10-100)",
+                        )
+                    })
+                    .collect::<Vec<u64>>();
+
+                if range_vec.len() != 2 {
+                    return Err(
+                        "Invalid 4444s bridge mode arg: expected 2 numbers in range".to_string()
+                    );
+                }
+                let start_block = range_vec[0].to_owned();
+                let end_block = range_vec[1].to_owned();
+                if start_block > end_block {
+                    return Err(
+                        "Invalid 4444s bridge mode arg: end_block is less than start_block"
+                            .to_string(),
+                    );
+                }
+                let start_epoch = start_block / EPOCH_SIZE as u64;
+                let end_epoch = end_block / EPOCH_SIZE as u64;
+                if start_epoch != end_epoch {
+                    return Err(
+                        "Invalid 4444s bridge mode arg: start_block and end_block are not in the same epoch"
+                            .to_string(),
+                    );
+                }
+                if start_epoch > 1896 {
+                    return Err(format!("Invalid 4444s bridge mode arg: era1 epoch greater than 1896 was given: {start_epoch}"));
+                }
+
+                Ok(FourFoursMode::Range(start_block, end_block))
+            }
             _ => Err("Invalid 4444s bridge mode arg: type prefix".to_string()),
         }
     }
@@ -189,8 +241,6 @@ impl FromStr for FourFoursMode {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::cli::BridgeConfig;
-    use clap::Parser;
     use rstest::rstest;
 
     #[rstest]
@@ -204,27 +254,43 @@ mod test {
     #[case("backfill:e0", BridgeMode::Backfill(ModeType::Epoch(0)))]
     #[case("backfill:e1000", BridgeMode::Backfill(ModeType::Epoch(1000)))]
     #[case("fourfours", BridgeMode::FourFours(FourFoursMode::Random))]
+    #[case(format!("fourfours:{RANDOM_SINGLE_MODE}"), 
+        BridgeMode::FourFours(FourFoursMode::RandomSingle)
+    )]
     #[case("fourfours:e1", BridgeMode::FourFours(FourFoursMode::Single(1)))]
+    #[case("fourfours:r1-10", BridgeMode::FourFours(FourFoursMode::Range(1, 10)))]
     #[case(
         "test:/usr/eth/test.json",
         BridgeMode::Test(PathBuf::from("/usr/eth/test.json"))
     )]
     fn test_mode_flag(#[case] actual: String, #[case] expected: BridgeMode) {
-        const EXECUTABLE_PATH: &str = "path/to/executable";
-        const EPOCH_ACC_PATH: &str = "path/to/epoch/accumulator";
-        let bridge_config = BridgeConfig::parse_from([
-            "bridge",
-            "--node-count",
-            "1",
-            "--executable-path",
-            EXECUTABLE_PATH,
-            "--epoch-accumulator-path",
-            EPOCH_ACC_PATH,
-            "--mode",
-            &actual,
-            "trin",
-        ]);
-        assert_eq!(bridge_config.mode, expected);
+        let bridge_mode = BridgeMode::from_str(&actual).unwrap();
+        assert_eq!(bridge_mode, expected);
+    }
+
+    #[rstest]
+    #[case("latest:")]
+    #[case("latest:block")]
+    #[case("backfill:")]
+    #[case("backfill:x")]
+    #[case("backfill:epoch")]
+    #[case("single:")]
+    #[case("single:x")]
+    #[case("fourfours:")]
+    #[case("fourfours:1")]
+    #[case("fourfours:r1")]
+    #[case("fourfours:1-100")]
+    #[case("fourfours:x1-100")]
+    #[case("fourfours:r1-10-100")]
+    // invalid range
+    #[case("fourfours:r100-1")]
+    // range is not within a single epoch
+    #[case("fourfours:r1-10000")]
+    // range is post-merge
+    #[case("fourfours:r19000000-19000100")]
+    fn test_invalid_mode_flag(#[case] actual: String) {
+        let bridge_mode = BridgeMode::from_str(&actual);
+        assert!(bridge_mode.is_err());
     }
 
     #[rstest]

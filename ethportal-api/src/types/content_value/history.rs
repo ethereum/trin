@@ -1,8 +1,5 @@
 use crate::{
-    types::{
-        constants::CONTENT_ABSENT, content_value::ContentValue,
-        execution::accumulator::EpochAccumulator,
-    },
+    types::{content_value::ContentValue, execution::accumulator::EpochAccumulator},
     utils::bytes::hex_encode,
     BlockBody, ContentValueError, HeaderWithProof, Receipts,
 };
@@ -19,46 +16,6 @@ pub enum HistoryContentValue {
     EpochAccumulator(EpochAccumulator),
 }
 
-/// A content response from the RPC server.
-///
-/// This type allows the RPC response to be non-error,
-/// functioning as an Option, but with None serializing to "0x"
-/// rather than 'null'.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum PossibleHistoryContentValue {
-    ContentPresent(HistoryContentValue),
-    ContentAbsent,
-}
-
-impl Serialize for PossibleHistoryContentValue {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match self {
-            PossibleHistoryContentValue::ContentPresent(content) => content.serialize(serializer),
-            PossibleHistoryContentValue::ContentAbsent => serializer.serialize_str(CONTENT_ABSENT),
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for PossibleHistoryContentValue {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-
-        if s == CONTENT_ABSENT {
-            Ok(PossibleHistoryContentValue::ContentAbsent)
-        } else {
-            HistoryContentValue::from_hex(&s)
-                .map(PossibleHistoryContentValue::ContentPresent)
-                .map_err(serde::de::Error::custom)
-        }
-    }
-}
-
 impl ContentValue for HistoryContentValue {
     fn encode(&self) -> Vec<u8> {
         match self {
@@ -70,11 +27,6 @@ impl ContentValue for HistoryContentValue {
     }
 
     fn decode(buf: &[u8]) -> Result<Self, ContentValueError> {
-        // Catch any attempt to construct a content value from "0x" improperly.
-        if buf == CONTENT_ABSENT.to_string().as_bytes() {
-            return Err(ContentValueError::DecodeAbsentContent);
-        }
-
         if let Ok(value) = HeaderWithProof::from_ssz_bytes(buf) {
             return Ok(Self::BlockHeaderWithProof(value));
         }
@@ -175,20 +127,6 @@ mod test {
         assert_eq!(
             error.to_string(),
             "could not determine content type of 0x010203040506070809 from history network"
-        );
-    }
-
-    #[test]
-    fn content_value_absent_raises_error_on_deserialization() {
-        let data = CONTENT_ABSENT.to_string();
-        let item_result = HistoryContentValue::decode(data.as_bytes());
-        let error = item_result.unwrap_err();
-        // Test the error Debug representation
-        assert_eq!(error, ContentValueError::DecodeAbsentContent);
-        // Test the error Display representation.
-        assert_eq!(
-            error.to_string(),
-            "attempted to decode the '0x' absent content message"
         );
     }
 }

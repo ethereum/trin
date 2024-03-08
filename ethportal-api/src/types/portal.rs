@@ -18,7 +18,7 @@ pub struct NodeInfo {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PongInfo {
-    pub enr_seq: u32,
+    pub enr_seq: u64,
     pub data_radius: DataRadius,
 }
 

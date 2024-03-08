@@ -5,7 +5,6 @@ use tokio::sync::mpsc;
 
 use ethportal_api::{
     types::{
-        constants::CONTENT_ABSENT,
         execution::{block_body::BlockBody, header::Header},
         jsonrpc::{endpoints::HistoryEndpoint, request::HistoryJsonRpcRequest},
     },
@@ -29,7 +28,27 @@ pub async fn proxy_query_to_history_subnet(
     match resp_rx.recv().await {
         Some(val) => match val {
             Ok(result) => Ok(result),
-            Err(msg) => Err(RpcServeError::Message(msg)),
+            Err(msg) => {
+                if msg.contains("Unable to locate content on the network") {
+                    let error_details: Value = serde_json::from_str(&msg).map_err(|e| {
+                        RpcServeError::Message(format!(
+                            "Failed to parse error message from history subnet: {e:?}",
+                        ))
+                    })?;
+                    let message = error_details["message"]
+                        .as_str()
+                        .expect("Failed to parse error message from history subnet")
+                        .to_string();
+                    let trace = match error_details.get("trace") {
+                        Some(trace) => serde_json::from_value(trace.clone())
+                            .expect("Failed to parse query trace"),
+                        None => None,
+                    };
+                    Err(RpcServeError::ContentNotFound { message, trace })
+                } else {
+                    Err(RpcServeError::Message(msg))
+                }
+            }
         },
         None => Err(RpcServeError::Message(
             "Internal error: No response from chain history subnetwork".to_string(),
@@ -82,9 +101,6 @@ async fn find_content_by_hash(
                 format!("Invalid internal representation of {content_key:?}; json: {wrong_type:?}");
             return Err(RpcServeError::Message(message));
         }
-    };
-    if content == CONTENT_ABSENT {
-        return Err(RpcServeError::Message("Content not found".into()));
     };
     let content: Vec<u8> =
         hex_decode(&content).expect("decoding the trin hex-encoded data failed, odd");

@@ -5,7 +5,7 @@ use crate::{
         enr::Enr,
         portal::{AcceptInfo, DataRadius, FindNodesInfo, PongInfo, TraceGossipInfo},
     },
-    BeaconContentValue, PossibleBeaconContentValue, RoutingTableInfo,
+    BeaconContentValue, RoutingTableInfo,
 };
 use discv5::enr::NodeId;
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
@@ -114,8 +114,5 @@ pub trait BeaconNetworkApi {
 
     /// Get a content from the local database
     #[method(name = "beaconLocalContent")]
-    async fn local_content(
-        &self,
-        content_key: BeaconContentKey,
-    ) -> RpcResult<PossibleBeaconContentValue>;
+    async fn local_content(&self, content_key: BeaconContentKey) -> RpcResult<BeaconContentValue>;
 }

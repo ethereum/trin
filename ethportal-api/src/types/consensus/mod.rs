@@ -1,10 +1,12 @@
+pub mod beacon_block;
+pub mod beacon_state;
 pub mod body;
 pub mod execution_payload;
 pub mod fork;
 pub mod header;
 pub mod header_proof;
 pub mod light_client;
-pub mod proof;
+pub mod participation_flags;
 pub mod pubkey;
 pub mod serde;
 pub mod signature;

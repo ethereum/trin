@@ -5,7 +5,7 @@ use crate::{
         portal::{AcceptInfo, DataRadius, FindNodesInfo, PongInfo, TraceGossipInfo},
         state::{ContentInfo, PaginateLocalContentInfo, TraceContentInfo},
     },
-    PossibleStateContentValue, RoutingTableInfo, StateContentValue,
+    RoutingTableInfo, StateContentValue,
 };
 use discv5::enr::NodeId;
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
@@ -112,8 +112,5 @@ pub trait StateNetworkApi {
 
     /// Get a content from the local database
     #[method(name = "stateLocalContent")]
-    async fn local_content(
-        &self,
-        content_key: StateContentKey,
-    ) -> RpcResult<PossibleStateContentValue>;
+    async fn local_content(&self, content_key: StateContentKey) -> RpcResult<StateContentValue>;
 }

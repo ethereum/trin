@@ -8,7 +8,7 @@ use crate::stats::{BeaconSlotStats, HistoryBlockStats, StatsReporter};
 use ethportal_api::{
     jsonrpsee::core::Error, types::portal::TraceGossipInfo, BeaconContentKey, BeaconContentValue,
     BeaconNetworkApiClient, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
-    OverlayContentKey, PossibleBeaconContentValue, PossibleHistoryContentValue,
+    OverlayContentKey,
 };
 
 const GOSSIP_RETRY_COUNT: u64 = 3;
@@ -63,11 +63,7 @@ async fn beacon_trace_gossip(
         // if not, make rfc request to see if data is available on network
         let result =
             BeaconNetworkApiClient::recursive_find_content(&client, content_key.clone()).await;
-        if let Ok(ethportal_api::types::beacon::ContentInfo::Content {
-            content: PossibleBeaconContentValue::ContentPresent(_),
-            ..
-        }) = result
-        {
+        if let Ok(ethportal_api::types::beacon::ContentInfo::Content { .. }) = result {
             debug!("Found content on network, after failing to gossip, aborting gossip. content key={:?}", content_key.to_hex());
             return Ok((traces, retry_count));
         }
@@ -109,7 +105,6 @@ pub async fn gossip_history_content(
     Ok(())
 }
 
-// todo why doesn't history return PossibleHistoryContentValue?
 async fn history_trace_gossip(
     client: HttpClient,
     content_key: HistoryContentKey,
@@ -134,11 +129,7 @@ async fn history_trace_gossip(
         // if not, make rfc request to see if data is available on network
         let result =
             HistoryNetworkApiClient::recursive_find_content(&client, content_key.clone()).await;
-        if let Ok(ethportal_api::types::history::ContentInfo::Content {
-            content: PossibleHistoryContentValue::ContentPresent(_),
-            ..
-        }) = result
-        {
+        if let Ok(ethportal_api::types::history::ContentInfo::Content { .. }) = result {
             debug!("Found content on network, after failing to gossip, aborting gossip. content key={:?}", content_key.to_hex());
             return Ok((traces, retry_count));
         }

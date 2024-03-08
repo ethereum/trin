@@ -2,7 +2,7 @@ use discv5::{enr::NodeId, kbucket::Key, Enr};
 use futures::channel::oneshot;
 use smallvec::SmallVec;
 
-use crate::find::query_pool::TargetKey;
+use crate::{find::query_pool::TargetKey, overlay::errors::OverlayRequestError};
 use ethportal_api::{
     types::{
         portal_wire::{Content, FindContent, FindNodes, Request},
@@ -23,10 +23,10 @@ pub struct QueryInfo<TContentKey> {
     pub trace: Option<QueryTrace>,
 }
 
-// Content, utp_transfer, trace
-// Content is Option<Vec<u8>> because it can be None if the content is not found
-// in a recursive find content query.
-pub type RecursiveFindContentResult = (Option<Vec<u8>>, bool, Option<QueryTrace>);
+// (content_value, utp_transfer, trace)
+// Returns an OverlayRequestError if the content wasn't found on the network
+pub type RecursiveFindContentResult =
+    Result<(Vec<u8>, bool, Option<QueryTrace>), OverlayRequestError>;
 
 // Content, utp_transfer
 // Content is Content type because the response to a simple find content query

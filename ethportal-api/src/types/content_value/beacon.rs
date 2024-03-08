@@ -19,7 +19,6 @@ use crate::{
                 update::{LightClientUpdate, LightClientUpdateBellatrix, LightClientUpdateCapella},
             },
         },
-        constants::CONTENT_ABSENT,
         content_value::ContentValue,
     },
     utils::bytes::hex_encode,
@@ -29,42 +28,6 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use ssz::{Decode, DecodeError, Encode};
 use ssz_types::{typenum::U128, VariableList};
 use std::ops::Deref;
-
-#[derive(Clone, Debug, PartialEq)]
-#[allow(clippy::large_enum_variant)]
-pub enum PossibleBeaconContentValue {
-    ContentPresent(BeaconContentValue),
-    ContentAbsent,
-}
-
-impl Serialize for PossibleBeaconContentValue {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match self {
-            Self::ContentPresent(content) => content.serialize(serializer),
-            Self::ContentAbsent => serializer.serialize_str(CONTENT_ABSENT),
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for PossibleBeaconContentValue {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-
-        if s == CONTENT_ABSENT {
-            Ok(PossibleBeaconContentValue::ContentAbsent)
-        } else {
-            BeaconContentValue::from_hex(&s)
-                .map(PossibleBeaconContentValue::ContentPresent)
-                .map_err(serde::de::Error::custom)
-        }
-    }
-}
 
 /// A wrapper type including a `ForkName` and `LightClientBootstrap`
 #[derive(Clone, Debug, PartialEq)]
@@ -472,9 +435,7 @@ impl<'de> Deserialize<'de> for BeaconContentValue {
 
 #[cfg(test)]
 mod test {
-    use crate::{
-        utils::bytes::hex_decode, BeaconContentValue, ContentValue, PossibleBeaconContentValue,
-    };
+    use crate::{utils::bytes::hex_decode, BeaconContentValue, ContentValue};
     use serde_json::Value;
     use std::fs;
 
@@ -605,12 +566,9 @@ mod test {
     }
 
     fn assert_possible_content_value_roundtrip(beacon_content: BeaconContentValue) {
-        let expected_possible_content_value =
-            PossibleBeaconContentValue::ContentPresent(beacon_content);
-        let json_str = serde_json::to_string(&expected_possible_content_value).unwrap();
-        let possible_content_value: PossibleBeaconContentValue =
-            serde_json::from_str(&json_str).unwrap();
+        let json_str = serde_json::to_string(&beacon_content).unwrap();
+        let possible_content_value: BeaconContentValue = serde_json::from_str(&json_str).unwrap();
 
-        assert_eq!(expected_possible_content_value, possible_content_value);
+        assert_eq!(beacon_content, possible_content_value);
     }
 }

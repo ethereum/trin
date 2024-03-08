@@ -6,19 +6,39 @@ use crate::{
     },
     utils::serde::{hex_fixed_vec, hex_var_list},
 };
-use ethereum_types::{H160, H256, U256};
+use ethereum_types::{Address, H160, H256, U256};
 use serde::{Deserialize, Serialize};
 use serde_this_or_that::as_u64;
 use ssz::Decode;
 use ssz_derive::{Decode, Encode};
-use ssz_types::{typenum, FixedVector};
+use ssz_types::{typenum, typenum::U16, FixedVector, VariableList};
 use superstruct::superstruct;
 use tree_hash_derive::TreeHash;
 
 pub type Bloom = FixedVector<u8, typenum::U256>;
 pub type ExtraData = ByteList32;
 
-#[derive(Debug, PartialEq, Clone, Deserialize, Serialize, Encode, Decode)]
+#[superstruct(
+    variants(Bellatrix, Capella),
+    variant_attributes(
+        derive(
+            Default,
+            Debug,
+            Clone,
+            PartialEq,
+            Serialize,
+            Deserialize,
+            Encode,
+            Decode,
+            TreeHash,
+        ),
+        serde(deny_unknown_fields),
+    )
+)]
+#[derive(Debug, Clone, Serialize, Encode, Deserialize, TreeHash)]
+#[serde(untagged)]
+#[ssz(enum_behaviour = "transparent")]
+#[tree_hash(enum_behaviour = "transparent")]
 pub struct ExecutionPayload {
     pub parent_hash: H256,
     pub fee_recipient: H160,
@@ -45,6 +65,30 @@ pub struct ExecutionPayload {
     #[serde(serialize_with = "se_txs_to_hex")]
     #[serde(deserialize_with = "de_hex_to_txs")]
     pub transactions: Transactions,
+    #[superstruct(only(Capella))]
+    pub withdrawals: VariableList<Withdrawal, U16>,
+}
+
+impl ExecutionPayload {
+    pub fn from_ssz_bytes(bytes: &[u8], fork_name: ForkName) -> Result<Self, ssz::DecodeError> {
+        match fork_name {
+            ForkName::Bellatrix => {
+                ExecutionPayloadBellatrix::from_ssz_bytes(bytes).map(Self::Bellatrix)
+            }
+            ForkName::Capella => ExecutionPayloadCapella::from_ssz_bytes(bytes).map(Self::Capella),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize, Encode, Decode, TreeHash)]
+pub struct Withdrawal {
+    #[serde(deserialize_with = "as_u64")]
+    pub index: u64,
+    #[serde(deserialize_with = "as_u64")]
+    pub validator_index: u64,
+    pub address: Address,
+    #[serde(deserialize_with = "as_u64")]
+    pub amount: u64,
 }
 
 #[superstruct(
@@ -120,7 +164,7 @@ impl ExecutionPayloadHeader {
 #[allow(clippy::unwrap_used)]
 mod test {
     use super::*;
-    use ::ssz::{Decode, Encode};
+    use ::ssz::Encode;
     use rstest::rstest;
     use serde_json::Value;
 
@@ -161,7 +205,7 @@ mod test {
             .expect("cannot find test asset");
         let mut decoder = snap::raw::Decoder::new();
         let expected = decoder.decompress_vec(&compressed).unwrap();
-        ExecutionPayload::from_ssz_bytes(&expected).unwrap();
+        ExecutionPayload::from_ssz_bytes(&expected, ForkName::Bellatrix).unwrap();
         assert_eq!(content.as_ssz_bytes(), expected);
     }
 

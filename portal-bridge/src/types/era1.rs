@@ -1,4 +1,4 @@
-use crate::types::e2s::{E2storeFile, Entry};
+use crate::types::e2s::{E2StoreFile, Entry};
 use anyhow::ensure;
 use ethereum_types::{H256, U256};
 use ethportal_api::types::execution::{
@@ -40,7 +40,7 @@ impl Era1 {
     }
 
     pub fn deserialize(buf: &[u8]) -> anyhow::Result<Self> {
-        let file = E2storeFile::deserialize(buf)?;
+        let file = E2StoreFile::deserialize(buf)?;
         ensure!(
             file.entries.len() == ERA1_ENTRY_COUNT,
             "invalid era1 file: incorrect entry count"
@@ -78,7 +78,7 @@ impl Era1 {
         entries.push(accumulator_entry);
         let block_index_entry: Entry = self.block_index.clone().try_into()?;
         entries.push(block_index_entry);
-        let file = E2storeFile { entries };
+        let file = E2StoreFile { entries };
         ensure!(
             file.entries.len() == ERA1_ENTRY_COUNT,
             "invalid era1 file: incorrect entry count"

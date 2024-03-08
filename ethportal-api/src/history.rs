@@ -5,7 +5,7 @@ use crate::{
         history::{ContentInfo, PaginateLocalContentInfo, TraceContentInfo},
         portal::{AcceptInfo, DataRadius, FindNodesInfo, PongInfo, TraceGossipInfo},
     },
-    HistoryContentValue, PossibleHistoryContentValue, RoutingTableInfo,
+    HistoryContentValue, RoutingTableInfo,
 };
 use discv5::enr::NodeId;
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
@@ -117,10 +117,8 @@ pub trait HistoryNetworkApi {
         content_value: HistoryContentValue,
     ) -> RpcResult<bool>;
 
-    /// Get a content from the local database
+    /// Get a content value from the local database
     #[method(name = "historyLocalContent")]
-    async fn local_content(
-        &self,
-        content_key: HistoryContentKey,
-    ) -> RpcResult<PossibleHistoryContentValue>;
+    async fn local_content(&self, content_key: HistoryContentKey)
+        -> RpcResult<HistoryContentValue>;
 }

@@ -8,13 +8,12 @@ use clap::Parser;
 use ethereum_types::H256;
 use ethers::prelude::*;
 use ethers_providers::Http;
-use rand::{distributions::Uniform, thread_rng, Rng};
+use rand::seq::SliceRandom;
 use tracing::{debug, info, warn};
 use url::Url;
 
 use ethportal_api::{
     jsonrpsee::http_client::{HttpClient, HttpClientBuilder},
-    types::{content_value::history::PossibleHistoryContentValue, history::ContentInfo},
     BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, HistoryContentKey, HistoryNetworkApiClient,
 };
 use trin_utils::log::init_tracing_logger;
@@ -92,24 +91,20 @@ pub async fn main() -> Result<()> {
             .await;
     let client = HttpClientBuilder::default().build(audit_config.node_ip)?;
     let latest_block: u64 = provider.get_block_number().await?.try_into().unwrap();
-    let block_range = match audit_config.range {
-        SampleRange::Shanghai => Uniform::new_inclusive(SHANGHAI_BLOCK_NUMBER, latest_block),
-        SampleRange::FourFours => Uniform::new_inclusive(0, MERGE_BLOCK_NUMBER),
-        SampleRange::Since(since) => Uniform::new_inclusive(since, latest_block),
-        SampleRange::Latest(latest) => Uniform::from(latest_block - latest..latest_block),
-        SampleRange::Range(start, end) => Uniform::from(start..end),
+    let (start, end) = match audit_config.range {
+        SampleRange::Shanghai => (SHANGHAI_BLOCK_NUMBER, latest_block),
+        SampleRange::FourFours => (0, MERGE_BLOCK_NUMBER),
+        SampleRange::Since(since) => (since, latest_block),
+        SampleRange::Latest(latest) => (latest_block - latest, latest_block),
+        SampleRange::Range(start, end) => (start, end),
     };
-    info!(
-        "Sampling {} Blocks from Range: {:?}",
-        audit_config.sample_size, block_range
-    );
-    let mut rng = thread_rng();
-    let blocks: Vec<u64> = (&mut rng)
-        .sample_iter(block_range)
-        .take(audit_config.sample_size)
-        .collect();
+    let mut blocks: Vec<u64> = (start..end).collect();
+    let sample_size = std::cmp::min(audit_config.sample_size, blocks.len());
+    info!("Sampling {sample_size} blocks from range: {start:?} - {end:?}");
+    blocks.shuffle(&mut rand::thread_rng());
+    let blocks_to_sample = blocks[0..sample_size].to_vec();
     let metrics = Arc::new(Mutex::new(Metrics::default()));
-    let futures = futures::stream::iter(blocks.into_iter().map(|block_number| {
+    let futures = futures::stream::iter(blocks_to_sample.into_iter().map(|block_number| {
         let client = client.clone();
         let metrics = metrics.clone();
         let provider = provider.clone();
@@ -121,7 +116,7 @@ pub async fn main() -> Result<()> {
                 .unwrap()
                 .hash
                 .unwrap();
-            let _ = audit_block(block_hash, metrics, client).await;
+            let _ = audit_block(block_number, block_hash, metrics, client).await;
         }
     }))
     .buffer_unordered(FUTURES_BUFFER_SIZE)
@@ -132,6 +127,7 @@ pub async fn main() -> Result<()> {
 }
 
 async fn audit_block(
+    block_number: u64,
     hash: H256,
     metrics: Arc<Mutex<Metrics>>,
     client: HttpClient,
@@ -145,38 +141,32 @@ async fn audit_block(
     let receipts_ck = HistoryContentKey::BlockReceipts(BlockReceiptsKey {
         block_hash: hash.to_fixed_bytes(),
     });
-    match client.recursive_find_content(header_ck).await? {
-        ContentInfo::Content { content, .. } => {
-            if let PossibleHistoryContentValue::ContentPresent(_) = content {
-                metrics.lock().unwrap().header.success_count += 1;
-            } else {
-                warn!("Header not found for block {hash}");
-                metrics.lock().unwrap().header.failure_count += 1;
-            }
+    match client.recursive_find_content(header_ck).await {
+        Ok(_) => {
+            metrics.lock().unwrap().header.success_count += 1;
         }
-        _ => metrics.lock().unwrap().header.failure_count += 1,
+        Err(_) => {
+            warn!("Header not found for block #{block_number} - {hash:?}");
+            metrics.lock().unwrap().header.failure_count += 1;
+        }
     }
-    match client.recursive_find_content(body_ck).await? {
-        ContentInfo::Content { content, .. } => {
-            if let PossibleHistoryContentValue::ContentPresent(_) = content {
-                metrics.lock().unwrap().block_body.success_count += 1;
-            } else {
-                warn!("Body not found for block {hash}");
-                metrics.lock().unwrap().block_body.failure_count += 1;
-            }
+    match client.recursive_find_content(body_ck).await {
+        Ok(_) => {
+            metrics.lock().unwrap().block_body.success_count += 1;
         }
-        _ => metrics.lock().unwrap().block_body.failure_count += 1,
+        Err(_) => {
+            warn!("Body not found for block #{block_number} - {hash:?}");
+            metrics.lock().unwrap().block_body.failure_count += 1;
+        }
     }
-    match client.recursive_find_content(receipts_ck).await? {
-        ContentInfo::Content { content, .. } => {
-            if let PossibleHistoryContentValue::ContentPresent(_) = content {
-                metrics.lock().unwrap().receipts.success_count += 1;
-            } else {
-                warn!("Receipts not found for block {hash}");
-                metrics.lock().unwrap().receipts.failure_count += 1;
-            }
+    match client.recursive_find_content(receipts_ck).await {
+        Ok(_) => {
+            metrics.lock().unwrap().receipts.success_count += 1;
         }
-        _ => metrics.lock().unwrap().receipts.failure_count += 1,
+        Err(_) => {
+            warn!("Receipts not found for block #{block_number} - {hash:?}");
+            metrics.lock().unwrap().receipts.failure_count += 1;
+        }
     }
     Ok(())
 }

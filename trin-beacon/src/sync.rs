@@ -3,7 +3,7 @@ use light_client::{
     config::networks, consensus::rpc::portal_rpc::PortalRpc, database::FileDB, Client,
     ClientBuilder,
 };
-use portalnet::overlay_service::OverlayCommand;
+use portalnet::overlay::command::OverlayCommand;
 use std::path::PathBuf;
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::{error, info};
