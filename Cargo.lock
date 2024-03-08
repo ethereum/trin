@@ -4882,7 +4882,7 @@ dependencies = [
  "trin-validation",
  "uds_windows",
  "url",
- "utp-rs",
+ "utp-rs 0.1.0-alpha.8 (git+https://github.com/ethereum/utp?tag=v0.1.0-alpha.9)",
  "validator",
 ]
 
@@ -7526,6 +7526,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "dirs",
  "discv5",
  "ethereum-types",
  "ethereum_ssz",
@@ -7542,6 +7543,7 @@ dependencies = [
  "portalnet",
  "prometheus_exporter",
  "rand 0.8.5",
+ "regex",
  "reth-ipc",
  "rlp",
  "rpc",
@@ -7554,6 +7556,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "tree_hash",
  "trin-beacon",
  "trin-history",
  "trin-state",
@@ -7562,7 +7565,7 @@ dependencies = [
  "trin-validation",
  "ureq",
  "url",
- "utp-rs",
+ "utp-rs 0.1.0-alpha.8 (git+https://github.com/ethereum/utp?tag=v0.1.0-alpha.11)",
 ]
 
 [[package]]
@@ -7588,7 +7591,7 @@ dependencies = [
  "trin-storage",
  "trin-utils",
  "trin-validation",
- "utp-rs",
+ "utp-rs 0.1.0-alpha.8 (git+https://github.com/ethereum/utp?tag=v0.1.0-alpha.9)",
 ]
 
 [[package]]
@@ -7623,7 +7626,7 @@ dependencies = [
  "trin-utils",
  "trin-validation",
  "ureq",
- "utp-rs",
+ "utp-rs 0.1.0-alpha.8 (git+https://github.com/ethereum/utp?tag=v0.1.0-alpha.9)",
 ]
 
 [[package]]
@@ -7659,7 +7662,7 @@ dependencies = [
  "trin-metrics",
  "trin-storage",
  "trin-validation",
- "utp-rs",
+ "utp-rs 0.1.0-alpha.8 (git+https://github.com/ethereum/utp?tag=v0.1.0-alpha.9)",
 ]
 
 [[package]]
@@ -7902,6 +7905,19 @@ checksum = "711b9620af191e0cdc7468a8d14e709c3dcdb115b36f838e601583af800a370a"
 [[package]]
 name = "utp-rs"
 version = "0.1.0-alpha.8"
+source = "git+https://github.com/ethereum/utp?tag=v0.1.0-alpha.11#37177d83e399f26f284676a7665929c65b246085"
+dependencies = [
+ "async-trait",
+ "delay_map 0.3.0",
+ "futures 0.3.30",
+ "rand 0.8.5",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "utp-rs"
+version = "0.1.0-alpha.8"
 source = "git+https://github.com/ethereum/utp?tag=v0.1.0-alpha.9#a5194267293711e4fd187b09091fbc7188426903"
 dependencies = [
  "async-trait",
@@ -7927,7 +7943,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "trin-utils",
- "utp-rs",
+ "utp-rs 0.1.0-alpha.8 (git+https://github.com/ethereum/utp?tag=v0.1.0-alpha.9)",
 ]
 
 [[package]]
