@@ -15,10 +15,11 @@ description = "A Rust implementation of the Ethereum Portal Network"
 [dependencies]
 anyhow = "1.0.68"
 clap = { version = "4.2.1", features = ["derive"] }
+dirs = "5.0.1"
 discv5 = { version = "0.4.0", features = ["serde"] }
 ethereum-types = "0.14.1"
 ethereum_ssz = "0.5.3"
-ethers = { version = "2.0"}
+ethers = { version = "2.0" }
 ethers-providers = { version = "2.0", features = ["ws"] }
 ethportal-api = { path = "ethportal-api" }
 futures = "0.3.21"
@@ -29,16 +30,22 @@ portalnet = { path = "portalnet" }
 portal-bridge = { path = "portal-bridge" }
 prometheus_exporter = "0.8.4"
 rand = "0.8.4"
-reth-ipc = { tag = "v0.1.0-alpha.10", git = "https://github.com/paradigmxyz/reth.git"}
+regex = "1.10.2"
+reth-ipc = { tag = "v0.1.0-alpha.10", git = "https://github.com/paradigmxyz/reth.git" }
 rlp = "0.5.0"
-rpc = { path = "rpc"}
-serde_json = {version = "1.0.89", features = ["preserve_order"]}
+rpc = { path = "rpc" }
+serde_json = { version = "1.0.89", features = ["preserve_order"] }
 sha3 = "0.9.1"
-surf = { version = "2.3.2", default-features = false, features = ["h1-client-rustls", "middleware-logger", "encoding"] } # we use rustils because OpenSSL cause issues compiling on aarch64
+surf = { version = "2.3.2", default-features = false, features = [
+    "h1-client-rustls",
+    "middleware-logger",
+    "encoding",
+] } # we use rustils because OpenSSL cause issues compiling on aarch64
 tempfile = "3.3.0"
 tokio = { version = "1.14.0", features = ["full"] }
 tracing = "0.1.36"
 tracing-subscriber = "0.3.15"
+tree_hash = "0.5.2"
 trin-beacon = { path = "trin-beacon" }
 trin-history = { path = "trin-history" }
 trin-state = { path = "trin-state" }
@@ -46,13 +53,15 @@ trin-storage = { path = "trin-storage" }
 trin-utils = { path = "trin-utils" }
 trin-validation = { path = "trin-validation" }
 url = "2.3.1"
-utp-rs = { git = "https://github.com/ethereum/utp", tag = "v0.1.0-alpha.9" }
+utp-rs = { git = "https://github.com/ethereum/utp", tag = "v0.1.0-alpha.11" }
 
 [dev-dependencies]
-ethers-core = { version = "2.0", default-features = false}
-ethers-providers = { version = "2.0", default-features = false, features = ["ipc"] }
+ethers-core = { version = "2.0", default-features = false }
+ethers-providers = { version = "2.0", default-features = false, features = [
+    "ipc",
+] }
 ethportal-peertest = { path = "ethportal-peertest" }
-serde_yaml = "0.9.25"
+serde_yaml = "0.9"
 serial_test = "0.5.1"
 ureq = { version = "2.5.0", features = ["json"] }
 
