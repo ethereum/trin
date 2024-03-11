@@ -49,6 +49,7 @@ use crate::{
         query_pool::{QueryId, QueryPool, QueryPoolState, TargetKey},
     },
     gossip::propagate_gossip_cross_thread,
+    offer_queue::OfferQueue,
     overlay::{
         command::OverlayCommand,
         errors::OverlayRequestError,
@@ -97,7 +98,10 @@ const BUCKET_REFRESH_INTERVAL_SECS: u64 = 60;
 const EVENT_STREAM_CHANNEL_CAPACITY: usize = 10;
 
 /// The overlay service.
-pub struct OverlayService<TContentKey, TMetric, TValidator, TStore> {
+pub struct OverlayService<TContentKey, TMetric, TValidator, TStore>
+where
+    TContentKey: 'static + OverlayContentKey + Send + Sync,
+{
     /// The underlying Discovery v5 protocol.
     discovery: Arc<Discovery>,
     /// The content database of the local node.
@@ -149,6 +153,8 @@ pub struct OverlayService<TContentKey, TMetric, TValidator, TStore> {
     event_stream: broadcast::Sender<EventEnvelope>,
     /// Disable poke mechanism
     disable_poke: bool,
+    /// Offer Queue
+    offer_queue: Arc<RwLock<OfferQueue<TContentKey>>>,
 }
 
 impl<
@@ -198,6 +204,7 @@ where
         let (response_tx, response_rx) = mpsc::unbounded_channel();
         let (event_stream, _) = broadcast::channel(EVENT_STREAM_CHANNEL_CAPACITY);
 
+        let command_tx_clone = command_tx.clone();
         tokio::spawn(async move {
             let mut service = Self {
                 discovery,
@@ -223,6 +230,7 @@ where
                 validator,
                 event_stream,
                 disable_poke,
+                offer_queue: Arc::new(RwLock::new(OfferQueue::new(command_tx_clone))),
             };
 
             info!(protocol = %protocol, "Starting overlay service");
@@ -770,13 +778,9 @@ where
 
                 // if we have met the max outbound utp transfer limit continue the loop as we aren't
                 // allow to generate another utp stream
-                let permit = match utp_controller
-                    .outbound_utp_transfer_semaphore
-                    .clone()
-                    .try_acquire_owned()
-                {
-                    Ok(permit) => permit,
-                    Err(_) => continue,
+                let permit = match utp_controller.get_outbound_semaphore() {
+                    Some(permit) => permit,
+                    None => continue,
                 };
 
                 let request = OverlayRequest::new(
@@ -957,12 +961,9 @@ where
         };
         match (
             self.store.read().get(&content_key),
-            self.utp_controller
-                .outbound_utp_transfer_semaphore
-                .clone()
-                .try_acquire_owned(),
+            self.utp_controller.get_outbound_semaphore(),
         ) {
-            (Ok(Some(content)), Ok(permit)) => {
+            (Ok(Some(content)), Some(permit)) => {
                 if content.len() <= MAX_PORTAL_CONTENT_PAYLOAD_SIZE {
                     Ok(Content::Content(content))
                 } else {
@@ -1024,9 +1025,9 @@ where
                 )
             })?;
 
-        // Attempt to get semaphore permit if fails we return an empty accept
-        // `try_acquire_owned()` isn't blocking and will instantly return with
-        // `Some(TryAcquireError::NoPermits)` error if there isn't a permit avaliable
+        // Attempt to get semaphore permit if fails we return an empty accept.
+        // `get_inbound_semaphore()` isn't blocking and will instantly return with
+        // `None` if there isn't a permit avaliable.
         // The reason we get the permit before checking if we can store it is because
         // * checking if a semaphore is avaliable is basically free it doesn't block and will return
         //   instantly
@@ -1034,14 +1035,9 @@ where
         //   should be avoided.
         // so by trying to acquire the semaphore before the storage call we avoid unnecessary work
         // **Note:** if we are not accepting any content `requested_keys` should be empty
-        let permit = match self
-            .utp_controller
-            .inbound_utp_transfer_semaphore
-            .clone()
-            .try_acquire_owned()
-        {
-            Ok(permit) => permit,
-            Err(_) => {
+        let permit = match self.utp_controller.get_inbound_semaphore() {
+            Some(permit) => permit,
+            None => {
                 return Ok(Accept {
                     connection_id: 0,
                     content_keys: requested_keys,
@@ -1062,9 +1058,14 @@ where
 
         let mut accepted_keys: Vec<TContentKey> = Vec::default();
 
+        // if we're unable to find the ENR for the source node we throw an error
+        // since the enr is required for the offer cache, and it is expected to be present
+        let node_addr = self.discovery.cached_node_addr(source).ok_or_else(|| {
+            OverlayRequestError::AcceptError("unable to find ENR for NodeId".to_string())
+        })?;
         for (i, key) in content_keys.iter().enumerate() {
             // Accept content if within radius and not already present in the data store.
-            let accept = self
+            let mut accept = self
                 .store
                 .read()
                 .is_key_within_radius_and_unavailable(key)
@@ -1075,7 +1076,12 @@ where
                     ))
                 })?;
             if accept {
-                accepted_keys.push(key.clone());
+                // check if we should accept the content key
+                if self.offer_queue.write().should_accept(key, &node_addr.enr) {
+                    accepted_keys.push(key.clone());
+                } else {
+                    accept = false;
+                }
             }
             requested_keys.set(i, accept).map_err(|err| {
                 OverlayRequestError::AcceptError(format!(
@@ -1128,10 +1134,12 @@ where
         );
 
         let utp_controller = Arc::clone(&self.utp_controller);
+        let offer_queue = self.offer_queue.clone();
         tokio::spawn(async move {
             let data = match utp_controller.accept_inbound_stream(cid.clone()).await {
                 Ok(data) => data,
                 Err(err) => {
+                    offer_queue.write().failed_to_accept(&content_keys);
                     debug!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), content_keys = ?content_keys_string, "unable to complete uTP transfer");
                     drop(permit);
                     return;
@@ -1147,6 +1155,7 @@ where
                 accepted_keys,
                 data,
                 utp_controller.clone(),
+                offer_queue.clone(),
             )
             .await
             {
@@ -1471,6 +1480,7 @@ where
         content_keys: Vec<TContentKey>,
         payload: Vec<u8>,
         utp_controller: Arc<UtpController>,
+        offer_queue: Arc<RwLock<OfferQueue<TContentKey>>>,
     ) -> anyhow::Result<()> {
         let content_keys_string: Vec<String> = content_keys
             .iter()
@@ -1483,7 +1493,6 @@ where
         );
 
         let content_values = portal_wire::decode_content_payload(payload)?;
-
         // Accepted content keys len should match content value len
         let keys_len = content_keys.len();
         let vals_len = content_values.len();
@@ -1494,6 +1503,7 @@ where
         }
 
         let handles: Vec<JoinHandle<_>> = content_keys
+            .clone()
             .into_iter()
             .zip(content_values.to_vec())
             .map(|(key, content_value)| {
@@ -1574,19 +1584,26 @@ where
             .await
             .into_iter()
             .enumerate()
-            .filter_map(|(index, content)| content.unwrap_or_else(|err| {
-                // Extract the error from the thread handle
-                let err = err.into_panic();
-                let err = if let Some(err) = err.downcast_ref::<&'static str>() {
-                    err.to_string()
-                } else if let Some(err) = err.downcast_ref::<String>() {
-                    err.clone()
-                } else {
-                    format!("{err:?}")
-                };
-                debug!(err, content_key = ?content_keys_string[index], "Process uTP payload tokio task failed:");
-                None
-            }))
+            .filter_map(|(index, content)| match content {
+                Ok(content) => {
+                    offer_queue.write().successful_processing(&content_keys[index]);
+                    content
+                }
+                Err(err) => {
+                    offer_queue.write().failed_to_process(&content_keys[index]);
+                    // Extract the error from the thread handle
+                    let err = err.into_panic();
+                    let err = if let Some(err) = err.downcast_ref::<&'static str>() {
+                        err.to_string()
+                    } else if let Some(err) = err.downcast_ref::<String>() {
+                        err.clone()
+                    } else {
+                        format!("{err:?}")
+                    };
+                    debug!(err, content_key = ?content_keys_string[index], "Process uTP payload tokio task failed:");
+                    None
+                }
+            })
             .collect();
 
         // Propagate all validated content, whether or not it was stored.
@@ -2540,6 +2557,7 @@ mod tests {
         let (command_tx, command_rx) = mpsc::unbounded_channel();
         let (response_tx, response_rx) = mpsc::unbounded_channel();
         let validator = Arc::new(MockValidator {});
+        let offer_queue = Arc::new(RwLock::new(OfferQueue::new(command_tx.clone())));
 
         OverlayService {
             discovery,
@@ -2569,6 +2587,7 @@ mod tests {
             validator,
             event_stream: broadcast::channel(EVENT_STREAM_CHANNEL_CAPACITY).0,
             disable_poke: false,
+            offer_queue,
         }
     }
 

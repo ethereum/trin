@@ -6,7 +6,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest, Sha256};
 use ssz::{Decode, DecodeError, Encode};
 use ssz_derive::{Decode, Encode};
-use std::fmt;
+use std::{fmt, hash::Hash};
 
 // Prefixes for the different types of beacon content keys:
 // https://github.com/ethereum/portal-network-specs/blob/638aca50c913a749d0d762264d9a4ac72f1a9966/beacon-chain/beacon-network.md
@@ -22,6 +22,12 @@ pub enum BeaconContentKey {
     LightClientUpdatesByRange(LightClientUpdatesByRangeKey),
     LightClientFinalityUpdate(LightClientFinalityUpdateKey),
     LightClientOptimisticUpdate(LightClientOptimisticUpdateKey),
+}
+
+impl Hash for BeaconContentKey {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        state.write(&self.content_id());
+    }
 }
 
 /// Key used to identify a light client bootstrap.

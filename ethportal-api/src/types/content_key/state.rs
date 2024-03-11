@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, hash::Hash};
 
 use ethereum_types::{Address, H256};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -27,6 +27,12 @@ pub enum StateContentKey {
     ContractStorageTrieNode(ContractStorageTrieNodeKey),
     /// An account's contract bytecode.
     ContractBytecode(ContractBytecodeKey),
+}
+
+impl Hash for StateContentKey {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        state.write(&self.content_id());
+    }
 }
 
 /// A key for a trie node from the state trie.

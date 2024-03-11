@@ -88,16 +88,10 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
     // Create and send OFFER overlay request to the interested nodes
     for (enr_string, interested_content) in enrs_and_content.into_iter() {
         let permit = match utp_controller {
-            Some(ref utp_controller) => {
-                match utp_controller
-                    .outbound_utp_transfer_semaphore
-                    .clone()
-                    .try_acquire_owned()
-                {
-                    Ok(permit) => Some(permit),
-                    Err(_) => continue,
-                }
-            }
+            Some(ref utp_controller) => match utp_controller.get_outbound_semaphore() {
+                Some(permit) => Some(permit),
+                None => continue,
+            },
             None => None,
         };
 
