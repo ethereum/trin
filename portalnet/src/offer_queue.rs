@@ -67,6 +67,7 @@ where
                     content_key,
                     peer.node_id(),
                 );
+                self.content_key_map.insert(content_key.clone(), node_ids);
                 return false;
             }
             if !node_ids.fallback.contains(peer) {
@@ -174,6 +175,42 @@ mod tests {
         assert!(!offer_queue.should_accept(&content_key, &peer1));
         offer_queue.successful_processing(&content_key);
         assert!(offer_queue.should_accept(&content_key, &peer1));
+    }
+
+    #[tokio::test]
+    async fn test_queue_keeps_record_after_duplicate_offers_from_same_peer() {
+        let (command_tx, mut command_rx) = mpsc::unbounded_channel();
+        let mut offer_queue = OfferQueue::new(command_tx);
+        let content_key = IdentityContentKey::random();
+        let (_, peer1) = generate_random_remote_enr();
+        let (_, peer2) = generate_random_remote_enr();
+        assert!(offer_queue.should_accept(&content_key, &peer1));
+        assert!(!offer_queue.should_accept(&content_key, &peer2));
+        // peer1 offers the same content key again
+        assert!(!offer_queue.should_accept(&content_key, &peer1));
+        offer_queue.failed_to_process(&content_key);
+        let fallback = command_rx.recv().await;
+        match fallback.unwrap() {
+            OverlayCommand::Request(OverlayRequest {
+                request, direction, ..
+            }) => {
+                match request {
+                    Request::FindContent(FindContent {
+                        content_key: target,
+                    }) => {
+                        assert_eq!(target, content_key.to_bytes());
+                    }
+                    _ => panic!("unexpected request"),
+                }
+                match direction {
+                    RequestDirection::Outgoing { destination } => {
+                        assert_eq!(destination, peer2);
+                    }
+                    _ => panic!("unexpected direction"),
+                }
+            }
+            _ => panic!("unexpected command"),
+        }
     }
 
     #[tokio::test]
