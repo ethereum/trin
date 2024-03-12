@@ -37,6 +37,7 @@ use tracing::{debug, enabled, error, info, trace, warn, Level};
 use utp_rs::cid::ConnectionId;
 
 use crate::{
+    accept_queue::AcceptQueue,
     discovery::{Discovery, UtpEnr},
     events::{EventEnvelope, OverlayEvent},
     find::{
@@ -49,7 +50,6 @@ use crate::{
         query_pool::{QueryId, QueryPool, QueryPoolState, TargetKey},
     },
     gossip::propagate_gossip_cross_thread,
-    offer_queue::OfferQueue,
     overlay::{
         command::OverlayCommand,
         errors::OverlayRequestError,
@@ -153,8 +153,8 @@ where
     event_stream: broadcast::Sender<EventEnvelope>,
     /// Disable poke mechanism
     disable_poke: bool,
-    /// Offer Queue
-    offer_queue: Arc<RwLock<OfferQueue<TContentKey>>>,
+    /// Accept Queue for inbound content keys
+    accept_queue: Arc<RwLock<AcceptQueue<TContentKey>>>,
 }
 
 impl<
@@ -204,7 +204,6 @@ where
         let (response_tx, response_rx) = mpsc::unbounded_channel();
         let (event_stream, _) = broadcast::channel(EVENT_STREAM_CHANNEL_CAPACITY);
 
-        let command_tx_clone = command_tx.clone();
         tokio::spawn(async move {
             let mut service = Self {
                 discovery,
@@ -230,7 +229,7 @@ where
                 validator,
                 event_stream,
                 disable_poke,
-                offer_queue: Arc::new(RwLock::new(OfferQueue::new(command_tx_clone))),
+                accept_queue: Arc::new(RwLock::new(AcceptQueue::default())),
             };
 
             info!(protocol = %protocol, "Starting overlay service");
@@ -985,12 +984,12 @@ where
                         drop(permit);
                     });
 
-                    // Connection id is send as BE because uTP header values are stored also as BE
+                    // Connection id is sent as BE because uTP header values are stored also as BE
                     Ok(Content::ConnectionId(cid_send.to_be()))
                 }
             }
             // If we don't have data to send back or can't obtain a permit, send the requester a
-            // list of closer ENR
+            // list of closer ENRs.
             (Ok(Some(_)), _) | (Ok(None), _) => {
                 let mut enrs = self.find_nodes_close_to_content(content_key);
                 enrs.retain(|enr| source != &enr.node_id());
@@ -1076,8 +1075,12 @@ where
                     ))
                 })?;
             if accept {
-                // check if we should accept the content key
-                if self.offer_queue.write().should_accept(key, &node_addr.enr) {
+                // check if we can successfully add the key to the accept queue
+                if self
+                    .accept_queue
+                    .write()
+                    .add_key_to_queue(key, &node_addr.enr)
+                {
                     accepted_keys.push(key.clone());
                 } else {
                     accept = false;
@@ -1112,11 +1115,6 @@ where
         };
         let cid: ConnectionId<UtpEnr> = self.utp_controller.cid(enr, false);
         let cid_send = cid.send;
-        let validator = Arc::clone(&self.validator);
-        let store = Arc::clone(&self.store);
-        let kbuckets = Arc::clone(&self.kbuckets);
-        let command_tx = self.command_tx.clone();
-        let metrics = self.metrics.clone();
 
         let content_keys_string: Vec<String> = content_keys
             .iter()
@@ -1133,31 +1131,63 @@ where
             "Content keys handled by offer",
         );
 
-        let utp_controller = Arc::clone(&self.utp_controller);
-        let offer_queue = self.offer_queue.clone();
+        let utp_processing = UtpProcessing {
+            validator: Arc::clone(&self.validator),
+            store: Arc::clone(&self.store),
+            metrics: self.metrics.clone(),
+            kbuckets: Arc::clone(&self.kbuckets),
+            command_tx: self.command_tx.clone(),
+            utp_controller: Arc::clone(&self.utp_controller),
+            accept_queue: self.accept_queue.clone(),
+        };
         tokio::spawn(async move {
-            let data = match utp_controller.accept_inbound_stream(cid.clone()).await {
+            let data = match utp_processing
+                .utp_controller
+                .accept_inbound_stream(cid.clone())
+                .await
+            {
                 Ok(data) => data,
                 Err(err) => {
-                    offer_queue.write().failed_to_accept(&content_keys);
                     debug!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), content_keys = ?content_keys_string, "unable to complete uTP transfer");
+                    // we spawn these additional tasks using the same semaphore permit that was
+                    // initially acquired. This might result in the utp active count to temporarily
+                    // exceed the max, but that seems preferable to requiring an
+                    // additional permits for each individual content key, which
+                    // could drop the fallback request entirely if there are no
+                    // more permits available
+                    let handles: Vec<JoinHandle<_>> = content_keys
+                        .into_iter()
+                        .filter_map(|content_key| {
+                            let fallback_peer = match utp_processing
+                                .accept_queue
+                                .write()
+                                .process_failed_key(&content_key)
+                            {
+                                Some(peer) => peer,
+                                None => {
+                                    debug!("No fallback peer found for content key");
+                                    return None;
+                                }
+                            };
+                            let utp_processing = utp_processing.clone();
+                            Some(tokio::spawn(async move {
+                                let _ = Self::fallback_find_content(
+                                    content_key.clone(),
+                                    fallback_peer,
+                                    utp_processing,
+                                )
+                                .await;
+                            }))
+                        })
+                        .collect();
+                    let _ = join_all(handles).await;
                     drop(permit);
                     return;
                 }
             };
 
-            if let Err(err) = Self::process_accept_utp_payload(
-                validator,
-                store,
-                metrics,
-                kbuckets,
-                command_tx,
-                accepted_keys,
-                data,
-                utp_controller.clone(),
-                offer_queue.clone(),
-            )
-            .await
+            if let Err(err) =
+                Self::process_accept_utp_payload(accepted_keys, data, utp_processing).await
             {
                 debug!(%err, cid.send, cid.recv, peer = ?cid.peer.client(), content_keys = ?content_keys_string, "unable to process uTP payload");
             }
@@ -1470,17 +1500,10 @@ where
     }
 
     /// Process accepted uTP payload of the OFFER/ACCEPT stream
-    #[allow(clippy::too_many_arguments)]
     async fn process_accept_utp_payload(
-        validator: Arc<TValidator>,
-        store: Arc<RwLock<TStore>>,
-        metrics: OverlayMetricsReporter,
-        kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
-        command_tx: UnboundedSender<OverlayCommand<TContentKey>>,
         content_keys: Vec<TContentKey>,
         payload: Vec<u8>,
-        utp_controller: Arc<UtpController>,
-        offer_queue: Arc<RwLock<OfferQueue<TContentKey>>>,
+        utp_processing: UtpProcessing<TValidator, TStore, TContentKey>,
     ) -> anyhow::Result<()> {
         let content_keys_string: Vec<String> = content_keys
             .iter()
@@ -1492,6 +1515,7 @@ where
             "Processing accepted uTP payload",
         );
 
+        // i think this should still work for single content values?
         let content_values = portal_wire::decode_content_payload(payload)?;
         // Accepted content keys len should match content value len
         let keys_len = content_keys.len();
@@ -1512,9 +1536,9 @@ where
                 // might require non-blocking requests to this/other overlay networks)
                 // - Checks if validated content should be stored, and stores it if true
                 // - Propagate all validated content
-                let validator = Arc::clone(&validator);
-                let store = Arc::clone(&store);
-                let metrics = metrics.clone();
+                let validator = Arc::clone(&utp_processing.validator);
+                let store = Arc::clone(&utp_processing.store);
+                let metrics = utp_processing.metrics.clone();
                 tokio::spawn(async move {
                     // Validate received content
                     let validation_result = validator.validate_content(&key, &content_value).await;
@@ -1586,11 +1610,13 @@ where
             .enumerate()
             .filter_map(|(index, content)| match content {
                 Ok(content) => {
-                    offer_queue.write().successful_processing(&content_keys[index]);
+                    let content_key = content_keys[index].clone();
+                    utp_processing.accept_queue.write().remove_key(&content_key);
+                    debug!("Content key: {content_key} successfully processed and removed from accept queue.");
                     content
                 }
                 Err(err) => {
-                    offer_queue.write().failed_to_process(&content_keys[index]);
+                    utp_processing.accept_queue.write().process_failed_key(&content_keys[index]);
                     // Extract the error from the thread handle
                     let err = err.into_panic();
                     let err = if let Some(err) = err.downcast_ref::<&'static str>() {
@@ -1628,11 +1654,60 @@ where
         debug!(ids = ?ids_to_propagate, "propagating validated content");
         propagate_gossip_cross_thread(
             content_to_propagate,
-            kbuckets,
-            command_tx.clone(),
-            Some(utp_controller),
+            utp_processing.kbuckets,
+            utp_processing.command_tx.clone(),
+            Some(utp_processing.utp_controller),
         );
         Ok(())
+    }
+
+    // returns an error if the fallback fails
+    async fn fallback_find_content(
+        content_key: TContentKey,
+        fallback_peer: Enr,
+        utp_processing: UtpProcessing<TValidator, TStore, TContentKey>,
+    ) -> anyhow::Result<()> {
+        // what do about semaphore permits
+        let request = Request::FindContent(FindContent {
+            content_key: content_key.clone().into(),
+        });
+        let direction = RequestDirection::Outgoing {
+            destination: fallback_peer.clone(),
+        };
+        let (tx, rx) = oneshot::channel();
+        utp_processing
+            .command_tx
+            .send(OverlayCommand::Request(OverlayRequest::new(
+                request,
+                direction,
+                Some(tx),
+                None,
+                None,
+            )))?;
+        let data: Vec<u8> = match rx.await? {
+            Ok(Response::Content(found_content)) => {
+                match found_content {
+                    Content::Content(content) => content,
+                    Content::Enrs(_) => return Err(anyhow!("expected content, got ENRs")),
+                    // Init uTP stream if `connection_id` is received
+                    Content::ConnectionId(conn_id) => {
+                        let conn_id = u16::from_be(conn_id);
+                        let cid = utp_rs::cid::ConnectionId {
+                            recv: conn_id,
+                            send: conn_id.wrapping_add(1),
+                            peer: UtpEnr(fallback_peer),
+                        };
+                        utp_processing
+                            .utp_controller
+                            .connect_inbound_stream(cid)
+                            .await?
+                    }
+                }
+            }
+            Ok(_) => return Err(anyhow!("invalid response")),
+            Err(_) => return Err(anyhow!("error in response")),
+        };
+        Self::process_accept_utp_payload(vec![content_key], data, utp_processing).await
     }
 
     /// Processes a Pong response.
@@ -1643,7 +1718,7 @@ where
         trace!(
             protocol = %self.protocol,
             response.source = %node_id,
-            "Processing Pong message {}", pong
+            "Processing Pong message {pong}"
         );
 
         // If the ENR sequence number in pong is less than the ENR sequence number for the routing
@@ -2478,6 +2553,43 @@ fn pop_while_ssz_bytes_len_gt(enrs: &mut Vec<SszEnr>, max_size: usize) {
     }
 }
 
+/// References to `OverlayService` components required for processing
+/// a utp stream. This is basically a utility struct to avoid passing
+/// around a large number of individual references.
+struct UtpProcessing<TValidator, TStore, TContentKey>
+where
+    TContentKey: 'static + OverlayContentKey + Send + Sync,
+    TValidator: Validator<TContentKey>,
+    TStore: ContentStore,
+{
+    validator: Arc<TValidator>,
+    store: Arc<RwLock<TStore>>,
+    metrics: OverlayMetricsReporter,
+    kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
+    command_tx: UnboundedSender<OverlayCommand<TContentKey>>,
+    utp_controller: Arc<UtpController>,
+    accept_queue: Arc<RwLock<AcceptQueue<TContentKey>>>,
+}
+
+impl<TValidator, TStore, TContentKey> Clone for UtpProcessing<TValidator, TStore, TContentKey>
+where
+    TContentKey: 'static + OverlayContentKey + Send + Sync,
+    TValidator: Validator<TContentKey>,
+    TStore: ContentStore,
+{
+    fn clone(&self) -> Self {
+        Self {
+            validator: Arc::clone(&self.validator),
+            store: Arc::clone(&self.store),
+            metrics: self.metrics.clone(),
+            kbuckets: Arc::clone(&self.kbuckets),
+            command_tx: self.command_tx.clone(),
+            utp_controller: Arc::clone(&self.utp_controller),
+            accept_queue: Arc::clone(&self.accept_queue),
+        }
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -2557,7 +2669,7 @@ mod tests {
         let (command_tx, command_rx) = mpsc::unbounded_channel();
         let (response_tx, response_rx) = mpsc::unbounded_channel();
         let validator = Arc::new(MockValidator {});
-        let offer_queue = Arc::new(RwLock::new(OfferQueue::new(command_tx.clone())));
+        let accept_queue = Arc::new(RwLock::new(AcceptQueue::default()));
 
         OverlayService {
             discovery,
@@ -2587,7 +2699,7 @@ mod tests {
             validator,
             event_stream: broadcast::channel(EVENT_STREAM_CHANNEL_CAPACITY).0,
             disable_poke: false,
-            offer_queue,
+            accept_queue,
         }
     }
 
