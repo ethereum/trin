@@ -5,5 +5,6 @@ pub mod find;
 pub mod gossip;
 pub mod offer_accept;
 pub mod paginate;
+pub mod state;
 pub mod utp;
 pub mod validation;

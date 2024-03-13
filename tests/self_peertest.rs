@@ -175,6 +175,43 @@ async fn peertest_trace_recursive_utp() {
     handle.stop().unwrap();
 }
 
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
+async fn peertest_state_offer_account_trie_node() {
+    let (peertest, target, handle) = setup_peertest().await;
+    peertest::scenarios::state::test_state_offer_account_trie_node(&peertest, &target).await;
+    peertest.exit_all_nodes();
+    handle.stop().unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
+async fn peertest_state_offer_contract_storage_trie_node() {
+    let (peertest, target, handle) = setup_peertest().await;
+    peertest::scenarios::state::test_state_gossip_contract_storage_trie_node(&peertest, &target)
+        .await;
+    peertest.exit_all_nodes();
+    handle.stop().unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
+async fn peertest_state_offer_contract_bytecode() {
+    let (peertest, target, handle) = setup_peertest().await;
+    peertest::scenarios::state::test_state_gossip_contract_bytecode(&peertest, &target).await;
+    peertest.exit_all_nodes();
+    handle.stop().unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
+async fn peertest_state_recursive_gossip() {
+    let (peertest, target, handle) = setup_peertest().await;
+    peertest::scenarios::state::test_state_recursive_gossip(&peertest, &target).await;
+    peertest.exit_all_nodes();
+    handle.stop().unwrap();
+}
+
 async fn setup_peertest() -> (peertest::Peertest, Client, RpcServerHandle) {
     utils::init_tracing();
     // Run a client, as a buddy peer for ping tests, etc.
