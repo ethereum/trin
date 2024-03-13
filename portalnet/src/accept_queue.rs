@@ -59,13 +59,11 @@ where
         if let Some(mut seen_peers) = self.content_key_map.remove(content_key) {
             if seen_peers.origin == *peer || seen_peers.fallback.contains(peer) {
                 warn!(
-                    "Received multiple offers containing the same content key: {content_key} from peer: {}",
-                    peer.node_id(),
+                    "Received multiple offers containing the same content key: {content_key} from peer: {peer}"
                 );
             } else {
                 debug!(
-                    "Content key: {content_key} already in accept queue, adding peer to fallback list: {}",
-                    peer.node_id()
+                    "Content key: {content_key} already in accept queue, adding peer to fallback list: {peer}"
                 );
                 seen_peers.fallback.push(peer.clone());
             }
@@ -91,16 +89,14 @@ where
     /// fallback peer to send a fallback FINDCONTENT request.
     /// If no fallback peer is found, it returns None.
     pub fn process_failed_key(&mut self, content_key: &TContentKey) -> Option<Enr> {
-        if let Some(mut node_ids) = self.content_key_map.remove(content_key) {
-            if node_ids.fallback.is_empty() {
+        if let Some(mut seen_peers) = self.content_key_map.remove(content_key) {
+            if seen_peers.fallback.is_empty() {
                 debug!("Failed to process content key: {content_key}, no fallback peers found.");
                 return None;
             }
-            // choose a random seen peer as the fallback peer,
-            // and remove it from the list of fallback peers
-            // to avoid reusing the same peer for the next fallback
-            node_ids.fallback.shuffle(&mut thread_rng());
-            Some(node_ids.fallback.remove(0))
+            // randomly choose a seen peer as the fallback peer
+            seen_peers.fallback.shuffle(&mut thread_rng());
+            Some(seen_peers.fallback.remove(0))
         } else {
             warn!(
                 "Failed to process content key: {content_key}, but a corresponding AcceptQueue record was not found"
