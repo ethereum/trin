@@ -31,7 +31,7 @@ pub enum StateContentKey {
 
 impl Hash for StateContentKey {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        state.write(&self.content_id());
+        state.write(&self.to_bytes());
     }
 }
 

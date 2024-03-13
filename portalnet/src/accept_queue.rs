@@ -18,10 +18,10 @@ struct SeenPeers {
 /// This queue is designed for content keys that have already
 /// been checked with storage that they are within radius.
 // It's possible that some content keys evade tracking through the entire processing
-// cycle, due to error handling inside the OverlayService (eg process_accept_utp_payload()).
-// On top of this, we could also have threads panic / deadlocking. The use of a delay
-// map is useful to remove content keys which have been in the queue for too long or
-// might be stuck, and avoid infinitely-growing queues / indefinitely prevent
+// cycle, due to error handling inside the OverlayService, or threads
+// panicking / deadlocking. The use of a delay
+// map will remove content keys which have been in the queue for too long or
+// might be stuck, and avoid infinitely-growing queues / indefinitely preventing
 // previously seen content keys from being accepted.
 pub struct AcceptQueue<TContentKey>
 where
@@ -87,15 +87,13 @@ where
         self.content_key_map.remove(content_key);
     }
 
-    /// Processes a failed content key, and returns a randomly selected
+    /// Removes a failed content key, and returns a randomly selected
     /// fallback peer to send a fallback FINDCONTENT request.
     /// If no fallback peer is found, it returns None.
     pub fn process_failed_key(&mut self, content_key: &TContentKey) -> Option<Enr> {
         if let Some(mut node_ids) = self.content_key_map.remove(content_key) {
             if node_ids.fallback.is_empty() {
-                debug!(
-                    "Failed to process content key: {content_key}, but no fallback peers found."
-                );
+                debug!("Failed to process content key: {content_key}, no fallback peers found.");
                 return None;
             }
             // choose a random seen peer as the fallback peer,
