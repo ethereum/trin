@@ -9,15 +9,16 @@ use tree_hash_derive::TreeHash;
 /// https://github.com/status-im/nimbus-eth1/blob/77135e70015de77d9ca46b196d99dc260ed3e364/fluffy/network/history/experimental/beacon_chain_block_proof.nim
 
 //BeaconBlockBodyProof* = array[8, Digest]
-pub struct BeaconBlockBodyProof([H256; 8]);
+pub type BeaconBlockBodyProof = [H256; 8];
 
 //BeaconBlockHeaderProof* = array[3, Digest]
-pub struct BeaconBlockHeaderProof([H256; 3]);
+pub type BeaconBlockHeaderProof = [H256; 3];
 
 //HistoricalRootsProof* = array[14, Digest]
-pub struct BeaconBlockHistoricalRootsProof([H256; 14]);
+pub type BeaconBlockHistoricalRootsProof = [H256; 14];
 
 //# Total size (8 + 1 + 3 + 1 + 14) * 32 bytes + 4 bytes = 868 bytes
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BeaconChainBlockProof {
     pub beacon_block_body_proof: BeaconBlockBodyProof,
     pub beacon_block_body_root: H256,

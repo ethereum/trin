@@ -11,6 +11,7 @@ use crate::consensus::{
 use discv5::enr::k256::elliptic_curve::consts::{U1099511627776, U2048, U4, U65536, U8192};
 use ethereum_types::H256;
 use jsonrpsee::core::Serialize;
+use rs_merkle::{algorithms::Sha256, MerkleTree};
 use serde::Deserialize;
 use serde_this_or_that::as_u64;
 use serde_utils;
@@ -245,6 +246,35 @@ pub struct HistoricalBatch {
     pub state_roots: FixedVector<H256, SlotsPerHistoricalRoot>,
 }
 
+impl HistoricalBatch {
+    pub fn build_block_root_proof(&self, block_root_index: u64) -> Vec<H256> {
+        // Build block hash proof for sel.block_roots
+        let leaves: Vec<[u8; 32]> = self
+            .block_roots
+            .iter()
+            .map(|root| root.tree_hash_root().to_fixed_bytes())
+            .collect();
+
+        let merkle_tree = MerkleTree::<Sha256>::from_leaves(&leaves);
+        let indices_to_prove = vec![block_root_index as usize];
+        let proof = merkle_tree.proof(&indices_to_prove);
+        let mut proof_hashes: Vec<H256> = proof
+            .proof_hashes()
+            .iter()
+            .map(|x| H256::from_slice(x))
+            .collect();
+
+        // To generate proof for block root anchored to the historical batch tree_hash_root, we need
+        // to add the self.state_root tree_hash_root to the proof_hashes
+        proof_hashes.push(self.state_roots.tree_hash_root());
+
+        // Proof len should always be 14
+        assert_eq!(proof_hashes.len(), 14);
+
+        proof_hashes
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod test {
@@ -252,6 +282,7 @@ mod test {
     use ::ssz::Encode;
     use rstest::rstest;
     use serde_json::Value;
+    use std::str::FromStr;
 
     #[rstest]
     #[case("case_0")]
@@ -321,5 +352,73 @@ mod test {
         let expected = decoder.decompress_vec(&compressed).unwrap();
         BeaconState::from_ssz_bytes(&expected, ForkName::Capella).unwrap();
         assert_eq!(content.as_ssz_bytes(), expected);
+    }
+
+    #[rstest]
+    #[case("case_0")]
+    #[case("case_1")]
+    fn serde_historical_batch(#[case] case: &str) {
+        let value = std::fs::read_to_string(format!(
+            "../test_assets/beacon/bellatrix/HistoricalBatch/ssz_random/{case}/value.yaml"
+        ))
+        .expect("cannot find test asset");
+        let value: Value = serde_yaml::from_str(&value).unwrap();
+        let content: HistoricalBatch = serde_json::from_value(value.clone()).unwrap();
+        let serialized = serde_json::to_value(content).unwrap();
+        assert_eq!(serialized, value);
+    }
+
+    #[rstest]
+    #[case("case_0")]
+    #[case("case_1")]
+    fn ssz_historical_batch(#[case] case: &str) {
+        let value = std::fs::read_to_string(format!(
+            "../test_assets/beacon/bellatrix/HistoricalBatch/ssz_random/{case}/value.yaml"
+        ))
+        .expect("cannot find test asset");
+        let value: Value = serde_yaml::from_str(&value).unwrap();
+        let content: HistoricalBatch = serde_json::from_value(value).unwrap();
+
+        let compressed = std::fs::read(format!(
+            "../test_assets/beacon/bellatrix/HistoricalBatch/ssz_random/{case}/serialized.ssz_snappy"
+        ))
+            .expect("cannot find test asset");
+        let mut decoder = snap::raw::Decoder::new();
+        let expected = decoder.decompress_vec(&compressed).unwrap();
+        HistoricalBatch::from_ssz_bytes(&expected).unwrap();
+        assert_eq!(content.as_ssz_bytes(), expected);
+    }
+
+    #[test]
+    fn historical_batch_block_root_proof() {
+        let value = std::fs::read_to_string(
+            "../test_assets/beacon/bellatrix/HistoricalBatch/ssz_random/case_0/value.yaml",
+        )
+        .expect("cannot find test asset");
+        let value: Value = serde_yaml::from_str(&value).unwrap();
+        let content: HistoricalBatch = serde_json::from_value(value).unwrap();
+
+        let expected_proof = [
+            "0xad500369fa624b7bb451bf1c5119bb6e5e623bab76a0d06948d04a38f35a740d",
+            "0x222151dcdfbace03dd6f2428ee1a12acffaa1ce03e6966aefd4a48282a776e8e",
+            "0x28319c59ca450d2fba4b3225eccd994eee98276b7c77e2c3256a3df829767112",
+            "0x4cd3f3ff2891ef30542d4ae1530c90120cf7718ae936204aa5b0d67ea07957ef",
+            "0xab543cef2058a48bd9d327dce1ee91ac9acf114f7c0b1762689c79b7d10bb363",
+            "0x410b45ebb9351cd84dd13a888de4b04d781630df726cec7eb74814f2a00f3c6e",
+            "0xd213561e8cff461aa94ee50910381ff1182e3fb90a914e17060f3c0c23522911",
+            "0x84b4db81fe167dd181bcab2ca02008b22f0ab11462f8bd4547e29a6b55bb6a11",
+            "0x845c6bf5051749dc6b82222c664033ae301fca96c24fd32a63fc3f5adfb1a656",
+            "0x19a5290c03daf8156f6941cca8feb5b16e843220e2f9b57647a90d76a459d302",
+            "0x9ca2a640c85ce719174ec29710596f3315aedb4b47044f175b2c39f35bf0d15e",
+            "0xb7534aed4d180eec8ac7d961e1020028c07d0c83dcdd23f56a7920a08b7393be",
+            "0xf8a36457194917609bd16697972d616d8f14e71f4fcfd64666e11544bd5f193e",
+            "0x1d28097093ca99336cb6b3e8c8c34d749a3e43efc9bb6fabc2cfd6ffb1701b08",
+        ]
+        .map(|x| H256::from_str(x).unwrap());
+
+        let proof = content.build_block_root_proof(0);
+
+        assert_eq!(proof.len(), 14);
+        assert_eq!(proof, expected_proof.to_vec());
     }
 }

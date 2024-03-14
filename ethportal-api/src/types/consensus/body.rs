@@ -8,6 +8,7 @@ use crate::{
 };
 use discv5::enr::k256::elliptic_curve::consts::U16;
 use ethereum_types::{Address, H256};
+use rs_merkle::{algorithms::Sha256, MerkleTree};
 use serde::{Deserialize, Serialize};
 use serde_this_or_that::as_u64;
 use ssz::Decode;
@@ -18,6 +19,7 @@ use ssz_types::{
     BitList, BitVector, FixedVector, VariableList,
 };
 use superstruct::superstruct;
+use tree_hash::TreeHash;
 use tree_hash_derive::TreeHash;
 
 use super::{header::BeaconBlockHeader, pubkey::PubKey, signature::BlsSignature};
@@ -72,6 +74,46 @@ impl BeaconBlockBody {
             }
             ForkName::Capella => BeaconBlockBodyCapella::from_ssz_bytes(bytes).map(Self::Capella),
         }
+    }
+}
+
+impl BeaconBlockBodyBellatrix {
+    pub fn build_execution_payload_proof(&self) -> Vec<H256> {
+        let mut leaves: Vec<[u8; 32]> = vec![
+            self.randao_reveal.tree_hash_root().to_fixed_bytes(),
+            self.eth1_data.tree_hash_root().to_fixed_bytes(),
+            self.graffiti.tree_hash_root().to_fixed_bytes(),
+            self.proposer_slashings.tree_hash_root().to_fixed_bytes(),
+            self.attester_slashings.tree_hash_root().to_fixed_bytes(),
+            self.attestations.tree_hash_root().to_fixed_bytes(),
+            self.deposits.tree_hash_root().to_fixed_bytes(),
+            self.voluntary_exits.tree_hash_root().to_fixed_bytes(),
+            self.sync_aggregate.tree_hash_root().to_fixed_bytes(),
+            self.execution_payload.tree_hash_root().to_fixed_bytes(),
+        ];
+        // We want to add empty leaves to make the tree a power of 2
+        while leaves.len() < 16 {
+            leaves.push([0; 32]);
+        }
+
+        let merkle_tree = MerkleTree::<Sha256>::from_leaves(&leaves);
+
+        // We want to prove the 10th leaf
+        let indices_to_prove = vec![9];
+        let proof = merkle_tree.proof(&indices_to_prove);
+        let proof_hashes: Vec<H256> = proof
+            .proof_hashes()
+            .iter()
+            .map(|x| H256::from_slice(x))
+            .collect();
+
+        proof_hashes
+    }
+
+    pub fn build_execution_block_hash_proof(&self) -> Vec<H256> {
+        let mut block_hash_proof = self.execution_payload.build_block_hash_proof();
+        block_hash_proof.extend(self.build_execution_payload_proof());
+        block_hash_proof
     }
 }
 
@@ -186,6 +228,7 @@ mod test {
     use ::ssz::Encode;
     use rstest::rstest;
     use serde_json::Value;
+    use std::str::FromStr;
 
     /// Test vectors sourced from:
     /// https://github.com/ethereum/consensus-spec-tests/commit/c6e69469a75392b35169bc6234d4d3e6c4e288da
@@ -228,5 +271,40 @@ mod test {
         let expected = decoder.decompress_vec(&compressed).unwrap();
         BeaconBlockBody::from_ssz_bytes(&expected, ForkName::Bellatrix).unwrap();
         assert_eq!(body.as_ssz_bytes(), expected);
+    }
+
+    #[test]
+    fn block_body_execution_payload_proof() {
+        let value = std::fs::read_to_string(
+            "../test_assets/beacon/bellatrix/BeaconBlockBody/ssz_random/case_0/value.yaml",
+        )
+        .expect("cannot find test asset");
+        let value: Value = serde_yaml::from_str(&value).unwrap();
+        let content: BeaconBlockBodyBellatrix = serde_json::from_value(value).unwrap();
+        let expected_execution_payload_proof = [
+            "0xf5bf9e85dce9cc5f1edbed4085bf4e37da4ddec337483f847cc451f296ff0799",
+            "0xf5a5fd42d16a20302798ef6ed309979b43003d2320d9f0e8ea9831a92759fb4b",
+            "0xdb56114e00fdd4c1f85c892bf35ac9a89289aaecb1ebd0a96cde606a748b5d71",
+            "0x38373fc5d635131b9054c0a97cf1eeb397621f2f6e54ffc54f5f2516088b87d9",
+        ]
+        .map(|x| H256::from_str(x).unwrap());
+        let proof = content.build_execution_payload_proof();
+
+        assert_eq!(proof.len(), 4);
+        assert_eq!(proof, expected_execution_payload_proof.to_vec());
+
+        let mut expected_block_hash_proof = [
+            "0x7ffe241ea60187fdb0187bfa22de35d1f9bed7ab061d9401fd47e34a54fbede1",
+            "0xf5a5fd42d16a20302798ef6ed309979b43003d2320d9f0e8ea9831a92759fb4b",
+            "0xf00e3441849a7e4228e6f48d5a5b231e153b39cb2ef283febdd9f7df1f777551",
+            "0x6911c0b766b06671612d77e8f3061320f2a3471c2ba8d3f8251b53da8efb111a",
+        ]
+        .map(|x| H256::from_str(x).unwrap())
+        .to_vec();
+        let proof = content.build_execution_block_hash_proof();
+        expected_block_hash_proof.extend(expected_execution_payload_proof);
+
+        assert_eq!(proof.len(), 8);
+        assert_eq!(proof, expected_block_hash_proof);
     }
 }
