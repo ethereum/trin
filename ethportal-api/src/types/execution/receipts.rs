@@ -325,6 +325,7 @@ impl Encodable for Receipt {
             Receipt::Legacy(receipt) => receipt.rlp_append(s),
             Receipt::AccessList(receipt) => receipt.rlp_append(s),
             Receipt::EIP1559(receipt) => receipt.rlp_append(s),
+            Receipt::Blob(receipt) => receipt.rlp_append(s),
         }
     }
 }
@@ -342,6 +343,7 @@ impl Encodable for Receipts {
 #[repr(u8)]
 /// The typed transaction ID
 pub enum TransactionId {
+    Blob = 0x03,
     EIP1559 = 0x02,
     AccessList = 0x01,
     Legacy = 0x00,
@@ -354,6 +356,7 @@ impl TryFrom<u8> for TransactionId {
         match val {
             id if id == TransactionId::EIP1559 as u8 => Ok(Self::EIP1559),
             id if id == TransactionId::AccessList as u8 => Ok(Self::AccessList),
+            id if id == TransactionId::Blob as u8 => Ok(Self::Blob),
             id if (id & 0x80) != 0x00 => Ok(Self::Legacy),
             id if id == TransactionId::Legacy as u8 => Ok(Self::Legacy),
             _ => Err(DecoderError::Custom(
@@ -383,6 +386,7 @@ pub enum Receipt {
     Legacy(LegacyReceipt),
     AccessList(LegacyReceipt),
     EIP1559(LegacyReceipt),
+    Blob(LegacyReceipt),
 }
 
 impl Receipt {
@@ -393,6 +397,7 @@ impl Receipt {
             TransactionId::EIP1559 => Self::EIP1559(legacy_receipt),
             TransactionId::AccessList => Self::AccessList(legacy_receipt),
             TransactionId::Legacy => Self::Legacy(legacy_receipt),
+            TransactionId::Blob => Self::Blob(legacy_receipt),
         }
     }
 
@@ -401,6 +406,7 @@ impl Receipt {
             Self::Legacy(receipt) => receipt,
             Self::AccessList(receipt) => receipt,
             Self::EIP1559(receipt) => receipt,
+            Self::Blob(receipt) => receipt,
         }
     }
 
@@ -409,6 +415,7 @@ impl Receipt {
             Self::Legacy(receipt) => receipt,
             Self::AccessList(receipt) => receipt,
             Self::EIP1559(receipt) => receipt,
+            Self::Blob(receipt) => receipt,
         }
     }
 
@@ -427,6 +434,10 @@ impl Receipt {
                 receipt.rlp_append(&mut stream);
                 [&[TransactionId::EIP1559 as u8], stream.as_raw()].concat()
             }
+            Self::Blob(receipt) => {
+                receipt.rlp_append(&mut stream);
+                [&[TransactionId::Blob as u8], stream.as_raw()].concat()
+            }
         }
     }
 
@@ -439,9 +450,10 @@ impl Receipt {
             .map_err(|_| DecoderError::Custom("Unknown transaction id"))?;
         //other transaction types
         match id {
-            TransactionId::EIP1559 => Ok(Self::EIP1559(rlp::decode(&receipt[1..])?)),
-            TransactionId::AccessList => Ok(Self::AccessList(rlp::decode(&receipt[1..])?)),
             TransactionId::Legacy => Ok(Self::Legacy(rlp::decode(receipt)?)),
+            TransactionId::AccessList => Ok(Self::AccessList(rlp::decode(&receipt[1..])?)),
+            TransactionId::EIP1559 => Ok(Self::EIP1559(rlp::decode(&receipt[1..])?)),
+            TransactionId::Blob => Ok(Self::Blob(rlp::decode(&receipt[1..])?)),
         }
     }
 }
@@ -466,6 +478,9 @@ impl<'de> Deserialize<'de> for Receipt {
                 LegacyReceipt::deserialize(obj).map_err(serde::de::Error::custom)?,
             )),
             TransactionId::EIP1559 => Ok(Receipt::EIP1559(
+                LegacyReceipt::deserialize(obj).map_err(serde::de::Error::custom)?,
+            )),
+            TransactionId::Blob => Ok(Receipt::Blob(
                 LegacyReceipt::deserialize(obj).map_err(serde::de::Error::custom)?,
             )),
         }

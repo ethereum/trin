@@ -13,6 +13,7 @@ pub enum Transaction {
     Legacy(LegacyTransaction),
     AccessList(AccessListTransaction),
     EIP1559(EIP1559Transaction),
+    Blob(BlobTransaction),
 }
 
 impl Transaction {
@@ -38,6 +39,12 @@ impl Encodable for Transaction {
                 let encoded = [&[TransactionId::EIP1559 as u8], stream.as_raw()].concat();
                 s.append_raw(&encoded, 1);
             }
+            Self::Blob(tx) => {
+                let mut stream = RlpStream::new();
+                tx.rlp_append(&mut stream);
+                let encoded = [&[TransactionId::Blob as u8], stream.as_raw()].concat();
+                s.append_raw(&encoded, 1);
+            }
         }
     }
 }
@@ -54,6 +61,7 @@ impl Decodable for Transaction {
             TransactionId::EIP1559 => Ok(Self::EIP1559(rlp::decode(&rlp.as_raw()[1..])?)),
             TransactionId::AccessList => Ok(Self::AccessList(rlp::decode(&rlp.as_raw()[1..])?)),
             TransactionId::Legacy => Ok(Self::Legacy(rlp::decode(rlp.as_raw())?)),
+            TransactionId::Blob => Ok(Self::Blob(rlp::decode(rlp.as_raw())?)),
         }
     }
 }
@@ -89,6 +97,11 @@ impl<'de> Deserialize<'de> for Transaction {
                 let helper =
                     EIP1559TransactionHelper::deserialize(obj).map_err(serde::de::Error::custom)?;
                 Ok(Self::EIP1559(helper.into()))
+            }
+            TransactionId::Blob => {
+                let helper =
+                    BlobTransactionHelper::deserialize(obj).map_err(serde::de::Error::custom)?;
+                Ok(Self::Blob(helper.into()))
             }
         }
     }
@@ -248,6 +261,70 @@ impl Into<EIP1559Transaction> for EIP1559TransactionHelper {
             y_parity: self.y_parity,
             r: self.r,
             s: self.s,
+        }
+    }
+}
+
+#[derive(Eq, Debug, Clone, PartialEq, RlpDecodable, RlpEncodable)]
+pub struct BlobTransaction {
+    pub chain_id: U256,
+    pub nonce: U256,
+    pub max_priority_fee_per_gas: U256,
+    pub max_fee_per_gas: U256,
+    pub gas_limit: U256,
+    pub to: ToAddress,
+    pub value: U256,
+    pub data: Bytes,
+    pub access_list: AccessList,
+    pub y_parity: U64,
+    pub r: U256,
+    pub s: U256,
+    pub max_fee_per_blob_gas: U256,
+    pub blob_versioned_hashes: Vec<H256>,
+}
+
+#[derive(Eq, Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BlobTransactionHelper {
+    pub chain_id: U256,
+    pub nonce: U256,
+    pub max_priority_fee_per_gas: U256,
+    pub max_fee_per_gas: U256,
+    #[serde(rename(deserialize = "gas"))]
+    pub gas_limit: U256,
+    pub to: ToAddress,
+    pub value: U256,
+    #[serde(rename(deserialize = "input"))]
+    pub data: JsonBytes,
+    pub access_list: Vec<AccessListItem>,
+    #[serde(rename(deserialize = "v"))]
+    pub y_parity: U64,
+    pub r: U256,
+    pub s: U256,
+    pub max_fee_per_blob_gas: U256,
+    pub blob_versioned_hashes: Vec<H256>,
+}
+
+#[allow(clippy::from_over_into)]
+impl Into<BlobTransaction> for BlobTransactionHelper {
+    fn into(self) -> BlobTransaction {
+        BlobTransaction {
+            chain_id: self.chain_id,
+            nonce: self.nonce,
+            max_priority_fee_per_gas: self.max_priority_fee_per_gas,
+            max_fee_per_gas: self.max_fee_per_gas,
+            gas_limit: self.gas_limit,
+            to: self.to,
+            value: self.value,
+            data: self.data.0,
+            access_list: AccessList {
+                list: self.access_list,
+            },
+            y_parity: self.y_parity,
+            r: self.r,
+            s: self.s,
+            max_fee_per_blob_gas: self.max_fee_per_blob_gas,
+            blob_versioned_hashes: self.blob_versioned_hashes,
         }
     }
 }

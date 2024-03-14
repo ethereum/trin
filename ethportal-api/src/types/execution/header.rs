@@ -1,4 +1,4 @@
-use ethereum_types::{Bloom, H160, H256, H64, U256};
+use ethereum_types::{Bloom, H160, H256, H64, U256, U64};
 use reth_rpc_types::Header as RpcHeader;
 use rlp::{Decodable, DecoderError, Encodable, Rlp, RlpStream};
 use ruint::Uint;
@@ -13,6 +13,7 @@ use crate::{
 
 const LONDON_BLOCK_NUMBER: u64 = 12965000;
 const SHANGHAI_BLOCK_NUMBER: u64 = 17034871;
+const DENCUN_BLOCK_NUMBER: u64 = 19426589; // double-check
 
 /// A block header.
 #[derive(Debug, Clone, Eq, Deserialize, Serialize)]
@@ -58,6 +59,10 @@ pub struct Header {
     pub base_fee_per_gas: Option<U256>,
     /// Withdrawals root from execution payload. Introduced by EIP-4895.
     pub withdrawals_root: Option<H256>,
+    /// Blob gas used. Introduced by EIP-4844
+    pub blob_gas_used: Option<U64>,
+    /// Excess blob gas. Introduced by EIP-4844
+    pub excess_blob_gas: Option<U64>,
 }
 
 fn se_hex<S>(value: &[u8], serializer: S) -> Result<S::Ok, S::Error>
@@ -93,7 +98,10 @@ impl Header {
 
     /// Append header to RLP stream `s`, optionally `with_seal`.
     fn stream_rlp(&self, s: &mut RlpStream, with_seal: bool) {
-        let stream_length_without_seal = if self.withdrawals_root.is_some() {
+        let stream_length_without_seal = if self.excess_blob_gas.is_some() {
+            // add two for excess_blob_gas and blob_gas_used
+            17
+        } else if self.withdrawals_root.is_some() {
             15
         } else if self.base_fee_per_gas.is_some() {
             14
@@ -121,16 +129,24 @@ impl Header {
             .append(&self.timestamp)
             .append(&self.extra_data);
 
-        // naked unwraps ok since we validate that properties exist before unwrapping
-        #[allow(clippy::unwrap_used)]
         if with_seal && self.mix_hash.is_some() && self.nonce.is_some() {
-            s.append(&self.mix_hash.unwrap())
-                .append(self.nonce.as_ref().unwrap());
+            s.append(&self.mix_hash.expect("mix_hash to be Some"))
+                .append(self.nonce.as_ref().expect("nonce to be Some"));
         }
+
         if let Some(val) = self.base_fee_per_gas {
             s.append(&val);
         }
+
         if let Some(val) = self.withdrawals_root {
+            s.append(&val);
+        }
+
+        if let Some(val) = self.blob_gas_used {
+            s.append(&val);
+        }
+
+        if let Some(val) = self.excess_blob_gas {
             s.append(&val);
         }
     }
@@ -157,6 +173,8 @@ impl Decodable for Header {
             nonce: Some(rlp.val_at(14)?),
             base_fee_per_gas: None,
             withdrawals_root: None,
+            blob_gas_used: None,
+            excess_blob_gas: None,
         };
 
         if header.number >= LONDON_BLOCK_NUMBER {
@@ -165,6 +183,11 @@ impl Decodable for Header {
 
         if header.number >= SHANGHAI_BLOCK_NUMBER {
             header.withdrawals_root = Some(rlp.val_at(16)?);
+        }
+
+        if header.number >= DENCUN_BLOCK_NUMBER {
+            header.blob_gas_used = Some(rlp.val_at(17)?);
+            header.excess_blob_gas = Some(rlp.val_at(18)?);
         }
 
         Ok(header)
@@ -196,6 +219,8 @@ impl PartialEq for Header {
             && self.nonce == other.nonce
             && self.base_fee_per_gas == other.base_fee_per_gas
             && self.withdrawals_root == other.withdrawals_root
+            && self.blob_gas_used == other.blob_gas_used
+            && self.excess_blob_gas == other.excess_blob_gas
     }
 }
 
@@ -224,6 +249,8 @@ impl From<Header> for RpcHeader {
             nonce,
             base_fee_per_gas,
             withdrawals_root,
+            blob_gas_used,
+            excess_blob_gas,
         } = header;
 
         Self {
@@ -252,8 +279,8 @@ impl From<Header> for RpcHeader {
             nonce: nonce.map(|h64| h64.as_fixed_bytes().into()),
             base_fee_per_gas: base_fee_per_gas.map(u256_to_uint256),
             withdrawals_root: withdrawals_root.map(|root| root.to_fixed_bytes().into()),
-            blob_gas_used: None,
-            excess_blob_gas: None,
+            blob_gas_used,
+            excess_blob_gas,
             hash,
             parent_beacon_block_root: None,
         }
@@ -557,6 +584,63 @@ mod tests {
             &hex_decode("0x17cf53189035bbae5bce5c844355badd701aa9d2dd4b4f5ab1f9f0e8dd9fea5b")
                 .unwrap(),
         );
+        assert_eq!(header.number, 17034871);
+        assert_eq!(header.hash(), expected_hash);
+    }
+
+    #[test]
+    fn dencun_rlp() {
+        let body =
+            std::fs::read_to_string("../test_assets/mainnet/block_19433903_value.json").unwrap();
+        let response: Value = serde_json::from_str(&body).unwrap();
+        let header: Header = serde_json::from_value(response["result"].clone()).unwrap();
+        let encoded = rlp::encode(&header);
+        let decoded: Header = rlp::decode(&encoded).unwrap();
+        assert_eq!(header, decoded);
+        let re_encoded = rlp::encode(&decoded);
+        assert_eq!(encoded, re_encoded);
+        let body =
+            std::fs::read_to_string("../test_assets/mainnet/block_19433902_value.json").unwrap();
+        let response: Value = serde_json::from_str(&body).unwrap();
+        let header: Header = serde_json::from_value(response["result"].clone()).unwrap();
+        let encoded = rlp::encode(&header);
+        let decoded: Header = rlp::decode(&encoded).unwrap();
+        assert_eq!(header, decoded);
+        let re_encoded = rlp::encode(&decoded);
+        assert_eq!(encoded, re_encoded);
+    }
+
+    #[test]
+    fn post_dencun_header_without_blob_txs() {
+        let body =
+            std::fs::read_to_string("../test_assets/mainnet/block_19433902_value.json").unwrap();
+        let response: Value = serde_json::from_str(&body).unwrap();
+        let header: Header = serde_json::from_value(response["result"].clone()).unwrap();
+        let etherscan_hash = H256::from_slice(
+            &hex_decode("0x8ec7bd37afa247fde16aa96317c77055b7a633aa8dc9ae27d0d5c776b58fef04")
+                .unwrap(),
+        );
+        let expected_hash =
+            H256::from_slice(&hex_decode(response["result"]["hash"].as_str().unwrap()).unwrap());
+        assert_eq!(etherscan_hash, expected_hash);
+        assert_eq!(header.number, 19433902);
+        assert_eq!(header.hash(), expected_hash);
+    }
+
+    #[test]
+    fn post_dencun_header_with_blob_txs() {
+        let body =
+            std::fs::read_to_string("../test_assets/mainnet/block_19433903_value.json").unwrap();
+        let response: Value = serde_json::from_str(&body).unwrap();
+        let header: Header = serde_json::from_value(response["result"].clone()).unwrap();
+        let etherscan_hash = H256::from_slice(
+            &hex_decode("0xb39d99cc81a35570c4d5765d9273cb282e424324cd5aae059cc00de7d59afb69")
+                .unwrap(),
+        );
+        let expected_hash =
+            H256::from_slice(&hex_decode(response["result"]["hash"].as_str().unwrap()).unwrap());
+        assert_eq!(etherscan_hash, expected_hash);
+        assert_eq!(header.number, 19433903);
         assert_eq!(header.hash(), expected_hash);
     }
 }

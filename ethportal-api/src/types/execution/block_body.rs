@@ -470,6 +470,7 @@ mod tests {
     #[case(TX17, 1544975)]
     // EIP1559 w/ populated access list
     #[case(TX6, 41942)]
+    // todo blob
     fn encode_and_decode_txs(#[case] tx: &str, #[case] expected_nonce: u32) {
         let tx_rlp = hex_decode(tx).unwrap();
         let tx = rlp::decode(&tx_rlp).expect("error decoding tx");
@@ -478,6 +479,7 @@ mod tests {
             Transaction::Legacy(tx) => assert_eq!(tx.nonce, expected_nonce),
             Transaction::AccessList(tx) => assert_eq!(tx.nonce, expected_nonce),
             Transaction::EIP1559(tx) => assert_eq!(tx.nonce, expected_nonce),
+            Transaction::Blob(tx) => assert_eq!(tx.nonce, expected_nonce),
         }
         let encoded_tx = rlp::encode(&tx);
         assert_eq!(hex_encode(tx_rlp), hex_encode(encoded_tx));
