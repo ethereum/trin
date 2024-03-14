@@ -406,6 +406,8 @@ mod test {
             nonce: None,
             base_fee_per_gas: None,
             withdrawals_root: None,
+            blob_gas_used: None,
+            excess_blob_gas: None,
         }
     }
 
