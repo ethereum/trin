@@ -276,11 +276,11 @@ pub struct BlobTransaction {
     pub value: U256,
     pub data: Bytes,
     pub access_list: AccessList,
+    pub max_fee_per_blob_gas: U256,
+    pub blob_versioned_hashes: Vec<H256>,
     pub y_parity: U64,
     pub r: U256,
     pub s: U256,
-    pub max_fee_per_blob_gas: U256,
-    pub blob_versioned_hashes: Vec<H256>,
 }
 
 #[derive(Eq, Debug, Clone, PartialEq, Deserialize)]
@@ -297,12 +297,12 @@ struct BlobTransactionHelper {
     #[serde(rename(deserialize = "input"))]
     pub data: JsonBytes,
     pub access_list: Vec<AccessListItem>,
+    pub max_fee_per_blob_gas: U256,
+    pub blob_versioned_hashes: Vec<H256>,
     #[serde(rename(deserialize = "v"))]
     pub y_parity: U64,
     pub r: U256,
     pub s: U256,
-    pub max_fee_per_blob_gas: U256,
-    pub blob_versioned_hashes: Vec<H256>,
 }
 
 #[allow(clippy::from_over_into)]
@@ -317,14 +317,14 @@ impl Into<BlobTransaction> for BlobTransactionHelper {
             to: self.to,
             value: self.value,
             data: self.data.0,
+            max_fee_per_blob_gas: self.max_fee_per_blob_gas,
+            blob_versioned_hashes: self.blob_versioned_hashes,
             access_list: AccessList {
                 list: self.access_list,
             },
             y_parity: self.y_parity,
             r: self.r,
             s: self.s,
-            max_fee_per_blob_gas: self.max_fee_per_blob_gas,
-            blob_versioned_hashes: self.blob_versioned_hashes,
         }
     }
 }

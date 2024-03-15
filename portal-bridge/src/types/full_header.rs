@@ -162,6 +162,25 @@ mod tests {
         block_body.validate_against_header(&header).unwrap();
     }
 
+    #[rstest::rstest]
+    // without blob txs
+    #[case("19433902")]
+    // with blob txs
+    #[case("19433903")]
+    fn full_header_block_body_dencun(#[case] case: &str) {
+        let body =
+            std::fs::read_to_string(format!("../test_assets/mainnet/block_{case}_value.json"))
+                .unwrap();
+        let body: Value = serde_json::from_str(&body).unwrap();
+        let full_header = FullHeader::try_from(body["result"].clone()).unwrap();
+        let header: Header = serde_json::from_value(body["result"].clone()).unwrap();
+        let block_body = BlockBody::Shanghai(BlockBodyShanghai {
+            txs: full_header.txs.clone(),
+            withdrawals: full_header.withdrawals.unwrap(),
+        });
+        block_body.validate_against_header(&header).unwrap();
+    }
+
     #[test_log::test]
     fn full_header_batch() {
         // this block (15573637) was chosen since it contains all tx types (legacy, access list,
