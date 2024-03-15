@@ -5,6 +5,8 @@ use rand::{seq::SliceRandom, thread_rng};
 use tokio::time::Duration;
 use tracing::{debug, warn};
 
+const OFFER_QUEUE_TIMEOUT: Duration = Duration::from_secs(120);
+
 /// A record of peers that have offered a content key.
 struct SeenPeers {
     /// The peer that originally offered the content key.
@@ -31,8 +33,6 @@ where
     // pointing to seen peers that have offered them the content
     content_key_map: HashMapDelay<TContentKey, SeenPeers>,
 }
-
-const OFFER_QUEUE_TIMEOUT: Duration = Duration::from_secs(120);
 
 impl<TContentKey> Default for AcceptQueue<TContentKey>
 where

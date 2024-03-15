@@ -100,7 +100,7 @@ const EVENT_STREAM_CHANNEL_CAPACITY: usize = 10;
 /// The overlay service.
 pub struct OverlayService<TContentKey, TMetric, TValidator, TStore>
 where
-    TContentKey: 'static + OverlayContentKey + Send + Sync,
+    TContentKey: OverlayContentKey,
 {
     /// The underlying Discovery v5 protocol.
     discovery: Arc<Discovery>,
@@ -1146,11 +1146,7 @@ where
                     //
                     // We spawn these additional fallback FINDCONTENT tasks using
                     // the same semaphore permit that was initially acquired for
-                    // the ACCEPT utp stream. This might cause the utp active count
-                    // to temporarily exceed the max, but that seems preferable to
-                    // requiring additional permits for each individual content key,
-                    // which could drop the fallback request entirely if there are no
-                    // more permits available.
+                    // the ACCEPT utp stream.
                     let handles: Vec<JoinHandle<_>> = content_keys
                         .into_iter()
                         .map(|content_key| {
@@ -2593,7 +2589,7 @@ fn pop_while_ssz_bytes_len_gt(enrs: &mut Vec<SszEnr>, max_size: usize) {
 /// around a large number of individual references.
 struct UtpProcessing<TValidator, TStore, TContentKey>
 where
-    TContentKey: 'static + OverlayContentKey + Send + Sync,
+    TContentKey: OverlayContentKey + Send + Sync,
     TValidator: Validator<TContentKey>,
     TStore: ContentStore,
 {
@@ -2610,7 +2606,7 @@ impl<TContentKey, TMetric, TValidator, TStore>
     From<&OverlayService<TContentKey, TMetric, TValidator, TStore>>
     for UtpProcessing<TValidator, TStore, TContentKey>
 where
-    TContentKey: 'static + OverlayContentKey + Send + Sync,
+    TContentKey: OverlayContentKey + Send + Sync,
     TValidator: Validator<TContentKey>,
     TStore: ContentStore,
 {
@@ -2629,7 +2625,7 @@ where
 
 impl<TValidator, TStore, TContentKey> Clone for UtpProcessing<TValidator, TStore, TContentKey>
 where
-    TContentKey: 'static + OverlayContentKey + Send + Sync,
+    TContentKey: OverlayContentKey + Send + Sync,
     TValidator: Validator<TContentKey>,
     TStore: ContentStore,
 {
