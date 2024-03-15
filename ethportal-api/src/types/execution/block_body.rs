@@ -470,7 +470,6 @@ mod tests {
     #[case(TX17, 1544975)]
     // EIP1559 w/ populated access list
     #[case(TX6, 41942)]
-    // todo blob
     fn encode_and_decode_txs(#[case] tx: &str, #[case] expected_nonce: u32) {
         let tx_rlp = hex_decode(tx).unwrap();
         let tx = rlp::decode(&tx_rlp).expect("error decoding tx");
