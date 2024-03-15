@@ -7,12 +7,14 @@ use crate::{
     utils::serde::{hex_fixed_vec, hex_var_list},
 };
 use ethereum_types::{Address, H160, H256, U256};
+use rs_merkle::{algorithms::Sha256, MerkleTree};
 use serde::{Deserialize, Serialize};
 use serde_this_or_that::as_u64;
 use ssz::Decode;
 use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, typenum::U16, FixedVector, VariableList};
 use superstruct::superstruct;
+use tree_hash::TreeHash;
 use tree_hash_derive::TreeHash;
 
 pub type Bloom = FixedVector<u8, typenum::U256>;
@@ -77,6 +79,42 @@ impl ExecutionPayload {
             }
             ForkName::Capella => ExecutionPayloadCapella::from_ssz_bytes(bytes).map(Self::Capella),
         }
+    }
+}
+
+impl ExecutionPayloadBellatrix {
+    pub fn build_block_hash_proof(&self) -> Vec<H256> {
+        let mut leaves: Vec<[u8; 32]> = vec![
+            self.parent_hash.tree_hash_root().to_fixed_bytes(),
+            self.fee_recipient.tree_hash_root().to_fixed_bytes(),
+            self.state_root.tree_hash_root().to_fixed_bytes(),
+            self.receipts_root.tree_hash_root().to_fixed_bytes(),
+            self.logs_bloom.tree_hash_root().to_fixed_bytes(),
+            self.prev_randao.tree_hash_root().to_fixed_bytes(),
+            self.block_number.tree_hash_root().to_fixed_bytes(),
+            self.gas_limit.tree_hash_root().to_fixed_bytes(),
+            self.gas_used.tree_hash_root().to_fixed_bytes(),
+            self.timestamp.tree_hash_root().to_fixed_bytes(),
+            self.extra_data.tree_hash_root().to_fixed_bytes(),
+            self.base_fee_per_gas.tree_hash_root().to_fixed_bytes(),
+            self.block_hash.tree_hash_root().to_fixed_bytes(),
+            self.transactions.tree_hash_root().to_fixed_bytes(),
+        ];
+        // We want to add empty leaves to make the tree a power of 2
+        while leaves.len() < 16 {
+            leaves.push([0; 32]);
+        }
+
+        let merkle_tree = MerkleTree::<Sha256>::from_leaves(&leaves);
+        let indices_to_prove = vec![12];
+        let proof = merkle_tree.proof(&indices_to_prove);
+        let proof_hashes: Vec<H256> = proof
+            .proof_hashes()
+            .iter()
+            .map(|x| H256::from_slice(x))
+            .collect();
+
+        proof_hashes
     }
 }
 
@@ -167,6 +205,7 @@ mod test {
     use ::ssz::Encode;
     use rstest::rstest;
     use serde_json::Value;
+    use std::str::FromStr;
 
     #[rstest]
     #[case("case_0")]
@@ -289,5 +328,27 @@ mod test {
         let expected = decoder.decompress_vec(&compressed).unwrap();
         ExecutionPayloadHeader::from_ssz_bytes(&expected, ForkName::Capella).unwrap();
         assert_eq!(content.as_ssz_bytes(), expected);
+    }
+
+    #[test]
+    fn execution_payload_block_hash_proof() {
+        let value = std::fs::read_to_string(
+            "../test_assets/beacon/bellatrix/ExecutionPayload/ssz_random/case_0/value.yaml",
+        )
+        .expect("cannot find test asset");
+        let value: Value = serde_yaml::from_str(&value).unwrap();
+        let content: ExecutionPayloadBellatrix = serde_json::from_value(value).unwrap();
+        let expected_block_hash_proof = [
+            "0xc1c51dd941baaa59ef26f7141dc6f1b88e6c30e39c819189fcb515e8bcb41733",
+            "0xf5a5fd42d16a20302798ef6ed309979b43003d2320d9f0e8ea9831a92759fb4b",
+            "0x49e643aa5e1626558ec27d657101d5b7b2a0216755659e301e7d3e523bf48b49",
+            "0xc81a9c5f1916aba6b34dd4e347fe9adf075debdecebd1eb65db3c1dad6757cd2",
+        ]
+        .map(|x| H256::from_str(x).unwrap())
+        .to_vec();
+        let proof = content.build_block_hash_proof();
+
+        assert_eq!(proof.len(), 4);
+        assert_eq!(proof, expected_block_hash_proof);
     }
 }
