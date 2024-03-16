@@ -15,7 +15,7 @@ use ethportal_api::{
 };
 use portalnet::overlay::errors::OverlayRequestError;
 use serde_json::{json, Value};
-use tokio::sync::{mpsc, Mutex, RwLock};
+use tokio::sync::{mpsc, RwLock};
 use tracing::error;
 use trin_storage::ContentStore;
 
@@ -24,14 +24,13 @@ use crate::network::HistoryNetwork;
 /// Handles History network JSON-RPC requests
 pub struct HistoryRequestHandler {
     pub network: Arc<RwLock<HistoryNetwork>>,
-    pub history_rx: Arc<Mutex<mpsc::UnboundedReceiver<HistoryJsonRpcRequest>>>,
+    pub history_rx: mpsc::UnboundedReceiver<HistoryJsonRpcRequest>,
 }
 
 impl HistoryRequestHandler {
     /// Complete RPC requests for the History network.
-    pub async fn handle_client_queries(&self) {
-        let history_rx = self.history_rx.clone();
-        while let Some(request) = history_rx.lock().await.recv().await {
+    pub async fn handle_client_queries(mut self) {
+        while let Some(request) = self.history_rx.recv().await {
             let network = self.network.clone();
             tokio::spawn(async move { complete_request(network, request).await });
         }

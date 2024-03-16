@@ -22,7 +22,10 @@ use portalnet::{
     utils::db::setup_temp_dir,
 };
 use std::{io::ErrorKind, net::SocketAddr, str::FromStr, sync::Arc, time::Duration};
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{
+    mpsc::{self, Receiver},
+    RwLock,
+};
 use utp_rs::{conn::ConnectionConfig, socket::UtpSocket};
 
 /// uTP test app
@@ -132,7 +135,7 @@ impl RpcServer for TestApp {
 }
 
 impl TestApp {
-    pub async fn start(&self, mut talk_req_rx: mpsc::Receiver<TalkRequest>) {
+    pub async fn start(&self, mut talk_req_rx: Receiver<TalkRequest>) {
         let utp_talk_reqs_tx = self.utp_talk_req_tx.clone();
 
         // Forward discv5 uTP packets to uTP socket
