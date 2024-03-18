@@ -2,7 +2,7 @@ use crate::discovery::UtpEnr;
 use anyhow::anyhow;
 use lazy_static::lazy_static;
 use std::sync::Arc;
-use tokio::sync::Semaphore;
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use tracing::debug;
 use trin_metrics::{
     labels::{UtpDirectionLabel, UtpOutcomeLabel},
@@ -18,8 +18,8 @@ use utp_rs::{cid::ConnectionId, conn::ConnectionConfig, socket::UtpSocket};
 /// - killing bad uTP connections which won't send us data or is purposefully keeping the connection
 ///   open
 pub struct UtpController {
-    pub inbound_utp_transfer_semaphore: Arc<Semaphore>,
-    pub outbound_utp_transfer_semaphore: Arc<Semaphore>,
+    inbound_utp_transfer_semaphore: Arc<Semaphore>,
+    outbound_utp_transfer_semaphore: Arc<Semaphore>,
     utp_socket: Arc<UtpSocket<UtpEnr>>,
     metrics: OverlayMetricsReporter,
 }
@@ -49,6 +49,62 @@ impl UtpController {
             outbound_utp_transfer_semaphore: Arc::new(Semaphore::new(utp_transfer_limit)),
             metrics,
         }
+    }
+
+    pub fn cid(&self, peer: UtpEnr, is_initiator: bool) -> ConnectionId<UtpEnr> {
+        self.utp_socket.cid(peer, is_initiator)
+    }
+
+    /// Non-blocking method to try and acquire a permit for an outbound uTP transfer.
+    // `try_acquire_owned()` isn't blocking and will instantly return with
+    // `Some(TryAcquireError::NoPermits)` error if there isn't a permit avaliable
+    pub fn get_outbound_semaphore(&self) -> Option<OwnedSemaphorePermit> {
+        match self
+            .outbound_utp_transfer_semaphore
+            .clone()
+            .try_acquire_owned()
+        {
+            Ok(permit) => Some(permit),
+            Err(_) => None,
+        }
+    }
+
+    /// Non-blocking method to try and acquire a permit for an inbound uTP transfer.
+    // `try_acquire_owned()` isn't blocking and will instantly return with
+    // `Some(TryAcquireError::NoPermits)` error if there isn't a permit avaliable
+    pub fn get_inbound_semaphore(&self) -> Option<OwnedSemaphorePermit> {
+        match self
+            .inbound_utp_transfer_semaphore
+            .clone()
+            .try_acquire_owned()
+        {
+            Ok(permit) => Some(permit),
+            Err(_) => None,
+        }
+    }
+
+    pub async fn connect_inbound_stream(
+        &self,
+        cid: ConnectionId<UtpEnr>,
+    ) -> anyhow::Result<Vec<u8>> {
+        self.inbound_stream(cid, UtpConnectionSide::Connect).await
+    }
+
+    pub async fn accept_inbound_stream(
+        &self,
+        cid: ConnectionId<UtpEnr>,
+    ) -> anyhow::Result<Vec<u8>> {
+        self.inbound_stream(cid, UtpConnectionSide::Accept).await
+    }
+
+    pub async fn connect_outbound_stream(&self, cid: ConnectionId<UtpEnr>, data: Vec<u8>) -> bool {
+        self.outbound_stream(cid, data, UtpConnectionSide::Connect)
+            .await
+    }
+
+    pub async fn accept_outbound_stream(&self, cid: ConnectionId<UtpEnr>, data: Vec<u8>) -> bool {
+        self.outbound_stream(cid, data, UtpConnectionSide::Accept)
+            .await
     }
 
     async fn inbound_stream(
@@ -187,33 +243,5 @@ impl UtpController {
         self.metrics
             .report_utp_outcome(UtpDirectionLabel::Outbound, UtpOutcomeLabel::Success);
         true
-    }
-
-    pub fn cid(&self, peer: UtpEnr, is_initiator: bool) -> ConnectionId<UtpEnr> {
-        self.utp_socket.cid(peer, is_initiator)
-    }
-
-    pub async fn connect_inbound_stream(
-        &self,
-        cid: ConnectionId<UtpEnr>,
-    ) -> anyhow::Result<Vec<u8>> {
-        self.inbound_stream(cid, UtpConnectionSide::Connect).await
-    }
-
-    pub async fn accept_inbound_stream(
-        &self,
-        cid: ConnectionId<UtpEnr>,
-    ) -> anyhow::Result<Vec<u8>> {
-        self.inbound_stream(cid, UtpConnectionSide::Accept).await
-    }
-
-    pub async fn connect_outbound_stream(&self, cid: ConnectionId<UtpEnr>, data: Vec<u8>) -> bool {
-        self.outbound_stream(cid, data, UtpConnectionSide::Connect)
-            .await
-    }
-
-    pub async fn accept_outbound_stream(&self, cid: ConnectionId<UtpEnr>, data: Vec<u8>) -> bool {
-        self.outbound_stream(cid, data, UtpConnectionSide::Accept)
-            .await
     }
 }

@@ -1,18 +1,29 @@
+use std::{fmt, hash::Hash, ops::Deref};
+
+use quickcheck::{Arbitrary, Gen};
+
 use crate::{
     types::content_key::error::ContentKeyError,
     utils::bytes::{hex_decode, hex_encode, hex_encode_compact},
 };
-use quickcheck::{Arbitrary, Gen};
-use std::{fmt, ops::Deref};
 
 /// Types whose values represent keys to lookup content items in an overlay network.
 /// Keys are serializable.
 pub trait OverlayContentKey:
-    Into<Vec<u8>> + TryFrom<Vec<u8>, Error = ContentKeyError> + Clone + fmt::Debug + fmt::Display
+    Into<Vec<u8>>
+    + TryFrom<Vec<u8>, Error = ContentKeyError>
+    + Clone
+    + fmt::Debug
+    + fmt::Display
+    + Eq
+    + PartialEq
+    + Hash
+    + std::marker::Unpin
 {
     /// Returns the identifier for the content referred to by the key.
     /// The identifier locates the content in the overlay.
     fn content_id(&self) -> [u8; 32];
+
     /// Returns the bytes of the content key.
     fn to_bytes(&self) -> Vec<u8>;
 
@@ -20,6 +31,7 @@ pub trait OverlayContentKey:
     fn to_hex(&self) -> String {
         hex_encode(self.to_bytes())
     }
+
     /// Returns the content key from a hex encoded "0x"-prefixed string.
     fn from_hex(data: &str) -> anyhow::Result<Self> {
         let bytes = hex_decode(&data.to_lowercase())?;
@@ -29,7 +41,7 @@ pub trait OverlayContentKey:
 
 /// A content key type whose content id is the inner value. Allows for the construction
 /// of a content key with an arbitrary content ID.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct IdentityContentKey {
     value: [u8; 32],
 }

@@ -3,7 +3,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest as Sha2Digest, Sha256};
 use ssz::{Decode, DecodeError};
 use ssz_derive::{Decode, Encode};
-use std::fmt;
+use std::{fmt, hash::Hash};
 
 use crate::{
     types::content_key::{error::ContentKeyError, overlay::OverlayContentKey},
@@ -31,6 +31,12 @@ pub enum HistoryContentKey {
     BlockReceipts(BlockReceiptsKey),
     /// An epoch header accumulator.
     EpochAccumulator(EpochAccumulatorKey),
+}
+
+impl Hash for HistoryContentKey {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        state.write(&self.to_bytes());
+    }
 }
 
 impl Serialize for HistoryContentKey {

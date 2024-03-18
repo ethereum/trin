@@ -1,6 +1,7 @@
 #![warn(clippy::unwrap_used)]
 #![warn(clippy::uninlined_format_args)]
 
+pub mod accept_queue;
 pub mod config;
 pub mod discovery;
 pub mod events;
