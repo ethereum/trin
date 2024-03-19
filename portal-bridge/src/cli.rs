@@ -2,13 +2,15 @@ use std::{net::SocketAddr, path::PathBuf, str::FromStr};
 
 use clap::{Parser, Subcommand};
 use ethereum_types::H256;
-use ethportal_api::types::cli::check_private_key_length;
 use tokio::process::Child;
 use url::Url;
 
 use crate::{
     client_handles::{fluffy_handle, trin_handle},
     types::{mode::BridgeMode, network::NetworkKind},
+};
+use ethportal_api::types::cli::{
+    check_private_key_length, DEFAULT_DISCOVERY_PORT, DEFAULT_WEB3_HTTP_PORT,
 };
 
 // max value of 16 b/c...
@@ -95,6 +97,20 @@ pub struct BridgeConfig {
         help = "Data provider for consensus layer data. (\"pandaops\" / local node url)"
     )]
     pub cl_provider: Provider,
+
+    #[arg(
+        default_value_t = DEFAULT_DISCOVERY_PORT,
+        long = "base-discovery-port",
+        help = "The UDP port to listen on. If more than one node is launched, the additional ports will be incremented by 1."
+    )]
+    pub base_discovery_port: u16,
+
+    #[arg(
+        default_value_t = DEFAULT_WEB3_HTTP_PORT,
+        long = "base-rpc-port",
+        help = "The base jsonrpc port to listen on. If more than one node is launched, the additional ports will be incremented by 1."
+    )]
+    pub base_rpc_port: u16,
 }
 
 fn check_node_count(val: &str) -> Result<u8, String> {

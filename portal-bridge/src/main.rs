@@ -4,10 +4,7 @@ use clap::Parser;
 use tokio::time::{sleep, Duration};
 use tracing::Instrument;
 
-use ethportal_api::{
-    jsonrpsee::http_client::{HttpClient, HttpClientBuilder},
-    types::cli::{DEFAULT_DISCOVERY_PORT, DEFAULT_WEB3_HTTP_PORT},
-};
+use ethportal_api::jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
 use portal_bridge::{
     api::{consensus::ConsensusApi, execution::ExecutionApi},
     bridge::{beacon::BeaconBridge, era1::Era1Bridge, history::HistoryBridge},
@@ -28,8 +25,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut handles = vec![];
     let mut http_addresses = vec![];
     for (i, key) in private_keys.into_iter().enumerate() {
-        let web3_http_port = DEFAULT_WEB3_HTTP_PORT + i as u16;
-        let discovery_port = DEFAULT_DISCOVERY_PORT + i as u16;
+        let web3_http_port = bridge_config.base_rpc_port + i as u16;
+        let discovery_port = bridge_config.base_discovery_port + i as u16;
         let handle = bridge_config.client_type.build_handle(
             key,
             web3_http_port,
