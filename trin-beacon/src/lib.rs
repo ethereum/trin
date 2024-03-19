@@ -11,7 +11,7 @@ pub mod validation;
 use std::sync::Arc;
 
 use tokio::{
-    sync::{broadcast, mpsc, Mutex, RwLock},
+    sync::{broadcast, mpsc, RwLock},
     task::JoinHandle,
     time::{interval, Duration},
 };
@@ -61,7 +61,7 @@ pub async fn initialize_beacon_network(
     let beacon_event_stream = beacon_network.overlay.event_stream().await?;
     let beacon_handler = BeaconRequestHandler {
         network: Arc::new(RwLock::new(beacon_network.clone())),
-        rpc_rx: Arc::new(Mutex::new(beacon_jsonrpc_rx)),
+        rpc_rx: beacon_jsonrpc_rx,
     };
     let beacon_network = Arc::new(beacon_network);
     let beacon_network_task =

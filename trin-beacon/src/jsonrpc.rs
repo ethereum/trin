@@ -16,7 +16,7 @@ use ethportal_api::{
 };
 use portalnet::overlay::errors::OverlayRequestError;
 use serde_json::{json, Value};
-use tokio::sync::{mpsc, Mutex, RwLock};
+use tokio::sync::{mpsc, RwLock};
 use tracing::error;
 use trin_storage::ContentStore;
 
@@ -25,14 +25,13 @@ use crate::network::BeaconNetwork;
 /// Handles Beacon network JSON-RPC requests
 pub struct BeaconRequestHandler {
     pub network: Arc<RwLock<BeaconNetwork>>,
-    pub rpc_rx: Arc<Mutex<mpsc::UnboundedReceiver<BeaconJsonRpcRequest>>>,
+    pub rpc_rx: mpsc::UnboundedReceiver<BeaconJsonRpcRequest>,
 }
 
 impl BeaconRequestHandler {
     /// Complete RPC requests for the Beacon network.
-    pub async fn handle_client_queries(&self) {
-        let rpc_rx = self.rpc_rx.clone();
-        while let Some(request) = rpc_rx.lock().await.recv().await {
+    pub async fn handle_client_queries(mut self) {
+        while let Some(request) = self.rpc_rx.recv().await {
             let network = self.network.clone();
             tokio::spawn(async move { complete_request(network, request).await });
         }

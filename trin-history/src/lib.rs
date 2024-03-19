@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use network::HistoryNetwork;
 use tokio::{
-    sync::{broadcast, mpsc, Mutex, RwLock},
+    sync::{broadcast, mpsc, RwLock},
     task::JoinHandle,
     time::{interval, Duration},
 };
@@ -63,7 +63,7 @@ pub async fn initialize_history_network(
     let event_stream = history_network.overlay.event_stream().await?;
     let history_handler = HistoryRequestHandler {
         network: Arc::new(RwLock::new(history_network.clone())),
-        history_rx: Arc::new(Mutex::new(history_jsonrpc_rx)),
+        history_rx: history_jsonrpc_rx,
     };
     let history_network = Arc::new(history_network);
     let history_network_task =
