@@ -30,6 +30,7 @@ jsonrpsee = { version = "0.20.0", features = [
 ] }
 lazy_static = "1.4.0"
 portalnet = { path = "../portalnet" }
+prometheus_exporter = "0.8.4"
 rand = "0.8.4"
 rlp = "0.5.0"
 scraper = "0.18.1"
@@ -42,6 +43,7 @@ surf = { version = "2.3.2", default-features = false, features = ["h1-client-rus
 tokio = { version = "1.14.0", features = ["full"] }
 tracing = "0.1.36"
 tracing-subscriber = "0.3.15"
+trin-metrics = { path = "../trin-metrics" }
 trin-utils = { path = "../trin-utils" }
 trin-validation = { path = "../trin-validation" }
 url = "2.3.1"

@@ -20,6 +20,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     init_tracing_logger();
 
     let bridge_config = BridgeConfig::parse();
+
+    if let Some(addr) = bridge_config.metrics_url {
+        prometheus_exporter::start(addr)?;
+    }
+
     let private_keys =
         generate_spaced_private_keys(bridge_config.node_count, bridge_config.root_private_key);
     let mut handles = vec![];

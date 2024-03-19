@@ -11,6 +11,7 @@ use tokio::{
     time::{sleep, timeout, Duration},
 };
 use tracing::{debug, error, info, warn, Instrument};
+use trin_metrics::bridge::BridgeMetricsReporter;
 
 use crate::{
     api::execution::ExecutionApi,
@@ -42,6 +43,7 @@ pub struct HistoryBridge {
     pub execution_api: ExecutionApi,
     pub header_oracle: HeaderOracle,
     pub epoch_acc_path: PathBuf,
+    pub metrics: BridgeMetricsReporter,
 }
 
 impl HistoryBridge {
@@ -52,12 +54,14 @@ impl HistoryBridge {
         header_oracle: HeaderOracle,
         epoch_acc_path: PathBuf,
     ) -> Self {
+        let metrics = BridgeMetricsReporter::new("history".to_string(), &format!("{mode:?}"));
         Self {
             mode,
             portal_clients,
             execution_api,
             header_oracle,
             epoch_acc_path,
+            metrics,
         }
     }
 }
@@ -130,6 +134,7 @@ impl HistoryBridge {
                         self.portal_clients.clone(),
                         self.execution_api.clone(),
                         None,
+                        self.metrics.clone(),
                     );
                 }
                 block_index = gossip_range.end;
@@ -189,6 +194,7 @@ impl HistoryBridge {
                 self.portal_clients.clone(),
                 self.execution_api.clone(),
                 Some(permit),
+                self.metrics.clone(),
             ));
         }
 
@@ -203,11 +209,13 @@ impl HistoryBridge {
         portal_clients: Vec<HttpClient>,
         execution_api: ExecutionApi,
         permit: Option<OwnedSemaphorePermit>,
+        metrics: BridgeMetricsReporter,
     ) -> JoinHandle<()> {
         tokio::spawn(async move {
+            let timer = metrics.start_process_timer("spawn_serve_full_block");
             match timeout(
                 SERVE_BLOCK_TIMEOUT,
-                Self::serve_full_block(height, epoch_acc, portal_clients, execution_api)
+                Self::serve_full_block(height, epoch_acc, portal_clients, execution_api, metrics.clone())
                     .in_current_span(),
             )
             .await {
@@ -220,6 +228,7 @@ impl HistoryBridge {
             if let Some(permit) = permit {
                 drop(permit);
             }
+            metrics.stop_process_timer(timer);
         })
     }
 
@@ -228,8 +237,10 @@ impl HistoryBridge {
         epoch_acc: Option<Arc<EpochAccumulator>>,
         portal_clients: Vec<HttpClient>,
         execution_api: ExecutionApi,
+        metrics: BridgeMetricsReporter,
     ) -> anyhow::Result<()> {
         info!("Serving block: {height}");
+        let timer = metrics.start_process_timer("construct_and_gossip_header");
         let (full_header, header_content_key, header_content_value) =
             execution_api.get_header(height, epoch_acc).await?;
         let block_stats = Arc::new(Mutex::new(HistoryBlockStats::new(
@@ -247,10 +258,12 @@ impl HistoryBridge {
         {
             warn!("Error gossiping HeaderWithProof #{height:?}: {msg:?}");
         };
+        metrics.stop_process_timer(timer);
 
         // Sleep for 10 seconds to allow headers to saturate network,
         // since they must be available for body / receipt validation.
         sleep(Duration::from_secs(HEADER_SATURATION_DELAY)).await;
+        let timer = metrics.start_process_timer("construct_and_gossip_block_body");
         if let Err(msg) = HistoryBridge::construct_and_gossip_block_body(
             &full_header,
             &portal_clients,
@@ -261,7 +274,8 @@ impl HistoryBridge {
         {
             warn!("Error gossiping block body #{height:?}: {msg:?}");
         };
-
+        metrics.stop_process_timer(timer);
+        let timer = metrics.start_process_timer("construct_and_gossip_receipts");
         if let Err(msg) = HistoryBridge::construct_and_gossip_receipt(
             &full_header,
             &portal_clients,
@@ -272,7 +286,7 @@ impl HistoryBridge {
         {
             warn!("Error gossiping block receipt #{height:?}: {msg:?}");
         };
-
+        metrics.stop_process_timer(timer);
         if let Ok(stats) = block_stats.lock() {
             stats.report();
         } else {

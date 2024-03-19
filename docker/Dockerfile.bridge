@@ -56,6 +56,6 @@ COPY --from=builder /trin/target/release/poll_latest /usr/bin/
 
 RUN apt-get update && apt-get install libcurl4 -y
 
-ENV RUST_LOG=debug
+ENV RUST_LOG=error,portal_bridge=debug,portalnet=info
 
 ENTRYPOINT ["/usr/bin/portal-bridge"]

@@ -22,9 +22,9 @@ pub fn fluffy_handle(
         .arg(format!("--udp-port:{udp_port}"))
         .arg(format!("--nat:extip:{}", ip.ip()))
         .arg(format!("--netkey-unsafe:{private_key}"));
-    if let Some(metrics_url) = bridge_config.metrics_url {
-        let address = metrics_url.ip().to_string();
-        let port = metrics_url.port();
+    if let Some(client_metrics_url) = bridge_config.client_metrics_url {
+        let address = client_metrics_url.ip().to_string();
+        let port = client_metrics_url.port();
         command
             .arg("--metrics")
             .arg(format!("--metrics-address:{address}"))
@@ -71,8 +71,8 @@ pub fn trin_handle(
     if let Some(ip) = bridge_config.external_ip {
         command.args(["--external-address", &format!("{ip}:{udp_port}")]);
     }
-    if let Some(metrics_url) = bridge_config.metrics_url {
-        let url: String = metrics_url.to_string();
+    if let Some(client_metrics_url) = bridge_config.client_metrics_url {
+        let url: String = client_metrics_url.to_string();
         command.args(["--enable-metrics-with-url", &url]);
     }
     Ok(command.spawn()?)

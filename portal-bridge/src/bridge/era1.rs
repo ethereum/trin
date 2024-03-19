@@ -15,6 +15,7 @@ use tokio::{
     time::timeout,
 };
 use tracing::{debug, error, info, warn};
+use trin_metrics::bridge::BridgeMetricsReporter;
 
 use crate::{
     api::execution::construct_proof,
@@ -48,6 +49,7 @@ pub struct Era1Bridge {
     pub epoch_acc_path: PathBuf,
     pub era1_files: Vec<String>,
     pub http_client: Client,
+    pub metrics: BridgeMetricsReporter,
 }
 
 // todo: validate via checksum, so we don't have to validate content on a per-value basis
@@ -63,6 +65,7 @@ impl Era1Bridge {
             .expect("to be able to add header")
             .try_into()?;
         let era1_files = get_shuffled_era1_files(&http_client).await?;
+        let metrics = BridgeMetricsReporter::new("era1".to_string(), &format!("{mode:?}"));
         Ok(Self {
             mode,
             portal_clients,
@@ -70,6 +73,7 @@ impl Era1Bridge {
             epoch_acc_path,
             era1_files,
             http_client,
+            metrics,
         })
     }
 
@@ -144,7 +148,7 @@ impl Era1Bridge {
             }
         };
         let master_acc = Arc::new(self.header_oracle.master_acc.clone());
-        let mut serve_block_tuple_handles = vec![];
+        let mut serve_block_tuple_handles: Vec<JoinHandle<()>> = vec![];
         let block_tuples = match gossip_range {
             Some(range) => era1
                 .block_tuples
@@ -169,6 +173,7 @@ impl Era1Bridge {
                 epoch_acc.clone(),
                 master_acc.clone(),
                 permit,
+                self.metrics.clone(),
             );
             serve_block_tuple_handles.push(serve_block_tuple_handle);
         }
@@ -211,11 +216,13 @@ impl Era1Bridge {
         epoch_acc: Arc<EpochAccumulator>,
         master_acc: Arc<MasterAccumulator>,
         permit: OwnedSemaphorePermit,
+        metrics: BridgeMetricsReporter,
     ) -> JoinHandle<()> {
         let number = block_tuple.header.header.number;
         info!("Spawning serve_block_tuple for block at height: {number}",);
         let block_stats = Arc::new(Mutex::new(HistoryBlockStats::new(number)));
         tokio::spawn(async move {
+            let timer = metrics.start_process_timer("spawn_serve_block_tuple");
             match timeout(
                 SERVE_BLOCK_TIMEOUT,
                 Self::serve_block_tuple(
@@ -224,6 +231,7 @@ impl Era1Bridge {
                     epoch_acc,
                     master_acc,
                     block_stats.clone(),
+                    metrics.clone()
                 )).await
                 {
                 Ok(result) => match result {
@@ -237,7 +245,13 @@ impl Era1Bridge {
                 },
                 Err(_) => error!("serve_full_block() timed out on height {number}: this is an indication a bug is present")
             };
+            if let Ok(stats) = block_stats.lock() {
+                stats.report();
+            } else {
+                warn!("Error displaying history gossip stats. Unable to acquire lock.");
+            }
             drop(permit);
+            metrics.stop_process_timer(timer);
         })
     }
 
@@ -247,11 +261,13 @@ impl Era1Bridge {
         epoch_acc: Arc<EpochAccumulator>,
         master_acc: Arc<MasterAccumulator>,
         block_stats: Arc<Mutex<HistoryBlockStats>>,
+        metrics: BridgeMetricsReporter,
     ) -> anyhow::Result<()> {
         info!(
             "Serving block tuple at height: {}",
             block_tuple.header.header.number
         );
+        let timer = metrics.start_process_timer("construct_and_gossip_header");
         match Self::construct_and_gossip_header(
             portal_clients.clone(),
             block_tuple.clone(),
@@ -261,11 +277,15 @@ impl Era1Bridge {
         )
         .await
         {
-            Ok(_) => debug!(
-                "Successfully served block tuple header at height: {:?}",
-                block_tuple.header.header.number
-            ),
+            Ok(_) => {
+                metrics.report_gossip_success(true, "header");
+                debug!(
+                    "Successfully served block tuple header at height: {:?}",
+                    block_tuple.header.header.number
+                )
+            }
             Err(msg) => {
+                metrics.report_gossip_success(false, "header");
                 warn!(
                     "Error serving block tuple header at height, will not gossip remaining block content: {:?} - {:?}",
                     block_tuple.header.header.number, msg
@@ -277,7 +297,8 @@ impl Era1Bridge {
                 return Ok(());
             }
         }
-
+        metrics.stop_process_timer(timer);
+        let timer = metrics.start_process_timer("construct_and_gossip_block_body");
         match Self::construct_and_gossip_block_body(
             portal_clients.clone(),
             block_tuple.clone(),
@@ -285,16 +306,23 @@ impl Era1Bridge {
         )
         .await
         {
-            Ok(_) => debug!(
-                "Successfully served block body at height: {:?}",
-                block_tuple.header.header.number
-            ),
-            Err(msg) => warn!(
-                "Error serving block body at height: {:?} - {:?}",
-                block_tuple.header.header.number, msg
-            ),
+            Ok(_) => {
+                metrics.report_gossip_success(true, "block_body");
+                debug!(
+                    "Successfully served block body at height: {:?}",
+                    block_tuple.header.header.number
+                )
+            }
+            Err(msg) => {
+                metrics.report_gossip_success(false, "block_body");
+                warn!(
+                    "Error serving block body at height: {:?} - {:?}",
+                    block_tuple.header.header.number, msg
+                )
+            }
         }
-
+        metrics.stop_process_timer(timer);
+        let timer = metrics.start_process_timer("construct_and_gossip_receipts");
         match Self::construct_and_gossip_receipts(
             portal_clients.clone(),
             block_tuple.clone(),
@@ -302,15 +330,22 @@ impl Era1Bridge {
         )
         .await
         {
-            Ok(_) => debug!(
-                "Successfully served block receipts at height: {:?}",
-                block_tuple.header.header.number
-            ),
-            Err(msg) => warn!(
-                "Error serving block receipts at height: {:?} - {:?}",
-                block_tuple.header.header.number, msg
-            ),
+            Ok(_) => {
+                metrics.report_gossip_success(true, "receipt");
+                debug!(
+                    "Successfully served block receipts at height: {:?}",
+                    block_tuple.header.header.number
+                )
+            }
+            Err(msg) => {
+                metrics.report_gossip_success(false, "receipt");
+                warn!(
+                    "Error serving block receipts at height: {:?} - {:?}",
+                    block_tuple.header.header.number, msg
+                )
+            }
         }
+        metrics.stop_process_timer(timer);
         Ok(())
     }
 
