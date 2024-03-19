@@ -61,11 +61,11 @@ pub async fn initialize_history_network(
     )
     .await?;
     let event_stream = history_network.overlay.event_stream().await?;
+    let history_network = Arc::new(history_network);
     let history_handler = HistoryRequestHandler {
-        network: Arc::new(RwLock::new(history_network.clone())),
+        network: history_network.clone(),
         history_rx: history_jsonrpc_rx,
     };
-    let history_network = Arc::new(history_network);
     let history_network_task =
         spawn_history_network(history_network.clone(), portalnet_config, history_event_rx);
     spawn_history_heartbeat(history_network);
