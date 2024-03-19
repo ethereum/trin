@@ -1,6 +1,6 @@
 use std::{collections::HashSet, str::FromStr};
 
-use tracing::{info, trace};
+use tracing::{debug, info};
 
 use ethportal_api::{
     jsonrpsee::core::Error,
@@ -36,93 +36,22 @@ impl StatsReporter<BeaconContentKey> for BeaconSlotStats {
     }
 
     fn report(&self) {
+        let slot_number = self.slot_number;
         if let Some(stats) = &self.bootstrap {
-            info!(
-                "GossipReport: slot#{} - bootstrap - {}",
-                self.slot_number,
-                stats.report()
-            );
-            trace!(
-                "GossipReport: slot#{} - bootstrap - offered {:?}",
-                self.slot_number,
-                stats.offered
-            );
-            trace!(
-                "GossipReport: slot#{} - bootstrap - accepted {:?}",
-                self.slot_number,
-                stats.accepted
-            );
-            trace!(
-                "GossipReport: slot#{} - bootstrap - transferred {:?}",
-                self.slot_number,
-                stats.transferred
-            );
+            info!("GossipReport: slot#{slot_number} - bootstrap - {stats}");
+            debug!("GossipReport: slot#{slot_number} - bootstrap - offered {stats:?}");
         }
         if let Some(stats) = &self.update {
-            info!(
-                "GossipReport: slot#{} - update - {}",
-                self.slot_number,
-                stats.report()
-            );
-            trace!(
-                "GossipReport: slot#{} - update - offered {:?}",
-                self.slot_number,
-                stats.offered
-            );
-            trace!(
-                "GossipReport: slot#{} - update - accepted {:?}",
-                self.slot_number,
-                stats.accepted
-            );
-            trace!(
-                "GossipReport: slot#{} - update - transferred {:?}",
-                self.slot_number,
-                stats.transferred
-            );
+            info!("GossipReport: slot#{slot_number} - update - {stats}");
+            debug!("GossipReport: slot#{slot_number} - update - offered {stats:?}");
         }
         if let Some(stats) = &self.finality_update {
-            info!(
-                "GossipReport: slot#{} - finality_update - {}",
-                self.slot_number,
-                stats.report()
-            );
-            trace!(
-                "GossipReport: slot#{} - finality_update - offered {:?}",
-                self.slot_number,
-                stats.offered
-            );
-            trace!(
-                "GossipReport: slot#{} - finality_update - accepted {:?}",
-                self.slot_number,
-                stats.accepted
-            );
-            trace!(
-                "GossipReport: slot#{} - finality_update - transferred {:?}",
-                self.slot_number,
-                stats.transferred
-            );
+            info!("GossipReport: slot#{slot_number} - finality_update - {stats}");
+            debug!("GossipReport: slot#{slot_number} - finality_update - offered {stats:?}");
         }
         if let Some(stats) = &self.optimistic_update {
-            info!(
-                "GossipReport: slot#{} - optimistic_update - {}",
-                self.slot_number,
-                stats.report()
-            );
-            trace!(
-                "GossipReport: slot#{} - optimistic_update - offered {:?}",
-                self.slot_number,
-                stats.offered
-            );
-            trace!(
-                "GossipReport: slot#{} - optimistic_update - accepted {:?}",
-                self.slot_number,
-                stats.accepted
-            );
-            trace!(
-                "GossipReport: slot#{} - optimistic_update - transferred {:?}",
-                self.slot_number,
-                stats.transferred
-            );
+            info!("GossipReport: slot#{slot_number} - optimistic_update - {stats}");
+            debug!("GossipReport: slot#{slot_number} - optimistic_update - {stats:?}");
         }
     }
 
@@ -163,93 +92,22 @@ impl StatsReporter<HistoryContentKey> for HistoryBlockStats {
     }
 
     fn report(&self) {
+        let block_number = self.block_number;
         if let Some(stats) = &self.header_with_proof {
-            info!(
-                "GossipReport: block#{}: header_with_proof - {}",
-                self.block_number,
-                stats.report()
-            );
-            trace!(
-                "GossipReport: block#{}: header_with_proof - offered {:?}",
-                self.block_number,
-                stats.offered
-            );
-            trace!(
-                "GossipReport: block#{}: header_with_proof - accepted {:?}",
-                self.block_number,
-                stats.accepted
-            );
-            trace!(
-                "GossipReport: block#{}: header_with_proof - transferred {:?}",
-                self.block_number,
-                stats.transferred
-            );
+            info!("GossipReport: block#{block_number}: header_with_proof - {stats}");
+            debug!("GossipReport: block#{block_number}: header_with_proof - {stats:?}",);
         }
         if let Some(stats) = &self.block_body {
-            info!(
-                "GossipReport: block#{}: block_body - {}",
-                self.block_number,
-                stats.report()
-            );
-            trace!(
-                "GossipReport: block#{}: block_body - offered {:?}",
-                self.block_number,
-                stats.offered
-            );
-            trace!(
-                "GossipReport: block#{}: block_body - accepted {:?}",
-                self.block_number,
-                stats.accepted
-            );
-            trace!(
-                "GossipReport: block#{}: block_body - transferred {:?}",
-                self.block_number,
-                stats.transferred
-            );
+            info!("GossipReport: block#{block_number}: block_body - {stats}");
+            debug!("GossipReport: block#{block_number}: block_body - {stats:?}",);
         }
         if let Some(stats) = &self.receipts {
-            info!(
-                "GossipReport: block#{}: receipts - {}",
-                self.block_number,
-                stats.report()
-            );
-            trace!(
-                "GossipReport: block#{}: receipts - offered {:?}",
-                self.block_number,
-                stats.offered
-            );
-            trace!(
-                "GossipReport: block#{}: receipts - accepted {:?}",
-                self.block_number,
-                stats.accepted
-            );
-            trace!(
-                "GossipReport: block#{}: receipts - transferred {:?}",
-                self.block_number,
-                stats.transferred
-            );
+            info!("GossipReport: block#{block_number}: receipts - {stats}");
+            debug!("GossipReport: block#{block_number}: receipts - {stats:?}",);
         }
         if let Some(stats) = &self.epoch_accumulator {
-            info!(
-                "GossipReport: block#{}: epoch_accumulator - {}",
-                self.block_number,
-                stats.report()
-            );
-            trace!(
-                "GossipReport: block#{}: epoch_accumulator - offered {:?}",
-                self.block_number,
-                stats.offered
-            );
-            trace!(
-                "GossipReport: block#{}: epoch_accumulator - accepted {:?}",
-                self.block_number,
-                stats.accepted
-            );
-            trace!(
-                "GossipReport: block#{}: epoch_accumulator - transferred {:?}",
-                self.block_number,
-                stats.transferred
-            );
+            info!("GossipReport: block#{block_number}: epoch_accumulator - {stats}");
+            debug!("GossipReport: block#{block_number}: epoch_accumulator - {stats:?}");
         }
     }
 
@@ -279,7 +137,7 @@ impl StatsReporter<HistoryContentKey> for HistoryBlockStats {
 // Currently, this is just to simplify, but if there's a use case where it makes sense to record
 // duplicate offers to the same peer, we can change this, by removing the double count check in the
 // From impl below.
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Default)]
 pub struct ContentStats {
     // use hashset so peers aren't double-counted across clients
     pub offered: HashSet<Enr>,
@@ -289,9 +147,34 @@ pub struct ContentStats {
     pub failures: u64,
 }
 
-impl ContentStats {
-    pub fn report(&self) -> String {
-        format!(
+impl std::fmt::Debug for ContentStats {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let offered_enrs = self
+            .offered
+            .iter()
+            .map(|enr| enr.to_string())
+            .collect::<Vec<String>>();
+        let accepted_enrs = self
+            .accepted
+            .iter()
+            .map(|enr| enr.to_string())
+            .collect::<Vec<String>>();
+        let transferred_enrs = self
+            .transferred
+            .iter()
+            .map(|enr| enr.to_string())
+            .collect::<Vec<String>>();
+        let message = format!(
+            "\noffered: {offered_enrs:?}\naccepted: {accepted_enrs:?}\ntransferred: {transferred_enrs:?}"
+        );
+        write!(f, "{message}")
+    }
+}
+
+impl std::fmt::Display for ContentStats {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
             "offered: {}, accepted: {}, transferred: {}, retries: {}, failures: {}",
             self.offered.len(),
             self.accepted.len(),

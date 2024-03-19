@@ -229,7 +229,9 @@ impl Era1Bridge {
                 Ok(result) => match result {
                     Ok(_) => {
                         debug!("Done serving block: {number}");
-                        block_stats.lock().unwrap().report();
+                        if let Ok(stats) = block_stats.lock() {
+                            stats.report();
+                        }
                     }
                     Err(msg) => warn!("Error serving block: {number}: {msg:?}"),
                 },
