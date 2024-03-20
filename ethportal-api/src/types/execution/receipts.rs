@@ -323,9 +323,45 @@ impl Encodable for Receipt {
     fn rlp_append(&self, s: &mut RlpStream) {
         match self {
             Receipt::Legacy(receipt) => receipt.rlp_append(s),
-            Receipt::AccessList(receipt) => receipt.rlp_append(s),
-            Receipt::EIP1559(receipt) => receipt.rlp_append(s),
-            Receipt::Blob(receipt) => receipt.rlp_append(s),
+            Receipt::AccessList(receipt) => {
+                let mut stream = RlpStream::new();
+                receipt.rlp_append(&mut stream);
+                let encoded =
+                    rlp::encode(&[&[TransactionId::AccessList as u8], stream.as_raw()].concat());
+                s.append_raw(&encoded, 1);
+            }
+            Receipt::EIP1559(receipt) => {
+                let mut stream = RlpStream::new();
+                receipt.rlp_append(&mut stream);
+                let encoded =
+                    rlp::encode(&[&[TransactionId::EIP1559 as u8], stream.as_raw()].concat());
+                s.append_raw(&encoded, 1);
+            }
+            Receipt::Blob(receipt) => {
+                let mut stream = RlpStream::new();
+                receipt.rlp_append(&mut stream);
+                let encoded =
+                    rlp::encode(&[&[TransactionId::Blob as u8], stream.as_raw()].concat());
+                s.append_raw(&encoded, 1);
+            }
+        }
+    }
+}
+
+impl Decodable for Receipt {
+    fn decode(rlp: &Rlp) -> Result<Self, DecoderError> {
+        // try to decode as legacy receipt
+        if let Ok(val) = LegacyReceipt::decode(rlp) {
+            return Ok(Receipt::Legacy(val));
+        }
+        // try to decode as typed receipt
+        let typed_receipt: Vec<u8> = rlp.data()?.to_vec();
+        let tx_type = TransactionId::try_from(typed_receipt[0])?;
+        match tx_type {
+            TransactionId::AccessList => Ok(Receipt::AccessList(rlp::decode(&typed_receipt[1..])?)),
+            TransactionId::EIP1559 => Ok(Receipt::EIP1559(rlp::decode(&typed_receipt[1..])?)),
+            TransactionId::Blob => Ok(Receipt::Blob(rlp::decode(&typed_receipt[1..])?)),
+            TransactionId::Legacy => Ok(Receipt::Legacy(rlp::decode(&typed_receipt[1..])?)),
         }
     }
 }
@@ -336,6 +372,13 @@ impl Encodable for Receipts {
         for receipt in self.receipt_list.clone() {
             receipt.rlp_append(s);
         }
+    }
+}
+
+impl Decodable for Receipts {
+    fn decode(rlp: &Rlp) -> Result<Self, DecoderError> {
+        let receipt_list: Vec<Receipt> = rlp.as_list()?;
+        Ok(Self { receipt_list })
     }
 }
 

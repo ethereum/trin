@@ -67,7 +67,7 @@ impl Era1 {
 
     #[allow(dead_code)]
     fn write(&self) -> anyhow::Result<Vec<u8>> {
-        let mut entries: Vec<Entry> = vec![];
+        let mut entries: Vec<Entry> = Vec::with_capacity(ERA1_ENTRY_COUNT);
         let version_entry: Entry = self.version.clone().try_into()?;
         entries.push(version_entry);
         for block_tuple in &self.block_tuples {
@@ -226,6 +226,12 @@ impl TryFrom<&Entry> for BodyEntry {
         let mut buf: Vec<u8> = vec![];
         decoder.read_to_end(&mut buf)?;
         let body = rlp::decode(&buf)?;
+        if !matches!(body, BlockBody::Legacy(_)) {
+            // all era1 block bodies should be legacy, not merge or shanghai
+            return Err(anyhow::anyhow!(
+                "invalid body entry: incorrect body type: expected legacy, got {body:?}"
+            ));
+        }
         Ok(Self { body })
     }
 }
@@ -263,12 +269,7 @@ impl TryFrom<&Entry> for ReceiptsEntry {
         let mut decoder = snap::read::FrameDecoder::new(&entry.value[..]);
         let mut buf: Vec<u8> = vec![];
         decoder.read_to_end(&mut buf)?;
-        let encoded_receipts: Vec<LegacyReceipt> = rlp::decode_list(&buf);
-        let receipt_list = encoded_receipts
-            .iter()
-            .map(|r| Receipt::Legacy(r.clone()))
-            .collect();
-        let receipts = Receipts { receipt_list };
+        let receipts = rlp::decode(&buf)?;
         Ok(Self { receipts })
     }
 }
@@ -448,10 +449,11 @@ mod tests {
     #[case::era1("../test_assets/era1/mainnet-00001-a5364e9a.era1")]
     // epoch #10 contains txs
     #[case::era1("../test_assets/era1/mainnet-00010-5f5d4516.era1")]
+    //#[case::era1("../test_assets/era1/mainnet-01500-17e97c49.era1")]
     fn test_era1(#[case] path: &str) {
         let era1 = Era1::read_from_file(path.to_string()).unwrap();
-        let actual = era1.write().unwrap();
+        let encoded = era1.write().unwrap();
         let expected = fs::read(path).unwrap();
-        assert_eq!(expected, actual);
+        assert_eq!(expected, encoded);
     }
 }

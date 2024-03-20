@@ -30,19 +30,22 @@ impl Encodable for Transaction {
             Self::AccessList(tx) => {
                 let mut stream = RlpStream::new();
                 tx.rlp_append(&mut stream);
-                let encoded = [&[TransactionId::AccessList as u8], stream.as_raw()].concat();
+                let encoded =
+                    rlp::encode(&[&[TransactionId::AccessList as u8], stream.as_raw()].concat());
                 s.append_raw(&encoded, 1);
             }
             Self::EIP1559(tx) => {
                 let mut stream = RlpStream::new();
                 tx.rlp_append(&mut stream);
-                let encoded = [&[TransactionId::EIP1559 as u8], stream.as_raw()].concat();
+                let encoded =
+                    rlp::encode(&[&[TransactionId::EIP1559 as u8], stream.as_raw()].concat());
                 s.append_raw(&encoded, 1);
             }
             Self::Blob(tx) => {
                 let mut stream = RlpStream::new();
                 tx.rlp_append(&mut stream);
-                let encoded = [&[TransactionId::Blob as u8], stream.as_raw()].concat();
+                let encoded =
+                    rlp::encode(&[&[TransactionId::Blob as u8], stream.as_raw()].concat());
                 s.append_raw(&encoded, 1);
             }
         }
@@ -55,13 +58,18 @@ impl Decodable for Transaction {
         if rlp.as_raw().is_empty() {
             return Err(DecoderError::RlpIncorrectListLen);
         }
-        let id = TransactionId::try_from(rlp.as_raw()[0])
-            .map_err(|_| DecoderError::Custom("Unknown transaction id"))?;
-        match id {
-            TransactionId::EIP1559 => Ok(Self::EIP1559(rlp::decode(&rlp.as_raw()[1..])?)),
-            TransactionId::AccessList => Ok(Self::AccessList(rlp::decode(&rlp.as_raw()[1..])?)),
-            TransactionId::Legacy => Ok(Self::Legacy(rlp::decode(rlp.as_raw())?)),
-            TransactionId::Blob => Ok(Self::Blob(rlp::decode(rlp.as_raw())?)),
+        // try to decode as legacy transaction
+        if let Ok(val) = LegacyTransaction::decode(rlp) {
+            return Ok(Self::Legacy(val));
+        }
+        // try to decode as typed transaction
+        let typed_tx: Vec<u8> = rlp.data()?.to_vec();
+        let tx_type = TransactionId::try_from(typed_tx[0])?;
+        match tx_type {
+            TransactionId::EIP1559 => Ok(Self::EIP1559(rlp::decode(&typed_tx[1..])?)),
+            TransactionId::AccessList => Ok(Self::AccessList(rlp::decode(&typed_tx[1..])?)),
+            TransactionId::Blob => Ok(Self::Blob(rlp::decode(&typed_tx[1..])?)),
+            TransactionId::Legacy => Ok(Self::Legacy(rlp::decode(&typed_tx[1..])?)),
         }
     }
 }
