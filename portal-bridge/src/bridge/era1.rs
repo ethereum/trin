@@ -148,7 +148,7 @@ impl Era1Bridge {
             }
         };
         let master_acc = Arc::new(self.header_oracle.master_acc.clone());
-        let mut serve_block_tuple_handles: Vec<JoinHandle<()>> = vec![];
+        let mut serve_block_tuple_handles = vec![];
         let block_tuples = match gossip_range {
             Some(range) => era1
                 .block_tuples
@@ -245,11 +245,6 @@ impl Era1Bridge {
                 },
                 Err(_) => error!("serve_full_block() timed out on height {number}: this is an indication a bug is present")
             };
-            if let Ok(stats) = block_stats.lock() {
-                stats.report();
-            } else {
-                warn!("Error displaying history gossip stats. Unable to acquire lock.");
-            }
             drop(permit);
             metrics.stop_process_timer(timer);
         })
