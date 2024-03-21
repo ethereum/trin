@@ -105,10 +105,10 @@ pub mod test {
         let conn = config.sql_connection_pool.get()?;
 
         // Set store version
-        update_store_info(&ContentType::State, StoreVersion::IdIndexedLegacy, &conn)?;
+        update_store_info(&ContentType::State, StoreVersion::LegacyHistory, &conn)?;
         assert_eq!(
             lookup_store_version(&ContentType::State, &conn)?,
-            Some(StoreVersion::IdIndexedLegacy)
+            Some(StoreVersion::LegacyHistory)
         );
 
         // Update store version
@@ -174,7 +174,7 @@ pub mod test {
 
         update_store_info(
             &ContentType::State,
-            StoreVersion::IdIndexedLegacy,
+            StoreVersion::LegacyHistory,
             &sql_connection_pool.get().unwrap(),
         )
         .unwrap();
