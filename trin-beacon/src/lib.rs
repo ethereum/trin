@@ -59,11 +59,11 @@ pub async fn initialize_beacon_network(
     )
     .await?;
     let beacon_event_stream = beacon_network.overlay.event_stream().await?;
+    let beacon_network = Arc::new(beacon_network);
     let beacon_handler = BeaconRequestHandler {
-        network: Arc::new(RwLock::new(beacon_network.clone())),
+        network: beacon_network.clone(),
         rpc_rx: beacon_jsonrpc_rx,
     };
-    let beacon_network = Arc::new(beacon_network);
     let beacon_network_task =
         spawn_beacon_network(beacon_network.clone(), portalnet_config, beacon_message_rx);
     spawn_beacon_heartbeat(beacon_network);

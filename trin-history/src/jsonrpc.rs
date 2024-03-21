@@ -15,7 +15,7 @@ use ethportal_api::{
 };
 use portalnet::overlay::errors::OverlayRequestError;
 use serde_json::{json, Value};
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::mpsc;
 use tracing::error;
 use trin_storage::ContentStore;
 
@@ -23,7 +23,7 @@ use crate::network::HistoryNetwork;
 
 /// Handles History network JSON-RPC requests
 pub struct HistoryRequestHandler {
-    pub network: Arc<RwLock<HistoryNetwork>>,
+    pub network: Arc<HistoryNetwork>,
     pub history_rx: mpsc::UnboundedReceiver<HistoryJsonRpcRequest>,
 }
 
@@ -38,7 +38,7 @@ impl HistoryRequestHandler {
 }
 
 /// Generates a response for a given request and sends it to the receiver.
-async fn complete_request(network: Arc<RwLock<HistoryNetwork>>, request: HistoryJsonRpcRequest) {
+async fn complete_request(network: Arc<HistoryNetwork>, request: HistoryJsonRpcRequest) {
     let response: Result<Value, String> = match request.endpoint {
         HistoryEndpoint::LocalContent(content_key) => local_content(network, content_key).await,
         HistoryEndpoint::PaginateLocalContentKeys(offset, limit) => {
@@ -55,7 +55,7 @@ async fn complete_request(network: Arc<RwLock<HistoryNetwork>>, request: History
         }
         HistoryEndpoint::AddEnr(enr) => add_enr(network, enr).await,
         HistoryEndpoint::DataRadius => {
-            let radius = network.read().await.overlay.data_radius();
+            let radius = network.overlay.data_radius();
             Ok(json!(*radius))
         }
         HistoryEndpoint::DeleteEnr(node_id) => delete_enr(network, node_id).await,
@@ -76,7 +76,7 @@ async fn complete_request(network: Arc<RwLock<HistoryNetwork>>, request: History
         }
         HistoryEndpoint::Ping(enr) => ping(network, enr).await,
         HistoryEndpoint::RoutingTableInfo => {
-            serde_json::to_value(network.read().await.overlay.routing_table_info())
+            serde_json::to_value(network.overlay.routing_table_info())
                 .map_err(|err| err.to_string())
         }
         HistoryEndpoint::RecursiveFindNodes(node_id) => {
@@ -88,13 +88,12 @@ async fn complete_request(network: Arc<RwLock<HistoryNetwork>>, request: History
 
 /// Constructs a JSON call for the RecursiveFindContent method.
 async fn recursive_find_content(
-    network: Arc<RwLock<HistoryNetwork>>,
+    network: Arc<HistoryNetwork>,
     content_key: HistoryContentKey,
     is_trace: bool,
 ) -> Result<Value, String> {
     // Check whether we have the data locally.
-    let overlay = network.read().await.overlay.clone();
-    let local_content: Option<Vec<u8>> = match overlay.store.read().get(&content_key) {
+    let local_content: Option<Vec<u8>> = match network.overlay.store.read().get(&content_key) {
         Ok(Some(data)) => Some(data),
         Ok(None) => None,
         Err(err) => {
@@ -108,13 +107,14 @@ async fn recursive_find_content(
     };
     let (content_bytes, utp_transfer, trace) = match local_content {
         Some(val) => {
-            let local_enr = overlay.local_enr();
-            let mut trace = QueryTrace::new(&overlay.local_enr(), content_key.content_id());
+            let local_enr = network.overlay.local_enr();
+            let mut trace = QueryTrace::new(&network.overlay.local_enr(), content_key.content_id());
             trace.node_responded_with_content(&local_enr);
             (val, false, if is_trace { Some(trace) } else { None })
         }
         // data is not available locally, make network request
-        None => match overlay
+        None => match network
+            .overlay
             .lookup_content(content_key.clone(), is_trace)
             .await
             .map_err(|err| err.to_string())?
@@ -167,11 +167,10 @@ async fn recursive_find_content(
 
 /// Constructs a JSON call for the LocalContent method.
 async fn local_content(
-    network: Arc<RwLock<HistoryNetwork>>,
+    network: Arc<HistoryNetwork>,
     content_key: HistoryContentKey,
 ) -> Result<Value, String> {
-    let store = network.read().await.overlay.store.clone();
-    let response = match store.read().get(&content_key)
+    let response = match network.overlay.store.read().get(&content_key)
         {
             Ok(val) => match val {
                 Some(val) => {
@@ -193,12 +192,11 @@ async fn local_content(
 
 /// Constructs a JSON call for the PaginateLocalContentKeys method.
 async fn paginate_local_content_keys(
-    network: Arc<RwLock<HistoryNetwork>>,
+    network: Arc<HistoryNetwork>,
     offset: u64,
     limit: u64,
 ) -> Result<Value, String> {
-    let store = network.read().await.overlay.store.clone();
-    let response = match store.read().paginate(&offset, &limit)
+    let response = match network.overlay.store.read().paginate(&offset, &limit)
         {
             Ok(val) => Ok(json!(val)),
             Err(err) => Err(format!(
@@ -210,13 +208,14 @@ async fn paginate_local_content_keys(
 
 /// Constructs a JSON call for the Store method.
 async fn store(
-    network: Arc<RwLock<HistoryNetwork>>,
+    network: Arc<HistoryNetwork>,
     content_key: HistoryContentKey,
     content_value: ethportal_api::HistoryContentValue,
 ) -> Result<Value, String> {
     let data = content_value.encode();
-    let store = network.read().await.overlay.store.clone();
-    let response = match store
+    let response = match network
+        .overlay
+        .store
         .write()
         .put::<HistoryContentKey, Vec<u8>>(content_key, data)
     {
@@ -228,42 +227,32 @@ async fn store(
 
 /// Constructs a JSON call for the AddEnr method.
 async fn add_enr(
-    network: Arc<RwLock<HistoryNetwork>>,
+    network: Arc<HistoryNetwork>,
     enr: discv5::enr::Enr<discv5::enr::CombinedKey>,
 ) -> Result<Value, String> {
-    let overlay = network.read().await.overlay.clone();
-    match overlay.add_enr(enr) {
+    match network.overlay.add_enr(enr) {
         Ok(_) => Ok(json!(true)),
         Err(err) => Err(format!("AddEnr failed: {err:?}")),
     }
 }
 
 /// Constructs a JSON call for the GetEnr method.
-async fn get_enr(network: Arc<RwLock<HistoryNetwork>>, node_id: NodeId) -> Result<Value, String> {
-    let overlay = network.read().await.overlay.clone();
-    match overlay.get_enr(node_id) {
+async fn get_enr(network: Arc<HistoryNetwork>, node_id: NodeId) -> Result<Value, String> {
+    match network.overlay.get_enr(node_id) {
         Ok(enr) => Ok(json!(enr)),
         Err(err) => Err(format!("GetEnr failed: {err:?}")),
     }
 }
 
 /// Constructs a JSON call for the deleteEnr method.
-async fn delete_enr(
-    network: Arc<RwLock<HistoryNetwork>>,
-    node_id: NodeId,
-) -> Result<Value, String> {
-    let overlay = network.read().await.overlay.clone();
-    let is_deleted = overlay.delete_enr(node_id);
+async fn delete_enr(network: Arc<HistoryNetwork>, node_id: NodeId) -> Result<Value, String> {
+    let is_deleted = network.overlay.delete_enr(node_id);
     Ok(json!(is_deleted))
 }
 
 /// Constructs a JSON call for the LookupEnr method.
-async fn lookup_enr(
-    network: Arc<RwLock<HistoryNetwork>>,
-    node_id: NodeId,
-) -> Result<Value, String> {
-    let overlay = network.read().await.overlay.clone();
-    match overlay.lookup_enr(node_id).await {
+async fn lookup_enr(network: Arc<HistoryNetwork>, node_id: NodeId) -> Result<Value, String> {
+    match network.overlay.lookup_enr(node_id).await {
         Ok(enr) => Ok(json!(enr)),
         Err(err) => Err(format!("LookupEnr failed: {err:?}")),
     }
@@ -271,12 +260,11 @@ async fn lookup_enr(
 
 /// Constructs a JSON call for the FindContent method.
 async fn find_content(
-    network: Arc<RwLock<HistoryNetwork>>,
+    network: Arc<HistoryNetwork>,
     enr: discv5::enr::Enr<discv5::enr::CombinedKey>,
     content_key: HistoryContentKey,
 ) -> Result<Value, String> {
-    let overlay = network.read().await.overlay.clone();
-    match overlay.send_find_content(enr, content_key.into()).await {
+    match network.overlay.send_find_content(enr, content_key.into()).await {
         Ok((content, utp_transfer)) => match content {
             Content::ConnectionId(id) => Err(format!(
                 "FindContent request returned a connection id ({id:?}) instead of conducting utp transfer."
@@ -295,12 +283,11 @@ async fn find_content(
 
 /// Constructs a JSON call for the FindNodes method.
 async fn find_nodes(
-    network: Arc<RwLock<HistoryNetwork>>,
+    network: Arc<HistoryNetwork>,
     enr: discv5::enr::Enr<discv5::enr::CombinedKey>,
     distances: Vec<u16>,
 ) -> Result<Value, String> {
-    let overlay = network.read().await.overlay.clone();
-    match overlay.send_find_nodes(enr, distances).await {
+    match network.overlay.send_find_nodes(enr, distances).await {
         Ok(nodes) => Ok(json!(nodes
             .enrs
             .into_iter()
@@ -312,39 +299,43 @@ async fn find_nodes(
 
 /// Constructs a JSON call for the Gossip method.
 async fn gossip(
-    network: Arc<RwLock<HistoryNetwork>>,
+    network: Arc<HistoryNetwork>,
     content_key: HistoryContentKey,
     content_value: ethportal_api::HistoryContentValue,
 ) -> Result<Value, String> {
     let data = content_value.encode();
-    let overlay = network.read().await.overlay.clone();
-    Ok(overlay.propagate_gossip(vec![(content_key, data)]).into())
+    Ok(network
+        .overlay
+        .propagate_gossip(vec![(content_key, data)])
+        .into())
 }
 
 /// Constructs a JSON call for the Gossip method, with tracing enabled.
 async fn gossip_trace(
-    network: Arc<RwLock<HistoryNetwork>>,
+    network: Arc<HistoryNetwork>,
     content_key: HistoryContentKey,
     content_value: ethportal_api::HistoryContentValue,
 ) -> Result<Value, String> {
     let data = content_value.encode();
-    let overlay = network.read().await.overlay.clone();
     Ok(json!(
-        overlay.propagate_gossip_trace(content_key, data).await
+        network
+            .overlay
+            .propagate_gossip_trace(content_key, data)
+            .await
     ))
 }
 
 /// Constructs a JSON call for the Offer method.
 async fn offer(
-    network: Arc<RwLock<HistoryNetwork>>,
+    network: Arc<HistoryNetwork>,
     enr: discv5::enr::Enr<discv5::enr::CombinedKey>,
     content_key: HistoryContentKey,
     content_value: Option<ethportal_api::HistoryContentValue>,
 ) -> Result<Value, String> {
-    let overlay = network.read().await.overlay.clone();
     if let Some(content_value) = content_value {
         let content_value = content_value.encode();
-        match overlay
+        match network
+            .overlay
             .send_populated_offer(enr, content_key.into(), content_value)
             .await
         {
@@ -355,7 +346,7 @@ async fn offer(
         }
     } else {
         let content_key: Vec<RawContentKey> = vec![content_key.to_bytes()];
-        match overlay.send_offer(content_key, enr).await {
+        match network.overlay.send_offer(content_key, enr).await {
             Ok(accept) => Ok(json!(AcceptInfo {
                 content_keys: accept.content_keys,
             })),
@@ -366,11 +357,10 @@ async fn offer(
 
 /// Constructs a JSON call for the Ping method.
 async fn ping(
-    network: Arc<RwLock<HistoryNetwork>>,
+    network: Arc<HistoryNetwork>,
     enr: discv5::enr::Enr<discv5::enr::CombinedKey>,
 ) -> Result<Value, String> {
-    let overlay = network.read().await.overlay.clone();
-    match overlay.send_ping(enr).await {
+    match network.overlay.send_ping(enr).await {
         Ok(pong) => Ok(json!(PongInfo {
             enr_seq: pong.enr_seq,
             data_radius: *Distance::from(pong.custom_payload),
@@ -381,10 +371,9 @@ async fn ping(
 
 /// Constructs a JSON call for the RecursiveFindNodes method.
 async fn recursive_find_nodes(
-    network: Arc<RwLock<HistoryNetwork>>,
+    network: Arc<HistoryNetwork>,
     node_id: NodeId,
 ) -> Result<Value, String> {
-    let overlay = network.read().await.overlay.clone();
-    let nodes = overlay.lookup_node(node_id).await;
+    let nodes = network.overlay.lookup_node(node_id).await;
     Ok(json!(nodes))
 }
