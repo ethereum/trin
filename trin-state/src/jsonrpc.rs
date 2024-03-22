@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{fmt::Debug, sync::Arc};
 
 use discv5::{enr::NodeId, Enr};
 use portalnet::overlay::errors::OverlayRequestError;
@@ -83,8 +83,8 @@ impl StateRequestHandler {
                 )
                 .await
             }
-            StateEndpoint::PaginateLocalContentKeys(_, _) => {
-                Err("Pagination not implemented for state network".to_string())
+            StateEndpoint::PaginateLocalContentKeys(offset, limit) => {
+                paginate(network, offset, limit)
             }
         };
 
@@ -296,8 +296,7 @@ async fn store(
             .store
             .write()
             .put(content_key, content_value.encode())
-            .map(|_| true)
-            .map_err(|err| OverlayRequestError::Failure(err.to_string())),
+            .map(|_| true),
     )
 }
 
@@ -353,9 +352,16 @@ async fn gossip(
     }
 }
 
+fn paginate(network: Arc<StateNetwork>, offset: u64, limit: u64) -> Result<Value, String> {
+    to_json_result(
+        "PaginateLocalContentKeys",
+        network.overlay.store.read().paginate(offset, limit),
+    )
+}
+
 fn to_json_result(
     request: &str,
-    result: Result<impl Serialize, OverlayRequestError>,
+    result: Result<impl Serialize, impl Debug>,
 ) -> Result<Value, String> {
     result
         .map(|value| json!(value))
