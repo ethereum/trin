@@ -193,15 +193,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "amcl"
-version = "0.3.0"
-source = "git+https://github.com/Snowfork/milagro_bls#7d1776edb42870b006430ece9741c15811e4c9e3"
-dependencies = [
- "parity-scale-codec",
- "scale-info",
-]
-
-[[package]]
 name = "android-tzdata"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1348,6 +1339,27 @@ name = "const_fn"
 version = "0.4.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fbdcdcb6d86f71c5e97409ad45898af11cbc995b4ee8112d59095a28d376c935"
+
+[[package]]
+name = "const_format"
+version = "0.2.32"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3a214c7af3d04997541b18d432afaff4c455e79e2029079647e72fc2bd27673"
+dependencies = [
+ "const_format_proc_macros",
+ "konst",
+]
+
+[[package]]
+name = "const_format_proc_macros"
+version = "0.2.32"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c7f6ff08fd20f4f299298a28e2dfa8a8ba1036e6cd2460ac1de7b425d76f2500"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "unicode-xid",
+]
 
 [[package]]
 name = "constant_time_eq"
@@ -2525,6 +2537,7 @@ dependencies = [
  "base64 0.13.1",
  "bytes 1.5.0",
  "clap",
+ "const_format",
  "discv5",
  "env_logger 0.9.3",
  "eth_trie",
@@ -2552,6 +2565,7 @@ dependencies = [
  "serde_yaml",
  "sha2 0.10.8",
  "sha3 0.9.1",
+ "shadow-rs",
  "snap",
  "ssz_types",
  "superstruct",
@@ -3018,6 +3032,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4271d37baee1b8c7e4b708028c57d816cf9d2434acb33a549475f78c181f6253"
 
 [[package]]
+name = "git2"
+version = "0.18.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "232e6a7bfe35766bf715e55a88b39a700596c0ccfd88cd3680b4cdb40d66ef70"
+dependencies = [
+ "bitflags 2.4.1",
+ "libc",
+ "libgit2-sys",
+ "log",
+ "url",
+]
+
+[[package]]
 name = "glob"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3366,7 +3393,7 @@ dependencies = [
  "httpdate",
  "itoa",
  "pin-project-lite",
- "socket2 0.4.10",
+ "socket2 0.5.5",
  "tokio",
  "tower-service",
  "tracing",
@@ -3600,6 +3627,12 @@ dependencies = [
  "rustix 0.38.30",
  "windows-sys 0.52.0",
 ]
+
+[[package]]
+name = "is_debug"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06d198e9919d9822d5f7083ba8530e04de87841eaf21ead9af8f2304efd57c89"
 
 [[package]]
 name = "itertools"
@@ -3871,6 +3904,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "konst"
+version = "0.2.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "330f0e13e6483b8c34885f7e6c9f19b1a7bd449c673fbb948a51c99d66ef74f4"
+dependencies = [
+ "konst_macro_rules",
+]
+
+[[package]]
+name = "konst_macro_rules"
+version = "0.2.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4933f3f57a8e9d9da04db23fb153356ecaf00cbd14aee46279c33dc80925c37"
+
+[[package]]
 name = "kv-log-macro"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3945,6 +3993,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13e3bf6590cbc649f4d1a3eefc9d5d6eb746f5200ffb04e5e142700b8faa56e7"
 
 [[package]]
+name = "libgit2-sys"
+version = "0.16.2+1.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee4126d8b4ee5c9d9ea891dd875cfdc1e9d0950437179104b183d7d8a74d24e8"
+dependencies = [
+ "cc",
+ "libc",
+ "libz-sys",
+ "pkg-config",
+]
+
+[[package]]
 name = "libloading"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3983,6 +4043,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "libz-sys"
+version = "1.1.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5e143b5e666b2695d28f6bca6497720813f699c9602dd7f5cac91008b8ada7f9"
+dependencies = [
+ "cc",
+ "libc",
+ "pkg-config",
+ "vcpkg",
+]
+
+[[package]]
 name = "light-client"
 version = "0.1.0"
 dependencies = [
@@ -3996,7 +4068,6 @@ dependencies = [
  "hex",
  "jsonrpsee",
  "log",
- "milagro_bls",
  "parking_lot 0.11.2",
  "portalnet",
  "reqwest",
@@ -4004,6 +4075,7 @@ dependencies = [
  "serde-this-or-that",
  "serde_json",
  "serde_yaml",
+ "snowbridge-milagro-bls",
  "ssz-rs",
  "ssz_types",
  "strum 0.26.1",
@@ -4154,20 +4226,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5a634b1c61a95585bd15607c6ab0c4e5b226e695ff2800ba0cdccddf208c406c"
 dependencies = [
  "autocfg 1.1.0",
-]
-
-[[package]]
-name = "milagro_bls"
-version = "1.5.0"
-source = "git+https://github.com/Snowfork/milagro_bls#7d1776edb42870b006430ece9741c15811e4c9e3"
-dependencies = [
- "amcl",
- "hex",
- "lazy_static",
- "parity-scale-codec",
- "rand 0.8.5",
- "scale-info",
- "zeroize",
 ]
 
 [[package]]
@@ -4409,6 +4467,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.48",
+]
+
+[[package]]
+name = "num_threads"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c7398b9c8b70908f6371f47ed36737907c87c52af34c268fed0bf0ceb92ead9"
+dependencies = [
+ "libc",
 ]
 
 [[package]]
@@ -6549,6 +6616,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "shadow-rs"
+version = "0.27.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7960cbd6ba74691bb15e7ebf97f7136bd02d1115f5695a58c1f31d5645750128"
+dependencies = [
+ "const_format",
+ "git2",
+ "is_debug",
+ "time 0.3.31",
+ "tzdb",
+]
+
+[[package]]
 name = "sharded-slab"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6629,6 +6709,30 @@ name = "snap"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b6b67fb9a61334225b5b790716f609cd58395f895b3fe8b328786812a40bc3b"
+
+[[package]]
+name = "snowbridge-amcl"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "460a9ed63cdf03c1b9847e8a12a5f5ba19c4efd5869e4a737e05be25d7c427e5"
+dependencies = [
+ "parity-scale-codec",
+ "scale-info",
+]
+
+[[package]]
+name = "snowbridge-milagro-bls"
+version = "1.5.4"
+source = "git+https://github.com/Snowfork/milagro_bls#43a5d480ed6e3b83de4cf54888680d51604199e6"
+dependencies = [
+ "hex",
+ "lazy_static",
+ "parity-scale-codec",
+ "rand 0.8.5",
+ "scale-info",
+ "snowbridge-amcl",
+ "zeroize",
+]
 
 [[package]]
 name = "socket2"
@@ -7168,6 +7272,8 @@ checksum = "f657ba42c3f86e7680e53c8cd3af8abbe56b5491790b46e22e19c0d57463583e"
 dependencies = [
  "deranged",
  "itoa",
+ "libc",
+ "num_threads",
  "powerfmt",
  "serde",
  "time-core",
@@ -7906,6 +8012,35 @@ name = "typenum"
 version = "1.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "42ff0bf0c66b8238c6f3b578df37d0b7848e55df8577b3f74f92a69acceeb825"
+
+[[package]]
+name = "tz-rs"
+version = "0.6.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "33851b15c848fad2cf4b105c6bb66eb9512b6f6c44a4b13f57c53c73c707e2b4"
+dependencies = [
+ "const_fn",
+]
+
+[[package]]
+name = "tzdb"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1b580f6b365fa89f5767cdb619a55d534d04a4e14c2d7e5b9a31e94598687fb1"
+dependencies = [
+ "iana-time-zone",
+ "tz-rs",
+ "tzdb_data",
+]
+
+[[package]]
+name = "tzdb_data"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d1889fdffac09d65c1d95c42d5202e9b21ad8c758f426e9fe09088817ea998d6"
+dependencies = [
+ "tz-rs",
+]
 
 [[package]]
 name = "ucd-trie"
