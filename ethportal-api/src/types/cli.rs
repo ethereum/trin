@@ -5,6 +5,7 @@ use clap::{
     Args, Parser, Subcommand,
 };
 use std::{env, ffi::OsString, fmt, net::SocketAddr, path::PathBuf, str::FromStr};
+use trin_utils::build_info;
 use url::Url;
 
 use crate::types::bootnodes::Bootnodes;
@@ -52,13 +53,29 @@ impl FromStr for Web3TransportType {
     }
 }
 
+const APP_NAME: &str = "trin";
+const VERSION: &str = const_format::formatcp!(
+    "{version}-{hash} {build_os} {rust_version}",
+    // Remove -alpha.1 versioning if it is present.
+    // This must be done as it can conflict with eth versioning
+    version = const_format::str_split!(build_info::PKG_VERSION, '-')[0],
+    hash = build_info::short_commit(),
+    build_os = build_info::BUILD_OS,
+    // the rust version looks like that:
+    // rustc 1.77.0 (aedd173a2 2024-03-17)
+    // we remove everything in the brackets and replace spaces with nothing
+    rust_version = const_format::str_replace!(
+        const_format::str_split!(build_info::RUST_VERSION, '(')[0],
+        ' ',
+        ""
+    )
+);
+
 #[derive(Parser, Debug, PartialEq, Clone)]
-#[command(
-    name = "trin",
-    version = "0.0.1",
-    author = "carver",
-    about = "Run an eth portal client"
-)]
+#[command(name = APP_NAME,
+    author = "https://github.com/ethereum/trin/graphs/contributors",
+    about = "Run an eth portal client",
+    version = VERSION)]
 pub struct TrinConfig {
     #[arg(
         default_value = DEFAULT_WEB3_TRANSPORT,

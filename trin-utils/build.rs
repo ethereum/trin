@@ -1,29 +1,36 @@
-use std::{env, process::Command};
+use std::{fs::File, io::Write};
 
-fn main() {
-    let output = Command::new("git")
-        .args(["rev-parse", "HEAD"])
-        .output()
-        .expect("Unable to get git hash");
-    let output = String::from_utf8(output.stdout)
-        .expect("git rev-parse output must be a valid utf8 encoding")
-        .replace('\n', "");
-    let git_hash = match output.len() {
-        40 => output,
-        _ => {
-            // If the git hash is not 40 characters, then we are probably in a
-            // docker build context, in which case we access the git hash via the
-            // environment variable set in the Docker build command
-            match env::var("GIT_HASH") {
-                Ok(val) => match val.len() {
-                    40 => val,
-                    _ => "".to_string(),
-                },
-                Err(_) => "".to_string(),
-            }
-        }
-    };
-    // Printing to stdout is how build scripts communicate with cargo
-    // https://doc.rust-lang.org/cargo/reference/build-scripts.html#outputs-of-the-build-script
-    println!("cargo:rustc-env=GIT_HASH={}", git_hash);
+use shadow_rs::SdResult;
+
+fn main() -> SdResult<()> {
+    shadow_rs::new_hook(hook)?;
+
+    Ok(())
+}
+
+fn hook(mut file: &File) -> SdResult<()> {
+    let env_var_git_hash = std::env::var("GIT_HASH").unwrap_or_default();
+    writeln!(file, "const ENV_GIT_HASH: &str = \"{}\";", env_var_git_hash)?;
+
+    hook_method(file)?;
+
+    Ok(())
+}
+
+fn hook_method(mut file: &File) -> SdResult<()> {
+    let hook_fn = r#"
+pub const fn short_commit() -> &'static str {
+    if shadow_rs::str_get!(SHORT_COMMIT, 0).is_some() {
+        return SHORT_COMMIT;
+    }
+
+    if shadow_rs::str_get!(ENV_GIT_HASH, 0).is_some() {
+        ENV_GIT_HASH
+    } else {
+        "unknown"
+    }
+}"#;
+
+    writeln!(file, "{}", hook_fn)?;
+    Ok(())
 }
