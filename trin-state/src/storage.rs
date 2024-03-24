@@ -11,7 +11,7 @@ use keccak_hash::keccak;
 use trin_storage::{
     error::ContentStoreError,
     versioned::{create_store, ContentType, IdIndexedV1Store, IdIndexedV1StoreConfig},
-    ContentId, ContentStore, PortalStorageConfig, ShouldWeStoreContent, BYTES_IN_MB_U64,
+    ContentId, ContentStore, PortalStorageConfig, ShouldWeStoreContent,
 };
 
 /// Storage layer for the state network. Encapsulates state network specific data and logic.
@@ -68,15 +68,7 @@ impl ContentStore for StateStorage {
 impl StateStorage {
     pub fn new(config: PortalStorageConfig) -> Result<Self, ContentStoreError> {
         let sql_connection_pool = config.sql_connection_pool.clone();
-        let config = IdIndexedV1StoreConfig {
-            content_type: ContentType::State,
-            network: ProtocolId::State,
-            node_id: config.node_id,
-            node_data_dir: config.node_data_dir,
-            distance_fn: config.distance_fn,
-            sql_connection_pool: config.sql_connection_pool,
-            storage_capacity_bytes: config.storage_capacity_mb * BYTES_IN_MB_U64,
-        };
+        let config = IdIndexedV1StoreConfig::new(ContentType::State, ProtocolId::State, config);
         Ok(Self {
             store: create_store(ContentType::State, config, sql_connection_pool)?,
         })
