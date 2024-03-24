@@ -1,5 +1,7 @@
 use super::ContentType;
 
+// The store_info queries
+
 pub const STORE_INFO_CREATE_TABLE: &str = "
     CREATE TABLE IF NOT EXISTS store_info (
         content_type TEXT PRIMARY KEY,
@@ -15,6 +17,8 @@ pub const STORE_INFO_LOOKUP: &str = "
     FROM store_info
     WHERE content_type = :content_type
     LIMIT 1";
+
+// The usage_stats queries
 
 pub const USAGE_STATS_CREATE_TABLE: &str = "
     CREATE TABLE IF NOT EXISTS usage_stats (
@@ -72,3 +76,10 @@ pub fn create_usage_stats_triggers(
         "
     )
 }
+
+// The table management queries
+
+pub const TABLE_EXISTS: &str = "
+    SELECT name
+    FROM sqlite_master
+    WHERE type='table' AND name=:table_name";

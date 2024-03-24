@@ -13,7 +13,7 @@ pub fn create_store<S: VersionedContentStore>(
     config: S::Config,
     sql_connection_pool: Pool<SqliteConnectionManager>,
 ) -> Result<S, ContentStoreError> {
-    let old_version = lookup_store_version(&content_type, &sql_connection_pool.get()?)?;
+    let old_version = get_store_version(&content_type, &sql_connection_pool.get()?)?;
 
     match old_version {
         Some(old_version) => {
@@ -31,20 +31,41 @@ pub fn create_store<S: VersionedContentStore>(
     S::create(content_type, config)
 }
 
-fn lookup_store_version(
+fn get_store_version(
     content_type: &ContentType,
     conn: &PooledConnection<SqliteConnectionManager>,
 ) -> Result<Option<StoreVersion>, ContentStoreError> {
-    Ok(conn
+    let version = conn
         .query_row(
             sql::STORE_INFO_LOOKUP,
             named_params! { ":content_type": content_type.as_ref() },
-            |row| {
-                let version: StoreVersion = row.get("version")?;
-                Ok(version)
-            },
+            |row| row.get::<&str, StoreVersion>("version"),
         )
-        .optional()?)
+        .optional()?;
+
+    match version {
+        Some(_) => Ok(version),
+        None => get_default_store_version(content_type, conn),
+    }
+}
+
+fn get_default_store_version(
+    content_type: &ContentType,
+    conn: &PooledConnection<SqliteConnectionManager>,
+) -> Result<Option<StoreVersion>, ContentStoreError> {
+    match content_type {
+        ContentType::History => {
+            let exists = conn
+                .prepare(sql::TABLE_EXISTS)?
+                .exists(named_params! {":table_name": "history"})?;
+            if exists {
+                Ok(Some(StoreVersion::LegacyHistory))
+            } else {
+                Ok(None)
+            }
+        }
+        _ => Ok(None),
+    }
 }
 
 fn update_store_info(
@@ -63,7 +84,6 @@ fn update_store_info(
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 pub mod test {
     use anyhow::Result;
 
@@ -74,12 +94,28 @@ pub mod test {
     const STORAGE_CAPACITY_MB: u64 = 10;
 
     #[test]
-    fn lookup_no_store_version() -> Result<()> {
+    fn get_store_version_missing() -> Result<()> {
         let (_temp_dir, config) =
             create_test_portal_storage_config_with_capacity(STORAGE_CAPACITY_MB)?;
         let conn = config.sql_connection_pool.get()?;
 
-        assert_eq!(lookup_store_version(&ContentType::State, &conn)?, None);
+        assert_eq!(get_store_version(&ContentType::History, &conn)?, None);
+        Ok(())
+    }
+
+    #[test]
+    fn get_store_version_default_history() -> Result<()> {
+        let (_temp_dir, config) =
+            create_test_portal_storage_config_with_capacity(STORAGE_CAPACITY_MB)?;
+        let conn = config.sql_connection_pool.get()?;
+
+        let create_dummy_history_table_sql = "CREATE TABLE history (content_id blob PRIMARY KEY);";
+        conn.execute(create_dummy_history_table_sql, [])?;
+
+        assert_eq!(
+            get_store_version(&ContentType::History, &conn)?,
+            Some(StoreVersion::LegacyHistory)
+        );
         Ok(())
     }
 
@@ -92,7 +128,7 @@ pub mod test {
         update_store_info(&ContentType::State, StoreVersion::IdIndexedV1, &conn)?;
 
         assert_eq!(
-            lookup_store_version(&ContentType::State, &conn)?,
+            get_store_version(&ContentType::State, &conn)?,
             Some(StoreVersion::IdIndexedV1)
         );
         Ok(())
@@ -107,14 +143,14 @@ pub mod test {
         // Set store version
         update_store_info(&ContentType::State, StoreVersion::LegacyHistory, &conn)?;
         assert_eq!(
-            lookup_store_version(&ContentType::State, &conn)?,
+            get_store_version(&ContentType::State, &conn)?,
             Some(StoreVersion::LegacyHistory)
         );
 
         // Update store version
         update_store_info(&ContentType::State, StoreVersion::IdIndexedV1, &conn)?;
         assert_eq!(
-            lookup_store_version(&ContentType::State, &conn)?,
+            get_store_version(&ContentType::State, &conn)?,
             Some(StoreVersion::IdIndexedV1)
         );
 
@@ -135,7 +171,7 @@ pub mod test {
         )?;
 
         assert_eq!(
-            lookup_store_version(&ContentType::State, &sql_connection_pool.get()?)?,
+            get_store_version(&ContentType::State, &sql_connection_pool.get()?)?,
             Some(StoreVersion::IdIndexedV1)
         );
 
@@ -158,7 +194,7 @@ pub mod test {
         create_store::<MockContentStore>(ContentType::State, config.clone(), sql_connection_pool)?;
 
         assert_eq!(
-            lookup_store_version(&ContentType::State, &config.sql_connection_pool.get()?)?,
+            get_store_version(&ContentType::State, &config.sql_connection_pool.get()?)?,
             Some(StoreVersion::IdIndexedV1)
         );
 
@@ -173,14 +209,15 @@ pub mod test {
         let sql_connection_pool = config.sql_connection_pool.clone();
 
         update_store_info(
-            &ContentType::State,
+            &ContentType::History,
             StoreVersion::LegacyHistory,
             &sql_connection_pool.get().unwrap(),
         )
         .unwrap();
 
         // Should panic - MockContentStore doesn't support migration.
-        create_store::<MockContentStore>(ContentType::State, config, sql_connection_pool).unwrap();
+        create_store::<MockContentStore>(ContentType::History, config, sql_connection_pool)
+            .unwrap();
     }
 
     pub struct MockContentStore;

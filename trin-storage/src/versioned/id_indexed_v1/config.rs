@@ -7,7 +7,7 @@ use r2d2_sqlite::SqliteConnectionManager;
 
 use crate::{
     versioned::{usage_stats::UsageStats, ContentType},
-    DistanceFunction,
+    DistanceFunction, PortalStorageConfig, BYTES_IN_MB_U64,
 };
 
 /// The fraction of the storage capacity that we should aim for when pruning.
@@ -29,6 +29,22 @@ pub struct IdIndexedV1StoreConfig {
 }
 
 impl IdIndexedV1StoreConfig {
+    pub fn new(
+        content_type: ContentType,
+        network: ProtocolId,
+        config: PortalStorageConfig,
+    ) -> Self {
+        Self {
+            content_type,
+            network,
+            node_id: config.node_id,
+            node_data_dir: config.node_data_dir,
+            storage_capacity_bytes: config.storage_capacity_mb * BYTES_IN_MB_U64,
+            sql_connection_pool: config.sql_connection_pool,
+            distance_fn: config.distance_fn,
+        }
+    }
+
     pub fn target_capacity(&self) -> u64 {
         (self.storage_capacity_bytes as f64 * TARGET_CAPACITY_FRACTION).round() as u64
     }
