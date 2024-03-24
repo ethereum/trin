@@ -1,25 +1,22 @@
 use ethportal_api::{
-    types::{distance::Distance, history::PaginateLocalContentInfo},
+    types::{distance::Distance, history::PaginateLocalContentInfo, portal_wire::ProtocolId},
     OverlayContentKey,
 };
 use trin_storage::{
     error::ContentStoreError,
-    versioned::{create_store, ContentType, LegacyHistoryStore},
-    ContentStore, PortalStorageConfig, ShouldWeStoreContent,
+    versioned::{create_store, ContentType, IdIndexedV1Store, IdIndexedV1StoreConfig},
+    ContentId, ContentStore, PortalStorageConfig, ShouldWeStoreContent,
 };
 
 /// Storage layer for the history network. Encapsulates history network specific data and logic.
 #[derive(Debug)]
 pub struct HistoryStorage {
-    store: LegacyHistoryStore,
+    store: IdIndexedV1Store,
 }
 
 impl ContentStore for HistoryStorage {
     fn get<K: OverlayContentKey>(&self, key: &K) -> Result<Option<Vec<u8>>, ContentStoreError> {
-        let content_id = key.content_id();
-        self.store.lookup_content_value(content_id).map_err(|err| {
-            ContentStoreError::Database(format!("Error looking up content value: {err:?}"))
-        })
+        self.store.lookup_content_value(&key.content_id().into())
     }
 
     fn put<K: OverlayContentKey, V: AsRef<[u8]>>(
@@ -27,30 +24,21 @@ impl ContentStore for HistoryStorage {
         key: K,
         value: V,
     ) -> Result<(), ContentStoreError> {
-        self.store.store(&key, &value.as_ref().to_vec())
+        self.store.insert(&key, value.as_ref().to_vec())
     }
 
     fn is_key_within_radius_and_unavailable<K: OverlayContentKey>(
         &self,
         key: &K,
     ) -> Result<ShouldWeStoreContent, ContentStoreError> {
-        let distance = self.store.distance_to_content_id(&key.content_id());
-        if distance > self.store.radius() {
-            return Ok(ShouldWeStoreContent::NotWithinRadius);
+        let content_id = ContentId::from(key.content_id());
+        if self.store.distance_to_content_id(&content_id) > self.store.radius() {
+            Ok(ShouldWeStoreContent::NotWithinRadius)
+        } else if self.store.has_content(&content_id)? {
+            Ok(ShouldWeStoreContent::AlreadyStored)
+        } else {
+            Ok(ShouldWeStoreContent::Store)
         }
-
-        let key = key.content_id();
-        let is_key_available = self
-            .store
-            .lookup_content_key(key)
-            .map_err(|err| {
-                ContentStoreError::Database(format!("Error looking up content key: {err:?}"))
-            })?
-            .is_some();
-        if is_key_available {
-            return Ok(ShouldWeStoreContent::AlreadyStored);
-        }
-        Ok(ShouldWeStoreContent::Store)
     }
 
     fn radius(&self) -> Distance {
@@ -61,6 +49,7 @@ impl ContentStore for HistoryStorage {
 impl HistoryStorage {
     pub fn new(config: PortalStorageConfig) -> Result<Self, ContentStoreError> {
         let sql_connection_pool = config.sql_connection_pool.clone();
+        let config = IdIndexedV1StoreConfig::new(ContentType::History, ProtocolId::History, config);
         Ok(Self {
             store: create_store(ContentType::History, config, sql_connection_pool)?,
         })
@@ -75,10 +64,15 @@ impl HistoryStorage {
     /// subnetwork) according to the provided offset and limit.
     pub fn paginate(
         &self,
-        offset: &u64,
-        limit: &u64,
+        offset: u64,
+        limit: u64,
     ) -> Result<PaginateLocalContentInfo, ContentStoreError> {
-        self.store.paginate(offset, limit)
+        self.store
+            .paginate(offset, limit)
+            .map(|paginate_result| PaginateLocalContentInfo {
+                content_keys: paginate_result.content_keys,
+                total_entries: paginate_result.entry_count,
+            })
     }
 }
 
