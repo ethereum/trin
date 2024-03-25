@@ -68,7 +68,7 @@ impl VersionedContentStore for LegacyHistoryStore {
 }
 
 impl LegacyHistoryStore {
-    /// Public constructor for building a `HistoryStorage` object.
+    /// Public constructor for building a `LegacyHistoryStore` object.
     /// Checks whether a populated database already exists vs a fresh instance.
     pub fn new(config: PortalStorageConfig) -> Result<Self, ContentStoreError> {
         let conn = config.sql_connection_pool.get()?;
