@@ -375,6 +375,8 @@ impl Era1Bridge {
         let content_key = HistoryContentKey::BlockBody(BlockBodyKey {
             block_hash: header.hash().to_fixed_bytes(),
         });
+        // Validate BlockBody
+        block_tuple.body.body.validate_against_header(&header)?;
         // Construct HistoryContentValue
         let content_value = HistoryContentValue::BlockBody(block_tuple.body.body);
         gossip_history_content(&portal_clients, content_key, content_value, block_stats).await
@@ -394,6 +396,14 @@ impl Era1Bridge {
         let content_key = HistoryContentKey::BlockReceipts(BlockReceiptsKey {
             block_hash: header.hash().to_fixed_bytes(),
         });
+        // Validate Receipts
+        let receipts_root = block_tuple.receipts.receipts.root()?;
+        ensure!(
+            receipts_root == header.receipts_root,
+            "Receipts root doesn't match header receipts root: {:?} - {:?}",
+            receipts_root,
+            header.receipts_root
+        );
         // Construct HistoryContentValue
         let content_value = HistoryContentValue::Receipts(block_tuple.receipts.receipts);
         gossip_history_content(&portal_clients, content_key, content_value, block_stats).await
