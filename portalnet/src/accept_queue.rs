@@ -58,7 +58,7 @@ where
         let _ = future::poll_fn(|cx| self.content_key_map.poll_expired(cx)).now_or_never();
         if let Some(mut seen_peers) = self.content_key_map.remove(content_key) {
             if seen_peers.origin == *peer || seen_peers.fallback.contains(peer) {
-                warn!(
+                debug!(
                     "Received multiple offers containing the same content key: {content_key} from peer: {peer}"
                 );
             } else {
