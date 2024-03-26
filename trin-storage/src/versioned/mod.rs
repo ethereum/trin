@@ -1,4 +1,5 @@
 mod id_indexed_v1;
+mod legacy_history;
 pub mod sql;
 pub mod store;
 mod usage_stats;
@@ -8,6 +9,7 @@ use rusqlite::types::{FromSql, FromSqlError, ValueRef};
 use strum::{AsRefStr, Display, EnumString};
 
 pub use id_indexed_v1::{IdIndexedV1Store, IdIndexedV1StoreConfig};
+pub use legacy_history::LegacyHistoryStore;
 pub use store::VersionedContentStore;
 pub use utils::create_store;
 
@@ -33,14 +35,12 @@ pub enum ContentType {
 #[derive(Clone, Debug, Display, Eq, PartialEq, EnumString, AsRefStr)]
 #[strum(serialize_all = "snake_case")]
 pub enum StoreVersion {
-    /// The original SQLite version of the store. Main issue that it had was
-    /// that content-values were stored as hex string, occupying two times
-    /// needed space. NOTE: store is implemented but not as `VersionedContentStore`.
-    IdIndexedLegacy,
     /// The store designed for content-id, content-key and content-value objects.
     /// The content from different subnetwork (expressed with `ContentType`)
     /// uses different table. NOTE: implementation is in progress.
     IdIndexedV1,
+    /// The original SQLite version of the history storage store.
+    LegacyHistory,
 }
 
 impl FromSql for StoreVersion {

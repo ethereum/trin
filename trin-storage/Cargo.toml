@@ -26,4 +26,5 @@ tracing = "0.1.36"
 trin-metrics = { path = "../trin-metrics" }
 
 [dev-dependencies]
+quickcheck = "1.0.3"
 rstest = "0.18.2"

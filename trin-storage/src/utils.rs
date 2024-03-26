@@ -1,9 +1,6 @@
 use crate::{
     error::ContentStoreError,
-    sql::{
-        CREATE_QUERY_DB_BEACON, CREATE_QUERY_DB_HISTORY, DROP_CONTENT_DATA_QUERY_DB,
-        LC_UPDATE_CREATE_TABLE,
-    },
+    sql::{CREATE_QUERY_DB_BEACON, DROP_CONTENT_DATA_QUERY_DB, LC_UPDATE_CREATE_TABLE},
     versioned::sql::{STORE_INFO_CREATE_TABLE, USAGE_STATS_CREATE_TABLE},
     DATABASE_NAME,
 };
@@ -20,7 +17,6 @@ pub fn setup_sql(node_data_dir: &Path) -> Result<Pool<SqliteConnectionManager>, 
     let manager = SqliteConnectionManager::file(sql_path);
     let pool = Pool::new(manager)?;
     let conn = pool.get()?;
-    conn.execute_batch(CREATE_QUERY_DB_HISTORY)?;
     conn.execute_batch(CREATE_QUERY_DB_BEACON)?;
     conn.execute_batch(LC_UPDATE_CREATE_TABLE)?;
     conn.execute_batch(STORE_INFO_CREATE_TABLE)?;

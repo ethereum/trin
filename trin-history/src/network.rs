@@ -42,10 +42,7 @@ impl HistoryNetwork {
             utp_transfer_limit: portal_config.utp_transfer_limit,
             ..Default::default()
         };
-        let storage = Arc::new(PLRwLock::new(HistoryStorage::new(
-            storage_config,
-            ProtocolId::History,
-        )?));
+        let storage = Arc::new(PLRwLock::new(HistoryStorage::new(storage_config)?));
         let validator = Arc::new(ChainHistoryValidator { header_oracle });
         let overlay = OverlayProtocol::new(
             config,
