@@ -438,12 +438,12 @@ impl LegacyHistoryStore {
                         return Ok(None);
                     }
                 };
-                result?.to_fixed_bytes()
+                result?.0
             }
         };
 
         self.metrics.stop_process_timer(timer);
-        Ok(Some(result))
+        Ok(Some(result.0))
     }
 
     /// Method that returns the distance between our node ID and a given content ID.

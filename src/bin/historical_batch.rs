@@ -66,7 +66,7 @@ async fn main() -> anyhow::Result<()> {
             state_roots: beacon_state.state_roots().clone(),
         };
 
-        let hash = hex_encode(historical_batch.tree_hash_root().as_bytes())
+        let hash = hex_encode(historical_batch.tree_hash_root().as_slice())
             .strip_prefix("0x")
             .unwrap()
             .to_string();

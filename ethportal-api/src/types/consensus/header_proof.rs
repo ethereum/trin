@@ -1,4 +1,4 @@
-use ethereum_types::H256;
+use alloy_primitives::B256;
 use serde::{Deserialize, Serialize};
 use ssz::SszEncoder;
 use ssz_derive::{Decode, Encode};
@@ -9,21 +9,21 @@ use tree_hash_derive::TreeHash;
 /// https://github.com/status-im/nimbus-eth1/blob/77135e70015de77d9ca46b196d99dc260ed3e364/fluffy/network/history/experimental/beacon_chain_block_proof.nim
 
 //BeaconBlockBodyProof* = array[8, Digest]
-pub type BeaconBlockBodyProof = [H256; 8];
+pub type BeaconBlockBodyProof = [B256; 8];
 
 //BeaconBlockHeaderProof* = array[3, Digest]
-pub type BeaconBlockHeaderProof = [H256; 3];
+pub type BeaconBlockHeaderProof = [B256; 3];
 
 //HistoricalRootsProof* = array[14, Digest]
-pub type BeaconBlockHistoricalRootsProof = [H256; 14];
+pub type BeaconBlockHistoricalRootsProof = [B256; 14];
 
 //# Total size (8 + 1 + 3 + 1 + 14) * 32 bytes + 4 bytes = 868 bytes
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BeaconChainBlockProof {
     pub beacon_block_body_proof: BeaconBlockBodyProof,
-    pub beacon_block_body_root: H256,
+    pub beacon_block_body_root: B256,
     pub beacon_block_header_proof: BeaconBlockHeaderProof,
-    pub beacon_block_header_root: H256,
+    pub beacon_block_header_root: B256,
     pub historical_roots_proof: BeaconBlockHistoricalRootsProof,
     pub slot: u64,
 }
@@ -35,8 +35,8 @@ pub struct BeaconChainBlockProof {
 /// https://github.com/ethereum/consensus-specs/blob/dev/specs/capella/beacon-chain.md#historicalsummary
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Decode, Encode, TreeHash)]
 pub struct HistoricalSummary {
-    block_summary_root: H256,
-    state_summary_root: H256,
+    block_summary_root: B256,
+    state_summary_root: B256,
 }
 
 type HistoricalSummaries = VariableList<HistoricalSummary, typenum::U16777216>;
@@ -44,13 +44,13 @@ type HistoricalSummaries = VariableList<HistoricalSummary, typenum::U16777216>;
 /// Proof against the beacon state root hash
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HistoricalSummariesProof {
-    pub proof: [H256; 5],
+    pub proof: [B256; 5],
 }
 
 impl Default for HistoricalSummariesProof {
     fn default() -> Self {
         Self {
-            proof: [H256::zero(); 5],
+            proof: [B256::ZERO; 5],
         }
     }
 }
@@ -69,7 +69,7 @@ impl ssz::Decode for HistoricalSummariesProof {
             ))
         })?;
         for (i, item) in raw_proof.iter().enumerate() {
-            proof[i] = H256::from_slice(item);
+            proof[i] = B256::from_slice(item);
         }
         Ok(Self { proof })
     }

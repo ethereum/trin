@@ -1,6 +1,6 @@
+use alloy_primitives::B256;
 use anyhow::{ensure, Result};
 use ethportal_api::types::state_trie::{nibbles::Nibbles, TrieProof};
-use keccak_hash::H256;
 
 use super::trie::TrieProofValidationInfo;
 
@@ -9,7 +9,7 @@ use super::trie::TrieProofValidationInfo;
 pub struct RecursiveGossipInfo {
     pub path: Nibbles,
     pub proof: TrieProof,
-    pub last_node_hash: H256,
+    pub last_node_hash: B256,
 }
 
 /// Returns information needed for recursive gossip.

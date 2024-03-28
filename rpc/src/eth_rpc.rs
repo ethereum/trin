@@ -1,5 +1,5 @@
-use ethereum_types::{H256, U256};
-use reth_rpc_types::{Block, BlockTransactions};
+use alloy_primitives::{B256, U256};
+use reth_rpc_types::{other::OtherFields, Block, BlockTransactions};
 use tokio::sync::mpsc;
 
 use ethportal_api::{
@@ -32,7 +32,7 @@ impl EthApiServer for EthApi {
 
     async fn get_block_by_hash(
         &self,
-        block_hash: H256,
+        block_hash: B256,
         hydrated_transactions: bool,
     ) -> RpcResult<Block> {
         if hydrated_transactions {
@@ -52,7 +52,7 @@ impl EthApiServer for EthApi {
         let transactions = BlockTransactions::Hashes(
             transactions
                 .into_iter()
-                .map(|tx| tx.hash().as_fixed_bytes().into())
+                .map(|tx| tx.hash().0.into())
                 .collect(),
         );
 
@@ -62,7 +62,7 @@ impl EthApiServer for EthApi {
             transactions,
             uncles: vec![],
             size: None,
-            total_difficulty: None,
+            other: OtherFields::default(),
             withdrawals: None,
         };
         Ok(block)

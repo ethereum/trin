@@ -1,5 +1,5 @@
+use alloy_primitives::B256;
 use anyhow::anyhow;
-use ethereum_types::H256;
 use serde_json::Value;
 use tokio::sync::mpsc;
 
@@ -38,7 +38,7 @@ impl HeaderOracle {
     }
 
     // Only serves pre-block hashes aka. portal-network verified data only
-    pub async fn get_hash_at_height(&self, block_number: u64) -> anyhow::Result<H256> {
+    pub async fn get_hash_at_height(&self, block_number: u64) -> anyhow::Result<B256> {
         self.master_acc
             .lookup_premerge_hash_by_number(block_number, self.history_jsonrpc_tx()?)
             .await
@@ -48,7 +48,7 @@ impl HeaderOracle {
     /// request.
     pub async fn recursive_find_header_with_proof(
         &self,
-        block_hash: H256,
+        block_hash: B256,
     ) -> anyhow::Result<HeaderWithProof> {
         let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
             block_hash: block_hash.0,
@@ -115,7 +115,7 @@ mod test {
         let header_oracle = HeaderOracle::new(master_acc);
         assert_eq!(
             header_oracle.master_acc.tree_hash_root(),
-            H256::from_str(DEFAULT_MASTER_ACC_HASH).unwrap(),
+            B256::from_str(DEFAULT_MASTER_ACC_HASH).unwrap(),
         );
     }
 }

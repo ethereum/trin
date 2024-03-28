@@ -12,15 +12,16 @@ authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 
 [dependencies]
+alloy-primitives = "0.6.4"
+alloy-rlp = "0.3.4"
 anyhow = "1.0.68"
 async-trait = "0.1.68"
 chrono = "0.4.26"
 clap = { version = "4.2.1", features = ["derive"] }
-discv5 = { version = "0.4.0", features = ["serde"] }
+discv5 = { version = "0.4.1", features = ["serde"] }
 ethportal-api = { path = "../ethportal-api" }
-ethereum-types = "0.14.1"
-ethereum_ssz = "0.5.3"
-ethereum_ssz_derive = "0.5.3"
+ethereum_ssz = { git = "https://github.com/KolbyML/ethereum_ssz.git", rev = "ec9af0923e3122353243f4f6656fd6e6e3c2e4e3" }
+ethereum_ssz_derive = { git = "https://github.com/KolbyML/ethereum_ssz.git", rev = "ec9af0923e3122353243f4f6656fd6e6e3c2e4e3" }
 futures = "0.3.21"
 jsonrpsee = { version = "0.20.0", features = [
   "async-client",
@@ -32,13 +33,12 @@ lazy_static = "1.4.0"
 portalnet = { path = "../portalnet" }
 prometheus_exporter = "0.8.4"
 rand = "0.8.4"
-rlp = "0.5.0"
 scraper = "0.18.1"
 serde = { version = "1.0.150", features = ["derive", "rc"] }
 serde_json = "1.0.89"
 serde_yaml = "0.9"
 snap = "1.1.1"
-ssz_types = "0.5.4"
+ssz_types = { git = "https://github.com/KolbyML/ssz_types.git", rev = "91db848894d6cb94e3258d1a9f9be4897d05463a" }
 surf = { version = "2.3.2", default-features = false, features = ["h1-client-rustls", "middleware-logger", "encoding"] } # we use rustils because OpenSSL cause issues compiling on aarch64
 tokio = { version = "1.14.0", features = ["full"] }
 tracing = "0.1.36"

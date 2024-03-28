@@ -1,7 +1,7 @@
 use std::{collections::HashMap, time::SystemTime};
 
+use alloy_primitives::B256;
 use discv5::enr::NodeId;
-use ethereum_types::H256;
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -144,7 +144,7 @@ pub struct QueryResponse {
 #[serde(rename_all = "camelCase")]
 pub struct NodeInfo {
     pub enr: Enr,
-    pub distance: H256,
+    pub distance: B256,
 }
 
 #[cfg(test)]

@@ -12,8 +12,8 @@ authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 [dependencies]
 anyhow = "1.0.68"
-discv5 = { version = "0.4.0", features = ["serde"] }
-ethereum_ssz = "0.5.3"
+discv5 = { version = "0.4.1", features = ["serde"] }
+ethereum_ssz = { git = "https://github.com/KolbyML/ethereum_ssz.git", rev = "ec9af0923e3122353243f4f6656fd6e6e3c2e4e3" }
 ethportal-api = { path = "../ethportal-api" }
 parking_lot = "0.11.2"
 portalnet = { path = "../portalnet" }
@@ -22,7 +22,7 @@ r2d2_sqlite = "0.24.0"
 rusqlite = { version = "0.31.0", features = ["bundled"] }
 light-client = { path = "../light-client" }
 serde_json = "1.0.89"
-ssz_types = "0.5.4"
+ssz_types = { git = "https://github.com/KolbyML/ssz_types.git", rev = "91db848894d6cb94e3258d1a9f9be4897d05463a" }
 tokio = { version = "1.14.0", features = ["full"] }
 tracing = "0.1.36"
 trin-metrics = { path = "../trin-metrics" }

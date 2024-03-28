@@ -1,5 +1,5 @@
+use alloy_primitives::B256;
 /// Fetch data from related Portal networks
-use ethereum_types::H256;
 use serde_json::Value;
 use tokio::sync::mpsc;
 
@@ -58,7 +58,7 @@ pub async fn proxy_query_to_history_subnet(
 
 pub async fn find_header_by_hash(
     network: &mpsc::UnboundedSender<HistoryJsonRpcRequest>,
-    block_hash: H256,
+    block_hash: B256,
 ) -> Result<Header, RpcServeError> {
     // Request the block header from the history subnet.
     let content_key: HistoryContentKey = HistoryContentKey::BlockHeaderWithProof(block_hash.into());
@@ -74,7 +74,7 @@ pub async fn find_header_by_hash(
 
 pub async fn find_block_body_by_hash(
     network: &mpsc::UnboundedSender<HistoryJsonRpcRequest>,
-    block_hash: H256,
+    block_hash: B256,
 ) -> Result<BlockBody, RpcServeError> {
     // Request the block body from the history subnet.
     let content_key: HistoryContentKey = HistoryContentKey::BlockBody(block_hash.into());

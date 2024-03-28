@@ -6,7 +6,7 @@ use crate::types::consensus::{
         update::FinalizedRootProofLen,
     },
 };
-use ethereum_types::H256;
+use alloy_primitives::B256;
 use serde::{Deserialize, Serialize};
 use serde_this_or_that::as_u64;
 use ssz::Decode;
@@ -37,7 +37,7 @@ pub struct LightClientFinalityUpdate {
     #[superstruct(only(Capella), partial_getter(rename = "finalized_header_capella"))]
     pub finalized_header: LightClientHeaderCapella,
     /// Merkle proof attesting finalized header.
-    pub finality_branch: FixedVector<H256, FinalizedRootProofLen>,
+    pub finality_branch: FixedVector<B256, FinalizedRootProofLen>,
     /// current sync aggregate
     pub sync_aggregate: SyncAggregate,
     /// Slot of the sync aggregated signature

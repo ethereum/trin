@@ -1,4 +1,4 @@
-use ethereum_types::H256;
+use alloy_primitives::B256;
 use serde::{Deserialize, Serialize};
 use serde_this_or_that::as_u64;
 use ssz_derive::{Decode, Encode};
@@ -14,9 +14,9 @@ pub struct BeaconBlockHeader {
     pub slot: u64,
     #[serde(deserialize_with = "as_u64")]
     pub proposer_index: u64,
-    pub parent_root: H256,
-    pub state_root: H256,
-    pub body_root: H256,
+    pub parent_root: B256,
+    pub state_root: B256,
+    pub body_root: B256,
 }
 
 #[cfg(test)]

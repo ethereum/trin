@@ -1,4 +1,4 @@
-use ethereum_types::U256;
+use alloy_primitives::U256;
 use serde::{Deserialize, Serialize};
 use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, VariableList};

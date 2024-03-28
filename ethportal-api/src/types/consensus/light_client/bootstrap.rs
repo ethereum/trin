@@ -3,7 +3,7 @@ use crate::types::consensus::{
     light_client::header::{LightClientHeaderBellatrix, LightClientHeaderCapella},
     sync_committee::SyncCommittee,
 };
-use ethereum_types::H256;
+use alloy_primitives::B256;
 use serde::{Deserialize, Serialize};
 use ssz::Decode;
 use ssz_derive::{Decode, Encode};
@@ -32,7 +32,7 @@ pub struct LightClientBootstrap {
     pub header: LightClientHeaderCapella,
     /// Current sync committee corresponding to `header.beacon.state_root`
     pub current_sync_committee: SyncCommittee,
-    pub current_sync_committee_branch: FixedVector<H256, CurrentSyncCommitteeProofLen>,
+    pub current_sync_committee_branch: FixedVector<B256, CurrentSyncCommitteeProofLen>,
 }
 
 impl LightClientBootstrap {

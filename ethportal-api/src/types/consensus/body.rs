@@ -6,8 +6,8 @@ use crate::{
     },
     types::bytes::ByteList1G,
 };
+use alloy_primitives::{Address, B256};
 use discv5::enr::k256::elliptic_curve::consts::U16;
-use ethereum_types::{Address, H256};
 use rs_merkle::{algorithms::Sha256, MerkleTree};
 use serde::{Deserialize, Serialize};
 use serde_this_or_that::as_u64;
@@ -50,7 +50,7 @@ type MaxBlsToExecutionChanges = U16;
 pub struct BeaconBlockBody {
     pub randao_reveal: BlsSignature,
     pub eth1_data: Eth1Data,
-    pub graffiti: H256,
+    pub graffiti: B256,
     pub proposer_slashings: VariableList<ProposerSlashing, U16>,
     pub attester_slashings: VariableList<AttesterSlashing, U2>,
     pub attestations: VariableList<Attestation, U128>,
@@ -78,18 +78,18 @@ impl BeaconBlockBody {
 }
 
 impl BeaconBlockBodyBellatrix {
-    pub fn build_execution_payload_proof(&self) -> Vec<H256> {
+    pub fn build_execution_payload_proof(&self) -> Vec<B256> {
         let mut leaves: Vec<[u8; 32]> = vec![
-            self.randao_reveal.tree_hash_root().to_fixed_bytes(),
-            self.eth1_data.tree_hash_root().to_fixed_bytes(),
-            self.graffiti.tree_hash_root().to_fixed_bytes(),
-            self.proposer_slashings.tree_hash_root().to_fixed_bytes(),
-            self.attester_slashings.tree_hash_root().to_fixed_bytes(),
-            self.attestations.tree_hash_root().to_fixed_bytes(),
-            self.deposits.tree_hash_root().to_fixed_bytes(),
-            self.voluntary_exits.tree_hash_root().to_fixed_bytes(),
-            self.sync_aggregate.tree_hash_root().to_fixed_bytes(),
-            self.execution_payload.tree_hash_root().to_fixed_bytes(),
+            self.randao_reveal.tree_hash_root().0,
+            self.eth1_data.tree_hash_root().0,
+            self.graffiti.tree_hash_root().0,
+            self.proposer_slashings.tree_hash_root().0,
+            self.attester_slashings.tree_hash_root().0,
+            self.attestations.tree_hash_root().0,
+            self.deposits.tree_hash_root().0,
+            self.voluntary_exits.tree_hash_root().0,
+            self.sync_aggregate.tree_hash_root().0,
+            self.execution_payload.tree_hash_root().0,
         ];
         // We want to add empty leaves to make the tree a power of 2
         while leaves.len() < 16 {
@@ -101,16 +101,16 @@ impl BeaconBlockBodyBellatrix {
         // We want to prove the 10th leaf
         let indices_to_prove = vec![9];
         let proof = merkle_tree.proof(&indices_to_prove);
-        let proof_hashes: Vec<H256> = proof
+        let proof_hashes: Vec<B256> = proof
             .proof_hashes()
             .iter()
-            .map(|x| H256::from_slice(x))
+            .map(|x| B256::from_slice(x))
             .collect();
 
         proof_hashes
     }
 
-    pub fn build_execution_block_hash_proof(&self) -> Vec<H256> {
+    pub fn build_execution_block_hash_proof(&self) -> Vec<B256> {
         let mut block_hash_proof = self.execution_payload.build_block_hash_proof();
         block_hash_proof.extend(self.build_execution_payload_proof());
         block_hash_proof
@@ -153,14 +153,14 @@ pub struct Attestation {
 
 #[derive(Debug, PartialEq, Clone, Deserialize, Serialize, Decode, Encode, TreeHash)]
 pub struct Deposit {
-    pub proof: FixedVector<H256, U33>,
+    pub proof: FixedVector<B256, U33>,
     pub data: DepositData,
 }
 
 #[derive(Debug, PartialEq, Clone, Deserialize, Serialize, Decode, Encode, TreeHash)]
 pub struct DepositData {
     pub pubkey: PubKey,
-    pub withdrawal_credentials: H256,
+    pub withdrawal_credentials: B256,
     pub amount: u64,
     pub signature: BlsSignature,
 }
@@ -176,7 +176,7 @@ pub struct IndexedAttestation {
 pub struct AttestationData {
     pub slot: u64,
     pub index: u64,
-    pub beacon_block_root: H256,
+    pub beacon_block_root: B256,
     pub source: Checkpoint,
     pub target: Checkpoint,
 }
@@ -184,7 +184,7 @@ pub struct AttestationData {
 #[derive(Debug, PartialEq, Clone, Copy, Deserialize, Serialize, Decode, Encode, TreeHash)]
 pub struct Checkpoint {
     pub epoch: Epoch,
-    pub root: H256,
+    pub root: B256,
 }
 
 #[derive(Debug, PartialEq, Clone, Deserialize, Serialize, Decode, Encode, TreeHash)]
@@ -202,9 +202,9 @@ pub struct VoluntaryExit {
 
 #[derive(Debug, PartialEq, Clone, Default, Deserialize, Serialize, Decode, Encode, TreeHash)]
 pub struct Eth1Data {
-    pub deposit_root: H256,
+    pub deposit_root: B256,
     pub deposit_count: u64,
-    pub block_hash: H256,
+    pub block_hash: B256,
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, Encode, Decode, TreeHash)]
@@ -287,7 +287,7 @@ mod test {
             "0xdb56114e00fdd4c1f85c892bf35ac9a89289aaecb1ebd0a96cde606a748b5d71",
             "0x38373fc5d635131b9054c0a97cf1eeb397621f2f6e54ffc54f5f2516088b87d9",
         ]
-        .map(|x| H256::from_str(x).unwrap());
+        .map(|x| B256::from_str(x).unwrap());
         let proof = content.build_execution_payload_proof();
 
         assert_eq!(proof.len(), 4);
@@ -299,7 +299,7 @@ mod test {
             "0xf00e3441849a7e4228e6f48d5a5b231e153b39cb2ef283febdd9f7df1f777551",
             "0x6911c0b766b06671612d77e8f3061320f2a3471c2ba8d3f8251b53da8efb111a",
         ]
-        .map(|x| H256::from_str(x).unwrap())
+        .map(|x| B256::from_str(x).unwrap())
         .to_vec();
         let proof = content.build_execution_block_hash_proof();
         expected_block_hash_proof.extend(expected_execution_payload_proof);

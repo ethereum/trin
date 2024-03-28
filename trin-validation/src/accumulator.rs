@@ -1,8 +1,8 @@
+use alloy_primitives::B256;
 use rust_embed::RustEmbed;
 use std::path::PathBuf;
 
 use anyhow::anyhow;
-use ethereum_types::H256;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use ssz::Decode;
@@ -78,7 +78,7 @@ impl MasterAccumulator {
         &self,
         block_number: u64,
         history_jsonrpc_tx: mpsc::UnboundedSender<HistoryJsonRpcRequest>,
-    ) -> anyhow::Result<H256> {
+    ) -> anyhow::Result<B256> {
         if block_number > MERGE_BLOCK_NUMBER {
             return Err(anyhow!("Post-merge blocks are not supported."));
         }
@@ -123,7 +123,7 @@ impl MasterAccumulator {
 
     pub async fn lookup_epoch_acc(
         &self,
-        epoch_hash: H256,
+        epoch_hash: B256,
         history_jsonrpc_tx: mpsc::UnboundedSender<HistoryJsonRpcRequest>,
     ) -> anyhow::Result<EpochAccumulator> {
         let content_key = HistoryContentKey::EpochAccumulator(EpochAccumulatorKey { epoch_hash });
@@ -157,7 +157,7 @@ impl MasterAccumulator {
         &self,
         header: &Header,
         history_jsonrpc_tx: mpsc::UnboundedSender<HistoryJsonRpcRequest>,
-    ) -> anyhow::Result<[H256; 15]> {
+    ) -> anyhow::Result<[B256; 15]> {
         if header.number > MERGE_BLOCK_NUMBER {
             return Err(anyhow!("Unable to generate proof for post-merge header."));
         }
@@ -182,7 +182,7 @@ impl MasterAccumulator {
     pub fn construct_proof(
         header: &Header,
         epoch_acc: &EpochAccumulator,
-    ) -> anyhow::Result<[H256; 15]> {
+    ) -> anyhow::Result<[B256; 15]> {
         // Validate header hash matches historical hash from epoch accumulator
         let hr_index = (header.number % EPOCH_SIZE as u64) as usize;
         let header_record = epoch_acc[hr_index];
@@ -201,10 +201,8 @@ impl MasterAccumulator {
         for record in epoch_acc.into_iter() {
             // add the block hash as a leaf
             leaves.push(record.block_hash);
-            // convert total difficulty to H256
-            let mut slice = [0u8; 32];
-            record.total_difficulty.to_little_endian(&mut slice);
-            let leaf = H256::from_slice(&slice);
+            // convert total difficulty to B256
+            let leaf = B256::from_slice(record.total_difficulty.as_le_slice());
             // add the total difficulty as a leaf
             leaves.push(leaf);
         }
@@ -223,10 +221,10 @@ impl MasterAccumulator {
 
         // Add the be encoded EPOCH_SIZE to proof to comply with ssz merkleization spec
         // https://github.com/ethereum/consensus-specs/blob/dev/ssz/merkle-proofs.md#ssz-object-to-index
-        proof.push(H256::from_slice(&hex_decode(
+        proof.push(B256::from_slice(&hex_decode(
             "0x0020000000000000000000000000000000000000000000000000000000000000",
         )?));
-        let final_proof: [H256; 15] = proof
+        let final_proof: [B256; 15] = proof
             .try_into()
             .map_err(|_| anyhow!("Invalid proof length."))?;
         Ok(final_proof)
@@ -246,9 +244,11 @@ mod test {
     use super::*;
     use std::{fs, str::FromStr};
 
-    use ethereum_types::{Bloom, H160, U256};
+    use alloy_primitives::{Address, Bloom};
+    use alloy_rlp::Decodable;
     use rstest::*;
     use serde_json::json;
+    use serde_utils::u256_from_dec_str::u256_from_dec_str;
     use ssz::Decode;
 
     use crate::constants::DEFAULT_MASTER_ACC_HASH;
@@ -361,7 +361,7 @@ mod test {
         let future_hwp = HeaderWithProof {
             header: future_header,
             proof: BlockHeaderProof::AccumulatorProof(AccumulatorProof {
-                proof: [H256::zero(); 15],
+                proof: [B256::ZERO; 15],
             }),
         };
         master_acc.validate_header_with_proof(&future_hwp).unwrap();
@@ -374,7 +374,7 @@ mod test {
         let master_acc = MasterAccumulator::default();
         assert_eq!(
             master_acc.tree_hash_root(),
-            H256::from_str(DEFAULT_MASTER_ACC_HASH).unwrap()
+            B256::from_str(DEFAULT_MASTER_ACC_HASH).unwrap()
         );
         master_acc
     }
@@ -384,22 +384,22 @@ mod test {
         let json: Value = serde_json::from_str(&file).unwrap();
         let json = json.as_object().unwrap();
         let raw_header = json.get(&number.to_string()).unwrap().as_str().unwrap();
-        rlp::decode(&hex_decode(raw_header).unwrap()).unwrap()
+        Decodable::decode(&mut hex_decode(raw_header).unwrap().as_slice()).unwrap()
     }
 
     fn generate_random_header(height: &u64) -> Header {
         Header {
-            parent_hash: H256::random(),
-            uncles_hash: H256::random(),
-            author: H160::random(),
-            state_root: H256::random(),
-            transactions_root: H256::random(),
-            receipts_root: H256::random(),
-            logs_bloom: Bloom::zero(),
-            difficulty: U256::from_dec_str("1").unwrap(),
+            parent_hash: B256::random(),
+            uncles_hash: B256::random(),
+            author: Address::random(),
+            state_root: B256::random(),
+            transactions_root: B256::random(),
+            receipts_root: B256::random(),
+            logs_bloom: Bloom::ZERO,
+            difficulty: u256_from_dec_str("1").unwrap(),
             number: *height,
-            gas_limit: U256::from_dec_str("1").unwrap(),
-            gas_used: U256::from_dec_str("1").unwrap(),
+            gas_limit: u256_from_dec_str("1").unwrap(),
+            gas_used: u256_from_dec_str("1").unwrap(),
             timestamp: 1,
             extra_data: vec![],
             mix_hash: None,
@@ -419,7 +419,7 @@ mod test {
                     let json_value = serde_json::to_value(content_key).unwrap();
                     let response = json_value.as_str().unwrap();
                     let epoch_acc_hash = response.trim_start_matches("0x03");
-                    let epoch_acc_hash = H256::from_str(epoch_acc_hash).unwrap();
+                    let epoch_acc_hash = B256::from_str(epoch_acc_hash).unwrap();
                     let epoch_acc_path = format!("./src/assets/epoch_accs/{epoch_acc_hash}.bin");
                     let epoch_acc = fs::read(epoch_acc_path).unwrap();
                     let epoch_acc = hex_encode(epoch_acc);

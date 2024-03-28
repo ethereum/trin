@@ -2,7 +2,7 @@ use crate::{
     utils::{fixture_block_body, fixture_header_with_proof, fixture_receipts},
     Peertest,
 };
-use ethereum_types::H256;
+use alloy_primitives::B256;
 use ethportal_api::{
     jsonrpsee::async_client::Client,
     types::{content_key::history::BlockHeaderKey, enr::Enr, history::ContentInfo},
@@ -53,7 +53,7 @@ pub async fn test_invalidate_header_by_hash(peertest: &Peertest, target: &Client
     // store header_with_proof - doesn't perform validation
     let (_, content_value) = fixture_header_with_proof();
     let invalid_content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
-        block_hash: H256::random().into(),
+        block_hash: B256::random().into(),
     });
 
     let store_result = peertest

@@ -1,5 +1,5 @@
+use alloy_primitives::B256;
 use anyhow::Result;
-use ethereum_types::H256;
 use ethportal_api::{
     consensus::header::BeaconBlockHeader,
     light_client::{bootstrap::CurrentSyncCommitteeProofLen, update::FinalizedRootProofLen},
@@ -19,9 +19,9 @@ pub struct GenericUpdate {
     pub sync_aggregate: SyncAggregate,
     pub signature_slot: u64,
     pub next_sync_committee: Option<SyncCommittee>,
-    pub next_sync_committee_branch: Option<FixedVector<H256, CurrentSyncCommitteeProofLen>>,
+    pub next_sync_committee_branch: Option<FixedVector<B256, CurrentSyncCommitteeProofLen>>,
     pub finalized_header: Option<BeaconBlockHeader>,
-    pub finality_branch: Option<FixedVector<H256, FinalizedRootProofLen>>,
+    pub finality_branch: Option<FixedVector<B256, FinalizedRootProofLen>>,
 }
 
 impl From<&LightClientUpdateCapella> for GenericUpdate {

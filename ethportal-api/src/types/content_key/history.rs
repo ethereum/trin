@@ -1,4 +1,4 @@
-use ethereum_types::H256;
+use alloy_primitives::B256;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest as Sha2Digest, Sha256};
 use ssz::{Decode, DecodeError};
@@ -65,10 +65,10 @@ pub struct BlockHeaderKey {
     pub block_hash: [u8; 32],
 }
 
-impl From<H256> for BlockHeaderKey {
-    fn from(block_hash: H256) -> Self {
+impl From<B256> for BlockHeaderKey {
+    fn from(block_hash: B256) -> Self {
         Self {
-            block_hash: block_hash.to_fixed_bytes(),
+            block_hash: block_hash.0,
         }
     }
 }
@@ -80,10 +80,10 @@ pub struct BlockBodyKey {
     pub block_hash: [u8; 32],
 }
 
-impl From<H256> for BlockBodyKey {
-    fn from(block_hash: H256) -> Self {
+impl From<B256> for BlockBodyKey {
+    fn from(block_hash: B256) -> Self {
         Self {
-            block_hash: block_hash.to_fixed_bytes(),
+            block_hash: block_hash.0,
         }
     }
 }
@@ -98,7 +98,7 @@ pub struct BlockReceiptsKey {
 /// A key for an epoch header accumulator.
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct EpochAccumulatorKey {
-    pub epoch_hash: H256,
+    pub epoch_hash: B256,
 }
 
 impl From<&HistoryContentKey> for Vec<u8> {
@@ -164,7 +164,7 @@ impl fmt::Display for HistoryContentKey {
             Self::EpochAccumulator(acc) => {
                 format!(
                     "EpochAccumulator {{ epoch_hash: {} }}",
-                    hex_encode_compact(acc.epoch_hash.as_fixed_bytes())
+                    hex_encode_compact(acc.epoch_hash.0)
                 )
             }
         };
@@ -307,7 +307,7 @@ mod test {
                 .unwrap();
 
         let key = HistoryContentKey::EpochAccumulator(EpochAccumulatorKey {
-            epoch_hash: H256::from_slice(&epoch_hash),
+            epoch_hash: B256::from_slice(&epoch_hash),
         });
 
         // round trip
@@ -315,7 +315,7 @@ mod test {
         assert_eq!(decoded, key);
 
         assert_eq!(key.to_bytes(), expected_content_key);
-        assert_eq!(key.content_id(), expected_content_id.as_ref());
+        assert_eq!(key.content_id(), expected_content_id.as_ref() as &[u8]);
         assert_eq!(
             key.to_string(),
             "EpochAccumulator { epoch_hash: 0xe242..c491 }"
@@ -393,7 +393,7 @@ mod test {
             hex_decode("0xe242814b90ed3950e13aac7e56ce116540c71b41d1516605aada26c6c07cc491")
                 .unwrap();
         let expected_content_key = HistoryContentKey::EpochAccumulator(EpochAccumulatorKey {
-            epoch_hash: H256::from_slice(&epoch_hash),
+            epoch_hash: B256::from_slice(&epoch_hash),
         });
 
         let content_key: HistoryContentKey = serde_json::from_str(content_key_json).unwrap();

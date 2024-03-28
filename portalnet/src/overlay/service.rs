@@ -2630,7 +2630,7 @@ where
 }
 
 fn decode_and_validate_content_payload<TContentKey>(
-    accepted_keys: &Vec<TContentKey>,
+    accepted_keys: &[TContentKey],
     payload: Vec<u8>,
 ) -> anyhow::Result<Vec<Vec<u8>>> {
     let content_values = portal_wire::decode_content_payload(payload)?;
@@ -2654,8 +2654,8 @@ mod tests {
 
     use std::{net::SocketAddr, time::Instant};
 
+    use alloy_primitives::U256;
     use discv5::kbucket::Entry;
-    use ethereum_types::U256;
     use rstest::*;
     use serial_test::serial;
     use tokio::sync::mpsc::unbounded_channel;
@@ -3189,7 +3189,7 @@ mod tests {
         let key2 = kbucket::Key::from(enr2.node_id());
         let peer2 = Node {
             enr: enr2,
-            data_radius: Distance::from(U256::zero()),
+            data_radius: Distance::from(U256::ZERO),
         };
         let _ = service
             .kbuckets

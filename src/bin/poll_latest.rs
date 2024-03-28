@@ -1,6 +1,6 @@
+use alloy_primitives::B256;
 use anyhow::{anyhow, Result};
 use clap::Parser;
-use ethereum_types::H256;
 use ethers::prelude::*;
 use ethers_providers::Ws;
 use ethportal_api::{
@@ -112,7 +112,7 @@ pub async fn main() -> Result<()> {
         let timestamp = Instant::now();
         let metrics = metrics.clone();
         tokio::spawn(audit_block(
-            block_hash,
+            B256::from_slice(block_hash.as_bytes()),
             timestamp,
             timeout,
             audit_config.backoff,
@@ -124,7 +124,7 @@ pub async fn main() -> Result<()> {
 }
 
 async fn audit_block(
-    hash: H256,
+    hash: B256,
     timestamp: Instant,
     timeout: Duration,
     backoff: Backoff,
@@ -133,27 +133,21 @@ async fn audit_block(
 ) -> Result<()> {
     metrics.lock().unwrap().active_audit_count += 3;
     let header_handle = tokio::spawn(audit_content_key(
-        HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
-            block_hash: hash.to_fixed_bytes(),
-        }),
+        HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey { block_hash: hash.0 }),
         timestamp,
         timeout,
         backoff,
         client.clone(),
     ));
     let block_body_handle = tokio::spawn(audit_content_key(
-        HistoryContentKey::BlockBody(BlockBodyKey {
-            block_hash: hash.to_fixed_bytes(),
-        }),
+        HistoryContentKey::BlockBody(BlockBodyKey { block_hash: hash.0 }),
         timestamp,
         timeout,
         backoff,
         client.clone(),
     ));
     let receipts_handle = tokio::spawn(audit_content_key(
-        HistoryContentKey::BlockReceipts(BlockReceiptsKey {
-            block_hash: hash.to_fixed_bytes(),
-        }),
+        HistoryContentKey::BlockReceipts(BlockReceiptsKey { block_hash: hash.0 }),
         timestamp,
         timeout,
         backoff,

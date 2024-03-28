@@ -1,7 +1,7 @@
 use std::{collections::HashMap, time::Duration};
 
+use alloy_primitives::B256;
 use anyhow::anyhow;
-use ethereum_types::H256;
 use reqwest::Response;
 use serde::{Deserialize, Serialize};
 use serde_this_or_that::as_u64;
@@ -27,8 +27,8 @@ pub struct RawSlotResponseData {
 pub struct Slot {
     #[serde(deserialize_with = "as_u64")]
     pub slot: u64,
-    pub block_root: Option<H256>,
-    pub state_root: Option<H256>,
+    pub block_root: Option<B256>,
+    pub state_root: Option<B256>,
     #[serde(deserialize_with = "as_u64")]
     pub epoch: u64,
     pub time: StartEndTime,
@@ -122,7 +122,7 @@ impl CheckpointFallback {
     pub async fn fetch_latest_checkpoint(
         &self,
         network: &networks::Network,
-    ) -> anyhow::Result<H256> {
+    ) -> anyhow::Result<B256> {
         let services = &self.get_healthy_fallback_services(network);
         Self::fetch_latest_checkpoint_from_services(&services[..]).await
     }
@@ -137,7 +137,7 @@ impl CheckpointFallback {
     /// Fetch the latest checkpoint from a list of checkpoint fallback services.
     pub async fn fetch_latest_checkpoint_from_services(
         services: &[CheckpointFallbackService],
-    ) -> anyhow::Result<H256> {
+    ) -> anyhow::Result<B256> {
         // Iterate over all mainnet checkpoint sync services and get the latest checkpoint slot for
         // each.
         let tasks: Vec<_> = services
@@ -192,7 +192,7 @@ impl CheckpointFallback {
             .iter()
             .filter_map(|x| x.block_root)
             .collect::<Vec<_>>();
-        let mut m: HashMap<H256, usize> = HashMap::new();
+        let mut m: HashMap<B256, usize> = HashMap::new();
         for c in checkpoints {
             *m.entry(c).or_default() += 1;
         }
@@ -204,7 +204,7 @@ impl CheckpointFallback {
 
     /// Associated function to fetch the latest checkpoint from a specific checkpoint sync fallback
     /// service api url.
-    pub async fn fetch_checkpoint_from_api(url: &str) -> anyhow::Result<H256> {
+    pub async fn fetch_checkpoint_from_api(url: &str) -> anyhow::Result<B256> {
         // Fetch the url
         let constructed_url = Self::construct_url(url);
         let res = Self::send_request(&constructed_url).await?;
@@ -330,7 +330,7 @@ mod test {
             .fetch_latest_checkpoint(&networks::Network::Mainnet)
             .await
             .unwrap();
-        assert_ne!(checkpoint, H256::zero());
+        assert_ne!(checkpoint, B256::ZERO);
     }
 
     #[tokio::test]

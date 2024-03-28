@@ -1,4 +1,4 @@
-use ethereum_types::U256;
+use alloy_primitives::U256;
 use tracing::info;
 
 use ethportal_api::EthApiClient;

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
+use alloy_primitives::B256;
 use anyhow::{anyhow, ensure};
-use ethereum_types::H256;
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 
@@ -50,7 +50,7 @@ pub struct FullHeader {
     pub header: Header,
     pub txs: Vec<Transaction>,
     pub tx_hashes: TxHashes,
-    pub uncles: Vec<H256>,
+    pub uncles: Vec<B256>,
     pub epoch_acc: Option<Arc<EpochAccumulator>>,
     pub withdrawals: Option<Vec<Withdrawal>>,
 }
@@ -62,7 +62,7 @@ impl TryFrom<Value> for FullHeader {
 
     fn try_from(val: Value) -> anyhow::Result<Self> {
         let header: Header = serde_json::from_value(val.clone())?;
-        let uncles: Vec<H256> = serde_json::from_value(val["uncles"].clone())?;
+        let uncles: Vec<B256> = serde_json::from_value(val["uncles"].clone())?;
         let tx_hashes: TxHashes = serde_json::from_value(val["transactions"].clone())?;
         let txs: Vec<Transaction> = serde_json::from_value(val["transactions"].clone())?;
         let withdrawals = match val["withdrawals"].clone() {

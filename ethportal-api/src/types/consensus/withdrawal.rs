@@ -1,5 +1,5 @@
-use ethereum_types::Address;
-use rlp_derive::{RlpDecodable, RlpEncodable};
+use alloy_primitives::Address;
+use alloy_rlp::{RlpDecodable, RlpEncodable};
 use serde::{Deserialize, Deserializer, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, RlpDecodable, RlpEncodable)]

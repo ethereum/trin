@@ -1,8 +1,8 @@
 use std::{fmt, ops::Deref};
 
-use ethereum_types::U256;
+use alloy_primitives::U256;
 
-pub type DataRadius = ethereum_types::U256;
+pub type DataRadius = U256;
 
 /// Represents a distance between two keys in the DHT key space.
 #[derive(Copy, Clone, PartialEq, Eq, Default, PartialOrd, Ord, Debug)]
@@ -18,7 +18,7 @@ impl Distance {
     /// The maximum value.
     pub const MAX: Self = Self(U256::MAX);
     /// The minimum value.
-    pub const ZERO: Self = Self(U256::zero());
+    pub const ZERO: Self = Self(U256::ZERO);
 
     /// Returns the integer base-2 logarithm of `self`.
     ///
@@ -28,15 +28,13 @@ impl Distance {
         if self.0.is_zero() {
             None
         } else {
-            Some(256 - (self.0.leading_zeros() as usize))
+            Some(256 - self.0.leading_zeros())
         }
     }
 
     /// Returns the big-endian representation of `self`.
     pub fn big_endian(&self) -> [u8; 32] {
-        let mut be: [u8; 32] = [0; 32];
-        self.0.to_big_endian(&mut be);
-        be
+        self.0.to_be_bytes()
     }
 
     /// Returns the top 4 bytes representation of `self`.
@@ -77,7 +75,7 @@ impl Metric for XorMetric {
         for i in 0..32 {
             z[i] = x[i] ^ y[i];
         }
-        Distance(U256::from_big_endian(z.as_slice()))
+        Distance(U256::from_be_slice(z.as_slice()))
     }
 }
 
@@ -109,7 +107,7 @@ mod test {
     #[test]
     fn distance_log2() {
         fn prop(x: DhtPoint) -> TestResult {
-            let x = U256::from_big_endian(&x.0);
+            let x = U256::from_be_slice(&x.0);
             let distance = Distance(x);
             let log2_distance = distance.log2();
 
@@ -130,31 +128,22 @@ mod test {
         quickcheck(prop as fn(DhtPoint) -> TestResult);
 
         // 256 (2^8).
-        let point = U256::from(256);
-        let mut distance = [0u8; 32];
-        point.to_big_endian(&mut distance);
-        let point = DhtPoint(distance);
+        let point = DhtPoint(U256::from(256).to_be_bytes());
         assert!(!prop(point).is_failure());
 
         // 255 (2^8 - 1).
-        let point = U256::from(255);
-        let mut distance = [0u8; 32];
-        point.to_big_endian(&mut distance);
-        let point = DhtPoint(distance);
+        let point = DhtPoint(U256::from(255).to_be_bytes());
         assert!(!prop(point).is_failure());
 
         // 257 (2^8 + 1).
-        let point = U256::from(257);
-        let mut distance = [0u8; 32];
-        point.to_big_endian(&mut distance);
-        let point = DhtPoint(distance);
+        let point = DhtPoint(U256::from(257).to_be_bytes());
         assert!(!prop(point).is_failure());
     }
 
     #[test]
     fn distance_big_endian() {
         fn prop(x: DhtPoint) -> TestResult {
-            let x_be_u256 = U256::from_big_endian(&x.0);
+            let x_be_u256 = U256::from_be_slice(&x.0);
             let distance = Distance(x_be_u256);
             let distance_be = distance.big_endian();
             TestResult::from_bool(distance_be == x.0)

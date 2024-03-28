@@ -3,7 +3,7 @@ name = "trin"
 version = "0.1.0"
 authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 edition = "2021"
-rust-version = "1.75.0"
+rust-version = "1.76.0"
 default-run = "trin"
 repository = "https://github.com/ethereum/trin"
 license = "GPL-3.0"
@@ -13,12 +13,13 @@ categories = ["cryptography::cryptocurrencies"]
 description = "A Rust implementation of the Ethereum Portal Network"
 
 [dependencies]
+alloy-primitives = "0.6.4"
+alloy-rlp = "0.3.4"
 anyhow = "1.0.68"
 clap = { version = "4.2.1", features = ["derive"] }
 dirs = "5.0.1"
-discv5 = { version = "0.4.0", features = ["serde"] }
-ethereum-types = "0.14.1"
-ethereum_ssz = "0.5.3"
+discv5 = { version = "0.4.1", features = ["serde"] }
+ethereum_ssz = { git = "https://github.com/KolbyML/ethereum_ssz.git", rev = "ec9af0923e3122353243f4f6656fd6e6e3c2e4e3" }
 ethers = { version = "2.0"}
 ethers-providers = { version = "2.0", features = ["ws"] }
 ethportal-api = { path = "ethportal-api" }
@@ -31,8 +32,7 @@ portal-bridge = { path = "portal-bridge" }
 prometheus_exporter = "0.8.4"
 rand = "0.8.4"
 regex = "1.10.2"
-reth-ipc = { tag = "v0.1.0-alpha.10", git = "https://github.com/paradigmxyz/reth.git"}
-rlp = "0.5.0"
+reth-ipc = { tag = "v0.2.0-beta.4", git = "https://github.com/paradigmxyz/reth.git"}
 rpc = { path = "rpc"}
 serde_json = {version = "1.0.89", features = ["preserve_order"]}
 sha3 = "0.9.1"
@@ -41,7 +41,7 @@ tempfile = "3.3.0"
 tokio = { version = "1.14.0", features = ["full"] }
 tracing = "0.1.36"
 tracing-subscriber = "0.3.15"
-tree_hash = "0.5.2"
+tree_hash = { git = "https://github.com/KolbyML/tree_hash.git", rev = "c402373ce2b430551eb8debd85512ceac9567210" }
 trin-beacon = { path = "trin-beacon" }
 trin-history = { path = "trin-history" }
 trin-state = { path = "trin-state" }

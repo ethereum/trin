@@ -1,4 +1,4 @@
-use ethereum_types::{H256, U256};
+use alloy_primitives::{B256, U256};
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
 use reth_rpc_types::Block;
 
@@ -11,7 +11,7 @@ pub trait EthApi {
     #[method(name = "getBlockByHash")]
     async fn get_block_by_hash(
         &self,
-        block_hash: H256,
+        block_hash: B256,
         hydrated_transactions: bool,
     ) -> RpcResult<Block>;
 }

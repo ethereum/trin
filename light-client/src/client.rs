@@ -391,7 +391,7 @@ impl<DB: Database, R: ConsensusRpc + 'static> Client<DB, R> {
             let config = self.node.read().await.config.clone();
             let consensus = ConsensusLightClient::new(
                 &config.consensus_rpc,
-                checkpoint.as_bytes(),
+                checkpoint.as_slice(),
                 config.clone(),
             )?;
             self.node.write().await.consensus = consensus;
@@ -428,7 +428,7 @@ impl<DB: Database, R: ConsensusRpc + 'static> Client<DB, R> {
         let config = self.node.read().await.config.clone();
         let consensus = ConsensusLightClient::new(
             &config.consensus_rpc,
-            checkpoint.as_bytes(),
+            checkpoint.as_slice(),
             config.clone(),
         )?;
         self.node.write().await.consensus = consensus;

@@ -12,14 +12,12 @@ use std::{
 
 use anyhow::anyhow;
 use async_trait::async_trait;
-use bytes::BytesMut;
 use discv5::{
     enr::{CombinedKey, Enr as Discv5Enr, NodeId},
     ConfigBuilder, Discv5, Event, ListenConfig, RequestError, TalkRequest,
 };
 use lru::LruCache;
 use parking_lot::RwLock;
-use rlp::RlpStream;
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 use utp_rs::{cid::ConnectionPeer, udp::AsyncUdpSocket};
@@ -151,7 +149,7 @@ impl Discovery {
                 .expect("Unable to set Enr sequence number");
 
             // If the content is different then increase the sequence number
-            if get_enr_rlp_content(&enr) != get_enr_rlp_content(&old_enr) {
+            if !enr.compare_content(&old_enr) {
                 enr.set_seq(old_enr.seq() + 1, &enr_key)
                     .expect("Unable to increase Enr sequence number");
                 fs::write(trin_enr_path, enr.to_base64())
@@ -437,29 +435,6 @@ impl AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
             }
             None => Err(io::Error::from(io::ErrorKind::NotConnected)),
         }
-    }
-}
-
-// todo: remove this once sigp/enr implements this for enr's
-// we need this because signatures can be different for the same data but still valid
-fn get_enr_rlp_content(enr: &Enr) -> BytesMut {
-    match enr.id() {
-        Some(ref id) if id == "v4" => {
-            let mut stream = RlpStream::new_with_buffer(BytesMut::with_capacity(300));
-            let count = enr.iter().count();
-            stream.begin_list(count * 2 + 1);
-            stream.append(&enr.seq());
-            for (k, v) in enr.iter() {
-                // Keys are bytes
-                stream.append(k);
-                // Values are raw RLP encoded data
-                stream.append_raw(v, 1);
-            }
-
-            stream.out()
-        }
-        // unsupported identity schemes
-        _ => BytesMut::with_capacity(0),
     }
 }
 

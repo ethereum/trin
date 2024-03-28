@@ -4,10 +4,10 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use alloy_primitives::B256;
 use anyhow::bail;
 use chrono::Duration;
 use discv5::enr::{CombinedKey, Enr, NodeId};
-use ethereum_types::H256;
 use serde::{Deserialize, Serialize};
 
 use ethportal_api::{
@@ -22,13 +22,12 @@ use ethportal_api::{
 // stops getting evenly spread, because of how the code spreads the data by
 // inspecting the first byte from the node ID. Also, values between 16 to
 // 256 would be spread, but less and less evenly.
-pub fn generate_spaced_private_keys(count: u8, root_private_key: Option<H256>) -> Vec<String> {
+pub fn generate_spaced_private_keys(count: u8, root_private_key: Option<B256>) -> Vec<String> {
     let mut private_keys = vec![];
     let (root_node_id, root_private_key) = match root_private_key {
-        Some(key) => {
+        Some(mut key) => {
             let private_key =
-                CombinedKey::secp256k1_from_bytes(key.to_fixed_bytes().as_mut_slice())
-                    .expect("to be able to decode key");
+                CombinedKey::secp256k1_from_bytes(&mut key.0).expect("to be able to decode key");
             let enr = Enr::empty(&private_key).expect("to be able to build ENR from private key");
             (enr.node_id(), private_key)
         }
@@ -171,7 +170,6 @@ mod tests {
         BEACON_GENESIS_TIME, HEADER_WITH_PROOF_CONTENT_KEY, HEADER_WITH_PROOF_CONTENT_VALUE,
     };
     use chrono::{DateTime, TimeZone, Utc};
-    use ethereum_types::U256;
     use ethportal_api::{
         types::distance::{Metric, XorMetric},
         utils::bytes::hex_decode,
@@ -184,6 +182,8 @@ mod tests {
     #[case(4)]
     #[case(16)]
     fn test_generate_spaced_private_keys(#[case] count: u8) {
+        use alloy_primitives::U256;
+
         let private_keys = generate_spaced_private_keys(count, None);
         assert_eq!(private_keys.len() as u8, count);
         let one = Enr::empty(
@@ -195,7 +195,7 @@ mod tests {
         )
         .unwrap();
         let distance = XorMetric::distance(&one.node_id().raw(), &two.node_id().raw());
-        let min_spread = (U256::MAX / count / 2).into();
+        let min_spread = (U256::MAX / U256::from(count) / U256::from(2)).into();
         let first_byte1 = one.node_id().raw()[0];
         let first_byte2 = two.node_id().raw()[0];
         assert!(

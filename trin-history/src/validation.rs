@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
+use alloy_primitives::B256;
 use anyhow::anyhow;
-use ethereum_types::H256;
 use ssz::Decode;
 use tokio::sync::RwLock;
 use tree_hash::TreeHash;
@@ -38,7 +38,7 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                         anyhow!("Header with proof content has invalid encoding: {err:?}")
                     })?;
                 let header_hash = header_with_proof.header.hash();
-                if header_hash != H256::from(key.block_hash) {
+                if header_hash != B256::from(key.block_hash) {
                     return Err(anyhow!(
                         "Content validation failed: Invalid header hash. Found: {header_hash:?} - Expected: {:?}",
                         hex_encode(key.block_hash)
@@ -59,7 +59,7 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                     .header_oracle
                     .read()
                     .await
-                    .recursive_find_header_with_proof(H256::from(key.block_hash))
+                    .recursive_find_header_with_proof(B256::from(key.block_hash))
                     .await?
                     .header;
                 let actual_uncles_root = block_body.uncles_root()?;
@@ -88,7 +88,7 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                     .header_oracle
                     .read()
                     .await
-                    .recursive_find_header_with_proof(H256::from(key.block_hash))
+                    .recursive_find_header_with_proof(B256::from(key.block_hash))
                     .await?
                     .header;
                 let actual_receipts_root = receipts.root()?;
@@ -133,8 +133,9 @@ mod tests {
     use super::*;
     use std::{fs, path::PathBuf};
 
-    use ethereum_types::U256;
+    use alloy_primitives::U256;
     use serde_json::Value;
+    use serde_utils::u256_from_dec_str::u256_from_dec_str;
     use ssz::Encode;
 
     use ethportal_api::{
@@ -216,7 +217,7 @@ mod tests {
     #[tokio::test]
     async fn validate_epoch_acc() {
         let epoch_acc =
-            std::fs::read("./../trin-validation/src/assets/epoch_accs/0x5ec1…4218.bin").unwrap();
+            std::fs::read("./../trin-validation/src/assets/epoch_accs/0x5ec1ffb8c3b146f42606c74ced973dc16ec5a107c0345858c343fc94780b4218.bin").unwrap();
         let epoch_acc = EpochAccumulator::from_ssz_bytes(&epoch_acc).unwrap();
         let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator { header_oracle };
@@ -234,7 +235,7 @@ mod tests {
     #[should_panic(expected = "Invalid epoch accumulator tree hash root.")]
     async fn invalidate_epoch_acc_with_invalid_root_hash() {
         let epoch_acc =
-            std::fs::read("./../trin-validation/src/assets/epoch_accs/0x5ec1…4218.bin").unwrap();
+            std::fs::read("./../trin-validation/src/assets/epoch_accs/0x5ec1ffb8c3b146f42606c74ced973dc16ec5a107c0345858c343fc94780b4218.bin").unwrap();
         let mut epoch_acc = EpochAccumulator::from_ssz_bytes(&epoch_acc).unwrap();
         let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator { header_oracle };
@@ -243,8 +244,8 @@ mod tests {
         });
 
         epoch_acc[0] = HeaderRecord {
-            block_hash: H256::random(),
-            total_difficulty: U256::from_dec_str("0").unwrap(),
+            block_hash: B256::random(),
+            total_difficulty: u256_from_dec_str("0").unwrap(),
         };
         let invalid_content = epoch_acc.as_ssz_bytes();
 
@@ -258,14 +259,14 @@ mod tests {
     #[should_panic(expected = "Invalid epoch accumulator, missing from master accumulator.")]
     async fn invalidate_epoch_acc_missing_from_master_acc() {
         let epoch_acc =
-            std::fs::read("./../trin-validation/src/assets/epoch_accs/0x5ec1…4218.bin").unwrap();
+            std::fs::read("./../trin-validation/src/assets/epoch_accs/0x5ec1ffb8c3b146f42606c74ced973dc16ec5a107c0345858c343fc94780b4218.bin").unwrap();
         let mut epoch_acc = EpochAccumulator::from_ssz_bytes(&epoch_acc).unwrap();
         let header_oracle = default_header_oracle();
         let chain_history_validator = ChainHistoryValidator { header_oracle };
 
         epoch_acc[0] = HeaderRecord {
-            block_hash: H256::random(),
-            total_difficulty: U256::from_dec_str("0").unwrap(),
+            block_hash: B256::random(),
+            total_difficulty: u256_from_dec_str("0").unwrap(),
         };
         let content_key = HistoryContentKey::EpochAccumulator(EpochAccumulatorKey {
             epoch_hash: epoch_acc.tree_hash_root(),

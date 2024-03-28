@@ -1,9 +1,9 @@
+use alloy_primitives::B256;
 use clap::{
     arg,
     error::{Error, ErrorKind},
     Args, Parser, Subcommand,
 };
-use ethereum_types::H256;
 use std::{env, ffi::OsString, fmt, net::SocketAddr, path::PathBuf, str::FromStr};
 use url::Url;
 
@@ -120,7 +120,7 @@ pub struct TrinConfig {
         value_parser = check_private_key_length,
         help = "Hex encoded 32 byte private key (with 0x prefix) (considered unsafe as it's stored in terminal history - keyfile support coming soon)"
     )]
-    pub private_key: Option<H256>,
+    pub private_key: Option<B256>,
 
     #[arg(
         long,
@@ -272,9 +272,9 @@ impl TrinConfig {
     }
 }
 
-pub fn check_private_key_length(private_key: &str) -> Result<H256, String> {
+pub fn check_private_key_length(private_key: &str) -> Result<B256, String> {
     if private_key.len() == 66 {
-        return H256::from_str(private_key).map_err(|err| format!("HexError: {err}"));
+        return B256::from_str(private_key).map_err(|err| format!("HexError: {err}"));
     }
     Err(format!(
         "Invalid private key length: {}, expected 66 (0x-prefixed 32 byte hexstring)",
@@ -501,7 +501,7 @@ mod test {
     #[test]
     fn test_custom_private_key() {
         let expected_config = TrinConfig {
-            private_key: Some(H256::from_slice(&[1; 32])),
+            private_key: Some(B256::from_slice(&[1; 32])),
             ..Default::default()
         };
         let actual_config = TrinConfig::new_from(
