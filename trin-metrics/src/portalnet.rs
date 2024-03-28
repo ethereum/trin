@@ -1,4 +1,4 @@
-use crate::{overlay::OverlayMetrics, storage::StorageMetrics};
+use crate::{bridge::BridgeMetrics, overlay::OverlayMetrics, storage::StorageMetrics};
 use lazy_static::lazy_static;
 use prometheus_exporter::prometheus::default_registry;
 
@@ -15,6 +15,7 @@ fn initialize_metrics_registry() -> PortalnetMetrics {
 }
 
 pub struct PortalnetMetrics {
+    bridge: BridgeMetrics,
     overlay: OverlayMetrics,
     storage: StorageMetrics,
 }
@@ -24,7 +25,12 @@ impl PortalnetMetrics {
         let registry = default_registry();
         let overlay = OverlayMetrics::new(registry)?;
         let storage = StorageMetrics::new(registry)?;
-        Ok(Self { overlay, storage })
+        let bridge = BridgeMetrics::new(registry)?;
+        Ok(Self {
+            overlay,
+            storage,
+            bridge,
+        })
     }
 
     pub fn overlay(&self) -> OverlayMetrics {
@@ -33,5 +39,9 @@ impl PortalnetMetrics {
 
     pub fn storage(&self) -> StorageMetrics {
         self.storage.clone()
+    }
+
+    pub fn bridge(&self) -> BridgeMetrics {
+        self.bridge.clone()
     }
 }

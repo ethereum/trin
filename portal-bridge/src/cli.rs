@@ -57,9 +57,15 @@ pub struct BridgeConfig {
 
     #[arg(
         long,
-        help = "Socket address for metrics reporting, ex: 127.0.0.1:9090"
+        help = "Socket address for bridge metrics reporting, ex: 127.0.0.1:9091"
     )]
     pub metrics_url: Option<SocketAddr>,
+
+    #[arg(
+        long,
+        help = "Socket address for client metrics reporting, ex: 127.0.0.1:9090"
+    )]
+    pub client_metrics_url: Option<SocketAddr>,
 
     #[arg(
         default_value = "default",

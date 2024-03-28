@@ -11,6 +11,7 @@ use serde_json::Value;
 use ssz_types::VariableList;
 use tokio::time::{interval, sleep, Duration, MissedTickBehavior};
 use tracing::{info, warn, Instrument};
+use trin_metrics::bridge::BridgeMetricsReporter;
 
 use crate::{
     api::consensus::ConsensusApi,
@@ -47,14 +48,17 @@ pub struct BeaconBridge {
     pub api: ConsensusApi,
     mode: BridgeMode,
     portal_clients: Arc<Vec<HttpClient>>,
+    pub metrics: BridgeMetricsReporter,
 }
 
 impl BeaconBridge {
     pub fn new(api: ConsensusApi, mode: BridgeMode, portal_clients: Arc<Vec<HttpClient>>) -> Self {
+        let metrics = BridgeMetricsReporter::new("beacon".to_string(), &format!("{mode:?}"));
         Self {
             api,
             mode,
             portal_clients,
+            metrics,
         }
     }
 
