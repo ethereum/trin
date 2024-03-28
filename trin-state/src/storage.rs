@@ -4,6 +4,7 @@ use ethportal_api::{
         content_value::state::{ContractBytecode, TrieNode},
         distance::Distance,
         portal_wire::ProtocolId,
+        state::PaginateLocalContentInfo,
     },
     ContentValue, OverlayContentKey, StateContentKey, StateContentValue,
 };
@@ -79,6 +80,20 @@ impl StateStorage {
         };
         Ok(Self {
             store: create_store(ContentType::State, config, sql_connection_pool)?,
+        })
+    }
+
+    /// Returns a paginated list of all locally available content keys, according to the provided
+    /// offset and limit.
+    pub fn paginate(
+        &self,
+        offset: u64,
+        limit: u64,
+    ) -> Result<PaginateLocalContentInfo, ContentStoreError> {
+        let paginate_result = self.store.paginate(offset, limit)?;
+        Ok(PaginateLocalContentInfo {
+            content_keys: paginate_result.content_keys,
+            total_entries: paginate_result.entry_count,
         })
     }
 
