@@ -122,15 +122,21 @@ impl PortalnetEvents {
 
         match protocol_id {
             Ok(protocol) => match protocol {
-                ProtocolId::History => {
-                    self.send_overlay_request(&self.history_handle.tx, request.into(), "history")
-                }
-                ProtocolId::Beacon => {
-                    self.send_overlay_request(&self.beacon_handle.tx, request.into(), "beacon")
-                }
-                ProtocolId::State => {
-                    self.send_overlay_request(&self.state_handle.tx, request.into(), "state")
-                }
+                ProtocolId::History => self.send_overlay_request(
+                    self.history_handle.tx.as_ref(),
+                    request.into(),
+                    "history",
+                ),
+                ProtocolId::Beacon => self.send_overlay_request(
+                    self.beacon_handle.tx.as_ref(),
+                    request.into(),
+                    "beacon",
+                ),
+                ProtocolId::State => self.send_overlay_request(
+                    self.state_handle.tx.as_ref(),
+                    request.into(),
+                    "state",
+                ),
                 ProtocolId::Utp => {
                     if let Err(err) = self.utp_talk_reqs.send(request) {
                         error!(%err, "Error forwarding talk request to uTP socket");
@@ -166,19 +172,27 @@ impl PortalnetEvents {
         }
 
         if recipients.contains(&ProtocolId::Beacon) {
-            self.send_overlay_request(&self.beacon_handle.tx, Event(event.clone()), "beacon");
+            self.send_overlay_request(
+                self.beacon_handle.tx.as_ref(),
+                Event(event.clone()),
+                "beacon",
+            );
         }
         if recipients.contains(&ProtocolId::State) {
-            self.send_overlay_request(&self.state_handle.tx, Event(event.clone()), "state");
+            self.send_overlay_request(self.state_handle.tx.as_ref(), Event(event.clone()), "state");
         }
         if recipients.contains(&ProtocolId::History) {
-            self.send_overlay_request(&self.history_handle.tx, Event(event.clone()), "history");
+            self.send_overlay_request(
+                self.history_handle.tx.as_ref(),
+                Event(event.clone()),
+                "history",
+            );
         }
     }
 
     fn send_overlay_request(
         &self,
-        tx: &Option<mpsc::UnboundedSender<OverlayRequest>>,
+        tx: Option<&mpsc::UnboundedSender<OverlayRequest>>,
         msg: OverlayRequest,
         dest: &'static str,
     ) {

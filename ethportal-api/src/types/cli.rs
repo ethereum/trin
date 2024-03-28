@@ -52,13 +52,29 @@ impl FromStr for Web3TransportType {
     }
 }
 
+shadow_rs::shadow!(build_info);
+
+const APP_NAME: &str = "trin";
+const VERSION: &str = shadow_rs::formatcp!(
+    "{version}-{hash} {build_os} {rust_version}",
+    version = build_info::PKG_VERSION,
+    hash = build_info::SHORT_COMMIT,
+    build_os = build_info::BUILD_OS,
+    // the rust version looks like that:
+    // rustc 1.77.0 (aedd173a2 2024-03-17)
+    // we remove everythin in the brackets and replace spaces with nothing
+    rust_version = shadow_rs::str_replace!(
+        shadow_rs::str_split!(build_info::RUST_VERSION, '(')[0],
+        ' ',
+        ""
+    )
+);
+
 #[derive(Parser, Debug, PartialEq, Clone)]
-#[command(
-    name = "trin",
-    version = "0.0.1",
+#[command(name = APP_NAME,
     author = "carver",
-    about = "Run an eth portal client"
-)]
+    about = "Run an eth portal client",
+    version = VERSION)]
 pub struct TrinConfig {
     #[arg(
         default_value = DEFAULT_WEB3_TRANSPORT,
