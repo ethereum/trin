@@ -19,14 +19,12 @@ use crate::config::{utils::hex_str_to_bytes, BaseConfig, ChainConfig, Fork, Fork
 )]
 pub enum Network {
     Mainnet,
-    Goerli,
 }
 
 impl Network {
     pub fn to_base_config(self) -> BaseConfig {
         match self {
             Self::Mainnet => mainnet(),
-            Self::Goerli => goerli(),
         }
     }
 }

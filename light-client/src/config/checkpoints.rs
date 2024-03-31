@@ -85,7 +85,7 @@ impl CheckpointFallback {
     pub fn new() -> Self {
         Self {
             services: Default::default(),
-            networks: [networks::Network::Mainnet, networks::Network::Goerli].to_vec(),
+            networks: [networks::Network::Mainnet].to_vec(),
         }
     }
 
@@ -307,11 +307,7 @@ mod test {
         let cf = config::checkpoints::CheckpointFallback::new();
 
         assert_eq!(cf.services.get(&networks::Network::Mainnet), None);
-        assert_eq!(cf.services.get(&networks::Network::Goerli), None);
-        assert_eq!(
-            cf.networks,
-            [networks::Network::Mainnet, networks::Network::Goerli].to_vec()
-        );
+        assert_eq!(cf.networks, [networks::Network::Mainnet].to_vec());
     }
 
     #[tokio::test]
@@ -322,7 +318,6 @@ mod test {
             .unwrap();
 
         assert!(cf.services[&networks::Network::Mainnet].len() > 1);
-        assert!(cf.services[&networks::Network::Goerli].len() > 1);
     }
 
     #[tokio::test]
@@ -331,11 +326,6 @@ mod test {
             .build()
             .await
             .unwrap();
-        let checkpoint = cf
-            .fetch_latest_checkpoint(&networks::Network::Goerli)
-            .await
-            .unwrap();
-        assert_ne!(checkpoint, H256::zero());
         let checkpoint = cf
             .fetch_latest_checkpoint(&networks::Network::Mainnet)
             .await
@@ -351,8 +341,6 @@ mod test {
             .unwrap();
         let urls = cf.get_all_fallback_endpoints(&networks::Network::Mainnet);
         assert!(!urls.is_empty());
-        let urls = cf.get_all_fallback_endpoints(&networks::Network::Goerli);
-        assert!(!urls.is_empty());
     }
 
     #[tokio::test]
@@ -362,8 +350,6 @@ mod test {
             .await
             .unwrap();
         let urls = cf.get_healthy_fallback_endpoints(&networks::Network::Mainnet);
-        assert!(!urls.is_empty());
-        let urls = cf.get_healthy_fallback_endpoints(&networks::Network::Goerli);
         assert!(!urls.is_empty());
     }
 }
