@@ -19,14 +19,12 @@ use crate::config::{utils::hex_str_to_bytes, BaseConfig, ChainConfig, Fork, Fork
 )]
 pub enum Network {
     Mainnet,
-    Goerli,
 }
 
 impl Network {
     pub fn to_base_config(self) -> BaseConfig {
         match self {
             Self::Mainnet => mainnet(),
-            Self::Goerli => goerli(),
         }
     }
 }
@@ -62,44 +60,6 @@ pub fn mainnet() -> BaseConfig {
             },
             capella: Fork {
                 epoch: 194048,
-                fork_version: hex_str_to_bytes("0x03000000").expect("should be a valid hex str"),
-            },
-        },
-        max_checkpoint_age: 1_209_600, // 14 days
-    }
-}
-
-pub fn goerli() -> BaseConfig {
-    BaseConfig {
-        default_checkpoint: hex_str_to_bytes(
-            "0xd4344682866dbede543395ecf5adf9443a27f423a4b00f270458e7932686ced1",
-        )
-        .expect("should be a valid hex str"),
-        rpc_port: 8545,
-        consensus_rpc: None,
-        chain: ChainConfig {
-            chain_id: 5,
-            genesis_time: 1616508000,
-            genesis_root: hex_str_to_bytes(
-                "0x043db0d9a83813551ee2f33450d23797757d430911a9320530ad8a0eabc43efb",
-            )
-            .expect("should be a valid hex str"),
-        },
-        forks: Forks {
-            genesis: Fork {
-                epoch: 0,
-                fork_version: hex_str_to_bytes("0x00001020").expect("should be a valid hex str"),
-            },
-            altair: Fork {
-                epoch: 36660,
-                fork_version: hex_str_to_bytes("0x01001020").expect("should be a valid hex str"),
-            },
-            bellatrix: Fork {
-                epoch: 112260,
-                fork_version: hex_str_to_bytes("0x02001020").expect("should be a valid hex str"),
-            },
-            capella: Fork {
-                epoch: 162304,
                 fork_version: hex_str_to_bytes("0x03000000").expect("should be a valid hex str"),
             },
         },

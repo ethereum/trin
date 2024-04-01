@@ -411,19 +411,12 @@ impl<DB: Database, R: ConsensusRpc + 'static> Client<DB, R> {
             .await
             .map_err(|_| anyhow!("Failed to construct external checkpoint sync fallbacks"))?;
 
-        let checkpoint = if self.node.read().await.config.chain.chain_id == 5 {
-            list.fetch_latest_checkpoint(&Network::Goerli)
-                .await
-                .map_err(|_| {
-                    anyhow!("Failed to fetch latest goerli checkpoint from external fallbacks")
-                })?
-        } else {
-            list.fetch_latest_checkpoint(&Network::Mainnet)
-                .await
-                .map_err(|_| {
-                    anyhow!("Failed to fetch latest mainnet checkpoint from external fallbacks")
-                })?
-        };
+        let checkpoint = list
+            .fetch_latest_checkpoint(&Network::Mainnet)
+            .await
+            .map_err(|_| {
+                anyhow!("Failed to fetch latest mainnet checkpoint from external fallbacks")
+            })?;
 
         info!(
             "external fallbacks responded with checkpoint {:?}",

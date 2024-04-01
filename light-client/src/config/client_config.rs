@@ -33,7 +33,6 @@ impl Config {
     pub fn from_file(config_path: &PathBuf, network: &str, cli_config: &CliConfig) -> Self {
         let base_config = match network {
             "mainnet" => networks::mainnet(),
-            "goerli" => networks::goerli(),
             _ => BaseConfig::default(),
         };
 
