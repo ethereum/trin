@@ -1,7 +1,7 @@
 use std::{sync::Arc, vec};
 
 use alloy_primitives::B256;
-use alloy_rlp::{Decodable, Encodable, Error as RlpError, RlpDecodable, RlpEncodable};
+use alloy_rlp::{Decodable, Encodable, Error as RlpError, Header as RlpHeader};
 use anyhow::{anyhow, bail};
 use eth_trie::{EthTrie, MemoryDB, Trie};
 use serde::Deserialize;
@@ -169,10 +169,54 @@ impl BlockBody {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, RlpEncodable, RlpDecodable)]
+fn rlp_encode_transaction_list(out: &mut dyn bytes::BufMut, txs: &[Transaction]) {
+    let mut transactions_list = Vec::<u8>::new();
+    for tx in txs {
+        tx.encode_with_envelope(&mut transactions_list, true);
+    }
+    let header = RlpHeader {
+        list: true,
+        payload_length: transactions_list.len(),
+    };
+    header.encode(out);
+    out.put_slice(transactions_list.as_slice());
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct BlockBodyLegacy {
     pub txs: Vec<Transaction>,
     pub uncles: Vec<Header>,
+}
+
+impl Encodable for BlockBodyLegacy {
+    fn encode(&self, out: &mut dyn bytes::BufMut) {
+        let mut list = Vec::<u8>::new();
+        rlp_encode_transaction_list(&mut list, &self.txs);
+        self.uncles.encode(&mut list);
+        let header = RlpHeader {
+            list: true,
+            payload_length: list.len(),
+        };
+        header.encode(out);
+        out.put_slice(list.as_slice());
+    }
+}
+
+impl Decodable for BlockBodyLegacy {
+    fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
+        let header = RlpHeader::decode(buf)?;
+        if !header.list {
+            return Err(RlpError::UnexpectedString);
+        }
+        let mut bytes = RlpHeader::decode_bytes(buf, true)?;
+        let mut txs: Vec<Transaction> = vec![];
+        let payload_view = &mut bytes;
+        while !payload_view.is_empty() {
+            txs.push(Transaction::decode_enveloped_transactions(payload_view)?);
+        }
+        let uncles: Vec<Header> = Decodable::decode(buf)?;
+        Ok(Self { txs, uncles })
+    }
 }
 
 impl ssz::Encode for BlockBodyLegacy {
@@ -227,9 +271,39 @@ impl ssz::Decode for BlockBodyLegacy {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, RlpEncodable, RlpDecodable)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct BlockBodyMerge {
     pub txs: Vec<Transaction>,
+}
+
+impl Encodable for BlockBodyMerge {
+    fn encode(&self, out: &mut dyn bytes::BufMut) {
+        let mut list = Vec::<u8>::new();
+        rlp_encode_transaction_list(&mut list, &self.txs);
+        let header = RlpHeader {
+            list: true,
+            payload_length: list.len(),
+        };
+        header.encode(out);
+        out.put_slice(list.as_slice());
+    }
+}
+
+impl Decodable for BlockBodyMerge {
+    fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
+        let header = RlpHeader::decode(buf)?;
+        if !header.list {
+            return Err(RlpError::UnexpectedString);
+        }
+        let mut bytes = RlpHeader::decode_bytes(buf, true)?;
+        let mut txs: Vec<Transaction> = vec![];
+        let payload_view = &mut bytes;
+        while !payload_view.is_empty() {
+            txs.push(Transaction::decode_enveloped_transactions(payload_view)?);
+        }
+
+        Ok(Self { txs })
+    }
 }
 
 impl ssz::Encode for BlockBodyMerge {
@@ -287,12 +361,43 @@ impl ssz::Decode for BlockBodyMerge {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, RlpEncodable, RlpDecodable)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct BlockBodyShanghai {
     pub txs: Vec<Transaction>,
     // post-shanghai block bodies are expected to have empty uncles, but we skip that here
     // and simply encode an empty list during the encoding/decoding process
     pub withdrawals: Vec<Withdrawal>,
+}
+
+impl Encodable for BlockBodyShanghai {
+    fn encode(&self, out: &mut dyn bytes::BufMut) {
+        let mut list = Vec::<u8>::new();
+        rlp_encode_transaction_list(&mut list, &self.txs);
+        self.withdrawals.encode(&mut list);
+        let header = RlpHeader {
+            list: true,
+            payload_length: list.len(),
+        };
+        header.encode(out);
+        out.put_slice(list.as_slice());
+    }
+}
+
+impl Decodable for BlockBodyShanghai {
+    fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
+        let header = RlpHeader::decode(buf)?;
+        if !header.list {
+            return Err(RlpError::UnexpectedString);
+        }
+        let mut bytes = RlpHeader::decode_bytes(buf, true)?;
+        let mut txs: Vec<Transaction> = vec![];
+        let payload_view = &mut bytes;
+        while !payload_view.is_empty() {
+            txs.push(Transaction::decode_enveloped_transactions(payload_view)?);
+        }
+        let withdrawals: Vec<Withdrawal> = Decodable::decode(buf)?;
+        Ok(Self { txs, withdrawals })
+    }
 }
 
 impl ssz::Encode for BlockBodyShanghai {

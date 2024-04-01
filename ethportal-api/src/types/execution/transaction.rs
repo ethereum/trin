@@ -23,12 +23,8 @@ impl Transaction {
     pub fn hash(&self) -> B256 {
         keccak256(alloy_rlp::encode(self))
     }
-}
 
-impl Encodable for Transaction {
-    fn encode(&self, out: &mut dyn bytes::BufMut) {
-        // we don't wrap versioned transactions with a string header
-        let with_header = false;
+    pub fn encode_with_envelope(&self, out: &mut dyn bytes::BufMut, with_header: bool) {
         match self {
             Self::Legacy(tx) => tx.encode(out),
             Self::AccessList(tx) => {
@@ -68,6 +64,42 @@ impl Encodable for Transaction {
                 tx.encode(out);
             }
         }
+    }
+
+    pub fn decode_enveloped_transactions(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
+        // at least one byte needs to be present
+        if buf.is_empty() {
+            return Err(RlpError::InputTooShort);
+        }
+        let original_encoding = *buf;
+        let header = RlpHeader::decode(buf)?;
+        let value = &mut &buf[..header.payload_length];
+        buf.advance(header.payload_length);
+        if !header.list {
+            let id = TransactionId::try_from(value[0])
+                .map_err(|_| RlpError::Custom("Unknown transaction id"))?;
+            value.advance(1);
+            match id {
+                TransactionId::EIP1559 => Ok(Self::EIP1559(EIP1559Transaction::decode(value)?)),
+                TransactionId::AccessList => {
+                    Ok(Self::AccessList(AccessListTransaction::decode(value)?))
+                }
+                TransactionId::Legacy => {
+                    unreachable!("Legacy transactions should be wrapped in a list")
+                }
+                TransactionId::Blob => Ok(Self::Blob(BlobTransaction::decode(value)?)),
+            }
+        } else {
+            Ok(Self::Legacy(LegacyTransaction::decode(
+                &mut &original_encoding[..(header.payload_length + header.length())],
+            )?))
+        }
+    }
+}
+
+impl Encodable for Transaction {
+    fn encode(&self, out: &mut dyn bytes::BufMut) {
+        self.encode_with_envelope(out, false)
     }
 }
 
