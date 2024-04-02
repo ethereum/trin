@@ -21,6 +21,15 @@ struct FarthestQueryResult {
     distance_u32: u32,
 }
 
+/// The result of the pagination lookup.
+#[derive(Debug, PartialEq, Eq)]
+pub struct PaginateResult<K> {
+    /// The content keys of the queried page
+    pub content_keys: Vec<K>,
+    /// The total count of entries in the database
+    pub entry_count: u64,
+}
+
 /// The store for storing content key/value pairs.
 ///
 /// Different SQL table is created for each `ContentType`, with content-id as a primary key.
@@ -287,6 +296,40 @@ impl IdIndexedV1Store {
 
         self.metrics.stop_process_timer(timer);
         Ok(())
+    }
+
+    /// Returns a paginated list of all locally available content keys, according to the provided
+    /// offset and limit.
+    pub fn paginate<K: ethportal_api::OverlayContentKey>(
+        &self,
+        offset: u64,
+        limit: u64,
+    ) -> Result<PaginateResult<K>, ContentStoreError> {
+        let timer = self.metrics.start_process_timer("paginate");
+
+        let conn = self.config.sql_connection_pool.get()?;
+        let content_keys: Result<Vec<K>, rusqlite::Error> = conn
+            .prepare(&sql::paginate(&self.config.content_type))?
+            .query_map(
+                named_params! {
+                    ":limit": limit,
+                    ":offset": offset,
+                },
+                |row| {
+                    let bytes = row.get::<&str, Vec<u8>>("content_key")?;
+                    K::try_from(bytes).map_err(|e| {
+                        rusqlite::Error::FromSqlConversionFailure(0, Type::Blob, e.into())
+                    })
+                },
+            )?
+            .collect();
+        let usage_stats = self.get_usage_stats_internal()?;
+
+        self.metrics.stop_process_timer(timer);
+        Ok(PaginateResult {
+            content_keys: content_keys?,
+            entry_count: usage_stats.entry_count,
+        })
     }
 
     /// Updates metrics and returns summary.
@@ -852,6 +895,94 @@ mod tests {
             }
         );
         assert_eq!(store.to_insert_until_pruning, 1);
+
+        Ok(())
+    }
+
+    #[test]
+    fn pagination_empty() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let config = create_config(&temp_dir);
+        let store = IdIndexedV1Store::create(ContentType::State, config)?;
+
+        assert_eq!(
+            store.paginate::<IdentityContentKey>(/* offset= */ 0, /* limit= */ 10)?,
+            PaginateResult {
+                content_keys: vec![],
+                entry_count: 0,
+            }
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn pagination() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let config = create_config(&temp_dir);
+        let mut store = IdIndexedV1Store::create(ContentType::State, config.clone())?;
+
+        let entry_count = 12;
+
+        let mut content_keys = vec![];
+        for _ in 0..entry_count {
+            let (key, value) = generate_key_value(&config, 0);
+            store.insert(&key, value).unwrap();
+            content_keys.push(key);
+        }
+        content_keys.sort_by_key(|key| key.to_vec());
+
+        // Paginate in steps of 4, there should be exactly 3 pages
+        assert_eq!(
+            store.paginate::<IdentityContentKey>(/* offset= */ 0, /* limit= */ 4)?,
+            PaginateResult {
+                content_keys: content_keys[0..4].into(),
+                entry_count,
+            }
+        );
+        assert_eq!(
+            store.paginate::<IdentityContentKey>(/* offset= */ 4, /* limit= */ 4)?,
+            PaginateResult {
+                content_keys: content_keys[4..8].into(),
+                entry_count,
+            }
+        );
+        assert_eq!(
+            store.paginate::<IdentityContentKey>(/* offset= */ 8, /* limit= */ 4)?,
+            PaginateResult {
+                content_keys: content_keys[8..].into(),
+                entry_count,
+            }
+        );
+        assert_eq!(
+            store.paginate::<IdentityContentKey>(/* offset= */ 12, /* limit= */ 4)?,
+            PaginateResult {
+                content_keys: vec![],
+                entry_count,
+            }
+        );
+
+        // Paginate in steps of 5, last page should have only 2
+        assert_eq!(
+            store.paginate::<IdentityContentKey>(/* offset= */ 0, /* limit= */ 5)?,
+            PaginateResult {
+                content_keys: content_keys[0..5].into(),
+                entry_count,
+            }
+        );
+        assert_eq!(
+            store.paginate::<IdentityContentKey>(/* offset= */ 5, /* limit= */ 5)?,
+            PaginateResult {
+                content_keys: content_keys[5..10].into(),
+                entry_count,
+            }
+        );
+        assert_eq!(
+            store.paginate::<IdentityContentKey>(/* offset= */ 10, /* limit= */ 5)?,
+            PaginateResult {
+                content_keys: content_keys[10..].into(),
+                entry_count,
+            }
+        );
 
         Ok(())
     }

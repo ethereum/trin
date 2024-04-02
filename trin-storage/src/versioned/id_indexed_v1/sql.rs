@@ -81,6 +81,16 @@ pub fn lookup_farthest(content_type: &ContentType) -> String {
     )
 }
 
+pub fn paginate(content_type: &ContentType) -> String {
+    format!(
+        "SELECT content_key FROM {}
+        ORDER BY content_key
+        LIMIT :limit
+        OFFSET :offset",
+        table_name(content_type)
+    )
+}
+
 pub fn entry_count_and_size(content_type: &ContentType) -> String {
     format!(
         "SELECT COUNT(*) as count, TOTAL(content_size) as used_capacity FROM {}",
