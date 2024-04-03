@@ -261,7 +261,7 @@ impl HistoricalBatch {
         let mut proof_hashes: Vec<B256> = proof
             .proof_hashes()
             .iter()
-            .map(|x| B256::from_slice(x))
+            .map(|hash| B256::from_slice(hash))
             .collect();
 
         // To generate proof for block root anchored to the historical batch tree_hash_root, we need

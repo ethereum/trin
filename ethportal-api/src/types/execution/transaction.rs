@@ -29,7 +29,7 @@ impl Transaction {
 
 impl Encodable for Transaction {
     fn encode(&self, out: &mut dyn bytes::BufMut) {
-        // we don't wrap versioned transitions with a string header
+        // we don't wrap versioned transactions with a string header
         let with_header = false;
         match self {
             Self::Legacy(tx) => tx.encode(out),

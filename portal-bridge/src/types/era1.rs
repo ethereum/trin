@@ -1,6 +1,6 @@
 use crate::types::e2s::{E2StoreFile, Entry};
 use alloy_primitives::{B256, U256};
-use alloy_rlp::{Decodable, Encodable};
+use alloy_rlp::Decodable;
 use anyhow::ensure;
 use ethportal_api::types::execution::{
     block_body::BlockBody,
@@ -197,8 +197,7 @@ impl TryInto<Entry> for HeaderEntry {
     type Error = anyhow::Error;
 
     fn try_into(self) -> Result<Entry, Self::Error> {
-        let mut rlp_encoded = vec![];
-        self.header.encode(&mut rlp_encoded);
+        let rlp_encoded = alloy_rlp::encode(self.header);
         let buf: Vec<u8> = vec![];
         let mut encoder = snap::write::FrameEncoder::new(buf);
         let _ = encoder.write(&rlp_encoded)?;
@@ -236,8 +235,7 @@ impl TryInto<Entry> for BodyEntry {
     type Error = anyhow::Error;
 
     fn try_into(self) -> Result<Entry, Self::Error> {
-        let mut rlp_encoded = vec![];
-        self.body.encode(&mut rlp_encoded);
+        let rlp_encoded = alloy_rlp::encode(self.body);
         let buf: Vec<u8> = vec![];
         let mut encoder = snap::write::FrameEncoder::new(buf);
         let _ = encoder.write(&rlp_encoded)?;
@@ -280,8 +278,7 @@ impl TryInto<Entry> for ReceiptsEntry {
     type Error = anyhow::Error;
 
     fn try_into(self) -> Result<Entry, Self::Error> {
-        let mut rlp_encoded = vec![];
-        self.receipts.encode(&mut rlp_encoded);
+        let rlp_encoded = alloy_rlp::encode(&self.receipts);
         let buf: Vec<u8> = vec![];
         let mut encoder = snap::write::FrameEncoder::new(buf);
         let _ = encoder.write(&rlp_encoded)?;

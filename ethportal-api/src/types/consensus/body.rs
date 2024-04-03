@@ -104,7 +104,7 @@ impl BeaconBlockBodyBellatrix {
         let proof_hashes: Vec<B256> = proof
             .proof_hashes()
             .iter()
-            .map(|x| B256::from_slice(x))
+            .map(|hash| B256::from_slice(hash))
             .collect();
 
         proof_hashes

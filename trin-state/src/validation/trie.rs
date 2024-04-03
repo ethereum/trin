@@ -206,7 +206,6 @@ mod tests {
     use std::str::FromStr;
 
     use alloy_primitives::U256;
-    use alloy_rlp::Encodable;
     use anyhow::Result;
     use eth_trie::{nibbles::Nibbles as EthTrieNibbles, node::empty_children};
     use ethportal_api::utils::bytes::hex_decode;
@@ -406,9 +405,7 @@ mod tests {
             storage_root: B256::random(),
             code_hash: B256::random(),
         };
-        let mut value = vec![];
-        account_state.encode(&mut value);
-        let node = EncodedTrieNode::from(&create_leaf(&path, &value));
+        let node = EncodedTrieNode::from(&create_leaf(&path, &alloy_rlp::encode(&account_state)));
         assert_eq!(
             validate_account_state(None, &address, &vec![node].into()).unwrap(),
             account_state
@@ -441,9 +438,7 @@ mod tests {
             storage_root: B256::random(),
             code_hash: B256::random(),
         };
-        let mut value = vec![];
-        account_state.encode(&mut value);
-        let node = EncodedTrieNode::from(&create_leaf(&path, &value));
+        let node = EncodedTrieNode::from(&create_leaf(&path, &alloy_rlp::encode(account_state)));
         validate_account_state(None, &address, &vec![node].into()).unwrap();
     }
 

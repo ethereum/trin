@@ -1,7 +1,7 @@
 use std::{sync::Arc, vec};
 
 use alloy_primitives::B256;
-use alloy_rlp::{encode_list, Decodable, Encodable, Error as RlpError, RlpDecodable, RlpEncodable};
+use alloy_rlp::{Decodable, Encodable, Error as RlpError, RlpDecodable, RlpEncodable};
 use anyhow::{anyhow, bail};
 use eth_trie::{EthTrie, MemoryDB, Trie};
 use serde::Deserialize;
@@ -136,10 +136,8 @@ impl BlockBody {
 
         // Insert txs into tx tree
         for (index, tx) in self.transactions()?.iter().enumerate() {
-            let mut path = vec![];
-            index.encode(&mut path);
-            let mut encoded_tx = vec![];
-            tx.encode(&mut encoded_tx);
+            let path = alloy_rlp::encode(index);
+            let encoded_tx = alloy_rlp::encode(tx);
             trie.insert(&path, &encoded_tx)
                 .map_err(|err| anyhow!("Error calculating transactions root: {err:?}"))?;
         }
@@ -152,7 +150,7 @@ impl BlockBody {
         let mut buf = Vec::<u8>::new();
         self.uncles()?.encode(&mut buf);
         let hash = Keccak256::digest(&buf);
-        Ok(B256::from_slice(&hash[..32]))
+        Ok(B256::from_slice(&hash))
     }
 
     pub fn withdrawals_root(&self) -> anyhow::Result<B256> {
@@ -160,10 +158,8 @@ impl BlockBody {
         let mut trie = EthTrie::new(memdb);
 
         for (index, wd) in self.withdrawals()?.iter().enumerate() {
-            let mut path = vec![];
-            index.encode(&mut path);
-            let mut encoded_wd = vec![];
-            wd.encode(&mut encoded_wd);
+            let path = alloy_rlp::encode(index);
+            let encoded_wd = alloy_rlp::encode(wd);
             trie.insert(&path, &encoded_wd)
                 .map_err(|err| anyhow!("Error calculating withdrawals root: {err:?}"))?;
         }
@@ -189,15 +185,8 @@ impl ssz::Encode for BlockBodyLegacy {
         let offset =
             <Vec<Vec<u8>> as Encode>::ssz_fixed_len() + <Vec<u8> as Encode>::ssz_fixed_len();
         let mut encoder = SszEncoder::container(buf, offset);
-        let mut encoded_txs: Vec<Vec<u8>> = vec![];
-        for tx in &self.txs {
-            let mut encoded_tx: Vec<u8> = vec![];
-            Transaction::encode(tx, &mut encoded_tx);
-            encoded_txs.push(encoded_tx);
-        }
-        let mut rlp_uncles: Vec<u8> = vec![];
-        Encodable::encode(&self.uncles, &mut rlp_uncles);
-
+        let encoded_txs: Vec<Vec<u8>> = self.txs.iter().map(alloy_rlp::encode).collect();
+        let rlp_uncles: Vec<u8> = alloy_rlp::encode(&self.uncles);
         encoder.append(&encoded_txs);
         encoder.append(&rlp_uncles);
         encoder.finalize();
@@ -253,15 +242,9 @@ impl ssz::Encode for BlockBodyMerge {
         let offset =
             <Vec<Vec<u8>> as Encode>::ssz_fixed_len() + <Vec<u8> as Encode>::ssz_fixed_len();
         let mut encoder = SszEncoder::container(buf, offset);
-        let mut encoded_txs: Vec<Vec<u8>> = vec![];
-        for tx in &self.txs {
-            let mut encoded_tx: Vec<u8> = vec![];
-            Transaction::encode(tx, &mut encoded_tx);
-            encoded_txs.push(encoded_tx);
-        }
+        let encoded_txs: Vec<Vec<u8>> = self.txs.iter().map(alloy_rlp::encode).collect();
         let empty_uncles: Vec<Header> = vec![];
-        let mut rlp_uncles: Vec<u8> = vec![];
-        encode_list(&empty_uncles, &mut rlp_uncles);
+        let rlp_uncles: Vec<u8> = alloy_rlp::encode(empty_uncles);
         encoder.append(&encoded_txs);
         encoder.append(&rlp_uncles);
         encoder.finalize();
@@ -289,7 +272,7 @@ impl ssz::Decode for BlockBodyMerge {
             .collect::<Result<Vec<Transaction>, _>>()
             .map_err(|e| {
                 ssz::DecodeError::BytesInvalid(format!(
-                    "Legacy block body contains invalid txs: {e:?}",
+                    "Merge block body contains invalid txs: {e:?}",
                 ))
             })?;
         let uncles: Vec<Header> = Decodable::decode(&mut uncles.as_slice()).map_err(|e| {
@@ -323,21 +306,11 @@ impl ssz::Encode for BlockBodyShanghai {
             + <Vec<u8> as Encode>::ssz_fixed_len()
             + <Vec<Vec<u8>> as Encode>::ssz_fixed_len();
         let mut encoder = SszEncoder::container(buf, offset);
-        let mut encoded_txs: Vec<Vec<u8>> = vec![];
-        for tx in &self.txs {
-            let mut encoded_tx: Vec<u8> = vec![];
-            Transaction::encode(tx, &mut encoded_tx);
-            encoded_txs.push(encoded_tx);
-        }
+        let encoded_txs: Vec<Vec<u8>> = self.txs.iter().map(alloy_rlp::encode).collect();
         let empty_uncles: Vec<Header> = vec![];
-        let mut rlp_uncles: Vec<u8> = vec![];
-        encode_list(&empty_uncles, &mut rlp_uncles);
-        let mut encoded_withdrawals: Vec<Vec<u8>> = vec![];
-        for withdrawal in &self.withdrawals {
-            let mut encoded_withdrawal: Vec<u8> = vec![];
-            Withdrawal::encode(withdrawal, &mut encoded_withdrawal);
-            encoded_withdrawals.push(encoded_withdrawal);
-        }
+        let rlp_uncles: Vec<u8> = alloy_rlp::encode(empty_uncles);
+        let encoded_withdrawals: Vec<Vec<u8>> =
+            self.withdrawals.iter().map(alloy_rlp::encode).collect();
         encoder.append(&encoded_txs);
         encoder.append(&rlp_uncles);
         encoder.append(&encoded_withdrawals);
@@ -428,8 +401,7 @@ mod tests {
             Transaction::EIP1559(tx) => assert_eq!(tx.nonce, expected_nonce),
             Transaction::Blob(tx) => assert_eq!(tx.nonce, expected_nonce),
         }
-        let mut encoded_tx = vec![];
-        tx.encode(&mut encoded_tx);
+        let encoded_tx = alloy_rlp::encode(&tx);
         assert_eq!(hex_encode(tx_rlp), hex_encode(encoded_tx));
     }
 

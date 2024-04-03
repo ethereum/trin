@@ -90,9 +90,7 @@ where
 impl Header {
     /// Returns the Keccak-256 hash of the header.
     pub fn hash(&self) -> B256 {
-        let mut out = vec![];
-        self.encode(&mut out);
-        keccak256(out)
+        keccak256(alloy_rlp::encode(self))
     }
 }
 
@@ -481,8 +479,7 @@ mod tests {
             )
         );
 
-        let mut encoded_header = vec![];
-        header.encode(&mut encoded_header);
+        let encoded_header = alloy_rlp::encode(header);
         assert_eq!(header_rlp, encoded_header);
     }
 
@@ -502,8 +499,7 @@ mod tests {
                     .unwrap()
             )
         );
-        let mut encoded_header = vec![];
-        header.encode(&mut encoded_header);
+        let encoded_header = alloy_rlp::encode(header);
         assert_eq!(header_rlp, encoded_header);
     }
 
@@ -634,8 +630,7 @@ mod tests {
             B256::from_str("0x10aca3ebb4cf6ddd9e945a5db19385f9c105ede7374380c50d56384c3d233785")
                 .unwrap();
         assert_eq!(decoded.hash(), expected_hash);
-        let mut expected_header = vec![];
-        expected.encode(&mut expected_header);
+        let expected_header = alloy_rlp::encode(expected);
         assert_eq!(data, expected_header);
     }
 

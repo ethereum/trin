@@ -32,10 +32,8 @@ impl Receipts {
 
         // Insert receipts into receipts tree
         for (index, receipt) in self.receipt_list.iter().enumerate() {
-            let mut path = vec![];
-            index.encode(&mut path);
-            let mut encoded_receipt = vec![];
-            receipt.encode(&mut encoded_receipt);
+            let path = alloy_rlp::encode(index);
+            let encoded_receipt = alloy_rlp::encode(receipt);
             trie.insert(&path, &encoded_receipt)
                 .map_err(|err| anyhow!("Error calculating receipts root: {err:?}"))?;
         }
@@ -52,12 +50,8 @@ impl ssz::Encode for Receipts {
     }
 
     fn ssz_append(&self, buf: &mut Vec<u8>) {
-        let mut encoded_receipts: Vec<Vec<u8>> = vec![];
-        for receipt in &self.receipt_list {
-            let mut encoded_receipt: Vec<u8> = vec![];
-            Receipt::encode(receipt, &mut encoded_receipt);
-            encoded_receipts.push(encoded_receipt);
-        }
+        let encoded_receipts: Vec<Vec<u8>> =
+            self.receipt_list.iter().map(alloy_rlp::encode).collect();
         encoded_receipts.ssz_append(buf);
     }
 
@@ -538,8 +532,7 @@ mod tests {
         assert_eq!(receipt.cumulative_gas_used, U256::from(579367));
         assert_eq!(receipt.logs, []);
         assert_eq!(receipt.outcome, TransactionOutcome::StatusCode(1));
-        let mut encoded = vec![];
-        receipt.encode(&mut encoded);
+        let encoded = alloy_rlp::encode(receipt);
         assert_eq!(encoded, receipt_rlp);
     }
 
@@ -551,8 +544,7 @@ mod tests {
         assert_eq!(receipt.cumulative_gas_used, U256::from(189807));
         assert_eq!(receipt.logs.len(), 7);
         assert_eq!(receipt.outcome, TransactionOutcome::StatusCode(1));
-        let mut encoded = vec![];
-        receipt.encode(&mut encoded);
+        let encoded = alloy_rlp::encode(receipt);
         assert_eq!(encoded, receipt_rlp);
     }
 
@@ -655,8 +647,7 @@ mod tests {
                 }],
             ),
         );
-        let mut encoded = vec![];
-        receipt.encode(&mut encoded);
+        let encoded = alloy_rlp::encode(&receipt);
         assert_eq!(encoded, expected);
         let decoded = Receipt::decode(&mut encoded.as_slice()).expect("decoding receipt failed");
         assert_eq!(decoded, receipt);
@@ -682,8 +673,7 @@ mod tests {
                 }],
             ),
         );
-        let mut encoded = vec![];
-        receipt.encode(&mut encoded);
+        let encoded = alloy_rlp::encode(&receipt);
         assert_eq!(encoded, expected);
         let decoded = Receipt::decode(&mut encoded.as_slice()).expect("decoding receipt failed");
         assert_eq!(decoded, receipt);
@@ -709,8 +699,7 @@ mod tests {
                 }],
             ),
         );
-        let mut encoded = vec![];
-        receipt.encode(&mut encoded);
+        let encoded = alloy_rlp::encode(&receipt);
         assert_eq!(&encoded, &expected);
         let decoded = Receipt::decode(&mut encoded.as_slice()).expect("decoding receipt failed");
         assert_eq!(decoded, receipt);
@@ -736,8 +725,7 @@ mod tests {
                 }],
             ),
         );
-        let mut encoded = vec![];
-        receipt.encode(&mut encoded);
+        let encoded = alloy_rlp::encode(&receipt);
         assert_eq!(&encoded, &expected);
         let decoded = Receipt::decode(&mut encoded.as_slice()).expect("decoding receipt failed");
         assert_eq!(decoded, receipt);
@@ -758,8 +746,7 @@ mod tests {
                 }],
             ),
         );
-        let mut encoded = vec![];
-        receipt.encode(&mut encoded);
+        let encoded = alloy_rlp::encode(&receipt);
         assert_eq!(&encoded[..], &expected[..]);
         let decoded = Receipt::decode(&mut encoded.as_slice()).expect("decoding receipt failed");
         assert_eq!(decoded, receipt);
