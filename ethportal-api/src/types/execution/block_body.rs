@@ -339,6 +339,8 @@ impl Decodable for BlockBodyMerge {
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct BlockBodyShanghai {
     pub txs: Vec<Transaction>,
+    // post-shanghai block bodies are expected to have empty uncles, but we skip that here
+    // and simply encode an empty list during the encoding/decoding process
     pub withdrawals: Vec<Withdrawal>,
 }
 
@@ -395,6 +397,7 @@ impl ssz::Decode for BlockBodyShanghai {
                     "Shanghai block body contains invalid transactions: {e:?}",
                 ))
             })?;
+        // shanghai block bodies are expected to have empty uncles
         let uncles = rlp::decode_list::<Header>(&uncles);
         if !uncles.is_empty() {
             return Err(ssz::DecodeError::BytesInvalid(
