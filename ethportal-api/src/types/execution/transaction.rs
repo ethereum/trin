@@ -61,7 +61,7 @@ impl Decodable for Transaction {
             TransactionId::EIP1559 => Ok(Self::EIP1559(rlp::decode(&rlp.as_raw()[1..])?)),
             TransactionId::AccessList => Ok(Self::AccessList(rlp::decode(&rlp.as_raw()[1..])?)),
             TransactionId::Legacy => Ok(Self::Legacy(rlp::decode(rlp.as_raw())?)),
-            TransactionId::Blob => Ok(Self::Blob(rlp::decode(rlp.as_raw())?)),
+            TransactionId::Blob => Ok(Self::Blob(rlp::decode(&rlp.as_raw()[1..])?)),
         }
     }
 }

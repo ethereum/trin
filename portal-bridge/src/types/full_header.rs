@@ -120,6 +120,7 @@ mod tests {
         BlockBody, BlockBodyLegacy, BlockBodyShanghai,
     };
     use serde_json::Value;
+    use ssz::{Decode, Encode};
 
     #[test]
     fn full_header_from_get_block_response() {
@@ -179,6 +180,10 @@ mod tests {
             withdrawals: full_header.withdrawals.unwrap(),
         });
         block_body.validate_against_header(&header).unwrap();
+        // test ssz roundtrip
+        let ssz = block_body.as_ssz_bytes();
+        let decoded_block_body = BlockBody::from_ssz_bytes(&ssz).unwrap();
+        assert_eq!(block_body, decoded_block_body);
     }
 
     #[test_log::test]
