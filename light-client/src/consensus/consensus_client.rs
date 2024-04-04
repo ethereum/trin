@@ -160,7 +160,7 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
                 self.apply_finality_update(&finality_update);
             }
             Err(err) => {
-                debug!("Could not fetch finality update: {err}")
+                warn!("Could not fetch finality update: {err}")
             }
         }
 
@@ -384,6 +384,9 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
 
         let should_apply_update = {
             let has_majority = committee_bits * 3 >= 512 * 2;
+            if !has_majority {
+                debug!("skipping block with low vote count");
+            }
             let update_is_newer = update_finalized_slot > self.store.finalized_header.slot;
             let good_update = update_is_newer || update_has_finalized_next_committee;
 
@@ -504,6 +507,11 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
             let header_root = bytes_to_bytes32(attested_header.tree_hash_root().as_slice());
             let signing_root = self.compute_committee_sign_root(header_root, signature_slot)?;
 
+            println!(
+                "is signature valid: {:?}",
+                is_aggregate_valid(signature, signing_root.as_bytes(), &pks)
+            );
+
             Ok(is_aggregate_valid(
                 signature,
                 signing_root.r#as_bytes(),
@@ -563,7 +571,7 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
             .as_secs();
 
         let time_to_next_slot = next_slot_timestamp - now;
-        let next_update = time_to_next_slot + 4;
+        let next_update = time_to_next_slot + 8;
 
         Duration::seconds(next_update as i64)
     }

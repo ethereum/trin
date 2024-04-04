@@ -22,6 +22,7 @@ use portalnet::overlay::command::OverlayCommand;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::warn;
+
 pub const BEACON_GENESIS_TIME: u64 = 1606824023;
 
 #[derive(Clone, Debug)]
@@ -174,9 +175,12 @@ impl ConsensusRpc for PortalRpc {
         let expected_current_slot = expected_current_slot();
         let recent_epoch_start = expected_current_slot - (expected_current_slot % 32) + 1;
 
+        // Get the finality update for the most recent finalized epoch. We use 0 as the finalized
+        // slot because the finalized slot is not known at this point and the protocol is
+        // designed to return the most recent which is > 0
         let finality_update_key =
             BeaconContentKey::LightClientFinalityUpdate(LightClientFinalityUpdateKey {
-                finalized_slot: recent_epoch_start,
+                finalized_slot: 0,
             });
 
         let (tx, rx) = oneshot::channel();
