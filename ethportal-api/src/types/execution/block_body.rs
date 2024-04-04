@@ -199,14 +199,21 @@ pub struct BlockBodyLegacy {
 impl Encodable for BlockBodyLegacy {
     fn rlp_append(&self, s: &mut RlpStream) {
         s.begin_list(2);
-        s.append_list(&self.txs);
+        s.begin_list(self.txs.len());
+        for tx in &self.txs {
+            tx.encode_with_envelope(s, true);
+        }
         s.append_list(&self.uncles);
     }
 }
 
 impl Decodable for BlockBodyLegacy {
     fn decode(rlp: &Rlp) -> Result<Self, DecoderError> {
-        let txs: Vec<Transaction> = rlp.list_at(0)?;
+        let txs: Vec<Transaction> = rlp
+            .at(0)?
+            .iter()
+            .map(|tx| Transaction::decode_enveloped_transactions(&tx))
+            .collect::<Result<Vec<Transaction>, _>>()?;
         let uncles: Vec<Header> = rlp.list_at(1)?;
         Ok(Self { txs, uncles })
     }
@@ -323,15 +330,18 @@ impl Encodable for BlockBodyMerge {
         s.begin_list(1);
         s.begin_list(self.txs.len());
         for tx in &self.txs {
-            let encoded = rlp::encode(tx);
-            s.append_raw(&encoded, encoded.len());
+            tx.encode_with_envelope(s, true);
         }
     }
 }
 
 impl Decodable for BlockBodyMerge {
     fn decode(rlp: &Rlp) -> Result<Self, DecoderError> {
-        let txs: Vec<Transaction> = rlp.list_at(0)?;
+        let txs: Vec<Transaction> = rlp
+            .at(0)?
+            .iter()
+            .map(|tx| Transaction::decode_enveloped_transactions(&tx))
+            .collect::<Result<Vec<Transaction>, _>>()?;
         Ok(Self { txs })
     }
 }
@@ -422,8 +432,7 @@ impl Encodable for BlockBodyShanghai {
         s.begin_list(2);
         s.begin_list(self.txs.len());
         for tx in &self.txs {
-            let encoded = rlp::encode(tx);
-            s.append_raw(&encoded, encoded.len());
+            tx.encode_with_envelope(s, true);
         }
         s.begin_list(self.withdrawals.len());
         for withdrawal in &self.withdrawals {
@@ -435,7 +444,11 @@ impl Encodable for BlockBodyShanghai {
 
 impl Decodable for BlockBodyShanghai {
     fn decode(rlp: &Rlp) -> Result<Self, DecoderError> {
-        let txs: Vec<Transaction> = rlp.list_at(0)?;
+        let txs: Vec<Transaction> = rlp
+            .at(0)?
+            .iter()
+            .map(|tx| Transaction::decode_enveloped_transactions(&tx))
+            .collect::<Result<Vec<Transaction>, _>>()?;
         let withdrawals: Vec<Vec<u8>> = rlp.at(1)?.as_list()?;
         let withdrawals: Vec<Withdrawal> = withdrawals
             .iter()

@@ -2630,7 +2630,7 @@ where
 }
 
 fn decode_and_validate_content_payload<TContentKey>(
-    accepted_keys: &Vec<TContentKey>,
+    accepted_keys: &[TContentKey],
     payload: Vec<u8>,
 ) -> anyhow::Result<Vec<Vec<u8>>> {
     let content_values = portal_wire::decode_content_payload(payload)?;

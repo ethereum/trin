@@ -21,31 +21,71 @@ impl Transaction {
     pub fn hash(&self) -> H256 {
         keccak_hash::keccak(rlp::encode(self))
     }
+
+    pub fn encode_with_envelope(&self, stream: &mut RlpStream, with_header: bool) {
+        match self {
+            Self::Legacy(tx) => tx.rlp_append(stream),
+            Self::AccessList(tx) => {
+                let mut s = RlpStream::new();
+                s.append_raw(&[TransactionId::AccessList as u8], 1);
+                tx.rlp_append(&mut s);
+                if with_header {
+                    stream.append(&s.out());
+                } else {
+                    stream.append_raw(&s.out(), 1);
+                }
+            }
+            Self::EIP1559(tx) => {
+                let mut s = RlpStream::new();
+                s.append_raw(&[TransactionId::EIP1559 as u8], 1);
+                tx.rlp_append(&mut s);
+                if with_header {
+                    stream.append(&s.out());
+                } else {
+                    stream.append_raw(&s.out(), 1);
+                }
+            }
+            Self::Blob(tx) => {
+                let mut s = RlpStream::new();
+                s.append_raw(&[TransactionId::Blob as u8], 1);
+                tx.rlp_append(&mut s);
+                if with_header {
+                    stream.append(&s.out());
+                } else {
+                    stream.append_raw(&s.out(), 1);
+                }
+            }
+        }
+    }
+
+    pub fn decode_enveloped_transactions(rlp: &Rlp) -> Result<Self, DecoderError> {
+        // at least one byte needs to be present
+        if rlp.as_raw().is_empty() {
+            return Err(DecoderError::RlpIncorrectListLen);
+        }
+        if !rlp.is_list() {
+            let transaction_rlp = rlp.data()?;
+            let id = TransactionId::try_from(transaction_rlp[0])
+                .map_err(|_| DecoderError::Custom("Unknown transaction id"))?;
+            match id {
+                TransactionId::EIP1559 => Ok(Self::EIP1559(rlp::decode(&transaction_rlp[1..])?)),
+                TransactionId::AccessList => {
+                    Ok(Self::AccessList(rlp::decode(&transaction_rlp[1..])?))
+                }
+                TransactionId::Legacy => {
+                    unreachable!("Legacy transactions should be wrapped in a list")
+                }
+                TransactionId::Blob => Ok(Self::Blob(rlp::decode(&transaction_rlp[1..])?)),
+            }
+        } else {
+            Ok(Self::Legacy(rlp::decode(rlp.as_raw())?))
+        }
+    }
 }
 
 impl Encodable for Transaction {
     fn rlp_append(&self, s: &mut RlpStream) {
-        match self {
-            Self::Legacy(tx) => tx.rlp_append(s),
-            Self::AccessList(tx) => {
-                let mut stream = RlpStream::new();
-                tx.rlp_append(&mut stream);
-                let encoded = [&[TransactionId::AccessList as u8], stream.as_raw()].concat();
-                s.append_raw(&encoded, 1);
-            }
-            Self::EIP1559(tx) => {
-                let mut stream = RlpStream::new();
-                tx.rlp_append(&mut stream);
-                let encoded = [&[TransactionId::EIP1559 as u8], stream.as_raw()].concat();
-                s.append_raw(&encoded, 1);
-            }
-            Self::Blob(tx) => {
-                let mut stream = RlpStream::new();
-                tx.rlp_append(&mut stream);
-                let encoded = [&[TransactionId::Blob as u8], stream.as_raw()].concat();
-                s.append_raw(&encoded, 1);
-            }
-        }
+        self.encode_with_envelope(s, false)
     }
 }
 
@@ -409,9 +449,11 @@ pub struct AccessList {
 
 impl Decodable for AccessList {
     fn decode(rlp_obj: &Rlp) -> Result<Self, DecoderError> {
-        let list: Result<Vec<AccessListItem>, DecoderError> =
-            rlp_obj.iter().map(|v| rlp::decode(v.as_raw())).collect();
-        Ok(Self { list: list? })
+        let list: Vec<AccessListItem> = rlp_obj
+            .iter()
+            .map(|v| rlp::decode(v.as_raw()))
+            .collect::<Result<Vec<AccessListItem>, DecoderError>>()?;
+        Ok(Self { list })
     }
 }
 

@@ -32,13 +32,32 @@ impl Receipts {
         // Insert receipts into receipts tree
         for (index, receipt) in self.receipt_list.iter().enumerate() {
             let path = rlp::encode(&index).freeze().to_vec();
-            let encoded_receipt = receipt.encode();
+            let encoded_receipt = receipt.rlp_bytes();
             trie.insert(&path, &encoded_receipt)
                 .map_err(|err| anyhow!("Error calculating receipts root: {err:?}"))?;
         }
 
         trie.root_hash()
             .map_err(|err| anyhow!("Error calculating receipts root: {err:?}"))
+    }
+}
+
+impl Encodable for Receipts {
+    fn rlp_append(&self, s: &mut RlpStream) {
+        s.begin_list(self.receipt_list.len());
+        for receipt in self.receipt_list.clone() {
+            receipt.encode_with_envelope(s, true);
+        }
+    }
+}
+
+impl Decodable for Receipts {
+    fn decode(rlp: &Rlp) -> Result<Self, DecoderError> {
+        let receipt_list = rlp
+            .iter()
+            .map(|rlp: Rlp<'_>| Receipt::decode_enveloped_receipts(&rlp))
+            .collect::<Result<Vec<Receipt>, _>>()?;
+        Ok(Self { receipt_list })
     }
 }
 
@@ -49,7 +68,12 @@ impl ssz::Encode for Receipts {
     }
 
     fn ssz_append(&self, buf: &mut Vec<u8>) {
-        EncodedReceiptList::from(self).ssz_append(buf);
+        let encoded_receipts: Vec<Vec<u8>> = self
+            .receipt_list
+            .iter()
+            .map(|receipt| rlp::encode(receipt).into())
+            .collect();
+        encoded_receipts.ssz_append(buf);
     }
 
     fn ssz_bytes_len(&self) -> usize {
@@ -63,9 +87,20 @@ impl ssz::Decode for Receipts {
     }
 
     fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
-        EncodedReceiptList::from_ssz_bytes(bytes)?
-            .try_into()
-            .map_err(|msg: DecoderError| ssz::DecodeError::BytesInvalid(msg.to_string()))
+        let encoded_receipts: Vec<Vec<u8>> =
+            ssz::decode_list_of_variable_length_items(bytes, Some(MAX_TRANSACTION_COUNT))?;
+        let receipts: Vec<Receipt> = encoded_receipts
+            .iter()
+            .map(|bytes| rlp::decode(bytes.as_slice()))
+            .collect::<Result<Vec<Receipt>, _>>()
+            .map_err(|e| {
+                ssz::DecodeError::BytesInvalid(format!(
+                    "Legacy block body contains invalid txs: {e:?}",
+                ))
+            })?;
+        Ok(Self {
+            receipt_list: receipts,
+        })
     }
 }
 
@@ -87,62 +122,6 @@ impl<'de> Deserialize<'de> for Receipts {
         Ok(Self {
             receipt_list: results.map_err(serde::de::Error::custom)?,
         })
-    }
-}
-
-#[derive(Debug)]
-pub struct EncodedReceiptList {
-    // list ( rlp receipts )
-    pub encoded_receipts: Vec<Vec<u8>>,
-}
-
-impl ssz::Encode for EncodedReceiptList {
-    fn is_ssz_fixed_len() -> bool {
-        false
-    }
-
-    fn ssz_append(&self, buf: &mut Vec<u8>) {
-        self.encoded_receipts.ssz_append(buf);
-    }
-
-    fn ssz_bytes_len(&self) -> usize {
-        self.as_ssz_bytes().len()
-    }
-}
-
-impl ssz::Decode for EncodedReceiptList {
-    fn is_ssz_fixed_len() -> bool {
-        false
-    }
-
-    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
-        let encoded_receipts: Vec<Vec<u8>> =
-            ssz::decode_list_of_variable_length_items(bytes, Some(MAX_TRANSACTION_COUNT))?;
-        Ok(Self { encoded_receipts })
-    }
-}
-
-impl From<&Receipts> for EncodedReceiptList {
-    fn from(receipts: &Receipts) -> Self {
-        let encoded_receipts: Vec<Vec<u8>> = receipts
-            .receipt_list
-            .iter()
-            .map(|receipt| receipt.encode().to_vec())
-            .collect();
-        Self { encoded_receipts }
-    }
-}
-
-impl TryFrom<EncodedReceiptList> for Receipts {
-    type Error = DecoderError;
-
-    fn try_from(receipt_list: EncodedReceiptList) -> Result<Self, Self::Error> {
-        let receipt_list: Vec<Receipt> = receipt_list
-            .encoded_receipts
-            .iter()
-            .map(|bytes| Receipt::decode(bytes))
-            .collect::<Result<Vec<Receipt>, _>>()?;
-        Ok(Self { receipt_list })
     }
 }
 
@@ -319,26 +298,6 @@ impl Encodable for LegacyReceipt {
     }
 }
 
-impl Encodable for Receipt {
-    fn rlp_append(&self, s: &mut RlpStream) {
-        match self {
-            Receipt::Legacy(receipt) => receipt.rlp_append(s),
-            Receipt::AccessList(receipt) => receipt.rlp_append(s),
-            Receipt::EIP1559(receipt) => receipt.rlp_append(s),
-            Receipt::Blob(receipt) => receipt.rlp_append(s),
-        }
-    }
-}
-
-impl Encodable for Receipts {
-    fn rlp_append(&self, s: &mut RlpStream) {
-        s.begin_list(self.receipt_list.len());
-        for receipt in self.receipt_list.clone() {
-            receipt.rlp_append(s);
-        }
-    }
-}
-
 #[derive(Eq, Hash, Debug, Copy, Clone, PartialEq)]
 #[repr(u8)]
 /// The typed transaction ID
@@ -419,41 +378,86 @@ impl Receipt {
         }
     }
 
-    fn encode(&self) -> Vec<u8> {
-        let mut stream = RlpStream::new();
+    fn encode_with_envelope(&self, stream: &mut RlpStream, with_header: bool) {
         match self {
-            Self::Legacy(receipt) => {
-                receipt.rlp_append(&mut stream);
-                stream.out().freeze().to_vec()
-            }
+            Self::Legacy(receipt) => receipt.rlp_append(stream),
             Self::AccessList(receipt) => {
-                receipt.rlp_append(&mut stream);
-                [&[TransactionId::AccessList as u8], stream.as_raw()].concat()
+                let mut s = RlpStream::new();
+                s.append_raw(&[TransactionId::AccessList as u8], 1);
+                receipt.rlp_append(&mut s);
+                if with_header {
+                    stream.append(&s.out());
+                } else {
+                    stream.append_raw(&s.out(), 1);
+                }
             }
             Self::EIP1559(receipt) => {
-                receipt.rlp_append(&mut stream);
-                [&[TransactionId::EIP1559 as u8], stream.as_raw()].concat()
+                let mut s = RlpStream::new();
+                s.append_raw(&[TransactionId::EIP1559 as u8], 1);
+                receipt.rlp_append(&mut s);
+                if with_header {
+                    stream.append(&s.out());
+                } else {
+                    stream.append_raw(&s.out(), 1);
+                }
             }
             Self::Blob(receipt) => {
-                receipt.rlp_append(&mut stream);
-                [&[TransactionId::Blob as u8], stream.as_raw()].concat()
+                let mut s = RlpStream::new();
+                s.append_raw(&[TransactionId::Blob as u8], 1);
+                receipt.rlp_append(&mut s);
+                if with_header {
+                    stream.append(&s.out());
+                } else {
+                    stream.append_raw(&s.out(), 1);
+                }
             }
         }
     }
 
-    fn decode(receipt: &[u8]) -> Result<Self, DecoderError> {
+    fn decode_enveloped_receipts(rlp: &Rlp) -> Result<Self, DecoderError> {
         // at least one byte needs to be present
-        if receipt.is_empty() {
+        if rlp.as_raw().is_empty() {
             return Err(DecoderError::RlpIncorrectListLen);
         }
-        let id = TransactionId::try_from(receipt[0])
+        if !rlp.is_list() {
+            let receipt_rlp = rlp.data()?;
+            let id = TransactionId::try_from(receipt_rlp[0])
+                .map_err(|_| DecoderError::Custom("Unknown transaction id"))?;
+            //other transaction types
+            match id {
+                TransactionId::Legacy => {
+                    unreachable!("Legacy receipts should be wrapped in a list")
+                }
+                TransactionId::AccessList => Ok(Self::AccessList(rlp::decode(&receipt_rlp[1..])?)),
+                TransactionId::EIP1559 => Ok(Self::EIP1559(rlp::decode(&receipt_rlp[1..])?)),
+                TransactionId::Blob => Ok(Self::Blob(rlp::decode(&receipt_rlp[1..])?)),
+            }
+        } else {
+            Ok(Self::Legacy(rlp::decode(rlp.as_raw())?))
+        }
+    }
+}
+
+impl Encodable for Receipt {
+    fn rlp_append(&self, s: &mut RlpStream) {
+        self.encode_with_envelope(s, false)
+    }
+}
+
+impl Decodable for Receipt {
+    fn decode(rlp: &Rlp) -> Result<Self, DecoderError> {
+        // at least one byte needs to be present
+        if rlp.as_raw().is_empty() {
+            return Err(DecoderError::RlpIncorrectListLen);
+        }
+        let id = TransactionId::try_from(rlp.as_raw()[0])
             .map_err(|_| DecoderError::Custom("Unknown transaction id"))?;
         //other transaction types
         match id {
-            TransactionId::Legacy => Ok(Self::Legacy(rlp::decode(receipt)?)),
-            TransactionId::AccessList => Ok(Self::AccessList(rlp::decode(&receipt[1..])?)),
-            TransactionId::EIP1559 => Ok(Self::EIP1559(rlp::decode(&receipt[1..])?)),
-            TransactionId::Blob => Ok(Self::Blob(rlp::decode(&receipt[1..])?)),
+            TransactionId::Legacy => Ok(Self::Legacy(rlp::decode(rlp.as_raw())?)),
+            TransactionId::AccessList => Ok(Self::AccessList(rlp::decode(&rlp.as_raw()[1..])?)),
+            TransactionId::EIP1559 => Ok(Self::EIP1559(rlp::decode(&rlp.as_raw()[1..])?)),
+            TransactionId::Blob => Ok(Self::Blob(rlp::decode(&rlp.as_raw()[1..])?)),
         }
     }
 }
@@ -520,24 +524,24 @@ mod tests {
     #[test_log::test]
     fn legacy_receipt() {
         let receipt_rlp = hex_decode(RECEIPT_6).unwrap();
-        let receipt = Receipt::decode(&receipt_rlp).expect("error decoding receipt");
+        let receipt: Receipt = rlp::decode(&receipt_rlp).expect("error decoding receipt");
         // tx link: https://etherscan.io/tx/0x147c84ddb366ae572ce5aa4d815e62de3a151133479fbb414e25d32bd7db9aa5
         assert_eq!(receipt.cumulative_gas_used, U256::from(579367));
         assert_eq!(receipt.logs, []);
         assert_eq!(receipt.outcome, TransactionOutcome::StatusCode(1));
-        let encoded = receipt.encode();
+        let encoded = receipt.rlp_bytes();
         assert_eq!(encoded, receipt_rlp);
     }
 
     #[test_log::test]
     fn typed_receipt() {
         let receipt_rlp = hex_decode(RECEIPT_0).unwrap();
-        let receipt = Receipt::decode(&receipt_rlp).expect("error decoding receipt");
+        let receipt: Receipt = rlp::decode(&receipt_rlp).expect("error decoding receipt");
         // tx link: https://etherscan.io/tx/0x163dae461ab32787eaecdad0748c9cf5fe0a22b443bc694efae9b80e319d9559
         assert_eq!(receipt.cumulative_gas_used, U256::from(189807));
         assert_eq!(receipt.logs.len(), 7);
         assert_eq!(receipt.outcome, TransactionOutcome::StatusCode(1));
-        let encoded = receipt.encode();
+        let encoded = receipt.rlp_bytes();
         assert_eq!(encoded, receipt_rlp);
     }
 
@@ -545,7 +549,7 @@ mod tests {
     fn cumulative_gas_used() {
         // cumulative gas for last tx in block should match block's gas used
         let receipt_rlp = hex_decode(RECEIPT_18).unwrap();
-        let receipt = Receipt::decode(&receipt_rlp).expect("error decoding receipt");
+        let receipt: Receipt = rlp::decode(&receipt_rlp).expect("error decoding receipt");
         // https://etherscan.io/block/14764013
         assert_eq!(receipt.cumulative_gas_used, U256::from(1314225));
     }
@@ -554,25 +558,25 @@ mod tests {
     fn calculate_receipts_root() {
         let receipts = Receipts {
             receipt_list: vec![
-                Receipt::decode(&hex_decode(RECEIPT_0).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_1).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_2).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_3).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_4).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_5).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_6).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_7).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_8).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_9).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_10).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_11).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_12).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_13).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_14).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_15).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_16).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_17).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_18).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_0).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_1).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_2).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_3).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_4).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_5).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_6).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_7).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_8).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_9).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_10).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_11).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_12).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_13).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_14).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_15).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_16).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_17).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_18).unwrap()).unwrap(),
             ],
         };
         assert_eq!(
@@ -585,25 +589,25 @@ mod tests {
     fn ssz_encoding_decoding_receipts() {
         let receipts = Receipts {
             receipt_list: vec![
-                Receipt::decode(&hex_decode(RECEIPT_0).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_1).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_2).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_3).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_4).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_5).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_6).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_7).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_8).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_9).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_10).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_11).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_12).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_13).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_14).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_15).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_16).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_17).unwrap()).unwrap(),
-                Receipt::decode(&hex_decode(RECEIPT_18).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_0).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_1).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_2).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_3).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_4).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_5).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_6).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_7).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_8).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_9).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_10).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_11).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_12).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_13).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_14).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_15).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_16).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_17).unwrap()).unwrap(),
+                rlp::decode(&hex_decode(RECEIPT_18).unwrap()).unwrap(),
             ],
         };
         let encoded = receipts.as_ssz_bytes();
@@ -640,9 +644,9 @@ mod tests {
                 }],
             ),
         );
-        let encoded = receipt.encode();
+        let encoded = receipt.rlp_bytes();
         assert_eq!(encoded, expected);
-        let decoded = Receipt::decode(&encoded).expect("decoding receipt failed");
+        let decoded = Receipt::decode(&Rlp::new(&encoded)).expect("decoding receipt failed");
         assert_eq!(decoded, receipt);
     }
 
@@ -666,9 +670,9 @@ mod tests {
                 }],
             ),
         );
-        let encoded = receipt.encode();
+        let encoded = receipt.rlp_bytes();
         assert_eq!(encoded, expected);
-        let decoded = Receipt::decode(&encoded).expect("decoding receipt failed");
+        let decoded = Receipt::decode(&Rlp::new(&encoded)).expect("decoding receipt failed");
         assert_eq!(decoded, receipt);
     }
 
@@ -692,9 +696,9 @@ mod tests {
                 }],
             ),
         );
-        let encoded = receipt.encode();
+        let encoded = receipt.rlp_bytes();
         assert_eq!(&encoded, &expected);
-        let decoded = Receipt::decode(&encoded).expect("decoding receipt failed");
+        let decoded = Receipt::decode(&Rlp::new(&encoded)).expect("decoding receipt failed");
         assert_eq!(decoded, receipt);
     }
 
@@ -718,9 +722,9 @@ mod tests {
                 }],
             ),
         );
-        let encoded = receipt.encode();
+        let encoded = receipt.rlp_bytes();
         assert_eq!(&encoded, &expected);
-        let decoded = Receipt::decode(&encoded).expect("decoding receipt failed");
+        let decoded = Receipt::decode(&Rlp::new(&encoded)).expect("decoding receipt failed");
         assert_eq!(decoded, receipt);
     }
 
@@ -739,9 +743,9 @@ mod tests {
                 }],
             ),
         );
-        let encoded = receipt.encode();
+        let encoded = receipt.rlp_bytes();
         assert_eq!(&encoded[..], &expected[..]);
-        let decoded = Receipt::decode(&encoded).expect("decoding receipt failed");
+        let decoded = Receipt::decode(&Rlp::new(&encoded)).expect("decoding receipt failed");
         assert_eq!(decoded, receipt);
     }
 

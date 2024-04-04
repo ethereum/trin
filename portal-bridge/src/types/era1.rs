@@ -1,11 +1,7 @@
 use crate::types::e2s::{E2StoreFile, Entry};
 use anyhow::ensure;
 use ethereum_types::{H256, U256};
-use ethportal_api::types::execution::{
-    block_body::BlockBody,
-    header::Header,
-    receipts::{LegacyReceipt, Receipt, Receipts},
-};
+use ethportal_api::types::execution::{block_body::BlockBody, header::Header, receipts::Receipts};
 use std::{
     fs,
     io::{Read, Write},
@@ -263,12 +259,7 @@ impl TryFrom<&Entry> for ReceiptsEntry {
         let mut decoder = snap::read::FrameDecoder::new(&entry.value[..]);
         let mut buf: Vec<u8> = vec![];
         decoder.read_to_end(&mut buf)?;
-        let encoded_receipts: Vec<LegacyReceipt> = rlp::decode_list(&buf);
-        let receipt_list = encoded_receipts
-            .iter()
-            .map(|r| Receipt::Legacy(r.clone()))
-            .collect();
-        let receipts = Receipts { receipt_list };
+        let receipts: Receipts = rlp::decode(&buf)?;
         Ok(Self { receipts })
     }
 }
