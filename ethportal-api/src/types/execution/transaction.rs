@@ -1,7 +1,7 @@
 use alloy_primitives::{keccak256, Address, B256, U256, U64};
 use alloy_rlp::{
-    length_of_length, Decodable, Encodable, Error as RlpError, Header, RlpDecodable, RlpEncodable,
-    EMPTY_STRING_CODE,
+    length_of_length, Decodable, Encodable, Error as RlpError, Header as RlpHeader, RlpDecodable,
+    RlpEncodable, EMPTY_STRING_CODE,
 };
 use bytes::{Buf, Bytes};
 use serde::{Deserialize, Deserializer};
@@ -21,9 +21,7 @@ pub enum Transaction {
 impl Transaction {
     /// Returns the Keccak-256 hash of the header.
     pub fn hash(&self) -> B256 {
-        let mut buf = vec![];
-        self.encode(&mut buf);
-        keccak256(buf)
+        keccak256(alloy_rlp::encode(self))
     }
 }
 
@@ -36,7 +34,7 @@ impl Encodable for Transaction {
             Self::AccessList(tx) => {
                 let payload_length = tx.fields_len();
                 if with_header {
-                    Header {
+                    RlpHeader {
                         list: false,
                         payload_length: 1 + length_of_length(payload_length) + payload_length,
                     }
@@ -48,7 +46,7 @@ impl Encodable for Transaction {
             Self::EIP1559(tx) => {
                 let payload_length = tx.fields_len();
                 if with_header {
-                    Header {
+                    RlpHeader {
                         list: false,
                         payload_length: 1 + length_of_length(payload_length) + payload_length,
                     }
@@ -60,7 +58,7 @@ impl Encodable for Transaction {
             Self::Blob(tx) => {
                 let payload_length = tx.fields_len();
                 if with_header {
-                    Header {
+                    RlpHeader {
                         list: false,
                         payload_length: 1 + length_of_length(payload_length) + payload_length,
                     }

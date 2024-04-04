@@ -393,7 +393,7 @@ mod tests {
     #[case(TX6, 41942)]
     fn encode_and_decode_txs(#[case] tx: &str, #[case] expected_nonce: u32) {
         let tx_rlp = hex_decode(tx).unwrap();
-        let tx = Transaction::decode(&mut tx_rlp.as_slice()).expect("error decoding tx");
+        let tx = Decodable::decode(&mut tx_rlp.as_slice()).expect("error decoding tx");
         let expected_nonce = U256::from(expected_nonce);
         match &tx {
             Transaction::Legacy(tx) => assert_eq!(tx.nonce, expected_nonce),
@@ -546,25 +546,25 @@ mod tests {
 
     fn get_14764013_block_body() -> BlockBody {
         let txs: Vec<Transaction> = vec![
-            Transaction::decode(&mut hex_decode(TX1).unwrap().as_slice()).unwrap(),
-            Transaction::decode(&mut hex_decode(TX2).unwrap().as_slice()).unwrap(),
-            Transaction::decode(&mut hex_decode(TX3).unwrap().as_slice()).unwrap(),
-            Transaction::decode(&mut hex_decode(TX4).unwrap().as_slice()).unwrap(),
-            Transaction::decode(&mut hex_decode(TX5).unwrap().as_slice()).unwrap(),
-            Transaction::decode(&mut hex_decode(TX6).unwrap().as_slice()).unwrap(),
-            Transaction::decode(&mut hex_decode(TX7).unwrap().as_slice()).unwrap(),
-            Transaction::decode(&mut hex_decode(TX8).unwrap().as_slice()).unwrap(),
-            Transaction::decode(&mut hex_decode(TX9).unwrap().as_slice()).unwrap(),
-            Transaction::decode(&mut hex_decode(TX10).unwrap().as_slice()).unwrap(),
-            Transaction::decode(&mut hex_decode(TX11).unwrap().as_slice()).unwrap(),
-            Transaction::decode(&mut hex_decode(TX12).unwrap().as_slice()).unwrap(),
-            Transaction::decode(&mut hex_decode(TX13).unwrap().as_slice()).unwrap(),
-            Transaction::decode(&mut hex_decode(TX14).unwrap().as_slice()).unwrap(),
-            Transaction::decode(&mut hex_decode(TX15).unwrap().as_slice()).unwrap(),
-            Transaction::decode(&mut hex_decode(TX16).unwrap().as_slice()).unwrap(),
-            Transaction::decode(&mut hex_decode(TX17).unwrap().as_slice()).unwrap(),
-            Transaction::decode(&mut hex_decode(TX18).unwrap().as_slice()).unwrap(),
-            Transaction::decode(&mut hex_decode(TX19).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(TX1).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(TX2).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(TX3).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(TX4).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(TX5).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(TX6).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(TX7).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(TX8).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(TX9).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(TX10).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(TX11).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(TX12).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(TX13).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(TX14).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(TX15).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(TX16).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(TX17).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(TX18).unwrap().as_slice()).unwrap(),
+            Decodable::decode(&mut hex_decode(TX19).unwrap().as_slice()).unwrap(),
         ];
         let uncles: Vec<Header> =
             Decodable::decode(&mut hex_decode(UNCLE).unwrap().as_slice()).unwrap();
