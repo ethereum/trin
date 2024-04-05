@@ -41,7 +41,7 @@ sha2 = "0.10.1"
 sha3 = "0.9.1"
 snap = "1.1.0"
 superstruct = "0.7.0"
-ssz_types = { git = "https://github.com/morph-dev/kolby_ssz_types.git", rev = "e6129bf860cea549a510281222a13154f3370ac1" }
+ssz_types = { git = "https://github.com/KolbyML/ssz_types.git", rev = "2a5922de75f00746890bf4ea9ad663c9d5d58efe" }
 thiserror = "1.0.57"
 tree_hash = { git = "https://github.com/KolbyML/tree_hash.git", rev = "8aaf8bb4184148768d48e2cfbbdd0b95d1da8730" }
 tree_hash_derive = { git = "https://github.com/KolbyML/tree_hash.git", rev = "8aaf8bb4184148768d48e2cfbbdd0b95d1da8730" }

@@ -6706,7 +6706,7 @@ dependencies = [
 [[package]]
 name = "ssz_types"
 version = "0.6.0"
-source = "git+https://github.com/morph-dev/kolby_ssz_types.git?rev=e6129bf860cea549a510281222a13154f3370ac1#e6129bf860cea549a510281222a13154f3370ac1"
+source = "git+https://github.com/KolbyML/ssz_types.git?rev=2a5922de75f00746890bf4ea9ad663c9d5d58efe#2a5922de75f00746890bf4ea9ad663c9d5d58efe"
 dependencies = [
  "derivative",
  "ethereum_serde_utils",

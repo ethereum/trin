@@ -38,7 +38,7 @@ serde = { version = "1.0.150", features = ["derive", "rc"] }
 serde_json = "1.0.89"
 serde_yaml = "0.9"
 snap = "1.1.1"
-ssz_types = { git = "https://github.com/morph-dev/kolby_ssz_types.git", rev = "e6129bf860cea549a510281222a13154f3370ac1" }
+ssz_types = { git = "https://github.com/KolbyML/ssz_types.git", rev = "2a5922de75f00746890bf4ea9ad663c9d5d58efe" }
 surf = { version = "2.3.2", default-features = false, features = ["h1-client-rustls", "middleware-logger", "encoding"] } # we use rustils because OpenSSL cause issues compiling on aarch64
 tokio = { version = "1.14.0", features = ["full"] }
 tracing = "0.1.36"
