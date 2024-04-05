@@ -12,7 +12,11 @@ authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 build = "build.rs"
 
 [dependencies]
+shadow-rs = "0.27"
 tracing-subscriber = { version = "0.3.15", features = ["env-filter"] }
+
+[build-dependencies]
+shadow-rs = "0.27"
 
 [target.'cfg(windows)'.dependencies]
 # The crates for detecting whether the terminal supports colors are OS-specific.
