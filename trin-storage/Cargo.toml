@@ -11,7 +11,7 @@ description = "Storage library for Trin."
 authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 [dependencies]
-alloy-primitives = "0.6.4"
+alloy-primitives = "0.7.0"
 anyhow = "1.0.68"
 discv5 = { version = "0.4.1", features = ["serde"] }
 ethportal-api = {path = "../ethportal-api"}

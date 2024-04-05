@@ -11,7 +11,7 @@ description = "Core library for Trin."
 authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 [dependencies]
-alloy-primitives = "0.6.4"
+alloy-primitives = "0.7.0"
 alloy-rlp = "0.3.4"
 anyhow = "1.0.68"
 async-trait = "0.1.64"
@@ -20,8 +20,8 @@ bytes = "1.3.0"
 delay_map = "0.3.0"
 directories = "3.0"
 discv5 = { version = "0.4.1", features = ["serde"] }
-ethereum_ssz = { git = "https://github.com/KolbyML/ethereum_ssz.git", rev = "ec9af0923e3122353243f4f6656fd6e6e3c2e4e3" }
-ethereum_ssz_derive = { git = "https://github.com/KolbyML/ethereum_ssz.git", rev = "ec9af0923e3122353243f4f6656fd6e6e3c2e4e3" }
+ethereum_ssz = { git = "https://github.com/KolbyML/ethereum_ssz.git", rev = "364a2d93229e638b72c99186cbc2a56590585151" }
+ethereum_ssz_derive = { git = "https://github.com/KolbyML/ethereum_ssz.git", rev = "364a2d93229e638b72c99186cbc2a56590585151" }
 ethportal-api = { path = "../ethportal-api" }
 fnv = "1.0.7"
 futures = "0.3.21"
@@ -37,7 +37,7 @@ rand = "0.8.4"
 serde = { version = "1.0.150", features = ["derive"] }
 serde_json = "1.0.89"
 smallvec = "1.8.0"
-ssz_types = { git = "https://github.com/KolbyML/ssz_types.git", rev = "91db848894d6cb94e3258d1a9f9be4897d05463a" }
+ssz_types = { git = "https://github.com/KolbyML/ssz_types.git", rev = "e2af01ba6b9b255880fe2a0def6a6bb81bc66c9a" }
 stunclient = "0.1.2"
 tempfile = "3.3.0"
 thiserror = "1.0.57"

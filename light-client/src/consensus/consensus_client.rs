@@ -504,7 +504,11 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
             let header_root = bytes_to_bytes32(attested_header.tree_hash_root().as_slice());
             let signing_root = self.compute_committee_sign_root(header_root, signature_slot)?;
 
-            Ok(is_aggregate_valid(signature, signing_root.as_bytes(), &pks))
+            Ok(is_aggregate_valid(
+                signature,
+                signing_root.r#as_bytes(),
+                &pks,
+            ))
         })();
 
         if let Ok(is_valid) = res {

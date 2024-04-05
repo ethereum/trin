@@ -150,7 +150,7 @@ impl BlockBody {
         let mut buf = Vec::<u8>::new();
         self.uncles()?.encode(&mut buf);
         let hash = Keccak256::digest(&buf);
-        Ok(B256::from_slice(&hash))
+        Ok(B256::from_slice(hash.as_slice()))
     }
 
     pub fn withdrawals_root(&self) -> anyhow::Result<B256> {

@@ -11,10 +11,10 @@ description = "History network subprotocol for Trin."
 authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 [dependencies]
-alloy-primitives = "0.6.4"
+alloy-primitives = "0.7.0"
 anyhow = "1.0.68"
 discv5 = { version = "0.4.1", features = ["serde"] }
-ethereum_ssz = { git = "https://github.com/KolbyML/ethereum_ssz.git", rev = "ec9af0923e3122353243f4f6656fd6e6e3c2e4e3" }
+ethereum_ssz = { git = "https://github.com/KolbyML/ethereum_ssz.git", rev = "364a2d93229e638b72c99186cbc2a56590585151" }
 ethportal-api = {path = "../ethportal-api"}
 parking_lot = "0.11.2"
 portalnet = { path = "../portalnet" }
@@ -23,7 +23,7 @@ r2d2_sqlite = "0.24.0"
 serde_json = "1.0.89"
 tokio = { version = "1.14.0", features = ["full"] }
 tracing = "0.1.36"
-tree_hash = { git = "https://github.com/KolbyML/tree_hash.git", rev = "c402373ce2b430551eb8debd85512ceac9567210" }
+tree_hash = { git = "https://github.com/KolbyML/tree_hash.git", rev = "8aaf8bb4184148768d48e2cfbbdd0b95d1da8730" }
 trin-metrics = { path = "../trin-metrics" }
 trin-storage = { path = "../trin-storage" }
 trin-utils = { path = "../trin-utils" }
@@ -36,8 +36,8 @@ quickcheck = "1.0.3"
 rand = "0.8.4"
 rstest = "0.18.2"
 serial_test = "0.5.1"
-ethereum_serde_utils = { git = "https://github.com/KolbyML/ethereum_serde_utils.git", rev = "25b69f5dbd3ac871217ad24fc42304a93000d8da" }
-ssz_types = { git = "https://github.com/KolbyML/ssz_types.git", rev = "91db848894d6cb94e3258d1a9f9be4897d05463a" }
+ethereum_serde_utils = { git = "https://github.com/KolbyML/ethereum_serde_utils.git", rev = "b0f9fcf3ed6a983561925f1b520a725cfe2191f2" }
+ssz_types = { git = "https://github.com/KolbyML/ssz_types.git", rev = "e2af01ba6b9b255880fe2a0def6a6bb81bc66c9a" }
 test-log = { version = "0.2.11", features = ["trace"] }
 tokio-test = "0.4.2"
 tracing-subscriber = "0.3.15"

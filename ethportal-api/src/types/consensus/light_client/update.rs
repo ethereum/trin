@@ -21,7 +21,7 @@ pub type FinalizedRootProofLen = U6;
 #[superstruct(
     variants(Bellatrix, Capella),
     variant_attributes(
-        derive(Debug, Clone, Serialize, PartialEq, Deserialize, Encode, Decode,),
+        derive(Debug, Clone, Serialize, PartialEq, Deserialize, Encode, Decode),
         serde(deny_unknown_fields),
     )
 )]
