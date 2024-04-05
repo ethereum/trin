@@ -2,11 +2,7 @@ use crate::types::e2s::{E2StoreFile, Entry};
 use alloy_primitives::{B256, U256};
 use alloy_rlp::Decodable;
 use anyhow::ensure;
-use ethportal_api::types::execution::{
-    block_body::BlockBody,
-    header::Header,
-    receipts::{LegacyReceipt, Receipt, Receipts},
-};
+use ethportal_api::types::execution::{block_body::BlockBody, header::Header, receipts::Receipts};
 use std::{
     fs,
     io::{Read, Write},
@@ -25,7 +21,8 @@ use std::{
 // Accumulator        = { type: 0x07,   data: hash_tree_root(List(HeaderRecord, 8192)) }
 // BlockIndex         = { type: 0x3266, data: block-index }
 
-const ERA1_ENTRY_COUNT: usize = 8192 * 4 + 3;
+const BLOCK_TUPLE_COUNT: usize = 8192;
+const ERA1_ENTRY_COUNT: usize = BLOCK_TUPLE_COUNT * 4 + 3;
 
 pub struct Era1 {
     pub version: VersionEntry,
@@ -48,7 +45,7 @@ impl Era1 {
         );
         let version = VersionEntry::try_from(&file.entries[0])?;
         let mut block_tuples = vec![];
-        for count in 0..8192 {
+        for count in 0..BLOCK_TUPLE_COUNT {
             let mut entries: [Entry; 4] = Default::default();
             for (i, entry) in entries.iter_mut().enumerate() {
                 *entry = file.entries[count * 4 + i + 1].clone();
@@ -264,12 +261,7 @@ impl TryFrom<&Entry> for ReceiptsEntry {
         let mut decoder = snap::read::FrameDecoder::new(&entry.value[..]);
         let mut buf: Vec<u8> = vec![];
         decoder.read_to_end(&mut buf)?;
-        let encoded_receipts: Vec<LegacyReceipt> = Decodable::decode(&mut buf.as_slice())?;
-        let receipt_list = encoded_receipts
-            .iter()
-            .map(|r| Receipt::Legacy(r.clone()))
-            .collect();
-        let receipts = Receipts { receipt_list };
+        let receipts: Receipts = Decodable::decode(&mut buf.as_slice())?;
         Ok(Self { receipts })
     }
 }
@@ -416,7 +408,7 @@ impl TryInto<Entry> for BlockIndexEntry {
 #[derive(Clone, Eq, PartialEq, Debug)]
 struct BlockIndex {
     starting_number: u64,
-    indices: [u64; 8192],
+    indices: [u64; BLOCK_TUPLE_COUNT],
     count: u64,
 }
 
@@ -425,11 +417,13 @@ impl TryFrom<Entry> for BlockIndex {
 
     fn try_from(entry: Entry) -> Result<Self, Self::Error> {
         let starting_number = u64::from_le_bytes(entry.value[0..8].try_into()?);
-        let mut indices = [0u64; 8192];
+        let mut indices = [0u64; BLOCK_TUPLE_COUNT];
         for (i, index) in indices.iter_mut().enumerate() {
             *index = u64::from_le_bytes(entry.value[(i * 8 + 8)..(i * 8 + 16)].try_into()?);
         }
-        let count = u64::from_le_bytes(entry.value[(8192 * 8 + 8)..(8192 * 8 + 16)].try_into()?);
+        let count = u64::from_le_bytes(
+            entry.value[(BLOCK_TUPLE_COUNT * 8 + 8)..(BLOCK_TUPLE_COUNT * 8 + 16)].try_into()?,
+        );
         Ok(Self {
             starting_number,
             indices,
@@ -447,6 +441,12 @@ mod tests {
     #[case::era1("../test_assets/era1/mainnet-00001-a5364e9a.era1")]
     // epoch #10 contains txs
     #[case::era1("../test_assets/era1/mainnet-00010-5f5d4516.era1")]
+    // this is a test era1 file that has been amended for size purposes,
+    // since era1 files that contain typed txs are quite large.
+    // it was created by copying the `mainnet-01600-c6a9ee35.era1` file
+    // - the first 10 block tuples are included, unchanged
+    // - the following 8182 block tuples contain empty bodies and receipts
+    #[case::era1("../test_assets/era1/test-mainnet-01600-xxxxxxxx.era1")]
     fn test_era1(#[case] path: &str) {
         let era1 = Era1::read_from_file(path.to_string()).unwrap();
         let actual = era1.write().unwrap();

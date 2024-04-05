@@ -9,7 +9,7 @@ use alloy_rlp::{
     RlpEncodable,
 };
 use anyhow::anyhow;
-use bytes::{BufMut, Bytes};
+use bytes::{Buf, BufMut, Bytes};
 use eth_trie::{EthTrie, MemoryDB, Trie};
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
@@ -41,6 +41,33 @@ impl Receipts {
 
         trie.root_hash()
             .map_err(|err| anyhow!("Error calculating receipts root: {err:?}"))
+    }
+}
+
+impl Encodable for Receipts {
+    fn encode(&self, out: &mut dyn BufMut) {
+        let mut list = Vec::<u8>::new();
+        for receipt in &self.receipt_list {
+            receipt.encode_with_envelope(&mut list, true);
+        }
+        let header = RlpHeader {
+            list: true,
+            payload_length: list.len(),
+        };
+        header.encode(out);
+        out.put_slice(list.as_slice());
+    }
+}
+
+impl Decodable for Receipts {
+    fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
+        let mut bytes = RlpHeader::decode_bytes(buf, true)?;
+        let mut receipt_list: Vec<Receipt> = vec![];
+        let payload_view = &mut bytes;
+        while !payload_view.is_empty() {
+            receipt_list.push(Receipt::decode_enveloped_transactions(payload_view)?);
+        }
+        Ok(Self { receipt_list })
     }
 }
 
@@ -304,21 +331,6 @@ impl Encodable for LegacyReceipt {
     }
 }
 
-impl Encodable for Receipts {
-    fn encode(&self, out: &mut dyn BufMut) {
-        let mut list = Vec::<u8>::new();
-        for receipt in self.receipt_list.clone() {
-            receipt.encode(&mut list);
-        }
-        let header = RlpHeader {
-            list: true,
-            payload_length: list.len(),
-        };
-        header.encode(out);
-        out.put_slice(list.as_slice());
-    }
-}
-
 #[derive(Eq, Hash, Debug, Copy, Clone, PartialEq)]
 #[repr(u8)]
 /// The typed transaction ID
@@ -398,11 +410,8 @@ impl Receipt {
             Self::Blob(receipt) => receipt,
         }
     }
-}
 
-impl Encodable for Receipt {
-    fn encode(&self, out: &mut dyn bytes::BufMut) {
-        let with_header = false;
+    fn encode_with_envelope(&self, out: &mut dyn bytes::BufMut, with_header: bool) {
         match self {
             Self::Legacy(receipt) => {
                 receipt.encode(out);
@@ -444,6 +453,40 @@ impl Encodable for Receipt {
                 receipt.encode(out);
             }
         }
+    }
+
+    pub fn decode_enveloped_transactions(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
+        // at least one byte needs to be present
+        if buf.is_empty() {
+            return Err(RlpError::InputTooShort);
+        }
+        let original_encoding = *buf;
+        let header = RlpHeader::decode(buf)?;
+        let value = &mut &buf[..header.payload_length];
+        buf.advance(header.payload_length);
+        if !header.list {
+            let id = TransactionId::try_from(value[0])
+                .map_err(|_| RlpError::Custom("Unknown transaction id"))?;
+            value.advance(1);
+            match id {
+                TransactionId::Legacy => {
+                    unreachable!("Legacy receipts should be wrapped in a list")
+                }
+                TransactionId::AccessList => Ok(Self::AccessList(Decodable::decode(value)?)),
+                TransactionId::EIP1559 => Ok(Self::EIP1559(Decodable::decode(value)?)),
+                TransactionId::Blob => Ok(Self::Blob(Decodable::decode(value)?)),
+            }
+        } else {
+            Ok(Self::Legacy(Decodable::decode(
+                &mut &original_encoding[..(header.payload_length + header.length())],
+            )?))
+        }
+    }
+}
+
+impl Encodable for Receipt {
+    fn encode(&self, out: &mut dyn bytes::BufMut) {
+        self.encode_with_envelope(out, false)
     }
 }
 
