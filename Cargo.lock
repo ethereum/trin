@@ -229,7 +229,7 @@ dependencies = [
  "cfg-if 1.0.0",
  "const-hex",
  "derive_more",
- "ethereum_ssz 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ethereum_ssz",
  "getrandom 0.2.12",
  "hex-literal",
  "itoa",
@@ -2268,9 +2268,10 @@ dependencies = [
 [[package]]
 name = "ethereum_serde_utils"
 version = "0.5.2"
-source = "git+https://github.com/KolbyML/ethereum_serde_utils.git?rev=b0f9fcf3ed6a983561925f1b520a725cfe2191f2#b0f9fcf3ed6a983561925f1b520a725cfe2191f2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "de4d5951468846963c24e8744c133d44f39dff2cd3a233f6be22b370d08a524f"
 dependencies = [
- "alloy-primitives",
+ "ethereum-types",
  "hex",
  "serde",
  "serde_derive",
@@ -2289,19 +2290,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "ethereum_ssz"
-version = "0.5.3"
-source = "git+https://github.com/KolbyML/ethereum_ssz.git?rev=364a2d93229e638b72c99186cbc2a56590585151#364a2d93229e638b72c99186cbc2a56590585151"
-dependencies = [
- "alloy-primitives",
- "itertools 0.10.5",
- "smallvec 1.13.2",
-]
-
-[[package]]
 name = "ethereum_ssz_derive"
 version = "0.5.3"
-source = "git+https://github.com/KolbyML/ethereum_ssz.git?rev=364a2d93229e638b72c99186cbc2a56590585151#364a2d93229e638b72c99186cbc2a56590585151"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6085d7fd3cf84bd2b8fec150d54c8467fb491d8db9c460607c5534f653a0ee38"
 dependencies = [
  "darling 0.13.4",
  "proc-macro2",
@@ -2579,7 +2571,7 @@ dependencies = [
  "env_logger 0.9.3",
  "eth_trie",
  "ethereum_serde_utils",
- "ethereum_ssz 0.5.3 (git+https://github.com/KolbyML/ethereum_ssz.git?rev=364a2d93229e638b72c99186cbc2a56590585151)",
+ "ethereum_ssz",
  "ethereum_ssz_derive",
  "ethnum",
  "hex",
@@ -2621,7 +2613,7 @@ dependencies = [
  "alloy-primitives",
  "anyhow",
  "discv5",
- "ethereum_ssz 0.5.3 (git+https://github.com/KolbyML/ethereum_ssz.git?rev=364a2d93229e638b72c99186cbc2a56590585151)",
+ "ethereum_ssz",
  "ethportal-api",
  "futures 0.3.30",
  "hex",
@@ -4931,7 +4923,7 @@ dependencies = [
  "clap",
  "discv5",
  "env_logger 0.9.3",
- "ethereum_ssz 0.5.3 (git+https://github.com/KolbyML/ethereum_ssz.git?rev=364a2d93229e638b72c99186cbc2a56590585151)",
+ "ethereum_ssz",
  "ethereum_ssz_derive",
  "ethportal-api",
  "futures 0.3.30",
@@ -4972,7 +4964,7 @@ dependencies = [
  "directories",
  "discv5",
  "env_logger 0.9.3",
- "ethereum_ssz 0.5.3 (git+https://github.com/KolbyML/ethereum_ssz.git?rev=364a2d93229e638b72c99186cbc2a56590585151)",
+ "ethereum_ssz",
  "ethereum_ssz_derive",
  "ethportal-api",
  "fnv",
@@ -5771,7 +5763,7 @@ dependencies = [
  "ark-ff 0.3.0",
  "ark-ff 0.4.2",
  "bytes 1.6.0",
- "ethereum_ssz 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ethereum_ssz",
  "fastrlp",
  "num-bigint",
  "num-traits",
@@ -6714,11 +6706,11 @@ dependencies = [
 [[package]]
 name = "ssz_types"
 version = "0.6.0"
-source = "git+https://github.com/KolbyML/ssz_types.git?rev=e2af01ba6b9b255880fe2a0def6a6bb81bc66c9a#e2af01ba6b9b255880fe2a0def6a6bb81bc66c9a"
+source = "git+https://github.com/morph-dev/kolby_ssz_types.git?rev=e6129bf860cea549a510281222a13154f3370ac1#e6129bf860cea549a510281222a13154f3370ac1"
 dependencies = [
  "derivative",
  "ethereum_serde_utils",
- "ethereum_ssz 0.5.3 (git+https://github.com/KolbyML/ethereum_ssz.git?rev=364a2d93229e638b72c99186cbc2a56590585151)",
+ "ethereum_ssz",
  "itertools 0.10.5",
  "serde",
  "serde_derive",
@@ -7649,7 +7641,7 @@ dependencies = [
  "clap",
  "dirs",
  "discv5",
- "ethereum_ssz 0.5.3 (git+https://github.com/KolbyML/ethereum_ssz.git?rev=364a2d93229e638b72c99186cbc2a56590585151)",
+ "ethereum_ssz",
  "ethers",
  "ethers-core",
  "ethers-providers",
@@ -7693,7 +7685,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "discv5",
- "ethereum_ssz 0.5.3 (git+https://github.com/KolbyML/ethereum_ssz.git?rev=364a2d93229e638b72c99186cbc2a56590585151)",
+ "ethereum_ssz",
  "ethportal-api",
  "light-client",
  "parking_lot 0.11.2",
@@ -7720,8 +7712,7 @@ dependencies = [
  "anyhow",
  "discv5",
  "env_logger 0.9.3",
- "ethereum_serde_utils",
- "ethereum_ssz 0.5.3 (git+https://github.com/KolbyML/ethereum_ssz.git?rev=364a2d93229e638b72c99186cbc2a56590585151)",
+ "ethereum_ssz",
  "ethportal-api",
  "parking_lot 0.11.2",
  "portalnet",
@@ -7825,8 +7816,7 @@ dependencies = [
  "alloy-rlp",
  "anyhow",
  "eth2_hashing",
- "ethereum_serde_utils",
- "ethereum_ssz 0.5.3 (git+https://github.com/KolbyML/ethereum_ssz.git?rev=364a2d93229e638b72c99186cbc2a56590585151)",
+ "ethereum_ssz",
  "ethereum_ssz_derive",
  "ethportal-api",
  "lazy_static",

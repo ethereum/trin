@@ -516,7 +516,6 @@ mod tests {
 
     use alloy_primitives::U256;
     use serde_json::json;
-    use serde_utils::u256_from_dec_str::u256_from_dec_str;
     use ssz::{Decode, Encode};
 
     use crate::utils::bytes::hex_encode;
@@ -772,7 +771,7 @@ mod tests {
         };
         assert_eq!(
             receipt.cumulative_gas_used,
-            u256_from_dec_str("579367").unwrap()
+            U256::from_str_radix("579367", 10).unwrap()
         );
     }
 
@@ -783,7 +782,7 @@ mod tests {
         let receipt: Receipt = serde_json::from_value(response).unwrap();
         assert_eq!(
             receipt.cumulative_gas_used,
-            u256_from_dec_str("189807").unwrap()
+            U256::from_str_radix("189807", 10).unwrap()
         );
     }
 

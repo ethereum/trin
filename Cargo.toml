@@ -19,7 +19,7 @@ anyhow = "1.0.68"
 clap = { version = "4.2.1", features = ["derive"] }
 dirs = "5.0.1"
 discv5 = { version = "0.4.1", features = ["serde"] }
-ethereum_ssz = { git = "https://github.com/KolbyML/ethereum_ssz.git", rev = "364a2d93229e638b72c99186cbc2a56590585151" }
+ethereum_ssz = "0.5.3"
 ethers = { version = "2.0"}
 ethers-providers = { version = "2.0", features = ["ws"] }
 ethportal-api = { path = "ethportal-api" }
