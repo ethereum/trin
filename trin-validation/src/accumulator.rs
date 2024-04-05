@@ -244,11 +244,10 @@ mod test {
     use super::*;
     use std::{fs, str::FromStr};
 
-    use alloy_primitives::{Address, Bloom};
+    use alloy_primitives::{Address, Bloom, U256};
     use alloy_rlp::Decodable;
     use rstest::*;
     use serde_json::json;
-    use serde_utils::u256_from_dec_str::u256_from_dec_str;
     use ssz::Decode;
 
     use crate::constants::DEFAULT_MASTER_ACC_HASH;
@@ -396,10 +395,10 @@ mod test {
             transactions_root: B256::random(),
             receipts_root: B256::random(),
             logs_bloom: Bloom::ZERO,
-            difficulty: u256_from_dec_str("1").unwrap(),
+            difficulty: U256::from(1),
             number: *height,
-            gas_limit: u256_from_dec_str("1").unwrap(),
-            gas_used: u256_from_dec_str("1").unwrap(),
+            gas_limit: U256::from(1),
+            gas_used: U256::from(1),
             timestamp: 1,
             extra_data: vec![],
             mix_hash: None,

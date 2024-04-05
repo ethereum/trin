@@ -135,7 +135,6 @@ mod tests {
 
     use alloy_primitives::U256;
     use serde_json::Value;
-    use serde_utils::u256_from_dec_str::u256_from_dec_str;
     use ssz::Encode;
 
     use ethportal_api::{
@@ -245,7 +244,7 @@ mod tests {
 
         epoch_acc[0] = HeaderRecord {
             block_hash: B256::random(),
-            total_difficulty: u256_from_dec_str("0").unwrap(),
+            total_difficulty: U256::ZERO,
         };
         let invalid_content = epoch_acc.as_ssz_bytes();
 
@@ -266,7 +265,7 @@ mod tests {
 
         epoch_acc[0] = HeaderRecord {
             block_hash: B256::random(),
-            total_difficulty: u256_from_dec_str("0").unwrap(),
+            total_difficulty: U256::ZERO,
         };
         let content_key = HistoryContentKey::EpochAccumulator(EpochAccumulatorKey {
             epoch_hash: epoch_acc.tree_hash_root(),

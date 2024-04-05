@@ -14,7 +14,7 @@ authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 alloy-primitives = "0.7.0"
 anyhow = "1.0.68"
 discv5 = { version = "0.4.1", features = ["serde"] }
-ethereum_ssz = { git = "https://github.com/KolbyML/ethereum_ssz.git", rev = "364a2d93229e638b72c99186cbc2a56590585151" }
+ethereum_ssz = "0.5.3"
 ethportal-api = {path = "../ethportal-api"}
 parking_lot = "0.11.2"
 portalnet = { path = "../portalnet" }
@@ -36,8 +36,7 @@ quickcheck = "1.0.3"
 rand = "0.8.4"
 rstest = "0.18.2"
 serial_test = "0.5.1"
-ethereum_serde_utils = { git = "https://github.com/KolbyML/ethereum_serde_utils.git", rev = "b0f9fcf3ed6a983561925f1b520a725cfe2191f2" }
-ssz_types = { git = "https://github.com/KolbyML/ssz_types.git", rev = "e2af01ba6b9b255880fe2a0def6a6bb81bc66c9a" }
+ssz_types = { git = "https://github.com/KolbyML/ssz_types.git", rev = "2a5922de75f00746890bf4ea9ad663c9d5d58efe" }
 test-log = { version = "0.2.11", features = ["trace"] }
 tokio-test = "0.4.2"
 tracing-subscriber = "0.3.15"

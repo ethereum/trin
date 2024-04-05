@@ -11,18 +11,17 @@ description = "Validation layer for the Portal Network data."
 authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 [dependencies]
-alloy-primitives = "0.7.0"
+alloy-primitives = { version = "0.7.0", features = ["ssz"] }
 anyhow = "1.0.68"
 eth2_hashing = "0.2.0"
-ethereum_serde_utils = { git = "https://github.com/KolbyML/ethereum_serde_utils.git", rev = "b0f9fcf3ed6a983561925f1b520a725cfe2191f2" }
-ethereum_ssz = { git = "https://github.com/KolbyML/ethereum_ssz.git", rev = "364a2d93229e638b72c99186cbc2a56590585151" }
-ethereum_ssz_derive = { git = "https://github.com/KolbyML/ethereum_ssz.git", rev = "364a2d93229e638b72c99186cbc2a56590585151" }
+ethereum_ssz = "0.5.3"
+ethereum_ssz_derive = "0.5.3"
 ethportal-api = { path = "../ethportal-api" }
 lazy_static = "1.4.0"
 rust-embed = "6.6.1"
 serde = { version = "1.0.150", features = ["derive"] }
 serde_json = "1.0.89"
-ssz_types = { git = "https://github.com/KolbyML/ssz_types.git", rev = "e2af01ba6b9b255880fe2a0def6a6bb81bc66c9a" }
+ssz_types = { git = "https://github.com/KolbyML/ssz_types.git", rev = "2a5922de75f00746890bf4ea9ad663c9d5d58efe" }
 tokio = { version = "1.14.0", features = ["full"] }
 tree_hash = { git = "https://github.com/KolbyML/tree_hash.git", rev = "8aaf8bb4184148768d48e2cfbbdd0b95d1da8730" }
 tree_hash_derive = { git = "https://github.com/KolbyML/tree_hash.git", rev = "8aaf8bb4184148768d48e2cfbbdd0b95d1da8730" }
