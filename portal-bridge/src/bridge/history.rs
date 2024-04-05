@@ -112,10 +112,24 @@ impl HistoryBridge {
         let mut last_seen_block_counter = 0;
         loop {
             sleep(Duration::from_secs(LATEST_BLOCK_POLL_RATE)).await;
-            let latest_block = match self.execution_api.get_latest_block_number().await {
-                Ok(val) => val,
-                Err(msg) => {
-                    warn!("error getting latest block, skipping iteration: {msg:?}");
+            // If get_latest_block_number(), it is an indiction there is a deadlock bug somewhere in
+            // this future call, we know it doesn't happen if we use infura, but it comes up when we
+            // use ethpandaops, maybe we are deadlocking if we get a bad http response?
+            let latest_block = match timeout(
+                Duration::from_secs(LATEST_BLOCK_POLL_RATE),
+                self.execution_api.get_latest_block_number(),
+            )
+            .await
+            {
+                Ok(result) => match result {
+                    Ok(latest_block) => latest_block,
+                    Err(msg) => {
+                        warn!("error getting latest block, skipping iteration: {msg:?}");
+                        continue;
+                    }
+                },
+                Err(_) => {
+                    error!("get_latest_block_number() timed out on getting latest header");
                     continue;
                 }
             };
