@@ -1,10 +1,11 @@
+use alloy_primitives::U256;
 use serde::{Deserialize, Serialize};
 use ssz_types::{typenum, BitList};
 
 use crate::types::enr::Enr;
 
-pub type DataRadius = ethereum_types::U256;
-pub type Distance = ethereum_types::U256;
+pub type DataRadius = U256;
+pub type Distance = U256;
 
 /// Part of a TraceRecursiveFindContent response
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

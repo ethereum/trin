@@ -3,10 +3,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use alloy_primitives::B256;
 use anyhow::anyhow;
 use directories::ProjectDirs;
 use discv5::enr::{CombinedKey, Enr, NodeId};
-use ethereum_types::H256;
 use tempfile::TempDir;
 use tracing::debug;
 
@@ -48,8 +48,8 @@ pub fn configure_trin_data_dir(ephemeral: bool) -> anyhow::Result<PathBuf> {
 /// If no private key is provided, the application private key is used.
 pub fn configure_node_data_dir(
     trin_data_dir: PathBuf,
-    private_key: Option<H256>,
-) -> anyhow::Result<(PathBuf, H256)> {
+    private_key: Option<B256>,
+) -> anyhow::Result<(PathBuf, B256)> {
     let pk = match private_key {
         // user has provided a custom private key...
         Some(val) => CombinedKey::secp256k1_from_bytes(val.0.clone().as_mut_slice())
@@ -59,7 +59,7 @@ pub fn configure_node_data_dir(
     let node_id = Enr::empty(&pk)?.node_id();
     let node_data_dir = get_node_data_dir(trin_data_dir, node_id);
     fs::create_dir_all(&node_data_dir)?;
-    Ok((node_data_dir, H256::from_slice(&pk.encode())))
+    Ok((node_data_dir, B256::from_slice(&pk.encode())))
 }
 
 /// Returns the node data directory associated with the provided node id.
@@ -112,7 +112,7 @@ pub mod test {
         let temp_dir = setup_temp_dir().unwrap();
         let (_, active_pk) = configure_node_data_dir(temp_dir.path().to_path_buf(), None).unwrap();
         let app_pk = get_application_private_key(temp_dir.path()).unwrap();
-        let app_pk = H256::from_slice(&app_pk.encode());
+        let app_pk = B256::from_slice(&app_pk.encode());
         temp_dir.close().unwrap();
         assert_eq!(active_pk, app_pk);
     }
@@ -122,7 +122,7 @@ pub mod test {
     fn custom_private_key() {
         let temp_dir = setup_temp_dir().unwrap();
         let pk = CombinedKey::generate_secp256k1();
-        let pk = H256::from_slice(&pk.encode());
+        let pk = B256::from_slice(&pk.encode());
         let (_, active_pk) =
             configure_node_data_dir(temp_dir.path().to_path_buf(), Some(pk)).unwrap();
         temp_dir.close().unwrap();
@@ -137,7 +137,7 @@ pub mod test {
 
         // configure data dir to use a custom pk
         let pk = CombinedKey::generate_secp256k1();
-        let pk = H256::from_slice(&pk.encode());
+        let pk = B256::from_slice(&pk.encode());
         let _ = configure_node_data_dir(temp_dir.path().to_path_buf(), Some(pk)).unwrap();
 
         // reconfigure data dir with no pk, should use the original app pk

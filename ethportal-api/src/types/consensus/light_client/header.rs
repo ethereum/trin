@@ -1,7 +1,7 @@
 use crate::types::consensus::{
     execution_payload::ExecutionPayloadHeaderCapella, fork::ForkName, header::BeaconBlockHeader,
 };
-use ethereum_types::H256;
+use alloy_primitives::B256;
 use serde::{Deserialize, Serialize};
 use ssz::Decode;
 use ssz_derive::{Decode, Encode};
@@ -36,7 +36,7 @@ pub struct LightClientHeader {
     #[superstruct(only(Capella))]
     pub execution: ExecutionPayloadHeaderCapella,
     #[superstruct(only(Capella))]
-    pub execution_branch: FixedVector<H256, ExecutionBranchLen>,
+    pub execution_branch: FixedVector<B256, ExecutionBranchLen>,
 }
 
 impl Default for LightClientHeader {

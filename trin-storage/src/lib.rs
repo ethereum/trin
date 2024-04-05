@@ -5,9 +5,9 @@ pub mod utils;
 pub mod versioned;
 
 use crate::utils::setup_sql;
+use alloy_primitives::B256;
 use discv5::enr::NodeId;
 use error::ContentStoreError;
-use ethereum_types::H256;
 use ethportal_api::types::{
     content_key::overlay::OverlayContentKey,
     distance::{Distance, Metric, XorMetric},
@@ -173,9 +173,9 @@ impl PortalStorageConfig {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ContentId(H256);
+pub struct ContentId(B256);
 
-impl<T: Into<H256>> From<T> for ContentId {
+impl<T: Into<B256>> From<T> for ContentId {
     fn from(value: T) -> Self {
         Self(value.into())
     }
@@ -185,8 +185,8 @@ impl FromSql for ContentId {
     fn column_result(value: ValueRef<'_>) -> Result<Self, FromSqlError> {
         match value {
             ValueRef::Blob(bytes) => {
-                if bytes.len() == H256::len_bytes() {
-                    Ok(ContentId(H256::from_slice(bytes)))
+                if bytes.len() == B256::len_bytes() {
+                    Ok(ContentId(B256::from_slice(bytes)))
                 } else {
                     Err(FromSqlError::Other(
                         format!(
@@ -199,7 +199,7 @@ impl FromSql for ContentId {
             }
             ValueRef::Text(_) => {
                 let hex_text = value.as_str()?;
-                H256::from_str(hex_text)
+                B256::from_str(hex_text)
                     .map(ContentId)
                     .map_err(|err| FromSqlError::Other(err.into()))
             }
@@ -209,7 +209,7 @@ impl FromSql for ContentId {
 }
 
 impl Deref for ContentId {
-    type Target = H256;
+    type Target = B256;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -226,7 +226,7 @@ pub struct EntryCount(pub u64);
 #[allow(clippy::unwrap_used)]
 pub mod test {
     use super::*;
-    use ethereum_types::H512;
+    use alloy_primitives::B512;
     use ethportal_api::IdentityContentKey;
 
     #[test]
@@ -302,29 +302,29 @@ pub mod test {
 
     #[test]
     fn content_id_from_blob() {
-        let content_id = ContentId(H256::random());
-        let sql_value = ValueRef::from(content_id.as_bytes());
+        let content_id = ContentId(B256::random());
+        let sql_value = ValueRef::from(content_id.as_slice());
         assert_eq!(ContentId::column_result(sql_value), Ok(content_id));
     }
 
     #[test]
     #[should_panic(expected = "ContentId is not possible from a blob of length 31")]
     fn content_id_from_blob_less_bytes() {
-        let bytes = H256::random().to_fixed_bytes();
+        let bytes = B256::random().0;
         ContentId::column_result(ValueRef::from(&bytes[..31])).unwrap();
     }
 
     #[test]
     #[should_panic(expected = "ContentId is not possible from a blob of length 33")]
     fn content_id_from_blob_more_bytes() {
-        let bytes = H512::random().to_fixed_bytes();
+        let bytes = B512::random().0;
         ContentId::column_result(ValueRef::from(&bytes[..33])).unwrap();
     }
 
     #[test]
     fn content_id_from_text() {
         let content_id_str = "0123456789abcdef0123456789ABCDEF0123456789abcdef0123456789ABCDEF";
-        let content_id = ContentId(H256::from_str(content_id_str).unwrap());
+        let content_id = ContentId(B256::from_str(content_id_str).unwrap());
         let sql_value = ValueRef::from(content_id_str);
         assert_eq!(ContentId::column_result(sql_value), Ok(content_id));
     }
@@ -332,7 +332,7 @@ pub mod test {
     #[test]
     fn content_id_from_text_with_0x_prefix() {
         let content_id_str = "0x0123456789abcdef0123456789ABCDEF0123456789abcdef0123456789ABCDEF";
-        let content_id = ContentId(H256::from_str(content_id_str).unwrap());
+        let content_id = ContentId(B256::from_str(content_id_str).unwrap());
         let sql_value = ValueRef::from(content_id_str);
         assert_eq!(ContentId::column_result(sql_value), Ok(content_id));
     }

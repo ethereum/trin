@@ -1,10 +1,9 @@
-use std::{fmt, hash::Hash};
-
-use ethereum_types::{Address, H256};
+use alloy_primitives::{Address, B256};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest as Sha2Digest, Sha256};
 use ssz::{Decode, DecodeError, Encode};
 use ssz_derive::{Decode, Encode};
+use std::{fmt, hash::Hash};
 
 use crate::{
     types::{content_key::overlay::OverlayContentKey, state_trie::nibbles::Nibbles},
@@ -41,7 +40,7 @@ pub struct AccountTrieNodeKey {
     /// Trie path of the node.
     pub path: Nibbles,
     /// Hash of the node.
-    pub node_hash: H256,
+    pub node_hash: B256,
 }
 
 /// A key for a trie node from some account's contract storage.
@@ -52,7 +51,7 @@ pub struct ContractStorageTrieNodeKey {
     /// Trie path of the node.
     pub path: Nibbles,
     /// Hash of the node.
-    pub node_hash: H256,
+    pub node_hash: B256,
 }
 
 /// A key for an account's contract bytecode.
@@ -61,7 +60,7 @@ pub struct ContractBytecodeKey {
     /// Address of the account.
     pub address: Address,
     /// Hash of the bytecode.
-    pub code_hash: H256,
+    pub code_hash: B256,
 }
 
 impl OverlayContentKey for StateContentKey {
@@ -205,7 +204,7 @@ mod test {
 
         let expected_content_key = StateContentKey::AccountTrieNode(AccountTrieNodeKey {
             path: yaml_as_nibbles(&yaml["path"]),
-            node_hash: yaml_as_h256(&yaml["node_hash"]),
+            node_hash: yaml_as_b256(&yaml["node_hash"]),
         });
 
         assert_content_key(&yaml["content_key"], expected_content_key)
@@ -220,7 +219,7 @@ mod test {
             StateContentKey::ContractStorageTrieNode(ContractStorageTrieNodeKey {
                 address: yaml_as_address(&yaml["address"]),
                 path: yaml_as_nibbles(&yaml["path"]),
-                node_hash: yaml_as_h256(&yaml["node_hash"]),
+                node_hash: yaml_as_b256(&yaml["node_hash"]),
             });
 
         assert_content_key(&yaml["content_key"], expected_content_key)
@@ -233,7 +232,7 @@ mod test {
 
         let expected_content_key = StateContentKey::ContractBytecode(ContractBytecodeKey {
             address: yaml_as_address(&yaml["address"]),
-            code_hash: yaml_as_h256(&yaml["code_hash"]),
+            code_hash: yaml_as_b256(&yaml["code_hash"]),
         });
 
         assert_content_key(&yaml["content_key"], expected_content_key)
@@ -301,9 +300,9 @@ mod test {
 
         let content_key_bytes = hex_decode(yaml["content_key"].as_str().unwrap())?;
         let content_key = StateContentKey::try_from(content_key_bytes)?;
-        let expected_content_id = yaml_as_h256(&yaml["content_id"]);
+        let expected_content_id = yaml_as_b256(&yaml["content_id"]);
 
-        assert_eq!(H256::from(content_key.content_id()), expected_content_id);
+        assert_eq!(B256::from(content_key.content_id()), expected_content_id);
         Ok(())
     }
 
@@ -317,8 +316,8 @@ mod test {
         Address::from_str(value.as_str().unwrap()).unwrap()
     }
 
-    fn yaml_as_h256(value: &Value) -> H256 {
-        H256::from_str(value.as_str().unwrap()).unwrap()
+    fn yaml_as_b256(value: &Value) -> B256 {
+        B256::from_str(value.as_str().unwrap()).unwrap()
     }
 
     fn yaml_as_hex(value: &Value) -> Vec<u8> {

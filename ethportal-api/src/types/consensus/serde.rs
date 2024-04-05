@@ -1,6 +1,7 @@
-use ethereum_types::U256;
+use alloy_primitives::U256;
 use serde::{ser::SerializeSeq, Deserialize, Deserializer, Serializer};
 use serde_json::Value;
+use serde_utils::u256_from_dec_str::u256_from_dec_str;
 use ssz_types::VariableList;
 
 use super::body::{Transaction, Transactions};
@@ -33,7 +34,7 @@ where
         Some(val) => val,
         None => return Err(serde::de::Error::custom("Unable to deserialize u256")),
     };
-    let result = U256::from_dec_str(result).map_err(serde::de::Error::custom)?;
+    let result = u256_from_dec_str(result).map_err(serde::de::Error::custom)?;
     Ok(result)
 }
 

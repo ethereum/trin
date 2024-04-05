@@ -1,8 +1,7 @@
 use std::sync::PoisonError;
 
+use alloy_primitives::B256;
 use eth_trie::TrieError;
-use keccak_hash::H256;
-use rlp::DecoderError;
 use thiserror::Error;
 
 // An error that happened while validating state content
@@ -34,20 +33,20 @@ pub enum StateValidationError {
     LeafNodeExpected,
     #[error("Node has wrong hash: {node_hash}, expected {expected_node_hash}")]
     InvalidNodeHash {
-        node_hash: H256,
-        expected_node_hash: H256,
+        node_hash: B256,
+        expected_node_hash: B256,
     },
     #[error("Bytecode has wrong hash: {bytecode_hash}, expected {expected_bytecode_hash}")]
     InvalidBytecodeHash {
-        bytecode_hash: H256,
-        expected_bytecode_hash: H256,
+        bytecode_hash: B256,
+        expected_bytecode_hash: B256,
     },
     #[error("Invalid content type for content key: {0}")]
     InvalidContentValueType(&'static str),
     #[error("Unable to decode node: {0}")]
     DecodingNode(#[from] TrieError),
     #[error("Unable to decode account state: {0}")]
-    DecodingAccountState(#[from] DecoderError),
+    DecodingAccountState(#[from] alloy_rlp::Error),
     #[error("Error while validating: {0}")]
     Custom(String),
 }

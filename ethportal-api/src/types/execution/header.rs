@@ -1,7 +1,6 @@
-use ethereum_types::{Bloom, H160, H256, H64, U256, U64};
+use alloy_primitives::{keccak256, Address, Bloom, Bytes, B256, B64, U256, U64};
+use alloy_rlp::{Decodable, Encodable, Header as RlpHeader};
 use reth_rpc_types::Header as RpcHeader;
-use rlp::{Decodable, DecoderError, Encodable, Rlp, RlpStream};
-use ruint::Uint;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use ssz::{Encode, SszDecoderBuilder, SszEncoder};
 use ssz_derive::{Decode, Encode};
@@ -16,19 +15,19 @@ use crate::{
 #[serde(rename_all = "camelCase")]
 pub struct Header {
     /// Block parent hash.
-    pub parent_hash: H256,
+    pub parent_hash: B256,
     /// Block uncles hash.
     #[serde(rename(deserialize = "sha3Uncles"))]
-    pub uncles_hash: H256,
+    pub uncles_hash: B256,
     /// Block author.
     #[serde(rename(deserialize = "miner"))]
-    pub author: H160,
+    pub author: Address,
     /// Block state root.
-    pub state_root: H256,
+    pub state_root: B256,
     /// Block transactions root.
-    pub transactions_root: H256,
+    pub transactions_root: B256,
     /// Block receipts root.
-    pub receipts_root: H256,
+    pub receipts_root: B256,
     /// Block bloom filter.
     pub logs_bloom: Bloom,
     /// Block difficulty.
@@ -48,19 +47,19 @@ pub struct Header {
     #[serde(deserialize_with = "de_hex_to_vec_u8")]
     pub extra_data: Vec<u8>,
     /// Block PoW mix hash.
-    pub mix_hash: Option<H256>,
+    pub mix_hash: Option<B256>,
     /// Block PoW nonce.
-    pub nonce: Option<H64>,
+    pub nonce: Option<B64>,
     /// Block base fee per gas. Introduced by EIP-1559.
     pub base_fee_per_gas: Option<U256>,
     /// Withdrawals root from execution payload. Introduced by EIP-4895.
-    pub withdrawals_root: Option<H256>,
+    pub withdrawals_root: Option<B256>,
     /// Blob gas used. Introduced by EIP-4844
     pub blob_gas_used: Option<U64>,
     /// Excess blob gas. Introduced by EIP-4844
     pub excess_blob_gas: Option<U64>,
     /// The parent beacon block's root hash. Introduced by EIP-4788
-    pub parent_beacon_block_root: Option<H256>,
+    pub parent_beacon_block_root: Option<B256>,
 }
 
 fn se_hex<S>(value: &[u8], serializer: S) -> Result<S::Ok, S::Error>
@@ -90,91 +89,89 @@ where
 // Based on https://github.com/openethereum/openethereum/blob/main/crates/ethcore/types/src/header.rs
 impl Header {
     /// Returns the Keccak-256 hash of the header.
-    pub fn hash(&self) -> H256 {
-        keccak_hash::keccak(rlp::encode(self))
+    pub fn hash(&self) -> B256 {
+        keccak256(alloy_rlp::encode(self))
     }
+}
 
-    /// Append header to RLP stream `s`, optionally `with_seal`.
-    fn stream_rlp(&self, s: &mut RlpStream, with_seal: bool) {
-        let stream_length_without_seal = if self.parent_beacon_block_root.is_some() {
-            18
-        } else if self.excess_blob_gas.is_some() {
-            // add two for excess_blob_gas and blob_gas_used
-            17
-        } else if self.withdrawals_root.is_some() {
-            15
-        } else if self.base_fee_per_gas.is_some() {
-            14
-        } else {
-            13
-        };
+impl Encodable for Header {
+    fn encode(&self, out: &mut dyn bytes::BufMut) {
+        let mut list = vec![];
+        self.parent_hash.encode(&mut list);
+        self.uncles_hash.encode(&mut list);
+        self.author.encode(&mut list);
+        self.state_root.encode(&mut list);
+        self.transactions_root.encode(&mut list);
+        self.receipts_root.encode(&mut list);
+        self.logs_bloom.encode(&mut list);
+        self.difficulty.encode(&mut list);
+        self.number.encode(&mut list);
+        self.gas_limit.encode(&mut list);
+        self.gas_used.encode(&mut list);
+        self.timestamp.encode(&mut list);
+        self.extra_data.as_slice().encode(&mut list);
 
-        if with_seal && self.mix_hash.is_some() && self.nonce.is_some() {
-            s.begin_list(stream_length_without_seal + 2);
-        } else {
-            s.begin_list(stream_length_without_seal);
+        if let Some(val) = self.mix_hash {
+            val.encode(&mut list);
         }
 
-        s.append(&self.parent_hash)
-            .append(&self.uncles_hash)
-            .append(&self.author)
-            .append(&self.state_root)
-            .append(&self.transactions_root)
-            .append(&self.receipts_root)
-            .append(&self.logs_bloom)
-            .append(&self.difficulty)
-            .append(&self.number)
-            .append(&self.gas_limit)
-            .append(&self.gas_used)
-            .append(&self.timestamp)
-            .append(&self.extra_data);
-
-        if with_seal && self.mix_hash.is_some() && self.nonce.is_some() {
-            s.append(&self.mix_hash.expect("mix_hash to be Some"))
-                .append(self.nonce.as_ref().expect("nonce to be Some"));
+        if let Some(val) = self.nonce {
+            val.encode(&mut list);
         }
 
         if let Some(val) = self.base_fee_per_gas {
-            s.append(&val);
+            val.encode(&mut list);
         }
 
         if let Some(val) = self.withdrawals_root {
-            s.append(&val);
+            val.encode(&mut list);
         }
 
         if let Some(val) = self.blob_gas_used {
-            s.append(&val);
+            val.encode(&mut list);
         }
 
         if let Some(val) = self.excess_blob_gas {
-            s.append(&val);
+            val.encode(&mut list);
         }
 
         if let Some(val) = self.parent_beacon_block_root {
-            s.append(&val);
+            val.encode(&mut list);
         }
+
+        let header = RlpHeader {
+            list: true,
+            payload_length: list.len(),
+        };
+        header.encode(out);
+        out.put_slice(list.as_slice());
     }
 }
 
 impl Decodable for Header {
     /// Attempt to decode a header from RLP bytes.
-    fn decode(rlp: &Rlp) -> Result<Self, DecoderError> {
+    fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
+        let rlp_head = alloy_rlp::Header::decode(buf)?;
+        if !rlp_head.list {
+            return Err(alloy_rlp::Error::UnexpectedString);
+        }
+        let started_len = buf.len();
         let mut header = Header {
-            parent_hash: rlp.val_at(0)?,
-            uncles_hash: rlp.val_at(1)?,
-            author: rlp.val_at(2)?,
-            state_root: rlp.val_at(3)?,
-            transactions_root: rlp.val_at(4)?,
-            receipts_root: rlp.val_at(5)?,
-            logs_bloom: rlp.val_at(6)?,
-            difficulty: rlp.val_at(7)?,
-            number: rlp.val_at(8)?,
-            gas_limit: rlp.val_at(9)?,
-            gas_used: rlp.val_at(10)?,
-            timestamp: rlp.val_at(11)?,
-            extra_data: rlp.val_at(12)?,
-            mix_hash: Some(rlp.val_at(13)?),
-            nonce: Some(rlp.val_at(14)?),
+            parent_hash: Decodable::decode(buf)?,
+            uncles_hash: Decodable::decode(buf)?,
+            author: Decodable::decode(buf)?,
+            state_root: Decodable::decode(buf)?,
+            transactions_root: Decodable::decode(buf)?,
+            receipts_root: Decodable::decode(buf)?,
+            logs_bloom: Decodable::decode(buf)?,
+            difficulty: Decodable::decode(buf)?,
+            number: Decodable::decode(buf)?,
+            gas_limit: Decodable::decode(buf)?,
+            gas_used: Decodable::decode(buf)?,
+            timestamp: Decodable::decode(buf)?,
+            extra_data: Bytes::decode(buf)?.to_vec(),
+            mix_hash: Some(Decodable::decode(buf)?),
+            nonce: Some(Decodable::decode(buf)?),
             base_fee_per_gas: None,
             withdrawals_root: None,
             blob_gas_used: None,
@@ -182,33 +179,27 @@ impl Decodable for Header {
             parent_beacon_block_root: None,
         };
 
-        if let Ok(val) = rlp.val_at(15) {
-            header.base_fee_per_gas = Some(val)
+        if started_len - buf.len() < rlp_head.payload_length {
+            header.base_fee_per_gas = Some(Decodable::decode(buf)?)
         }
 
-        if let Ok(val) = rlp.val_at(16) {
-            header.withdrawals_root = Some(val)
+        if started_len - buf.len() < rlp_head.payload_length {
+            header.withdrawals_root = Some(Decodable::decode(buf)?)
         }
 
-        if let Ok(val) = rlp.val_at(17) {
-            header.blob_gas_used = Some(val)
+        if started_len - buf.len() < rlp_head.payload_length {
+            header.blob_gas_used = Some(Decodable::decode(buf)?)
         }
 
-        if let Ok(val) = rlp.val_at(18) {
-            header.excess_blob_gas = Some(val)
+        if started_len - buf.len() < rlp_head.payload_length {
+            header.excess_blob_gas = Some(Decodable::decode(buf)?)
         }
 
-        if let Ok(val) = rlp.val_at(19) {
-            header.parent_beacon_block_root = Some(val)
+        if started_len - buf.len() < rlp_head.payload_length {
+            header.parent_beacon_block_root = Some(Decodable::decode(buf)?)
         }
 
         Ok(header)
-    }
-}
-
-impl Encodable for Header {
-    fn rlp_append(&self, s: &mut RlpStream) {
-        self.stream_rlp(s, true);
     }
 }
 
@@ -243,7 +234,7 @@ impl PartialEq for Header {
 /// RpcHeader is a field in reth's `Block` RPC type used in eth_getBlockByHash, for example.
 impl From<Header> for RpcHeader {
     fn from(header: Header) -> Self {
-        let hash = Some(header.hash().to_fixed_bytes().into());
+        let hash = Some(header.hash().0.into());
         let Header {
             parent_hash,
             uncles_hash,
@@ -268,65 +259,41 @@ impl From<Header> for RpcHeader {
         } = header;
 
         Self {
-            parent_hash: parent_hash.to_fixed_bytes().into(),
-            uncles_hash: uncles_hash.to_fixed_bytes().into(),
-            miner: author.to_fixed_bytes().into(),
-            state_root: state_root.to_fixed_bytes().into(),
-            transactions_root: transactions_root.to_fixed_bytes().into(),
-            receipts_root: receipts_root.to_fixed_bytes().into(),
-            logs_bloom: logs_bloom.to_fixed_bytes().into(),
-            difficulty: u256_to_uint256(difficulty),
-            number: Some(u64_to_uint256(number)),
-            gas_limit: u256_to_uint256(gas_limit),
-            gas_used: u256_to_uint256(gas_used),
-            timestamp: u64_to_uint256(timestamp),
+            parent_hash,
+            uncles_hash,
+            miner: author,
+            state_root,
+            transactions_root,
+            receipts_root,
+            logs_bloom,
+            difficulty,
+            number: Some(U256::from(number)),
+            gas_limit,
+            gas_used,
+            timestamp: U256::from(timestamp),
             extra_data: extra_data.into(),
-            mix_hash: mix_hash
-                .map(|mh| mh.to_fixed_bytes().into())
-                .unwrap_or_default(),
-            // A note on nonce:
-            // ethportal-api and reth both use ethereum-types::H64 for nonce. Unfortunately, we use
-            // v0.12.1 of ethereum-types, which is different from reth, so the value can't be
-            // transparently reused.
-            // Further, if we upgrade to 0.14.1, then we lose SSZ encoding, so we are stuck leaving
-            // the versions different and converting here:
-            nonce: nonce.map(|h64| h64.as_fixed_bytes().into()),
-            base_fee_per_gas: base_fee_per_gas.map(u256_to_uint256),
-            withdrawals_root: withdrawals_root.map(|root| root.to_fixed_bytes().into()),
+            mix_hash,
+            nonce,
+            base_fee_per_gas,
+            withdrawals_root,
             blob_gas_used,
             excess_blob_gas,
             hash,
-            parent_beacon_block_root: parent_beacon_block_root
-                .map(|h264| h264.as_fixed_bytes().into()),
+            parent_beacon_block_root: parent_beacon_block_root.map(|h264| h264.0.into()),
+            total_difficulty: Some(difficulty),
         }
     }
 }
 
-fn u256_to_uint256(u256: U256) -> Uint<256, 4> {
-    let mut bytes = [0u8; 32];
-    u256.to_big_endian(&mut bytes);
-    Uint::from_be_bytes(bytes)
-}
-
-fn u64_to_uint256(val: u64) -> Uint<256, 4> {
-    let u64_bytes: &[u8] = &val.to_be_bytes();
-    let high_zero_bytes: &[u8] = &[0u8; 24];
-    let bytes: [u8; 32] = [high_zero_bytes, u64_bytes]
-        .concat()
-        .try_into()
-        .expect("8 bytes + 24 bytes should be 32 bytes");
-    Uint::from_be_bytes(bytes)
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TxHashes {
-    pub hashes: Vec<H256>,
+    pub hashes: Vec<B256>,
 }
 
 // type used to pluck "hash" value from tx object
 #[derive(Serialize, Deserialize)]
 struct TxHashesHelper {
-    pub hash: H256,
+    pub hash: B256,
 }
 
 impl<'de> Deserialize<'de> for TxHashes {
@@ -355,7 +322,7 @@ impl ssz::Encode for HeaderWithProof {
     }
 
     fn ssz_append(&self, buf: &mut Vec<u8>) {
-        let header = rlp::encode(&self.header).to_vec();
+        let header = alloy_rlp::encode(&self.header);
         let header = ByteList2048::from(header);
         let offset = <ByteList2048 as Encode>::ssz_fixed_len()
             + <AccumulatorProof as Encode>::ssz_fixed_len();
@@ -366,7 +333,7 @@ impl ssz::Encode for HeaderWithProof {
     }
 
     fn ssz_bytes_len(&self) -> usize {
-        let header = rlp::encode(&self.header).to_vec();
+        let header = alloy_rlp::encode(&self.header);
         let header = ByteList2048::from(header);
         header.len() + self.proof.ssz_bytes_len()
     }
@@ -383,7 +350,7 @@ pub enum BlockHeaderProof {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AccumulatorProof {
-    pub proof: [H256; 15],
+    pub proof: [B256; 15],
 }
 
 impl ssz::Decode for HeaderWithProof {
@@ -401,7 +368,7 @@ impl ssz::Decode for HeaderWithProof {
 
         let header_rlp: Vec<u8> = decoder.decode_next()?;
         let proof = decoder.decode_next()?;
-        let header: Header = rlp::decode(&header_rlp).map_err(|_| {
+        let header: Header = Decodable::decode(&mut header_rlp.as_slice()).map_err(|_| {
             ssz::DecodeError::BytesInvalid("Unable to decode bytes into header.".to_string())
         })?;
 
@@ -416,12 +383,12 @@ impl ssz::Decode for AccumulatorProof {
 
     fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
         let vec: Vec<[u8; 32]> = Vec::from_ssz_bytes(bytes)?;
-        let mut proof: [H256; 15] = [H256::zero(); 15];
+        let mut proof: [B256; 15] = [B256::ZERO; 15];
         let raw_proof: [[u8; 32]; 15] = vec
             .try_into()
             .map_err(|_| ssz::DecodeError::BytesInvalid("Invalid proof length".to_string()))?;
         for (idx, val) in raw_proof.iter().enumerate() {
-            proof[idx] = H256::from_slice(val);
+            proof[idx] = B256::from_slice(val);
         }
         Ok(Self { proof })
     }
@@ -443,7 +410,7 @@ impl ssz::Encode for AccumulatorProof {
     }
 
     fn ssz_bytes_len(&self) -> usize {
-        <H256 as Encode>::ssz_fixed_len() * 15
+        <B256 as Encode>::ssz_fixed_len() * 15
     }
 }
 
@@ -498,18 +465,19 @@ mod tests {
         // https://www.dropbox.com/s/y5n36ztppltgs7x/mainnetMM.zip?dl=0
         let header_rlp = hex_decode("0xf90211a0d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d493479405a56e2d52c817161883f50c441c3228cfe54d9fa0d67e4d450343046425ae4271474353857ab860dbc0a1dde64b41b5cd3a532bf3a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421b90100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008503ff80000001821388808455ba422499476574682f76312e302e302f6c696e75782f676f312e342e32a0969b900de27b6ac6a67742365dd65f55a0526c41fd18e1b16f1a1215c2e66f5988539bd4979fef1ec4").unwrap();
 
-        let header: Header = rlp::decode(&header_rlp).expect("error decoding header");
+        let header: Header =
+            Decodable::decode(&mut header_rlp.as_slice()).expect("error decoding header");
         assert_eq!(header.number, 1);
         assert_eq!(
             header.hash(),
-            H256::from_slice(
+            B256::from_slice(
                 // https://etherscan.io/block/1
                 &hex_decode("0x88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6")
                     .unwrap()
             )
         );
 
-        let encoded_header = rlp::encode(&header);
+        let encoded_header = alloy_rlp::encode(header);
         assert_eq!(header_rlp, encoded_header);
     }
 
@@ -518,18 +486,18 @@ mod tests {
         // RLP encoded block header #14037611
         let header_rlp = hex_decode("0xf90214a02320c9ca606618919c2a4cf5c6012cfac99399446c60a07f084334dea25f69eca01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794ea674fdde714fd979de3edf0f56aa9716b898ec8a0604a0ab7fe0d434943fbf2c525c4086818b8305349d91d6f4b205aca0759a2b8a0fdfe28e250fb15f7cb360d36ebb7dafa6da4f74543ce593baa96c27891ccac83a0cb9f9e60fb971068b76a8dece4202dde6b4075ebd90e7b2cd21c7fd8e121bba1b9010082e01d13f40116b1e1a0244090289b6920c51418685a0855031b988aef1b494313054c4002584928380267bc11cec18b0b30c456ca30651d9b06c931ea78aa0c40849859c7e0432df944341b489322b0450ce12026cafa1ba590f20af8051024fb8722a43610800381a531aa92042dd02448b1549052d6f06e4005b1000e063035c0220402a09c0124daab9028836209c446240d652c927bc7e4004b849256db5ba8d08b4a2321fd1e25c4d1dc480d18465d8600a41e864001cae44f38609d1c7414a8d62b5869d5a8001180d87228d788e852119c8a03df162471a317832622153da12fc21d828710062c7103534eb119714280201341ce6889ae926e025067872b68048d94e1ed83d6326b8401caa84183b062808461e859a88c617369612d65617374322d32a03472320df4ea70d29b89afdf195c3aa2289560a453957eea5058b57b80b908bf88d6450793e6dcec1c8532ff3f048d").unwrap();
 
-        let header: Header = rlp::decode(&header_rlp).unwrap();
+        let header: Header = Decodable::decode(&mut header_rlp.as_slice()).unwrap();
 
         assert_eq!(header.number, 14037611);
         assert_eq!(
             header.hash(),
-            H256::from_slice(
+            B256::from_slice(
                 // https://etherscan.io/block/14037611
                 &hex_decode("0xa8227474afb7372058aceb724e44fd32bcebf3d39bc2e5e00dcdda2e442eebde")
                     .unwrap()
             )
         );
-        let encoded_header = rlp::encode(&header);
+        let encoded_header = alloy_rlp::encode(header);
         assert_eq!(header_rlp, encoded_header);
     }
 
@@ -594,7 +562,7 @@ mod tests {
             std::fs::read_to_string("../test_assets/mainnet/block_17034871_value.json").unwrap();
         let response: Value = serde_json::from_str(&body).unwrap();
         let header: Header = serde_json::from_value(response["result"].clone()).unwrap();
-        let expected_hash = H256::from_slice(
+        let expected_hash = B256::from_slice(
             &hex_decode("0x17cf53189035bbae5bce5c844355badd701aa9d2dd4b4f5ab1f9f0e8dd9fea5b")
                 .unwrap(),
         );
@@ -606,26 +574,26 @@ mod tests {
     #[test_log::test]
     fn dencun_rlp_ethereum_tests_example() {
         let data = hex_decode("0xf90221a03a9b485972e7353edd9152712492f0c58d89ef80623686b6bf947a4a6dce6cb6a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347942adc25665018aa1fe0e6bc666dac8fc2697ff9baa03c837fc158e3e93eafcaf2e658a02f5d8f99abc9f1c4c66cdea96c0ca26406aea04409cc4b699384ba5f8248d92b784713610c5ff9c1de51e9239da0dac76de9cea046cab26abf1047b5b119ecc2dda1296b071766c8b1307e1381fcecc90d513d86b90100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008001887fffffffffffffff8302a86582079e42a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b42188000000000000000009a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b4218302000080").unwrap();
-        let decoded: Header = rlp::decode(&data).unwrap();
+        let decoded: Header = Decodable::decode(&mut data.as_slice()).unwrap();
         let expected: Header = Header {
-            parent_hash: H256::from_str(
+            parent_hash: B256::from_str(
                 "0x3a9b485972e7353edd9152712492f0c58d89ef80623686b6bf947a4a6dce6cb6",
             )
             .unwrap(),
-            uncles_hash: H256::from_str(
+            uncles_hash: B256::from_str(
                 "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",
             )
             .unwrap(),
-            author: H160::from_str("0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba").unwrap(),
-            state_root: H256::from_str(
+            author: Address::from_str("0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba").unwrap(),
+            state_root: B256::from_str(
                 "0x3c837fc158e3e93eafcaf2e658a02f5d8f99abc9f1c4c66cdea96c0ca26406ae",
             )
             .unwrap(),
-            transactions_root: H256::from_str(
+            transactions_root: B256::from_str(
                 "0x4409cc4b699384ba5f8248d92b784713610c5ff9c1de51e9239da0dac76de9ce",
             )
             .unwrap(),
-            receipts_root: H256::from_str(
+            receipts_root: B256::from_str(
                 "0x46cab26abf1047b5b119ecc2dda1296b071766c8b1307e1381fcecc90d513d86",
             )
             .unwrap(),
@@ -637,15 +605,15 @@ mod tests {
             timestamp: 0x079e,
             extra_data: vec![0x42],
             mix_hash: Some(
-                H256::from_str(
+                B256::from_str(
                     "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
                 )
                 .unwrap(),
             ),
-            nonce: Some(H64::zero()),
+            nonce: Some(B64::ZERO),
             base_fee_per_gas: Some(U256::from_str("0x9").unwrap()),
             withdrawals_root: Some(
-                H256::from_str(
+                B256::from_str(
                     "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
                 )
                 .unwrap(),
@@ -657,10 +625,11 @@ mod tests {
         assert_eq!(decoded, expected);
 
         let expected_hash =
-            H256::from_str("0x10aca3ebb4cf6ddd9e945a5db19385f9c105ede7374380c50d56384c3d233785")
+            B256::from_str("0x10aca3ebb4cf6ddd9e945a5db19385f9c105ede7374380c50d56384c3d233785")
                 .unwrap();
         assert_eq!(decoded.hash(), expected_hash);
-        assert_eq!(data, rlp::encode(&expected));
+        let expected_header = alloy_rlp::encode(expected);
+        assert_eq!(data, expected_header);
     }
 
     #[rstest::rstest]
@@ -673,7 +642,7 @@ mod tests {
         let response: Value = serde_json::from_str(&body).unwrap();
         let header: Header = serde_json::from_value(response["result"].clone()).unwrap();
         let expected_hash =
-            H256::from_slice(&hex_decode(response["result"]["hash"].as_str().unwrap()).unwrap());
+            B256::from_slice(&hex_decode(response["result"]["hash"].as_str().unwrap()).unwrap());
         assert_eq!(header.hash(), expected_hash);
     }
 }

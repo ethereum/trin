@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
+use alloy_primitives::B256;
 use anyhow::{anyhow, bail};
-use ethereum_types::H256;
 use futures::future::join_all;
 use serde_json::{json, Value};
 use surf::{
@@ -122,7 +122,7 @@ impl ExecutionApi {
 
         // Construct content key / value pair.
         let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
-            block_hash: full_header.header.hash().to_fixed_bytes(),
+            block_hash: full_header.header.hash().0,
         });
         let content_value = match &full_header.epoch_acc {
             Some(epoch_acc) => {
@@ -153,7 +153,7 @@ impl ExecutionApi {
         let block_body = self.get_trusted_block_body(full_header).await?;
         block_body.validate_against_header(&full_header.header)?;
         let content_key = HistoryContentKey::BlockBody(BlockBodyKey {
-            block_hash: full_header.header.hash().to_fixed_bytes(),
+            block_hash: full_header.header.hash().0,
         });
         let content_value = HistoryContentValue::BlockBody(block_body);
         Ok((content_key, content_value))
@@ -186,7 +186,7 @@ impl ExecutionApi {
     }
 
     /// Return unvalidated uncles for the given uncle hashes.
-    async fn get_trusted_uncles(&self, hashes: &[H256]) -> anyhow::Result<Vec<Header>> {
+    async fn get_trusted_uncles(&self, hashes: &[B256]) -> anyhow::Result<Vec<Header>> {
         let batch_request = hashes
             .iter()
             .enumerate()
@@ -236,14 +236,14 @@ impl ExecutionApi {
             );
         }
         let content_key = HistoryContentKey::BlockReceipts(BlockReceiptsKey {
-            block_hash: full_header.header.hash().to_fixed_bytes(),
+            block_hash: full_header.header.hash().0,
         });
         let content_value = HistoryContentValue::Receipts(receipts);
         Ok((content_key, content_value))
     }
 
     /// Return unvalidated receipts for the given transaction hashes.
-    async fn get_trusted_receipts(&self, tx_hashes: &[H256]) -> anyhow::Result<Receipts> {
+    async fn get_trusted_receipts(&self, tx_hashes: &[B256]) -> anyhow::Result<Receipts> {
         let request: Vec<JsonRequest> = tx_hashes
             .iter()
             .enumerate()

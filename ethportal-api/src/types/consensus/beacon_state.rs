@@ -8,8 +8,8 @@ use crate::consensus::{
     pubkey::PubKey,
     sync_committee::SyncCommittee,
 };
+use alloy_primitives::B256;
 use discv5::enr::k256::elliptic_curve::consts::{U1099511627776, U2048, U4, U65536, U8192};
-use ethereum_types::H256;
 use jsonrpsee::core::Serialize;
 use rs_merkle::{algorithms::Sha256, MerkleTree};
 use serde::Deserialize;
@@ -58,7 +58,7 @@ pub struct BeaconState {
     #[serde(deserialize_with = "as_u64")]
     pub genesis_time: u64,
     #[superstruct(getter(copy))]
-    pub genesis_validators_root: H256,
+    pub genesis_validators_root: B256,
     #[superstruct(getter(copy))]
     pub slot: u64,
     #[superstruct(getter(copy))]
@@ -66,10 +66,10 @@ pub struct BeaconState {
 
     // History
     pub latest_block_header: BeaconBlockHeader,
-    pub block_roots: FixedVector<H256, SlotsPerHistoricalRoot>,
-    pub state_roots: FixedVector<H256, SlotsPerHistoricalRoot>,
+    pub block_roots: FixedVector<B256, SlotsPerHistoricalRoot>,
+    pub state_roots: FixedVector<B256, SlotsPerHistoricalRoot>,
     // Frozen in Capella, replaced by historical_summaries
-    pub historical_roots: VariableList<H256, HistoricalRootsLimit>,
+    pub historical_roots: VariableList<B256, HistoricalRootsLimit>,
 
     // Ethereum 1.0 chain data
     pub eth1_data: Eth1Data,
@@ -83,7 +83,7 @@ pub struct BeaconState {
     pub balances: VariableList<u64, ValidatorRegistryLimit>,
 
     // Randomness
-    pub randao_mixes: FixedVector<H256, EpochsPerHistoricalVector>,
+    pub randao_mixes: FixedVector<B256, EpochsPerHistoricalVector>,
 
     // Slashings
     pub slashings: FixedVector<u64, EpochsPerSlashingsVector>,
@@ -230,7 +230,7 @@ pub fn int_to_fixed_bytes32(int: u64) -> [u8; 32] {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Encode, Decode, TreeHash)]
 pub struct Validator {
     pub pubkey: PubKey,
-    pub withdrawal_credentials: H256,
+    pub withdrawal_credentials: B256,
     #[serde(deserialize_with = "as_u64")]
     pub effective_balance: u64,
     pub slashed: bool,
@@ -242,26 +242,26 @@ pub struct Validator {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Encode, Decode, TreeHash)]
 pub struct HistoricalBatch {
-    pub block_roots: FixedVector<H256, SlotsPerHistoricalRoot>,
-    pub state_roots: FixedVector<H256, SlotsPerHistoricalRoot>,
+    pub block_roots: FixedVector<B256, SlotsPerHistoricalRoot>,
+    pub state_roots: FixedVector<B256, SlotsPerHistoricalRoot>,
 }
 
 impl HistoricalBatch {
-    pub fn build_block_root_proof(&self, block_root_index: u64) -> Vec<H256> {
+    pub fn build_block_root_proof(&self, block_root_index: u64) -> Vec<B256> {
         // Build block hash proof for sel.block_roots
         let leaves: Vec<[u8; 32]> = self
             .block_roots
             .iter()
-            .map(|root| root.tree_hash_root().to_fixed_bytes())
+            .map(|root| root.tree_hash_root().0)
             .collect();
 
         let merkle_tree = MerkleTree::<Sha256>::from_leaves(&leaves);
         let indices_to_prove = vec![block_root_index as usize];
         let proof = merkle_tree.proof(&indices_to_prove);
-        let mut proof_hashes: Vec<H256> = proof
+        let mut proof_hashes: Vec<B256> = proof
             .proof_hashes()
             .iter()
-            .map(|x| H256::from_slice(x))
+            .map(|hash| B256::from_slice(hash))
             .collect();
 
         // To generate proof for block root anchored to the historical batch tree_hash_root, we need
@@ -414,7 +414,7 @@ mod test {
             "0xf8a36457194917609bd16697972d616d8f14e71f4fcfd64666e11544bd5f193e",
             "0x1d28097093ca99336cb6b3e8c8c34d749a3e43efc9bb6fabc2cfd6ffb1701b08",
         ]
-        .map(|x| H256::from_str(x).unwrap());
+        .map(|x| B256::from_str(x).unwrap());
 
         let proof = content.build_block_root_proof(0);
 

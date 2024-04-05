@@ -1,6 +1,7 @@
 use crate::types::e2s::{E2StoreFile, Entry};
+use alloy_primitives::{B256, U256};
+use alloy_rlp::Decodable;
 use anyhow::ensure;
-use ethereum_types::{H256, U256};
 use ethportal_api::types::execution::{
     block_body::BlockBody,
     header::Header,
@@ -187,7 +188,7 @@ impl TryFrom<&Entry> for HeaderEntry {
         let mut decoder = snap::read::FrameDecoder::new(&entry.value[..]);
         let mut buf: Vec<u8> = vec![];
         decoder.read_to_end(&mut buf)?;
-        let header = rlp::decode(&buf)?;
+        let header = Decodable::decode(&mut buf.as_slice())?;
         Ok(Self { header })
     }
 }
@@ -196,7 +197,7 @@ impl TryInto<Entry> for HeaderEntry {
     type Error = anyhow::Error;
 
     fn try_into(self) -> Result<Entry, Self::Error> {
-        let rlp_encoded = rlp::encode(&self.header).to_vec();
+        let rlp_encoded = alloy_rlp::encode(self.header);
         let buf: Vec<u8> = vec![];
         let mut encoder = snap::write::FrameEncoder::new(buf);
         let _ = encoder.write(&rlp_encoded)?;
@@ -225,7 +226,7 @@ impl TryFrom<&Entry> for BodyEntry {
         let mut decoder = snap::read::FrameDecoder::new(&entry.value[..]);
         let mut buf: Vec<u8> = vec![];
         decoder.read_to_end(&mut buf)?;
-        let body = rlp::decode(&buf)?;
+        let body = Decodable::decode(&mut buf.as_slice())?;
         Ok(Self { body })
     }
 }
@@ -234,7 +235,7 @@ impl TryInto<Entry> for BodyEntry {
     type Error = anyhow::Error;
 
     fn try_into(self) -> Result<Entry, Self::Error> {
-        let rlp_encoded = rlp::encode(&self.body).to_vec();
+        let rlp_encoded = alloy_rlp::encode(self.body);
         let buf: Vec<u8> = vec![];
         let mut encoder = snap::write::FrameEncoder::new(buf);
         let _ = encoder.write(&rlp_encoded)?;
@@ -263,7 +264,7 @@ impl TryFrom<&Entry> for ReceiptsEntry {
         let mut decoder = snap::read::FrameDecoder::new(&entry.value[..]);
         let mut buf: Vec<u8> = vec![];
         decoder.read_to_end(&mut buf)?;
-        let encoded_receipts: Vec<LegacyReceipt> = rlp::decode_list(&buf);
+        let encoded_receipts: Vec<LegacyReceipt> = Decodable::decode(&mut buf.as_slice())?;
         let receipt_list = encoded_receipts
             .iter()
             .map(|r| Receipt::Legacy(r.clone()))
@@ -277,7 +278,7 @@ impl TryInto<Entry> for ReceiptsEntry {
     type Error = anyhow::Error;
 
     fn try_into(self) -> Result<Entry, Self::Error> {
-        let rlp_encoded = rlp::encode(&self.receipts).to_vec();
+        let rlp_encoded = alloy_rlp::encode(&self.receipts);
         let buf: Vec<u8> = vec![];
         let mut encoder = snap::write::FrameEncoder::new(buf);
         let _ = encoder.write(&rlp_encoded)?;
@@ -311,7 +312,7 @@ impl TryFrom<&Entry> for TotalDifficultyEntry {
             entry.value.len() == 32,
             "invalid total difficulty entry: incorrect value length"
         );
-        let total_difficulty = U256::from_big_endian(&entry.value);
+        let total_difficulty = U256::from_be_slice(entry.value.as_slice());
         Ok(Self { total_difficulty })
     }
 }
@@ -320,15 +321,13 @@ impl TryInto<Entry> for TotalDifficultyEntry {
     type Error = anyhow::Error;
 
     fn try_into(self) -> Result<Entry, Self::Error> {
-        let mut value = [0u8; 32];
-        self.total_difficulty.to_big_endian(&mut value);
-        Ok(Entry::new(0x06, value.to_vec()))
+        Ok(Entry::new(0x06, self.total_difficulty.to_be_bytes_vec()))
     }
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct AccumulatorEntry {
-    accumulator: H256,
+    accumulator: B256,
 }
 
 impl TryFrom<&Entry> for AccumulatorEntry {
@@ -351,7 +350,7 @@ impl TryFrom<&Entry> for AccumulatorEntry {
             entry.value.len() == 32,
             "invalid accumulator entry: incorrect value length"
         );
-        let accumulator = H256::from_slice(&entry.value);
+        let accumulator = B256::from_slice(&entry.value);
         Ok(Self { accumulator })
     }
 }
@@ -360,7 +359,7 @@ impl TryInto<Entry> for AccumulatorEntry {
     type Error = anyhow::Error;
 
     fn try_into(self) -> Result<Entry, Self::Error> {
-        let value = self.accumulator.as_bytes().to_vec();
+        let value = self.accumulator.as_slice().to_vec();
         Ok(Entry::new(0x07, value))
     }
 }

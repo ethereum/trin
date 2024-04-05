@@ -6,7 +6,7 @@ use crate::{
     },
     utils::serde::{hex_fixed_vec, hex_var_list},
 };
-use ethereum_types::{Address, H160, H256, U256};
+use alloy_primitives::{Address, B256, U256};
 use rs_merkle::{algorithms::Sha256, MerkleTree};
 use serde::{Deserialize, Serialize};
 use serde_this_or_that::as_u64;
@@ -42,13 +42,13 @@ pub type ExtraData = ByteList32;
 #[ssz(enum_behaviour = "transparent")]
 #[tree_hash(enum_behaviour = "transparent")]
 pub struct ExecutionPayload {
-    pub parent_hash: H256,
-    pub fee_recipient: H160,
-    pub state_root: H256,
-    pub receipts_root: H256,
+    pub parent_hash: B256,
+    pub fee_recipient: Address,
+    pub state_root: B256,
+    pub receipts_root: B256,
     #[serde(with = "hex_fixed_vec")]
     pub logs_bloom: Bloom,
-    pub prev_randao: H256, // 'difficulty' in the yellow paper
+    pub prev_randao: B256, // 'difficulty' in the yellow paper
     #[serde(deserialize_with = "as_u64")]
     pub block_number: u64, // 'number' in the yellow paper
     #[serde(deserialize_with = "as_u64")]
@@ -63,7 +63,7 @@ pub struct ExecutionPayload {
     #[serde(serialize_with = "se_hex_to_number")]
     pub base_fee_per_gas: U256,
     // Extra payload fields
-    pub block_hash: H256, // Hash of execution block
+    pub block_hash: B256, // Hash of execution block
     #[serde(serialize_with = "se_txs_to_hex")]
     #[serde(deserialize_with = "de_hex_to_txs")]
     pub transactions: Transactions,
@@ -83,22 +83,22 @@ impl ExecutionPayload {
 }
 
 impl ExecutionPayloadBellatrix {
-    pub fn build_block_hash_proof(&self) -> Vec<H256> {
+    pub fn build_block_hash_proof(&self) -> Vec<B256> {
         let mut leaves: Vec<[u8; 32]> = vec![
-            self.parent_hash.tree_hash_root().to_fixed_bytes(),
-            self.fee_recipient.tree_hash_root().to_fixed_bytes(),
-            self.state_root.tree_hash_root().to_fixed_bytes(),
-            self.receipts_root.tree_hash_root().to_fixed_bytes(),
-            self.logs_bloom.tree_hash_root().to_fixed_bytes(),
-            self.prev_randao.tree_hash_root().to_fixed_bytes(),
-            self.block_number.tree_hash_root().to_fixed_bytes(),
-            self.gas_limit.tree_hash_root().to_fixed_bytes(),
-            self.gas_used.tree_hash_root().to_fixed_bytes(),
-            self.timestamp.tree_hash_root().to_fixed_bytes(),
-            self.extra_data.tree_hash_root().to_fixed_bytes(),
-            self.base_fee_per_gas.tree_hash_root().to_fixed_bytes(),
-            self.block_hash.tree_hash_root().to_fixed_bytes(),
-            self.transactions.tree_hash_root().to_fixed_bytes(),
+            self.parent_hash.tree_hash_root().0,
+            self.fee_recipient.tree_hash_root().0,
+            self.state_root.tree_hash_root().0,
+            self.receipts_root.tree_hash_root().0,
+            self.logs_bloom.tree_hash_root().0,
+            self.prev_randao.tree_hash_root().0,
+            self.block_number.tree_hash_root().0,
+            self.gas_limit.tree_hash_root().0,
+            self.gas_used.tree_hash_root().0,
+            self.timestamp.tree_hash_root().0,
+            self.extra_data.tree_hash_root().0,
+            self.base_fee_per_gas.tree_hash_root().0,
+            self.block_hash.tree_hash_root().0,
+            self.transactions.tree_hash_root().0,
         ];
         // We want to add empty leaves to make the tree a power of 2
         while leaves.len() < 16 {
@@ -108,10 +108,10 @@ impl ExecutionPayloadBellatrix {
         let merkle_tree = MerkleTree::<Sha256>::from_leaves(&leaves);
         let indices_to_prove = vec![12];
         let proof = merkle_tree.proof(&indices_to_prove);
-        let proof_hashes: Vec<H256> = proof
+        let proof_hashes: Vec<B256> = proof
             .proof_hashes()
             .iter()
-            .map(|x| H256::from_slice(x))
+            .map(|hash| B256::from_slice(hash))
             .collect();
 
         proof_hashes
@@ -148,16 +148,16 @@ pub struct Withdrawal {
 #[tree_hash(enum_behaviour = "transparent")]
 pub struct ExecutionPayloadHeader {
     #[superstruct(getter(copy))]
-    pub parent_hash: H256,
-    pub fee_recipient: H160,
+    pub parent_hash: B256,
+    pub fee_recipient: Address,
     #[superstruct(getter(copy))]
-    pub state_root: H256,
+    pub state_root: B256,
     #[superstruct(getter(copy))]
-    pub receipts_root: H256,
+    pub receipts_root: B256,
     #[serde(with = "hex_fixed_vec")]
     pub logs_bloom: Bloom,
     #[superstruct(getter(copy))]
-    pub prev_randao: H256,
+    pub prev_randao: B256,
     #[superstruct(getter(copy))]
     #[serde(deserialize_with = "as_u64")]
     pub block_number: u64,
@@ -177,12 +177,12 @@ pub struct ExecutionPayloadHeader {
     #[serde(serialize_with = "se_hex_to_number")]
     pub base_fee_per_gas: U256,
     #[superstruct(getter(copy))]
-    pub block_hash: H256,
+    pub block_hash: B256,
     #[superstruct(getter(copy))]
-    pub transactions_root: H256,
+    pub transactions_root: B256,
     #[superstruct(only(Capella))]
     #[superstruct(getter(copy))]
-    pub withdrawals_root: H256,
+    pub withdrawals_root: B256,
 }
 
 impl ExecutionPayloadHeader {
@@ -344,7 +344,7 @@ mod test {
             "0x49e643aa5e1626558ec27d657101d5b7b2a0216755659e301e7d3e523bf48b49",
             "0xc81a9c5f1916aba6b34dd4e347fe9adf075debdecebd1eb65db3c1dad6757cd2",
         ]
-        .map(|x| H256::from_str(x).unwrap())
+        .map(|x| B256::from_str(x).unwrap())
         .to_vec();
         let proof = content.build_block_hash_proof();
 

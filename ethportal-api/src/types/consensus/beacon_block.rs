@@ -3,7 +3,7 @@ use crate::consensus::{
     fork::ForkName,
     signature::BlsSignature,
 };
-use ethereum_types::H256;
+use alloy_primitives::B256;
 use jsonrpsee::core::Serialize;
 use rs_merkle::{algorithms::Sha256, MerkleTree};
 use serde::Deserialize;
@@ -47,9 +47,9 @@ pub struct BeaconBlock {
     #[serde(deserialize_with = "as_u64")]
     pub proposer_index: u64,
     #[superstruct(getter(copy))]
-    pub parent_root: H256,
+    pub parent_root: B256,
     #[superstruct(getter(copy))]
-    pub state_root: H256,
+    pub state_root: B256,
     #[superstruct(only(Bellatrix), partial_getter(rename = "body_merge"))]
     pub body: BeaconBlockBodyBellatrix,
     #[superstruct(only(Capella), partial_getter(rename = "body_capella"))]
@@ -66,13 +66,13 @@ impl BeaconBlock {
 }
 
 impl BeaconBlockBellatrix {
-    pub fn build_body_root_proof(&self) -> Vec<H256> {
+    pub fn build_body_root_proof(&self) -> Vec<B256> {
         let mut leaves: Vec<[u8; 32]> = vec![
-            self.slot.tree_hash_root().to_fixed_bytes(),
-            self.proposer_index.tree_hash_root().to_fixed_bytes(),
-            self.parent_root.tree_hash_root().to_fixed_bytes(),
-            self.state_root.tree_hash_root().to_fixed_bytes(),
-            self.body.tree_hash_root().to_fixed_bytes(),
+            self.slot.tree_hash_root().0,
+            self.proposer_index.tree_hash_root().0,
+            self.parent_root.tree_hash_root().0,
+            self.state_root.tree_hash_root().0,
+            self.body.tree_hash_root().0,
         ];
         // We want to add empty leaves to make the tree a power of 2
         while leaves.len() < 8 {
@@ -83,10 +83,10 @@ impl BeaconBlockBellatrix {
         // We want to prove the body root, which is the 5th leaf
         let indices_to_prove = vec![4];
         let proof = merkle_tree.proof(&indices_to_prove);
-        let proof_hashes: Vec<H256> = proof
+        let proof_hashes: Vec<B256> = proof
             .proof_hashes()
             .iter()
-            .map(|x| H256::from_slice(x))
+            .map(|hash| B256::from_slice(hash))
             .collect();
 
         proof_hashes
@@ -282,7 +282,7 @@ mod test {
             "0xf5a5fd42d16a20302798ef6ed309979b43003d2320d9f0e8ea9831a92759fb4b",
             "0x32b5f53d4b2729823f200eeb36bcf8a78fc1da2d60fef6df87a64a351fce46e7",
         ]
-        .map(|x| H256::from_str(x).unwrap());
+        .map(|x| B256::from_str(x).unwrap());
         let proof = content.build_body_root_proof();
 
         assert_eq!(proof.len(), 3);

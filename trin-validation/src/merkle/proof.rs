@@ -2,12 +2,12 @@
 /// Code sourced from:
 /// https://github.com/sigp/lighthouse/blob/bf533c8e42/consensus/merkle_proof/src/lib.rs
 use crate::merkle::safe_arith::ArithError;
+use alloy_primitives::B256;
 use eth2_hashing::{hash, hash32_concat, ZERO_HASHES};
-use ethereum_types::H256;
 use lazy_static::lazy_static;
 
 const MAX_TREE_DEPTH: usize = 32;
-const EMPTY_SLICE: &[H256] = &[];
+const EMPTY_SLICE: &[B256] = &[];
 
 lazy_static! {
     /// Zero nodes to act as "synthetic" left and right subtrees of other zero nodes.
@@ -23,11 +23,11 @@ lazy_static! {
 #[derive(Debug, PartialEq)]
 pub enum MerkleTree {
     /// Finalized Node
-    Finalized(H256),
+    Finalized(B256),
     /// Leaf node with the hash of its content.
-    Leaf(H256),
+    Leaf(B256),
     /// Internal node with hash, left subtree and right subtree.
-    Node(H256, Box<Self>, Box<Self>),
+    Node(B256, Box<Self>, Box<Self>),
     /// Zero subtree of a given depth.
     ///
     /// It represents a Merkle tree of 2^depth zero leaves.
@@ -68,7 +68,7 @@ pub enum InvalidSnapshot {
 
 impl MerkleTree {
     /// Create a new Merkle tree from a list of leaves and a fixed depth.
-    pub fn create(leaves: &[H256], depth: usize) -> Self {
+    pub fn create(leaves: &[B256], depth: usize) -> Self {
         use MerkleTree::*;
 
         if leaves.is_empty() {
@@ -91,9 +91,9 @@ impl MerkleTree {
 
                 let left_subtree = MerkleTree::create(left_leaves, depth - 1);
                 let right_subtree = MerkleTree::create(right_leaves, depth - 1);
-                let hash = H256::from_slice(&hash32_concat(
-                    left_subtree.hash().as_bytes(),
-                    right_subtree.hash().as_bytes(),
+                let hash = B256::from_slice(&hash32_concat(
+                    left_subtree.hash().as_slice(),
+                    right_subtree.hash().as_slice(),
                 ));
 
                 Node(hash, Box::new(left_subtree), Box::new(right_subtree))
@@ -103,7 +103,7 @@ impl MerkleTree {
 
     /// Push an element in the MerkleTree.
     /// MerkleTree and depth must be correct, as the algorithm expects valid data.
-    pub fn push_leaf(&mut self, elem: H256, depth: usize) -> Result<(), MerkleTreeError> {
+    pub fn push_leaf(&mut self, elem: B256, depth: usize) -> Result<(), MerkleTreeError> {
         use MerkleTree::*;
 
         if depth == 0 {
@@ -150,9 +150,9 @@ impl MerkleTree {
                     // All other possibilities are invalid MerkleTrees
                     (_, _) => return Err(MerkleTreeError::Invalid),
                 };
-                hash.assign_from_slice(&hash32_concat(
-                    left.hash().as_bytes(),
-                    right.hash().as_bytes(),
+                *hash = B256::from_slice(&hash32_concat(
+                    left.hash().as_slice(),
+                    right.hash().as_slice(),
                 ));
             }
             Finalized(_) => return Err(MerkleTreeError::FinalizedNodePushed),
@@ -162,12 +162,12 @@ impl MerkleTree {
     }
 
     /// Retrieve the root hash of this Merkle tree.
-    pub fn hash(&self) -> H256 {
+    pub fn hash(&self) -> B256 {
         match *self {
             MerkleTree::Finalized(h) => h,
             MerkleTree::Leaf(h) => h,
             MerkleTree::Node(h, _, _) => h,
-            MerkleTree::Zero(depth) => H256::from_slice(&ZERO_HASHES[depth]),
+            MerkleTree::Zero(depth) => B256::from_slice(&ZERO_HASHES[depth]),
         }
     }
 
@@ -222,7 +222,7 @@ impl MerkleTree {
         }
     }
 
-    fn append_finalized_hashes(&self, result: &mut Vec<H256>) {
+    fn append_finalized_hashes(&self, result: &mut Vec<B256>) {
         match self {
             MerkleTree::Zero(_) | MerkleTree::Leaf(_) => {}
             MerkleTree::Finalized(h) => result.push(*h),
@@ -233,14 +233,14 @@ impl MerkleTree {
         }
     }
 
-    pub fn get_finalized_hashes(&self) -> Vec<H256> {
+    pub fn get_finalized_hashes(&self) -> Vec<B256> {
         let mut result = vec![];
         self.append_finalized_hashes(&mut result);
         result
     }
 
     pub fn from_finalized_snapshot(
-        finalized_branch: &[H256],
+        finalized_branch: &[B256],
         deposit_count: usize,
         level: usize,
     ) -> Result<Self, MerkleTreeError> {
@@ -280,9 +280,9 @@ impl MerkleTree {
             ),
         };
 
-        let hash = H256::from_slice(&hash32_concat(
-            left.hash().as_bytes(),
-            right.hash().as_bytes(),
+        let hash = B256::from_slice(&hash32_concat(
+            left.hash().as_slice(),
+            right.hash().as_slice(),
         ));
         Ok(MerkleTree::Node(hash, Box::new(left), Box::new(right)))
     }
@@ -295,7 +295,7 @@ impl MerkleTree {
         &self,
         index: usize,
         depth: usize,
-    ) -> Result<(H256, Vec<H256>), MerkleTreeError> {
+    ) -> Result<(B256, Vec<B256>), MerkleTreeError> {
         let mut proof = vec![];
         let mut current_node = self;
         let mut current_depth = depth;
@@ -337,7 +337,7 @@ impl MerkleTree {
             MerkleTree::Leaf(hash) => (None, format!("Leaf({hash})")),
             MerkleTree::Zero(depth) => (
                 None,
-                format!("Z[{}]({})", depth, H256::from_slice(&ZERO_HASHES[*depth])),
+                format!("Z[{}]({})", depth, B256::from_slice(&ZERO_HASHES[*depth])),
             ),
             MerkleTree::Finalized(hash) => (None, format!("Final({hash})")),
         };
@@ -360,11 +360,11 @@ impl MerkleTree {
 /// The `branch` argument is the main component of the proof: it should be a list of internal
 /// node hashes such that the root can be reconstructed (in bottom-up order).
 pub fn verify_merkle_proof(
-    leaf: H256,
-    branch: &[H256],
+    leaf: B256,
+    branch: &[B256],
     depth: usize,
     index: usize,
-    root: H256,
+    root: B256,
 ) -> bool {
     if branch.len() == depth {
         merkle_root_from_branch(leaf, branch, depth, index) == root
@@ -374,23 +374,23 @@ pub fn verify_merkle_proof(
 }
 
 /// Compute a root hash from a leaf and a Merkle proof.
-pub fn merkle_root_from_branch(leaf: H256, branch: &[H256], depth: usize, index: usize) -> H256 {
+pub fn merkle_root_from_branch(leaf: B256, branch: &[B256], depth: usize, index: usize) -> B256 {
     assert_eq!(branch.len(), depth, "proof length should equal depth");
 
-    let mut merkle_root = leaf.as_bytes().to_vec();
+    let mut merkle_root = leaf.as_slice().to_vec();
 
     for (i, leaf) in branch.iter().enumerate().take(depth) {
         let ith_bit = (index >> i) & 0x01;
         if ith_bit == 1 {
-            merkle_root = hash32_concat(leaf.as_bytes(), &merkle_root)[..].to_vec();
+            merkle_root = hash32_concat(leaf.as_slice(), &merkle_root)[..].to_vec();
         } else {
             let mut input = merkle_root;
-            input.extend_from_slice(leaf.as_bytes());
+            input.extend_from_slice(leaf.as_slice());
             merkle_root = hash(&input);
         }
     }
 
-    H256::from_slice(&merkle_root)
+    B256::from_slice(&merkle_root)
 }
 
 impl From<ArithError> for MerkleTreeError {
@@ -408,6 +408,7 @@ impl From<InvalidSnapshot> for MerkleTreeError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloy_primitives::U256;
     use quickcheck::TestResult;
     use quickcheck_macros::quickcheck;
 
@@ -420,7 +421,10 @@ mod tests {
             return TestResult::discard();
         }
 
-        let leaves: Vec<_> = int_leaves.into_iter().map(H256::from_low_u64_be).collect();
+        let leaves: Vec<_> = int_leaves
+            .into_iter()
+            .map(|leaf| B256::from(U256::from(leaf)))
+            .collect();
         let merkle_tree = MerkleTree::create(&leaves, depth);
         let merkle_root = merkle_tree.hash();
 
@@ -440,7 +444,9 @@ mod tests {
             return TestResult::discard();
         }
 
-        let leaves_iter = int_leaves.into_iter().map(H256::from_low_u64_be);
+        let leaves_iter = int_leaves
+            .into_iter()
+            .map(|leaf| B256::from(U256::from(leaf)));
 
         let mut merkle_tree = MerkleTree::create(&[], depth);
 
@@ -458,7 +464,7 @@ mod tests {
     #[test]
     fn sparse_zero_correct() {
         let depth = 2;
-        let zero = H256::from([0x00; 32]);
+        let zero = B256::from([0x00; 32]);
         let dense_tree = MerkleTree::create(&[zero, zero, zero, zero], depth);
         let sparse_tree = MerkleTree::create(&[], depth);
         assert_eq!(dense_tree.hash(), sparse_tree.hash());
@@ -468,15 +474,15 @@ mod tests {
     fn create_small_example() {
         // Construct a small merkle tree manually and check that it's consistent with
         // the MerkleTree type.
-        let leaf_b00 = H256::from([0xAA; 32]);
-        let leaf_b01 = H256::from([0xBB; 32]);
-        let leaf_b10 = H256::from([0xCC; 32]);
-        let leaf_b11 = H256::from([0xDD; 32]);
+        let leaf_b00 = B256::from([0xAA; 32]);
+        let leaf_b01 = B256::from([0xBB; 32]);
+        let leaf_b10 = B256::from([0xCC; 32]);
+        let leaf_b11 = B256::from([0xDD; 32]);
 
-        let node_b0x = H256::from_slice(&hash32_concat(leaf_b00.as_bytes(), leaf_b01.as_bytes()));
-        let node_b1x = H256::from_slice(&hash32_concat(leaf_b10.as_bytes(), leaf_b11.as_bytes()));
+        let node_b0x = B256::from_slice(&hash32_concat(leaf_b00.as_slice(), leaf_b01.as_slice()));
+        let node_b1x = B256::from_slice(&hash32_concat(leaf_b10.as_slice(), leaf_b11.as_slice()));
 
-        let root = H256::from_slice(&hash32_concat(node_b0x.as_bytes(), node_b1x.as_bytes()));
+        let root = B256::from_slice(&hash32_concat(node_b0x.as_slice(), node_b1x.as_slice()));
 
         let tree = MerkleTree::create(&[leaf_b00, leaf_b01, leaf_b10, leaf_b11], 2);
         assert_eq!(tree.hash(), root);
@@ -485,15 +491,15 @@ mod tests {
     #[test]
     fn verify_small_example() {
         // Construct a small merkle tree manually
-        let leaf_b00 = H256::from([0xAA; 32]);
-        let leaf_b01 = H256::from([0xBB; 32]);
-        let leaf_b10 = H256::from([0xCC; 32]);
-        let leaf_b11 = H256::from([0xDD; 32]);
+        let leaf_b00 = B256::from([0xAA; 32]);
+        let leaf_b01 = B256::from([0xBB; 32]);
+        let leaf_b10 = B256::from([0xCC; 32]);
+        let leaf_b11 = B256::from([0xDD; 32]);
 
-        let node_b0x = H256::from_slice(&hash32_concat(leaf_b00.as_bytes(), leaf_b01.as_bytes()));
-        let node_b1x = H256::from_slice(&hash32_concat(leaf_b10.as_bytes(), leaf_b11.as_bytes()));
+        let node_b0x = B256::from_slice(&hash32_concat(leaf_b00.as_slice(), leaf_b01.as_slice()));
+        let node_b1x = B256::from_slice(&hash32_concat(leaf_b10.as_slice(), leaf_b11.as_slice()));
 
-        let root = H256::from_slice(&hash32_concat(node_b0x.as_bytes(), node_b1x.as_bytes()));
+        let root = B256::from_slice(&hash32_concat(node_b0x.as_slice(), node_b1x.as_slice()));
 
         // Run some proofs
         assert!(verify_merkle_proof(
@@ -565,8 +571,8 @@ mod tests {
 
     #[test]
     fn verify_zero_depth() {
-        let leaf = H256::from([0xD6; 32]);
-        let junk = H256::from([0xD7; 32]);
+        let leaf = B256::from([0xD6; 32]);
+        let junk = B256::from([0xD7; 32]);
         assert!(verify_merkle_proof(leaf, &[], 0, 0, leaf));
         assert!(!verify_merkle_proof(leaf, &[], 0, 7, junk));
     }
@@ -576,7 +582,7 @@ mod tests {
         let depth = 2;
         let mut tree = MerkleTree::create(&[], depth);
 
-        let leaf_b00 = H256::from([0xAA; 32]);
+        let leaf_b00 = B256::from([0xAA; 32]);
 
         let res = tree.push_leaf(leaf_b00, 0);
         assert_eq!(res, Err(MerkleTreeError::DepthTooSmall));
@@ -588,25 +594,25 @@ mod tests {
         let expected_tree = MerkleTree::create(&[leaf_b00], depth);
         assert_eq!(tree.hash(), expected_tree.hash());
 
-        let leaf_b01 = H256::from([0xBB; 32]);
+        let leaf_b01 = B256::from([0xBB; 32]);
         tree.push_leaf(leaf_b01, depth)
             .expect("Pushing in left then right node failed");
         let expected_tree = MerkleTree::create(&[leaf_b00, leaf_b01], depth);
         assert_eq!(tree.hash(), expected_tree.hash());
 
-        let leaf_b10 = H256::from([0xCC; 32]);
+        let leaf_b10 = B256::from([0xCC; 32]);
         tree.push_leaf(leaf_b10, depth)
             .expect("Pushing in right then left node failed");
         let expected_tree = MerkleTree::create(&[leaf_b00, leaf_b01, leaf_b10], depth);
         assert_eq!(tree.hash(), expected_tree.hash());
 
-        let leaf_b11 = H256::from([0xDD; 32]);
+        let leaf_b11 = B256::from([0xDD; 32]);
         tree.push_leaf(leaf_b11, depth)
             .expect("Pushing in outermost leaf failed");
         let expected_tree = MerkleTree::create(&[leaf_b00, leaf_b01, leaf_b10, leaf_b11], depth);
         assert_eq!(tree.hash(), expected_tree.hash());
 
-        let leaf_b12 = H256::from([0xEE; 32]);
+        let leaf_b12 = B256::from([0xEE; 32]);
         let res = tree.push_leaf(leaf_b12, depth);
         assert_eq!(res, Err(MerkleTreeError::MerkleTreeFull));
         assert_eq!(tree.hash(), expected_tree.hash());

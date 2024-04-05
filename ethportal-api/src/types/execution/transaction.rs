@@ -1,7 +1,9 @@
-use bytes::Bytes;
-use ethereum_types::{H160, H256, U256, U64};
-use rlp::{Decodable, DecoderError, Encodable, Rlp, RlpStream};
-use rlp_derive::{RlpDecodable, RlpEncodable};
+use alloy_primitives::{keccak256, Address, B256, U256, U64};
+use alloy_rlp::{
+    length_of_length, Decodable, Encodable, Error as RlpError, Header as RlpHeader, RlpDecodable,
+    RlpEncodable, EMPTY_STRING_CODE,
+};
+use bytes::{Buf, Bytes};
 use serde::{Deserialize, Deserializer};
 use serde_json::{json, Value};
 
@@ -18,50 +20,74 @@ pub enum Transaction {
 
 impl Transaction {
     /// Returns the Keccak-256 hash of the header.
-    pub fn hash(&self) -> H256 {
-        keccak_hash::keccak(rlp::encode(self))
+    pub fn hash(&self) -> B256 {
+        keccak256(alloy_rlp::encode(self))
     }
 }
 
 impl Encodable for Transaction {
-    fn rlp_append(&self, s: &mut RlpStream) {
+    fn encode(&self, out: &mut dyn bytes::BufMut) {
+        // we don't wrap versioned transactions with a string header
+        let with_header = false;
         match self {
-            Self::Legacy(tx) => tx.rlp_append(s),
+            Self::Legacy(tx) => tx.encode(out),
             Self::AccessList(tx) => {
-                let mut stream = RlpStream::new();
-                tx.rlp_append(&mut stream);
-                let encoded = [&[TransactionId::AccessList as u8], stream.as_raw()].concat();
-                s.append_raw(&encoded, 1);
+                let payload_length = tx.fields_len();
+                if with_header {
+                    RlpHeader {
+                        list: false,
+                        payload_length: 1 + length_of_length(payload_length) + payload_length,
+                    }
+                    .encode(out);
+                }
+                out.put_u8(TransactionId::AccessList as u8);
+                tx.encode(out);
             }
             Self::EIP1559(tx) => {
-                let mut stream = RlpStream::new();
-                tx.rlp_append(&mut stream);
-                let encoded = [&[TransactionId::EIP1559 as u8], stream.as_raw()].concat();
-                s.append_raw(&encoded, 1);
+                let payload_length = tx.fields_len();
+                if with_header {
+                    RlpHeader {
+                        list: false,
+                        payload_length: 1 + length_of_length(payload_length) + payload_length,
+                    }
+                    .encode(out);
+                }
+                out.put_u8(TransactionId::EIP1559 as u8);
+                tx.encode(out);
             }
             Self::Blob(tx) => {
-                let mut stream = RlpStream::new();
-                tx.rlp_append(&mut stream);
-                let encoded = [&[TransactionId::Blob as u8], stream.as_raw()].concat();
-                s.append_raw(&encoded, 1);
+                let payload_length = tx.fields_len();
+                if with_header {
+                    RlpHeader {
+                        list: false,
+                        payload_length: 1 + length_of_length(payload_length) + payload_length,
+                    }
+                    .encode(out);
+                }
+                out.put_u8(TransactionId::Blob as u8);
+                tx.encode(out);
             }
         }
     }
 }
 
 impl Decodable for Transaction {
-    fn decode(rlp: &Rlp) -> Result<Self, DecoderError> {
+    fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
         // at least one byte needs to be present
-        if rlp.as_raw().is_empty() {
-            return Err(DecoderError::RlpIncorrectListLen);
+        if buf.is_empty() {
+            return Err(RlpError::InputTooShort);
         }
-        let id = TransactionId::try_from(rlp.as_raw()[0])
-            .map_err(|_| DecoderError::Custom("Unknown transaction id"))?;
+        let id = TransactionId::try_from(buf[0])
+            .map_err(|_| RlpError::Custom("Unknown transaction id"))?;
         match id {
-            TransactionId::EIP1559 => Ok(Self::EIP1559(rlp::decode(&rlp.as_raw()[1..])?)),
-            TransactionId::AccessList => Ok(Self::AccessList(rlp::decode(&rlp.as_raw()[1..])?)),
-            TransactionId::Legacy => Ok(Self::Legacy(rlp::decode(rlp.as_raw())?)),
-            TransactionId::Blob => Ok(Self::Blob(rlp::decode(&rlp.as_raw()[1..])?)),
+            TransactionId::EIP1559 => {
+                Ok(Self::EIP1559(EIP1559Transaction::decode(&mut &buf[1..])?))
+            }
+            TransactionId::AccessList => Ok(Self::AccessList(AccessListTransaction::decode(
+                &mut &buf[1..],
+            )?)),
+            TransactionId::Legacy => Ok(Self::Legacy(LegacyTransaction::decode(buf)?)),
+            TransactionId::Blob => Ok(Self::Blob(BlobTransaction::decode(&mut &buf[1..])?)),
         }
     }
 }
@@ -120,6 +146,20 @@ pub struct LegacyTransaction {
     pub s: U256,
 }
 
+impl LegacyTransaction {
+    pub fn fields_len(&self) -> usize {
+        self.nonce.length()
+            + self.gas_price.length()
+            + self.gas.length()
+            + self.to.length()
+            + self.value.length()
+            + self.data.length()
+            + self.v.length()
+            + self.r.length()
+            + self.s.length()
+    }
+}
+
 #[derive(Default, Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct LegacyTransactionHelper {
@@ -165,6 +205,22 @@ pub struct AccessListTransaction {
     pub y_parity: U64,
     pub r: U256,
     pub s: U256,
+}
+
+impl AccessListTransaction {
+    pub fn fields_len(&self) -> usize {
+        self.chain_id.length()
+            + self.nonce.length()
+            + self.gas_price.length()
+            + self.gas_limit.length()
+            + self.to.length()
+            + self.value.length()
+            + self.data.length()
+            + self.access_list.length()
+            + self.y_parity.length()
+            + self.r.length()
+            + self.s.length()
+    }
 }
 
 #[derive(Eq, Debug, Clone, PartialEq, Deserialize)]
@@ -223,6 +279,23 @@ pub struct EIP1559Transaction {
     pub s: U256,
 }
 
+impl EIP1559Transaction {
+    pub fn fields_len(&self) -> usize {
+        self.chain_id.length()
+            + self.nonce.length()
+            + self.max_priority_fee_per_gas.length()
+            + self.max_fee_per_gas.length()
+            + self.gas_limit.length()
+            + self.to.length()
+            + self.value.length()
+            + self.data.length()
+            + self.access_list.length()
+            + self.y_parity.length()
+            + self.r.length()
+            + self.s.length()
+    }
+}
+
 #[derive(Eq, Debug, Clone, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct EIP1559TransactionHelper {
@@ -277,10 +350,29 @@ pub struct BlobTransaction {
     pub data: Bytes,
     pub access_list: AccessList,
     pub max_fee_per_blob_gas: U256,
-    pub blob_versioned_hashes: Vec<H256>,
+    pub blob_versioned_hashes: Vec<B256>,
     pub y_parity: U64,
     pub r: U256,
     pub s: U256,
+}
+
+impl BlobTransaction {
+    pub fn fields_len(&self) -> usize {
+        self.chain_id.length()
+            + self.nonce.length()
+            + self.max_priority_fee_per_gas.length()
+            + self.max_fee_per_gas.length()
+            + self.gas_limit.length()
+            + self.to.length()
+            + self.value.length()
+            + self.data.len()
+            + self.access_list.length()
+            + self.max_fee_per_blob_gas.length()
+            + self.blob_versioned_hashes.length()
+            + self.y_parity.length()
+            + self.r.length()
+            + self.s.length()
+    }
 }
 
 #[derive(Eq, Debug, Clone, PartialEq, Deserialize)]
@@ -298,7 +390,7 @@ struct BlobTransactionHelper {
     pub data: JsonBytes,
     pub access_list: Vec<AccessListItem>,
     pub max_fee_per_blob_gas: U256,
-    pub blob_versioned_hashes: Vec<H256>,
+    pub blob_versioned_hashes: Vec<B256>,
     #[serde(rename(deserialize = "v"))]
     pub y_parity: U64,
     pub r: U256,
@@ -335,7 +427,7 @@ impl Into<BlobTransaction> for BlobTransactionHelper {
 pub enum ToAddress {
     #[default]
     Empty,
-    Exists(H160),
+    Exists(Address),
 }
 
 impl<'de> Deserialize<'de> for ToAddress {
@@ -346,7 +438,7 @@ impl<'de> Deserialize<'de> for ToAddress {
         let s: Option<String> = Deserialize::deserialize(deserializer)?;
         match s {
             None => Ok(Self::Empty),
-            Some(val) => Ok(Self::Exists(H160::from_slice(
+            Some(val) => Ok(Self::Exists(Address::from_slice(
                 &hex_decode(&val).map_err(serde::de::Error::custom)?,
             ))),
         }
@@ -354,23 +446,29 @@ impl<'de> Deserialize<'de> for ToAddress {
 }
 
 impl Encodable for ToAddress {
-    fn rlp_append(&self, s: &mut RlpStream) {
+    fn encode(&self, out: &mut dyn bytes::BufMut) {
         match self {
             ToAddress::Empty => {
-                s.append_internal(&"");
+                out.put_u8(EMPTY_STRING_CODE);
             }
             ToAddress::Exists(addr) => {
-                s.append_internal(addr);
+                addr.0.encode(out);
             }
         }
     }
 }
 
 impl Decodable for ToAddress {
-    fn decode(rlp: &Rlp<'_>) -> Result<Self, DecoderError> {
-        match rlp.is_empty() {
-            true => Ok(ToAddress::Empty),
-            false => Ok(ToAddress::Exists(rlp::decode(rlp.as_raw())?)),
+    fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
+        if let Some(&first) = buf.first() {
+            if first == EMPTY_STRING_CODE {
+                buf.advance(1);
+                Ok(ToAddress::Empty)
+            } else {
+                Ok(ToAddress::Exists(Address::decode(buf)?))
+            }
+        } else {
+            Err(RlpError::InputTooShort)
         }
     }
 }
@@ -408,22 +506,21 @@ pub struct AccessList {
 }
 
 impl Decodable for AccessList {
-    fn decode(rlp_obj: &Rlp) -> Result<Self, DecoderError> {
-        let list: Result<Vec<AccessListItem>, DecoderError> =
-            rlp_obj.iter().map(|v| rlp::decode(v.as_raw())).collect();
-        Ok(Self { list: list? })
+    fn decode(buf: &mut &[u8]) -> alloy_rlp::Result<Self> {
+        let list: Vec<AccessListItem> = Decodable::decode(buf)?;
+        Ok(Self { list })
     }
 }
 
 impl Encodable for AccessList {
-    fn rlp_append(&self, stream: &mut RlpStream) {
-        stream.append_list(&self.list);
+    fn encode(&self, out: &mut dyn bytes::BufMut) {
+        self.list.encode(out);
     }
 }
 
 #[derive(Debug, PartialEq, Clone, Eq, Deserialize, RlpDecodable, RlpEncodable)]
 #[serde(rename_all = "camelCase")]
 pub struct AccessListItem {
-    pub address: H160,
-    pub storage_keys: Vec<H256>,
+    pub address: Address,
+    pub storage_keys: Vec<B256>,
 }

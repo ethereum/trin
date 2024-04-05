@@ -1,7 +1,7 @@
 use std::ops::Deref;
 
+use alloy_primitives::{keccak256, B256};
 use eth_trie::{decode_node, node::Node, TrieError};
-use keccak_hash::{keccak, H256};
 use serde::{Deserialize, Serialize};
 use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, VariableList};
@@ -18,12 +18,12 @@ mod utils;
 pub struct EncodedTrieNode(ByteList1024);
 
 impl EncodedTrieNode {
-    pub fn node_hash(&self) -> H256 {
-        keccak(&self[..])
+    pub fn node_hash(&self) -> B256 {
+        keccak256(&self[..])
     }
 
     pub fn as_trie_node(&self) -> Result<Node, TrieError> {
-        decode_node(&self[..])
+        decode_node(&mut &self.clone()[..])
     }
 }
 

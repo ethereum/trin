@@ -372,7 +372,7 @@ impl Era1Bridge {
 
         // Construct HistoryContentKey
         let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
-            block_hash: header.hash().to_fixed_bytes(),
+            block_hash: header.hash().0,
         });
         // Construct HeaderWithProof
         let header_with_proof = construct_proof(header.clone(), &epoch_acc).await?;
@@ -403,7 +403,7 @@ impl Era1Bridge {
         let header = block_tuple.header.header;
         // Construct HistoryContentKey
         let content_key = HistoryContentKey::BlockBody(BlockBodyKey {
-            block_hash: header.hash().to_fixed_bytes(),
+            block_hash: header.hash().0,
         });
         // Construct HistoryContentValue
         let content_value = HistoryContentValue::BlockBody(block_tuple.body.body);
@@ -422,7 +422,7 @@ impl Era1Bridge {
         let header = block_tuple.header.header;
         // Construct HistoryContentKey
         let content_key = HistoryContentKey::BlockReceipts(BlockReceiptsKey {
-            block_hash: header.hash().to_fixed_bytes(),
+            block_hash: header.hash().0,
         });
         // Construct HistoryContentValue
         let content_value = HistoryContentValue::Receipts(block_tuple.receipts.receipts);

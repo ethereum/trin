@@ -10,17 +10,17 @@ categories = ["cryptography::cryptocurrencies"]
 description = "Beacon chain light client implementation"
 
 [dependencies]
+alloy-primitives = "0.7.0"
 anyhow = "1.0.68"
 async-trait = "0.1.57"
 chrono = "0.4.22"
-ethereum-types = "0.14.1"
 ethportal-api = { path = "../ethportal-api" }
 figment = { version = "0.10.7", features = ["toml", "env"] }
 futures = "0.3.23"
 hex = "0.4.3"
 jsonrpsee = { version = "0.20.0", features = ["full"] }
 log = "0.4.17"
-milagro_bls = { git = "https://github.com/Snowfork/milagro_bls" }
+milagro_bls = { package="snowbridge-milagro-bls", git = "https://github.com/Snowfork/milagro_bls" }
 parking_lot = "0.11.2"
 portalnet = { path = "../portalnet" }
 reqwest = { version = "0.11.13", default-features = false, features = ["json", "rustls-tls"] }
@@ -29,13 +29,13 @@ serde_json = "1.0.85"
 serde_yaml = "0.9"
 serde-this-or-that = "0.4.2"
 ssz-rs = { git = "https://github.com/ralexstokes/ssz-rs", rev = "d09f55b4f8554491e3431e01af1c32347a8781cd" }
-ssz_types = "0.5.4"
+ssz_types = { git = "https://github.com/KolbyML/ssz_types.git", rev = "e2af01ba6b9b255880fe2a0def6a6bb81bc66c9a" }
 strum = { version = "0.26.1", features = ["derive"] }
 thiserror = "1.0.57"
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1.36"
 tracing-subscriber = "0.3.15"
-tree_hash = "0.5.2"
+tree_hash = { git = "https://github.com/KolbyML/tree_hash.git", rev = "8aaf8bb4184148768d48e2cfbbdd0b95d1da8730" }
 
 [lib]
 name = "light_client"

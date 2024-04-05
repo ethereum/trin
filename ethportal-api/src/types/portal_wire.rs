@@ -5,7 +5,7 @@ use std::{
     str::FromStr,
 };
 
-use ethereum_types::U256;
+use alloy_primitives::U256;
 use rlp::Encodable;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -103,7 +103,7 @@ impl From<Vec<u8>> for CustomPayload {
 impl From<CustomPayload> for Distance {
     fn from(val: CustomPayload) -> Self {
         let bytes = val.payload;
-        U256::from_little_endian(bytes.deref()).into()
+        U256::from_le_slice(bytes.deref()).into()
     }
 }
 

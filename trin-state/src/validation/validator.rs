@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use alloy_primitives::{keccak256, B256};
 use anyhow::anyhow;
 use ethportal_api::{
     types::{
@@ -8,7 +9,6 @@ use ethportal_api::{
     },
     ContentValue, StateContentKey, StateContentValue,
 };
-use keccak_hash::{keccak, H256};
 use tokio::sync::RwLock;
 use tracing::{debug, error};
 use trin_validation::{
@@ -176,7 +176,7 @@ impl StateValidator {
     ) -> Result<ValidationResult<StateContentKey>, StateValidationError> {
         match value {
             StateContentValue::ContractBytecode(value) => {
-                let bytecode_hash = keccak(&value.code[..]);
+                let bytecode_hash = keccak256(&value.code[..]);
                 if bytecode_hash == key.code_hash {
                     Ok(ValidationResult::new(/* valid_for_storing= */ false))
                 } else {
@@ -187,7 +187,7 @@ impl StateValidator {
                 }
             }
             StateContentValue::ContractBytecodeWithProof(value) => {
-                let bytecode_hash = keccak(&value.code[..]);
+                let bytecode_hash = keccak256(&value.code[..]);
                 if bytecode_hash != key.code_hash {
                     return Err(StateValidationError::InvalidBytecodeHash {
                         bytecode_hash,
@@ -213,7 +213,7 @@ impl StateValidator {
         }
     }
 
-    async fn get_state_root(&self, _block_hash: H256) -> Option<H256> {
+    async fn get_state_root(&self, _block_hash: B256) -> Option<B256> {
         // Currently not implemented as history network is not reliable
         debug!("Fetching state root is not yet implemented");
         None

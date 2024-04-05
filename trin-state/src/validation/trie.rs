@@ -1,12 +1,12 @@
 use std::collections::VecDeque;
 
+use alloy_primitives::{Address, B256};
+use alloy_rlp::Decodable;
 use eth_trie::node::Node;
-use ethereum_types::{Address, H256};
 use ethportal_api::types::state_trie::{
     account_state::AccountState, nibbles::Nibbles, EncodedTrieNode, TrieProof,
 };
 use keccak_hash::keccak;
-use rlp;
 
 use super::error::StateValidationError;
 
@@ -23,8 +23,8 @@ pub struct TrieProofValidationInfo<'nodes, 'path> {
 
 /// Validate the trie proof and return validation info.
 pub fn validate_node_trie_proof<'proof, 'path>(
-    root_hash: Option<H256>,
-    node_hash: H256,
+    root_hash: Option<B256>,
+    node_hash: B256,
     path: &'path Nibbles,
     proof: &'proof TrieProof,
 ) -> Result<TrieProofValidationInfo<'proof, 'path>, StateValidationError> {
@@ -48,7 +48,7 @@ pub fn validate_node_trie_proof<'proof, 'path>(
 
 /// Validate the trie proof associated with the account state.
 pub fn validate_account_state(
-    root_hash: Option<H256>,
+    root_hash: Option<B256>,
     account: &Address,
     proof: &TrieProof,
 ) -> Result<AccountState, StateValidationError> {
@@ -79,7 +79,7 @@ pub fn validate_account_state(
         });
     }
 
-    Ok(rlp::decode(&last_node.value)?)
+    Ok(Decodable::decode(&mut last_node.value.as_slice())?)
 }
 
 /// Validates the Trie Proof and returns relevant info.
@@ -88,7 +88,7 @@ pub fn validate_account_state(
 /// * `path` - The path that should be used to reach the last node.
 /// * `proof` - The proof that we are to validating.
 fn validate_trie_proof<'nodes, 'path>(
-    root_hash: Option<H256>,
+    root_hash: Option<B256>,
     path: &'path [u8],
     proof: &'nodes TrieProof,
 ) -> Result<TrieProofValidationInfo<'nodes, 'path>, StateValidationError> {
@@ -140,7 +140,7 @@ fn validate_trie_proof<'nodes, 'path>(
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct NodeTraversalInfo<'path> {
     /// The next node that we reached
-    next_node: H256,
+    next_node: B256,
     /// Nibbles consumed while traversing the node.
     consumed_path: VecDeque<u8>,
     /// Nibbles that remained after traversing the node.
@@ -205,16 +205,16 @@ fn traverse_node<'path>(
 mod tests {
     use std::str::FromStr;
 
+    use alloy_primitives::U256;
     use anyhow::Result;
     use eth_trie::{nibbles::Nibbles as EthTrieNibbles, node::empty_children};
-    use ethereum_types::U256;
     use ethportal_api::utils::bytes::hex_decode;
     use rstest::rstest;
 
     use super::*;
 
     fn create_branch_with_child(child: Node, child_index: usize) -> Node {
-        let mut children = [(); 16].map(|_| Node::from_hash(H256::random()));
+        let mut children = [(); 16].map(|_| Node::from_hash(B256::random()));
         children[child_index] = child;
         Node::from_branch(children, None)
     }
@@ -359,15 +359,15 @@ mod tests {
     fn validate_account_state_test_vector() -> Result<()> {
         // Data copied from: https://github.com/ethereum/portal-network-specs/blob/04cc360179aeda179e0b1cac6fea900a74e87f2b/state-network-test-vectors.md
         let state_root =
-            H256::from_str("0x1ad7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61")?;
+            B256::from_str("0x1ad7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61")?;
         let address = Address::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")?;
         let account_state = AccountState {
             nonce: 1,
-            balance: U256::from_str_radix("0x02b4f32ee2f03d31ee3fbb", 16)?,
-            storage_root: H256::from_str(
+            balance: U256::from(3272363543482522011582395_u128),
+            storage_root: B256::from_str(
                 "0x46d5eb15d44b160805e80d05e2a47d434053e6c4b3ef9d1111773039e9586661",
             )?,
-            code_hash: H256::from_str(
+            code_hash: B256::from_str(
                 "0xd0a06b12ac47863b5c7be4185c2deaad1c61557033f56c7d4ea74429cbb25e23",
             )?,
         };
@@ -401,11 +401,11 @@ mod tests {
             .collect();
         let account_state = AccountState {
             nonce: 1,
-            balance: U256::from(H256::random().as_bytes()),
-            storage_root: H256::random(),
-            code_hash: H256::random(),
+            balance: U256::from_be_slice(B256::random().as_slice()),
+            storage_root: B256::random(),
+            code_hash: B256::random(),
         };
-        let node = EncodedTrieNode::from(&create_leaf(&path, &rlp::encode(&account_state)));
+        let node = EncodedTrieNode::from(&create_leaf(&path, &alloy_rlp::encode(&account_state)));
         assert_eq!(
             validate_account_state(None, &address, &vec![node].into()).unwrap(),
             account_state
@@ -434,11 +434,11 @@ mod tests {
 
         let account_state = AccountState {
             nonce: 1,
-            balance: U256::from(H256::random().as_bytes()),
-            storage_root: H256::random(),
-            code_hash: H256::random(),
+            balance: U256::from_be_slice(B256::random().as_slice()),
+            storage_root: B256::random(),
+            code_hash: B256::random(),
         };
-        let node = EncodedTrieNode::from(&create_leaf(&path, &rlp::encode(&account_state)));
+        let node = EncodedTrieNode::from(&create_leaf(&path, &alloy_rlp::encode(account_state)));
         validate_account_state(None, &address, &vec![node].into()).unwrap();
     }
 
@@ -466,7 +466,7 @@ mod tests {
     #[test]
     fn validate_trie_proof_single_node() {
         let node = EncodedTrieNode::from(&create_branch_with_child(
-            Node::from_hash(H256::random()),
+            Node::from_hash(B256::random()),
             1,
         ));
 
@@ -487,7 +487,7 @@ mod tests {
     #[test]
     fn validate_trie_proof_single_node_with_root_hash() {
         let node = EncodedTrieNode::from(&create_branch_with_child(
-            Node::from_hash(H256::random()),
+            Node::from_hash(B256::random()),
             1,
         ));
 
@@ -543,7 +543,7 @@ mod tests {
     #[test]
     fn validate_trie_proof_wrong_order_of_nodes() {
         let last_node = EncodedTrieNode::from(&create_branch_with_child(
-            Node::from_hash(H256::random()),
+            Node::from_hash(B256::random()),
             1,
         ));
         let root_node = EncodedTrieNode::from(&create_branch_with_child(
@@ -588,12 +588,12 @@ mod tests {
     fn validate_trie_proof_invalid_root_hash() {
         let node = Node::from_branch(empty_children(), None);
         let proof = TrieProof::from(vec![EncodedTrieNode::from(&node)]);
-        validate_trie_proof(Some(H256::random()), &[], &proof).unwrap();
+        validate_trie_proof(Some(B256::random()), &[], &proof).unwrap();
     }
 
     #[test]
     fn traverse_node_direct_hash() -> Result<()> {
-        let hash = H256::random();
+        let hash = B256::random();
         assert_eq!(
             traverse_node(&Node::from_hash(hash), &[])?,
             NodeTraversalInfo {
@@ -607,7 +607,7 @@ mod tests {
 
     #[test]
     fn traverse_node_direct_hash_with_path() -> Result<()> {
-        let hash = H256::random();
+        let hash = B256::random();
         assert_eq!(
             traverse_node(&Node::from_hash(hash), &[1, 2, 3])?,
             NodeTraversalInfo {
@@ -621,7 +621,7 @@ mod tests {
 
     #[test]
     fn traverse_node_branch_to_hash() -> Result<()> {
-        let hash = H256::random();
+        let hash = B256::random();
         let path = [1, 2, 3];
         assert_eq!(
             traverse_node(&create_branch_with_child(Node::from_hash(hash), 1), &path)?,
@@ -636,7 +636,7 @@ mod tests {
 
     #[test]
     fn traverse_node_extension_to_hash() -> Result<()> {
-        let hash = H256::random();
+        let hash = B256::random();
         let path = [1, 2, 3, 4, 5];
         let node = create_extension(&[1, 2], Node::from_hash(hash));
         assert_eq!(
@@ -652,7 +652,7 @@ mod tests {
 
     #[test]
     fn traverse_node_extension_to_branch_to_hash() -> Result<()> {
-        let hash = H256::random();
+        let hash = B256::random();
         let path = [1, 2, 3, 4, 5];
         let node = create_extension(&[1, 2], create_branch_with_child(Node::from_hash(hash), 3));
         assert_eq!(
@@ -669,7 +669,7 @@ mod tests {
     #[test]
     #[should_panic = "EmptyExtensionPath"]
     fn traverse_node_extension_empty_path() {
-        let hash = H256::random();
+        let hash = B256::random();
         let node = create_extension(&[], Node::from_hash(hash));
         traverse_node(&node, &[1]).unwrap();
     }
@@ -677,7 +677,7 @@ mod tests {
     #[test]
     #[should_panic = "InvalidExtensionPath"]
     fn traverse_node_extension_missmatched_path() {
-        let hash = H256::random();
+        let hash = B256::random();
         let node = create_extension(&[2], Node::from_hash(hash));
         traverse_node(&node, &[1, 2]).unwrap();
     }
@@ -685,7 +685,7 @@ mod tests {
     #[test]
     #[should_panic = "PathTooShort"]
     fn traverse_node_branch_empty_path() {
-        let hash = H256::random();
+        let hash = B256::random();
         let node = create_branch_with_child(Node::from_hash(hash), 1);
         traverse_node(&node, &[]).unwrap();
     }

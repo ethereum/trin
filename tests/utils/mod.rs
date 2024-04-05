@@ -1,4 +1,4 @@
-use ethereum_types::U256;
+use alloy_primitives::{B256, U256};
 
 // sets the global tracing subscriber, to be used by all other tests
 pub fn init_tracing() {
@@ -15,9 +15,7 @@ pub fn init_tracing() {
 // self_peertest.rs, even though it is used in rpc_server.rs. So we disable the warning.
 #[allow(dead_code)]
 pub fn u256_to_ethers_u256(u256: U256) -> ethers_core::types::U256 {
-    let mut bytes = [0u8; 32];
-    u256.to_big_endian(&mut bytes);
-    ethers_core::types::U256::from_big_endian(&bytes)
+    ethers_core::types::U256::from_big_endian(B256::from(u256).as_slice())
 }
 
 // Convert a primitive u64 to an ethers-rs U256

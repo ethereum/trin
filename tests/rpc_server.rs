@@ -3,6 +3,7 @@
 use std::fs;
 use std::net::{IpAddr, Ipv4Addr};
 
+use ethers::types::H160;
 use ethers_core::types::{Bloom, U256};
 use ethers_providers::*;
 use jsonrpsee::async_client::Client;
@@ -98,20 +99,16 @@ async fn test_eth_get_block_by_hash() {
     ) = (
         hwp.header.number.into(),
         hwp.header.hash(),
-        hwp.header.parent_hash.as_fixed_bytes().into(),
-        hwp.header
-            .nonce
-            .expect("nonce must be present")
-            .as_fixed_bytes()
-            .into(),
-        hwp.header.uncles_hash.as_fixed_bytes().into(),
-        Bloom::from(hwp.header.logs_bloom.as_fixed_bytes()),
-        hwp.header.author.as_fixed_bytes().into(),
-        hwp.header.state_root.as_fixed_bytes().into(),
-        hwp.header.transactions_root.as_fixed_bytes().into(),
-        hwp.header.receipts_root.as_fixed_bytes().into(),
+        hwp.header.parent_hash.0.into(),
+        hwp.header.nonce.expect("nonce must be present").0.into(),
+        hwp.header.uncles_hash.0.into(),
+        Bloom::from(hwp.header.logs_bloom.into_array()),
+        H160::from(hwp.header.author.into_array()),
+        hwp.header.state_root.0.into(),
+        hwp.header.transactions_root.0.into(),
+        hwp.header.receipts_root.0.into(),
         hwp.header.extra_data.clone(),
-        hwp.header.mix_hash.map(|h| h.as_fixed_bytes().into()),
+        hwp.header.mix_hash.map(|h| h.0.into()),
         u256_to_ethers_u256(hwp.header.gas_used),
         u256_to_ethers_u256(hwp.header.gas_limit),
         u256_to_ethers_u256(hwp.header.difficulty),
@@ -150,7 +147,7 @@ async fn test_eth_get_block_by_hash() {
         .expect("specified block not found");
     web3_server.stop().unwrap();
 
-    let block_hash = block_hash.as_fixed_bytes().into();
+    let block_hash = block_hash.0.into();
     assert_eq!(block.number.expect("number must be present"), block_number);
     assert_eq!(block.hash.expect("hash must be present"), block_hash);
     assert_eq!(block.parent_hash, parent_hash);

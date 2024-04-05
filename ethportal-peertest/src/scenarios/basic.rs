@@ -1,5 +1,5 @@
 use crate::{utils::fixture_header_with_proof, Peertest};
-use ethereum_types::{H256, U256};
+use alloy_primitives::{B256, U256};
 use ethportal_api::{
     types::{distance::Distance, portal_wire::ProtocolId},
     BeaconNetworkApiClient, BlockHeaderKey, Discv5ApiClient, HistoryContentKey,
@@ -54,7 +54,7 @@ pub async fn test_radius(protocol: ProtocolId, target: &Client) {
     .unwrap();
     assert_eq!(
         result,
-        U256::from_big_endian(Distance::MAX.as_ssz_bytes().as_slice())
+        U256::from_be_slice(Distance::MAX.as_ssz_bytes().as_slice())
     );
 }
 
@@ -128,7 +128,7 @@ pub async fn test_ping(protocol: ProtocolId, target: &Client, peertest: &Peertes
     .unwrap();
     assert_eq!(
         result.data_radius,
-        U256::from_big_endian(Distance::MAX.as_ssz_bytes().as_slice())
+        U256::from_be_slice(Distance::MAX.as_ssz_bytes().as_slice())
     );
     assert_eq!(result.enr_seq, 1);
 }
@@ -177,7 +177,7 @@ pub async fn test_history_store(target: &Client) {
 pub async fn test_history_local_content_absent(target: &Client) {
     info!("Testing portal_historyLocalContent absent");
     let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
-        block_hash: H256::random().into(),
+        block_hash: B256::random().into(),
     });
     let error = HistoryNetworkApiClient::local_content(target, content_key)
         .await

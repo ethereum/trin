@@ -3,9 +3,9 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use alloy_primitives::B256;
 use anyhow::Result;
 use clap::Parser;
-use ethereum_types::H256;
 use ethers::prelude::*;
 use ethers_providers::Http;
 use rand::seq::SliceRandom;
@@ -116,7 +116,13 @@ pub async fn main() -> Result<()> {
                 .unwrap()
                 .hash
                 .unwrap();
-            let _ = audit_block(block_number, block_hash, metrics, client).await;
+            let _ = audit_block(
+                block_number,
+                B256::from_slice(block_hash.as_bytes()),
+                metrics,
+                client,
+            )
+            .await;
         }
     }))
     .buffer_unordered(FUTURES_BUFFER_SIZE)
@@ -128,19 +134,13 @@ pub async fn main() -> Result<()> {
 
 async fn audit_block(
     block_number: u64,
-    hash: H256,
+    hash: B256,
     metrics: Arc<Mutex<Metrics>>,
     client: HttpClient,
 ) -> anyhow::Result<()> {
-    let header_ck = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
-        block_hash: hash.to_fixed_bytes(),
-    });
-    let body_ck = HistoryContentKey::BlockBody(BlockBodyKey {
-        block_hash: hash.to_fixed_bytes(),
-    });
-    let receipts_ck = HistoryContentKey::BlockReceipts(BlockReceiptsKey {
-        block_hash: hash.to_fixed_bytes(),
-    });
+    let header_ck = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey { block_hash: hash.0 });
+    let body_ck = HistoryContentKey::BlockBody(BlockBodyKey { block_hash: hash.0 });
+    let receipts_ck = HistoryContentKey::BlockReceipts(BlockReceiptsKey { block_hash: hash.0 });
     match client.recursive_find_content(header_ck).await {
         Ok(_) => {
             metrics.lock().unwrap().header.success_count += 1;

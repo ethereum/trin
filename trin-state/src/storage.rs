@@ -1,3 +1,4 @@
+use alloy_primitives::keccak256;
 use ethportal_api::{
     types::{
         content_key::state::{AccountTrieNodeKey, ContractBytecodeKey, ContractStorageTrieNodeKey},
@@ -8,7 +9,6 @@ use ethportal_api::{
     },
     ContentValue, OverlayContentKey, StateContentKey, StateContentValue,
 };
-use keccak_hash::keccak;
 use trin_storage::{
     error::ContentStoreError,
     versioned::{create_store, ContentType, IdIndexedV1Store, IdIndexedV1StoreConfig},
@@ -112,7 +112,7 @@ impl StateStorage {
                 message: "Expected Trie nodes in the proof but none were present".to_string(),
             });
         };
-        let last_node_hash = keccak(&last_trie_node[..]);
+        let last_node_hash = keccak256(&last_trie_node[..]);
 
         if last_node_hash != key.node_hash {
             return Err(ContentStoreError::InvalidData {
@@ -148,7 +148,7 @@ impl StateStorage {
                 message: "Expected Trie nodes in the proof but none were present".to_string(),
             });
         };
-        let last_node_hash = keccak(&last_trie_node[..]);
+        let last_node_hash = keccak256(&last_trie_node[..]);
 
         if last_node_hash != key.node_hash {
             return Err(ContentStoreError::InvalidData {
@@ -179,7 +179,7 @@ impl StateStorage {
                 ),
             });
         };
-        let bytes_hash = keccak(&value.code[..]);
+        let bytes_hash = keccak256(&value.code[..]);
 
         if bytes_hash != key.code_hash {
             return Err(ContentStoreError::InvalidData {

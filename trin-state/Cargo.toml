@@ -11,15 +11,15 @@ description = "State network subprotocol for Trin."
 authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 [dependencies]
+alloy-primitives = { version = "0.7.0", features = ["getrandom"] }
+alloy-rlp = "0.3.4"
 anyhow = "1.0.68"
-discv5 = { version = "0.4.0", features = ["serde"] }
-eth_trie = { git = "https://github.com/morph-dev/eth-trie.rs.git", branch = "trin" }
-ethereum-types = "0.14.1"
+discv5 = { version = "0.4.1", features = ["serde"] }
+eth_trie = { git = "https://github.com/kolbyml/eth-trie.rs.git", rev = "11ec003e3276e1413f06328ab746af5d99f112bb" }
 ethportal-api = { path = "../ethportal-api" }
 keccak-hash = "0.10.0"
 parking_lot = "0.11.2"
 portalnet = { path = "../portalnet" }
-rlp = "0.5.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.89"
 thiserror = "1.0.57"

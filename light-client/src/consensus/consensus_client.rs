@@ -1,5 +1,6 @@
 use std::{cmp, sync::Arc};
 
+use alloy_primitives::B256;
 use anyhow::{anyhow, Result};
 use chrono::Duration;
 use log::{debug, info, warn};
@@ -17,7 +18,6 @@ use crate::{
     types::Bytes32,
     utils::bytes_to_bytes32,
 };
-use ethereum_types::H256;
 use ethportal_api::{
     consensus::{header::BeaconBlockHeader, signature::BlsSignature},
     light_client::{bootstrap::CurrentSyncCommitteeProofLen, update::FinalizedRootProofLen},
@@ -418,7 +418,7 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
 
                 if self.store.finalized_header.slot % 32 == 0 {
                     let checkpoint = self.store.finalized_header.tree_hash_root();
-                    self.last_checkpoint = Some(checkpoint.as_bytes().to_vec());
+                    self.last_checkpoint = Some(checkpoint.as_slice().to_vec());
                 }
 
                 if self.store.finalized_header.slot > self.store.optimistic_header.slot {
@@ -501,10 +501,14 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
     ) -> bool {
         let res: Result<bool> = (move || {
             let pks: Vec<&PublicKey> = pks.iter().collect();
-            let header_root = bytes_to_bytes32(attested_header.tree_hash_root().as_bytes());
+            let header_root = bytes_to_bytes32(attested_header.tree_hash_root().as_slice());
             let signing_root = self.compute_committee_sign_root(header_root, signature_slot)?;
 
-            Ok(is_aggregate_valid(signature, signing_root.as_bytes(), &pks))
+            Ok(is_aggregate_valid(
+                signature,
+                signing_root.r#as_bytes(),
+                &pks,
+            ))
         })();
 
         if let Ok(is_valid) = res {
@@ -606,11 +610,11 @@ fn get_bits(bitfield: &BitVector<typenum::U512>) -> u64 {
 fn is_finality_proof_valid(
     attested_header: &BeaconBlockHeader,
     finality_header: &mut BeaconBlockHeader,
-    finality_branch: &FixedVector<H256, FinalizedRootProofLen>,
+    finality_branch: &FixedVector<B256, FinalizedRootProofLen>,
 ) -> bool {
     let finality_branch = finality_branch
         .iter()
-        .map(|h| bytes_to_bytes32(h.as_bytes()))
+        .map(|h| bytes_to_bytes32(h.as_slice()))
         .collect::<Vec<_>>();
     is_proof_valid(attested_header, finality_header, &finality_branch, 6, 41)
 }
@@ -618,11 +622,11 @@ fn is_finality_proof_valid(
 fn is_next_committee_proof_valid(
     attested_header: &BeaconBlockHeader,
     next_committee: &mut SyncCommittee,
-    next_committee_branch: &FixedVector<H256, CurrentSyncCommitteeProofLen>,
+    next_committee_branch: &FixedVector<B256, CurrentSyncCommitteeProofLen>,
 ) -> bool {
     let next_committee_branch = next_committee_branch
         .iter()
-        .map(|h| bytes_to_bytes32(h.as_bytes()))
+        .map(|h| bytes_to_bytes32(h.as_slice()))
         .collect::<Vec<_>>();
     is_proof_valid(
         attested_header,
@@ -636,11 +640,11 @@ fn is_next_committee_proof_valid(
 fn is_current_committee_proof_valid(
     attested_header: &BeaconBlockHeader,
     current_committee: &mut SyncCommittee,
-    current_committee_branch: &FixedVector<H256, CurrentSyncCommitteeProofLen>,
+    current_committee_branch: &FixedVector<B256, CurrentSyncCommitteeProofLen>,
 ) -> bool {
     let current_committee_branch = current_committee_branch
         .iter()
-        .map(|h| bytes_to_bytes32(h.as_bytes()))
+        .map(|h| bytes_to_bytes32(h.as_slice()))
         .collect::<Vec<_>>();
     is_proof_valid(
         attested_header,

@@ -161,7 +161,7 @@ impl IdIndexedV1Store {
     pub fn distance_to_content_id(&self, content_id: &ContentId) -> Distance {
         self.config
             .distance_fn
-            .distance(&self.config.node_id, content_id.as_fixed_bytes())
+            .distance(&self.config.node_id, &content_id.0)
     }
 
     /// Returns whether data associated with the content id is already stored.
@@ -174,7 +174,7 @@ impl IdIndexedV1Store {
             .get()?
             .prepare(&sql::lookup_key(&self.config.content_type))?
             .exists(named_params! {
-                ":content_id": content_id.as_fixed_bytes().to_vec(),
+                ":content_id": content_id.0.to_vec(),
             })?;
 
         self.metrics.stop_process_timer(timer);
@@ -195,7 +195,7 @@ impl IdIndexedV1Store {
             .query_row(
                 &sql::lookup_key(&self.config.content_type),
                 named_params! {
-                    ":content_id": content_id.as_fixed_bytes().to_vec(),
+                    ":content_id": content_id.0.to_vec(),
                 },
                 |row| {
                     let bytes: Vec<u8> = row.get("content_key")?;
@@ -224,7 +224,7 @@ impl IdIndexedV1Store {
             .query_row(
                 &sql::lookup_value(&self.config.content_type),
                 named_params! {
-                    ":content_id": content_id.as_fixed_bytes().to_vec(),
+                    ":content_id": content_id.0.to_vec(),
                 },
                 |row| row.get::<&str, Vec<u8>>("content_value"),
             )
@@ -292,7 +292,7 @@ impl IdIndexedV1Store {
         self.config.sql_connection_pool.get()?.execute(
             &sql::delete(&self.config.content_type),
             named_params! {
-                ":content_id": content_id.as_fixed_bytes().to_vec(),
+                ":content_id": content_id.0.to_vec(),
             },
         )?;
         self.metrics.decrease_entry_count();

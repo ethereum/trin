@@ -4,7 +4,7 @@ use crate::types::consensus::{
     light_client::header::{LightClientHeaderBellatrix, LightClientHeaderCapella},
     sync_committee::SyncCommittee,
 };
-use ethereum_types::H256;
+use alloy_primitives::B256;
 use serde::{Deserialize, Serialize};
 use serde_this_or_that::as_u64;
 use ssz::Decode;
@@ -21,7 +21,7 @@ pub type FinalizedRootProofLen = U6;
 #[superstruct(
     variants(Bellatrix, Capella),
     variant_attributes(
-        derive(Debug, Clone, Serialize, PartialEq, Deserialize, Encode, Decode,),
+        derive(Debug, Clone, Serialize, PartialEq, Deserialize, Encode, Decode),
         serde(deny_unknown_fields),
     )
 )]
@@ -36,14 +36,14 @@ pub struct LightClientUpdate {
     /// The `SyncCommittee` used in the next period.
     pub next_sync_committee: SyncCommittee,
     /// Merkle proof for next sync committee
-    pub next_sync_committee_branch: FixedVector<H256, NextSyncCommitteeProofLen>,
+    pub next_sync_committee_branch: FixedVector<B256, NextSyncCommitteeProofLen>,
     /// The last `LightClientHeader` from the last attested finalized block (end of epoch).
     #[superstruct(only(Bellatrix), partial_getter(rename = "finalized_header_bellatrix"))]
     pub finalized_header: LightClientHeaderBellatrix,
     #[superstruct(only(Capella), partial_getter(rename = "finalized_header_capella"))]
     pub finalized_header: LightClientHeaderCapella,
     /// Merkle proof attesting finalized header.
-    pub finality_branch: FixedVector<H256, FinalizedRootProofLen>,
+    pub finality_branch: FixedVector<B256, FinalizedRootProofLen>,
     /// current sync aggregate
     pub sync_aggregate: SyncAggregate,
     /// Slot of the sync aggregated signature

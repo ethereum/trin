@@ -1,7 +1,7 @@
 use std::{net::SocketAddr, path::PathBuf, str::FromStr};
 
+use alloy_primitives::B256;
 use clap::{Parser, Subcommand};
-use ethereum_types::H256;
 use tokio::process::Child;
 use url::Url;
 
@@ -88,7 +88,7 @@ pub struct BridgeConfig {
         value_parser = check_private_key_length,
         help = "Hex encoded 32 byte private key (with 0x prefix) (used as the root key for generating spaced private keys, if multiple nodes are selected)"
     )]
-    pub root_private_key: Option<H256>,
+    pub root_private_key: Option<B256>,
 
     #[arg(
         long = "el-provider",

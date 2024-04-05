@@ -1,4 +1,4 @@
-use ethereum_types::H256;
+use alloy_primitives::B256;
 use serde::{Deserialize, Serialize};
 use ssz::{Decode, Encode};
 use ssz_derive::{Decode, Encode};
@@ -86,7 +86,7 @@ pub struct AccountTrieNodeWithProof {
     /// An proof for the account trie node.
     pub proof: TrieProof,
     /// A block at which the proof is anchored.
-    pub block_hash: H256,
+    pub block_hash: B256,
 }
 /// A content value type, used when offering a trie node from the contract storage trie.
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
@@ -96,7 +96,7 @@ pub struct ContractStorageTrieNodeWithProof {
     /// A proof for the account state.
     pub account_proof: TrieProof,
     /// A block at which the proof is anchored.
-    pub block_hash: H256,
+    pub block_hash: B256,
 }
 
 /// A content value type, used when retrieving contract's bytecode.
@@ -113,7 +113,7 @@ pub struct ContractBytecodeWithProof {
     /// A proof for the account state of the corresponding contract.
     pub account_proof: TrieProof,
     /// A block at which the proof is anchored.
-    pub block_hash: H256,
+    pub block_hash: B256,
 }
 
 #[cfg(test)]
@@ -152,7 +152,7 @@ mod test {
         let expected_content_value =
             StateContentValue::AccountTrieNodeWithProof(AccountTrieNodeWithProof {
                 proof: yaml_as_proof(&value["proof"]),
-                block_hash: yaml_as_h256(&value["block_hash"]),
+                block_hash: yaml_as_b256(&value["block_hash"]),
             });
 
         assert_content_value(&value["content_value"], expected_content_value);
@@ -169,7 +169,7 @@ mod test {
             StateContentValue::ContractStorageTrieNodeWithProof(ContractStorageTrieNodeWithProof {
                 storage_proof: yaml_as_proof(&value["storage_proof"]),
                 account_proof: yaml_as_proof(&value["account_proof"]),
-                block_hash: yaml_as_h256(&value["block_hash"]),
+                block_hash: yaml_as_b256(&value["block_hash"]),
             });
 
         assert_content_value(&value["content_value"], expected_content_value);
@@ -200,7 +200,7 @@ mod test {
             StateContentValue::ContractBytecodeWithProof(ContractBytecodeWithProof {
                 code: ByteCode::from(yaml_as_hex(&value["bytecode"])),
                 account_proof: yaml_as_proof(&value["account_proof"]),
-                block_hash: yaml_as_h256(&value["block_hash"]),
+                block_hash: yaml_as_b256(&value["block_hash"]),
             });
 
         assert_content_value(&value["content_value"], expected_content_value);
@@ -253,8 +253,8 @@ mod test {
         Ok(serde_yaml::from_str(&file)?)
     }
 
-    fn yaml_as_h256(value: &Value) -> H256 {
-        H256::from_str(value.as_str().unwrap()).unwrap()
+    fn yaml_as_b256(value: &Value) -> B256 {
+        B256::from_str(value.as_str().unwrap()).unwrap()
     }
 
     fn yaml_as_hex(value: &Value) -> Vec<u8> {
