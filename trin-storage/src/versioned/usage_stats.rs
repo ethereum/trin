@@ -85,10 +85,11 @@ mod tests {
     use super::*;
 
     const TABLE_NAME: &str = "test";
-    const ENTRY_SIZE_COLUMN_NAME: &str = "size";
-    const TEST_TABLE_CREATE: &str = "CREATE TABLE test (id TEXT NOT NULL, size INTEGER NOT NULL)";
-    const TEST_TABLE_INSERT: &str = "INSERT INTO test (id, size) VALUES (?1, ?2)";
-    const TEST_TABLE_UPDATE: &str = "UPDATE test SET size = (?2) WHERE id = (?1)";
+    const ENTRY_SIZE_COLUMN_NAME: &str = "content_size";
+    const TEST_TABLE_CREATE: &str =
+        "CREATE TABLE test (id TEXT NOT NULL, content_size INTEGER NOT NULL)";
+    const TEST_TABLE_INSERT: &str = "INSERT INTO test (id, content_size) VALUES (?1, ?2)";
+    const TEST_TABLE_UPDATE: &str = "UPDATE test SET content_size = (?2) WHERE id = (?1)";
     const TEST_TABLE_DELETE: &str = "DELETE FROM test WHERE id = (?1)";
 
     fn setup_for_tests(temp_dir: &TempDir) -> Pool<SqliteConnectionManager> {
