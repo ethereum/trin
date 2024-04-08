@@ -3144,7 +3144,7 @@ mod tests {
 
         let (_, enr1) = generate_random_remote_enr();
         let (_, enr2) = generate_random_remote_enr();
-        let peers = vec![enr1, enr2];
+        let peers = [enr1, enr2];
         let peer_node_ids: Vec<NodeId> = peers.iter().map(|p| p.node_id()).collect();
 
         // No nodes in the routing table, so no commands should be in the channel.

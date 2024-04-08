@@ -46,6 +46,7 @@ async fn main() -> anyhow::Result<()> {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(true)
             .open(file_path.join("era_urls.txt"))
             .unwrap();
 
