@@ -63,7 +63,7 @@ pub fn mainnet() -> BaseConfig {
                 fork_version: hex_str_to_bytes("0x03000000").expect("should be a valid hex str"),
             },
             deneb: Fork {
-                epoch: 243200,
+                epoch: 269568,
                 fork_version: hex_str_to_bytes("0x04000000").expect("should be a valid hex str"),
             },
         },

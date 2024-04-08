@@ -7,13 +7,14 @@ use ethportal_api::{
 pub use ethportal_api::{
     consensus::{body::SyncAggregate, sync_committee::SyncCommittee},
     light_client::{
-        bootstrap::LightClientBootstrapCapella, finality_update::LightClientFinalityUpdateCapella,
-        header::LightClientHeaderCapella, optimistic_update::LightClientOptimisticUpdateCapella,
-        update::LightClientUpdateCapella,
+        bootstrap::LightClientBootstrapDeneb, finality_update::LightClientFinalityUpdateDeneb,
+        header::LightClientHeaderDeneb, optimistic_update::LightClientOptimisticUpdateDeneb,
+        update::LightClientUpdateDeneb,
     },
 };
 use ssz_types::FixedVector;
 
+#[derive(Debug, Clone)]
 pub struct GenericUpdate {
     pub attested_header: BeaconBlockHeader,
     pub sync_aggregate: SyncAggregate,
@@ -24,8 +25,8 @@ pub struct GenericUpdate {
     pub finality_branch: Option<FixedVector<B256, FinalizedRootProofLen>>,
 }
 
-impl From<&LightClientUpdateCapella> for GenericUpdate {
-    fn from(update: &LightClientUpdateCapella) -> Self {
+impl From<&LightClientUpdateDeneb> for GenericUpdate {
+    fn from(update: &LightClientUpdateDeneb) -> Self {
         Self {
             attested_header: update.attested_header.beacon.clone(),
             sync_aggregate: update.sync_aggregate.clone(),
@@ -38,8 +39,8 @@ impl From<&LightClientUpdateCapella> for GenericUpdate {
     }
 }
 
-impl From<&LightClientFinalityUpdateCapella> for GenericUpdate {
-    fn from(update: &LightClientFinalityUpdateCapella) -> Self {
+impl From<&LightClientFinalityUpdateDeneb> for GenericUpdate {
+    fn from(update: &LightClientFinalityUpdateDeneb) -> Self {
         Self {
             attested_header: update.attested_header.beacon.clone(),
             sync_aggregate: update.sync_aggregate.clone(),
@@ -52,8 +53,8 @@ impl From<&LightClientFinalityUpdateCapella> for GenericUpdate {
     }
 }
 
-impl From<&LightClientOptimisticUpdateCapella> for GenericUpdate {
-    fn from(update: &LightClientOptimisticUpdateCapella) -> Self {
+impl From<&LightClientOptimisticUpdateDeneb> for GenericUpdate {
+    fn from(update: &LightClientOptimisticUpdateDeneb) -> Self {
         Self {
             attested_header: update.attested_header.beacon.clone(),
             sync_aggregate: update.sync_aggregate.clone(),

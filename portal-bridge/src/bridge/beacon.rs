@@ -24,16 +24,14 @@ use crate::{
     },
 };
 use ethportal_api::{
+    light_client::{
+        bootstrap::LightClientBootstrapDeneb,
+        finality_update::LightClientFinalityUpdateDeneb,
+        optimistic_update::LightClientOptimisticUpdateDeneb,
+        update::{LightClientUpdate, LightClientUpdateDeneb},
+    },
     types::{
-        consensus::{
-            fork::ForkName,
-            light_client::{
-                bootstrap::LightClientBootstrapCapella,
-                finality_update::LightClientFinalityUpdateCapella,
-                optimistic_update::LightClientOptimisticUpdateCapella,
-                update::{LightClientUpdate, LightClientUpdateCapella},
-            },
-        },
+        consensus::fork::ForkName,
         content_key::beacon::{LightClientFinalityUpdateKey, LightClientOptimisticUpdateKey},
         content_value::beacon::{ForkVersionedLightClientUpdate, LightClientUpdatesByRange},
     },
@@ -261,8 +259,7 @@ impl BeaconBridge {
         // finalized block root is different, so serve a new bootstrap
         let result = api.get_lc_bootstrap(&latest_finalized_block_root).await?;
         let result: Value = serde_json::from_str(&result)?;
-        let bootstrap: LightClientBootstrapCapella =
-            serde_json::from_value(result["data"].clone())?;
+        let bootstrap: LightClientBootstrapDeneb = serde_json::from_value(result["data"].clone())?;
 
         info!(
             header_slot=%bootstrap.header.beacon.slot,
@@ -308,7 +305,7 @@ impl BeaconBridge {
 
         let data = api.get_lc_updates(expected_current_period, 1).await?;
         let update: Value = serde_json::from_str(&data)?;
-        let update: LightClientUpdateCapella = serde_json::from_value(update[0]["data"].clone())?;
+        let update: LightClientUpdateDeneb = serde_json::from_value(update[0]["data"].clone())?;
         let finalized_header_period = update.finalized_header.beacon.slot / SLOTS_PER_PERIOD;
 
         // We don't serve a `LightClientUpdate` if its finalized header slot is not within the
@@ -323,8 +320,8 @@ impl BeaconBridge {
         }
 
         let fork_versioned_update = ForkVersionedLightClientUpdate {
-            fork_name: ForkName::Capella,
-            update: LightClientUpdate::Capella(update.clone()),
+            fork_name: ForkName::Deneb,
+            update: LightClientUpdate::Deneb(update.clone()),
         };
 
         let content_value = BeaconContentValue::LightClientUpdatesByRange(
@@ -354,7 +351,7 @@ impl BeaconBridge {
         let data = api.get_lc_optimistic_update().await?;
         let update: Value = serde_json::from_str(&data)?;
 
-        let update: LightClientOptimisticUpdateCapella =
+        let update: LightClientOptimisticUpdateDeneb =
             serde_json::from_value(update["data"].clone())?;
         info!(
             signature_slot = %update.signature_slot,
@@ -375,7 +372,7 @@ impl BeaconBridge {
     ) -> anyhow::Result<u64> {
         let data = api.get_lc_finality_update().await?;
         let update: Value = serde_json::from_str(&data)?;
-        let update: LightClientFinalityUpdateCapella =
+        let update: LightClientFinalityUpdateDeneb =
             serde_json::from_value(update["data"].clone())?;
         info!(
             finalized_slot = %update.finalized_header.beacon.slot,

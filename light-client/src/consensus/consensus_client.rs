@@ -3,9 +3,9 @@ use std::{cmp, sync::Arc};
 use alloy_primitives::B256;
 use anyhow::{anyhow, Result};
 use chrono::Duration;
-use log::{debug, info, warn};
 use milagro_bls::PublicKey;
 use ssz_rs::prelude::*;
+use tracing::{debug, info, warn};
 
 use super::{rpc::ConsensusRpc, types::*, utils::*};
 
@@ -20,7 +20,12 @@ use crate::{
 };
 use ethportal_api::{
     consensus::{header::BeaconBlockHeader, signature::BlsSignature},
-    light_client::{bootstrap::CurrentSyncCommitteeProofLen, update::FinalizedRootProofLen},
+    light_client::{
+        bootstrap::CurrentSyncCommitteeProofLen,
+        finality_update::LightClientFinalityUpdateDeneb,
+        optimistic_update::LightClientOptimisticUpdateDeneb,
+        update::{FinalizedRootProofLen, LightClientUpdateDeneb},
+    },
     utils::bytes::hex_encode,
 };
 use ssz_types::{typenum, BitVector, FixedVector};
@@ -336,17 +341,17 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
         Ok(())
     }
 
-    fn verify_update(&self, update: &LightClientUpdateCapella) -> Result<()> {
+    fn verify_update(&self, update: &LightClientUpdateDeneb) -> Result<()> {
         let update = GenericUpdate::from(update);
         self.verify_generic_update(&update)
     }
 
-    fn verify_finality_update(&self, update: &LightClientFinalityUpdateCapella) -> Result<()> {
+    fn verify_finality_update(&self, update: &LightClientFinalityUpdateDeneb) -> Result<()> {
         let update = GenericUpdate::from(update);
         self.verify_generic_update(&update)
     }
 
-    fn verify_optimistic_update(&self, update: &LightClientOptimisticUpdateCapella) -> Result<()> {
+    fn verify_optimistic_update(&self, update: &LightClientOptimisticUpdateDeneb) -> Result<()> {
         let update = GenericUpdate::from(update);
         self.verify_generic_update(&update)
     }
@@ -385,7 +390,7 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
         let should_apply_update = {
             let has_majority = committee_bits * 3 >= 512 * 2;
             if !has_majority {
-                debug!("skipping block with low vote count");
+                debug!(update = ?update, "Skipping update with low vote count");
             }
             let update_is_newer = update_finalized_slot > self.store.finalized_header.slot;
             let good_update = update_is_newer || update_has_finalized_next_committee;
@@ -431,12 +436,12 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
         }
     }
 
-    fn apply_update(&mut self, update: &LightClientUpdateCapella) {
+    fn apply_update(&mut self, update: &LightClientUpdateDeneb) {
         let update = GenericUpdate::from(update);
         self.apply_generic_update(&update);
     }
 
-    fn apply_finality_update(&mut self, update: &LightClientFinalityUpdateCapella) {
+    fn apply_finality_update(&mut self, update: &LightClientFinalityUpdateDeneb) {
         let update = GenericUpdate::from(update);
         self.apply_generic_update(&update);
     }
@@ -458,7 +463,7 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
         );
     }
 
-    fn apply_optimistic_update(&mut self, update: &LightClientOptimisticUpdateCapella) {
+    fn apply_optimistic_update(&mut self, update: &LightClientOptimisticUpdateDeneb) {
         let update = GenericUpdate::from(update);
         self.apply_generic_update(&update);
     }
@@ -506,11 +511,6 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
             let pks: Vec<&PublicKey> = pks.iter().collect();
             let header_root = bytes_to_bytes32(attested_header.tree_hash_root().as_slice());
             let signing_root = self.compute_committee_sign_root(header_root, signature_slot)?;
-
-            println!(
-                "is signature valid: {:?}",
-                is_aggregate_valid(signature, signing_root.as_bytes(), &pks)
-            );
 
             Ok(is_aggregate_valid(
                 signature,

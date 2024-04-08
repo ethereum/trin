@@ -17,6 +17,7 @@ pub type ForkDigest = [u8; 4];
 pub enum ForkName {
     Bellatrix,
     Capella,
+    Deneb,
 }
 
 impl TryFrom<ForkDigest> for ForkName {
@@ -26,6 +27,7 @@ impl TryFrom<ForkDigest> for ForkName {
         match fork_digest {
             [0x0, 0x0, 0x0, 0x0] => Ok(ForkName::Bellatrix),
             [0xbb, 0xa4, 0xda, 0x96] => Ok(ForkName::Capella),
+            [0x6a, 0x95, 0xa1, 0xa9] => Ok(ForkName::Deneb),
             _ => Err(ParseForkNameError(hex_encode(fork_digest))),
         }
     }
@@ -36,6 +38,7 @@ impl ForkName {
         match self {
             ForkName::Bellatrix => [0x0, 0x0, 0x0, 0x0],
             ForkName::Capella => [0xbb, 0xa4, 0xda, 0x96],
+            ForkName::Deneb => [0x6a, 0x95, 0xa1, 0xa9],
         }
     }
 }
@@ -47,6 +50,7 @@ impl FromStr for ForkName {
         Ok(match fork_name.to_lowercase().as_ref() {
             "bellatrix" | "merge" => ForkName::Bellatrix,
             "capella" => ForkName::Capella,
+            "deneb" => ForkName::Deneb,
             _ => return Err(format!("unknown fork name: {fork_name}")),
         })
     }
@@ -57,6 +61,7 @@ impl Display for ForkName {
         match self {
             ForkName::Bellatrix => "bellatrix".fmt(f),
             ForkName::Capella => "capella".fmt(f),
+            ForkName::Deneb => "deneb".fmt(f),
         }
     }
 }
@@ -83,7 +88,9 @@ mod test {
     fn fork_name_bellatrix_or_merge() {
         assert_eq!(ForkName::from_str("bellatrix"), Ok(ForkName::Bellatrix));
         assert_eq!(ForkName::from_str("capella"), Ok(ForkName::Capella));
+        assert_eq!(ForkName::from_str("deneb"), Ok(ForkName::Deneb));
         assert_eq!(ForkName::Bellatrix.to_string(), "bellatrix");
         assert_eq!(ForkName::Capella.to_string(), "capella");
+        assert_eq!(ForkName::Deneb.to_string(), "deneb");
     }
 }

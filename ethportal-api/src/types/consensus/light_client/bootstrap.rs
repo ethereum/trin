@@ -15,7 +15,7 @@ pub type CurrentSyncCommitteeProofLen = U5;
 /// `LightClientBootstrap` object for the configured trusted block root.
 /// The bootstrap object is used to generate a local `LightClientStore`.
 #[superstruct(
-    variants(Bellatrix, Capella),
+    variants(Bellatrix, Capella, Deneb),
     variant_attributes(
         derive(Debug, Clone, Serialize, PartialEq, Deserialize, Encode, Decode,),
         serde(deny_unknown_fields),
@@ -29,6 +29,8 @@ pub struct LightClientBootstrap {
     #[superstruct(only(Bellatrix), partial_getter(rename = "header_bellatrix"))]
     pub header: LightClientHeaderBellatrix,
     #[superstruct(only(Capella), partial_getter(rename = "header_capella"))]
+    pub header: LightClientHeaderCapella,
+    #[superstruct(only(Deneb), partial_getter(rename = "header_deneb"))]
     pub header: LightClientHeaderCapella,
     /// Current sync committee corresponding to `header.beacon.state_root`
     pub current_sync_committee: SyncCommittee,
@@ -44,6 +46,7 @@ impl LightClientBootstrap {
             ForkName::Capella => {
                 LightClientBootstrapCapella::from_ssz_bytes(bytes).map(Self::Capella)
             }
+            ForkName::Deneb => LightClientBootstrapDeneb::from_ssz_bytes(bytes).map(Self::Deneb),
         }
     }
 }

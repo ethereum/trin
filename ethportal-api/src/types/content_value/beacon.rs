@@ -1,4 +1,8 @@
 use crate::{
+    light_client::{
+        bootstrap::LightClientBootstrapDeneb, finality_update::LightClientFinalityUpdateDeneb,
+        optimistic_update::LightClientOptimisticUpdateDeneb, update::LightClientUpdateDeneb,
+    },
     types::{
         consensus::{
             fork::{ForkDigest, ForkName},
@@ -45,6 +49,15 @@ impl From<LightClientBootstrapCapella> for ForkVersionedLightClientBootstrap {
     }
 }
 
+impl From<LightClientBootstrapDeneb> for ForkVersionedLightClientBootstrap {
+    fn from(bootstrap: LightClientBootstrapDeneb) -> Self {
+        Self {
+            fork_name: ForkName::Deneb,
+            bootstrap: LightClientBootstrap::Deneb(bootstrap),
+        }
+    }
+}
+
 impl ForkVersionedLightClientBootstrap {
     pub fn encode(&self) -> Vec<u8> {
         let fork_digest = self.fork_name.as_fork_digest();
@@ -69,6 +82,9 @@ impl ForkVersionedLightClientBootstrap {
             ForkName::Capella => LightClientBootstrap::Capella(
                 LightClientBootstrapCapella::from_ssz_bytes(&bytes[4..])?,
             ),
+            ForkName::Deneb => {
+                LightClientBootstrap::Deneb(LightClientBootstrapDeneb::from_ssz_bytes(&bytes[4..])?)
+            }
         };
 
         Ok(Self {
@@ -132,6 +148,9 @@ impl ForkVersionedLightClientUpdate {
             ),
             ForkName::Capella => {
                 LightClientUpdate::Capella(LightClientUpdateCapella::from_ssz_bytes(&bytes[4..])?)
+            }
+            ForkName::Deneb => {
+                LightClientUpdate::Deneb(LightClientUpdateDeneb::from_ssz_bytes(&bytes[4..])?)
             }
         };
 
@@ -236,6 +255,15 @@ impl From<LightClientOptimisticUpdateCapella> for ForkVersionedLightClientOptimi
     }
 }
 
+impl From<LightClientOptimisticUpdateDeneb> for ForkVersionedLightClientOptimisticUpdate {
+    fn from(update: LightClientOptimisticUpdateDeneb) -> Self {
+        Self {
+            fork_name: ForkName::Deneb,
+            update: LightClientOptimisticUpdate::Deneb(update),
+        }
+    }
+}
+
 impl ForkVersionedLightClientOptimisticUpdate {
     fn encode(&self) -> Vec<u8> {
         let fork_digest = self.fork_name.as_fork_digest();
@@ -260,6 +288,9 @@ impl ForkVersionedLightClientOptimisticUpdate {
             ),
             ForkName::Capella => LightClientOptimisticUpdate::Capella(
                 LightClientOptimisticUpdateCapella::from_ssz_bytes(&buf[4..])?,
+            ),
+            ForkName::Deneb => LightClientOptimisticUpdate::Deneb(
+                LightClientOptimisticUpdateDeneb::from_ssz_bytes(&buf[4..])?,
             ),
         };
 
@@ -309,6 +340,14 @@ impl From<LightClientFinalityUpdateCapella> for ForkVersionedLightClientFinality
         }
     }
 }
+impl From<LightClientFinalityUpdateDeneb> for ForkVersionedLightClientFinalityUpdate {
+    fn from(update: LightClientFinalityUpdateDeneb) -> Self {
+        Self {
+            fork_name: ForkName::Deneb,
+            update: LightClientFinalityUpdate::Deneb(update),
+        }
+    }
+}
 
 impl ForkVersionedLightClientFinalityUpdate {
     fn encode(&self) -> Vec<u8> {
@@ -334,6 +373,9 @@ impl ForkVersionedLightClientFinalityUpdate {
             ),
             ForkName::Capella => LightClientFinalityUpdate::Capella(
                 LightClientFinalityUpdateCapella::from_ssz_bytes(&buf[4..])?,
+            ),
+            ForkName::Deneb => LightClientFinalityUpdate::Deneb(
+                LightClientFinalityUpdateDeneb::from_ssz_bytes(&buf[4..])?,
             ),
         };
 

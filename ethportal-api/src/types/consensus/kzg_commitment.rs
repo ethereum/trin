@@ -1,3 +1,4 @@
+use crate::utils::bytes::{hex_decode, hex_encode};
 use c_kzg::BYTES_PER_COMMITMENT;
 use ethereum_hashing::hash_fixed;
 use serde::{
@@ -91,48 +92,56 @@ impl FromStr for KzgCommitment {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if let Some(stripped) = s.strip_prefix("0x") {
-            let bytes = hex::decode(stripped).map_err(|e| e.to_string())?;
-            if bytes.len() == BYTES_PER_COMMITMENT {
-                let mut kzg_commitment_bytes = [0; BYTES_PER_COMMITMENT];
-                kzg_commitment_bytes[..].copy_from_slice(&bytes);
-                Ok(Self(kzg_commitment_bytes))
-            } else {
-                Err(format!(
-                    "InvalidByteLength: got {}, expected {}",
-                    bytes.len(),
-                    BYTES_PER_COMMITMENT
-                ))
-            }
+        let bytes = hex_decode(s).map_err(|e| e.to_string())?;
+        if bytes.len() == BYTES_PER_COMMITMENT {
+            let mut kzg_commitment_bytes = [0; BYTES_PER_COMMITMENT];
+            kzg_commitment_bytes[..].copy_from_slice(&bytes);
+            Ok(Self(kzg_commitment_bytes))
         } else {
-            Err("must start with 0x".to_string())
+            Err(format!(
+                "InvalidByteLength: got {}, expected {}",
+                bytes.len(),
+                BYTES_PER_COMMITMENT
+            ))
         }
     }
 }
 
 impl Debug for KzgCommitment {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", serde_utils::hex::encode(self.0))
+        write!(f, "{}", hex_encode(self.0))
     }
 }
 
-#[test]
-fn kzg_commitment_display() {
-    let display_commitment_str = "0x53fa…adac";
-    let display_commitment = KzgCommitment::from_str(
-        "0x53fa09af35d1d1a9e76f65e16112a9064ce30d1e4e2df98583f0f5dc2e7dd13a4f421a9c89f518fafd952df76f23adac",
-    )
-        .unwrap()
-        .to_string();
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod test {
+    use super::*;
 
-    assert_eq!(display_commitment, display_commitment_str);
-}
+    const COMMITMENT_STR: &str = "0x53fa09af35d1d1a9e76f65e16112a9064ce30d1e4e2df98583f0f5dc2e7dd13a4f421a9c89f518fafd952df76f23adac";
 
-#[test]
-fn kzg_commitment_debug() {
-    let debug_commitment_str =
-        "0x53fa09af35d1d1a9e76f65e16112a9064ce30d1e4e2df98583f0f5dc2e7dd13a4f421a9c89f518fafd952df76f23adac";
-    let debug_commitment = KzgCommitment::from_str(debug_commitment_str).unwrap();
+    #[test]
+    fn kzg_commitment_display() {
+        let display_commitment_str = "0x53fa…adac";
+        let display_commitment = KzgCommitment::from_str(COMMITMENT_STR).unwrap().to_string();
 
-    assert_eq!(format!("{debug_commitment:?}"), debug_commitment_str);
+        assert_eq!(display_commitment, display_commitment_str);
+    }
+
+    #[test]
+    fn kzg_commitment_debug() {
+        let debug_commitment_str = COMMITMENT_STR;
+        let debug_commitment = KzgCommitment::from_str(debug_commitment_str).unwrap();
+
+        assert_eq!(format!("{debug_commitment:?}"), debug_commitment_str);
+    }
+
+    #[test]
+    fn kzg_commitment_tree_hash_root() {
+        let commitment = KzgCommitment::from_str(COMMITMENT_STR).unwrap();
+        let root = commitment.tree_hash_root();
+        let expected_root = commitment.0.tree_hash_root();
+
+        assert_eq!(root, expected_root);
+    }
 }

@@ -4,8 +4,8 @@ use async_trait::async_trait;
 use ethportal_api::{
     consensus::light_client::bootstrap::LightClientBootstrap,
     light_client::{
-        bootstrap::LightClientBootstrapCapella, finality_update::LightClientFinalityUpdateCapella,
-        optimistic_update::LightClientOptimisticUpdateCapella, update::LightClientUpdateCapella,
+        bootstrap::LightClientBootstrapDeneb, finality_update::LightClientFinalityUpdateDeneb,
+        optimistic_update::LightClientOptimisticUpdateDeneb, update::LightClientUpdateDeneb,
     },
     types::{
         consensus::light_client::{
@@ -45,7 +45,7 @@ impl ConsensusRpc for PortalRpc {
     async fn get_bootstrap(
         &self,
         block_root: &'_ [u8],
-    ) -> anyhow::Result<LightClientBootstrapCapella> {
+    ) -> anyhow::Result<LightClientBootstrapDeneb> {
         let bootstrap_key = BeaconContentKey::LightClientBootstrap(LightClientBootstrapKey {
             block_hash: <[u8; 32]>::try_from(block_root)?,
         });
@@ -76,12 +76,10 @@ impl ConsensusRpc for PortalRpc {
                     }
                 };
                 if let BeaconContentValue::LightClientBootstrap(bootstrap) = bootstrap {
-                    if let LightClientBootstrap::Capella(bootstrap_capella) = bootstrap.bootstrap {
-                        Ok(bootstrap_capella)
+                    if let LightClientBootstrap::Deneb(bootstrap_deneb) = bootstrap.bootstrap {
+                        Ok(bootstrap_deneb)
                     } else {
-                        bail!(
-                            "Error converting LightClientBootstrap to LightClientBootstrapCapella"
-                        )
+                        bail!("Error converting LightClientBootstrap to LightClientBootstrapDeneb")
                     }
                 } else {
                     bail!("Error converting BeaconContentValue to LightClientBootstrap");
@@ -102,7 +100,7 @@ impl ConsensusRpc for PortalRpc {
         &self,
         period: u64,
         count: u8,
-    ) -> anyhow::Result<Vec<LightClientUpdateCapella>> {
+    ) -> anyhow::Result<Vec<LightClientUpdateDeneb>> {
         let updates_key =
             BeaconContentKey::LightClientUpdatesByRange(LightClientUpdatesByRangeKey {
                 start_period: period,
@@ -135,21 +133,21 @@ impl ConsensusRpc for PortalRpc {
                     }
                 };
                 if let BeaconContentValue::LightClientUpdatesByRange(updates) = content_value {
-                    let capella_updates: Vec<LightClientUpdate> = updates
+                    let deneb_updates: Vec<LightClientUpdate> = updates
                         .as_ref()
                         .iter()
                         .map(|update| update.update.clone())
                         .collect();
 
-                    let mut result: Vec<LightClientUpdateCapella> = Vec::new();
+                    let mut result: Vec<LightClientUpdateDeneb> = Vec::new();
 
-                    for update in capella_updates {
-                        // Check if updates is LightLCientUpdateCapella
-                        if let LightClientUpdate::Capella(update_capella) = update {
-                            result.push(update_capella);
+                    for update in deneb_updates {
+                        // Check if updates is LightLCientUpdateDeneb
+                        if let LightClientUpdate::Deneb(update_deneb) = update {
+                            result.push(update_deneb);
                         } else {
                             return Err(anyhow!(
-                                "Error converting LightClientUpdate to LightClientUpdateCapella"
+                                "Error converting LightClientUpdate to LightClientUpdateDeneb"
                             ));
                         }
                     }
@@ -171,10 +169,7 @@ impl ConsensusRpc for PortalRpc {
         }
     }
 
-    async fn get_finality_update(&self) -> anyhow::Result<LightClientFinalityUpdateCapella> {
-        let expected_current_slot = expected_current_slot();
-        let recent_epoch_start = expected_current_slot - (expected_current_slot % 32) + 1;
-
+    async fn get_finality_update(&self) -> anyhow::Result<LightClientFinalityUpdateDeneb> {
         // Get the finality update for the most recent finalized epoch. We use 0 as the finalized
         // slot because the finalized slot is not known at this point and the protocol is
         // designed to return the most recent which is > 0
@@ -205,19 +200,19 @@ impl ConsensusRpc for PortalRpc {
                 let finality_update = match result {
                     Ok(result) => BeaconContentValue::decode(&result.0)?,
                     Err(err) => {
-                        return Err(anyhow!("LightClientFinalityUpdate content with finalized slot {recent_epoch_start} not found on the network: {err}"));
+                        return Err(anyhow!("LightClientFinalityUpdate content with finalized slot 0 not found on the network: {err}"));
                     }
                 };
                 if let BeaconContentValue::LightClientFinalityUpdate(finality_update) =
                     finality_update
                 {
-                    if let LightClientFinalityUpdate::Capella(finality_update_capella) =
+                    if let LightClientFinalityUpdate::Deneb(finality_update_deneb) =
                         finality_update.update
                     {
-                        Ok(finality_update_capella)
+                        Ok(finality_update_deneb)
                     } else {
                         return Err(anyhow!(
-                            "Error converting LightClientFinalityUpdate to LightClientFinalityUpdateCapella"
+                            "Error converting LightClientFinalityUpdate to LightClientFinalityUpdateDeneb"
                         ));
                     }
                 } else {
@@ -237,7 +232,7 @@ impl ConsensusRpc for PortalRpc {
         }
     }
 
-    async fn get_optimistic_update(&self) -> anyhow::Result<LightClientOptimisticUpdateCapella> {
+    async fn get_optimistic_update(&self) -> anyhow::Result<LightClientOptimisticUpdateDeneb> {
         let expected_current_slot = expected_current_slot();
         let optimistic_update_key =
             BeaconContentKey::LightClientOptimisticUpdate(LightClientOptimisticUpdateKey {
@@ -272,13 +267,13 @@ impl ConsensusRpc for PortalRpc {
                 if let BeaconContentValue::LightClientOptimisticUpdate(optimistic_update) =
                     optimistic_update
                 {
-                    if let LightClientOptimisticUpdate::Capella(optimistic_update_capella) =
+                    if let LightClientOptimisticUpdate::Deneb(optimistic_update_deneb) =
                         optimistic_update.update
                     {
-                        Ok(optimistic_update_capella)
+                        Ok(optimistic_update_deneb)
                     } else {
                         return Err(anyhow!(
-                            "Error converting LightClientOptimisticUpdate to LightClientOptimisticUpdateCapella"
+                            "Error converting LightClientOptimisticUpdate to LightClientOptimisticUpdateDeneb"
                         ));
                     }
                 } else {

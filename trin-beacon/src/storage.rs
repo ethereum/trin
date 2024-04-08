@@ -77,7 +77,7 @@ impl BeaconStorageCache {
             // requested slot.
             if finality_update
                 .update
-                .finalized_header_capella()
+                .finalized_header_deneb()
                 .ok()?
                 .beacon
                 .slot
