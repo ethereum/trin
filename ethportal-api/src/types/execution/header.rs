@@ -146,6 +146,53 @@ impl Encodable for Header {
         header.encode(out);
         out.put_slice(list.as_slice());
     }
+
+    fn length(&self) -> usize {
+        let mut length = 0;
+        length += self.parent_hash.length();
+        length += self.uncles_hash.length();
+        length += self.author.length();
+        length += self.state_root.length();
+        length += self.transactions_root.length();
+        length += self.receipts_root.length();
+        length += self.logs_bloom.length();
+        length += self.difficulty.length();
+        length += U256::from(self.number).length();
+        length += U256::from(self.gas_limit).length();
+        length += U256::from(self.gas_used).length();
+        length += self.timestamp.length();
+        length += self.extra_data.length();
+
+        if let Some(mix_hash) = self.mix_hash {
+            length += mix_hash.length();
+        }
+
+        if let Some(nonce) = self.nonce {
+            length += B64::new(nonce.0).length();
+        }
+
+        if let Some(base_fee) = self.base_fee_per_gas {
+            length += base_fee.length();
+        }
+
+        if let Some(root) = self.withdrawals_root {
+            length += root.length();
+        }
+
+        if let Some(blob_gas_used) = self.blob_gas_used {
+            length += U256::from(blob_gas_used).length();
+        }
+
+        if let Some(excess_blob_gas) = self.excess_blob_gas {
+            length += U256::from(excess_blob_gas).length();
+        }
+
+        if let Some(parent_beacon_block_root) = self.parent_beacon_block_root {
+            length += parent_beacon_block_root.length();
+        }
+
+        alloy_rlp::length_of_length(length) + length
+    }
 }
 
 impl Decodable for Header {

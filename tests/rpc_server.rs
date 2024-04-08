@@ -164,8 +164,15 @@ async fn test_eth_get_block_by_hash() {
     assert_eq!(block.gas_limit, gas_limit);
     assert_eq!(block.difficulty, difficulty);
     assert_eq!(block.timestamp, timestamp);
-    assert_eq!(block.size, None);
     assert_eq!(block.transactions.len(), shanghai_body.txs.len());
+    assert_eq!(
+        block
+            .withdrawals
+            .expect("withdrawals must be present")
+            .len(),
+        shanghai_body.withdrawals.len()
+    );
+    assert_eq!(block.size, Some(U256::from(37890)));
 
     // Spot check a few transaction hashes:
     // First tx

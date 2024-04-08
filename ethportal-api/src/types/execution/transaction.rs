@@ -24,12 +24,21 @@ impl Transaction {
         keccak256(alloy_rlp::encode(self))
     }
 
+    pub fn field_len(&self) -> usize {
+        match self {
+            Self::Legacy(tx) => tx.fields_len(),
+            Self::AccessList(tx) => tx.fields_len(),
+            Self::EIP1559(tx) => tx.fields_len(),
+            Self::Blob(tx) => tx.fields_len(),
+        }
+    }
+
     pub fn encode_with_envelope(&self, out: &mut dyn bytes::BufMut, with_header: bool) {
         match self {
             Self::Legacy(tx) => tx.encode(out),
             Self::AccessList(tx) => {
-                let payload_length = tx.fields_len();
                 if with_header {
+                    let payload_length = tx.fields_len();
                     RlpHeader {
                         list: false,
                         payload_length: 1 + length_of_length(payload_length) + payload_length,
@@ -40,8 +49,8 @@ impl Transaction {
                 tx.encode(out);
             }
             Self::EIP1559(tx) => {
-                let payload_length = tx.fields_len();
                 if with_header {
+                    let payload_length = tx.fields_len();
                     RlpHeader {
                         list: false,
                         payload_length: 1 + length_of_length(payload_length) + payload_length,
@@ -52,8 +61,8 @@ impl Transaction {
                 tx.encode(out);
             }
             Self::Blob(tx) => {
-                let payload_length = tx.fields_len();
                 if with_header {
+                    let payload_length = tx.fields_len();
                     RlpHeader {
                         list: false,
                         payload_length: 1 + length_of_length(payload_length) + payload_length,
@@ -100,6 +109,18 @@ impl Transaction {
 impl Encodable for Transaction {
     fn encode(&self, out: &mut dyn bytes::BufMut) {
         self.encode_with_envelope(out, false)
+    }
+
+    fn length(&self) -> usize {
+        let length = self.field_len();
+        let length = match &self {
+            Transaction::Legacy(_) => length,
+            Transaction::AccessList(_) | Transaction::EIP1559(_) | Transaction::Blob(_) => {
+                1 + length_of_length(length) + length
+            }
+        };
+
+        length_of_length(length) + length
     }
 }
 
@@ -555,4 +576,152 @@ impl Encodable for AccessList {
 pub struct AccessListItem {
     pub address: Address,
     pub storage_keys: Vec<B256>,
+}
+
+#[cfg(test)]
+mod test {
+    use crate::utils::bytes::hex_encode;
+
+    use super::*;
+
+    #[test]
+    fn legacy_encode_decode() {
+        let tx = Transaction::Legacy(LegacyTransaction {
+            nonce: 0x18.try_into().unwrap(),
+            gas_price: 0xfa56ea00u64.try_into().unwrap(),
+            gas: 119902.try_into().unwrap(),
+            to: ToAddress::Exists(Address::from_slice(&hex_decode("0x06012c8cf97bead5deae237070f9587f8e7a266d").unwrap())),
+            value: U256::from(0x1c6bf526340000u64),
+            data: hex_decode("0xf7d8c88300000000000000000000000000000000000000000000000000000000000cee6100000000000000000000000000000000000000000000000000000000000ac3e1").unwrap().into(),
+            v: 37.try_into().unwrap(),
+            r: U256::from_be_bytes::<32>(hex_decode("0x2a378831cf81d99a3f06a18ae1b6ca366817ab4d88a70053c41d7a8f0368e031").unwrap().try_into().unwrap()),
+            s: U256::from_be_bytes::<32>(hex_decode("0x450d831a05b6e418724436c05c155e0a1b7b921015d0fbc2f667aed709ac4fb5").unwrap().try_into().unwrap()),
+        });
+        let expected_hash = B256::from_slice(
+            &hex_decode("0xbb3a336e3f823ec18197f1e13ee875700f08f03e2cab75f0d0b118dabb44cba0")
+                .unwrap(),
+        );
+
+        let buf = alloy_rlp::encode(&tx);
+
+        let hash = keccak256(&buf);
+
+        let decoded = Transaction::decode(&mut &buf[..]).unwrap();
+
+        assert_eq!(tx, decoded);
+        assert_eq!(expected_hash, hash);
+    }
+
+    #[test]
+    fn access_list_encode_decode() {
+        let tx = Transaction::AccessList(AccessListTransaction {
+            chain_id: 0x1.try_into().unwrap(),
+            nonce: 0xbc985.try_into().unwrap(),
+            gas_price: 0x84d119895u64.try_into().unwrap(),
+            gas_limit: 0x7a120.try_into().unwrap(),
+            to: ToAddress::Exists(Address::from_slice(
+                &hex_decode("0xb50f27bd6e1e19365e9e843dc3db376808f85747").unwrap(),
+            )),
+            value: 0x244469b75a8000u128.try_into().unwrap(),
+            data: "".into(),
+            access_list: AccessList::default(),
+            y_parity: 0.try_into().unwrap(),
+            r: U256::from_be_bytes::<32>(
+                hex_decode("0xb222efdbd94f45a88d0ce92031a7ccb546a4859384f65e371b566a4646b2fdd9")
+                    .unwrap()
+                    .try_into()
+                    .unwrap(),
+            ),
+            s: U256::from_be_bytes::<32>(
+                hex_decode("0x02721bbcd7dcb3cca3b023b4dc67f23aa2de1d4efe8e8d36b5e422b355da0912")
+                    .unwrap()
+                    .try_into()
+                    .unwrap(),
+            ),
+        });
+
+        let expected_hash = B256::from_slice(
+            &hex_decode("0xd7d37adcf13d2af706dd33432798be898d9324f01c8100c5cc73c1985c89a5af")
+                .unwrap(),
+        );
+
+        let buf = alloy_rlp::encode(&tx);
+        let hash = keccak256(&buf);
+
+        let decoded = Transaction::decode(&mut &buf[..]).unwrap();
+        assert_eq!(tx, decoded);
+        assert_eq!(hash, expected_hash);
+    }
+
+    #[test]
+    fn eip1559_encode_decode() {
+        let tx = Transaction::EIP1559(EIP1559Transaction {
+            chain_id: 1.try_into().unwrap(),
+            nonce: 0x42.try_into().unwrap(),
+            gas_limit: 44386.try_into().unwrap(),
+            to: ToAddress::Exists(Address::from_slice(&hex_decode("0x6069a6c32cf691f5982febae4faf8a6f3ab2f0f6").unwrap())),
+            value: U256::ZERO,
+            data: Bytes::from(hex_decode("0xa22cb4650000000000000000000000005eee75727d804a2b13038928d36f8b188945a57a0000000000000000000000000000000000000000000000000000000000000000").unwrap()),
+            max_fee_per_gas: 0x4a817c800u64.try_into().unwrap(),
+            max_priority_fee_per_gas: 0x3b9aca00u64.try_into().unwrap(),
+            access_list: AccessList::default(),
+            r: U256::from_be_bytes::<32>(hex_decode("0x840cfc572845f5786e702984c2a582528cad4b49b2a10b9db1be7fca90058565").unwrap().try_into().unwrap()),
+            s: U256::from_be_bytes::<32>(hex_decode("0x25e7109ceb98168d95b09b18bbf6b685130e0562f233877d492b94eee0c5b6d1").unwrap().try_into().unwrap()),
+            y_parity: 0x0.try_into().unwrap(),
+        });
+
+        let expected_hash: alloy_primitives::FixedBytes<32> = B256::from_slice(
+            &hex_decode("0x0ec0b6a2df4d87424e5f6ad2a654e27aaeb7dac20ae9e8385cc09087ad532ee0")
+                .unwrap(),
+        );
+
+        let buf = alloy_rlp::encode(&tx);
+        println!("{:?}", hex_encode(&buf));
+        let hash = keccak256(&buf);
+
+        let decoded = Transaction::decode(&mut &buf[..]).unwrap();
+        assert_eq!(tx, decoded);
+        assert_eq!(hash, expected_hash);
+    }
+
+    #[test]
+    fn blob_encode_decode() {
+        let tx = Transaction::Blob(BlobTransaction {
+            chain_id: 1.try_into().unwrap(),
+            nonce: 0xb377.try_into().unwrap(),
+            max_priority_fee_per_gas: 0x59055e5eu64.try_into().unwrap(),
+            max_fee_per_gas: 0xd09dc3000u128.try_into().unwrap(),
+            gas_limit: 0x4c4b40.try_into().unwrap(),
+            to: ToAddress::Exists(Address::from_slice(
+                &hex_decode("0xd19d4b5d358258f05d7b411e21a1460d11b0876f").unwrap(),
+            )),
+            value: 0x0.try_into().unwrap(),
+            data: Bytes::from(hex_decode("0x2d3c12e5014ee50a775d52d6c2a237c019eea1c0e2656431fbfaf770b71ecccb27b4d1310133ebfb09d965bb16608165012a4d6a381ef24d9acfcafc6e1548ab837664b201c578547a356e041e636b785b13c94fc897ce059b73ad15701cda1f60e4518e000000000000000000000000000000000000000000000000000000000035b54c000000000000000000000000000000000000000000000000000000000035b59c04f7c2b7e0cffebe50b9db5d7deaae8e8d490a4997e49fbd09405d2408015a013ebd7fee0628a625b655c48aca89db9b0b9310ee9c951cdac1dcef5afe3695d300000000000000000000000000000000000000000000000000000000000001200000000000000000000000000000000000000000000000000000000000000180000000000000000000000000000000000000000000000000000000000000003081ea4cd121164b0cfab3e36b38466f002574ffbe995eeccdf275ef22cec9fbddc94de069d2bf7ebc4a4a2ba91a8c86ac000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000030ae3a3ee976de41aa9abbbfba1f9a78a93d8ed351406ea207f5c1f766ccaee118bca5ff293e0ccb0d222fbfced41cf2da00000000000000000000000000000000").unwrap()),
+            access_list: Default::default(),
+            max_fee_per_blob_gas: 0xd09dc3000u128.try_into().unwrap(),
+            blob_versioned_hashes: vec![B256::from_slice(
+                &hex_decode("0x019903b23ce40774be59b6075368a4d0c020a0a5af6d620654d3ca31e46b91af").unwrap(),
+            )],
+            y_parity: 1.try_into().unwrap(),
+            r: U256::from_be_bytes::<32>(
+                hex_decode("0x3ebfa3874956fe8ac3016838de2e742abc2f5b301df3f1ab91e7ed6d3e708ddd")
+                    .unwrap()
+                    .try_into()
+                    .unwrap()),
+            s: U256::from_be_bytes::<32>(
+                hex_decode("0x2d6354ee6d39fce2c0602bef8766161498b69d52e29abd5acf1d838cbde339dc").unwrap().try_into().unwrap())
+        });
+
+        let expected_hash = B256::from_slice(
+            &hex_decode("0x028b71a298242d2c6edf64d6e15baccbe21d173016d0de7e5a828fd283d5fc4f")
+                .unwrap(),
+        );
+
+        let buf = alloy_rlp::encode(&tx);
+        let hash = keccak256(&buf);
+
+        let decoded = Transaction::decode(&mut &buf[..]).unwrap();
+        assert_eq!(tx, decoded);
+        assert_eq!(hash, expected_hash);
+    }
 }

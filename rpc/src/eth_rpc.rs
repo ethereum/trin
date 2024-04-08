@@ -1,4 +1,7 @@
-use alloy_primitives::{B256, U256};
+use alloy_primitives::{
+    private::alloy_rlp::{length_of_length, Encodable},
+    B256, U256,
+};
 use reth_rpc_types::{other::OtherFields, Block, BlockTransactions};
 use tokio::sync::mpsc;
 
@@ -44,26 +47,35 @@ impl EthApiServer for EthApi {
 
         let header = find_header_by_hash(&self.network, block_hash).await?;
         let body = find_block_body_by_hash(&self.network, block_hash).await?;
-        let transactions = match body {
-            BlockBody::Legacy(body) => body.txs,
-            BlockBody::Merge(body) => body.txs,
-            BlockBody::Shanghai(body) => body.txs,
+        let (transactions, withdrawals) = match body {
+            BlockBody::Legacy(body) => (body.txs, None),
+            BlockBody::Merge(body) => (body.txs, None),
+            BlockBody::Shanghai(body) => (body.txs, Some(body.withdrawals)),
         };
+
+        let uncles = vec![];
+        let size = header.length()
+            + transactions.length()
+            + withdrawals.as_ref().map(|w| w.length()).unwrap_or_default()
+            + uncles.length();
+        let size = size + length_of_length(size);
+
         let transactions = BlockTransactions::Hashes(
             transactions
                 .into_iter()
                 .map(|tx| tx.hash().0.into())
                 .collect(),
         );
+        let withdrawals = withdrawals.map(|w| w.into_iter().map(Into::into).collect());
 
         // Combine header and block body into the single json representation of the block.
         let block = Block {
             header: header.into(),
             transactions,
-            uncles: vec![],
-            size: None,
+            uncles,
+            size: Some(U256::from(size)),
             other: OtherFields::default(),
-            withdrawals: None,
+            withdrawals,
         };
         Ok(block)
     }
