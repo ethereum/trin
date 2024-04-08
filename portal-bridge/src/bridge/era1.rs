@@ -81,10 +81,13 @@ impl Era1Bridge {
         info!("Launching era1 bridge: {:?}", self.mode);
         match self.mode.clone() {
             BridgeMode::FourFours(FourFoursMode::Random) => self.launch_random().await,
-            BridgeMode::FourFours(FourFoursMode::RandomSingle) => self.launch_single(None).await,
-            BridgeMode::FourFours(FourFoursMode::Single(epoch)) => {
-                self.launch_single(Some(epoch)).await
+            BridgeMode::FourFours(FourFoursMode::RandomSingle) => {
+                self.launch_random_single(None).await
             }
+            BridgeMode::FourFours(FourFoursMode::RandomSingleWithFloor(floor)) => {
+                self.launch_random_single(Some(floor)).await
+            }
+            BridgeMode::FourFours(FourFoursMode::Single(epoch)) => self.launch_single(epoch).await,
             BridgeMode::FourFours(FourFoursMode::Range(start, end)) => {
                 self.launch_range(start, end).await;
             }
@@ -93,26 +96,47 @@ impl Era1Bridge {
         info!("Bridge mode: {:?} complete.", self.mode);
     }
 
-    pub async fn launch_random(&self) {
+    async fn launch_random(&self) {
         for era1_path in self.era1_files.clone().into_iter() {
             self.gossip_era1(era1_path, None).await;
         }
     }
 
-    pub async fn launch_single(&self, epoch: Option<u64>) {
+    async fn launch_single(&self, epoch: u64) {
+        let era1_path = self
+            .era1_files
+            .clone()
+            .into_iter()
+            .find(|file| file.contains(&format!("mainnet-{epoch:05}-")))
+            .expect("to be able to find era1 file");
+        self.gossip_era1(era1_path, None).await;
+    }
+
+    async fn launch_random_single(&self, floor: Option<u64>) {
         let mut era1_files = self.era1_files.clone().into_iter();
-        let era1_path = match epoch {
-            Some(epoch) => era1_files
-                .find(|file| file.contains(&format!("mainnet-{epoch:05}-")))
-                .expect("to be able to find era1 file for requested epoch"),
-            None => era1_files
+        let era1_path = loop {
+            let era1_file = era1_files
                 .next()
-                .expect("to be able to get first era1 file"),
+                .expect("to be able to get first era1 file");
+            let epoch = era1_file
+                .split('-')
+                .nth(1)
+                .expect("to be able to get epoch from era1 file")
+                .parse::<u64>()
+                .expect("to be able to parse epoch from era1 file");
+            match floor {
+                Some(floor) => {
+                    if epoch >= floor {
+                        break era1_file;
+                    }
+                }
+                None => break era1_file,
+            }
         };
         self.gossip_era1(era1_path, None).await;
     }
 
-    pub async fn launch_range(&self, start: u64, end: u64) {
+    async fn launch_range(&self, start: u64, end: u64) {
         let epoch = start / EPOCH_SIZE as u64;
         let era1_path =
             self.era1_files.clone().into_iter().find(|file| {
@@ -125,7 +149,7 @@ impl Era1Bridge {
         }
     }
 
-    pub async fn gossip_era1(&self, era1_path: String, gossip_range: Option<Range<u64>>) {
+    async fn gossip_era1(&self, era1_path: String, gossip_range: Option<Range<u64>>) {
         info!("Processing era1 file at path: {era1_path:?}");
         // We are using a semaphore to limit the amount of active gossip transfers to make sure
         // we don't overwhelm the trin client

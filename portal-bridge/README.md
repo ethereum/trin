@@ -34,6 +34,7 @@ Current options include `"trin"` / `"fluffy"`.
 - `"--mode single:e100"`: gossip a single epoch #100
 - `"--mode fourfours`: will randomly select era1 files from `era1.ethportal.net` and gossip them
 - `"--mode fourfours:random_epoch"`: will randomly select a single era1 file from `era1.ethportal.net` and then gossip it
+- `"--mode fourfours:random_epoch:100"`: will randomly select a single era1 file from `era1.ethportal.net` that represents an epoch number greater than the floor provided and then gossip it
 - `"--mode fourfours:e600`: will select era1 file 600 from `era1.ethportal.net` and gossip it
 - `"--mode fourfours:r100-200`: will gossip a block range from an era1 file, range must be from the same epoch
 

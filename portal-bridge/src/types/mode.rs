@@ -169,6 +169,8 @@ pub enum FourFoursMode {
     Random,
     // Gossips a single, randomly selected epoch
     RandomSingle,
+    // Gossips a single, randomly selected epoch, with a floor epoch
+    RandomSingleWithFloor(u64),
     // Gossips the single epoch given
     Single(u64),
     // Gossips a block range from within a single epoch
@@ -183,8 +185,19 @@ impl FromStr for FourFoursMode {
         if s.is_empty() {
             return Err("Invalid bridge fourfours mode arg: empty string".to_string());
         }
-        if s == RANDOM_SINGLE_MODE {
-            return Ok(FourFoursMode::RandomSingle);
+        if s.starts_with(RANDOM_SINGLE_MODE) {
+            match s.split(':').nth(1) {
+                Some(floor_epoch) => {
+                    let floor_epoch = floor_epoch
+                        .parse()
+                        .map_err(|_| "Invalid 4444s bridge mode arg: floor epoch number")?;
+                    if floor_epoch > 1896 {
+                        return Err(format!("Invalid 4444s bridge mode arg: era1 epoch greater than 1896 was given: {floor_epoch}"));
+                    }
+                    return Ok(FourFoursMode::RandomSingleWithFloor(floor_epoch));
+                }
+                None => return Ok(FourFoursMode::RandomSingle),
+            }
         }
         match &s[..1] {
             "e" => {
@@ -257,6 +270,12 @@ mod test {
     #[case(format!("fourfours:{RANDOM_SINGLE_MODE}"), 
         BridgeMode::FourFours(FourFoursMode::RandomSingle)
     )]
+    #[case(format!("fourfours:{RANDOM_SINGLE_MODE}:0"), 
+        BridgeMode::FourFours(FourFoursMode::RandomSingleWithFloor(0))
+    )]
+    #[case(format!("fourfours:{RANDOM_SINGLE_MODE}:1500"), 
+        BridgeMode::FourFours(FourFoursMode::RandomSingleWithFloor(1500))
+    )]
     #[case("fourfours:e1", BridgeMode::FourFours(FourFoursMode::Single(1)))]
     #[case("fourfours:r1-10", BridgeMode::FourFours(FourFoursMode::Range(1, 10)))]
     #[case(
@@ -288,6 +307,9 @@ mod test {
     #[case("fourfours:r1-10000")]
     // range is post-merge
     #[case("fourfours:r19000000-19000100")]
+    #[case("fourfours:random_epoch:")]
+    // epoch is post-merge
+    #[case("fourfours:random_epoch:1900")]
     fn test_invalid_mode_flag(#[case] actual: String) {
         let bridge_mode = BridgeMode::from_str(&actual);
         assert!(bridge_mode.is_err());
