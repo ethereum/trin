@@ -57,7 +57,7 @@ impl UtpController {
 
     /// Non-blocking method to try and acquire a permit for an outbound uTP transfer.
     // `try_acquire_owned()` isn't blocking and will instantly return with
-    // `Some(TryAcquireError::NoPermits)` error if there isn't a permit avaliable
+    // `Some(TryAcquireError::NoPermits)` error if there isn't a permit available
     pub fn get_outbound_semaphore(&self) -> Option<OwnedSemaphorePermit> {
         match self
             .outbound_utp_transfer_semaphore
@@ -71,7 +71,7 @@ impl UtpController {
 
     /// Non-blocking method to try and acquire a permit for an inbound uTP transfer.
     // `try_acquire_owned()` isn't blocking and will instantly return with
-    // `Some(TryAcquireError::NoPermits)` error if there isn't a permit avaliable
+    // `Some(TryAcquireError::NoPermits)` error if there isn't a permit available
     pub fn get_inbound_semaphore(&self) -> Option<OwnedSemaphorePermit> {
         match self
             .inbound_utp_transfer_semaphore

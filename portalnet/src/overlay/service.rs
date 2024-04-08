@@ -1006,9 +1006,9 @@ where
 
         // Attempt to get semaphore permit if fails we return an empty accept.
         // `get_inbound_semaphore()` isn't blocking and will instantly return with
-        // `None` if there isn't a permit avaliable.
+        // `None` if there isn't a permit available.
         // The reason we get the permit before checking if we can store it is because
-        // * checking if a semaphore is avaliable is basically free it doesn't block and will return
+        // * checking if a semaphore is available is basically free it doesn't block and will return
         //   instantly
         // * filling the `requested_keys` is expensive because it requires calls to disk which
         //   should be avoided.
