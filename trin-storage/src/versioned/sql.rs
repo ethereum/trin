@@ -67,7 +67,7 @@ pub fn create_usage_stats_triggers(
         FOR EACH ROW
         BEGIN
             UPDATE usage_stats
-            SET size = size - OLD.size + NEW.size
+            SET size = size - OLD.{entry_size_column} + NEW.{entry_size_column}
             WHERE content_type = '{content_type}';
         END;
 
