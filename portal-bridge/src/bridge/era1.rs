@@ -19,10 +19,7 @@ use trin_metrics::bridge::BridgeMetricsReporter;
 
 use crate::{
     api::execution::construct_proof,
-    bridge::{
-        history::{GOSSIP_LIMIT, SERVE_BLOCK_TIMEOUT},
-        utils::lookup_epoch_acc,
-    },
+    bridge::{history::SERVE_BLOCK_TIMEOUT, utils::lookup_epoch_acc},
     gossip::gossip_history_content,
     stats::{HistoryBlockStats, StatsReporter},
     types::{
@@ -50,6 +47,7 @@ pub struct Era1Bridge {
     pub era1_files: Vec<String>,
     pub http_client: Client,
     pub metrics: BridgeMetricsReporter,
+    pub gossip_limit: usize,
 }
 
 // todo: validate via checksum, so we don't have to validate content on a per-value basis
@@ -59,6 +57,7 @@ impl Era1Bridge {
         portal_clients: Vec<HttpClient>,
         header_oracle: HeaderOracle,
         epoch_acc_path: PathBuf,
+        gossip_limit: usize,
     ) -> anyhow::Result<Self> {
         let http_client: Client = Config::new()
             .add_header("Content-Type", "application/xml")
@@ -74,6 +73,7 @@ impl Era1Bridge {
             era1_files,
             http_client,
             metrics,
+            gossip_limit,
         })
     }
 
@@ -151,7 +151,7 @@ impl Era1Bridge {
         info!("Processing era1 file at path: {era1_path:?}");
         // We are using a semaphore to limit the amount of active gossip transfers to make sure
         // we don't overwhelm the trin client
-        let gossip_send_semaphore = Arc::new(Semaphore::new(GOSSIP_LIMIT));
+        let gossip_send_semaphore = Arc::new(Semaphore::new(self.gossip_limit));
 
         let raw_era1 = self
             .http_client

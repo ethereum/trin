@@ -34,7 +34,6 @@ use trin_validation::{
 const HEADER_SATURATION_DELAY: u64 = 10; // seconds
 const LATEST_BLOCK_POLL_RATE: u64 = 5; // seconds
 pub const EPOCH_SIZE: u64 = EPOCH_SIZE_USIZE as u64;
-pub const GOSSIP_LIMIT: usize = 32;
 pub const SERVE_BLOCK_TIMEOUT: Duration = Duration::from_secs(120);
 
 pub struct HistoryBridge {
@@ -44,6 +43,7 @@ pub struct HistoryBridge {
     pub header_oracle: HeaderOracle,
     pub epoch_acc_path: PathBuf,
     pub metrics: BridgeMetricsReporter,
+    pub gossip_limit: usize,
 }
 
 impl HistoryBridge {
@@ -53,6 +53,7 @@ impl HistoryBridge {
         portal_clients: Vec<HttpClient>,
         header_oracle: HeaderOracle,
         epoch_acc_path: PathBuf,
+        gossip_limit: usize,
     ) -> Self {
         let metrics = BridgeMetricsReporter::new("history".to_string(), &format!("{mode:?}"));
         Self {
@@ -62,6 +63,7 @@ impl HistoryBridge {
             header_oracle,
             epoch_acc_path,
             metrics,
+            gossip_limit,
         }
     }
 }
@@ -175,7 +177,7 @@ impl HistoryBridge {
 
         // We are using a semaphore to limit the amount of active gossip transfers to make sure we
         // don't overwhelm the trin client
-        let gossip_send_semaphore = Arc::new(Semaphore::new(GOSSIP_LIMIT));
+        let gossip_send_semaphore = Arc::new(Semaphore::new(self.gossip_limit));
 
         info!("fetching headers in range: {gossip_range:?}");
         let mut epoch_acc = None;

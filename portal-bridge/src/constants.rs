@@ -17,3 +17,6 @@ pub const BEACON_GENESIS_TIME: u64 = 1606824023;
 // This is a very conservative timeout if a provider takes longer than even 1 second it is probably
 // overloaded and not performing well
 pub const HTTP_REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
+
+// This is the maximum number of active blocks being gossiped
+pub const DEFAULT_GOSSIP_LIMIT: usize = 32;
