@@ -36,6 +36,7 @@ const LATEST_BLOCK_POLL_RATE: u64 = 5; // seconds
 pub const EPOCH_SIZE: u64 = EPOCH_SIZE_USIZE as u64;
 pub const GOSSIP_LIMIT: usize = 32;
 pub const SERVE_BLOCK_TIMEOUT: Duration = Duration::from_secs(120);
+pub const SERVE_CONTENT_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub struct HistoryBridge {
     pub mode: BridgeMode,
@@ -277,30 +278,54 @@ impl HistoryBridge {
         // Sleep for 10 seconds to allow headers to saturate network,
         // since they must be available for body / receipt validation.
         sleep(Duration::from_secs(HEADER_SATURATION_DELAY)).await;
-        let timer = metrics.start_process_timer("construct_and_gossip_block_body");
-        if let Err(msg) = HistoryBridge::construct_and_gossip_block_body(
-            &full_header,
-            &portal_clients,
-            &execution_api,
-            block_stats.clone(),
-        )
-        .await
-        {
-            warn!("Error gossiping block body #{height:?}: {msg:?}");
-        };
-        metrics.stop_process_timer(timer);
-        let timer = metrics.start_process_timer("construct_and_gossip_receipts");
-        if let Err(msg) = HistoryBridge::construct_and_gossip_receipt(
-            &full_header,
-            &portal_clients,
-            &execution_api,
-            block_stats.clone(),
-        )
-        .await
-        {
-            warn!("Error gossiping block receipt #{height:?}: {msg:?}");
-        };
-        metrics.stop_process_timer(timer);
+
+        let block_body_full_header = full_header.clone();
+        let block_body_portal_clients = portal_clients.clone();
+        let block_body_execution_api = execution_api.clone();
+        let block_body_block_stats = block_stats.clone();
+        let block_body_metrics = metrics.clone();
+        let serve_block_body_task = tokio::spawn(async move {
+            match timeout(
+                SERVE_CONTENT_TIMEOUT,
+                HistoryBridge::construct_and_gossip_block_body(
+                    &block_body_full_header,
+                    &block_body_portal_clients,
+                    &block_body_execution_api,
+                    block_body_block_stats,
+                    block_body_metrics,
+                ).in_current_span(),
+            )
+            .await {
+                Ok(result) => match result {
+                    Ok(_) => (),
+                    Err(msg) => warn!("Error gossiping block body #{height:?}: {msg:?}"),
+                },
+                Err(_) => error!("construct_and_gossip_block_body() timed out on height {height}: this is an indication a bug is present")
+            };
+        });
+        let receipt_block_stats = block_stats.clone();
+        let serve_receipt_task = tokio::spawn(async move {
+            match timeout(
+                SERVE_CONTENT_TIMEOUT,
+                HistoryBridge::construct_and_gossip_receipt(
+                    &full_header,
+                    &portal_clients,
+                    &execution_api,
+                    receipt_block_stats,
+                    metrics,
+                ).in_current_span(),
+            )
+            .await {
+                Ok(result) => match result {
+                    Ok(_) => (),
+                    Err(msg) => warn!("Error gossiping block receipt #{height:?}: {msg:?}"),
+                },
+                Err(_) => error!("construct_and_gossip_receipt() timed out on height {height}: this is an indication a bug is present")
+            };
+        });
+
+        serve_block_body_task.await?;
+        serve_receipt_task.await?;
         if let Ok(stats) = block_stats.lock() {
             stats.report();
         } else {
@@ -342,13 +367,18 @@ impl HistoryBridge {
         portal_clients: &Vec<HttpClient>,
         execution_api: &ExecutionApi,
         block_stats: Arc<Mutex<HistoryBlockStats>>,
+        metrics: BridgeMetricsReporter,
     ) -> anyhow::Result<()> {
+        let timer = metrics.start_process_timer("construct_and_gossip_receipt");
         let (content_key, content_value) = execution_api.get_receipts(full_header).await?;
         debug!(
             "Built and validated Receipts for Block #{:?}: now gossiping.",
             full_header.header.number
         );
-        gossip_history_content(portal_clients, content_key, content_value, block_stats).await
+        let result =
+            gossip_history_content(portal_clients, content_key, content_value, block_stats).await;
+        metrics.stop_process_timer(timer);
+        result
     }
 
     async fn construct_and_gossip_block_body(
@@ -356,12 +386,17 @@ impl HistoryBridge {
         portal_clients: &Vec<HttpClient>,
         execution_api: &ExecutionApi,
         block_stats: Arc<Mutex<HistoryBlockStats>>,
+        metrics: BridgeMetricsReporter,
     ) -> anyhow::Result<()> {
+        let timer = metrics.start_process_timer("construct_and_gossip_block_body");
         let (content_key, content_value) = execution_api.get_block_body(full_header).await?;
         debug!(
             "Built and validated BlockBody for Block #{:?}: now gossiping.",
             full_header.header.number
         );
-        gossip_history_content(portal_clients, content_key, content_value, block_stats).await
+        let result =
+            gossip_history_content(portal_clients, content_key, content_value, block_stats).await;
+        metrics.stop_process_timer(timer);
+        result
     }
 }
