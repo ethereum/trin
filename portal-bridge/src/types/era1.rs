@@ -37,6 +37,23 @@ impl Era1 {
         Self::deserialize(&buf)
     }
 
+    /// Function to iterate over block tuples in an era1 file
+    /// this is useful for processing large era1 files without storing the entire
+    /// deserialized era1 object in memory.
+    pub fn iter_tuples(raw_era1: Vec<u8>) -> impl Iterator<Item = BlockTuple> {
+        let file = E2StoreFile::deserialize(&raw_era1).expect("invalid era1 file");
+        let block_index = BlockIndexEntry::try_from(&file.entries[32770])
+            .expect("invalid block index entry")
+            .block_index;
+        (0..block_index.count).map(move |i| {
+            let mut entries: [Entry; 4] = Default::default();
+            for (j, entry) in entries.iter_mut().enumerate() {
+                *entry = file.entries[i as usize * 4 + j + 1].to_owned();
+            }
+            BlockTuple::try_from(&entries).expect("invalid block tuple")
+        })
+    }
+
     pub fn deserialize(buf: &[u8]) -> anyhow::Result<Self> {
         let file = E2StoreFile::deserialize(buf)?;
         ensure!(
