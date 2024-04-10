@@ -12,14 +12,17 @@ use surf::{Client, Config};
 use tokio::{
     sync::{OwnedSemaphorePermit, Semaphore},
     task::JoinHandle,
-    time::timeout,
+    time::{sleep, timeout, Duration},
 };
 use tracing::{debug, error, info, warn};
 use trin_metrics::bridge::BridgeMetricsReporter;
 
 use crate::{
     api::execution::construct_proof,
-    bridge::{history::SERVE_BLOCK_TIMEOUT, utils::lookup_epoch_acc},
+    bridge::{
+        history::{HEADER_SATURATION_DELAY, SERVE_BLOCK_TIMEOUT},
+        utils::lookup_epoch_acc,
+    },
     gossip::gossip_history_content,
     stats::{HistoryBlockStats, StatsReporter},
     types::{
@@ -309,10 +312,14 @@ impl Era1Bridge {
                 // since the header might fail validation and we don't want to serve the rest of the
                 // block. A future improvement would be to have a more fine-grained error
                 // handling and only cut off gossip if header fails validation
+                metrics.stop_process_timer(timer);
                 return Ok(());
             }
         }
         metrics.stop_process_timer(timer);
+        // Sleep for 10 seconds to allow headers to saturate network,
+        // since they must be available for body / receipt validation.
+        sleep(Duration::from_secs(HEADER_SATURATION_DELAY)).await;
         let timer = metrics.start_process_timer("construct_and_gossip_block_body");
         match Self::construct_and_gossip_block_body(
             portal_clients.clone(),

@@ -31,7 +31,7 @@ use trin_validation::{
 };
 
 // todo: calculate / test optimal saturation delay
-const HEADER_SATURATION_DELAY: u64 = 10; // seconds
+pub const HEADER_SATURATION_DELAY: u64 = 10; // seconds
 const LATEST_BLOCK_POLL_RATE: u64 = 5; // seconds
 pub const EPOCH_SIZE: u64 = EPOCH_SIZE_USIZE as u64;
 pub const SERVE_BLOCK_TIMEOUT: Duration = Duration::from_secs(120);
