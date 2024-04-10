@@ -1,4 +1,4 @@
-use tracing::debug;
+use tracing::{debug, info};
 
 use crate::{
     error::ContentStoreError,
@@ -19,7 +19,7 @@ pub fn migrate_legacy_history_store(
     }
     let content_type = &config.content_type;
 
-    debug!(content_type = %content_type, "Migration started");
+    info!(content_type = %content_type, "Migration started");
 
     let new_table_name = sql::table_name(content_type);
 
@@ -56,7 +56,7 @@ pub fn migrate_legacy_history_store(
     })?;
     update_usage_stats(&conn, content_type, &usage_stats)?;
 
-    debug!(content_type = %content_type, "Migrating finished");
+    info!(content_type = %content_type, "Migration finished");
     Ok(())
 }
 
