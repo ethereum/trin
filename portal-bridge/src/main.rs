@@ -89,6 +89,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     portal_clients.expect("Failed to create history JSON-RPC clients"),
                     header_oracle,
                     bridge_config.epoch_acc_path,
+                    bridge_config.gossip_limit,
                 )
                 .await?;
                 let bridge_handle = tokio::spawn(async move {
@@ -113,6 +114,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         portal_clients.expect("Failed to create history JSON-RPC clients"),
                         header_oracle,
                         bridge_config.epoch_acc_path,
+                        bridge_config.gossip_limit,
                     );
 
                     bridge

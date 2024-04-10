@@ -7,6 +7,7 @@ use url::Url;
 
 use crate::{
     client_handles::{fluffy_handle, trin_handle},
+    constants::DEFAULT_GOSSIP_LIMIT,
     types::{mode::BridgeMode, network::NetworkKind},
 };
 use ethportal_api::types::cli::{
@@ -117,6 +118,13 @@ pub struct BridgeConfig {
         help = "The base jsonrpc port to listen on. If more than one node is launched, the additional ports will be incremented by 1."
     )]
     pub base_rpc_port: u16,
+
+    #[arg(
+        default_value_t = DEFAULT_GOSSIP_LIMIT,
+        long = "gossip-limit",
+        help = "The maximum number of active blocks being gossiped."
+    )]
+    pub gossip_limit: usize,
 }
 
 fn check_node_count(val: &str) -> Result<u8, String> {
