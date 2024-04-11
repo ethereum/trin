@@ -1,5 +1,4 @@
 use std::{
-    ops::Range,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
@@ -137,25 +136,27 @@ impl HistoryBridge {
                 }
             };
             last_seen_block_counter += 1;
-            if latest_block > block_index {
+            if latest_block >= block_index {
                 last_seen_block_counter = 0;
-                let gossip_range = Range {
-                    start: block_index,
-                    end: latest_block + 1,
-                };
-                info!("Discovered new blocks to gossip: {gossip_range:?}");
-                for height in gossip_range.clone() {
-                    Self::spawn_serve_full_block(
-                        height,
-                        None,
-                        self.portal_clients.clone(),
-                        self.execution_api.clone(),
-                        None,
-                        self.metrics.clone(),
-                    );
-                }
-                block_index = gossip_range.end;
+                info!("Discovered new blocks to gossip: {block_index}-{latest_block}");
             }
+            // `..=` is the inclusive range operator, it includes the right side of the range.
+            // Example: 1..=3 is equivalent to 1, 2, 3
+            // Where as: 1..3 is equivalent to 1, 2
+            // block_index will always contain the next block to be gossiped, so when we get a new
+            // latest_block from `get_latest_block_number()` it will gossip all blocks
+            // from block_index to latest_block.
+            for height in block_index..=latest_block {
+                Self::spawn_serve_full_block(
+                    height,
+                    None,
+                    self.portal_clients.clone(),
+                    self.execution_api.clone(),
+                    None,
+                    self.metrics.clone(),
+                );
+            }
+            block_index = latest_block + 1;
             // Ethereum mainnet creates a new block every 15 seconds, if we don't get a new block
             // within 1 minute. There is a problem with the provider so throw an error.
             if last_seen_block_counter > 60 / LATEST_BLOCK_POLL_RATE {
