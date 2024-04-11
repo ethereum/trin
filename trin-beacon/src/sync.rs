@@ -39,15 +39,25 @@ impl BeaconSync {
             .build_with_rpc(portal_rpc)
             .expect("Failed to build portal light client");
 
-        // Run the client
-        loop {
+        // Try sync the client 10 times with 10 seconds interval. Return error if failed after 10
+        // attempts
+        let mut counter = 10;
+        while counter > 0 {
             info!(trusted_block_root = %trusted_block_root, "Starting syncing portal light client ...");
             match client.start().await {
                 Ok(_) => break,
-                Err(e) => {
-                    error!("Error syncing portal light client: {e} Retrying...");
+                Err(err) => {
+                    error!(attempt = format!("{}/10",11- counter), error = %err, "Error syncing portal light client. Retrying in 10 secs...");
+                    counter -= 1;
                 }
             }
+            tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+        }
+
+        if counter == 0 {
+            return Err(anyhow::anyhow!(
+                "Failed to sync portal light client after 10 retries"
+            ));
         }
 
         Ok(())
