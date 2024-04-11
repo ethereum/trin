@@ -28,7 +28,7 @@ const DEFAULT_BASE_EL_ARCHIVE_ENDPOINT: &str =
     "https://erigon-lighthouse.mainnet.eu1.ethpandaops.io/";
 /// Consensus layer PandaOps endpoint
 /// We use Nimbus as the CL client, because it supports light client data by default.
-const DEFAULT_BASE_CL_ENDPOINT: &str = "https://nimbus.mainnet.ethpandaops.io/";
+const DEFAULT_BASE_CL_ENDPOINT: &str = "https://nimbus.mainnet.eu1.ethpandaops.io/";
 
 lazy_static! {
     pub static ref PANDAOPS_CLIENT_ID: String =

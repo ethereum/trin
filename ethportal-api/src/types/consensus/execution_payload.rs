@@ -21,7 +21,7 @@ pub type Bloom = FixedVector<u8, typenum::U256>;
 pub type ExtraData = ByteList32;
 
 #[superstruct(
-    variants(Bellatrix, Capella),
+    variants(Bellatrix, Capella, Deneb),
     variant_attributes(
         derive(
             Default,
@@ -67,8 +67,14 @@ pub struct ExecutionPayload {
     #[serde(serialize_with = "se_txs_to_hex")]
     #[serde(deserialize_with = "de_hex_to_txs")]
     pub transactions: Transactions,
-    #[superstruct(only(Capella))]
+    #[superstruct(only(Capella, Deneb))]
     pub withdrawals: VariableList<Withdrawal, U16>,
+    #[superstruct(only(Deneb))]
+    #[serde(deserialize_with = "as_u64")]
+    pub blob_gas_used: u64,
+    #[superstruct(only(Deneb))]
+    #[serde(deserialize_with = "as_u64")]
+    pub excess_blob_gas: u64,
 }
 
 impl ExecutionPayload {
@@ -78,6 +84,7 @@ impl ExecutionPayload {
                 ExecutionPayloadBellatrix::from_ssz_bytes(bytes).map(Self::Bellatrix)
             }
             ForkName::Capella => ExecutionPayloadCapella::from_ssz_bytes(bytes).map(Self::Capella),
+            ForkName::Deneb => ExecutionPayloadDeneb::from_ssz_bytes(bytes).map(Self::Deneb),
         }
     }
 }
@@ -130,7 +137,7 @@ pub struct Withdrawal {
 }
 
 #[superstruct(
-    variants(Bellatrix, Capella),
+    variants(Bellatrix, Capella, Deneb),
     variant_attributes(derive(
         Default,
         Debug,
@@ -180,9 +187,17 @@ pub struct ExecutionPayloadHeader {
     pub block_hash: B256,
     #[superstruct(getter(copy))]
     pub transactions_root: B256,
-    #[superstruct(only(Capella))]
+    #[superstruct(only(Capella, Deneb))]
     #[superstruct(getter(copy))]
     pub withdrawals_root: B256,
+    #[superstruct(only(Deneb))]
+    #[superstruct(getter(copy))]
+    #[serde(deserialize_with = "as_u64")]
+    pub blob_gas_used: u64,
+    #[superstruct(only(Deneb))]
+    #[superstruct(getter(copy))]
+    #[serde(deserialize_with = "as_u64")]
+    pub excess_blob_gas: u64,
 }
 
 impl ExecutionPayloadHeader {
@@ -194,6 +209,7 @@ impl ExecutionPayloadHeader {
             ForkName::Capella => {
                 ExecutionPayloadHeaderCapella::from_ssz_bytes(bytes).map(Self::Capella)
             }
+            ForkName::Deneb => ExecutionPayloadHeaderDeneb::from_ssz_bytes(bytes).map(Self::Deneb),
         }
     }
 }
@@ -327,6 +343,41 @@ mod test {
         let mut decoder = snap::raw::Decoder::new();
         let expected = decoder.decompress_vec(&compressed).unwrap();
         ExecutionPayloadHeader::from_ssz_bytes(&expected, ForkName::Capella).unwrap();
+        assert_eq!(content.as_ssz_bytes(), expected);
+    }
+
+    #[rstest]
+    #[case("case_0")]
+    #[case("case_1")]
+    fn serde_execution_payload_header_deneb(#[case] case: &str) {
+        let value = std::fs::read_to_string(format!(
+            "../test_assets/beacon/deneb/ExecutionPayloadHeader/ssz_random/{case}/value.yaml"
+        ))
+        .expect("cannot find test asset");
+        let value: Value = serde_yaml::from_str(&value).unwrap();
+        let body: ExecutionPayloadHeaderDeneb = serde_json::from_value(value.clone()).unwrap();
+        let serialized = serde_json::to_value(body).unwrap();
+        assert_eq!(serialized, value);
+    }
+
+    #[rstest]
+    #[case("case_0")]
+    #[case("case_1")]
+    fn ssz_execution_payload_header_deneb(#[case] case: &str) {
+        let value = std::fs::read_to_string(format!(
+            "../test_assets/beacon/deneb/ExecutionPayloadHeader/ssz_random/{case}/value.yaml"
+        ))
+        .expect("cannot find test asset");
+        let value: Value = serde_yaml::from_str(&value).unwrap();
+        let content: ExecutionPayloadHeaderDeneb = serde_json::from_value(value).unwrap();
+
+        let compressed = std::fs::read(format!(
+            "../test_assets/beacon/deneb/ExecutionPayloadHeader/ssz_random/{case}/serialized.ssz_snappy"
+        ))
+            .expect("cannot find test asset");
+        let mut decoder = snap::raw::Decoder::new();
+        let expected = decoder.decompress_vec(&compressed).unwrap();
+        ExecutionPayloadHeader::from_ssz_bytes(&expected, ForkName::Deneb).unwrap();
         assert_eq!(content.as_ssz_bytes(), expected);
     }
 

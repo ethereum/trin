@@ -1,9 +1,12 @@
-use crate::types::consensus::{
-    body::SyncAggregate,
-    fork::ForkName,
-    light_client::{
-        header::{LightClientHeaderBellatrix, LightClientHeaderCapella},
-        update::FinalizedRootProofLen,
+use crate::{
+    light_client::header::LightClientHeaderDeneb,
+    types::consensus::{
+        body::SyncAggregate,
+        fork::ForkName,
+        light_client::{
+            header::{LightClientHeaderBellatrix, LightClientHeaderCapella},
+            update::FinalizedRootProofLen,
+        },
     },
 };
 use alloy_primitives::B256;
@@ -17,7 +20,7 @@ use superstruct::superstruct;
 /// A LightClientFinalityUpdate is the update that
 /// signal a new finalized beacon block header for the light client sync protocol.
 #[superstruct(
-    variants(Bellatrix, Capella),
+    variants(Bellatrix, Capella, Deneb),
     variant_attributes(
         derive(Debug, Clone, PartialEq, Serialize, Deserialize, Encode, Decode,),
         serde(deny_unknown_fields),
@@ -31,11 +34,15 @@ pub struct LightClientFinalityUpdate {
     pub attested_header: LightClientHeaderBellatrix,
     #[superstruct(only(Capella), partial_getter(rename = "attested_header_capella"))]
     pub attested_header: LightClientHeaderCapella,
+    #[superstruct(only(Deneb), partial_getter(rename = "attested_header_deneb"))]
+    pub attested_header: LightClientHeaderDeneb,
     /// The last `LightClientHeader` from the last attested finalized block (end of epoch).
     #[superstruct(only(Bellatrix), partial_getter(rename = "finalized_header_bellatrix"))]
     pub finalized_header: LightClientHeaderBellatrix,
     #[superstruct(only(Capella), partial_getter(rename = "finalized_header_capella"))]
     pub finalized_header: LightClientHeaderCapella,
+    #[superstruct(only(Deneb), partial_getter(rename = "finalized_header_deneb"))]
+    pub finalized_header: LightClientHeaderDeneb,
     /// Merkle proof attesting finalized header.
     pub finality_branch: FixedVector<B256, FinalizedRootProofLen>,
     /// current sync aggregate
@@ -53,6 +60,9 @@ impl LightClientFinalityUpdate {
             }
             ForkName::Capella => {
                 LightClientFinalityUpdateCapella::from_ssz_bytes(bytes).map(Self::Capella)
+            }
+            ForkName::Deneb => {
+                LightClientFinalityUpdateDeneb::from_ssz_bytes(bytes).map(Self::Deneb)
             }
         }
     }

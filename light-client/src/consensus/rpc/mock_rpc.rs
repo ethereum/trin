@@ -2,8 +2,8 @@ use std::{fs::read_to_string, path::PathBuf};
 
 use super::ConsensusRpc;
 use crate::consensus::types::{
-    LightClientBootstrapCapella, LightClientFinalityUpdateCapella,
-    LightClientOptimisticUpdateCapella, LightClientUpdateCapella,
+    LightClientBootstrapDeneb, LightClientFinalityUpdateDeneb, LightClientOptimisticUpdateDeneb,
+    LightClientUpdateDeneb,
 };
 use anyhow::Result;
 use async_trait::async_trait;
@@ -21,22 +21,22 @@ impl ConsensusRpc for MockRpc {
         }
     }
 
-    async fn get_bootstrap(&self, _block_root: &'_ [u8]) -> Result<LightClientBootstrapCapella> {
+    async fn get_bootstrap(&self, _block_root: &'_ [u8]) -> Result<LightClientBootstrapDeneb> {
         let bootstrap = read_to_string(self.testdata.join("bootstrap.json"))?;
         Ok(serde_json::from_str(&bootstrap)?)
     }
 
-    async fn get_updates(&self, _period: u64, _count: u8) -> Result<Vec<LightClientUpdateCapella>> {
+    async fn get_updates(&self, _period: u64, _count: u8) -> Result<Vec<LightClientUpdateDeneb>> {
         let updates = read_to_string(self.testdata.join("updates.json"))?;
         Ok(serde_json::from_str(&updates)?)
     }
 
-    async fn get_finality_update(&self) -> Result<LightClientFinalityUpdateCapella> {
+    async fn get_finality_update(&self) -> Result<LightClientFinalityUpdateDeneb> {
         let finality = read_to_string(self.testdata.join("finality.json"))?;
         Ok(serde_json::from_str(&finality)?)
     }
 
-    async fn get_optimistic_update(&self) -> Result<LightClientOptimisticUpdateCapella> {
+    async fn get_optimistic_update(&self) -> Result<LightClientOptimisticUpdateDeneb> {
         let optimistic = read_to_string(self.testdata.join("optimistic.json"))?;
         Ok(serde_json::from_str(&optimistic)?)
     }

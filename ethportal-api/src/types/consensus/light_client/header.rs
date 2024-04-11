@@ -12,7 +12,7 @@ use tree_hash_derive::TreeHash;
 pub type ExecutionBranchLen = U4;
 
 #[superstruct(
-    variants(Bellatrix, Capella),
+    variants(Bellatrix, Capella, Deneb),
     variant_attributes(
         derive(
             Debug,
@@ -33,9 +33,9 @@ pub type ExecutionBranchLen = U4;
 #[tree_hash(enum_behaviour = "transparent")]
 pub struct LightClientHeader {
     pub beacon: BeaconBlockHeader,
-    #[superstruct(only(Capella))]
+    #[superstruct(only(Capella, Deneb))]
     pub execution: ExecutionPayloadHeaderCapella,
-    #[superstruct(only(Capella))]
+    #[superstruct(only(Capella, Deneb))]
     pub execution_branch: FixedVector<B256, ExecutionBranchLen>,
 }
 
@@ -52,6 +52,7 @@ impl LightClientHeader {
                 LightClientHeaderBellatrix::from_ssz_bytes(bytes).map(Self::Bellatrix)
             }
             ForkName::Capella => LightClientHeaderCapella::from_ssz_bytes(bytes).map(Self::Capella),
+            ForkName::Deneb => LightClientHeaderDeneb::from_ssz_bytes(bytes).map(Self::Deneb),
         }
     }
 }

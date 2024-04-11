@@ -5,6 +5,7 @@ pub mod execution_payload;
 pub mod fork;
 pub mod header;
 pub mod header_proof;
+pub mod kzg_commitment;
 pub mod light_client;
 pub mod participation_flags;
 pub mod pubkey;

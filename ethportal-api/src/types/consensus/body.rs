@@ -1,8 +1,11 @@
 use crate::{
     consensus::{
         beacon_state::Epoch,
-        execution_payload::{ExecutionPayloadBellatrix, ExecutionPayloadCapella},
+        execution_payload::{
+            ExecutionPayloadBellatrix, ExecutionPayloadCapella, ExecutionPayloadDeneb,
+        },
         fork::ForkName,
+        kzg_commitment::KzgCommitment,
     },
     types::bytes::ByteList1G,
 };
@@ -15,7 +18,7 @@ use ssz::Decode;
 use ssz_derive::{Decode, Encode};
 use ssz_types::{
     typenum,
-    typenum::{U128, U2, U33},
+    typenum::{U128, U2, U33, U4096},
     BitList, BitVector, FixedVector, VariableList,
 };
 use superstruct::superstruct;
@@ -24,12 +27,14 @@ use tree_hash_derive::TreeHash;
 
 use super::{header::BeaconBlockHeader, pubkey::PubKey, signature::BlsSignature};
 
+type MaxBlobCommitmentsPerBlock = U4096;
 type MaxBlsToExecutionChanges = U16;
+pub type KzgCommitments = VariableList<KzgCommitment, MaxBlobCommitmentsPerBlock>;
 
 /// Types based off specs @
 /// https://github.com/ethereum/consensus-specs/blob/5970ae56a1cd50ea06049d8aad6bed74093d49d3/specs/bellatrix/beacon-chain.md
 #[superstruct(
-    variants(Bellatrix, Capella),
+    variants(Bellatrix, Capella, Deneb),
     variant_attributes(
         derive(
             Debug,
@@ -61,9 +66,13 @@ pub struct BeaconBlockBody {
     pub execution_payload: ExecutionPayloadBellatrix,
     #[superstruct(only(Capella), partial_getter(rename = "execution_payload_capella"))]
     pub execution_payload: ExecutionPayloadCapella,
-    #[superstruct(only(Capella))]
+    #[superstruct(only(Deneb), partial_getter(rename = "execution_payload_deneb"))]
+    pub execution_payload: ExecutionPayloadDeneb,
+    #[superstruct(only(Capella, Deneb))]
     pub bls_to_execution_changes:
         VariableList<SignedBlsToExecutionChange, MaxBlsToExecutionChanges>,
+    #[superstruct(only(Deneb))]
+    pub blob_kzg_commitments: KzgCommitments,
 }
 
 impl BeaconBlockBody {
@@ -73,6 +82,7 @@ impl BeaconBlockBody {
                 BeaconBlockBodyBellatrix::from_ssz_bytes(bytes).map(Self::Bellatrix)
             }
             ForkName::Capella => BeaconBlockBodyCapella::from_ssz_bytes(bytes).map(Self::Capella),
+            ForkName::Deneb => BeaconBlockBodyDeneb::from_ssz_bytes(bytes).map(Self::Deneb),
         }
     }
 }

@@ -1836,7 +1836,6 @@ where
         let local_value = utp_processing.store.read().get(&content_key);
         if let Ok(Some(val)) = local_value {
             // todo validate & replace content value if different & punish bad peer
-            warn!("Stored content doesn't match expected value");
             content = val;
         } else {
             let content_id = content_key.content_id();

@@ -62,6 +62,10 @@ pub fn mainnet() -> BaseConfig {
                 epoch: 194048,
                 fork_version: hex_str_to_bytes("0x03000000").expect("should be a valid hex str"),
             },
+            deneb: Fork {
+                epoch: 269568,
+                fork_version: hex_str_to_bytes("0x04000000").expect("should be a valid hex str"),
+            },
         },
         max_checkpoint_age: 1_209_600, // 14 days
     }
