@@ -1,3 +1,5 @@
+use tracing::{debug, info};
+
 use crate::{
     error::ContentStoreError,
     versioned::{
@@ -17,15 +19,34 @@ pub fn migrate_legacy_history_store(
     }
     let content_type = &config.content_type;
 
-    // Rename old table and drop old indicies (they can't be renamed).
+    info!(content_type = %content_type, "Migration started");
+
+    let new_table_name = sql::table_name(content_type);
+
+    // Rename table
+    debug!(content_type = %content_type, "Renaming table: history -> {new_table_name}");
     config.sql_connection_pool.get()?.execute_batch(&format!(
-        "ALTER TABLE history RENAME TO {};
-        DROP INDEX history_distance_short_idx;
+        "ALTER TABLE history RENAME TO {};",
+        new_table_name
+    ))?;
+
+    // Drop old indicies (they can't be renamed)
+    debug!(content_type = %content_type, "Dropping old indices");
+    config.sql_connection_pool.get()?.execute_batch(
+        "DROP INDEX history_distance_short_idx;
         DROP INDEX history_content_size_idx;",
-        sql::table_name(content_type)
+    )?;
+
+    // Create new indicies
+    debug!(content_type = %content_type, "Creating new indices");
+    config.sql_connection_pool.get()?.execute_batch(&format!(
+        "CREATE INDEX IF NOT EXISTS {0}_distance_short_idx ON {0} (distance_short);
+        CREATE INDEX IF NOT EXISTS {0}_content_size_idx ON {0} (content_size);",
+        new_table_name
     ))?;
 
     // Update usage stats
+    debug!(content_type = %content_type, "Updating usage stats");
     let conn = config.sql_connection_pool.get()?;
     let usage_stats = conn.query_row(&sql::entry_count_and_size(content_type), [], |row| {
         Ok(UsageStats {
@@ -35,6 +56,7 @@ pub fn migrate_legacy_history_store(
     })?;
     update_usage_stats(&conn, content_type, &usage_stats)?;
 
+    info!(content_type = %content_type, "Migration finished");
     Ok(())
 }
 
