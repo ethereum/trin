@@ -255,7 +255,12 @@ impl ExecutionApi {
             })
             .collect();
         let response = self.batch_requests(request).await?;
-        Ok(serde_json::from_str(&response)?)
+        match serde_json::from_str(&response) {
+            Ok(receipts) => Ok(receipts),
+            Err(err) => {
+                bail!("Unable to parse receipts from response: {response:?} error: {err:?}")
+            }
+        }
     }
 
     pub async fn get_latest_block_number(&self) -> anyhow::Result<u64> {
@@ -369,6 +374,7 @@ impl Middleware for Retry {
                 if val.status().is_success() {
                     return Ok(val);
                 }
+                tracing::error!("Execution client request failed with: {:?}", val);
             };
             retry_count += 1;
             sleep(Duration::from_millis(100)).await;
