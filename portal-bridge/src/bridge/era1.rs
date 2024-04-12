@@ -190,6 +190,7 @@ impl Era1Bridge {
                 .acquire_owned()
                 .await
                 .expect("to be able to acquire semaphore");
+            self.metrics.report_current_block(block_number as i64);
             let serve_block_tuple_handle = Self::spawn_serve_block_tuple(
                 self.portal_clients.clone(),
                 block_tuple,

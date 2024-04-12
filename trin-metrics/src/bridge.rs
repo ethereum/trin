@@ -15,6 +15,7 @@ pub struct BridgeMetrics {
     pub process_timer: HistogramVec,
     pub bridge_info: IntGaugeVec,
     pub gossip_total: IntCounterVec,
+    pub current_block: IntGaugeVec,
 }
 
 impl BridgeMetrics {
@@ -40,10 +41,19 @@ impl BridgeMetrics {
             &["bridge", "success", "type"],
             registry
         )?;
+        let current_block = register_int_gauge_vec_with_registry!(
+            opts!(
+                "bridge_current_block",
+                "the current block number the bridge is on"
+            ),
+            &["bridge"],
+            registry
+        )?;
         Ok(Self {
             process_timer,
             bridge_info,
             gossip_total,
+            current_block,
         })
     }
 }
@@ -90,5 +100,13 @@ impl BridgeMetricsReporter {
             .bridge_info
             .with_label_values(&labels)
             .inc();
+    }
+
+    pub fn report_current_block(&self, block_number: i64) {
+        let labels: [&str; 1] = [&self.bridge];
+        self.bridge_metrics
+            .current_block
+            .with_label_values(&labels)
+            .set(block_number);
     }
 }
