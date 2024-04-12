@@ -255,7 +255,12 @@ impl ExecutionApi {
             })
             .collect();
         let response = self.batch_requests(request).await?;
-        Ok(serde_json::from_str(&response)?)
+        match serde_json::from_str(&response) {
+            Ok(receipts) => Ok(receipts),
+            Err(err) => {
+                bail!("Unable to parse receipts from response: {response:?} error: {err:?}")
+            }
+        }
     }
 
     pub async fn get_latest_block_number(&self) -> anyhow::Result<u64> {
