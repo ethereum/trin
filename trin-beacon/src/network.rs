@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use parking_lot::RwLock as PLRwLock;
 use tokio::sync::RwLock;
+use tracing::error;
 use utp_rs::socket::UtpSocket;
 
 use crate::{storage::BeaconStorage, sync::BeaconSync, validation::BeaconValidator};
@@ -56,14 +57,16 @@ impl BeaconNetwork {
         if portal_config.trusted_block_root.is_some() {
             tokio::spawn(async move {
                 let beacon_sync = BeaconSync::new(overlay_tx);
-                beacon_sync
+                let beacon_sync = beacon_sync
                     .start(
                         portal_config
                             .trusted_block_root
                             .expect("Trusted block root should be available"),
                     )
-                    .await
-                    .expect("Beacon sync failed to start");
+                    .await;
+                if let Err(err) = beacon_sync {
+                    error!(error = %err, "Failed to start beacon sync.");
+                }
             });
         }
 
