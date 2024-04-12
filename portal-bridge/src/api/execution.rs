@@ -374,6 +374,7 @@ impl Middleware for Retry {
                 if val.status().is_success() {
                     return Ok(val);
                 }
+                tracing::error!("Execution client request failed with: {:?}", val);
             };
             retry_count += 1;
             sleep(Duration::from_millis(100)).await;
