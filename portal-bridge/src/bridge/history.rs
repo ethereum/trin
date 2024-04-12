@@ -147,6 +147,7 @@ impl HistoryBridge {
             // latest_block from `get_latest_block_number()` it will gossip all blocks
             // from block_index to latest_block.
             for height in block_index..=latest_block {
+                self.metrics.report_current_block(height as i64);
                 Self::spawn_serve_full_block(
                     height,
                     None,
@@ -206,6 +207,7 @@ impl HistoryBridge {
             let permit = gossip_send_semaphore.clone().acquire_owned().await.expect(
                 "acquire_owned() can only error on semaphore close, this should be impossible",
             );
+            self.metrics.report_current_block(height as i64);
             serve_full_block_handles.push(Self::spawn_serve_full_block(
                 height,
                 epoch_acc.clone(),
