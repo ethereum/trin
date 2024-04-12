@@ -22,7 +22,7 @@ use trin_history::initialize_history_network;
 use trin_state::initialize_state_network;
 use trin_storage::PortalStorageConfig;
 use trin_utils::version::get_trin_version;
-use trin_validation::{accumulator::MasterAccumulator, oracle::HeaderOracle};
+use trin_validation::{accumulator::PreMergeAccumulator, oracle::HeaderOracle};
 
 pub async fn run_trin(
     trin_config: TrinConfig,
@@ -77,12 +77,13 @@ pub async fn run_trin(
     )?;
 
     // Initialize validation oracle
-    let master_accumulator = MasterAccumulator::try_from_file(trin_config.master_acc_path.clone())?;
+    let pre_merge_accumulator =
+        PreMergeAccumulator::try_from_file(trin_config.pre_merge_acc_path.clone())?;
     info!(
-        "Loaded master accumulator from: {:?}",
-        trin_config.master_acc_path
+        "Loaded pre-merge accumulator from: {:?}",
+        trin_config.pre_merge_acc_path
     );
-    let header_oracle = HeaderOracle::new(master_accumulator);
+    let header_oracle = HeaderOracle::new(pre_merge_accumulator);
     let header_oracle = Arc::new(RwLock::new(header_oracle));
 
     // Initialize state sub-network service and event handlers, if selected

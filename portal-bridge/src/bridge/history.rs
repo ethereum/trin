@@ -347,7 +347,7 @@ impl HistoryBridge {
     ) -> anyhow::Result<Arc<EpochAccumulator>> {
         let (epoch_hash, epoch_acc) = lookup_epoch_acc(
             epoch_index,
-            &self.header_oracle.master_acc,
+            &self.header_oracle.pre_merge_acc,
             &self.epoch_acc_path,
         )
         .await?;

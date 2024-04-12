@@ -42,28 +42,28 @@ struct TrinValidationAssets;
 /// Primary datatype used to maintain record of historical and current epoch.
 /// Verifies canonical-ness of a given header.
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq, Deserialize, Serialize, TreeHash)]
-pub struct MasterAccumulator {
+pub struct PreMergeAccumulator {
     pub historical_epochs: HistoricalEpochRoots,
 }
 
-impl Default for MasterAccumulator {
+impl Default for PreMergeAccumulator {
     fn default() -> Self {
         let raw = TrinValidationAssets::get("validation_assets/merge_macc.bin")
-            .expect("Unable to find default master accumulator");
-        MasterAccumulator::from_ssz_bytes(raw.data.as_ref())
-            .expect("Unable to decode default master accumulator")
+            .expect("Unable to find default pre-merge accumulator");
+        PreMergeAccumulator::from_ssz_bytes(raw.data.as_ref())
+            .expect("Unable to decode default pre-merge accumulator")
     }
 }
 
-impl MasterAccumulator {
-    /// Load default trusted master acc
-    pub fn try_from_file(master_acc_path: PathBuf) -> anyhow::Result<MasterAccumulator> {
-        let raw = TrinValidationAssets::get(&(*master_acc_path).display().to_string()[..])
+impl PreMergeAccumulator {
+    /// Load default trusted pre-merge acc
+    pub fn try_from_file(pre_merge_acc_path: PathBuf) -> anyhow::Result<PreMergeAccumulator> {
+        let raw = TrinValidationAssets::get(&(*pre_merge_acc_path).display().to_string()[..])
             .ok_or_else(|| {
-                anyhow!("Unable to find master accumulator at path: {master_acc_path:?}")
+                anyhow!("Unable to find pre-merge accumulator at path: {pre_merge_acc_path:?}")
             })?;
-        MasterAccumulator::from_ssz_bytes(raw.data.as_ref())
-            .map_err(|err| anyhow!("Unable to decode master accumulator: {err:?}"))
+        PreMergeAccumulator::from_ssz_bytes(raw.data.as_ref())
+            .map_err(|err| anyhow!("Unable to decode pre-merge accumulator: {err:?}"))
     }
 
     /// Number of the last block to be included in the accumulator
@@ -175,15 +175,15 @@ impl MasterAccumulator {
             .lookup_epoch_acc(epoch_hash, history_jsonrpc_tx)
             .await?;
 
-        // Validate epoch accumulator hash matches historical hash from master accumulator
+        // Validate epoch accumulator hash matches historical hash from pre-merge accumulator
         let epoch_index = self.get_epoch_index_of_header(header);
         let epoch_hash = self.historical_epochs[epoch_index as usize];
         if epoch_acc.tree_hash_root() != epoch_hash {
             return Err(anyhow!(
-                "Epoch acc hash sourced from network doesn't match historical hash in master acc."
+                "Epoch acc hash sourced from network doesn't match historical hash in pre-merge acc."
             ));
         }
-        MasterAccumulator::construct_proof(header, &epoch_acc)
+        PreMergeAccumulator::construct_proof(header, &epoch_acc)
     }
 
     pub fn construct_proof(
@@ -257,7 +257,7 @@ mod test {
     use serde_json::json;
     use ssz::Decode;
 
-    use crate::constants::DEFAULT_MASTER_ACC_HASH;
+    use crate::constants::DEFAULT_PRE_MERGE_ACC_HASH;
     use ethportal_api::{
         types::execution::header_with_proof::{
             AccumulatorProof, BlockHeaderProof, HeaderWithProof, SszNone,
@@ -284,7 +284,7 @@ mod test {
         let file = fs::read_to_string("./src/assets/fluffy/header_with_proofs.json").unwrap();
         let json: Value = serde_json::from_str(&file).unwrap();
         let hwps = json.as_object().unwrap();
-        let trin_macc = get_mainnet_master_acc();
+        let trin_macc = get_mainnet_pre_merge_acc();
         let (tx, mut rx) = mpsc::unbounded_channel::<HistoryJsonRpcRequest>();
         tokio::spawn(async move {
             spawn_mock_epoch_acc_lookup(&mut rx).await;
@@ -317,7 +317,7 @@ mod test {
 
     #[tokio::test]
     async fn invalidate_invalid_proofs() {
-        let trin_macc = get_mainnet_master_acc();
+        let trin_macc = get_mainnet_pre_merge_acc();
         let (tx, mut rx) = mpsc::unbounded_channel::<HistoryJsonRpcRequest>();
         tokio::spawn(async move {
             spawn_mock_epoch_acc_lookup(&mut rx).await;
@@ -338,32 +338,34 @@ mod test {
 
     #[tokio::test]
     #[should_panic(expected = "Missing accumulator proof for pre-merge header.")]
-    async fn master_accumulator_cannot_validate_pre_merge_header_missing_proof() {
-        let master_acc = get_mainnet_master_acc();
+    async fn pre_merge_accumulator_cannot_validate_merge_header_missing_proof() {
+        let pre_merge_acc = get_mainnet_pre_merge_acc();
         let header = get_header(1_000_001);
         let hwp = HeaderWithProof {
             header,
             proof: BlockHeaderProof::None(SszNone::default()),
         };
-        master_acc.validate_header_with_proof(&hwp).unwrap();
+        pre_merge_acc.validate_header_with_proof(&hwp).unwrap();
     }
 
     #[tokio::test]
-    async fn master_accumulator_validates_post_merge_header_without_proof() {
-        let master_acc = get_mainnet_master_acc();
+    async fn pre_merge_accumulator_validates_post_merge_header_without_proof() {
+        let pre_merge_acc = get_mainnet_pre_merge_acc();
         let future_height = MERGE_BLOCK_NUMBER + 1;
         let future_header = generate_random_header(&future_height);
         let future_hwp = HeaderWithProof {
             header: future_header,
             proof: BlockHeaderProof::None(SszNone::default()),
         };
-        master_acc.validate_header_with_proof(&future_hwp).unwrap();
+        pre_merge_acc
+            .validate_header_with_proof(&future_hwp)
+            .unwrap();
     }
 
     #[tokio::test]
     #[should_panic(expected = "Invalid proof type found for post-merge header.")]
-    async fn master_accumulator_invalidates_post_merge_header_with_accumulator_proof() {
-        let master_acc = get_mainnet_master_acc();
+    async fn pre_merge_accumulator_invalidates_post_merge_header_with_accumulator_proof() {
+        let pre_merge_acc = get_mainnet_pre_merge_acc();
         let future_height = MERGE_BLOCK_NUMBER + 1;
         let future_header = generate_random_header(&future_height);
         let future_hwp = HeaderWithProof {
@@ -372,19 +374,21 @@ mod test {
                 proof: [B256::ZERO; 15],
             }),
         };
-        master_acc.validate_header_with_proof(&future_hwp).unwrap();
+        pre_merge_acc
+            .validate_header_with_proof(&future_hwp)
+            .unwrap();
     }
 
     //
     // Testing utils
     //
-    fn get_mainnet_master_acc() -> MasterAccumulator {
-        let master_acc = MasterAccumulator::default();
+    fn get_mainnet_pre_merge_acc() -> PreMergeAccumulator {
+        let pre_merge_acc = PreMergeAccumulator::default();
         assert_eq!(
-            master_acc.tree_hash_root(),
-            B256::from_str(DEFAULT_MASTER_ACC_HASH).unwrap()
+            pre_merge_acc.tree_hash_root(),
+            B256::from_str(DEFAULT_PRE_MERGE_ACC_HASH).unwrap()
         );
-        master_acc
+        pre_merge_acc
     }
 
     fn get_header(number: u64) -> Header {
@@ -437,7 +441,7 @@ mod test {
                 _ => panic!("Unexpected request endpoint"),
             },
             None => {
-                panic!("Test run failed: Unable to get response from master_acc validation.")
+                panic!("Test run failed: Unable to get response from pre_merge_acc validation.")
             }
         }
     }

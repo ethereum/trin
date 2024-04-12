@@ -13,7 +13,7 @@ use portal_bridge::{
     utils::generate_spaced_private_keys,
 };
 use trin_utils::log::init_tracing_logger;
-use trin_validation::{accumulator::MasterAccumulator, oracle::HeaderOracle};
+use trin_validation::{accumulator::PreMergeAccumulator, oracle::HeaderOracle};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -86,8 +86,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if bridge_config.network.contains(&NetworkKind::History) {
         match bridge_config.mode {
             BridgeMode::FourFours(_) => {
-                let master_acc = MasterAccumulator::default();
-                let header_oracle = HeaderOracle::new(master_acc);
+                let pre_merge_acc = PreMergeAccumulator::default();
+                let header_oracle = HeaderOracle::new(pre_merge_acc);
                 let era1_bridge = Era1Bridge::new(
                     bridge_config.mode,
                     portal_clients.expect("Failed to create history JSON-RPC clients"),
@@ -111,8 +111,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 )
                 .await?;
                 let bridge_handle = tokio::spawn(async move {
-                    let master_acc = MasterAccumulator::default();
-                    let header_oracle = HeaderOracle::new(master_acc);
+                    let pre_merge_acc = PreMergeAccumulator::default();
+                    let header_oracle = HeaderOracle::new(pre_merge_acc);
 
                     let bridge = HistoryBridge::new(
                         bridge_config.mode,

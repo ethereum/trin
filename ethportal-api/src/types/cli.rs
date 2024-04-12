@@ -10,7 +10,7 @@ use url::Url;
 
 use crate::types::bootnodes::Bootnodes;
 
-pub const DEFAULT_MASTER_ACC_PATH: &str = "validation_assets/merge_macc.bin";
+pub const DEFAULT_PRE_MERGE_ACC_PATH: &str = "validation_assets/merge_macc.bin";
 pub const DEFAULT_WEB3_IPC_PATH: &str = "/tmp/trin-jsonrpc.ipc";
 pub const DEFAULT_WEB3_HTTP_ADDRESS: &str = "http://127.0.0.1:8545/";
 pub const DEFAULT_WEB3_HTTP_PORT: u16 = 8545;
@@ -187,11 +187,11 @@ pub struct TrinConfig {
     pub ephemeral: bool,
 
     #[arg(
-        long = "master-accumulator-path",
-        help = "Path to master accumulator for validation",
-        default_value(DEFAULT_MASTER_ACC_PATH)
+        long = "pre-merge-accumulator-path",
+        help = "Path to pre-merge accumulator for validation",
+        default_value(DEFAULT_PRE_MERGE_ACC_PATH)
     )]
-    pub master_acc_path: PathBuf,
+    pub pre_merge_acc_path: PathBuf,
 
     #[arg(
         long = "disable-poke",
@@ -245,7 +245,7 @@ impl Default for TrinConfig {
                 .expect("Parsing static DEFAULT_STORAGE_CAPACITY_MB to work"),
             enable_metrics_with_url: None,
             ephemeral: false,
-            master_acc_path: PathBuf::from(DEFAULT_MASTER_ACC_PATH.to_string()),
+            pre_merge_acc_path: PathBuf::from(DEFAULT_PRE_MERGE_ACC_PATH.to_string()),
             disable_poke: false,
             ws: false,
             ws_port: DEFAULT_WEB3_WS_PORT,

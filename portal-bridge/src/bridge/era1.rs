@@ -36,7 +36,7 @@ use ethportal_api::{
     HistoryContentValue,
 };
 use trin_validation::{
-    accumulator::MasterAccumulator, constants::EPOCH_SIZE, oracle::HeaderOracle,
+    accumulator::PreMergeAccumulator, constants::EPOCH_SIZE, oracle::HeaderOracle,
 };
 
 const ERA1_DIR_URL: &str = "https://era1.ethportal.net/";
@@ -175,7 +175,7 @@ impl Era1Bridge {
                 return;
             }
         };
-        let master_acc = Arc::new(self.header_oracle.master_acc.clone());
+        let pre_merge_acc = Arc::new(self.header_oracle.pre_merge_acc.clone());
         info!("Era1 file read successfully, gossiping block tuples for epoch: {epoch_index}");
         let mut serve_block_tuple_handles = vec![];
         for block_tuple in Era1::iter_tuples(raw_era1) {
@@ -195,7 +195,7 @@ impl Era1Bridge {
                 self.portal_clients.clone(),
                 block_tuple,
                 epoch_acc.clone(),
-                master_acc.clone(),
+                pre_merge_acc.clone(),
                 permit,
                 self.metrics.clone(),
             );
@@ -209,7 +209,7 @@ impl Era1Bridge {
     async fn get_epoch_acc(&self, epoch_index: u64) -> anyhow::Result<Arc<EpochAccumulator>> {
         let (epoch_hash, epoch_acc) = lookup_epoch_acc(
             epoch_index,
-            &self.header_oracle.master_acc,
+            &self.header_oracle.pre_merge_acc,
             &self.epoch_acc_path,
         )
         .await?;
@@ -238,7 +238,7 @@ impl Era1Bridge {
         portal_clients: Vec<HttpClient>,
         block_tuple: BlockTuple,
         epoch_acc: Arc<EpochAccumulator>,
-        master_acc: Arc<MasterAccumulator>,
+        pre_merge_acc: Arc<PreMergeAccumulator>,
         permit: OwnedSemaphorePermit,
         metrics: BridgeMetricsReporter,
     ) -> JoinHandle<()> {
@@ -253,7 +253,7 @@ impl Era1Bridge {
                     portal_clients,
                     block_tuple,
                     epoch_acc,
-                    master_acc,
+                    pre_merge_acc,
                     block_stats.clone(),
                     metrics.clone()
                 )).await
@@ -278,7 +278,7 @@ impl Era1Bridge {
         portal_clients: Vec<HttpClient>,
         block_tuple: BlockTuple,
         epoch_acc: Arc<EpochAccumulator>,
-        master_acc: Arc<MasterAccumulator>,
+        pre_merge_acc: Arc<PreMergeAccumulator>,
         block_stats: Arc<Mutex<HistoryBlockStats>>,
         metrics: BridgeMetricsReporter,
     ) -> anyhow::Result<()> {
@@ -291,7 +291,7 @@ impl Era1Bridge {
             portal_clients.clone(),
             block_tuple.clone(),
             epoch_acc,
-            master_acc,
+            pre_merge_acc,
             block_stats.clone(),
         )
         .await
@@ -376,7 +376,7 @@ impl Era1Bridge {
         portal_clients: Vec<HttpClient>,
         block_tuple: BlockTuple,
         epoch_acc: Arc<EpochAccumulator>,
-        master_acc: Arc<MasterAccumulator>,
+        pre_merge_acc: Arc<PreMergeAccumulator>,
         block_stats: Arc<Mutex<HistoryBlockStats>>,
     ) -> anyhow::Result<()> {
         debug!(
@@ -405,7 +405,7 @@ impl Era1Bridge {
         // Construct HeaderWithProof
         let header_with_proof = construct_proof(header.clone(), &epoch_acc).await?;
         // Double check that the proof is valid
-        master_acc.validate_header_with_proof(&header_with_proof)?;
+        pre_merge_acc.validate_header_with_proof(&header_with_proof)?;
         // Construct HistoryContentValue
         let content_value = HistoryContentValue::BlockHeaderWithProof(header_with_proof);
 
