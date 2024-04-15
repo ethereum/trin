@@ -315,7 +315,9 @@ fn network_parser(network_string: &str) -> Result<Arc<NetworkSpec>, String> {
     match network_string {
         "mainnet" => Ok(MAINNET.clone()),
         "testnet" => Ok(TESTNET.clone()),
-        _ => Err(format!("Not a valid network: {network_string}")),
+        _ => Err(format!(
+            "Not a valid network: {network_string}, must be 'testnet' or 'mainnet'"
+        )),
     }
 }
 

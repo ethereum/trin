@@ -333,10 +333,10 @@ impl Discovery {
         request: ProtocolRequest,
     ) -> Result<Vec<u8>, RequestError> {
         // Send empty protocol id if unable to convert it to bytes
-        let protocol = match self.network_spec.portal_networks.get_by_left(&protocol) {
-            Some(protocol_id) => hex_decode(protocol_id).unwrap_or_default(),
-            None => {
-                unreachable!("send_talk_req() should never receive an invalid ProtocolId protocol")
+        let protocol = match self.network_spec.get_protocol_hex_from_id(&protocol) {
+            Ok(protocol_id) => hex_decode(&protocol_id).unwrap_or_default(),
+            Err(err) => {
+                unreachable!("send_talk_req() should never receive an invalid ProtocolId protocol: err={err}");
             }
         };
 

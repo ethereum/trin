@@ -65,11 +65,10 @@ async fn spawn_overlay(
     let overlay_protocol = *overlay.protocol();
     tokio::spawn(async move {
         while let Some(talk_req) = talk_req_rx.recv().await {
-            let req_protocol = MAINNET
-                .portal_networks
-                .get_by_right(&hex_encode_upper(talk_req.protocol()));
+            let req_protocol =
+                MAINNET.get_protocol_id_from_hex(&hex_encode_upper(talk_req.protocol()));
 
-            if let Some(req_protocol) = req_protocol {
+            if let Ok(req_protocol) = req_protocol {
                 match (req_protocol, overlay_protocol) {
                     (ProtocolId::History, ProtocolId::History)
                     | (ProtocolId::State, ProtocolId::State) => overlay_tx.send(talk_req).unwrap(),

@@ -45,7 +45,7 @@ pub async fn run_trin(
     let (node_data_dir, private_key) = configure_node_data_dir(
         trin_data_dir,
         trin_config.private_key,
-        trin_config.network.network_name.clone(),
+        trin_config.network.get_network_name().to_string(),
     )?;
 
     let portalnet_config = PortalnetConfig::new(&trin_config, private_key);
@@ -89,8 +89,7 @@ pub async fn run_trin(
     let (state_handler, state_network_task, state_event_tx, state_jsonrpc_tx, state_event_stream) =
         if trin_config
             .portal_subnetworks
-            .iter()
-            .any(|val| val == STATE_NETWORK)
+            .contains(&STATE_NETWORK.to_string())
         {
             initialize_state_network(
                 &discovery,
@@ -113,8 +112,7 @@ pub async fn run_trin(
         beacon_event_stream,
     ) = if trin_config
         .portal_subnetworks
-        .iter()
-        .any(|val| val == BEACON_NETWORK)
+        .contains(&BEACON_NETWORK.to_string())
     {
         initialize_beacon_network(
             &discovery,
@@ -137,8 +135,7 @@ pub async fn run_trin(
         history_event_stream,
     ) = if trin_config
         .portal_subnetworks
-        .iter()
-        .any(|val| val == HISTORY_NETWORK)
+        .contains(&HISTORY_NETWORK.to_string())
     {
         initialize_history_network(
             &discovery,

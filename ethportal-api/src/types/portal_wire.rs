@@ -178,8 +178,31 @@ pub enum ProtocolId {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NetworkSpec {
-    pub network_name: String,
-    pub portal_networks: BiHashMap<ProtocolId, String>,
+    network_name: String,
+    portal_networks: BiHashMap<ProtocolId, String>,
+}
+
+impl NetworkSpec {
+    pub fn get_network_name(&self) -> &str {
+        &self.network_name
+    }
+
+    pub fn get_protocol_id_from_hex(&self, hex: &str) -> Result<ProtocolId, ProtocolIdError> {
+        self.portal_networks
+            .get_by_right(hex)
+            .copied()
+            .ok_or(ProtocolIdError::Invalid)
+    }
+
+    pub fn get_protocol_hex_from_id(
+        &self,
+        protocol_id: &ProtocolId,
+    ) -> Result<String, ProtocolIdError> {
+        self.portal_networks
+            .get_by_left(protocol_id)
+            .cloned()
+            .ok_or(ProtocolIdError::Invalid)
+    }
 }
 
 pub static MAINNET: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
@@ -623,8 +646,8 @@ mod test {
     #[test]
     fn protocol_id_encoding() {
         let hex = "0x500A";
-        let protocol_id = MAINNET.portal_networks.get_by_right(hex).unwrap();
-        let expected_hex = MAINNET.portal_networks.get_by_left(protocol_id).unwrap();
+        let protocol_id = MAINNET.get_protocol_id_from_hex(hex).unwrap();
+        let expected_hex = MAINNET.get_protocol_hex_from_id(&protocol_id).unwrap();
         assert_eq!(hex, expected_hex);
     }
 

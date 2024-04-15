@@ -124,11 +124,10 @@ impl PortalnetEvents {
     fn dispatch_discv5_talk_req(&self, request: TalkRequest) {
         let protocol_id = self
             .network_spec
-            .portal_networks
-            .get_by_right(&hex_encode_upper(request.protocol()));
+            .get_protocol_id_from_hex(&hex_encode_upper(request.protocol()));
 
         match protocol_id {
-            Some(protocol) => match protocol {
+            Ok(protocol) => match protocol {
                 ProtocolId::History => self.send_overlay_request(
                     self.history_handle.tx.as_ref(),
                     request.into(),
@@ -158,8 +157,8 @@ impl PortalnetEvents {
                     );
                 }
             },
-            None => warn!(
-                "Received TalkRequest on unknown protocol from={} protocol={} body={}",
+            Err(err) => warn!(
+                "Received TalkRequest on unknown protocol from={} protocol={} body={} err={err}",
                 request.node_id(),
                 hex_encode_upper(request.protocol()),
                 hex_encode(request.body()),
