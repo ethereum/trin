@@ -21,7 +21,7 @@ pub async fn gossip_beacon_content(
     content_value: BeaconContentValue,
     slot_stats: Arc<Mutex<BeaconSlotStats>>,
 ) -> anyhow::Result<()> {
-    let mut results: Vec<Result<(Vec<TraceGossipInfo>, u64), Error>> = vec![];
+    let mut results: Vec<Result<GossipReport, Error>> = vec![];
     for client in portal_clients.as_ref() {
         let client = client.clone();
         let content_key = content_key.clone();
@@ -43,10 +43,11 @@ async fn beacon_trace_gossip(
     client: HttpClient,
     content_key: BeaconContentKey,
     content_value: BeaconContentValue,
-) -> Result<(Vec<TraceGossipInfo>, u64), Error> {
-    let mut retry_count = 0;
+) -> Result<GossipReport, Error> {
+    let mut retries = 0;
     let mut traces = vec![];
-    while retry_count < GOSSIP_RETRY_COUNT {
+    let mut found = false;
+    while retries < GOSSIP_RETRY_COUNT {
         let result = BeaconNetworkApiClient::trace_gossip(
             &client,
             content_key.clone(),
@@ -57,7 +58,11 @@ async fn beacon_trace_gossip(
         if let Ok(trace) = result {
             traces.push(trace.clone());
             if !trace.transferred.is_empty() {
-                return Ok((traces, retry_count));
+                return Ok(GossipReport {
+                    traces,
+                    retries,
+                    found,
+                });
             }
         }
         // if not, make rfc request to see if data is available on network
@@ -65,9 +70,14 @@ async fn beacon_trace_gossip(
             BeaconNetworkApiClient::recursive_find_content(&client, content_key.clone()).await;
         if let Ok(ethportal_api::types::beacon::ContentInfo::Content { .. }) = result {
             debug!("Found content on network, after failing to gossip, aborting gossip. content key={:?}", content_key.to_hex());
-            return Ok((traces, retry_count));
+            found = true;
+            return Ok(GossipReport {
+                traces,
+                retries,
+                found,
+            });
         }
-        retry_count += 1;
+        retries += 1;
         debug!("Unable to locate content on network, after failing to gossip, retrying in {:?} seconds. content key={:?}", RETRY_AFTER, content_key.to_hex());
         sleep(RETRY_AFTER).await;
     }
@@ -76,7 +86,11 @@ async fn beacon_trace_gossip(
         GOSSIP_RETRY_COUNT,
         content_key.to_hex(),
     );
-    Ok((traces, retry_count))
+    Ok(GossipReport {
+        traces,
+        retries,
+        found,
+    })
 }
 
 /// Gossip any given content key / value to the history network.
@@ -86,7 +100,7 @@ pub async fn gossip_history_content(
     content_value: HistoryContentValue,
     block_stats: Arc<Mutex<HistoryBlockStats>>,
 ) -> anyhow::Result<()> {
-    let mut results: Vec<Result<(Vec<TraceGossipInfo>, u64), Error>> = vec![];
+    let mut results: Vec<Result<GossipReport, Error>> = vec![];
     for client in portal_clients {
         let client = client.clone();
         let content_key = content_key.clone();
@@ -109,10 +123,11 @@ async fn history_trace_gossip(
     client: HttpClient,
     content_key: HistoryContentKey,
     content_value: HistoryContentValue,
-) -> Result<(Vec<TraceGossipInfo>, u64), Error> {
-    let mut retry_count = 0;
+) -> Result<GossipReport, Error> {
+    let mut retries = 0;
     let mut traces = vec![];
-    while retry_count < GOSSIP_RETRY_COUNT {
+    let mut found = false;
+    while retries < GOSSIP_RETRY_COUNT {
         let result = HistoryNetworkApiClient::trace_gossip(
             &client,
             content_key.clone(),
@@ -123,7 +138,11 @@ async fn history_trace_gossip(
         if let Ok(trace) = result {
             traces.push(trace.clone());
             if !trace.transferred.is_empty() {
-                return Ok((traces, retry_count));
+                return Ok(GossipReport {
+                    traces,
+                    retries,
+                    found,
+                });
             }
         }
         // if not, make rfc request to see if data is available on network
@@ -131,9 +150,14 @@ async fn history_trace_gossip(
             HistoryNetworkApiClient::recursive_find_content(&client, content_key.clone()).await;
         if let Ok(ethportal_api::types::history::ContentInfo::Content { .. }) = result {
             debug!("Found content on network, after failing to gossip, aborting gossip. content key={:?}", content_key.to_hex());
-            return Ok((traces, retry_count));
+            found = true;
+            return Ok(GossipReport {
+                traces,
+                retries,
+                found,
+            });
         }
-        retry_count += 1;
+        retries += 1;
         debug!("Unable to locate content on network, after failing to gossip, retrying in {:?} seconds. content key={:?}", RETRY_AFTER, content_key.to_hex());
         sleep(RETRY_AFTER).await;
     }
@@ -142,5 +166,15 @@ async fn history_trace_gossip(
         GOSSIP_RETRY_COUNT,
         content_key.to_hex(),
     );
-    Ok((traces, retry_count))
+    Ok(GossipReport {
+        traces,
+        retries,
+        found,
+    })
+}
+
+pub struct GossipReport {
+    pub traces: Vec<TraceGossipInfo>,
+    pub retries: u64,
+    pub found: bool,
 }

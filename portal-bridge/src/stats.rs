@@ -2,11 +2,8 @@ use std::{collections::HashSet, str::FromStr};
 
 use tracing::{debug, info};
 
-use ethportal_api::{
-    jsonrpsee::core::Error,
-    types::{enr::Enr, portal::TraceGossipInfo},
-    BeaconContentKey, HistoryContentKey,
-};
+use crate::gossip::GossipReport;
+use ethportal_api::{jsonrpsee::core::Error, types::enr::Enr, BeaconContentKey, HistoryContentKey};
 
 // Trait for tracking / reporting gossip stats
 pub trait StatsReporter<TContentKey> {
@@ -145,6 +142,7 @@ pub struct ContentStats {
     pub transferred: HashSet<Enr>,
     pub retries: u64,
     pub failures: u64,
+    pub found: bool,
 }
 
 impl std::fmt::Debug for ContentStats {
@@ -175,24 +173,26 @@ impl std::fmt::Display for ContentStats {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "offered: {}, accepted: {}, transferred: {}, retries: {}, failures: {}",
+            "offered: {}, accepted: {}, transferred: {}, retries: {}, failures: {}, found: {}",
             self.offered.len(),
             self.accepted.len(),
             self.transferred.len(),
             self.retries,
             self.failures,
+            self.found,
         )
     }
 }
 
-impl From<Vec<Result<(Vec<TraceGossipInfo>, u64), Error>>> for ContentStats {
-    fn from(results: Vec<Result<(Vec<TraceGossipInfo>, u64), Error>>) -> Self {
+impl From<Vec<Result<GossipReport, Error>>> for ContentStats {
+    fn from(results: Vec<Result<GossipReport, Error>>) -> Self {
         let mut content_stats = ContentStats::default();
         for trace_gossip_info in results.iter() {
             match trace_gossip_info {
-                Ok((traces, retries)) => {
-                    content_stats.retries += retries;
-                    for trace in traces {
+                Ok(gossip_report) => {
+                    content_stats.retries += gossip_report.retries;
+                    content_stats.found = gossip_report.found;
+                    for trace in &gossip_report.traces {
                         for enr in trace.offered.iter() {
                             let enr = Enr::from_str(enr)
                                 .expect("ENR from trace gossip response to successfully decode.");
