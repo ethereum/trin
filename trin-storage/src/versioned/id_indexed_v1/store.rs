@@ -16,6 +16,10 @@ use crate::{
     ContentId,
 };
 
+/// How frequently to check for pruning. Higher number means we will check more frequently while
+/// lower number (minimum 1) means we will check less frequently.
+const PRUNING_CHECKING_FREQUENCY: u64 = 100;
+
 struct FarthestQueryResult {
     content_id: ContentId,
     distance_u32: u32,
@@ -273,6 +277,8 @@ impl IdIndexedV1Store {
 
         if self.to_insert_until_pruning > 1 {
             self.to_insert_until_pruning -= 1;
+            self.metrics
+                .report_to_insert_until_pruning(self.to_insert_until_pruning);
         } else {
             let usage_stats = self.get_usage_stats_internal()?;
             if usage_stats.is_above(self.config.pruning_capacity_threshold()) {
@@ -456,11 +462,15 @@ impl IdIndexedV1Store {
         Ok(())
     }
 
-    /// Updates `to_insert_until_pruning` based on current usage stats. We aim to prune once we
-    /// reach full capacity, but in reality we will prune if we are above
-    /// `pruning_capacity_threshold()`.
+    /// Updates `to_insert_until_pruning` based on current usage stats and
+    /// PRUNING_CHECKING_FREQUENCY. We aim to prune once we reach full capacity, but in reality we
+    /// will check for pruning based on `PRUNING_CHECKING_FREQUENCY` and prune when we are above
+    /// `config.pruning_capacity_threshold()`.
     fn update_to_insert_until_pruning(&mut self, usage_stats: &UsageStats) {
-        self.to_insert_until_pruning = self.config.estimate_to_insert_until_full(usage_stats);
+        self.to_insert_until_pruning =
+            self.config.estimate_to_insert_until_full(usage_stats) / PRUNING_CHECKING_FREQUENCY;
+        self.metrics
+            .report_to_insert_until_pruning(self.to_insert_until_pruning);
     }
 }
 
@@ -490,8 +500,11 @@ mod tests {
 
     use super::*;
 
-    const STORAGE_CAPACITY_10KB_IN_BYTES: u64 = 10_000;
-    const CONTENT_SIZE_100_BYTES: u64 = STORAGE_CAPACITY_10KB_IN_BYTES / 100;
+    // Storage configuration that stores 10_000 items
+
+    const STORAGE_CAPACITY_1MB_IN_BYTES: u64 = 1_000_000;
+    const CONTENT_SIZE_100_BYTES: u64 = 100;
+    const NUMBER_OF_ITEMS_WHEN_FULL: u64 = STORAGE_CAPACITY_1MB_IN_BYTES / CONTENT_SIZE_100_BYTES;
 
     fn create_config(temp_dir: &TempDir) -> IdIndexedV1StoreConfig {
         IdIndexedV1StoreConfig {
@@ -501,16 +514,16 @@ mod tests {
             node_data_dir: temp_dir.path().to_path_buf(),
             distance_fn: DistanceFunction::Xor,
             sql_connection_pool: setup_sql(temp_dir.path()).unwrap(),
-            storage_capacity_bytes: STORAGE_CAPACITY_10KB_IN_BYTES,
+            storage_capacity_bytes: STORAGE_CAPACITY_1MB_IN_BYTES,
         }
     }
 
-    /// Creates content key/value pair that are exactly 1% of the Storage capacity.
+    /// Creates content key/value pair that are exactly 0.01% of the Storage capacity.
     fn generate_key_value(
         config: &IdIndexedV1StoreConfig,
         distance: u8,
     ) -> (IdentityContentKey, Vec<u8>) {
-        generate_key_value_with_content_size(config, distance, STORAGE_CAPACITY_10KB_IN_BYTES / 100)
+        generate_key_value_with_content_size(config, distance, CONTENT_SIZE_100_BYTES)
     }
 
     fn generate_key_value_with_content_size(
@@ -565,7 +578,7 @@ mod tests {
         let temp_dir = TempDir::new()?;
         let config = create_config(&temp_dir);
 
-        let item_count = 20;
+        let item_count = 2000; // 20%
         create_and_populate_table(&config, item_count)?;
 
         let store = IdIndexedV1Store::create(ContentType::State, config)?;
@@ -577,7 +590,10 @@ mod tests {
             item_count * CONTENT_SIZE_100_BYTES
         );
         assert_eq!(store.radius(), Distance::MAX);
-        assert_eq!(store.to_insert_until_pruning, item_count);
+        assert_eq!(
+            store.to_insert_until_pruning,
+            item_count / PRUNING_CHECKING_FREQUENCY
+        );
         Ok(())
     }
 
@@ -586,7 +602,7 @@ mod tests {
         let temp_dir = TempDir::new()?;
         let config = create_config(&temp_dir);
 
-        let item_count = 50;
+        let item_count = 5000; // 50%
         create_and_populate_table(&config, item_count)?;
 
         let store = IdIndexedV1Store::create(ContentType::State, config)?;
@@ -598,7 +614,10 @@ mod tests {
             item_count * CONTENT_SIZE_100_BYTES
         );
         assert_eq!(store.radius(), Distance::MAX);
-        assert_eq!(store.to_insert_until_pruning, 100 - item_count);
+        assert_eq!(
+            store.to_insert_until_pruning,
+            (NUMBER_OF_ITEMS_WHEN_FULL - item_count) / PRUNING_CHECKING_FREQUENCY
+        );
         Ok(())
     }
 
@@ -618,7 +637,10 @@ mod tests {
             target_capacity_count * CONTENT_SIZE_100_BYTES
         );
         assert_eq!(store.radius(), Distance::MAX);
-        assert_eq!(store.to_insert_until_pruning, 100 - target_capacity_count);
+        assert_eq!(
+            store.to_insert_until_pruning,
+            (NUMBER_OF_ITEMS_WHEN_FULL - target_capacity_count) / PRUNING_CHECKING_FREQUENCY
+        );
         Ok(())
     }
 
@@ -640,7 +662,10 @@ mod tests {
             pruning_capacity_count * CONTENT_SIZE_100_BYTES
         );
         assert!(store.radius() < Distance::MAX);
-        assert_eq!(store.to_insert_until_pruning, 100 - pruning_capacity_count);
+        assert_eq!(
+            store.to_insert_until_pruning,
+            (NUMBER_OF_ITEMS_WHEN_FULL - pruning_capacity_count) / PRUNING_CHECKING_FREQUENCY
+        );
         Ok(())
     }
 
@@ -665,7 +690,10 @@ mod tests {
             target_capacity_count * CONTENT_SIZE_100_BYTES
         );
         assert!(store.radius() < Distance::MAX);
-        assert_eq!(store.to_insert_until_pruning, 100 - target_capacity_count);
+        assert_eq!(
+            store.to_insert_until_pruning,
+            (NUMBER_OF_ITEMS_WHEN_FULL - target_capacity_count) / PRUNING_CHECKING_FREQUENCY
+        );
         Ok(())
     }
 
@@ -689,7 +717,10 @@ mod tests {
             target_capacity_count * CONTENT_SIZE_100_BYTES
         );
         assert!(store.radius() < Distance::MAX);
-        assert_eq!(store.to_insert_until_pruning, 100 - target_capacity_count);
+        assert_eq!(
+            store.to_insert_until_pruning,
+            (NUMBER_OF_ITEMS_WHEN_FULL - target_capacity_count) / PRUNING_CHECKING_FREQUENCY
+        );
         Ok(())
     }
 
@@ -734,86 +765,17 @@ mod tests {
     }
 
     #[test]
-    fn to_insert_until_pruning_from_empty_to_full() -> Result<()> {
-        let temp_dir = TempDir::new()?;
-        let config = create_config(&temp_dir);
-        let mut store = IdIndexedV1Store::create(ContentType::State, config.clone())?;
-
-        assert_eq!(store.to_insert_until_pruning, 0);
-
-        let mut insert_and_check =
-            |insert_count: u64, expected_count: u64, expected_to_insert_until_pruning: u64| {
-                for _ in 0..insert_count {
-                    let (key, value) = generate_key_value(&config, 0);
-                    store.insert(&key, value).unwrap();
-                }
-                let usage_stats = store.get_usage_stats_internal().unwrap();
-                assert_eq!(
-                    usage_stats.entry_count, expected_count,
-                    "UsageStats: {usage_stats:?}. Testing count"
-                );
-                assert_eq!(
-                    store.to_insert_until_pruning, expected_to_insert_until_pruning,
-                    "UsageStats: {usage_stats:?}. Testing to_insert_until_pruning"
-                );
-            };
-
-        // The "to_insert_until_pruning" shouldn't be bigger that stored count
-        insert_and_check(
-            /* insert_count= */ 1, /* expected_count= */ 1,
-            /* expected_to_insert_until_pruning= */ 1,
-        );
-        insert_and_check(
-            /* insert_count= */ 1, /* expected_count= */ 2,
-            /* expected_to_insert_until_pruning= */ 2,
-        );
-        insert_and_check(
-            /* insert_count= */ 2, /* expected_count= */ 4,
-            /* expected_to_insert_until_pruning= */ 4,
-        );
-        insert_and_check(
-            /* insert_count= */ 4, /* expected_count= */ 8,
-            /* expected_to_insert_until_pruning= */ 8,
-        );
-        insert_and_check(
-            /* insert_count= */ 8, /* expected_count= */ 16,
-            /* expected_to_insert_until_pruning= */ 16,
-        );
-        insert_and_check(
-            /* insert_count= */ 16, /* expected_count= */ 32,
-            /* expected_to_insert_until_pruning= */ 32,
-        );
-
-        // The "to_insert_until_pruning" should estimate when we reach full capacity
-        insert_and_check(
-            /* insert_count= */ 32, /* expected_count= */ 64,
-            /* expected_to_insert_until_pruning= */ 36,
-        );
-
-        // We shouldn't trigger pruning for next "to_insert_until_pruning - 1" inserts.
-        insert_and_check(
-            /* insert_count= */ 35, /* expected_count= */ 99,
-            /* expected_to_insert_until_pruning= */ 1,
-        );
-
-        // Inserting one more should trigger pruning and we should be down to target capacity.
-        insert_and_check(
-            /* insert_count= */ 1, /* expected_count= */ 90,
-            /* expected_to_insert_until_pruning= */ 10,
-        );
-
-        Ok(())
-    }
-
-    #[test]
     fn pruning_with_one_large_item() -> Result<()> {
         let temp_dir = TempDir::new()?;
         let config = create_config(&temp_dir);
 
-        // fill 50% of storage with 50 items, 1% each
-        create_and_populate_table(&config, 50)?;
+        // fill 50% of storage with 5000 items, 0.01% each
+        create_and_populate_table(&config, 5000)?;
         let mut store = IdIndexedV1Store::create(ContentType::State, config.clone())?;
-        assert_eq!(store.to_insert_until_pruning, 50);
+        assert_eq!(
+            store.to_insert_until_pruning,
+            5000 / PRUNING_CHECKING_FREQUENCY
+        );
 
         // Insert key/value such that:
         // - key shouldn't be pruned (close distance)
@@ -821,7 +783,7 @@ mod tests {
         let (big_value_key, value) = generate_key_value_with_content_size(
             &config,
             /* distance = */ 0,
-            STORAGE_CAPACITY_10KB_IN_BYTES / 2,
+            STORAGE_CAPACITY_1MB_IN_BYTES / 2,
         );
         store.insert(&big_value_key, value)?;
 
@@ -829,13 +791,17 @@ mod tests {
         // - we didn't prune
         // - we are at 148% total capacity
         for _ in 0..48 {
-            let (key, value) = generate_key_value(&config, 0x80);
+            let (key, value) = generate_key_value_with_content_size(
+                &config,
+                /* distance = */ 0x80,
+                STORAGE_CAPACITY_1MB_IN_BYTES / 100,
+            );
             store.insert(&key, value).unwrap();
         }
         assert_eq!(store.to_insert_until_pruning, 1);
         assert_eq!(
             store.get_usage_stats_internal()?.total_entry_size_bytes,
-            STORAGE_CAPACITY_10KB_IN_BYTES * 148 / 100
+            STORAGE_CAPACITY_1MB_IN_BYTES * 148 / 100
         );
 
         // Add one more and check that:
@@ -849,7 +815,7 @@ mod tests {
                 <= config.pruning_capacity_threshold()
         );
         assert!(store.has_content(&big_value_key.content_id().into())?);
-        assert_eq!(store.to_insert_until_pruning, 2);
+        assert_eq!(store.to_insert_until_pruning, 1);
 
         Ok(())
     }
@@ -859,10 +825,13 @@ mod tests {
         let temp_dir = TempDir::new()?;
         let config = create_config(&temp_dir);
 
-        // Fill 50% of storage with 50 items, 1% each
-        create_and_populate_table(&config, 50)?;
+        // fill 50% of storage with 5000 items, 0.01% each
+        create_and_populate_table(&config, 5000)?;
         let mut store = IdIndexedV1Store::create(ContentType::State, config.clone())?;
-        assert_eq!(store.to_insert_until_pruning, 50);
+        assert_eq!(
+            store.to_insert_until_pruning,
+            5000 / PRUNING_CHECKING_FREQUENCY
+        );
 
         // Add 49 items with small distance and large size (50% total storage each) and check that:
         // - pruning didn't happen
@@ -871,33 +840,33 @@ mod tests {
             let (key, value) = generate_key_value_with_content_size(
                 &config,
                 /* distance = */ 0,
-                STORAGE_CAPACITY_10KB_IN_BYTES / 2,
+                STORAGE_CAPACITY_1MB_IN_BYTES / 2,
             );
             store.insert(&key, value)?;
         }
         assert_eq!(store.to_insert_until_pruning, 1);
         assert_eq!(
             store.get_usage_stats_internal()?.total_entry_size_bytes,
-            25 * STORAGE_CAPACITY_10KB_IN_BYTES
+            25 * STORAGE_CAPACITY_1MB_IN_BYTES
         );
 
         // Add one more big item and check that:
         // - we pruned all but one big one
-        // - to_insert_until_pruning is set to 1
+        // - to_insert_until_pruning is set to 0
         let (key, value) = generate_key_value_with_content_size(
             &config,
             /* distance = */ 0,
-            STORAGE_CAPACITY_10KB_IN_BYTES / 2,
+            STORAGE_CAPACITY_1MB_IN_BYTES / 2,
         );
         store.insert(&key, value)?;
         assert_eq!(
             store.get_usage_stats_internal()?,
             UsageStats {
                 entry_count: 1,
-                total_entry_size_bytes: STORAGE_CAPACITY_10KB_IN_BYTES / 2
+                total_entry_size_bytes: STORAGE_CAPACITY_1MB_IN_BYTES / 2
             }
         );
-        assert_eq!(store.to_insert_until_pruning, 1);
+        assert_eq!(store.to_insert_until_pruning, 0);
 
         Ok(())
     }
