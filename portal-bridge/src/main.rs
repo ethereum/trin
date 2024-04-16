@@ -7,7 +7,7 @@ use tracing::Instrument;
 use ethportal_api::jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
 use portal_bridge::{
     api::{consensus::ConsensusApi, execution::ExecutionApi},
-    bridge::{beacon::BeaconBridge, era1::Era1Bridge, history::HistoryBridge},
+    bridge::{beacon::BeaconBridge, era1::Era1Bridge, history::HistoryBridge, state::StateBridge},
     cli::BridgeConfig,
     types::{mode::BridgeMode, network::NetworkKind},
     utils::generate_spaced_private_keys,
@@ -79,6 +79,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .await;
         });
 
+        bridge_tasks.push(bridge_handle);
+    }
+
+    // Launch State Network portal bridge
+    if bridge_config.network.contains(&NetworkKind::State) {
+        let bridge_mode = bridge_config.mode.clone();
+        let portal_clients = portal_clients.clone();
+        let epoch_acc_path = bridge_config.epoch_acc_path.clone();
+        let master_acc = PreMergeAccumulator::default();
+        let header_oracle = HeaderOracle::new(master_acc);
+        let state_bridge = StateBridge::new(
+            bridge_mode,
+            portal_clients.expect("Failed to create state JSON-RPC clients"),
+            header_oracle,
+            epoch_acc_path,
+            bridge_config.gossip_limit,
+        )
+        .await?;
+        let bridge_handle = tokio::spawn(async move {
+            state_bridge
+                .launch()
+                .instrument(tracing::trace_span!("state"))
+                .await;
+        });
         bridge_tasks.push(bridge_handle);
     }
 

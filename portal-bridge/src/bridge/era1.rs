@@ -459,7 +459,7 @@ impl Era1Bridge {
 }
 
 /// Fetches era1 files hosted on era1.ethportal.net and shuffles them
-async fn get_shuffled_era1_files(http_client: &Client) -> anyhow::Result<Vec<String>> {
+pub async fn get_shuffled_era1_files(http_client: &Client) -> anyhow::Result<Vec<String>> {
     let index_html = http_client
         .get(ERA1_DIR_URL)
         .recv_string()

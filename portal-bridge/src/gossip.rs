@@ -8,7 +8,7 @@ use crate::stats::{BeaconSlotStats, HistoryBlockStats, StatsReporter};
 use ethportal_api::{
     jsonrpsee::core::Error, types::portal::TraceGossipInfo, BeaconContentKey, BeaconContentValue,
     BeaconNetworkApiClient, HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
-    OverlayContentKey,
+    OverlayContentKey, StateContentKey, StateContentValue, StateNetworkApiClient,
 };
 
 const GOSSIP_RETRY_COUNT: u64 = 3;
@@ -163,6 +163,79 @@ async fn history_trace_gossip(
     }
     warn!(
         "Failed to gossip history content, without successfully locating data on network, after {} attempts: content key={:?}",
+        GOSSIP_RETRY_COUNT,
+        content_key.to_hex(),
+    );
+    Ok(GossipReport {
+        traces,
+        retries,
+        found,
+    })
+}
+
+/// Gossip any given content key / value to the state network.
+pub async fn gossip_state_content(
+    portal_clients: &Vec<HttpClient>,
+    content_key: StateContentKey,
+    content_value: StateContentValue,
+) -> anyhow::Result<()> {
+    let mut results: Vec<Result<GossipReport, Error>> = vec![];
+    for client in portal_clients {
+        let client = client.clone();
+        let content_key = content_key.clone();
+        let content_value = content_value.clone();
+        let result =
+            tokio::spawn(state_trace_gossip(client, content_key, content_value).in_current_span())
+                .await?;
+        results.push(result);
+    }
+    Ok(())
+}
+
+async fn state_trace_gossip(
+    client: HttpClient,
+    content_key: StateContentKey,
+    content_value: StateContentValue,
+) -> Result<GossipReport, Error> {
+    let mut retries = 0;
+    let mut traces = vec![];
+    let mut found = false;
+    while retries < GOSSIP_RETRY_COUNT {
+        let result = StateNetworkApiClient::trace_gossip(
+            &client,
+            content_key.clone(),
+            content_value.clone(),
+        )
+        .await;
+        // check if content was successfully transferred to at least one peer on network
+        if let Ok(trace) = result {
+            traces.push(trace.clone());
+            if !trace.transferred.is_empty() {
+                return Ok(GossipReport {
+                    traces,
+                    retries,
+                    found,
+                });
+            }
+        }
+        // if not, make rfc request to see if data is available on network
+        let result =
+            StateNetworkApiClient::recursive_find_content(&client, content_key.clone()).await;
+        if let Ok(ethportal_api::types::state::ContentInfo::Content { .. }) = result {
+            debug!("Found content on network, after failing to gossip, aborting gossip. content key={:?}", content_key.to_hex());
+            found = true;
+            return Ok(GossipReport {
+                traces,
+                retries,
+                found,
+            });
+        }
+        retries += 1;
+        debug!("Unable to locate content on network, after failing to gossip, retrying in {:?} seconds. content key={:?}", RETRY_AFTER, content_key.to_hex());
+        sleep(RETRY_AFTER).await;
+    }
+    warn!(
+        "Failed to gossip state content, without successfully locating data on network, after {} attempts: content key={:?}",
         GOSSIP_RETRY_COUNT,
         content_key.to_hex(),
     );

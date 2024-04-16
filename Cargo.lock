@@ -187,11 +187,23 @@ name = "alloy-consensus"
 version = "0.1.0"
 source = "git+https://github.com/alloy-rs/alloy?rev=8c9dd0a#8c9dd0ae0a0f12eb81b5afe75a9b55ea4ad3abf4"
 dependencies = [
- "alloy-eips",
+ "alloy-eips 0.1.0 (git+https://github.com/alloy-rs/alloy?rev=8c9dd0a)",
  "alloy-primitives",
  "alloy-rlp",
- "alloy-serde",
+ "alloy-serde 0.1.0 (git+https://github.com/alloy-rs/alloy?rev=8c9dd0a)",
  "serde",
+ "sha2 0.10.8",
+]
+
+[[package]]
+name = "alloy-consensus"
+version = "0.1.0"
+source = "git+https://github.com/alloy-rs/alloy.git?rev=d68a6b787b2904061f0ae7fcc02ece8513e3c500#d68a6b787b2904061f0ae7fcc02ece8513e3c500"
+dependencies = [
+ "alloy-eips 0.1.0 (git+https://github.com/alloy-rs/alloy.git?rev=d68a6b787b2904061f0ae7fcc02ece8513e3c500)",
+ "alloy-primitives",
+ "alloy-rlp",
+ "c-kzg",
  "sha2 0.10.8",
 ]
 
@@ -202,7 +214,20 @@ source = "git+https://github.com/alloy-rs/alloy?rev=8c9dd0a#8c9dd0ae0a0f12eb81b5
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
- "alloy-serde",
+ "alloy-serde 0.1.0 (git+https://github.com/alloy-rs/alloy?rev=8c9dd0a)",
+ "c-kzg",
+ "once_cell",
+ "serde",
+]
+
+[[package]]
+name = "alloy-eips"
+version = "0.1.0"
+source = "git+https://github.com/alloy-rs/alloy.git?rev=d68a6b787b2904061f0ae7fcc02ece8513e3c500#d68a6b787b2904061f0ae7fcc02ece8513e3c500"
+dependencies = [
+ "alloy-primitives",
+ "alloy-rlp",
+ "alloy-serde 0.1.0 (git+https://github.com/alloy-rs/alloy.git?rev=d68a6b787b2904061f0ae7fcc02ece8513e3c500)",
  "c-kzg",
  "once_cell",
  "serde",
@@ -214,7 +239,7 @@ version = "0.1.0"
 source = "git+https://github.com/alloy-rs/alloy?rev=8c9dd0a#8c9dd0ae0a0f12eb81b5afe75a9b55ea4ad3abf4"
 dependencies = [
  "alloy-primitives",
- "alloy-serde",
+ "alloy-serde 0.1.0 (git+https://github.com/alloy-rs/alloy?rev=8c9dd0a)",
  "serde",
 ]
 
@@ -269,12 +294,12 @@ name = "alloy-rpc-types"
 version = "0.1.0"
 source = "git+https://github.com/alloy-rs/alloy?rev=8c9dd0a#8c9dd0ae0a0f12eb81b5afe75a9b55ea4ad3abf4"
 dependencies = [
- "alloy-consensus",
- "alloy-eips",
+ "alloy-consensus 0.1.0 (git+https://github.com/alloy-rs/alloy?rev=8c9dd0a)",
+ "alloy-eips 0.1.0 (git+https://github.com/alloy-rs/alloy?rev=8c9dd0a)",
  "alloy-genesis",
  "alloy-primitives",
  "alloy-rlp",
- "alloy-serde",
+ "alloy-serde 0.1.0 (git+https://github.com/alloy-rs/alloy?rev=8c9dd0a)",
  "alloy-sol-types",
  "itertools 0.12.1",
  "jsonrpsee-types",
@@ -288,11 +313,11 @@ name = "alloy-rpc-types-engine"
 version = "0.1.0"
 source = "git+https://github.com/alloy-rs/alloy?rev=8c9dd0a#8c9dd0ae0a0f12eb81b5afe75a9b55ea4ad3abf4"
 dependencies = [
- "alloy-consensus",
+ "alloy-consensus 0.1.0 (git+https://github.com/alloy-rs/alloy?rev=8c9dd0a)",
  "alloy-primitives",
  "alloy-rlp",
  "alloy-rpc-types",
- "alloy-serde",
+ "alloy-serde 0.1.0 (git+https://github.com/alloy-rs/alloy?rev=8c9dd0a)",
  "jsonrpsee-types",
  "serde",
  "thiserror",
@@ -305,7 +330,7 @@ source = "git+https://github.com/alloy-rs/alloy?rev=8c9dd0a#8c9dd0ae0a0f12eb81b5
 dependencies = [
  "alloy-primitives",
  "alloy-rpc-types",
- "alloy-serde",
+ "alloy-serde 0.1.0 (git+https://github.com/alloy-rs/alloy?rev=8c9dd0a)",
  "serde",
  "serde_json",
 ]
@@ -314,6 +339,16 @@ dependencies = [
 name = "alloy-serde"
 version = "0.1.0"
 source = "git+https://github.com/alloy-rs/alloy?rev=8c9dd0a#8c9dd0ae0a0f12eb81b5afe75a9b55ea4ad3abf4"
+dependencies = [
+ "alloy-primitives",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "alloy-serde"
+version = "0.1.0"
+source = "git+https://github.com/alloy-rs/alloy.git?rev=d68a6b787b2904061f0ae7fcc02ece8513e3c500#d68a6b787b2904061f0ae7fcc02ece8513e3c500"
 dependencies = [
  "alloy-primitives",
  "serde",
@@ -5017,6 +5052,7 @@ dependencies = [
 name = "portal-bridge"
 version = "0.1.0"
 dependencies = [
+ "alloy-consensus 0.1.0 (git+https://github.com/alloy-rs/alloy.git?rev=d68a6b787b2904061f0ae7fcc02ece8513e3c500)",
  "alloy-primitives",
  "alloy-rlp",
  "anyhow",
@@ -5025,6 +5061,7 @@ dependencies = [
  "clap",
  "discv5",
  "env_logger 0.9.3",
+ "eth_trie",
  "ethereum_ssz",
  "ethereum_ssz_derive",
  "ethportal-api",
