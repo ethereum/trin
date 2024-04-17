@@ -1,14 +1,18 @@
-use std::{net::SocketAddr, path::PathBuf, str::FromStr};
+use std::{env, net::SocketAddr, path::PathBuf, str::FromStr};
 
 use alloy_primitives::B256;
 use clap::{Parser, Subcommand};
+use surf::{Client, Config};
 use tokio::process::Child;
+use tracing::error;
 use url::Url;
 
 use crate::{
     client_handles::{fluffy_handle, trin_handle},
-    constants::DEFAULT_GOSSIP_LIMIT,
+    constants::{DEFAULT_GOSSIP_LIMIT, HTTP_REQUEST_TIMEOUT},
     types::{mode::BridgeMode, network::NetworkKind},
+    DEFAULT_BASE_CL_ENDPOINT, DEFAULT_BASE_EL_ENDPOINT, FALLBACK_BASE_CL_ENDPOINT,
+    FALLBACK_BASE_EL_ENDPOINT,
 };
 use ethportal_api::types::cli::{
     check_private_key_length, DEFAULT_DISCOVERY_PORT, DEFAULT_WEB3_HTTP_PORT,
@@ -21,7 +25,7 @@ use ethportal_api::types::cli::{
 pub const MAX_NODE_COUNT: u8 = 16;
 const DEFAULT_SUBNETWORK: &str = "history";
 
-#[derive(Parser, Debug, PartialEq, Clone)]
+#[derive(Parser, Debug, Clone)]
 #[command(name = "Trin Bridge", about = "Feed the network")]
 pub struct BridgeConfig {
     #[arg(
@@ -93,17 +97,35 @@ pub struct BridgeConfig {
 
     #[arg(
         long = "el-provider",
-        default_value_t = Provider::PandaOps,
-        help = "Data provider for execution layer data. (\"pandaops\" / infura url with api key / local node url)"
+        default_value = DEFAULT_BASE_EL_ENDPOINT,
+        help = "Data provider for execution layer data. (pandaops url / infura url with api key / local node url)",
+        value_parser = url_to_client
     )]
-    pub el_provider: Provider,
+    pub el_provider: Client,
+
+    #[arg(
+        long = "el-provider-fallback",
+        default_value = FALLBACK_BASE_EL_ENDPOINT,
+        help = "Data provider for execution layer data. (pandaops url / infura url with api key / local node url)",
+        value_parser = url_to_client
+    )]
+    pub el_provider_fallback: Client,
 
     #[arg(
         long = "cl-provider",
-        default_value_t = Provider::PandaOps,
-        help = "Data provider for consensus layer data. (\"pandaops\" / local node url)"
+        default_value = DEFAULT_BASE_CL_ENDPOINT,
+        help = "Data provider for consensus layer data. (pandaops url / local node url)",
+        value_parser = url_to_client
     )]
-    pub cl_provider: Provider,
+    pub cl_provider: Client,
+
+    #[arg(
+        long = "cl-provider-fallback",
+        default_value = FALLBACK_BASE_CL_ENDPOINT,
+        help = "Data provider for consensus layer data. (pandaops url / local node url)",
+        value_parser = url_to_client
+    )]
+    pub cl_provider_fallback: Client,
 
     #[arg(
         default_value_t = DEFAULT_DISCOVERY_PORT,
@@ -136,42 +158,41 @@ fn check_node_count(val: &str) -> Result<u8, String> {
     }
 }
 
+fn url_to_client(url: &str) -> Result<Client, String> {
+    let mut config = Config::new()
+        .add_header("Content-Type", "application/json")
+        .expect("to be able to add content type header")
+        .set_timeout(Some(HTTP_REQUEST_TIMEOUT));
+    let url = Url::parse(url).map_err(|_| "Invalid provider url".to_string())?;
+    if url
+        .host_str()
+        .expect("to find host string")
+        .contains("pandaops.io")
+    {
+        let client_id = env::var("PANDAOPS_CLIENT_ID").unwrap_or_else(|_| {
+            error!("Pandoaps provider detected without PANDAOPS_CLIENT_ID set");
+            "null".to_string()
+        });
+        let client_secret = env::var("PANDAOPS_CLIENT_SECRET").unwrap_or_else(|_| {
+            error!("Pandoaps provider detected without PANDAOPS_CLIENT_SECRET set");
+            "null".to_string()
+        });
+        config = config
+            .clone()
+            .add_header("CF-Access-Client-Id", client_id)
+            .map_err(|_| "to be able to add client id header")?
+            .add_header("CF-Access-Client-Secret", client_secret)
+            .map_err(|_| "to be able to add client secret header")?
+            .set_base_url(url);
+    } else {
+        config = config.set_base_url(url);
+    }
+    Ok(config
+        .try_into()
+        .map_err(|_| "to convert config to client")?)
+}
+
 type ParseError = &'static str;
-
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub enum Provider {
-    #[default]
-    PandaOps,
-    // the url for a local provider or 3rd party provider (like Infura)
-    Url(Url),
-    // stub provider for use in test mode
-    Test,
-}
-
-impl FromStr for Provider {
-    type Err = ParseError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "pandaops" => Ok(Provider::PandaOps),
-            "test" => Ok(Provider::Test),
-            _ => match Url::parse(s) {
-                Ok(url) => Ok(Provider::Url(url)),
-                Err(_) => Err("Invalid provider: must be 'pandaops' or a valid url"),
-            },
-        }
-    }
-}
-
-impl ToString for Provider {
-    fn to_string(&self) -> String {
-        match self {
-            Provider::PandaOps => "pandaops".to_string(),
-            Provider::Test => "test".to_string(),
-            Provider::Url(url) => format!("{url}"),
-        }
-    }
-}
 
 #[derive(Clone, Debug, PartialEq, Eq, Subcommand)]
 pub enum ClientType {
@@ -235,8 +256,38 @@ mod test {
         );
         assert_eq!(bridge_config.mode, BridgeMode::Latest);
         assert_eq!(bridge_config.epoch_acc_path, PathBuf::from(EPOCH_ACC_PATH));
-        assert_eq!(bridge_config.el_provider, Provider::PandaOps);
-        assert_eq!(bridge_config.cl_provider, Provider::PandaOps);
+        assert!(bridge_config
+            .el_provider
+            .config()
+            .base_url
+            .as_ref()
+            .unwrap()
+            .as_str()
+            .contains(DEFAULT_BASE_EL_ENDPOINT));
+        assert!(bridge_config
+            .el_provider_fallback
+            .config()
+            .base_url
+            .as_ref()
+            .unwrap()
+            .as_str()
+            .contains(FALLBACK_BASE_EL_ENDPOINT));
+        assert!(bridge_config
+            .cl_provider
+            .config()
+            .base_url
+            .as_ref()
+            .unwrap()
+            .as_str()
+            .contains(DEFAULT_BASE_CL_ENDPOINT));
+        assert!(bridge_config
+            .cl_provider_fallback
+            .config()
+            .base_url
+            .as_ref()
+            .unwrap()
+            .as_str()
+            .contains(FALLBACK_BASE_CL_ENDPOINT));
         assert_eq!(
             bridge_config.network,
             vec![NetworkKind::History, NetworkKind::Beacon]

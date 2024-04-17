@@ -6,14 +6,15 @@ use ethportal_api::{jsonrpsee::http_client::HttpClient, BeaconContentKey, Beacon
 use portal_bridge::{
     api::{consensus::ConsensusApi, execution::ExecutionApi},
     bridge::{beacon::BeaconBridge, history::HistoryBridge},
-    cli::Provider,
     constants::DEFAULT_GOSSIP_LIMIT,
     types::mode::BridgeMode,
 };
 use serde_json::Value;
 use std::sync::Arc;
+use surf::{Client, Config};
 use tokio::time::{sleep, Duration};
 use trin_validation::{accumulator::MasterAccumulator, oracle::HeaderOracle};
+use url::Url;
 
 pub async fn test_history_bridge(peertest: &Peertest, target: &HttpClient) {
     let master_acc = MasterAccumulator::default();
@@ -21,9 +22,12 @@ pub async fn test_history_bridge(peertest: &Peertest, target: &HttpClient) {
     let portal_clients = vec![target.clone()];
     let epoch_acc_path = "validation_assets/epoch_acc.bin".into();
     let mode = BridgeMode::Test("./test_assets/portalnet/bridge_data.json".into());
-    let execution_api = ExecutionApi::new(Provider::Test, mode.clone())
-        .await
+    let client: Client = Config::new()
+        // url doesn't matter, we're not making any requests
+        .set_base_url(Url::parse("http://www.null.com").unwrap())
+        .try_into()
         .unwrap();
+    let execution_api = ExecutionApi::new(client.clone(), client).await.unwrap();
     // Wait for bootnode to start
     sleep(Duration::from_secs(1)).await;
     let bridge = HistoryBridge::new(

@@ -4,20 +4,10 @@ use alloy_primitives::B256;
 use anyhow::{anyhow, bail};
 use futures::future::join_all;
 use serde_json::{json, Value};
-use surf::{
-    middleware::{Middleware, Next},
-    Body, Client, Config, Request, Response,
-};
-use tokio::time::{sleep, Duration};
-use tracing::{debug, warn};
-use url::Url;
+use surf::Client;
+use tracing::{debug, error, warn};
 
-use crate::{
-    cli::Provider,
-    constants::HTTP_REQUEST_TIMEOUT,
-    types::{full_header::FullHeader, mode::BridgeMode},
-    BASE_EL_ARCHIVE_ENDPOINT, BASE_EL_ENDPOINT, PANDAOPS_CLIENT_ID, PANDAOPS_CLIENT_SECRET,
-};
+use crate::types::full_header::FullHeader;
 use ethportal_api::{
     types::{
         execution::{
@@ -45,50 +35,37 @@ const BATCH_LIMIT: usize = 100;
 #[derive(Clone, Debug)]
 pub struct ExecutionApi {
     pub client: Client,
+    pub fallback_client: Client,
     pub master_acc: MasterAccumulator,
 }
 
 impl ExecutionApi {
-    pub async fn new(provider: Provider, mode: BridgeMode) -> Result<Self, surf::Error> {
-        let client: Client = match &provider {
-            Provider::PandaOps => {
-                let endpoint = match mode {
-                    BridgeMode::Backfill(_) => BASE_EL_ARCHIVE_ENDPOINT.to_string(),
-                    _ => BASE_EL_ENDPOINT.to_string(),
-                };
-                let base_el_endpoint =
-                    Url::parse(&endpoint).expect("to be able to parse static base el endpoint url");
-                Config::new()
-                    .add_header("Content-Type", "application/json")?
-                    .add_header("CF-Access-Client-Id", PANDAOPS_CLIENT_ID.to_string())?
-                    .add_header(
-                        "CF-Access-Client-Secret",
-                        PANDAOPS_CLIENT_SECRET.to_string(),
-                    )?
-                    .set_base_url(base_el_endpoint)
-                    .set_timeout(Some(HTTP_REQUEST_TIMEOUT))
-                    .try_into()?
-            }
-            Provider::Url(url) => Config::new()
-                .add_header("Content-Type", "application/json")?
-                .set_base_url(url.clone())
-                .set_timeout(Some(HTTP_REQUEST_TIMEOUT))
-                .try_into()?,
-            Provider::Test => Config::new().try_into()?,
-        };
-        let client = client.with(Retry::default());
+    pub async fn new(client: Client, fallback_client: Client) -> Result<Self, surf::Error> {
         // Only check that provider is connected & available if not using a test provider.
         debug!(
-            "Starting ExecutionApi with provider at url: {:?}",
-            client.config().base_url
+            "Starting ExecutionApi with primary provider: {} and fallback provider: {}",
+            client
+                .config()
+                .base_url
+                .as_ref()
+                .expect("to have base url set")
+                .as_str(),
+            fallback_client
+                .config()
+                .base_url
+                .as_ref()
+                .expect("to have base url set")
+                .as_str()
         );
-        if provider != Provider::Test {
-            check_provider(&client).await.map_err(|err| {
-                anyhow!("Check EL provider failed. Provider may be offline: {err:?}")
-            })?;
+        if let Err(err) = check_provider(&client).await {
+            error!("Primary el provider is offline: {err:?}");
         }
         let master_acc = MasterAccumulator::default();
-        Ok(Self { client, master_acc })
+        Ok(Self {
+            client,
+            fallback_client,
+            master_acc,
+        })
     }
 
     /// Return a validated FullHeader & content key / value pair for the given header.
@@ -101,7 +78,7 @@ impl ExecutionApi {
         let block_param = format!("0x{height:01X}");
         let params = Params::Array(vec![json!(block_param), json!(true)]);
         let request = JsonRequest::new("eth_getBlockByNumber".to_string(), params, height as u32);
-        let response = self.send_request(request).await?;
+        let response = self.try_request(request).await?;
         let result = response
             .get("result")
             .ok_or_else(|| anyhow!("Unable to fetch header for block: {height:?}"))?;
@@ -119,7 +96,6 @@ impl ExecutionApi {
         if let Err(msg) = full_header.validate() {
             bail!("Header validation failed: {msg}");
         };
-
         // Construct content key / value pair.
         let content_key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
             block_hash: full_header.header.hash().0,
@@ -267,7 +243,7 @@ impl ExecutionApi {
         let params = Params::Array(vec![json!("latest"), json!(false)]);
         let method = "eth_getBlockByNumber".to_string();
         let request = JsonRequest::new(method, params, 1);
-        let response = self.send_request(request).await?;
+        let response = self.try_request(request).await?;
         let result = response
             .get("result")
             .ok_or_else(|| anyhow!("Unable to fetch latest block"))?;
@@ -281,7 +257,7 @@ impl ExecutionApi {
     async fn batch_requests(&self, obj: Vec<JsonRequest>) -> anyhow::Result<String> {
         let batched_request_futures = obj
             .chunks(BATCH_LIMIT)
-            .map(|chunk| self.send_batch_request(chunk.to_vec()))
+            .map(|chunk| self.try_batch_request(chunk.to_vec()))
             .collect::<Vec<_>>();
         match join_all(batched_request_futures)
             .await
@@ -295,14 +271,31 @@ impl ExecutionApi {
         }
     }
 
-    async fn send_batch_request(&self, requests: Vec<JsonRequest>) -> anyhow::Result<Vec<Value>> {
+    async fn try_batch_request(&self, requests: Vec<JsonRequest>) -> anyhow::Result<Vec<Value>> {
         if requests.len() > BATCH_LIMIT {
             warn!(
                 "Attempting to send requests outnumbering provider request limit of {BATCH_LIMIT}."
             )
         }
-        let result = self
-            .client
+        match Self::send_batch_request(&self.client, &requests).await {
+            Ok(response) => Ok(response),
+            Err(msg) => {
+                warn!("Failed to send batch request to primary provider: {msg}");
+                match Self::send_batch_request(&self.fallback_client, &requests).await {
+                    Ok(response) => Ok(response),
+                    Err(msg) => {
+                        bail!("Failed to send batch request to fallback provider: {msg}");
+                    }
+                }
+            }
+        }
+    }
+
+    async fn send_batch_request(
+        client: &Client,
+        requests: &Vec<JsonRequest>,
+    ) -> anyhow::Result<Vec<Value>> {
+        let result = client
             .post("")
             .body_json(&json!(requests))
             .map_err(|e| anyhow!("Unable to construct json post for batched requests: {e:?}"))?;
@@ -315,9 +308,20 @@ impl ExecutionApi {
         })
     }
 
-    async fn send_request(&self, request: JsonRequest) -> anyhow::Result<Value> {
-        let result = self
-            .client
+    async fn try_request(&self, request: JsonRequest) -> anyhow::Result<Value> {
+        match Self::send_request(&self.client, &request).await {
+            Ok(response) => Ok(response),
+            Err(msg) => {
+                warn!("Failed to send request to primary provider, retrying with fallback provider: {msg}");
+                Self::send_request(&self.fallback_client, &request)
+                    .await
+                    .map_err(|err| anyhow!("Failed to send request to fallback provider: {err:?}"))
+            }
+        }
+    }
+
+    async fn send_request(client: &Client, request: &JsonRequest) -> anyhow::Result<Value> {
+        let result = client
             .post("")
             .body_json(&request)
             .map_err(|e| anyhow!("Unable to construct json post for single request: {e:?}"))?;
@@ -341,55 +345,6 @@ pub async fn construct_proof(
     let proof = MasterAccumulator::construct_proof(&header, epoch_acc)?;
     let proof = BlockHeaderProof::AccumulatorProof(AccumulatorProof { proof });
     Ok(HeaderWithProof { header, proof })
-}
-
-#[derive(Debug)]
-pub struct Retry {
-    attempts: u8,
-}
-
-impl Retry {
-    pub fn new(attempts: u8) -> Self {
-        Retry { attempts }
-    }
-}
-
-#[async_trait::async_trait]
-impl Middleware for Retry {
-    async fn handle(
-        &self,
-        mut req: Request,
-        client: Client,
-        next: Next<'_>,
-    ) -> Result<Response, surf::Error> {
-        let mut retry_count: u8 = 0;
-        let body = req.take_body().into_bytes().await?;
-        while retry_count < self.attempts {
-            if retry_count > 0 {
-                warn!("Retrying request");
-            }
-            let mut new_req = req.clone();
-            new_req.set_body(Body::from_bytes(body.clone()));
-            if let Ok(val) = next.run(new_req, client.clone()).await {
-                if val.status().is_success() {
-                    return Ok(val);
-                }
-                tracing::error!("Execution client request failed with: {:?}", val);
-            };
-            retry_count += 1;
-            sleep(Duration::from_millis(100)).await;
-        }
-        Err(surf::Error::from_str(
-            500,
-            "Unable to fetch batch after 3 retries",
-        ))
-    }
-}
-
-impl Default for Retry {
-    fn default() -> Self {
-        Self { attempts: 3 }
-    }
 }
 
 /// Check that provider is valid and accessible.

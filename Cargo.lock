@@ -2651,6 +2651,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "surf",
  "tempfile",
  "tokio",
  "tracing",
@@ -2663,6 +2664,7 @@ dependencies = [
  "trin-validation",
  "uds_windows",
  "ureq",
+ "url",
 ]
 
 [[package]]
