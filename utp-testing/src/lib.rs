@@ -8,7 +8,10 @@ pub mod rpc;
 use crate::rpc::RpcServer;
 use discv5::TalkRequest;
 use ethportal_api::{
-    types::{enr::Enr, portal_wire::ProtocolId},
+    types::{
+        enr::Enr,
+        portal_wire::{ProtocolId, MAINNET},
+    },
     utils::bytes::{hex_encode, hex_encode_upper},
 };
 use jsonrpsee::{
@@ -141,8 +144,9 @@ impl TestApp {
         // Forward discv5 uTP packets to uTP socket
         tokio::spawn(async move {
             while let Some(request) = talk_req_rx.recv().await {
-                let protocol_id =
-                    ProtocolId::from_str(&hex_encode_upper(request.protocol())).unwrap();
+                let protocol_id = MAINNET
+                    .get_protocol_id_from_hex(&hex_encode_upper(request.protocol()))
+                    .unwrap();
 
                 if let ProtocolId::Utp = protocol_id {
                     utp_talk_reqs_tx.send(request).unwrap();
@@ -166,7 +170,7 @@ pub async fn run_test_app(
     };
 
     let temp_dir = setup_temp_dir().unwrap().into_path();
-    let mut discovery = Discovery::new(config, temp_dir).unwrap();
+    let mut discovery = Discovery::new(config, temp_dir, MAINNET.clone()).unwrap();
     let talk_req_rx = discovery.start().await.unwrap();
     let enr = discovery.local_enr();
     let discovery = Arc::new(discovery);

@@ -94,7 +94,7 @@ pub mod test {
     const CAPACITY_MB: u64 = 2;
 
     fn get_active_node_id(temp_dir: PathBuf) -> NodeId {
-        let (_, mut pk) = configure_node_data_dir(temp_dir, None).unwrap();
+        let (_, mut pk) = configure_node_data_dir(temp_dir, None, "test".to_string()).unwrap();
         let pk = CombinedKey::secp256k1_from_bytes(pk.0.as_mut_slice()).unwrap();
         Discv5Enr::empty(&pk).unwrap().node_id()
     }

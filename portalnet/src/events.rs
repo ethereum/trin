@@ -1,5 +1,5 @@
 use std::{
-    str::FromStr,
+    sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -10,7 +10,7 @@ use tokio_stream::wrappers::BroadcastStream;
 use tracing::{debug, error, trace, warn};
 
 use ethportal_api::{
-    types::portal_wire::ProtocolId,
+    types::portal_wire::{NetworkSpec, ProtocolId},
     utils::bytes::{hex_encode, hex_encode_upper},
 };
 
@@ -63,6 +63,8 @@ pub struct PortalnetEvents {
     pub beacon_handle: OverlayHandle,
     /// Send TalkReq events with "utp" protocol id to `UtpListener`
     pub utp_talk_reqs: mpsc::UnboundedSender<TalkRequest>,
+    /// The Portal Network to Protocal Id Map etc MAINNET, TESTNET
+    network_spec: Arc<NetworkSpec>,
 }
 
 impl PortalnetEvents {
@@ -72,6 +74,7 @@ impl PortalnetEvents {
         state_channels: OverlayChannels,
         beacon_channels: OverlayChannels,
         utp_talk_reqs: mpsc::UnboundedSender<TalkRequest>,
+        network_spec: Arc<NetworkSpec>,
     ) -> Self {
         Self {
             talk_req_receiver,
@@ -79,6 +82,7 @@ impl PortalnetEvents {
             state_handle: state_channels.into(),
             beacon_handle: beacon_channels.into(),
             utp_talk_reqs,
+            network_spec,
         }
     }
 
@@ -118,7 +122,9 @@ impl PortalnetEvents {
 
     /// Dispatch Discv5 TalkRequest event to overlay networks or uTP socket
     fn dispatch_discv5_talk_req(&self, request: TalkRequest) {
-        let protocol_id = ProtocolId::from_str(&hex_encode_upper(request.protocol()));
+        let protocol_id = self
+            .network_spec
+            .get_protocol_id_from_hex(&hex_encode_upper(request.protocol()));
 
         match protocol_id {
             Ok(protocol) => match protocol {
@@ -144,14 +150,19 @@ impl PortalnetEvents {
                 }
                 _ => {
                     warn!(
-                        "Received TalkRequest on unknown protocol from={} protocol={} body={}",
+                        "Received TalkRequest on non-supported protocol from={} protocol={} body={}",
                         request.node_id(),
                         hex_encode_upper(request.protocol()),
                         hex_encode(request.body()),
                     );
                 }
             },
-            Err(_) => warn!("Unable to decode protocol id"),
+            Err(err) => warn!(
+                "Received TalkRequest on unknown protocol from={} protocol={} body={} err={err}",
+                request.node_id(),
+                hex_encode_upper(request.protocol()),
+                hex_encode(request.body()),
+            ),
         }
     }
 

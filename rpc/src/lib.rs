@@ -51,7 +51,7 @@ pub async fn launch_jsonrpc_server(
     // Discv5 and Web3 modules are enabled with every network
     let mut modules = vec![PortalRpcModule::Discv5, PortalRpcModule::Web3];
 
-    for network in trin_config.networks.iter() {
+    for network in trin_config.portal_subnetworks.iter() {
         match network.as_str() {
             HISTORY_NETWORK => {
                 modules.push(PortalRpcModule::History);

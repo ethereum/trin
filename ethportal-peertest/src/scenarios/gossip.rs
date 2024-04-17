@@ -42,7 +42,7 @@ pub async fn test_gossip_with_trace(peertest: &Peertest, target: &Client) {
     let trin_config = TrinConfig::new_from(
         [
             "trin",
-            "--networks",
+            "--portal-subnetworks",
             "history,state",
             "--external-address",
             external_addr.as_str(),

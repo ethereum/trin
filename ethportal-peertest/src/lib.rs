@@ -79,7 +79,7 @@ fn generate_trin_config(id: u16, bootnode_enr: Option<&Enr>) -> TrinConfig {
             let web3_ipc_path_str = web3_ipc_path.as_path().display().to_string();
             let trin_config_args = vec![
                 "trin",
-                "--networks",
+                "--portal-subnetworks",
                 "history,beacon,state",
                 "--external-address",
                 external_addr.as_str(),
@@ -101,7 +101,7 @@ fn generate_trin_config(id: u16, bootnode_enr: Option<&Enr>) -> TrinConfig {
             let web3_ipc_path_str = web3_ipc_path.as_path().display().to_string();
             let trin_config_args = vec![
                 "trin",
-                "--networks",
+                "--portal-subnetworks",
                 "history,beacon,state",
                 "--external-address",
                 external_addr.as_str(),

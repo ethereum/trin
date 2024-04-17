@@ -133,6 +133,14 @@ pub async fn test_ping(protocol: ProtocolId, target: &Client, peertest: &Peertes
     assert_eq!(result.enr_seq, 1);
 }
 
+pub async fn test_ping_cross_network(target: &Client, peertest: &Peertest) {
+    info!("Testing ping for history cross mainnet and testnet discv5 protocol id");
+    let bootnode_enr = peertest.bootnode.enr.clone();
+    if let Ok(pong) = HistoryNetworkApiClient::ping(target, bootnode_enr).await {
+        panic!("Expected ping to fail as mainnet/testnet history nodes shouldn't be able to communicate {pong:?}");
+    };
+}
+
 pub async fn test_find_nodes(protocol: ProtocolId, target: &Client, peertest: &Peertest) {
     info!("Testing find_nodes for {protocol}");
     let bootnode_enr = peertest.bootnode.enr.clone();

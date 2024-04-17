@@ -15,6 +15,7 @@ alloy-primitives = { version = "0.7.0", features = ["ssz"] }
 alloy-rlp = "0.3.4"
 anyhow = "1.0.68"
 base64 = "0.13.0"
+bimap = "0.6.3"
 bytes = "1.3.0"
 clap = { version = "4.2.1", features = ["derive"] }
 const_format = {version = "0.2.0", features = ["rust_1_64"]}
@@ -31,6 +32,7 @@ jsonrpsee = {version="0.20.0", features = ["async-client", "client", "macros", "
 keccak-hash = "0.10.0"
 lazy_static = "1.4.0"
 nanotemplate = "0.3.0"
+once_cell = "1.17"
 quickcheck = "1.0.3"
 rand = "0.8.5"
 reth-rpc-types = { rev = "8d1d13ef89cf19459adc37ba0c45e7aac6270dc1", git = "https://github.com/paradigmxyz/reth.git"}

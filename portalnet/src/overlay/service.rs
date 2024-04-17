@@ -2671,6 +2671,7 @@ mod tests {
         content_key::overlay::IdentityContentKey,
         distance::XorMetric,
         enr::generate_random_remote_enr,
+        portal_wire::MAINNET,
     };
     use trin_metrics::portalnet::PORTALNET_METRICS;
     use trin_storage::{DistanceFunction, MemoryContentStore};
@@ -2689,7 +2690,7 @@ mod tests {
             ..Default::default()
         };
         let temp_dir = setup_temp_dir().unwrap().into_path();
-        let discovery = Arc::new(Discovery::new(portal_config, temp_dir).unwrap());
+        let discovery = Arc::new(Discovery::new(portal_config, temp_dir, MAINNET.clone()).unwrap());
 
         let (_utp_talk_req_tx, utp_talk_req_rx) = unbounded_channel();
         let discv5_utp =

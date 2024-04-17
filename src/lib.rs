@@ -42,13 +42,20 @@ pub async fn run_trin(
     let trin_data_dir = configure_trin_data_dir(trin_config.ephemeral)?;
 
     // Configure node data dir based on the provided private key
-    let (node_data_dir, private_key) =
-        configure_node_data_dir(trin_data_dir, trin_config.private_key)?;
+    let (node_data_dir, private_key) = configure_node_data_dir(
+        trin_data_dir,
+        trin_config.private_key,
+        trin_config.network.get_network_name().to_string(),
+    )?;
 
     let portalnet_config = PortalnetConfig::new(&trin_config, private_key);
 
     // Initialize base discovery protocol
-    let mut discovery = Discovery::new(portalnet_config.clone(), node_data_dir.clone())?;
+    let mut discovery = Discovery::new(
+        portalnet_config.clone(),
+        node_data_dir.clone(),
+        trin_config.network.clone(),
+    )?;
     let talk_req_rx = discovery.start().await?;
     let discovery = Arc::new(discovery);
 
@@ -80,7 +87,10 @@ pub async fn run_trin(
 
     // Initialize state sub-network service and event handlers, if selected
     let (state_handler, state_network_task, state_event_tx, state_jsonrpc_tx, state_event_stream) =
-        if trin_config.networks.iter().any(|val| val == STATE_NETWORK) {
+        if trin_config
+            .portal_subnetworks
+            .contains(&STATE_NETWORK.to_string())
+        {
             initialize_state_network(
                 &discovery,
                 utp_socket.clone(),
@@ -100,7 +110,10 @@ pub async fn run_trin(
         beacon_event_tx,
         beacon_jsonrpc_tx,
         beacon_event_stream,
-    ) = if trin_config.networks.iter().any(|val| val == BEACON_NETWORK) {
+    ) = if trin_config
+        .portal_subnetworks
+        .contains(&BEACON_NETWORK.to_string())
+    {
         initialize_beacon_network(
             &discovery,
             utp_socket.clone(),
@@ -121,9 +134,8 @@ pub async fn run_trin(
         history_jsonrpc_tx,
         history_event_stream,
     ) = if trin_config
-        .networks
-        .iter()
-        .any(|val| val == HISTORY_NETWORK)
+        .portal_subnetworks
+        .contains(&HISTORY_NETWORK.to_string())
     {
         initialize_history_network(
             &discovery,
@@ -167,6 +179,7 @@ pub async fn run_trin(
             (state_event_tx, state_event_stream),
             (beacon_event_tx, beacon_event_stream),
             utp_talk_reqs_tx,
+            trin_config.network.clone(),
         )
         .await;
         events.start().await;

@@ -1,6 +1,5 @@
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
-    str::FromStr,
     sync::Arc,
 };
 
@@ -17,7 +16,7 @@ use ethportal_api::{
         content_key::overlay::IdentityContentKey,
         distance::XorMetric,
         enr::{Enr, SszEnr},
-        portal_wire::{Content, Message, ProtocolId},
+        portal_wire::{Content, Message, ProtocolId, MAINNET},
     },
     utils::bytes::hex_encode_upper,
 };
@@ -66,7 +65,8 @@ async fn spawn_overlay(
     let overlay_protocol = *overlay.protocol();
     tokio::spawn(async move {
         while let Some(talk_req) = talk_req_rx.recv().await {
-            let req_protocol = ProtocolId::from_str(&hex_encode_upper(talk_req.protocol()));
+            let req_protocol =
+                MAINNET.get_protocol_id_from_hex(&hex_encode_upper(talk_req.protocol()));
 
             if let Ok(req_protocol) = req_protocol {
                 match (req_protocol, overlay_protocol) {
@@ -110,7 +110,8 @@ async fn overlay() {
         ..PortalnetConfig::default()
     };
     let temp_dir_one = setup_temp_dir().unwrap().into_path();
-    let mut discovery_one = Discovery::new(portal_config_one, temp_dir_one).unwrap();
+    let mut discovery_one =
+        Discovery::new(portal_config_one, temp_dir_one, MAINNET.clone()).unwrap();
     let talk_req_rx_one = discovery_one.start().await.unwrap();
     let discovery_one = Arc::new(discovery_one);
     let overlay_one = Arc::new(init_overlay(Arc::clone(&discovery_one), protocol).await);
@@ -124,7 +125,8 @@ async fn overlay() {
         ..PortalnetConfig::default()
     };
     let temp_dir_two = setup_temp_dir().unwrap().into_path();
-    let mut discovery_two = Discovery::new(portal_config_two, temp_dir_two).unwrap();
+    let mut discovery_two =
+        Discovery::new(portal_config_two, temp_dir_two, MAINNET.clone()).unwrap();
     let talk_req_rx_two = discovery_two.start().await.unwrap();
     let discovery_two = Arc::new(discovery_two);
     let overlay_two = Arc::new(init_overlay(Arc::clone(&discovery_two), protocol).await);
@@ -138,7 +140,8 @@ async fn overlay() {
         ..PortalnetConfig::default()
     };
     let temp_dir_three = setup_temp_dir().unwrap().into_path();
-    let mut discovery_three = Discovery::new(portal_config_three, temp_dir_three).unwrap();
+    let mut discovery_three =
+        Discovery::new(portal_config_three, temp_dir_three, MAINNET.clone()).unwrap();
     let talk_req_rx_three = discovery_three.start().await.unwrap();
     let discovery_three = Arc::new(discovery_three);
     let overlay_three = Arc::new(init_overlay(Arc::clone(&discovery_three), protocol).await);
@@ -255,7 +258,7 @@ async fn overlay_event_stream() {
         ..Default::default()
     };
     let temp_dir = setup_temp_dir().unwrap().into_path();
-    let discovery = Arc::new(Discovery::new(portal_config, temp_dir).unwrap());
+    let discovery = Arc::new(Discovery::new(portal_config, temp_dir, MAINNET.clone()).unwrap());
     let overlay = init_overlay(discovery, ProtocolId::Beacon).await;
 
     overlay.event_stream().await.unwrap();
