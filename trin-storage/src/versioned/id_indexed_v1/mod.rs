@@ -1,6 +1,6 @@
 mod config;
 mod migration;
-mod sql;
+pub(super) mod sql;
 mod store;
 
 pub use config::IdIndexedV1StoreConfig;

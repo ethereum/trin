@@ -18,11 +18,14 @@ use crate::{
     ContentId, DataSize, DistanceFunction, EntryCount, PortalStorageConfig, BYTES_IN_MB_U64,
 };
 
-use super::sql::{
-    CONTENT_KEY_LOOKUP_QUERY_HISTORY, CONTENT_SIZE_LOOKUP_QUERY_HISTORY,
-    CONTENT_VALUE_LOOKUP_QUERY_HISTORY, CREATE_QUERY_DB_HISTORY, DELETE_QUERY_HISTORY,
-    INSERT_QUERY_HISTORY, PAGINATE_QUERY_HISTORY, TOTAL_DATA_SIZE_QUERY_HISTORY,
-    TOTAL_ENTRY_COUNT_QUERY_HISTORY, XOR_FIND_FARTHEST_QUERY_HISTORY,
+use super::{
+    migration::migrate_id_indexed_store,
+    sql::{
+        CONTENT_KEY_LOOKUP_QUERY_HISTORY, CONTENT_SIZE_LOOKUP_QUERY_HISTORY,
+        CONTENT_VALUE_LOOKUP_QUERY_HISTORY, CREATE_QUERY_DB_HISTORY, DELETE_QUERY_HISTORY,
+        INSERT_QUERY_HISTORY, PAGINATE_QUERY_HISTORY, TOTAL_DATA_SIZE_QUERY_HISTORY,
+        TOTAL_ENTRY_COUNT_QUERY_HISTORY, XOR_FIND_FARTHEST_QUERY_HISTORY,
+    },
 };
 
 // The length of content_id and content_key
@@ -49,10 +52,17 @@ impl VersionedContentStore for LegacyHistoryStore {
     }
 
     fn migrate_from(
-        _content_type: &ContentType,
+        content_type: &ContentType,
         old_version: StoreVersion,
-        _config: &Self::Config,
+        config: &Self::Config,
     ) -> Result<(), ContentStoreError> {
+        if content_type != &ContentType::History {
+            panic!("LegacyHistoryStore only supports History content type");
+        }
+        if old_version == StoreVersion::IdIndexedV1 {
+            return migrate_id_indexed_store(&config.sql_connection_pool);
+        }
+
         Err(ContentStoreError::UnsupportedStoreMigration {
             old_version,
             new_version: Self::version(),
