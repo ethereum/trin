@@ -26,6 +26,7 @@ rpc = { path = "../rpc" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.89"
 serde_yaml = "0.9"
+surf = { version = "2.3.2", default-features = false, features = ["h1-client-rustls", "middleware-logger", "encoding"] } # we use rustls because OpenSSL cause issues compiling on aarch64
 tempfile = "3.3.0"
 tokio = {version = "1.14.0", features = ["full"]}
 tracing = "0.1.36"
@@ -38,6 +39,7 @@ trin-state = { path = "../trin-state" }
 trin-utils = { path = "../trin-utils" }
 trin-validation = { path = "../trin-validation" }
 ureq = { version = "2.5.0", features = ["json"] }
+url = "2.3.1"
 
 [target.'cfg(windows)'.dependencies]
 uds_windows = "1.0.1"

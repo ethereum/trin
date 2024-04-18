@@ -1,57 +1,40 @@
 use std::fmt::Display;
 
 use anyhow::anyhow;
-use surf::{Client, Config};
-use tracing::debug;
-use url::Url;
-
-use crate::{
-    cli::Provider, constants::HTTP_REQUEST_TIMEOUT, BASE_CL_ENDPOINT, PANDAOPS_CLIENT_ID,
-    PANDAOPS_CLIENT_SECRET,
-};
+use surf::Client;
+use tracing::{debug, warn};
 
 /// Implements endpoints from the Beacon API to access data from the consensus layer.
 #[derive(Clone, Debug, Default)]
 pub struct ConsensusApi {
     client: Client,
+    fallback_client: Client,
 }
 
 impl ConsensusApi {
-    pub async fn new(provider: Provider) -> Result<Self, surf::Error> {
-        let client: Client = match provider {
-            Provider::PandaOps => {
-                let base_cl_endpoint = Url::parse(&BASE_CL_ENDPOINT)
-                    .expect("to be able to parse static base cl endpoint url");
-                Config::new()
-                    .add_header("CF-Access-Client-Id", PANDAOPS_CLIENT_ID.to_string())?
-                    .add_header(
-                        "CF-Access-Client-Secret",
-                        PANDAOPS_CLIENT_SECRET.to_string(),
-                    )?
-                    .add_header("Content-Type", "application/json")?
-                    .set_base_url(base_cl_endpoint)
-                    .set_timeout(Some(HTTP_REQUEST_TIMEOUT))
-                    .try_into()?
-            }
-            Provider::Url(url) => Config::new()
-                .add_header("Content-Type", "application/json")?
-                .set_base_url(url)
-                .set_timeout(Some(HTTP_REQUEST_TIMEOUT))
-                .try_into()?,
-            Provider::Test => {
-                return Err(surf::Error::from(anyhow!(
-                    "Invalid provider, test mode is not supported for ConsensusApi"
-                )))
-            }
-        };
+    pub async fn new(client: Client, fallback_client: Client) -> Result<Self, surf::Error> {
         debug!(
-            "Starting ConsensusApi with provider at url: {:?}",
-            client.config().base_url
+            "Starting ConsensusApi with primary provider: {} and fallback provider: {}",
+            client
+                .config()
+                .base_url
+                .as_ref()
+                .expect("to have base url set")
+                .as_str(),
+            fallback_client
+                .config()
+                .base_url
+                .as_ref()
+                .expect("to have base url set")
+                .as_str()
         );
         check_provider(&client)
             .await
             .map_err(|err| anyhow!("Check CL provider failed. Provider may be offline: {err:?}"))?;
-        Ok(Self { client })
+        Ok(Self {
+            client,
+            fallback_client,
+        })
     }
 
     /// Requests the `LightClientBootstrap` structure corresponding to a given post-Altair beacon
@@ -99,8 +82,19 @@ impl ConsensusApi {
 
     /// Make a request to the cl provider.
     async fn request(&self, endpoint: String) -> anyhow::Result<String> {
-        let result = self.client.get(endpoint).recv_string().await;
-        result.map_err(|err| anyhow!("Unable to request consensus data from provider: {err:?}"))
+        match self.client.get(&endpoint).recv_string().await {
+            Ok(response) => Ok(response),
+            Err(err) => {
+                warn!("Error requesting consensus data from provider, retrying with fallback provider: {err:?}");
+                self.fallback_client
+                    .get(endpoint)
+                    .recv_string()
+                    .await
+                    .map_err(|err| {
+                        anyhow!("Unable to request consensus data from fallback provider: {err:?}")
+                    })
+            }
+        }
     }
 }
 

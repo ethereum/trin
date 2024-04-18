@@ -6,16 +6,21 @@ use rand::{
     distributions::{Distribution, Uniform},
     thread_rng,
 };
+use serde_json::json;
 use ssz::Decode;
 use surf::{Client, Config};
 use tracing::{debug, info, warn};
 use url::Url;
 
-use ethportal_api::{types::execution::accumulator::EpochAccumulator, utils::bytes::hex_encode};
-use portal_bridge::{
-    api::execution::ExecutionApi, bridge::history::EPOCH_SIZE, cli::Provider,
-    types::mode::BridgeMode, PANDAOPS_CLIENT_ID, PANDAOPS_CLIENT_SECRET,
+use ethportal_api::{
+    types::{
+        execution::accumulator::EpochAccumulator,
+        jsonrpc::{params::Params, request::JsonRequest},
+    },
+    utils::bytes::hex_encode,
+    Header,
 };
+use portal_bridge::{api::execution::ExecutionApi, bridge::history::EPOCH_SIZE};
 use trin_utils::log::init_tracing_logger;
 use trin_validation::{
     accumulator::MasterAccumulator,
@@ -25,6 +30,11 @@ use trin_validation::{
         SHANGHAI_BLOCK_NUMBER,
     },
 };
+
+lazy_static::lazy_static! {
+    static ref PANDAOPS_CLIENT_ID: String = std::env::var("PANDAOPS_CLIENT_ID").unwrap();
+    static ref PANDAOPS_CLIENT_SECRET: String = std::env::var("PANDAOPS_CLIENT_SECRET").unwrap();
+}
 
 // tldr:
 // Randomly samples X blocks from every hard fork range.
@@ -43,10 +53,8 @@ use trin_validation::{
 pub async fn main() -> Result<()> {
     init_tracing_logger();
     let config = ProviderConfig::parse();
-    let api = ExecutionApi::new(Provider::PandaOps, BridgeMode::Latest)
-        .await
-        .unwrap();
-    let latest_block = api.get_latest_block_number().await?;
+    let latest_block = get_latest_block_number().await?;
+    info!("Starting to test providers: latest block = {latest_block}");
     let mut all_ranges = Ranges::into_vec(config.sample_size, latest_block);
     let mut all_providers: Vec<Providers> = Providers::into_vec();
     for provider in all_providers.iter_mut() {
@@ -54,6 +62,7 @@ pub async fn main() -> Result<()> {
         let mut provider_failures = 0;
         let client = provider.get_client();
         let api = ExecutionApi {
+            fallback_client: client.clone(),
             client,
             master_acc: MasterAccumulator::default(),
         };
@@ -436,4 +445,30 @@ impl Providers {
             }
         }
     }
+}
+
+async fn get_latest_block_number() -> Result<u64> {
+    let config = Config::new()
+        .add_header("Content-Type", "application/json")
+        .unwrap()
+        .add_header("CF-Access-Client-Id", PANDAOPS_CLIENT_ID.to_string())
+        .unwrap()
+        .add_header(
+            "CF-Access-Client-Secret",
+            PANDAOPS_CLIENT_SECRET.to_string(),
+        )
+        .unwrap()
+        .set_base_url(Url::parse("https://geth-lighthouse.mainnet.eu1.ethpandaops.io/").unwrap());
+    let client: Client = config.try_into()?;
+    let params = Params::Array(vec![json!("latest"), json!(false)]);
+    let method = "eth_getBlockByNumber".to_string();
+    let request = JsonRequest::new(method, params, 1);
+    let response = client.post("").body_json(&request).unwrap();
+    let response = response.recv_string().await.unwrap();
+    let response = serde_json::from_str::<serde_json::Value>(&response)?;
+    let result = response
+        .get("result")
+        .ok_or_else(|| anyhow!("Unable to fetch latest block"))?;
+    let header: Header = serde_json::from_value(result.clone())?;
+    Ok(header.number)
 }
