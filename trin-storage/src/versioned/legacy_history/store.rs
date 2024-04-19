@@ -151,7 +151,7 @@ impl LegacyHistoryStore {
         })
     }
 
-    fn total_entry_count(&self) -> Result<u64, ContentStoreError> {
+    pub fn total_entry_count(&self) -> Result<u64, ContentStoreError> {
         let timer = self.metrics.start_process_timer("total_entry_count");
         let conn = self.sql_connection_pool.get()?;
         let mut query = conn.prepare(TOTAL_ENTRY_COUNT_QUERY_HISTORY)?;
@@ -213,6 +213,32 @@ impl LegacyHistoryStore {
             .report_total_storage_usage_bytes(total_bytes_on_disk as f64);
 
         Ok(())
+    }
+
+    #[allow(dead_code)]
+    /// Removes all data from the store that does not pass the provided validation function.
+    /// Returns the number of items removed.
+    fn filter(
+        &self,
+        validation_fn: &dyn Fn(&[u8], &[u8]) -> bool,
+    ) -> Result<u32, ContentStoreError> {
+        let timer = self.metrics.start_process_timer("filter");
+        let total_entry_count = self.total_entry_count()?;
+        let mut removed = 0;
+        for offset in (0..total_entry_count).step_by(1000) {
+            let result = self.paginate(&offset, &1000)?;
+            for content_key in result.content_keys {
+                let content_value = self.lookup_content_value(content_key.content_id()).unwrap();
+                if let Some(content_value) = content_value {
+                    if !validation_fn(&content_key.to_bytes(), &content_value) {
+                        removed += 1;
+                        self.db_remove(&content_key.content_id())?;
+                    }
+                }
+            }
+        }
+        self.metrics.stop_process_timer(timer);
+        Ok(removed)
     }
 
     /// Internal method for pruning any data that falls outside of the radius of the store.
@@ -461,6 +487,7 @@ impl LegacyHistoryStore {
 #[allow(clippy::unwrap_used)]
 pub mod test {
     use super::*;
+    use alloy_primitives::B256;
     use ethportal_api::{
         types::distance::Distance, BlockHeaderKey, HistoryContentKey, IdentityContentKey,
     };
@@ -839,5 +866,76 @@ pub mod test {
         }
 
         quickcheck(prop as fn(IdentityContentKey, IdentityContentKey) -> TestResult);
+    }
+
+    #[test]
+    fn test_filter_removes() {
+        let temp_dir = TempDir::new().unwrap();
+        let node_id = NodeId::random();
+
+        let val = vec![0x00, 0x01, 0x02, 0x03, 0x04];
+        let storage_config =
+            PortalStorageConfig::new(CAPACITY_MB, temp_dir.path().to_path_buf(), node_id).unwrap();
+        let mut storage = LegacyHistoryStore::new(storage_config).unwrap();
+        let key_1 = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey::from(B256::random()));
+        let key_2 = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey::from(B256::random()));
+        storage.store(&key_1, &val).unwrap();
+        storage.store(&key_2, &val).unwrap();
+
+        let num_removed_items = storage.filter(&|_, _| false).unwrap();
+        assert_eq!(2, num_removed_items);
+        assert_eq!(0, storage.total_entry_count().unwrap());
+
+        std::mem::drop(storage);
+        temp_dir.close().unwrap();
+    }
+
+    #[test]
+    fn test_filter_filters() {
+        let temp_dir = TempDir::new().unwrap();
+        let node_id = NodeId::random();
+
+        let val_1 = vec![0x00, 0x01, 0x02, 0x03, 0x04];
+        let val_2 = vec![0x01, 0x01, 0x02, 0x03, 0x04];
+        let storage_config =
+            PortalStorageConfig::new(CAPACITY_MB, temp_dir.path().to_path_buf(), node_id).unwrap();
+        let mut storage = LegacyHistoryStore::new(storage_config).unwrap();
+        let key_1 = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey::from(B256::random()));
+        let key_2 = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey::from(B256::random()));
+        storage.store(&key_1, &val_1).unwrap();
+        storage.store(&key_2, &val_2).unwrap();
+        let validate_fn = |_key: &[u8], val: &[u8]| val.starts_with(&[0x00]);
+
+        let num_removed_items = storage.filter(&validate_fn).unwrap();
+        assert_eq!(1, num_removed_items);
+        assert_eq!(1, storage.total_entry_count().unwrap());
+
+        std::mem::drop(storage);
+        temp_dir.close().unwrap();
+    }
+
+    #[test]
+    fn test_filter_filters_with_pagination() {
+        let temp_dir = TempDir::new().unwrap();
+        let node_id = NodeId::random();
+        let storage_config =
+            PortalStorageConfig::new(CAPACITY_MB, temp_dir.path().to_path_buf(), node_id).unwrap();
+        let mut storage = LegacyHistoryStore::new(storage_config).unwrap();
+
+        for _ in 0..1000 {
+            let val = vec![0x00, 0x01, 0x02, 0x03, 0x04];
+            let key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey::from(B256::random()));
+            storage.store(&key, &val).unwrap();
+        }
+        let val = vec![0x01, 0x01, 0x02, 0x03, 0x04];
+        let key = HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey::from(B256::random()));
+        storage.store(&key, &val).unwrap();
+        let validate_fn = |_key: &[u8], val: &[u8]| val.starts_with(&[0x00]);
+        let num_removed_items = storage.filter(&validate_fn).unwrap();
+        assert_eq!(1, num_removed_items);
+        assert_eq!(1000, storage.total_entry_count().unwrap());
+
+        std::mem::drop(storage);
+        temp_dir.close().unwrap();
     }
 }
