@@ -1,3 +1,4 @@
+mod migration;
 mod sql;
 mod store;
 
