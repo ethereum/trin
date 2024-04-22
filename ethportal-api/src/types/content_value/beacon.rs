@@ -6,7 +6,7 @@ use crate::{
     types::{
         consensus::{
             fork::{ForkDigest, ForkName},
-            header_proof::HistoricalSummariesWithProof,
+            historical_summaries::HistoricalSummariesWithProof,
             light_client::{
                 bootstrap::{
                     LightClientBootstrap, LightClientBootstrapBellatrix,

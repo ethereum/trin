@@ -20,7 +20,8 @@ use ethportal_api::{
     types::{
         execution::{
             accumulator::EpochAccumulator,
-            header::{BlockHeaderProof, Header, HeaderWithProof},
+            header::Header,
+            header_with_proof::{BlockHeaderProof, HeaderWithProof},
         },
         jsonrpc::{endpoints::HistoryEndpoint, request::HistoryJsonRpcRequest},
     },
@@ -252,7 +253,9 @@ mod test {
 
     use crate::constants::DEFAULT_MASTER_ACC_HASH;
     use ethportal_api::{
-        types::execution::header::{AccumulatorProof, BlockHeaderProof, HeaderWithProof, SszNone},
+        types::execution::header_with_proof::{
+            AccumulatorProof, BlockHeaderProof, HeaderWithProof, SszNone,
+        },
         utils::bytes::hex_encode,
     };
 

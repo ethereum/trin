@@ -16,7 +16,7 @@ use ethportal_api::{
                 BlockBody, BlockBodyLegacy, BlockBodyMerge, BlockBodyShanghai, MERGE_TIMESTAMP,
                 SHANGHAI_TIMESTAMP,
             },
-            header::{AccumulatorProof, BlockHeaderProof, HeaderWithProof, SszNone},
+            header_with_proof::{AccumulatorProof, BlockHeaderProof, HeaderWithProof, SszNone},
         },
         jsonrpc::{params::Params, request::JsonRequest},
     },

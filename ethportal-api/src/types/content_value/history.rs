@@ -1,7 +1,10 @@
 use crate::{
-    types::{content_value::ContentValue, execution::accumulator::EpochAccumulator},
+    types::{
+        content_value::ContentValue,
+        execution::{accumulator::EpochAccumulator, header_with_proof::HeaderWithProof},
+    },
     utils::bytes::hex_encode,
-    BlockBody, ContentValueError, HeaderWithProof, Receipts,
+    BlockBody, ContentValueError, Receipts,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use ssz::{Decode, Encode};
