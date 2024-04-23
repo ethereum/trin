@@ -93,32 +93,38 @@ impl MasterAccumulator {
     }
 
     pub fn validate_header_with_proof(&self, hwp: &HeaderWithProof) -> anyhow::Result<()> {
-        let proof = match &hwp.proof {
-            BlockHeaderProof::AccumulatorProof(val) => {
+        match &hwp.proof {
+            BlockHeaderProof::AccumulatorProof(proof) => {
                 if hwp.header.number > MERGE_BLOCK_NUMBER {
                     return Err(anyhow!("Invalid proof type found for post-merge header."));
                 }
-                val
+                // Look up historical epoch hash for header from master accumulator
+                let gen_index = calculate_generalized_index(&hwp.header);
+                let epoch_index = self.get_epoch_index_of_header(&hwp.header) as usize;
+                let epoch_hash = self.historical_epochs[epoch_index];
+
+                match verify_merkle_proof(
+                    hwp.header.hash(),
+                    &proof.proof,
+                    15,
+                    gen_index,
+                    epoch_hash,
+                ) {
+                    true => Ok(()),
+                    false => Err(anyhow!(
+                        "Merkle proof validation failed for pre-merge header"
+                    )),
+                }
             }
             BlockHeaderProof::None(_) => {
                 if hwp.header.number <= MERGE_BLOCK_NUMBER {
-                    return Err(anyhow!("Missing accumulator proof for pre-merge header."));
+                    Err(anyhow!("Missing accumulator proof for pre-merge header."))
                 } else {
                     // Skip validation for post-merge headers until proof format is finalized
-                    return Ok(());
+                    Ok(())
                 }
             }
-        };
-
-        // Look up historical epoch hash for header from master accumulator
-        let gen_index = calculate_generalized_index(&hwp.header);
-        let epoch_index = self.get_epoch_index_of_header(&hwp.header) as usize;
-        let epoch_hash = self.historical_epochs[epoch_index];
-        match verify_merkle_proof(hwp.header.hash(), &proof.proof, 15, gen_index, epoch_hash) {
-            true => Ok(()),
-            false => Err(anyhow!(
-                "Merkle proof validation failed for pre-merge header"
-            )),
+            _ => unimplemented!("Unsupported proof type found."),
         }
     }
 

@@ -3,7 +3,7 @@ use crate::{types::enr::Enr, HistoryContentKey, HistoryContentValue};
 use serde::{Deserialize, Serialize};
 
 /// Response for FindContent & RecursiveFindContent endpoints
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ContentInfo {
     #[serde(rename_all = "camelCase")]
@@ -21,7 +21,7 @@ pub enum ContentInfo {
 ///
 /// This struct represents the content info, and is only used
 /// when the content is found locally or on the network.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TraceContentInfo {
     pub content: HistoryContentValue,

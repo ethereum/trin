@@ -5,11 +5,12 @@ use jsonrpsee::core::Serialize;
 use serde::Deserialize;
 use ssz::{Encode, SszDecoderBuilder, SszEncoder};
 use ssz_derive::{Decode, Encode};
+use ssz_types::{typenum, FixedVector};
 
 /// A block header with accumulator proof.
 /// Type definition:
 /// https://github.com/status-im/nimbus-eth1/blob/master/fluffy/network/history/history_content.nim#L136
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct HeaderWithProof {
     pub header: Header,
     pub proof: BlockHeaderProof,
@@ -38,13 +39,15 @@ impl ssz::Encode for HeaderWithProof {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Decode, Encode, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Decode, Encode, Deserialize)]
 #[ssz(enum_behaviour = "union")]
 // Ignore clippy here, since "box"-ing the accumulator proof breaks the Decode trait
 #[allow(clippy::large_enum_variant)]
 pub enum BlockHeaderProof {
     None(SszNone),
     AccumulatorProof(AccumulatorProof),
+    HistoricalRootsBlockProof(HistoricalRootsBlockProof),
+    HistoricalSummariesBlockProof(HistoricalSummariesBlockProof),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -114,19 +117,19 @@ impl ssz::Encode for AccumulatorProof {
 }
 
 /// Proof that execution header root is part of BeaconBlockBody
-pub type BeaconBlockBodyProof = [B256; 8];
+pub type BeaconBlockBodyProof = FixedVector<B256, typenum::U8>;
 /// Proof that BeaconBlockBody root is part of BeaconBlockHeader
-pub type BeaconBlockHeaderProof = [B256; 3];
+pub type BeaconBlockHeaderProof = FixedVector<B256, typenum::U3>;
 /// Proof that BeaconBlockHeader root is part of HistoricalRoots
-pub type HistoricalRootsProof = [B256; 14];
+pub type HistoricalRootsProof = FixedVector<B256, typenum::U14>;
 /// Proof that BeaconBlockHeader root is part of HistoricalSummaries
-pub type HistoricalSummariesProof = [B256; 13];
+pub type HistoricalSummariesProof = FixedVector<B256, typenum::U13>;
 
 /// The struct holds a chain of proofs. This chain of proofs allows for verifying that an EL
 /// `BlockHeader` is part of the canonical chain. The only requirement is having access to the
 /// beacon chain `historical_roots`.
 // Total size (8 + 1 + 3 + 1 + 14) * 32 bytes + 4 bytes = 868 bytes
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Encode, Decode, Serialize, Deserialize)]
 pub struct HistoricalRootsBlockProof {
     pub beacon_block_body_proof: BeaconBlockBodyProof,
     pub beacon_block_body_root: B256,
@@ -139,7 +142,7 @@ pub struct HistoricalRootsBlockProof {
 /// The struct holds a chain of proofs. This chain of proofs allows for verifying that an EL
 /// `BlockHeader` is part of the canonical chain. The only requirement is having access to the
 /// beacon chain `historical_summaries`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Encode, Decode, Serialize, Deserialize)]
 pub struct HistoricalSummariesBlockProof {
     pub beacon_block_body_proof: BeaconBlockBodyProof,
     pub beacon_block_body_root: B256,
