@@ -8,10 +8,8 @@ use tree_hash::TreeHash;
 
 use ethportal_api::{
     types::execution::{
-        accumulator::EpochAccumulator,
-        block_body::BlockBody,
-        header::{Header, HeaderWithProof},
-        receipts::Receipts,
+        accumulator::EpochAccumulator, block_body::BlockBody, header::Header,
+        header_with_proof::HeaderWithProof, receipts::Receipts,
     },
     utils::bytes::hex_encode,
     HistoryContentKey,

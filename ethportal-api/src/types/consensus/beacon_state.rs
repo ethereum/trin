@@ -5,7 +5,7 @@ use crate::consensus::{
     },
     fork::ForkName,
     header::BeaconBlockHeader,
-    header_proof::HistoricalSummary,
+    historical_summaries::HistoricalSummary,
     participation_flags::ParticipationFlags,
     pubkey::PubKey,
     sync_committee::SyncCommittee,

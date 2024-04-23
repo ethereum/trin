@@ -6,7 +6,7 @@ use tokio::sync::mpsc;
 use crate::accumulator::MasterAccumulator;
 use ethportal_api::{
     types::{
-        execution::header::HeaderWithProof,
+        execution::header_with_proof::HeaderWithProof,
         history::ContentInfo,
         jsonrpc::{
             endpoints::HistoryEndpoint,

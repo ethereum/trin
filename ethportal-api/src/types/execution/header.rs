@@ -2,13 +2,8 @@ use alloy_primitives::{keccak256, Address, Bloom, Bytes, B256, B64, U256, U64};
 use alloy_rlp::{Decodable, Encodable, Header as RlpHeader};
 use reth_rpc_types::Header as RpcHeader;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use ssz::{Encode, SszDecoderBuilder, SszEncoder};
-use ssz_derive::{Decode, Encode};
 
-use crate::{
-    types::bytes::ByteList2048,
-    utils::bytes::{hex_decode, hex_encode},
-};
+use crate::utils::bytes::{hex_decode, hex_encode};
 
 /// A block header.
 #[derive(Debug, Clone, Eq, Deserialize, Serialize)]
@@ -307,156 +302,13 @@ impl<'de> Deserialize<'de> for TxHashes {
     }
 }
 
-/// A block header with accumulator proof.
-/// Type definition:
-/// https://github.com/status-im/nimbus-eth1/blob/master/fluffy/network/history/history_content.nim#L136
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-pub struct HeaderWithProof {
-    pub header: Header,
-    pub proof: BlockHeaderProof,
-}
-
-impl ssz::Encode for HeaderWithProof {
-    fn is_ssz_fixed_len() -> bool {
-        false
-    }
-
-    fn ssz_append(&self, buf: &mut Vec<u8>) {
-        let header = alloy_rlp::encode(&self.header);
-        let header = ByteList2048::from(header);
-        let offset = <ByteList2048 as Encode>::ssz_fixed_len()
-            + <AccumulatorProof as Encode>::ssz_fixed_len();
-        let mut encoder = SszEncoder::container(buf, offset);
-        encoder.append(&header);
-        encoder.append(&self.proof);
-        encoder.finalize();
-    }
-
-    fn ssz_bytes_len(&self) -> usize {
-        let header = alloy_rlp::encode(&self.header);
-        let header = ByteList2048::from(header);
-        header.len() + self.proof.ssz_bytes_len()
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Decode, Encode, Deserialize)]
-#[ssz(enum_behaviour = "union")]
-// Ignore clippy here, since "box"-ing the accumulator proof breaks the Decode trait
-#[allow(clippy::large_enum_variant)]
-pub enum BlockHeaderProof {
-    None(SszNone),
-    AccumulatorProof(AccumulatorProof),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AccumulatorProof {
-    pub proof: [B256; 15],
-}
-
-impl ssz::Decode for HeaderWithProof {
-    fn is_ssz_fixed_len() -> bool {
-        false
-    }
-
-    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
-        let mut builder = SszDecoderBuilder::new(bytes);
-
-        builder.register_type::<ByteList2048>()?;
-        builder.register_type::<BlockHeaderProof>()?;
-
-        let mut decoder = builder.build()?;
-
-        let header_rlp: Vec<u8> = decoder.decode_next()?;
-        let proof = decoder.decode_next()?;
-        let header: Header = Decodable::decode(&mut header_rlp.as_slice()).map_err(|_| {
-            ssz::DecodeError::BytesInvalid("Unable to decode bytes into header.".to_string())
-        })?;
-
-        Ok(Self { header, proof })
-    }
-}
-
-impl ssz::Decode for AccumulatorProof {
-    fn is_ssz_fixed_len() -> bool {
-        true
-    }
-
-    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
-        let vec: Vec<[u8; 32]> = Vec::from_ssz_bytes(bytes)?;
-        let mut proof: [B256; 15] = [B256::ZERO; 15];
-        let raw_proof: [[u8; 32]; 15] = vec
-            .try_into()
-            .map_err(|_| ssz::DecodeError::BytesInvalid("Invalid proof length".to_string()))?;
-        for (idx, val) in raw_proof.iter().enumerate() {
-            proof[idx] = B256::from_slice(val);
-        }
-        Ok(Self { proof })
-    }
-}
-
-impl ssz::Encode for AccumulatorProof {
-    fn is_ssz_fixed_len() -> bool {
-        true
-    }
-
-    fn ssz_append(&self, buf: &mut Vec<u8>) {
-        let offset = self.ssz_bytes_len();
-        let mut encoder = SszEncoder::container(buf, offset);
-
-        for proof in self.proof {
-            encoder.append(&proof);
-        }
-        encoder.finalize();
-    }
-
-    fn ssz_bytes_len(&self) -> usize {
-        <B256 as Encode>::ssz_fixed_len() * 15
-    }
-}
-
-/// Struct to represent encodable/decodable None value for an SSZ enum
-#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
-pub struct SszNone {
-    // In rust, None is a variant not a type,
-    // so we must use Option here to represent a None value
-    pub value: Option<()>,
-}
-
-impl ssz::Decode for SszNone {
-    fn is_ssz_fixed_len() -> bool {
-        true
-    }
-
-    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
-        match bytes.len() {
-            0 => Ok(Self { value: None }),
-            _ => Err(ssz::DecodeError::BytesInvalid(
-                "Expected None value to be empty, found bytes.".to_string(),
-            )),
-        }
-    }
-}
-
-impl ssz::Encode for SszNone {
-    fn is_ssz_fixed_len() -> bool {
-        true
-    }
-
-    fn ssz_append(&self, _buf: &mut Vec<u8>) {}
-
-    fn ssz_bytes_len(&self) -> usize {
-        0
-    }
-}
-
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use std::{fs, str::FromStr};
+    use std::str::FromStr;
 
     use serde_json::{json, Value};
-    use ssz::Decode;
 
     #[test_log::test]
     fn decode_and_encode_header() {
@@ -536,24 +388,6 @@ mod tests {
         let header: Header = serde_json::from_value(val["result"].clone()).unwrap();
         assert_eq!(header.difficulty, U256::from(3371913793060314u64));
         assert_eq!(header.base_fee_per_gas, None);
-    }
-
-    #[test_log::test]
-    fn decode_encode_header_with_proofs() {
-        let file =
-            fs::read_to_string("../trin-validation/src/assets/fluffy/header_with_proofs.json")
-                .unwrap();
-        let json: Value = serde_json::from_str(&file).unwrap();
-        let hwps = json.as_object().unwrap();
-        for (block_number, obj) in hwps {
-            let _content_key = obj.get("content_key").unwrap();
-            let block_number: u64 = block_number.parse().unwrap();
-            let proof = obj.get("value").unwrap().as_str().unwrap();
-            let hwp = HeaderWithProof::from_ssz_bytes(&hex_decode(proof).unwrap()).unwrap();
-            assert_eq!(block_number, hwp.header.number);
-            let encoded = hex_encode(hwp.as_ssz_bytes());
-            assert_eq!(encoded, proof);
-        }
     }
 
     #[test_log::test]

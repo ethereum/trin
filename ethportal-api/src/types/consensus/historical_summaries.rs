@@ -5,29 +5,6 @@ use ssz_derive::{Decode, Encode};
 use ssz_types::{typenum, VariableList};
 use tree_hash_derive::TreeHash;
 
-/// Types sourced from Fluffy:
-/// https://github.com/status-im/nimbus-eth1/blob/77135e70015de77d9ca46b196d99dc260ed3e364/fluffy/network/history/experimental/beacon_chain_block_proof.nim
-
-//BeaconBlockBodyProof* = array[8, Digest]
-pub type BeaconBlockBodyProof = [B256; 8];
-
-//BeaconBlockHeaderProof* = array[3, Digest]
-pub type BeaconBlockHeaderProof = [B256; 3];
-
-//HistoricalRootsProof* = array[14, Digest]
-pub type BeaconBlockHistoricalRootsProof = [B256; 14];
-
-//# Total size (8 + 1 + 3 + 1 + 14) * 32 bytes + 4 bytes = 868 bytes
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct BeaconChainBlockProof {
-    pub beacon_block_body_proof: BeaconBlockBodyProof,
-    pub beacon_block_body_root: B256,
-    pub beacon_block_header_proof: BeaconBlockHeaderProof,
-    pub beacon_block_header_root: B256,
-    pub historical_roots_proof: BeaconBlockHistoricalRootsProof,
-    pub slot: u64,
-}
-
 /// `HistoricalSummary` matches the components of the phase0 `HistoricalBatch`
 /// making the two hash_tree_root-compatible. This struct is introduced into the beacon state
 /// in the Capella hard fork.
@@ -43,11 +20,11 @@ type HistoricalSummaries = VariableList<HistoricalSummary, typenum::U16777216>;
 
 /// Proof against the beacon state root hash
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct HistoricalSummariesProof {
+pub struct HistoricalSummariesStateProof {
     pub proof: [B256; 5],
 }
 
-impl Default for HistoricalSummariesProof {
+impl Default for HistoricalSummariesStateProof {
     fn default() -> Self {
         Self {
             proof: [B256::ZERO; 5],
@@ -55,7 +32,7 @@ impl Default for HistoricalSummariesProof {
     }
 }
 
-impl ssz::Decode for HistoricalSummariesProof {
+impl ssz::Decode for HistoricalSummariesStateProof {
     fn is_ssz_fixed_len() -> bool {
         true
     }
@@ -75,7 +52,7 @@ impl ssz::Decode for HistoricalSummariesProof {
     }
 }
 
-impl ssz::Encode for HistoricalSummariesProof {
+impl ssz::Encode for HistoricalSummariesStateProof {
     fn is_ssz_fixed_len() -> bool {
         true
     }
@@ -104,7 +81,7 @@ impl ssz::Encode for HistoricalSummariesProof {
 pub struct HistoricalSummariesWithProof {
     pub epoch: u64,
     pub historical_summaries: HistoricalSummaries,
-    pub proof: HistoricalSummariesProof,
+    pub proof: HistoricalSummariesStateProof,
 }
 
 // TODO: Add test vectors for HistoricalSummariesWithProof

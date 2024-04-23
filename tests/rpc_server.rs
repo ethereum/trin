@@ -14,7 +14,7 @@ use ssz::Decode;
 use ethportal_api::{
     types::{
         cli::{TrinConfig, DEFAULT_WEB3_IPC_PATH},
-        execution::{block_body::BlockBody, header::HeaderWithProof},
+        execution::{block_body::BlockBody, header_with_proof::HeaderWithProof},
     },
     utils::bytes::{hex_decode, hex_encode},
     HistoryContentKey, HistoryContentValue, HistoryNetworkApiClient,
