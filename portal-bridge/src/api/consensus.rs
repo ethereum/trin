@@ -2,7 +2,10 @@ use std::fmt::Display;
 
 use anyhow::anyhow;
 use surf::Client;
+use tokio::time::sleep;
 use tracing::{debug, warn};
+
+use crate::constants::FALLBACK_RETRY_AFTER;
 
 /// Implements endpoints from the Beacon API to access data from the consensus layer.
 #[derive(Clone, Debug, Default)]
@@ -86,6 +89,7 @@ impl ConsensusApi {
             Ok(response) => Ok(response),
             Err(err) => {
                 warn!("Error requesting consensus data from provider, retrying with fallback provider: {err:?}");
+                sleep(FALLBACK_RETRY_AFTER).await;
                 self.fallback_client
                     .get(endpoint)
                     .recv_string()
