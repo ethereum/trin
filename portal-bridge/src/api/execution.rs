@@ -5,9 +5,10 @@ use anyhow::{anyhow, bail};
 use futures::future::join_all;
 use serde_json::{json, Value};
 use surf::Client;
+use tokio::time::sleep;
 use tracing::{debug, error, warn};
 
-use crate::types::full_header::FullHeader;
+use crate::{constants::FALLBACK_RETRY_AFTER, types::full_header::FullHeader};
 use ethportal_api::{
     types::{
         execution::{
@@ -281,6 +282,7 @@ impl ExecutionApi {
             Ok(response) => Ok(response),
             Err(msg) => {
                 warn!("Failed to send batch request to primary provider: {msg}");
+                sleep(FALLBACK_RETRY_AFTER).await;
                 match Self::send_batch_request(&self.fallback_client, &requests).await {
                     Ok(response) => Ok(response),
                     Err(msg) => {
@@ -313,6 +315,7 @@ impl ExecutionApi {
             Ok(response) => Ok(response),
             Err(msg) => {
                 warn!("Failed to send request to primary provider, retrying with fallback provider: {msg}");
+                sleep(FALLBACK_RETRY_AFTER).await;
                 Self::send_request(&self.fallback_client, &request)
                     .await
                     .map_err(|err| anyhow!("Failed to send request to fallback provider: {err:?}"))

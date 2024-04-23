@@ -20,3 +20,6 @@ pub const HTTP_REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 
 // This is the maximum number of active blocks being gossiped
 pub const DEFAULT_GOSSIP_LIMIT: usize = 32;
+
+// Number of seconds to wait before retrying a provider request
+pub const FALLBACK_RETRY_AFTER: Duration = Duration::from_secs(5);
