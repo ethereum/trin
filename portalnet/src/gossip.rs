@@ -6,7 +6,7 @@ use discv5::{
 };
 use futures::channel::oneshot;
 use parking_lot::RwLock;
-use rand::seq::IteratorRandom;
+use rand::{seq::SliceRandom, thread_rng};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use tracing::{debug, error, warn};
@@ -40,38 +40,51 @@ pub struct GossipResult {
     pub transferred: Vec<Enr>,
 }
 
+fn get_local_nodes(
+    kbuckets: &Arc<RwLock<KBucketsTable<NodeId, Node>>>,
+) -> Vec<kbucket::Node<NodeId, Node>> {
+    kbuckets
+        .read()
+        .buckets_iter()
+        .flat_map(|kbucket| {
+            kbucket
+                .iter()
+                .filter(|node| node.status.is_connected())
+                .map(|node| node.to_owned())
+                .collect::<Vec<kbucket::Node<NodeId, Node>>>()
+        })
+        .collect()
+}
+
 /// Propagate gossip in a way that can be used across threads, without &self.
 /// Doesn't trace gossip results
-pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
+pub async fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
     content: Vec<(TContentKey, Vec<u8>)>,
     kbuckets: Arc<RwLock<KBucketsTable<NodeId, Node>>>,
     command_tx: mpsc::UnboundedSender<OverlayCommand<TContentKey>>,
     utp_controller: Option<Arc<UtpController>>,
 ) -> usize {
     // Get all connected nodes from overlay routing table
-    let kbuckets = kbuckets.read();
-    let all_nodes: Vec<&kbucket::Node<NodeId, Node>> = kbuckets
-        .buckets_iter()
-        .flat_map(|kbucket| {
-            kbucket
-                .iter()
-                .filter(|node| node.status.is_connected())
-                .collect::<Vec<&kbucket::Node<NodeId, Node>>>()
-        })
-        .collect();
-
-    if all_nodes.is_empty() {
-        // If there are no nodes whatsoever in the routing table the gossip cannot proceed.
-        warn!("No nodes in routing table, gossip cannot proceed.");
-        return 0;
-    }
+    let local_nodes = get_local_nodes(&kbuckets);
 
     // HashMap to temporarily store all interested ENRs and the content.
     // Key is base64 string of node's ENR.
     let mut enrs_and_content: HashMap<String, Vec<(RawContentKey, Vec<u8>)>> = HashMap::new();
 
     for (content_key, content_value) in content {
-        let interested_enrs = calculate_interested_enrs(&content_key, &all_nodes);
+        let (tx, rx) = oneshot::channel();
+        let target = discv5::enr::NodeId::from(content_key.content_id());
+        if let Err(msg) = command_tx.send(OverlayCommand::FindNodeQuery {
+            target,
+            callback: tx,
+        }) {
+            error!(error = %msg, "Error sending FIND_NODE message to service during RFN gossip lookup");
+        };
+        let mut rfn_nodes = rx.await.unwrap_or_else(|_| {
+            error!("Failed to get RFN nodes for content key gossip");
+            vec![]
+        });
+        let interested_enrs = calculate_interested_enrs(&content_key, &local_nodes, &mut rfn_nodes);
 
         // Temporarily store all randomly selected nodes with the content of interest.
         // We want this so we can offer all the content to an interested node in one request.
@@ -136,23 +149,24 @@ pub async fn trace_propagate_gossip_cross_thread<TContentKey: OverlayContentKey>
     let mut gossip_result = GossipResult::default();
     // Get all connected nodes from overlay routing table
     let interested_enrs = {
-        let kbuckets = kbuckets.read();
-        let all_nodes: Vec<&kbucket::Node<NodeId, Node>> = kbuckets
-            .buckets_iter()
-            .flat_map(|kbucket| {
-                kbucket
-                    .iter()
-                    .filter(|node| node.status.is_connected())
-                    .collect::<Vec<&kbucket::Node<NodeId, Node>>>()
-            })
+        let local_nodes = get_local_nodes(&kbuckets);
+        let local_nodes: Vec<kbucket::Node<NodeId, Node>> = local_nodes
+            .into_iter()
+            .map(|node| node.to_owned())
             .collect();
-
-        if all_nodes.is_empty() {
-            // If there are no nodes whatsoever in the routing table the gossip cannot proceed.
-            warn!("No nodes in routing table, gossip cannot proceed.");
-            return gossip_result;
-        }
-        calculate_interested_enrs(&content_key, &all_nodes)
+        let (tx, rx) = oneshot::channel();
+        let target = discv5::enr::NodeId::from(content_key.content_id());
+        if let Err(msg) = command_tx.send(OverlayCommand::FindNodeQuery {
+            target,
+            callback: tx,
+        }) {
+            error!(error = %msg, "Error sending FIND_NODE message to service during RFN gossip lookup");
+        };
+        let mut rfn_nodes = rx.await.unwrap_or_else(|_| {
+            error!("Failed to get RFN nodes for content key gossip");
+            vec![]
+        });
+        calculate_interested_enrs(&content_key, &local_nodes, &mut rfn_nodes)
     };
     if interested_enrs.is_empty() {
         return gossip_result;
@@ -211,14 +225,15 @@ pub async fn trace_propagate_gossip_cross_thread<TContentKey: OverlayContentKey>
 /// Filter all nodes from overlay routing table where XOR_distance(content_id, nodeId) < node radius
 fn calculate_interested_enrs<TContentKey: OverlayContentKey>(
     content_key: &TContentKey,
-    all_nodes: &[&kbucket::Node<NodeId, Node>],
+    local_nodes: &[kbucket::Node<NodeId, Node>],
+    rfn_nodes: &mut Vec<Enr>,
 ) -> Vec<Enr> {
     // HashMap to temporarily store all interested ENRs and the content.
     // Key is base64 string of node's ENR.
 
     // Filter all nodes from overlay routing table where XOR_distance(content_id, nodeId) < node
     // radius
-    let mut interested_enrs: Vec<Enr> = all_nodes
+    let mut interested_enrs: Vec<Enr> = local_nodes
         .iter()
         .filter(|node| {
             XorMetric::distance(&content_key.content_id(), &node.key.preimage().raw())
@@ -228,10 +243,10 @@ fn calculate_interested_enrs<TContentKey: OverlayContentKey>(
         .collect();
 
     // Continue if no nodes are interested in the content
-    if interested_enrs.is_empty() {
+    if interested_enrs.is_empty() && rfn_nodes.is_empty() {
         debug!(
             content.id = %hex_encode(content_key.content_id()),
-            kbuckets.len = all_nodes.len(),
+            kbuckets.len = local_nodes.len(),
             "No peers eligible for neighborhood gossip"
         );
         return vec![];
@@ -246,40 +261,54 @@ fn calculate_interested_enrs<TContentKey: OverlayContentKey>(
             std::cmp::Ordering::Less
         })
     });
-
-    select_gossip_recipients(interested_enrs)
-}
-
-/// Randomly select `num_enrs` nodes from `enrs`.
-fn select_random_enrs(num_enrs: usize, enrs: Vec<Enr>) -> Vec<Enr> {
-    let random_enrs: Vec<Enr> = enrs
-        .into_iter()
-        .choose_multiple(&mut rand::thread_rng(), num_enrs);
-    random_enrs
+    select_gossip_recipients(interested_enrs, rfn_nodes)
 }
 
 const NUM_CLOSEST_NODES: usize = 4;
-const NUM_FARTHER_NODES: usize = 4;
+const NUM_RFN_NODES: usize = 4;
+const MAX_NODES: usize = 8;
 /// Selects gossip recipients from a vec of sorted interested ENRs.
 /// Returned vec is a concatenation of, at most:
 /// 1. First `NUM_CLOSEST_NODES` elements of `interested_sorted_enrs`.
 /// 2. `NUM_FARTHER_NODES` elements randomly selected from
 ///    `interested_sorted_enrs[NUM_CLOSEST_NODES..]`
-fn select_gossip_recipients(interested_sorted_enrs: Vec<Enr>) -> Vec<Enr> {
+fn select_gossip_recipients(
+    interested_sorted_enrs: Vec<Enr>,
+    rfn_nodes: &mut Vec<Enr>,
+) -> Vec<Enr> {
     let mut gossip_recipients: Vec<Enr> = vec![];
+    let rfn_node_ids: Vec<NodeId> = rfn_nodes.iter().map(|enr| enr.node_id()).collect();
 
-    // Get first n closest nodes
-    gossip_recipients.extend(
-        interested_sorted_enrs
-            .clone()
-            .into_iter()
-            .take(NUM_CLOSEST_NODES),
-    );
-    if interested_sorted_enrs.len() > NUM_CLOSEST_NODES {
-        let farther_enrs = interested_sorted_enrs[NUM_CLOSEST_NODES..].to_vec();
-        // Get random non-close ENRs to gossip to.
-        let random_farther_enrs = select_random_enrs(NUM_FARTHER_NODES, farther_enrs);
-        gossip_recipients.extend(random_farther_enrs);
+    // Filter out all duplicates
+    let mut interested_sorted_enrs: Vec<Enr> = interested_sorted_enrs
+        .into_iter()
+        .filter(|enr| !rfn_node_ids.contains(&enr.node_id()))
+        .collect();
+
+    // Get first n rfn nodes
+    while gossip_recipients.len() < NUM_RFN_NODES {
+        match rfn_nodes.pop() {
+            Some(enr) => gossip_recipients.push(enr),
+            None => break,
+        }
+    }
+
+    // Append first n closest nodes
+    let rfn_count = gossip_recipients.len();
+    while gossip_recipients.len() < rfn_count + NUM_CLOSEST_NODES {
+        match interested_sorted_enrs.pop() {
+            Some(enr) => gossip_recipients.push(enr),
+            None => break,
+        }
+    }
+
+    // Fill remaining slots with random nodes from interested_sorted_enrs
+    interested_sorted_enrs.shuffle(&mut thread_rng());
+    while gossip_recipients.len() < MAX_NODES {
+        match interested_sorted_enrs.pop() {
+            Some(enr) => gossip_recipients.push(enr),
+            None => break,
+        }
     }
     gossip_recipients
 }
@@ -294,17 +323,38 @@ mod tests {
     use ethportal_api::types::enr::generate_random_remote_enr;
 
     #[rstest]
-    #[case(vec![generate_random_remote_enr().1; 0], 0)]
-    #[case(vec![generate_random_remote_enr().1; NUM_CLOSEST_NODES - 1], NUM_CLOSEST_NODES - 1)]
-    #[case(vec![generate_random_remote_enr().1; NUM_CLOSEST_NODES], NUM_CLOSEST_NODES)]
-    #[case(vec![generate_random_remote_enr().1; NUM_CLOSEST_NODES + 1], NUM_CLOSEST_NODES + 1)]
-    #[case(vec![generate_random_remote_enr().1; NUM_CLOSEST_NODES + NUM_FARTHER_NODES], NUM_CLOSEST_NODES + NUM_FARTHER_NODES)]
-    #[case(vec![generate_random_remote_enr().1; 256], NUM_CLOSEST_NODES + NUM_FARTHER_NODES)]
-    fn test_select_gossip_recipients_no_panic(
-        #[case] all_nodes: Vec<Enr>,
+    #[case(0, 0, 0)]
+    #[case(0, 3, 3)]
+    #[case(3, 0, 3)]
+    #[case(7, 0, 7)]
+    #[case(2, 2, 4)]
+    #[case(5, 5, MAX_NODES)]
+    #[case(7, 2, MAX_NODES)]
+    #[case(2, 7, 6)]
+    #[case(7, 7, MAX_NODES)]
+    #[case(12, 0, MAX_NODES)]
+    #[case(0, 12, NUM_RFN_NODES)]
+    fn test_select_gossip_recipients(
+        #[case] local_nodes: usize,
+        #[case] rfn_nodes: usize,
         #[case] expected_size: usize,
     ) {
-        let gossip_recipients = select_gossip_recipients(all_nodes);
+        let mut rfn_nodes = (0..rfn_nodes)
+            .map(|_| generate_random_remote_enr().1)
+            .collect();
+        let local_nodes = (0..local_nodes)
+            .map(|_| generate_random_remote_enr().1)
+            .collect();
+        let gossip_recipients = select_gossip_recipients(local_nodes, &mut rfn_nodes);
         assert_eq!(gossip_recipients.len(), expected_size);
+    }
+
+    #[test]
+    fn test_select_gossip_recipients_filters_duplicates() {
+        let local_nodes: Vec<Enr> = (0..4).map(|_| generate_random_remote_enr().1).collect();
+        let mut rfn_nodes: Vec<Enr> = (0..4).map(|_| generate_random_remote_enr().1).collect();
+        rfn_nodes[0] = local_nodes[0].clone();
+        let gossip_recipients = select_gossip_recipients(local_nodes, &mut rfn_nodes);
+        assert_eq!(gossip_recipients.len(), 7);
     }
 }

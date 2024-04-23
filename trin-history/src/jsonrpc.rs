@@ -307,6 +307,7 @@ async fn gossip(
     Ok(network
         .overlay
         .propagate_gossip(vec![(content_key, data)])
+        .await
         .into())
 }
 

@@ -1560,7 +1560,8 @@ where
             utp_processing.kbuckets,
             utp_processing.command_tx.clone(),
             Some(utp_processing.utp_controller),
-        );
+        )
+        .await;
         Ok(())
     }
 
