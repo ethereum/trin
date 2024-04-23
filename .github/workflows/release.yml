@@ -180,14 +180,6 @@ jobs:
           - [ ] Write the summary.
           - [ ] Ensure all binaries have been added.
 
-          ## Summary
-
-          Add a summary, including:
-
-          - Critical bug fixes
-          - New features
-          - Any breaking changes (and what to expect)
-
           ## All Changes
 
           ${{ steps.changelog.outputs.CHANGELOG }}
