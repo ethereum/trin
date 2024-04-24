@@ -94,7 +94,7 @@ impl PreMergeAccumulator {
 
     pub fn validate_header_with_proof(&self, hwp: &HeaderWithProof) -> anyhow::Result<()> {
         match &hwp.proof {
-            BlockHeaderProof::AccumulatorProof(proof) => {
+            BlockHeaderProof::PreMergeAccumulatorProof(proof) => {
                 if hwp.header.number > MERGE_BLOCK_NUMBER {
                     return Err(anyhow!("Invalid proof type found for post-merge header."));
                 }
@@ -260,7 +260,7 @@ mod test {
     use crate::constants::DEFAULT_PRE_MERGE_ACC_HASH;
     use ethportal_api::{
         types::execution::header_with_proof::{
-            AccumulatorProof, BlockHeaderProof, HeaderWithProof, SszNone,
+            BlockHeaderProof, HeaderWithProof, PreMergeAccumulatorProof, SszNone,
         },
         utils::bytes::hex_encode,
     };
@@ -304,13 +304,15 @@ mod test {
         let header = get_header(block_number);
         let trin_proof = trin_macc.generate_proof(&header, tx).await.unwrap();
         let fluffy_proof = match fluffy_hwp.proof {
-            BlockHeaderProof::AccumulatorProof(val) => val,
+            BlockHeaderProof::PreMergeAccumulatorProof(val) => val,
             _ => panic!("test reached invalid state"),
         };
         assert_eq!(trin_proof, fluffy_proof.proof);
         let hwp = HeaderWithProof {
             header,
-            proof: BlockHeaderProof::AccumulatorProof(AccumulatorProof { proof: trin_proof }),
+            proof: BlockHeaderProof::PreMergeAccumulatorProof(PreMergeAccumulatorProof {
+                proof: trin_proof,
+            }),
         };
         trin_macc.validate_header_with_proof(&hwp).unwrap();
     }
@@ -327,7 +329,7 @@ mod test {
         proof.swap(0, 1);
         let hwp = HeaderWithProof {
             header,
-            proof: BlockHeaderProof::AccumulatorProof(AccumulatorProof { proof }),
+            proof: BlockHeaderProof::PreMergeAccumulatorProof(PreMergeAccumulatorProof { proof }),
         };
         assert!(trin_macc
             .validate_header_with_proof(&hwp)
@@ -370,7 +372,7 @@ mod test {
         let future_header = generate_random_header(&future_height);
         let future_hwp = HeaderWithProof {
             header: future_header,
-            proof: BlockHeaderProof::AccumulatorProof(AccumulatorProof {
+            proof: BlockHeaderProof::PreMergeAccumulatorProof(PreMergeAccumulatorProof {
                 proof: [B256::ZERO; 15],
             }),
         };

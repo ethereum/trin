@@ -17,7 +17,9 @@ use ethportal_api::{
                 BlockBody, BlockBodyLegacy, BlockBodyMerge, BlockBodyShanghai, MERGE_TIMESTAMP,
                 SHANGHAI_TIMESTAMP,
             },
-            header_with_proof::{AccumulatorProof, BlockHeaderProof, HeaderWithProof, SszNone},
+            header_with_proof::{
+                BlockHeaderProof, HeaderWithProof, PreMergeAccumulatorProof, SszNone,
+            },
         },
         jsonrpc::{params::Params, request::JsonRequest},
     },
@@ -346,7 +348,7 @@ pub async fn construct_proof(
     epoch_acc: &EpochAccumulator,
 ) -> anyhow::Result<HeaderWithProof> {
     let proof = PreMergeAccumulator::construct_proof(&header, epoch_acc)?;
-    let proof = BlockHeaderProof::AccumulatorProof(AccumulatorProof { proof });
+    let proof = BlockHeaderProof::PreMergeAccumulatorProof(PreMergeAccumulatorProof { proof });
     Ok(HeaderWithProof { header, proof })
 }
 

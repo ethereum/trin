@@ -25,7 +25,7 @@ impl ssz::Encode for HeaderWithProof {
         let header = alloy_rlp::encode(&self.header);
         let header = ByteList2048::from(header);
         let offset = <ByteList2048 as Encode>::ssz_fixed_len()
-            + <AccumulatorProof as Encode>::ssz_fixed_len();
+            + <PreMergeAccumulatorProof as Encode>::ssz_fixed_len();
         let mut encoder = SszEncoder::container(buf, offset);
         encoder.append(&header);
         encoder.append(&self.proof);
@@ -45,13 +45,13 @@ impl ssz::Encode for HeaderWithProof {
 #[allow(clippy::large_enum_variant)]
 pub enum BlockHeaderProof {
     None(SszNone),
-    AccumulatorProof(AccumulatorProof),
+    PreMergeAccumulatorProof(PreMergeAccumulatorProof),
     HistoricalRootsBlockProof(HistoricalRootsBlockProof),
     HistoricalSummariesBlockProof(HistoricalSummariesBlockProof),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AccumulatorProof {
+pub struct PreMergeAccumulatorProof {
     pub proof: [B256; 15],
 }
 
@@ -78,7 +78,7 @@ impl ssz::Decode for HeaderWithProof {
     }
 }
 
-impl ssz::Decode for AccumulatorProof {
+impl ssz::Decode for PreMergeAccumulatorProof {
     fn is_ssz_fixed_len() -> bool {
         true
     }
@@ -96,7 +96,7 @@ impl ssz::Decode for AccumulatorProof {
     }
 }
 
-impl ssz::Encode for AccumulatorProof {
+impl ssz::Encode for PreMergeAccumulatorProof {
     fn is_ssz_fixed_len() -> bool {
         true
     }
