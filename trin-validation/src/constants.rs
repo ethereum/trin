@@ -8,8 +8,8 @@ pub const CONSTANTINOPLE_BLOCK_NUMBER: u64 = 7_280_000;
 pub const BYZANTIUM_BLOCK_NUMBER: u64 = 4_370_000;
 pub const HOMESTEAD_BLOCK_NUMBER: u64 = 1_150_000;
 
-// todo docstring
-pub const DEFAULT_MASTER_ACC_HASH: &str =
+/// The default hash of the pre-merge accumulator at the time of the merge block.
+pub const DEFAULT_PRE_MERGE_ACC_HASH: &str =
     "0x8eac399e24480dce3cfe06f4bdecba51c6e5d0c46200e3e8611a0b44a3a69ff9";
 
 /// Max number of blocks / epoch = 2 ** 13

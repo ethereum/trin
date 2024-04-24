@@ -23,7 +23,7 @@ use ethportal_api::{
 use portal_bridge::{api::execution::ExecutionApi, bridge::history::EPOCH_SIZE};
 use trin_utils::log::init_tracing_logger;
 use trin_validation::{
-    accumulator::MasterAccumulator,
+    accumulator::PreMergeAccumulator,
     constants::{
         BERLIN_BLOCK_NUMBER, BYZANTIUM_BLOCK_NUMBER, CONSTANTINOPLE_BLOCK_NUMBER,
         HOMESTEAD_BLOCK_NUMBER, ISTANBUL_BLOCK_NUMBER, LONDON_BLOCK_NUMBER, MERGE_BLOCK_NUMBER,
@@ -64,7 +64,7 @@ pub async fn main() -> Result<()> {
         let api = ExecutionApi {
             fallback_client: client.clone(),
             client,
-            master_acc: MasterAccumulator::default(),
+            pre_merge_acc: PreMergeAccumulator::default(),
         };
         for gossip_range in all_ranges.iter_mut() {
             debug!("Testing range: {gossip_range:?}");
@@ -130,8 +130,8 @@ fn lookup_epoch_acc(block: u64) -> Result<Option<Arc<EpochAccumulator>>> {
         return Ok(None);
     }
     let epoch_index = block / EPOCH_SIZE;
-    let master_acc = MasterAccumulator::default();
-    let epoch_hash = master_acc.historical_epochs[epoch_index as usize];
+    let pre_merge_acc = PreMergeAccumulator::default();
+    let epoch_hash = pre_merge_acc.historical_epochs[epoch_index as usize];
     let epoch_hash_pretty = hex_encode(epoch_hash);
     let epoch_hash_pretty = epoch_hash_pretty.trim_start_matches("0x");
     let epoch_acc_path =

@@ -17,7 +17,9 @@ use ethportal_api::{
                 BlockBody, BlockBodyLegacy, BlockBodyMerge, BlockBodyShanghai, MERGE_TIMESTAMP,
                 SHANGHAI_TIMESTAMP,
             },
-            header_with_proof::{AccumulatorProof, BlockHeaderProof, HeaderWithProof, SszNone},
+            header_with_proof::{
+                BlockHeaderProof, HeaderWithProof, PreMergeAccumulatorProof, SszNone,
+            },
         },
         jsonrpc::{params::Params, request::JsonRequest},
     },
@@ -25,7 +27,7 @@ use ethportal_api::{
     BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, Header, HistoryContentKey, HistoryContentValue,
     Receipts,
 };
-use trin_validation::{accumulator::MasterAccumulator, constants::MERGE_BLOCK_NUMBER};
+use trin_validation::{accumulator::PreMergeAccumulator, constants::MERGE_BLOCK_NUMBER};
 
 /// Limit the number of requests in a single batch to avoid exceeding the
 /// provider's batch size limit configuration of 100.
@@ -37,7 +39,7 @@ const BATCH_LIMIT: usize = 100;
 pub struct ExecutionApi {
     pub client: Client,
     pub fallback_client: Client,
-    pub master_acc: MasterAccumulator,
+    pub pre_merge_acc: PreMergeAccumulator,
 }
 
 impl ExecutionApi {
@@ -61,11 +63,11 @@ impl ExecutionApi {
         if let Err(err) = check_provider(&client).await {
             error!("Primary el provider is offline: {err:?}");
         }
-        let master_acc = MasterAccumulator::default();
+        let pre_merge_acc = PreMergeAccumulator::default();
         Ok(Self {
             client,
             fallback_client,
-            master_acc,
+            pre_merge_acc,
         })
     }
 
@@ -107,7 +109,7 @@ impl ExecutionApi {
                 let header_with_proof =
                     construct_proof(full_header.header.clone(), epoch_acc).await?;
                 // Double check that the proof is valid
-                self.master_acc
+                self.pre_merge_acc
                     .validate_header_with_proof(&header_with_proof)?;
                 HistoryContentValue::BlockHeaderWithProof(header_with_proof)
             }
@@ -345,8 +347,8 @@ pub async fn construct_proof(
     header: Header,
     epoch_acc: &EpochAccumulator,
 ) -> anyhow::Result<HeaderWithProof> {
-    let proof = MasterAccumulator::construct_proof(&header, epoch_acc)?;
-    let proof = BlockHeaderProof::AccumulatorProof(AccumulatorProof { proof });
+    let proof = PreMergeAccumulator::construct_proof(&header, epoch_acc)?;
+    let proof = BlockHeaderProof::PreMergeAccumulatorProof(PreMergeAccumulatorProof { proof });
     Ok(HeaderWithProof { header, proof })
 }
 

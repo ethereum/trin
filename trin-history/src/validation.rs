@@ -45,7 +45,7 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                 self.header_oracle
                     .read()
                     .await
-                    .master_acc
+                    .pre_merge_acc
                     .validate_header_with_proof(&header_with_proof)?;
 
                 Ok(ValidationResult::new(true))
@@ -113,10 +113,10 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                         key.epoch_hash,
                     ));
                 }
-                let master_acc = &self.header_oracle.read().await.master_acc;
-                if !master_acc.historical_epochs.contains(&tree_hash_root) {
+                let pre_merge_acc = &self.header_oracle.read().await.pre_merge_acc;
+                if !pre_merge_acc.historical_epochs.contains(&tree_hash_root) {
                     return Err(anyhow!(
-                        "Content validation failed: Invalid epoch accumulator, missing from master accumulator."
+                        "Content validation failed: Invalid epoch accumulator, missing from pre-merge accumulator."
                     ));
                 }
                 Ok(ValidationResult::new(true))
@@ -136,11 +136,11 @@ mod tests {
     use ssz::Encode;
 
     use ethportal_api::{
-        types::{cli::DEFAULT_MASTER_ACC_PATH, execution::accumulator::HeaderRecord},
+        types::{cli::DEFAULT_PRE_MERGE_ACC_PATH, execution::accumulator::HeaderRecord},
         utils::bytes::hex_decode,
         BlockHeaderKey, EpochAccumulatorKey,
     };
-    use trin_validation::accumulator::MasterAccumulator;
+    use trin_validation::accumulator::PreMergeAccumulator;
 
     fn get_hwp_ssz() -> Vec<u8> {
         let file =
@@ -253,8 +253,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[should_panic(expected = "Invalid epoch accumulator, missing from master accumulator.")]
-    async fn invalidate_epoch_acc_missing_from_master_acc() {
+    #[should_panic(expected = "Invalid epoch accumulator, missing from pre-merge accumulator.")]
+    async fn invalidate_epoch_acc_missing_from_pre_merge_acc() {
         let epoch_acc =
             std::fs::read("./../trin-validation/src/assets/epoch_accs/0x5ec1ffb8c3b146f42606c74ced973dc16ec5a107c0345858c343fc94780b4218.bin").unwrap();
         let mut epoch_acc = EpochAccumulator::from_ssz_bytes(&epoch_acc).unwrap();
@@ -277,9 +277,10 @@ mod tests {
     }
 
     fn default_header_oracle() -> Arc<RwLock<HeaderOracle>> {
-        let master_acc =
-            MasterAccumulator::try_from_file(PathBuf::from(DEFAULT_MASTER_ACC_PATH.to_string()))
-                .unwrap();
-        Arc::new(RwLock::new(HeaderOracle::new(master_acc)))
+        let pre_merge_acc = PreMergeAccumulator::try_from_file(PathBuf::from(
+            DEFAULT_PRE_MERGE_ACC_PATH.to_string(),
+        ))
+        .unwrap();
+        Arc::new(RwLock::new(HeaderOracle::new(pre_merge_acc)))
     }
 }

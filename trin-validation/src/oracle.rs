@@ -3,7 +3,7 @@ use anyhow::anyhow;
 use serde_json::Value;
 use tokio::sync::mpsc;
 
-use crate::accumulator::MasterAccumulator;
+use crate::accumulator::PreMergeAccumulator;
 use ethportal_api::{
     types::{
         execution::header_with_proof::HeaderWithProof,
@@ -25,21 +25,21 @@ pub struct HeaderOracle {
     // determining which subnetworks are actually available.
     pub history_jsonrpc_tx: Option<mpsc::UnboundedSender<HistoryJsonRpcRequest>>,
     pub beacon_jsonrpc_tx: Option<mpsc::UnboundedSender<BeaconJsonRpcRequest>>,
-    pub master_acc: MasterAccumulator,
+    pub pre_merge_acc: PreMergeAccumulator,
 }
 
 impl HeaderOracle {
-    pub fn new(master_acc: MasterAccumulator) -> Self {
+    pub fn new(pre_merge_acc: PreMergeAccumulator) -> Self {
         Self {
             history_jsonrpc_tx: None,
             beacon_jsonrpc_tx: None,
-            master_acc,
+            pre_merge_acc,
         }
     }
 
     // Only serves pre-block hashes aka. portal-network verified data only
     pub async fn get_hash_at_height(&self, block_number: u64) -> anyhow::Result<B256> {
-        self.master_acc
+        self.pre_merge_acc
             .lookup_premerge_hash_by_number(block_number, self.history_jsonrpc_tx()?)
             .await
     }
@@ -105,17 +105,18 @@ mod test {
 
     use tree_hash::TreeHash;
 
-    use crate::constants::DEFAULT_MASTER_ACC_HASH;
+    use crate::constants::DEFAULT_PRE_MERGE_ACC_HASH;
     use ethportal_api::types::cli::TrinConfig;
 
     #[tokio::test]
-    async fn header_oracle_bootstraps_with_default_merge_master_acc() {
+    async fn header_oracle_bootstraps_with_default_pre_merge_acc() {
         let trin_config = TrinConfig::default();
-        let master_acc = MasterAccumulator::try_from_file(trin_config.master_acc_path).unwrap();
-        let header_oracle = HeaderOracle::new(master_acc);
+        let pre_merge_acc =
+            PreMergeAccumulator::try_from_file(trin_config.pre_merge_acc_path).unwrap();
+        let header_oracle = HeaderOracle::new(pre_merge_acc);
         assert_eq!(
-            header_oracle.master_acc.tree_hash_root(),
-            B256::from_str(DEFAULT_MASTER_ACC_HASH).unwrap(),
+            header_oracle.pre_merge_acc.tree_hash_root(),
+            B256::from_str(DEFAULT_PRE_MERGE_ACC_HASH).unwrap(),
         );
     }
 }

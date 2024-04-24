@@ -13,12 +13,12 @@ use serde_json::Value;
 use std::sync::Arc;
 use surf::{Client, Config};
 use tokio::time::{sleep, Duration};
-use trin_validation::{accumulator::MasterAccumulator, oracle::HeaderOracle};
+use trin_validation::{accumulator::PreMergeAccumulator, oracle::HeaderOracle};
 use url::Url;
 
 pub async fn test_history_bridge(peertest: &Peertest, target: &HttpClient) {
-    let master_acc = MasterAccumulator::default();
-    let header_oracle = HeaderOracle::new(master_acc);
+    let pre_merge_acc = PreMergeAccumulator::default();
+    let header_oracle = HeaderOracle::new(pre_merge_acc);
     let portal_clients = vec![target.clone()];
     let epoch_acc_path = "validation_assets/epoch_acc.bin".into();
     let mode = BridgeMode::Test("./test_assets/portalnet/bridge_data.json".into());

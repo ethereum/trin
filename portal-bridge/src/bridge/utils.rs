@@ -3,15 +3,15 @@ use anyhow::anyhow;
 use ethportal_api::{types::execution::accumulator::EpochAccumulator, utils::bytes::hex_encode};
 use ssz::Decode;
 use std::{fs, path::Path};
-use trin_validation::accumulator::MasterAccumulator;
+use trin_validation::accumulator::PreMergeAccumulator;
 
 /// Lookup the epoch accumulator & epoch hash for the given epoch index.
 pub async fn lookup_epoch_acc(
     epoch_index: u64,
-    master_acc: &MasterAccumulator,
+    pre_merge_acc: &PreMergeAccumulator,
     epoch_acc_path: &Path,
 ) -> anyhow::Result<(B256, EpochAccumulator)> {
-    let epoch_hash = master_acc.historical_epochs[epoch_index as usize];
+    let epoch_hash = pre_merge_acc.historical_epochs[epoch_index as usize];
     let epoch_hash_pretty = hex_encode(epoch_hash);
     let epoch_hash_pretty = epoch_hash_pretty.trim_start_matches("0x");
     let epoch_acc_path = format!(
