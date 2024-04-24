@@ -24,6 +24,8 @@ use ethportal_api::types::cli::{
 // - running more than 16 nodes simultaneously is not thoroughly tested
 pub const MAX_NODE_COUNT: u8 = 16;
 const DEFAULT_SUBNETWORK: &str = "history";
+const DEFAULT_EXECUTABLE_PATH: &str = "./target/debug/trin";
+const DEFAULT_EPOCH_ACC_PATH: &str = "./portal-accumulators";
 
 #[derive(Parser, Debug, Clone)]
 #[command(name = "Trin Bridge", about = "Feed the network")]
@@ -36,7 +38,7 @@ pub struct BridgeConfig {
     )]
     pub node_count: u8,
 
-    #[arg(long, help = "path to portalnet client executable")]
+    #[arg(long, help = "path to portalnet client executable", default_value = DEFAULT_EXECUTABLE_PATH)]
     pub executable_path: PathBuf,
 
     #[arg(
@@ -48,7 +50,8 @@ pub struct BridgeConfig {
 
     #[arg(
         long = "epoch-accumulator-path",
-        help = "Path to epoch accumulator repo for bridge mode"
+        help = "Path to epoch accumulator repo for bridge mode",
+        default_value = DEFAULT_EPOCH_ACC_PATH
     )]
     pub epoch_acc_path: PathBuf,
 
