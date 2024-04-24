@@ -234,12 +234,8 @@ impl ExecutionApi {
             })
             .collect();
         let response = self.batch_requests(request).await?;
-        match serde_json::from_str(&response) {
-            Ok(receipts) => Ok(receipts),
-            Err(err) => {
-                bail!("Unable to parse receipts from response: {response:?} error: {err:?}")
-            }
-        }
+        serde_json::from_str(&response)
+            .map_err(|err| anyhow!("Unable to parse receipts from provider response: {err:?}"))
     }
 
     pub async fn get_latest_block_number(&self) -> anyhow::Result<u64> {
@@ -285,12 +281,11 @@ impl ExecutionApi {
             Err(msg) => {
                 warn!("Failed to send batch request to primary provider: {msg}");
                 sleep(FALLBACK_RETRY_AFTER).await;
-                match Self::send_batch_request(&self.fallback_client, &requests).await {
-                    Ok(response) => Ok(response),
-                    Err(msg) => {
-                        bail!("Failed to send batch request to fallback provider: {msg}");
-                    }
-                }
+                Self::send_batch_request(&self.fallback_client, &requests)
+                    .await
+                    .map_err(|err| {
+                        anyhow!("Failed to send batch request to fallback provider: {err}")
+                    })
             }
         }
     }
