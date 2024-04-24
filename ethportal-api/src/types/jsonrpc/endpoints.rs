@@ -53,7 +53,7 @@ pub enum StateEndpoint {
 }
 
 /// History network JSON-RPC endpoints. Start with "portal_history" prefix
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum HistoryEndpoint {
     /// params: [enr]
     AddEnr(Enr),
