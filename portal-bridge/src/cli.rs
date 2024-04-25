@@ -2,9 +2,15 @@ use std::{env, net::SocketAddr, path::PathBuf, str::FromStr};
 
 use alloy_primitives::B256;
 use clap::{Parser, Subcommand};
-use surf::{Client, Config};
-use tokio::process::Child;
-use tracing::error;
+use surf::{
+    middleware::{Middleware, Next},
+    Body, Client, Config, Request, Response,
+};
+use tokio::{
+    process::Child,
+    time::{sleep, Duration},
+};
+use tracing::{error, warn};
 use url::Url;
 
 use crate::{
@@ -187,9 +193,59 @@ fn url_to_client(url: &str) -> Result<Client, String> {
     } else {
         config = config.set_base_url(url);
     }
-    Ok(config
+    let client: Client = config
         .try_into()
-        .map_err(|_| "to convert config to client")?)
+        .map_err(|_| "to convert config to client")?;
+    Ok(client.with(Retry::default()))
+}
+
+#[derive(Debug)]
+pub struct Retry {
+    attempts: u8,
+}
+
+impl Retry {
+    pub fn new(attempts: u8) -> Self {
+        Retry { attempts }
+    }
+}
+
+#[async_trait::async_trait]
+impl Middleware for Retry {
+    async fn handle(
+        &self,
+        mut req: Request,
+        client: Client,
+        next: Next<'_>,
+    ) -> Result<Response, surf::Error> {
+        let mut retry_count: u8 = 0;
+        let body = req.take_body().into_bytes().await?;
+        while retry_count < self.attempts {
+            if retry_count > 0 {
+                warn!("Retrying request");
+            }
+            let mut new_req = req.clone();
+            new_req.set_body(Body::from_bytes(body.clone()));
+            if let Ok(val) = next.run(new_req, client.clone()).await {
+                if val.status().is_success() {
+                    return Ok(val);
+                }
+                tracing::error!("Execution client request failed with: {:?}", val);
+            };
+            retry_count += 1;
+            sleep(Duration::from_millis(100)).await;
+        }
+        Err(surf::Error::from_str(
+            500,
+            "Unable to fetch batch after 3 retries",
+        ))
+    }
+}
+
+impl Default for Retry {
+    fn default() -> Self {
+        Self { attempts: 3 }
+    }
 }
 
 type ParseError = &'static str;
