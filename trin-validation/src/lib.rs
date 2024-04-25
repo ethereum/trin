@@ -3,6 +3,7 @@
 
 pub mod accumulator;
 pub mod constants;
+pub mod header_validfator;
 pub mod merkle;
 pub mod oracle;
 pub mod validator;

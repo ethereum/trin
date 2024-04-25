@@ -29,6 +29,7 @@ use trin_validation::{
         HOMESTEAD_BLOCK_NUMBER, ISTANBUL_BLOCK_NUMBER, LONDON_BLOCK_NUMBER, MERGE_BLOCK_NUMBER,
         SHANGHAI_BLOCK_NUMBER,
     },
+    header_validfator::HeaderValidator,
 };
 
 lazy_static::lazy_static! {
@@ -64,7 +65,7 @@ pub async fn main() -> Result<()> {
         let api = ExecutionApi {
             fallback_client: client.clone(),
             client,
-            pre_merge_acc: PreMergeAccumulator::default(),
+            header_validator: HeaderValidator::default(),
         };
         for gossip_range in all_ranges.iter_mut() {
             debug!("Testing range: {gossip_range:?}");

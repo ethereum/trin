@@ -45,7 +45,7 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                 self.header_oracle
                     .read()
                     .await
-                    .pre_merge_acc
+                    .header_validator
                     .validate_header_with_proof(&header_with_proof)?;
 
                 Ok(ValidationResult::new(true))
@@ -113,7 +113,12 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
                         key.epoch_hash,
                     ));
                 }
-                let pre_merge_acc = &self.header_oracle.read().await.pre_merge_acc;
+                let pre_merge_acc = &self
+                    .header_oracle
+                    .read()
+                    .await
+                    .header_validator
+                    .pre_merge_acc;
                 if !pre_merge_acc.historical_epochs.contains(&tree_hash_root) {
                     return Err(anyhow!(
                         "Content validation failed: Invalid epoch accumulator, missing from pre-merge accumulator."

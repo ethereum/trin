@@ -3,7 +3,7 @@ use anyhow::anyhow;
 use serde_json::Value;
 use tokio::sync::mpsc;
 
-use crate::accumulator::PreMergeAccumulator;
+use crate::{accumulator::PreMergeAccumulator, header_validfator::HeaderValidator};
 use ethportal_api::{
     types::{
         execution::header_with_proof::HeaderWithProof,
@@ -25,21 +25,23 @@ pub struct HeaderOracle {
     // determining which subnetworks are actually available.
     pub history_jsonrpc_tx: Option<mpsc::UnboundedSender<HistoryJsonRpcRequest>>,
     pub beacon_jsonrpc_tx: Option<mpsc::UnboundedSender<BeaconJsonRpcRequest>>,
-    pub pre_merge_acc: PreMergeAccumulator,
+    pub header_validator: HeaderValidator,
 }
 
 impl HeaderOracle {
     pub fn new(pre_merge_acc: PreMergeAccumulator) -> Self {
+        let header_validator = HeaderValidator::new(pre_merge_acc);
         Self {
             history_jsonrpc_tx: None,
             beacon_jsonrpc_tx: None,
-            pre_merge_acc,
+            header_validator,
         }
     }
 
     // Only serves pre-block hashes aka. portal-network verified data only
     pub async fn get_hash_at_height(&self, block_number: u64) -> anyhow::Result<B256> {
-        self.pre_merge_acc
+        self.header_validator
+            .pre_merge_acc
             .lookup_premerge_hash_by_number(block_number, self.history_jsonrpc_tx()?)
             .await
     }
@@ -115,7 +117,10 @@ mod test {
             PreMergeAccumulator::try_from_file(trin_config.pre_merge_acc_path).unwrap();
         let header_oracle = HeaderOracle::new(pre_merge_acc);
         assert_eq!(
-            header_oracle.pre_merge_acc.tree_hash_root(),
+            header_oracle
+                .header_validator
+                .pre_merge_acc
+                .tree_hash_root(),
             B256::from_str(DEFAULT_PRE_MERGE_ACC_HASH).unwrap(),
         );
     }
