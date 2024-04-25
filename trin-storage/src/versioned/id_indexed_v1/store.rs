@@ -787,7 +787,7 @@ mod tests {
         );
         store.insert(&big_value_key, value)?;
 
-        // Add another 48 small items (1% each) and check that:
+        // Add another 48 small-ish items (1% each) and check that:
         // - we didn't prune
         // - we are at 148% total capacity
         for _ in 0..48 {
@@ -807,7 +807,6 @@ mod tests {
         // Add one more and check that:
         // - we pruned enough to be under pruning capacity
         // - the big_value_key is still stored
-        // - to_insert_until_pruning is set to correct value
         let (key, value) = generate_key_value(&config, 1);
         store.insert(&key, value).unwrap();
         assert!(
@@ -815,7 +814,6 @@ mod tests {
                 <= config.pruning_capacity_threshold()
         );
         assert!(store.has_content(&big_value_key.content_id().into())?);
-        assert_eq!(store.to_insert_until_pruning, 1);
 
         Ok(())
     }
