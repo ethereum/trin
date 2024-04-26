@@ -3,15 +3,14 @@ use std::net::SocketAddr;
 use tokio::process::{Child, Command};
 
 use crate::cli::BridgeConfig;
+use ethportal_api::utils::bytes::hex_encode;
 use portalnet::socket::stun_for_external;
 
-pub fn fluffy_handle(
-    private_key: String,
-    rpc_port: u16,
-    udp_port: u16,
-    bridge_config: BridgeConfig,
-) -> anyhow::Result<Child> {
-    let mut command = Command::new(bridge_config.executable_path);
+pub fn fluffy_handle(bridge_config: &BridgeConfig) -> anyhow::Result<Child> {
+    let rpc_port = bridge_config.base_rpc_port;
+    let udp_port = bridge_config.base_discovery_port;
+    let private_key = hex_encode(bridge_config.private_key);
+    let mut command = Command::new(bridge_config.executable_path.clone());
     let listen_all_ips = SocketAddr::new("0.0.0.0".parse().expect("to parse ip"), udp_port);
     let ip = stun_for_external(&listen_all_ips).expect("to stun for external ip");
     command
@@ -35,22 +34,20 @@ pub fn fluffy_handle(
             command.args(["--bootstrap-node", enr]);
         }
     }
-    if let Some(ip) = bridge_config.external_ip {
+    if let Some(ip) = bridge_config.external_ip.clone() {
         command.arg(format!("--nat:extip:{ip}"));
     }
     Ok(command.spawn()?)
 }
 
-pub fn trin_handle(
-    private_key: String,
-    rpc_port: u16,
-    udp_port: u16,
-    bridge_config: BridgeConfig,
-) -> anyhow::Result<Child> {
-    let mut command = Command::new(bridge_config.executable_path);
+pub fn trin_handle(bridge_config: &BridgeConfig) -> anyhow::Result<Child> {
+    let rpc_port = bridge_config.base_rpc_port;
+    let udp_port = bridge_config.base_discovery_port;
+    let private_key = hex_encode(bridge_config.private_key);
+    let mut command = Command::new(bridge_config.executable_path.clone());
     let networks = bridge_config
         .network
-        .into_iter()
+        .iter()
         .map(|n| n.to_string())
         .collect::<Vec<_>>()
         .join(",");
@@ -68,7 +65,7 @@ pub fn trin_handle(
         ])
         .args(["--discovery-port", &format!("{udp_port}")])
         .args(["--bootnodes", &bridge_config.bootnodes]);
-    if let Some(ip) = bridge_config.external_ip {
+    if let Some(ip) = bridge_config.external_ip.clone() {
         command.args(["--external-address", &format!("{ip}:{udp_port}")]);
     }
     if let Some(client_metrics_url) = bridge_config.client_metrics_url {

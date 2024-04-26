@@ -24,11 +24,6 @@ use ethportal_api::types::cli::{
     check_private_key_length, DEFAULT_DISCOVERY_PORT, DEFAULT_WEB3_HTTP_PORT,
 };
 
-// max value of 16 b/c...
-// - reliably calculate spaced private keys in a reasonable time
-// - for values b/w 16 - 256, calculated spaced private keys are less and less evenly spread
-// - running more than 16 nodes simultaneously is not thoroughly tested
-pub const MAX_NODE_COUNT: u8 = 16;
 const DEFAULT_SUBNETWORK: &str = "history";
 const DEFAULT_EXECUTABLE_PATH: &str = "./target/debug/trin";
 const DEFAULT_EPOCH_ACC_PATH: &str = "./portal-accumulators";
@@ -36,14 +31,6 @@ const DEFAULT_EPOCH_ACC_PATH: &str = "./portal-accumulators";
 #[derive(Parser, Debug, Clone)]
 #[command(name = "Trin Bridge", about = "Feed the network")]
 pub struct BridgeConfig {
-    #[arg(
-        long,
-        help = "number of nodes to launch - must be between 1 and 16",
-        default_value = "1",
-        value_parser = check_node_count
-    )]
-    pub node_count: u8,
-
     #[arg(long, help = "path to portalnet client executable", default_value = DEFAULT_EXECUTABLE_PATH)]
     pub executable_path: PathBuf,
 
@@ -98,11 +85,12 @@ pub struct BridgeConfig {
     pub client_type: ClientType,
 
     #[arg(
-        long = "root-private-key",
+        long = "private-key",
         value_parser = check_private_key_length,
-        help = "Hex encoded 32 byte private key (with 0x prefix) (used as the root key for generating spaced private keys, if multiple nodes are selected)"
+        help = "Hex encoded 32 byte private key (with 0x prefix)",
+        default_value_t = B256::random(),
     )]
-    pub root_private_key: Option<B256>,
+    pub private_key: B256,
 
     #[arg(
         long = "el-provider",
@@ -156,15 +144,6 @@ pub struct BridgeConfig {
         help = "The maximum number of active blocks being gossiped."
     )]
     pub gossip_limit: usize,
-}
-
-fn check_node_count(val: &str) -> Result<u8, String> {
-    let node_count: u8 = val.parse().map_err(|_| "Invalid node count".to_string())?;
-    if node_count > 0 && node_count <= MAX_NODE_COUNT {
-        Ok(node_count)
-    } else {
-        Err(format!("Node count must be between 1 and {MAX_NODE_COUNT}"))
-    }
 }
 
 fn url_to_client(url: &str) -> Result<Client, String> {
@@ -272,16 +251,10 @@ impl FromStr for ClientType {
 }
 
 impl ClientType {
-    pub fn build_handle(
-        &self,
-        private_key: String,
-        rpc_port: u16,
-        udp_port: u16,
-        bridge_config: BridgeConfig,
-    ) -> anyhow::Result<Child> {
+    pub fn build_handle(&self, bridge_config: &BridgeConfig) -> anyhow::Result<Child> {
         match self {
-            ClientType::Fluffy => fluffy_handle(private_key, rpc_port, udp_port, bridge_config),
-            ClientType::Trin => trin_handle(private_key, rpc_port, udp_port, bridge_config),
+            ClientType::Fluffy => fluffy_handle(bridge_config),
+            ClientType::Trin => trin_handle(bridge_config),
         }
     }
 }
@@ -293,13 +266,10 @@ mod test {
 
     #[test]
     fn test_default_bridge_config() {
-        const NODE_COUNT: &str = "1";
         const EXECUTABLE_PATH: &str = "path/to/executable";
         const EPOCH_ACC_PATH: &str = "path/to/epoch/accumulator";
         let bridge_config = BridgeConfig::parse_from([
             "bridge",
-            "--node-count",
-            NODE_COUNT,
             "--executable-path",
             EXECUTABLE_PATH,
             "--epoch-accumulator-path",
@@ -308,7 +278,6 @@ mod test {
             "history,beacon",
             "trin",
         ]);
-        assert_eq!(bridge_config.node_count, 1);
         assert_eq!(
             bridge_config.executable_path,
             PathBuf::from(EXECUTABLE_PATH)
@@ -355,14 +324,11 @@ mod test {
 
     #[test]
     fn test_bridge_config_with_epoch() {
-        const NODE_COUNT: &str = "1";
         const EXECUTABLE_PATH: &str = "path/to/executable";
         const EPOCH_ACC_PATH: &str = "path/to/epoch/accumulator";
         const EPOCH: &str = "backfill:e100";
         let bridge_config = BridgeConfig::parse_from([
             "bridge",
-            "--node-count",
-            NODE_COUNT,
             "--executable-path",
             EXECUTABLE_PATH,
             "--epoch-accumulator-path",
@@ -371,7 +337,6 @@ mod test {
             EPOCH,
             "trin",
         ]);
-        assert_eq!(bridge_config.node_count, 1);
         assert_eq!(
             bridge_config.executable_path,
             PathBuf::from(EXECUTABLE_PATH)
@@ -380,32 +345,6 @@ mod test {
             bridge_config.mode,
             BridgeMode::Backfill(ModeType::Epoch(100))
         );
-        assert_eq!(bridge_config.epoch_acc_path, PathBuf::from(EPOCH_ACC_PATH));
-        assert_eq!(bridge_config.network, vec![NetworkKind::History]);
-    }
-
-    #[test]
-    fn test_bridge_config_with_max_node_count() {
-        let node_count_string = MAX_NODE_COUNT.to_string();
-        let node_count: &str = node_count_string.as_str();
-        const EXECUTABLE_PATH: &str = "path/to/executable";
-        const EPOCH_ACC_PATH: &str = "path/to/epoch/accumulator";
-        let bridge_config = BridgeConfig::parse_from([
-            "bridge",
-            "--node-count",
-            node_count,
-            "--executable-path",
-            EXECUTABLE_PATH,
-            "--epoch-accumulator-path",
-            EPOCH_ACC_PATH,
-            "trin",
-        ]);
-        assert_eq!(bridge_config.node_count, 16);
-        assert_eq!(
-            bridge_config.executable_path,
-            PathBuf::from(EXECUTABLE_PATH)
-        );
-        assert_eq!(bridge_config.mode, BridgeMode::Latest);
         assert_eq!(bridge_config.epoch_acc_path, PathBuf::from(EPOCH_ACC_PATH));
         assert_eq!(bridge_config.network, vec![NetworkKind::History]);
     }
@@ -423,8 +362,6 @@ mod test {
     fn test_config_requires_client_type_subcommand() {
         BridgeConfig::try_parse_from([
             "bridge",
-            "--node-count",
-            "1",
             "--executable-path",
             "path/to/executable",
             "--epoch-accumulator-path",

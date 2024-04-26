@@ -16,23 +16,17 @@ const RETRY_AFTER: Duration = Duration::from_secs(15);
 
 /// Gossip any given content key / value to the history network.
 pub async fn gossip_beacon_content(
-    portal_clients: Arc<Vec<HttpClient>>,
+    portal_client: HttpClient,
     content_key: BeaconContentKey,
     content_value: BeaconContentValue,
     slot_stats: Arc<Mutex<BeaconSlotStats>>,
 ) -> anyhow::Result<()> {
-    let mut results: Vec<Result<GossipReport, Error>> = vec![];
-    for client in portal_clients.as_ref() {
-        let client = client.clone();
-        let content_key = content_key.clone();
-        let content_value = content_value.clone();
-        let result =
-            tokio::spawn(beacon_trace_gossip(client, content_key, content_value).in_current_span())
-                .await?;
-        results.push(result);
-    }
+    let result = tokio::spawn(
+        beacon_trace_gossip(portal_client, content_key.clone(), content_value).in_current_span(),
+    )
+    .await?;
     if let Ok(mut data) = slot_stats.lock() {
-        data.update(content_key, results.into());
+        data.update(content_key, result.into());
     } else {
         warn!("Error updating beacon gossip stats. Unable to acquire lock.");
     }
@@ -95,24 +89,17 @@ async fn beacon_trace_gossip(
 
 /// Gossip any given content key / value to the history network.
 pub async fn gossip_history_content(
-    portal_clients: &Vec<HttpClient>,
+    portal_client: HttpClient,
     content_key: HistoryContentKey,
     content_value: HistoryContentValue,
     block_stats: Arc<Mutex<HistoryBlockStats>>,
 ) -> anyhow::Result<()> {
-    let mut results: Vec<Result<GossipReport, Error>> = vec![];
-    for client in portal_clients {
-        let client = client.clone();
-        let content_key = content_key.clone();
-        let content_value = content_value.clone();
-        let result = tokio::spawn(
-            history_trace_gossip(client, content_key, content_value).in_current_span(),
-        )
-        .await?;
-        results.push(result);
-    }
+    let result = tokio::spawn(
+        history_trace_gossip(portal_client, content_key.clone(), content_value).in_current_span(),
+    )
+    .await?;
     if let Ok(mut data) = block_stats.lock() {
-        data.update(content_key, results.into());
+        data.update(content_key, result.into());
     } else {
         warn!("Error updating history gossip stats. Unable to acquire lock.");
     }

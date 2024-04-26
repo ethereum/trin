@@ -38,7 +38,7 @@ pub const SERVE_CONTENT_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub struct HistoryBridge {
     pub mode: BridgeMode,
-    pub portal_clients: Vec<HttpClient>,
+    pub portal_client: HttpClient,
     pub execution_api: ExecutionApi,
     pub header_oracle: HeaderOracle,
     pub epoch_acc_path: PathBuf,
@@ -50,7 +50,7 @@ impl HistoryBridge {
     pub fn new(
         mode: BridgeMode,
         execution_api: ExecutionApi,
-        portal_clients: Vec<HttpClient>,
+        portal_client: HttpClient,
         header_oracle: HeaderOracle,
         epoch_acc_path: PathBuf,
         gossip_limit: usize,
@@ -58,7 +58,7 @@ impl HistoryBridge {
         let metrics = BridgeMetricsReporter::new("history".to_string(), &format!("{mode:?}"));
         Self {
             mode,
-            portal_clients,
+            portal_client,
             execution_api,
             header_oracle,
             epoch_acc_path,
@@ -90,7 +90,7 @@ impl HistoryBridge {
         let block_stats = Arc::new(Mutex::new(HistoryBlockStats::new(0)));
         for asset in assets.0.into_iter() {
             let _ = gossip_history_content(
-                &self.portal_clients,
+                self.portal_client.clone(),
                 asset.content_key.clone(),
                 asset.content_value,
                 block_stats.clone(),
@@ -151,7 +151,7 @@ impl HistoryBridge {
                 Self::spawn_serve_full_block(
                     height,
                     None,
-                    self.portal_clients.clone(),
+                    self.portal_client.clone(),
                     self.execution_api.clone(),
                     None,
                     self.metrics.clone(),
@@ -211,7 +211,7 @@ impl HistoryBridge {
             serve_full_block_handles.push(Self::spawn_serve_full_block(
                 height,
                 epoch_acc.clone(),
-                self.portal_clients.clone(),
+                self.portal_client.clone(),
                 self.execution_api.clone(),
                 Some(permit),
                 self.metrics.clone(),
@@ -226,7 +226,7 @@ impl HistoryBridge {
     fn spawn_serve_full_block(
         height: u64,
         epoch_acc: Option<Arc<EpochAccumulator>>,
-        portal_clients: Vec<HttpClient>,
+        portal_client: HttpClient,
         execution_api: ExecutionApi,
         permit: Option<OwnedSemaphorePermit>,
         metrics: BridgeMetricsReporter,
@@ -235,7 +235,7 @@ impl HistoryBridge {
             let timer = metrics.start_process_timer("spawn_serve_full_block");
             match timeout(
                 SERVE_BLOCK_TIMEOUT,
-                Self::serve_full_block(height, epoch_acc, portal_clients, execution_api, metrics.clone())
+                Self::serve_full_block(height, epoch_acc, portal_client, execution_api, metrics.clone())
                     .in_current_span(),
             )
             .await {
@@ -255,7 +255,7 @@ impl HistoryBridge {
     async fn serve_full_block(
         height: u64,
         epoch_acc: Option<Arc<EpochAccumulator>>,
-        portal_clients: Vec<HttpClient>,
+        portal_client: HttpClient,
         execution_api: ExecutionApi,
         metrics: BridgeMetricsReporter,
     ) -> anyhow::Result<()> {
@@ -269,7 +269,7 @@ impl HistoryBridge {
 
         debug!("Built and validated HeaderWithProof for Block #{height:?}: now gossiping.");
         if let Err(msg) = gossip_history_content(
-            &portal_clients,
+            portal_client.clone(),
             header_content_key,
             header_content_value,
             block_stats.clone(),
@@ -285,7 +285,7 @@ impl HistoryBridge {
         sleep(Duration::from_secs(HEADER_SATURATION_DELAY)).await;
 
         let block_body_full_header = full_header.clone();
-        let block_body_portal_clients = portal_clients.clone();
+        let block_body_portal_client = portal_client.clone();
         let block_body_execution_api = execution_api.clone();
         let block_body_block_stats = block_stats.clone();
         let block_body_metrics = metrics.clone();
@@ -294,7 +294,7 @@ impl HistoryBridge {
                 SERVE_CONTENT_TIMEOUT,
                 HistoryBridge::construct_and_gossip_block_body(
                     &block_body_full_header,
-                    &block_body_portal_clients,
+                    block_body_portal_client,
                     &block_body_execution_api,
                     block_body_block_stats,
                     block_body_metrics,
@@ -314,7 +314,7 @@ impl HistoryBridge {
                 SERVE_CONTENT_TIMEOUT,
                 HistoryBridge::construct_and_gossip_receipt(
                     &full_header,
-                    &portal_clients,
+                    &portal_client,
                     &execution_api,
                     receipt_block_stats,
                     metrics,
@@ -358,7 +358,7 @@ impl HistoryBridge {
         let block_stats = Arc::new(Mutex::new(HistoryBlockStats::new(epoch_index * EPOCH_SIZE)));
         debug!("Built EpochAccumulator for Epoch #{epoch_index:?}: now gossiping.");
         let _ = gossip_history_content(
-            &self.portal_clients,
+            self.portal_client.clone(),
             content_key,
             content_value,
             block_stats,
@@ -369,7 +369,7 @@ impl HistoryBridge {
 
     async fn construct_and_gossip_receipt(
         full_header: &FullHeader,
-        portal_clients: &Vec<HttpClient>,
+        portal_client: &HttpClient,
         execution_api: &ExecutionApi,
         block_stats: Arc<Mutex<HistoryBlockStats>>,
         metrics: BridgeMetricsReporter,
@@ -380,15 +380,20 @@ impl HistoryBridge {
             "Built and validated Receipts for Block #{:?}: now gossiping.",
             full_header.header.number
         );
-        let result =
-            gossip_history_content(portal_clients, content_key, content_value, block_stats).await;
+        let result = gossip_history_content(
+            portal_client.clone(),
+            content_key,
+            content_value,
+            block_stats,
+        )
+        .await;
         metrics.stop_process_timer(timer);
         result
     }
 
     async fn construct_and_gossip_block_body(
         full_header: &FullHeader,
-        portal_clients: &Vec<HttpClient>,
+        portal_client: HttpClient,
         execution_api: &ExecutionApi,
         block_stats: Arc<Mutex<HistoryBlockStats>>,
         metrics: BridgeMetricsReporter,
@@ -400,7 +405,7 @@ impl HistoryBridge {
             full_header.header.number
         );
         let result =
-            gossip_history_content(portal_clients, content_key, content_value, block_stats).await;
+            gossip_history_content(portal_client, content_key, content_value, block_stats).await;
         metrics.stop_process_timer(timer);
         result
     }

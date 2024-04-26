@@ -10,16 +10,14 @@ use portal_bridge::{
     types::mode::BridgeMode,
 };
 use serde_json::Value;
-use std::sync::Arc;
 use surf::{Client, Config};
 use tokio::time::{sleep, Duration};
 use trin_validation::{accumulator::PreMergeAccumulator, oracle::HeaderOracle};
 use url::Url;
 
-pub async fn test_history_bridge(peertest: &Peertest, target: &HttpClient) {
+pub async fn test_history_bridge(peertest: &Peertest, portal_client: &HttpClient) {
     let pre_merge_acc = PreMergeAccumulator::default();
     let header_oracle = HeaderOracle::new(pre_merge_acc);
-    let portal_clients = vec![target.clone()];
     let epoch_acc_path = "validation_assets/epoch_acc.bin".into();
     let mode = BridgeMode::Test("./test_assets/portalnet/bridge_data.json".into());
     let client: Client = Config::new()
@@ -33,7 +31,7 @@ pub async fn test_history_bridge(peertest: &Peertest, target: &HttpClient) {
     let bridge = HistoryBridge::new(
         mode,
         execution_api,
-        portal_clients,
+        portal_client.clone(),
         header_oracle,
         epoch_acc_path,
         DEFAULT_GOSSIP_LIMIT,
@@ -49,13 +47,12 @@ pub async fn test_history_bridge(peertest: &Peertest, target: &HttpClient) {
     );
 }
 
-pub async fn test_beacon_bridge(peertest: &Peertest, target: &HttpClient) {
-    let portal_clients = Arc::new(vec![target.clone()]);
+pub async fn test_beacon_bridge(peertest: &Peertest, portal_client: &HttpClient) {
     let mode = BridgeMode::Test("./test_assets/portalnet/beacon_bridge_data.yaml".into());
     // Wait for bootnode to start
     sleep(Duration::from_secs(1)).await;
     let consensus_api = ConsensusApi::default();
-    let bridge = BeaconBridge::new(consensus_api, mode, portal_clients);
+    let bridge = BeaconBridge::new(consensus_api, mode, portal_client.clone());
     bridge.launch().await;
 
     let value = std::fs::read_to_string("./test_assets/portalnet/beacon_bridge_data.yaml")
