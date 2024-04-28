@@ -243,7 +243,7 @@ impl Era1Bridge {
         metrics: BridgeMetricsReporter,
     ) -> JoinHandle<()> {
         let number = block_tuple.header.header.number;
-        info!("Spawning serve_block_tuple for block at height: {number}",);
+        info!("Spawning serve_block_tuple for block at height: {number}");
         let block_stats = Arc::new(Mutex::new(HistoryBlockStats::new(number)));
         tokio::spawn(async move {
             let timer = metrics.start_process_timer("spawn_serve_block_tuple");

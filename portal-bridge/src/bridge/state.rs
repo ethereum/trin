@@ -88,6 +88,7 @@ impl StateBridge {
         let mut current_raw_era1 = vec![];
         let mut state = State::new().map_err(|e| anyhow!("unable to create genesis state: {e}"))?;
         for block_index in 0..=last_block {
+            info!("Gossipping state for block at height: {block_index}");
             let epoch_index = block_index / EPOCH_SIZE;
             // make sure we have the current era1 file loaded
             if current_epoch_index != epoch_index {
