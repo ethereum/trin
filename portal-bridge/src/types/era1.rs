@@ -54,6 +54,15 @@ impl Era1 {
         })
     }
 
+    pub fn get_tuple_by_index(raw_era1: &[u8], index: u64) -> BlockTuple {
+        let file = E2StoreFile::deserialize(raw_era1).expect("invalid era1 file");
+        let mut entries: [Entry; 4] = Default::default();
+        for (j, entry) in entries.iter_mut().enumerate() {
+            *entry = file.entries[index as usize * 4 + j + 1].to_owned();
+        }
+        BlockTuple::try_from(&entries).expect("invalid block tuple")
+    }
+
     pub fn deserialize(buf: &[u8]) -> anyhow::Result<Self> {
         let file = E2StoreFile::deserialize(buf)?;
         ensure!(

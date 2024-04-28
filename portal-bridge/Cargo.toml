@@ -12,6 +12,7 @@ authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 
 [dependencies]
+alloy-consensus = { git = "https://github.com/alloy-rs/alloy.git", rev = "d68a6b787b2904061f0ae7fcc02ece8513e3c500"}
 alloy-primitives = "0.7.0"
 alloy-rlp = "0.3.4"
 anyhow = "1.0.68"
@@ -19,9 +20,10 @@ async-trait = "0.1.68"
 chrono = "0.4.26"
 clap = { version = "4.2.1", features = ["derive"] }
 discv5 = { version = "0.4.1", features = ["serde"] }
-ethportal-api = { path = "../ethportal-api" }
 ethereum_ssz = "0.5.3"
 ethereum_ssz_derive = "0.5.3"
+ethportal-api = { path = "../ethportal-api" }
+eth_trie = { git = "https://github.com/kolbyml/eth-trie.rs.git", rev = "11ec003e3276e1413f06328ab746af5d99f112bb" }
 futures = "0.3.21"
 jsonrpsee = { version = "0.20.0", features = [
   "async-client",

@@ -243,7 +243,7 @@ impl Era1Bridge {
         metrics: BridgeMetricsReporter,
     ) -> JoinHandle<()> {
         let number = block_tuple.header.header.number;
-        info!("Spawning serve_block_tuple for block at height: {number}",);
+        info!("Spawning serve_block_tuple for block at height: {number}");
         let block_stats = Arc::new(Mutex::new(HistoryBlockStats::new(number)));
         tokio::spawn(async move {
             let timer = metrics.start_process_timer("spawn_serve_block_tuple");
@@ -459,7 +459,7 @@ impl Era1Bridge {
 }
 
 /// Fetches era1 files hosted on era1.ethportal.net and shuffles them
-async fn get_shuffled_era1_files(http_client: &Client) -> anyhow::Result<Vec<String>> {
+pub async fn get_shuffled_era1_files(http_client: &Client) -> anyhow::Result<Vec<String>> {
     let index_html = http_client
         .get(ERA1_DIR_URL)
         .recv_string()
