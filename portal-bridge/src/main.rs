@@ -22,10 +22,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         prometheus_exporter::start(addr)?;
     }
 
-    // start the bridge client
-    if let Err(err) = bridge_config.client_type.build_handle(&bridge_config) {
-        return Err(format!("Failed to start bridge client: {err}").into());
-    }
+    // start the bridge client, need to keep the handle alive
+    // for bridge to work inside docker containers
+    let handle = bridge_config
+        .client_type
+        .build_handle(&bridge_config)
+        .map_err(|e| e.to_string())?;
 
     let web3_http_address = format!("http://127.0.0.1:{}", bridge_config.base_rpc_port);
     sleep(Duration::from_secs(5)).await;
@@ -137,6 +139,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     futures::future::join_all(bridge_tasks).await;
-
+    drop(handle);
     Ok(())
 }
