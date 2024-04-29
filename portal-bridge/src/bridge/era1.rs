@@ -44,7 +44,7 @@ const ERA1_FILE_COUNT: usize = 1897;
 
 pub struct Era1Bridge {
     pub mode: BridgeMode,
-    pub portal_clients: Vec<HttpClient>,
+    pub portal_client: HttpClient,
     pub header_oracle: HeaderOracle,
     pub epoch_acc_path: PathBuf,
     pub era1_files: Vec<String>,
@@ -57,7 +57,7 @@ pub struct Era1Bridge {
 impl Era1Bridge {
     pub async fn new(
         mode: BridgeMode,
-        portal_clients: Vec<HttpClient>,
+        portal_client: HttpClient,
         header_oracle: HeaderOracle,
         epoch_acc_path: PathBuf,
         gossip_limit: usize,
@@ -70,7 +70,7 @@ impl Era1Bridge {
         let metrics = BridgeMetricsReporter::new("era1".to_string(), &format!("{mode:?}"));
         Ok(Self {
             mode,
-            portal_clients,
+            portal_client,
             header_oracle,
             epoch_acc_path,
             era1_files,
@@ -192,7 +192,7 @@ impl Era1Bridge {
                 .expect("to be able to acquire semaphore");
             self.metrics.report_current_block(block_number as i64);
             let serve_block_tuple_handle = Self::spawn_serve_block_tuple(
-                self.portal_clients.clone(),
+                self.portal_client.clone(),
                 block_tuple,
                 epoch_acc.clone(),
                 header_validator.clone(),
@@ -222,11 +222,10 @@ impl Era1Bridge {
         )));
         debug!("Built EpochAccumulator for Epoch #{epoch_index:?}: now gossiping.");
         // spawn gossip in new thread to avoid blocking
-        let portal_clients = self.portal_clients.clone();
+        let portal_client = self.portal_client.clone();
         tokio::spawn(async move {
             if let Err(msg) =
-                gossip_history_content(&portal_clients, content_key, content_value, block_stats)
-                    .await
+                gossip_history_content(portal_client, content_key, content_value, block_stats).await
             {
                 warn!("Failed to gossip epoch accumulator: {msg}");
             }
@@ -235,7 +234,7 @@ impl Era1Bridge {
     }
 
     fn spawn_serve_block_tuple(
-        portal_clients: Vec<HttpClient>,
+        portal_client: HttpClient,
         block_tuple: BlockTuple,
         epoch_acc: Arc<EpochAccumulator>,
         header_validator: Arc<HeaderValidator>,
@@ -250,7 +249,7 @@ impl Era1Bridge {
             match timeout(
                 SERVE_BLOCK_TIMEOUT,
                 Self::serve_block_tuple(
-                    portal_clients,
+                    portal_client,
                     block_tuple,
                     epoch_acc,
                     header_validator,
@@ -275,7 +274,7 @@ impl Era1Bridge {
     }
 
     async fn serve_block_tuple(
-        portal_clients: Vec<HttpClient>,
+        portal_client: HttpClient,
         block_tuple: BlockTuple,
         epoch_acc: Arc<EpochAccumulator>,
         header_validator: Arc<HeaderValidator>,
@@ -288,7 +287,7 @@ impl Era1Bridge {
         );
         let timer = metrics.start_process_timer("construct_and_gossip_header");
         match Self::construct_and_gossip_header(
-            portal_clients.clone(),
+            portal_client.clone(),
             block_tuple.clone(),
             epoch_acc,
             header_validator,
@@ -323,7 +322,7 @@ impl Era1Bridge {
         sleep(Duration::from_secs(HEADER_SATURATION_DELAY)).await;
         let timer = metrics.start_process_timer("construct_and_gossip_block_body");
         match Self::construct_and_gossip_block_body(
-            portal_clients.clone(),
+            portal_client.clone(),
             block_tuple.clone(),
             block_stats.clone(),
         )
@@ -347,7 +346,7 @@ impl Era1Bridge {
         metrics.stop_process_timer(timer);
         let timer = metrics.start_process_timer("construct_and_gossip_receipts");
         match Self::construct_and_gossip_receipts(
-            portal_clients.clone(),
+            portal_client.clone(),
             block_tuple.clone(),
             block_stats.clone(),
         )
@@ -373,7 +372,7 @@ impl Era1Bridge {
     }
 
     async fn construct_and_gossip_header(
-        portal_clients: Vec<HttpClient>,
+        portal_client: HttpClient,
         block_tuple: BlockTuple,
         epoch_acc: Arc<EpochAccumulator>,
         header_validator: Arc<HeaderValidator>,
@@ -409,18 +408,11 @@ impl Era1Bridge {
         // Construct HistoryContentValue
         let content_value = HistoryContentValue::BlockHeaderWithProof(header_with_proof);
 
-        gossip_history_content(
-            // remove borrow
-            &portal_clients,
-            content_key,
-            content_value,
-            block_stats,
-        )
-        .await
+        gossip_history_content(portal_client, content_key, content_value, block_stats).await
     }
 
     async fn construct_and_gossip_block_body(
-        portal_clients: Vec<HttpClient>,
+        portal_client: HttpClient,
         block_tuple: BlockTuple,
         block_stats: Arc<Mutex<HistoryBlockStats>>,
     ) -> anyhow::Result<()> {
@@ -435,11 +427,11 @@ impl Era1Bridge {
         });
         // Construct HistoryContentValue
         let content_value = HistoryContentValue::BlockBody(block_tuple.body.body);
-        gossip_history_content(&portal_clients, content_key, content_value, block_stats).await
+        gossip_history_content(portal_client, content_key, content_value, block_stats).await
     }
 
     async fn construct_and_gossip_receipts(
-        portal_clients: Vec<HttpClient>,
+        portal_client: HttpClient,
         block_tuple: BlockTuple,
         block_stats: Arc<Mutex<HistoryBlockStats>>,
     ) -> anyhow::Result<()> {
@@ -454,7 +446,7 @@ impl Era1Bridge {
         });
         // Construct HistoryContentValue
         let content_value = HistoryContentValue::Receipts(block_tuple.receipts.receipts);
-        gossip_history_content(&portal_clients, content_key, content_value, block_stats).await
+        gossip_history_content(portal_client, content_key, content_value, block_stats).await
     }
 }
 

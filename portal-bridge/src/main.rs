@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use clap::Parser;
 use tokio::time::{sleep, Duration};
 use tracing::Instrument;
@@ -10,7 +8,6 @@ use portal_bridge::{
     bridge::{beacon::BeaconBridge, era1::Era1Bridge, history::HistoryBridge, state::StateBridge},
     cli::BridgeConfig,
     types::{mode::BridgeMode, network::NetworkKind},
-    utils::generate_spaced_private_keys,
 };
 use trin_utils::log::init_tracing_logger;
 use trin_validation::{accumulator::PreMergeAccumulator, oracle::HeaderOracle};
@@ -25,53 +22,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         prometheus_exporter::start(addr)?;
     }
 
-    let private_keys =
-        generate_spaced_private_keys(bridge_config.node_count, bridge_config.root_private_key);
-    let mut handles = vec![];
-    let mut http_addresses = vec![];
-    for (i, key) in private_keys.into_iter().enumerate() {
-        let web3_http_port = bridge_config.base_rpc_port + i as u16;
-        let discovery_port = bridge_config.base_discovery_port + i as u16;
-        let handle = bridge_config.client_type.build_handle(
-            key,
-            web3_http_port,
-            discovery_port,
-            bridge_config.clone(),
-        );
-        let web3_http_address = format!("http://127.0.0.1:{}", web3_http_port);
-        http_addresses.push(web3_http_address);
-        handles.push(handle);
+    // start the bridge client
+    if let Err(err) = bridge_config.client_type.build_handle(&bridge_config) {
+        return Err(format!("Failed to start bridge client: {err}").into());
     }
+
+    let web3_http_address = format!("http://127.0.0.1:{}", bridge_config.base_rpc_port);
     sleep(Duration::from_secs(5)).await;
 
-    let portal_clients: Result<Vec<HttpClient>, String> = http_addresses
-        .iter()
-        .map(|address| {
-            HttpClientBuilder::default()
-                // increase default timeout to allow for trace_gossip requests that can take a long
-                // time
-                .request_timeout(Duration::from_secs(120))
-                .build(address)
-                .map_err(|e| e.to_string())
-        })
-        .collect();
+    let portal_client: HttpClient = HttpClientBuilder::default()
+        // increase default timeout to allow for trace_gossip requests that can take a long
+        // time
+        .request_timeout(Duration::from_secs(120))
+        .build(web3_http_address.clone())
+        .map_err(|e| e.to_string())?;
 
     let mut bridge_tasks = Vec::new();
 
     // Launch Beacon Network portal bridge
     if bridge_config.network.contains(&NetworkKind::Beacon) {
         let bridge_mode = bridge_config.mode.clone();
-        let portal_clients = portal_clients
-            .clone()
-            .expect("Failed to create beacon JSON-RPC clients");
         let consensus_api = ConsensusApi::new(
             bridge_config.cl_provider,
             bridge_config.cl_provider_fallback,
         )
         .await?;
+        let portal_client_clone = portal_client.clone();
         let bridge_handle = tokio::spawn(async move {
-            let beacon_bridge =
-                BeaconBridge::new(consensus_api, bridge_mode, Arc::new(portal_clients));
+            let beacon_bridge = BeaconBridge::new(consensus_api, bridge_mode, portal_client_clone);
 
             beacon_bridge
                 .launch()
@@ -114,7 +92,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let header_oracle = HeaderOracle::new(pre_merge_acc);
                 let era1_bridge = Era1Bridge::new(
                     bridge_config.mode,
-                    portal_clients.expect("Failed to create history JSON-RPC clients"),
+                    portal_client,
                     header_oracle,
                     bridge_config.epoch_acc_path,
                     bridge_config.gossip_limit,
@@ -141,7 +119,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let bridge = HistoryBridge::new(
                         bridge_config.mode,
                         execution_api,
-                        portal_clients.expect("Failed to create history JSON-RPC clients"),
+                        portal_client,
                         header_oracle,
                         bridge_config.epoch_acc_path,
                         bridge_config.gossip_limit,

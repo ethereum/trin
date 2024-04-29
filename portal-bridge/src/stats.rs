@@ -184,36 +184,34 @@ impl std::fmt::Display for ContentStats {
     }
 }
 
-impl From<Vec<Result<GossipReport, Error>>> for ContentStats {
-    fn from(results: Vec<Result<GossipReport, Error>>) -> Self {
+impl From<Result<GossipReport, Error>> for ContentStats {
+    fn from(result: Result<GossipReport, Error>) -> Self {
         let mut content_stats = ContentStats::default();
-        for trace_gossip_info in results.iter() {
-            match trace_gossip_info {
-                Ok(gossip_report) => {
-                    content_stats.retries += gossip_report.retries;
-                    content_stats.found = gossip_report.found;
-                    for trace in &gossip_report.traces {
-                        for enr in trace.offered.iter() {
-                            let enr = Enr::from_str(enr)
-                                .expect("ENR from trace gossip response to successfully decode.");
-                            content_stats.offered.insert(enr);
-                        }
+        match result {
+            Ok(gossip_report) => {
+                content_stats.retries += gossip_report.retries;
+                content_stats.found = gossip_report.found;
+                for trace in &gossip_report.traces {
+                    for enr in trace.offered.iter() {
+                        let enr = Enr::from_str(enr)
+                            .expect("ENR from trace gossip response to successfully decode.");
+                        content_stats.offered.insert(enr);
+                    }
 
-                        for enr in trace.accepted.iter() {
-                            let enr = Enr::from_str(enr)
-                                .expect("ENR from trace gossip response to successfully decode.");
-                            content_stats.accepted.insert(enr);
-                        }
+                    for enr in trace.accepted.iter() {
+                        let enr = Enr::from_str(enr)
+                            .expect("ENR from trace gossip response to successfully decode.");
+                        content_stats.accepted.insert(enr);
+                    }
 
-                        for enr in trace.transferred.iter() {
-                            let enr = Enr::from_str(enr)
-                                .expect("ENR from trace gossip response to successfully decode.");
-                            content_stats.transferred.insert(enr);
-                        }
+                    for enr in trace.transferred.iter() {
+                        let enr = Enr::from_str(enr)
+                            .expect("ENR from trace gossip response to successfully decode.");
+                        content_stats.transferred.insert(enr);
                     }
                 }
-                Err(_) => content_stats.failures += 1,
             }
+            Err(_) => content_stats.failures += 1,
         }
         content_stats
     }
