@@ -29,7 +29,7 @@ use trin_validation::{
         HOMESTEAD_BLOCK_NUMBER, ISTANBUL_BLOCK_NUMBER, LONDON_BLOCK_NUMBER, MERGE_BLOCK_NUMBER,
         SHANGHAI_BLOCK_NUMBER,
     },
-    header_validfator::HeaderValidator,
+    header_validator::HeaderValidator,
 };
 
 lazy_static::lazy_static! {

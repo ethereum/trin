@@ -36,7 +36,7 @@ use ethportal_api::{
     HistoryContentValue,
 };
 use trin_validation::{
-    constants::EPOCH_SIZE, header_validfator::HeaderValidator, oracle::HeaderOracle,
+    constants::EPOCH_SIZE, header_validator::HeaderValidator, oracle::HeaderOracle,
 };
 
 const ERA1_DIR_URL: &str = "https://era1.ethportal.net/";

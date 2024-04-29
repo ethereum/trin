@@ -1,6 +1,7 @@
 use crate::{
     accumulator::PreMergeAccumulator,
     constants::{EPOCH_SIZE, MERGE_BLOCK_NUMBER},
+    historical_roots_acc::HistoricalRootsAccumulator,
     merkle::proof::verify_merkle_proof,
 };
 use anyhow::anyhow;
@@ -15,11 +16,17 @@ use ethportal_api::{
 pub struct HeaderValidator {
     /// Pre-merge accumulator used to validate pre-merge headers.
     pub pre_merge_acc: PreMergeAccumulator,
+    /// Historical roots accumulator used to validate post-merge/pre-Capella headers.
+    pub historical_roots_acc: HistoricalRootsAccumulator,
 }
 
 impl HeaderValidator {
     pub fn new(pre_merge_acc: PreMergeAccumulator) -> Self {
-        Self { pre_merge_acc }
+        let historical_roots_acc = HistoricalRootsAccumulator::default();
+        Self {
+            pre_merge_acc,
+            historical_roots_acc,
+        }
     }
 
     pub fn validate_header_with_proof(&self, hwp: &HeaderWithProof) -> anyhow::Result<()> {

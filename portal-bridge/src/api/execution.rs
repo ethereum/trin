@@ -30,7 +30,7 @@ use ethportal_api::{
 };
 use trin_validation::{
     accumulator::PreMergeAccumulator, constants::MERGE_BLOCK_NUMBER,
-    header_validfator::HeaderValidator,
+    header_validator::HeaderValidator,
 };
 
 /// Limit the number of requests in a single batch to avoid exceeding the
