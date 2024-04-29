@@ -252,6 +252,11 @@ impl FromStr for ClientType {
 
 impl ClientType {
     pub fn build_handle(&self, bridge_config: &BridgeConfig) -> anyhow::Result<Child> {
+        if !bridge_config.executable_path.is_file() {
+            return Err(anyhow::anyhow!(
+                "Invalid executable path: exectuable doesn't exist"
+            ));
+        }
         match self {
             ClientType::Fluffy => fluffy_handle(bridge_config),
             ClientType::Trin => trin_handle(bridge_config),
