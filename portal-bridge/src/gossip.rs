@@ -162,20 +162,15 @@ async fn history_trace_gossip(
 
 /// Gossip any given content key / value to the state network.
 pub async fn gossip_state_content(
-    portal_clients: &Vec<HttpClient>,
+    portal_client: HttpClient,
     content_key: StateContentKey,
     content_value: StateContentValue,
 ) -> anyhow::Result<()> {
-    let mut results: Vec<Result<GossipReport, Error>> = vec![];
-    for client in portal_clients {
-        let client = client.clone();
-        let content_key = content_key.clone();
-        let content_value = content_value.clone();
-        let result =
-            tokio::spawn(state_trace_gossip(client, content_key, content_value).in_current_span())
-                .await?;
-        results.push(result);
-    }
+    // stats are not currently being reported for state content
+    let _result = tokio::spawn(
+        state_trace_gossip(portal_client, content_key, content_value).in_current_span(),
+    )
+    .await?;
     Ok(())
 }
 

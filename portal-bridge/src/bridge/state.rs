@@ -28,7 +28,7 @@ use crate::{
 
 pub struct StateBridge {
     pub mode: BridgeMode,
-    pub portal_clients: Vec<HttpClient>,
+    pub portal_client: HttpClient,
     pub header_oracle: HeaderOracle,
     pub epoch_acc_path: PathBuf,
     pub era1_files: Vec<String>,
@@ -40,7 +40,7 @@ pub struct StateBridge {
 impl StateBridge {
     pub async fn new(
         mode: BridgeMode,
-        portal_clients: Vec<HttpClient>,
+        portal_client: HttpClient,
         header_oracle: HeaderOracle,
         epoch_acc_path: PathBuf,
         gossip_limit: usize,
@@ -53,7 +53,7 @@ impl StateBridge {
         let metrics = BridgeMetricsReporter::new("state".to_string(), &format!("{mode:?}"));
         Ok(Self {
             mode,
-            portal_clients,
+            portal_client,
             header_oracle,
             epoch_acc_path,
             era1_files,
@@ -126,7 +126,7 @@ impl StateBridge {
                 let content_value =
                     create_content_value(block_tuple.header.header.hash(), &account_proof)?;
                 Self::spawn_serve_state_proof(
-                    self.portal_clients.clone(),
+                    self.portal_client.clone(),
                     content_key,
                     content_value,
                     permit,
@@ -138,7 +138,7 @@ impl StateBridge {
     }
 
     fn spawn_serve_state_proof(
-        portal_clients: Vec<HttpClient>,
+        portal_client: HttpClient,
         content_key: StateContentKey,
         content_value: StateContentValue,
         permit: OwnedSemaphorePermit,
@@ -150,7 +150,7 @@ impl StateBridge {
             match timeout(
                 SERVE_BLOCK_TIMEOUT,
                 Self::serve_state_proof(
-                    portal_clients,
+                    portal_client,
                     content_key.clone(),
                     content_value,
                     metrics.clone()
@@ -170,13 +170,13 @@ impl StateBridge {
     }
 
     async fn serve_state_proof(
-        portal_clients: Vec<HttpClient>,
+        portal_client: HttpClient,
         content_key: StateContentKey,
         content_value: StateContentValue,
         metrics: BridgeMetricsReporter,
     ) -> anyhow::Result<()> {
         let timer = metrics.start_process_timer("gossip_state_content");
-        match gossip_state_content(&portal_clients, content_key.clone(), content_value).await {
+        match gossip_state_content(portal_client, content_key.clone(), content_value).await {
             Ok(_) => {
                 debug!("Successfully gossiped state proof: {content_key}")
             }
