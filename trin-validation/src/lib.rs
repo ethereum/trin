@@ -7,3 +7,10 @@ pub mod header_validfator;
 pub mod merkle;
 pub mod oracle;
 pub mod validator;
+
+use rust_embed::RustEmbed;
+
+#[derive(RustEmbed)]
+#[folder = "src/assets/"]
+#[prefix = "validation_assets/"]
+struct TrinValidationAssets;

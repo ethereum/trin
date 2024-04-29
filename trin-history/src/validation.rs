@@ -134,16 +134,15 @@ impl Validator<HistoryContentKey> for ChainHistoryValidator {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use std::{fs, path::PathBuf};
+    use std::fs;
 
     use alloy_primitives::U256;
     use serde_json::Value;
     use ssz::Encode;
 
     use ethportal_api::{
-        types::{cli::DEFAULT_PRE_MERGE_ACC_PATH, execution::accumulator::HeaderRecord},
-        utils::bytes::hex_decode,
-        BlockHeaderKey, EpochAccumulatorKey,
+        types::execution::accumulator::HeaderRecord, utils::bytes::hex_decode, BlockHeaderKey,
+        EpochAccumulatorKey,
     };
     use trin_validation::accumulator::PreMergeAccumulator;
 
@@ -282,10 +281,7 @@ mod tests {
     }
 
     fn default_header_oracle() -> Arc<RwLock<HeaderOracle>> {
-        let pre_merge_acc = PreMergeAccumulator::try_from_file(PathBuf::from(
-            DEFAULT_PRE_MERGE_ACC_PATH.to_string(),
-        ))
-        .unwrap();
+        let pre_merge_acc = PreMergeAccumulator::default();
         Arc::new(RwLock::new(HeaderOracle::new(pre_merge_acc)))
     }
 }

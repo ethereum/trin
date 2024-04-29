@@ -77,12 +77,8 @@ pub async fn run_trin(
     )?;
 
     // Initialize validation oracle
-    let pre_merge_accumulator =
-        PreMergeAccumulator::try_from_file(trin_config.pre_merge_acc_path.clone())?;
-    info!(
-        "Loaded pre-merge accumulator from: {:?}",
-        trin_config.pre_merge_acc_path
-    );
+    let pre_merge_accumulator = PreMergeAccumulator::default();
+    info!("Loaded pre-merge accumulator.",);
     let header_oracle = HeaderOracle::new(pre_merge_accumulator);
     let header_oracle = Arc::new(RwLock::new(header_oracle));
 

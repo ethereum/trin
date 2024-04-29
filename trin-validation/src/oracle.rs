@@ -108,13 +108,10 @@ mod test {
     use tree_hash::TreeHash;
 
     use crate::constants::DEFAULT_PRE_MERGE_ACC_HASH;
-    use ethportal_api::types::cli::TrinConfig;
 
     #[tokio::test]
     async fn header_oracle_bootstraps_with_default_pre_merge_acc() {
-        let trin_config = TrinConfig::default();
-        let pre_merge_acc =
-            PreMergeAccumulator::try_from_file(trin_config.pre_merge_acc_path).unwrap();
+        let pre_merge_acc = PreMergeAccumulator::default();
         let header_oracle = HeaderOracle::new(pre_merge_acc);
         assert_eq!(
             header_oracle

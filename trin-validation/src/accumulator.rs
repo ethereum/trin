@@ -1,5 +1,4 @@
 use alloy_primitives::B256;
-use rust_embed::RustEmbed;
 use std::path::PathBuf;
 
 use anyhow::anyhow;
@@ -15,6 +14,7 @@ use tree_hash_derive::TreeHash;
 use crate::{
     constants::{EPOCH_SIZE, MERGE_BLOCK_NUMBER},
     merkle::proof::MerkleTree,
+    TrinValidationAssets,
 };
 use ethportal_api::{
     types::{
@@ -28,11 +28,6 @@ use ethportal_api::{
 /// SSZ List[Hash256, max_length = MAX_HISTORICAL_EPOCHS]
 /// List of historical epoch accumulator merkle roots preceding current epoch.
 pub type HistoricalEpochRoots = VariableList<tree_hash::Hash256, typenum::U131072>;
-
-#[derive(RustEmbed)]
-#[folder = "src/assets/"]
-#[prefix = "validation_assets/"]
-struct TrinValidationAssets;
 
 /// SSZ Container
 /// Primary datatype used to maintain record of historical and current epoch.
