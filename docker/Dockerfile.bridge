@@ -47,11 +47,10 @@ RUN cargo build -p trin -p portal-bridge --release
 
 # final base
 FROM final_base
-WORKDIR /usr/bin/
 
 # copy build artifacts from build stage
 COPY --from=builder /trin/target/release/trin /usr/bin/
-COPY --from=builder /trin/portal-bridge/resources /usr/bin/resources
+COPY --from=builder /trin/portal-bridge/resources /resources
 COPY --from=builder /trin/target/release/portal-bridge /usr/bin/
 COPY --from=builder /trin/target/release/sample_range /usr/bin/
 COPY --from=builder /trin/target/release/poll_latest /usr/bin/
