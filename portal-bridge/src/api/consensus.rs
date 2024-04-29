@@ -4,40 +4,30 @@ use anyhow::anyhow;
 use surf::Client;
 use tokio::time::sleep;
 use tracing::{debug, warn};
+use url::Url;
 
-use crate::constants::FALLBACK_RETRY_AFTER;
+use crate::{cli::url_to_client, constants::FALLBACK_RETRY_AFTER};
 
 /// Implements endpoints from the Beacon API to access data from the consensus layer.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct ConsensusApi {
-    client: Client,
-    fallback_client: Client,
+    primary: Url,
+    fallback: Url,
 }
 
 impl ConsensusApi {
-    pub async fn new(client: Client, fallback_client: Client) -> Result<Self, surf::Error> {
+    pub async fn new(primary: Url, fallback: Url) -> Result<Self, surf::Error> {
         debug!(
             "Starting ConsensusApi with primary provider: {} and fallback provider: {}",
-            client
-                .config()
-                .base_url
-                .as_ref()
-                .expect("to have base url set")
-                .as_str(),
-            fallback_client
-                .config()
-                .base_url
-                .as_ref()
-                .expect("to have base url set")
-                .as_str()
+            primary, fallback
         );
-        check_provider(&client)
-            .await
-            .map_err(|err| anyhow!("Check CL provider failed. Provider may be offline: {err:?}"))?;
-        Ok(Self {
-            client,
-            fallback_client,
-        })
+        let client = url_to_client(primary.clone()).map_err(|err| {
+            anyhow!("Unable to create primary client for consensus data provider: {err:?}")
+        })?;
+        if let Err(err) = check_provider(&client).await {
+            warn!("Primary consensus data provider may be offline: {err:?}");
+        }
+        Ok(Self { primary, fallback })
     }
 
     /// Requests the `LightClientBootstrap` structure corresponding to a given post-Altair beacon
@@ -85,18 +75,20 @@ impl ConsensusApi {
 
     /// Make a request to the cl provider.
     async fn request(&self, endpoint: String) -> anyhow::Result<String> {
-        match self.client.get(&endpoint).recv_string().await {
+        let client = url_to_client(self.primary.clone()).map_err(|err| {
+            anyhow!("Unable to create client for primary consensus data provider: {err:?}")
+        })?;
+        match client.get(&endpoint).recv_string().await {
             Ok(response) => Ok(response),
             Err(err) => {
                 warn!("Error requesting consensus data from provider, retrying with fallback provider: {err:?}");
                 sleep(FALLBACK_RETRY_AFTER).await;
-                self.fallback_client
-                    .get(endpoint)
-                    .recv_string()
-                    .await
-                    .map_err(|err| {
-                        anyhow!("Unable to request consensus data from fallback provider: {err:?}")
-                    })
+                let client = url_to_client(self.fallback.clone()).map_err(|err| {
+                    anyhow!("Unable to create client for fallback consensus data provider: {err:?}")
+                })?;
+                client.get(endpoint).recv_string().await.map_err(|err| {
+                    anyhow!("Unable to request consensus data from fallback provider: {err:?}")
+                })
             }
         }
     }

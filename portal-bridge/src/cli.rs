@@ -96,33 +96,29 @@ pub struct BridgeConfig {
         long = "el-provider",
         default_value = DEFAULT_BASE_EL_ENDPOINT,
         help = "Data provider for execution layer data. (pandaops url / infura url with api key / local node url)",
-        value_parser = url_to_client
     )]
-    pub el_provider: Client,
+    pub el_provider: Url,
 
     #[arg(
         long = "el-provider-fallback",
         default_value = FALLBACK_BASE_EL_ENDPOINT,
         help = "Data provider for execution layer data. (pandaops url / infura url with api key / local node url)",
-        value_parser = url_to_client
     )]
-    pub el_provider_fallback: Client,
+    pub el_provider_fallback: Url,
 
     #[arg(
         long = "cl-provider",
         default_value = DEFAULT_BASE_CL_ENDPOINT,
         help = "Data provider for consensus layer data. (pandaops url / local node url)",
-        value_parser = url_to_client
     )]
-    pub cl_provider: Client,
+    pub cl_provider: Url,
 
     #[arg(
         long = "cl-provider-fallback",
         default_value = FALLBACK_BASE_CL_ENDPOINT,
         help = "Data provider for consensus layer data. (pandaops url / local node url)",
-        value_parser = url_to_client
     )]
-    pub cl_provider_fallback: Client,
+    pub cl_provider_fallback: Url,
 
     #[arg(
         default_value_t = DEFAULT_DISCOVERY_PORT,
@@ -146,12 +142,11 @@ pub struct BridgeConfig {
     pub gossip_limit: usize,
 }
 
-fn url_to_client(url: &str) -> Result<Client, String> {
+pub fn url_to_client(url: Url) -> Result<Client, String> {
     let mut config = Config::new()
         .add_header("Content-Type", "application/json")
         .expect("to be able to add content type header")
         .set_timeout(Some(HTTP_REQUEST_TIMEOUT));
-    let url = Url::parse(url).map_err(|_| "Invalid provider url".to_string())?;
     if url
         .host_str()
         .expect("to find host string")
@@ -284,38 +279,22 @@ mod test {
         );
         assert_eq!(bridge_config.mode, BridgeMode::Latest);
         assert_eq!(bridge_config.epoch_acc_path, PathBuf::from(EPOCH_ACC_PATH));
-        assert!(bridge_config
-            .el_provider
-            .config()
-            .base_url
-            .as_ref()
-            .unwrap()
-            .as_str()
-            .contains(DEFAULT_BASE_EL_ENDPOINT));
-        assert!(bridge_config
-            .el_provider_fallback
-            .config()
-            .base_url
-            .as_ref()
-            .unwrap()
-            .as_str()
-            .contains(FALLBACK_BASE_EL_ENDPOINT));
-        assert!(bridge_config
-            .cl_provider
-            .config()
-            .base_url
-            .as_ref()
-            .unwrap()
-            .as_str()
-            .contains(DEFAULT_BASE_CL_ENDPOINT));
-        assert!(bridge_config
-            .cl_provider_fallback
-            .config()
-            .base_url
-            .as_ref()
-            .unwrap()
-            .as_str()
-            .contains(FALLBACK_BASE_CL_ENDPOINT));
+        assert_eq!(
+            bridge_config.el_provider.to_string(),
+            DEFAULT_BASE_EL_ENDPOINT
+        );
+        assert_eq!(
+            bridge_config.el_provider_fallback.to_string(),
+            FALLBACK_BASE_EL_ENDPOINT
+        );
+        assert_eq!(
+            bridge_config.cl_provider.to_string(),
+            DEFAULT_BASE_CL_ENDPOINT
+        );
+        assert_eq!(
+            bridge_config.cl_provider_fallback.to_string(),
+            FALLBACK_BASE_CL_ENDPOINT
+        );
         assert_eq!(
             bridge_config.network,
             vec![NetworkKind::History, NetworkKind::Beacon]

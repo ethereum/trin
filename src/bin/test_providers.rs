@@ -61,10 +61,10 @@ pub async fn main() -> Result<()> {
     for provider in all_providers.iter_mut() {
         info!("Testing Provider: {provider}");
         let mut provider_failures = 0;
-        let client = provider.get_client();
+        let client_url = provider.get_client_url();
         let api = ExecutionApi {
-            fallback_client: client.clone(),
-            client,
+            primary: client_url.clone(),
+            fallback: client_url,
             header_validator: HeaderValidator::default(),
         };
         for gossip_range in all_ranges.iter_mut() {
@@ -401,49 +401,25 @@ impl Providers {
         ]
     }
 
-    fn get_client(&self) -> Client {
+    fn get_client_url(&self) -> Url {
         match self {
             Providers::Infura(_) => {
                 let infura_key = std::env::var("TRIN_INFURA_PROJECT_ID").unwrap();
-                let base_infura_url =
-                    Url::parse(&format!("https://mainnet.infura.io/v3/{}", infura_key)).unwrap();
-                Config::new()
-                    .add_header("Content-Type", "application/json")
-                    .unwrap()
-                    .set_base_url(base_infura_url)
-                    .try_into()
-                    .unwrap()
+                Url::parse(&format!("https://mainnet.infura.io/v3/{}", infura_key)).unwrap()
             }
-            _ => {
-                let base_el_endpoint = match self {
-                    Providers::PandaGeth(_) => {
-                        Url::parse("https://geth-lighthouse.mainnet.eu1.ethpandaops.io/")
-                            .expect("to be able to parse static base el endpoint url")
-                    }
-                    Providers::PandaErigon(_) => {
-                        Url::parse("https://erigon-lighthouse.mainnet.eu1.ethpandaops.io/")
-                            .expect("to be able to parse static base el endpoint url")
-                    }
-                    Providers::PandaArchive(_) => {
-                        Url::parse("https://archive.mainnet.ethpandaops.io/")
-                            .expect("to be able to parse static base el endpoint url")
-                    }
-                    _ => panic!("not implemented"),
-                };
-                Config::new()
-                    .add_header("Content-Type", "application/json")
-                    .unwrap()
-                    .add_header("CF-Access-Client-Id", PANDAOPS_CLIENT_ID.to_string())
-                    .unwrap()
-                    .add_header(
-                        "CF-Access-Client-Secret",
-                        PANDAOPS_CLIENT_SECRET.to_string(),
-                    )
-                    .unwrap()
-                    .set_base_url(base_el_endpoint)
-                    .try_into()
-                    .unwrap()
-            }
+            _ => match self {
+                Providers::PandaGeth(_) => {
+                    Url::parse("https://geth-lighthouse.mainnet.eu1.ethpandaops.io/")
+                        .expect("to be able to parse static base el endpoint url")
+                }
+                Providers::PandaErigon(_) => {
+                    Url::parse("https://erigon-lighthouse.mainnet.eu1.ethpandaops.io/")
+                        .expect("to be able to parse static base el endpoint url")
+                }
+                Providers::PandaArchive(_) => Url::parse("https://archive.mainnet.ethpandaops.io/")
+                    .expect("to be able to parse static base el endpoint url"),
+                _ => panic!("not implemented"),
+            },
         }
     }
 }
