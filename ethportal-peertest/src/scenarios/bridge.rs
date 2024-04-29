@@ -10,7 +10,6 @@ use portal_bridge::{
     types::mode::BridgeMode,
 };
 use serde_json::Value;
-use surf::{Client, Config};
 use tokio::time::{sleep, Duration};
 use trin_validation::{accumulator::PreMergeAccumulator, oracle::HeaderOracle};
 use url::Url;
@@ -20,12 +19,11 @@ pub async fn test_history_bridge(peertest: &Peertest, portal_client: &HttpClient
     let header_oracle = HeaderOracle::new(pre_merge_acc);
     let epoch_acc_path = "validation_assets/epoch_acc.bin".into();
     let mode = BridgeMode::Test("./test_assets/portalnet/bridge_data.json".into());
-    let client: Client = Config::new()
-        // url doesn't matter, we're not making any requests
-        .set_base_url(Url::parse("http://www.null.com").unwrap())
-        .try_into()
+    // url doesn't matter, we're not making any requests
+    let client_url = Url::parse("http://www.null.com").unwrap();
+    let execution_api = ExecutionApi::new(client_url.clone(), client_url)
+        .await
         .unwrap();
-    let execution_api = ExecutionApi::new(client.clone(), client).await.unwrap();
     // Wait for bootnode to start
     sleep(Duration::from_secs(1)).await;
     let bridge = HistoryBridge::new(
@@ -51,7 +49,11 @@ pub async fn test_beacon_bridge(peertest: &Peertest, portal_client: &HttpClient)
     let mode = BridgeMode::Test("./test_assets/portalnet/beacon_bridge_data.yaml".into());
     // Wait for bootnode to start
     sleep(Duration::from_secs(1)).await;
-    let consensus_api = ConsensusApi::default();
+    // url doesn't matter, we're not making any requests
+    let client_url = Url::parse("http://www.null.com").unwrap();
+    let consensus_api = ConsensusApi::new(client_url.clone(), client_url)
+        .await
+        .unwrap();
     let bridge = BeaconBridge::new(consensus_api, mode, portal_client.clone());
     bridge.launch().await;
 
