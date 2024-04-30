@@ -144,7 +144,6 @@ mod tests {
         types::execution::accumulator::HeaderRecord, utils::bytes::hex_decode, BlockHeaderKey,
         EpochAccumulatorKey,
     };
-    use trin_validation::accumulator::PreMergeAccumulator;
 
     fn get_hwp_ssz() -> Vec<u8> {
         let file =
@@ -281,7 +280,6 @@ mod tests {
     }
 
     fn default_header_oracle() -> Arc<RwLock<HeaderOracle>> {
-        let pre_merge_acc = PreMergeAccumulator::default();
-        Arc::new(RwLock::new(HeaderOracle::new(pre_merge_acc)))
+        Arc::new(RwLock::new(HeaderOracle::default()))
     }
 }

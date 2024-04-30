@@ -229,15 +229,13 @@ mod tests {
     use serde::Deserialize;
     use serde_yaml::Value;
     use trin_utils::submodules::read_portal_spec_tests_file;
-    use trin_validation::accumulator::PreMergeAccumulator;
 
     use super::*;
 
     const TEST_DIRECTORY: &str = "tests/mainnet/state/validation";
 
     fn create_validator() -> StateValidator {
-        let pre_merge_acc = PreMergeAccumulator::default();
-        let header_oracle = Arc::new(RwLock::new(HeaderOracle::new(pre_merge_acc)));
+        let header_oracle = Arc::new(RwLock::new(HeaderOracle::default()));
         StateValidator { header_oracle }
     }
 

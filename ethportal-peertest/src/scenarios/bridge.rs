@@ -11,12 +11,11 @@ use portal_bridge::{
 };
 use serde_json::Value;
 use tokio::time::{sleep, Duration};
-use trin_validation::{accumulator::PreMergeAccumulator, oracle::HeaderOracle};
+use trin_validation::oracle::HeaderOracle;
 use url::Url;
 
 pub async fn test_history_bridge(peertest: &Peertest, portal_client: &HttpClient) {
-    let pre_merge_acc = PreMergeAccumulator::default();
-    let header_oracle = HeaderOracle::new(pre_merge_acc);
+    let header_oracle = HeaderOracle::default();
     let epoch_acc_path = "validation_assets/epoch_acc.bin".into();
     let mode = BridgeMode::Test("./test_assets/portalnet/bridge_data.json".into());
     // url doesn't matter, we're not making any requests

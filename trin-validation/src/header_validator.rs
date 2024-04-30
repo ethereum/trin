@@ -21,8 +21,10 @@ pub struct HeaderValidator {
 }
 
 impl HeaderValidator {
-    pub fn new(pre_merge_acc: PreMergeAccumulator) -> Self {
+    pub fn new() -> Self {
+        let pre_merge_acc = PreMergeAccumulator::default();
         let historical_roots_acc = HistoricalRootsAccumulator::default();
+
         Self {
             pre_merge_acc,
             historical_roots_acc,
