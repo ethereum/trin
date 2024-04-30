@@ -33,6 +33,8 @@ type EpochsPerHistoricalVector = U65536;
 type EpochsPerSlashingsVector = U8192;
 type JustificationBitsLength = U4;
 
+pub type HistoricalRoots = VariableList<B256, HistoricalRootsLimit>;
+
 /// The state of the `BeaconChain` at some slot.
 #[superstruct(
     variants(Bellatrix, Capella, Deneb),
@@ -71,7 +73,7 @@ pub struct BeaconState {
     pub block_roots: FixedVector<B256, SlotsPerHistoricalRoot>,
     pub state_roots: FixedVector<B256, SlotsPerHistoricalRoot>,
     // Frozen in Capella, replaced by historical_summaries
-    pub historical_roots: VariableList<B256, HistoricalRootsLimit>,
+    pub historical_roots: HistoricalRoots,
 
     // Ethereum 1.0 chain data
     pub eth1_data: Eth1Data,

@@ -6,11 +6,15 @@ use std::sync::Arc;
 use rpc::{launch_jsonrpc_server, RpcServerHandle};
 use tokio::sync::{mpsc, RwLock};
 use tracing::info;
+use tree_hash::TreeHash;
 use utp_rs::socket::UtpSocket;
 
 #[cfg(windows)]
 use ethportal_api::types::cli::Web3TransportType;
-use ethportal_api::types::cli::{TrinConfig, BEACON_NETWORK, HISTORY_NETWORK, STATE_NETWORK};
+use ethportal_api::{
+    types::cli::{TrinConfig, BEACON_NETWORK, HISTORY_NETWORK, STATE_NETWORK},
+    utils::bytes::hex_encode,
+};
 use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, Discv5UdpSocket},
@@ -78,7 +82,7 @@ pub async fn run_trin(
 
     // Initialize validation oracle
     let pre_merge_accumulator = PreMergeAccumulator::default();
-    info!("Loaded pre-merge accumulator.",);
+    info!(hash_tree_root = %hex_encode(pre_merge_accumulator.tree_hash_root().0),"Loaded pre-merge accumulator.",);
     let header_oracle = HeaderOracle::new(pre_merge_accumulator);
     let header_oracle = Arc::new(RwLock::new(header_oracle));
 

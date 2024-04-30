@@ -3,7 +3,7 @@ use anyhow::anyhow;
 use serde_json::Value;
 use tokio::sync::mpsc;
 
-use crate::{accumulator::PreMergeAccumulator, header_validfator::HeaderValidator};
+use crate::{accumulator::PreMergeAccumulator, header_validator::HeaderValidator};
 use ethportal_api::{
     types::{
         execution::header_with_proof::HeaderWithProof,
