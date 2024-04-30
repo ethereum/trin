@@ -4,6 +4,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use alloy_primitives::B256;
 use anyhow::{anyhow, ensure};
 use futures::future::join_all;
 use rand::{seq::SliceRandom, thread_rng};
@@ -18,7 +19,7 @@ use tracing::{debug, error, info, warn};
 use trin_metrics::bridge::BridgeMetricsReporter;
 
 use crate::{
-    api::execution::construct_proof,
+    api::execution::{construct_proof, ExecutionApi},
     bridge::{
         history::{HEADER_SATURATION_DELAY, SERVE_BLOCK_TIMEOUT},
         utils::lookup_epoch_acc,
@@ -31,9 +32,10 @@ use crate::{
     },
 };
 use ethportal_api::{
-    jsonrpsee::http_client::HttpClient, types::execution::accumulator::EpochAccumulator,
+    jsonrpsee::http_client::HttpClient,
+    types::{execution::accumulator::EpochAccumulator, history::ContentInfo},
     BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, EpochAccumulatorKey, HistoryContentKey,
-    HistoryContentValue,
+    HistoryContentValue, HistoryNetworkApiClient,
 };
 use trin_validation::{
     constants::EPOCH_SIZE, header_validator::HeaderValidator, oracle::HeaderOracle,
@@ -51,6 +53,7 @@ pub struct Era1Bridge {
     pub http_client: Client,
     pub metrics: BridgeMetricsReporter,
     pub gossip_limit: usize,
+    pub execution_api: ExecutionApi,
 }
 
 // todo: validate via checksum, so we don't have to validate content on a per-value basis
@@ -61,6 +64,7 @@ impl Era1Bridge {
         header_oracle: HeaderOracle,
         epoch_acc_path: PathBuf,
         gossip_limit: usize,
+        execution_api: ExecutionApi,
     ) -> anyhow::Result<Self> {
         let http_client: Client = Config::new()
             .add_header("Content-Type", "application/xml")
@@ -77,6 +81,7 @@ impl Era1Bridge {
             http_client,
             metrics,
             gossip_limit,
+            execution_api,
         })
     }
 
@@ -84,6 +89,11 @@ impl Era1Bridge {
         info!("Launching era1 bridge: {:?}", self.mode);
         match self.mode.clone() {
             BridgeMode::FourFours(FourFoursMode::Random) => self.launch_random().await,
+            BridgeMode::FourFours(FourFoursMode::Hunter(sample_size, threshold)) => {
+                if let Err(err) = self.launch_hunter(sample_size, threshold).await {
+                    error!("Failed to run hunter mode: {err}");
+                }
+            }
             BridgeMode::FourFours(FourFoursMode::RandomSingle) => {
                 self.launch_random_single(None).await
             }
@@ -101,8 +111,63 @@ impl Era1Bridge {
 
     async fn launch_random(&self) {
         for era1_path in self.era1_files.clone().into_iter() {
-            self.gossip_era1(era1_path, None).await;
+            self.gossip_era1(era1_path, None, false).await;
         }
+    }
+
+    async fn launch_hunter(&self, sample_size: u64, threshold: u64) -> anyhow::Result<()> {
+        info!("Launching hunter mode with sample size: {sample_size} and threshold: {threshold}");
+        let era1_files = self.era1_files.clone().into_iter();
+        for era1_path in era1_files {
+            let epoch = get_epoch_from_era1_path(&era1_path)?;
+            info!("Hunting for missing content inside epoch: {epoch}");
+            let block_range = (epoch * EPOCH_SIZE as u64)..((epoch + 1) * EPOCH_SIZE as u64);
+            let blocks_to_sample = block_range.clone().collect::<Vec<u64>>();
+            let blocks_to_sample =
+                blocks_to_sample.choose_multiple(&mut thread_rng(), sample_size as usize);
+            let mut hashes_to_sample: Vec<B256> = vec![];
+            for block_number in blocks_to_sample {
+                let block_hash = self.execution_api.get_block_hash(*block_number).await?;
+                hashes_to_sample.push(block_hash);
+            }
+            let content_keys_to_sample = hashes_to_sample
+                .iter()
+                .map(|hash| {
+                    (
+                        HistoryContentKey::BlockHeaderWithProof(BlockHeaderKey {
+                            block_hash: hash.0,
+                        }),
+                        HistoryContentKey::BlockBody(BlockBodyKey { block_hash: hash.0 }),
+                        HistoryContentKey::BlockReceipts(BlockReceiptsKey { block_hash: hash.0 }),
+                    )
+                })
+                .collect::<Vec<(HistoryContentKey, HistoryContentKey, HistoryContentKey)>>()
+                .iter()
+                .flat_map(|(header_key, body_key, receipts_key)| {
+                    vec![header_key.clone(), body_key.clone(), receipts_key.clone()]
+                })
+                .collect::<Vec<HistoryContentKey>>();
+            let mut found = 0;
+            let hunter_threshold = (content_keys_to_sample.len() as u64 * threshold / 100) as usize;
+            for content_key in content_keys_to_sample {
+                let result = self
+                    .portal_client
+                    .recursive_find_content(content_key.clone())
+                    .await;
+                if let Ok(ContentInfo::Content { .. }) = result {
+                    found += 1;
+                    if found == hunter_threshold {
+                        info!("Hunter found enough content ({hunter_threshold}) to stop hunting in epoch {epoch}");
+                        break;
+                    }
+                }
+            }
+            if found < hunter_threshold {
+                info!("Hunter failed to find enough content ({hunter_threshold}) in epoch {epoch}, launching epoch gossip.");
+                self.gossip_era1(era1_path, None, true).await;
+            }
+        }
+        Ok(())
     }
 
     async fn launch_single(&self, epoch: u64) {
@@ -112,7 +177,7 @@ impl Era1Bridge {
             .into_iter()
             .find(|file| file.contains(&format!("mainnet-{epoch:05}-")))
             .expect("to be able to find era1 file");
-        self.gossip_era1(era1_path, None).await;
+        self.gossip_era1(era1_path, None, false).await;
     }
 
     async fn launch_random_single(&self, floor: Option<u64>) {
@@ -134,7 +199,7 @@ impl Era1Bridge {
                 None => break era1_file,
             }
         };
-        self.gossip_era1(era1_path, None).await;
+        self.gossip_era1(era1_path, None, false).await;
     }
 
     async fn launch_range(&self, start: u64, end: u64) {
@@ -145,12 +210,12 @@ impl Era1Bridge {
             });
         let gossip_range = Some(Range { start, end });
         match era1_path {
-            Some(path) => self.gossip_era1(path, gossip_range).await,
+            Some(path) => self.gossip_era1(path, gossip_range, false).await,
             None => panic!("4444s bridge couldn't find requested epoch on era1 file server"),
         }
     }
 
-    async fn gossip_era1(&self, era1_path: String, gossip_range: Option<Range<u64>>) {
+    async fn gossip_era1(&self, era1_path: String, gossip_range: Option<Range<u64>>, hunt: bool) {
         info!("Processing era1 file at path: {era1_path:?}");
         // We are using a semaphore to limit the amount of active gossip transfers to make sure
         // we don't overwhelm the trin client
@@ -198,6 +263,7 @@ impl Era1Bridge {
                 header_validator.clone(),
                 permit,
                 self.metrics.clone(),
+                hunt,
             );
             serve_block_tuple_handles.push(serve_block_tuple_handle);
         }
@@ -240,6 +306,7 @@ impl Era1Bridge {
         header_validator: Arc<HeaderValidator>,
         permit: OwnedSemaphorePermit,
         metrics: BridgeMetricsReporter,
+        hunt: bool,
     ) -> JoinHandle<()> {
         let number = block_tuple.header.header.number;
         info!("Spawning serve_block_tuple for block at height: {number}");
@@ -254,7 +321,8 @@ impl Era1Bridge {
                     epoch_acc,
                     header_validator,
                     block_stats.clone(),
-                    metrics.clone()
+                    metrics.clone(),
+                    hunt,
                 )).await
                 {
                 Ok(result) => match result {
@@ -280,94 +348,156 @@ impl Era1Bridge {
         header_validator: Arc<HeaderValidator>,
         block_stats: Arc<Mutex<HistoryBlockStats>>,
         metrics: BridgeMetricsReporter,
+        hunt: bool,
     ) -> anyhow::Result<()> {
         info!(
             "Serving block tuple at height: {}",
             block_tuple.header.header.number
         );
-        let timer = metrics.start_process_timer("construct_and_gossip_header");
-        match Self::construct_and_gossip_header(
-            portal_client.clone(),
-            block_tuple.clone(),
-            epoch_acc,
-            header_validator,
-            block_stats.clone(),
-        )
-        .await
-        {
-            Ok(_) => {
-                metrics.report_gossip_success(true, "header");
-                debug!(
-                    "Successfully served block tuple header at height: {:?}",
+        let mut gossip_header = true;
+        if hunt {
+            let header_hash = block_tuple.header.header.hash();
+            let header_key = BlockHeaderKey {
+                block_hash: header_hash.0,
+            };
+            let header_content_key = HistoryContentKey::BlockHeaderWithProof(header_key);
+            let header_content_info = portal_client
+                .recursive_find_content(header_content_key.clone())
+                .await;
+            if let Ok(ContentInfo::Content { .. }) = header_content_info {
+                info!(
+                    "Skipping header at height: {} as header already found",
                     block_tuple.header.header.number
-                )
-            }
-            Err(msg) => {
-                metrics.report_gossip_success(false, "header");
-                warn!(
-                    "Error serving block tuple header at height, will not gossip remaining block content: {:?} - {:?}",
-                    block_tuple.header.header.number, msg
                 );
-                // We actually do want to cut off the gossip for body / receipts if header fails,
-                // since the header might fail validation and we don't want to serve the rest of the
-                // block. A future improvement would be to have a more fine-grained error
-                // handling and only cut off gossip if header fails validation
-                metrics.stop_process_timer(timer);
-                return Ok(());
+                gossip_header = false;
             }
         }
-        metrics.stop_process_timer(timer);
-        // Sleep for 10 seconds to allow headers to saturate network,
-        // since they must be available for body / receipt validation.
-        sleep(Duration::from_secs(HEADER_SATURATION_DELAY)).await;
-        let timer = metrics.start_process_timer("construct_and_gossip_block_body");
-        match Self::construct_and_gossip_block_body(
-            portal_client.clone(),
-            block_tuple.clone(),
-            block_stats.clone(),
-        )
-        .await
-        {
-            Ok(_) => {
-                metrics.report_gossip_success(true, "block_body");
-                debug!(
-                    "Successfully served block body at height: {:?}",
+        if gossip_header {
+            let timer = metrics.start_process_timer("construct_and_gossip_header");
+            match Self::construct_and_gossip_header(
+                portal_client.clone(),
+                block_tuple.clone(),
+                epoch_acc,
+                header_validator,
+                block_stats.clone(),
+            )
+            .await
+            {
+                Ok(_) => {
+                    metrics.report_gossip_success(true, "header");
+                    info!(
+                        "Successfully served block tuple header at height: {:?}",
+                        block_tuple.header.header.number
+                    )
+                }
+                Err(msg) => {
+                    metrics.report_gossip_success(false, "header");
+                    warn!(
+                        "Error serving block tuple header at height, will not gossip remaining block content: {:?} - {:?}",
+                        block_tuple.header.header.number, msg
+                    );
+                    // We actually do want to cut off the gossip for body / receipts if header
+                    // fails, since the header might fail validation and we
+                    // don't want to serve the rest of the block. A future
+                    // improvement would be to have a more fine-grained error
+                    // handling and only cut off gossip if header fails validation
+                    metrics.stop_process_timer(timer);
+                    return Ok(());
+                }
+            }
+            metrics.stop_process_timer(timer);
+            // Sleep for 10 seconds to allow headers to saturate network,
+            // since they must be available for body / receipt validation.
+            sleep(Duration::from_secs(HEADER_SATURATION_DELAY)).await;
+        }
+        let mut gossip_body = true;
+        if hunt {
+            let body_hash = block_tuple.header.header.hash();
+            let body_key = BlockBodyKey {
+                block_hash: body_hash.0,
+            };
+            let body_content_key = HistoryContentKey::BlockBody(body_key);
+            let body_content_info = portal_client
+                .recursive_find_content(body_content_key.clone())
+                .await;
+            if let Ok(ContentInfo::Content { .. }) = body_content_info {
+                info!(
+                    "Skipping body at height: {} as body already found",
                     block_tuple.header.header.number
-                )
-            }
-            Err(msg) => {
-                metrics.report_gossip_success(false, "block_body");
-                warn!(
-                    "Error serving block body at height: {:?} - {:?}",
-                    block_tuple.header.header.number, msg
-                )
+                );
+                gossip_body = false;
             }
         }
-        metrics.stop_process_timer(timer);
-        let timer = metrics.start_process_timer("construct_and_gossip_receipts");
-        match Self::construct_and_gossip_receipts(
-            portal_client.clone(),
-            block_tuple.clone(),
-            block_stats.clone(),
-        )
-        .await
-        {
-            Ok(_) => {
-                metrics.report_gossip_success(true, "receipt");
-                debug!(
-                    "Successfully served block receipts at height: {:?}",
+        if gossip_body {
+            let timer = metrics.start_process_timer("construct_and_gossip_block_body");
+            match Self::construct_and_gossip_block_body(
+                portal_client.clone(),
+                block_tuple.clone(),
+                block_stats.clone(),
+            )
+            .await
+            {
+                Ok(_) => {
+                    metrics.report_gossip_success(true, "block_body");
+                    info!(
+                        "Successfully served block body at height: {:?}",
+                        block_tuple.header.header.number
+                    )
+                }
+                Err(msg) => {
+                    metrics.report_gossip_success(false, "block_body");
+                    warn!(
+                        "Error serving block body at height: {:?} - {:?}",
+                        block_tuple.header.header.number, msg
+                    )
+                }
+            }
+            metrics.stop_process_timer(timer);
+        }
+        let mut gossip_receipts = true;
+        if hunt {
+            let receipts_hash = block_tuple.header.header.hash();
+            let receipts_key = BlockReceiptsKey {
+                block_hash: receipts_hash.0,
+            };
+            let receipts_content_key = HistoryContentKey::BlockReceipts(receipts_key);
+            let receipts_content_info = portal_client
+                .recursive_find_content(receipts_content_key.clone())
+                .await;
+            if let Ok(ContentInfo::Content { .. }) = receipts_content_info {
+                info!(
+                    "Skipping receipts at height: {} as receipts already found",
                     block_tuple.header.header.number
-                )
+                );
+                gossip_receipts = false;
             }
-            Err(msg) => {
-                metrics.report_gossip_success(false, "receipt");
-                warn!(
-                    "Error serving block receipts at height: {:?} - {:?}",
-                    block_tuple.header.header.number, msg
-                )
+        };
+        if gossip_receipts {
+            let timer = metrics.start_process_timer("construct_and_gossip_receipts");
+            match Self::construct_and_gossip_receipts(
+                portal_client.clone(),
+                block_tuple.clone(),
+                block_stats.clone(),
+            )
+            .await
+            {
+                Ok(_) => {
+                    metrics.report_gossip_success(true, "receipt");
+                    info!(
+                        "Successfully served block receipts at height: {:?}",
+                        block_tuple.header.header.number
+                    )
+                }
+                Err(msg) => {
+                    metrics.report_gossip_success(false, "receipt");
+                    warn!(
+                        "Error serving block receipts at height: {:?} - {:?}",
+                        block_tuple.header.header.number, msg
+                    )
+                }
             }
+            metrics.stop_process_timer(timer);
         }
-        metrics.stop_process_timer(timer);
         Ok(())
     }
 

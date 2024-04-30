@@ -37,6 +37,9 @@ Current options include `"trin"` / `"fluffy"`.
 - `"--mode fourfours:random_epoch:100"`: will randomly select a single era1 file from `era1.ethportal.net` that represents an epoch number greater than the floor provided and then gossip it
 - `"--mode fourfours:e600`: will select era1 file 600 from `era1.ethportal.net` and gossip it
 - `"--mode fourfours:r100-200`: will gossip a block range from an era1 file, range must be from the same epoch
+- `"--mode fourfours:hunter:10:50`: sample size = 10, threshold = 50
+    - will randomly select era1 files from `era1.ethportal.net` and gossip them after performing rfc lookups given the sample size. if the threshold is **not** met, the era1 file will be gossiped.
+    - before gossiping a individual piece of content, the bridge will perform a lookup to see if the content is already in the portal network. If it is, the content will not be gossiped.
 
 ### Network
 You can specify the `--network` flag for which network to run the bridge for

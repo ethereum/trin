@@ -88,6 +88,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Launch History Network portal bridge
     if bridge_config.network.contains(&NetworkKind::History) {
+        let execution_api = ExecutionApi::new(
+            bridge_config.el_provider,
+            bridge_config.el_provider_fallback,
+        )
+        .await?;
         match bridge_config.mode {
             BridgeMode::FourFours(_) => {
                 let pre_merge_acc = PreMergeAccumulator::default();
@@ -98,6 +103,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     header_oracle,
                     bridge_config.epoch_acc_path,
                     bridge_config.gossip_limit,
+                    execution_api,
                 )
                 .await?;
                 let bridge_handle = tokio::spawn(async move {
@@ -109,11 +115,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 bridge_tasks.push(bridge_handle);
             }
             _ => {
-                let execution_api = ExecutionApi::new(
-                    bridge_config.el_provider,
-                    bridge_config.el_provider_fallback,
-                )
-                .await?;
                 let bridge_handle = tokio::spawn(async move {
                     let pre_merge_acc = PreMergeAccumulator::default();
                     let header_oracle = HeaderOracle::new(pre_merge_acc);
