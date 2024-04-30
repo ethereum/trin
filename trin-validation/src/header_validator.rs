@@ -1,12 +1,15 @@
 use crate::{
     accumulator::PreMergeAccumulator,
-    constants::{EPOCH_SIZE, MERGE_BLOCK_NUMBER},
+    constants::{EPOCH_SIZE, MERGE_BLOCK_NUMBER, SHANGHAI_BLOCK_NUMBER},
     historical_roots_acc::HistoricalRootsAccumulator,
     merkle::proof::verify_merkle_proof,
 };
+use alloy_primitives::B256;
 use anyhow::anyhow;
 use ethportal_api::{
-    types::execution::header_with_proof::{BlockHeaderProof, HeaderWithProof},
+    types::execution::header_with_proof::{
+        BlockHeaderProof, HeaderWithProof, HistoricalRootsBlockProof,
+    },
     Header,
 };
 
@@ -64,8 +67,82 @@ impl HeaderValidator {
                     Ok(())
                 }
             }
-            _ => unimplemented!("Unsupported proof type found."),
+            BlockHeaderProof::HistoricalRootsBlockProof(proof) => self
+                .verify_post_merge_pre_capella_header(hwp.header.number, hwp.header.hash(), proof),
+            BlockHeaderProof::HistoricalSummariesBlockProof(_) => {
+                if hwp.header.number <= SHANGHAI_BLOCK_NUMBER {
+                    return Err(anyhow!(
+                        "Invalid HistoricalSummariesBlockProof found for pre-Shanghai header."
+                    ));
+                }
+                // TODO: Validation for post-Capella headers is not implemented
+                Ok(())
+            }
         }
+    }
+
+    /// A method to verify the chain of proofs for post-merge/pre-Capella execution headers.
+    fn verify_post_merge_pre_capella_header(
+        &self,
+        block_number: u64,
+        header_hash: B256,
+        proof: &HistoricalRootsBlockProof,
+    ) -> anyhow::Result<()> {
+        if block_number <= MERGE_BLOCK_NUMBER {
+            return Err(anyhow!(
+                "Invalid HistoricalRootsBlockProof found for pre-merge header."
+            ));
+        }
+        if block_number >= SHANGHAI_BLOCK_NUMBER {
+            return Err(anyhow!(
+                "Invalid HistoricalRootsBlockProof found for post-Shanghai header."
+            ));
+        }
+
+        // Verify the chain of proofs for post-merge/pre-capella block header
+        if !verify_merkle_proof(
+            header_hash,
+            &proof.beacon_block_body_proof,
+            8,
+            412,
+            proof.beacon_block_body_root,
+        ) {
+            return Err(anyhow!(
+                "Merkle proof validation failed for BeaconBlockBodyProof"
+            ));
+        }
+
+        if !verify_merkle_proof(
+            proof.beacon_block_body_root,
+            &proof.beacon_block_header_proof,
+            3,
+            12,
+            proof.beacon_block_header_root,
+        ) {
+            return Err(anyhow!(
+                "Merkle proof validation failed for BeaconBlockHeaderProof"
+            ));
+        }
+
+        let block_root_index = proof.slot % 8192;
+        let gen_index = 2 * 8192 + block_root_index;
+        let historical_root_index = proof.slot / 8192;
+        let historical_root =
+            self.historical_roots_acc.historical_roots[historical_root_index as usize];
+
+        if !verify_merkle_proof(
+            proof.beacon_block_header_root,
+            &proof.historical_roots_proof,
+            14,
+            gen_index as usize,
+            historical_root,
+        ) {
+            return Err(anyhow!(
+                "Merkle proof validation failed for HistoricalRootsProof"
+            ));
+        }
+
+        Ok(())
     }
 }
 
@@ -224,6 +301,59 @@ mod test {
         header_validator
             .validate_header_with_proof(&future_hwp)
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn header_validator_validate_post_merge_pre_capella_header() {
+        let header_validator = get_mainnet_header_validator();
+
+        // Read the historical roots block proof from a test file
+        let file = fs::read_to_string("./../portal-spec-tests/tests/mainnet/history/headers_with_proof/block_proofs_bellatrix/beacon_block_proof-15539558-cdf9ed89b0c43cda17398dc4da9cfc505e5ccd19f7c39e3b43474180f1051e01.yaml").unwrap();
+        let mut value: serde_yaml::Value = serde_yaml::from_str(&file).unwrap();
+        let block_number: u64 = 15539558;
+        let header_hash = value
+            .get("execution_block_header")
+            .unwrap()
+            .as_str()
+            .unwrap();
+        let header_hash = B256::from_str(header_hash).unwrap();
+
+        // Change the first value of beacon_block_header_proof from Number to String.
+        // This is required because yaml Value deserialize 0x0000.. as Number(0) instead of String
+        let inner_value = value
+            .get_mut("beacon_block_header_proof")
+            .unwrap()
+            .get_mut(0)
+            .unwrap();
+        *inner_value = serde_yaml::Value::String(
+            "0x0000000000000000000000000000000000000000000000000000000000000000".to_string(),
+        );
+
+        let historical_roots_block_proof: HistoricalRootsBlockProof =
+            serde_yaml::from_value(value).unwrap();
+
+        header_validator
+            .verify_post_merge_pre_capella_header(
+                block_number,
+                header_hash,
+                &historical_roots_block_proof,
+            )
+            .unwrap();
+
+        // Test for invalid block numbers
+        let validator_result = header_validator.verify_post_merge_pre_capella_header(
+            SHANGHAI_BLOCK_NUMBER,
+            header_hash,
+            &historical_roots_block_proof,
+        );
+        assert!(validator_result.is_err());
+
+        let validator_result = header_validator.verify_post_merge_pre_capella_header(
+            MERGE_BLOCK_NUMBER,
+            header_hash,
+            &historical_roots_block_proof,
+        );
+        assert!(validator_result.is_err());
     }
 
     //

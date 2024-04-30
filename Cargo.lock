@@ -7985,6 +7985,7 @@ dependencies = [
  "rust-embed",
  "serde",
  "serde_json",
+ "serde_yaml",
  "ssz_types",
  "tokio",
  "tree_hash",
