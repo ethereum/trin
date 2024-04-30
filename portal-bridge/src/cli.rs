@@ -1,6 +1,7 @@
 use std::{env, net::SocketAddr, path::PathBuf, str::FromStr};
 
 use alloy_primitives::B256;
+use anyhow::anyhow;
 use clap::{Parser, Subcommand};
 use surf::{
     middleware::{Middleware, Next},
@@ -253,8 +254,9 @@ impl FromStr for ClientType {
 impl ClientType {
     pub fn build_handle(&self, bridge_config: &BridgeConfig) -> anyhow::Result<Child> {
         if !bridge_config.executable_path.is_file() {
-            return Err(anyhow::anyhow!(
-                "Invalid executable path: exectuable doesn't exist"
+            return Err(anyhow!(
+                "Invalid path executable doesn't exist: {:?}",
+                bridge_config.executable_path
             ));
         }
         match self {
