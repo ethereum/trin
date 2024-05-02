@@ -10,7 +10,7 @@ use portal_bridge::{
     types::{mode::BridgeMode, network::NetworkKind},
 };
 use trin_utils::log::init_tracing_logger;
-use trin_validation::{accumulator::PreMergeAccumulator, oracle::HeaderOracle};
+use trin_validation::oracle::HeaderOracle;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -67,8 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let bridge_mode = bridge_config.mode.clone();
         let portal_client_clone = portal_client.clone();
         let epoch_acc_path = bridge_config.epoch_acc_path.clone();
-        let master_acc = PreMergeAccumulator::default();
-        let header_oracle = HeaderOracle::new(master_acc);
+        let header_oracle = HeaderOracle::default();
         let state_bridge = StateBridge::new(
             bridge_mode,
             portal_client_clone,
@@ -90,8 +89,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if bridge_config.network.contains(&NetworkKind::History) {
         match bridge_config.mode {
             BridgeMode::FourFours(_) => {
-                let pre_merge_acc = PreMergeAccumulator::default();
-                let header_oracle = HeaderOracle::new(pre_merge_acc);
+                let header_oracle = HeaderOracle::default();
                 let era1_bridge = Era1Bridge::new(
                     bridge_config.mode,
                     portal_client,
@@ -115,8 +113,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 )
                 .await?;
                 let bridge_handle = tokio::spawn(async move {
-                    let pre_merge_acc = PreMergeAccumulator::default();
-                    let header_oracle = HeaderOracle::new(pre_merge_acc);
+                    let header_oracle = HeaderOracle::default();
 
                     let bridge = HistoryBridge::new(
                         bridge_config.mode,

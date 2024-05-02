@@ -3,7 +3,7 @@ use anyhow::anyhow;
 use serde_json::Value;
 use tokio::sync::mpsc;
 
-use crate::{accumulator::PreMergeAccumulator, header_validator::HeaderValidator};
+use crate::header_validator::HeaderValidator;
 use ethportal_api::{
     types::{
         execution::header_with_proof::HeaderWithProof,
@@ -28,9 +28,15 @@ pub struct HeaderOracle {
     pub header_validator: HeaderValidator,
 }
 
+impl Default for HeaderOracle {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl HeaderOracle {
-    pub fn new(pre_merge_acc: PreMergeAccumulator) -> Self {
-        let header_validator = HeaderValidator::new(pre_merge_acc);
+    pub fn new() -> Self {
+        let header_validator = HeaderValidator::new();
         Self {
             history_jsonrpc_tx: None,
             beacon_jsonrpc_tx: None,
@@ -111,8 +117,7 @@ mod test {
 
     #[tokio::test]
     async fn header_oracle_bootstraps_with_default_pre_merge_acc() {
-        let pre_merge_acc = PreMergeAccumulator::default();
-        let header_oracle = HeaderOracle::new(pre_merge_acc);
+        let header_oracle = HeaderOracle::default();
         assert_eq!(
             header_oracle
                 .header_validator
