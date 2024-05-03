@@ -24,7 +24,7 @@ use ethportal_api::{
         },
         jsonrpc::{params::Params, request::JsonRequest},
     },
-    utils::bytes::hex_encode,
+    utils::bytes::{hex_decode, hex_encode},
     BlockBodyKey, BlockHeaderKey, BlockReceiptsKey, Header, HistoryContentKey, HistoryContentValue,
     Receipts,
 };
@@ -231,6 +231,24 @@ impl ExecutionApi {
         let response = self.batch_requests(request).await?;
         serde_json::from_str(&response)
             .map_err(|err| anyhow!("Unable to parse receipts from provider response: {err:?}"))
+    }
+
+    pub async fn get_block_hash(&self, height: u64) -> anyhow::Result<B256> {
+        let block_param = format!("0x{height:01X}");
+        let params = Params::Array(vec![json!(block_param), json!(false)]);
+        let request = JsonRequest::new("eth_getBlockByNumber".to_string(), params, 1);
+        let response = self.try_request(request).await?;
+        let result = response
+            .get("result")
+            .ok_or_else(|| anyhow!("Unable to fetch block hash result for block: {height:?}"))?;
+        let hash = result
+            .get("hash")
+            .ok_or_else(|| anyhow!("Unable to fetch block hash for block: {height:?}"))?;
+        let hash = hex_decode(
+            hash.as_str()
+                .ok_or_else(|| anyhow!("Unable to decode block hash"))?,
+        )?;
+        Ok(B256::from_slice(&hash))
     }
 
     pub async fn get_latest_block_number(&self) -> anyhow::Result<u64> {
