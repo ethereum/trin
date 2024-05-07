@@ -2,11 +2,7 @@ use tracing::{debug, info};
 
 use crate::{
     error::ContentStoreError,
-    versioned::{
-        id_indexed_v1::sql,
-        usage_stats::{update_usage_stats, UsageStats},
-        ContentType,
-    },
+    versioned::{id_indexed_v1::sql, ContentType},
 };
 
 use super::IdIndexedV1StoreConfig;
@@ -45,17 +41,6 @@ pub fn migrate_legacy_history_store(
         new_table_name
     ))?;
 
-    // Update usage stats
-    debug!(content_type = %content_type, "Updating usage stats");
-    let conn = config.sql_connection_pool.get()?;
-    let usage_stats = conn.query_row(&sql::entry_count_and_size(content_type), [], |row| {
-        Ok(UsageStats {
-            entry_count: row.get("count")?,
-            total_entry_size_bytes: row.get::<&str, f64>("used_capacity")?.round() as u64,
-        })
-    })?;
-    update_usage_stats(&conn, content_type, &usage_stats)?;
-
     info!(content_type = %content_type, "Migration finished");
     Ok(())
 }
@@ -71,7 +56,7 @@ mod tests {
     use crate::{
         test_utils::{create_test_portal_storage_config_with_capacity, generate_random_bytes},
         versioned::{
-            create_store, usage_stats::get_usage_stats, IdIndexedV1Store, LegacyHistoryStore,
+            create_store, usage_stats::UsageStats, IdIndexedV1Store, LegacyHistoryStore,
             VersionedContentStore,
         },
     };
@@ -100,9 +85,9 @@ mod tests {
         migrate_legacy_history_store(&config)?;
 
         // make sure we can initialize new store and that it's empty
-        IdIndexedV1Store::create(ContentType::History, config.clone())?;
+        let store = IdIndexedV1Store::create(ContentType::History, config.clone())?;
         assert_eq!(
-            get_usage_stats(&config.sql_connection_pool.get()?, &ContentType::History)?,
+            store.usage_stats(),
             UsageStats {
                 entry_count: 0,
                 total_entry_size_bytes: 0

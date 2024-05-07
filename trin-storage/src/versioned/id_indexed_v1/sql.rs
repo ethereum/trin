@@ -45,7 +45,9 @@ pub fn insert(content_type: &ContentType) -> String {
 
 pub fn delete(content_type: &ContentType) -> String {
     format!(
-        "DELETE FROM {} WHERE content_id = :content_id",
+        "DELETE FROM {}
+        WHERE content_id = :content_id
+        RETURNING content_size",
         table_name(content_type)
     )
 }
@@ -66,8 +68,14 @@ pub fn lookup_value(content_type: &ContentType) -> String {
 
 pub fn delete_farthest(content_type: &ContentType) -> String {
     format!(
-        "DELETE FROM {0} WHERE rowid IN (
-            SELECT rowid FROM {0} ORDER BY distance_short DESC LIMIT :limit)",
+        "DELETE FROM {0}
+        WHERE rowid IN (
+            SELECT rowid
+            FROM {0}
+            ORDER BY distance_short DESC
+            LIMIT :limit
+        )
+        RETURNING content_size",
         table_name(content_type)
     )
 }

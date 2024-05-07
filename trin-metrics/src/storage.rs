@@ -19,7 +19,6 @@ pub struct StorageMetrics {
     pub storage_capacity_bytes: GaugeVec,
     pub radius_ratio: GaugeVec,
     pub entry_count: IntGaugeVec,
-    pub to_insert_until_pruning: IntGaugeVec,
 }
 
 const BYTES_IN_MB_F64: f64 = 1000.0 * 1000.0;
@@ -71,14 +70,6 @@ impl StorageMetrics {
             &["protocol"],
             registry
         )?;
-        let to_insert_until_pruning = register_int_gauge_vec_with_registry!(
-            opts!(
-                "trin_to_insert_until_pruning",
-                "number of entries to be inserted before we check whether we should prune"
-            ),
-            &["protocol"],
-            registry
-        )?;
         Ok(Self {
             process_timer,
             content_storage_usage_bytes,
@@ -86,7 +77,6 @@ impl StorageMetrics {
             storage_capacity_bytes,
             radius_ratio,
             entry_count,
-            to_insert_until_pruning,
         })
     }
 }
@@ -176,13 +166,6 @@ impl StorageMetricsReporter {
             .entry_count
             .with_label_values(&[&self.protocol])
             .dec();
-    }
-
-    pub fn report_to_insert_until_pruning(&self, value: u64) {
-        self.storage_metrics
-            .to_insert_until_pruning
-            .with_label_values(&[&self.protocol])
-            .set(value as i64);
     }
 
     pub fn get_summary(&self) -> String {

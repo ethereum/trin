@@ -5,8 +5,6 @@ use trin_metrics::storage::StorageMetricsReporter;
 
 use super::{sql, ContentType};
 
-pub use sql::create_usage_stats_triggers;
-
 /// Contains information about number and size of entries that is stored.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UsageStats {
@@ -58,6 +56,7 @@ pub fn update_usage_stats(
 }
 
 /// Returns the usage stats for a given content type.
+#[allow(dead_code)] // this is currently not used but it can be useful
 pub fn get_usage_stats(
     conn: &PooledConnection<SqliteConnectionManager>,
     content_type: &ContentType,
@@ -96,7 +95,7 @@ mod tests {
         let pool = setup_sql(temp_dir.path()).unwrap();
         let conn = pool.get().unwrap();
         conn.execute_batch(TEST_TABLE_CREATE).unwrap();
-        conn.execute_batch(&create_usage_stats_triggers(
+        conn.execute_batch(&sql::create_usage_stats_triggers(
             &ContentType::History,
             TABLE_NAME,
             ENTRY_SIZE_COLUMN_NAME,
