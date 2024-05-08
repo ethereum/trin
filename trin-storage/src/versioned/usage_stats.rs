@@ -6,7 +6,7 @@ use trin_metrics::storage::StorageMetricsReporter;
 use super::{sql, ContentType};
 
 /// Contains information about number and size of entries that is stored.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct UsageStats {
     /// The total count of stored entries
     pub entry_count: u64,
@@ -15,6 +15,10 @@ pub struct UsageStats {
 }
 
 impl UsageStats {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     /// Returns the average entry size
     pub fn average_entry_size_bytes(&self) -> Option<f64> {
         if self.entry_count == 0 {

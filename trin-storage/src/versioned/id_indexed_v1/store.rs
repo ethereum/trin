@@ -17,6 +17,10 @@ use crate::{
 };
 
 /// The maximum number of entries to prune with a single query.
+///
+/// The value is chosen based on observation that it takes 100-300 ms for such query on a 10GB
+/// history storage db. Value can be adjusted based on future performance observations and it can
+/// be moved to the `config` if different values are desired for different content types.
 const MAX_TO_PRUNE_PER_QUERY: u64 = 100;
 
 /// The result of looking for the farthest content.
@@ -81,10 +85,7 @@ impl VersionedContentStore for IdIndexedV1Store {
         let mut store = Self {
             config,
             radius: Distance::MAX,
-            usage_stats: UsageStats {
-                entry_count: 0,
-                total_entry_size_bytes: 0,
-            },
+            usage_stats: UsageStats::new(),
             metrics: StorageMetricsReporter::new(protocol_id),
         };
         store.init()?;
@@ -522,13 +523,13 @@ mod tests {
 
     use super::*;
 
-    const CONTENT_DEFAULT_SIZE: u64 = 100;
+    const CONTENT_DEFAULT_SIZE_BYTES: u64 = 100;
 
     // Storage capacity that stores 100 items of default size
-    const STORAGE_CAPACITY_100_ITEMS: u64 = 100 * CONTENT_DEFAULT_SIZE;
+    const STORAGE_CAPACITY_100_ITEMS: u64 = 100 * CONTENT_DEFAULT_SIZE_BYTES;
 
     // Storage capacity that stores 10000 items of default size
-    const STORAGE_CAPACITY_10000_ITEMS: u64 = 10000 * CONTENT_DEFAULT_SIZE;
+    const STORAGE_CAPACITY_10000_ITEMS: u64 = 10000 * CONTENT_DEFAULT_SIZE_BYTES;
 
     fn create_config(temp_dir: &TempDir) -> IdIndexedV1StoreConfig {
         IdIndexedV1StoreConfig {
@@ -547,7 +548,7 @@ mod tests {
         config: &IdIndexedV1StoreConfig,
         distance: u8,
     ) -> (IdentityContentKey, Vec<u8>) {
-        generate_key_value_with_content_size(config, distance, CONTENT_DEFAULT_SIZE)
+        generate_key_value_with_content_size(config, distance, CONTENT_DEFAULT_SIZE_BYTES)
     }
 
     fn generate_key_value_with_content_size(
@@ -611,7 +612,7 @@ mod tests {
         assert_eq!(store.usage_stats.entry_count, item_count);
         assert_eq!(
             store.usage_stats.total_entry_size_bytes,
-            item_count * CONTENT_DEFAULT_SIZE
+            item_count * CONTENT_DEFAULT_SIZE_BYTES
         );
         assert_eq!(store.radius(), Distance::MAX);
         Ok(())
@@ -630,7 +631,7 @@ mod tests {
         assert_eq!(store.usage_stats.entry_count, item_count);
         assert_eq!(
             store.usage_stats.total_entry_size_bytes,
-            item_count * CONTENT_DEFAULT_SIZE
+            item_count * CONTENT_DEFAULT_SIZE_BYTES
         );
         assert_eq!(store.radius(), Distance::MAX);
         Ok(())
@@ -641,14 +642,14 @@ mod tests {
         let temp_dir = TempDir::new()?;
         let config = create_config(&temp_dir);
 
-        let target_capacity_count = config.target_capacity_bytes() / CONTENT_DEFAULT_SIZE;
+        let target_capacity_count = config.target_capacity_bytes() / CONTENT_DEFAULT_SIZE_BYTES;
         create_and_populate_table(&config, target_capacity_count)?;
 
         let store = IdIndexedV1Store::create(ContentType::State, config)?;
         assert_eq!(store.usage_stats.entry_count, target_capacity_count);
         assert_eq!(
             store.usage_stats.total_entry_size_bytes,
-            target_capacity_count * CONTENT_DEFAULT_SIZE
+            target_capacity_count * CONTENT_DEFAULT_SIZE_BYTES
         );
         assert_eq!(store.radius(), Distance::MAX);
         Ok(())
@@ -659,7 +660,8 @@ mod tests {
         let temp_dir = TempDir::new()?;
         let config = create_config(&temp_dir);
 
-        let above_target_capacity_count = 1 + config.target_capacity_bytes() / CONTENT_DEFAULT_SIZE;
+        let above_target_capacity_count =
+            1 + config.target_capacity_bytes() / CONTENT_DEFAULT_SIZE_BYTES;
 
         create_and_populate_table(&config, above_target_capacity_count)?;
 
@@ -669,7 +671,7 @@ mod tests {
         assert_eq!(store.usage_stats.entry_count, above_target_capacity_count);
         assert_eq!(
             store.usage_stats.total_entry_size_bytes,
-            above_target_capacity_count * CONTENT_DEFAULT_SIZE
+            above_target_capacity_count * CONTENT_DEFAULT_SIZE_BYTES
         );
 
         // Radius should not be MAX
@@ -682,7 +684,7 @@ mod tests {
         let temp_dir = TempDir::new()?;
         let config = create_config(&temp_dir);
 
-        let full_capacity_count = config.storage_capacity_bytes / CONTENT_DEFAULT_SIZE;
+        let full_capacity_count = config.storage_capacity_bytes / CONTENT_DEFAULT_SIZE_BYTES;
 
         create_and_populate_table(&config, full_capacity_count)?;
 
@@ -705,7 +707,8 @@ mod tests {
         let temp_dir = TempDir::new()?;
         let config = create_config(&temp_dir);
 
-        let above_full_capacity_count = 10 + config.storage_capacity_bytes / CONTENT_DEFAULT_SIZE;
+        let above_full_capacity_count =
+            10 + config.storage_capacity_bytes / CONTENT_DEFAULT_SIZE_BYTES;
 
         create_and_populate_table(&config, above_full_capacity_count)?;
 
@@ -714,7 +717,7 @@ mod tests {
         // should prune until target capacity
         assert_eq!(
             store.usage_stats.entry_count,
-            config.target_capacity_bytes() / CONTENT_DEFAULT_SIZE
+            config.target_capacity_bytes() / CONTENT_DEFAULT_SIZE_BYTES
         );
         assert_eq!(
             store.usage_stats.total_entry_size_bytes,
@@ -864,7 +867,7 @@ mod tests {
             let (key, value) = generate_key_value_with_content_size(
                 &config,
                 0,
-                rng.gen_range((CONTENT_DEFAULT_SIZE)..(4 * CONTENT_DEFAULT_SIZE)),
+                rng.gen_range((CONTENT_DEFAULT_SIZE_BYTES)..(4 * CONTENT_DEFAULT_SIZE_BYTES)),
             );
             store.insert(&key, value)?;
             important_keys.push(key);
@@ -880,7 +883,7 @@ mod tests {
             let (key, value) = generate_key_value_with_content_size(
                 &config,
                 0xFF - i,
-                rng.gen_range((CONTENT_DEFAULT_SIZE)..(3 * CONTENT_DEFAULT_SIZE)),
+                rng.gen_range((CONTENT_DEFAULT_SIZE_BYTES)..(3 * CONTENT_DEFAULT_SIZE_BYTES)),
             );
             store.insert(&key, value)?;
             assert!(store.usage_stats.total_entry_size_bytes <= config.storage_capacity_bytes);
