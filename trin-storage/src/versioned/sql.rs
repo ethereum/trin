@@ -80,9 +80,9 @@ pub fn create_usage_stats_triggers(
 pub fn delete_usage_stats_triggers(content_type: &ContentType, table_name: &str) -> String {
     format!(
         "
-        DROP TRIGGER {table_name}_on_insert_update_usage_stats_trigger;
-        DROP TRIGGER {table_name}_on_delete_update_usage_stats_trigger;
-        DROP TRIGGER {table_name}_on_update_update_usage_stats_trigger;
+        DROP TRIGGER IF EXISTS {table_name}_on_insert_update_usage_stats_trigger;
+        DROP TRIGGER IF EXISTS {table_name}_on_delete_update_usage_stats_trigger;
+        DROP TRIGGER IF EXISTS {table_name}_on_update_update_usage_stats_trigger;
         DELETE FROM usage_stats WHERE content_type = '{content_type}';
         "
     )

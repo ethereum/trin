@@ -4,7 +4,7 @@ use tracing::{debug, info};
 
 use crate::{
     error::ContentStoreError,
-    versioned::{id_indexed_v1, sql::delete_usage_stats_triggers, ContentType},
+    versioned::{id_indexed_v1, ContentType},
 };
 
 pub fn migrate_id_indexed_store(
@@ -26,15 +26,6 @@ pub fn migrate_id_indexed_store(
         "DROP INDEX {old_table_name}_distance_short_idx;
         DROP INDEX {old_table_name}_content_size_idx;"
     ))?;
-
-    // Delete usage stats
-    debug!("Deleting usage stats");
-    sql_connection_pool
-        .get()?
-        .execute_batch(&delete_usage_stats_triggers(
-            &ContentType::History,
-            &old_table_name,
-        ))?;
 
     info!("Migration finished");
     Ok(())
