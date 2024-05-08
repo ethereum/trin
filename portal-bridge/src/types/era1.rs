@@ -42,9 +42,10 @@ impl Era1 {
     /// deserialized era1 object in memory.
     pub fn iter_tuples(raw_era1: Vec<u8>) -> impl Iterator<Item = BlockTuple> {
         let file = E2StoreFile::deserialize(&raw_era1).expect("invalid era1 file");
-        let block_index = BlockIndexEntry::try_from(&file.entries[32770])
-            .expect("invalid block index entry")
-            .block_index;
+        let block_index =
+            BlockIndexEntry::try_from(file.entries.last().expect("missing block index entry"))
+                .expect("invalid block index entry")
+                .block_index;
         (0..block_index.count).map(move |i| {
             let mut entries: [Entry; 4] = Default::default();
             for (j, entry) in entries.iter_mut().enumerate() {
@@ -66,12 +67,16 @@ impl Era1 {
     pub fn deserialize(buf: &[u8]) -> anyhow::Result<Self> {
         let file = E2StoreFile::deserialize(buf)?;
         ensure!(
-            file.entries.len() == ERA1_ENTRY_COUNT,
+            // era1 file #0-1895 || era1 file #1896
+            file.entries.len() == ERA1_ENTRY_COUNT || file.entries.len() == 21451,
             "invalid era1 file: incorrect entry count"
         );
         let version = VersionEntry::try_from(&file.entries[0])?;
+        let block_index =
+            BlockIndexEntry::try_from(file.entries.last().expect("missing block index entry"))?;
         let mut block_tuples = vec![];
-        for count in 0..BLOCK_TUPLE_COUNT {
+        let block_tuple_count = block_index.block_index.count as usize;
+        for count in 0..block_tuple_count {
             let mut entries: [Entry; 4] = Default::default();
             for (i, entry) in entries.iter_mut().enumerate() {
                 *entry = file.entries[count * 4 + i + 1].clone();
@@ -79,8 +84,8 @@ impl Era1 {
             let block_tuple = BlockTuple::try_from(&entries)?;
             block_tuples.push(block_tuple);
         }
-        let accumulator = AccumulatorEntry::try_from(&file.entries[32769])?;
-        let block_index = BlockIndexEntry::try_from(&file.entries[32770])?;
+        let accumulator_index = (block_tuple_count * 4) + 1;
+        let accumulator = AccumulatorEntry::try_from(&file.entries[accumulator_index])?;
         Ok(Self {
             version,
             block_tuples,
@@ -104,7 +109,8 @@ impl Era1 {
         entries.push(block_index_entry);
         let file = E2StoreFile { entries };
         ensure!(
-            file.entries.len() == ERA1_ENTRY_COUNT,
+            // era1 file #0-1895 || era1 file #1896
+            file.entries.len() == ERA1_ENTRY_COUNT || file.entries.len() == 21451,
             "invalid era1 file: incorrect entry count"
         );
         let file_length = file.length();
@@ -398,7 +404,8 @@ impl TryFrom<&Entry> for BlockIndexEntry {
             "invalid block index entry: incorrect header type"
         );
         ensure!(
-            entry.header.length == 65552,
+            // era1 file #0-1895 || era1 file #1896
+            entry.header.length == 65552 || entry.header.length == 42912,
             "invalid block index entry: incorrect header length"
         );
         ensure!(
@@ -406,7 +413,8 @@ impl TryFrom<&Entry> for BlockIndexEntry {
             "invalid block index entry: incorrect header reserved bytes"
         );
         ensure!(
-            entry.value.len() == 65552,
+            // era1 file #0-1895 || era1 file #1896
+            entry.value.len() == 65552 || entry.value.len() == 42912,
             "invalid block index entry: incorrect value length"
         );
         Ok(Self {
@@ -434,7 +442,7 @@ impl TryInto<Entry> for BlockIndexEntry {
 #[derive(Clone, Eq, PartialEq, Debug)]
 struct BlockIndex {
     starting_number: u64,
-    indices: [u64; BLOCK_TUPLE_COUNT],
+    indices: Vec<u64>,
     count: u64,
 }
 
@@ -443,12 +451,13 @@ impl TryFrom<Entry> for BlockIndex {
 
     fn try_from(entry: Entry) -> Result<Self, Self::Error> {
         let starting_number = u64::from_le_bytes(entry.value[0..8].try_into()?);
-        let mut indices = [0u64; BLOCK_TUPLE_COUNT];
+        let block_tuple_count = (entry.value.len() - 16) / 8;
+        let mut indices = vec![0; block_tuple_count];
         for (i, index) in indices.iter_mut().enumerate() {
             *index = u64::from_le_bytes(entry.value[(i * 8 + 8)..(i * 8 + 16)].try_into()?);
         }
         let count = u64::from_le_bytes(
-            entry.value[(BLOCK_TUPLE_COUNT * 8 + 8)..(BLOCK_TUPLE_COUNT * 8 + 16)].try_into()?,
+            entry.value[(block_tuple_count * 8 + 8)..(block_tuple_count * 8 + 16)].try_into()?,
         );
         Ok(Self {
             starting_number,
@@ -478,5 +487,7 @@ mod tests {
         let actual = era1.write().unwrap();
         let expected = fs::read(path).unwrap();
         assert_eq!(expected, actual);
+        let era1_raw_bytes = fs::read(path).unwrap();
+        let _block_tuples: Vec<BlockTuple> = Era1::iter_tuples(era1_raw_bytes).collect();
     }
 }
