@@ -7,6 +7,8 @@ pub const ISTANBUL_BLOCK_NUMBER: u64 = 9_069_000;
 pub const CONSTANTINOPLE_BLOCK_NUMBER: u64 = 7_280_000;
 pub const BYZANTIUM_BLOCK_NUMBER: u64 = 4_370_000;
 pub const HOMESTEAD_BLOCK_NUMBER: u64 = 1_150_000;
+pub const CAPELLA_FORK_EPOCH: u64 = 194_048;
+pub const SLOTS_PER_EPOCH: u64 = 32;
 
 /// The default hash of the pre-merge accumulator at the time of the merge block.
 pub const DEFAULT_PRE_MERGE_ACC_HASH: &str =

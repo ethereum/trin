@@ -5,7 +5,7 @@ use crate::consensus::{
     },
     fork::ForkName,
     header::BeaconBlockHeader,
-    historical_summaries::HistoricalSummary,
+    historical_summaries::HistoricalSummaries,
     participation_flags::ParticipationFlags,
     pubkey::PubKey,
     sync_committee::SyncCommittee,
@@ -143,7 +143,7 @@ pub struct BeaconState {
     pub next_withdrawal_validator_index: u64,
     // Deep history valid from Capella onwards.
     #[superstruct(only(Capella, Deneb))]
-    pub historical_summaries: VariableList<HistoricalSummary, HistoricalRootsLimit>,
+    pub historical_summaries: HistoricalSummaries,
 }
 
 impl BeaconState {

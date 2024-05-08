@@ -12,11 +12,11 @@ use tree_hash_derive::TreeHash;
 /// https://github.com/ethereum/consensus-specs/blob/dev/specs/capella/beacon-chain.md#historicalsummary
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Decode, Encode, TreeHash)]
 pub struct HistoricalSummary {
-    block_summary_root: B256,
-    state_summary_root: B256,
+    pub block_summary_root: B256,
+    pub state_summary_root: B256,
 }
 
-type HistoricalSummaries = VariableList<HistoricalSummary, typenum::U16777216>;
+pub type HistoricalSummaries = VariableList<HistoricalSummary, typenum::U16777216>;
 
 /// Proof against the beacon state root hash
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
