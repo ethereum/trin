@@ -200,7 +200,7 @@ impl<ExtDB: DatabaseRef> Database for CacheDB<ExtDB> {
         match self.accounts.entry(address) {
             Entry::Occupied(mut acc_entry) => {
                 let acc_entry = acc_entry.get_mut();
-                match acc_entry.storage.entry(index.into()) {
+                match acc_entry.storage.entry(index) {
                     Entry::Occupied(entry) => Ok(*entry.get()),
                     Entry::Vacant(entry) => {
                         if matches!(
@@ -226,7 +226,7 @@ impl<ExtDB: DatabaseRef> Database for CacheDB<ExtDB> {
                 let (account, value) = if info.is_some() {
                     let value = self.db.storage_ref(address, index)?;
                     let mut account: DbAccount = info.into();
-                    account.storage.insert(index.into(), value);
+                    account.storage.insert(index, value);
                     let _ = account.trie.lock().insert(
                         keccak256(B256::from(index)).as_ref(),
                         &alloy_rlp::encode(value),
