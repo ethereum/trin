@@ -288,7 +288,7 @@ mod test {
             EXECUTABLE_PATH,
             "--epoch-accumulator-path",
             EPOCH_ACC_PATH,
-            "--network",
+            "--portal-subnetworks",
             "history,beacon",
             "trin",
         ]);
