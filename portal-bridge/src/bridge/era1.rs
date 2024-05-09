@@ -121,7 +121,7 @@ impl Era1Bridge {
         for era1_path in era1_files {
             let epoch = get_epoch_from_era1_path(&era1_path)?;
             info!("Hunting for missing content inside epoch: {epoch}");
-            let block_range = (epoch * EPOCH_SIZE as u64)..((epoch + 1) * EPOCH_SIZE as u64);
+            let block_range = (epoch * EPOCH_SIZE)..((epoch + 1) * EPOCH_SIZE);
             let blocks_to_sample = block_range.clone().collect::<Vec<u64>>();
             let blocks_to_sample =
                 blocks_to_sample.choose_multiple(&mut thread_rng(), sample_size as usize);
@@ -203,7 +203,7 @@ impl Era1Bridge {
     }
 
     async fn launch_range(&self, start: u64, end: u64) {
-        let epoch = start / EPOCH_SIZE as u64;
+        let epoch = start / EPOCH_SIZE;
         let era1_path =
             self.era1_files.clone().into_iter().find(|file| {
                 file.contains(&format!("mainnet-{epoch:05}-")) && file.contains(".era1")
@@ -283,9 +283,7 @@ impl Era1Bridge {
         let content_key = HistoryContentKey::EpochAccumulator(EpochAccumulatorKey { epoch_hash });
         let content_value = HistoryContentValue::EpochAccumulator(epoch_acc.clone());
         // create unique stats for epoch accumulator, since it's rarely gossiped
-        let block_stats = Arc::new(Mutex::new(HistoryBlockStats::new(
-            epoch_index * EPOCH_SIZE as u64,
-        )));
+        let block_stats = Arc::new(Mutex::new(HistoryBlockStats::new(epoch_index * EPOCH_SIZE)));
         debug!("Built EpochAccumulator for Epoch #{epoch_index:?}: now gossiping.");
         // spawn gossip in new thread to avoid blocking
         let portal_client = self.portal_client.clone();
@@ -514,7 +512,7 @@ impl Era1Bridge {
         );
         let header = block_tuple.header.header;
         // Fetch HeaderRecord from EpochAccumulator for validation
-        let header_index = header.number % EPOCH_SIZE as u64;
+        let header_index = header.number % EPOCH_SIZE;
         let header_record = &epoch_acc[header_index as usize];
 
         // Validate Header

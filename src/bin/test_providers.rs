@@ -20,12 +20,12 @@ use ethportal_api::{
     utils::bytes::hex_encode,
     Header,
 };
-use portal_bridge::{api::execution::ExecutionApi, bridge::history::EPOCH_SIZE};
+use portal_bridge::api::execution::ExecutionApi;
 use trin_utils::log::init_tracing_logger;
 use trin_validation::{
     accumulator::PreMergeAccumulator,
     constants::{
-        BERLIN_BLOCK_NUMBER, BYZANTIUM_BLOCK_NUMBER, CONSTANTINOPLE_BLOCK_NUMBER,
+        BERLIN_BLOCK_NUMBER, BYZANTIUM_BLOCK_NUMBER, CONSTANTINOPLE_BLOCK_NUMBER, EPOCH_SIZE,
         HOMESTEAD_BLOCK_NUMBER, ISTANBUL_BLOCK_NUMBER, LONDON_BLOCK_NUMBER, MERGE_BLOCK_NUMBER,
         SHANGHAI_BLOCK_NUMBER,
     },

@@ -63,7 +63,7 @@ impl PreMergeAccumulator {
     }
 
     pub(crate) fn get_epoch_index_of_header(&self, header: &Header) -> u64 {
-        header.number / EPOCH_SIZE as u64
+        header.number / EPOCH_SIZE
     }
 
     pub async fn lookup_premerge_hash_by_number(
@@ -74,8 +74,8 @@ impl PreMergeAccumulator {
         if block_number > MERGE_BLOCK_NUMBER {
             return Err(anyhow!("Post-merge blocks are not supported."));
         }
-        let rel_index = block_number % EPOCH_SIZE as u64;
-        let epoch_index = block_number / EPOCH_SIZE as u64;
+        let rel_index = block_number % EPOCH_SIZE;
+        let epoch_index = block_number / EPOCH_SIZE;
         let epoch_hash = self.historical_epochs[epoch_index as usize];
         let epoch_acc = self
             .lookup_epoch_acc(epoch_hash, history_jsonrpc_tx)
@@ -146,7 +146,7 @@ impl PreMergeAccumulator {
         epoch_acc: &EpochAccumulator,
     ) -> anyhow::Result<[B256; 15]> {
         // Validate header hash matches historical hash from epoch accumulator
-        let hr_index = (header.number % EPOCH_SIZE as u64) as usize;
+        let hr_index = (header.number % EPOCH_SIZE) as usize;
         let header_record = epoch_acc[hr_index];
         if header_record.block_hash != header.hash() {
             return Err(anyhow!(
