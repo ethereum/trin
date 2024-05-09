@@ -42,7 +42,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut bridge_tasks = Vec::new();
 
     // Launch Beacon Network portal bridge
-    if bridge_config.network.contains(&NetworkKind::Beacon) {
+    if bridge_config
+        .portal_subnetworks
+        .contains(&NetworkKind::Beacon)
+    {
         let bridge_mode = bridge_config.mode.clone();
         let consensus_api = ConsensusApi::new(
             bridge_config.cl_provider,
@@ -63,7 +66,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Launch State Network portal bridge
-    if bridge_config.network.contains(&NetworkKind::State) {
+    if bridge_config
+        .portal_subnetworks
+        .contains(&NetworkKind::State)
+    {
         let bridge_mode = bridge_config.mode.clone();
         let portal_client_clone = portal_client.clone();
         let epoch_acc_path = bridge_config.epoch_acc_path.clone();
@@ -86,7 +92,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Launch History Network portal bridge
-    if bridge_config.network.contains(&NetworkKind::History) {
+    if bridge_config
+        .portal_subnetworks
+        .contains(&NetworkKind::History)
+    {
         let execution_api = ExecutionApi::new(
             bridge_config.el_provider,
             bridge_config.el_provider_fallback,

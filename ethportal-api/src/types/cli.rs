@@ -302,7 +302,7 @@ pub fn check_private_key_length(private_key: &str) -> Result<B256, String> {
     ))
 }
 
-fn network_parser(network_string: &str) -> Result<Arc<NetworkSpec>, String> {
+pub fn network_parser(network_string: &str) -> Result<Arc<NetworkSpec>, String> {
     match network_string {
         "mainnet" => Ok(MAINNET.clone()),
         "testnet" => Ok(TESTNET.clone()),

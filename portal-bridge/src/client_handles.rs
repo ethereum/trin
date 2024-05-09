@@ -45,8 +45,8 @@ pub fn trin_handle(bridge_config: &BridgeConfig) -> anyhow::Result<Child> {
     let udp_port = bridge_config.base_discovery_port;
     let private_key = hex_encode(bridge_config.private_key);
     let mut command = Command::new(bridge_config.executable_path.clone());
-    let networks = bridge_config
-        .network
+    let portal_subnetworks = bridge_config
+        .portal_subnetworks
         .iter()
         .map(|n| n.to_string())
         .collect::<Vec<_>>()
@@ -57,7 +57,8 @@ pub fn trin_handle(bridge_config: &BridgeConfig) -> anyhow::Result<Child> {
         .args(["--ephemeral"])
         .args(["--mb", "0"])
         .args(["--web3-transport", "http"])
-        .args(["--portal-subnetworks", &networks])
+        .args(["--network", bridge_config.network.get_network_name()])
+        .args(["--portal-subnetworks", &portal_subnetworks])
         .args(["--unsafe-private-key", &private_key])
         .args([
             "--web3-http-address",
