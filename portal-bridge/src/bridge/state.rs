@@ -191,7 +191,7 @@ impl StateBridge {
 }
 
 #[cfg(test)]
-#[cfg(all(test, feature = "remove this if you want to run this test"))]
+#[cfg(all(test, feature = "comment this line out if you want to run this test"))]
 mod tests {
     use surf::{Client, Config};
     use tracing_test::traced_test;
