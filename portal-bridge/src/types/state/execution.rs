@@ -1,15 +1,15 @@
 use alloy_primitives::{keccak256, Address, Bytes, B256, U256};
-use alloy_rlp::{Decodable, EMPTY_STRING_CODE};
+use alloy_rlp::EMPTY_STRING_CODE;
 use anyhow::{ensure, Error};
 use eth_trie::Trie;
 use ethportal_api::types::{
-    execution::transaction::{ToAddress, Transaction},
+    execution::transaction::Transaction,
     state_trie::account_state::AccountState as AccountStateInfo,
 };
 use revm::{
     db::EmptyDB, inspector_handle_register, inspectors::NoOpInspector, DatabaseCommit, Evm,
 };
-use revm_primitives::{Env, ResultAndState, SpecId, TransactTo};
+use revm_primitives::{Env, ResultAndState, SpecId};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeSet, HashMap},
@@ -23,11 +23,11 @@ use crate::types::{
     state::{
         block_reward::get_block_reward,
         database::{CacheDB, DbAccount},
-        spec_id::get_spec_id,
+        spec_id::{get_spec_id, SPURIOUS_DRAGON_BLOCK_NUMBER},
+        transaction::TxEnvModifier,
+        utils::u256_to_lower_u64,
     },
 };
-
-use super::utils::u256_to_lower_u64;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct AllocBalance {
@@ -195,118 +195,17 @@ impl State {
                 .with_spec_id(get_spec_id(block_number))
                 .modify_tx_env(|tx_env| {
                     tx_env.caller = tx
-                        .get_transaction_sender_address(block_number >= 2675000)
+                        .get_transaction_sender_address(
+                            block_number >= SPURIOUS_DRAGON_BLOCK_NUMBER,
+                        )
                         .expect(
                             "We should always be able to get the sender address of a transaction",
                         );
                     match tx {
-                        Transaction::Legacy(tx) => {
-                            tx_env.gas_limit = u256_to_lower_u64(tx.gas);
-                            tx_env.gas_price = U256::from(tx.gas_price);
-                            tx_env.gas_priority_fee = None;
-                            tx_env.transact_to = match tx.to {
-                                ToAddress::Exists(to) => TransactTo::Call(to),
-                                ToAddress::Empty => TransactTo::create(),
-                            };
-                            tx_env.value = tx.value;
-                            tx_env.data = alloy_primitives::Bytes(tx.data.clone());
-                            tx_env.chain_id = if block_number >= 2675000 {
-                                Some(1)
-                            } else {
-                                None
-                            };
-                            tx_env.nonce = Some(u256_to_lower_u64(tx.nonce));
-                            tx_env.access_list.clear();
-                            tx_env.blob_hashes.clear();
-                            tx_env.max_fee_per_blob_gas.take();
-                        }
-                        Transaction::AccessList(tx) => {
-                            tx_env.gas_limit = u256_to_lower_u64(tx.gas_limit);
-                            tx_env.gas_price = U256::from(tx.gas_price);
-                            tx_env.gas_priority_fee = None;
-                            tx_env.transact_to = match tx.to {
-                                ToAddress::Exists(to) => TransactTo::Call(to),
-                                ToAddress::Empty => TransactTo::create(),
-                            };
-                            tx_env.value = tx.value;
-                            tx_env.data = alloy_primitives::Bytes(tx.data.clone());
-                            tx_env.chain_id = Some(u256_to_lower_u64(tx.chain_id));
-                            tx_env.nonce = Some(u256_to_lower_u64(tx.nonce));
-                            tx_env.access_list = tx
-                                .access_list
-                                .list
-                                .iter()
-                                .map(|l| {
-                                    (
-                                        l.address,
-                                        l.storage_keys
-                                            .iter()
-                                            .map(|k| U256::from_be_bytes(k.0))
-                                            .collect(),
-                                    )
-                                })
-                                .collect();
-                            tx_env.blob_hashes.clear();
-                            tx_env.max_fee_per_blob_gas.take();
-                        }
-                        Transaction::EIP1559(tx) => {
-                            tx_env.gas_limit = u256_to_lower_u64(tx.gas_limit);
-                            tx_env.gas_price = U256::from(tx.max_fee_per_gas);
-                            tx_env.gas_priority_fee = Some(U256::from(tx.max_priority_fee_per_gas));
-                            tx_env.transact_to = match tx.to {
-                                ToAddress::Exists(to) => TransactTo::Call(to),
-                                ToAddress::Empty => TransactTo::create(),
-                            };
-                            tx_env.value = tx.value;
-                            tx_env.data = alloy_primitives::Bytes(tx.data.clone());
-                            tx_env.chain_id = Some(u256_to_lower_u64(tx.chain_id));
-                            tx_env.nonce = Some(u256_to_lower_u64(tx.nonce));
-                            tx_env.access_list = tx
-                                .access_list
-                                .list
-                                .iter()
-                                .map(|l| {
-                                    (
-                                        l.address,
-                                        l.storage_keys
-                                            .iter()
-                                            .map(|k| U256::from_be_bytes(k.0))
-                                            .collect(),
-                                    )
-                                })
-                                .collect();
-                            tx_env.blob_hashes.clear();
-                            tx_env.max_fee_per_blob_gas.take();
-                        }
-                        Transaction::Blob(tx) => {
-                            tx_env.gas_limit = u256_to_lower_u64(tx.gas_limit);
-                            tx_env.gas_price = U256::from(tx.max_fee_per_gas);
-                            tx_env.gas_priority_fee = Some(U256::from(tx.max_priority_fee_per_gas));
-                            tx_env.transact_to = match tx.to {
-                                ToAddress::Exists(to) => TransactTo::Call(to),
-                                ToAddress::Empty => TransactTo::create(),
-                            };
-                            tx_env.value = tx.value;
-                            tx_env.data = alloy_primitives::Bytes(tx.data.clone());
-                            tx_env.chain_id = Some(u256_to_lower_u64(tx.chain_id));
-                            tx_env.nonce = Some(u256_to_lower_u64(tx.nonce));
-                            tx_env.access_list = tx
-                                .access_list
-                                .list
-                                .iter()
-                                .map(|l| {
-                                    (
-                                        l.address,
-                                        l.storage_keys
-                                            .iter()
-                                            .map(|k| U256::from_be_bytes(k.0))
-                                            .collect(),
-                                    )
-                                })
-                                .collect();
-                            tx_env.blob_hashes = tx.blob_versioned_hashes.clone();
-                            tx_env.max_fee_per_blob_gas = Some(U256::from(tx.max_fee_per_blob_gas));
-                        }
+                        Transaction::Legacy(tx) => tx.modify(block_number, tx_env),
+                        Transaction::EIP1559(tx) => tx.modify(block_number, tx_env),
+                        Transaction::AccessList(tx) => tx.modify(block_number, tx_env),
+                        Transaction::Blob(tx) => tx.modify(block_number, tx_env),
                     }
                 })
                 .with_external_context(NoOpInspector)
@@ -324,13 +223,14 @@ impl State {
     }
 
     pub fn get_account_state(&self, account: &Address) -> anyhow::Result<AccountStateInfo> {
-        let account_state = self
-            .database
-            .trie
-            .lock()
-            .get(keccak256(account).as_slice())?;
+        let account_state = self.database.accounts.get(account);
         match account_state {
-            Some(encoded) => AccountStateInfo::decode(&mut encoded.as_slice()).map_err(Error::from),
+            Some(account_db) => Ok(AccountStateInfo {
+                nonce: account_db.info.nonce,
+                balance: account_db.info.balance,
+                storage_root: account_db.trie.lock().root_hash()?,
+                code_hash: account_db.info.code_hash,
+            }),
             None => Ok(AccountStateInfo::default()),
         }
     }

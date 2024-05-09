@@ -52,8 +52,10 @@ impl Transaction {
         let sig =
             RecoverableSignature::from_compact(&sig[0..64], RecoveryId::from_i32(sig[64] as i32)?)?;
 
-        let public =
-            SECP256K1.recover_ecdsa(&Message::from_digest_slice(&signature_hash.0[..32])?, &sig)?;
+        let public = SECP256K1.recover_ecdsa(
+            &Message::from_digest_slice(&signature_hash.as_slice())?,
+            &sig,
+        )?;
         let hash = keccak256(&public.serialize_uncompressed()[1..]);
         Ok(Address::from_slice(&hash[12..]))
     }
