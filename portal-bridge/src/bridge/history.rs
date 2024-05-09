@@ -25,14 +25,13 @@ use ethportal_api::{
     EpochAccumulatorKey, HistoryContentKey, HistoryContentValue,
 };
 use trin_validation::{
-    constants::{EPOCH_SIZE as EPOCH_SIZE_USIZE, MERGE_BLOCK_NUMBER},
+    constants::{EPOCH_SIZE, MERGE_BLOCK_NUMBER},
     oracle::HeaderOracle,
 };
 
 // todo: calculate / test optimal saturation delay
 pub const HEADER_SATURATION_DELAY: u64 = 10; // seconds
 const LATEST_BLOCK_POLL_RATE: u64 = 5; // seconds
-pub const EPOCH_SIZE: u64 = EPOCH_SIZE_USIZE as u64;
 pub const SERVE_BLOCK_TIMEOUT: Duration = Duration::from_secs(120);
 pub const SERVE_CONTENT_TIMEOUT: Duration = Duration::from_secs(30);
 

@@ -46,10 +46,10 @@ impl BridgeMode {
         let (start, end) = match mode_type.clone() {
             ModeType::Epoch(epoch_number) => {
                 let end_block = match is_single_mode {
-                    true => (epoch_number + 1) * EPOCH_SIZE as u64,
+                    true => (epoch_number + 1) * EPOCH_SIZE,
                     false => latest_block + 1,
                 };
-                (epoch_number * EPOCH_SIZE as u64, end_block)
+                (epoch_number * EPOCH_SIZE, end_block)
             }
             ModeType::Block(block) => {
                 let end_block = match is_single_mode {
@@ -250,8 +250,8 @@ impl FromStr for FourFoursMode {
                             .to_string(),
                     );
                 }
-                let start_epoch = start_block / EPOCH_SIZE as u64;
-                let end_epoch = end_block / EPOCH_SIZE as u64;
+                let start_epoch = start_block / EPOCH_SIZE;
+                let end_epoch = end_block / EPOCH_SIZE;
                 if start_epoch != end_epoch {
                     return Err(
                         "Invalid 4444s bridge mode arg: start_block and end_block are not in the same epoch"

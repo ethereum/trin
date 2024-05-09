@@ -54,7 +54,7 @@ impl HeaderValidator {
                     hwp.header.hash(),
                     &proof.proof,
                     15,
-                    gen_index,
+                    gen_index as usize,
                     epoch_hash,
                 ) {
                     true => Ok(()),
@@ -115,9 +115,9 @@ impl HeaderValidator {
             proof.beacon_block_header_root,
         )?;
 
-        let block_root_index = proof.slot % 8192;
-        let gen_index = 2 * 8192 + block_root_index;
-        let historical_root_index = proof.slot / 8192;
+        let block_root_index = proof.slot % EPOCH_SIZE;
+        let gen_index = 2 * EPOCH_SIZE + block_root_index;
+        let historical_root_index = proof.slot / EPOCH_SIZE;
         let historical_root =
             self.historical_roots_acc.historical_roots[historical_root_index as usize];
 
@@ -163,9 +163,10 @@ impl HeaderValidator {
             proof.beacon_block_header_root,
         )?;
 
-        let block_root_index = proof.slot % 8192;
-        let gen_index = 8192 + block_root_index;
-        let historical_summary_index = (proof.slot - CAPELLA_FORK_EPOCH * SLOTS_PER_EPOCH) / 8192;
+        let block_root_index = proof.slot % EPOCH_SIZE;
+        let gen_index = EPOCH_SIZE + block_root_index;
+        let historical_summary_index =
+            (proof.slot - CAPELLA_FORK_EPOCH * SLOTS_PER_EPOCH) / EPOCH_SIZE;
         let historical_summary =
             historical_summaries[historical_summary_index as usize].block_summary_root;
 
@@ -219,10 +220,10 @@ impl HeaderValidator {
     }
 }
 
-fn calculate_generalized_index(header: &Header) -> usize {
+fn calculate_generalized_index(header: &Header) -> u64 {
     // Calculate generalized index for header
     // https://github.com/ethereum/consensus-specs/blob/v0.11.1/ssz/merkle-proofs.md#generalized-merkle-tree-index
-    let hr_index = header.number as usize % EPOCH_SIZE;
+    let hr_index = header.number % EPOCH_SIZE;
     (EPOCH_SIZE * 2 * 2) + (hr_index * 2)
 }
 

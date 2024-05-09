@@ -11,10 +11,10 @@ use tokio::{
 };
 use tracing::{debug, error, info, warn};
 use trin_metrics::bridge::BridgeMetricsReporter;
-use trin_validation::oracle::HeaderOracle;
+use trin_validation::{constants::EPOCH_SIZE, oracle::HeaderOracle};
 
 use crate::{
-    bridge::history::{EPOCH_SIZE, SERVE_BLOCK_TIMEOUT},
+    bridge::history::SERVE_BLOCK_TIMEOUT,
     gossip::gossip_state_content,
     types::{
         era1::Era1,

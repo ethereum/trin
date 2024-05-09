@@ -5,7 +5,6 @@ use anyhow::{anyhow, ensure};
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 
-use crate::bridge::history::EPOCH_SIZE;
 use ethportal_api::types::{
     consensus::withdrawal::Withdrawal,
     execution::{
@@ -14,7 +13,7 @@ use ethportal_api::types::{
         transaction::Transaction,
     },
 };
-use trin_validation::constants::MERGE_BLOCK_NUMBER;
+use trin_validation::constants::{EPOCH_SIZE, MERGE_BLOCK_NUMBER};
 
 /// Helper type to deserialize a response from a batched Header request.
 #[derive(Debug, Clone, PartialEq, Eq)]
