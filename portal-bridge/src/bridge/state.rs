@@ -3,6 +3,7 @@ use std::{path::PathBuf, sync::Arc};
 use super::era1::get_shuffled_era1_files;
 use anyhow::anyhow;
 use ethportal_api::{jsonrpsee::http_client::HttpClient, StateContentKey, StateContentValue};
+use revm_primitives::SpecId;
 use surf::{Client, Config};
 use tokio::{
     sync::{OwnedSemaphorePermit, Semaphore},
@@ -22,7 +23,7 @@ use crate::{
         state::{
             content::{create_content_key, create_content_value},
             execution::State,
-            spec_id::DAO_FORK_BLOCK_NUMBER,
+            spec_id::get_spec_block_number,
         },
     },
 };
@@ -68,8 +69,11 @@ impl StateBridge {
         info!("Launching state bridge: {:?}", self.mode);
         match self.mode.clone() {
             BridgeMode::Single(ModeType::Block(last_block)) => {
-                if last_block > DAO_FORK_BLOCK_NUMBER {
-                    panic!("State bridge only supports blocks up to {DAO_FORK_BLOCK_NUMBER} for the time being.");
+                if last_block > get_spec_block_number(SpecId::DAO_FORK) {
+                    panic!(
+                        "State bridge only supports blocks up to {} for the time being.",
+                        get_spec_block_number(SpecId::DAO_FORK)
+                    );
                 }
                 self.launch_state(last_block)
                     .await
@@ -187,55 +191,5 @@ impl StateBridge {
         }
         metrics.stop_process_timer(timer);
         Ok(())
-    }
-}
-
-#[cfg(test)]
-#[cfg(all(test, feature = "comment this line out if you want to run this test"))]
-mod tests {
-    use surf::{Client, Config};
-    use tracing_test::traced_test;
-
-    use crate::{
-        bridge::era1::get_shuffled_era1_files,
-        types::{era1::Era1, state::execution::State},
-    };
-
-    #[tokio::test]
-    #[traced_test]
-    async fn test_we_can_generate_state_up_to_x() {
-        // set last epoch to test for
-        let last_epoch = 1896;
-
-        let http_client: Client = Config::new()
-            .add_header("Content-Type", "application/xml")
-            .expect("to be able to add header")
-            .try_into()
-            .unwrap();
-        let era1_files = get_shuffled_era1_files(&http_client).await.unwrap();
-        let mut state = State::new().unwrap();
-        for epoch_index in 0..=last_epoch {
-            println!("Gossipping state for epoch: {epoch_index}");
-            let era1_path = era1_files
-                .iter()
-                .find(|file| file.contains(&format!("mainnet-{epoch_index:05}-")))
-                .expect("to be able to find era1 file");
-            let raw_era1 = http_client
-                .get(era1_path.clone())
-                .recv_bytes()
-                .await
-                .unwrap_or_else(|_| panic!("unable to read era1 file at path: {era1_path:?}"));
-
-            for block_tuple in Era1::iter_tuples(raw_era1) {
-                if block_tuple.header.header.number == 0 {
-                    continue;
-                }
-                state.process_block(&block_tuple).unwrap();
-                assert_eq!(
-                    state.get_root().unwrap(),
-                    block_tuple.header.header.state_root
-                );
-            }
-        }
     }
 }

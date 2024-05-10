@@ -16,6 +16,7 @@ use revm_primitives::{hash_map::Entry, keccak256, Account, AccountInfo, Bytecode
 /// [DbAccount], whereas contracts are identified by their code hash, and are stored in the
 /// `contracts` map. The [DbAccount] holds the code hash of the contract, which is used to look up
 /// the contract in the `contracts` map.
+/// Originally based off https://bluealloy.github.io/revm/docs/revm/db/in_memory_db/struct.CacheDB.html
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CacheDB<ExtDB> {
@@ -32,7 +33,7 @@ pub struct CacheDB<ExtDB> {
     ///
     /// Note: this is read-only, data is never written to this database.
     pub db: ExtDB,
-    /// To get proofs
+    /// To get proofs and to verify trie state.
     pub trie: Arc<Mutex<EthTrie<MemoryDB>>>,
 }
 

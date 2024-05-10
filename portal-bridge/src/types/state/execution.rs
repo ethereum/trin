@@ -23,9 +23,8 @@ use crate::types::{
     state::{
         block_reward::get_block_reward,
         database::{CacheDB, DbAccount},
-        spec_id::{get_spec_id, SPURIOUS_DRAGON_BLOCK_NUMBER},
+        spec_id::get_spec_id,
         transaction::TxEnvModifier,
-        utils::u256_to_lower_u64,
     },
 };
 
@@ -110,20 +109,18 @@ impl State {
         env.block.number = U256::from(block_tuple.header.header.number);
         env.block.coinbase = block_tuple.header.header.author;
         env.block.timestamp = U256::from(block_tuple.header.header.timestamp);
-        if get_spec_id(block_tuple.header.header.number) >= SpecId::MERGE {
+        if get_spec_id(block_tuple.header.header.number).is_enabled_in(SpecId::MERGE) {
             env.block.difficulty = U256::ZERO;
             env.block.prevrandao = block_tuple.header.header.mix_hash;
         } else {
             env.block.difficulty = block_tuple.header.header.difficulty;
             env.block.prevrandao = None;
         }
-        env.block.basefee = U256::from(
-            block_tuple
-                .header
-                .header
-                .base_fee_per_gas
-                .unwrap_or_default(),
-        );
+        env.block.basefee = block_tuple
+            .header
+            .header
+            .base_fee_per_gas
+            .unwrap_or_default();
         env.block.gas_limit = block_tuple.header.header.gas_limit;
 
         // EIP-4844 excess blob gas of this block, introduced in Cancun
@@ -144,8 +141,8 @@ impl State {
             .body
             .transactions()
             .map_err(|err| Error::msg(format!("Error getting transactions: {err:?}")))?;
-        for tranasction in transactions {
-            updated_accounts.extend(self.execute_transaction(tranasction, &env)?);
+        for transaction in transactions {
+            updated_accounts.extend(self.execute_transaction(transaction, &env)?);
         }
 
         // update beneficiary
@@ -187,7 +184,7 @@ impl State {
         tx: Transaction,
         evm_evnironment: &Env,
     ) -> anyhow::Result<BTreeSet<Address>> {
-        let block_number = u256_to_lower_u64(evm_evnironment.block.number);
+        let block_number = evm_evnironment.block.number.to::<u64>();
         let ResultAndState { state: changes, .. } = {
             let mut evm = Evm::builder()
                 .with_ref_db(&self.database)
@@ -196,7 +193,7 @@ impl State {
                 .modify_tx_env(|tx_env| {
                     tx_env.caller = tx
                         .get_transaction_sender_address(
-                            block_number >= SPURIOUS_DRAGON_BLOCK_NUMBER,
+                            get_spec_id(block_number).is_enabled_in(SpecId::SPURIOUS_DRAGON),
                         )
                         .expect(
                             "We should always be able to get the sender address of a transaction",
