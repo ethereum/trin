@@ -3,6 +3,7 @@ use std::{path::PathBuf, sync::Arc};
 use super::era1::get_shuffled_era1_files;
 use anyhow::anyhow;
 use ethportal_api::{jsonrpsee::http_client::HttpClient, StateContentKey, StateContentValue};
+use revm_primitives::SpecId;
 use surf::{Client, Config};
 use tokio::{
     sync::{OwnedSemaphorePermit, Semaphore},
@@ -22,6 +23,7 @@ use crate::{
         state::{
             content::{create_content_key, create_content_value},
             execution::State,
+            spec_id::get_spec_block_number,
         },
     },
 };
@@ -67,8 +69,11 @@ impl StateBridge {
         info!("Launching state bridge: {:?}", self.mode);
         match self.mode.clone() {
             BridgeMode::Single(ModeType::Block(last_block)) => {
-                if last_block > 46146 {
-                    panic!("State bridge only supports blocks up to 46146 for the time being.");
+                if last_block > get_spec_block_number(SpecId::DAO_FORK) {
+                    panic!(
+                        "State bridge only supports blocks up to {} for the time being.",
+                        get_spec_block_number(SpecId::DAO_FORK)
+                    );
                 }
                 self.launch_state(last_block)
                     .await
@@ -110,7 +115,7 @@ impl StateBridge {
             // process block
             let block_tuple = Era1::get_tuple_by_index(&current_raw_era1, block_index % EPOCH_SIZE);
             let updated_accounts = match block_index == 0 {
-                true => state.accounts.clone(),
+                true => state.database.accounts.keys().copied().collect(),
                 false => state.process_block(&block_tuple)?,
             };
 

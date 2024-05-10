@@ -38,6 +38,7 @@ rand = "0.8.5"
 reth-rpc-types = { rev = "8d1d13ef89cf19459adc37ba0c45e7aac6270dc1", git = "https://github.com/paradigmxyz/reth.git"}
 rlp = "0.5.0"
 rs_merkle = "1.4.2"
+secp256k1 = { version = "0.29.0", features = ["global-context", "recovery", "rand"] }
 serde = { version = "1.0.150", features = ["derive", "rc"] }
 serde_json = "1.0.89"
 serde-this-or-that = "0.4.2"
