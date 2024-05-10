@@ -68,6 +68,22 @@ mod tests {
     }
 
     #[test]
+    fn test_get_spec_id_block_1() {
+        assert_eq!(get_spec_id(1), SpecId::FRONTIER);
+    }
+
+    #[test]
+    fn test_get_spec_id_between_forks() {
+        assert_eq!(get_spec_id(2563000), SpecId::TANGERINE);
+        assert_eq!(get_spec_id(12644000), SpecId::BERLIN);
+    }
+
+    #[test]
+    fn test_get_spec_id_after_cancun() {
+        assert_eq!(get_spec_id(20000000), SpecId::CANCUN);
+    }
+
+    #[test]
     fn test_get_spec_block_number() {
         assert_eq!(get_spec_block_number(SpecId::FRONTIER), 0);
         assert_eq!(get_spec_block_number(SpecId::FRONTIER_THAWING), 200000);
