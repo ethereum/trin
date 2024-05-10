@@ -1,4 +1,4 @@
-use std::{env, net::SocketAddr, path::PathBuf, str::FromStr};
+use std::{env, net::SocketAddr, path::PathBuf, str::FromStr, sync::Arc};
 
 use alloy_primitives::B256;
 use anyhow::anyhow;
@@ -21,8 +21,12 @@ use crate::{
     DEFAULT_BASE_CL_ENDPOINT, DEFAULT_BASE_EL_ENDPOINT, FALLBACK_BASE_CL_ENDPOINT,
     FALLBACK_BASE_EL_ENDPOINT,
 };
-use ethportal_api::types::cli::{
-    check_private_key_length, DEFAULT_DISCOVERY_PORT, DEFAULT_WEB3_HTTP_PORT,
+use ethportal_api::types::{
+    cli::{
+        check_private_key_length, network_parser, DEFAULT_DISCOVERY_PORT, DEFAULT_NETWORK,
+        DEFAULT_WEB3_HTTP_PORT,
+    },
+    portal_wire::NetworkSpec,
 };
 
 const DEFAULT_SUBNETWORK: &str = "history";
@@ -50,12 +54,20 @@ pub struct BridgeConfig {
     pub epoch_acc_path: PathBuf,
 
     #[arg(
-        long = "network",
+        long = "portal-subnetworks",
         help = "Comma-separated list of which portal subnetworks to activate",
         default_value = DEFAULT_SUBNETWORK,
         use_value_delimiter = true
     )]
-    pub network: Vec<NetworkKind>,
+    pub portal_subnetworks: Vec<NetworkKind>,
+
+    #[arg(
+            long = "network",
+                help = "Choose mainnet or testnet",
+                default_value = DEFAULT_NETWORK,
+                value_parser = network_parser
+            )]
+    pub network: Arc<NetworkSpec>,
 
     #[arg(
         long,
@@ -276,7 +288,7 @@ mod test {
             EXECUTABLE_PATH,
             "--epoch-accumulator-path",
             EPOCH_ACC_PATH,
-            "--network",
+            "--portal-subnetworks",
             "history,beacon",
             "trin",
         ]);
@@ -303,7 +315,7 @@ mod test {
             FALLBACK_BASE_CL_ENDPOINT
         );
         assert_eq!(
-            bridge_config.network,
+            bridge_config.portal_subnetworks,
             vec![NetworkKind::History, NetworkKind::Beacon]
         );
     }
@@ -332,7 +344,7 @@ mod test {
             BridgeMode::Backfill(ModeType::Epoch(100))
         );
         assert_eq!(bridge_config.epoch_acc_path, PathBuf::from(EPOCH_ACC_PATH));
-        assert_eq!(bridge_config.network, vec![NetworkKind::History]);
+        assert_eq!(bridge_config.portal_subnetworks, vec![NetworkKind::History]);
     }
 
     #[test]
@@ -340,7 +352,8 @@ mod test {
         expected = "Invalid network arg. Expected either 'beacon', 'history' or 'state'"
     )]
     fn test_invalid_network_arg() {
-        BridgeConfig::try_parse_from(["bridge", "--network", "das", "trin"].iter()).unwrap();
+        BridgeConfig::try_parse_from(["bridge", "--portal-subnetworks", "das", "trin"].iter())
+            .unwrap();
     }
 
     #[test]
