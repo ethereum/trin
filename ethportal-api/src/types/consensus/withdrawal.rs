@@ -14,6 +14,17 @@ pub struct Withdrawal {
     pub amount: u64,
 }
 
+impl From<Withdrawal> for reth_rpc_types::Withdrawal {
+    fn from(val: Withdrawal) -> reth_rpc_types::Withdrawal {
+        reth_rpc_types::Withdrawal {
+            index: val.index,
+            validator_index: val.validator_index,
+            address: val.address,
+            amount: val.amount,
+        }
+    }
+}
+
 fn string_to_u64<'de, D>(deserializer: D) -> Result<u64, D::Error>
 where
     D: Deserializer<'de>,
