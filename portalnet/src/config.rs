@@ -4,7 +4,6 @@ use alloy_primitives::B256;
 use ethportal_api::types::{
     bootnodes::Bootnodes,
     cli::{TrinConfig, DEFAULT_UTP_TRANSFER_LIMIT},
-    distance::Distance,
 };
 
 /// Capacity of the cache for observed `NodeAddress` values.
@@ -18,7 +17,6 @@ pub struct PortalnetConfig {
     pub private_key: B256,
     pub listen_port: u16,
     pub bootnodes: Bootnodes,
-    pub data_radius: Distance,
     pub internal_ip: bool,
     pub no_stun: bool,
     pub no_upnp: bool,
@@ -36,7 +34,6 @@ impl Default for PortalnetConfig {
             private_key: B256::random(),
             listen_port: 4242,
             bootnodes: Bootnodes::default(),
-            data_radius: Distance::MAX,
             internal_ip: false,
             no_stun: false,
             no_upnp: false,
