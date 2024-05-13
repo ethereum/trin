@@ -6,6 +6,7 @@ impl From<ProtocolLabel> for MetricLabel {
     fn from(label: ProtocolLabel) -> Self {
         match label {
             ProtocolLabel::State => "state",
+            ProtocolLabel::VerkleState => "verkle_state",
             ProtocolLabel::History => "history",
             ProtocolLabel::TransactionGossip => "transaction_gossip",
             ProtocolLabel::CanonicalIndices => "canonical_indices",
@@ -88,6 +89,7 @@ impl From<&Response> for MessageLabel {
 #[derive(Debug, Clone, Copy)]
 pub enum ProtocolLabel {
     State,
+    VerkleState,
     History,
     TransactionGossip,
     CanonicalIndices,
@@ -120,6 +122,7 @@ impl From<&ProtocolId> for ProtocolLabel {
     fn from(protocol: &ProtocolId) -> Self {
         match protocol {
             ProtocolId::State => Self::State,
+            ProtocolId::VerkleState => Self::VerkleState,
             ProtocolId::History => Self::History,
             ProtocolId::TransactionGossip => Self::TransactionGossip,
             ProtocolId::CanonicalIndices => Self::CanonicalIndices,
