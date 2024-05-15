@@ -22,6 +22,7 @@ pub struct BeaconSlotStats {
     pub update: Option<ContentStats>,
     pub finality_update: Option<ContentStats>,
     pub optimistic_update: Option<ContentStats>,
+    pub historical_summaries_with_proof: Option<ContentStats>,
 }
 
 impl StatsReporter<BeaconContentKey> for BeaconSlotStats {
@@ -65,6 +66,9 @@ impl StatsReporter<BeaconContentKey> for BeaconSlotStats {
             }
             BeaconContentKey::LightClientOptimisticUpdate(_) => {
                 self.optimistic_update = Some(results);
+            }
+            BeaconContentKey::HistoricalSummariesWithProof(_) => {
+                self.historical_summaries_with_proof = Some(results);
             }
         }
     }
