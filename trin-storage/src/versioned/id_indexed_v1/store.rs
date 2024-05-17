@@ -436,6 +436,12 @@ impl IdIndexedV1Store {
             return Ok(());
         }
 
+        if self.config.storage_capacity_bytes == 0 {
+            warn!(Db = %self.config.content_type,
+                "Pruning requested but storage capacity is 0. Skipping");
+            return Ok(());
+        }
+
         let timer = self.metrics.start_process_timer("prune");
         debug!(Db = %self.config.content_type,
             "Pruning start: count={} capacity={}",
