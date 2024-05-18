@@ -1,5 +1,4 @@
 mod id_indexed_v1;
-mod legacy_history;
 pub mod sql;
 pub mod store;
 mod usage_stats;
@@ -9,7 +8,6 @@ use rusqlite::types::{FromSql, FromSqlError, ValueRef};
 use strum::{AsRefStr, Display, EnumString};
 
 pub use id_indexed_v1::{IdIndexedV1Store, IdIndexedV1StoreConfig};
-pub use legacy_history::LegacyHistoryStore;
 pub use store::VersionedContentStore;
 pub use utils::create_store;
 

@@ -220,8 +220,6 @@ pub struct DataSize {
     pub num_bytes: f64,
 }
 
-pub struct EntryCount(pub u64);
-
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 pub mod test {

@@ -114,10 +114,7 @@ mod tests {
         #[case] expected: bool,
     ) {
         let config = create_config();
-        let usage_stats = UsageStats {
-            entry_count,
-            total_entry_size_bytes,
-        };
+        let usage_stats = UsageStats::new(entry_count, total_entry_size_bytes);
 
         assert_eq!(
             usage_stats.is_above(config.target_capacity_bytes()),
@@ -128,10 +125,7 @@ mod tests {
     #[test]
     fn estimate_capacity_count_no_usage() {
         let config = create_config();
-        let usage_stats = UsageStats {
-            entry_count: 0,
-            total_entry_size_bytes: 0,
-        };
+        let usage_stats = UsageStats::default();
         assert_eq!(
             config.estimated_target_capacity_count(&usage_stats),
             None,
@@ -159,10 +153,7 @@ mod tests {
         #[case] estimated_target_capacity_count: u64,
     ) {
         let config = create_config();
-        let usage_stats = UsageStats {
-            entry_count,
-            total_entry_size_bytes,
-        };
+        let usage_stats = UsageStats::new(entry_count, total_entry_size_bytes);
         assert_eq!(
             config.estimated_target_capacity_count(&usage_stats),
             Some(estimated_target_capacity_count),
@@ -190,10 +181,7 @@ mod tests {
         #[case] expected_to_delete_until_target: u64,
     ) {
         let config = create_config();
-        let usage_stats = UsageStats {
-            entry_count,
-            total_entry_size_bytes,
-        };
+        let usage_stats = UsageStats::new(entry_count, total_entry_size_bytes);
 
         assert_eq!(
             config.estimate_to_delete_until_target(&usage_stats),
