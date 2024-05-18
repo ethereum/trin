@@ -55,4 +55,4 @@ pub const LC_UPDATE_PERIOD_LOOKUP_QUERY: &str =
 pub const LC_UPDATE_TOTAL_SIZE_QUERY: &str = "SELECT TOTAL(update_size) FROM lc_update";
 
 // todo: remove this in the future
-pub const DROP_CONTENT_DATA_QUERY_DB: &str = "DROP TABLE IF EXISTS content_data;";
+pub const DROP_USAGE_STATS_DB: &str = "DROP TABLE IF EXISTS usage_stats;";

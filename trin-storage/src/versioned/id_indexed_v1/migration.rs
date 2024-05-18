@@ -55,15 +55,69 @@ mod tests {
 
     use crate::{
         test_utils::{create_test_portal_storage_config_with_capacity, generate_random_bytes},
-        versioned::{
-            create_store, usage_stats::UsageStats, IdIndexedV1Store, LegacyHistoryStore,
-            VersionedContentStore,
-        },
+        versioned::{usage_stats::UsageStats, IdIndexedV1Store, VersionedContentStore},
     };
 
     use super::*;
 
     const STORAGE_CAPACITY_MB: u64 = 10;
+
+    mod legacy_history {
+        // Minimal code needed to test migration (since original code is deleted)
+
+        use rusqlite::params;
+
+        use super::*;
+        use crate::PortalStorageConfig;
+
+        const CREATE_QUERY_DB_HISTORY: &str = "CREATE TABLE IF NOT EXISTS history (
+            content_id blob PRIMARY KEY,
+            content_key blob NOT NULL,
+            content_value blob NOT NULL,
+            distance_short INTEGER NOT NULL,
+            content_size INTEGER NOT NULL
+        );
+            CREATE INDEX IF NOT EXISTS history_distance_short_idx ON history(content_size);
+            CREATE INDEX IF NOT EXISTS history_content_size_idx ON history(distance_short);
+        ";
+
+        const INSERT_QUERY_HISTORY: &str =
+            "INSERT OR IGNORE INTO history (content_id, content_key, content_value, distance_short, content_size)
+                                    VALUES (?1, ?2, ?3, ?4, ?5)";
+
+        pub fn create_store(config: &PortalStorageConfig) -> Result<()> {
+            config
+                .sql_connection_pool
+                .get()?
+                .execute_batch(CREATE_QUERY_DB_HISTORY)?;
+            Ok(())
+        }
+
+        pub fn store(
+            config: &PortalStorageConfig,
+            key: &impl OverlayContentKey,
+            value: &Vec<u8>,
+        ) -> Result<()> {
+            let content_id = key.content_id();
+            let key = key.to_bytes();
+            let distance_u32 = config
+                .distance_fn
+                .distance(&config.node_id, &content_id)
+                .big_endian_u32();
+            let content_size = content_id.len() + key.len() + value.len();
+            config.sql_connection_pool.get()?.execute(
+                INSERT_QUERY_HISTORY,
+                params![
+                    content_id.as_slice(),
+                    key,
+                    value,
+                    distance_u32,
+                    content_size
+                ],
+            )?;
+            Ok(())
+        }
+    }
 
     fn generate_key_value_with_content_size() -> (IdentityContentKey, Vec<u8>) {
         let key = IdentityContentKey::random();
@@ -77,8 +131,7 @@ mod tests {
             create_test_portal_storage_config_with_capacity(STORAGE_CAPACITY_MB)?;
 
         // initialize legacy store
-        let legacy_history_store = LegacyHistoryStore::new(config.clone())?;
-        drop(legacy_history_store);
+        legacy_history::create_store(&config)?;
 
         // migrate
         let config = IdIndexedV1StoreConfig::new(ContentType::History, ProtocolId::History, config);
@@ -86,13 +139,7 @@ mod tests {
 
         // make sure we can initialize new store and that it's empty
         let store = IdIndexedV1Store::create(ContentType::History, config.clone())?;
-        assert_eq!(
-            store.usage_stats(),
-            UsageStats {
-                entry_count: 0,
-                total_entry_size_bytes: 0
-            }
-        );
+        assert_eq!(store.usage_stats(), UsageStats::default(),);
 
         Ok(())
     }
@@ -105,13 +152,12 @@ mod tests {
         let mut key_value_map = HashMap::new();
 
         // initialize legacy store
-        let mut legacy_history_store = LegacyHistoryStore::new(config.clone())?;
+        legacy_history::create_store(&config)?;
         for _ in 0..10 {
             let (key, value) = generate_key_value_with_content_size();
-            legacy_history_store.store(&key, &value)?;
+            legacy_history::store(&config, &key, &value)?;
             key_value_map.insert(key, value);
         }
-        drop(legacy_history_store);
 
         // migrate
         let config = IdIndexedV1StoreConfig::new(ContentType::History, ProtocolId::History, config);
@@ -119,43 +165,6 @@ mod tests {
 
         // create IdIndexedV1Store and verify content
         let store = IdIndexedV1Store::create(ContentType::History, config)?;
-        for (key, value) in key_value_map.into_iter() {
-            assert_eq!(
-                store.lookup_content_value(&key.content_id().into())?,
-                Some(value),
-            );
-        }
-
-        Ok(())
-    }
-
-    #[test]
-    fn legacy_history_using_create_store() -> Result<()> {
-        let (_temp_dir, config) =
-            create_test_portal_storage_config_with_capacity(STORAGE_CAPACITY_MB)?;
-
-        let mut key_value_map = HashMap::new();
-
-        // initialize legacy store
-        let mut legacy_history_store: LegacyHistoryStore = create_store(
-            ContentType::History,
-            config.clone(),
-            config.sql_connection_pool.clone(),
-        )?;
-        for _ in 0..10 {
-            let (key, value) = generate_key_value_with_content_size();
-            legacy_history_store.store(&key, &value)?;
-            key_value_map.insert(key, value);
-        }
-        drop(legacy_history_store);
-
-        // create IdIndexedV1Store and verify content
-        let config = IdIndexedV1StoreConfig::new(ContentType::History, ProtocolId::History, config);
-        let store: IdIndexedV1Store = create_store(
-            ContentType::History,
-            config.clone(),
-            config.sql_connection_pool.clone(),
-        )?;
         for (key, value) in key_value_map.into_iter() {
             assert_eq!(
                 store.lookup_content_value(&key.content_id().into())?,

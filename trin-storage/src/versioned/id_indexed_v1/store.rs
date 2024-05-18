@@ -9,10 +9,7 @@ use super::{migration::migrate_legacy_history_store, sql, IdIndexedV1StoreConfig
 use crate::{
     error::ContentStoreError,
     utils::get_total_size_of_directory_in_bytes,
-    versioned::{
-        sql::delete_usage_stats_triggers, usage_stats::UsageStats, ContentType, StoreVersion,
-        VersionedContentStore,
-    },
+    versioned::{usage_stats::UsageStats, ContentType, StoreVersion, VersionedContentStore},
     ContentId,
 };
 
@@ -85,7 +82,7 @@ impl VersionedContentStore for IdIndexedV1Store {
         let mut store = Self {
             config,
             radius: Distance::MAX,
-            usage_stats: UsageStats::new(),
+            usage_stats: UsageStats::default(),
             metrics: StorageMetricsReporter::new(protocol_id),
         };
         store.init()?;
@@ -372,11 +369,9 @@ impl IdIndexedV1Store {
             &sql::entry_count_and_size(&self.config.content_type),
             [],
             |row| {
+                let entry_count = row.get("count")?;
                 let used_capacity: f64 = row.get("used_capacity")?;
-                Ok(UsageStats {
-                    entry_count: row.get("count")?,
-                    total_entry_size_bytes: used_capacity.round() as u64,
-                })
+                Ok(UsageStats::new(entry_count, used_capacity.round() as u64))
             },
         )?;
         self.usage_stats.report_metrics(&self.metrics);
@@ -504,10 +499,6 @@ fn maybe_create_table_and_indexes(
 ) -> Result<(), ContentStoreError> {
     let conn = pool.get()?;
     conn.execute_batch(&sql::create_table(content_type))?;
-    conn.execute_batch(&delete_usage_stats_triggers(
-        content_type,
-        &sql::table_name(content_type),
-    ))?;
     Ok(())
 }
 
