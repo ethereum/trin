@@ -1,5 +1,6 @@
 mod config;
 mod migration;
+mod pruning_strategy;
 pub(super) mod sql;
 mod store;
 
