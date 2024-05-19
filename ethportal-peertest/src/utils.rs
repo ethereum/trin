@@ -1,5 +1,6 @@
 use std::fs;
 
+use alloy_primitives::B256;
 use futures::{Future, TryFutureExt};
 use tracing::error;
 
@@ -128,8 +129,10 @@ pub struct StateContentData {
     pub lookup_value: StateContentValue,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct StateFixture {
+    pub state_root: B256,
+    #[serde(flatten)]
     pub content_data: StateContentData,
     pub recursive_gossip: Option<StateContentData>,
 }
@@ -138,20 +141,7 @@ fn read_state_fixture_from_file(file_name: &str) -> Result<Vec<StateFixture>> {
     let yaml_content = fs::read_to_string(file_name)?;
     let value: Value = serde_yaml::from_str(&yaml_content)?;
 
-    let mut result = vec![];
-
-    for fixture in value.as_sequence().unwrap() {
-        result.push(StateFixture {
-            content_data: StateContentData::deserialize(fixture)?,
-            recursive_gossip: fixture.get("recursive_gossip").and_then(|value| {
-                if value.is_null() {
-                    None
-                } else {
-                    Some(StateContentData::deserialize(value).unwrap())
-                }
-            }),
-        });
-    }
+    let result = <Vec<StateFixture>>::deserialize(value)?;
     Ok(result)
 }
 
@@ -175,6 +165,7 @@ pub fn fixtures_state_contract_bytecode() -> Vec<StateFixture> {
 }
 
 pub struct StateRecursiveGossipFixture {
+    pub state_root: B256,
     pub key_value_pairs: Vec<(StateContentKey, StateContentValue)>,
 }
 
@@ -188,19 +179,17 @@ pub fn fixtures_state_recursive_gossip() -> Result<Vec<StateRecursiveGossipFixtu
 
     for fixture in value.as_sequence().unwrap() {
         result.push(StateRecursiveGossipFixture {
-            key_value_pairs: fixture
+            state_root: B256::deserialize(&fixture["state_root"])?,
+            key_value_pairs: fixture["recursive_gossip"]
                 .as_sequence()
                 .unwrap()
                 .iter()
                 .map(|key_value_container| {
-                    let key = StateContentKey::deserialize(
-                        key_value_container.get("content_key").unwrap(),
-                    )
-                    .unwrap();
-                    let value = StateContentValue::deserialize(
-                        key_value_container.get("content_value").unwrap(),
-                    )
-                    .unwrap();
+                    let key =
+                        StateContentKey::deserialize(&key_value_container["content_key"]).unwrap();
+                    let value =
+                        StateContentValue::deserialize(&key_value_container["content_value"])
+                            .unwrap();
                     (key, value)
                 })
                 .collect(),

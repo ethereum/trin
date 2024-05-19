@@ -424,7 +424,9 @@ mod tests {
 
         let test_cases = read_yaml_file_as_sequence("recursive_gossip.yaml");
         for test_case in test_cases {
-            let test_case_items = test_case.as_sequence().expect("test_case as sequence");
+            let test_case_items = test_case["recursive_gossip"]
+                .as_sequence()
+                .expect("test_case as sequence");
             for i in 0..test_case_items.len() {
                 let case_item = test_case_items[i]
                     .as_mapping()
