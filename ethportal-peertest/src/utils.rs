@@ -141,7 +141,7 @@ fn read_state_fixture_from_file(file_name: &str) -> Result<Vec<StateFixture>> {
     let yaml_content = fs::read_to_string(file_name)?;
     let value: Value = serde_yaml::from_str(&yaml_content)?;
 
-    let result = <Vec<StateFixture>>::deserialize(value)?;
+    let result = Vec::<StateFixture>::deserialize(value)?;
     Ok(result)
 }
 
