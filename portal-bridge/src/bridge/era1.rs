@@ -120,6 +120,10 @@ impl Era1Bridge {
         let era1_files = self.era1_files.clone().into_iter();
         for era1_path in era1_files {
             let epoch = get_epoch_from_era1_path(&era1_path)?;
+            if epoch < 512 {
+                info!("Skipping epoch {epoch} since it's from before block #4,200,000 and this range is already very well saturated.");
+                continue;
+            }
             info!("Hunting for missing content inside epoch: {epoch}");
             let block_range = (epoch * EPOCH_SIZE)..((epoch + 1) * EPOCH_SIZE);
             let blocks_to_sample = block_range.clone().collect::<Vec<u64>>();
