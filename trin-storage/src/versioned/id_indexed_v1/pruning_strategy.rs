@@ -13,6 +13,10 @@ pub struct PruningConfig {
     pub target_capacity_fraction: f64,
     /// The fraction by which we increase/decrease the `max_pruning_count` when pruning duration is
     /// outside `optimal_pruning_duration_range`.
+    ///
+    /// For example, let's assume that value is `0.1`. If pruning is too slow, the
+    /// `max_pruning_count` will decrease by 10%, while if pruning is too fast, the
+    /// `max_pruning_count` will increase by 10%. Note that increase and decrease don't cancel out.
     pub max_pruning_count_change_fraction: f64,
     /// The range of pruning durations that we consider optimal.
     pub optimal_pruning_duration_range: Range<Duration>,
@@ -32,7 +36,7 @@ impl PruningConfig {
         max_pruning_count_change_fraction: f64,
         optimal_pruning_duration_range: Range<Duration>,
     ) -> Self {
-        if !(0.0..1.0).contains(&target_capacity_fraction) {
+        if !(0.0..=1.0).contains(&target_capacity_fraction) {
             panic!(
                 "Invalid pruning strategy parameters: target_capacity_fraction={}",
                 target_capacity_fraction
