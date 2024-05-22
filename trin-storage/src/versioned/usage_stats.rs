@@ -17,7 +17,7 @@ impl UsageStats {
         }
     }
 
-    /// Returns the average entry size
+    /// Returns the average entry size, or `None` when empty.
     pub fn average_entry_size_bytes(&self) -> Option<f64> {
         if self.entry_count == 0 {
             Option::None
