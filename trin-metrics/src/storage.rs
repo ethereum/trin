@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use ethportal_api::types::{distance::Distance, portal_wire::ProtocolId};
 use prometheus_exporter::{
     self,
@@ -104,8 +106,8 @@ impl StorageMetricsReporter {
         )
     }
 
-    pub fn stop_process_timer(&self, timer: DiscardOnDropHistogramTimer) {
-        timer.observe_duration()
+    pub fn stop_process_timer(&self, timer: DiscardOnDropHistogramTimer) -> Duration {
+        Duration::from_secs_f64(timer.stop_and_record())
     }
 
     pub fn report_content_data_storage_bytes(&self, bytes: f64) {
