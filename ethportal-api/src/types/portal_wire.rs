@@ -169,6 +169,7 @@ pub enum ProtocolIdError {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum ProtocolId {
     State,
+    VerkleState,
     History,
     TransactionGossip,
     CanonicalIndices,
@@ -209,9 +210,10 @@ pub static MAINNET: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
     let mut portal_networks = BiHashMap::new();
     portal_networks.insert(ProtocolId::State, "0x500A".to_string());
     portal_networks.insert(ProtocolId::History, "0x500B".to_string());
-    portal_networks.insert(ProtocolId::TransactionGossip, "0x500C".to_string());
+    portal_networks.insert(ProtocolId::Beacon, "0x500C".to_string());
     portal_networks.insert(ProtocolId::CanonicalIndices, "0x500D".to_string());
-    portal_networks.insert(ProtocolId::Beacon, "0x501A".to_string());
+    portal_networks.insert(ProtocolId::VerkleState, "0x500E".to_string());
+    portal_networks.insert(ProtocolId::TransactionGossip, "0x500F".to_string());
     portal_networks.insert(ProtocolId::Utp, "0x757470".to_string());
     NetworkSpec {
         portal_networks,
@@ -222,11 +224,12 @@ pub static MAINNET: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
 
 pub static TESTNET: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
     let mut portal_networks = BiHashMap::new();
-    portal_networks.insert(ProtocolId::State, "0x501A".to_string());
-    portal_networks.insert(ProtocolId::History, "0x501B".to_string());
-    portal_networks.insert(ProtocolId::TransactionGossip, "0x501C".to_string());
-    portal_networks.insert(ProtocolId::CanonicalIndices, "0x501D".to_string());
-    portal_networks.insert(ProtocolId::Beacon, "0x502A".to_string());
+    portal_networks.insert(ProtocolId::State, "0x504A".to_string());
+    portal_networks.insert(ProtocolId::History, "0x504B".to_string());
+    portal_networks.insert(ProtocolId::Beacon, "0x504C".to_string());
+    portal_networks.insert(ProtocolId::CanonicalIndices, "0x504D".to_string());
+    portal_networks.insert(ProtocolId::VerkleState, "0x504E".to_string());
+    portal_networks.insert(ProtocolId::TransactionGossip, "0x504F".to_string());
     portal_networks.insert(ProtocolId::Utp, "0x757470".to_string());
     NetworkSpec {
         portal_networks,
@@ -239,6 +242,7 @@ impl fmt::Display for ProtocolId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let protocol = match self {
             ProtocolId::State => "State",
+            ProtocolId::VerkleState => "Verkle State",
             ProtocolId::History => "History",
             ProtocolId::TransactionGossip => "Transaction Gossip",
             ProtocolId::CanonicalIndices => "Canonical Indices",
@@ -249,27 +253,11 @@ impl fmt::Display for ProtocolId {
     }
 }
 
-/// Decode ProtocolId to raw bytes
-impl TryFrom<ProtocolId> for Vec<u8> {
-    type Error = ProtocolIdError;
-
-    fn try_from(protocol_id: ProtocolId) -> Result<Self, Self::Error> {
-        let bytes = match protocol_id {
-            ProtocolId::State => hex_decode("0x500A"),
-            ProtocolId::History => hex_decode("0x500B"),
-            ProtocolId::TransactionGossip => hex_decode("0x500C"),
-            ProtocolId::CanonicalIndices => hex_decode("0x500D"),
-            ProtocolId::Beacon => hex_decode("0x501A"),
-            ProtocolId::Utp => hex_decode("0x757470"),
-        };
-        bytes.map_err(ProtocolIdError::Decode)
-    }
-}
-
 impl From<ProtocolId> for u8 {
     fn from(protocol_id: ProtocolId) -> Self {
         match protocol_id {
             ProtocolId::State => 2,
+            ProtocolId::VerkleState => 5,
             ProtocolId::History => 0,
             ProtocolId::TransactionGossip => 3,
             ProtocolId::CanonicalIndices => 4,
@@ -639,7 +627,7 @@ mod test {
 
     #[test]
     fn protocol_id_invalid() {
-        let hex = "0x500F";
+        let hex = "0x504F";
         assert!(!MAINNET.portal_networks.contains_right(hex));
     }
 
