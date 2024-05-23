@@ -82,8 +82,10 @@ pub async fn run_trin(
 
     // Initialize validation oracle
     let header_oracle = HeaderOracle::default();
-    info!(hash_tree_root = %hex_encode(header_oracle.header_validator.pre_merge_acc.tree_hash_root().0),"Loaded
-        pre-merge accumulator.");
+    info!(
+        hash_tree_root = %hex_encode(header_oracle.header_validator.pre_merge_acc.tree_hash_root().0),
+        "Loaded pre-merge accumulator."
+    );
     let header_oracle = Arc::new(RwLock::new(header_oracle));
 
     // Initialize state sub-network service and event handlers, if selected
