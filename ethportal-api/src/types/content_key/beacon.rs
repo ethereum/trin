@@ -14,6 +14,7 @@ pub const LIGHT_CLIENT_BOOTSTRAP_KEY_PREFIX: u8 = 0x10;
 pub const LIGHT_CLIENT_UPDATES_BY_RANGE_KEY_PREFIX: u8 = 0x11;
 pub const LIGHT_CLIENT_FINALITY_UPDATE_KEY_PREFIX: u8 = 0x12;
 pub const LIGHT_CLIENT_OPTIMISTIC_UPDATE_KEY_PREFIX: u8 = 0x13;
+pub const HISTORICAL_SUMMARIES_WITH_PROOF_KEY_PREFIX: u8 = 0x14;
 
 /// A content key in the beacon chain network.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -22,6 +23,7 @@ pub enum BeaconContentKey {
     LightClientUpdatesByRange(LightClientUpdatesByRangeKey),
     LightClientFinalityUpdate(LightClientFinalityUpdateKey),
     LightClientOptimisticUpdate(LightClientOptimisticUpdateKey),
+    HistoricalSummariesWithProof(HistoricalSummariesWithProofKey),
 }
 
 impl Hash for BeaconContentKey {
@@ -72,6 +74,13 @@ impl LightClientOptimisticUpdateKey {
     }
 }
 
+/// Key used to identify a latest historical summaries with proof.
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+pub struct HistoricalSummariesWithProofKey {
+    /// Epoch of the historical summaries.
+    pub epoch: u64,
+}
+
 impl From<&BeaconContentKey> for Vec<u8> {
     fn from(val: &BeaconContentKey) -> Self {
         val.to_bytes()
@@ -113,6 +122,11 @@ impl TryFrom<Vec<u8>> for BeaconContentKey {
                     .map(Self::LightClientOptimisticUpdate)
                     .map_err(|e| ContentKeyError::from_decode_error(e, value))
             }
+            HISTORICAL_SUMMARIES_WITH_PROOF_KEY_PREFIX => {
+                HistoricalSummariesWithProofKey::from_ssz_bytes(key)
+                    .map(Self::HistoricalSummariesWithProof)
+                    .map_err(|e| ContentKeyError::from_decode_error(e, value))
+            }
             _ => Err(ContentKeyError::from_decode_error(
                 DecodeError::UnionSelectorInvalid(selector),
                 value,
@@ -140,6 +154,9 @@ impl fmt::Display for BeaconContentKey {
                 "LightClientOptimisticUpdate {{ signature_slot: {} }}",
                 key.signature_slot
             ),
+            Self::HistoricalSummariesWithProof(key) => {
+                format!("HistoricalSummariesWithProof {{ epoch: {} }}", key.epoch)
+            }
         };
 
         write!(f, "{s}")
@@ -171,6 +188,10 @@ impl OverlayContentKey for BeaconContentKey {
             }
             BeaconContentKey::LightClientOptimisticUpdate(key) => {
                 bytes.push(LIGHT_CLIENT_OPTIMISTIC_UPDATE_KEY_PREFIX);
+                bytes.extend_from_slice(&key.as_ssz_bytes())
+            }
+            BeaconContentKey::HistoricalSummariesWithProof(key) => {
+                bytes.push(HISTORICAL_SUMMARIES_WITH_PROOF_KEY_PREFIX);
                 bytes.extend_from_slice(&key.as_ssz_bytes())
             }
         }
@@ -293,6 +314,25 @@ mod test {
         assert_eq!(
             content_key.to_string(),
             "LightClientOptimisticUpdate { signature_slot: 7271362 }"
+        );
+        assert_eq!(content_key.to_hex(), KEY_STR);
+    }
+
+    #[test]
+    fn historical_summaries_with_proof() {
+        const KEY_STR: &str = "0x14ae7e346485874006";
+        let expected_content_key = hex_decode(KEY_STR).unwrap();
+        let content_key =
+            BeaconContentKey::HistoricalSummariesWithProof(HistoricalSummariesWithProofKey {
+                epoch: 450508969718611630,
+            });
+
+        test_encode_decode(&content_key);
+
+        assert_eq!(content_key.to_bytes(), expected_content_key);
+        assert_eq!(
+            content_key.to_string(),
+            "HistoricalSummariesWithProof { epoch: 450508969718611630 }"
         );
         assert_eq!(content_key.to_hex(), KEY_STR);
     }

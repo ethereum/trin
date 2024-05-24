@@ -1,8 +1,7 @@
 use alloy_primitives::B256;
 use serde::{Deserialize, Serialize};
-use ssz::SszEncoder;
 use ssz_derive::{Decode, Encode};
-use ssz_types::{typenum, VariableList};
+use ssz_types::{typenum, FixedVector, VariableList};
 use tree_hash_derive::TreeHash;
 
 /// `HistoricalSummary` matches the components of the phase0 `HistoricalBatch`
@@ -17,71 +16,54 @@ pub struct HistoricalSummary {
 }
 
 pub type HistoricalSummaries = VariableList<HistoricalSummary, typenum::U16777216>;
-
-/// Proof against the beacon state root hash
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct HistoricalSummariesStateProof {
-    pub proof: [B256; 5],
-}
-
-impl Default for HistoricalSummariesStateProof {
-    fn default() -> Self {
-        Self {
-            proof: [B256::ZERO; 5],
-        }
-    }
-}
-
-impl ssz::Decode for HistoricalSummariesStateProof {
-    fn is_ssz_fixed_len() -> bool {
-        true
-    }
-    fn from_ssz_bytes(bytes: &[u8]) -> Result<Self, ssz::DecodeError> {
-        let vec: Vec<[u8; 32]> = Vec::from_ssz_bytes(bytes)?;
-        let mut proof = Self::default().proof;
-        let raw_proof: [[u8; 32]; 5] = vec.try_into().map_err(|_| {
-            ssz::DecodeError::BytesInvalid(format!(
-                "Invalid length of bytes for HistoricalSummariesProof: {}",
-                bytes.len()
-            ))
-        })?;
-        for (i, item) in raw_proof.iter().enumerate() {
-            proof[i] = B256::from_slice(item);
-        }
-        Ok(Self { proof })
-    }
-}
-
-impl ssz::Encode for HistoricalSummariesStateProof {
-    fn is_ssz_fixed_len() -> bool {
-        true
-    }
-
-    fn ssz_append(&self, buf: &mut Vec<u8>) {
-        let offset = self.ssz_bytes_len();
-        let mut encoder = SszEncoder::container(buf, offset);
-
-        for proof in self.proof {
-            encoder.append(&proof);
-        }
-        encoder.finalize();
-    }
-
-    fn ssz_fixed_len() -> usize {
-        32 * 5
-    }
-
-    fn ssz_bytes_len(&self) -> usize {
-        32 * 5
-    }
-}
+pub type HistoricalSummariesStateProof = FixedVector<B256, typenum::U5>;
 
 /// A historical summaries BeaconState field with proof.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Encode, Decode)]
 pub struct HistoricalSummariesWithProof {
     pub epoch: u64,
     pub historical_summaries: HistoricalSummaries,
     pub proof: HistoricalSummariesStateProof,
 }
 
-// TODO: Add test vectors for HistoricalSummariesWithProof
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod test {
+    use crate::consensus::{
+        beacon_state::BeaconStateDeneb,
+        historical_summaries::{HistoricalSummariesStateProof, HistoricalSummariesWithProof},
+    };
+    use serde_json::Value;
+    use ssz::{Decode, Encode};
+
+    #[test]
+    fn test_historical_summaries_with_proof_deneb() {
+        let value = std::fs::read_to_string(
+            "../test_assets/beacon/deneb/BeaconState/ssz_random/case_0/value.yaml",
+        )
+        .expect("cannot find test asset");
+        let value: Value = serde_yaml::from_str(&value).unwrap();
+        let beacon_state: BeaconStateDeneb = serde_json::from_value(value).unwrap();
+        let historical_summaries_proof = beacon_state.build_historical_summaries_proof();
+        let historical_summaries_state_proof =
+            HistoricalSummariesStateProof::from(historical_summaries_proof);
+        let historical_summaries = beacon_state.historical_summaries.clone();
+
+        let historical_summaries_epoch = beacon_state.slot / 32;
+
+        let expected_summaries_with_proof = HistoricalSummariesWithProof {
+            epoch: historical_summaries_epoch,
+            historical_summaries,
+            proof: historical_summaries_state_proof.clone(),
+        };
+
+        // Test ssz encoding and decoding
+        let ssz_bytes = expected_summaries_with_proof.as_ssz_bytes();
+        let historical_summaries_with_proof =
+            HistoricalSummariesWithProof::from_ssz_bytes(&ssz_bytes).unwrap();
+        assert_eq!(
+            expected_summaries_with_proof,
+            historical_summaries_with_proof
+        );
+    }
+}

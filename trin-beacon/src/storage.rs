@@ -179,6 +179,11 @@ impl ContentStore for BeaconStorage {
                     None => Ok(None),
                 }
             }
+            BeaconContentKey::HistoricalSummariesWithProof(_) => {
+                Err(ContentStoreError::InvalidData {
+                    message: "HistoricalSummariesWithProof not supported yet".to_string(),
+                })
+            }
         }
     }
 
@@ -250,6 +255,11 @@ impl ContentStore for BeaconStorage {
                     Some(_) => Ok(ShouldWeStoreContent::AlreadyStored),
                     None => Ok(ShouldWeStoreContent::Store),
                 }
+            }
+            BeaconContentKey::HistoricalSummariesWithProof(_) => {
+                Err(ContentStoreError::InvalidData {
+                    message: "HistoricalSummariesWithProof not supported yet".to_string(),
+                })
             }
         }
     }

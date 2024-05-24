@@ -156,6 +156,56 @@ impl BeaconState {
     }
 }
 
+impl BeaconStateDeneb {
+    pub fn build_historical_summaries_proof(&self) -> Vec<B256> {
+        let mut leaves: Vec<[u8; 32]> = vec![
+            self.genesis_time.tree_hash_root().0,
+            self.genesis_validators_root.tree_hash_root().0,
+            self.slot.tree_hash_root().0,
+            self.fork.tree_hash_root().0,
+            self.latest_block_header.tree_hash_root().0,
+            self.block_roots.tree_hash_root().0,
+            self.state_roots.tree_hash_root().0,
+            self.historical_roots.tree_hash_root().0,
+            self.eth1_data.tree_hash_root().0,
+            self.eth1_data_votes.tree_hash_root().0,
+            self.eth1_deposit_index.tree_hash_root().0,
+            self.validators.tree_hash_root().0,
+            self.balances.tree_hash_root().0,
+            self.randao_mixes.tree_hash_root().0,
+            self.slashings.tree_hash_root().0,
+            self.previous_epoch_participation.tree_hash_root().0,
+            self.current_epoch_participation.tree_hash_root().0,
+            self.justification_bits.tree_hash_root().0,
+            self.previous_justified_checkpoint.tree_hash_root().0,
+            self.current_justified_checkpoint.tree_hash_root().0,
+            self.finalized_checkpoint.tree_hash_root().0,
+            self.inactivity_scores.tree_hash_root().0,
+            self.current_sync_committee.tree_hash_root().0,
+            self.next_sync_committee.tree_hash_root().0,
+            self.latest_execution_payload_header.tree_hash_root().0,
+            self.next_withdrawal_index.tree_hash_root().0,
+            self.next_withdrawal_validator_index.tree_hash_root().0,
+            self.historical_summaries.tree_hash_root().0,
+        ];
+        // We want to add empty leaves to make the tree a power of 2
+        while leaves.len() < 32 {
+            leaves.push([0; 32]);
+        }
+
+        let merkle_tree = MerkleTree::<Sha256>::from_leaves(&leaves);
+        let indices_to_prove = vec![27];
+        let proof = merkle_tree.proof(&indices_to_prove);
+        let proog_hashes: Vec<B256> = proof
+            .proof_hashes()
+            .iter()
+            .map(|hash| B256::from_slice(hash))
+            .collect();
+
+        proog_hashes
+    }
+}
+
 /// Specifies a fork of the `BeaconChain`, to prevent replay attacks.
 ///
 /// Spec v0.12.1
@@ -461,5 +511,17 @@ mod test {
 
         assert_eq!(proof.len(), 14);
         assert_eq!(proof, expected_proof.to_vec());
+    }
+
+    #[test]
+    fn beacon_state_historical_summaries_proof() {
+        let value = std::fs::read_to_string(
+            "../test_assets/beacon/deneb/BeaconState/ssz_random/case_0/value.yaml",
+        )
+        .expect("cannot find test asset");
+        let value: Value = serde_yaml::from_str(&value).unwrap();
+        let beacon_state: BeaconStateDeneb = serde_json::from_value(value).unwrap();
+        let historical_summaries_proof = beacon_state.build_historical_summaries_proof();
+        assert_eq!(historical_summaries_proof.len(), 5);
     }
 }
