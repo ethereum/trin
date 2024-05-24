@@ -830,7 +830,7 @@ mod tests {
         // this block (15573637) was chosen since it contains all tx types (legacy, access list,
         // eip1559) as well as contract creation txs
         let expected: String =
-            std::fs::read_to_string("../test_assets/geth_batch/receipts.json").unwrap();
+            std::fs::read_to_string("../test_assets/infura_batch/receipts-15573637.json").unwrap();
         let receipts: Receipts = serde_json::from_str(&expected).unwrap();
         let expected_receipts_root: B256 = B256::from_slice(
             &hex_decode("0xc9e543effd8c9708acc53249157c54b0c6aecd69285044bcb9df91cedc6437ad")
