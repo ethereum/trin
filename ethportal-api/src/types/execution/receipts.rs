@@ -111,23 +111,19 @@ impl ssz::Decode for Receipts {
     }
 }
 
-// Deserialize is currently only implemented for BATCHED responses from an execution client
-// Used inside portal-bridge
+// Deserialize is currently only implemented for eth_getBlockReceipts responses from an execution
+// client Used inside portal-bridge
 impl<'de> Deserialize<'de> for Receipts {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        let obj: Vec<Value> = Deserialize::deserialize(deserializer)?;
-        let results: Result<Vec<Receipt>, _> = obj
-            .into_iter()
-            .map(|mut val| {
-                let result = val["result"].take();
-                serde_json::from_value(result)
-            })
-            .collect();
+        let mut obj: Value = Deserialize::deserialize(deserializer)?;
+        let result = obj["result"].take();
+        let results: Vec<Receipt> =
+            serde_json::from_value(result).map_err(serde::de::Error::custom)?;
         Ok(Self {
-            receipt_list: results.map_err(serde::de::Error::custom)?,
+            receipt_list: results,
         })
     }
 }
@@ -834,7 +830,7 @@ mod tests {
         // this block (15573637) was chosen since it contains all tx types (legacy, access list,
         // eip1559) as well as contract creation txs
         let expected: String =
-            std::fs::read_to_string("../test_assets/geth_batch/receipts.json").unwrap();
+            std::fs::read_to_string("../test_assets/infura_batch/receipts-15573637.json").unwrap();
         let receipts: Receipts = serde_json::from_str(&expected).unwrap();
         let expected_receipts_root: B256 = B256::from_slice(
             &hex_decode("0xc9e543effd8c9708acc53249157c54b0c6aecd69285044bcb9df91cedc6437ad")
