@@ -111,23 +111,19 @@ impl ssz::Decode for Receipts {
     }
 }
 
-// Deserialize is currently only implemented for BATCHED responses from an execution client
-// Used inside portal-bridge
+// Deserialize is currently only implemented for eth_getBlockReceipts responses from an execution
+// client Used inside portal-bridge
 impl<'de> Deserialize<'de> for Receipts {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        let obj: Vec<Value> = Deserialize::deserialize(deserializer)?;
-        let results: Result<Vec<Receipt>, _> = obj
-            .into_iter()
-            .map(|mut val| {
-                let result = val["result"].take();
-                serde_json::from_value(result)
-            })
-            .collect();
+        let mut obj: Value = Deserialize::deserialize(deserializer)?;
+        let result = obj["result"].take();
+        let results: Vec<Receipt> =
+            serde_json::from_value(result).map_err(serde::de::Error::custom)?;
         Ok(Self {
-            receipt_list: results.map_err(serde::de::Error::custom)?,
+            receipt_list: results,
         })
     }
 }

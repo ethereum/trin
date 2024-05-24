@@ -23,3 +23,6 @@ pub const DEFAULT_GOSSIP_LIMIT: usize = 32;
 
 // Number of seconds to wait before retrying a provider request
 pub const FALLBACK_RETRY_AFTER: Duration = Duration::from_secs(5);
+
+// Number of seconds to wait before retrying a provider request for get_receipts
+pub const GET_RECEIPTS_RETRY_AFTER: Duration = Duration::from_secs(1);
