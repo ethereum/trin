@@ -1,12 +1,14 @@
 use ethportal_api::{
     types::{
         content_key::beacon::{
-            LIGHT_CLIENT_BOOTSTRAP_KEY_PREFIX, LIGHT_CLIENT_FINALITY_UPDATE_KEY_PREFIX,
-            LIGHT_CLIENT_OPTIMISTIC_UPDATE_KEY_PREFIX, LIGHT_CLIENT_UPDATES_BY_RANGE_KEY_PREFIX,
+            HISTORICAL_SUMMARIES_WITH_PROOF_KEY_PREFIX, LIGHT_CLIENT_BOOTSTRAP_KEY_PREFIX,
+            LIGHT_CLIENT_FINALITY_UPDATE_KEY_PREFIX, LIGHT_CLIENT_OPTIMISTIC_UPDATE_KEY_PREFIX,
+            LIGHT_CLIENT_UPDATES_BY_RANGE_KEY_PREFIX,
         },
         content_value::beacon::{
-            ForkVersionedLightClientFinalityUpdate, ForkVersionedLightClientOptimisticUpdate,
-            ForkVersionedLightClientUpdate, LightClientUpdatesByRange,
+            ForkVersionedHistoricalSummariesWithProof, ForkVersionedLightClientFinalityUpdate,
+            ForkVersionedLightClientOptimisticUpdate, ForkVersionedLightClientUpdate,
+            LightClientUpdatesByRange,
         },
         distance::Distance,
         portal_wire::ProtocolId,
@@ -37,6 +39,7 @@ use trin_storage::{
 pub struct BeaconStorageCache {
     optimistic_update: Option<ForkVersionedLightClientOptimisticUpdate>,
     finality_update: Option<ForkVersionedLightClientFinalityUpdate>,
+    historical_summaries: Option<ForkVersionedHistoricalSummariesWithProof>,
 }
 
 impl Default for BeaconStorageCache {
@@ -50,6 +53,7 @@ impl BeaconStorageCache {
         Self {
             optimistic_update: None,
             finality_update: None,
+            historical_summaries: None,
         }
     }
 
@@ -59,7 +63,7 @@ impl BeaconStorageCache {
         signature_slot: u64,
     ) -> Option<ForkVersionedLightClientOptimisticUpdate> {
         if let Some(optimistic_update) = &self.optimistic_update {
-            if optimistic_update.update.signature_slot() == &signature_slot {
+            if optimistic_update.update.signature_slot() >= &signature_slot {
                 return Some(optimistic_update.clone());
             }
         }
@@ -90,6 +94,22 @@ impl BeaconStorageCache {
         None
     }
 
+    /// Returns the historical summaries with proof if it exists and matches the given epoch.
+    pub fn get_historical_summaries_with_proof(
+        &self,
+        epoch: u64,
+    ) -> Option<ForkVersionedHistoricalSummariesWithProof> {
+        if let Some(historical_summaries) = &self.historical_summaries {
+            // Returns the current historical summaries with proof if it's epoch is bigger or equal
+            // to the requested epoch.
+            if historical_summaries.historical_summaries_with_proof.epoch >= epoch {
+                return Some(historical_summaries.clone());
+            }
+        }
+
+        None
+    }
+
     /// Sets the light client optimistic update
     pub fn set_optimistic_update(
         &mut self,
@@ -101,6 +121,14 @@ impl BeaconStorageCache {
     /// Sets the light client finality update
     pub fn set_finality_update(&mut self, finality_update: ForkVersionedLightClientFinalityUpdate) {
         self.finality_update = Some(finality_update);
+    }
+
+    /// Sets the historical summaries with proof
+    pub fn set_historical_summaries_with_proof(
+        &mut self,
+        historical_summaries: ForkVersionedHistoricalSummariesWithProof,
+    ) {
+        self.historical_summaries = Some(historical_summaries);
     }
 }
 
@@ -179,10 +207,16 @@ impl ContentStore for BeaconStorage {
                     None => Ok(None),
                 }
             }
-            BeaconContentKey::HistoricalSummariesWithProof(_) => {
-                Err(ContentStoreError::InvalidData {
-                    message: "HistoricalSummariesWithProof not supported yet".to_string(),
-                })
+            BeaconContentKey::HistoricalSummariesWithProof(content_key) => {
+                match self
+                    .cache
+                    .get_historical_summaries_with_proof(content_key.epoch)
+                {
+                    Some(historical_summaries_with_proof) => {
+                        Ok(Some(historical_summaries_with_proof.as_ssz_bytes()))
+                    }
+                    None => Ok(None),
+                }
             }
         }
     }
@@ -252,14 +286,30 @@ impl ContentStore for BeaconStorage {
             }
             BeaconContentKey::LightClientOptimisticUpdate(content_key) => {
                 match self.cache.get_optimistic_update(content_key.signature_slot) {
-                    Some(_) => Ok(ShouldWeStoreContent::AlreadyStored),
+                    Some(content) => {
+                        if content.update.signature_slot() >= &content_key.signature_slot {
+                            Ok(ShouldWeStoreContent::AlreadyStored)
+                        } else {
+                            Ok(ShouldWeStoreContent::Store)
+                        }
+                    }
                     None => Ok(ShouldWeStoreContent::Store),
                 }
             }
-            BeaconContentKey::HistoricalSummariesWithProof(_) => {
-                Err(ContentStoreError::InvalidData {
-                    message: "HistoricalSummariesWithProof not supported yet".to_string(),
-                })
+            BeaconContentKey::HistoricalSummariesWithProof(content_key) => {
+                match self
+                    .cache
+                    .get_historical_summaries_with_proof(content_key.epoch)
+                {
+                    Some(content) => {
+                        if content.historical_summaries_with_proof.epoch >= content_key.epoch {
+                            Ok(ShouldWeStoreContent::AlreadyStored)
+                        } else {
+                            Ok(ShouldWeStoreContent::Store)
+                        }
+                    }
+                    None => Ok(ShouldWeStoreContent::Store),
+                }
             }
         }
     }
@@ -408,6 +458,16 @@ impl BeaconStorage {
                     )?,
                 );
             }
+            Some(&HISTORICAL_SUMMARIES_WITH_PROOF_KEY_PREFIX) => {
+                self.cache.set_historical_summaries_with_proof(
+                    ForkVersionedHistoricalSummariesWithProof::from_ssz_bytes(value.as_slice())
+                        .map_err(|err| ContentStoreError::InvalidData {
+                            message: format!(
+                                "Error deserializing HistoricalSummariesWithProof value: {err:?}"
+                            ),
+                        })?,
+                );
+            }
             _ => {
                 // Unknown content type
                 return Err(ContentStoreError::InvalidData {
@@ -553,5 +613,284 @@ impl BeaconStorage {
     /// Get a summary of the current state of storage
     pub fn get_summary_info(&self) -> String {
         self.metrics.get_summary()
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod test {
+    use super::*;
+    use ethportal_api::{
+        consensus::{
+            beacon_state::BeaconStateDeneb,
+            fork::ForkName,
+            historical_summaries::{HistoricalSummariesStateProof, HistoricalSummariesWithProof},
+        },
+        light_client::{
+            finality_update::LightClientFinalityUpdate,
+            optimistic_update::LightClientOptimisticUpdate, update::LightClientUpdate,
+        },
+        types::content_key::beacon::{
+            HistoricalSummariesWithProofKey, LightClientFinalityUpdateKey,
+            LightClientOptimisticUpdateKey,
+        },
+        LightClientBootstrapKey, LightClientUpdatesByRangeKey,
+    };
+    use serde_json::Value;
+    use trin_storage::test_utils::create_test_portal_storage_config_with_capacity;
+
+    #[test]
+    fn test_beacon_storage_get_put_bootstrap() {
+        let (_temp_dir, config) = create_test_portal_storage_config_with_capacity(10).unwrap();
+        let mut storage = BeaconStorage::new(config).unwrap();
+        let key = BeaconContentKey::LightClientBootstrap(LightClientBootstrapKey {
+            block_hash: [1; 32],
+        });
+        let value = vec![1, 2, 3, 4, 5];
+        storage.put(key.clone(), &value).unwrap();
+        let result = storage.get(&key).unwrap().unwrap();
+        assert_eq!(result, value);
+    }
+
+    #[test]
+    fn test_beacon_storage_get_put_updates_by_range() {
+        let (_temp_dir, config) = create_test_portal_storage_config_with_capacity(10).unwrap();
+        let mut storage = BeaconStorage::new(config).unwrap();
+        let key = BeaconContentKey::LightClientUpdatesByRange(LightClientUpdatesByRangeKey {
+            start_period: 1,
+            count: 2,
+        });
+        let lc_update_0 = get_light_client_update(0);
+        let lc_update_1 = get_light_client_update(1);
+        let value = VariableList::<ForkVersionedLightClientUpdate, U128>::new(vec![
+            lc_update_0.clone(),
+            lc_update_1.clone(),
+        ])
+        .unwrap();
+        storage.put(key.clone(), &value.as_ssz_bytes()).unwrap();
+        let result = storage.get(&key).unwrap().unwrap();
+
+        assert_eq!(result, value.as_ssz_bytes());
+
+        // Test getting the first individual updates
+        let key_0 = BeaconContentKey::LightClientUpdatesByRange(LightClientUpdatesByRangeKey {
+            start_period: 1,
+            count: 1,
+        });
+        let expected_value_0 =
+            VariableList::<ForkVersionedLightClientUpdate, U128>::new(vec![lc_update_0.clone()])
+                .unwrap();
+        let result_0 = storage.get(&key_0).unwrap().unwrap();
+        assert_eq!(result_0, expected_value_0.as_ssz_bytes());
+
+        // Test getting the second individual updates. The start period must be 2,
+        let key_1 = BeaconContentKey::LightClientUpdatesByRange(LightClientUpdatesByRangeKey {
+            start_period: 2,
+            count: 1,
+        });
+        let expected_value_1 =
+            VariableList::<ForkVersionedLightClientUpdate, U128>::new(vec![lc_update_1]).unwrap();
+        let result_1 = storage.get(&key_1).unwrap().unwrap();
+        assert_eq!(result_1, expected_value_1.as_ssz_bytes());
+    }
+
+    #[test]
+    fn test_beacon_storage_get_put_finality_update() {
+        let (_temp_dir, config) = create_test_portal_storage_config_with_capacity(10).unwrap();
+        let mut storage = BeaconStorage::new(config).unwrap();
+        let value = get_light_client_finality_update(0);
+        let finalized_slot = value.update.finalized_header_capella().unwrap().beacon.slot;
+        let key = BeaconContentKey::LightClientFinalityUpdate(LightClientFinalityUpdateKey {
+            finalized_slot,
+        });
+        storage.put(key.clone(), &value.as_ssz_bytes()).unwrap();
+        let result = storage.get(&key).unwrap().unwrap();
+        assert_eq!(result, value.as_ssz_bytes());
+
+        // Test is_key_within_radius_and_unavailable for the same finalized slot
+        let should_store_content = storage.is_key_within_radius_and_unavailable(&key).unwrap();
+        assert_eq!(should_store_content, ShouldWeStoreContent::AlreadyStored);
+
+        // Test is_key_within_radius_and_unavailable for older finalized slot
+        let key = BeaconContentKey::LightClientFinalityUpdate(LightClientFinalityUpdateKey {
+            finalized_slot: finalized_slot - 1,
+        });
+        let should_store_content = storage.is_key_within_radius_and_unavailable(&key).unwrap();
+        assert_eq!(should_store_content, ShouldWeStoreContent::AlreadyStored);
+
+        // Test is_key_within_radius_and_unavailable for newer finalized slot
+        let key = BeaconContentKey::LightClientFinalityUpdate(LightClientFinalityUpdateKey {
+            finalized_slot: finalized_slot + 1,
+        });
+        let should_store_content = storage.is_key_within_radius_and_unavailable(&key).unwrap();
+        assert_eq!(should_store_content, ShouldWeStoreContent::Store);
+
+        // Test getting the latest finality update
+        let key = BeaconContentKey::LightClientFinalityUpdate(LightClientFinalityUpdateKey {
+            finalized_slot: 0,
+        });
+        let result = storage.get(&key).unwrap().unwrap();
+        assert_eq!(result, value.as_ssz_bytes());
+    }
+
+    #[test]
+    fn test_beacon_storage_get_put_optimistic_update() {
+        let (_temp_dir, config) = create_test_portal_storage_config_with_capacity(10).unwrap();
+        let mut storage = BeaconStorage::new(config).unwrap();
+        let value = get_light_client_optimistic_update(0);
+        let signature_slot = *value.update.signature_slot();
+        let key = BeaconContentKey::LightClientOptimisticUpdate(LightClientOptimisticUpdateKey {
+            signature_slot,
+        });
+        storage.put(key.clone(), &value.as_ssz_bytes()).unwrap();
+        let result = storage.get(&key).unwrap().unwrap();
+        assert_eq!(result, value.as_ssz_bytes());
+
+        // Test is_key_within_radius_and_unavailable for the same signature slot
+        let should_store_content = storage.is_key_within_radius_and_unavailable(&key).unwrap();
+        assert_eq!(should_store_content, ShouldWeStoreContent::AlreadyStored);
+
+        // Test is_key_within_radius_and_unavailable for older signature slot
+        let key = BeaconContentKey::LightClientOptimisticUpdate(LightClientOptimisticUpdateKey {
+            signature_slot: signature_slot - 1,
+        });
+        let should_store_content = storage.is_key_within_radius_and_unavailable(&key).unwrap();
+        assert_eq!(should_store_content, ShouldWeStoreContent::AlreadyStored);
+
+        // Test is_key_within_radius_and_unavailable for newer signature slot
+        let key = BeaconContentKey::LightClientOptimisticUpdate(LightClientOptimisticUpdateKey {
+            signature_slot: signature_slot + 1,
+        });
+        let should_store_content = storage.is_key_within_radius_and_unavailable(&key).unwrap();
+        assert_eq!(should_store_content, ShouldWeStoreContent::Store);
+
+        // Test getting unavailable optimistic update
+        let key = BeaconContentKey::LightClientOptimisticUpdate(LightClientOptimisticUpdateKey {
+            signature_slot: signature_slot + 1,
+        });
+        let result = storage.get(&key).unwrap();
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_beacon_storage_get_put_historical_summaries() {
+        let (_temp_dir, config) = create_test_portal_storage_config_with_capacity(10).unwrap();
+        let mut storage = BeaconStorage::new(config).unwrap();
+        let value = get_history_summaries_with_proof();
+        let epoch = value.historical_summaries_with_proof.epoch;
+        let key = BeaconContentKey::HistoricalSummariesWithProof(HistoricalSummariesWithProofKey {
+            epoch,
+        });
+        storage.put(key.clone(), &value.as_ssz_bytes()).unwrap();
+        let result = storage.get(&key).unwrap().unwrap();
+        assert_eq!(result, value.as_ssz_bytes());
+
+        // Test is_key_within_radius_and_unavailable for the same epoch
+        let should_store_content = storage.is_key_within_radius_and_unavailable(&key).unwrap();
+        assert_eq!(should_store_content, ShouldWeStoreContent::AlreadyStored);
+
+        // Test is_key_within_radius_and_unavailable for older epoch
+        let key = BeaconContentKey::HistoricalSummariesWithProof(HistoricalSummariesWithProofKey {
+            epoch: epoch - 1,
+        });
+        let should_store_content = storage.is_key_within_radius_and_unavailable(&key).unwrap();
+        assert_eq!(should_store_content, ShouldWeStoreContent::AlreadyStored);
+
+        // Test is_key_within_radius_and_unavailable for newer epoch
+        let key = BeaconContentKey::HistoricalSummariesWithProof(HistoricalSummariesWithProofKey {
+            epoch: epoch + 1,
+        });
+        let should_store_content = storage.is_key_within_radius_and_unavailable(&key).unwrap();
+        assert_eq!(should_store_content, ShouldWeStoreContent::Store);
+
+        // Test getting unavailable historical summaries with proof
+        let key = BeaconContentKey::HistoricalSummariesWithProof(HistoricalSummariesWithProofKey {
+            epoch: epoch + 1,
+        });
+        let result = storage.get(&key).unwrap();
+        assert_eq!(result, None);
+
+        // Test getting the latest historical summaries with proof
+        let key = BeaconContentKey::HistoricalSummariesWithProof(HistoricalSummariesWithProofKey {
+            epoch: 0,
+        });
+        let result = storage.get(&key).unwrap().unwrap();
+        assert_eq!(result, value.as_ssz_bytes());
+    }
+
+    // Valid number range for the test cases is 0..4
+    fn get_light_client_update(number: u8) -> ForkVersionedLightClientUpdate {
+        let lc_update = std::fs::read(format!(
+            "../test_assets/beacon/capella/LightClientUpdate/ssz_random/case_{number}/serialized.ssz_snappy"
+        ))
+            .expect("cannot find test asset");
+        let mut decoder = snap::raw::Decoder::new();
+        let lc_update = decoder.decompress_vec(&lc_update).unwrap();
+        let lc_update = LightClientUpdate::from_ssz_bytes(&lc_update, ForkName::Capella).unwrap();
+
+        ForkVersionedLightClientUpdate {
+            fork_name: ForkName::Capella,
+            update: lc_update,
+        }
+    }
+
+    // Valid number range for the test cases is 0..4
+    fn get_light_client_finality_update(number: u8) -> ForkVersionedLightClientFinalityUpdate {
+        let lc_finality_update = std::fs::read(format!(
+            "../test_assets/beacon/capella/LightClientFinalityUpdate/ssz_random/case_{number}/serialized.ssz_snappy"
+        ))
+            .expect("cannot find test asset");
+        let mut decoder = snap::raw::Decoder::new();
+        let lc_finality_update = decoder.decompress_vec(&lc_finality_update).unwrap();
+        let lc_finality_update =
+            LightClientFinalityUpdate::from_ssz_bytes(&lc_finality_update, ForkName::Capella)
+                .unwrap();
+
+        ForkVersionedLightClientFinalityUpdate {
+            fork_name: ForkName::Deneb,
+            update: lc_finality_update,
+        }
+    }
+
+    // Valid number range for the test cases is 0..4
+    fn get_light_client_optimistic_update(number: u8) -> ForkVersionedLightClientOptimisticUpdate {
+        let lc_optimistic_update = std::fs::read(format!(
+            "../test_assets/beacon/capella/LightClientOptimisticUpdate/ssz_random/case_{number}/serialized.ssz_snappy"
+        ))
+            .expect("cannot find test asset");
+        let mut decoder = snap::raw::Decoder::new();
+        let lc_optimistic_update = decoder.decompress_vec(&lc_optimistic_update).unwrap();
+        let lc_optimistic_update =
+            LightClientOptimisticUpdate::from_ssz_bytes(&lc_optimistic_update, ForkName::Capella)
+                .unwrap();
+
+        ForkVersionedLightClientOptimisticUpdate {
+            fork_name: ForkName::Deneb,
+            update: lc_optimistic_update,
+        }
+    }
+
+    fn get_history_summaries_with_proof() -> ForkVersionedHistoricalSummariesWithProof {
+        let value = std::fs::read_to_string(
+            "../test_assets/beacon/deneb/BeaconState/ssz_random/case_0/value.yaml",
+        )
+        .expect("cannot find test asset");
+        let value: Value = serde_yaml::from_str(&value).unwrap();
+        let beacon_state: BeaconStateDeneb = serde_json::from_value(value).unwrap();
+        let historical_summaries_proof = beacon_state.build_historical_summaries_proof();
+        let historical_summaries_state_proof =
+            HistoricalSummariesStateProof::from(historical_summaries_proof);
+        let historical_summaries = beacon_state.historical_summaries.clone();
+        let historical_summaries_epoch = beacon_state.slot / 32;
+        let historical_summaries_with_proof = HistoricalSummariesWithProof {
+            epoch: historical_summaries_epoch,
+            historical_summaries,
+            proof: historical_summaries_state_proof.clone(),
+        };
+
+        ForkVersionedHistoricalSummariesWithProof {
+            fork_name: ForkName::Deneb,
+            historical_summaries_with_proof,
+        }
     }
 }
