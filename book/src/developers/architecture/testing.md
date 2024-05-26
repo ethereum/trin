@@ -17,12 +17,12 @@ requests to the Trin repository.
 ## Network simulation
 
 The `test-utp` crate is part of continuous integration (CI). This sets up
-client and server insfrastructure on a single machine to test data streaming with
+client and server infrastructure on a single machine to test data streaming with
 simulated packet loss.
 
 ## Hive
 
-Hive testing runs Trin as a node and challenges it in a peer to peer envorinment. This
+Hive testing runs Trin as a node and challenges it in a peer to peer environment. This
 involves creating a docker image with the Trin binary and passing it to Hive.
 
 Hive itself is a fork of Ethereum hive testing and exists as `portal-hive`, an
