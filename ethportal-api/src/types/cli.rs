@@ -26,7 +26,7 @@ pub const DEFAULT_WEB3_TRANSPORT: &str = "ipc";
 
 use crate::dashboard::grafana::{GrafanaAPI, DASHBOARD_TEMPLATES};
 
-use super::portal_wire::{NetworkSpec, MAINNET, TESTNET};
+use super::portal_wire::{NetworkSpec, ANGELFOOD, MAINNET};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Web3TransportType {
@@ -158,7 +158,7 @@ pub struct TrinConfig {
 
     #[arg(
         long = "network",
-            help = "Choose mainnet or testnet",
+            help = "Choose mainnet or angelfood",
             default_value = DEFAULT_NETWORK,
             value_parser = network_parser
         )]
@@ -305,9 +305,9 @@ pub fn check_private_key_length(private_key: &str) -> Result<B256, String> {
 pub fn network_parser(network_string: &str) -> Result<Arc<NetworkSpec>, String> {
     match network_string {
         "mainnet" => Ok(MAINNET.clone()),
-        "testnet" => Ok(TESTNET.clone()),
+        "angelfood" => Ok(ANGELFOOD.clone()),
         _ => Err(format!(
-            "Not a valid network: {network_string}, must be 'testnet' or 'mainnet'"
+            "Not a valid network: {network_string}, must be 'angelfood' or 'mainnet'"
         )),
     }
 }

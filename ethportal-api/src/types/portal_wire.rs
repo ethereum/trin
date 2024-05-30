@@ -222,7 +222,7 @@ pub static MAINNET: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
     .into()
 });
 
-pub static TESTNET: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
+pub static ANGELFOOD: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
     let mut portal_networks = BiHashMap::new();
     portal_networks.insert(ProtocolId::State, "0x504A".to_string());
     portal_networks.insert(ProtocolId::History, "0x504B".to_string());
@@ -233,7 +233,7 @@ pub static TESTNET: Lazy<Arc<NetworkSpec>> = Lazy::new(|| {
     portal_networks.insert(ProtocolId::Utp, "0x757470".to_string());
     NetworkSpec {
         portal_networks,
-        network_name: "testnet".to_string(),
+        network_name: "angelfood".to_string(),
     }
     .into()
 });

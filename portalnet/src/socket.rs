@@ -5,7 +5,7 @@ use std::{
 };
 use tracing::{debug, info, warn};
 
-// This stun server is part of the testnet infrastructure.
+// This stun server is part of the mainnet infrastructure.
 // If you are unable to connect, please create an issue.
 const STUN_SERVER: &str = "159.223.0.83:3478";
 

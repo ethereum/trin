@@ -134,10 +134,10 @@ pub async fn test_ping(protocol: ProtocolId, target: &Client, peertest: &Peertes
 }
 
 pub async fn test_ping_cross_network(target: &Client, peertest: &Peertest) {
-    info!("Testing ping for history cross mainnet and testnet discv5 protocol id");
+    info!("Testing ping for history cross mainnet and angelfood discv5 protocol id");
     let bootnode_enr = peertest.bootnode.enr.clone();
     if let Ok(pong) = HistoryNetworkApiClient::ping(target, bootnode_enr).await {
-        panic!("Expected ping to fail as mainnet/testnet history nodes shouldn't be able to communicate {pong:?}");
+        panic!("Expected ping to fail as mainnet/angelfood history nodes shouldn't be able to communicate {pong:?}");
     };
 }
 
