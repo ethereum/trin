@@ -130,9 +130,9 @@ RUST_LOG=debug cargo run -- \
     --no-stun
 ```
 
-### Connect to the Portal Network testnet
+### Connect to the Portal Network mainnet
 
-To immediately connect to the testnet, you can use the `--bootnodes default` argument to automatically connect with the default Trin bootnodes.
+To immediately connect to the mainnet, you can use the `--bootnodes default` argument to automatically connect with the default Trin bootnodes.
 
 ```sh
 cargo run -- --bootnodes default

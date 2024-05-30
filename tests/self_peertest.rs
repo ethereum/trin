@@ -215,7 +215,7 @@ async fn peertest_state_recursive_gossip() {
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
 async fn peertest_ping_cross_discv5_protocol_id() {
-    let (peertest, target, handle) = setup_peertest("testnet").await;
+    let (peertest, target, handle) = setup_peertest("angelfood").await;
     peertest::scenarios::basic::test_ping_cross_network(&target, &peertest).await;
     peertest.exit_all_nodes();
     handle.stop().unwrap();

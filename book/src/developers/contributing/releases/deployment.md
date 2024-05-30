@@ -93,7 +93,7 @@ Another successful release! 🎉
 
 - `latest`: [This image](https://github.com/ethereum/trin/blob/master/docker/Dockerfile) with `trin` is built on every push to master
 - `latest-bridge`: [This image](https://github.com/ethereum/trin/blob/master/docker/Dockerfile.bridge) with `portal-bridge` is built on every push to master
-- `testnet`: This tag is used by Ansible to load `trin` onto the nodes we host
+- `angelfood`: This tag is used by Ansible to load `trin` onto the nodes we host
 - `bridge`: This tag is used by Ansible to load `portal-bridge` onto the nodes we host
 
 Note that building the Docker image on git's master takes some time. If you merge to master and immediately pull the `latest` Docker image, you won't be getting the build of that latest commit. You have to wait for the Docker build to complete. You should be able to see on github when the Docker build has finished.

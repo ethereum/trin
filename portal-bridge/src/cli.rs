@@ -63,7 +63,7 @@ pub struct BridgeConfig {
 
     #[arg(
             long = "network",
-                help = "Choose mainnet or testnet",
+                help = "Choose mainnet or angelfood",
                 default_value = DEFAULT_NETWORK,
                 value_parser = network_parser
             )]

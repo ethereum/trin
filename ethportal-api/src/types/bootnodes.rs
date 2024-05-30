@@ -12,7 +12,7 @@ pub struct Bootnode {
 
 lazy_static! {
     pub static ref DEFAULT_BOOTNODES: Vec<Bootnode> = vec![
-        // https://github.com/ethereum/portal-network-specs/blob/master/testnet.md
+        // https://github.com/ethereum/portal-network-specs/blob/master/bootnodes.md
         // Trin bootstrap nodes
         Bootnode{
             enr: Enr::from_str("enr:-Jy4QIs2pCyiKna9YWnAF0zgf7bT0GzlAGoF8MEKFJOExmtofBIqzm71zDvmzRiiLkxaEJcs_Amr7XIhLI74k1rtlXICY5Z0IDAuMS4xLWFscGhhLjEtMTEwZjUwgmlkgnY0gmlwhKEjVaWJc2VjcDI1NmsxoQLSC_nhF1iRwsCw0n3J4jRjqoaRxtKgsEe5a-Dz7y0JloN1ZHCCIyg").expect("Parsing static bootnode enr to work"),
@@ -135,7 +135,7 @@ mod test {
     use rstest::rstest;
 
     #[test_log::test]
-    fn test_bootnodes_default_with_testnet_bootnodes() {
+    fn test_bootnodes_default_with_angelfood_bootnodes() {
         let config = TrinConfig::new_from(["trin"].iter()).unwrap();
         assert_eq!(config.bootnodes, Bootnodes::Default);
         let bootnodes: Vec<Enr> = config.bootnodes.into();
