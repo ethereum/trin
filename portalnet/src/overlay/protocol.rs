@@ -204,9 +204,9 @@ where
     }
 
     /// Propagate gossip accepted content via OFFER/ACCEPT, return number of peers propagated
-    pub fn propagate_gossip(&self, content: Vec<(TContentKey, Vec<u8>)>) -> usize {
+    pub async fn propagate_gossip(&self, content: Vec<(TContentKey, Vec<u8>)>) -> usize {
         let kbuckets = Arc::clone(&self.kbuckets);
-        propagate_gossip_cross_thread(content, kbuckets, self.command_tx.clone(), None)
+        propagate_gossip_cross_thread(content, kbuckets, self.command_tx.clone(), None).await
     }
 
     /// Propagate gossip accepted content via OFFER/ACCEPT, returns trace detailing outcome of

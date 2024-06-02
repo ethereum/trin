@@ -21,9 +21,9 @@ pub async fn test_gossip_with_trace(peertest: &Peertest, target: &Client) {
         .await
         .unwrap();
 
-    assert_eq!(result.offered.len(), 1);
-    assert_eq!(result.accepted.len(), 1);
-    assert_eq!(result.transferred.len(), 1);
+    assert_eq!(result.offered.len(), 2);
+    assert_eq!(result.accepted.len(), 2);
+    assert_eq!(result.transferred.len(), 2);
 
     // Check if the stored content value in bootnode's DB matches the offered
     let received_content_value =
@@ -74,7 +74,7 @@ pub async fn test_gossip_with_trace(peertest: &Peertest, target: &Client) {
         .await
         .unwrap();
 
-    assert_eq!(result.offered.len(), 2);
+    assert_eq!(result.offered.len(), 3);
     assert_eq!(result.accepted.len(), 1);
     assert_eq!(result.transferred.len(), 1);
 
@@ -91,7 +91,7 @@ pub async fn test_gossip_with_trace(peertest: &Peertest, target: &Client) {
         .await
         .unwrap();
 
-    assert_eq!(result.offered.len(), 2);
+    assert_eq!(result.offered.len(), 3);
     assert_eq!(result.accepted.len(), 0);
     assert_eq!(result.transferred.len(), 0);
 }
