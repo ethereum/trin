@@ -22,7 +22,7 @@ const_format = {version = "0.2.0", features = ["rust_1_64"]}
 c-kzg = "1.0.0"
 discv5 = { version = "0.4.1", features = ["serde"] }
 ethereum_hashing = "0.6.0"
-eth_trie = { git = "https://github.com/kolbyml/eth-trie.rs.git", rev = "11ec003e3276e1413f06328ab746af5d99f112bb" }
+eth_trie = { git = "https://github.com/kolbyml/eth-trie.rs.git", rev = "a69f99cdee5ea37edddd1147058f1990a5d943eb" }
 ethereum_serde_utils = "0.5.2"
 ethereum_ssz = "0.5.3"
 ethereum_ssz_derive = "0.5.3"

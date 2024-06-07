@@ -2374,7 +2374,7 @@ dependencies = [
 [[package]]
 name = "eth_trie"
 version = "0.4.0"
-source = "git+https://github.com/kolbyml/eth-trie.rs.git?rev=11ec003e3276e1413f06328ab746af5d99f112bb#11ec003e3276e1413f06328ab746af5d99f112bb"
+source = "git+https://github.com/kolbyml/eth-trie.rs.git?rev=a69f99cdee5ea37edddd1147058f1990a5d943eb#a69f99cdee5ea37edddd1147058f1990a5d943eb"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -5247,6 +5247,7 @@ dependencies = [
  "ethereum_ssz_derive",
  "ethportal-api",
  "futures 0.3.30",
+ "hashbrown 0.14.5",
  "jsonrpsee",
  "lazy_static",
  "parking_lot 0.11.2",

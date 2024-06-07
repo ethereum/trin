@@ -4,3 +4,4 @@ pub mod database;
 pub mod execution;
 pub mod spec_id;
 pub mod transaction;
+pub mod trie_walker;
