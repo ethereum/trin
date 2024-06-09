@@ -1,20 +1,19 @@
 use alloy_primitives::{keccak256, Address, Bytes, B256, U256};
-use alloy_rlp::EMPTY_STRING_CODE;
+use alloy_rlp::{Decodable, EMPTY_STRING_CODE};
 use anyhow::{anyhow, bail, ensure, Error};
 use eth_trie::{RootWithTrieDiff, Trie};
 use ethportal_api::types::{
     execution::transaction::Transaction,
     state_trie::account_state::AccountState as AccountStateInfo,
 };
-use revm::{
-    db::EmptyDB, inspector_handle_register, inspectors::NoOpInspector, DatabaseCommit, Evm,
-};
+use revm::{inspector_handle_register, inspectors::NoOpInspector, DatabaseCommit, Evm};
 use revm_primitives::{Env, SpecId};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeSet, HashMap},
     fs::File,
     io::BufReader,
+    path::PathBuf,
 };
 use tracing::info;
 
@@ -22,8 +21,8 @@ use crate::types::{
     era1::BlockTuple,
     state::{
         block_reward::get_block_reward,
-        database::{CacheDB, DbAccount},
         spec_id::get_spec_id,
+        storage::{account::Account, evm_db::EvmDB},
         transaction::TxEnvModifier,
     },
 };
@@ -43,7 +42,7 @@ struct GenesisConfig {
 }
 
 pub struct State {
-    pub database: CacheDB<EmptyDB>,
+    pub database: EvmDB,
     next_block_number: u64,
 }
 
@@ -51,15 +50,15 @@ const GENESIS_STATE_FILE: &str = "resources/genesis/mainnet.json";
 
 impl Default for State {
     fn default() -> Self {
-        Self::new()
+        Self::new(None)
     }
 }
 
 impl State {
-    pub fn new() -> Self {
+    pub fn new(path: Option<PathBuf>) -> Self {
         State {
             next_block_number: 0,
-            database: CacheDB::new(EmptyDB::default()),
+            database: EvmDB::new(path).expect("Failed to create EVM database"),
         }
     }
 
@@ -74,19 +73,20 @@ impl State {
         let genesis: GenesisConfig = serde_json::from_reader(BufReader::new(genesis_file))?;
 
         for (address, alloc_balance) in genesis.alloc {
-            let mut account = DbAccount::default();
-            account.info.balance += alloc_balance.balance;
-            let account_info = account.info.clone();
-            self.database.accounts.insert(address, account);
+            let mut account = Account::default();
+            account.balance += alloc_balance.balance;
             self.database.trie.lock().insert(
                 keccak256(address).as_ref(),
                 &alloy_rlp::encode(AccountStateInfo {
-                    nonce: account_info.nonce,
-                    balance: account_info.balance,
+                    nonce: account.nonce,
+                    balance: account.balance,
                     storage_root: keccak256([EMPTY_STRING_CODE]),
-                    code_hash: account_info.code_hash,
+                    code_hash: account.code_hash,
                 }),
             )?;
+            self.database
+                .db
+                .put(keccak256(address.as_slice()), alloy_rlp::encode(account))?;
         }
 
         let root_with_trie_diff = self.get_root_with_trie_diff()?;
@@ -138,10 +138,10 @@ impl State {
         }
 
         // insert blockhash into database
-        self.database.block_hashes.insert(
-            U256::from(block_tuple.header.header.number),
+        self.database.db.put(
+            keccak256(B256::from(U256::from(block_tuple.header.header.number))),
             block_tuple.header.header.hash(),
-        );
+        )?;
 
         // execute transactions
         let transactions = block_tuple
@@ -162,14 +162,20 @@ impl State {
                 .lock()
                 .insert(keccak256(beneficiary).as_ref(), &alloy_rlp::encode(account))?;
 
-            match self.database.accounts.get_mut(&beneficiary) {
-                Some(account) => {
-                    account.info.balance += U256::from(reward);
+            match self.database.db.get(keccak256(beneficiary))? {
+                Some(account_bytes) => {
+                    let mut account: Account = Decodable::decode(&mut account_bytes.as_slice())?;
+                    account.balance += U256::from(reward);
+                    self.database
+                        .db
+                        .put(keccak256(beneficiary), alloy_rlp::encode(account))?;
                 }
                 None => {
-                    let mut account = DbAccount::default();
-                    account.info.balance += U256::from(reward);
-                    self.database.accounts.insert(beneficiary, account);
+                    let mut account = Account::default();
+                    account.balance += U256::from(reward);
+                    self.database
+                        .db
+                        .put(keccak256(beneficiary), alloy_rlp::encode(account))?;
                 }
             }
         }
@@ -220,6 +226,7 @@ impl State {
             .append_handler_register(inspector_handle_register)
             .build()
             .transact()?;
+
         self.database.commit(evm_result.state);
         Ok(())
     }
@@ -233,14 +240,17 @@ impl State {
     }
 
     pub fn get_account_state(&self, account: &Address) -> anyhow::Result<AccountStateInfo> {
-        let account_state = self.database.accounts.get(account);
+        let account_state = self.database.db.get(keccak256(account))?;
         match account_state {
-            Some(account_db) => Ok(AccountStateInfo {
-                nonce: account_db.info.nonce,
-                balance: account_db.info.balance,
-                storage_root: account_db.trie.lock().root_hash()?,
-                code_hash: account_db.info.code_hash,
-            }),
+            Some(account) => {
+                let account: Account = Decodable::decode(&mut account.as_slice())?;
+                Ok(AccountStateInfo {
+                    nonce: account.nonce,
+                    balance: account.balance,
+                    storage_root: account.storage_root,
+                    code_hash: account.code_hash,
+                })
+            }
             None => Ok(AccountStateInfo::default()),
         }
     }
@@ -295,7 +305,7 @@ impl State {
 mod tests {
     use std::fs;
 
-    use crate::types::era1::Era1;
+    use crate::types::{era1::Era1, state::storage::utils::setup_temp_dir};
 
     use super::State;
     use alloy_primitives::Address;
@@ -303,7 +313,8 @@ mod tests {
 
     #[test_log::test]
     fn test_we_generate_the_correct_state_root_for_the_first_8192_blocks() {
-        let mut state = State::new();
+        let temp_directory = setup_temp_dir().unwrap();
+        let mut state = State::new(Some(temp_directory.path().to_path_buf()));
         let _ = state.initialize_genesis();
         let raw_era1 = fs::read("../test_assets/era1/mainnet-00000-5ec1ffb8.era1").unwrap();
         for block_tuple in Era1::iter_tuples(raw_era1) {
@@ -320,7 +331,8 @@ mod tests {
 
     #[test_log::test]
     fn test_get_proof() {
-        let mut state = State::new();
+        let temp_directory = setup_temp_dir().unwrap();
+        let mut state = State::new(Some(temp_directory.path().to_path_buf()));
         let _ = state.initialize_genesis().unwrap();
         let valid_proof = state
             .get_proof(&Address::from_hex("0x001d14804b399c6ef80e64576f657660804fec0b").unwrap())

@@ -3,7 +3,10 @@
 mod tests {
     use portal_bridge::{
         bridge::era1::get_shuffled_era1_files,
-        types::{era1::Era1, state::execution::State},
+        types::{
+            era1::Era1,
+            state::{execution::State, storage::utils::setup_temp_dir},
+        },
     };
     use surf::{Client, Config};
     use tracing_test::traced_test;
@@ -24,7 +27,9 @@ mod tests {
             .try_into()
             .unwrap();
         let era1_files = get_shuffled_era1_files(&http_client).await.unwrap();
-        let mut state = State::new().unwrap();
+        let temp_directory = setup_temp_dir().unwrap();
+        let mut state = State::new(Some(temp_directory.path().to_path_buf()));
+        state.initialize_genesis().unwrap();
         for epoch_index in 0..=last_epoch {
             println!("Gossipping state for epoch: {epoch_index}");
             let era1_path = era1_files
@@ -35,9 +40,12 @@ mod tests {
                 .get(era1_path.clone())
                 .recv_bytes()
                 .await
-                .unwrap_or_else(|_| panic!("unable to read era1 file at path: {era1_path:?}"));
+                .unwrap_or_else(|err| {
+                    panic!("unable to read era1 file at path: {era1_path:?} : {err}")
+                });
 
             for block_tuple in Era1::iter_tuples(raw_era1) {
+                println!("Processing block: {}", block_tuple.header.header.number);
                 if block_tuple.header.header.number == 0 {
                     continue;
                 }

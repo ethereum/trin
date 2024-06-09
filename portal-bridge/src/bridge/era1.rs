@@ -226,7 +226,9 @@ impl Era1Bridge {
             .get(era1_path.clone())
             .recv_bytes()
             .await
-            .unwrap_or_else(|_| panic!("unable to read era1 file at path: {era1_path:?}"));
+            .unwrap_or_else(|err| {
+                panic!("unable to read era1 file at path: {era1_path:?} : {err}")
+            });
         let epoch_index = match get_epoch_from_era1_path(&era1_path) {
             Ok(epoch) => epoch,
             Err(e) => {
