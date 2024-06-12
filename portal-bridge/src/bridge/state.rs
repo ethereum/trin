@@ -2,6 +2,7 @@ use std::{path::PathBuf, sync::Arc};
 
 use super::era1::get_shuffled_era1_files;
 use anyhow::anyhow;
+use eth_trie::RootWithTrieDiff;
 use ethportal_api::{jsonrpsee::http_client::HttpClient, StateContentKey, StateContentValue};
 use revm_primitives::SpecId;
 use surf::{Client, Config};
@@ -24,6 +25,7 @@ use crate::{
             content::{create_content_key, create_content_value},
             execution::State,
             spec_id::get_spec_block_number,
+            trie_walker::TrieWalker,
         },
     },
 };
@@ -91,7 +93,7 @@ impl StateBridge {
         let gossip_send_semaphore = Arc::new(Semaphore::new(self.gossip_limit));
         let mut current_epoch_index = u64::MAX;
         let mut current_raw_era1 = vec![];
-        let mut state = State::new().map_err(|e| anyhow!("unable to create genesis state: {e}"))?;
+        let mut state = State::new();
         for block_index in 0..=last_block {
             info!("Gossipping state for block at height: {block_index}");
             let epoch_index = block_index / EPOCH_SIZE;
@@ -114,19 +116,26 @@ impl StateBridge {
 
             // process block
             let block_tuple = Era1::get_tuple_by_index(&current_raw_era1, block_index % EPOCH_SIZE);
-            let updated_accounts = match block_index == 0 {
-                true => state.database.accounts.keys().copied().collect(),
+            let RootWithTrieDiff {
+                root: root_hash,
+                trie_diff: changed_nodes,
+            } = match block_index == 0 {
+                true => state
+                    .initialize_genesis()
+                    .map_err(|e| anyhow!("unable to create genesis state: {e}"))?,
                 false => state.process_block(&block_tuple)?,
             };
 
+            let walk_diff = TrieWalker::new(root_hash, changed_nodes);
+
             // gossip block's new state transitions
-            for updated_account in updated_accounts {
+            for node in walk_diff.nodes.keys() {
                 let permit = gossip_send_semaphore
                     .clone()
                     .acquire_owned()
                     .await
                     .expect("to be able to acquire semaphore");
-                let account_proof = state.get_proof(&updated_account)?;
+                let account_proof = walk_diff.get_proof(*node);
                 let content_key = create_content_key(&account_proof)?;
                 let content_value =
                     create_content_value(block_tuple.header.header.hash(), &account_proof)?;
