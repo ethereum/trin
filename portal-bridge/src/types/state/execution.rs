@@ -27,7 +27,7 @@ use crate::types::{
     },
 };
 
-use super::trie_walker::AccountProof;
+use super::{config::StateConfig, types::trie_proof::TrieProof, utils::address_to_nibble_path};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct AllocBalance {
@@ -43,6 +43,7 @@ struct GenesisConfig {
 
 pub struct State {
     pub database: EvmDB,
+    pub config: StateConfig,
     next_block_number: u64,
 }
 
@@ -50,15 +51,16 @@ const GENESIS_STATE_FILE: &str = "resources/genesis/mainnet.json";
 
 impl Default for State {
     fn default() -> Self {
-        Self::new(None)
+        Self::new(None, StateConfig::default())
     }
 }
 
 impl State {
-    pub fn new(path: Option<PathBuf>) -> Self {
+    pub fn new(path: Option<PathBuf>, config: StateConfig) -> Self {
         State {
             next_block_number: 0,
-            database: EvmDB::new(path).expect("Failed to create EVM database"),
+            config: config.clone(),
+            database: EvmDB::new(path, config).expect("Failed to create EVM database"),
         }
     }
 
@@ -255,12 +257,12 @@ impl State {
         }
     }
 
-    pub fn get_proof(&mut self, account: &Address) -> anyhow::Result<AccountProof> {
+    pub fn get_proof(&mut self, address: Address) -> anyhow::Result<TrieProof> {
         let proof: Vec<Bytes> = self
             .database
             .trie
             .lock()
-            .get_proof(keccak256(account).as_slice())?
+            .get_proof(keccak256(address).as_slice())?
             .into_iter()
             .map(Bytes::from)
             .collect();
@@ -277,26 +279,20 @@ impl State {
             bail!("Nibbles of the last node should have LEAF Marker")
         }
 
-        let mut path: Vec<u8> = keccak256(*account)
-            .into_iter()
-            .flat_map(|b| [b >> 4, b & 0xF])
-            .collect();
+        let mut path = address_to_nibble_path(address);
         if path.ends_with(last_node_nibbles.get_data()) {
             path.truncate(path.len() - last_node_nibbles.len());
         } else {
             bail!("Path should have a suffix of last node's nibbles")
         }
 
-        Ok(AccountProof { path, proof })
+        Ok(TrieProof { path, proof })
     }
 
-    pub fn get_proofs(
-        &mut self,
-        accounts: &BTreeSet<Address>,
-    ) -> anyhow::Result<Vec<AccountProof>> {
+    pub fn get_proofs(&mut self, accounts: &BTreeSet<Address>) -> anyhow::Result<Vec<TrieProof>> {
         accounts
             .iter()
-            .map(|account| self.get_proof(account))
+            .map(|account| self.get_proof(*account))
             .collect()
     }
 }
@@ -305,7 +301,10 @@ impl State {
 mod tests {
     use std::fs;
 
-    use crate::types::{era1::Era1, state::storage::utils::setup_temp_dir};
+    use crate::types::{
+        era1::Era1,
+        state::{config::StateConfig, storage::utils::setup_temp_dir},
+    };
 
     use super::State;
     use alloy_primitives::Address;
@@ -314,7 +313,10 @@ mod tests {
     #[test_log::test]
     fn test_we_generate_the_correct_state_root_for_the_first_8192_blocks() {
         let temp_directory = setup_temp_dir().unwrap();
-        let mut state = State::new(Some(temp_directory.path().to_path_buf()));
+        let mut state = State::new(
+            Some(temp_directory.path().to_path_buf()),
+            StateConfig::default(),
+        );
         let _ = state.initialize_genesis();
         let raw_era1 = fs::read("../test_assets/era1/mainnet-00000-5ec1ffb8.era1").unwrap();
         for block_tuple in Era1::iter_tuples(raw_era1) {
@@ -332,10 +334,13 @@ mod tests {
     #[test_log::test]
     fn test_get_proof() {
         let temp_directory = setup_temp_dir().unwrap();
-        let mut state = State::new(Some(temp_directory.path().to_path_buf()));
+        let mut state = State::new(
+            Some(temp_directory.path().to_path_buf()),
+            StateConfig::default(),
+        );
         let _ = state.initialize_genesis().unwrap();
         let valid_proof = state
-            .get_proof(&Address::from_hex("0x001d14804b399c6ef80e64576f657660804fec0b").unwrap())
+            .get_proof(Address::from_hex("0x001d14804b399c6ef80e64576f657660804fec0b").unwrap())
             .unwrap();
         assert_eq!(valid_proof.path, [5, 9, 2, 13]);
         // the proof is already tested by eth-trie.rs

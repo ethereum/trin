@@ -12,13 +12,13 @@ use crate::{
 /// A Portal State content value.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum StateContentValue {
-    /// A content value type for retriving a trie node.
+    /// A content value type for retrieving a trie node.
     TrieNode(TrieNode),
     /// A content value type for offering a trie node from the account trie.
     AccountTrieNodeWithProof(AccountTrieNodeWithProof),
     /// A content value type for offering a trie node from the contract storage trie.
     ContractStorageTrieNodeWithProof(ContractStorageTrieNodeWithProof),
-    /// A content value type for retriving contract's bytecode.
+    /// A content value type for retrieving contract's bytecode.
     ContractBytecode(ContractBytecode),
     /// A content value type for offering contract's bytecode.
     ContractBytecodeWithProof(ContractBytecodeWithProof),
