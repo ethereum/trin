@@ -92,6 +92,15 @@ impl ForkVersionedLightClientBootstrap {
             bootstrap: light_client_bootstrap,
         })
     }
+
+    /// Get the slot of the `LightClientBootstrap`
+    pub fn get_slot(&self) -> u64 {
+        match &self.bootstrap {
+            LightClientBootstrap::Bellatrix(bootstrap) => bootstrap.header.beacon.slot,
+            LightClientBootstrap::Capella(bootstrap) => bootstrap.header.beacon.slot,
+            LightClientBootstrap::Deneb(bootstrap) => bootstrap.header.beacon.slot,
+        }
+    }
 }
 
 impl Decode for ForkVersionedLightClientBootstrap {
@@ -383,6 +392,15 @@ impl ForkVersionedLightClientFinalityUpdate {
             fork_name,
             update: content,
         })
+    }
+
+    /// Get the finalized slot of the `LightClientFinalityUpdate`
+    pub fn get_finalized_slot(&self) -> u64 {
+        match &self.update {
+            LightClientFinalityUpdate::Bellatrix(update) => update.finalized_header.beacon.slot,
+            LightClientFinalityUpdate::Capella(update) => update.finalized_header.beacon.slot,
+            LightClientFinalityUpdate::Deneb(update) => update.finalized_header.beacon.slot,
+        }
     }
 }
 

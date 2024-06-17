@@ -12,6 +12,7 @@ authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 [dependencies]
 anyhow = "1.0.68"
+chrono = "0.4.38"
 discv5 = { version = "0.4.1", features = ["serde"] }
 ethereum_ssz = "0.5.3"
 ethportal-api = { path = "../ethportal-api" }

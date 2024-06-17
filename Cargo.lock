@@ -8384,6 +8384,7 @@ name = "trin-beacon"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "discv5",
  "ethereum_ssz",
  "ethportal-api",
