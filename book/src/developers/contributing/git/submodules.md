@@ -7,7 +7,7 @@ just cloned the project, be sure to run:
 $ git submodule update --init
 ```
 
-This page provides short overview of most common use cases.
+This page provides a short overview of the most common use cases.
 
 ## Pulling in Upstream Changes from the Submodule Remote
 
