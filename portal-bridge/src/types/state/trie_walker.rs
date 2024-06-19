@@ -81,15 +81,12 @@ impl TrieWalker {
                     if let Node::Hash(hash_node) = &extension.node {
                         // Only process provided nodes (they belong to the partial trie that we care
                         // about)
-                        if nodes.contains_key(&hash_node.hash) {
+                        if let Some(encoded_node) = nodes.get(&hash_node.hash) {
                             stack.push(hash_node.hash);
                             trie_walker_nodes.insert(
                                 hash_node.hash,
                                 TrieWalkerNode::new(
-                                    nodes
-                                    .get(&hash_node.hash)
-                                    .expect("The stack should only contain nodes that are in the changed nodes")
-                                    .clone(),
+                                    encoded_node.clone(),
                                     Some(node_key),
                                     extension.prefix.get_data().to_vec(),
                                 ),
@@ -108,15 +105,12 @@ impl TrieWalker {
                         if let Node::Hash(hash_node) = child {
                             //Only process provided nodes (they belong to the partial trie that we
                             // care about)
-                            if nodes.contains_key(&hash_node.hash) {
+                            if let Some(encoded_node) = nodes.get(&hash_node.hash) {
                                 stack.push(hash_node.hash);
                                 trie_walker_nodes.insert(
                                     hash_node.hash,
                                     TrieWalkerNode::new(
-                                        nodes
-                                    .get(&hash_node.hash)
-                                    .expect("The stack should only contain nodes that are in the changed nodes")
-                                    .clone(),
+                                        encoded_node.clone(),
                                         Some(node_key),
                                         vec![i as u8],
                                     ),
@@ -141,14 +135,14 @@ impl TrieWalker {
         let mut reverse_proof = vec![];
         let mut next_node: Option<B256> = Some(node_hash);
         while let Some(current_node) = next_node {
-            let Some(parent) = self.nodes.get(&current_node) else {
-                break;
+            let Some(node) = self.nodes.get(&current_node) else {
+                panic!("Node not found in trie walker nodes. This should never happen.");
             };
-            for nibble in parent.path_nibbles.iter().rev() {
+            for nibble in node.path_nibbles.iter().rev() {
                 reverse_path.push(*nibble);
             }
-            reverse_proof.push(Bytes(parent.encoded_node.clone().into()));
-            next_node = parent.parent_hash;
+            reverse_proof.push(Bytes(node.encoded_node.clone().into()));
+            next_node = node.parent_hash;
         }
 
         reverse_path.reverse();
@@ -162,7 +156,9 @@ impl TrieWalker {
 
 #[cfg(test)]
 mod tests {
-    use crate::types::state::{execution::State, trie_walker::TrieWalker};
+    use crate::types::state::{
+        execution::State, storage::utils::setup_temp_dir, trie_walker::TrieWalker,
+    };
 
     use alloy_primitives::{keccak256, Address};
     use anyhow::anyhow;
@@ -171,7 +167,8 @@ mod tests {
 
     #[test_log::test]
     fn test_trie_walker_builds_valid_proof() {
-        let mut state = State::new();
+        let temp_directory = setup_temp_dir().unwrap();
+        let mut state = State::new(Some(temp_directory.path().to_path_buf()));
         let RootWithTrieDiff { trie_diff, .. } = state.initialize_genesis().unwrap();
         let valid_proof = state
             .get_proof(&Address::from_hex("0x001d14804b399c6ef80e64576f657660804fec0b").unwrap())

@@ -25,6 +25,7 @@ use crate::{
             content::{create_content_key, create_content_value},
             execution::State,
             spec_id::get_spec_block_number,
+            storage::utils::setup_temp_dir,
             trie_walker::TrieWalker,
         },
     },
@@ -93,7 +94,8 @@ impl StateBridge {
         let gossip_send_semaphore = Arc::new(Semaphore::new(self.gossip_limit));
         let mut current_epoch_index = u64::MAX;
         let mut current_raw_era1 = vec![];
-        let mut state = State::new();
+        let temp_directory = setup_temp_dir()?;
+        let mut state = State::new(Some(temp_directory.path().to_path_buf()));
         for block_index in 0..=last_block {
             info!("Gossipping state for block at height: {block_index}");
             let epoch_index = block_index / EPOCH_SIZE;
@@ -109,7 +111,9 @@ impl StateBridge {
                     .get(era1_path.clone())
                     .recv_bytes()
                     .await
-                    .unwrap_or_else(|_| panic!("unable to read era1 file at path: {era1_path:?}"));
+                    .unwrap_or_else(|err| {
+                        panic!("unable to read era1 file at path: {era1_path:?} : {err}")
+                    });
                 current_epoch_index = epoch_index;
                 current_raw_era1 = raw_era1;
             }
