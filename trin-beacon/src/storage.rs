@@ -620,23 +620,14 @@ impl BeaconStorage {
 #[allow(clippy::unwrap_used)]
 mod test {
     use super::*;
+    use crate::test_utils;
     use ethportal_api::{
-        consensus::{
-            beacon_state::BeaconStateDeneb,
-            fork::ForkName,
-            historical_summaries::{HistoricalSummariesStateProof, HistoricalSummariesWithProof},
-        },
-        light_client::{
-            finality_update::LightClientFinalityUpdate,
-            optimistic_update::LightClientOptimisticUpdate, update::LightClientUpdate,
-        },
         types::content_key::beacon::{
             HistoricalSummariesWithProofKey, LightClientFinalityUpdateKey,
             LightClientOptimisticUpdateKey,
         },
         LightClientBootstrapKey, LightClientUpdatesByRangeKey,
     };
-    use serde_json::Value;
     use trin_storage::test_utils::create_test_portal_storage_config_with_capacity;
 
     #[test]
@@ -660,8 +651,8 @@ mod test {
             start_period: 1,
             count: 2,
         });
-        let lc_update_0 = get_light_client_update(0);
-        let lc_update_1 = get_light_client_update(1);
+        let lc_update_0 = test_utils::get_light_client_update(0);
+        let lc_update_1 = test_utils::get_light_client_update(1);
         let value = VariableList::<ForkVersionedLightClientUpdate, U128>::new(vec![
             lc_update_0.clone(),
             lc_update_1.clone(),
@@ -698,7 +689,7 @@ mod test {
     fn test_beacon_storage_get_put_finality_update() {
         let (_temp_dir, config) = create_test_portal_storage_config_with_capacity(10).unwrap();
         let mut storage = BeaconStorage::new(config).unwrap();
-        let value = get_light_client_finality_update(0);
+        let value = test_utils::get_light_client_finality_update(0);
         let finalized_slot = value.update.finalized_header_capella().unwrap().beacon.slot;
         let key = BeaconContentKey::LightClientFinalityUpdate(LightClientFinalityUpdateKey {
             finalized_slot,
@@ -737,7 +728,7 @@ mod test {
     fn test_beacon_storage_get_put_optimistic_update() {
         let (_temp_dir, config) = create_test_portal_storage_config_with_capacity(10).unwrap();
         let mut storage = BeaconStorage::new(config).unwrap();
-        let value = get_light_client_optimistic_update(0);
+        let value = test_utils::get_light_client_optimistic_update(0);
         let signature_slot = *value.update.signature_slot();
         let key = BeaconContentKey::LightClientOptimisticUpdate(LightClientOptimisticUpdateKey {
             signature_slot,
@@ -776,7 +767,7 @@ mod test {
     fn test_beacon_storage_get_put_historical_summaries() {
         let (_temp_dir, config) = create_test_portal_storage_config_with_capacity(10).unwrap();
         let mut storage = BeaconStorage::new(config).unwrap();
-        let value = get_history_summaries_with_proof();
+        let value = test_utils::get_history_summaries_with_proof();
         let epoch = value.historical_summaries_with_proof.epoch;
         let key = BeaconContentKey::HistoricalSummariesWithProof(HistoricalSummariesWithProofKey {
             epoch,
@@ -816,81 +807,5 @@ mod test {
         });
         let result = storage.get(&key).unwrap().unwrap();
         assert_eq!(result, value.as_ssz_bytes());
-    }
-
-    // Valid number range for the test cases is 0..4
-    fn get_light_client_update(number: u8) -> ForkVersionedLightClientUpdate {
-        let lc_update = std::fs::read(format!(
-            "../test_assets/beacon/capella/LightClientUpdate/ssz_random/case_{number}/serialized.ssz_snappy"
-        ))
-            .expect("cannot find test asset");
-        let mut decoder = snap::raw::Decoder::new();
-        let lc_update = decoder.decompress_vec(&lc_update).unwrap();
-        let lc_update = LightClientUpdate::from_ssz_bytes(&lc_update, ForkName::Capella).unwrap();
-
-        ForkVersionedLightClientUpdate {
-            fork_name: ForkName::Capella,
-            update: lc_update,
-        }
-    }
-
-    // Valid number range for the test cases is 0..4
-    fn get_light_client_finality_update(number: u8) -> ForkVersionedLightClientFinalityUpdate {
-        let lc_finality_update = std::fs::read(format!(
-            "../test_assets/beacon/capella/LightClientFinalityUpdate/ssz_random/case_{number}/serialized.ssz_snappy"
-        ))
-            .expect("cannot find test asset");
-        let mut decoder = snap::raw::Decoder::new();
-        let lc_finality_update = decoder.decompress_vec(&lc_finality_update).unwrap();
-        let lc_finality_update =
-            LightClientFinalityUpdate::from_ssz_bytes(&lc_finality_update, ForkName::Capella)
-                .unwrap();
-
-        ForkVersionedLightClientFinalityUpdate {
-            fork_name: ForkName::Deneb,
-            update: lc_finality_update,
-        }
-    }
-
-    // Valid number range for the test cases is 0..4
-    fn get_light_client_optimistic_update(number: u8) -> ForkVersionedLightClientOptimisticUpdate {
-        let lc_optimistic_update = std::fs::read(format!(
-            "../test_assets/beacon/capella/LightClientOptimisticUpdate/ssz_random/case_{number}/serialized.ssz_snappy"
-        ))
-            .expect("cannot find test asset");
-        let mut decoder = snap::raw::Decoder::new();
-        let lc_optimistic_update = decoder.decompress_vec(&lc_optimistic_update).unwrap();
-        let lc_optimistic_update =
-            LightClientOptimisticUpdate::from_ssz_bytes(&lc_optimistic_update, ForkName::Capella)
-                .unwrap();
-
-        ForkVersionedLightClientOptimisticUpdate {
-            fork_name: ForkName::Deneb,
-            update: lc_optimistic_update,
-        }
-    }
-
-    fn get_history_summaries_with_proof() -> ForkVersionedHistoricalSummariesWithProof {
-        let value = std::fs::read_to_string(
-            "../test_assets/beacon/deneb/BeaconState/ssz_random/case_0/value.yaml",
-        )
-        .expect("cannot find test asset");
-        let value: Value = serde_yaml::from_str(&value).unwrap();
-        let beacon_state: BeaconStateDeneb = serde_json::from_value(value).unwrap();
-        let historical_summaries_proof = beacon_state.build_historical_summaries_proof();
-        let historical_summaries_state_proof =
-            HistoricalSummariesStateProof::from(historical_summaries_proof);
-        let historical_summaries = beacon_state.historical_summaries.clone();
-        let historical_summaries_epoch = beacon_state.slot / 32;
-        let historical_summaries_with_proof = HistoricalSummariesWithProof {
-            epoch: historical_summaries_epoch,
-            historical_summaries,
-            proof: historical_summaries_state_proof.clone(),
-        };
-
-        ForkVersionedHistoricalSummariesWithProof {
-            fork_name: ForkName::Deneb,
-            historical_summaries_with_proof,
-        }
     }
 }

@@ -6,6 +6,8 @@ mod jsonrpc;
 pub mod network;
 mod storage;
 mod sync;
+#[cfg(test)]
+mod test_utils;
 pub mod validation;
 
 use std::sync::Arc;
