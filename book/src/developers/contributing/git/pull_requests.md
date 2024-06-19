@@ -15,7 +15,7 @@ through github via pull requests.
   prior to being merged.
     * Obvious exceptions include very small pull requests.
     * Less obvious examples include things like time-sensitive fixes.
-* You should not expect feedback on a pull request which is not passing CI.
+* You should not expect feedback on a pull request that is not passing CI.
     * Obvious exceptions include soliciting high-level feedback on your approach.
 
 

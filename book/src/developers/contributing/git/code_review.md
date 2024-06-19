@@ -4,7 +4,7 @@
 
 Every team member is responsible for reviewing code. The designations :speech_balloon:, :heavy_check_mark:, and :x: **should** be left by a reviewer as follows:
 
-- :speech_balloon: (Comment) should be used when there is not yet an opinion on overall validity of complete PR, for example:
+- :speech_balloon: (Comment) should be used when there is not yet an opinion on the overall validity of complete PR, for example:
   - comments from a partial review
   - comments from a complete review on a Work in Progress PR
   - questions or non-specific concerns, where the answer might trigger an expected change before merging

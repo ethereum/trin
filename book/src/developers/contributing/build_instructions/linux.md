@@ -65,7 +65,7 @@ Some selected flags are described below.
 
 `--no-stun`. A third party server connection is configured by default to assist in testing.
 This is a Session Traversal Utilities for NAT (STUN) server and may be disabled
-a flag. The docs state: "Do not use STUN to determine an external IP. Leaves
+as a flag. The docs state: "Do not use STUN to determine an external IP. Leaves
 ENR entry for IP blank. Some users report better connections over VPN."
 
 #### Optional flags for conflicting nodes
