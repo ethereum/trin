@@ -49,7 +49,7 @@ impl Era1 {
         (0..block_index.count).map(move |i| {
             let mut entries: [Entry; 4] = Default::default();
             for (j, entry) in entries.iter_mut().enumerate() {
-                *entry = file.entries[i as usize * 4 + j + 1].to_owned();
+                file.entries[i as usize * 4 + j + 1].clone_into(entry);
             }
             BlockTuple::try_from(&entries).expect("invalid block tuple")
         })
@@ -59,7 +59,7 @@ impl Era1 {
         let file = E2StoreFile::deserialize(raw_era1).expect("invalid era1 file");
         let mut entries: [Entry; 4] = Default::default();
         for (j, entry) in entries.iter_mut().enumerate() {
-            *entry = file.entries[index as usize * 4 + j + 1].to_owned();
+            file.entries[index as usize * 4 + j + 1].clone_into(entry);
         }
         BlockTuple::try_from(&entries).expect("invalid block tuple")
     }

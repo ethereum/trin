@@ -402,7 +402,9 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
             let store_period = calc_sync_period(self.store.finalized_header.slot);
 
             if self.store.next_sync_committee.is_none() {
-                self.store.next_sync_committee = update.next_sync_committee.clone();
+                self.store
+                    .next_sync_committee
+                    .clone_from(&update.next_sync_committee);
             } else if update_finalized_period == store_period + 1 {
                 info!("sync committee updated");
                 self.store.current_sync_committee = self
@@ -410,7 +412,9 @@ impl<R: ConsensusRpc> ConsensusLightClient<R> {
                     .next_sync_committee
                     .clone()
                     .expect("we know that this is `Some`");
-                self.store.next_sync_committee = update.next_sync_committee.clone();
+                self.store
+                    .next_sync_committee
+                    .clone_from(&update.next_sync_committee);
                 self.store.previous_max_active_participants =
                     self.store.current_max_active_participants;
                 self.store.current_max_active_participants = 0;

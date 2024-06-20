@@ -110,7 +110,7 @@ impl MemoryContentStore {
 impl ContentStore for MemoryContentStore {
     fn get<K: OverlayContentKey>(&self, key: &K) -> Result<Option<Vec<u8>>, ContentStoreError> {
         let key = key.content_id();
-        let val = self.store.get(&key.to_vec()).cloned();
+        let val = self.store.get(key.as_slice()).cloned();
         Ok(val)
     }
 

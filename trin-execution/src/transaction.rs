@@ -124,7 +124,7 @@ impl TxEnvModifier for BlobTransaction {
                 )
             })
             .collect();
-        tx_env.blob_hashes = self.blob_versioned_hashes.clone();
+        tx_env.blob_hashes.clone_from(&self.blob_versioned_hashes);
         tx_env.max_fee_per_blob_gas = Some(U256::from(self.max_fee_per_blob_gas));
     }
 }

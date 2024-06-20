@@ -293,6 +293,7 @@ mod tests {
 
     use ethportal_api::types::enr::generate_random_remote_enr;
 
+    #[allow(clippy::zero_repeat_side_effects)]
     #[rstest]
     #[case(vec![generate_random_remote_enr().1; 0], 0)]
     #[case(vec![generate_random_remote_enr().1; NUM_CLOSEST_NODES - 1], NUM_CLOSEST_NODES - 1)]
