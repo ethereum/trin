@@ -143,7 +143,7 @@ jobs:
           command: apt install -y clang
       - run:
           name: Install rustfmt
-          command: rustup component add rustfmt     
+          command: rustup component add --toolchain nightly rustfmt
       - run:
           name: Run rustfmt
           command: cargo +nightly fmt --all -- --check
