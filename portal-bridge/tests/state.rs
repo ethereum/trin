@@ -5,7 +5,7 @@ mod tests {
         bridge::era1::get_shuffled_era1_files,
         types::{
             era1::Era1,
-            state::{execution::State, storage::utils::setup_temp_dir},
+            state::{config::StateConfig, execution::State, storage::utils::setup_temp_dir},
         },
     };
     use surf::{Client, Config};
@@ -28,7 +28,10 @@ mod tests {
             .unwrap();
         let era1_files = get_shuffled_era1_files(&http_client).await.unwrap();
         let temp_directory = setup_temp_dir().unwrap();
-        let mut state = State::new(Some(temp_directory.path().to_path_buf()));
+        let mut state = State::new(
+            Some(temp_directory.path().to_path_buf()),
+            StateConfig::default(),
+        );
         state.initialize_genesis().unwrap();
         for epoch_index in 0..=last_epoch {
             println!("Gossipping state for epoch: {epoch_index}");

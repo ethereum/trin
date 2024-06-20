@@ -4,11 +4,7 @@ use eth_trie::{decode_node, node::Node};
 use hashbrown::HashMap as BrownHashMap;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct AccountProof {
-    pub path: Vec<u8>,
-    pub proof: Vec<Bytes>,
-}
+use super::types::trie_proof::TrieProof;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TrieWalkerNode {
@@ -129,7 +125,7 @@ impl TrieWalker {
         Ok(trie_walker_nodes)
     }
 
-    pub fn get_proof(&self, node_hash: B256) -> AccountProof {
+    pub fn get_proof(&self, node_hash: B256) -> TrieProof {
         // Build path and proof from the node to the root and reverse it at the end.
         let mut reverse_path = vec![];
         let mut reverse_proof = vec![];
@@ -147,7 +143,7 @@ impl TrieWalker {
 
         reverse_path.reverse();
         reverse_proof.reverse();
-        AccountProof {
+        TrieProof {
             path: reverse_path,
             proof: reverse_proof,
         }
@@ -157,7 +153,8 @@ impl TrieWalker {
 #[cfg(test)]
 mod tests {
     use crate::types::state::{
-        execution::State, storage::utils::setup_temp_dir, trie_walker::TrieWalker,
+        config::StateConfig, execution::State, storage::utils::setup_temp_dir,
+        trie_walker::TrieWalker,
     };
 
     use alloy_primitives::{keccak256, Address};
@@ -168,10 +165,13 @@ mod tests {
     #[test_log::test]
     fn test_trie_walker_builds_valid_proof() {
         let temp_directory = setup_temp_dir().unwrap();
-        let mut state = State::new(Some(temp_directory.path().to_path_buf()));
+        let mut state = State::new(
+            Some(temp_directory.path().to_path_buf()),
+            StateConfig::default(),
+        );
         let RootWithTrieDiff { trie_diff, .. } = state.initialize_genesis().unwrap();
         let valid_proof = state
-            .get_proof(&Address::from_hex("0x001d14804b399c6ef80e64576f657660804fec0b").unwrap())
+            .get_proof(Address::from_hex("0x001d14804b399c6ef80e64576f657660804fec0b").unwrap())
             .unwrap();
         let root_hash = state.get_root().unwrap();
         let walk_diff = TrieWalker::new(root_hash, trie_diff);
