@@ -21,7 +21,6 @@ hex = "0.4.3"
 jsonrpsee = { version = "0.20.0", features = ["full"] }
 log = "0.4.17"
 milagro_bls = { package="snowbridge-milagro-bls", git = "https://github.com/Snowfork/milagro_bls" }
-parking_lot = "0.11.2"
 portalnet = { path = "../portalnet" }
 reqwest = { version = "0.11.13", default-features = false, features = ["json", "rustls-tls"] }
 serde = { version = "1.0.143", features = ["derive"] }

@@ -19,41 +19,32 @@ anyhow = "1.0.68"
 async-trait = "0.1.68"
 chrono = "0.4.26"
 clap = { version = "4.2.1", features = ["derive"] }
-directories = "3.0"
 discv5 = { version = "0.4.1", features = ["serde"] }
 ethereum_ssz = "0.5.3"
-ethereum_ssz_derive = "0.5.3"
 ethportal-api = { path = "../ethportal-api" }
 eth_trie = { git = "https://github.com/kolbyml/eth-trie.rs.git", rev = "7e57d3dfadee126cc9fda2696fb039bf7b6ed688" }
+e2store = { path = "../e2store" }
 futures = "0.3.21"
-hashbrown = "0.14.0"
 jsonrpsee = { version = "0.20.0", features = [
   "async-client",
   "client",
   "macros",
   "server",
 ] }
-lazy_static = "1.4.0"
-parking_lot = "0.11.2"
 portalnet = { path = "../portalnet" }
 prometheus_exporter = "0.8.4"
 rand = "0.8.4"
 revm = { version = "8.0.0", features = ["std", "secp256k1", "serde-json"], default-features = false }
 revm-primitives = { version = "3.1.0", features = ["std", "serde"], default-features = false }
-revm-inspectors = { git = "https://github.com/paradigmxyz/evm-inspectors", rev = "848d568" }
-rocksdb = "0.22.0"
 scraper = "0.18.1"
 serde = { version = "1.0.150", features = ["derive", "rc"] }
 serde_json = "1.0.89"
 serde_yaml = "0.9"
-snap = "1.1.1"
 ssz_types = { git = "https://github.com/KolbyML/ssz_types.git", rev = "2a5922de75f00746890bf4ea9ad663c9d5d58efe" }
 surf = { version = "2.3.2", default-features = false, features = ["h1-client-rustls", "middleware-logger", "encoding"] } # we use rustls because OpenSSL cause issues compiling on aarch64
-tempfile = "3.3.0"
-thiserror = "1.0.57"
 tokio = { version = "1.14.0", features = ["full"] }
 tracing = "0.1.36"
-tracing-subscriber = "0.3.15"
+trin-execution = { path = "../trin-execution" }
 trin-metrics = { path = "../trin-metrics" }
 trin-utils = { path = "../trin-utils" }
 trin-validation = { path = "../trin-validation" }

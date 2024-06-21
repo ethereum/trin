@@ -1,4 +1,4 @@
-use crate::types::e2s::{E2StoreFile, Entry};
+use crate::e2s::{E2StoreFile, Entry};
 use alloy_primitives::{B256, U256};
 use alloy_rlp::Decodable;
 use anyhow::ensure;

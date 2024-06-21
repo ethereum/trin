@@ -66,7 +66,8 @@ impl DB for AccountDB {
 
 #[cfg(test)]
 mod test_account_db {
-    use crate::types::state::storage::utils::{setup_rocksdb, setup_temp_dir};
+
+    use crate::storage::utils::{setup_rocksdb, setup_temp_dir};
 
     use super::*;
     use eth_trie::DB;

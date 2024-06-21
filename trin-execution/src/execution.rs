@@ -1,6 +1,7 @@
 use alloy_primitives::{keccak256, Address, Bytes, B256, U256};
 use alloy_rlp::{Decodable, EMPTY_STRING_CODE};
 use anyhow::{anyhow, bail, ensure, Error};
+use e2store::era1::BlockTuple;
 use eth_trie::{RootWithTrieDiff, Trie};
 use ethportal_api::types::{
     execution::transaction::Transaction,
@@ -17,14 +18,11 @@ use std::{
 };
 use tracing::info;
 
-use crate::types::{
-    era1::BlockTuple,
-    state::{
-        block_reward::get_block_reward,
-        spec_id::get_spec_id,
-        storage::{account::Account, evm_db::EvmDB},
-        transaction::TxEnvModifier,
-    },
+use crate::{
+    block_reward::get_block_reward,
+    spec_id::get_spec_id,
+    storage::{account::Account, evm_db::EvmDB},
+    transaction::TxEnvModifier,
 };
 
 use super::{config::StateConfig, types::trie_proof::TrieProof, utils::address_to_nibble_path};
@@ -299,12 +297,10 @@ impl State {
 
 #[cfg(test)]
 mod tests {
+    use e2store::era1::Era1;
     use std::fs;
 
-    use crate::types::{
-        era1::Era1,
-        state::{config::StateConfig, storage::utils::setup_temp_dir},
-    };
+    use crate::{config::StateConfig, storage::utils::setup_temp_dir};
 
     use super::State;
     use alloy_primitives::Address;

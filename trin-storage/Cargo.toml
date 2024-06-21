@@ -12,7 +12,6 @@ authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 [dependencies]
 alloy-primitives = "0.7.0"
-anyhow = "1.0.68"
 discv5 = { version = "0.4.1", features = ["serde"] }
 ethportal-api = {path = "../ethportal-api"}
 r2d2 = "0.8.9"
@@ -26,5 +25,6 @@ tracing = "0.1.36"
 trin-metrics = { path = "../trin-metrics" }
 
 [dev-dependencies]
+anyhow = "1.0.68"
 quickcheck = "1.0.3"
 rstest = "0.18.2"

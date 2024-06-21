@@ -1,6 +1,6 @@
 use std::{path::PathBuf, sync::Arc};
 
-use crate::types::state::{config::StateConfig, storage::error::EVMError};
+use crate::{config::StateConfig, storage::error::EVMError};
 use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_primitives::{Address, B256, U256};
 use alloy_rlp::{Decodable, EMPTY_STRING_CODE};

@@ -28,7 +28,7 @@ mod tests {
     use eth_trie::nibbles::Nibbles as EthNibbles;
     use revm_primitives::{keccak256, Address};
 
-    use crate::types::state::utils::{address_to_nibble_path, full_nibble_path_to_address_hash};
+    use crate::utils::{address_to_nibble_path, full_nibble_path_to_address_hash};
 
     #[test]
     fn test_eth_trie_and_ethportalapi_nibbles() {

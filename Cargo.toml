@@ -14,7 +14,6 @@ description = "A Rust implementation of the Ethereum Portal Network"
 
 [dependencies]
 alloy-primitives = "0.7.0"
-alloy-rlp = "0.3.4"
 anyhow = "1.0.68"
 clap = { version = "4.2.1", features = ["derive"] }
 dirs = "5.0.1"
@@ -23,6 +22,7 @@ ethereum_ssz = "0.5.3"
 ethers = { version = "2.0"}
 ethers-providers = { version = "2.0", features = ["ws"] }
 ethportal-api = { path = "ethportal-api" }
+e2store = { path = "e2store" }
 futures = "0.3.21"
 jsonrpsee = "0.20.0"
 lazy_static = "1.4.0"
@@ -63,11 +63,13 @@ ureq = { version = "2.5.0", features = ["json"] }
 members = [
     "ethportal-api",
     "ethportal-peertest",
+    "e2store",
     "light-client",
     "trin-metrics",
     "portal-bridge",
     "rpc",
     "trin-beacon",
+    "trin-execution",
     "trin-history",
     "trin-state",
     "trin-storage",
