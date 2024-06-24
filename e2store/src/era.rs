@@ -1,4 +1,4 @@
-use crate::types::{
+use crate::{
     e2s::{E2StoreFile, Entry},
     era1::VersionEntry,
 };

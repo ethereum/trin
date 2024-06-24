@@ -1,8 +1,8 @@
 use std::{path::PathBuf, sync::Arc};
 
-use super::era1::get_shuffled_era1_files;
 use alloy_rlp::Decodable;
 use anyhow::anyhow;
+use e2store::{era1::Era1, utils::get_shuffled_era1_files};
 use eth_trie::{decode_node, node::Node, RootWithTrieDiff};
 use ethportal_api::{
     jsonrpsee::http_client::HttpClient,
@@ -18,30 +18,26 @@ use tokio::{
     time::timeout,
 };
 use tracing::{debug, error, info, warn};
+use trin_execution::{
+    config::StateConfig,
+    content::{
+        create_account_content_key, create_account_content_value, create_contract_content_key,
+        create_contract_content_value, create_storage_content_key, create_storage_content_value,
+    },
+    execution::State,
+    spec_id::get_spec_block_number,
+    storage::utils::setup_temp_dir,
+    trie_walker::TrieWalker,
+    types::trie_proof::TrieProof,
+    utils::full_nibble_path_to_address_hash,
+};
 use trin_metrics::bridge::BridgeMetricsReporter;
 use trin_validation::{constants::EPOCH_SIZE, oracle::HeaderOracle};
 
 use crate::{
     bridge::history::SERVE_BLOCK_TIMEOUT,
     gossip::gossip_state_content,
-    types::{
-        era1::Era1,
-        mode::{BridgeMode, ModeType},
-        state::{
-            config::StateConfig,
-            content::{
-                create_account_content_key, create_account_content_value,
-                create_contract_content_key, create_contract_content_value,
-                create_storage_content_key, create_storage_content_value,
-            },
-            execution::State,
-            spec_id::get_spec_block_number,
-            storage::utils::setup_temp_dir,
-            trie_walker::TrieWalker,
-            types::trie_proof::TrieProof,
-            utils::full_nibble_path_to_address_hash,
-        },
-    },
+    types::mode::{BridgeMode, ModeType},
 };
 
 pub struct StateBridge {

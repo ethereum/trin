@@ -12,7 +12,6 @@ authors = ["https://github.com/ethereum/trin/graphs/contributors"]
 
 [dependencies]
 alloy-primitives = "0.7.0"
-anyhow = "1.0.68"
 discv5 = { version = "0.4.1", features = ["serde"] }
 ethportal-api = { path = "../ethportal-api"}
 portalnet = { path = "../portalnet"}
@@ -22,7 +21,6 @@ tokio = { version = "1.14.0", features = ["full"] }
 hyper = "0.14.28"
 reth-ipc = { tag = "v0.2.0-beta.5", git = "https://github.com/paradigmxyz/reth.git"}
 reth-rpc-types = { rev = "8d1d13ef89cf19459adc37ba0c45e7aac6270dc1", git = "https://github.com/paradigmxyz/reth.git"}
-url = "2.3.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.95"
 strum = { version = "0.26.1", features = ["derive"] }

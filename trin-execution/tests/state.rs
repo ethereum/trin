@@ -1,15 +1,10 @@
 #[cfg(test)]
 #[cfg(all(test, feature = "comment this line out if you want to run this test"))]
 mod tests {
-    use portal_bridge::{
-        bridge::era1::get_shuffled_era1_files,
-        types::{
-            era1::Era1,
-            state::{config::StateConfig, execution::State, storage::utils::setup_temp_dir},
-        },
-    };
+    use e2store::{era1::Era1, utils::get_shuffled_era1_files};
     use surf::{Client, Config};
     use tracing_test::traced_test;
+    use trin_execution::{config::StateConfig, execution::State, storage::utils::setup_temp_dir};
 
     // This test is variable and configurable by settings `last_epoch`
     // The time the test takes to run is dependent on the value of `last_epoch`

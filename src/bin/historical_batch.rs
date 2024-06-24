@@ -1,6 +1,6 @@
 use anyhow::ensure;
+use e2store::era::Era;
 use ethportal_api::{consensus::beacon_state::HistoricalBatch, utils::bytes::hex_encode};
-use portal_bridge::types::era::Era;
 use regex::Regex;
 use ssz::Encode;
 use std::{

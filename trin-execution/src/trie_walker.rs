@@ -152,15 +152,15 @@ impl TrieWalker {
 
 #[cfg(test)]
 mod tests {
-    use crate::types::state::{
-        config::StateConfig, execution::State, storage::utils::setup_temp_dir,
-        trie_walker::TrieWalker,
-    };
-
     use alloy_primitives::{keccak256, Address};
     use anyhow::anyhow;
     use eth_trie::RootWithTrieDiff;
     use revm_primitives::hex::FromHex;
+
+    use crate::{
+        config::StateConfig, execution::State, storage::utils::setup_temp_dir,
+        trie_walker::TrieWalker,
+    };
 
     #[test_log::test]
     fn test_trie_walker_builds_valid_proof() {

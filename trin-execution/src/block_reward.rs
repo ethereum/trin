@@ -1,8 +1,7 @@
 use alloy_consensus::constants::ETH_TO_WEI;
 use alloy_primitives::Address;
+use e2store::era1::BlockTuple;
 use ethportal_api::{BlockBody, BlockBodyLegacy};
-
-use crate::types::era1::BlockTuple;
 
 // Calculate block reward
 // https://github.com/paradigmxyz/reth/blob/v0.2.0-beta.6/crates/consensus/common/src/calc.rs

@@ -21,14 +21,15 @@ lazy_static = "1.4.0"
 rust-embed = "6.6.1"
 serde = { version = "1.0.150", features = ["derive"] }
 serde_json = "1.0.89"
-serde_yaml = "0.9.33"
 ssz_types = { git = "https://github.com/KolbyML/ssz_types.git", rev = "2a5922de75f00746890bf4ea9ad663c9d5d58efe" }
 tokio = { version = "1.14.0", features = ["full"] }
 tree_hash = { git = "https://github.com/KolbyML/tree_hash.git", rev = "8aaf8bb4184148768d48e2cfbbdd0b95d1da8730" }
 tree_hash_derive = { git = "https://github.com/KolbyML/tree_hash.git", rev = "8aaf8bb4184148768d48e2cfbbdd0b95d1da8730" }
 
 [dev-dependencies]
+alloy-rlp = "0.3.4"
 quickcheck = "1.0.3"
 quickcheck_macros = "1.0.0"
-alloy-rlp = "0.3.4"
 rstest = "0.18.2"
+serde_yaml = "0.9.33"
+
