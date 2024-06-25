@@ -81,6 +81,19 @@ async fn complete_request(network: Arc<BeaconNetwork>, request: BeaconJsonRpcReq
                 .map_err(|err| err.to_string())
         }
         BeaconEndpoint::RecursiveFindNodes(node_id) => recursive_find_nodes(network, node_id).await,
+        BeaconEndpoint::OptimisticStateRoot => {
+            let beacon_client = network.beacon_client.lock().await;
+            match beacon_client.as_ref() {
+                Some(client) => {
+                    let header = client.get_header().await;
+                    match header {
+                        Ok(header) => Ok(json!((header.state_root))),
+                        Err(err) => Err(err.to_string()),
+                    }
+                }
+                None => Err("Beacon client not initialized".to_string()),
+            }
+        }
     };
     let _ = request.resp.send(response);
 }

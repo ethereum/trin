@@ -103,6 +103,8 @@ pub enum BeaconEndpoint {
     DataRadius,
     /// params: node_id
     DeleteEnr(NodeId),
+    /// params: None
+    OptimisticStateRoot,
     /// params: [enr, content_key]
     FindContent(Enr, BeaconContentKey),
     /// params: [enr, distances]
