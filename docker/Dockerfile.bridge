@@ -31,12 +31,14 @@ COPY ./light-client ./light-client
 COPY ./src ./src 
 COPY ./trin-beacon ./trin-beacon
 COPY ./portal-bridge ./portal-bridge
+COPY ./trin-execution ./trin-execution
 COPY ./trin-history ./trin-history
 COPY ./trin-metrics ./trin-metrics
 COPY ./trin-state ./trin-state
 COPY ./trin-storage ./trin-storage
 COPY ./trin-utils ./trin-utils
 COPY ./trin-validation ./trin-validation
+COPY ./e2store ./e2store
 COPY ./ethportal-peertest ./ethportal-peertest 
 COPY ./utp-testing ./utp-testing
 COPY ./ethportal-api ./ethportal-api
@@ -50,7 +52,7 @@ FROM final_base
 
 # copy build artifacts from build stage
 COPY --from=builder /trin/target/release/trin /usr/bin/
-COPY --from=builder /trin/portal-bridge/resources /resources
+COPY --from=builder /trin/trin-execution/resources /resources
 COPY --from=builder /trin/target/release/portal-bridge /usr/bin/
 COPY --from=builder /trin/target/release/sample_range /usr/bin/
 COPY --from=builder /trin/target/release/poll_latest /usr/bin/
