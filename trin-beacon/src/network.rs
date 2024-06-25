@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use parking_lot::RwLock as PLRwLock;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tracing::error;
 use utp_rs::socket::UtpSocket;
 
@@ -10,6 +10,7 @@ use ethportal_api::{
     types::{distance::XorMetric, enr::Enr, portal_wire::ProtocolId},
     BeaconContentKey,
 };
+use light_client::{consensus::rpc::portal_rpc::PortalRpc, database::FileDB, Client};
 use portalnet::{
     config::PortalnetConfig,
     discovery::{Discovery, UtpEnr},
@@ -23,6 +24,7 @@ use trin_validation::oracle::HeaderOracle;
 #[derive(Clone)]
 pub struct BeaconNetwork {
     pub overlay: Arc<OverlayProtocol<BeaconContentKey, XorMetric, BeaconValidator, BeaconStorage>>,
+    pub beacon_client: Arc<Mutex<Option<Client<FileDB, PortalRpc>>>>,
 }
 
 impl BeaconNetwork {
@@ -52,6 +54,8 @@ impl BeaconNetwork {
         .await;
 
         let overlay_tx = overlay.command_tx.clone();
+        let beacon_client = Arc::new(Mutex::new(None));
+        let beacon_client_clone = Arc::clone(&beacon_client);
 
         // Spawn the beacon sync task.
         if portal_config.trusted_block_root.is_some() {
@@ -64,14 +68,21 @@ impl BeaconNetwork {
                             .expect("Trusted block root should be available"),
                     )
                     .await;
-                if let Err(err) = beacon_sync {
-                    error!(error = %err, "Failed to start beacon sync.");
+                match beacon_sync {
+                    Ok(client) => {
+                        let mut beacon_client = beacon_client_clone.lock().await;
+                        *beacon_client = Some(client);
+                    }
+                    Err(err) => {
+                        error!(error = %err, "Failed to start beacon sync.");
+                    }
                 }
             });
         }
 
         Ok(Self {
             overlay: Arc::new(overlay),
+            beacon_client,
         })
     }
 }

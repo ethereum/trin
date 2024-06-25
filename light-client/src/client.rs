@@ -252,6 +252,7 @@ impl ClientBuilder {
     }
 }
 
+#[derive(Clone)]
 pub struct Client<DB: Database, R: ConsensusRpc> {
     node: Arc<RwLock<Node<R>>>,
     rpc: Option<Rpc<R>>,

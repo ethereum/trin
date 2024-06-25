@@ -15,6 +15,7 @@ pub trait Database {
     fn load_checkpoint(&self) -> Result<Vec<u8>>;
 }
 
+#[derive(Clone)]
 pub struct FileDB {
     data_dir: PathBuf,
     default_checkpoint: Vec<u8>,

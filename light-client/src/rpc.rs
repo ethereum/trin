@@ -15,6 +15,7 @@ use crate::node::Node;
 
 use crate::utils::u64_to_hex_string;
 
+#[derive(Clone)]
 pub struct Rpc<R: ConsensusRpc> {
     node: Arc<RwLock<Node<R>>>,
     handle: Option<ServerHandle>,
