@@ -125,6 +125,7 @@ impl QueryTrace {
         NodeInfo {
             enr: enr.clone(),
             distance,
+            radius: None,
         }
     }
 }
@@ -145,6 +146,7 @@ pub struct QueryResponse {
 pub struct NodeInfo {
     pub enr: Enr,
     pub distance: B256,
+    pub radius: Option<B256>,
 }
 
 #[cfg(test)]
