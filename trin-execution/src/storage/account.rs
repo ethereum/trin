@@ -1,5 +1,6 @@
 use alloy_primitives::{keccak256, B256, U256};
 use alloy_rlp::{Buf, Decodable, Encodable, RlpDecodable, RlpEncodable, EMPTY_STRING_CODE};
+use ethportal_api::types::state_trie::account_state::AccountState as AccountStateInfo;
 use revm_primitives::KECCAK_EMPTY;
 
 /// The Account State stored in the state trie.
@@ -21,6 +22,17 @@ impl Default for Account {
             storage_root: keccak256([EMPTY_STRING_CODE]),
             code_hash: KECCAK_EMPTY,
             account_state: AccountState::default(),
+        }
+    }
+}
+
+impl From<&Account> for AccountStateInfo {
+    fn from(account: &Account) -> Self {
+        Self {
+            nonce: account.nonce,
+            balance: account.balance,
+            storage_root: account.storage_root,
+            code_hash: account.code_hash,
         }
     }
 }
