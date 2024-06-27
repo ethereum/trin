@@ -8,20 +8,24 @@ use ethportal_api::types::{
     state_trie::account_state::AccountState as AccountStateInfo,
 };
 use revm::{inspector_handle_register, inspectors::NoOpInspector, DatabaseCommit, Evm};
-use revm_primitives::{Env, SpecId};
+use revm_primitives::{Env, ResultAndState, SpecId};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeSet, HashMap},
     fs::File,
     io::BufReader,
-    path::PathBuf,
+    path::{Path, PathBuf},
+    sync::Arc,
 };
 use tracing::info;
 
 use crate::{
     block_reward::get_block_reward,
     spec_id::get_spec_id,
-    storage::{account::Account, evm_db::EvmDB},
+    storage::{
+        account::Account, evm_db::EvmDB, execution_position::ExecutionPosition,
+        utils::setup_rocksdb,
+    },
     transaction::TxEnvModifier,
 };
 
@@ -42,34 +46,41 @@ struct GenesisConfig {
 pub struct State {
     pub database: EvmDB,
     pub config: StateConfig,
-    next_block_number: u64,
+    execution_position: ExecutionPosition,
 }
 
-const GENESIS_STATE_FILE: &str = "resources/genesis/mainnet.json";
-
-impl Default for State {
-    fn default() -> Self {
-        Self::new(None, StateConfig::default())
-    }
-}
+const GENESIS_STATE_FILE: &str = "trin-execution/resources/genesis/mainnet.json";
+const TEST_GENESIS_STATE_FILE: &str = "resources/genesis/mainnet.json";
 
 impl State {
-    pub fn new(path: Option<PathBuf>, config: StateConfig) -> Self {
-        State {
-            next_block_number: 0,
-            config: config.clone(),
-            database: EvmDB::new(path, config).expect("Failed to create EVM database"),
-        }
+    pub fn new(path: Option<PathBuf>, config: StateConfig) -> anyhow::Result<Self> {
+        let db = Arc::new(setup_rocksdb(path)?);
+        let execution_position = ExecutionPosition::initialize_from_db(db.clone())?;
+
+        let database = EvmDB::new(config.clone(), db, &execution_position)
+            .expect("Failed to create EVM database");
+
+        Ok(State {
+            execution_position,
+            config,
+            database,
+        })
     }
 
     pub fn initialize_genesis(&mut self) -> anyhow::Result<RootWithTrieDiff> {
         ensure!(
-            self.next_block_number == 0,
+            self.execution_position.block_execution_number() == 0,
             "Trying to initialize genesis but received block {}",
-            self.next_block_number,
+            self.execution_position.block_execution_number(),
         );
 
-        let genesis_file = File::open(GENESIS_STATE_FILE)?;
+        let genesis_file = if Path::new(GENESIS_STATE_FILE).is_file() {
+            File::open(GENESIS_STATE_FILE)?
+        } else if Path::new(TEST_GENESIS_STATE_FILE).is_file() {
+            File::open(TEST_GENESIS_STATE_FILE)?
+        } else {
+            bail!("Genesis file not found")
+        };
         let genesis: GenesisConfig = serde_json::from_reader(BufReader::new(genesis_file))?;
 
         for (address, alloc_balance) in genesis.alloc {
@@ -95,7 +106,8 @@ impl State {
             "Root doesn't match state root from genesis file"
         );
 
-        self.next_block_number += 1;
+        self.execution_position
+            .increase_block_execution_number(self.database.db.clone(), root_with_trie_diff.root)?;
 
         Ok(root_with_trie_diff)
     }
@@ -106,9 +118,9 @@ impl State {
             block_tuple.header.header.number
         );
         ensure!(
-            self.next_block_number == block_tuple.header.header.number,
+            self.execution_position.block_execution_number() == block_tuple.header.header.number,
             "Expected block {}, received {}",
-            self.next_block_number,
+            self.execution_position.block_execution_number(),
             block_tuple.header.header.number
         );
 
@@ -144,13 +156,34 @@ impl State {
         )?;
 
         // execute transactions
+        let mut cumulative_gas_used = U256::ZERO;
+
         let transactions = block_tuple
             .body
             .body
             .transactions()
             .map_err(|err| Error::msg(format!("Error getting transactions: {err:?}")))?;
-        for transaction in transactions {
-            self.execute_transaction(transaction, &env)?;
+        for (index, transaction) in transactions.into_iter().enumerate() {
+            if index != self.execution_position.transaction_index() as usize {
+                cumulative_gas_used =
+                    block_tuple.receipts.receipts.receipt_list[index].cumulative_gas_used;
+                continue;
+            }
+
+            let evm_result = self.execute_transaction(transaction, &env)?;
+            cumulative_gas_used += U256::from(evm_result.result.gas_used());
+            if cumulative_gas_used
+                != block_tuple.receipts.receipts.receipt_list[index].cumulative_gas_used
+            {
+                panic!(
+                    "Cumulative gas used doesn't match! Block number: {} Transaction Index: {}",
+                    self.execution_position.block_execution_number(),
+                    self.execution_position.transaction_index()
+                )
+            }
+            self.execution_position
+                .increase_transaction_index(self.database.db.clone())?;
+            self.database.commit(evm_result.state);
         }
 
         // update beneficiary
@@ -187,11 +220,12 @@ impl State {
         if root != block_tuple.header.header.state_root {
             panic!(
                 "State root doesn't match! Irreversible! Block number: {}",
-                self.next_block_number
+                self.execution_position.block_execution_number()
             )
         }
 
-        self.next_block_number += 1;
+        self.execution_position
+            .increase_block_execution_number(self.database.db.clone(), root)?;
 
         Ok(RootWithTrieDiff {
             root,
@@ -203,9 +237,9 @@ impl State {
         &mut self,
         tx: Transaction,
         evm_evnironment: &Env,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<ResultAndState> {
         let block_number = evm_evnironment.block.number.to::<u64>();
-        let evm_result = Evm::builder()
+        Ok(Evm::builder()
             .with_ref_db(&self.database)
             .with_env(Box::new(evm_evnironment.clone()))
             .with_spec_id(get_spec_id(block_number))
@@ -225,10 +259,11 @@ impl State {
             .with_external_context(NoOpInspector)
             .append_handler_register(inspector_handle_register)
             .build()
-            .transact()?;
+            .transact()?)
+    }
 
-        self.database.commit(evm_result.state);
-        Ok(())
+    pub fn block_execution_number(&self) -> u64 {
+        self.execution_position.block_execution_number()
     }
 
     pub fn get_root(&mut self) -> anyhow::Result<B256> {
@@ -312,8 +347,9 @@ mod tests {
         let mut state = State::new(
             Some(temp_directory.path().to_path_buf()),
             StateConfig::default(),
-        );
-        let _ = state.initialize_genesis();
+        )
+        .unwrap();
+        let _ = state.initialize_genesis().unwrap();
         let raw_era1 = fs::read("../test_assets/era1/mainnet-00000-5ec1ffb8.era1").unwrap();
         for block_tuple in Era1::iter_tuples(raw_era1) {
             if block_tuple.header.header.number == 0 {
@@ -333,7 +369,8 @@ mod tests {
         let mut state = State::new(
             Some(temp_directory.path().to_path_buf()),
             StateConfig::default(),
-        );
+        )
+        .unwrap();
         let _ = state.initialize_genesis().unwrap();
         let valid_proof = state
             .get_proof(Address::from_hex("0x001d14804b399c6ef80e64576f657660804fec0b").unwrap())

@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc};
+use std::sync::Arc;
 
 use crate::{config::StateConfig, storage::error::EVMError};
 use alloy_consensus::constants::KECCAK_EMPTY;
@@ -15,8 +15,8 @@ use rocksdb::DB as RocksDB;
 use super::{
     account::{Account as RocksAccount, AccountState as RocksAccountState},
     account_db::AccountDB,
+    execution_position::ExecutionPosition,
     trie_db::TrieRocksDB,
-    utils::setup_rocksdb,
 };
 
 const REVERSE_HASH_LOOKUP_PREFIX: &[u8] = b"reverse hash lookup";
@@ -35,14 +35,24 @@ pub struct EvmDB {
 }
 
 impl EvmDB {
-    pub fn new(path: Option<PathBuf>, config: StateConfig) -> anyhow::Result<Self> {
-        let db = Arc::new(setup_rocksdb(path)?);
+    pub fn new(
+        config: StateConfig,
+        db: Arc<RocksDB>,
+        execution_position: &ExecutionPosition,
+    ) -> anyhow::Result<Self> {
         db.put(KECCAK_EMPTY, Bytecode::new().bytes().as_ref())?;
         db.put(B256::ZERO, Bytecode::new().bytes().as_ref())?;
-        let trie = Arc::new(Mutex::new(EthTrie::new(Arc::new(TrieRocksDB::new(
-            false,
-            db.clone(),
-        )))));
+
+        let trie = Arc::new(Mutex::new(
+            if execution_position.state_root() == keccak256([EMPTY_STRING_CODE]) {
+                EthTrie::new(Arc::new(TrieRocksDB::new(false, db.clone())))
+            } else {
+                EthTrie::from(
+                    Arc::new(TrieRocksDB::new(false, db.clone())),
+                    execution_position.state_root(),
+                )?
+            },
+        ));
 
         let storage_cache = HashMap::new();
         Ok(Self {

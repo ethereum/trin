@@ -168,7 +168,8 @@ mod tests {
         let mut state = State::new(
             Some(temp_directory.path().to_path_buf()),
             StateConfig::default(),
-        );
+        )
+        .unwrap();
         let RootWithTrieDiff { trie_diff, .. } = state.initialize_genesis().unwrap();
         let valid_proof = state
             .get_proof(Address::from_hex("0x001d14804b399c6ef80e64576f657660804fec0b").unwrap())

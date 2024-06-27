@@ -110,7 +110,7 @@ impl StateBridge {
         let state_config = StateConfig {
             cache_contract_storage_changes: true,
         };
-        let mut state = State::new(Some(temp_directory.path().to_path_buf()), state_config);
+        let mut state = State::new(Some(temp_directory.path().to_path_buf()), state_config)?;
         for block_index in 0..=last_block {
             info!("Gossipping state for block at height: {block_index}");
             let epoch_index = block_index / EPOCH_SIZE;
