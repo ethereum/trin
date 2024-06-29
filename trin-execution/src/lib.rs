@@ -1,6 +1,8 @@
 pub mod block_reward;
+pub mod cli;
 pub mod config;
 pub mod content;
+pub mod era_manager;
 pub mod execution;
 pub mod spec_id;
 pub mod storage;

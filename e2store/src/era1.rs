@@ -21,7 +21,7 @@ use std::{
 // Accumulator        = { type: 0x07,   data: hash_tree_root(List(HeaderRecord, 8192)) }
 // BlockIndex         = { type: 0x3266, data: block-index }
 
-const BLOCK_TUPLE_COUNT: usize = 8192;
+pub const BLOCK_TUPLE_COUNT: usize = 8192;
 const ERA1_ENTRY_COUNT: usize = BLOCK_TUPLE_COUNT * 4 + 3;
 
 pub struct Era1 {
@@ -117,6 +117,14 @@ impl Era1 {
         let mut buf = vec![0; file_length];
         file.write(&mut buf)?;
         Ok(buf)
+    }
+
+    pub fn epoch_number_from_block_number(block_number: u64) -> u64 {
+        block_number / (BLOCK_TUPLE_COUNT as u64)
+    }
+
+    pub fn epoch_number(&self) -> u64 {
+        Self::epoch_number_from_block_number(self.block_index.block_index.starting_number)
     }
 }
 
@@ -392,7 +400,7 @@ impl TryInto<Entry> for AccumulatorEntry {
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct BlockIndexEntry {
-    block_index: BlockIndex,
+    pub block_index: BlockIndex,
 }
 
 impl TryFrom<&Entry> for BlockIndexEntry {
@@ -440,10 +448,10 @@ impl TryInto<Entry> for BlockIndexEntry {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
-struct BlockIndex {
-    starting_number: u64,
-    indices: Vec<u64>,
-    count: u64,
+pub struct BlockIndex {
+    pub starting_number: u64,
+    pub indices: Vec<u64>,
+    pub count: u64,
 }
 
 impl TryFrom<Entry> for BlockIndex {
@@ -489,5 +497,14 @@ mod tests {
         assert_eq!(expected, actual);
         let era1_raw_bytes = fs::read(path).unwrap();
         let _block_tuples: Vec<BlockTuple> = Era1::iter_tuples(era1_raw_bytes).collect();
+    }
+
+    #[rstest::rstest]
+    #[case("../test_assets/era1/mainnet-00000-5ec1ffb8.era1", 0)]
+    #[case("../test_assets/era1/mainnet-00001-a5364e9a.era1", 8192)]
+    #[case("../test_assets/era1/mainnet-00010-5f5d4516.era1", 81920)]
+    fn test_era1_index(#[case] path: &str, #[case] index: u64) {
+        let era1 = Era1::read_from_file(path.to_string()).unwrap();
+        assert_eq!(era1.block_index.block_index.starting_number, index);
     }
 }

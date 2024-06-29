@@ -5,3 +5,9 @@ Trin execution has it's origins in trying to gossip all of Ethereum's Merkle Pat
 ## Priorities
 
 Currently the main priority is executing to the head of the chain so we can gossip all of Ethereum's state data. After we achieve this goal we can open Trin Execution as an Execution layer client. Trin Execution is the first execution layer client being built without relying on devp2p.
+
+
+## How to run
+```bash
+cargo run -p trin-execution
+```

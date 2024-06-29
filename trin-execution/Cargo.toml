@@ -16,6 +16,7 @@ alloy-consensus = { git = "https://github.com/alloy-rs/alloy.git", rev = "d68a6b
 alloy-primitives = "0.7.0"
 alloy-rlp = "0.3.4"
 anyhow = "1.0.68"
+clap = { version = "4.2.1", features = ["derive"] }
 directories = "3.0"
 ethportal-api = { path = "../ethportal-api" }
 e2store = { path = "../e2store" }
@@ -27,12 +28,13 @@ revm-primitives = { version = "3.1.0", features = ["std", "serde"], default-feat
 rocksdb = "0.22.0"
 serde = { version = "1.0.150", features = ["derive", "rc"] }
 serde_json = "1.0.89"
+surf = { version = "2.3.2", default-features = false, features = ["h1-client-rustls", "middleware-logger", "encoding"] } # we use rustls because OpenSSL cause issues compiling on aarch64
 tempfile = "3.3.0"
 thiserror = "1.0.57"
+tokio = { version = "1.14.0", features = ["full"] }
 tracing = "0.1.36"
+trin-utils = { path = "../trin-utils" }
 
 [dev-dependencies]
-surf = { version = "2.3.2", default-features = false, features = ["h1-client-rustls", "middleware-logger", "encoding"] } # we use rustls because OpenSSL cause issues compiling on aarch64
 test-log = { version = "0.2.11", features = ["trace"] }
-tokio = { version = "1.14.0", features = ["full"] }
 tracing-test = "0.1"

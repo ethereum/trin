@@ -7814,6 +7814,7 @@ dependencies = [
  "alloy-primitives",
  "alloy-rlp",
  "anyhow",
+ "clap",
  "directories",
  "e2store",
  "eth_trie",
@@ -7832,6 +7833,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-test",
+ "trin-utils",
 ]
 
 [[package]]
