@@ -5,6 +5,7 @@ pub mod content;
 pub mod dao_fork;
 pub mod era_manager;
 pub mod execution;
+pub mod metrics;
 pub mod spec_id;
 pub mod storage;
 pub mod transaction;

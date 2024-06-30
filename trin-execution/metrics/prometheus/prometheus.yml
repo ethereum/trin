@@ -1,0 +1,17 @@
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 15s
+
+# Load rules once and periodically evaluate them according to the global 'evaluation_interval'.
+rule_files:
+  - "rules.yml"
+
+# scrape configuration for trin hosts and the prometheus/grafana instance itself
+scrape_configs:
+  # Node exporter metrics
+  - job_name: "node"
+    static_configs:
+      - targets: ["host.docker.internal:9091"]
+        labels:
+          instance: local_node

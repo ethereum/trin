@@ -26,6 +26,7 @@ use tracing::info;
 use crate::{
     block_reward::get_block_reward,
     dao_fork::process_dao_fork,
+    metrics::{start_timer_vec, stop_timer, BLOCK_PROCESSING_TIMES},
     spec_id::{get_spec_block_number, get_spec_id},
     storage::{
         account::Account,
@@ -121,6 +122,7 @@ impl State {
     }
 
     pub fn process_block(&mut self, block_tuple: &BlockTuple) -> anyhow::Result<RootWithTrieDiff> {
+        let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["initialize_evm"]);
         info!(
             "State EVM processing block {}",
             block_tuple.header.header.number
@@ -157,15 +159,21 @@ impl State {
                 .set_blob_excess_gas_and_price(u64::from_be_bytes(excess_blob_gas.to_be_bytes()));
         }
 
+        stop_timer(timer);
+
         // insert blockhash into database
+        let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["insert_blockhash"]);
         self.database.db.put(
             keccak256(B256::from(U256::from(block_tuple.header.header.number))),
             block_tuple.header.header.hash(),
         )?;
+        stop_timer(timer);
 
         // execute transactions
         let mut cumulative_gas_used = U256::ZERO;
 
+        let cumulative_transaction_timer =
+            start_timer_vec(&BLOCK_PROCESSING_TIMES, &["cumulative_transaction"]);
         let transactions = block_tuple
             .body
             .body
@@ -178,6 +186,7 @@ impl State {
                 continue;
             }
 
+            let transaction_timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["transaction"]);
             let evm_result = self.execute_transaction(transaction, &env)?;
             cumulative_gas_used += U256::from(evm_result.result.gas_used());
             if cumulative_gas_used
@@ -192,9 +201,12 @@ impl State {
             self.execution_position
                 .increase_transaction_index(self.database.db.clone())?;
             self.database.commit(evm_result.state);
+            stop_timer(transaction_timer);
         }
+        stop_timer(cumulative_transaction_timer);
 
         // update beneficiary
+        let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["update_beneficiary"]);
         for (beneficiary, reward) in get_block_reward(block_tuple) {
             let mut account = self.get_account_state(&beneficiary)?;
             account.balance += U256::from(reward);
@@ -225,7 +237,9 @@ impl State {
         if block_tuple.header.header.number == get_spec_block_number(SpecId::DAO_FORK) {
             process_dao_fork(&self.database)?;
         }
+        stop_timer(timer);
 
+        let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["get_root_with_trie_diff"]);
         let RootWithTrieDiff {
             root,
             trie_diff: changed_nodes,
@@ -236,9 +250,15 @@ impl State {
                 self.execution_position.block_execution_number()
             )
         }
+        stop_timer(timer);
 
+        let timer = start_timer_vec(
+            &BLOCK_PROCESSING_TIMES,
+            &["increase_block_execution_number"],
+        );
         self.execution_position
             .increase_block_execution_number(self.database.db.clone(), root)?;
+        stop_timer(timer);
 
         Ok(RootWithTrieDiff {
             root,
