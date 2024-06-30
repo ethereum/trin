@@ -26,3 +26,16 @@ cargo run -p trin-execution -- --block-to-trace=all
 ```bash
 cargo run -p trin-execution -- --block-to-trace=block:<block_number>
 ```
+
+### Want to export prometheus metrics
+```base
+cargo run -p trin-execution -- --enable-metrics-with-url=127.0.0.1:9091
+```
+
+### Run with an ephemeral database
+```base
+cargo run -p trin-execution -- --ephemeral
+```
+
+## Want to see metrics of how Trin Execution is performing
+Go to [metrics/README.md](metrics/README.md) to find out more
