@@ -43,10 +43,15 @@ See the `--mb` flag.
 Trin requires a private key to configure a node's identity. Upon startup,
 Trin will automatically generate a random private key that will be re-used
 every time Trin is restarted. The only exceptions are if...
+- User supplies a private key via the environment variable `TRIN_PRIVATE_KEY_PATH`, in which
+  case that private key will be used to create the node's identity. If `TRIN_PRIVATE_KEY_PATH` is specified it will override `--unsafe-private-key`
 - User supplies a private key via the `--unsafe-private-key` flag, in which
   case that private key will be used to create the node's identity.
 - User deletes the `TRIN_DATA_DIR` or changes the `TRIN_DATA_DIR`. In which 
   case a new private key will be randomly generated and used.
+
+#### What does a private key file look like?
+A private key file is hex encode private key in a text file. Trin currently uses `ECDSA/secp256k1` as it's private key format which is 256 bits.
 
 ### Sub-Protocols
 

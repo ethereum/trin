@@ -1,5 +1,6 @@
 use std::{
-    env, fs,
+    env::{self, VarError},
+    fs,
     path::{Path, PathBuf},
 };
 
@@ -8,7 +9,7 @@ use anyhow::anyhow;
 use directories::ProjectDirs;
 use discv5::enr::{CombinedKey, Enr, NodeId};
 use tempfile::TempDir;
-use tracing::debug;
+use tracing::{debug, info};
 
 use ethportal_api::{
     types::cli::DEFAULT_NETWORK,
@@ -16,6 +17,7 @@ use ethportal_api::{
 };
 
 const TRIN_DATA_ENV_VAR: &str = "TRIN_DATA_PATH";
+const TRIN_PRIVATE_KEY_ENV_VAR: &str = "TRIN_PRIVATE_KEY_PATH";
 const TRIN_DATA_DIR: &str = "trin";
 const UNSAFE_PRIVATE_KEY_FILE_NAME: &str = "unsafe_private_key.hex";
 
@@ -95,11 +97,29 @@ fn get_default_data_dir() -> anyhow::Result<PathBuf> {
 }
 
 /// Returns application private key.
+/// If the private key is provided via env var, it is used.
 /// If the private key does not exist (eg. brand new trin data dir),
 /// a random pk is generated and stored.
 fn get_application_private_key(trin_data_dir: &Path) -> anyhow::Result<CombinedKey> {
-    let unsafe_private_key_file = trin_data_dir.join(UNSAFE_PRIVATE_KEY_FILE_NAME);
-    if !unsafe_private_key_file.exists() {
+    let unsafe_private_key_file = match env::var(TRIN_PRIVATE_KEY_ENV_VAR) {
+        Ok(val) => {
+            let private_key_file_path = PathBuf::from(val);
+            if !private_key_file_path.is_file() {
+                return Err(anyhow!(
+                    "Private key file provide by environment variable does not exist"
+                ));
+            }
+            info!("Using private key specified by environment variable: {private_key_file_path:?}");
+            private_key_file_path
+        }
+        Err(VarError::NotPresent) => {
+            let trin_private_key_dir = trin_data_dir.to_path_buf();
+            fs::create_dir_all(&trin_private_key_dir)?;
+            trin_private_key_dir.join(UNSAFE_PRIVATE_KEY_FILE_NAME)
+        }
+        err => return Err(anyhow!("Error reading private key env var: {err:?}")),
+    };
+    if !unsafe_private_key_file.is_file() {
         let pk = CombinedKey::generate_secp256k1();
         let pk_hex = hex_encode(pk.encode());
         fs::write(&unsafe_private_key_file, pk_hex)?;
