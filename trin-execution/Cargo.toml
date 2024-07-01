@@ -24,6 +24,7 @@ eth_trie = { git = "https://github.com/kolbyml/eth-trie.rs.git", rev = "7e57d3df
 hashbrown = "0.14.0"
 parking_lot = "0.11.2"
 revm = { version = "8.0.0", features = ["std", "secp256k1", "serde-json"], default-features = false }
+revm-inspectors = { git = "https://github.com/paradigmxyz/evm-inspectors", rev = "848d568" }
 revm-primitives = { version = "3.1.0", features = ["std", "serde"], default-features = false }
 rocksdb = "0.22.0"
 serde = { version = "1.0.150", features = ["derive", "rc"] }

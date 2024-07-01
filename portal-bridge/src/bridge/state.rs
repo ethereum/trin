@@ -28,7 +28,7 @@ use trin_execution::{
     spec_id::get_spec_block_number,
     storage::utils::setup_temp_dir,
     trie_walker::TrieWalker,
-    types::trie_proof::TrieProof,
+    types::{block_to_trace::BlockToTrace, trie_proof::TrieProof},
     utils::full_nibble_path_to_address_hash,
 };
 use trin_metrics::bridge::BridgeMetricsReporter;
@@ -109,6 +109,7 @@ impl StateBridge {
         // Enable contract storage changes caching required for gossiping the storage trie
         let state_config = StateConfig {
             cache_contract_storage_changes: true,
+            block_to_trace: BlockToTrace::None,
         };
         let mut state = State::new(Some(temp_directory.path().to_path_buf()), state_config)?;
         for block_index in 0..=last_block {

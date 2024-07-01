@@ -1,5 +1,5 @@
 use alloy_primitives::{keccak256, Address, Bytes, B256, U256};
-use alloy_rlp::{Decodable, EMPTY_STRING_CODE};
+use alloy_rlp::Decodable;
 use anyhow::{anyhow, bail, ensure, Error};
 use e2store::era1::BlockTuple;
 use eth_trie::{RootWithTrieDiff, Trie};
@@ -7,12 +7,16 @@ use ethportal_api::types::{
     execution::transaction::Transaction,
     state_trie::account_state::AccountState as AccountStateInfo,
 };
-use revm::{inspector_handle_register, inspectors::NoOpInspector, DatabaseCommit, Evm};
+use revm::{
+    inspector_handle_register,
+    inspectors::{NoOpInspector, TracerEip3155},
+    DatabaseCommit, Evm,
+};
 use revm_primitives::{Env, ResultAndState, SpecId};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeSet, HashMap},
-    fs::File,
+    fs::{self, File},
     io::BufReader,
     path::{Path, PathBuf},
     sync::Arc,
@@ -21,10 +25,13 @@ use tracing::info;
 
 use crate::{
     block_reward::get_block_reward,
-    spec_id::get_spec_id,
+    dao_fork::process_dao_fork,
+    spec_id::{get_spec_block_number, get_spec_id},
     storage::{
-        account::Account, evm_db::EvmDB, execution_position::ExecutionPosition,
-        utils::setup_rocksdb,
+        account::Account,
+        evm_db::EvmDB,
+        execution_position::ExecutionPosition,
+        utils::{get_default_data_dir, setup_rocksdb},
     },
     transaction::TxEnvModifier,
 };
@@ -47,6 +54,7 @@ pub struct State {
     pub database: EvmDB,
     pub config: StateConfig,
     execution_position: ExecutionPosition,
+    pub node_data_directory: PathBuf,
 }
 
 const GENESIS_STATE_FILE: &str = "trin-execution/resources/genesis/mainnet.json";
@@ -54,7 +62,11 @@ const TEST_GENESIS_STATE_FILE: &str = "resources/genesis/mainnet.json";
 
 impl State {
     pub fn new(path: Option<PathBuf>, config: StateConfig) -> anyhow::Result<Self> {
-        let db = Arc::new(setup_rocksdb(path)?);
+        let node_data_directory = match path {
+            Some(path_buf) => path_buf,
+            None => get_default_data_dir()?,
+        };
+        let db = Arc::new(setup_rocksdb(node_data_directory.clone())?);
         let execution_position = ExecutionPosition::initialize_from_db(db.clone())?;
 
         let database = EvmDB::new(config.clone(), db, &execution_position)
@@ -64,6 +76,7 @@ impl State {
             execution_position,
             config,
             database,
+            node_data_directory,
         })
     }
 
@@ -88,12 +101,7 @@ impl State {
             account.balance += alloc_balance.balance;
             self.database.trie.lock().insert(
                 keccak256(address).as_ref(),
-                &alloy_rlp::encode(AccountStateInfo {
-                    nonce: account.nonce,
-                    balance: account.balance,
-                    storage_root: keccak256([EMPTY_STRING_CODE]),
-                    code_hash: account.code_hash,
-                }),
+                &alloy_rlp::encode(AccountStateInfo::from(&account)),
             )?;
             self.database
                 .db
@@ -163,7 +171,7 @@ impl State {
             .body
             .transactions()
             .map_err(|err| Error::msg(format!("Error getting transactions: {err:?}")))?;
-        for (index, transaction) in transactions.into_iter().enumerate() {
+        for (index, transaction) in transactions.iter().enumerate() {
             if index != self.execution_position.transaction_index() as usize {
                 cumulative_gas_used =
                     block_tuple.receipts.receipts.receipt_list[index].cumulative_gas_used;
@@ -213,6 +221,11 @@ impl State {
             }
         }
 
+        // check if dao fork, if it is drain accounts and transfer it to beneficiary
+        if block_tuple.header.header.number == get_spec_block_number(SpecId::DAO_FORK) {
+            process_dao_fork(&self.database)?;
+        }
+
         let RootWithTrieDiff {
             root,
             trie_diff: changed_nodes,
@@ -235,11 +248,12 @@ impl State {
 
     fn execute_transaction(
         &mut self,
-        tx: Transaction,
+        tx: &Transaction,
         evm_evnironment: &Env,
     ) -> anyhow::Result<ResultAndState> {
         let block_number = evm_evnironment.block.number.to::<u64>();
-        Ok(Evm::builder()
+
+        let base_evm_builder = Evm::builder()
             .with_ref_db(&self.database)
             .with_env(Box::new(evm_evnironment.clone()))
             .with_spec_id(get_spec_id(block_number))
@@ -255,11 +269,28 @@ impl State {
                     Transaction::AccessList(tx) => tx.modify(block_number, tx_env),
                     Transaction::Blob(tx) => tx.modify(block_number, tx_env),
                 }
-            })
-            .with_external_context(NoOpInspector)
-            .append_handler_register(inspector_handle_register)
-            .build()
-            .transact()?)
+            });
+
+        Ok(if self.config.block_to_trace.should_trace(block_number) {
+            let output_path = self
+                .node_data_directory
+                .as_path()
+                .join("evm_traces")
+                .join(format!("block_{block_number}"));
+            fs::create_dir_all(&output_path)?;
+            let output_file = File::create(output_path.join(format!("tx_{}.json", tx.hash())))?;
+            base_evm_builder
+                .with_external_context(TracerEip3155::new(Box::new(output_file)))
+                .append_handler_register(inspector_handle_register)
+                .build()
+                .transact()?
+        } else {
+            base_evm_builder
+                .with_external_context(NoOpInspector)
+                .append_handler_register(inspector_handle_register)
+                .build()
+                .transact()?
+        })
     }
 
     pub fn block_execution_number(&self) -> u64 {
@@ -279,12 +310,7 @@ impl State {
         match account_state {
             Some(account) => {
                 let account: Account = Decodable::decode(&mut account.as_slice())?;
-                Ok(AccountStateInfo {
-                    nonce: account.nonce,
-                    balance: account.balance,
-                    storage_root: account.storage_root,
-                    code_hash: account.code_hash,
-                })
+                Ok(AccountStateInfo::from(&account))
             }
             None => Ok(AccountStateInfo::default()),
         }

@@ -5,7 +5,9 @@ use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_primitives::{Address, B256, U256};
 use alloy_rlp::{Decodable, EMPTY_STRING_CODE};
 use eth_trie::{EthTrie, RootWithTrieDiff, Trie};
-use ethportal_api::types::state_trie::account_state::AccountState as AccountStateInfo;
+use ethportal_api::{
+    types::state_trie::account_state::AccountState as AccountStateInfo, utils::bytes::hex_encode,
+};
 use hashbrown::{HashMap as BrownHashMap, HashSet};
 use parking_lot::Mutex;
 use revm::{DatabaseCommit, DatabaseRef};
@@ -89,7 +91,7 @@ impl EvmDB {
 
                 // Insert contract code into the database
                 self.db
-                    .put(account.code_hash, code.bytes().as_ref())
+                    .put(account.code_hash, code.original_bytes().as_ref())
                     .expect("Inserting contract shouldn't fail");
             }
         }
@@ -167,8 +169,14 @@ impl DatabaseCommit for EvmDB {
                 .get(address_hash)
                 .expect("Reading account from database should never fail")
             {
-                Some(raw_account) => Decodable::decode(&mut raw_account.as_slice())
-                    .expect("Decoding account should never fail"),
+                Some(raw_account) => {
+                    Decodable::decode(&mut raw_account.as_slice()).unwrap_or_else(|_| {
+                        panic!(
+                            "Decoding account should never fail {}",
+                            hex_encode(&raw_account)
+                        )
+                    })
+                }
                 None => RocksAccount::default(),
             };
 
@@ -229,16 +237,12 @@ impl DatabaseCommit for EvmDB {
                 }
             }
 
+            rocks_account.storage_root = storage_root;
+
             let _ = self.trie.lock().insert(
                 address_hash.as_ref(),
-                &alloy_rlp::encode(AccountStateInfo {
-                    nonce: rocks_account.nonce,
-                    balance: rocks_account.balance,
-                    storage_root,
-                    code_hash: rocks_account.code_hash,
-                }),
+                &alloy_rlp::encode(AccountStateInfo::from(&rocks_account)),
             );
-            rocks_account.storage_root = storage_root;
 
             self.db
                 .put(

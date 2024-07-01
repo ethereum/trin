@@ -9,12 +9,8 @@ use tracing::{debug, info};
 const TRIN_EXECUTION_DATA_DIR: &str = "trin-execution";
 
 /// Helper function for opening a RocksDB connection for the radius-constrained db.
-pub fn setup_rocksdb(path: Option<PathBuf>) -> anyhow::Result<RocksDB> {
-    let node_data_dir = match path {
-        Some(path_buf) => path_buf,
-        None => get_default_data_dir()?,
-    };
-    let rocksdb_path = node_data_dir.join("rocksdb");
+pub fn setup_rocksdb(path: PathBuf) -> anyhow::Result<RocksDB> {
+    let rocksdb_path = path.join("rocksdb");
     info!(path = %rocksdb_path.display(), "Setting up RocksDB");
 
     let mut db_opts = Options::default();
@@ -38,7 +34,7 @@ pub fn setup_temp_dir() -> anyhow::Result<TempDir> {
     Ok(temp_dir)
 }
 
-fn get_default_data_dir() -> anyhow::Result<PathBuf> {
+pub fn get_default_data_dir() -> anyhow::Result<PathBuf> {
     // Windows: C:\Users\Username\AppData\Roaming\$TRIN_EXECUTION_DATA_DIR
     // macOS: ~/Library/Application Support/$TRIN_EXECUTION_DATA_DIR
     // Unix-like: $HOME/.local/share/$TRIN_EXECUTION_DATA_DIR

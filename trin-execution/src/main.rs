@@ -3,7 +3,7 @@ use clap::Parser;
 use revm_primitives::SpecId;
 use tracing::info;
 use trin_execution::{
-    cli::TrinExecutionConfig, config::StateConfig, era_manager::EraManager, execution::State,
+    cli::TrinExecutionConfig, era_manager::EraManager, execution::State,
     spec_id::get_spec_block_number, storage::utils::setup_temp_dir,
 };
 use trin_utils::log::init_tracing_logger;
@@ -21,7 +21,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut state = State::new(
         directory.map(|temp_directory| temp_directory.path().to_path_buf()),
-        StateConfig::default(),
+        trin_execution_config.into(),
     )?;
 
     let mut era_manager = EraManager::new().await?;

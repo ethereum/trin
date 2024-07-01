@@ -23,8 +23,8 @@ impl AccountDB {
         }
     }
 
-    fn combine_key(addr_hash: &[u8], key: &[u8]) -> Vec<u8> {
-        [addr_hash, key].concat()
+    fn get_db_key(&self, key: &[u8]) -> Vec<u8> {
+        [self.address_hash.as_slice(), key].concat()
     }
 }
 
@@ -35,27 +35,24 @@ impl DB for AccountDB {
             return Ok(Some(NULL_RLP_STATIC.to_vec()));
         }
 
-        let concatenated = Self::combine_key(&self.address_hash.0[..], key);
-        self.db
-            .get(concatenated.as_slice())
-            .map_err(|err| err.into())
+        self.db.get(self.get_db_key(key)).map_err(|err| err.into())
     }
 
     fn insert(&self, key: &[u8], value: Vec<u8>) -> Result<(), EVMError> {
         if B256::from_slice(key) == keccak256([]) {
             return Ok(());
         }
-        let concatenated = Self::combine_key(&self.address_hash.0[..], key);
-        self.db.put(concatenated, value).map_err(|err| err.into())
+        self.db
+            .put(self.get_db_key(key), value)
+            .map_err(|err| err.into())
     }
 
     fn remove(&self, key: &[u8]) -> Result<(), EVMError> {
         if B256::from_slice(key) == keccak256([]) {
             return Ok(());
         }
-        let concatenated = Self::combine_key(&self.address_hash.0[..], key);
         self.db
-            .delete(concatenated.as_slice())
+            .delete(self.get_db_key(key))
             .map_err(|err| err.into())
     }
 
@@ -74,7 +71,7 @@ mod test_account_db {
 
     #[test]
     fn test_account_db_get() {
-        let rocksdb = setup_rocksdb(Some(setup_temp_dir().unwrap().into_path())).unwrap();
+        let rocksdb = setup_rocksdb(setup_temp_dir().unwrap().into_path()).unwrap();
         let accdb = AccountDB::new(Address::ZERO, Arc::new(rocksdb));
         accdb
             .insert(keccak256(b"test-key").as_slice(), b"test-value".to_vec())
@@ -88,7 +85,7 @@ mod test_account_db {
 
     #[test]
     fn test_account_db_remove() {
-        let rocksdb = setup_rocksdb(Some(setup_temp_dir().unwrap().into_path())).unwrap();
+        let rocksdb = setup_rocksdb(setup_temp_dir().unwrap().into_path()).unwrap();
         let accdb = AccountDB::new(Address::ZERO, Arc::new(rocksdb));
         accdb
             .insert(keccak256(b"test").as_slice(), b"test".to_vec())

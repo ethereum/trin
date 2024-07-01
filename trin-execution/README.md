@@ -11,3 +11,18 @@ Currently the main priority is executing to the head of the chain so we can goss
 ```bash
 cargo run -p trin-execution
 ```
+
+### Want to get a trace of the EVM's execution?
+EVM traces are useful for debugging as they will give you the trace of every opcode executed during a transaction. Traces will be saved in Trin Execution's working directory, under the `evm_traces` folder
+
+The tracer we use is from [EIP-3155](https://eips.ethereum.org/EIPS/eip-3155)
+
+#### To trace all blocks
+```bash
+cargo run -p trin-execution -- --block-to-trace=all
+```
+
+#### To trace a specific block by block number
+```bash
+cargo run -p trin-execution -- --block-to-trace=block:<block_number>
+```
