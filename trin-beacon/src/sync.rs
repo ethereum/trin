@@ -18,7 +18,10 @@ impl BeaconSync {
         Self { overlay_tx }
     }
 
-    pub async fn start(&self, trusted_block_root: String) -> anyhow::Result<()> {
+    pub async fn start(
+        &self,
+        trusted_block_root: String,
+    ) -> anyhow::Result<Client<FileDB, PortalRpc>> {
         // Create a new Light Client Builder
         let mut builder = ClientBuilder::new();
 
@@ -60,6 +63,6 @@ impl BeaconSync {
             ));
         }
 
-        Ok(())
+        Ok(client)
     }
 }

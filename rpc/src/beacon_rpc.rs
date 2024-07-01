@@ -1,4 +1,5 @@
 use crate::{errors::RpcServeError, serde::from_value};
+use alloy_primitives::B256;
 
 use crate::jsonrpsee::core::{async_trait, RpcResult};
 use discv5::enr::NodeId;
@@ -147,6 +148,13 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
         let endpoint = BeaconEndpoint::DataRadius;
         let result = self.proxy_query_to_beacon_subnet(endpoint).await?;
         let result: DataRadius = from_value(result)?;
+        Ok(result)
+    }
+
+    async fn optimistic_state_root(&self) -> RpcResult<B256> {
+        let endpoint = BeaconEndpoint::OptimisticStateRoot;
+        let result = self.proxy_query_to_beacon_subnet(endpoint).await?;
+        let result: B256 = from_value(result)?;
         Ok(result)
     }
 

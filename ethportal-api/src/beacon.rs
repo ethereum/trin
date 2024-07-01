@@ -7,6 +7,7 @@ use crate::{
     },
     BeaconContentValue, RoutingTableInfo,
 };
+use alloy_primitives::B256;
 use discv5::enr::NodeId;
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
 
@@ -49,6 +50,10 @@ pub trait BeaconNetworkApi {
     /// Lookup a target node within in the network
     #[method(name = "beaconRecursiveFindNodes")]
     async fn recursive_find_nodes(&self, node_id: NodeId) -> RpcResult<Vec<Enr>>;
+
+    /// Get the optimistic root of the optimistic header.
+    #[method(name = "beaconOptimisticStateRoot")]
+    async fn optimistic_state_root(&self) -> RpcResult<B256>;
 
     /// Send FINDCONTENT message to get the content with a content key.
     #[method(name = "beaconFindContent")]
