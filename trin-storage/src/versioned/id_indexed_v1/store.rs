@@ -1,5 +1,3 @@
-use std::time::Instant;
-
 use ethportal_api::types::distance::Distance;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
@@ -466,16 +464,15 @@ impl IdIndexedV1Store {
                 return Ok(());
             }
 
-            let pruning_start_time = Instant::now();
             let delete_timer = self.metrics.start_process_timer("prune_delete");
             let deleted_content_sizes = delete_query
                 .query_map(named_params! { ":limit": to_delete }, |row| {
                     row.get("content_size")
                 })?
                 .collect::<Result<Vec<u64>, rusqlite::Error>>()?;
-            self.metrics.stop_process_timer(delete_timer);
+            let pruning_duration = self.metrics.stop_process_timer(delete_timer);
             self.pruning_strategy
-                .observe_pruning_duration(pruning_start_time.elapsed());
+                .observe_pruning_duration(pruning_duration);
 
             if to_delete != deleted_content_sizes.len() as u64 {
                 error!(Db = %self.config.content_type,
