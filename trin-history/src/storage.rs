@@ -1,6 +1,6 @@
 use ethportal_api::{
     types::{distance::Distance, history::PaginateLocalContentInfo, portal_wire::ProtocolId},
-    OverlayContentKey,
+    HistoryContentKey, OverlayContentKey,
 };
 use trin_storage::{
     error::ContentStoreError,
@@ -11,25 +11,22 @@ use trin_storage::{
 /// Storage layer for the history network. Encapsulates history network specific data and logic.
 #[derive(Debug)]
 pub struct HistoryStorage {
-    store: IdIndexedV1Store,
+    store: IdIndexedV1Store<HistoryContentKey>,
 }
 
-impl ContentStore for HistoryStorage {
-    fn get<K: OverlayContentKey>(&self, key: &K) -> Result<Option<Vec<u8>>, ContentStoreError> {
+impl<TContentKey: OverlayContentKey> ContentStore<TContentKey> for HistoryStorage {
+    fn get(&self, key: &TContentKey) -> Result<Option<Vec<u8>>, ContentStoreError> {
         self.store.lookup_content_value(&key.content_id().into())
     }
 
-    fn put<K: OverlayContentKey, V: AsRef<[u8]>>(
-        &mut self,
-        key: K,
-        value: V,
-    ) -> Result<(), ContentStoreError> {
+    fn put<V: AsRef<[u8]>>(&mut self, key: TContentKey, value: V) -> Result<(), ContentStoreError> {
+        let key = HistoryContentKey::try_from(key.to_bytes())?;
         self.store.insert(&key, value.as_ref().to_vec())
     }
 
-    fn is_key_within_radius_and_unavailable<K: OverlayContentKey>(
+    fn is_key_within_radius_and_unavailable(
         &self,
-        key: &K,
+        key: &TContentKey,
     ) -> Result<ShouldWeStoreContent, ContentStoreError> {
         let content_id = ContentId::from(key.content_id());
         if self.store.distance_to_content_id(&content_id) > self.store.radius() {
@@ -84,7 +81,7 @@ pub mod test {
     use ethportal_api::{BlockHeaderKey, HistoryContentKey, IdentityContentKey};
     use portalnet::utils::db::{configure_node_data_dir, setup_temp_dir};
     use quickcheck::{QuickCheck, TestResult};
-    use rand::RngCore;
+    use rand::{seq::SliceRandom, RngCore};
     use serial_test::serial;
 
     use super::*;
@@ -107,7 +104,10 @@ pub mod test {
                 PortalStorageConfig::new(CAPACITY_MB, temp_dir.path().to_path_buf(), node_id)
                     .unwrap();
             let mut storage = HistoryStorage::new(storage_config).unwrap();
-            let content_key = IdentityContentKey::random();
+            let prefixes = [0u8, 1u8, 2u8, 3u8];
+            let mut raw_content_key: Vec<u8> = IdentityContentKey::random().to_bytes();
+            raw_content_key.insert(0, *prefixes.choose(&mut rand::thread_rng()).unwrap());
+            let content_key = HistoryContentKey::try_from(raw_content_key).unwrap();
             let mut value = [0u8; 32];
             rand::thread_rng().fill_bytes(&mut value);
             storage.put(content_key, value).unwrap();

@@ -138,7 +138,8 @@ mod tests {
         migrate_legacy_history_store(&config)?;
 
         // make sure we can initialize new store and that it's empty
-        let store = IdIndexedV1Store::create(ContentType::History, config.clone())?;
+        let store: IdIndexedV1Store<IdentityContentKey> =
+            IdIndexedV1Store::create(ContentType::History, config.clone())?;
         assert_eq!(store.usage_stats(), UsageStats::default(),);
 
         Ok(())
@@ -164,7 +165,8 @@ mod tests {
         migrate_legacy_history_store(&config)?;
 
         // create IdIndexedV1Store and verify content
-        let store = IdIndexedV1Store::create(ContentType::History, config)?;
+        let store: IdIndexedV1Store<IdentityContentKey> =
+            IdIndexedV1Store::create(ContentType::History, config)?;
         for (key, value) in key_value_map.into_iter() {
             assert_eq!(
                 store.lookup_content_value(&key.content_id().into())?,
