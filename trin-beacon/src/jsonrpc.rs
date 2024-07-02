@@ -224,7 +224,7 @@ async fn store(
         .overlay
         .store
         .write()
-        .put::<BeaconContentKey, Vec<u8>>(content_key, data)
+        .put::<Vec<u8>>(content_key, data)
     {
         Ok(_) => Ok(Value::Bool(true)),
         Err(msg) => Ok(Value::String(msg.to_string())),

@@ -161,7 +161,7 @@ impl<
         TContentKey: 'static + OverlayContentKey + Send + Sync,
         TMetric: Metric + Send + Sync,
         TValidator: 'static + Validator<TContentKey> + Send + Sync,
-        TStore: 'static + ContentStore + Send + Sync,
+        TStore: 'static + ContentStore<TContentKey> + Send + Sync,
     > OverlayService<TContentKey, TMetric, TValidator, TStore>
 where
     <TContentKey as TryFrom<Vec<u8>>>::Error: Debug,
@@ -2574,7 +2574,7 @@ struct UtpProcessing<TValidator, TStore, TContentKey>
 where
     TContentKey: OverlayContentKey + Send + Sync,
     TValidator: Validator<TContentKey>,
-    TStore: ContentStore,
+    TStore: ContentStore<TContentKey>,
 {
     validator: Arc<TValidator>,
     store: Arc<RwLock<TStore>>,
@@ -2592,7 +2592,7 @@ impl<TContentKey, TMetric, TValidator, TStore>
 where
     TContentKey: OverlayContentKey + Send + Sync,
     TValidator: Validator<TContentKey>,
-    TStore: ContentStore,
+    TStore: ContentStore<TContentKey>,
 {
     fn from(service: &OverlayService<TContentKey, TMetric, TValidator, TStore>) -> Self {
         Self {
@@ -2612,7 +2612,7 @@ impl<TValidator, TStore, TContentKey> Clone for UtpProcessing<TValidator, TStore
 where
     TContentKey: OverlayContentKey + Send + Sync,
     TValidator: Validator<TContentKey>,
-    TStore: ContentStore,
+    TStore: ContentStore<TContentKey>,
 {
     fn clone(&self) -> Self {
         Self {

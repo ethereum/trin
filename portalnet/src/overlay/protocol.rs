@@ -91,7 +91,7 @@ impl<
         TContentKey: 'static + OverlayContentKey + Send + Sync,
         TMetric: Metric + Send + Sync,
         TValidator: 'static + Validator<TContentKey> + Send + Sync,
-        TStore: 'static + ContentStore + Send + Sync,
+        TStore: 'static + ContentStore<TContentKey> + Send + Sync,
     > OverlayProtocol<TContentKey, TMetric, TValidator, TStore>
 where
     <TContentKey as TryFrom<Vec<u8>>>::Error: Debug + Display + Send,

@@ -217,7 +217,7 @@ async fn store(
         .overlay
         .store
         .write()
-        .put::<HistoryContentKey, Vec<u8>>(content_key, data)
+        .put::<Vec<u8>>(content_key, data)
     {
         Ok(_) => Ok(Value::Bool(true)),
         Err(err) => Ok(Value::String(err.to_string())),
