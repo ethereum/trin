@@ -78,9 +78,9 @@ pub struct OverlayProtocol<TContentKey, TMetric, TValidator, TStore> {
     /// Declare the allowed content key types for a given overlay network.
     /// Use a phantom, because we don't store any keys in this struct.
     /// For example, this type is used when decoding a content key received over the network.
-    phantom_content_key: PhantomData<TContentKey>,
+    _phantom_content_key: PhantomData<TContentKey>,
     /// Associate a distance metric with the overlay network.
-    phantom_metric: PhantomData<TMetric>,
+    _phantom_metric: PhantomData<TMetric>,
     /// Accepted content validator that makes requests to this/other overlay networks
     validator: Arc<TValidator>,
     /// Runtime telemetry metrics for the overlay network.
@@ -147,8 +147,8 @@ where
             protocol,
             command_tx,
             utp_controller,
-            phantom_content_key: PhantomData,
-            phantom_metric: PhantomData,
+            _phantom_content_key: PhantomData,
+            _phantom_metric: PhantomData,
             validator,
             metrics,
         }

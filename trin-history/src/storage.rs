@@ -78,10 +78,10 @@ pub mod test {
     use std::path::PathBuf;
 
     use discv5::enr::{CombinedKey, Enr as Discv5Enr, NodeId};
-    use ethportal_api::{BlockHeaderKey, HistoryContentKey, IdentityContentKey};
+    use ethportal_api::{BlockHeaderKey, HistoryContentKey};
     use portalnet::utils::db::{configure_node_data_dir, setup_temp_dir};
     use quickcheck::{QuickCheck, TestResult};
-    use rand::{seq::SliceRandom, RngCore};
+    use rand::RngCore;
     use serial_test::serial;
 
     use super::*;
@@ -104,10 +104,7 @@ pub mod test {
                 PortalStorageConfig::new(CAPACITY_MB, temp_dir.path().to_path_buf(), node_id)
                     .unwrap();
             let mut storage = HistoryStorage::new(storage_config).unwrap();
-            let prefixes = [0u8, 1u8, 2u8, 3u8];
-            let mut raw_content_key: Vec<u8> = IdentityContentKey::random().to_bytes();
-            raw_content_key.insert(0, *prefixes.choose(&mut rand::thread_rng()).unwrap());
-            let content_key = HistoryContentKey::try_from(raw_content_key).unwrap();
+            let content_key = HistoryContentKey::random().unwrap();
             let mut value = [0u8; 32];
             rand::thread_rng().fill_bytes(&mut value);
             storage.put(content_key, value).unwrap();

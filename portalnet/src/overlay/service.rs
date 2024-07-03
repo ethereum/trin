@@ -142,9 +142,9 @@ where
     /// uTP controller.
     utp_controller: Arc<UtpController>,
     /// Phantom content key.
-    phantom_content_key: PhantomData<TContentKey>,
+    _phantom_content_key: PhantomData<TContentKey>,
     /// Phantom metric (distance function).
-    phantom_metric: PhantomData<TMetric>,
+    _phantom_metric: PhantomData<TMetric>,
     /// Metrics reporting component
     metrics: OverlayMetricsReporter,
     /// Validator for overlay network content.
@@ -223,8 +223,8 @@ where
                 response_rx,
                 response_tx,
                 utp_controller,
-                phantom_content_key: PhantomData,
-                phantom_metric: PhantomData,
+                _phantom_content_key: PhantomData,
+                _phantom_metric: PhantomData,
                 metrics,
                 validator,
                 event_stream,
@@ -2750,8 +2750,8 @@ mod tests {
             findnodes_query_distances_per_peer: overlay_config.findnodes_query_distances_per_peer,
             response_tx,
             response_rx,
-            phantom_content_key: PhantomData,
-            phantom_metric: PhantomData,
+            _phantom_content_key: PhantomData,
+            _phantom_metric: PhantomData,
             metrics,
             validator,
             event_stream: broadcast::channel(EVENT_STREAM_CHANNEL_CAPACITY).0,
