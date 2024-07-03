@@ -170,13 +170,14 @@ mod tests {
         trie_walker::TrieWalker,
     };
 
-    #[test_log::test]
-    fn test_trie_walker_builds_valid_proof() {
+    #[tokio::test]
+    async fn test_trie_walker_builds_valid_proof() {
         let temp_directory = setup_temp_dir().unwrap();
         let mut state = State::new(
             Some(temp_directory.path().to_path_buf()),
             StateConfig::default(),
         )
+        .await
         .unwrap();
         let RootWithTrieDiff { trie_diff, .. } = state.initialize_genesis().unwrap();
         let valid_proof = state

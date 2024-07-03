@@ -11,7 +11,6 @@ use trin_execution::{
         create_account_content_key, create_account_content_value, create_contract_content_key,
         create_contract_content_value, create_storage_content_key, create_storage_content_value,
     },
-    era::manager::EraManager,
     execution::State,
     storage::utils::setup_temp_dir,
     trie_walker::TrieWalker,
@@ -37,33 +36,42 @@ async fn test_we_can_generate_content_key_values_up_to_x() -> Result<()> {
 
     let temp_directory = setup_temp_dir()?;
 
-    let mut era_manager = EraManager::new(0).await?;
-
     let mut state = State::new(
         Some(temp_directory.path().to_path_buf()),
         StateConfig {
             cache_contract_storage_changes: true,
             block_to_trace: BlockToTrace::None,
         },
-    )?;
+    )
+    .await?;
 
     for block_number in 0..=blocks {
         println!("Starting block: {block_number}");
-        let block = era_manager.get_next_block().await?;
-        ensure!(
-            block_number == block.header.number,
-            "Block number doesn't match!"
-        );
 
         let RootWithTrieDiff {
             root: root_hash,
             trie_diff: changed_nodes,
         } = match block_number == 0 {
-            true => state
-                .initialize_genesis()
-                .map_err(|e| anyhow!("unable to create genesis state: {e}"))?,
-            false => state.process_block(block)?,
+            true => {
+                // initialize genesis state processes this block so we skip it
+                state.era_manager.lock().await.get_next_block().await?;
+                state
+                    .initialize_genesis()
+                    .map_err(|e| anyhow!("unable to create genesis state: {e}"))?
+            }
+            false => state.process_block(block_number).await?,
         };
+        let block = state
+            .era_manager
+            .lock()
+            .await
+            .last_fetched_block()
+            .await?
+            .clone();
+        ensure!(
+            block_number == block.header.number,
+            "Block number doesn't match!"
+        );
         ensure!(
             state.get_root()? == block.header.state_root,
             "State root doesn't match"

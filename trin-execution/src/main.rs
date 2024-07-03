@@ -1,13 +1,10 @@
 use clap::Parser;
 
+use e2store::era1::BLOCK_TUPLE_COUNT;
 use revm_primitives::SpecId;
 use tracing::info;
 use trin_execution::{
-    cli::TrinExecutionConfig,
-    era::manager::EraManager,
-    execution::State,
-    metrics::{start_timer_vec, stop_timer, BLOCK_PROCESSING_TIMES},
-    spec_id::get_spec_block_number,
+    cli::TrinExecutionConfig, execution::State, spec_id::get_spec_block_number,
     storage::utils::setup_temp_dir,
 };
 use trin_utils::log::init_tracing_logger;
@@ -31,10 +28,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut state = State::new(
         directory.map(|temp_directory| temp_directory.path().to_path_buf()),
         trin_execution_config.into(),
-    )?;
-
-    let starting_block_number = state.block_execution_number();
-    let mut era_manager = EraManager::new(starting_block_number).await?;
+    )
+    .await?;
 
     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
     tokio::spawn(async move {
@@ -44,27 +39,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .expect("signal ctrl_c should never fail");
     });
 
-    for block_number in starting_block_number..=get_spec_block_number(SpecId::MERGE) {
+    let mut block_number = state.next_block_number();
+
+    let end_block = get_spec_block_number(SpecId::MERGE);
+    while block_number < end_block {
         if rx.try_recv().is_ok() {
             state.database.db.flush()?;
             info!(
-                "Received SIGINT, stopping execution: {block_number} {}",
+                "Received SIGINT, stopping execution: {} {}",
+                block_number - 1,
                 state.get_root()?
             );
             break;
         }
 
-        let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["fetching_block_from_era"]);
-        let block = era_manager.get_next_block().await?;
-        stop_timer(timer);
-        let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["processing_block"]);
-        if block.header.number == 0 {
+        let end =
+            ((block_number / (BLOCK_TUPLE_COUNT as u64)) + 86) * (BLOCK_TUPLE_COUNT as u64) - 1;
+        let end = std::cmp::min(end, end_block);
+
+        if block_number == 0 {
+            // initialize genesis state processes this block so we skip it
+            state.era_manager.lock().await.get_next_block().await?;
             state.initialize_genesis()?;
+            block_number = 1;
             continue;
         }
-        state.process_block(block)?;
-        stop_timer(timer);
-        assert_eq!(state.get_root()?, block.header.state_root);
+        state.process_range_of_blocks(block_number, end).await?;
+        block_number = state.next_block_number();
     }
 
     Ok(())
