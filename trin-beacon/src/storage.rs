@@ -143,7 +143,9 @@ pub struct BeaconStorage {
 }
 
 impl ContentStore for BeaconStorage {
-    fn get<K: OverlayContentKey>(&self, key: &K) -> Result<Option<Vec<u8>>, ContentStoreError> {
+    type Key = BeaconContentKey;
+
+    fn get(&self, key: &Self::Key) -> Result<Option<Vec<u8>>, ContentStoreError> {
         let content_key: Vec<u8> = key.clone().into();
         let beacon_content_key = BeaconContentKey::try_from(content_key).map_err(|err| {
             ContentStoreError::InvalidData {
@@ -221,18 +223,14 @@ impl ContentStore for BeaconStorage {
         }
     }
 
-    fn put<K: OverlayContentKey, V: AsRef<[u8]>>(
-        &mut self,
-        key: K,
-        value: V,
-    ) -> Result<(), ContentStoreError> {
+    fn put<V: AsRef<[u8]>>(&mut self, key: Self::Key, value: V) -> Result<(), ContentStoreError> {
         self.store(&key, &value.as_ref().to_vec())
     }
 
     /// The "radius" concept is not applicable for Beacon network
-    fn is_key_within_radius_and_unavailable<K: OverlayContentKey>(
+    fn is_key_within_radius_and_unavailable(
         &self,
-        key: &K,
+        key: &Self::Key,
     ) -> Result<ShouldWeStoreContent, ContentStoreError> {
         let content_key: Vec<u8> = key.clone().into();
         let beacon_content_key = BeaconContentKey::try_from(content_key).map_err(|err| {

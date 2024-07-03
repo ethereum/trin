@@ -142,9 +142,9 @@ where
     /// uTP controller.
     utp_controller: Arc<UtpController>,
     /// Phantom content key.
-    phantom_content_key: PhantomData<TContentKey>,
+    _phantom_content_key: PhantomData<TContentKey>,
     /// Phantom metric (distance function).
-    phantom_metric: PhantomData<TMetric>,
+    _phantom_metric: PhantomData<TMetric>,
     /// Metrics reporting component
     metrics: OverlayMetricsReporter,
     /// Validator for overlay network content.
@@ -161,7 +161,7 @@ impl<
         TContentKey: 'static + OverlayContentKey + Send + Sync,
         TMetric: Metric + Send + Sync,
         TValidator: 'static + Validator<TContentKey> + Send + Sync,
-        TStore: 'static + ContentStore + Send + Sync,
+        TStore: 'static + ContentStore<Key = TContentKey> + Send + Sync,
     > OverlayService<TContentKey, TMetric, TValidator, TStore>
 where
     <TContentKey as TryFrom<Vec<u8>>>::Error: Debug,
@@ -223,8 +223,8 @@ where
                 response_rx,
                 response_tx,
                 utp_controller,
-                phantom_content_key: PhantomData,
-                phantom_metric: PhantomData,
+                _phantom_content_key: PhantomData,
+                _phantom_metric: PhantomData,
                 metrics,
                 validator,
                 event_stream,
@@ -2574,7 +2574,7 @@ struct UtpProcessing<TValidator, TStore, TContentKey>
 where
     TContentKey: OverlayContentKey + Send + Sync,
     TValidator: Validator<TContentKey>,
-    TStore: ContentStore,
+    TStore: ContentStore<Key = TContentKey>,
 {
     validator: Arc<TValidator>,
     store: Arc<RwLock<TStore>>,
@@ -2592,7 +2592,7 @@ impl<TContentKey, TMetric, TValidator, TStore>
 where
     TContentKey: OverlayContentKey + Send + Sync,
     TValidator: Validator<TContentKey>,
-    TStore: ContentStore,
+    TStore: ContentStore<Key = TContentKey>,
 {
     fn from(service: &OverlayService<TContentKey, TMetric, TValidator, TStore>) -> Self {
         Self {
@@ -2612,7 +2612,7 @@ impl<TValidator, TStore, TContentKey> Clone for UtpProcessing<TValidator, TStore
 where
     TContentKey: OverlayContentKey + Send + Sync,
     TValidator: Validator<TContentKey>,
-    TStore: ContentStore,
+    TStore: ContentStore<Key = TContentKey>,
 {
     fn clone(&self) -> Self {
         Self {
@@ -2750,8 +2750,8 @@ mod tests {
             findnodes_query_distances_per_peer: overlay_config.findnodes_query_distances_per_peer,
             response_tx,
             response_rx,
-            phantom_content_key: PhantomData,
-            phantom_metric: PhantomData,
+            _phantom_content_key: PhantomData,
+            _phantom_metric: PhantomData,
             metrics,
             validator,
             event_stream: broadcast::channel(EVENT_STREAM_CHANNEL_CAPACITY).0,

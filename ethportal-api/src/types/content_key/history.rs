@@ -1,4 +1,5 @@
 use alloy_primitives::B256;
+use rand::{seq::SliceRandom, RngCore};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest as Sha2Digest, Sha256};
 use ssz::{Decode, DecodeError};
@@ -31,6 +32,23 @@ pub enum HistoryContentKey {
     BlockReceipts(BlockReceiptsKey),
     /// An epoch header accumulator.
     EpochAccumulator(EpochAccumulatorKey),
+}
+
+impl HistoryContentKey {
+    pub fn random() -> anyhow::Result<Self> {
+        let mut random_bytes: Vec<u8> = vec![0u8; 32];
+        rand::thread_rng().fill_bytes(&mut random_bytes[..]);
+        let random_prefix = [
+            HISTORY_BLOCK_HEADER_KEY_PREFIX,
+            HISTORY_BLOCK_BODY_KEY_PREFIX,
+            HISTORY_BLOCK_RECEIPTS_KEY_PREFIX,
+            HISTORY_BLOCK_EPOCH_ACCUMULATOR_KEY_PREFIX,
+        ]
+        .choose(&mut rand::thread_rng())
+        .ok_or_else(|| anyhow::Error::msg("Failed to choose random prefix"))?;
+        random_bytes.insert(0, *random_prefix);
+        Self::try_from(random_bytes).map_err(anyhow::Error::msg)
+    }
 }
 
 impl Hash for HistoryContentKey {

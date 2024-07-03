@@ -1,6 +1,6 @@
 use ethportal_api::{
     types::{distance::Distance, history::PaginateLocalContentInfo, portal_wire::ProtocolId},
-    OverlayContentKey,
+    HistoryContentKey, OverlayContentKey,
 };
 use trin_storage::{
     error::ContentStoreError,
@@ -11,25 +11,23 @@ use trin_storage::{
 /// Storage layer for the history network. Encapsulates history network specific data and logic.
 #[derive(Debug)]
 pub struct HistoryStorage {
-    store: IdIndexedV1Store,
+    store: IdIndexedV1Store<HistoryContentKey>,
 }
 
 impl ContentStore for HistoryStorage {
-    fn get<K: OverlayContentKey>(&self, key: &K) -> Result<Option<Vec<u8>>, ContentStoreError> {
+    type Key = HistoryContentKey;
+
+    fn get(&self, key: &Self::Key) -> Result<Option<Vec<u8>>, ContentStoreError> {
         self.store.lookup_content_value(&key.content_id().into())
     }
 
-    fn put<K: OverlayContentKey, V: AsRef<[u8]>>(
-        &mut self,
-        key: K,
-        value: V,
-    ) -> Result<(), ContentStoreError> {
+    fn put<V: AsRef<[u8]>>(&mut self, key: Self::Key, value: V) -> Result<(), ContentStoreError> {
         self.store.insert(&key, value.as_ref().to_vec())
     }
 
-    fn is_key_within_radius_and_unavailable<K: OverlayContentKey>(
+    fn is_key_within_radius_and_unavailable(
         &self,
-        key: &K,
+        key: &Self::Key,
     ) -> Result<ShouldWeStoreContent, ContentStoreError> {
         let content_id = ContentId::from(key.content_id());
         if self.store.distance_to_content_id(&content_id) > self.store.radius() {
@@ -81,7 +79,7 @@ pub mod test {
     use std::path::PathBuf;
 
     use discv5::enr::{CombinedKey, Enr as Discv5Enr, NodeId};
-    use ethportal_api::{BlockHeaderKey, HistoryContentKey, IdentityContentKey};
+    use ethportal_api::{BlockHeaderKey, HistoryContentKey};
     use portalnet::utils::db::{configure_node_data_dir, setup_temp_dir};
     use quickcheck::{QuickCheck, TestResult};
     use rand::RngCore;
@@ -107,7 +105,7 @@ pub mod test {
                 PortalStorageConfig::new(CAPACITY_MB, temp_dir.path().to_path_buf(), node_id)
                     .unwrap();
             let mut storage = HistoryStorage::new(storage_config).unwrap();
-            let content_key = IdentityContentKey::random();
+            let content_key = HistoryContentKey::random().unwrap();
             let mut value = [0u8; 32];
             rand::thread_rng().fill_bytes(&mut value);
             storage.put(content_key, value).unwrap();

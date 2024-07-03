@@ -44,7 +44,7 @@ pub struct QueryPool<TNodeId, TQuery, TContentKey> {
     next_id: QueryId,
     query_timeout: Duration,
     queries: FnvHashMap<QueryId, (QueryInfo<TContentKey>, TQuery)>,
-    marker: PhantomData<TNodeId>,
+    _marker: PhantomData<TNodeId>,
 }
 
 /// The observable states emitted by [`QueryPool::poll`].
@@ -80,7 +80,7 @@ where
             next_id: QueryId(0),
             query_timeout,
             queries: Default::default(),
-            marker: PhantomData,
+            _marker: PhantomData,
         }
     }
 

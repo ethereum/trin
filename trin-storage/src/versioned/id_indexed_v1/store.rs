@@ -1,9 +1,9 @@
-use ethportal_api::types::distance::Distance;
+use std::marker::PhantomData;
+
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{named_params, types::Type, OptionalExtension};
 use tracing::{debug, error, warn};
-use trin_metrics::storage::StorageMetricsReporter;
 
 use super::{
     migration::migrate_legacy_history_store, pruning_strategy::PruningStrategy, sql,
@@ -15,6 +15,8 @@ use crate::{
     versioned::{usage_stats::UsageStats, ContentType, StoreVersion, VersionedContentStore},
     ContentId,
 };
+use ethportal_api::{types::distance::Distance, OverlayContentKey};
+use trin_metrics::storage::StorageMetricsReporter;
 
 /// The result of looking for the farthest content.
 struct FarthestQueryResult {
@@ -24,9 +26,9 @@ struct FarthestQueryResult {
 
 /// The result of the pagination lookup.
 #[derive(Debug, PartialEq, Eq)]
-pub struct PaginateResult<K> {
+pub struct PaginateResult<TContentKey> {
     /// The content keys of the queried page
-    pub content_keys: Vec<K>,
+    pub content_keys: Vec<TContentKey>,
     /// The total count of entries in the database
     pub entry_count: u64,
 }
@@ -37,7 +39,7 @@ pub struct PaginateResult<K> {
 /// It has a configurable capacity and it will prune data that is farthest from the `NodeId` once
 /// it uses more than storage capacity.
 #[derive(Debug)]
-pub struct IdIndexedV1Store {
+pub struct IdIndexedV1Store<TContentKey: OverlayContentKey> {
     /// The configuration.
     config: IdIndexedV1StoreConfig,
     /// The maximum distance between `NodeId` and content id that store should keep. Updated
@@ -49,9 +51,11 @@ pub struct IdIndexedV1Store {
     usage_stats: UsageStats,
     /// The Metrics for tracking performance.
     metrics: StorageMetricsReporter,
+    /// Phantom Content Key
+    _phantom_content_key: PhantomData<TContentKey>,
 }
 
-impl VersionedContentStore for IdIndexedV1Store {
+impl<TContentKey: OverlayContentKey> VersionedContentStore for IdIndexedV1Store<TContentKey> {
     type Config = IdIndexedV1StoreConfig;
 
     fn version() -> StoreVersion {
@@ -85,13 +89,14 @@ impl VersionedContentStore for IdIndexedV1Store {
             pruning_strategy,
             usage_stats: UsageStats::default(),
             metrics: StorageMetricsReporter::new(protocol_id),
+            _phantom_content_key: PhantomData,
         };
         store.init()?;
         Ok(store)
     }
 }
 
-impl IdIndexedV1Store {
+impl<TContentKey: OverlayContentKey> IdIndexedV1Store<TContentKey> {
     /// Initializes variables and metrics, and runs necessary checks.
     fn init(&mut self) -> Result<(), ContentStoreError> {
         self.metrics
@@ -181,10 +186,10 @@ impl IdIndexedV1Store {
     }
 
     /// Returns content key data is stored.
-    pub fn lookup_content_key<K: ethportal_api::OverlayContentKey>(
+    pub fn lookup_content_key(
         &self,
         content_id: &ContentId,
-    ) -> Result<Option<K>, ContentStoreError> {
+    ) -> Result<Option<TContentKey>, ContentStoreError> {
         let timer = self.metrics.start_process_timer("lookup_content_key");
 
         let key = self
@@ -196,7 +201,7 @@ impl IdIndexedV1Store {
                 named_params! { ":content_id": content_id.to_vec() },
                 |row| {
                     let bytes: Vec<u8> = row.get("content_key")?;
-                    K::try_from(bytes).map_err(|e| {
+                    TContentKey::try_from(bytes).map_err(|e| {
                         rusqlite::Error::FromSqlConversionFailure(0, Type::Blob, e.into())
                     })
                 },
@@ -232,9 +237,9 @@ impl IdIndexedV1Store {
     /// Inserts content key/value pair into storage and prunes the db if necessary.
     ///
     /// It returns `InsufficientRadius` error if content is outside radius.
-    pub fn insert<K: ethportal_api::OverlayContentKey>(
+    pub fn insert(
         &mut self,
-        content_key: &K,
+        content_key: &TContentKey,
         content_value: Vec<u8>,
     ) -> Result<(), ContentStoreError> {
         let insert_with_pruning_timer = self.metrics.start_process_timer("insert_with_pruning");
@@ -312,11 +317,11 @@ impl IdIndexedV1Store {
 
     /// Returns a paginated list of all locally available content keys, according to the provided
     /// offset and limit.
-    pub fn paginate<K: ethportal_api::OverlayContentKey>(
+    pub fn paginate(
         &self,
         offset: u64,
         limit: u64,
-    ) -> Result<PaginateResult<K>, ContentStoreError> {
+    ) -> Result<PaginateResult<TContentKey>, ContentStoreError> {
         let timer = self.metrics.start_process_timer("paginate");
 
         let conn = self.config.sql_connection_pool.get()?;
@@ -329,12 +334,12 @@ impl IdIndexedV1Store {
                 },
                 |row| {
                     let bytes = row.get::<&str, Vec<u8>>("content_key")?;
-                    K::try_from(bytes).map_err(|e| {
+                    TContentKey::try_from(bytes).map_err(|e| {
                         rusqlite::Error::FromSqlConversionFailure(0, Type::Blob, e.into())
                     })
                 },
             )?
-            .collect::<Result<Vec<K>, rusqlite::Error>>()?;
+            .collect::<Result<Vec<TContentKey>, rusqlite::Error>>()?;
 
         self.metrics.stop_process_timer(timer);
         Ok(PaginateResult {
@@ -517,7 +522,7 @@ fn maybe_create_table_and_indexes(
 mod tests {
     use anyhow::Result;
     use discv5::enr::NodeId;
-    use ethportal_api::{types::portal_wire::ProtocolId, IdentityContentKey, OverlayContentKey};
+    use ethportal_api::{types::portal_wire::ProtocolId, IdentityContentKey};
     use rand::Rng;
     use tempfile::TempDir;
 
@@ -598,7 +603,8 @@ mod tests {
     fn create_empty() -> Result<()> {
         let temp_dir = TempDir::new()?;
         let config = create_config(&temp_dir, STORAGE_CAPACITY_100_ITEMS);
-        let store = IdIndexedV1Store::create(ContentType::State, config)?;
+        let store =
+            IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
         assert_eq!(store.usage_stats.entry_count, 0);
         assert_eq!(store.usage_stats.total_entry_size_bytes, 0);
         assert_eq!(store.radius(), Distance::MAX);
@@ -613,7 +619,8 @@ mod tests {
         let item_count = 20; // 20%
         create_and_populate_table(&config, item_count)?;
 
-        let store = IdIndexedV1Store::create(ContentType::State, config)?;
+        let store =
+            IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
 
         assert_eq!(store.usage_stats.entry_count, item_count);
         assert_eq!(
@@ -632,7 +639,8 @@ mod tests {
         let item_count = 50; // 50%
         create_and_populate_table(&config, item_count)?;
 
-        let store = IdIndexedV1Store::create(ContentType::State, config)?;
+        let store =
+            IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
 
         assert_eq!(store.usage_stats.entry_count, item_count);
         assert_eq!(
@@ -652,7 +660,8 @@ mod tests {
         let target_capacity_count = target_capacity_bytes / CONTENT_DEFAULT_SIZE_BYTES;
         create_and_populate_table(&config, target_capacity_count)?;
 
-        let store = IdIndexedV1Store::create(ContentType::State, config)?;
+        let store =
+            IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
         assert_eq!(store.usage_stats.entry_count, target_capacity_count);
         assert_eq!(
             store.usage_stats.total_entry_size_bytes,
@@ -672,7 +681,8 @@ mod tests {
 
         create_and_populate_table(&config, above_target_capacity_count)?;
 
-        let store = IdIndexedV1Store::create(ContentType::State, config)?;
+        let store =
+            IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
 
         // Should not prune
         assert_eq!(store.usage_stats.entry_count, above_target_capacity_count);
@@ -695,7 +705,8 @@ mod tests {
 
         create_and_populate_table(&config, full_capacity_count)?;
 
-        let store = IdIndexedV1Store::create(ContentType::State, config.clone())?;
+        let store =
+            IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
 
         // Should not prune
         assert_eq!(store.usage_stats.entry_count, full_capacity_count);
@@ -719,7 +730,8 @@ mod tests {
 
         create_and_populate_table(&config, above_full_capacity_count)?;
 
-        let store = IdIndexedV1Store::create(ContentType::State, config.clone())?;
+        let store =
+            IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
 
         // should prune until target capacity
         assert_eq!(
@@ -739,7 +751,7 @@ mod tests {
         let temp_dir = TempDir::new()?;
         let config = create_config(&temp_dir, /* storage_capacity_bytes= */ 0);
 
-        let store = IdIndexedV1Store::create(ContentType::State, config)?;
+        let store = IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config)?;
 
         assert_eq!(store.usage_stats, UsageStats::default());
         assert_eq!(store.radius(), Distance::ZERO);
@@ -753,7 +765,7 @@ mod tests {
 
         // Add 1K entries, more than we would normally prune.
         create_and_populate_table(&config, 1_000)?;
-        let store = IdIndexedV1Store::create(ContentType::State, config)?;
+        let store = IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config)?;
 
         // Check that db is empty and distance is ZERO.
         assert_eq!(store.usage_stats, UsageStats::default());
@@ -768,7 +780,8 @@ mod tests {
 
         // fill 50% of storage with 50 items, 1% each
         create_and_populate_table(&config, 50)?;
-        let mut store = IdIndexedV1Store::create(ContentType::State, config.clone())?;
+        let mut store =
+            IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
 
         let (key, value) = generate_key_value(&config, 0);
         let id = ContentId::from(key.content_id());
@@ -798,7 +811,8 @@ mod tests {
 
         // fill 50% of storage with 50 items, 1% each
         create_and_populate_table(&config, 50)?;
-        let mut store = IdIndexedV1Store::create(ContentType::State, config.clone())?;
+        let mut store =
+            IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
 
         let (key, value) = generate_key_value(&config, 0);
         let id = ContentId::from(key.content_id());
@@ -825,7 +839,8 @@ mod tests {
     fn prune_simple() -> Result<()> {
         let temp_dir = TempDir::new()?;
         let config = create_config(&temp_dir, STORAGE_CAPACITY_100_ITEMS);
-        let mut store = IdIndexedV1Store::create(ContentType::State, config.clone())?;
+        let mut store =
+            IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
 
         assert_eq!(store.radius(), Distance::MAX);
 
@@ -890,7 +905,8 @@ mod tests {
 
         // fill 50% of storage with 50 items, 1% each
         create_and_populate_table(&config, 50)?;
-        let mut store = IdIndexedV1Store::create(ContentType::State, config.clone())?;
+        let mut store =
+            IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
 
         let mut rng = rand::thread_rng();
 
@@ -942,7 +958,8 @@ mod tests {
 
         // fill 50% of storage with 50 items, 1% each
         create_and_populate_table(&config, 50)?;
-        let mut store = IdIndexedV1Store::create(ContentType::State, config.clone())?;
+        let mut store =
+            IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
         assert_eq!(store.usage_stats.entry_count, 50);
 
         // Insert key/value such that:
@@ -986,7 +1003,8 @@ mod tests {
         let temp_dir = TempDir::new()?;
         let config = create_config(&temp_dir, STORAGE_CAPACITY_10000_ITEMS);
 
-        let mut store = IdIndexedV1Store::create(ContentType::State, config.clone())?;
+        let mut store =
+            IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
 
         // insert 10_000 entries, each 0x01% of storage size -> storage fully used
         for _ in 0..10_000 {
@@ -1025,7 +1043,8 @@ mod tests {
         let temp_dir = TempDir::new()?;
         let config = create_config(&temp_dir, STORAGE_CAPACITY_10000_ITEMS);
 
-        let mut store = IdIndexedV1Store::create(ContentType::State, config.clone())?;
+        let mut store =
+            IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
 
         // insert 10_000 entries, each 0x01% of storage size -> storage fully used
         for _ in 0..10_000 {
@@ -1071,10 +1090,10 @@ mod tests {
     fn pagination_empty() -> Result<()> {
         let temp_dir = TempDir::new()?;
         let config = create_config(&temp_dir, STORAGE_CAPACITY_100_ITEMS);
-        let store = IdIndexedV1Store::create(ContentType::State, config)?;
+        let store = IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config)?;
 
         assert_eq!(
-            store.paginate::<IdentityContentKey>(/* offset= */ 0, /* limit= */ 10)?,
+            store.paginate(/* offset= */ 0, /* limit= */ 10)?,
             PaginateResult {
                 content_keys: vec![],
                 entry_count: 0,
@@ -1087,7 +1106,8 @@ mod tests {
     fn pagination() -> Result<()> {
         let temp_dir = TempDir::new()?;
         let config = create_config(&temp_dir, STORAGE_CAPACITY_100_ITEMS);
-        let mut store = IdIndexedV1Store::create(ContentType::State, config.clone())?;
+        let mut store =
+            IdIndexedV1Store::<IdentityContentKey>::create(ContentType::State, config.clone())?;
 
         let entry_count = 12;
 
@@ -1101,28 +1121,28 @@ mod tests {
 
         // Paginate in steps of 4, there should be exactly 3 pages
         assert_eq!(
-            store.paginate::<IdentityContentKey>(/* offset= */ 0, /* limit= */ 4)?,
+            store.paginate(/* offset= */ 0, /* limit= */ 4)?,
             PaginateResult {
                 content_keys: content_keys[0..4].into(),
                 entry_count,
             }
         );
         assert_eq!(
-            store.paginate::<IdentityContentKey>(/* offset= */ 4, /* limit= */ 4)?,
+            store.paginate(/* offset= */ 4, /* limit= */ 4)?,
             PaginateResult {
                 content_keys: content_keys[4..8].into(),
                 entry_count,
             }
         );
         assert_eq!(
-            store.paginate::<IdentityContentKey>(/* offset= */ 8, /* limit= */ 4)?,
+            store.paginate(/* offset= */ 8, /* limit= */ 4)?,
             PaginateResult {
                 content_keys: content_keys[8..].into(),
                 entry_count,
             }
         );
         assert_eq!(
-            store.paginate::<IdentityContentKey>(/* offset= */ 12, /* limit= */ 4)?,
+            store.paginate(/* offset= */ 12, /* limit= */ 4)?,
             PaginateResult {
                 content_keys: vec![],
                 entry_count,
@@ -1131,21 +1151,21 @@ mod tests {
 
         // Paginate in steps of 5, last page should have only 2
         assert_eq!(
-            store.paginate::<IdentityContentKey>(/* offset= */ 0, /* limit= */ 5)?,
+            store.paginate(/* offset= */ 0, /* limit= */ 5)?,
             PaginateResult {
                 content_keys: content_keys[0..5].into(),
                 entry_count,
             }
         );
         assert_eq!(
-            store.paginate::<IdentityContentKey>(/* offset= */ 5, /* limit= */ 5)?,
+            store.paginate(/* offset= */ 5, /* limit= */ 5)?,
             PaginateResult {
                 content_keys: content_keys[5..10].into(),
                 entry_count,
             }
         );
         assert_eq!(
-            store.paginate::<IdentityContentKey>(/* offset= */ 10, /* limit= */ 5)?,
+            store.paginate(/* offset= */ 10, /* limit= */ 5)?,
             PaginateResult {
                 content_keys: content_keys[10..].into(),
                 entry_count,
