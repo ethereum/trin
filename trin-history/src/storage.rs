@@ -14,19 +14,20 @@ pub struct HistoryStorage {
     store: IdIndexedV1Store<HistoryContentKey>,
 }
 
-impl<TContentKey: OverlayContentKey> ContentStore<TContentKey> for HistoryStorage {
-    fn get(&self, key: &TContentKey) -> Result<Option<Vec<u8>>, ContentStoreError> {
+impl ContentStore for HistoryStorage {
+    type Key = HistoryContentKey;
+
+    fn get(&self, key: &Self::Key) -> Result<Option<Vec<u8>>, ContentStoreError> {
         self.store.lookup_content_value(&key.content_id().into())
     }
 
-    fn put<V: AsRef<[u8]>>(&mut self, key: TContentKey, value: V) -> Result<(), ContentStoreError> {
-        let key = HistoryContentKey::try_from(key.to_bytes())?;
+    fn put<V: AsRef<[u8]>>(&mut self, key: Self::Key, value: V) -> Result<(), ContentStoreError> {
         self.store.insert(&key, value.as_ref().to_vec())
     }
 
     fn is_key_within_radius_and_unavailable(
         &self,
-        key: &TContentKey,
+        key: &Self::Key,
     ) -> Result<ShouldWeStoreContent, ContentStoreError> {
         let content_id = ContentId::from(key.content_id());
         if self.store.distance_to_content_id(&content_id) > self.store.radius() {

@@ -21,12 +21,14 @@ pub struct StateStorage {
     store: IdIndexedV1Store<StateContentKey>,
 }
 
-impl<TContentKey: OverlayContentKey> ContentStore<TContentKey> for StateStorage {
-    fn get(&self, key: &TContentKey) -> Result<Option<Vec<u8>>, ContentStoreError> {
+impl ContentStore for StateStorage {
+    type Key = StateContentKey;
+
+    fn get(&self, key: &Self::Key) -> Result<Option<Vec<u8>>, ContentStoreError> {
         self.store.lookup_content_value(&key.content_id().into())
     }
 
-    fn put<V: AsRef<[u8]>>(&mut self, key: TContentKey, value: V) -> Result<(), ContentStoreError> {
+    fn put<V: AsRef<[u8]>>(&mut self, key: Self::Key, value: V) -> Result<(), ContentStoreError> {
         let key = StateContentKey::try_from(key.to_bytes())?;
         let value = StateContentValue::decode(value.as_ref())?;
 
@@ -45,7 +47,7 @@ impl<TContentKey: OverlayContentKey> ContentStore<TContentKey> for StateStorage 
 
     fn is_key_within_radius_and_unavailable(
         &self,
-        key: &TContentKey,
+        key: &Self::Key,
     ) -> Result<ShouldWeStoreContent, ContentStoreError> {
         let content_id = ContentId::from(key.content_id());
         if self.store.distance_to_content_id(&content_id) > self.store.radius() {

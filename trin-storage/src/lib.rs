@@ -9,7 +9,7 @@ use alloy_primitives::B256;
 use discv5::enr::NodeId;
 use error::ContentStoreError;
 use ethportal_api::types::{
-    content_key::overlay::OverlayContentKey,
+    content_key::overlay::{IdentityContentKey, OverlayContentKey},
     distance::{Distance, Metric, XorMetric},
 };
 use r2d2::Pool;
@@ -45,18 +45,20 @@ pub enum ShouldWeStoreContent {
 }
 
 /// A data store for Portal Network content (data).
-pub trait ContentStore<TContentKey: OverlayContentKey> {
+pub trait ContentStore {
+    type Key;
+
     /// Looks up a piece of content by `key`.
-    fn get(&self, key: &TContentKey) -> Result<Option<Vec<u8>>, ContentStoreError>;
+    fn get(&self, key: &Self::Key) -> Result<Option<Vec<u8>>, ContentStoreError>;
 
     /// Puts a piece of content into the store.
-    fn put<V: AsRef<[u8]>>(&mut self, key: TContentKey, value: V) -> Result<(), ContentStoreError>;
+    fn put<V: AsRef<[u8]>>(&mut self, key: Self::Key, value: V) -> Result<(), ContentStoreError>;
 
     /// Returns whether the content denoted by `key` is within the radius of the data store and not
     /// already stored within the data store.
     fn is_key_within_radius_and_unavailable(
         &self,
-        key: &TContentKey,
+        key: &Self::Key,
     ) -> Result<ShouldWeStoreContent, ContentStoreError>;
 
     /// Returns the radius of the data store.
@@ -103,14 +105,16 @@ impl MemoryContentStore {
     }
 }
 
-impl<TContentKey: OverlayContentKey> ContentStore<TContentKey> for MemoryContentStore {
-    fn get(&self, key: &TContentKey) -> Result<Option<Vec<u8>>, ContentStoreError> {
+impl ContentStore for MemoryContentStore {
+    type Key = IdentityContentKey;
+
+    fn get(&self, key: &Self::Key) -> Result<Option<Vec<u8>>, ContentStoreError> {
         let key = key.content_id();
         let val = self.store.get(key.as_slice()).cloned();
         Ok(val)
     }
 
-    fn put<V: AsRef<[u8]>>(&mut self, key: TContentKey, value: V) -> Result<(), ContentStoreError> {
+    fn put<V: AsRef<[u8]>>(&mut self, key: Self::Key, value: V) -> Result<(), ContentStoreError> {
         let content_id = key.content_id();
         let value: &[u8] = value.as_ref();
         self.store.insert(content_id.to_vec(), value.to_vec());
@@ -120,7 +124,7 @@ impl<TContentKey: OverlayContentKey> ContentStore<TContentKey> for MemoryContent
 
     fn is_key_within_radius_and_unavailable(
         &self,
-        key: &TContentKey,
+        key: &Self::Key,
     ) -> Result<ShouldWeStoreContent, ContentStoreError> {
         let distance = self.distance_to_key(key);
         if distance > self.radius {
