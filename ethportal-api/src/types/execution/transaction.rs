@@ -28,22 +28,23 @@ impl Transaction {
         keccak256(alloy_rlp::encode(self))
     }
 
-    pub fn get_transaction_sender_address(&self, encode_chain_id: bool) -> anyhow::Result<Address> {
-        let signature_hash = self.signature_hash(encode_chain_id);
-
-        let (r, s, odd_y_parity) = match self {
+    pub fn get_transaction_sender_address(&self) -> anyhow::Result<Address> {
+        let (r, s, odd_y_parity, is_eip155) = match self {
             Transaction::Legacy(tx) => {
-                let odd_y_parity = if encode_chain_id {
-                    tx.v.byte(0) - 37
+                let v = tx.v.byte(0);
+                let (odd_y_parity, is_eip155) = if v < 35 {
+                    (v - 27, false)
                 } else {
-                    tx.v.byte(0) - 27
+                    (v - 37, true)
                 };
-                (tx.r, tx.s, odd_y_parity)
+                (tx.r, tx.s, odd_y_parity, is_eip155)
             }
-            Transaction::AccessList(tx) => (tx.r, tx.s, tx.y_parity.byte(0)),
-            Transaction::EIP1559(tx) => (tx.r, tx.s, tx.y_parity.byte(0)),
-            Transaction::Blob(tx) => (tx.r, tx.s, tx.y_parity.byte(0)),
+            Transaction::AccessList(tx) => (tx.r, tx.s, tx.y_parity.byte(0), true),
+            Transaction::EIP1559(tx) => (tx.r, tx.s, tx.y_parity.byte(0), true),
+            Transaction::Blob(tx) => (tx.r, tx.s, tx.y_parity.byte(0), true),
         };
+
+        let signature_hash = self.signature_hash(is_eip155);
 
         let mut sig: [u8; 65] = [0; 65];
         sig[0..32].copy_from_slice(&r.to_be_bytes::<32>());
@@ -717,6 +718,13 @@ mod tests {
         "0x9e669fcad535566e5b69acbceb660c636886ac655f1afcb5686aebf820f52ca2",
         "0xcf00a85f3826941e7a25bfcf9aac575d40410852",
     )]
+    // Block 2675000 https://etherscan.io/tx/0x427b0b68b1ccc46b01d99ed399b61c4ae681e22216035eb6953afc83ef463e17
+    #[case(
+        "0xf86c02850e33e22200825208947329c8dbafaef13c3388de01015ea855e13723a28816ebf60a31618800801ca028e95ddd1849293d85341dc12a7ce2cb04c49b492d0b6afeea8553035bdc2ee1a01f3e9490b23ac10d2332310babfd201d4f6a30512cb55b5163f66ce3e082a8d3",
+        false,
+        "0x2d2bea519c4b02a71a7aaa40e402df443c00ff12d4cda62371b6fabb32ef4c95",
+        "0xf7bdb487a46241f78ebabc18e251a828e48da502"
+    )]
     // Block 3000000 https://etherscan.io/tx/0xb95ab9484280074f7b8c6a3cf5ffe2bf0c39168433adcdedc1aacd10d994d95a
     #[case(
         "0xf8708310aa038504a817c80083015f9094e7268aadb21f48a3b65f0880b6b9480217995979880dfe6c5bd5fa6ff08026a0a186e1a20b3973a29d28d0cddb205ff8b9e670cff1d3e794cd4de1b08b5a8562a0429c2166e893a646cb3b5faf1216ee4c7d99e3957ae145036ca68dec0bcb5f57",
@@ -724,6 +732,7 @@ mod tests {
         "0xd5f76f3a1f7eebadc04d702334445d261d24831d6bfef61e3974bcdb4f015c68",
         "0xea674fdde714fd979de3edf0f56aa9716b898ec8"
     )]
+
     fn test_legacy_get_sender_address_from_transaction(
         #[case] transaction: &str,
         #[case] post_eip155: bool,
@@ -740,9 +749,7 @@ mod tests {
         assert_eq!(
             format!(
                 "{:?}",
-                transaction
-                    .get_transaction_sender_address(post_eip155)
-                    .unwrap()
+                transaction.get_transaction_sender_address().unwrap()
             ),
             sender_address
         );

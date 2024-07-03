@@ -18,6 +18,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let bridge_config = BridgeConfig::parse();
 
+    if bridge_config
+        .portal_subnetworks
+        .contains(&NetworkKind::State)
+        && bridge_config.portal_subnetworks.len() > 1
+    {
+        return Err("The State network doesn't support being ran with the other networks bridges at the same time".into());
+    }
+
     if let Some(addr) = bridge_config.metrics_url {
         prometheus_exporter::start(addr)?;
     }
@@ -41,30 +49,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut bridge_tasks = Vec::new();
 
-    // Launch Beacon Network portal bridge
-    if bridge_config
-        .portal_subnetworks
-        .contains(&NetworkKind::Beacon)
-    {
-        let bridge_mode = bridge_config.mode.clone();
-        let consensus_api = ConsensusApi::new(
-            bridge_config.cl_provider,
-            bridge_config.cl_provider_fallback,
-        )
-        .await?;
-        let portal_client_clone = portal_client.clone();
-        let bridge_handle = tokio::spawn(async move {
-            let beacon_bridge = BeaconBridge::new(consensus_api, bridge_mode, portal_client_clone);
-
-            beacon_bridge
-                .launch()
-                .instrument(tracing::trace_span!("beacon"))
-                .await;
-        });
-
-        bridge_tasks.push(bridge_handle);
-    }
-
     // Launch State Network portal bridge
     if bridge_config
         .portal_subnetworks
@@ -82,65 +66,88 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             bridge_config.gossip_limit,
         )
         .await?;
-        let bridge_handle = tokio::spawn(async move {
-            state_bridge
-                .launch()
-                .instrument(tracing::trace_span!("state"))
-                .await;
-        });
-        bridge_tasks.push(bridge_handle);
-    }
 
-    // Launch History Network portal bridge
-    if bridge_config
-        .portal_subnetworks
-        .contains(&NetworkKind::History)
-    {
-        let execution_api = ExecutionApi::new(
-            bridge_config.el_provider,
-            bridge_config.el_provider_fallback,
-        )
-        .await?;
-        match bridge_config.mode {
-            BridgeMode::FourFours(_) => {
-                let header_oracle = HeaderOracle::default();
-                let era1_bridge = Era1Bridge::new(
-                    bridge_config.mode,
-                    portal_client,
-                    header_oracle,
-                    bridge_config.epoch_acc_path,
-                    bridge_config.gossip_limit,
-                    execution_api,
-                )
-                .await?;
-                let bridge_handle = tokio::spawn(async move {
-                    era1_bridge
-                        .launch()
-                        .instrument(tracing::trace_span!("history(era1)"))
-                        .await;
-                });
-                bridge_tasks.push(bridge_handle);
-            }
-            _ => {
-                let bridge_handle = tokio::spawn(async move {
+        state_bridge
+            .launch()
+            .instrument(tracing::trace_span!("state"))
+            .await;
+    } else {
+        // Launch Beacon Network portal bridge
+        if bridge_config
+            .portal_subnetworks
+            .contains(&NetworkKind::Beacon)
+        {
+            let bridge_mode = bridge_config.mode.clone();
+            let consensus_api = ConsensusApi::new(
+                bridge_config.cl_provider,
+                bridge_config.cl_provider_fallback,
+            )
+            .await?;
+            let portal_client_clone = portal_client.clone();
+            let bridge_handle = tokio::spawn(async move {
+                let beacon_bridge =
+                    BeaconBridge::new(consensus_api, bridge_mode, portal_client_clone);
+
+                beacon_bridge
+                    .launch()
+                    .instrument(tracing::trace_span!("beacon"))
+                    .await;
+            });
+
+            bridge_tasks.push(bridge_handle);
+        }
+
+        // Launch History Network portal bridge
+        if bridge_config
+            .portal_subnetworks
+            .contains(&NetworkKind::History)
+        {
+            let execution_api = ExecutionApi::new(
+                bridge_config.el_provider,
+                bridge_config.el_provider_fallback,
+            )
+            .await?;
+            match bridge_config.mode {
+                BridgeMode::FourFours(_) => {
                     let header_oracle = HeaderOracle::default();
-
-                    let bridge = HistoryBridge::new(
+                    let era1_bridge = Era1Bridge::new(
                         bridge_config.mode,
-                        execution_api,
                         portal_client,
                         header_oracle,
                         bridge_config.epoch_acc_path,
                         bridge_config.gossip_limit,
-                    );
+                        execution_api,
+                    )
+                    .await?;
+                    let bridge_handle = tokio::spawn(async move {
+                        era1_bridge
+                            .launch()
+                            .instrument(tracing::trace_span!("history(era1)"))
+                            .await;
+                    });
+                    bridge_tasks.push(bridge_handle);
+                }
+                _ => {
+                    let bridge_handle = tokio::spawn(async move {
+                        let header_oracle = HeaderOracle::default();
 
-                    bridge
-                        .launch()
-                        .instrument(tracing::trace_span!("history"))
-                        .await;
-                });
+                        let bridge = HistoryBridge::new(
+                            bridge_config.mode,
+                            execution_api,
+                            portal_client,
+                            header_oracle,
+                            bridge_config.epoch_acc_path,
+                            bridge_config.gossip_limit,
+                        );
 
-                bridge_tasks.push(bridge_handle);
+                        bridge
+                            .launch()
+                            .instrument(tracing::trace_span!("history"))
+                            .await;
+                    });
+
+                    bridge_tasks.push(bridge_handle);
+                }
             }
         }
     }

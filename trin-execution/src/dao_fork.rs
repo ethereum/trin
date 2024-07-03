@@ -1,12 +1,10 @@
 //! DAO Fork related constants from [EIP-779](https://eips.ethereum.org/EIPS/eip-779).
 //! It happened on Ethereum block 1_920_000
 
-use alloy_rlp::Decodable;
-use eth_trie::Trie;
-use ethportal_api::types::state_trie::account_state::AccountState as AccountStateInfo;
-use revm_primitives::{address, keccak256, Address, U256};
+use revm::{db::State as RevmState, Evm};
+use revm_primitives::{address, Address};
 
-use crate::storage::{account::Account, evm_db::EvmDB};
+use crate::storage::evm_db::EvmDB;
 
 /// Dao hardfork beneficiary that received ether from accounts from DAO and DAO creator children.
 pub static DAO_HARDFORK_BENEFICIARY: Address = address!("bf4ed7b27f1d666546e30d74d50d173d20bca754");
@@ -131,52 +129,15 @@ pub static DAO_HARDKFORK_ACCOUNTS: [Address; 116] = [
     address!("807640a13483f8ac783c557fcdf27be11ea4ac7a"),
 ];
 
-pub fn process_dao_fork(database: &EvmDB) -> anyhow::Result<()> {
-    let mut drained_balance_sum = U256::ZERO;
-
-    // drain dao accounts
-    for address in DAO_HARDKFORK_ACCOUNTS {
-        let address_hash = keccak256(address);
-        let mut account: Account = match database
-            .db
-            .get(address_hash)
-            .expect("Reading account from database should never fail")
-        {
-            Some(raw_account) => Decodable::decode(&mut raw_account.as_slice())?,
-            None => Account::default(),
-        };
-
-        drained_balance_sum += account.balance;
-        account.balance = U256::ZERO;
-
-        let _ = database.trie.lock().insert(
-            address_hash.as_ref(),
-            &alloy_rlp::encode(AccountStateInfo::from(&account)),
-        );
-
-        database.db.put(address_hash, alloy_rlp::encode(account))?;
-    }
+pub fn process_dao_fork(database: &mut Evm<(), RevmState<EvmDB>>) -> anyhow::Result<()> {
+    // drain balances from DAO hardfork accounts
+    let drained_balances = database.db_mut().drain_balances(DAO_HARDKFORK_ACCOUNTS)?;
+    let drained_balance_sum: u128 = drained_balances.iter().sum();
 
     // transfer drained balance to beneficiary
-    let address_hash = keccak256(DAO_HARDFORK_BENEFICIARY);
-
-    let mut account: Account = match database
-        .db
-        .get(address_hash)
-        .expect("Reading account from database should never fail")
-    {
-        Some(raw_account) => Decodable::decode(&mut raw_account.as_slice())?,
-        None => Account::default(),
-    };
-
-    account.balance += drained_balance_sum;
-
-    let _ = database.trie.lock().insert(
-        address_hash.as_ref(),
-        &alloy_rlp::encode(AccountStateInfo::from(&account)),
-    );
-
-    database.db.put(address_hash, alloy_rlp::encode(account))?;
+    database
+        .db_mut()
+        .increment_balances([(DAO_HARDFORK_BENEFICIARY, drained_balance_sum)].into_iter())?;
 
     Ok(())
 }
