@@ -19,7 +19,6 @@ use discv5::{
     rpc::RequestId,
 };
 use futures::{channel::oneshot, future::join_all, prelude::*};
-use itertools::Itertools;
 use parking_lot::RwLock;
 use rand::seq::SliceRandom;
 use smallvec::SmallVec;
@@ -79,7 +78,7 @@ use ethportal_api::{
 };
 use trin_metrics::overlay::OverlayMetricsReporter;
 use trin_storage::{ContentStore, ShouldWeStoreContent};
-use trin_validation::validator::{ValidationResult, Validator};
+use trin_validation::validator::Validator;
 
 pub const FIND_NODES_MAX_NODES: usize = 32;
 
@@ -153,6 +152,8 @@ where
     event_stream: broadcast::Sender<EventEnvelope>,
     /// Disable poke mechanism
     disable_poke: bool,
+    /// Gossip content as it gets dropped from local storage
+    gossip_dropped: bool,
     /// Accept Queue for inbound content keys
     accept_queue: Arc<RwLock<AcceptQueue<TContentKey>>>,
 }
@@ -188,6 +189,7 @@ where
         query_num_results: usize,
         findnodes_query_distances_per_peer: usize,
         disable_poke: bool,
+        gossip_dropped: bool,
     ) -> UnboundedSender<OverlayCommand<TContentKey>>
     where
         <TContentKey as TryFrom<Vec<u8>>>::Error: Send,
@@ -229,6 +231,7 @@ where
                 validator,
                 event_stream,
                 disable_poke,
+                gossip_dropped,
                 accept_queue: Arc::new(RwLock::new(AcceptQueue::default())),
             };
 
@@ -1196,7 +1199,7 @@ where
                     })
                 })
                 .collect::<Vec<_>>();
-            let validated_content = join_all(handles)
+            let validated_content: Vec<(TContentKey, Vec<u8>)> = join_all(handles)
                 .await
                 .into_iter()
                 .enumerate()
@@ -1215,8 +1218,14 @@ where
                         None
                     })
                 })
-                .collect::<Vec<_>>();
-            let _ = Self::propagate_validated_content(validated_content, utp_processing).await;
+                .flatten()
+                .collect();
+            propagate_gossip_cross_thread(
+                validated_content,
+                utp_processing.kbuckets,
+                utp_processing.command_tx.clone(),
+                Some(utp_processing.utp_controller),
+            );
             // explicitly drop semaphore permit in thread so the permit is moved into the thread
             drop(permit);
         });
@@ -1525,48 +1534,17 @@ where
         Ok(response)
     }
 
-    async fn propagate_validated_content(
-        validated_content: Vec<(TContentKey, Vec<u8>, ValidationResult<TContentKey>)>,
-        utp_processing: UtpProcessing<TValidator, TStore, TContentKey>,
-    ) -> anyhow::Result<()> {
-        // Propagate all validated content, whether or not it was stored.
-        let content_to_propagate: Vec<(TContentKey, Vec<u8>)> = validated_content
-            .into_iter()
-            .flat_map(|(content_key, content_value, validation_result)| {
-                match validation_result.additional_content_to_propagate {
-                    Some(additional_content_to_propagate) => vec![
-                        (content_key, content_value),
-                        additional_content_to_propagate,
-                    ],
-                    None => vec![(content_key, content_value)],
-                }
-            })
-            .unique_by(|(key, _)| key.content_id())
-            .collect();
-
-        let ids_to_propagate: Vec<String> = content_to_propagate
-            .iter()
-            .map(|(k, _)| hex_encode_compact(k.content_id()))
-            .collect();
-        debug!(ids = ?ids_to_propagate, "propagating validated content");
-        propagate_gossip_cross_thread(
-            content_to_propagate,
-            utp_processing.kbuckets,
-            utp_processing.command_tx.clone(),
-            Some(utp_processing.utp_controller),
-        );
-        Ok(())
-    }
-
     /// Validates & stores content value received from peer.
     /// Checks if validated content should be stored, and stores it if true
+    /// Returns validated content/content dropped from storage to
+    /// propagate to other peers.
     // (this step requires a dedicated task since it might require
     // non-blocking requests to this/other overlay networks).
     async fn validate_and_store_content(
         key: TContentKey,
         content_value: Vec<u8>,
         utp_processing: UtpProcessing<TValidator, TStore, TContentKey>,
-    ) -> Option<(TContentKey, Vec<u8>, ValidationResult<TContentKey>)> {
+    ) -> Option<Vec<(TContentKey, Vec<u8>)>> {
         // Validate received content
         let validation_result = utp_processing
             .validator
@@ -1599,6 +1577,14 @@ where
             return None;
         }
 
+        // Collect all content to propagate
+        let mut content_to_propagate = vec![(key.clone(), content_value.clone())];
+        if let Some(additional_content_to_propagate) =
+            validation_result.additional_content_to_propagate
+        {
+            content_to_propagate.push(additional_content_to_propagate);
+        }
+
         // Check if data should be stored, and store if it is within our radius and not
         // already stored.
         let key_desired = utp_processing
@@ -1607,16 +1593,23 @@ where
             .is_key_within_radius_and_unavailable(&key);
         match key_desired {
             Ok(ShouldWeStoreContent::Store) => {
-                if let Err(err) = utp_processing
+                match utp_processing
                     .store
                     .write()
                     .put(key.clone(), &content_value)
                 {
-                    warn!(
+                    Ok(dropped_content) => {
+                        if !dropped_content.is_empty() && utp_processing.gossip_dropped {
+                            // add dropped content to validation result, so it will be propagated
+                            debug!("Dropped {:?} pieces of content after inserting new content, propagating them back into the network.", dropped_content.len());
+                            content_to_propagate.extend(dropped_content.clone());
+                        }
+                    }
+                    Err(err) => warn!(
                         error = %err,
                         content.key = %key.to_hex(),
                         "Error storing accepted content"
-                    );
+                    ),
                 }
             }
             Ok(ShouldWeStoreContent::NotWithinRadius) => {
@@ -1638,8 +1631,8 @@ where
                     "Error checking data store for content key"
                 );
             }
-        }
-        Some((key, content_value, validation_result))
+        };
+        Some(content_to_propagate)
     }
 
     /// Attempts to send a single FINDCONTENT request to a fallback peer,
@@ -1711,7 +1704,12 @@ where
             }
         };
 
-        let _ = Self::propagate_validated_content(vec![validated_content], utp_processing).await;
+        propagate_gossip_cross_thread(
+            validated_content,
+            utp_processing.kbuckets,
+            utp_processing.command_tx.clone(),
+            Some(utp_processing.utp_controller),
+        );
         Ok(())
     }
 
@@ -1878,17 +1876,38 @@ where
                         |val| matches!(val, ShouldWeStoreContent::Store),
                     );
             if should_store {
-                if let Err(err) = utp_processing
+                match utp_processing
                     .store
                     .write()
                     .put(content_key.clone(), content.clone())
                 {
-                    error!(
+                    Ok(dropped_content) => {
+                        let mut content_to_propagate = vec![(content_key.clone(), content.clone())];
+                        if let Some(additional_content_to_propagate) =
+                            validation_result.additional_content_to_propagate
+                        {
+                            content_to_propagate.push(additional_content_to_propagate);
+                        }
+                        if !dropped_content.is_empty() && utp_processing.gossip_dropped {
+                            debug!(
+                                "Dropped {:?} pieces of content after inserting new content, propagating them back into the network.",
+                                dropped_content.len(),
+                            );
+                            content_to_propagate.extend(dropped_content.clone());
+                        }
+                        propagate_gossip_cross_thread(
+                            content_to_propagate,
+                            utp_processing.kbuckets.clone(),
+                            utp_processing.command_tx.clone(),
+                            Some(utp_processing.utp_controller.clone()),
+                        );
+                    }
+                    Err(err) => error!(
                         error = %err,
                         content.id = %hex_encode_compact(content_id),
                         content.key = %content_key,
                         "Error storing content"
-                    );
+                    ),
                 }
             }
         }
@@ -2587,6 +2606,7 @@ where
     utp_controller: Arc<UtpController>,
     accept_queue: Arc<RwLock<AcceptQueue<TContentKey>>>,
     disable_poke: bool,
+    gossip_dropped: bool,
 }
 
 impl<TContentKey, TMetric, TValidator, TStore>
@@ -2607,6 +2627,7 @@ where
             utp_controller: Arc::clone(&service.utp_controller),
             accept_queue: Arc::clone(&service.accept_queue),
             disable_poke: service.disable_poke,
+            gossip_dropped: service.gossip_dropped,
         }
     }
 }
@@ -2627,6 +2648,7 @@ where
             utp_controller: Arc::clone(&self.utp_controller),
             accept_queue: Arc::clone(&self.accept_queue),
             disable_poke: self.disable_poke,
+            gossip_dropped: self.gossip_dropped,
         }
     }
 }
@@ -2765,6 +2787,7 @@ mod tests {
             validator,
             event_stream: broadcast::channel(EVENT_STREAM_CHANNEL_CAPACITY).0,
             disable_poke: false,
+            gossip_dropped: false,
             accept_queue,
         }
     }

@@ -39,6 +39,7 @@ impl HistoryNetwork {
         let config = OverlayConfig {
             bootnode_enrs,
             disable_poke: portal_config.disable_poke,
+            gossip_dropped: portal_config.gossip_dropped,
             utp_transfer_limit: portal_config.utp_transfer_limit,
             ..Default::default()
         };

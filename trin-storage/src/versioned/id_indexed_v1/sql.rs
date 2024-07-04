@@ -75,7 +75,7 @@ pub fn delete_farthest(content_type: &ContentType) -> String {
             ORDER BY distance_short DESC
             LIMIT :limit
         )
-        RETURNING content_size",
+        RETURNING content_key, content_value",
         table_name(content_type)
     )
 }

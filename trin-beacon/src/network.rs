@@ -27,6 +27,10 @@ pub struct BeaconNetwork {
     pub beacon_client: Arc<Mutex<Option<Client<FileDB, PortalRpc>>>>,
 }
 
+/// Gossiping content as it gets dropped from local storage is disabled for the beacon network,
+/// since beacon nodes already store all the content they're interested in.
+const GOSSIP_DROPPED: bool = false;
+
 impl BeaconNetwork {
     pub async fn new(
         discovery: Arc<Discovery>,
@@ -39,6 +43,7 @@ impl BeaconNetwork {
         let config = OverlayConfig {
             bootnode_enrs,
             utp_transfer_limit: portal_config.utp_transfer_limit,
+            gossip_dropped: GOSSIP_DROPPED,
             ..Default::default()
         };
         let storage = Arc::new(PLRwLock::new(BeaconStorage::new(storage_config)?));

@@ -271,6 +271,24 @@ async fn peertest_history_offer_propagates_gossip_multiple_large_content_values(
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
+async fn peertest_history_gossip_dropped_with_offer() {
+    let (peertest, target, handle) = setup_peertest("mainnet").await;
+    peertest::scenarios::gossip::test_gossip_dropped_with_offer(&peertest, &target).await;
+    peertest.exit_all_nodes();
+    handle.stop().unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
+async fn peertest_history_gossip_dropped_with_find_content() {
+    let (peertest, target, handle) = setup_peertest("mainnet").await;
+    peertest::scenarios::gossip::test_gossip_dropped_with_find_content(&peertest, &target).await;
+    peertest.exit_all_nodes();
+    handle.stop().unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
 async fn peertest_ping_cross_discv5_protocol_id() {
     let (peertest, target, handle) = setup_peertest("angelfood").await;
     peertest::scenarios::basic::test_ping_cross_network(&target, &peertest).await;

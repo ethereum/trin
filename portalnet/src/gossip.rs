@@ -5,6 +5,7 @@ use discv5::{
     kbucket::{self, KBucketsTable},
 };
 use futures::channel::oneshot;
+use itertools::Itertools;
 use parking_lot::RwLock;
 use rand::seq::IteratorRandom;
 use serde::{Deserialize, Serialize};
@@ -25,7 +26,7 @@ use ethportal_api::{
         enr::Enr,
         portal_wire::{PopulatedOffer, PopulatedOfferWithResult, Request, Response},
     },
-    utils::bytes::hex_encode,
+    utils::bytes::{hex_encode, hex_encode_compact},
     OverlayContentKey, RawContentKey,
 };
 
@@ -48,6 +49,13 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
     command_tx: mpsc::UnboundedSender<OverlayCommand<TContentKey>>,
     utp_controller: Option<Arc<UtpController>>,
 ) -> usize {
+    // Propagate all validated content, whether or not it was stored.
+    let ids_to_propagate: Vec<String> = content
+        .iter()
+        .unique_by(|(key, _)| key.content_id())
+        .map(|(key, _)| hex_encode_compact(key.content_id()))
+        .collect();
+    debug!(ids = ?ids_to_propagate, "propagating validated content");
     // Get all connected nodes from overlay routing table
     let kbuckets = kbuckets.read();
     let all_nodes: Vec<&kbucket::Node<NodeId, Node>> = kbuckets
@@ -86,7 +94,7 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
 
     let num_propagated_peers = enrs_and_content.len();
     // Create and send OFFER overlay request to the interested nodes
-    for (enr_string, interested_content) in enrs_and_content.into_iter() {
+    for (enr_string, mut interested_content) in enrs_and_content.into_iter() {
         let permit = match utp_controller {
             Some(ref utp_controller) => match utp_controller.get_outbound_semaphore() {
                 Some(permit) => Some(permit),
@@ -102,6 +110,31 @@ pub fn propagate_gossip_cross_thread<TContentKey: OverlayContentKey>(
                 continue;
             }
         };
+
+        // offer messages are limited to 64 content keys
+        if interested_content.len() > 64 {
+            warn!(
+                enr = %enr,
+                content.len = interested_content.len(),
+                "Too many content items to offer to a single peer, dropping {}.",
+                interested_content.len() - 64
+            );
+            // sort content keys by distance to the node
+            interested_content.sort_by(|a, b| {
+                let mut raw_a = [0u8; 32];
+                raw_a.copy_from_slice(&a.0);
+                let mut raw_b = [0u8; 32];
+                raw_b.copy_from_slice(&b.0);
+                let distance_a = XorMetric::distance(&raw_a, &enr.node_id().raw());
+                let distance_b = XorMetric::distance(&raw_b, &enr.node_id().raw());
+                distance_a.partial_cmp(&distance_b).unwrap_or_else(|| {
+                    warn!(a = %distance_a, b = %distance_b, "Error comparing two distances");
+                    std::cmp::Ordering::Less
+                })
+            });
+            // take 64 closest content keys
+            interested_content.truncate(64);
+        }
 
         let offer_request = Request::PopulatedOffer(PopulatedOffer {
             content_items: interested_content,

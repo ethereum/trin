@@ -3,14 +3,16 @@ use std::net::{IpAddr, Ipv4Addr};
 use tracing::info;
 
 use crate::{
-    utils::{fixture_header_with_proof, wait_for_history_content},
+    utils::{
+        fixture_epoch_acc_1, fixture_epoch_acc_2, fixture_header_with_proof,
+        wait_for_history_content,
+    },
     Peertest,
 };
 use ethportal_api::{
     jsonrpsee::async_client::Client, types::cli::TrinConfig, Discv5ApiClient,
     HistoryNetworkApiClient,
 };
-
 pub async fn test_gossip_with_trace(peertest: &Peertest, target: &Client) {
     info!("Testing Gossip with tracing");
 
@@ -34,30 +36,7 @@ pub async fn test_gossip_with_trace(peertest: &Peertest, target: &Client) {
     );
 
     // Spin up a fresh client, not connected to existing peertest
-    let test_ip_addr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
-    // Use an uncommon port for the peertest to avoid clashes.
-    let test_discovery_port = 8899;
-    let external_addr = format!("{test_ip_addr}:{test_discovery_port}");
-    let fresh_ipc_path = format!("/tmp/trin-jsonrpc-{test_discovery_port}.ipc");
-    let trin_config = TrinConfig::new_from(
-        [
-            "trin",
-            "--portal-subnetworks",
-            "history,state",
-            "--external-address",
-            external_addr.as_str(),
-            "--web3-ipc-path",
-            fresh_ipc_path.as_str(),
-            "--ephemeral",
-            "--discovery-port",
-            test_discovery_port.to_string().as_ref(),
-            "--bootnodes",
-            "none",
-        ]
-        .iter(),
-    )
-    .unwrap();
-
+    let (fresh_ipc_path, trin_config) = fresh_node_config();
     let _test_client_rpc_handle = trin::run_trin(trin_config).await.unwrap();
     let fresh_target = reth_ipc::client::IpcClientBuilder::default()
         .build(fresh_ipc_path)
@@ -94,4 +73,244 @@ pub async fn test_gossip_with_trace(peertest: &Peertest, target: &Client) {
     assert_eq!(result.offered.len(), 2);
     assert_eq!(result.accepted.len(), 0);
     assert_eq!(result.transferred.len(), 0);
+}
+
+pub async fn test_gossip_dropped_with_offer(peertest: &Peertest, target: &Client) {
+    info!("Testing gossip of dropped content after an offer message.");
+
+    // connect target to network
+    let _ = target.ping(peertest.bootnode.enr.clone()).await.unwrap();
+
+    // Spin up a fresh client, not connected to existing peertest
+    let (fresh_ipc_path, trin_config) = fresh_node_config();
+    let _test_client_rpc_handle = trin::run_trin(trin_config).await.unwrap();
+    let fresh_target = reth_ipc::client::IpcClientBuilder::default()
+        .build(fresh_ipc_path)
+        .await
+        .unwrap();
+    let fresh_enr = fresh_target.node_info().await.unwrap().enr;
+
+    // Store accumulator_1 locally in client that is not connected to the network
+    let (acc_key_1, acc_value_1) = fixture_epoch_acc_1();
+    let store_result =
+        HistoryNetworkApiClient::store(&fresh_target, acc_key_1.clone(), acc_value_1.clone())
+            .await
+            .unwrap();
+    assert!(store_result);
+
+    // check that fresh target has accumulator_1
+    assert!(
+        HistoryNetworkApiClient::local_content(&fresh_target, acc_key_1.clone())
+            .await
+            .is_ok()
+    );
+    // check that target does not have accumulator_1
+    assert!(
+        HistoryNetworkApiClient::local_content(target, acc_key_1.clone())
+            .await
+            .is_err()
+    );
+    // check that peertest node does not have accumulator_1
+    assert!(HistoryNetworkApiClient::local_content(
+        &peertest.nodes[0].ipc_client,
+        acc_key_1.clone()
+    )
+    .await
+    .is_err());
+    // check that peertest bootnode does not have accumulator_1
+    assert!(HistoryNetworkApiClient::local_content(
+        &peertest.bootnode.ipc_client,
+        acc_key_1.clone()
+    )
+    .await
+    .is_err());
+
+    // connect fresh target to network
+    let _ = fresh_target
+        .ping(target.node_info().await.unwrap().enr)
+        .await
+        .unwrap();
+    let _ = fresh_target
+        .ping(peertest.bootnode.enr.clone())
+        .await
+        .unwrap();
+    let _ = fresh_target
+        .ping(peertest.nodes[0].enr.clone())
+        .await
+        .unwrap();
+
+    // offer accumulator_2 from target to fresh target
+    // doesn't store the content locally in target
+    let (acc_key_2, acc_value_2) = fixture_epoch_acc_2();
+    target
+        .offer(fresh_enr, acc_key_2.clone(), acc_value_2.clone())
+        .await
+        .unwrap();
+
+    // check that the fresh target has stored accumulator_2
+    assert_eq!(
+        acc_value_2,
+        wait_for_history_content(&fresh_target, acc_key_2.clone()).await
+    );
+    // check that the target has both accumulators
+    assert_eq!(
+        acc_value_1,
+        wait_for_history_content(target, acc_key_1.clone()).await
+    );
+    assert_eq!(
+        acc_value_2,
+        wait_for_history_content(target, acc_key_2.clone()).await
+    );
+    // check that the peertest bootnode has both accumulators
+    assert_eq!(
+        acc_value_1,
+        wait_for_history_content(&peertest.bootnode.ipc_client, acc_key_1.clone()).await
+    );
+    assert_eq!(
+        acc_value_2,
+        wait_for_history_content(&peertest.bootnode.ipc_client, acc_key_2.clone()).await
+    );
+    // check that the peertest node has both accumulators
+    assert_eq!(
+        acc_value_1,
+        wait_for_history_content(&peertest.nodes[0].ipc_client, acc_key_1.clone()).await
+    );
+    assert_eq!(
+        acc_value_2,
+        wait_for_history_content(&peertest.nodes[0].ipc_client, acc_key_2.clone()).await
+    );
+    // this must be at end of test, to guarantee that all propagation has concluded
+    // check that the fresh target has dropped accumulator_1
+    assert!(
+        HistoryNetworkApiClient::local_content(&fresh_target, acc_key_1.clone())
+            .await
+            .is_err()
+    );
+}
+
+pub async fn test_gossip_dropped_with_find_content(peertest: &Peertest, target: &Client) {
+    info!("Testing gossip of dropped content after a find content message.");
+
+    // connect target to network
+    let _ = target.ping(peertest.bootnode.enr.clone()).await.unwrap();
+
+    // Spin up a fresh client, not connected to existing peertest
+    let (fresh_ipc_path, trin_config) = fresh_node_config();
+    let _test_client_rpc_handle = trin::run_trin(trin_config).await.unwrap();
+    let fresh_target = reth_ipc::client::IpcClientBuilder::default()
+        .build(fresh_ipc_path)
+        .await
+        .unwrap();
+
+    // Store accumulator_1 locally in client that is not connected to the network
+    let (acc_key_1, acc_value_1) = fixture_epoch_acc_1();
+    let store_result =
+        HistoryNetworkApiClient::store(&fresh_target, acc_key_1.clone(), acc_value_1.clone())
+            .await
+            .unwrap();
+    assert!(store_result);
+
+    // Store accumulator_2 locally in target
+    let (acc_key_2, acc_value_2) = fixture_epoch_acc_2();
+    let store_result =
+        HistoryNetworkApiClient::store(target, acc_key_2.clone(), acc_value_2.clone())
+            .await
+            .unwrap();
+    assert!(store_result);
+
+    // connect fresh target to network
+    let _ = fresh_target
+        .ping(target.node_info().await.unwrap().enr)
+        .await
+        .unwrap();
+    let _ = fresh_target
+        .ping(peertest.bootnode.enr.clone())
+        .await
+        .unwrap();
+    let _ = fresh_target
+        .ping(peertest.nodes[0].enr.clone())
+        .await
+        .unwrap();
+
+    // send find_content request from fresh target to target
+    let _result = fresh_target
+        //.find_content(target.node_info().await.unwrap().enr, acc_key_2.clone())
+        .recursive_find_content(acc_key_2.clone())
+        .await
+        .unwrap();
+
+    // check that the fresh target has stored accumulator_2
+    assert_eq!(
+        acc_value_2,
+        wait_for_history_content(&fresh_target, acc_key_2.clone()).await
+    );
+    // check that the target has both accumulators
+    assert_eq!(
+        acc_value_1,
+        wait_for_history_content(target, acc_key_1.clone()).await
+    );
+    assert_eq!(
+        acc_value_2,
+        wait_for_history_content(target, acc_key_2.clone()).await
+    );
+    // check that the peertest bootnode has both accumulators
+    assert_eq!(
+        acc_value_1,
+        wait_for_history_content(&peertest.bootnode.ipc_client, acc_key_1.clone()).await
+    );
+    assert_eq!(
+        acc_value_2,
+        wait_for_history_content(&peertest.bootnode.ipc_client, acc_key_2.clone()).await
+    );
+    // check that the peertest node has both accumulators
+    assert_eq!(
+        acc_value_1,
+        wait_for_history_content(&peertest.nodes[0].ipc_client, acc_key_1.clone()).await
+    );
+    assert_eq!(
+        acc_value_2,
+        wait_for_history_content(&peertest.nodes[0].ipc_client, acc_key_2.clone()).await
+    );
+    // this must be at end of test, to guarantee that all propagation has concluded
+    // check that the fresh target has dropped accumulator_1
+    assert!(
+        HistoryNetworkApiClient::local_content(&fresh_target, acc_key_1.clone())
+            .await
+            .is_err()
+    );
+}
+
+fn fresh_node_config() -> (String, TrinConfig) {
+    // Spin up a fresh client, not connected to existing peertest
+    let test_ip_addr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+    // Use an uncommon port for the peertest to avoid clashes.
+    let test_discovery_port = 8889;
+    let external_addr = format!("{test_ip_addr}:{test_discovery_port}");
+    let fresh_ipc_path = format!("/tmp/trin-jsonrpc-{test_discovery_port}.ipc");
+    let trin_config = TrinConfig::new_from(
+        [
+            "trin",
+            "--portal-subnetworks",
+            "history",
+            "--external-address",
+            external_addr.as_str(),
+            "--mb",
+            "1", // set storage to 1mb so that we can easily test dropping data
+            "--web3-ipc-path",
+            fresh_ipc_path.as_str(),
+            "--ephemeral",
+            "--discovery-port",
+            test_discovery_port.to_string().as_ref(),
+            "--bootnodes",
+            "none",
+            "--unsafe-private-key",
+            // node id: 0x27128939ed60d6f4caef0374da15361a2c1cd6baa1a5bccebac1acd18f485900
+            "0x9ca7889c09ef1162132251b6284bd48e64bd3e71d75ea33b959c37be0582a2fd",
+            // gossip content as its dropped for the history network
+            "--gossip-dropped",
+        ]
+        .iter(),
+    )
+    .unwrap();
+    (fresh_ipc_path, trin_config)
 }

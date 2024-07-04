@@ -28,7 +28,11 @@ impl ContentStore for StateStorage {
         self.store.lookup_content_value(&key.content_id().into())
     }
 
-    fn put<V: AsRef<[u8]>>(&mut self, key: Self::Key, value: V) -> Result<(), ContentStoreError> {
+    fn put<V: AsRef<[u8]>>(
+        &mut self,
+        key: Self::Key,
+        value: V,
+    ) -> Result<Vec<(Self::Key, Vec<u8>)>, ContentStoreError> {
         let key = StateContentKey::try_from(key.to_bytes())?;
         let value = StateContentValue::decode(value.as_ref())?;
 
@@ -97,7 +101,7 @@ impl StateStorage {
         content_key: &StateContentKey,
         key: &AccountTrieNodeKey,
         value: StateContentValue,
-    ) -> Result<(), ContentStoreError> {
+    ) -> Result<Vec<(StateContentKey, Vec<u8>)>, ContentStoreError> {
         let StateContentValue::AccountTrieNodeWithProof(value) = value else {
             return Err(ContentStoreError::InvalidData {
                 message: format!(
@@ -124,8 +128,14 @@ impl StateStorage {
         let trie_node = TrieNode {
             node: last_trie_node.clone(),
         };
-        self.store
+        match self
+            .store
             .insert(content_key, StateContentValue::TrieNode(trie_node).encode())
+        {
+            // ignore any dropped content that's returned
+            Ok(_) => Ok(vec![]),
+            Err(e) => Err(e),
+        }
     }
 
     fn put_contract_storage_trie_node(
@@ -133,7 +143,7 @@ impl StateStorage {
         content_key: &StateContentKey,
         key: &ContractStorageTrieNodeKey,
         value: StateContentValue,
-    ) -> Result<(), ContentStoreError> {
+    ) -> Result<Vec<(StateContentKey, Vec<u8>)>, ContentStoreError> {
         let StateContentValue::ContractStorageTrieNodeWithProof(value) = value else {
             return Err(ContentStoreError::InvalidData {
                 message: format!(
@@ -160,8 +170,14 @@ impl StateStorage {
         let trie_node = TrieNode {
             node: last_trie_node.clone(),
         };
-        self.store
+        match self
+            .store
             .insert(content_key, StateContentValue::TrieNode(trie_node).encode())
+        {
+            // ignore any dropped content that's returned
+            Ok(_) => Ok(vec![]),
+            Err(e) => Err(e),
+        }
     }
 
     fn put_contract_bytecode(
@@ -169,7 +185,7 @@ impl StateStorage {
         content_key: &StateContentKey,
         key: &ContractBytecodeKey,
         value: StateContentValue,
-    ) -> Result<(), ContentStoreError> {
+    ) -> Result<Vec<(StateContentKey, Vec<u8>)>, ContentStoreError> {
         let StateContentValue::ContractBytecodeWithProof(value) = value else {
             return Err(ContentStoreError::InvalidData {
                 message: format!(
@@ -190,10 +206,14 @@ impl StateStorage {
 
         let contract_code = ContractBytecode { code: value.code };
 
-        self.store.insert(
+        match self.store.insert(
             content_key,
             StateContentValue::ContractBytecode(contract_code).encode(),
-        )
+        ) {
+            // ignore any dropped content that's returned
+            Ok(_) => Ok(vec![]),
+            Err(e) => Err(e),
+        }
     }
 }
 

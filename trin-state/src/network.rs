@@ -29,6 +29,9 @@ pub struct StateNetwork {
 /// Poke is disabled for state network because Offer/Accept and Find/Found Content are different,
 /// and recipient of the poke wouldn't be able to verify that content is canonical.
 const DISABLE_POKE: bool = true;
+/// Gossiping content as it gets dropped from local storage is disabled for the state network,
+/// since data as it's stored locally doesn't contain the proofs needed to verify the gossiped data.
+const GOSSIP_DROPPED: bool = false;
 
 impl StateNetwork {
     pub async fn new(
@@ -44,6 +47,7 @@ impl StateNetwork {
         let config = OverlayConfig {
             bootnode_enrs: portal_config.bootnodes.into(),
             disable_poke: DISABLE_POKE,
+            gossip_dropped: GOSSIP_DROPPED,
             utp_transfer_limit: portal_config.utp_transfer_limit,
             ..Default::default()
         };
