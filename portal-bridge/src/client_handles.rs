@@ -13,6 +13,13 @@ pub fn fluffy_handle(bridge_config: &BridgeConfig) -> anyhow::Result<Child> {
     let mut command = Command::new(bridge_config.executable_path.clone());
     let listen_all_ips = SocketAddr::new("0.0.0.0".parse().expect("to parse ip"), udp_port);
     let ip = stun_for_external(&listen_all_ips).expect("to stun for external ip");
+    let portal_subnetworks = bridge_config
+        .portal_subnetworks
+        .iter()
+        .map(|n| n.to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+
     command
         .kill_on_drop(true)
         .arg("--storage-capacity:0")
@@ -20,6 +27,11 @@ pub fn fluffy_handle(bridge_config: &BridgeConfig) -> anyhow::Result<Child> {
         .arg(format!("--rpc-port:{rpc_port}"))
         .arg(format!("--udp-port:{udp_port}"))
         .arg(format!("--nat:extip:{}", ip.ip()))
+        .arg(format!(
+            "--network:{}",
+            bridge_config.network.get_network_name()
+        ))
+        .arg(format!("--portal-subnetworks:{}", &portal_subnetworks))
         .arg(format!("--netkey-unsafe:{private_key}"));
     if let Some(client_metrics_url) = bridge_config.client_metrics_url {
         let address = client_metrics_url.ip().to_string();
