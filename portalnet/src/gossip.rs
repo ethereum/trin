@@ -209,7 +209,7 @@ pub async fn trace_propagate_gossip_cross_thread<TContentKey: OverlayContentKey>
 }
 
 /// Filter all nodes from overlay routing table where XOR_distance(content_id, nodeId) < node radius
-pub fn calculate_interested_enrs<TContentKey: OverlayContentKey>(
+fn calculate_interested_enrs<TContentKey: OverlayContentKey>(
     content_key: &TContentKey,
     all_nodes: &[&kbucket::Node<NodeId, Node>],
 ) -> Vec<Enr> {

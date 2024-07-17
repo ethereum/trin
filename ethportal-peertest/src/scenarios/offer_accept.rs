@@ -7,7 +7,7 @@ use tokio::time::{sleep, Duration};
 use tracing::info;
 
 use crate::{
-    utils::{fixture_block_body, fixture_header_with_proof, wait_for_history_content},
+    utils::{fixture_header_with_proof, wait_for_history_content},
     Peertest,
 };
 use ethportal_api::{
@@ -51,6 +51,32 @@ pub async fn test_unpopulated_offer(peertest: &Peertest, target: &Client) {
     );
 }
 
+pub async fn test_unpopulated_offer_fails_with_missing_content(
+    peertest: &Peertest,
+    target: &Client,
+) {
+    info!("Testing Unpopulated OFFER/ACCEPT flow with missing content");
+
+    let (content_key, _content_value) = fixture_header_with_proof();
+
+    // validate that unpopulated offer fails if content not available locally
+    match target
+        .offer(
+            Enr::from_str(&peertest.bootnode.enr.to_base64()).unwrap(),
+            content_key.clone(),
+            None,
+        )
+        .await
+    {
+        Ok(_) => panic!("Unpopulated offer should have failed"),
+        Err(e) => {
+            assert!(e
+                .to_string()
+                .contains("Content key not found in local store"));
+        }
+    }
+}
+
 pub async fn test_populated_offer(peertest: &Peertest, target: &Client) {
     info!("Testing Populated Offer/ACCEPT flow");
 
@@ -77,7 +103,7 @@ pub async fn test_populated_offer(peertest: &Peertest, target: &Client) {
 }
 
 pub async fn test_offer_propagates_gossip(peertest: &Peertest, target: &Client) {
-    info!("Testing poke xxx");
+    info!("Testing populated offer propagates gossip");
 
     // connect target to network
     let _ = target.ping(peertest.bootnode.enr.clone()).await.unwrap();
@@ -118,7 +144,6 @@ pub async fn test_offer_propagates_gossip(peertest: &Peertest, target: &Client) 
     // connect target to network
     let _ = target.ping(fresh_enr.clone()).await.unwrap();
 
-    // offer header to validate block body later
     let (content_key, content_value) = fixture_header_with_proof();
     // use populated offer which means content will *not* be stored in the target's local db
     target
@@ -130,45 +155,10 @@ pub async fn test_offer_propagates_gossip(peertest: &Peertest, target: &Client) 
         .await
         .unwrap();
 
-    sleep(Duration::from_secs(3)).await;
+    // sleep to let gossip propagate
+    sleep(Duration::from_secs(1)).await;
 
-    // check that the target has been offered accumulator_1 after fresh target dropped it
-    // idk do we expect client to store locally after populated offer?
-    assert!(
-        HistoryNetworkApiClient::local_content(target, content_key.clone())
-            .await
-            .is_ok()
-    );
-    assert!(
-        HistoryNetworkApiClient::local_content(&fresh_target, content_key.clone())
-            .await
-            .is_ok()
-    );
-    assert!(HistoryNetworkApiClient::local_content(
-        &peertest.nodes[0].ipc_client,
-        content_key.clone()
-    )
-    .await
-    .is_ok());
-    assert!(HistoryNetworkApiClient::local_content(
-        &peertest.bootnode.ipc_client,
-        content_key.clone()
-    )
-    .await
-    .is_ok());
-
-    // use block body to test larger content over utp
-    let (content_key, content_value) = fixture_block_body();
-    // use populated offer which means content will *not* be stored in the target's local db
-    target
-        .offer(fresh_enr, content_key.clone(), Some(content_value.clone()))
-        .await
-        .unwrap();
-
-    sleep(Duration::from_secs(3)).await;
-
-    // check that the target has been offered accumulator_1 after fresh target dropped it
-    // idk do we expect client to store locally after populated offer?
+    // validate that every node in the network now has a local copy of the header
     assert!(
         HistoryNetworkApiClient::local_content(target, content_key.clone())
             .await

@@ -170,6 +170,9 @@ impl HistoryNetworkApiServer for HistoryNetworkApi {
     }
 
     /// Send an OFFER request with given ContentKey, to the designated peer and wait for a response.
+    /// If the content value is provided, a "populated" offer is used, which will not store the
+    /// content locally. Otherwise a regular offer is sent, after validating that the content is
+    /// available locally.
     /// Returns the content keys bitlist upon successful content transmission or empty bitlist
     /// receive.
     async fn offer(

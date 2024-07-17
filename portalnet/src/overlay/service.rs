@@ -1717,7 +1717,6 @@ where
             }
         };
 
-        println!("xxx overlay propagate_validated_content 2");
         let _ = Self::propagate_validated_content(vec![validated_content], utp_processing).await;
         Ok(())
     }
