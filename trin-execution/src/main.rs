@@ -41,7 +41,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut block_number = state.block_execution_number();
 
-    while block_number != get_spec_block_number(SpecId::MERGE) {
+    let end_block = 15_000_000;
+    while block_number < end_block {
         if rx.try_recv().is_ok() {
             state.database.db.flush()?;
             info!(
@@ -54,7 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let end =
             ((block_number / (BLOCK_TUPLE_COUNT as u64)) + 86) * (BLOCK_TUPLE_COUNT as u64) - 1;
-        let end = std::cmp::min(end, get_spec_block_number(SpecId::MERGE));
+        let end = std::cmp::min(end, end_block);
 
         if block_number == 0 {
             state.initialize_genesis()?;
