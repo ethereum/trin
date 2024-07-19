@@ -531,6 +531,32 @@ where
             destination: enr.clone(),
         };
 
+        // Validate that the content keys are available in the local store, before sending the
+        // offer
+        for content_key in content_keys.into_iter() {
+            let content_key = TContentKey::try_from(content_key.clone()).map_err(|err| {
+                OverlayRequestError::ContentNotFound {
+                    message: format!(
+                        "Error decoding content key for content key: {content_key:02X?} - {err}"
+                    ),
+                    utp: false,
+                    trace: None,
+                }
+            })?;
+            match self.store.read().get(&content_key) {
+                Ok(Some(_)) => {}
+                _ => {
+                    return Err(OverlayRequestError::ContentNotFound {
+                        message: format!(
+                            "Content key not found in local store: {content_key:02X?}"
+                        ),
+                        utp: false,
+                        trace: None,
+                    });
+                }
+            }
+        }
+
         // Send the request and wait on the response.
         match self
             .send_overlay_request(Request::Offer(request), direction)

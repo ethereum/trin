@@ -76,6 +76,18 @@ async fn peertest_unpopulated_offer() {
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
+async fn peertest_unpopulated_offer_fails_with_missing_content() {
+    let (peertest, target, handle) = setup_peertest("mainnet").await;
+    peertest::scenarios::offer_accept::test_unpopulated_offer_fails_with_missing_content(
+        &peertest, &target,
+    )
+    .await;
+    peertest.exit_all_nodes();
+    handle.stop().unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
 async fn peertest_gossip_with_trace() {
     let (peertest, target, handle) = setup_peertest("mainnet").await;
     peertest::scenarios::gossip::test_gossip_with_trace(&peertest, &target).await;
@@ -208,6 +220,15 @@ async fn peertest_state_offer_contract_bytecode() {
 async fn peertest_state_recursive_gossip() {
     let (peertest, target, handle) = setup_peertest("mainnet").await;
     peertest::scenarios::state::test_state_recursive_gossip(&peertest, &target).await;
+    peertest.exit_all_nodes();
+    handle.stop().unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
+async fn peertest_history_offer_propagates_gossip() {
+    let (peertest, target, handle) = setup_peertest("mainnet").await;
+    peertest::scenarios::offer_accept::test_offer_propagates_gossip(&peertest, &target).await;
     peertest.exit_all_nodes();
     handle.stop().unwrap();
 }
