@@ -33,7 +33,7 @@ use super::{
     tx_env_modifier::TxEnvModifier,
 };
 
-const BLOCKHASH_SERVE_WINDOW: u64 = 256;
+pub const BLOCKHASH_SERVE_WINDOW: u64 = 256;
 const GENESIS_STATE_FILE: &str = "trin-execution/resources/genesis/mainnet.json";
 const TEST_GENESIS_STATE_FILE: &str = "resources/genesis/mainnet.json";
 

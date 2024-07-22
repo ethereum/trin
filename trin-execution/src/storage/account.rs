@@ -24,6 +24,17 @@ impl Default for Account {
     }
 }
 
+impl From<AccountStateInfo> for Account {
+    fn from(account: AccountStateInfo) -> Self {
+        Self {
+            nonce: account.nonce,
+            balance: account.balance,
+            storage_root: account.storage_root,
+            code_hash: account.code_hash,
+        }
+    }
+}
+
 impl From<&Account> for AccountStateInfo {
     fn from(account: &Account) -> Self {
         Self {

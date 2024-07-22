@@ -6,6 +6,7 @@ pub mod evm;
 pub mod execution;
 pub mod metrics;
 pub mod storage;
+pub mod subcommands;
 pub mod trie_walker;
 pub mod types;
 pub mod utils;

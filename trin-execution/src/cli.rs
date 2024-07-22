@@ -1,6 +1,6 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, path::PathBuf};
 
-use clap::Parser;
+use clap::{Args, Parser, Subcommand};
 
 use crate::types::block_to_trace::BlockToTrace;
 
@@ -26,4 +26,34 @@ pub struct TrinExecutionConfig {
         help = "Enable prometheus metrics reporting (provide local IP/Port from which your Prometheus server is configured to fetch metrics)"
     )]
     pub enable_metrics_with_url: Option<SocketAddr>,
+
+    #[command(subcommand)]
+    pub command: Option<TrinExecutionSubCommands>,
+}
+
+#[derive(Subcommand, Debug, Clone, PartialEq)]
+#[allow(clippy::enum_variant_names)]
+pub enum TrinExecutionSubCommands {
+    /// Import a era2 state snapshot from a file, useful for bootstrapping a new node quickly
+    ImportState(ImportState),
+    /// Export the current state of the node to a era2 file
+    ExportState(ExportState),
+}
+
+#[derive(Args, Debug, Default, Clone, PartialEq)]
+pub struct ImportState {
+    #[arg(
+        long = "path-to-era2",
+        help = "path to where the era2 state snapshot is located"
+    )]
+    pub path_to_era2: PathBuf,
+}
+
+#[derive(Args, Debug, Default, Clone, PartialEq)]
+pub struct ExportState {
+    #[arg(
+        long = "path-to-era2",
+        help = "path to where the era2 state snapshot is located"
+    )]
+    pub path_to_era2: PathBuf,
 }

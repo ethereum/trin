@@ -29,7 +29,7 @@ use super::{config::StateConfig, types::trie_proof::TrieProof, utils::address_to
 pub struct TrinExecution {
     pub database: EvmDB,
     pub config: StateConfig,
-    execution_position: ExecutionPosition,
+    pub execution_position: ExecutionPosition,
     pub era_manager: Arc<Mutex<EraManager>>,
     pub node_data_directory: PathBuf,
 }

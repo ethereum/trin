@@ -18,6 +18,8 @@ use crate::{
     utils::underlying_io_error_kind,
 };
 
+pub const MAX_STORAGE_ITEMS: usize = 10_000_000;
+
 // <network-name>-<block-number>-<short-state-root>.era2
 //
 // era2 := Version | CompressedHeader | account*
@@ -108,11 +110,11 @@ impl Era2 {
                 match self.pending_storage_entries {
                     0 => bail!("Invalid append entry state: expected an account entry, got a storage entry. No storage entries left to append for the account"),
                     1 => ensure!(
-                        storage.len() <= 10_000_000,
+                        storage.len() <= MAX_STORAGE_ITEMS,
                         "Storage entry can't have more than 10 million items",
                     ),
                     _ => ensure!(
-                        storage.len() == 10_000_000,
+                        storage.len() == MAX_STORAGE_ITEMS,
                         "Only last storage entry can have less than 10 million items",
                     ),
                 }
@@ -221,7 +223,7 @@ impl TryFrom<AccountEntry> for Entry {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub struct StorageEntry(Vec<StorageItem>);
+pub struct StorageEntry(pub Vec<StorageItem>);
 
 impl Deref for StorageEntry {
     type Target = Vec<StorageItem>;
