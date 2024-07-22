@@ -60,7 +60,7 @@ struct GenesisConfig {
 pub struct State {
     pub database: EvmDB,
     pub config: StateConfig,
-    execution_position: ExecutionPosition,
+    pub execution_position: ExecutionPosition,
     pub era_manager: Arc<Mutex<EraManager>>,
     pub node_data_directory: PathBuf,
 }
