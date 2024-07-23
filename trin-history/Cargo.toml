@@ -24,7 +24,7 @@ tracing = "0.1.36"
 tree_hash = { git = "https://github.com/KolbyML/tree_hash.git", rev = "8aaf8bb4184148768d48e2cfbbdd0b95d1da8730" }
 trin-storage = { path = "../trin-storage" }
 trin-validation = { path = "../trin-validation" }
-utp-rs = { git = "https://github.com/ethereum/utp", tag = "v0.1.0-alpha.12" }
+utp-rs = { git = "https://github.com/ethereum/utp", tag = "v0.1.0-alpha.13" }
 
 [dev-dependencies]
 env_logger = "0.9.0"

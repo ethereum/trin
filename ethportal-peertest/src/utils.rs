@@ -9,7 +9,7 @@ use serde_yaml::Value;
 use ureq::serde::Deserialize;
 
 use ethportal_api::{
-    BeaconContentKey, BeaconContentValue, BeaconNetworkApiClient, HistoryContentKey,
+    BeaconContentKey, BeaconContentValue, BeaconNetworkApiClient, ContentValue, HistoryContentKey,
     HistoryContentValue, HistoryNetworkApiClient, StateContentKey, StateContentValue,
     StateNetworkApiClient,
 };
@@ -117,6 +117,31 @@ pub fn fixture_block_body() -> (HistoryContentKey, HistoryContentValue) {
 /// Block #14764013 (pre-merge)
 pub fn fixture_receipts() -> (HistoryContentKey, HistoryContentValue) {
     read_fixture("portal-spec-tests/tests/mainnet/history/receipts/14764013.yaml")
+}
+
+/// Epoch Accumulator #1659
+/// Content Key: 0x030013c08b64bf7e3afab80ad4f8ea9423f1a7d8b31a149fc3b832d7980719c60c
+/// Content ID: 0x61f6fd26ed4fb88cfae02ad691e4f41e0053e0305cb62f7cdfde5a7967ffbe65
+pub fn fixture_epoch_acc_1() -> (HistoryContentKey, HistoryContentValue) {
+    read_epoch_acc("0013c08b64bf7e3afab80ad4f8ea9423f1a7d8b31a149fc3b832d7980719c60c")
+}
+
+/// Epoch Accumulator #434
+/// Content Key: 0x03ed8823c84177d8ffabf104566f313a2b2a43d05304ba6c74c2f5555bae0ef329
+/// Content ID: 0x29e3c0966a85ee262ef4afeccd89721fda0962ae563a3818e81798fe28bdb37e
+pub fn fixture_epoch_acc_2() -> (HistoryContentKey, HistoryContentValue) {
+    read_epoch_acc("ed8823c84177d8ffabf104566f313a2b2a43d05304ba6c74c2f5555bae0ef329")
+}
+
+fn read_epoch_acc(hash: &str) -> (HistoryContentKey, HistoryContentValue) {
+    let epoch_acc = std::fs::read(format!("test_assets/mainnet/0x03{hash}.portalcontent")).unwrap();
+    let epoch_acc_hash = ethportal_api::utils::bytes::hex_decode(&format!("0x{hash}")).unwrap();
+    let content_key =
+        ethportal_api::HistoryContentKey::EpochAccumulator(ethportal_api::EpochAccumulatorKey {
+            epoch_hash: alloy_primitives::B256::from_slice(&epoch_acc_hash),
+        });
+    let content_value = ethportal_api::HistoryContentValue::decode(&epoch_acc).unwrap();
+    (content_key, content_value)
 }
 
 #[derive(Debug, Clone, Deserialize)]

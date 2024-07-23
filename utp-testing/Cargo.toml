@@ -23,7 +23,7 @@ tracing-subscriber = "0.3.15"
 trin-utils = { path = "../trin-utils" }
 trin-validation = { path="../trin-validation" }
 tokio = {version = "1.14.0", features = ["full"]}
-utp-rs = { git = "https://github.com/ethereum/utp", tag = "v0.1.0-alpha.12" }
+utp-rs = { git = "https://github.com/ethereum/utp", tag = "v0.1.0-alpha.13" }
 
 [[bin]]
 name = "utp-test-app"
