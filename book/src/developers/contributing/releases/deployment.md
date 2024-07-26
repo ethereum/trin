@@ -9,6 +9,7 @@
     python3 -m venv venv
     . venv/bin/activate
     pip install ansible
+    pip install docker
     sudo apt install ansible-core
     ```
     On mac you can do `brew install ansible` instead of `apt`.
