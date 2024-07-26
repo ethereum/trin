@@ -24,7 +24,6 @@ use super::{
 const REVERSE_HASH_LOOKUP_PREFIX: &[u8] = b"reverse hash lookup";
 
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct EvmDB {
     /// State config
     pub config: StateConfig,

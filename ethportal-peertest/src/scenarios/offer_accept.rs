@@ -29,12 +29,11 @@ pub async fn test_unpopulated_offer(peertest: &Peertest, target: &Client) {
 
     assert!(store_result);
 
-    // Send unpopulated offer request from testnode to bootnode
+    // Send wire offer request from testnode to bootnode
     let result = target
-        .offer(
+        .wire_offer(
             Enr::from_str(&peertest.bootnode.enr.to_base64()).unwrap(),
-            content_key.clone(),
-            None,
+            vec![content_key.clone()],
         )
         .await
         .unwrap();
@@ -59,12 +58,11 @@ pub async fn test_unpopulated_offer_fails_with_missing_content(
 
     let (content_key, _content_value) = fixture_header_with_proof();
 
-    // validate that unpopulated offer fails if content not available locally
+    // validate that wire offer fails if content not available locally
     match target
-        .offer(
+        .wire_offer(
             Enr::from_str(&peertest.bootnode.enr.to_base64()).unwrap(),
-            content_key.clone(),
-            None,
+            vec![content_key.clone()],
         )
         .await
     {
@@ -85,7 +83,7 @@ pub async fn test_populated_offer(peertest: &Peertest, target: &Client) {
         .offer(
             Enr::from_str(&peertest.bootnode.enr.to_base64()).unwrap(),
             content_key.clone(),
-            Some(content_value.clone()),
+            content_value.clone(),
         )
         .await
         .unwrap();
@@ -150,7 +148,7 @@ pub async fn test_offer_propagates_gossip(peertest: &Peertest, target: &Client) 
         .offer(
             fresh_enr.clone(),
             content_key.clone(),
-            Some(content_value.clone()),
+            content_value.clone(),
         )
         .await
         .unwrap();
