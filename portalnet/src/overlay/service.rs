@@ -947,12 +947,12 @@ where
                     Ok(Content::Content(content))
                 } else {
                     // Generate a connection ID for the uTP connection.
-                    let node_addr = self.discovery.cached_node_addr(source).ok_or_else(|| {
+                    let enr = self.find_enr(source).ok_or_else(|| {
                         OverlayRequestError::AcceptError(
                             "unable to find ENR for NodeId".to_string(),
                         )
                     })?;
-                    let enr = UtpEnr(node_addr.enr);
+                    let enr = UtpEnr(enr);
                     let cid = self.utp_controller.cid(enr, false);
                     let cid_send = cid.send;
 
@@ -1039,7 +1039,7 @@ where
 
         // if we're unable to find the ENR for the source node we throw an error
         // since the enr is required for the accept queue, and it is expected to be present
-        let node_addr = self.discovery.cached_node_addr(source).ok_or_else(|| {
+        let enr = self.find_enr(source).ok_or_else(|| {
             OverlayRequestError::AcceptError("unable to find ENR for NodeId".to_string())
         })?;
         for (i, key) in content_keys.iter().enumerate() {
@@ -1056,11 +1056,7 @@ where
                 })?;
             if accept {
                 // accept all keys that are successfully added to the queue
-                if self
-                    .accept_queue
-                    .write()
-                    .add_key_to_queue(key, &node_addr.enr)
-                {
+                if self.accept_queue.write().add_key_to_queue(key, &enr) {
                     accepted_keys.push(key.clone());
                 } else {
                     accept = false;
@@ -1084,10 +1080,10 @@ where
 
         // Generate a connection ID for the uTP connection if there is data we would like to
         // accept.
-        let node_addr = self.discovery.cached_node_addr(source).ok_or_else(|| {
+        let enr = self.find_enr(source).ok_or_else(|| {
             OverlayRequestError::AcceptError("unable to find ENR for NodeId".to_string())
         })?;
-        let enr = UtpEnr(node_addr.enr);
+        let enr = UtpEnr(enr);
         let enr_str = if enabled!(Level::TRACE) {
             enr.0.to_base64()
         } else {
