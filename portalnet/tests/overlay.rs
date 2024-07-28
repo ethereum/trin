@@ -6,7 +6,7 @@ use std::{
 use discv5::TalkRequest;
 use parking_lot::RwLock;
 use tokio::{
-    sync::{mpsc, mpsc::unbounded_channel},
+    sync::{mpsc, mpsc::unbounded_channel, RwLock as TokioRwLock},
     time::{self, Duration},
 };
 use utp_rs::socket::UtpSocket;
@@ -27,7 +27,7 @@ use portalnet::{
     utils::db::setup_temp_dir,
 };
 use trin_storage::{ContentStore, DistanceFunction, MemoryContentStore};
-use trin_validation::validator::MockValidator;
+use trin_validation::{oracle::HeaderOracle, validator::MockValidator};
 
 async fn init_overlay(
     discovery: Arc<Discovery>,
@@ -39,8 +39,10 @@ async fn init_overlay(
     let store = MemoryContentStore::new(node_id, DistanceFunction::Xor);
     let store = Arc::new(RwLock::new(store));
 
+    let header_oracle = HeaderOracle::default();
+    let header_oracle = Arc::new(TokioRwLock::new(header_oracle));
     let (_utp_talk_req_tx, utp_talk_req_rx) = unbounded_channel();
-    let discv5_utp = Discv5UdpSocket::new(Arc::clone(&discovery), utp_talk_req_rx);
+    let discv5_utp = Discv5UdpSocket::new(Arc::clone(&discovery), utp_talk_req_rx, header_oracle);
     let utp_socket = Arc::new(UtpSocket::with_socket(discv5_utp));
 
     let validator = Arc::new(MockValidator {});

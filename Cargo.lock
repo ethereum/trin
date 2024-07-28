@@ -8041,6 +8041,7 @@ dependencies = [
  "alloy-primitives",
  "alloy-rlp",
  "anyhow",
+ "enr",
  "eth2_hashing",
  "ethereum_ssz",
  "ethereum_ssz_derive",
@@ -8304,6 +8305,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber 0.3.18",
  "trin-utils",
+ "trin-validation",
  "utp-rs",
 ]
 

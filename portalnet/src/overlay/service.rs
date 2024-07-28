@@ -2653,7 +2653,7 @@ mod tests {
     use discv5::kbucket::Entry;
     use rstest::*;
     use serial_test::serial;
-    use tokio::sync::mpsc::unbounded_channel;
+    use tokio::sync::{mpsc::unbounded_channel, RwLock as TokioRwLock};
     use tokio_test::{assert_pending, assert_ready, task};
 
     use crate::{
@@ -2671,7 +2671,7 @@ mod tests {
     };
     use trin_metrics::portalnet::PORTALNET_METRICS;
     use trin_storage::{DistanceFunction, MemoryContentStore};
-    use trin_validation::validator::MockValidator;
+    use trin_validation::{oracle::HeaderOracle, validator::MockValidator};
 
     macro_rules! poll_command_rx {
         ($service:ident) => {
@@ -2688,9 +2688,14 @@ mod tests {
         let temp_dir = setup_temp_dir().unwrap().into_path();
         let discovery = Arc::new(Discovery::new(portal_config, temp_dir, MAINNET.clone()).unwrap());
 
+        let header_oracle = HeaderOracle::default();
+        let header_oracle = Arc::new(TokioRwLock::new(header_oracle));
         let (_utp_talk_req_tx, utp_talk_req_rx) = unbounded_channel();
-        let discv5_utp =
-            crate::discovery::Discv5UdpSocket::new(Arc::clone(&discovery), utp_talk_req_rx);
+        let discv5_utp = crate::discovery::Discv5UdpSocket::new(
+            Arc::clone(&discovery),
+            utp_talk_req_rx,
+            header_oracle,
+        );
         let utp_socket = utp_rs::socket::UtpSocket::with_socket(discv5_utp);
         let metrics = OverlayMetricsReporter {
             overlay_metrics: PORTALNET_METRICS.overlay(),

@@ -3,12 +3,6 @@
 
 use std::sync::Arc;
 
-use rpc::{launch_jsonrpc_server, RpcServerHandle};
-use tokio::sync::{mpsc, RwLock};
-use tracing::info;
-use tree_hash::TreeHash;
-use utp_rs::socket::UtpSocket;
-
 #[cfg(windows)]
 use ethportal_api::types::cli::Web3TransportType;
 use ethportal_api::{
@@ -21,12 +15,17 @@ use portalnet::{
     events::PortalnetEvents,
     utils::db::{configure_node_data_dir, configure_trin_data_dir},
 };
+use rpc::{launch_jsonrpc_server, RpcServerHandle};
+use tokio::sync::{mpsc, RwLock};
+use tracing::info;
+use tree_hash::TreeHash;
 use trin_beacon::initialize_beacon_network;
 use trin_history::initialize_history_network;
 use trin_state::initialize_state_network;
 use trin_storage::PortalStorageConfig;
 use trin_utils::version::get_trin_version;
 use trin_validation::oracle::HeaderOracle;
+use utp_rs::socket::UtpSocket;
 
 pub async fn run_trin(
     trin_config: TrinConfig,
@@ -68,9 +67,19 @@ pub async fn run_trin(
         prometheus_exporter::start(addr)?;
     }
 
+    // Initialize validation oracle
+    let header_oracle = HeaderOracle::default();
+    info!(hash_tree_root = %hex_encode(header_oracle.header_validator.pre_merge_acc.tree_hash_root().0),"Loaded
+        pre-merge accumulator.");
+    let header_oracle = Arc::new(RwLock::new(header_oracle));
+
     // Initialize and spawn uTP socket
     let (utp_talk_reqs_tx, utp_talk_reqs_rx) = mpsc::unbounded_channel();
-    let discv5_utp_socket = Discv5UdpSocket::new(Arc::clone(&discovery), utp_talk_reqs_rx);
+    let discv5_utp_socket = Discv5UdpSocket::new(
+        Arc::clone(&discovery),
+        utp_talk_reqs_rx,
+        header_oracle.clone(),
+    );
     let utp_socket = UtpSocket::with_socket(discv5_utp_socket);
     let utp_socket = Arc::new(utp_socket);
 
@@ -79,12 +88,6 @@ pub async fn run_trin(
         node_data_dir,
         discovery.local_enr().node_id(),
     )?;
-
-    // Initialize validation oracle
-    let header_oracle = HeaderOracle::default();
-    info!(hash_tree_root = %hex_encode(header_oracle.header_validator.pre_merge_acc.tree_hash_root().0),"Loaded
-        pre-merge accumulator.");
-    let header_oracle = Arc::new(RwLock::new(header_oracle));
 
     // Initialize state sub-network service and event handlers, if selected
     let (state_handler, state_network_task, state_event_tx, state_jsonrpc_tx, state_event_stream) =

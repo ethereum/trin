@@ -48,6 +48,7 @@ pub async fn initialize_state_network(
     StateEventStream,
 )> {
     let (state_jsonrpc_tx, state_jsonrpc_rx) = mpsc::unbounded_channel::<StateJsonRpcRequest>();
+    header_oracle.write().await.state_jsonrpc_tx = Some(state_jsonrpc_tx.clone());
     let (state_event_tx, state_event_rx) = mpsc::unbounded_channel::<OverlayRequest>();
 
     let state_network = StateNetwork::new(
