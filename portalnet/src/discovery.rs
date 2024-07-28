@@ -44,9 +44,6 @@ const ENR_PORTAL_CLIENT_KEY: &str = "c";
 /// ENR file name saving enr history to disk.
 const ENR_FILE_NAME: &str = "trin.enr";
 
-/// Amount of Enr to cache for Discv5UdpSocket
-const ENR_CACHE_CAPACITY: usize = 150;
-
 pub type ProtocolRequest = Vec<u8>;
 
 /// The contact info for a remote node.
@@ -361,8 +358,9 @@ impl Discv5UdpSocket {
         discv5: Arc<Discovery>,
         talk_request_receiver: mpsc::UnboundedReceiver<TalkRequest>,
         header_oracle: Arc<TokioRwLock<HeaderOracle>>,
+        enr_cache_capacity: usize,
     ) -> Self {
-        let enr_cache = LruCache::new(ENR_CACHE_CAPACITY);
+        let enr_cache = LruCache::new(enr_cache_capacity);
         let enr_cache = Arc::new(TokioRwLock::new(enr_cache));
         Self {
             discv5,

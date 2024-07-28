@@ -183,6 +183,7 @@ pub async fn run_test_app(
         Arc::clone(&discovery),
         utp_talk_req_rx,
         header_oracle,
+        50,
     );
     let utp_socket = utp_rs::socket::UtpSocket::with_socket(discv5_utp_socket);
     let utp_socket = Arc::new(utp_socket);

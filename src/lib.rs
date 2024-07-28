@@ -75,10 +75,16 @@ pub async fn run_trin(
 
     // Initialize and spawn uTP socket
     let (utp_talk_reqs_tx, utp_talk_reqs_rx) = mpsc::unbounded_channel();
+
+    // Set the enr_cache_capacity to half the maximum uTP limit between all active networks. This is
+    // a trade off between memory usage and increased searches from the networks for each Enr.
+    let enr_cache_capacity =
+        portalnet_config.utp_transfer_limit * 2 * trin_config.portal_subnetworks.len() / 2;
     let discv5_utp_socket = Discv5UdpSocket::new(
         Arc::clone(&discovery),
         utp_talk_reqs_rx,
         header_oracle.clone(),
+        enr_cache_capacity,
     );
     let utp_socket = UtpSocket::with_socket(discv5_utp_socket);
     let utp_socket = Arc::new(utp_socket);

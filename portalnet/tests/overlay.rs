@@ -42,7 +42,8 @@ async fn init_overlay(
     let header_oracle = HeaderOracle::default();
     let header_oracle = Arc::new(TokioRwLock::new(header_oracle));
     let (_utp_talk_req_tx, utp_talk_req_rx) = unbounded_channel();
-    let discv5_utp = Discv5UdpSocket::new(Arc::clone(&discovery), utp_talk_req_rx, header_oracle);
+    let discv5_utp =
+        Discv5UdpSocket::new(Arc::clone(&discovery), utp_talk_req_rx, header_oracle, 50);
     let utp_socket = Arc::new(UtpSocket::with_socket(discv5_utp));
 
     let validator = Arc::new(MockValidator {});

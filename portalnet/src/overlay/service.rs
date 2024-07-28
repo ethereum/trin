@@ -2695,6 +2695,7 @@ mod tests {
             Arc::clone(&discovery),
             utp_talk_req_rx,
             header_oracle,
+            50,
         );
         let utp_socket = utp_rs::socket::UtpSocket::with_socket(discv5_utp);
         let metrics = OverlayMetricsReporter {
