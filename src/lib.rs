@@ -76,10 +76,12 @@ pub async fn run_trin(
     // Initialize and spawn uTP socket
     let (utp_talk_reqs_tx, utp_talk_reqs_rx) = mpsc::unbounded_channel();
 
-    // Set the enr_cache_capacity to half the maximum uTP limit between all active networks. This is
+    // Set the enr_cache_capacity to the maximum uTP limit between all active networks. This is
     // a trade off between memory usage and increased searches from the networks for each Enr.
+    // utp_transfer_limit is 2x as it would be utp_transfer_limit for incoming and
+    // utp_transfer_limit for outgoing
     let enr_cache_capacity =
-        portalnet_config.utp_transfer_limit * 2 * trin_config.portal_subnetworks.len() / 2;
+        portalnet_config.utp_transfer_limit * 2 * trin_config.portal_subnetworks.len();
     let discv5_utp_socket = Discv5UdpSocket::new(
         Arc::clone(&discovery),
         utp_talk_reqs_rx,
