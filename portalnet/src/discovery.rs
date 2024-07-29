@@ -17,8 +17,9 @@ use discv5::{
 };
 use lru::LruCache;
 use parking_lot::RwLock;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, RwLock as TokioRwLock};
 use tracing::{debug, info, warn};
+use trin_validation::oracle::HeaderOracle;
 use utp_rs::{cid::ConnectionPeer, udp::AsyncUdpSocket};
 
 use super::config::PortalnetConfig;
@@ -346,13 +347,73 @@ impl Discovery {
 }
 
 pub struct Discv5UdpSocket {
-    talk_reqs: mpsc::UnboundedReceiver<TalkRequest>,
+    talk_request_receiver: mpsc::UnboundedReceiver<TalkRequest>,
     discv5: Arc<Discovery>,
+    enr_cache: Arc<TokioRwLock<LruCache<NodeId, Enr>>>,
+    header_oracle: Arc<TokioRwLock<HeaderOracle>>,
 }
 
 impl Discv5UdpSocket {
-    pub fn new(discv5: Arc<Discovery>, talk_reqs: mpsc::UnboundedReceiver<TalkRequest>) -> Self {
-        Self { discv5, talk_reqs }
+    pub fn new(
+        discv5: Arc<Discovery>,
+        talk_request_receiver: mpsc::UnboundedReceiver<TalkRequest>,
+        header_oracle: Arc<TokioRwLock<HeaderOracle>>,
+        enr_cache_capacity: usize,
+    ) -> Self {
+        let enr_cache = LruCache::new(enr_cache_capacity);
+        let enr_cache = Arc::new(TokioRwLock::new(enr_cache));
+        Self {
+            discv5,
+            talk_request_receiver,
+            enr_cache,
+            header_oracle,
+        }
+    }
+
+    async fn find_enr(&mut self, node_id: &NodeId) -> io::Result<UtpEnr> {
+        if let Some(cached_enr) = self.enr_cache.write().await.get(node_id).cloned() {
+            return Ok(UtpEnr(cached_enr));
+        }
+
+        if let Some(enr) = self.discv5.find_enr(node_id) {
+            self.enr_cache.write().await.put(*node_id, enr.clone());
+            return Ok(UtpEnr(enr));
+        }
+
+        if let Some(enr) = self.discv5.cached_node_addr(node_id) {
+            self.enr_cache.write().await.put(*node_id, enr.enr.clone());
+            return Ok(UtpEnr(enr.enr));
+        }
+
+        let history_jsonrpc_tx = self.header_oracle.read().await.history_jsonrpc_tx();
+        if let Ok(history_jsonrpc_tx) = history_jsonrpc_tx {
+            if let Ok(enr) = HeaderOracle::history_get_enr(node_id, history_jsonrpc_tx).await {
+                self.enr_cache.write().await.put(*node_id, enr.clone());
+                return Ok(UtpEnr(enr));
+            }
+        }
+
+        let state_jsonrpc_tx = self.header_oracle.read().await.state_jsonrpc_tx();
+        if let Ok(state_jsonrpc_tx) = state_jsonrpc_tx {
+            if let Ok(enr) = HeaderOracle::state_get_enr(node_id, state_jsonrpc_tx).await {
+                self.enr_cache.write().await.put(*node_id, enr.clone());
+                return Ok(UtpEnr(enr));
+            }
+        }
+
+        let beacon_jsonrpc_tx = self.header_oracle.read().await.beacon_jsonrpc_tx();
+        if let Ok(beacon_jsonrpc_tx) = beacon_jsonrpc_tx {
+            if let Ok(enr) = HeaderOracle::beacon_get_enr(node_id, beacon_jsonrpc_tx).await {
+                self.enr_cache.write().await.put(*node_id, enr.clone());
+                return Ok(UtpEnr(enr));
+            }
+        }
+
+        debug!(node_id = %node_id, "uTP packet from unknown source");
+        Err(io::Error::new(
+            io::ErrorKind::Other,
+            "ENR not found for talk req destination",
+        ))
     }
 }
 
@@ -418,25 +479,10 @@ impl AsyncUdpSocket<UtpEnr> for Discv5UdpSocket {
     }
 
     async fn recv_from(&mut self, buf: &mut [u8]) -> io::Result<(usize, UtpEnr)> {
-        match self.talk_reqs.recv().await {
+        match self.talk_request_receiver.recv().await {
             Some(talk_req) => {
                 let src_node_id = talk_req.node_id();
-                let enr = match self.discv5.find_enr(src_node_id) {
-                    Some(enr) => UtpEnr(enr),
-                    None => {
-                        let enr = match self.discv5.cached_node_addr(src_node_id) {
-                            Some(node_addr) => Ok(node_addr.enr),
-                            None => {
-                                debug!(node_id = %src_node_id, "uTP packet from unknown source");
-                                Err(io::Error::new(
-                                    io::ErrorKind::Other,
-                                    "ENR not found for talk req destination",
-                                ))
-                            }
-                        }?;
-                        UtpEnr(enr)
-                    }
-                };
+                let enr = self.find_enr(src_node_id).await?;
                 let packet = talk_req.body();
                 let n = std::cmp::min(buf.len(), packet.len());
                 buf[..n].copy_from_slice(&packet[..n]);

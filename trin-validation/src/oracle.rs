@@ -1,5 +1,6 @@
 use alloy_primitives::B256;
 use anyhow::anyhow;
+use enr::NodeId;
 use serde_json::Value;
 use tokio::sync::mpsc;
 
@@ -9,11 +10,11 @@ use ethportal_api::{
         execution::header_with_proof::HeaderWithProof,
         history::ContentInfo,
         jsonrpc::{
-            endpoints::HistoryEndpoint,
-            request::{BeaconJsonRpcRequest, HistoryJsonRpcRequest},
+            endpoints::{BeaconEndpoint, HistoryEndpoint, StateEndpoint},
+            request::{BeaconJsonRpcRequest, HistoryJsonRpcRequest, StateJsonRpcRequest},
         },
     },
-    BlockHeaderKey, HistoryContentKey, HistoryContentValue,
+    BlockHeaderKey, Enr, HistoryContentKey, HistoryContentValue,
 };
 
 /// Responsible for dispatching cross-overlay-network requests
@@ -25,6 +26,7 @@ pub struct HeaderOracle {
     // determining which subnetworks are actually available.
     pub history_jsonrpc_tx: Option<mpsc::UnboundedSender<HistoryJsonRpcRequest>>,
     pub beacon_jsonrpc_tx: Option<mpsc::UnboundedSender<BeaconJsonRpcRequest>>,
+    pub state_jsonrpc_tx: Option<mpsc::UnboundedSender<StateJsonRpcRequest>>,
     pub header_validator: HeaderValidator,
 }
 
@@ -40,6 +42,7 @@ impl HeaderOracle {
         Self {
             history_jsonrpc_tx: None,
             beacon_jsonrpc_tx: None,
+            state_jsonrpc_tx: None,
             header_validator,
         }
     }
@@ -100,8 +103,79 @@ impl HeaderOracle {
     ) -> anyhow::Result<mpsc::UnboundedSender<HistoryJsonRpcRequest>> {
         match self.history_jsonrpc_tx.clone() {
             Some(val) => Ok(val),
-            None => Err(anyhow!("History subnetwork is not available")),
+            None => Err(anyhow!("History network is not available")),
         }
+    }
+
+    pub fn beacon_jsonrpc_tx(&self) -> anyhow::Result<mpsc::UnboundedSender<BeaconJsonRpcRequest>> {
+        match self.beacon_jsonrpc_tx.clone() {
+            Some(val) => Ok(val),
+            None => Err(anyhow!("Beacon network is not available")),
+        }
+    }
+
+    pub fn state_jsonrpc_tx(&self) -> anyhow::Result<mpsc::UnboundedSender<StateJsonRpcRequest>> {
+        match self.state_jsonrpc_tx.clone() {
+            Some(val) => Ok(val),
+            None => Err(anyhow!("State network is not available")),
+        }
+    }
+
+    pub async fn history_get_enr(
+        node_id: &NodeId,
+        history_jsonrpc_tx: mpsc::UnboundedSender<HistoryJsonRpcRequest>,
+    ) -> anyhow::Result<Enr> {
+        let endpoint = HistoryEndpoint::GetEnr(*node_id);
+        let (resp, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
+        let request = HistoryJsonRpcRequest { endpoint, resp };
+        history_jsonrpc_tx.send(request)?;
+
+        let enr_value = match resp_rx.recv().await {
+            Some(val) => val.map_err(|err| anyhow!("History network request error: {err:?}"))?,
+            None => return Err(anyhow!("No response from History network")),
+        };
+
+        let enr: Enr = serde_json::from_value(enr_value)?;
+
+        Ok(enr)
+    }
+
+    pub async fn state_get_enr(
+        node_id: &NodeId,
+        state_jsonrpc_tx: mpsc::UnboundedSender<StateJsonRpcRequest>,
+    ) -> anyhow::Result<Enr> {
+        let endpoint = StateEndpoint::GetEnr(*node_id);
+        let (resp, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
+        let request = StateJsonRpcRequest { endpoint, resp };
+        state_jsonrpc_tx.send(request)?;
+
+        let enr_value = match resp_rx.recv().await {
+            Some(val) => val.map_err(|err| anyhow!("State network request error: {err:?}"))?,
+            None => return Err(anyhow!("No response from State network")),
+        };
+
+        let enr: Enr = serde_json::from_value(enr_value)?;
+
+        Ok(enr)
+    }
+
+    pub async fn beacon_get_enr(
+        node_id: &NodeId,
+        beacon_jsonrpc_tx: mpsc::UnboundedSender<BeaconJsonRpcRequest>,
+    ) -> anyhow::Result<Enr> {
+        let endpoint = BeaconEndpoint::GetEnr(*node_id);
+        let (resp, mut resp_rx) = mpsc::unbounded_channel::<Result<Value, String>>();
+        let request = BeaconJsonRpcRequest { endpoint, resp };
+        beacon_jsonrpc_tx.send(request)?;
+
+        let enr_value = match resp_rx.recv().await {
+            Some(val) => val.map_err(|err| anyhow!("Beacon network request error: {err:?}"))?,
+            None => return Err(anyhow!("No response from Beacon network")),
+        };
+
+        let enr: Enr = serde_json::from_value(enr_value)?;
+
+        Ok(enr)
     }
 }
 
