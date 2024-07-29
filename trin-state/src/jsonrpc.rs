@@ -304,31 +304,18 @@ async fn offer(
     network: Arc<StateNetwork>,
     enr: Enr,
     content_key: StateContentKey,
-    content_value: Option<StateContentValue>,
+    content_value: StateContentValue,
 ) -> Result<Value, String> {
-    if let Some(content_value) = content_value {
-        to_json_result(
-            "Populate Offer",
-            network
-                .overlay
-                .send_populated_offer(enr, content_key.into(), content_value.encode())
-                .await
-                .map(|accept| AcceptInfo {
-                    content_keys: accept.content_keys,
-                }),
-        )
-    } else {
-        to_json_result(
-            "Offer",
-            network
-                .overlay
-                .send_offer(vec![content_key.into()], enr)
-                .await
-                .map(|accept| AcceptInfo {
-                    content_keys: accept.content_keys,
-                }),
-        )
-    }
+    to_json_result(
+        "Offer",
+        network
+            .overlay
+            .send_offer(enr, content_key.into(), content_value.encode())
+            .await
+            .map(|accept| AcceptInfo {
+                content_keys: accept.content_keys,
+            }),
+    )
 }
 
 async fn gossip(

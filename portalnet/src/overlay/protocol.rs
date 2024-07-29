@@ -42,8 +42,8 @@ use ethportal_api::{
         distance::{Distance, Metric},
         enr::Enr,
         portal_wire::{
-            Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Offer, Ping,
-            Pong, PopulatedOffer, ProtocolId, Request, Response,
+            Accept, Content, CustomPayload, FindContent, FindNodes, Message, Nodes, Ping, Pong,
+            PopulatedOffer, ProtocolId, Request, Response,
         },
     },
     utils::bytes::hex_encode,
@@ -518,48 +518,31 @@ where
 
     /// Offer is sent in order to store content to k nodes with radii that contain content-id
     /// Offer is also sent to nodes after FindContent (POKE)
-    pub async fn send_offer(
+    pub async fn send_wire_offer(
         &self,
-        content_keys: Vec<RawContentKey>,
         enr: Enr,
+        content_keys: Vec<TContentKey>,
     ) -> Result<Accept, OverlayRequestError> {
+        let content_items = content_keys
+            .into_iter()
+            .map(|key| match self.store.read().get(&key) {
+                Ok(Some(content)) => Ok((key.into(), content.clone())),
+                _ => Err(OverlayRequestError::ContentNotFound {
+                    message: format!("Content key not found in local store: {key:02X?}"),
+                    utp: false,
+                    trace: None,
+                }),
+            })
+            .collect::<Result<Vec<(RawContentKey, Vec<u8>)>, OverlayRequestError>>()?;
         // Construct the request.
-        let request = Offer {
-            content_keys: content_keys.clone(),
-        };
+        let request = PopulatedOffer { content_items };
         let direction = RequestDirection::Outgoing {
             destination: enr.clone(),
         };
 
-        // Validate that the content keys are available in the local store, before sending the
-        // offer
-        for content_key in content_keys.into_iter() {
-            let content_key = TContentKey::try_from(content_key.clone()).map_err(|err| {
-                OverlayRequestError::ContentNotFound {
-                    message: format!(
-                        "Error decoding content key for content key: {content_key:02X?} - {err}"
-                    ),
-                    utp: false,
-                    trace: None,
-                }
-            })?;
-            match self.store.read().get(&content_key) {
-                Ok(Some(_)) => {}
-                _ => {
-                    return Err(OverlayRequestError::ContentNotFound {
-                        message: format!(
-                            "Content key not found in local store: {content_key:02X?}"
-                        ),
-                        utp: false,
-                        trace: None,
-                    });
-                }
-            }
-        }
-
         // Send the request and wait on the response.
         match self
-            .send_overlay_request(Request::Offer(request), direction)
+            .send_overlay_request(Request::PopulatedOffer(request), direction)
             .await
         {
             Ok(Response::Accept(accept)) => Ok(accept),
@@ -569,7 +552,7 @@ where
     }
 
     /// Send Offer request without storing the content into db
-    pub async fn send_populated_offer(
+    pub async fn send_offer(
         &self,
         enr: Enr,
         content_key: RawContentKey,

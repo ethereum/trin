@@ -230,18 +230,31 @@ impl BeaconNetworkApiServer for BeaconNetworkApi {
     }
 
     /// Send an OFFER request with given ContentKey, to the designated peer and wait for a response.
-    /// If the content value is provided, a "populated" offer is used, which will not store the
-    /// content locally. Otherwise a regular offer is sent, after validating that the content is
-    /// available locally.
+    /// Does not store content locally.
     /// Returns the content keys bitlist upon successful content transmission or empty bitlist
     /// receive.
     async fn offer(
         &self,
         enr: Enr,
         content_key: BeaconContentKey,
-        content_value: Option<BeaconContentValue>,
+        content_value: BeaconContentValue,
     ) -> RpcResult<AcceptInfo> {
         let endpoint = BeaconEndpoint::Offer(enr, content_key, content_value);
+        let result = self.proxy_query_to_beacon_subnet(endpoint).await?;
+        let result: AcceptInfo = from_value(result)?;
+        Ok(result)
+    }
+
+    /// Send an OFFER request with given ContentKeys, to the designated peer and wait for a
+    /// response. Requires the content keys to be stored locally.
+    /// Returns the content keys bitlist upon successful content transmission or empty bitlist
+    /// receive.
+    async fn wire_offer(
+        &self,
+        enr: Enr,
+        content_keys: Vec<BeaconContentKey>,
+    ) -> RpcResult<AcceptInfo> {
+        let endpoint = BeaconEndpoint::WireOffer(enr, content_keys);
         let result = self.proxy_query_to_beacon_subnet(endpoint).await?;
         let result: AcceptInfo = from_value(result)?;
         Ok(result)

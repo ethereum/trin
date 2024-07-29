@@ -11,7 +11,7 @@ use ethportal_api::{
         query_trace::QueryTrace,
     },
     utils::bytes::hex_encode,
-    ContentValue, HistoryContentKey, OverlayContentKey, RawContentKey,
+    ContentValue, HistoryContentKey, HistoryContentValue, OverlayContentKey,
 };
 use portalnet::overlay::errors::OverlayRequestError;
 use serde_json::{json, Value};
@@ -73,6 +73,9 @@ async fn complete_request(network: Arc<HistoryNetwork>, request: HistoryJsonRpcR
         HistoryEndpoint::LookupEnr(node_id) => lookup_enr(network, node_id).await,
         HistoryEndpoint::Offer(enr, content_key, content_value) => {
             offer(network, enr, content_key, content_value).await
+        }
+        HistoryEndpoint::WireOffer(enr, content_keys) => {
+            wire_offer(network, enr, content_keys).await
         }
         HistoryEndpoint::Ping(enr) => ping(network, enr).await,
         HistoryEndpoint::RoutingTableInfo => {
@@ -330,31 +333,33 @@ async fn offer(
     network: Arc<HistoryNetwork>,
     enr: discv5::enr::Enr<discv5::enr::CombinedKey>,
     content_key: HistoryContentKey,
-    content_value: Option<ethportal_api::HistoryContentValue>,
+    content_value: HistoryContentValue,
 ) -> Result<Value, String> {
-    if let Some(content_value) = content_value {
-        let content_value = content_value.encode();
-        match network
-            .overlay
-            .send_populated_offer(enr, content_key.into(), content_value)
-            .await
-        {
-            Ok(accept) => Ok(json!(AcceptInfo {
-                content_keys: accept.content_keys,
-            })),
-            Err(msg) => Err(format!("Populated Offer request timeout: {msg:?}")),
-        }
-    } else {
-        let content_key: Vec<RawContentKey> = vec![content_key.to_bytes()];
-        match network.overlay.send_offer(content_key, enr).await {
-            Ok(accept) => Ok(json!(AcceptInfo {
-                content_keys: accept.content_keys,
-            })),
-            Err(msg) => Err(format!("Offer request timeout: {msg:?}")),
-        }
+    match network
+        .overlay
+        .send_offer(enr, content_key.into(), content_value.encode())
+        .await
+    {
+        Ok(accept) => Ok(json!(AcceptInfo {
+            content_keys: accept.content_keys,
+        })),
+        Err(msg) => Err(format!("Offer request timeout: {msg:?}")),
     }
 }
 
+/// Constructs a JSON call for the WireOffer method.
+async fn wire_offer(
+    network: Arc<HistoryNetwork>,
+    enr: discv5::enr::Enr<discv5::enr::CombinedKey>,
+    content_keys: Vec<HistoryContentKey>,
+) -> Result<Value, String> {
+    match network.overlay.send_wire_offer(enr, content_keys).await {
+        Ok(accept) => Ok(json!(AcceptInfo {
+            content_keys: accept.content_keys,
+        })),
+        Err(msg) => Err(format!("WireOffer request timeout: {msg:?}")),
+    }
+}
 /// Constructs a JSON call for the Ping method.
 async fn ping(
     network: Arc<HistoryNetwork>,

@@ -47,7 +47,7 @@ async fn test_state_offer(fixture: &StateFixture, target: &Client, peer: &Peerte
         .offer(
             peer.enr.clone(),
             fixture.content_data.key.clone(),
-            Some(fixture.content_data.offer_value.clone()),
+            fixture.content_data.offer_value.clone(),
         )
         .await
         .unwrap();

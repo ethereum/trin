@@ -872,8 +872,7 @@ where
             protocol = %self.protocol,
             request.source = %source,
             request.discv5.id = %request_id,
-            "Handling Ping message {}",
-            request
+            "Handling Ping message {request}",
         );
 
         let enr_seq = self.local_enr().seq();

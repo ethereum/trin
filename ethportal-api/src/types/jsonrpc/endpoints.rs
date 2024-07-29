@@ -42,9 +42,11 @@ pub enum StateEndpoint {
     TraceRecursiveFindContent(StateContentKey),
     /// params: [content_key, content_value]
     Store(StateContentKey, StateContentValue),
-    /// params: [enr, content_key]
-    Offer(Enr, StateContentKey, Option<StateContentValue>),
-    /// params: [content_key, content_value]
+    /// params: [enr, content_key, content_value]
+    Offer(Enr, StateContentKey, StateContentValue),
+    /// WireOffer is not supported in the state network, since locally
+    /// stored values do not contain the proofs necessary for valid gossip.
+    /// params: [enr, content_key, content_value]
     Gossip(StateContentKey, StateContentValue),
     /// params: [content_key, content_value]
     TraceGossip(StateContentKey, StateContentValue),
@@ -75,8 +77,10 @@ pub enum HistoryEndpoint {
     Gossip(HistoryContentKey, HistoryContentValue),
     /// params: [content_key, content_value]
     TraceGossip(HistoryContentKey, HistoryContentValue),
-    /// params: [enr, content_key]
-    Offer(Enr, HistoryContentKey, Option<HistoryContentValue>),
+    /// params: [enr, content_key, content_value]
+    Offer(Enr, HistoryContentKey, HistoryContentValue),
+    /// params: [enr, [content_key]]
+    WireOffer(Enr, Vec<HistoryContentKey>),
     /// params: [enr]
     Ping(Enr),
     /// params: content_key
@@ -119,8 +123,10 @@ pub enum BeaconEndpoint {
     Gossip(BeaconContentKey, BeaconContentValue),
     /// params: [content_key, content_value]
     TraceGossip(BeaconContentKey, BeaconContentValue),
-    /// params: [enr, content_key]
-    Offer(Enr, BeaconContentKey, Option<BeaconContentValue>),
+    /// params: [enr, content_key, content_value]
+    Offer(Enr, BeaconContentKey, BeaconContentValue),
+    /// params: [enr, [content_key]]
+    WireOffer(Enr, Vec<BeaconContentKey>),
     /// params: enr
     Ping(Enr),
     /// params: content_key
