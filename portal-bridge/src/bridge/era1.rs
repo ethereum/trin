@@ -87,8 +87,13 @@ impl Era1Bridge {
         match self.mode.clone() {
             BridgeMode::FourFours(FourFoursMode::Random) => self.launch_random().await,
             BridgeMode::FourFours(FourFoursMode::Hunter(sample_size, threshold)) => {
-                if let Err(err) = self.launch_hunter(sample_size, threshold).await {
+                if let Err(err) = self.launch_hunter(sample_size, threshold, false).await {
                     error!("Failed to run hunter mode: {err}");
+                }
+            }
+            BridgeMode::FourFours(FourFoursMode::SingleHunter(sample_size, threshold)) => {
+                if let Err(err) = self.launch_hunter(sample_size, threshold, true).await {
+                    error!("Failed to run single hunter mode: {err}");
                 }
             }
             BridgeMode::FourFours(FourFoursMode::RandomSingle) => {
@@ -112,7 +117,12 @@ impl Era1Bridge {
         }
     }
 
-    async fn launch_hunter(&self, sample_size: u64, threshold: u64) -> anyhow::Result<()> {
+    async fn launch_hunter(
+        &self,
+        sample_size: u64,
+        threshold: u64,
+        single: bool,
+    ) -> anyhow::Result<()> {
         info!("Launching hunter mode with sample size: {sample_size} and threshold: {threshold}");
         let era1_files = self.era1_files.clone().into_iter();
         for era1_path in era1_files {
@@ -162,6 +172,10 @@ impl Era1Bridge {
             if found < hunter_threshold {
                 info!("Hunter failed to find enough content ({hunter_threshold}) in epoch {epoch}, launching epoch gossip.");
                 self.gossip_era1(era1_path, None, true).await;
+                if single {
+                    info!("Hunter mode is in single mode, exiting after first epoch gossip.");
+                    break;
+                }
             }
         }
         Ok(())

@@ -178,6 +178,10 @@ pub enum FourFoursMode {
     // Hunter mode tries to efficiently find missing data, by sampling a given number of blocks
     // (sample_size, threshold)
     Hunter(u64, u64),
+    // SingleHunter mode tries to efficiently find missing data, by sampling a given number of
+    // blocks and only gossiping a single epoch before exiting.
+    // (sample_size, threshold)
+    SingleHunter(u64, u64),
 }
 
 const RANDOM_SINGLE_MODE: &str = "random_epoch";
@@ -187,6 +191,21 @@ impl FromStr for FourFoursMode {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.is_empty() {
             return Err("Invalid bridge fourfours mode arg: empty string".to_string());
+        }
+        if s.starts_with("single_hunter") {
+            let mut split = s.split(':');
+            let _ = split.next();
+            let sample_size = split
+                .next()
+                .expect("Invalid 4444s bridge single hunter mode arg: missing sample size")
+                .parse()
+                .expect("Invalid 4444s bridge single hunter mode arg: invalid sample size");
+            let threshold = split
+                .next()
+                .expect("Invalid 4444s bridge single hunter mode arg: missing threshold")
+                .parse()
+                .expect("Invalid 4444s bridge single hunter mode arg: invalid threshold");
+            return Ok(FourFoursMode::SingleHunter(sample_size, threshold));
         }
         if s.starts_with("hunter") {
             let mut split = s.split(':');
