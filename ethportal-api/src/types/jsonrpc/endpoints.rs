@@ -42,10 +42,10 @@ pub enum StateEndpoint {
     TraceRecursiveFindContent(StateContentKey),
     /// params: [content_key, content_value]
     Store(StateContentKey, StateContentValue),
-    /// params: [enr, content_key, content_value]
-    Offer(Enr, StateContentKey, StateContentValue),
     /// WireOffer is not supported in the state network, since locally
     /// stored values do not contain the proofs necessary for valid gossip.
+    /// params: [enr, content_key, content_value]
+    Offer(Enr, StateContentKey, StateContentValue),
     /// params: [enr, content_key, content_value]
     Gossip(StateContentKey, StateContentValue),
     /// params: [content_key, content_value]
