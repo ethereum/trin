@@ -9,7 +9,11 @@ use tokio::time::sleep;
 use tracing::{debug, error, warn};
 use url::Url;
 
-use crate::{cli::url_to_client, constants::FALLBACK_RETRY_AFTER, types::full_header::FullHeader};
+use crate::{
+    cli::url_to_client,
+    constants::{FALLBACK_RETRY_AFTER, GET_RECEIPTS_RETRY_AFTER},
+    types::full_header::FullHeader,
+};
 use ethportal_api::{
     types::{
         execution::{
@@ -195,10 +199,7 @@ impl ExecutionApi {
             0 => Receipts {
                 receipt_list: vec![],
             },
-            _ => {
-                self.get_trusted_receipts(&full_header.tx_hashes.hashes)
-                    .await?
-            }
+            _ => self.get_trusted_receipts(full_header.header.number).await?,
         };
 
         // Validate Receipts
@@ -217,20 +218,29 @@ impl ExecutionApi {
     }
 
     /// Return unvalidated receipts for the given transaction hashes.
-    async fn get_trusted_receipts(&self, tx_hashes: &[B256]) -> anyhow::Result<Receipts> {
-        let request: Vec<JsonRequest> = tx_hashes
-            .iter()
-            .enumerate()
-            .map(|(id, tx_hash)| {
-                let tx_hash = hex_encode(tx_hash);
-                let params = Params::Array(vec![json!(tx_hash)]);
-                let method = "eth_getTransactionReceipt".to_string();
-                JsonRequest::new(method, params, id as u32)
-            })
-            .collect();
-        let response = self.batch_requests(request).await?;
-        serde_json::from_str(&response)
-            .map_err(|err| anyhow!("Unable to parse receipts from provider response: {err:?}"))
+    async fn get_trusted_receipts(&self, height: u64) -> anyhow::Result<Receipts> {
+        let block_param = format!("0x{height:01X}");
+        // At this custom retry mechanism, the json-rpc is unreliable, we only call this function if
+        // we know the receipts should exist, but they might not be ready yet for any reason and the
+        // full-node will retry null, so we will just retry 3 times as we know they have it.
+        for _ in 0..3 {
+            let params = Params::Array(vec![json!(block_param)]);
+            let request = JsonRequest::new("eth_getBlockReceipts".to_string(), params, 1);
+            let response = self.try_request(request).await?;
+            let result = response.get("result").ok_or_else(|| {
+                anyhow!("Unable to fetch block receipts result for height: {height:?} {response:?}")
+            })?;
+
+            // Check if the result is null, if so, sleep and retry.
+            if result.is_null() {
+                sleep(GET_RECEIPTS_RETRY_AFTER).await;
+                continue;
+            }
+            return serde_json::from_value(response).map_err(|err| {
+                anyhow!("Unable to parse receipts from provider response: {err:?}")
+            });
+        }
+        bail!("Unable to fetch receipts for block: {height:?}");
     }
 
     pub async fn get_block_hash(&self, height: u64) -> anyhow::Result<B256> {
