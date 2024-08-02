@@ -1,20 +1,17 @@
-use std::{
-    net::{IpAddr, Ipv4Addr},
-    str::FromStr,
-};
+use std::str::FromStr;
 
-use tokio::time::{sleep, Duration};
 use tracing::info;
 
 use crate::{
-    utils::{fixture_header_with_proof, wait_for_history_content},
+    utils::{
+        fixture_block_body, fixture_epoch_acc_1, fixture_epoch_acc_2, fixture_header_with_proof,
+        fixture_receipts, wait_for_history_content,
+    },
     Peertest,
 };
 use ethportal_api::{
-    jsonrpsee::async_client::Client,
-    types::{cli::TrinConfig, enr::Enr},
-    utils::bytes::hex_encode,
-    Discv5ApiClient, HistoryNetworkApiClient,
+    jsonrpsee::async_client::Client, types::enr::Enr, utils::bytes::hex_encode, Discv5ApiClient,
+    HistoryNetworkApiClient,
 };
 
 pub async fn test_unpopulated_offer(peertest: &Peertest, target: &Client) {
@@ -42,11 +39,9 @@ pub async fn test_unpopulated_offer(peertest: &Peertest, target: &Client) {
     assert_eq!(hex_encode(result.content_keys.into_bytes()), "0x03");
 
     // Check if the stored content value in bootnode's DB matches the offered
-    let received_content_value =
-        wait_for_history_content(&peertest.bootnode.ipc_client, content_key).await;
     assert_eq!(
-        content_value, received_content_value,
-        "The received content {received_content_value:?}, must match the expected {content_value:?}",
+        content_value,
+        wait_for_history_content(&peertest.bootnode.ipc_client, content_key).await,
     );
 }
 
@@ -92,91 +87,235 @@ pub async fn test_populated_offer(peertest: &Peertest, target: &Client) {
     assert_eq!(hex_encode(result.content_keys.into_bytes()), "0x03");
 
     // Check if the stored content value in bootnode's DB matches the offered
-    let received_content_value =
-        wait_for_history_content(&peertest.bootnode.ipc_client, content_key).await;
     assert_eq!(
-        content_value, received_content_value,
-        "The received content {received_content_value:?}, must match the expected {content_value:?}",
+        content_value,
+        wait_for_history_content(&peertest.bootnode.ipc_client, content_key).await,
     );
 }
 
 pub async fn test_offer_propagates_gossip(peertest: &Peertest, target: &Client) {
     info!("Testing populated offer propagates gossip");
 
-    // connect target to network
-    let _ = target.ping(peertest.bootnode.enr.clone()).await.unwrap();
-
-    // Spin up a fresh client, not connected to existing peertest
-    let test_ip_addr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
-    // Use an uncommon port for the peertest to avoid clashes.
-    let test_discovery_port = 8889;
-    let external_addr = format!("{test_ip_addr}:{test_discovery_port}");
-    let fresh_ipc_path = format!("/tmp/trin-jsonrpc-{test_discovery_port}.ipc");
-    let trin_config = TrinConfig::new_from(
-        [
-            "trin",
-            "--portal-subnetworks",
-            "history",
-            "--external-address",
-            external_addr.as_str(),
-            "--mb",
-            "10",
-            "--web3-ipc-path",
-            fresh_ipc_path.as_str(),
-            "--ephemeral",
-            "--discovery-port",
-            test_discovery_port.to_string().as_ref(),
-            "--bootnodes",
-            "none",
-        ]
-        .iter(),
-    )
-    .unwrap();
-    let _test_client_rpc_handle = trin::run_trin(trin_config).await.unwrap();
-    let fresh_target = reth_ipc::client::IpcClientBuilder::default()
-        .build(fresh_ipc_path)
-        .await
-        .unwrap();
-    let fresh_enr = fresh_target.node_info().await.unwrap().enr;
-
-    // connect target to network
-    let _ = target.ping(fresh_enr.clone()).await.unwrap();
-
+    // get content values to gossip
     let (content_key, content_value) = fixture_header_with_proof();
     // use populated offer which means content will *not* be stored in the target's local db
     target
         .offer(
-            fresh_enr.clone(),
+            peertest.bootnode.enr.clone(),
             content_key.clone(),
             content_value.clone(),
         )
         .await
         .unwrap();
 
-    // sleep to let gossip propagate
-    sleep(Duration::from_secs(1)).await;
-
     // validate that every node in the network now has a local copy of the header
-    assert!(
-        HistoryNetworkApiClient::local_content(target, content_key.clone())
-            .await
-            .is_ok()
+    assert_eq!(
+        content_value,
+        wait_for_history_content(target, content_key.clone()).await,
     );
-    assert!(
-        HistoryNetworkApiClient::local_content(&fresh_target, content_key.clone())
-            .await
-            .is_ok()
+    assert_eq!(
+        content_value,
+        wait_for_history_content(&peertest.nodes[0].ipc_client, content_key.clone()).await,
     );
-    assert!(HistoryNetworkApiClient::local_content(
-        &peertest.nodes[0].ipc_client,
-        content_key.clone()
-    )
-    .await
-    .is_ok());
-    assert!(HistoryNetworkApiClient::local_content(
-        &peertest.bootnode.ipc_client,
-        content_key.clone()
-    )
-    .await
-    .is_ok());
+    assert_eq!(
+        content_value,
+        wait_for_history_content(&peertest.bootnode.ipc_client, content_key).await,
+    );
+}
+
+pub async fn test_offer_propagates_gossip_with_large_content(peertest: &Peertest, target: &Client) {
+    info!("Testing populated offer propagates gossips single large content");
+    // 512kb epoch accumulator
+    let (content_key, content_value) = fixture_epoch_acc_1();
+
+    // Store content to offer in the testnode db
+    let store_result = target
+        .store(content_key.clone(), content_value.clone())
+        .await
+        .unwrap();
+    assert!(store_result);
+    target
+        .wire_offer(
+            peertest.bootnode.ipc_client.node_info().await.unwrap().enr,
+            vec![content_key.clone()],
+        )
+        .await
+        .unwrap();
+
+    // validate that every node in the network now has a local copy of the accumulator
+    assert_eq!(
+        content_value,
+        wait_for_history_content(target, content_key.clone()).await,
+    );
+    assert_eq!(
+        content_value,
+        wait_for_history_content(&peertest.nodes[0].ipc_client, content_key.clone()).await,
+    );
+    assert_eq!(
+        content_value,
+        wait_for_history_content(&peertest.bootnode.ipc_client, content_key).await,
+    );
+}
+
+// multiple content values, < 1mb payload
+pub async fn test_offer_propagates_gossip_multiple_content_values(
+    peertest: &Peertest,
+    target: &Client,
+) {
+    info!("Testing populated offer propagates gossips multiple content values simultaneously");
+    // get content values to gossip
+    let (header_key, header_value) = fixture_header_with_proof();
+    let (body_key, body_value) = fixture_block_body();
+    let (receipts_key, receipts_value) = fixture_receipts();
+    let (acc_key_1, acc_value_1) = fixture_epoch_acc_1();
+
+    // offer header content for validation later
+    target
+        .offer(
+            peertest.bootnode.enr.clone(),
+            header_key.clone(),
+            header_value.clone(),
+        )
+        .await
+        .unwrap();
+
+    // check that header content is available
+    assert_eq!(
+        header_value,
+        wait_for_history_content(target, header_key.clone()).await,
+    );
+    assert_eq!(
+        header_value,
+        wait_for_history_content(&peertest.bootnode.ipc_client, header_key.clone()).await,
+    );
+    assert_eq!(
+        header_value,
+        wait_for_history_content(&peertest.nodes[0].ipc_client, header_key.clone()).await,
+    );
+
+    // Store content to offer in the testnode db
+    let store_result = target
+        .store(body_key.clone(), body_value.clone())
+        .await
+        .unwrap();
+    assert!(store_result);
+    let store_result = target
+        .store(receipts_key.clone(), receipts_value.clone())
+        .await
+        .unwrap();
+    assert!(store_result);
+    let store_result = target
+        .store(acc_key_1.clone(), acc_value_1.clone())
+        .await
+        .unwrap();
+    assert!(store_result);
+
+    // here everythings stored in target
+    target
+        .wire_offer(
+            peertest.bootnode.ipc_client.node_info().await.unwrap().enr,
+            vec![body_key.clone(), receipts_key.clone(), acc_key_1.clone()],
+        )
+        .await
+        .unwrap();
+
+    // check that body content is available
+    assert_eq!(
+        body_value,
+        wait_for_history_content(target, body_key.clone()).await,
+    );
+    assert_eq!(
+        body_value,
+        wait_for_history_content(&peertest.bootnode.ipc_client, body_key.clone()).await,
+    );
+    assert_eq!(
+        body_value,
+        wait_for_history_content(&peertest.nodes[0].ipc_client, body_key.clone()).await,
+    );
+    // check that receipts content is available
+    assert_eq!(
+        receipts_value,
+        wait_for_history_content(target, receipts_key.clone()).await,
+    );
+    assert_eq!(
+        receipts_value,
+        wait_for_history_content(&peertest.bootnode.ipc_client, receipts_key.clone()).await,
+    );
+    assert_eq!(
+        receipts_value,
+        wait_for_history_content(&peertest.nodes[0].ipc_client, receipts_key.clone()).await,
+    );
+
+    // check that acc_content_1 is available
+    assert_eq!(
+        acc_value_1,
+        wait_for_history_content(target, acc_key_1.clone()).await,
+    );
+    assert_eq!(
+        acc_value_1,
+        wait_for_history_content(&peertest.bootnode.ipc_client, acc_key_1.clone()).await,
+    );
+    assert_eq!(
+        acc_value_1,
+        wait_for_history_content(&peertest.nodes[0].ipc_client, acc_key_1).await,
+    );
+}
+
+// multiple content values, > 1mb payload
+pub async fn test_offer_propagates_gossip_multiple_large_content_values(
+    peertest: &Peertest,
+    target: &Client,
+) {
+    info!("Testing populated offer propagates gossips multiple large content simultaneously");
+
+    // get content values to gossip
+    let (acc_key_1, acc_value_1) = fixture_epoch_acc_1();
+    let (acc_key_2, acc_value_2) = fixture_epoch_acc_2();
+
+    // Store content to offer in the testnode db
+    let store_result = target
+        .store(acc_key_1.clone(), acc_value_1.clone())
+        .await
+        .unwrap();
+    assert!(store_result);
+    let store_result = target
+        .store(acc_key_2.clone(), acc_value_2.clone())
+        .await
+        .unwrap();
+    assert!(store_result);
+    target
+        .wire_offer(
+            peertest.bootnode.ipc_client.node_info().await.unwrap().enr,
+            vec![acc_key_1.clone(), acc_key_2.clone()],
+        )
+        .await
+        .unwrap();
+
+    // check that acc_content_1 is available
+    assert_eq!(
+        acc_value_1,
+        wait_for_history_content(target, acc_key_1.clone()).await,
+    );
+    assert_eq!(
+        acc_value_1,
+        wait_for_history_content(&peertest.bootnode.ipc_client, acc_key_1.clone()).await,
+    );
+    assert_eq!(
+        acc_value_1,
+        wait_for_history_content(&peertest.nodes[0].ipc_client, acc_key_1).await,
+    );
+
+    // check that acc_content_2 is available
+    assert_eq!(
+        acc_value_2,
+        wait_for_history_content(target, acc_key_2.clone()).await,
+    );
+    assert_eq!(
+        acc_value_2,
+        wait_for_history_content(&peertest.bootnode.ipc_client, acc_key_2.clone()).await,
+    );
+    assert_eq!(
+        acc_value_2,
+        wait_for_history_content(&peertest.nodes[0].ipc_client, acc_key_2).await,
+    );
 }

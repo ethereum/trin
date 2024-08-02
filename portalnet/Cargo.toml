@@ -44,7 +44,7 @@ trin-metrics = { path = "../trin-metrics" }
 trin-storage = { path = "../trin-storage" }
 trin-utils = { path = "../trin-utils" }
 trin-validation = { path = "../trin-validation" }
-utp-rs = { git = "https://github.com/ethereum/utp", tag = "v0.1.0-alpha.12" }
+utp-rs = { git = "https://github.com/ethereum/utp", tag = "v0.1.0-alpha.13" }
 
 [target.'cfg(windows)'.dependencies]
 uds_windows = "1.0.1"

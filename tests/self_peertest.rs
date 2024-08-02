@@ -235,6 +235,42 @@ async fn peertest_history_offer_propagates_gossip() {
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
+async fn peertest_history_offer_propagates_gossip_with_large_content() {
+    let (peertest, target, handle) = setup_peertest("mainnet").await;
+    peertest::scenarios::offer_accept::test_offer_propagates_gossip_with_large_content(
+        &peertest, &target,
+    )
+    .await;
+    peertest.exit_all_nodes();
+    handle.stop().unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
+async fn peertest_history_offer_propagates_gossip_multiple_content_values() {
+    let (peertest, target, handle) = setup_peertest("mainnet").await;
+    peertest::scenarios::offer_accept::test_offer_propagates_gossip_multiple_content_values(
+        &peertest, &target,
+    )
+    .await;
+    peertest.exit_all_nodes();
+    handle.stop().unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
+async fn peertest_history_offer_propagates_gossip_multiple_large_content_values() {
+    let (peertest, target, handle) = setup_peertest("mainnet").await;
+    peertest::scenarios::offer_accept::test_offer_propagates_gossip_multiple_large_content_values(
+        &peertest, &target,
+    )
+    .await;
+    peertest.exit_all_nodes();
+    handle.stop().unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
 async fn peertest_ping_cross_discv5_protocol_id() {
     let (peertest, target, handle) = setup_peertest("angelfood").await;
     peertest::scenarios::basic::test_ping_cross_network(&target, &peertest).await;
