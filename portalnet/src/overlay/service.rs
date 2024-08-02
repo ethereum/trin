@@ -948,7 +948,7 @@ where
                     // Generate a connection ID for the uTP connection.
                     let enr = self.find_enr(source).ok_or_else(|| {
                         OverlayRequestError::AcceptError(
-                            "unable to find ENR for NodeId".to_string(),
+                            "handle_find_content: unable to find ENR for NodeId".to_string(),
                         )
                     })?;
                     let enr = UtpEnr(enr);
@@ -1039,7 +1039,9 @@ where
         // if we're unable to find the ENR for the source node we throw an error
         // since the enr is required for the accept queue, and it is expected to be present
         let enr = self.find_enr(source).ok_or_else(|| {
-            OverlayRequestError::AcceptError("unable to find ENR for NodeId".to_string())
+            OverlayRequestError::AcceptError(
+                "handle_offer: unable to find ENR for NodeId".to_string(),
+            )
         })?;
         for (i, key) in content_keys.iter().enumerate() {
             // Accept content if within radius and not already present in the data store.
@@ -1079,9 +1081,6 @@ where
 
         // Generate a connection ID for the uTP connection if there is data we would like to
         // accept.
-        let enr = self.find_enr(source).ok_or_else(|| {
-            OverlayRequestError::AcceptError("unable to find ENR for NodeId".to_string())
-        })?;
         let enr = UtpEnr(enr);
         let enr_str = if enabled!(Level::TRACE) {
             enr.0.to_base64()
@@ -2491,10 +2490,19 @@ where
 
     /// Returns an ENR if one is known for the given NodeId.
     pub fn find_enr(&self, node_id: &NodeId) -> Option<Enr> {
-        // Check whether we know this node id in our routing table.
+        // Check whether we know this node id in our X's Portal Network's routing table.
         let key = kbucket::Key::from(*node_id);
         if let kbucket::Entry::Present(entry, _) = self.kbuckets.write().entry(&key) {
             return Some(entry.value().clone().enr());
+        }
+
+        if let kbucket::Entry::Pending(mut entry, _) = self.kbuckets.write().entry(&key) {
+            return Some(entry.value().clone().enr());
+        }
+
+        // Check whether this node id is in our discv5 routing table
+        if let Some(enr) = self.discovery.find_enr(node_id) {
+            return Some(enr);
         }
 
         // Check whether this node id is in our discovery ENR cache
