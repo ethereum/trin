@@ -1,12 +1,11 @@
 use std::collections::VecDeque;
 
-use alloy_primitives::{Address, B256};
+use alloy_primitives::B256;
 use alloy_rlp::Decodable;
 use eth_trie::node::Node;
 use ethportal_api::types::state_trie::{
     account_state::AccountState, nibbles::Nibbles, EncodedTrieNode, TrieProof,
 };
-use keccak_hash::keccak;
 
 use super::error::StateValidationError;
 
@@ -49,11 +48,11 @@ pub fn validate_node_trie_proof<'proof, 'path>(
 /// Validate the trie proof associated with the account state.
 pub fn validate_account_state(
     root_hash: Option<B256>,
-    account: &Address,
+    address_hash: &B256,
     proof: &TrieProof,
 ) -> Result<AccountState, StateValidationError> {
-    let path: Vec<u8> = keccak(account)
-        .as_bytes()
+    let path: Vec<u8> = address_hash
+        .as_slice()
         .iter()
         .flat_map(Nibbles::unpack_nibble_pair)
         .collect();
@@ -205,7 +204,7 @@ fn traverse_node<'path>(
 mod tests {
     use std::str::FromStr;
 
-    use alloy_primitives::U256;
+    use alloy_primitives::{keccak256, Address, U256};
     use anyhow::Result;
     use eth_trie::{nibbles::Nibbles as EthTrieNibbles, node::empty_children};
     use ethportal_api::utils::bytes::hex_decode;
@@ -361,6 +360,7 @@ mod tests {
         let state_root =
             B256::from_str("0x1ad7b80af0c28bc1489513346d2706885be90abb07f23ca28e50482adb392d61")?;
         let address = Address::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")?;
+        let address_hash = keccak256(address);
         let account_state = AccountState {
             nonce: 1,
             balance: U256::from(3272363543482522011582395_u128),
@@ -384,7 +384,11 @@ mod tests {
           ].map(|trie_node| EncodedTrieNode::from(hex_decode(trie_node).unwrap()));
 
         assert_eq!(
-            validate_account_state(Some(state_root), &address, &account_proof.to_vec().into())?,
+            validate_account_state(
+                Some(state_root),
+                &address_hash,
+                &account_proof.to_vec().into()
+            )?,
             account_state
         );
 
@@ -394,8 +398,9 @@ mod tests {
     #[test]
     fn validate_account_state_just_leaf() {
         let address = Address::random();
-        let path: Vec<u8> = keccak(address)
-            .as_bytes()
+        let address_hash = keccak256(address);
+        let path: Vec<u8> = address_hash
+            .as_slice()
             .iter()
             .flat_map(Nibbles::unpack_nibble_pair)
             .collect();
@@ -407,7 +412,7 @@ mod tests {
         };
         let node = EncodedTrieNode::from(&create_leaf(&path, &alloy_rlp::encode(&account_state)));
         assert_eq!(
-            validate_account_state(None, &address, &vec![node].into()).unwrap(),
+            validate_account_state(None, &address_hash, &vec![node].into()).unwrap(),
             account_state
         );
     }
@@ -416,16 +421,18 @@ mod tests {
     #[should_panic = "LeafNodeExpected"]
     fn validate_account_state_last_node_is_not_leaf() {
         let address = Address::random();
+        let address_hash = keccak256(address);
         let node = EncodedTrieNode::from(&create_branch_with_child(Node::Empty, 1));
-        validate_account_state(None, &address, &vec![node].into()).unwrap();
+        validate_account_state(None, &address_hash, &vec![node].into()).unwrap();
     }
 
     #[test]
     #[should_panic = "InvalidLeafPath"]
     fn validate_account_state_invalid_leaf_path() {
         let address = Address::random();
-        let mut path: Vec<u8> = keccak(address)
-            .as_bytes()
+        let address_hash = keccak256(address);
+        let mut path: Vec<u8> = address_hash
+            .as_slice()
             .iter()
             .flat_map(Nibbles::unpack_nibble_pair)
             .collect();
@@ -439,28 +446,30 @@ mod tests {
             code_hash: B256::random(),
         };
         let node = EncodedTrieNode::from(&create_leaf(&path, &alloy_rlp::encode(account_state)));
-        validate_account_state(None, &address, &vec![node].into()).unwrap();
+        validate_account_state(None, &address_hash, &vec![node].into()).unwrap();
     }
 
     #[test]
     #[should_panic = "DecodingAccountState"]
     fn validate_account_state_non_decodable_account_state() {
         let address = Address::random();
-        let path: Vec<u8> = keccak(address)
-            .as_bytes()
+        let address_hash = keccak256(address);
+        let path: Vec<u8> = address_hash
+            .as_slice()
             .iter()
             .flat_map(Nibbles::unpack_nibble_pair)
             .collect();
         let node = EncodedTrieNode::from(&create_leaf(&path, &[0x12, 0x34]));
-        validate_account_state(None, &address, &vec![node].into()).unwrap();
+        validate_account_state(None, &address_hash, &vec![node].into()).unwrap();
     }
 
     #[test]
     #[should_panic = "DecodingNode"]
     fn validate_account_state_non_decodable_leaf() {
         let address = Address::random();
+        let address_hash = keccak256(address);
         let node = EncodedTrieNode::from(vec![0x12, 0x34]);
-        validate_account_state(None, &address, &vec![node].into()).unwrap();
+        validate_account_state(None, &address_hash, &vec![node].into()).unwrap();
     }
 
     #[test]

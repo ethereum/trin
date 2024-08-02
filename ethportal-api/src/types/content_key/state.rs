@@ -1,4 +1,4 @@
-use alloy_primitives::{Address, B256};
+use alloy_primitives::B256;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest as Sha2Digest, Sha256};
 use ssz::{Decode, DecodeError, Encode};
@@ -46,8 +46,8 @@ pub struct AccountTrieNodeKey {
 /// A key for a trie node from some account's contract storage.
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct ContractStorageTrieNodeKey {
-    /// Address of the account.
-    pub address: Address,
+    /// Address hash of the account.
+    pub address_hash: B256,
     /// Trie path of the node.
     pub path: Nibbles,
     /// Hash of the node.
@@ -57,8 +57,8 @@ pub struct ContractStorageTrieNodeKey {
 /// A key for an account's contract bytecode.
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct ContractBytecodeKey {
-    /// Address of the account.
-    pub address: Address,
+    /// Address hash of the account.
+    pub address_hash: B256,
     /// Hash of the bytecode.
     pub code_hash: B256,
 }
@@ -163,16 +163,16 @@ impl fmt::Display for StateContentKey {
             ),
             Self::ContractStorageTrieNode(key) => {
                 format!(
-                    "ContractStorageTrieNode {{ address: {}, path: {}, node_hash: {} }}",
-                    hex_encode_compact(key.address),
+                    "ContractStorageTrieNode {{ address_hash: {}, path: {}, node_hash: {} }}",
+                    hex_encode_compact(key.address_hash),
                     &key.path,
                     hex_encode_compact(key.node_hash)
                 )
             }
             Self::ContractBytecode(key) => {
                 format!(
-                    "ContractBytecode {{ address: {}, code_hash: {} }}",
-                    hex_encode_compact(key.address),
+                    "ContractBytecode {{ address_hash: {}, code_hash: {} }}",
+                    hex_encode_compact(key.address_hash),
                     hex_encode_compact(key.code_hash)
                 )
             }
@@ -187,6 +187,7 @@ impl fmt::Display for StateContentKey {
 mod test {
     use std::{path::PathBuf, str::FromStr};
 
+    use alloy_primitives::{keccak256, Address};
     use anyhow::Result;
     use rstest::rstest;
     use serde_yaml::Value;
@@ -217,7 +218,7 @@ mod test {
 
         let expected_content_key =
             StateContentKey::ContractStorageTrieNode(ContractStorageTrieNodeKey {
-                address: yaml_as_address(&yaml["address"]),
+                address_hash: keccak256(yaml_as_address(&yaml["address"])),
                 path: yaml_as_nibbles(&yaml["path"]),
                 node_hash: yaml_as_b256(&yaml["node_hash"]),
             });
@@ -231,7 +232,7 @@ mod test {
         let yaml = yaml.as_mapping().unwrap();
 
         let expected_content_key = StateContentKey::ContractBytecode(ContractBytecodeKey {
-            address: yaml_as_address(&yaml["address"]),
+            address_hash: keccak256(yaml_as_address(&yaml["address"])),
             code_hash: yaml_as_b256(&yaml["code_hash"]),
         });
 

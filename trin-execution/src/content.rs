@@ -10,7 +10,7 @@ use ethportal_api::{
     },
     StateContentKey, StateContentValue,
 };
-use revm_primitives::{Address, Bytecode};
+use revm_primitives::Bytecode;
 
 use super::types::trie_proof::TrieProof;
 
@@ -39,11 +39,11 @@ pub fn create_account_content_value(
 }
 
 pub fn create_contract_content_key(
-    address: Address,
+    address_hash: B256,
     code_hash: B256,
 ) -> anyhow::Result<StateContentKey> {
     Ok(StateContentKey::ContractBytecode(ContractBytecodeKey {
-        address,
+        address_hash,
         code_hash,
     }))
 }
@@ -64,7 +64,7 @@ pub fn create_contract_content_value(
 
 pub fn create_storage_content_key(
     storage_proof: &TrieProof,
-    address: Address,
+    address_hash: B256,
 ) -> anyhow::Result<StateContentKey> {
     let last_node = storage_proof
         .proof
@@ -75,7 +75,7 @@ pub fn create_storage_content_key(
         ContractStorageTrieNodeKey {
             path: Nibbles::try_from_unpacked_nibbles(&storage_proof.path)?,
             node_hash: keccak256(last_node),
-            address,
+            address_hash,
         },
     ))
 }

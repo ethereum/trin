@@ -21,14 +21,12 @@ use super::{
     trie_db::TrieRocksDB,
 };
 
-const REVERSE_HASH_LOOKUP_PREFIX: &[u8] = b"reverse hash lookup";
-
 #[derive(Debug, Clone)]
 pub struct EvmDB {
     /// State config
     pub config: StateConfig,
     /// Storage cache for the accounts used optionally for gossiping.
-    pub storage_cache: HashMap<Address, HashSet<B256>>,
+    pub storage_cache: HashMap<B256, HashSet<B256>>,
     /// The underlying database.
     pub db: Arc<RocksDB>,
     /// To get proofs and to verify trie state.
@@ -70,22 +68,11 @@ impl EvmDB {
     /// the account and instead map it to the code hash.
     ///
     /// Note: This will not insert into the underlying external database.
-    pub fn insert_contract(&mut self, address: Address, account: &mut AccountInfo) {
+    pub fn insert_contract(&mut self, account: &mut AccountInfo) {
         if let Some(code) = &account.code {
             if !code.is_empty() {
                 if account.code_hash == KECCAK_EMPTY {
                     account.code_hash = code.hash_slow();
-                }
-
-                // Insert address lookup into the database so that we can look up the address for
-                // smart contracts
-                if self.config.cache_contract_storage_changes {
-                    self.db
-                        .put(
-                            [REVERSE_HASH_LOOKUP_PREFIX, keccak256(address).as_slice()].concat(),
-                            address.as_slice(),
-                        )
-                        .expect("Inserting address should never fail");
                 }
 
                 // Insert contract code into the database
@@ -99,17 +86,14 @@ impl EvmDB {
         }
     }
 
-    pub fn get_address_from_hash(&self, address_hash: B256) -> Option<Address> {
-        self.db
-            .get([REVERSE_HASH_LOOKUP_PREFIX, address_hash.as_slice()].concat())
-            .expect("Getting address from the database should never fail")
-            .map(|raw_address| Address::from_slice(&raw_address))
-    }
-
-    pub fn get_storage_trie_diff(&self, address: Address) -> BrownHashMap<B256, Vec<u8>> {
+    pub fn get_storage_trie_diff(&self, address_hash: B256) -> BrownHashMap<B256, Vec<u8>> {
         let mut trie_diff = BrownHashMap::new();
 
-        for key in self.storage_cache.get(&address).unwrap_or(&HashSet::new()) {
+        for key in self
+            .storage_cache
+            .get(&address_hash)
+            .unwrap_or(&HashSet::new())
+        {
             let value = self
                 .db
                 .get(key)
@@ -161,7 +145,7 @@ impl DatabaseCommit for EvmDB {
                 continue;
             }
             let is_newly_created = account.is_created();
-            self.insert_contract(address, &mut account.info);
+            self.insert_contract(&mut account.info);
 
             let mut rocks_account: RocksAccount = match self
                 .db
@@ -230,7 +214,7 @@ impl DatabaseCommit for EvmDB {
                 .expect("Getting the root hash should never fail");
 
             if self.config.cache_contract_storage_changes {
-                let account_storage_cache = self.storage_cache.entry(address).or_default();
+                let account_storage_cache = self.storage_cache.entry(address_hash).or_default();
                 for key in trie_diff.keys() {
                     account_storage_cache.insert(*key);
                 }
