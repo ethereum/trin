@@ -14,8 +14,12 @@ pub struct E2StoreStream {
 }
 
 impl E2StoreStream {
-    pub fn new(e2store_path: &PathBuf) -> anyhow::Result<Self> {
+    pub fn new_read(e2store_path: &PathBuf) -> anyhow::Result<Self> {
         let e2store_file = File::open(e2store_path)?;
+        Ok(Self { e2store_file })
+    }
+
+    pub fn new_write(e2store_file: File) -> anyhow::Result<Self> {
         Ok(Self { e2store_file })
     }
 

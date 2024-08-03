@@ -95,6 +95,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             continue;
         }
         state.process_range_of_blocks(block_number, end).await?;
+        // state.process_block(block_number).await?;
         block_number = state.block_execution_number();
     }
 

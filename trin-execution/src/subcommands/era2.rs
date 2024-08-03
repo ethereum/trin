@@ -132,8 +132,13 @@ impl<TrieDB: DB> TrieLeafIterator<TrieDB> {
             let node = self
                 .trie
                 .lock()
-                .get(node_hash.as_slice())?
-                .expect("Node must exist, as we are walking a valid trie");
+                .db
+                .get(node_hash.as_slice())
+                .expect("Unable to get node from trie db")
+                .expect(&format!(
+                    "Node must exist, as we are walking a valid trie | node_hash: {} path: {:?}",
+                    node_hash, path
+                ));
 
             self.process_node(decode_node(&mut node.as_slice())?, path)?;
 
@@ -160,7 +165,8 @@ impl StateExporter {
     }
 
     pub fn export_state(&mut self, header: Header) -> Result<(), Error> {
-        let mut era2 = Era2::initiate_empty_era2(&self.exporter_config.path_to_era2, header)?;
+        let mut era2 =
+            Era2::initiate_empty_era2(self.exporter_config.path_to_era2.clone(), header)?;
 
         let mut leaf_iterator = TrieLeafIterator::new(self.state.database.trie.clone())?;
 

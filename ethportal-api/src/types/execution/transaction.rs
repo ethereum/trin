@@ -3,7 +3,7 @@ use alloy_rlp::{
     length_of_length, Decodable, Encodable, Error as RlpError, Header as RlpHeader, RlpDecodable,
     RlpEncodable, EMPTY_STRING_CODE,
 };
-use bytes::{Buf, Bytes};
+use bytes::{Buf, BufMut, Bytes};
 use secp256k1::{
     ecdsa::{RecoverableSignature, RecoveryId},
     Message, SECP256K1,
@@ -326,6 +326,7 @@ impl AccessListTransaction {
     pub fn signature_hash(&self) -> B256 {
         let mut buf = Vec::<u8>::new();
         let mut list = Vec::<u8>::new();
+        1u64.encode(&mut list);
         self.nonce.encode(&mut list);
         self.gas_price.encode(&mut list);
         self.gas_limit.encode(&mut list);
@@ -333,13 +334,11 @@ impl AccessListTransaction {
         self.value.encode(&mut list);
         self.data.encode(&mut list);
         self.access_list.encode(&mut list);
-        1u64.encode(&mut list);
-        0x00u8.encode(&mut list);
-        0x00u8.encode(&mut list);
         let header = RlpHeader {
             list: true,
             payload_length: list.len(),
         };
+        buf.put_u8(1);
         header.encode(&mut buf);
         buf.extend_from_slice(&list);
         keccak256(&buf)
@@ -421,6 +420,7 @@ impl EIP1559Transaction {
     pub fn signature_hash(&self) -> B256 {
         let mut buf = Vec::<u8>::new();
         let mut list = Vec::<u8>::new();
+        1u64.encode(&mut list);
         self.nonce.encode(&mut list);
         self.max_priority_fee_per_gas.encode(&mut list);
         self.max_fee_per_gas.encode(&mut list);
@@ -429,13 +429,11 @@ impl EIP1559Transaction {
         self.value.encode(&mut list);
         self.data.encode(&mut list);
         self.access_list.encode(&mut list);
-        1u64.encode(&mut list);
-        0x00u8.encode(&mut list);
-        0x00u8.encode(&mut list);
         let header = RlpHeader {
             list: true,
             payload_length: list.len(),
         };
+        buf.put_u8(2);
         header.encode(&mut buf);
         buf.extend_from_slice(&list);
         keccak256(&buf)
@@ -523,6 +521,7 @@ impl BlobTransaction {
     pub fn signature_hash(&self) -> B256 {
         let mut buf = Vec::<u8>::new();
         let mut list = Vec::<u8>::new();
+        1u64.encode(&mut list);
         self.nonce.encode(&mut list);
         self.max_priority_fee_per_gas.encode(&mut list);
         self.max_fee_per_gas.encode(&mut list);
@@ -533,13 +532,11 @@ impl BlobTransaction {
         self.access_list.encode(&mut list);
         self.max_fee_per_blob_gas.encode(&mut list);
         self.blob_versioned_hashes.encode(&mut list);
-        1u64.encode(&mut list);
-        0x00u8.encode(&mut list);
-        0x00u8.encode(&mut list);
         let header = RlpHeader {
             list: true,
             payload_length: list.len(),
         };
+        buf.put_u8(3);
         header.encode(&mut buf);
         buf.extend_from_slice(&list);
         keccak256(&buf)
@@ -731,6 +728,13 @@ mod tests {
         true,
         "0xd5f76f3a1f7eebadc04d702334445d261d24831d6bfef61e3974bcdb4f015c68",
         "0xea674fdde714fd979de3edf0f56aa9716b898ec8"
+    )]
+    // Block 12244145 https://etherscan.io/tx/0x851bad0415758075a1eb86776749c829b866d43179c57c3e4a4b9359a0358231
+    #[case(
+        "0x01f9039f018218bf85105e34df0083048a949410a0847c2d170008ddca7c3a688124f49363003280b902e4c11695480000000000000000000000004b274e4a9af31c20ed4151769a88ffe63d9439960000000000000000000000008510211a852f0c5994051dd85eaef73112a82eb5000000000000000000000000000000000000000000000000000000000000012000000000000000000000000000bad4de000000000000000000000000607816a600000000000000000000000000000000000000000000000000000000000002200000000000000000000000000000000000000000000000000000001146aa2600000000000000000000000000000000000000000000000000000000000001bc9b000000000000000000000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee000000000000000000000000482579f93dc13e6b434e38b5a0447ca543d88a4600000000000000000000000000000000000000000000000000000000000000c42df546f40000000000000000000000004b274e4a9af31c20ed4151769a88ffe63d943996000000000000000000000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000000000000007d93f93d41604572119e4be7757a7a4a43705f080000000000000000000000000000000000000000000000003782dace9d90000000000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000082b5a61569b5898ac347c82a594c86699f1981aa88ca46a6a00b8e4f27b3d17bdf3714e7c0ca6a8023b37cca556602fce7dc7daac3fcee1ab04bbb3b94c10dec301cc57266db6567aa073efaa1fa6669bdc6f0877b0aeab4e33d18cb08b8877f08931abf427f11bade042177db48ca956feb114d6f5d56d1f5889047189562ec545e1c000000000000000000000000000000000000000000000000000000000000f84ff7946856ccf24beb7ed77f1f24eee5742f7ece5557e2e1a00000000000000000000000000000000000000000000000000000000000000001d694b1dd690cc9af7bb1a906a9b5a94f94191cc553cec080a0d52f3dbcad3530e73fcef6f4a75329b569a8903bf6d8109a960901f251a37af3a00ecf570e0c0ffa6efdc6e6e49be764b6a1a77e47de7bb99e167544ffbbcd65bc",
+        true,
+        "0x894d999ea27537def37534b3d55df3fed4e1492b31e9f640774432d21cf4512c",
+        "0x1ced2cef30d40bb3617f8d455071b69f3b12d06f"
     )]
 
     fn test_legacy_get_sender_address_from_transaction(

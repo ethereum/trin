@@ -1,12 +1,17 @@
-use alloy_primitives::{B256, U256};
+use alloy_primitives::{hex, B256, U256};
 use alloy_rlp::{Decodable, RlpDecodable, RlpEncodable};
 use anyhow::ensure;
-use ethportal_api::types::{
-    execution::{block_body::BlockBody, header::Header, receipts::Receipts},
-    state_trie::account_state::AccountState,
+use core::panic;
+use ethportal_api::{
+    jsonrpsee::tracing::instrument::WithSubscriber,
+    types::{
+        execution::{block_body::BlockBody, header::Header, receipts::Receipts},
+        state_trie::account_state::AccountState,
+    },
+    utils::bytes::hex_encode,
 };
 use std::{
-    fs,
+    fs::{self, File},
     io::{Read, Write},
     path::{Path, PathBuf},
 };
@@ -43,7 +48,7 @@ pub struct Era2 {
 
 impl Era2 {
     pub fn initiate_era2_reader(era2_path: &PathBuf) -> anyhow::Result<Self> {
-        let mut e2store_stream = E2StoreStream::new(era2_path)?;
+        let mut e2store_stream = E2StoreStream::new_read(era2_path)?;
 
         let version = VersionEntry::try_from(&e2store_stream.next_entry()?)?;
         let header = HeaderEntry::try_from(&e2store_stream.next_entry()?)?;
@@ -55,8 +60,23 @@ impl Era2 {
         })
     }
 
-    pub fn initiate_empty_era2(era2_path: &PathBuf, header: Header) -> anyhow::Result<Self> {
-        let mut e2store_stream = E2StoreStream::new(era2_path)?;
+    pub fn initiate_empty_era2(era2_path: PathBuf, header: Header) -> anyhow::Result<Self> {
+        if era2_path.is_file() {
+            panic!(
+                "era2_path is not a directory, it is a file: {:?}",
+                era2_path
+            );
+        }
+        let era2_path = era2_path.join(format!(
+            "mainnet-{:010}-{}.era2",
+            header.number,
+            hex::encode(&header.state_root.as_slice()[..4])
+        ));
+        if era2_path.exists() {
+            panic!("era2 file already exists: {:?}", era2_path);
+        }
+        let era2_file = File::create(&era2_path)?;
+        let mut e2store_stream = E2StoreStream::new_write(era2_file)?;
 
         let version: VersionEntry = (&Entry {
             header: E2storeHeader {
