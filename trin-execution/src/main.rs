@@ -54,16 +54,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["fetching_block_from_era"]);
-        let block_tuple = era_manager.get_block_by_number(block_number).await?;
+        let block = era_manager.get_block_by_number(block_number).await?;
         stop_timer(timer);
         let timer = start_timer_vec(&BLOCK_PROCESSING_TIMES, &["processing_block"]);
-        if block_tuple.header.header.number == 0 {
+        if block.header.number == 0 {
             state.initialize_genesis()?;
             continue;
         }
-        state.process_block(block_tuple)?;
+        state.process_block(block)?;
         stop_timer(timer);
-        assert_eq!(state.get_root()?, block_tuple.header.header.state_root);
+        assert_eq!(state.get_root()?, block.header.state_root);
     }
 
     Ok(())
