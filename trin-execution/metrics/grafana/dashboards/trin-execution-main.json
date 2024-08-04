@@ -407,7 +407,7 @@
             "refId": "A"
           }
         ],
-        "title": "Block Height",
+        "title": "Block Height rate (1m window)",
         "type": "timeseries"
       },
       {
@@ -502,7 +502,7 @@
             "refId": "A"
           }
         ],
-        "title": "Block Execution Operation Count (1m window)",
+        "title": "Block Execution Operation Count",
         "type": "timeseries"
       },
       {
@@ -667,7 +667,7 @@
           "x": 0,
           "y": 27
         },
-        "id": 4,
+        "id": 10,
         "options": {
           "legend": {
             "calcs": [],
@@ -687,14 +687,14 @@
               "uid": "PBFA97CFB590B2093"
             },
             "editorMode": "code",
-            "expr": "rate(trin_execution_bundle_commit_processing_times_sum {instance=~\"local_node\"} [1m])/rate(trin_execution_bundle_commit_processing_times_count {instance=~\"local_node\"} [1m])",
+            "expr": "trin_execution_bundle_commit_processing_times_sum {instance=~\"local_node\"}",
             "instant": false,
             "legendFormat": "{{section}}",
             "range": true,
             "refId": "A"
           }
         ],
-        "title": "Average Bundle Commit Processing Section Duration (1m window)",
+        "title": "Average Bundle Commit Processing Section Duration",
         "type": "timeseries"
       },
       {
@@ -859,7 +859,7 @@
           "x": 0,
           "y": 36
         },
-        "id": 10,
+        "id": 4,
         "options": {
           "legend": {
             "calcs": [],
@@ -879,7 +879,7 @@
               "uid": "PBFA97CFB590B2093"
             },
             "editorMode": "code",
-            "expr": "trin_execution_bundle_commit_processing_times_sum {instance=~\"local_node\"}",
+            "expr": "rate(trin_execution_bundle_commit_processing_times_sum {instance=~\"local_node\"} [1m])/rate(trin_execution_bundle_commit_processing_times_count {instance=~\"local_node\"} [1m])",
             "instant": false,
             "legendFormat": "{{section}}",
             "range": true,
@@ -982,7 +982,7 @@
             "refId": "A"
           }
         ],
-        "title": "Transaction Processing Total Time Per Section",
+        "title": "Transaction Processing Total Time Per Section (1m window)",
         "type": "timeseries"
       },
       {
@@ -1097,4 +1097,5 @@
     "uid": "fdqcqby1pyvb4d",
     "version": 1,
     "weekStart": ""
-}
+  }
+  
