@@ -22,7 +22,7 @@ clap = { version = "4.2.1", features = ["derive"] }
 discv5 = { version = "0.4.1", features = ["serde"] }
 ethereum_ssz = "0.5.3"
 ethportal-api = { path = "../ethportal-api" }
-eth_trie = { git = "https://github.com/kolbyml/eth-trie.rs.git", rev = "7e57d3dfadee126cc9fda2696fb039bf7b6ed688" }
+eth_trie = { git = "https://github.com/kolbyml/eth-trie.rs.git", rev = "7947a83091192a7988f359b750b05121d5d7ba8c" }
 e2store = { path = "../e2store" }
 futures = "0.3.21"
 jsonrpsee = { version = "0.20.0", features = [

@@ -17,9 +17,6 @@ pub struct ExecutionPosition {
 
     /// The block number we are currently executing
     block_execution_number: u64,
-
-    /// The index of the transaction we are currently executing
-    transaction_index: u64,
 }
 
 impl ExecutionPosition {
@@ -32,7 +29,6 @@ impl ExecutionPosition {
                 version: 0,
                 block_execution_number: 0,
                 state_root: keccak256([EMPTY_STRING_CODE]),
-                transaction_index: 0,
             },
         })
     }
@@ -49,24 +45,14 @@ impl ExecutionPosition {
         self.state_root
     }
 
-    pub fn transaction_index(&self) -> u64 {
-        self.transaction_index
-    }
-
-    pub fn increase_block_execution_number(
+    pub fn set_block_execution_number(
         &mut self,
         db: Arc<RocksDB>,
+        block_number: u64,
         state_root: B256,
     ) -> anyhow::Result<()> {
-        self.block_execution_number += 1;
+        self.block_execution_number = block_number;
         self.state_root = state_root;
-        self.transaction_index = 0;
-        db.put(EXECUTION_POSITION_DB_KEY, alloy_rlp::encode(self))?;
-        Ok(())
-    }
-
-    pub fn increase_transaction_index(&mut self, db: Arc<RocksDB>) -> anyhow::Result<()> {
-        self.transaction_index += 1;
         db.put(EXECUTION_POSITION_DB_KEY, alloy_rlp::encode(self))?;
         Ok(())
     }

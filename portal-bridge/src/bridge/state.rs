@@ -2,14 +2,14 @@ use std::{path::PathBuf, sync::Arc};
 
 use alloy_rlp::Decodable;
 use anyhow::anyhow;
-use e2store::{era1::Era1, utils::get_shuffled_era1_files};
+use e2store::utils::get_shuffled_era1_files;
 use eth_trie::{decode_node, node::Node, RootWithTrieDiff};
 use ethportal_api::{
     jsonrpsee::http_client::HttpClient,
     types::state_trie::account_state::AccountState as AccountStateInfo, StateContentKey,
     StateContentValue,
 };
-use revm::DatabaseRef;
+use revm::Database;
 use revm_primitives::{keccak256, Address, Bytecode, SpecId, B256};
 use surf::{Client, Config};
 use tokio::{
@@ -32,7 +32,7 @@ use trin_execution::{
     utils::full_nibble_path_to_address_hash,
 };
 use trin_metrics::bridge::BridgeMetricsReporter;
-use trin_validation::{constants::EPOCH_SIZE, oracle::HeaderOracle};
+use trin_validation::oracle::HeaderOracle;
 
 use crate::{
     bridge::history::SERVE_BLOCK_TIMEOUT,
@@ -85,10 +85,10 @@ impl StateBridge {
         info!("Launching state bridge: {:?}", self.mode);
         match self.mode.clone() {
             BridgeMode::Single(ModeType::Block(last_block)) => {
-                if last_block > get_spec_block_number(SpecId::DAO_FORK) {
+                if last_block > get_spec_block_number(SpecId::MERGE) {
                     panic!(
                         "State bridge only supports blocks up to {} for the time being.",
-                        get_spec_block_number(SpecId::DAO_FORK)
+                        get_spec_block_number(SpecId::MERGE)
                     );
                 }
                 self.launch_state(last_block)
@@ -102,8 +102,6 @@ impl StateBridge {
 
     async fn launch_state(&self, last_block: u64) -> anyhow::Result<()> {
         info!("Gossiping state data from block 0 to {last_block}");
-        let mut current_epoch_index = u64::MAX;
-        let mut current_raw_era1 = vec![];
         let temp_directory = setup_temp_dir()?;
 
         // Enable contract storage changes caching required for gossiping the storage trie
@@ -111,40 +109,27 @@ impl StateBridge {
             cache_contract_storage_changes: true,
             block_to_trace: BlockToTrace::None,
         };
-        let mut state = State::new(Some(temp_directory.path().to_path_buf()), state_config)?;
-        for block_index in 0..=last_block {
-            info!("Gossipping state for block at height: {block_index}");
-            let epoch_index = block_index / EPOCH_SIZE;
-            // make sure we have the current era1 file loaded
-            if current_epoch_index != epoch_index {
-                let era1_path = self
-                    .era1_files
-                    .iter()
-                    .find(|file| file.contains(&format!("mainnet-{epoch_index:05}-")))
-                    .expect("to be able to find era1 file");
-                let raw_era1 = self
-                    .http_client
-                    .get(era1_path.clone())
-                    .recv_bytes()
-                    .await
-                    .unwrap_or_else(|err| {
-                        panic!("unable to read era1 file at path: {era1_path:?} : {err}")
-                    });
-                current_epoch_index = epoch_index;
-                current_raw_era1 = raw_era1;
-            }
+        let mut state = State::new(Some(temp_directory.path().to_path_buf()), state_config).await?;
+        for block_number in 0..=last_block {
+            info!("Gossipping state for block at height: {block_number}");
 
             // process block
-            let block_tuple = Era1::get_tuple_by_index(&current_raw_era1, block_index % EPOCH_SIZE);
             let RootWithTrieDiff {
                 root: root_hash,
                 trie_diff: changed_nodes,
-            } = match block_index == 0 {
+            } = match block_number == 0 {
                 true => state
                     .initialize_genesis()
                     .map_err(|e| anyhow!("unable to create genesis state: {e}"))?,
-                false => state.process_block(&block_tuple)?,
+                false => state.process_block(block_number).await?,
             };
+            let block_tuple = state
+                .era_manager
+                .lock()
+                .await
+                .get_block_by_number(block_number)
+                .await?
+                .clone();
 
             let walk_diff = TrieWalker::new(root_hash, changed_nodes);
 
@@ -153,7 +138,7 @@ impl StateBridge {
                 let account_proof = walk_diff.get_proof(*node);
 
                 // gossip the account
-                self.gossip_account(&account_proof, block_tuple.header.header.hash())
+                self.gossip_account(&account_proof, block_tuple.header.hash())
                     .await?;
 
                 let Some(encoded_last_node) = account_proof.proof.last() else {
@@ -186,11 +171,11 @@ impl StateBridge {
                     .expect("Contracts should always have an address in the database");
 
                 // gossip contract bytecode
-                let code = state.database.code_by_hash_ref(account.code_hash)?;
+                let code = state.database.code_by_hash(account.code_hash)?;
                 self.gossip_contract_bytecode(
                     address,
                     &account_proof,
-                    block_tuple.header.header.hash(),
+                    block_tuple.header.hash(),
                     account.code_hash,
                     code,
                 )
@@ -208,7 +193,7 @@ impl StateBridge {
                         &account_proof,
                         &storage_proof,
                         address,
-                        block_tuple.header.header.hash(),
+                        block_tuple.header.hash(),
                     )
                     .await?;
                 }
