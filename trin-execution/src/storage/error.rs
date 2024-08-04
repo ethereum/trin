@@ -11,8 +11,8 @@ pub enum EVMError {
     #[error("rocksdb error {0}")]
     DB(#[from] rocksdb::Error),
 
-    #[error("not found")]
-    NotFound,
+    #[error("not found database error {0}")]
+    NotFound(String),
 
     #[error("balance error")]
     BalanceError,
