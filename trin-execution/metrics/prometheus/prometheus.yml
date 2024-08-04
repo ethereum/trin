@@ -12,6 +12,8 @@ scrape_configs:
   # Node exporter metrics
   - job_name: "node"
     static_configs:
-      - targets: ["host.docker.internal:9091"]
+      - targets: 
+        - host.docker.internal:9091
+        - localhost:9091
         labels:
           instance: local_node
