@@ -3,7 +3,7 @@ use alloy_rlp::{
     length_of_length, Decodable, Encodable, Error as RlpError, Header as RlpHeader, RlpDecodable,
     RlpEncodable, EMPTY_STRING_CODE,
 };
-use bytes::{Buf, Bytes};
+use bytes::{Buf, BufMut, Bytes};
 use secp256k1::{
     ecdsa::{RecoverableSignature, RecoveryId},
     Message, SECP256K1,
@@ -28,22 +28,23 @@ impl Transaction {
         keccak256(alloy_rlp::encode(self))
     }
 
-    pub fn get_transaction_sender_address(&self, encode_chain_id: bool) -> anyhow::Result<Address> {
-        let signature_hash = self.signature_hash(encode_chain_id);
-
-        let (r, s, odd_y_parity) = match self {
+    pub fn get_transaction_sender_address(&self) -> anyhow::Result<Address> {
+        let (r, s, odd_y_parity, is_eip155) = match self {
             Transaction::Legacy(tx) => {
-                let odd_y_parity = if encode_chain_id {
-                    tx.v.byte(0) - 37
+                let v = tx.v.byte(0);
+                let (odd_y_parity, is_eip155) = if v < 35 {
+                    (v - 27, false)
                 } else {
-                    tx.v.byte(0) - 27
+                    (v - 37, true)
                 };
-                (tx.r, tx.s, odd_y_parity)
+                (tx.r, tx.s, odd_y_parity, is_eip155)
             }
-            Transaction::AccessList(tx) => (tx.r, tx.s, tx.y_parity.byte(0)),
-            Transaction::EIP1559(tx) => (tx.r, tx.s, tx.y_parity.byte(0)),
-            Transaction::Blob(tx) => (tx.r, tx.s, tx.y_parity.byte(0)),
+            Transaction::AccessList(tx) => (tx.r, tx.s, tx.y_parity.byte(0), true),
+            Transaction::EIP1559(tx) => (tx.r, tx.s, tx.y_parity.byte(0), true),
+            Transaction::Blob(tx) => (tx.r, tx.s, tx.y_parity.byte(0), true),
         };
+
+        let signature_hash = self.signature_hash(is_eip155);
 
         let mut sig: [u8; 65] = [0; 65];
         sig[0..32].copy_from_slice(&r.to_be_bytes::<32>());
@@ -325,6 +326,7 @@ impl AccessListTransaction {
     pub fn signature_hash(&self) -> B256 {
         let mut buf = Vec::<u8>::new();
         let mut list = Vec::<u8>::new();
+        1u64.encode(&mut list);
         self.nonce.encode(&mut list);
         self.gas_price.encode(&mut list);
         self.gas_limit.encode(&mut list);
@@ -332,13 +334,11 @@ impl AccessListTransaction {
         self.value.encode(&mut list);
         self.data.encode(&mut list);
         self.access_list.encode(&mut list);
-        1u64.encode(&mut list);
-        0x00u8.encode(&mut list);
-        0x00u8.encode(&mut list);
         let header = RlpHeader {
             list: true,
             payload_length: list.len(),
         };
+        buf.put_u8(1);
         header.encode(&mut buf);
         buf.extend_from_slice(&list);
         keccak256(&buf)
@@ -420,6 +420,7 @@ impl EIP1559Transaction {
     pub fn signature_hash(&self) -> B256 {
         let mut buf = Vec::<u8>::new();
         let mut list = Vec::<u8>::new();
+        1u64.encode(&mut list);
         self.nonce.encode(&mut list);
         self.max_priority_fee_per_gas.encode(&mut list);
         self.max_fee_per_gas.encode(&mut list);
@@ -428,13 +429,11 @@ impl EIP1559Transaction {
         self.value.encode(&mut list);
         self.data.encode(&mut list);
         self.access_list.encode(&mut list);
-        1u64.encode(&mut list);
-        0x00u8.encode(&mut list);
-        0x00u8.encode(&mut list);
         let header = RlpHeader {
             list: true,
             payload_length: list.len(),
         };
+        buf.put_u8(2);
         header.encode(&mut buf);
         buf.extend_from_slice(&list);
         keccak256(&buf)
@@ -522,6 +521,7 @@ impl BlobTransaction {
     pub fn signature_hash(&self) -> B256 {
         let mut buf = Vec::<u8>::new();
         let mut list = Vec::<u8>::new();
+        1u64.encode(&mut list);
         self.nonce.encode(&mut list);
         self.max_priority_fee_per_gas.encode(&mut list);
         self.max_fee_per_gas.encode(&mut list);
@@ -532,13 +532,11 @@ impl BlobTransaction {
         self.access_list.encode(&mut list);
         self.max_fee_per_blob_gas.encode(&mut list);
         self.blob_versioned_hashes.encode(&mut list);
-        1u64.encode(&mut list);
-        0x00u8.encode(&mut list);
-        0x00u8.encode(&mut list);
         let header = RlpHeader {
             list: true,
             payload_length: list.len(),
         };
+        buf.put_u8(3);
         header.encode(&mut buf);
         buf.extend_from_slice(&list);
         keccak256(&buf)
@@ -717,6 +715,13 @@ mod tests {
         "0x9e669fcad535566e5b69acbceb660c636886ac655f1afcb5686aebf820f52ca2",
         "0xcf00a85f3826941e7a25bfcf9aac575d40410852",
     )]
+    // Block 2675000 https://etherscan.io/tx/0x427b0b68b1ccc46b01d99ed399b61c4ae681e22216035eb6953afc83ef463e17
+    #[case(
+        "0xf86c02850e33e22200825208947329c8dbafaef13c3388de01015ea855e13723a28816ebf60a31618800801ca028e95ddd1849293d85341dc12a7ce2cb04c49b492d0b6afeea8553035bdc2ee1a01f3e9490b23ac10d2332310babfd201d4f6a30512cb55b5163f66ce3e082a8d3",
+        false,
+        "0x2d2bea519c4b02a71a7aaa40e402df443c00ff12d4cda62371b6fabb32ef4c95",
+        "0xf7bdb487a46241f78ebabc18e251a828e48da502"
+    )]
     // Block 3000000 https://etherscan.io/tx/0xb95ab9484280074f7b8c6a3cf5ffe2bf0c39168433adcdedc1aacd10d994d95a
     #[case(
         "0xf8708310aa038504a817c80083015f9094e7268aadb21f48a3b65f0880b6b9480217995979880dfe6c5bd5fa6ff08026a0a186e1a20b3973a29d28d0cddb205ff8b9e670cff1d3e794cd4de1b08b5a8562a0429c2166e893a646cb3b5faf1216ee4c7d99e3957ae145036ca68dec0bcb5f57",
@@ -724,6 +729,14 @@ mod tests {
         "0xd5f76f3a1f7eebadc04d702334445d261d24831d6bfef61e3974bcdb4f015c68",
         "0xea674fdde714fd979de3edf0f56aa9716b898ec8"
     )]
+    // Block 12244145 https://etherscan.io/tx/0x851bad0415758075a1eb86776749c829b866d43179c57c3e4a4b9359a0358231
+    #[case(
+        "0x01f9039f018218bf85105e34df0083048a949410a0847c2d170008ddca7c3a688124f49363003280b902e4c11695480000000000000000000000004b274e4a9af31c20ed4151769a88ffe63d9439960000000000000000000000008510211a852f0c5994051dd85eaef73112a82eb5000000000000000000000000000000000000000000000000000000000000012000000000000000000000000000bad4de000000000000000000000000607816a600000000000000000000000000000000000000000000000000000000000002200000000000000000000000000000000000000000000000000000001146aa2600000000000000000000000000000000000000000000000000000000000001bc9b000000000000000000000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee000000000000000000000000482579f93dc13e6b434e38b5a0447ca543d88a4600000000000000000000000000000000000000000000000000000000000000c42df546f40000000000000000000000004b274e4a9af31c20ed4151769a88ffe63d943996000000000000000000000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000000000000007d93f93d41604572119e4be7757a7a4a43705f080000000000000000000000000000000000000000000000003782dace9d90000000000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000082b5a61569b5898ac347c82a594c86699f1981aa88ca46a6a00b8e4f27b3d17bdf3714e7c0ca6a8023b37cca556602fce7dc7daac3fcee1ab04bbb3b94c10dec301cc57266db6567aa073efaa1fa6669bdc6f0877b0aeab4e33d18cb08b8877f08931abf427f11bade042177db48ca956feb114d6f5d56d1f5889047189562ec545e1c000000000000000000000000000000000000000000000000000000000000f84ff7946856ccf24beb7ed77f1f24eee5742f7ece5557e2e1a00000000000000000000000000000000000000000000000000000000000000001d694b1dd690cc9af7bb1a906a9b5a94f94191cc553cec080a0d52f3dbcad3530e73fcef6f4a75329b569a8903bf6d8109a960901f251a37af3a00ecf570e0c0ffa6efdc6e6e49be764b6a1a77e47de7bb99e167544ffbbcd65bc",
+        true,
+        "0x894d999ea27537def37534b3d55df3fed4e1492b31e9f640774432d21cf4512c",
+        "0x1ced2cef30d40bb3617f8d455071b69f3b12d06f"
+    )]
+
     fn test_legacy_get_sender_address_from_transaction(
         #[case] transaction: &str,
         #[case] post_eip155: bool,
@@ -740,9 +753,7 @@ mod tests {
         assert_eq!(
             format!(
                 "{:?}",
-                transaction
-                    .get_transaction_sender_address(post_eip155)
-                    .unwrap()
+                transaction.get_transaction_sender_address().unwrap()
             ),
             sender_address
         );

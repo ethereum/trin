@@ -279,9 +279,7 @@ impl State {
             .with_spec_id(get_spec_id(block_number))
             .modify_tx_env(|tx_env| {
                 tx_env.caller = tx
-                    .get_transaction_sender_address(
-                        get_spec_id(block_number).is_enabled_in(SpecId::SPURIOUS_DRAGON),
-                    )
+                    .get_transaction_sender_address()
                     .expect("We should always be able to get the sender address of a transaction");
                 match tx {
                     Transaction::Legacy(tx) => tx.modify(block_number, tx_env),
