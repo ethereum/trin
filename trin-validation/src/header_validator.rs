@@ -405,7 +405,7 @@ mod test {
             .validate_header_with_proof(&future_hwp)
             .unwrap();
     }
-
+    #[ignore] // ignored because of https://github.com/ethereum/trin/issues/1358
     #[tokio::test]
     async fn header_validator_validate_post_merge_pre_capella_header() {
         let header_validator = get_mainnet_header_validator();
@@ -460,8 +460,12 @@ mod test {
     }
 
     #[rstest]
+    // ignored because of https://github.com/ethereum/trin/issues/1358
+    #[ignore]
     #[case(17034870)]
+    #[ignore]
     #[case(17042287)]
+    #[ignore]
     #[case(17062257)]
     #[tokio::test]
     async fn header_validator_validate_post_capella_header(#[case] block_number: u64) {
