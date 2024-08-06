@@ -188,38 +188,3 @@ pub fn fixtures_state_contract_storage_trie_node() -> Vec<StateFixture> {
 pub fn fixtures_state_contract_bytecode() -> Vec<StateFixture> {
     read_state_fixture("portal-spec-tests/tests/mainnet/state/validation/contract_bytecode.yaml")
 }
-
-pub struct StateRecursiveGossipFixture {
-    pub state_root: B256,
-    pub key_value_pairs: Vec<(StateContentKey, StateContentValue)>,
-}
-
-pub fn fixtures_state_recursive_gossip() -> Result<Vec<StateRecursiveGossipFixture>> {
-    let yaml_content = fs::read_to_string(
-        "portal-spec-tests/tests/mainnet/state/validation/recursive_gossip.yaml",
-    )?;
-    let value: Value = serde_yaml::from_str(&yaml_content)?;
-
-    let mut result = vec![];
-
-    for fixture in value.as_sequence().unwrap() {
-        result.push(StateRecursiveGossipFixture {
-            state_root: B256::deserialize(&fixture["state_root"])?,
-            key_value_pairs: fixture["recursive_gossip"]
-                .as_sequence()
-                .unwrap()
-                .iter()
-                .map(|key_value_container| {
-                    let key =
-                        StateContentKey::deserialize(&key_value_container["content_key"]).unwrap();
-                    let value =
-                        StateContentValue::deserialize(&key_value_container["content_value"])
-                            .unwrap();
-                    (key, value)
-                })
-                .collect(),
-        })
-    }
-
-    Ok(result)
-}

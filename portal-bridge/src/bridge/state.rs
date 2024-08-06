@@ -10,7 +10,7 @@ use ethportal_api::{
     StateContentValue,
 };
 use revm::DatabaseRef;
-use revm_primitives::{keccak256, Address, Bytecode, SpecId, B256};
+use revm_primitives::{keccak256, Bytecode, SpecId, B256};
 use surf::{Client, Config};
 use tokio::{
     sync::{OwnedSemaphorePermit, Semaphore},
@@ -180,15 +180,11 @@ impl StateBridge {
                 let full_key_path =
                     [&account_proof.path.clone(), partial_key_path.as_slice()].concat();
                 let address_hash = full_nibble_path_to_address_hash(&full_key_path);
-                let address = state
-                    .database
-                    .get_address_from_hash(address_hash)
-                    .expect("Contracts should always have an address in the database");
 
                 // gossip contract bytecode
                 let code = state.database.code_by_hash_ref(account.code_hash)?;
                 self.gossip_contract_bytecode(
-                    address,
+                    address_hash,
                     &account_proof,
                     block_tuple.header.header.hash(),
                     account.code_hash,
@@ -197,7 +193,7 @@ impl StateBridge {
                 .await?;
 
                 // gossip contract storage
-                let storage_changed_nodes = state.database.get_storage_trie_diff(address);
+                let storage_changed_nodes = state.database.get_storage_trie_diff(address_hash);
 
                 let storage_walk_diff =
                     TrieWalker::new(account.storage_root, storage_changed_nodes);
@@ -207,7 +203,7 @@ impl StateBridge {
                     self.gossip_storage(
                         &account_proof,
                         &storage_proof,
-                        address,
+                        address_hash,
                         block_tuple.header.header.hash(),
                     )
                     .await?;
@@ -245,7 +241,7 @@ impl StateBridge {
 
     async fn gossip_contract_bytecode(
         &self,
-        address: Address,
+        address_hash: B256,
         account_proof: &TrieProof,
         block_hash: B256,
         code_hash: B256,
@@ -257,7 +253,7 @@ impl StateBridge {
             .acquire_owned()
             .await
             .expect("to be able to acquire semaphore");
-        let code_content_key = create_contract_content_key(address, code_hash)?;
+        let code_content_key = create_contract_content_key(address_hash, code_hash)?;
         let code_content_value = create_contract_content_value(block_hash, account_proof, code)?;
         Self::spawn_serve_state_proof(
             self.portal_client.clone(),
@@ -273,7 +269,7 @@ impl StateBridge {
         &self,
         account_proof: &TrieProof,
         storage_proof: &TrieProof,
-        address: Address,
+        address_hash: B256,
         block_hash: B256,
     ) -> anyhow::Result<()> {
         let permit = self
@@ -282,7 +278,7 @@ impl StateBridge {
             .acquire_owned()
             .await
             .expect("to be able to acquire semaphore");
-        let storage_content_key = create_storage_content_key(storage_proof, address)?;
+        let storage_content_key = create_storage_content_key(storage_proof, address_hash)?;
         let storage_content_value =
             create_storage_content_value(block_hash, account_proof, storage_proof)?;
         Self::spawn_serve_state_proof(
