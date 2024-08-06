@@ -14,9 +14,11 @@ use superstruct::superstruct;
 use tree_hash::TreeHash;
 use tree_hash_derive::TreeHash;
 
+use super::body::BeaconBlockBodyAltair;
+
 /// A block of the `BeaconChain`.
 #[superstruct(
-    variants(Bellatrix, Capella, Deneb),
+    variants(Altair, Bellatrix, Capella, Deneb),
     variant_attributes(
         derive(
             Debug,
@@ -50,6 +52,8 @@ pub struct BeaconBlock {
     pub parent_root: B256,
     #[superstruct(getter(copy))]
     pub state_root: B256,
+    #[superstruct(only(Altair), partial_getter(rename = "body_altair"))]
+    pub body: BeaconBlockBodyAltair,
     #[superstruct(only(Bellatrix), partial_getter(rename = "body_merge"))]
     pub body: BeaconBlockBodyBellatrix,
     #[superstruct(only(Capella), partial_getter(rename = "body_capella"))]
@@ -61,6 +65,7 @@ pub struct BeaconBlock {
 impl BeaconBlock {
     pub fn from_ssz_bytes(bytes: &[u8], fork_name: ForkName) -> Result<Self, ssz::DecodeError> {
         match fork_name {
+            ForkName::Altair => BeaconBlockAltair::from_ssz_bytes(bytes).map(Self::Altair),
             ForkName::Bellatrix => BeaconBlockBellatrix::from_ssz_bytes(bytes).map(Self::Bellatrix),
             ForkName::Capella => BeaconBlockCapella::from_ssz_bytes(bytes).map(Self::Capella),
             ForkName::Deneb => BeaconBlockDeneb::from_ssz_bytes(bytes).map(Self::Deneb),
@@ -98,7 +103,7 @@ impl BeaconBlockBellatrix {
 
 /// A `BeaconBlock` and a signature from its proposer.
 #[superstruct(
-    variants(Bellatrix, Capella, Deneb),
+    variants(Altair, Bellatrix, Capella, Deneb),
     variant_attributes(derive(
         Debug,
         Clone,
@@ -115,6 +120,8 @@ impl BeaconBlockBellatrix {
 #[tree_hash(enum_behaviour = "transparent")]
 #[ssz(enum_behaviour = "transparent")]
 pub struct SignedBeaconBlock {
+    #[superstruct(only(Altair), partial_getter(rename = "message_altair"))]
+    pub message: BeaconBlockAltair,
     #[superstruct(only(Bellatrix), partial_getter(rename = "message_merge"))]
     pub message: BeaconBlockBellatrix,
     #[superstruct(only(Capella), partial_getter(rename = "message_capella"))]
@@ -154,6 +161,9 @@ impl SignedBeaconBlock {
     /// Create a new `SignedBeaconBlock` from a `BeaconBlock` and `BlsSignature`.
     pub fn from_block(block: BeaconBlock, signature: BlsSignature) -> Self {
         match block {
+            BeaconBlock::Altair(message) => {
+                SignedBeaconBlock::Altair(SignedBeaconBlockAltair { message, signature })
+            }
             BeaconBlock::Bellatrix(message) => {
                 SignedBeaconBlock::Bellatrix(SignedBeaconBlockBellatrix { message, signature })
             }
@@ -176,6 +186,41 @@ mod test {
     use rstest::rstest;
     use serde_json::Value;
     use std::str::FromStr;
+
+    #[rstest]
+    #[case("case_0")]
+    #[case("case_1")]
+    fn serde_signed_beacon_block_altair(#[case] case: &str) {
+        let value = std::fs::read_to_string(format!(
+            "../test_assets/beacon/altair/SignedBeaconBlock/ssz_random/{case}/value.yaml"
+        ))
+        .expect("cannot find test asset");
+        let value: Value = serde_yaml::from_str(&value).unwrap();
+        let content: SignedBeaconBlockAltair = serde_json::from_value(value.clone()).unwrap();
+        let serialized = serde_json::to_value(content).unwrap();
+        assert_eq!(serialized, value);
+    }
+
+    #[rstest]
+    #[case("case_0")]
+    #[case("case_1")]
+    fn ssz_signed_beacon_block_altair(#[case] case: &str) {
+        let value = std::fs::read_to_string(format!(
+            "../test_assets/beacon/altair/SignedBeaconBlock/ssz_random/{case}/value.yaml"
+        ))
+        .expect("cannot find test asset");
+        let value: Value = serde_yaml::from_str(&value).unwrap();
+        let content: SignedBeaconBlockAltair = serde_json::from_value(value).unwrap();
+
+        let compressed = std::fs::read(format!(
+            "../test_assets/beacon/altair/SignedBeaconBlock/ssz_random/{case}/serialized.ssz_snappy"
+        ))
+        .expect("cannot find test asset");
+        let mut decoder = snap::raw::Decoder::new();
+        let expected = decoder.decompress_vec(&compressed).unwrap();
+        SignedBeaconBlock::from_ssz_bytes(&expected, ForkName::Altair).unwrap();
+        assert_eq!(content.as_ssz_bytes(), expected);
+    }
 
     #[rstest]
     #[case("case_0")]

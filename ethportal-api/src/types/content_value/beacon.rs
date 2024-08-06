@@ -1,7 +1,9 @@
 use crate::{
     light_client::{
-        bootstrap::LightClientBootstrapDeneb, finality_update::LightClientFinalityUpdateDeneb,
-        optimistic_update::LightClientOptimisticUpdateDeneb, update::LightClientUpdateDeneb,
+        bootstrap::{LightClientBootstrapAltair, LightClientBootstrapDeneb},
+        finality_update::{LightClientFinalityUpdateAltair, LightClientFinalityUpdateDeneb},
+        optimistic_update::{LightClientOptimisticUpdateAltair, LightClientOptimisticUpdateDeneb},
+        update::{LightClientUpdateAltair, LightClientUpdateDeneb},
     },
     types::{
         consensus::{
@@ -76,6 +78,9 @@ impl ForkVersionedLightClientBootstrap {
         })?;
 
         let light_client_bootstrap = match fork_name {
+            ForkName::Altair => LightClientBootstrap::Altair(
+                LightClientBootstrapAltair::from_ssz_bytes(&bytes[4..])?,
+            ),
             ForkName::Bellatrix => LightClientBootstrap::Bellatrix(
                 LightClientBootstrapBellatrix::from_ssz_bytes(&bytes[4..])?,
             ),
@@ -96,6 +101,7 @@ impl ForkVersionedLightClientBootstrap {
     /// Get the slot of the `LightClientBootstrap`
     pub fn get_slot(&self) -> u64 {
         match &self.bootstrap {
+            LightClientBootstrap::Altair(bootstrap) => bootstrap.header.beacon.slot,
             LightClientBootstrap::Bellatrix(bootstrap) => bootstrap.header.beacon.slot,
             LightClientBootstrap::Capella(bootstrap) => bootstrap.header.beacon.slot,
             LightClientBootstrap::Deneb(bootstrap) => bootstrap.header.beacon.slot,
@@ -152,6 +158,9 @@ impl ForkVersionedLightClientUpdate {
         })?;
 
         let light_client_update = match fork_name {
+            ForkName::Altair => {
+                LightClientUpdate::Altair(LightClientUpdateAltair::from_ssz_bytes(&bytes[4..])?)
+            }
             ForkName::Bellatrix => LightClientUpdate::Bellatrix(
                 LightClientUpdateBellatrix::from_ssz_bytes(&bytes[4..])?,
             ),
@@ -292,6 +301,9 @@ impl ForkVersionedLightClientOptimisticUpdate {
         })?;
 
         let content = match fork_name {
+            ForkName::Altair => LightClientOptimisticUpdate::Altair(
+                LightClientOptimisticUpdateAltair::from_ssz_bytes(&buf[4..])?,
+            ),
             ForkName::Bellatrix => LightClientOptimisticUpdate::Bellatrix(
                 LightClientOptimisticUpdateBellatrix::from_ssz_bytes(&buf[4..])?,
             ),
@@ -377,6 +389,9 @@ impl ForkVersionedLightClientFinalityUpdate {
         })?;
 
         let content = match fork_name {
+            ForkName::Altair => LightClientFinalityUpdate::Altair(
+                LightClientFinalityUpdateAltair::from_ssz_bytes(&buf[4..])?,
+            ),
             ForkName::Bellatrix => LightClientFinalityUpdate::Bellatrix(
                 LightClientFinalityUpdateBellatrix::from_ssz_bytes(&buf[4..])?,
             ),
@@ -397,6 +412,7 @@ impl ForkVersionedLightClientFinalityUpdate {
     /// Get the finalized slot of the `LightClientFinalityUpdate`
     pub fn get_finalized_slot(&self) -> u64 {
         match &self.update {
+            LightClientFinalityUpdate::Altair(update) => update.finalized_header.beacon.slot,
             LightClientFinalityUpdate::Bellatrix(update) => update.finalized_header.beacon.slot,
             LightClientFinalityUpdate::Capella(update) => update.finalized_header.beacon.slot,
             LightClientFinalityUpdate::Deneb(update) => update.finalized_header.beacon.slot,

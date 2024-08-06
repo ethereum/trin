@@ -37,7 +37,7 @@ pub type HistoricalRoots = VariableList<B256, HistoricalRootsLimit>;
 
 /// The state of the `BeaconChain` at some slot.
 #[superstruct(
-    variants(Bellatrix, Capella, Deneb),
+    variants(Altair, Bellatrix, Capella, Deneb),
     variant_attributes(
         derive(
             Clone,
@@ -93,9 +93,9 @@ pub struct BeaconState {
     pub slashings: FixedVector<u64, EpochsPerSlashingsVector>,
 
     // Participation (Altair and later)
-    #[superstruct(only(Bellatrix, Capella, Deneb))]
+    #[superstruct(only(Altair, Bellatrix, Capella, Deneb))]
     pub previous_epoch_participation: VariableList<ParticipationFlags, ValidatorRegistryLimit>,
-    #[superstruct(only(Bellatrix, Capella, Deneb))]
+    #[superstruct(only(Altair, Bellatrix, Capella, Deneb))]
     pub current_epoch_participation: VariableList<ParticipationFlags, ValidatorRegistryLimit>,
 
     // Finality
@@ -108,13 +108,13 @@ pub struct BeaconState {
     pub finalized_checkpoint: Checkpoint,
 
     // Inactivity
-    #[superstruct(only(Bellatrix, Capella, Deneb))]
+    #[superstruct(only(Altair, Bellatrix, Capella, Deneb))]
     pub inactivity_scores: VariableList<u64, ValidatorRegistryLimit>,
 
     // Light-client sync committees
-    #[superstruct(only(Bellatrix, Capella, Deneb))]
+    #[superstruct(only(Altair, Bellatrix, Capella, Deneb))]
     pub current_sync_committee: Arc<SyncCommittee>,
-    #[superstruct(only(Bellatrix, Capella, Deneb))]
+    #[superstruct(only(Altair, Bellatrix, Capella, Deneb))]
     pub next_sync_committee: Arc<SyncCommittee>,
 
     // Execution
@@ -149,6 +149,7 @@ pub struct BeaconState {
 impl BeaconState {
     pub fn from_ssz_bytes(bytes: &[u8], fork_name: ForkName) -> Result<Self, DecodeError> {
         match fork_name {
+            ForkName::Altair => BeaconStateAltair::from_ssz_bytes(bytes).map(Self::Altair),
             ForkName::Bellatrix => BeaconStateBellatrix::from_ssz_bytes(bytes).map(Self::Bellatrix),
             ForkName::Capella => BeaconStateCapella::from_ssz_bytes(bytes).map(Self::Capella),
             ForkName::Deneb => BeaconStateDeneb::from_ssz_bytes(bytes).map(Self::Deneb),
@@ -343,6 +344,41 @@ mod test {
     use rstest::rstest;
     use serde_json::Value;
     use std::str::FromStr;
+
+    #[rstest]
+    #[case("case_0")]
+    #[case("case_1")]
+    fn serde_beacon_state_altair(#[case] case: &str) {
+        let value = std::fs::read_to_string(format!(
+            "../test_assets/beacon/altair/BeaconState/ssz_random/{case}/value.yaml"
+        ))
+        .expect("cannot find test asset");
+        let value: Value = serde_yaml::from_str(&value).unwrap();
+        let content: BeaconStateAltair = serde_json::from_value(value.clone()).unwrap();
+        let serialized = serde_json::to_value(content).unwrap();
+        assert_eq!(serialized, value);
+    }
+
+    #[rstest]
+    #[case("case_0")]
+    #[case("case_1")]
+    fn ssz_beacon_state_altair(#[case] case: &str) {
+        let value = std::fs::read_to_string(format!(
+            "../test_assets/beacon/altair/BeaconState/ssz_random/{case}/value.yaml"
+        ))
+        .expect("cannot find test asset");
+        let value: Value = serde_yaml::from_str(&value).unwrap();
+        let content: BeaconStateAltair = serde_json::from_value(value).unwrap();
+
+        let compressed = std::fs::read(format!(
+            "../test_assets/beacon/altair/BeaconState/ssz_random/{case}/serialized.ssz_snappy"
+        ))
+        .expect("cannot find test asset");
+        let mut decoder = snap::raw::Decoder::new();
+        let expected = decoder.decompress_vec(&compressed).unwrap();
+        BeaconState::from_ssz_bytes(&expected, ForkName::Altair).unwrap();
+        assert_eq!(content.as_ssz_bytes(), expected);
+    }
 
     #[rstest]
     #[case("case_0")]

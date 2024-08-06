@@ -85,6 +85,7 @@ impl ExecutionPayload {
             }
             ForkName::Capella => ExecutionPayloadCapella::from_ssz_bytes(bytes).map(Self::Capella),
             ForkName::Deneb => ExecutionPayloadDeneb::from_ssz_bytes(bytes).map(Self::Deneb),
+            _ => Err(ssz::DecodeError::NoMatchingVariant),
         }
     }
 }
@@ -210,6 +211,7 @@ impl ExecutionPayloadHeader {
                 ExecutionPayloadHeaderCapella::from_ssz_bytes(bytes).map(Self::Capella)
             }
             ForkName::Deneb => ExecutionPayloadHeaderDeneb::from_ssz_bytes(bytes).map(Self::Deneb),
+            _ => Err(ssz::DecodeError::NoMatchingVariant),
         }
     }
 }

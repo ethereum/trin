@@ -15,6 +15,7 @@ pub type ForkDigest = [u8; 4];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ForkName {
+    Altair,
     Bellatrix,
     Capella,
     Deneb,
@@ -36,6 +37,7 @@ impl TryFrom<ForkDigest> for ForkName {
 impl ForkName {
     pub fn as_fork_digest(&self) -> [u8; 4] {
         match self {
+            ForkName::Altair => [0x0, 0x0, 0x0, 0x0],
             ForkName::Bellatrix => [0x0, 0x0, 0x0, 0x0],
             ForkName::Capella => [0xbb, 0xa4, 0xda, 0x96],
             ForkName::Deneb => [0x6a, 0x95, 0xa1, 0xa9],
@@ -48,6 +50,7 @@ impl FromStr for ForkName {
 
     fn from_str(fork_name: &str) -> Result<Self, String> {
         Ok(match fork_name.to_lowercase().as_ref() {
+            "altair" => ForkName::Altair,
             "bellatrix" | "merge" => ForkName::Bellatrix,
             "capella" => ForkName::Capella,
             "deneb" => ForkName::Deneb,
@@ -59,6 +62,7 @@ impl FromStr for ForkName {
 impl Display for ForkName {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
+            ForkName::Altair => "altair".fmt(f),
             ForkName::Bellatrix => "bellatrix".fmt(f),
             ForkName::Capella => "capella".fmt(f),
             ForkName::Deneb => "deneb".fmt(f),

@@ -12,7 +12,7 @@ use tree_hash_derive::TreeHash;
 pub type ExecutionBranchLen = U4;
 
 #[superstruct(
-    variants(Bellatrix, Capella, Deneb),
+    variants(Altair, Bellatrix, Capella, Deneb),
     variant_attributes(
         derive(
             Debug,
@@ -48,6 +48,7 @@ impl Default for LightClientHeader {
 impl LightClientHeader {
     pub fn from_ssz_bytes(bytes: &[u8], fork_name: ForkName) -> Result<Self, ssz::DecodeError> {
         match fork_name {
+            ForkName::Altair => LightClientHeaderAltair::from_ssz_bytes(bytes).map(Self::Altair),
             ForkName::Bellatrix => {
                 LightClientHeaderBellatrix::from_ssz_bytes(bytes).map(Self::Bellatrix)
             }
@@ -64,6 +65,47 @@ mod test {
     use ::ssz::Encode;
     use rstest::rstest;
     use serde_json::Value;
+
+    #[rstest]
+    #[case("case_0")]
+    #[case("case_1")]
+    #[case("case_2")]
+    #[case("case_3")]
+    #[case("case_4")]
+    fn serde_light_client_header_altair(#[case] case: &str) {
+        let value = std::fs::read_to_string(format!(
+            "../test_assets/beacon/altair/LightClientHeader/ssz_random/{case}/value.yaml"
+        ))
+        .expect("cannot find test asset");
+        let value: Value = serde_yaml::from_str(&value).unwrap();
+        let content: LightClientHeaderAltair = serde_json::from_value(value.clone()).unwrap();
+        let serialized = serde_json::to_value(content).unwrap();
+        assert_eq!(serialized, value);
+    }
+
+    #[rstest]
+    #[case("case_0")]
+    #[case("case_1")]
+    #[case("case_2")]
+    #[case("case_3")]
+    #[case("case_4")]
+    fn ssz_light_client_header_altair(#[case] case: &str) {
+        let value = std::fs::read_to_string(format!(
+            "../test_assets/beacon/altair/LightClientHeader/ssz_random/{case}/value.yaml"
+        ))
+        .expect("cannot find test asset");
+        let value: Value = serde_yaml::from_str(&value).unwrap();
+        let content: LightClientHeaderAltair = serde_json::from_value(value).unwrap();
+
+        let compressed = std::fs::read(format!(
+            "../test_assets/beacon/altair/LightClientHeader/ssz_random/{case}/serialized.ssz_snappy"
+        ))
+        .expect("cannot find test asset");
+        let mut decoder = snap::raw::Decoder::new();
+        let expected = decoder.decompress_vec(&compressed).unwrap();
+        LightClientHeader::from_ssz_bytes(&expected, ForkName::Altair).unwrap();
+        assert_eq!(content.as_ssz_bytes(), expected);
+    }
 
     #[rstest]
     #[case("case_0")]

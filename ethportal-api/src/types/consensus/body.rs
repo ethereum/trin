@@ -34,7 +34,7 @@ pub type KzgCommitments = VariableList<KzgCommitment, MaxBlobCommitmentsPerBlock
 /// Types based off specs @
 /// https://github.com/ethereum/consensus-specs/blob/5970ae56a1cd50ea06049d8aad6bed74093d49d3/specs/bellatrix/beacon-chain.md
 #[superstruct(
-    variants(Bellatrix, Capella, Deneb),
+    variants(Altair, Bellatrix, Capella, Deneb),
     variant_attributes(
         derive(
             Debug,
@@ -78,6 +78,7 @@ pub struct BeaconBlockBody {
 impl BeaconBlockBody {
     pub fn from_ssz_bytes(bytes: &[u8], fork_name: ForkName) -> Result<Self, ssz::DecodeError> {
         match fork_name {
+            ForkName::Altair => BeaconBlockBodyAltair::from_ssz_bytes(bytes).map(Self::Altair),
             ForkName::Bellatrix => {
                 BeaconBlockBodyBellatrix::from_ssz_bytes(bytes).map(Self::Bellatrix)
             }

@@ -18,11 +18,13 @@ use ssz_types::{
 };
 use superstruct::superstruct;
 
+use super::header::LightClientHeaderAltair;
+
 type NextSyncCommitteeProofLen = U5;
 pub type FinalizedRootProofLen = U6;
 
 #[superstruct(
-    variants(Bellatrix, Capella, Deneb),
+    variants(Altair, Bellatrix, Capella, Deneb),
     variant_attributes(
         derive(Debug, Clone, Serialize, PartialEq, Deserialize, Encode, Decode),
         serde(deny_unknown_fields),
@@ -32,6 +34,8 @@ pub type FinalizedRootProofLen = U6;
 #[ssz(enum_behaviour = "transparent")]
 pub struct LightClientUpdate {
     /// The last `LightClientHeader` from the last attested block by the sync committee.
+    #[superstruct(only(Altair), partial_getter(rename = "attested_header_altair"))]
+    pub attested_header: LightClientHeaderAltair,
     #[superstruct(only(Bellatrix), partial_getter(rename = "attested_header_bellatrix"))]
     pub attested_header: LightClientHeaderBellatrix,
     #[superstruct(only(Capella), partial_getter(rename = "attested_header_capella"))]
@@ -43,6 +47,8 @@ pub struct LightClientUpdate {
     /// Merkle proof for next sync committee
     pub next_sync_committee_branch: FixedVector<B256, NextSyncCommitteeProofLen>,
     /// The last `LightClientHeader` from the last attested finalized block (end of epoch).
+    #[superstruct(only(Altair), partial_getter(rename = "finalized_header_altair"))]
+    pub finalized_header: LightClientHeaderAltair,
     #[superstruct(only(Bellatrix), partial_getter(rename = "finalized_header_bellatrix"))]
     pub finalized_header: LightClientHeaderBellatrix,
     #[superstruct(only(Capella), partial_getter(rename = "finalized_header_capella"))]
@@ -61,6 +67,7 @@ pub struct LightClientUpdate {
 impl LightClientUpdate {
     pub fn from_ssz_bytes(bytes: &[u8], fork_name: ForkName) -> Result<Self, ssz::DecodeError> {
         match fork_name {
+            ForkName::Altair => LightClientUpdateAltair::from_ssz_bytes(bytes).map(Self::Altair),
             ForkName::Bellatrix => {
                 LightClientUpdateBellatrix::from_ssz_bytes(bytes).map(Self::Bellatrix)
             }
@@ -77,6 +84,47 @@ mod test {
     use ::ssz::Encode;
     use rstest::rstest;
     use serde_json::Value;
+
+    #[rstest]
+    #[case("case_0")]
+    #[case("case_1")]
+    #[case("case_2")]
+    #[case("case_3")]
+    #[case("case_4")]
+    fn serde_light_client_update_altair(#[case] case: &str) {
+        let value = std::fs::read_to_string(format!(
+            "../test_assets/beacon/altair/LightClientUpdate/ssz_random/{case}/value.yaml"
+        ))
+        .expect("cannot find test asset");
+        let value: Value = serde_yaml::from_str(&value).unwrap();
+        let content: LightClientUpdateAltair = serde_json::from_value(value.clone()).unwrap();
+        let serialized = serde_json::to_value(content).unwrap();
+        assert_eq!(serialized, value);
+    }
+
+    #[rstest]
+    #[case("case_0")]
+    #[case("case_1")]
+    #[case("case_2")]
+    #[case("case_3")]
+    #[case("case_4")]
+    fn ssz_light_client_update_altair(#[case] case: &str) {
+        let value = std::fs::read_to_string(format!(
+            "../test_assets/beacon/altair/LightClientUpdate/ssz_random/{case}/value.yaml"
+        ))
+        .expect("cannot find test asset");
+        let value: Value = serde_yaml::from_str(&value).unwrap();
+        let content: LightClientUpdateAltair = serde_json::from_value(value).unwrap();
+
+        let compressed = std::fs::read(format!(
+            "../test_assets/beacon/altair/LightClientUpdate/ssz_random/{case}/serialized.ssz_snappy"
+        ))
+        .expect("cannot find test asset");
+        let mut decoder = snap::raw::Decoder::new();
+        let expected = decoder.decompress_vec(&compressed).unwrap();
+        LightClientUpdate::from_ssz_bytes(&expected, ForkName::Altair).unwrap();
+        assert_eq!(content.as_ssz_bytes(), expected);
+    }
 
     #[rstest]
     #[case("case_0")]
