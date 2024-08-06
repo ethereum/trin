@@ -25,7 +25,7 @@ use super::{
 pub struct EvmDB {
     /// State config
     pub config: StateConfig,
-    /// Storage cache for the accounts used optionally for gossiping.
+    /// Storage cache for the accounts used optionally for gossiping, keyed by address hash.
     pub storage_cache: HashMap<B256, HashSet<B256>>,
     /// The underlying database.
     pub db: Arc<RocksDB>,

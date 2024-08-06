@@ -397,10 +397,8 @@ mod tests {
 
     #[test]
     fn validate_account_state_just_leaf() {
-        let address = Address::random();
-        let address_hash = keccak256(address);
+        let address_hash = B256::random();
         let path: Vec<u8> = address_hash
-            .as_slice()
             .iter()
             .flat_map(Nibbles::unpack_nibble_pair)
             .collect();
@@ -420,8 +418,7 @@ mod tests {
     #[test]
     #[should_panic = "LeafNodeExpected"]
     fn validate_account_state_last_node_is_not_leaf() {
-        let address = Address::random();
-        let address_hash = keccak256(address);
+        let address_hash = B256::random();
         let node = EncodedTrieNode::from(&create_branch_with_child(Node::Empty, 1));
         validate_account_state(None, &address_hash, &vec![node].into()).unwrap();
     }
@@ -429,10 +426,8 @@ mod tests {
     #[test]
     #[should_panic = "InvalidLeafPath"]
     fn validate_account_state_invalid_leaf_path() {
-        let address = Address::random();
-        let address_hash = keccak256(address);
+        let address_hash = B256::random();
         let mut path: Vec<u8> = address_hash
-            .as_slice()
             .iter()
             .flat_map(Nibbles::unpack_nibble_pair)
             .collect();
@@ -452,10 +447,8 @@ mod tests {
     #[test]
     #[should_panic = "DecodingAccountState"]
     fn validate_account_state_non_decodable_account_state() {
-        let address = Address::random();
-        let address_hash = keccak256(address);
+        let address_hash = B256::random();
         let path: Vec<u8> = address_hash
-            .as_slice()
             .iter()
             .flat_map(Nibbles::unpack_nibble_pair)
             .collect();
@@ -466,8 +459,7 @@ mod tests {
     #[test]
     #[should_panic = "DecodingNode"]
     fn validate_account_state_non_decodable_leaf() {
-        let address = Address::random();
-        let address_hash = keccak256(address);
+        let address_hash = B256::random();
         let node = EncodedTrieNode::from(vec![0x12, 0x34]);
         validate_account_state(None, &address_hash, &vec![node].into()).unwrap();
     }
